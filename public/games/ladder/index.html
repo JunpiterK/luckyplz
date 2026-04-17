@@ -992,12 +992,30 @@ function gameLoop(ts){
 /* ===== START GAME ===== */
 function isPCLayout(){return window.matchMedia('(min-width:900px)').matches}
 
-/* Live preview (PC only) — re-generates ladder structure and redraws on any change */
-function renderPreview(){
+/* Live preview (PC only).
+   - forceRegenerate=true  → rebuild the random horizontal rungs (use when the
+                             number of players or complexity actually changed)
+   - forceRegenerate=false → reuse the existing ladder structure and only
+                             refresh the player / result labels (for typing,
+                             shuffle, sort, mode toggle, etc.)
+   Also auto-regenerates if the stored ladder doesn't match the current
+   playerCount so the first render and "add player" still work. */
+function renderPreview(forceRegenerate){
     if(!isPCLayout())return;
     if(gamePhase==='playing'||gamePhase==='revealing')return;
     if(!canvas)initCanvas();else resizeCanvas();
-    generateLadder();
+    const structureChanged=forceRegenerate||!ladder.verticals||!ladder.verticals.length||ladder.n!==playerCount;
+    if(structureChanged){
+        generateLadder();
+    } else {
+        const nameInputs=document.querySelectorAll('#playerInputs input');
+        const resultInputs=document.querySelectorAll('#resultInputs input');
+        const names=[];const results=[];
+        nameInputs.forEach((inp,i)=>names.push(inp.value.trim()||T('playerN',{n:i+1})));
+        resultInputs.forEach((inp,i)=>results.push(inp.value.trim()||(inp.dataset.cleared?'':inp.placeholder)||''));
+        ladder.names=names;
+        ladder.results=results;
+    }
     drawLadder();
 }
 
@@ -1152,22 +1170,33 @@ function init(){
     const pabStart=document.getElementById('pabStart');
     if(pabAdd)pabAdd.addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderResults();renderPreview()});
     if(pabShuffle)pabShuffle.addEventListener('click',()=>{
+        /* Shuffle only changes who stands at which top position — the
+           ladder's horizontal rungs are preserved so the existing draw
+           structure stays intact. */
         const inputs=[...document.querySelectorAll('#playerInputs input')];
         const vals=inputs.map(i=>i.value);
         for(let i=vals.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]]}
         inputs.forEach((inp,i)=>inp.value=vals[i]);
-        renderPreview();Audio.click();
+        renderPreview(false);/* label refresh only, no re-generation */
+        Audio.click();
     });
     let sortDir=0;/* 0=unsorted, 1=asc, -1=desc — toggles on each click */
     const pabSortIco=document.getElementById('pabSortIco');
     if(pabSort)pabSort.addEventListener('click',()=>{
         sortDir=sortDir===1?-1:1;/* toggle asc <-> desc */
         const inputs=[...document.querySelectorAll('#playerInputs input')];
-        const vals=inputs.map(i=>i.value);
-        vals.sort((a,b)=>{if(!a&&b)return 1;if(a&&!b)return -1;return sortDir*a.localeCompare(b,undefined,{numeric:true,sensitivity:'base'})});
-        inputs.forEach((inp,i)=>inp.value=vals[i]);
+        /* Sort by effective display name (typed value OR placeholder) so
+           even untyped slots like "Player 3" reorder predictably. Empty
+           trailing slots stay at the end. */
+        const pairs=inputs.map((inp,i)=>({
+            value:inp.value,
+            key:(inp.value.trim()||inp.placeholder||('Player '+(i+1))).trim()
+        }));
+        pairs.sort((a,b)=>sortDir*a.key.localeCompare(b.key,undefined,{numeric:true,sensitivity:'base'}));
+        inputs.forEach((inp,i)=>inp.value=pairs[i].value);
         if(pabSortIco)pabSortIco.textContent=sortDir===1?'↓':'↑';
-        renderPreview();Audio.click();
+        renderPreview(false);/* keep the ladder, just relabel top positions */
+        Audio.click();
     });
     if(pabStart)pabStart.addEventListener('click',startGame);
 
@@ -1251,7 +1280,7 @@ function init(){
         card.classList.add('selected');
         complexity=card.dataset.val;
         Audio.click();
-        renderPreview();
+        renderPreview(true);/* rung density changed — rebuild ladder */
     });
 
     // Mode
