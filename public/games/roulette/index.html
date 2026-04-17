@@ -97,12 +97,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 #wheelCanvas{display:block;touch-action:none;cursor:grab}
 #wheelCanvas:active{cursor:grabbing}
 
-/* Spin button */
-#spinBtn{position:absolute;z-index:10;width:80px;height:80px;border-radius:50%;border:4px solid rgba(255,255,255,0.3);background:radial-gradient(circle at 35% 35%,#e74c3c,#c0392b,#922b21);color:#fff;font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:0.7em;font-weight:900;letter-spacing:1px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.5),inset 0 2px 4px rgba(255,255,255,0.2);transition:all 0.15s;text-transform:uppercase}
-#spinBtn:hover{transform:scale(1.08);box-shadow:0 6px 25px rgba(231,76,60,0.5),inset 0 2px 4px rgba(255,255,255,0.2)}
-#spinBtn:active{transform:scale(0.95)}
-#spinBtn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
-
 .msg-bar{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);text-align:center;padding:10px 24px;font-size:1em;font-weight:700;color:var(--accent);background:rgba(0,0,0,0.5);border-radius:20px;backdrop-filter:blur(8px);border:1px solid rgba(255,230,109,0.15);max-width:90%;white-space:nowrap}
 .msg-bar.winner-msg{color:#fff;background:linear-gradient(135deg,rgba(255,107,53,0.3),rgba(255,51,102,0.3));border-color:var(--primary);animation:winPulse 0.6s ease-out}
 @keyframes winPulse{0%{transform:translateX(-50%) scale(0.8);opacity:0}50%{transform:translateX(-50%) scale(1.05)}100%{transform:translateX(-50%) scale(1);opacity:1}}
@@ -138,7 +132,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     #setupScreen{padding:16px 12px}
     #setupScreen h1{font-size:1.3em}
     .player-row input{font-size:0.82em;padding:6px 10px}
-    #spinBtn{width:60px;height:60px;font-size:0.55em}
     .msg-bar{font-size:0.82em;padding:8px 16px;bottom:12px}
     .result-card{padding:20px 14px}
     .result-card h1{font-size:1.3em}
@@ -263,7 +256,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                 <button class="top-btn" id="backBtn">← Back</button>
             </div>
             <canvas id="wheelCanvas"></canvas>
-            <button id="spinBtn">SPIN</button>
             <div class="msg-bar" id="msgBar"></div>
         </div>
     </div>
@@ -330,7 +322,7 @@ function createStars(){const c=document.getElementById('starsContainer');for(let
 function renderPlayers(){const c=document.getElementById('playerInputs');const existing=[...c.querySelectorAll('input')].map(inp=>inp.value);c.innerHTML='';for(let i=0;i<playerCount;i++){const r=document.createElement('div');r.className='player-row';r.innerHTML=`<span class="dot" style="background:${COLORS[i%COLORS.length]}"></span><input type="text" placeholder="${T('playerN',{n:i+1})}" maxlength="20"><button class="remove-btn">&times;</button>`;c.appendChild(r)}c.querySelectorAll('input').forEach((inp,i)=>{if(existing[i])inp.value=existing[i]});c.querySelectorAll('.remove-btn').forEach(b=>b.addEventListener('click',()=>{if(playerCount<=2)return;playerCount--;renderPlayers();renderPreview()}))}
 
 function applyLanguage(){
-    document.getElementById('titleText').textContent=T('title');document.getElementById('subtitleText').textContent=T('subtitle');document.getElementById('playersTitle').textContent=T('players');document.getElementById('addPlayerText').textContent=T('addPlayer');document.getElementById('startBtn').textContent=T('start');document.getElementById('resultH1').textContent='🎯 '+T('result');document.getElementById('wLabel').textContent=T('result');document.getElementById('shareH3').textContent='📢 '+T('share');document.getElementById('replayText').textContent=T('replay');document.getElementById('setupText').textContent=T('settings');document.getElementById('spinBtn').textContent=T('spin');
+    document.getElementById('titleText').textContent=T('title');document.getElementById('subtitleText').textContent=T('subtitle');document.getElementById('playersTitle').textContent=T('players');document.getElementById('addPlayerText').textContent=T('addPlayer');document.getElementById('startBtn').textContent=T('start');document.getElementById('resultH1').textContent='🎯 '+T('result');document.getElementById('wLabel').textContent=T('result');document.getElementById('shareH3').textContent='📢 '+T('share');document.getElementById('replayText').textContent=T('replay');document.getElementById('setupText').textContent=T('settings');
     const pabA=document.getElementById('pabAddLabel');if(pabA)pabA.textContent=T('pabAdd');
     const pabSh=document.getElementById('pabShuffleLabel');if(pabSh)pabSh.textContent=T('pabShuffle');
     const pabSo=document.getElementById('pabSortLabel');if(pabSo)pabSo.textContent=T('pabSort');
@@ -349,6 +341,10 @@ let velocity=0;      // radians per second
 let lastTick=-1;     // which segment last ticked
 let selectedIdx=-1;
 let animId;
+/* Flapper (hinged pointer at top) — bats against pegs on the wheel rim.
+   Spring-damped pendulum that gets kicked each time a peg passes. */
+let flapperAngle=0;  // 0 = rest (straight down), + = tipped to the right
+let flapperVel=0;    // rad/s
 
 function initCanvas(){
     canvas=document.getElementById('wheelCanvas');
@@ -360,16 +356,16 @@ function initCanvas(){
 function resize(){
     const wrap=canvas.parentElement;
     W=wrap.clientWidth;H=wrap.clientHeight;
-    const maxR=Math.min(W,H)*0.42;
-    radius=Math.min(maxR,280);
+    /* Wheel is sized to fill the available canvas area. Bumped ~15% vs the
+       previous 0.42/280 pair so the wheel commands more visual attention
+       now that the center spin button is gone. Leave ~48px headroom for
+       the flapper (pivot above outer ring + length below). */
+    const maxR=Math.min(W,H)*0.48;
+    radius=Math.min(maxR,322);
     canvas.width=W*dpr;canvas.height=H*dpr;
     canvas.style.width=W+'px';canvas.style.height=H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
     cx=W/2;cy=H/2;
-    // Position spin button
-    const btn=document.getElementById('spinBtn');
-    btn.style.left=(cx-btn.offsetWidth/2)+'px';
-    btn.style.top=(cy-btn.offsetHeight/2)+'px';
 }
 
 function drawWheel(){
@@ -385,86 +381,97 @@ function drawWheel(){
     ctx.shadowColor='rgba(0,0,0,0.5)';
     ctx.shadowBlur=40;
     ctx.shadowOffsetY=8;
-    ctx.beginPath();ctx.arc(0,0,radius+8,0,Math.PI*2);
+    ctx.beginPath();ctx.arc(0,0,radius+10,0,Math.PI*2);
     ctx.fillStyle='rgba(0,0,0,0.01)';ctx.fill();
     ctx.restore();
 
-    // Outer ring (gold)
-    ctx.beginPath();ctx.arc(0,0,radius+8,0,Math.PI*2);
-    const ringGrad=ctx.createRadialGradient(0,0,radius,0,0,radius+8);
-    ringGrad.addColorStop(0,'#b8860b');ringGrad.addColorStop(0.5,'#ffd700');ringGrad.addColorStop(1,'#b8860b');
+    // Outer ring (gold) — slightly thicker so pegs read as protruding pins
+    ctx.beginPath();ctx.arc(0,0,radius+10,0,Math.PI*2);
+    const ringGrad=ctx.createRadialGradient(0,0,radius,0,0,radius+10);
+    ringGrad.addColorStop(0,'#b8860b');ringGrad.addColorStop(0.5,'#ffd700');ringGrad.addColorStop(1,'#8a6410');
     ctx.fillStyle=ringGrad;ctx.fill();
 
-    // Notches on ring
-    for(let i=0;i<n;i++){
-        const a=angle+i*sliceAngle;
-        const nx=Math.cos(a)*(radius+4);
-        const ny=Math.sin(a)*(radius+4);
-        ctx.beginPath();ctx.arc(nx,ny,3,0,Math.PI*2);
-        ctx.fillStyle='#8B6914';ctx.fill();
-    }
-
-    // Draw slices
+    // Draw slices — all the way to center (no hub cover)
     for(let i=0;i<n;i++){
         const startA=angle+i*sliceAngle;
         const endA=startA+sliceAngle;
 
-        // Slice fill
         ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,radius,startA,endA);ctx.closePath();
         const grad=ctx.createRadialGradient(0,0,radius*0.15,0,0,radius);
         grad.addColorStop(0,players[i].color);grad.addColorStop(1,players[i].dark);
         ctx.fillStyle=grad;ctx.fill();
 
-        // Slice border
-        ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=1.5;ctx.stroke();
+        ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=1.8;ctx.stroke();
 
-        // Inner shine
         ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,radius*0.92,startA,endA);ctx.closePath();
         ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;ctx.stroke();
 
-        // Text
         const midA=startA+sliceAngle/2;
         ctx.save();ctx.rotate(midA);
         ctx.textAlign='right';ctx.textBaseline='middle';
-        const fontSize=Math.min(16,radius*0.12,sliceAngle*radius*0.3);
+        const fontSize=Math.min(18,radius*0.13,sliceAngle*radius*0.32);
         ctx.font=`bold ${fontSize}px 'Noto Sans KR',sans-serif`;
         ctx.fillStyle='#fff';
         ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=3;
-        const maxTextW=radius*0.55;
+        const maxTextW=radius*0.72;
         let txt=players[i].name;
         if(ctx.measureText(txt).width>maxTextW){while(txt.length>1&&ctx.measureText(txt+'…').width>maxTextW)txt=txt.slice(0,-1);txt+='…'}
-        ctx.fillText(txt,radius*0.88,0,maxTextW);
+        ctx.fillText(txt,radius*0.9,0,maxTextW);
         ctx.restore();
     }
 
-    // Center hub
-    const hubR=radius*0.18;
-    ctx.beginPath();ctx.arc(0,0,hubR+3,0,Math.PI*2);
-    const hubRing=ctx.createRadialGradient(0,0,hubR,0,0,hubR+3);
-    hubRing.addColorStop(0,'#ffd700');hubRing.addColorStop(1,'#b8860b');
-    ctx.fillStyle=hubRing;ctx.fill();
+    // Pegs — one raised pin at each slice boundary. These are what the
+    // flapper physically bats against as the wheel spins.
+    for(let i=0;i<n;i++){
+        const a=angle+i*sliceAngle;
+        const nx=Math.cos(a)*(radius+5);
+        const ny=Math.sin(a)*(radius+5);
+        ctx.beginPath();ctx.arc(nx,ny,4.2,0,Math.PI*2);
+        const pg=ctx.createRadialGradient(nx-1.2,ny-1.2,0,nx,ny,4.2);
+        pg.addColorStop(0,'#fff4c2');pg.addColorStop(0.55,'#e9bd3a');pg.addColorStop(1,'#5a3f08');
+        ctx.fillStyle=pg;ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=0.9;ctx.stroke();
+    }
 
-    ctx.beginPath();ctx.arc(0,0,hubR,0,Math.PI*2);
-    const hubGrad=ctx.createRadialGradient(-hubR*0.3,-hubR*0.3,0,0,0,hubR);
-    hubGrad.addColorStop(0,'#555');hubGrad.addColorStop(0.7,'#222');hubGrad.addColorStop(1,'#111');
-    ctx.fillStyle=hubGrad;ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1;ctx.stroke();
+    // Tiny center nail (axis marker — not a hub covering the slices)
+    ctx.beginPath();ctx.arc(0,0,5.5,0,Math.PI*2);
+    const nailGrad=ctx.createRadialGradient(-1.5,-1.5,0,0,0,5.5);
+    nailGrad.addColorStop(0,'#ffe9a0');nailGrad.addColorStop(0.7,'#b8860b');nailGrad.addColorStop(1,'#4a2f08');
+    ctx.fillStyle=nailGrad;ctx.fill();
+    ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=1;ctx.stroke();
 
     ctx.restore();
 
-    // Pointer (top center triangle)
-    const ptrX=cx,ptrY=cy-radius-8;
+    // Flapper — hinged pointer that pegs bat against
+    drawFlapper();
+}
+
+function drawFlapper(){
+    const pivotX=cx;
+    const pivotY=cy-radius-4;   // hinge just above outer ring
+    const len=36;               // flapper tip reaches into the peg circle
     ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=8;
+    ctx.translate(pivotX,pivotY);
+    ctx.rotate(flapperAngle);
+    // body
+    ctx.shadowColor='rgba(0,0,0,0.45)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
     ctx.beginPath();
-    ctx.moveTo(ptrX,ptrY+28);
-    ctx.lineTo(ptrX-14,ptrY-4);
-    ctx.lineTo(ptrX+14,ptrY-4);
+    ctx.moveTo(-10,0);
+    ctx.lineTo(10,0);
+    ctx.lineTo(4,len);
+    ctx.lineTo(-4,len);
     ctx.closePath();
-    const ptrGrad=ctx.createLinearGradient(ptrX,ptrY-4,ptrX,ptrY+28);
-    ptrGrad.addColorStop(0,'#ffd700');ptrGrad.addColorStop(1,'#ff6b35');
-    ctx.fillStyle=ptrGrad;ctx.fill();
-    ctx.strokeStyle='#b8860b';ctx.lineWidth=2;ctx.stroke();
+    const fg=ctx.createLinearGradient(0,0,0,len);
+    fg.addColorStop(0,'#ffe066');fg.addColorStop(0.5,'#ff9f1c');fg.addColorStop(1,'#c24407');
+    ctx.fillStyle=fg;ctx.fill();
+    ctx.shadowColor='transparent';
+    ctx.strokeStyle='#5a2200';ctx.lineWidth=1.5;ctx.stroke();
+    // hinge cap
+    ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);
+    const hg=ctx.createRadialGradient(-2,-2,0,0,0,7);
+    hg.addColorStop(0,'#888');hg.addColorStop(0.7,'#222');hg.addColorStop(1,'#000');
+    ctx.fillStyle=hg;ctx.fill();
+    ctx.strokeStyle='#ffd700';ctx.lineWidth=1;ctx.stroke();
     ctx.restore();
 }
 
@@ -477,32 +484,60 @@ function getSelectedIndex(){
     return Math.floor(a/sliceAngle)%n;
 }
 
-/* Physics tick sound */
-function checkTick(){
-    const idx=getSelectedIndex();
-    if(idx!==lastTick){lastTick=idx;if(velocity>0.3)SFX.tick()}
-}
-
-/* Main animation loop */
+/* Main animation loop — wheel kinematics + flapper/peg collision physics.
+   Design targets a ~10s spin: initial velocity ~20 rad/s, low friction while
+   "spinning" flag is held, higher friction after release, plus a small bite
+   of energy on every peg collision so the decay feels physical. */
 let lastTime=0;
 function loop(ts){
     const dt=Math.min((ts-(lastTime||ts))/1000,0.05);
     lastTime=ts;
 
-    if(velocity>0.001){
-        // Friction: exponential decay
-        const friction=spinning?0.985:0.97;
+    const n=players.length;
+    const sliceAngle=Math.PI*2/n;
+
+    if(Math.abs(velocity)>0.001){
+        /* Base friction. While spinning flag is set (early hold phase) the
+           wheel keeps most of its energy; after release it decays faster. */
+        const friction=spinning?0.998:0.993;
         velocity*=Math.pow(friction,dt*60);
         angle+=velocity*dt;
+        angle=angle%(Math.PI*2);if(angle<0)angle+=Math.PI*2;
 
-        // Normalize angle
-        angle=angle%(Math.PI*2);
+        /* Peg collision: the top pointer sits above a slice. Whenever the
+           selected slice index changes, a peg just crossed under the
+           flapper — kick the flapper and bite a bit of energy off. */
+        const idx=getSelectedIndex();
+        if(idx!==lastTick){
+            if(lastTick!==-1){
+                SFX.tick();
+                const sf=Math.min(1,Math.abs(velocity)/9);
+                /* Kick in the direction the peg travels across the flapper tip. */
+                const dir=velocity>=0?1:-1;
+                flapperVel+=7.5*dir*(0.35+0.65*sf);
+                /* Wheel loses a small slice of velocity per peg strike. More
+                   at high speed (harder impact), less at crawl speed. */
+                velocity*=(1-0.004-0.012*sf);
+            }
+            lastTick=idx;
+        }
+    }
 
-        checkTick();
+    /* Flapper is a spring-damped pendulum pivoted above the rim. Returns
+       to center when no peg is pushing, overshoots and oscillates like a
+       real lever. Clamp angle so it can't flip past the rim. */
+    const K=560,C=8.5;
+    flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
+    flapperAngle+=flapperVel*dt;
+    const maxA=0.55;
+    if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.3}
+    if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.3}
 
-        // Stopped?
-        if(velocity<0.08&&!spinning){
-            velocity=0;
+    /* Stop condition — wheel velocity has decayed AND we're past the held
+       spin phase. Lock in the result. */
+    if(!spinning&&velocity!==0&&Math.abs(velocity)<0.06){
+        velocity=0;
+        if(selectedIdx===-1){
             selectedIdx=getSelectedIndex();
             onStopped();
         }
@@ -517,38 +552,38 @@ function onStopped(){
     const msg=document.getElementById('msgBar');
     msg.textContent=T('selected',{name});
     msg.className='msg-bar winner-msg';
-    document.getElementById('spinBtn').disabled=false;
     SFX.win();
-
-    // Show result after delay
     setTimeout(()=>showResult(name),2000);
 }
 
-/* Spin */
+/* Spin — kick off with enough initial energy for a ~10s run given the
+   friction + peg-damping tuning above. */
 function doSpin(){
-    if(velocity>0.5)return;
+    if(Math.abs(velocity)>0.5)return;
     SFX.g();SFX.click();
     spinning=true;
     selectedIdx=-1;
-    velocity=15+Math.random()*12;// 15-27 rad/s initial
-    document.getElementById('spinBtn').disabled=true;
+    velocity=19+Math.random()*4;  // 19–23 rad/s
+    flapperAngle=0;flapperVel=0;
     const msg=document.getElementById('msgBar');
     msg.textContent=T('spinning');msg.className='msg-bar';
-
-    // Release after random time (controls where it stops)
-    const holdTime=2000+Math.random()*2000;
+    /* Hold the low-friction phase for the first ~3s so the spin feels long
+       and powerful before gradual decay. */
+    const holdTime=2800+Math.random()*1200;
     setTimeout(()=>{spinning=false},holdTime);
 }
 
 /* Swipe/drag to spin */
 let dragStart=null,dragAngle=0,dragTime=0;
 function onPointerDown(e){
-    if(velocity>0.5)return;
+    if(Math.abs(velocity)>0.5)return;
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.touches?.[0]?.clientY)-r.top-cy;
     const dist=Math.sqrt(x*x+y*y);
-    if(dist<radius*0.2||dist>radius+30)return;// ignore center & outside
+    /* Hub is gone — only skip drags that start outside the wheel or on the
+       tiny center nail (where radial drag has no meaningful angular delta). */
+    if(dist<8||dist>radius+30)return;
     dragStart={x,y,a:Math.atan2(y,x),t:performance.now()};dragAngle=angle;
 }
 function onPointerMove(e){
@@ -575,14 +610,12 @@ function onPointerUp(e){
     const swipeVel=da/dt;
     if(Math.abs(swipeVel)>2){
         SFX.g();SFX.click();
-        velocity=Math.min(Math.abs(swipeVel)*1.5,30);
-        if(swipeVel<0)velocity=-velocity;// we only spin positive
-        velocity=Math.abs(velocity);
+        velocity=Math.min(Math.abs(swipeVel)*1.5,25);
         spinning=true;selectedIdx=-1;
-        document.getElementById('spinBtn').disabled=true;
+        flapperAngle=0;flapperVel=0;
         document.getElementById('msgBar').textContent=T('spinning');
         document.getElementById('msgBar').className='msg-bar';
-        setTimeout(()=>{spinning=false},1500+Math.random()*1500);
+        setTimeout(()=>{spinning=false},2500+Math.random()*1500);
     }
 }
 
@@ -634,8 +667,8 @@ function startGame(){
        so clicking Start looks like it's spinning what the user was already looking at. */
     if(!pcMode)angle=Math.random()*Math.PI*2;
     velocity=0;lastTick=-1;selectedIdx=-1;
+    flapperAngle=0;flapperVel=0;
     const msg=document.getElementById('msgBar');msg.textContent=T('tapToSpin');msg.className='msg-bar';
-    document.getElementById('spinBtn').disabled=false;
     lastTime=0;
     if(animId)cancelAnimationFrame(animId);
     animId=requestAnimationFrame(loop);
@@ -715,9 +748,8 @@ function init(){
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
     document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderPreview()});
     document.getElementById('startBtn').addEventListener('click',startGame);
-    document.getElementById('spinBtn').addEventListener('click',doSpin);
     document.getElementById('backBtn').addEventListener('click',backToSetup);
-    document.getElementById('replayBtn').addEventListener('click',()=>{confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;document.getElementById('spinBtn').disabled=false;document.getElementById('msgBar').textContent=T('tapToSpin');document.getElementById('msgBar').className='msg-bar';lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop)});
+    document.getElementById('replayBtn').addEventListener('click',()=>{confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;flapperAngle=0;flapperVel=0;document.getElementById('msgBar').textContent=T('tapToSpin');document.getElementById('msgBar').className='msg-bar';lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);if(isPCLayout())setTimeout(doSpin,80)});
     document.getElementById('backToSetupBtn').addEventListener('click',backToSetup);
 
     // Canvas events
