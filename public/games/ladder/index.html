@@ -589,24 +589,41 @@ function generateLadder(){
 
     // Horizontals
     const horizCount=complexity==='low'?Math.max(3,n*2):complexity==='high'?Math.max(8,n*5):Math.max(5,n*3);
-    const minGapY=30;
+    /* Even distribution across columns: give every column-pair a base share,
+       then sprinkle the remainder on random columns. Avoids the old bias
+       where pure-random column picks clumped rungs into a few gaps. */
+    const base=Math.floor(horizCount/(n-1));
+    const extra=horizCount-base*(n-1);
+    const targetPerCol=new Array(n-1).fill(base);
+    const extraCols=[...Array(n-1).keys()];
+    for(let i=extraCols.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[extraCols[i],extraCols[j]]=[extraCols[j],extraCols[i]]}
+    for(let i=0;i<extra;i++)targetPerCol[extraCols[i]]++;
+    /* Minimum vertical spacing for readability. Ideally 38px so rungs don't
+       look stacked, but shrink gracefully when the ladder is crowded
+       (high complexity + many players) so we can still fit every rung. */
+    const availableY=botY-topY;
+    const maxPerCol=Math.max(...targetPerCol);
+    const minGapY=Math.max(22,Math.min(38,Math.floor(availableY/(maxPerCol+1))));
     const horiz=[];
-    const segments=[];// track segments per column-pair
+    const segments=[];
     for(let i=0;i<n-1;i++)segments.push([]);
-
-    for(let h=0;h<horizCount;h++){
-        let attempts=0;
-        while(attempts<50){
-            const col=Math.floor(Math.random()*(n-1));
-            const y=topY+minGapY+Math.random()*(botY-topY-minGapY*2);
-            // Check no overlap
-            const tooClose=segments[col].some(sy=>Math.abs(sy-y)<minGapY);
-            if(!tooClose){
-                segments[col].push(y);
-                horiz.push({col,y,x1:verts[col].x,x2:verts[col+1].x});
-                break;
-            }
-            attempts++;
+    /* Flatten (col,slot) pairs then shuffle so no column is placed first —
+       otherwise later columns starve when early ones claim scarce y slots. */
+    const slots=[];
+    for(let col=0;col<n-1;col++)for(let k=0;k<targetPerCol[col];k++)slots.push(col);
+    for(let i=slots.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[slots[i],slots[j]]=[slots[j],slots[i]]}
+    for(const col of slots){
+        for(let attempt=0;attempt<120;attempt++){
+            const y=topY+minGapY+Math.random()*(availableY-minGapY*2);
+            if(segments[col].some(sy=>Math.abs(sy-y)<minGapY))continue;
+            /* Adjacent columns must also clear minGapY — two rungs at the
+               same y on neighboring column-pairs would visually merge and
+               make the path ambiguous at that junction. */
+            if(col>0&&segments[col-1].some(sy=>Math.abs(sy-y)<minGapY))continue;
+            if(col<n-2&&segments[col+1].some(sy=>Math.abs(sy-y)<minGapY))continue;
+            segments[col].push(y);
+            horiz.push({col,y,x1:verts[col].x,x2:verts[col+1].x});
+            break;
         }
     }
 
