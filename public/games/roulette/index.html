@@ -569,35 +569,40 @@ function loop(ts){
                 SFX.tick();
                 const sf=Math.min(1,Math.abs(velocity)/9);
                 const dir=velocity>=0?1:-1;
-                flapperVel+=6.0*dir*(0.3+0.7*sf);
+                /* Kick amplitude: 9 rad/s at full speed, minimum 45% floor
+                   so even slow-crawl pegs still visibly nudge the flapper.
+                   Previous 6.0*(0.3+0.7*sf) went to ~1.8 at low speed —
+                   essentially invisible. */
+                flapperVel+=9*dir*(0.45+0.55*sf);
                 velocity*=(1-0.00065-0.0021*sf);
             }
             lastTick=pegSlot;
         }
     }
 
-    /* Flapper dynamics — spring + asymmetric damping.
-       A plain symmetric spring rings the flapper back to center after
-       every kick, so each direction blurs into the next and the overall
-       lean is imperceptible. Fix: when the flapper is traveling AGAINST
-       the wheel's spin direction (i.e. springing back toward the pegs),
-       damp it ~2× harder. Effect: each peg strike pushes the flapper in
-       the spin direction and the arm stays biased that way instead of
-       bouncing back — reads as a heavy lever being dragged by the wheel,
-       which is the direction cue the user wanted. When the wheel is
-       essentially stopped, fall back to symmetric damping so the arm
-       returns cleanly to center. */
-    const K=500;
-    const Cbase=18;
+    /* Flapper dynamics — asymmetric-damped pendulum.
+       Tuned for a big visible swing in the spin direction and a calm,
+       overdamped return. Parameters:
+         K = 380 (ω₀ ≈ 19.5 rad/s) — softer spring so the same impulse
+             produces a larger, slower arc instead of a snappy blip.
+         Cbase = 12 (ζ ≈ 0.31) — underdamped in the spin direction; the
+             arm swings out and lingers, giving a clear directional lean.
+         Cagainst = 3× Cbase = 36 (ζ ≈ 0.92) — near critical damping on
+             the return stroke, so the arm doesn't bounce back past
+             center and stays biased toward the wheel direction.
+         maxA = 0.55 rad (~31°) — deflection cap tuned to fit inside
+             the canvas top reserve. */
+    const K=380;
+    const Cbase=12;
     const wheelDir=velocity>=0?1:-1;
     const movingEnough=Math.abs(velocity)>0.3;
     const againstWheel=movingEnough&&flapperVel*wheelDir<0;
-    const C=againstWheel?Cbase*2.2:Cbase;
+    const C=againstWheel?Cbase*3:Cbase;
     flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
     flapperAngle+=flapperVel*dt;
-    const maxA=0.45;
-    if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.3}
-    if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.3}
+    const maxA=0.55;
+    if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.2}
+    if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.2}
 
     /* Stop condition — wheel velocity has decayed AND we're past the held
        spin phase. Lock in the result. */
