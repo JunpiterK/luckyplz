@@ -312,7 +312,7 @@ let playerCount=4,players=[],spinning=false;
 /* Audio */
 const SFX=(()=>{let c;function g(){if(!c)c=new(window.AudioContext||window.webkitAudioContext)();return c}
 function p(f,d,t='sine',v=0.12){try{const x=g(),o=x.createOscillator(),ga=x.createGain();o.type=t;o.frequency.value=f;ga.gain.setValueAtTime(v,x.currentTime);ga.gain.exponentialRampToValueAtTime(0.001,x.currentTime+d);o.connect(ga);ga.connect(x.destination);o.start();o.stop(x.currentTime+d)}catch(e){}}
-return{tick(){p(1800,0.02,'square',0.06)},win(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,0.25,'sine',0.18),i*100))},click(){p(600,0.04,'square',0.08)},g}
+return{tick(){p(900,0.035,'square',0.07)},win(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,0.25,'sine',0.18),i*100))},click(){p(600,0.04,'square',0.08)},g}
 })();
 
 /* Stars */
@@ -424,20 +424,21 @@ function drawWheel(){
         ctx.restore();
     }
 
-    /* Pegs — 3× the slice count, spaced evenly around the rim so the
-       flapper has a dense row of pins to clatter against. Exactly aligned
-       on slice boundaries (every 3rd peg) and two interior pegs between. */
-    const pegCount=n*3;
+    /* Pegs — 6× the slice count, spaced evenly around the rim. Thicker
+       pins (5px radius) read better as physical objects the flapper bats
+       against. Orbit tucked slightly inward (radius+6) so the fatter peg
+       still sits flush against the outer ring rather than past it. */
+    const pegCount=n*6;
     const pegStep=Math.PI*2/pegCount;
     for(let i=0;i<pegCount;i++){
         const a=angle+i*pegStep;
-        const nx=Math.cos(a)*(radius+7);
-        const ny=Math.sin(a)*(radius+7);
-        ctx.beginPath();ctx.arc(nx,ny,3.6,0,Math.PI*2);
-        const pg=ctx.createRadialGradient(nx-1,ny-1,0,nx,ny,3.6);
-        pg.addColorStop(0,'#fff4c2');pg.addColorStop(0.55,'#e9bd3a');pg.addColorStop(1,'#5a3f08');
+        const nx=Math.cos(a)*(radius+6);
+        const ny=Math.sin(a)*(radius+6);
+        ctx.beginPath();ctx.arc(nx,ny,5,0,Math.PI*2);
+        const pg=ctx.createRadialGradient(nx-1.5,ny-1.5,0,nx,ny,5);
+        pg.addColorStop(0,'#fff4c2');pg.addColorStop(0.55,'#e9bd3a');pg.addColorStop(1,'#4a3008');
         ctx.fillStyle=pg;ctx.fill();
-        ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=0.8;ctx.stroke();
+        ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=1;ctx.stroke();
     }
 
     // Tiny center nail (axis marker — not a hub covering the slices)
@@ -469,7 +470,7 @@ function drawWheel(){
    overlap controls how deep the tip penetrates the peg circle. Big
    enough that pegs can't slip past without contact (~5px). */
 function drawFlapper(){
-    const pegOrbitR=radius+7;
+    const pegOrbitR=radius+6;
     const flapperLen=32;
     const pivotX=cx;
     const pivotY=cy-pegOrbitR-flapperLen+5;
@@ -537,7 +538,7 @@ function loop(ts){
     lastTime=ts;
 
     const n=players.length;
-    const pegCount=n*3;
+    const pegCount=n*6;
     const pegStep=Math.PI*2/pegCount;
 
     if(Math.abs(velocity)>0.001){
@@ -549,10 +550,8 @@ function loop(ts){
         angle=angle%(Math.PI*2);if(angle<0)angle+=Math.PI*2;
 
         /* Peg collision: track which peg slot is currently under the
-           flapper (top = -π/2). Each time this slot index changes, a peg
-           just crossed the flapper tip — kick the flapper and bite off
-           a slice of wheel energy. 3× more pegs than before, so the
-           per-peg damping is scaled down accordingly. */
+           flapper (top = -π/2). 6× more pegs than slices, so per-peg
+           damping is halved again vs the 3× version to keep a ~10s spin. */
         const topAngle=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
         const pegSlot=Math.floor(topAngle/pegStep);
         if(pegSlot!==lastTick){
@@ -560,20 +559,22 @@ function loop(ts){
                 SFX.tick();
                 const sf=Math.min(1,Math.abs(velocity)/9);
                 const dir=velocity>=0?1:-1;
-                flapperVel+=5.5*dir*(0.3+0.7*sf);
-                velocity*=(1-0.0013-0.0042*sf);
+                flapperVel+=4.5*dir*(0.3+0.7*sf);
+                velocity*=(1-0.00065-0.0021*sf);
             }
             lastTick=pegSlot;
         }
     }
 
-    /* Flapper is a spring-damped pendulum pivoted above the rim. Returns
-       to center when no peg is pushing, overshoots and oscillates like a
-       real lever. Clamp angle so it can't flip past the rim. */
-    const K=560,C=8.5;
+    /* Flapper is a spring-damped pendulum pivoted above the rim. Heavier
+       damping (C) gives the arm a more grounded, less springy recovery —
+       it settles quickly after each peg strike instead of ringing. Spring
+       K slightly lower so the baseline rest feels weighty, not twitchy.
+       Damping ratio ζ = C/(2√K) ≈ 0.34 (clearly underdamped but calm). */
+    const K=500,C=15;
     flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
     flapperAngle+=flapperVel*dt;
-    const maxA=0.55;
+    const maxA=0.45;
     if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.3}
     if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.3}
 
