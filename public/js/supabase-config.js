@@ -1,5 +1,5 @@
 /*
-  NotMePlz - Supabase Configuration
+  Lucky Please - Supabase Configuration
   Shared auth module for all pages
 */
 const SUPABASE_URL = 'https://owvaarmnlednfkgmgerf.supabase.co';

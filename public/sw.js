@@ -1,11 +1,11 @@
 /*
-  NotMePlz Service Worker
+  Lucky Please Service Worker
   - HTML/JS/CSS: Network-first (always try latest, fallback to cache)
   - Images/Audio/Fonts: Cache-first (fast load, update in background)
   - Version bump CACHE_VERSION on every deploy to purge old caches
 */
 const CACHE_VERSION = 19;
-const CACHE_NAME = 'notmeplz-v' + CACHE_VERSION;
+const CACHE_NAME = 'luckyplz-v' + CACHE_VERSION;
 
 const PRECACHE = [
   '/',
