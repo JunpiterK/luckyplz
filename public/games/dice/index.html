@@ -204,14 +204,30 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
 /* Quick Roll player cards */
 .qr-grid{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:10px 0}
-.qr-card{background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.08);border-radius:16px;padding:12px;text-align:center;min-width:130px;flex:1;max-width:200px;transition:all 0.4s}
-.qr-card.loser{border-color:var(--danger);background:rgba(255,51,102,0.12);box-shadow:0 0 25px rgba(255,51,102,0.2)}
-.qr-card.winner{border-color:var(--success);background:rgba(0,255,136,0.08)}
+.qr-card{background:rgba(255,255,255,0.05);border:2px solid rgba(255,255,255,0.08);border-radius:16px;padding:12px;text-align:center;min-width:130px;flex:1;max-width:200px;transition:all 0.4s;position:relative}
+.qr-card.loser{border-color:var(--danger);background:rgba(255,51,102,0.15);animation:loserShake .5s,loserPulse 1.6s ease-in-out infinite .5s}
+.qr-card.winner{border-color:var(--success);background:rgba(0,255,136,0.1);animation:winnerGlow 1.2s ease-in-out infinite alternate}
+@keyframes winnerGlow{from{box-shadow:0 0 20px rgba(0,255,136,.35);transform:scale(1)}to{box-shadow:0 0 42px rgba(0,255,136,.65);transform:scale(1.03)}}
+@keyframes loserShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@keyframes loserPulse{0%,100%{box-shadow:0 0 16px rgba(255,51,102,.35)}50%{box-shadow:0 0 32px rgba(255,51,102,.7)}}
 .qr-card .qr-name{font-size:0.85em;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:6px;justify-content:center}
 .qr-card .qr-name .qdot{width:14px;height:14px;border-radius:50%;flex-shrink:0}
 .qr-card .qr-dice-area{min-height:110px;display:flex;align-items:center;justify-content:center;perspective:500px}
+.qr-card .qr-emoji{font-size:1.6em;line-height:1;min-height:24px;margin-top:4px;transition:transform .2s}
+.qr-card .qr-emoji.show{animation:emoPop .55s cubic-bezier(.3,1.6,.5,1)}
+@keyframes emoPop{0%{transform:scale(0) translateY(8px);opacity:0}55%{transform:scale(1.35) translateY(-4px);opacity:1}100%{transform:scale(1) translateY(0);opacity:1}}
 .qr-card .qr-val{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.8em;font-weight:900;color:var(--accent);margin-top:6px;min-height:36px}
-.qr-card .qr-rank{font-size:0.7em;color:rgba(255,255,255,0.4);margin-top:2px}
+.qr-card .qr-val.flash{animation:valFlash .5s cubic-bezier(.3,1.7,.5,1)}
+@keyframes valFlash{0%{transform:scale(0) rotate(-25deg);color:#fff;text-shadow:0 0 30px #FFE66D}50%{transform:scale(1.6) rotate(6deg);color:#FFE66D;text-shadow:0 0 40px #FFE66D,0 0 60px #FF9A3C}100%{transform:scale(1) rotate(0);color:var(--accent);text-shadow:none}}
+.qr-card .qr-rank{font-size:.72em;color:rgba(255,255,255,.5);margin-top:4px;font-weight:700;letter-spacing:1px}
+.qr-card.winner .qr-rank{color:var(--success)}
+.qr-card.loser .qr-rank{color:var(--danger)}
+
+/* Combo banner */
+.combo-banner{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);color:#0A0A1A;font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:2em;font-weight:900;padding:18px 48px;border-radius:20px;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 80px rgba(255,230,109,.5);z-index:400;letter-spacing:.06em;text-align:center;pointer-events:none;opacity:0;white-space:nowrap}
+.combo-banner.show{animation:comboShow 1.8s cubic-bezier(.3,1.6,.5,1) forwards}
+@keyframes comboShow{0%{transform:translate(-50%,-50%) scale(0) rotate(-15deg);opacity:0}15%{transform:translate(-50%,-50%) scale(1.2) rotate(3deg);opacity:1}25%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}75%{transform:translate(-50%,-50%) scale(1) rotate(0);opacity:1}100%{transform:translate(-50%,-50%) scale(.7);opacity:0}}
+@media(max-width:500px){.combo-banner{font-size:1.3em;padding:14px 28px}}
 
 /* Mini dice for cards */
 .mini-dice-scene{width:70px;height:70px;perspective:400px}
@@ -546,70 +562,147 @@ function startQuickRoll(){
     let h=`<div class="game-header"><h2>⚡ ${T('quickRoll')}</h2></div>`;
     h+=`<div class="qr-grid" id="qrGrid">`;
     players.forEach((p,i)=>{
-        h+=`<div class="qr-card" id="qrc${i}"><div class="qr-name"><span class="qdot" style="background:${p.color}"></span>${p.name}</div><div class="qr-dice-area" id="qda${i}">${diceHTML('mini')}</div><div class="qr-val" id="qrv${i}">-</div><div class="qr-rank" id="qrr${i}"></div></div>`;
+        h+=`<div class="qr-card" id="qrc${i}"><div class="qr-name"><span class="qdot" style="background:${p.color}"></span>${p.name}</div><div class="qr-dice-area" id="qda${i}">${diceHTML('mini')}</div><div class="qr-emoji" id="qre${i}"></div><div class="qr-val" id="qrv${i}">-</div><div class="qr-rank" id="qrr${i}"></div></div>`;
     });
     h+=`</div><div class="msg-bar" id="qrMsg"></div><div style="text-align:center"><button id="rollBtn">${T('roll')}</button></div>`;
     gc.innerHTML=h;
     document.getElementById('rollBtn').addEventListener('click',executeQuickRoll);
 }
 
+function revealDiceValue(i,val){
+    const vEl=document.getElementById(`qrv${i}`);
+    if(vEl){
+        vEl.textContent=val;
+        vEl.classList.remove('flash');
+        void vEl.offsetWidth;
+        vEl.classList.add('flash');
+    }
+    const emoEl=document.getElementById(`qre${i}`);
+    if(emoEl){
+        const emoji=val===6?'🎉':val===1?'😱':val>=5?'😎':val>=3?'🙂':'😐';
+        emoEl.textContent=emoji;
+        emoEl.classList.remove('show');
+        void emoEl.offsetWidth;
+        emoEl.classList.add('show');
+    }
+}
+
+function detectDiceCombo(values){
+    const n=values.length;
+    if(!n)return null;
+    const sum=values.reduce((a,b)=>a+b,0);
+    const allSame=values.every(v=>v===values[0]);
+    if(n===1){
+        if(values[0]===6)return 'CRITICAL! 💥';
+        return null;
+    }
+    if(n===2){
+        if(values[0]===6&&values[1]===6)return 'DOUBLE SIX! 💎';
+        if(values[0]===1&&values[1]===1)return 'SNAKE EYES 🐍';
+        if(sum===7)return 'LUCKY SEVEN ⭐';
+        if(allSame)return `DOUBLES! ✨`;
+        return null;
+    }
+    if(allSame){
+        if(values[0]===6)return `${n} SIXES! 💎`;
+        if(values[0]===1)return `${n} ONES! 😱`;
+        return `${n} ${values[0]}s! 🌟`;
+    }
+    if(n>=3){
+        const sorted=[...values].sort((a,b)=>a-b);
+        const isStraight=sorted.every((v,i)=>i===0||v===sorted[i-1]+1);
+        if(isStraight)return 'STRAIGHT! 📈';
+    }
+    return null;
+}
+
+function showComboBanner(text){
+    let banner=document.querySelector('.combo-banner');
+    if(!banner){
+        banner=document.createElement('div');
+        banner.className='combo-banner';
+        document.body.appendChild(banner);
+    }
+    banner.textContent=text;
+    banner.classList.remove('show');
+    void banner.offsetWidth;
+    banner.classList.add('show');
+    SFX.win();
+    setTimeout(()=>banner.classList.remove('show'),1900);
+}
+
 async function executeQuickRoll(){
     SFX.g();const btn=document.getElementById('rollBtn');btn.disabled=true;
     const msg=document.getElementById('qrMsg');msg.textContent=T('rolling');msg.className='msg-bar';
 
-    // Roll all dice simultaneously with 3D animation
-    const rollPromises=[];
-    const values=[];
+    // Reset any previous state
     players.forEach((_,i)=>{
-        const val=Math.floor(Math.random()*6)+1;
-        values.push(val);
-        const box=document.querySelector(`#qda${i} .mini-dice-box`);
-        if(box){
-            const dur=1000+Math.random()*400;
-            rollPromises.push(animateDice(box,val,dur));
-        }
+        const vEl=document.getElementById(`qrv${i}`);if(vEl){vEl.textContent='?';vEl.classList.remove('flash')}
+        const emoEl=document.getElementById(`qre${i}`);if(emoEl){emoEl.textContent='';emoEl.classList.remove('show')}
+        document.getElementById(`qrr${i}`).textContent='';
+        document.getElementById(`qrc${i}`).classList.remove('winner','loser');
     });
 
-    await Promise.all(rollPromises);
+    // Cascade roll: each die starts 160ms after the previous so reveals stagger naturally
+    const values=new Array(players.length);
+    const tasks=players.map((p,i)=>{
+        const val=Math.floor(Math.random()*6)+1;
+        values[i]=val;
+        const box=document.querySelector(`#qda${i} .mini-dice-box`);
+        const dur=1300+Math.random()*300;
+        const startDelay=i*160;
+        return (async()=>{
+            await new Promise(r=>setTimeout(r,startDelay));
+            if(box)await animateDice(box,val,dur);
+            revealDiceValue(i,val);
+        })();
+    });
+    await Promise.all(tasks);
 
-    // Show values
-    values.forEach((v,i)=>document.getElementById(`qrv${i}`).textContent=v);
-
-    // Build results
+    // Tie-break: detect losers first, re-roll only them
     const results=players.map((p,i)=>({idx:i,total:values[i],name:p.name,color:p.color}));
     results.sort((a,b)=>b.total-a.total);
-
-    // Check ties at losing end
     const loserVal=penaltyRule==='lowest'?results[results.length-1].total:results[0].total;
-    const losers=results.filter(r=>(penaltyRule==='lowest'?r.total===loserVal:r.total===loserVal));
-
+    const losers=results.filter(r=>r.total===loserVal);
     if(losers.length>1&&losers.length<players.length){
         msg.textContent=T('tiebreak');
-        await new Promise(r=>setTimeout(r,1500));
+        await new Promise(r=>setTimeout(r,1200));
         for(const l of losers){
             const newVal=Math.floor(Math.random()*6)+1;
             l.total=newVal;
+            values[l.idx]=newVal;
             const box=document.querySelector(`#qda${l.idx} .mini-dice-box`);
             if(box)await animateDice(box,newVal,1000);
-            document.getElementById(`qrv${l.idx}`).textContent=newVal;
+            revealDiceValue(l.idx,newVal);
         }
     }
 
-    // Re-sort
+    // Named combo banner (after reveals settle)
+    const combo=detectDiceCombo(values);
+    if(combo){
+        await new Promise(r=>setTimeout(r,250));
+        showComboBanner(combo);
+        await new Promise(r=>setTimeout(r,1100));
+    } else {
+        await new Promise(r=>setTimeout(r,400));
+    }
+
+    // Final ranking with winner/loser VFX
     results.sort((a,b)=>b.total-a.total);
     results.forEach((r,i)=>{
         const rank=i+1;
         document.getElementById(`qrr${r.idx}`).textContent=T('rank',{n:rank});
-        if(penaltyRule==='lowest'&&rank===results.length)document.getElementById(`qrc${r.idx}`).classList.add('loser');
-        else if(penaltyRule==='highest'&&rank===1)document.getElementById(`qrc${r.idx}`).classList.add('loser');
-        else if(rank===1&&penaltyRule==='lowest')document.getElementById(`qrc${r.idx}`).classList.add('winner');
-        else if(rank===results.length&&penaltyRule==='highest')document.getElementById(`qrc${r.idx}`).classList.add('winner');
+        const isLoser=(penaltyRule==='lowest'&&rank===results.length)||(penaltyRule==='highest'&&rank===1);
+        const isWinner=(penaltyRule==='lowest'&&rank===1)||(penaltyRule==='highest'&&rank===results.length);
+        const card=document.getElementById(`qrc${r.idx}`);
+        if(isLoser)card.classList.add('loser');
+        else if(isWinner)card.classList.add('winner');
     });
 
     const loserP=penaltyRule==='lowest'?results[results.length-1]:results[0];
     msg.textContent=T('loser',{name:loserP.name})+' 💀';
     msg.className='msg-bar bust';SFX.bust();
-    await new Promise(r=>setTimeout(r,2000));
+    await new Promise(r=>setTimeout(r,2200));
     showResults(results);
 }
 
