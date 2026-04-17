@@ -1447,42 +1447,28 @@ function drawAnimAbsolute(dt){
     const centerY=H*0.42;// slightly above middle so team panels remain visible below
 
     if(drawPhase==='reveal'){
-        /* Total reveal = 1.8s. Sub-phases:
-            0.00-0.18 (10%) — scroll EMERGES from dispenser (small, rolled, vertical)
-            0.18-0.90 (40%) — FLIES to center while SCALING UP + ROTATING 0→90°
-            0.90-1.35 (25%) — UNROLLS horizontally, name appears
-            1.35-1.80 (25%) — HOLD, displays name prominently
+        /* Total reveal = 1.5s. Sub-phases (no scroll tube — paper only):
+            0.00-0.20 (20%) — POP-IN at center: scale 0 → full with tiny starter width
+            0.20-0.70 (50%) — UNFURL horizontally from center outward (symmetric expand)
+            0.70-1.00 (30%) — HOLD, gentle breathing, name prominently visible
         */
-        const REVEAL_DUR=1.8;
+        const REVEAL_DUR=1.5;
         const t=Math.min(1,drawPhaseTime/REVEAL_DUR);
-        let sx,sy,scale,rot,unroll;
+        let sx=centerX,sy=centerY,scale,rot=Math.PI/2,unroll;
 
-        if(t<0.10){
-            const p=t/0.10;
-            sx=startX;sy=startY;
-            scale=p*0.35;
-            rot=0;unroll=0;
-        }else if(t<0.50){
-            const p=(t-0.10)/0.40;
+        if(t<0.20){
+            const p=t/0.20;
             const eased=1-Math.pow(1-p,3);
-            sx=startX+(centerX-startX)*eased;
-            sy=startY+(centerY-startY)*eased;
-            scale=0.35+eased*1.6;// 0.35 → ~1.95 (large perspective zoom)
-            rot=eased*Math.PI/2;// 0 → 90°
-            unroll=0;
-        }else if(t<0.75){
-            const p=(t-0.50)/0.25;
+            scale=eased*1.95;
+            unroll=0.08;// tiny starter width so paper is always visible (no blank frame)
+        }else if(t<0.70){
+            const p=(t-0.20)/0.50;
             const eased=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
-            sx=centerX;sy=centerY;
             scale=1.95;
-            rot=Math.PI/2;
-            unroll=eased;
+            unroll=0.08+eased*0.92;// 0.08 → 1.0
         }else{
-            /* Hold - full size, full unrolled, gentle breathing scale */
-            const p=(t-0.75)/0.25;
-            sx=centerX;sy=centerY;
+            const p=(t-0.70)/0.30;
             scale=1.95+Math.sin(p*Math.PI*2)*0.03;
-            rot=Math.PI/2;
             unroll=1;
         }
 
@@ -1527,158 +1513,127 @@ function drawAnimAbsolute(dt){
     }
 }
 
-/* ---- White paper scroll that unrolls from ONE end ----
-   Behaves like a blueprint/document rolled up from one side that unfurls horizontally.
-   - Fully rolled (unroll=0): a single thick cylindrical roll, paper layers visible
-   - As unroll progresses: the rolled cylinder shrinks + flat paper extends from one side
-   - Fully unrolled (unroll=1): mostly flat paper with small residual roll on the left
+/* ---- White paper that unfurls symmetrically from the center ----
+   No rolled tube/cylinder — just a flat paper whose width grows from 0 to full
+   outward from a central point (like a magic scroll revealing itself in mid-air).
 
    Params: x,y = center position (absolute canvas coords)
-           scale = uniform scale factor (perspective zoom)
-           rotation = radians, 0 = roll is vertical (standing tube), PI/2 = lying horizontal
-           unroll = 0..1
-           name = text to display on the flat paper
+           scale = uniform scale factor
+           rotation = kept for API compatibility but unused (always horizontal)
+           unroll = 0..1 (controls horizontal width)
+           name = text to display on the paper
            teamColor = accent color for top bar */
 function drawScroll(x,y,scale,rotation,unroll,name,teamColor){
     if(!name)return;
     ctx.save();
     ctx.translate(x,y);
-    ctx.rotate(rotation-Math.PI/2);// 0 = vertical roll standing, PI/2 = horizontal (unrolled orientation)
     ctx.scale(scale,scale);
 
-    /* Responsive base dimensions.
-       Geometry rationale: the rolled tube is a CYLINDER whose axis points along the paper's height.
-       - TUBE LENGTH (horizontal in local) ≈ paper height (baseH). This becomes the straw's LONG axis.
-       - TUBE DIAMETER (vertical in local) = thin (~10% of baseH). This becomes the straw's SHORT axis.
-       Under the context's -π/2 rotation at rotation=0 (emerge state), the horizontal-long tube
-       becomes a VERTICAL-LONG tube on screen = proper STRAW shape. */
     const viewportW=W||window.innerWidth;
     const viewportH=H||window.innerHeight;
-    const targetMaxWidth=viewportW*0.88/Math.max(1.8,scale);
-    const baseH=Math.min(72,viewportH*0.09);          // paper height
-
-    const tubeHalfLen=baseH*0.48;                      // half-length of rolled tube (HORIZONTAL in local, LONG axis → becomes vertical straw on screen)
-    const maxHalfDia=baseH*0.095;                      // half-diameter when fully rolled (thin straw)
-    const minHalfDia=baseH*0.055;                      // half-diameter when mostly unrolled (even thinner)
-    const rollHalfDia=maxHalfDia-(maxHalfDia-minHalfDia)*unroll;
-
-    const maxPaperW=Math.max(200,targetMaxWidth-tubeHalfLen*2);
+    const maxPaperW=Math.max(220,viewportW*0.88/Math.max(1.8,scale));
+    const baseH=Math.min(72,viewportH*0.09);
     const paperW=maxPaperW*unroll;
 
-    /* Layout in LOCAL coords: horizontal tube on the left + horizontal paper extending right.
-       After ctx.rotate(rotation - π/2) at emerge (rotation=0), the whole thing rotates -90°:
-         horizontal tube in local → VERTICAL STRAW on screen (tall and narrow) ✓
-       At rotation=π/2 (final), no rotation: horizontal layout preserved on screen. */
-    const totalW=tubeHalfLen*2+paperW;
-    const scrollLeft=-totalW/2;
-    const rollCenterX=scrollLeft+tubeHalfLen;
-    const paperLeftX=rollCenterX+tubeHalfLen;// tangent to the right end of the tube
-    const paperRightX=paperLeftX+paperW;
+    if(unroll<=0.02||paperW<2){ctx.restore();return;}
 
-    /* === FLAT PAPER (emerges from the roll, extends rightward) === */
-    if(unroll>0.02&&paperW>2){
-        ctx.save();
-        // Drop shadow
-        ctx.shadowColor='rgba(0,0,0,.4)';
-        ctx.shadowBlur=10*scale;
-        ctx.shadowOffsetY=3*scale;
+    const halfW=paperW/2;
+    const halfH=baseH/2;
+    const r=Math.min(3,halfW);
 
-        // White/cream paper gradient (matches the reference image)
-        const pGrad=ctx.createLinearGradient(0,-baseH/2,0,baseH/2);
-        pGrad.addColorStop(0,'#e8e4d8');
-        pGrad.addColorStop(0.1,'#f8f5ee');
-        pGrad.addColorStop(0.5,'#ffffff');
-        pGrad.addColorStop(0.9,'#f0ece0');
-        pGrad.addColorStop(1,'#d8d2c0');
-        ctx.fillStyle=pGrad;
+    /* === PAPER BODY === */
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.4)';
+    ctx.shadowBlur=10*scale;
+    ctx.shadowOffsetY=3*scale;
 
-        // Paper rectangle with slightly rounded right edge
-        ctx.beginPath();
-        ctx.moveTo(paperLeftX,-baseH/2);
-        ctx.lineTo(paperRightX-3,-baseH/2);
-        ctx.quadraticCurveTo(paperRightX,-baseH/2,paperRightX,-baseH/2+3);
-        ctx.lineTo(paperRightX,baseH/2-3);
-        ctx.quadraticCurveTo(paperRightX,baseH/2,paperRightX-3,baseH/2);
-        ctx.lineTo(paperLeftX,baseH/2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
+    const pGrad=ctx.createLinearGradient(0,-halfH,0,halfH);
+    pGrad.addColorStop(0,'#e8e4d8');
+    pGrad.addColorStop(0.1,'#f8f5ee');
+    pGrad.addColorStop(0.5,'#ffffff');
+    pGrad.addColorStop(0.9,'#f0ece0');
+    pGrad.addColorStop(1,'#d8d2c0');
+    ctx.fillStyle=pGrad;
 
-        // Paper edge (top/right/bottom only — LEFT edge is hidden under the roll for seamless look)
-        ctx.strokeStyle='rgba(160,150,120,.4)';
-        ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.moveTo(paperLeftX+4,-baseH/2);
-        ctx.lineTo(paperRightX-3,-baseH/2);
-        ctx.quadraticCurveTo(paperRightX,-baseH/2,paperRightX,-baseH/2+3);
-        ctx.lineTo(paperRightX,baseH/2-3);
-        ctx.quadraticCurveTo(paperRightX,baseH/2,paperRightX-3,baseH/2);
-        ctx.lineTo(paperLeftX+4,baseH/2);
-        ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-halfW+r,-halfH);
+    ctx.lineTo(halfW-r,-halfH);
+    ctx.quadraticCurveTo(halfW,-halfH,halfW,-halfH+r);
+    ctx.lineTo(halfW,halfH-r);
+    ctx.quadraticCurveTo(halfW,halfH,halfW-r,halfH);
+    ctx.lineTo(-halfW+r,halfH);
+    ctx.quadraticCurveTo(-halfW,halfH,-halfW,halfH-r);
+    ctx.lineTo(-halfW,-halfH+r);
+    ctx.quadraticCurveTo(-halfW,-halfH,-halfW+r,-halfH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
 
-        // Team color accent bar at top
-        if(teamColor&&paperW>20){
-            const barGrad=ctx.createLinearGradient(paperLeftX,0,paperRightX,0);
-            barGrad.addColorStop(0,darkenColor(teamColor,.25));
-            barGrad.addColorStop(0.5,teamColor);
-            barGrad.addColorStop(1,darkenColor(teamColor,.25));
-            ctx.fillStyle=barGrad;
-            ctx.fillRect(paperLeftX+1,-baseH/2+2,paperW-2,3.5);
-        }
+    /* === EDGE STROKE === */
+    ctx.strokeStyle='rgba(160,150,120,.4)';
+    ctx.lineWidth=1;
+    ctx.stroke();
 
-        // Curl shadow near the roll — paper emerges from under the cylinder so there's a
-        // soft vertical shadow band right at the seam (makes the transition look natural)
-        if(paperW>12){
-            const curlGrad=ctx.createLinearGradient(paperLeftX-2,0,paperLeftX+18,0);
-            curlGrad.addColorStop(0,'rgba(60,40,20,.22)');
-            curlGrad.addColorStop(0.3,'rgba(60,40,20,.12)');
-            curlGrad.addColorStop(1,'rgba(0,0,0,0)');
-            ctx.fillStyle=curlGrad;
-            ctx.fillRect(paperLeftX-2,-baseH/2+3,20,baseH-6);
-        }
-
-        /* === NAME TEXT centered on paper === */
-        if(unroll>0.35){
-            const textAlpha=Math.min(1,(unroll-0.35)/0.35);
-            const paperCenterX=(paperLeftX+paperRightX)/2;
-            ctx.save();
-            ctx.globalAlpha*=textAlpha;
-
-            /* Dynamic font sizing to fit name within paper */
-            const maxTextW=paperW-24;
-            let fs=42;
-            ctx.font=`900 ${fs}px 'Noto Sans KR','Orbitron','Noto Sans',sans-serif`;
-            let tw=ctx.measureText(name).width;
-            while(tw>maxTextW&&fs>14){
-                fs-=1;
-                ctx.font=`900 ${fs}px 'Noto Sans KR','Orbitron','Noto Sans',sans-serif`;
-                tw=ctx.measureText(name).width;
-            }
-
-            // Name (large, centered, dark)
-            ctx.fillStyle='#2a1810';
-            ctx.textAlign='center';
-            ctx.textBaseline='middle';
-            ctx.shadowColor='rgba(0,0,0,.15)';
-            ctx.shadowBlur=2;
-            ctx.shadowOffsetY=1;
-            ctx.fillText(name,paperCenterX,4,maxTextW);
-            ctx.shadowBlur=0;
-            ctx.shadowOffsetY=0;
-
-            // Team label below name
-            if(revealTeamIdx>=0&&teamTrays[revealTeamIdx]&&paperW>160){
-                const teamFs=Math.max(10,fs*0.32);
-                ctx.font=`bold ${teamFs}px 'Noto Sans KR','Orbitron',sans-serif`;
-                ctx.fillStyle=darkenColor(teamColor||'#555',.1);
-                ctx.fillText(teamTrays[revealTeamIdx].label,paperCenterX,baseH/2-teamFs-2);
-            }
-            ctx.restore();
-        }
+    /* === TEAM COLOR ACCENT BAR === */
+    if(teamColor&&paperW>20){
+        const barGrad=ctx.createLinearGradient(-halfW,0,halfW,0);
+        barGrad.addColorStop(0,darkenColor(teamColor,.25));
+        barGrad.addColorStop(0.5,teamColor);
+        barGrad.addColorStop(1,darkenColor(teamColor,.25));
+        ctx.fillStyle=barGrad;
+        ctx.fillRect(-halfW+1,-halfH+2,paperW-2,3.5);
     }
 
-    /* === ROLLED CYLINDER on the LEFT (single roll with paper layers) === */
-    drawPaperRoll(rollCenterX,0,tubeHalfLen,rollHalfDia);
+    /* === SYMMETRIC UNFURL HINT — soft edge vignettes on left & right === */
+    if(paperW>16){
+        const vignetteW=Math.min(14,paperW*0.08);
+        const leftGrad=ctx.createLinearGradient(-halfW,0,-halfW+vignetteW,0);
+        leftGrad.addColorStop(0,'rgba(60,40,20,.18)');
+        leftGrad.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle=leftGrad;
+        ctx.fillRect(-halfW,-halfH+3,vignetteW,baseH-6);
+
+        const rightGrad=ctx.createLinearGradient(halfW-vignetteW,0,halfW,0);
+        rightGrad.addColorStop(0,'rgba(0,0,0,0)');
+        rightGrad.addColorStop(1,'rgba(60,40,20,.18)');
+        ctx.fillStyle=rightGrad;
+        ctx.fillRect(halfW-vignetteW,-halfH+3,vignetteW,baseH-6);
+    }
+
+    /* === NAME TEXT === */
+    if(unroll>0.35){
+        const textAlpha=Math.min(1,(unroll-0.35)/0.35);
+        ctx.save();
+        ctx.globalAlpha*=textAlpha;
+
+        const maxTextW=paperW-24;
+        let fs=42;
+        ctx.font=`900 ${fs}px 'Noto Sans KR','Orbitron','Noto Sans',sans-serif`;
+        let tw=ctx.measureText(name).width;
+        while(tw>maxTextW&&fs>14){
+            fs-=1;
+            ctx.font=`900 ${fs}px 'Noto Sans KR','Orbitron','Noto Sans',sans-serif`;
+            tw=ctx.measureText(name).width;
+        }
+
+        ctx.fillStyle='#2a1810';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.shadowColor='rgba(0,0,0,.15)';
+        ctx.shadowBlur=2;
+        ctx.shadowOffsetY=1;
+        ctx.fillText(name,0,4,maxTextW);
+        ctx.shadowBlur=0;
+        ctx.shadowOffsetY=0;
+
+        if(revealTeamIdx>=0&&teamTrays[revealTeamIdx]&&paperW>160){
+            const teamFs=Math.max(10,fs*0.32);
+            ctx.font=`bold ${teamFs}px 'Noto Sans KR','Orbitron',sans-serif`;
+            ctx.fillStyle=darkenColor(teamColor||'#555',.1);
+            ctx.fillText(teamTrays[revealTeamIdx].label,0,halfH-teamFs-2);
+        }
+        ctx.restore();
+    }
 
     ctx.restore();
 }
