@@ -83,6 +83,18 @@
         #setupScreen h1{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:2em;font-weight:700;background:linear-gradient(135deg,var(--primary),var(--accent),var(--secondary));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:5px;animation:titleGlow 3s ease-in-out infinite;letter-spacing:2px}
         @keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(255,107,53,0.5))}50%{filter:drop-shadow(0 0 40px rgba(0,217,255,0.8))}}
         #setupScreen h2{font-family:'Orbitron','Noto Sans KR',sans-serif;color:rgba(255,255,255,0.5);font-size:0.75em;margin-bottom:20px;font-weight:400;letter-spacing:3px;text-transform:uppercase}
+
+        /* Advanced settings toggle */
+        .advanced-toggle-wrap{text-align:center;margin:4px 0 18px}
+        #advToggleBtn{display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border:1.5px dashed rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:rgba(255,255,255,.55);font-size:.85em;border-radius:999px;cursor:pointer;font-family:inherit;transition:border-color .25s,background .25s,color .25s;letter-spacing:.02em}
+        #advToggleBtn:hover{border-color:rgba(255,230,109,.55);background:rgba(255,230,109,.08);color:#fff}
+        .advanced-hint{font-size:.72em;color:rgba(255,255,255,.35);margin-top:5px;letter-spacing:.01em}
+        /* Default-collapsed advanced sections */
+        #setupScreen .course-selector.adv-hidden,
+        #setupScreen .settings-grid.adv-hidden,
+        #setupScreen #rewardSection.adv-hidden{display:none !important}
+        /* When reward is hidden, let playerNames fill the row */
+        #playerRewardRow.adv-collapsed{grid-template-columns:1fr !important}
         .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
         .setting-group{margin:0;text-align:left;background:rgba(255,255,255,0.03);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,0.05)}
         .setting-group label{color:#fff;font-size:0.9em;display:flex;align-items:center;gap:8px;margin-bottom:8px;font-weight:700}
@@ -403,6 +415,10 @@
             <h1>🏎️ 영광의 카레이싱 🏆</h1>
         </div>
         <h2>CAR RACING CHAMPIONSHIP</h2>
+        <div class="advanced-toggle-wrap">
+            <button id="advToggleBtn" type="button">⚙️ 고급 설정 보기 ▾</button>
+            <div class="advanced-hint" id="advToggleHint">코스·경주시간·보상 등 세부 조정</div>
+        </div>
         <div class="course-selector">
             <h3>🛣️ 코스 선택</h3>
             <div class="course-cards" id="courseCards"></div>
@@ -5823,12 +5839,36 @@ function checkOrientation(){
     }
 }
 
+/* Collapse advanced settings (course, sliders, reward) behind a toggle so the
+   setup screen opens simple: language, title, player names, start. */
+function initAdvancedToggle(){
+    const btn=document.getElementById('advToggleBtn');
+    const hint=document.getElementById('advToggleHint');
+    if(!btn)return;
+    const sections=[
+        document.querySelector('.course-selector'),
+        document.querySelector('.settings-grid'),
+        document.getElementById('rewardSection')
+    ].filter(Boolean);
+    const row=document.getElementById('playerRewardRow');
+    let open=false;
+    function apply(){
+        sections.forEach(el=>el.classList.toggle('adv-hidden',!open));
+        if(row)row.classList.toggle('adv-collapsed',!open);
+        btn.innerHTML=open?'⚙️ 고급 설정 닫기 ▴':'⚙️ 고급 설정 보기 ▾';
+        if(hint)hint.style.display=open?'none':'';
+    }
+    apply();
+    btn.addEventListener('click',()=>{open=!open;apply();if(open)btn.scrollIntoView({behavior:'smooth',block:'nearest'})});
+}
+
 function init(){
     /* Restore saved language or auto-detect from browser */
     const savedLang=localStorage.getItem('luckyplz_lang');
     if(savedLang&&I18N[savedLang]) currentLang=savedLang;
     else currentLang=detectBrowserLang();
     createStars();initCourseSelector();generatePlayerNameInputs();showSaveIndicator();initEventListeners();
+    initAdvancedToggle();
     applyLanguage();
     /* Help button */
     document.getElementById('helpBtn').addEventListener('click',openHelp);
