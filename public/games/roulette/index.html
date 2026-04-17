@@ -356,16 +356,20 @@ function initCanvas(){
 function resize(){
     const wrap=canvas.parentElement;
     W=wrap.clientWidth;H=wrap.clientHeight;
-    /* Wheel is sized to fill the available canvas area. Bumped ~15% vs the
-       previous 0.42/280 pair so the wheel commands more visual attention
-       now that the center spin button is gone. Leave ~48px headroom for
-       the flapper (pivot above outer ring + length below). */
-    const maxR=Math.min(W,H)*0.48;
+    /* Reserve vertical space above the wheel for the external flapper
+       bracket + arm. Without this reserve, a large radius would push the
+       pivot off the top of the canvas. ~64px fits bracket (18) + arm (32)
+       + margin. Also leave ~24px at the bottom for the msg bar. */
+    const topReserve=64;
+    const botReserve=24;
+    const usableH=H-topReserve-botReserve;
+    const maxR=Math.min(W*0.48,usableH*0.5);
     radius=Math.min(maxR,322);
     canvas.width=W*dpr;canvas.height=H*dpr;
     canvas.style.width=W+'px';canvas.style.height=H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    cx=W/2;cy=H/2;
+    cx=W/2;
+    cy=topReserve+usableH/2;
 }
 
 function drawWheel(){
@@ -420,17 +424,20 @@ function drawWheel(){
         ctx.restore();
     }
 
-    // Pegs — one raised pin at each slice boundary. These are what the
-    // flapper physically bats against as the wheel spins.
-    for(let i=0;i<n;i++){
-        const a=angle+i*sliceAngle;
-        const nx=Math.cos(a)*(radius+5);
-        const ny=Math.sin(a)*(radius+5);
-        ctx.beginPath();ctx.arc(nx,ny,4.2,0,Math.PI*2);
-        const pg=ctx.createRadialGradient(nx-1.2,ny-1.2,0,nx,ny,4.2);
+    /* Pegs — 3× the slice count, spaced evenly around the rim so the
+       flapper has a dense row of pins to clatter against. Exactly aligned
+       on slice boundaries (every 3rd peg) and two interior pegs between. */
+    const pegCount=n*3;
+    const pegStep=Math.PI*2/pegCount;
+    for(let i=0;i<pegCount;i++){
+        const a=angle+i*pegStep;
+        const nx=Math.cos(a)*(radius+7);
+        const ny=Math.sin(a)*(radius+7);
+        ctx.beginPath();ctx.arc(nx,ny,3.6,0,Math.PI*2);
+        const pg=ctx.createRadialGradient(nx-1,ny-1,0,nx,ny,3.6);
         pg.addColorStop(0,'#fff4c2');pg.addColorStop(0.55,'#e9bd3a');pg.addColorStop(1,'#5a3f08');
         ctx.fillStyle=pg;ctx.fill();
-        ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=0.9;ctx.stroke();
+        ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=0.8;ctx.stroke();
     }
 
     // Tiny center nail (axis marker — not a hub covering the slices)
@@ -446,32 +453,68 @@ function drawWheel(){
     drawFlapper();
 }
 
+/* Flapper — like a wheel-of-fortune pointer. The hinge and bracket sit
+   OUTSIDE the wheel (above the rim); only the flapper's tip reaches down
+   into the peg orbit so passing pegs bat it sideways. Geometry:
+
+       bracket (fixed)
+            |
+            * pivot    <- cy - pegOrbit - flapperLen + overlap
+           /|
+          / |  flapper arm (rotates around pivot)
+         /  |
+        /   *  tip      <- sits just inside peg orbit
+       ---(peg orbit)---------- wheel edge
+
+   overlap controls how deep the tip penetrates the peg circle. Big
+   enough that pegs can't slip past without contact (~5px). */
 function drawFlapper(){
+    const pegOrbitR=radius+7;
+    const flapperLen=32;
     const pivotX=cx;
-    const pivotY=cy-radius-4;   // hinge just above outer ring
-    const len=36;               // flapper tip reaches into the peg circle
+    const pivotY=cy-pegOrbitR-flapperLen+5;
+
+    /* Mount bracket — static, anchored to the world (above the wheel). */
+    ctx.save();
+    ctx.fillStyle='#1a0f04';
+    ctx.strokeStyle='#c8a029';ctx.lineWidth=1.4;
+    ctx.beginPath();
+    ctx.arc(pivotX,pivotY-6,11,Math.PI,0,false);
+    ctx.lineTo(pivotX+7,pivotY-1);
+    ctx.lineTo(pivotX-7,pivotY-1);
+    ctx.closePath();
+    ctx.fill();ctx.stroke();
+    /* Small screw heads on the bracket for detail */
+    ctx.fillStyle='#c8a029';
+    ctx.beginPath();ctx.arc(pivotX-6,pivotY-7,1.3,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(pivotX+6,pivotY-7,1.3,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+
+    /* Arm — rotates around (pivotX, pivotY) by flapperAngle */
     ctx.save();
     ctx.translate(pivotX,pivotY);
     ctx.rotate(flapperAngle);
-    // body
-    ctx.shadowColor='rgba(0,0,0,0.45)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
+
+    ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
     ctx.beginPath();
     ctx.moveTo(-10,0);
     ctx.lineTo(10,0);
-    ctx.lineTo(4,len);
-    ctx.lineTo(-4,len);
+    ctx.lineTo(5,flapperLen-3);
+    ctx.quadraticCurveTo(0,flapperLen+4,-5,flapperLen-3);
     ctx.closePath();
-    const fg=ctx.createLinearGradient(0,0,0,len);
+    const fg=ctx.createLinearGradient(0,0,0,flapperLen);
     fg.addColorStop(0,'#ffe066');fg.addColorStop(0.5,'#ff9f1c');fg.addColorStop(1,'#c24407');
     ctx.fillStyle=fg;ctx.fill();
     ctx.shadowColor='transparent';
     ctx.strokeStyle='#5a2200';ctx.lineWidth=1.5;ctx.stroke();
-    // hinge cap
-    ctx.beginPath();ctx.arc(0,0,7,0,Math.PI*2);
-    const hg=ctx.createRadialGradient(-2,-2,0,0,0,7);
-    hg.addColorStop(0,'#888');hg.addColorStop(0.7,'#222');hg.addColorStop(1,'#000');
+
+    /* Hinge pin — the pivot axis */
+    ctx.beginPath();ctx.arc(0,0,4.5,0,Math.PI*2);
+    const hg=ctx.createRadialGradient(-1.2,-1.2,0,0,0,4.5);
+    hg.addColorStop(0,'#aaa');hg.addColorStop(0.7,'#222');hg.addColorStop(1,'#000');
     ctx.fillStyle=hg;ctx.fill();
     ctx.strokeStyle='#ffd700';ctx.lineWidth=1;ctx.stroke();
+
     ctx.restore();
 }
 
@@ -494,7 +537,8 @@ function loop(ts){
     lastTime=ts;
 
     const n=players.length;
-    const sliceAngle=Math.PI*2/n;
+    const pegCount=n*3;
+    const pegStep=Math.PI*2/pegCount;
 
     if(Math.abs(velocity)>0.001){
         /* Base friction. While spinning flag is set (early hold phase) the
@@ -504,22 +548,22 @@ function loop(ts){
         angle+=velocity*dt;
         angle=angle%(Math.PI*2);if(angle<0)angle+=Math.PI*2;
 
-        /* Peg collision: the top pointer sits above a slice. Whenever the
-           selected slice index changes, a peg just crossed under the
-           flapper — kick the flapper and bite a bit of energy off. */
-        const idx=getSelectedIndex();
-        if(idx!==lastTick){
+        /* Peg collision: track which peg slot is currently under the
+           flapper (top = -π/2). Each time this slot index changes, a peg
+           just crossed the flapper tip — kick the flapper and bite off
+           a slice of wheel energy. 3× more pegs than before, so the
+           per-peg damping is scaled down accordingly. */
+        const topAngle=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+        const pegSlot=Math.floor(topAngle/pegStep);
+        if(pegSlot!==lastTick){
             if(lastTick!==-1){
                 SFX.tick();
                 const sf=Math.min(1,Math.abs(velocity)/9);
-                /* Kick in the direction the peg travels across the flapper tip. */
                 const dir=velocity>=0?1:-1;
-                flapperVel+=7.5*dir*(0.35+0.65*sf);
-                /* Wheel loses a small slice of velocity per peg strike. More
-                   at high speed (harder impact), less at crawl speed. */
-                velocity*=(1-0.004-0.012*sf);
+                flapperVel+=5.5*dir*(0.3+0.7*sf);
+                velocity*=(1-0.0013-0.0042*sf);
             }
-            lastTick=idx;
+            lastTick=pegSlot;
         }
     }
 
