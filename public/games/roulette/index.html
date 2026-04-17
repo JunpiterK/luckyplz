@@ -145,6 +145,21 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     .lang-btn{width:26px;height:19px}.lang-btn img{width:20px;height:14px}
     .floating-home{width:38px;height:38px;font-size:1em;bottom:10px;left:10px}
 }
+
+/* Desktop split layout: canvas on left 2/3, settings panel fixed on right 1/3 */
+@media(min-width:900px){
+    body.pc-layout{overflow:hidden}
+    body.pc-layout #setupWrap{position:fixed;top:0;right:0;left:auto;bottom:0;width:33.33vw;min-width:380px;max-width:460px;padding:14px;justify-content:flex-start;align-items:stretch;overflow-y:auto;z-index:60}
+    body.pc-layout #setupScreen{width:100%;max-width:none;max-height:none;min-height:calc(100vh - 28px);border-radius:20px;padding:22px 22px}
+    body.pc-layout #gameScreen{display:block !important;position:fixed;top:0;left:0;width:calc(100vw - 33.33vw);height:100vh;z-index:40}
+    body.pc-layout #gameScreen.gs-narrow{width:calc(100vw - 460px)}
+    body.pc-layout .floating-home{left:14px}
+    body.pc-layout #gameScreen .top-btns{display:none}
+}
+@media(min-width:900px) and (max-width:1280px){
+    body.pc-layout #setupWrap{width:380px}
+    body.pc-layout #gameScreen{width:calc(100vw - 380px)}
+}
     </style>
 </head>
 <body>
@@ -276,7 +291,7 @@ return{tick(){p(1800,0.02,'square',0.06)},win(){[523,659,784,1047].forEach((f,i)
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<60;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2.5+0.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
 /* Setup */
-function renderPlayers(){const c=document.getElementById('playerInputs');const existing=[...c.querySelectorAll('input')].map(inp=>inp.value);c.innerHTML='';for(let i=0;i<playerCount;i++){const r=document.createElement('div');r.className='player-row';r.innerHTML=`<span class="dot" style="background:${COLORS[i%COLORS.length]}"></span><input type="text" placeholder="${T('playerN',{n:i+1})}" maxlength="20"><button class="remove-btn">&times;</button>`;c.appendChild(r)}c.querySelectorAll('input').forEach((inp,i)=>{if(existing[i])inp.value=existing[i]});c.querySelectorAll('.remove-btn').forEach(b=>b.addEventListener('click',()=>{if(playerCount<=2)return;playerCount--;renderPlayers()}))}
+function renderPlayers(){const c=document.getElementById('playerInputs');const existing=[...c.querySelectorAll('input')].map(inp=>inp.value);c.innerHTML='';for(let i=0;i<playerCount;i++){const r=document.createElement('div');r.className='player-row';r.innerHTML=`<span class="dot" style="background:${COLORS[i%COLORS.length]}"></span><input type="text" placeholder="${T('playerN',{n:i+1})}" maxlength="20"><button class="remove-btn">&times;</button>`;c.appendChild(r)}c.querySelectorAll('input').forEach((inp,i)=>{if(existing[i])inp.value=existing[i]});c.querySelectorAll('.remove-btn').forEach(b=>b.addEventListener('click',()=>{if(playerCount<=2)return;playerCount--;renderPlayers();renderPreview()}))}
 
 function applyLanguage(){
     document.getElementById('titleText').textContent=T('title');document.getElementById('subtitleText').textContent=T('subtitle');document.getElementById('playersTitle').textContent=T('players');document.getElementById('addPlayerText').textContent=T('addPlayer');document.getElementById('startBtn').textContent=T('start');document.getElementById('resultH1').textContent='🎯 '+T('result');document.getElementById('wLabel').textContent=T('result');document.getElementById('shareH3').textContent='📢 '+T('share');document.getElementById('replayText').textContent=T('replay');document.getElementById('setupText').textContent=T('settings');document.getElementById('spinBtn').textContent=T('spin');
@@ -555,11 +570,25 @@ let confetti=[],confCanvas,confCtx;
 function startConfetti(){confCanvas=document.getElementById('confettiCanvas');confCtx=confCanvas.getContext('2d');confCanvas.width=window.innerWidth;confCanvas.height=window.innerHeight;confetti=[];for(let i=0;i<120;i++)confetti.push({x:Math.random()*confCanvas.width,y:Math.random()*-confCanvas.height,vx:(Math.random()-0.5)*3,vy:Math.random()*4+2,rot:Math.random()*360,rv:(Math.random()-0.5)*10,w:Math.random()*8+4,h:Math.random()*4+2,color:COLORS[Math.floor(Math.random()*COLORS.length)],life:3+Math.random()*2});let lt=0;function cl(ts){const dt=Math.min((ts-(lt||ts))/1000,0.05);lt=ts;confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);confetti=confetti.filter(c=>{c.life-=dt;if(c.life<=0)return false;c.x+=c.vx;c.y+=c.vy;c.rot+=c.rv;c.vy+=0.1;confCtx.save();confCtx.translate(c.x,c.y);confCtx.rotate(c.rot*Math.PI/180);confCtx.globalAlpha=Math.min(1,c.life);confCtx.fillStyle=c.color;confCtx.fillRect(-c.w/2,-c.h/2,c.w,c.h);confCtx.restore();return true});if(confetti.length)requestAnimationFrame(cl)}requestAnimationFrame(cl)}
 
 /* Start game */
+function isPCLayout(){return window.matchMedia('(min-width:900px)').matches}
+
+/* Live preview (PC only) — re-draws the wheel immediately when players change */
+function renderPreview(){
+    if(!isPCLayout())return;
+    if(spinning)return;
+    collectData();
+    if(!ctx){initCanvas()}else{resize()}
+    angle=angle||0;velocity=0;lastTick=-1;selectedIdx=-1;
+    drawWheel();
+}
+
 function startGame(){
     collectData();
-    document.getElementById('setupWrap').style.display='none';
+    if(!isPCLayout()){
+        document.getElementById('setupWrap').style.display='none';
+    }
     document.getElementById('gameScreen').style.display='block';
-    initCanvas();
+    if(!ctx)initCanvas();else resize();
     angle=Math.random()*Math.PI*2;velocity=0;lastTick=-1;selectedIdx=-1;
     const msg=document.getElementById('msgBar');msg.textContent=T('tapToSpin');msg.className='msg-bar';
     document.getElementById('spinBtn').disabled=false;
@@ -570,8 +599,13 @@ function startGame(){
 
 function backToSetup(){
     if(animId)cancelAnimationFrame(animId);
-    document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='none';
+    if(isPCLayout()){
+        /* On desktop the setup panel is always open — just reset the preview */
+        renderPreview();
+        return;
+    }
+    document.getElementById('gameScreen').style.display='none';
     document.getElementById('setupWrap').style.display='flex';
     confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
 }
@@ -581,6 +615,22 @@ function init(){
     const saved=localStorage.getItem('luckyplz_lang');
     if(saved&&I18N[saved])lang=saved;else{const m={'ko':'ko','en':'en','es':'es','de':'de','fr':'fr','ja':'ja','zh':'zh','pt':'pt','ru':'ru','ar':'ar','hi':'hi','th':'th','id':'id','vi':'vi','tr':'tr'};const ls=navigator.languages||[navigator.language||'en'];for(const l of ls){if(l.toLowerCase()==='en-gb'){lang='gb';break}const p=l.split('-')[0].toLowerCase();if(m[p]){lang=m[p];break}}}
     createStars();applyLanguage();
+
+    /* Desktop split layout: both setup and game canvas visible, live preview */
+    function applyPCLayout(){
+        if(isPCLayout()){
+            document.body.classList.add('pc-layout');
+            /* kick off a preview render after layout settles */
+            setTimeout(renderPreview,60);
+        } else {
+            document.body.classList.remove('pc-layout');
+        }
+    }
+    applyPCLayout();
+    window.addEventListener('resize',()=>{applyPCLayout();if(isPCLayout()&&!spinning){resize&&resize();drawWheel&&drawWheel()}});
+
+    /* Live re-render on any player input change (PC only) */
+    document.getElementById('playerInputs').addEventListener('input',()=>{renderPreview()});
 
     /* Tab key: jump to next name input, skipping remove buttons */
     document.addEventListener('keydown',e=>{
@@ -599,7 +649,7 @@ function init(){
     });
 
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
-    document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers()});
+    document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderPreview()});
     document.getElementById('startBtn').addEventListener('click',startGame);
     document.getElementById('spinBtn').addEventListener('click',doSpin);
     document.getElementById('backBtn').addEventListener('click',backToSetup);

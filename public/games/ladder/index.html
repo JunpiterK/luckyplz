@@ -70,6 +70,20 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
 /* === Setup Screen === */
 #setupWrap{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;display:flex;justify-content:center;align-items:center;padding:10px;overflow-y:auto}
+
+/* Desktop split layout: ladder canvas on left 2/3, settings panel fixed on right 1/3 */
+@media(min-width:900px){
+    body.pc-layout{overflow:hidden}
+    body.pc-layout #setupWrap{position:fixed;top:0;right:0;left:auto;bottom:0;width:33.33vw;min-width:400px;max-width:480px;padding:14px;justify-content:flex-start;align-items:stretch;overflow-y:auto;z-index:60}
+    body.pc-layout #setupScreen{width:100%;max-width:none;max-height:none;min-height:calc(100vh - 28px);border-radius:20px;padding:22px 22px}
+    body.pc-layout #gameWrap{display:block !important;position:fixed;top:0;left:0;width:calc(100vw - 33.33vw);height:100vh;z-index:40}
+    body.pc-layout #gameCanvas{width:100% !important;height:100% !important}
+    body.pc-layout .floating-home{left:14px}
+}
+@media(min-width:900px) and (max-width:1280px){
+    body.pc-layout #setupWrap{width:400px}
+    body.pc-layout #gameWrap{width:calc(100vw - 400px)}
+}
 #setupScreen{position:relative;background:linear-gradient(145deg,rgba(20,20,40,0.95),rgba(10,10,30,0.98));backdrop-filter:blur(30px);border-radius:24px;padding:24px 28px;text-align:center;border:2px solid rgba(0,217,255,0.2);box-shadow:0 25px 80px rgba(0,0,0,0.7),0 0 80px rgba(0,217,255,0.08);max-height:95vh;overflow-y:auto;width:560px;max-width:98vw}
 #setupScreen::-webkit-scrollbar{width:6px}
 #setupScreen::-webkit-scrollbar-thumb{background:var(--secondary);border-radius:3px}
@@ -412,10 +426,10 @@ function renderPlayers(){
     }
     c.querySelectorAll('.remove-btn').forEach(b=>b.addEventListener('click',e=>{
         if(playerCount<=2)return;
-        playerCount--;renderPlayers();renderResults();
+        playerCount--;renderPlayers();renderResults();renderPreview();
     }));
     c.querySelectorAll('input').forEach((inp,i)=>{if(existing[i])inp.value=existing[i]});
-    document.getElementById('addPlayerBtn').onclick=()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderResults()};
+    document.getElementById('addPlayerBtn').onclick=()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderResults();renderPreview()};
 }
 
 function renderResults(){
@@ -437,6 +451,7 @@ function applyPreset(type){
     const inputs=document.querySelectorAll('#resultInputs input');
     inputs.forEach((inp,i)=>{inp.placeholder=list[i%list.length]||'';inp.value=''});
     Audio.click();
+    if(typeof renderPreview==='function')renderPreview();
 }
 
 function renderPresets(){
@@ -894,12 +909,25 @@ function gameLoop(ts){
 }
 
 /* ===== START GAME ===== */
+function isPCLayout(){return window.matchMedia('(min-width:900px)').matches}
+
+/* Live preview (PC only) — re-generates ladder structure and redraws on any change */
+function renderPreview(){
+    if(!isPCLayout())return;
+    if(gamePhase==='playing'||gamePhase==='revealing')return;
+    if(!canvas)initCanvas();else resizeCanvas();
+    generateLadder();
+    drawLadder();
+}
+
 function startGame(){
     Audio.getCtx();
     gamePhase='playing';
     tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];
 
-    document.getElementById('setupWrap').style.display='none';
+    if(!isPCLayout()){
+        document.getElementById('setupWrap').style.display='none';
+    }
     document.getElementById('gameWrap').style.display='block';
     document.getElementById('resultScreen').style.display='none';
     document.getElementById('soundToggle').style.display='block';
@@ -1001,6 +1029,22 @@ function init(){
     initCanvas();
     applyLanguage();
 
+    /* Desktop split layout: both setup and ladder canvas visible, live preview */
+    function applyPCLayout(){
+        if(isPCLayout()){
+            document.body.classList.add('pc-layout');
+            setTimeout(renderPreview,60);
+        } else {
+            document.body.classList.remove('pc-layout');
+        }
+    }
+    applyPCLayout();
+    window.addEventListener('resize',()=>{applyPCLayout();if(isPCLayout()&&gamePhase!=='playing'&&gamePhase!=='revealing'){renderPreview()}});
+
+    /* Live re-render when players / results / complexity / mode change */
+    document.getElementById('playerInputs').addEventListener('input',renderPreview);
+    document.getElementById('resultInputs').addEventListener('input',renderPreview);
+
     /* Tab key: jump to next name input, skipping remove buttons */
     document.addEventListener('keydown',e=>{
         if(e.key!=='Tab'||e.target.tagName!=='INPUT'||e.target.type!=='text')return;
@@ -1034,6 +1078,7 @@ function init(){
         card.classList.add('selected');
         complexity=card.dataset.val;
         Audio.click();
+        renderPreview();
     });
 
     // Mode
