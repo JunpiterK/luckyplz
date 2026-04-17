@@ -115,15 +115,22 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 }
 @media(min-width:900px){
     /* PC: hide the standalone Options section until the toggle opens it as a
-       floating popup anchored below the Options / Sets / Save toolbar. */
+       popup anchored directly below the Options / Sets / Save toolbar.
+       The popup uses position:absolute relative to .settings-toolbar-section
+       (which is set position:relative) so it reliably drops right under the
+       button — no getBoundingClientRect math, no off-screen coords. */
     .options-toggle-btn{display:inline-flex}
+    .settings-toolbar-section{position:relative}
     #optionsSection{display:none}
     /* The top action bar already has an Add button on PC — hide the duplicate
        "+ Add Player" CTA below the player list. */
     #addPlayerBtn{display:none !important}
     body[data-opts-open="1"] #optionsSection{
         display:block;
-        position:fixed;
+        position:absolute;
+        top:calc(100% + 4px);
+        left:0;
+        right:0;
         z-index:80;
         margin:0;
         background:linear-gradient(145deg,rgba(20,22,40,.98),rgba(28,30,50,.99));
@@ -1204,22 +1211,39 @@ function init(){
     if(pabStart)pabStart.addEventListener('click',startGame);
 
     /* Options toggle (PC only — button is hidden on mobile via CSS).
-       Opens #optionsSection as a floating popup anchored below the toolbar row. */
+       Strategy: physically move #optionsSection into .settings-toolbar-section
+       on PC so its position:absolute drop resolves against the toolbar, not
+       the viewport. Move back to the original DOM position on mobile. */
     const optionsToggle=document.getElementById('optionsToggleBtn');
     const optsChev=document.getElementById('optsChev');
     const optionsSection=document.getElementById('optionsSection');
     const optsCloseBtn=document.getElementById('optsCloseBtn');
+    const toolbarSection=document.querySelector('.settings-toolbar-section');
+    const originalOptsParent=optionsSection?optionsSection.parentElement:null;
+    const originalOptsNext=optionsSection?optionsSection.nextElementSibling:null;
 
-    function positionOptionsPopup(){
-        if(document.body.dataset.optsOpen!=='1')return;
-        const toolbar=document.querySelector('.settings-toolbar-section');
-        if(!toolbar||!optionsSection)return;
-        const rect=toolbar.getBoundingClientRect();
-        optionsSection.style.top=(rect.bottom+4)+'px';
-        optionsSection.style.left=rect.left+'px';
-        optionsSection.style.right='auto';
-        optionsSection.style.width=rect.width+'px';
+    function syncOptionsLocation(){
+        if(!optionsSection||!toolbarSection||!originalOptsParent)return;
+        if(isPCLayout()){
+            if(optionsSection.parentElement!==toolbarSection){
+                toolbarSection.appendChild(optionsSection);
+            }
+        } else {
+            /* restore original DOM position on mobile */
+            if(optionsSection.parentElement!==originalOptsParent){
+                if(originalOptsNext&&originalOptsNext.parentElement===originalOptsParent){
+                    originalOptsParent.insertBefore(optionsSection,originalOptsNext);
+                } else {
+                    originalOptsParent.appendChild(optionsSection);
+                }
+            }
+            /* also ensure any PC-only inline styles are cleared */
+            optionsSection.style.top=optionsSection.style.left=optionsSection.style.right=optionsSection.style.width='';
+            document.body.dataset.optsOpen='0';
+        }
     }
+    syncOptionsLocation();
+
     function closeOptionsPopup(){
         document.body.dataset.optsOpen='0';
         if(optsChev)optsChev.textContent='▾';
@@ -1227,7 +1251,6 @@ function init(){
     function openOptionsPopup(){
         document.body.dataset.optsOpen='1';
         if(optsChev)optsChev.textContent='▴';
-        positionOptionsPopup();
     }
     if(optionsToggle){
         optionsToggle.addEventListener('click',(e)=>{
@@ -1247,8 +1270,8 @@ function init(){
     });
     /* ESC key closes */
     document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&document.body.dataset.optsOpen==='1')closeOptionsPopup()});
-    /* Reposition on window resize */
-    window.addEventListener('resize',positionOptionsPopup);
+    /* Adjust DOM placement if the user resizes across the PC breakpoint */
+    window.addEventListener('resize',syncOptionsLocation);
 
     /* Tab key: jump to next name input, skipping remove buttons */
     document.addEventListener('keydown',e=>{
