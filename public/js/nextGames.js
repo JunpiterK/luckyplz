@@ -30,12 +30,15 @@
 
 /* Dice is retained as a file but intentionally excluded from cross-promotion
    so the home funnel focuses on betting games + team/lotto utilities. */
+/* Ladder emoji (🪜) isn't in Edge/Windows default emoji set on many systems,
+   so use the same SVG the home grid uses to avoid a tofu square. */
+const LP_LADDER_SVG = '<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><rect x="9" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="23.5" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="11" y="7" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="16.5" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="26" width="14" height="3" rx="1" fill="#e8a848"/></svg>';
 const LP_GAMES = [
     { id: 'lotto', icon: '🎱', url: '/games/lotto/' },
     { id: 'team', icon: '👥', url: '/games/team/' },
     { id: 'car-racing', icon: '🏎️', url: '/games/car-racing/' },
     { id: 'roulette', icon: '🎯', url: '/games/roulette/' },
-    { id: 'ladder', icon: '🪜', url: '/games/ladder/' },
+    { id: 'ladder', icon: LP_LADDER_SVG, url: '/games/ladder/' },
 ];
 
 const LP_GAME_NAMES = {

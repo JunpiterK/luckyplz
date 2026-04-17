@@ -8,9 +8,13 @@
 */
 
 (function(){
+    /* Ladder emoji (🪜) renders as tofu on Edge / Windows systems without a
+       full emoji font. Use the same SVG the home page uses so the icon is
+       consistent and glyph-independent. */
+    const LADDER_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><rect x="9" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="23.5" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="11" y="7" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="16.5" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="26" width="14" height="3" rx="1" fill="#e8a848"/></svg>';
     const GAMES=[
         {id:'roulette',  icon:'🎯', url:'/games/roulette/'},
-        {id:'ladder',    icon:'🪜', url:'/games/ladder/'},
+        {id:'ladder',    icon:LADDER_SVG, url:'/games/ladder/'},
         {id:'car-racing',icon:'🏎️',url:'/games/car-racing/'},
         {id:'team',      icon:'👥', url:'/games/team/'},
         {id:'lotto',     icon:'🎱', url:'/games/lotto/'},
