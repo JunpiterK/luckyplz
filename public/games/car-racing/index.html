@@ -84,6 +84,20 @@
         @keyframes titleGlow{0%,100%{filter:drop-shadow(0 0 20px rgba(255,107,53,0.5))}50%{filter:drop-shadow(0 0 40px rgba(0,217,255,0.8))}}
         #setupScreen h2{font-family:'Orbitron','Noto Sans KR',sans-serif;color:rgba(255,255,255,0.5);font-size:0.75em;margin-bottom:20px;font-weight:400;letter-spacing:3px;text-transform:uppercase}
 
+        /* Sticky car-add bar — stays pinned while name list scrolls */
+        .car-add-bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;padding:10px 12px;margin:0 -8px 10px;background:rgba(20,20,40,.96);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.06);border-radius:12px}
+        .car-add-label{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.7em;letter-spacing:2px;color:rgba(255,255,255,.55);font-weight:700;margin-right:4px;white-space:nowrap}
+        .car-add-bar .add-chip{min-width:40px;padding:6px 11px;border-radius:10px;border:1.5px solid rgba(0,255,136,.32);background:rgba(0,255,136,.07);color:var(--success);font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.82em;font-weight:900;cursor:pointer;transition:background .2s,border-color .2s,transform .15s;user-select:none}
+        .car-add-bar .add-chip:hover{background:rgba(0,255,136,.18);border-color:var(--success);transform:translateY(-1px)}
+        .car-add-bar .add-chip:active{transform:translateY(0);background:rgba(0,255,136,.3)}
+        .car-add-bar .add-chip.disabled{opacity:.3;cursor:not-allowed;transform:none}
+        .car-add-bar .add-chip.disabled:hover{background:rgba(0,255,136,.07);border-color:rgba(0,255,136,.32);transform:none}
+        @media(max-width:500px){
+            .car-add-bar{padding:7px 8px;gap:4px;margin:0 -6px 8px}
+            .car-add-label{font-size:.6em;letter-spacing:1.5px}
+            .car-add-bar .add-chip{min-width:34px;padding:5px 8px;font-size:.72em}
+        }
+
         /* Advanced settings toggle */
         .advanced-toggle-wrap{text-align:center;margin:4px 0 18px}
         #advToggleBtn{display:inline-flex;align-items:center;gap:8px;padding:9px 20px;border:1.5px dashed rgba(255,255,255,.2);background:rgba(255,255,255,.04);color:rgba(255,255,255,.55);font-size:.85em;border-radius:999px;cursor:pointer;font-family:inherit;transition:border-color .25s,background .25s,color .25s;letter-spacing:.02em}
@@ -460,6 +474,14 @@
                 </div>
                 <div class="section-row">
                     <div class="saved-indicator" id="savedIndicator">✅ 저장된 리스트가 있습니다!</div>
+                </div>
+                <div class="car-add-bar" id="carAddBar">
+                    <span class="car-add-label">🏎️ 차량 추가</span>
+                    <button class="add-chip" data-add="1" type="button">+1</button>
+                    <button class="add-chip" data-add="2" type="button">+2</button>
+                    <button class="add-chip" data-add="3" type="button">+3</button>
+                    <button class="add-chip" data-add="5" type="button">+5</button>
+                    <button class="add-chip" data-add="10" type="button">+10</button>
                 </div>
                 <div class="section-row" id="playerTotalRowPlaceholder"></div>
                 <div id="playerNameInputs"></div>
@@ -5225,9 +5247,19 @@ function generatePlayerNameInputs(){
         const oldName=i<oldNames.length?oldNames[i]:'';
         html+=`<div class="player-name-input"><span class="player-number">${i+1}</span><span class="color-preview" style="background:${color};border-radius:4px"></span><input type="text" id="playerName${i}" value="${oldName}" placeholder="${T('vehiclePlaceholder',{n:i+1})}" tabindex="${i+1}"><button class="btn-remove-player" data-index="${i}" tabindex="-1" ${count<=2?'disabled':''}>&times;</button></div>`;
     }
-    html+=`<button id="addPlayerBtn" ${count>=12?'disabled':''}>${T('addVehicle')}</button>`;
     container.innerHTML=html;
+    updateCarAddChips();
     updateRewardInputs();
+}
+
+function updateCarAddChips(){
+    const count=parseInt(document.getElementById('playerCount').value);
+    const MAX=12;
+    const remaining=MAX-count;
+    document.querySelectorAll('#carAddBar .add-chip').forEach(chip=>{
+        const add=parseInt(chip.dataset.add)||1;
+        chip.classList.toggle('disabled',add>remaining);
+    });
 }
 
 function removePlayerAt(index){
@@ -5525,7 +5557,23 @@ function initEventListeners(){
     document.getElementById('pauseBtn').addEventListener('click',togglePause);
     document.getElementById('exitBtn').addEventListener('click',()=>{if(confirm(T('confirmExit'))){exitMobileFullscreen();resetGame()}});
     document.getElementById('playerNameInputs').addEventListener('click',e=>{const btn=e.target.closest('.btn-remove-player');if(btn)removePlayerAt(parseInt(btn.dataset.index))});
-    document.getElementById('playerNamesSection').addEventListener('click',e=>{if(e.target.id==='addPlayerBtn')addPlayer()});
+    document.getElementById('carAddBar').addEventListener('click',e=>{
+        const chip=e.target.closest('.add-chip');
+        if(!chip||chip.classList.contains('disabled'))return;
+        const add=parseInt(chip.dataset.add)||1;
+        const MAX=12;
+        let count=parseInt(document.getElementById('playerCount').value);
+        const before=count;
+        count=Math.min(MAX,count+add);
+        if(count===before)return;
+        const inputs=document.querySelectorAll('#playerNameInputs input[type="text"]');
+        const names=[];inputs.forEach(inp=>names.push(inp.value));
+        for(let i=before;i<count;i++)names.push('');
+        document.getElementById('playerCount').value=count;
+        document.getElementById('playerCountValue').textContent=count;
+        generatePlayerNameInputs();
+        names.forEach((n,i)=>{const inp=document.getElementById(`playerName${i}`);if(inp)inp.value=n});
+    });
     document.getElementById('saveNamesBtn').addEventListener('click',openSaveModal);
     document.getElementById('loadNamesBtn').addEventListener('click',quickLoad);
     document.getElementById('viewListsBtn').addEventListener('click',openListModal);
