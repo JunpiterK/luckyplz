@@ -562,19 +562,30 @@ function loop(ts){
                 SFX.tick();
                 const sf=Math.min(1,Math.abs(velocity)/9);
                 const dir=velocity>=0?1:-1;
-                flapperVel+=4.5*dir*(0.3+0.7*sf);
+                flapperVel+=6.0*dir*(0.3+0.7*sf);
                 velocity*=(1-0.00065-0.0021*sf);
             }
             lastTick=pegSlot;
         }
     }
 
-    /* Flapper is a spring-damped pendulum pivoted above the rim. Heavier
-       damping (C) gives the arm a more grounded, less springy recovery —
-       it settles quickly after each peg strike instead of ringing. Spring
-       K slightly lower so the baseline rest feels weighty, not twitchy.
-       Damping ratio ζ = C/(2√K) ≈ 0.34 (clearly underdamped but calm). */
-    const K=500,C=15;
+    /* Flapper dynamics — spring + asymmetric damping.
+       A plain symmetric spring rings the flapper back to center after
+       every kick, so each direction blurs into the next and the overall
+       lean is imperceptible. Fix: when the flapper is traveling AGAINST
+       the wheel's spin direction (i.e. springing back toward the pegs),
+       damp it ~2× harder. Effect: each peg strike pushes the flapper in
+       the spin direction and the arm stays biased that way instead of
+       bouncing back — reads as a heavy lever being dragged by the wheel,
+       which is the direction cue the user wanted. When the wheel is
+       essentially stopped, fall back to symmetric damping so the arm
+       returns cleanly to center. */
+    const K=500;
+    const Cbase=18;
+    const wheelDir=velocity>=0?1:-1;
+    const movingEnough=Math.abs(velocity)>0.3;
+    const againstWheel=movingEnough&&flapperVel*wheelDir<0;
+    const C=againstWheel?Cbase*2.2:Cbase;
     flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
     flapperAngle+=flapperVel*dt;
     const maxA=0.45;
