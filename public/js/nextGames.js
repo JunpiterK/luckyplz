@@ -28,13 +28,14 @@
     document.head.appendChild(s);
 })();
 
+/* Dice is retained as a file but intentionally excluded from cross-promotion
+   so the home funnel focuses on betting games + team/lotto utilities. */
 const LP_GAMES = [
     { id: 'lotto', icon: '🎱', url: '/games/lotto/' },
     { id: 'team', icon: '👥', url: '/games/team/' },
     { id: 'car-racing', icon: '🏎️', url: '/games/car-racing/' },
     { id: 'roulette', icon: '🎯', url: '/games/roulette/' },
     { id: 'ladder', icon: '🪜', url: '/games/ladder/' },
-    { id: 'dice', icon: '🎲', url: '/games/dice/' },
 ];
 
 const LP_GAME_NAMES = {
