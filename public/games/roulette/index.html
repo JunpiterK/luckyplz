@@ -195,6 +195,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         <h2 id="subtitleText">SPIN THE WHEEL!</h2>
 
         <div class="section"><h3>👥 <span id="playersTitle">Players / Options</span></h3>
+            <div id="groupsWidget" class="rou-groups-widget" style="justify-content:flex-start;margin-bottom:10px"></div>
             <div id="playerInputs"></div>
             <button id="addPlayerBtn">+ <span id="addPlayerText">Add</span></button>
         </div>
@@ -227,6 +228,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <canvas id="confettiCanvas"></canvas>
     <div class="share-toast" id="shareToast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/supabase-config.js"></script>
+<script src="/js/groups.js"></script>
 <script>
 /* ========================================
    Lucky Please - Roulette
@@ -234,8 +238,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 ======================================== */
 
 const I18N={
-en:{title:'Roulette',subtitle:'SPIN THE WHEEL!',players:'Players / Options',addPlayer:'Add',playerN:'Option {n}',start:'SPIN!',home:'Home',result:'Selected!',share:'SHARE',replay:'Spin Again',settings:'Settings',copied:'Link copied!',spinning:'Spinning...',selected:'{name} is chosen!!',tapToSpin:'Tap SPIN or swipe the wheel!',spin:'SPIN'},
-ko:{title:'룰렛',subtitle:'돌려돌려 룰렛!',players:'참가자 / 항목',addPlayer:'추가',playerN:'항목 {n}',start:'돌리기!',home:'홈',result:'당첨!',share:'공유하기',replay:'다시 돌리기',settings:'설정',copied:'링크 복사됨!',spinning:'돌리는 중...',selected:'{name} 당첨!!',tapToSpin:'SPIN 버튼 또는 휠을 스와이프!',spin:'돌리기'},
+en:{title:'Roulette',subtitle:'SPIN THE WHEEL!',players:'Players / Options',addPlayer:'Add',playerN:'Option {n}',start:'SPIN!',home:'Home',result:'Selected!',share:'SHARE',replay:'Spin Again',settings:'Settings',copied:'Link copied!',spinning:'Spinning...',selected:'{name} is chosen!!',tapToSpin:'Tap SPIN or swipe the wheel!',spin:'SPIN',grpLoad:'Sets',grpSave:'Save',grpEmpty:'No saved sets yet.',grpLogin:'🔐 Sign in to save option sets',grpPrompt:'Name this set:',grpConfirmDel:'Delete this set?',grpNoMembers:'Enter option names first.',grpSaved:'Saved ✓'},
+ko:{title:'룰렛',subtitle:'돌려돌려 룰렛!',players:'참가자 / 항목',addPlayer:'추가',playerN:'항목 {n}',start:'돌리기!',home:'홈',result:'당첨!',share:'공유하기',replay:'다시 돌리기',settings:'설정',copied:'링크 복사됨!',spinning:'돌리는 중...',selected:'{name} 당첨!!',tapToSpin:'SPIN 버튼 또는 휠을 스와이프!',spin:'돌리기',grpLoad:'세트',grpSave:'저장',grpEmpty:'저장된 세트가 없습니다.',grpLogin:'🔐 로그인하면 옵션 세트를 저장할 수 있어요',grpPrompt:'세트 이름을 입력하세요:',grpConfirmDel:'이 세트를 삭제할까요?',grpNoMembers:'먼저 옵션 이름을 입력하세요.',grpSaved:'저장됨 ✓'},
 gb:{title:'Roulette',subtitle:'SPIN THE WHEEL!',players:'Players / Options',addPlayer:'Add',playerN:'Option {n}',start:'SPIN!',home:'Home',result:'Selected!',share:'SHARE',replay:'Spin Again',settings:'Settings',copied:'Link copied!',spinning:'Spinning...',selected:'{name} is chosen!!',tapToSpin:'Tap SPIN or swipe the wheel!',spin:'SPIN'},
 ja:{title:'ルーレット',subtitle:'回して決めよう！',players:'参加者 / 項目',addPlayer:'追加',playerN:'項目{n}',start:'回す！',home:'ホーム',result:'当選！',share:'シェア',replay:'もう一度',settings:'設定',copied:'コピー！',spinning:'回転中...',selected:'{name}に決定！！',tapToSpin:'SPINボタンかスワイプ！',spin:'回す'},
 zh:{title:'轮盘',subtitle:'转转转！',players:'参加者 / 选项',addPlayer:'添加',playerN:'选项{n}',start:'旋转！',home:'首页',result:'选中！',share:'分享',replay:'再转一次',settings:'设置',copied:'已复制！',spinning:'旋转中...',selected:'{name}被选中！！',tapToSpin:'点SPIN或滑动转盘！',spin:'旋转'},
@@ -594,6 +598,35 @@ function init(){
     cv.addEventListener('touchend',e=>{onPointerUp(e)},{passive:false});
 
     window.addEventListener('resize',()=>{if(document.getElementById('gameScreen').style.display==='block')resize()});
+
+    /* Saved Groups widget */
+    if(window.mountGroupsWidget){
+        const labels=()=>({load:T('grpLoad'),save:T('grpSave'),empty:T('grpEmpty'),loginCTA:T('grpLogin'),prompt:T('grpPrompt'),confirmDelete:T('grpConfirmDel'),noMembers:T('grpNoMembers'),saved:T('grpSaved')});
+        const widget=mountGroupsWidget({
+            container:document.getElementById('groupsWidget'),
+            labels:labels(),
+            getMembers(){
+                const inputs=document.querySelectorAll('#playerInputs input');
+                const out=[];
+                inputs.forEach(inp=>{const v=inp.value.trim();if(v)out.push(v)});
+                return out;
+            },
+            setMembers(loaded){
+                const arr=Array.isArray(loaded)?loaded:[];
+                if(!arr.length)return;
+                playerCount=Math.max(2,Math.min(12,arr.length));
+                renderPlayers();
+                const inputs=document.querySelectorAll('#playerInputs input');
+                arr.forEach((m,i)=>{
+                    if(!inputs[i])return;
+                    const name=typeof m==='string'?m:(m&&m.name)||'';
+                    inputs[i].value=name;
+                });
+            },
+        });
+        const origApplyLanguage=applyLanguage;
+        applyLanguage=function(){origApplyLanguage();widget.setLabels(labels())};
+    }
 }
 init();
 </script>
