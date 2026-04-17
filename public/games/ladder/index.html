@@ -114,12 +114,28 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     .pc-ad-slot{display:none !important}
 }
 @media(min-width:900px){
-    /* PC: hide standalone Options section; surface it via the toggle button next to Sets/Save */
+    /* PC: hide the standalone Options section until the toggle opens it as a
+       floating popup anchored below the Options / Sets / Save toolbar. */
     .options-toggle-btn{display:inline-flex}
     #optionsSection{display:none}
-    body[data-opts-open="1"] #optionsSection{display:block;animation:optsDropIn .2s ease-out}
-    @keyframes optsDropIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+    body[data-opts-open="1"] #optionsSection{
+        display:block;
+        position:fixed;
+        z-index:80;
+        margin:0;
+        background:linear-gradient(145deg,rgba(20,22,40,.98),rgba(28,30,50,.99));
+        border:1px solid rgba(0,217,255,.35);
+        border-radius:16px;
+        box-shadow:0 16px 48px rgba(0,0,0,.55),0 0 0 1px rgba(0,0,0,.3);
+        padding:18px 20px 20px;
+        animation:optsDropIn .18s ease-out;
+    }
+    body[data-opts-open="1"] #optionsSection>h3{display:none}
+    #optionsSection .opts-close-btn{display:flex;position:absolute;top:10px;right:10px;width:28px;height:28px;border:none;border-radius:50%;background:rgba(255,255,255,.06);color:rgba(255,255,255,.65);font-size:1.3em;line-height:1;cursor:pointer;align-items:center;justify-content:center;transition:background .18s,color .18s;padding:0}
+    #optionsSection .opts-close-btn:hover{background:rgba(255,51,102,.22);color:#fff}
+    @keyframes optsDropIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
 }
+#optionsSection .opts-close-btn{display:none}
 #setupScreen{position:relative;background:linear-gradient(145deg,rgba(20,20,40,0.95),rgba(10,10,30,0.98));backdrop-filter:blur(30px);border-radius:24px;padding:24px 28px;text-align:center;border:2px solid rgba(0,217,255,0.2);box-shadow:0 25px 80px rgba(0,0,0,0.7),0 0 80px rgba(0,217,255,0.08);max-height:95vh;overflow-y:auto;width:560px;max-width:98vw}
 #setupScreen::-webkit-scrollbar{width:6px}
 #setupScreen::-webkit-scrollbar-thumb{background:var(--secondary);border-radius:3px}
@@ -342,6 +358,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
         <!-- Options -->
         <div class="section" id="optionsSection">
+            <button class="opts-close-btn" id="optsCloseBtn" type="button" aria-label="Close options">×</button>
             <h3>⚙️ <span id="optionsTitle">Options</span></h3>
             <div style="margin-bottom:10px">
                 <div style="font-size:0.75em;color:rgba(255,255,255,0.5);margin-bottom:6px" id="complexityLabel">Ladder Complexity</div>
@@ -1154,16 +1171,52 @@ function init(){
     });
     if(pabStart)pabStart.addEventListener('click',startGame);
 
-    /* Options toggle (PC only — button is hidden on mobile via CSS) */
+    /* Options toggle (PC only — button is hidden on mobile via CSS).
+       Opens #optionsSection as a floating popup anchored below the toolbar row. */
     const optionsToggle=document.getElementById('optionsToggleBtn');
     const optsChev=document.getElementById('optsChev');
+    const optionsSection=document.getElementById('optionsSection');
+    const optsCloseBtn=document.getElementById('optsCloseBtn');
+
+    function positionOptionsPopup(){
+        if(document.body.dataset.optsOpen!=='1')return;
+        const toolbar=document.querySelector('.settings-toolbar-section');
+        if(!toolbar||!optionsSection)return;
+        const rect=toolbar.getBoundingClientRect();
+        optionsSection.style.top=(rect.bottom+4)+'px';
+        optionsSection.style.left=rect.left+'px';
+        optionsSection.style.right='auto';
+        optionsSection.style.width=rect.width+'px';
+    }
+    function closeOptionsPopup(){
+        document.body.dataset.optsOpen='0';
+        if(optsChev)optsChev.textContent='▾';
+    }
+    function openOptionsPopup(){
+        document.body.dataset.optsOpen='1';
+        if(optsChev)optsChev.textContent='▴';
+        positionOptionsPopup();
+    }
     if(optionsToggle){
-        optionsToggle.addEventListener('click',()=>{
-            const open=document.body.dataset.optsOpen==='1';
-            document.body.dataset.optsOpen=open?'0':'1';
-            if(optsChev)optsChev.textContent=open?'▾':'▴';
+        optionsToggle.addEventListener('click',(e)=>{
+            e.stopPropagation();
+            (document.body.dataset.optsOpen==='1'?closeOptionsPopup:openOptionsPopup)();
         });
     }
+    if(optsCloseBtn){
+        optsCloseBtn.addEventListener('click',closeOptionsPopup);
+    }
+    /* Close when clicking outside the popup */
+    document.addEventListener('click',(e)=>{
+        if(document.body.dataset.optsOpen!=='1')return;
+        if(optionsSection&&optionsSection.contains(e.target))return;
+        if(optionsToggle&&optionsToggle.contains(e.target))return;
+        closeOptionsPopup();
+    });
+    /* ESC key closes */
+    document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&document.body.dataset.optsOpen==='1')closeOptionsPopup()});
+    /* Reposition on window resize */
+    window.addEventListener('resize',positionOptionsPopup);
 
     /* Tab key: jump to next name input, skipping remove buttons */
     document.addEventListener('keydown',e=>{
