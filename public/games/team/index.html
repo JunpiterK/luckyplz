@@ -90,6 +90,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .add-chip.disabled{opacity:.3;cursor:not-allowed;transform:none}
 .add-chip.disabled:hover{background:rgba(0,255,136,.07);border-color:rgba(0,255,136,.3);transform:none}
 
+.team-groups-section{display:flex;align-items:center;gap:8px;padding:10px 14px;overflow:visible}
+.team-groups-widget{justify-content:flex-start}
+
 /* Team count & balance */
 .opt-row{display:flex;gap:8px;align-items:center;justify-content:center;margin:8px 0;flex-wrap:wrap}
 .opt-chip{padding:7px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);cursor:pointer;transition:all .3s;font-size:.8em;font-weight:700}
@@ -247,6 +250,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
     <!-- Team Builder Options -->
     <div id="teamSection">
+        <div class="section team-groups-section">
+            <div id="groupsWidget" class="team-groups-widget"></div>
+        </div>
         <div class="section section-members">
             <div class="frozen-row title-stats-row">
                 <h3 class="members-h3">&#x1F465; <span id="membersTitle">Members</span></h3>
@@ -306,6 +312,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <canvas id="confettiCanvas"></canvas>
 <div class="share-toast" id="shareToast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/supabase-config.js"></script>
+<script src="/js/groups.js"></script>
 <script>
 /* ========================================
    Lucky Please - Team Builder
@@ -313,8 +322,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 ======================================== */
 
 const I18N={
-en:{title:'Team Picker',subtitle:'BUILD YOUR DREAM TEAM!',members:'Members',addMember:'Add Member',addShort:'ADD',memberN:'Member {n}',teamOpt:'Team Options',teamCount:'Number of Teams',balance:'Balance Mode',random:'Random',balanced:'Tier Balanced',tier:'Tier',noTier:'None',start:'START!',result:'Results!',team:'Team {n}',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!',preview:'PREVIEW',remainder:'extra member',members_abbr:'members',plusOne:'+1 member'},
-ko:{title:'\uD300 \uBF51\uAE30',subtitle:'\uB4DC\uB9BC\uD300\uC744 \uB9CC\uB4E4\uC5B4\uBD10!',members:'\uCC38\uAC00\uC790',addMember:'\uCC38\uAC00\uC790 \uCD94\uAC00',memberN:'\uCC38\uAC00\uC790 {n}',teamOpt:'\uD300 \uC635\uC158',teamCount:'\uD300 \uC218',balance:'\uBC38\uB7F0\uC2A4 \uBAA8\uB4DC',random:'\uB79C\uB364 \uC11E\uAE30',balanced:'\uD2F0\uC5B4 \uBC38\uB7F0\uC2A4',tier:'\uD2F0\uC5B4',noTier:'\uC5C6\uC74C',start:'\uC2DC\uC791!',result:'\uACB0\uACFC \uBC1C\uD45C!',team:'{n}\uD300',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!',preview:'\uBBF8\uB9AC\ubcf4\uae30',remainder:'\uba85 \ucd94\uac00 \ubc30\uc815',members_abbr:'\uba85',plusOne:'+1\uba85',addShort:'\uc778\uc6d0\ucd94\uac00'},
+en:{title:'Team Picker',subtitle:'BUILD YOUR DREAM TEAM!',members:'Members',addMember:'Add Member',addShort:'ADD',memberN:'Member {n}',teamOpt:'Team Options',teamCount:'Number of Teams',balance:'Balance Mode',random:'Random',balanced:'Tier Balanced',tier:'Tier',noTier:'None',start:'START!',result:'Results!',team:'Team {n}',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!',preview:'PREVIEW',remainder:'extra member',members_abbr:'members',plusOne:'+1 member',grpLoad:'Groups',grpSave:'Save',grpEmpty:'No saved groups yet.',grpLogin:'🔐 Sign in to save groups',grpPrompt:'Name this group:',grpConfirmDel:'Delete this group?',grpNoMembers:'Add member names first.',grpSaved:'Saved ✓'},
+ko:{title:'\uD300 \uBF51\uAE30',subtitle:'\uB4DC\uB9BC\uD300\uC744 \uB9CC\uB4E4\uC5B4\uBD10!',members:'\uCC38\uAC00\uC790',addMember:'\uCC38\uAC00\uC790 \uCD94\uAC00',memberN:'\uCC38\uAC00\uC790 {n}',teamOpt:'\uD300 \uC635\uC158',teamCount:'\uD300 \uC218',balance:'\uBC38\uB7F0\uC2A4 \uBAA8\uB4DC',random:'\uB79C\uB364 \uC11E\uAE30',balanced:'\uD2F0\uC5B4 \uBC38\uB7F0\uC2A4',tier:'\uD2F0\uC5B4',noTier:'\uC5C6\uC74C',start:'\uC2DC\uC791!',result:'\uACB0\uACFC \uBC1C\uD45C!',team:'{n}\uD300',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!',preview:'\uBBF8\uB9AC\ubcf4\uae30',remainder:'\uba85 \ucd94\uac00 \ubc30\uc815',members_abbr:'\uba85',plusOne:'+1\uba85',addShort:'\uc778\uc6d0\ucd94\uac00',grpLoad:'\uadf8\ub8f9',grpSave:'\uc800\uc7a5',grpEmpty:'\uc800\uc7a5\ub41c \uadf8\ub8f9\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.',grpLogin:'\ud83d\udd10 \ub85c\uadf8\uc778\ud558\uba74 \uadf8\ub8f9\uc744 \uc800\uc7a5\ud560 \uc218 \uc788\uc5b4\uc694',grpPrompt:'\uadf8\ub8f9 \uc774\ub984\uc744 \uc785\ub825\ud558\uc138\uc694:',grpConfirmDel:'\uc774 \uadf8\ub8f9\uc744 \uc0ad\uc81c\ud560\uae4c\uc694?',grpNoMembers:'\uba3c\uc800 \ucc38\uac00\uc790\ub97c \ucd94\uac00\ud558\uc138\uc694.',grpSaved:'\uc800\uc7a5\ub428 \u2713'},
 gb:{title:'Team Picker',subtitle:'BUILD YOUR DREAM TEAM!',members:'Members',addMember:'Add Member',memberN:'Member {n}',teamOpt:'Team Options',teamCount:'Number of Teams',balance:'Balance Mode',random:'Random',balanced:'Tier Balanced',tier:'Tier',noTier:'None',start:'START!',result:'Results!',team:'Team {n}',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!'},
 ja:{title:'\u30C1\u30FC\u30E0\u5206\u3051',subtitle:'\u30C9\u30EA\u30FC\u30E0\u30C1\u30FC\u30E0\u3092\u4F5C\u308D\u3046\uFF01',members:'\u30E1\u30F3\u30D0\u30FC',addMember:'\u8FFD\u52A0',memberN:'\u30E1\u30F3\u30D0\u30FC{n}',teamOpt:'\u30C1\u30FC\u30E0\u8A2D\u5B9A',teamCount:'\u30C1\u30FC\u30E0\u6570',balance:'\u30D0\u30E9\u30F3\u30B9',random:'\u30E9\u30F3\u30C0\u30E0',balanced:'\u30C6\u30A3\u30A2\u30D0\u30E9\u30F3\u30B9',tier:'\u30C6\u30A3\u30A2',noTier:'\u306A\u3057',start:'\u30B9\u30BF\u30FC\u30C8\uFF01',result:'\u7D50\u679C\uFF01',team:'\u30C1\u30FC\u30E0{n}',again:'\u3082\u3046\u4E00\u5EA6',drawing:'\u62BD\u9078\u4E2D...',complete:'\u5B8C\u4E86\uFF01',copied:'\u30B3\u30D4\u30FC\uFF01'},
 zh:{title:'\u5206\u961F\u62BD\u7B7E',subtitle:'\u7EC4\u5EFA\u68A6\u60F3\u4E4B\u961F\uFF01',members:'\u6210\u5458',addMember:'\u6DFB\u52A0',memberN:'\u6210\u5458{n}',teamOpt:'\u961F\u4F0D\u8BBE\u7F6E',teamCount:'\u961F\u4F0D\u6570',balance:'\u5E73\u8861\u6A21\u5F0F',random:'\u968F\u673A',balanced:'\u7B49\u7EA7\u5E73\u8861',tier:'\u7B49\u7EA7',noTier:'\u65E0',start:'\u5F00\u59CB\uFF01',result:'\u7ED3\u679C\uFF01',team:'\u961F\u4F0D{n}',again:'\u518D\u6765',drawing:'\u62BD\u7403\u4E2D...',complete:'\u5B8C\u6210\uFF01',copied:'\u5DF2\u590D\u5236\uFF01'},
@@ -2106,6 +2115,45 @@ function init(){
     });
 
     window.addEventListener('resize',()=>{if(document.getElementById('gameScreen').style.display==='block')resizeCanvas()});
+
+    /* Saved Groups widget */
+    if(window.mountGroupsWidget){
+        const labels=()=>({load:T('grpLoad'),save:T('grpSave'),empty:T('grpEmpty'),loginCTA:T('grpLogin'),prompt:T('grpPrompt'),confirmDelete:T('grpConfirmDel'),noMembers:T('grpNoMembers'),saved:T('grpSaved')});
+        const widget=mountGroupsWidget({
+            container:document.getElementById('groupsWidget'),
+            labels:labels(),
+            getMembers(){
+                const rows=document.querySelectorAll('#memberInputs .member-row');
+                const out=[];
+                rows.forEach(r=>{
+                    const name=r.querySelector('input').value.trim();
+                    if(!name)return;
+                    const tier=parseInt(r.querySelector('select').value)||0;
+                    out.push({name,tier});
+                });
+                return out;
+            },
+            setMembers(loaded){
+                const arr=Array.isArray(loaded)?loaded:[];
+                if(!arr.length)return;
+                memberCount=Math.max(2,Math.min(40,arr.length));
+                renderMembers();
+                const inputs=document.querySelectorAll('#memberInputs input');
+                const selects=document.querySelectorAll('#memberInputs select');
+                arr.forEach((m,i)=>{
+                    if(!inputs[i])return;
+                    const name=typeof m==='string'?m:(m&&m.name)||'';
+                    const tier=typeof m==='object'&&m?parseInt(m.tier)||0:0;
+                    inputs[i].value=name;
+                    if(selects[i])selects[i].value=String(tier);
+                });
+                updateTierStats();updateAddChips();
+            },
+        });
+        /* refresh labels when language changes */
+        const origApplyLanguage=applyLanguage;
+        applyLanguage=function(){origApplyLanguage();widget.setLabels(labels())};
+    }
 }
 init();
 </script>
