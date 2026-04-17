@@ -2017,6 +2017,28 @@ function drawNextTeam(){
 }
 
 /* Result */
+function encodeResultUrl(){
+    try{
+        const data=teamResults.map(team=>team.map(m=>[m.name,m.tier||0]));
+        const json=JSON.stringify(data);
+        const b64=btoa(unescape(encodeURIComponent(json))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        return `${location.origin}/games/team/?r=${b64}`;
+    }catch(e){return 'https://luckyplz.com/games/team/'}
+}
+
+function decodeResultParam(){
+    const p=new URLSearchParams(location.search).get('r');
+    if(!p)return null;
+    try{
+        let b64=p.replace(/-/g,'+').replace(/_/g,'/');
+        while(b64.length%4)b64+='=';
+        const json=decodeURIComponent(escape(atob(b64)));
+        const data=JSON.parse(json);
+        if(!Array.isArray(data)||!data.length)return null;
+        return data.map(team=>(team||[]).map(t=>({name:String(t[0]||''),tier:parseInt(t[1])||0})));
+    }catch(e){return null}
+}
+
 function showResult(){
     if(animId)cancelAnimationFrame(animId);
     document.getElementById('gameScreen').style.display='none';
@@ -2042,10 +2064,11 @@ function showResult(){
 }
 
 function buildShareBtns(text){
-    const full=`Lucky Please Team Builder \uD83D\uDC65\n${text}\nhttps://luckyplz.com/games/team/`;
-    const enc=encodeURIComponent(full);const eu=encodeURIComponent('https://luckyplz.com/games/team/');
+    const url=encodeResultUrl();
+    const full=`Lucky Please Team Builder \uD83D\uDC65\n${text}\n${url}`;
+    const enc=encodeURIComponent(full);const eu=encodeURIComponent(url);
     let h=`<button class="share-btn kakao" onclick="copyS()">\uD83D\uDCAC Kakao</button><button class="share-btn whatsapp" onclick="window.open('https://wa.me/?text=${enc}')">\uD83D\uDCAC WhatsApp</button><button class="share-btn telegram" onclick="window.open('https://t.me/share/url?url=${eu}&text=${enc}')">\u2708\uFE0F Telegram</button><button class="share-btn twitter" onclick="window.open('https://twitter.com/intent/tweet?text=${enc}')">\uD83D\uDC26 X</button><button class="share-btn copy-link" onclick="copyS()">\uD83D\uDD17 Copy</button>`;
-    if(navigator.share)h+=`<button class="share-btn native-share" style="display:flex" onclick="navigator.share({title:'Lucky Please Team Builder',text:window._st,url:'https://luckyplz.com/games/team/'}).catch(()=>{})">\uD83D\uDCE4 Share</button>`;
+    if(navigator.share)h+=`<button class="share-btn native-share" style="display:flex" onclick="navigator.share({title:'Lucky Please Team Builder',text:window._st,url:'${url}'}).catch(()=>{})">\uD83D\uDCE4 Share</button>`;
     document.getElementById('shareButtons').innerHTML=h;window._st=full;
 }
 function copyS(){navigator.clipboard.writeText(window._st).then(()=>{const t=document.getElementById('shareToast');t.textContent=T('copied');t.style.display='block';setTimeout(()=>t.style.display='none',2000)})}
@@ -2061,6 +2084,14 @@ function init(){
     else{const m={'ko':'ko','en':'en','es':'es','de':'de','fr':'fr','ja':'ja','zh':'zh','pt':'pt','ru':'ru','ar':'ar','hi':'hi','th':'th','id':'id','vi':'vi','tr':'tr'};const ls=navigator.languages||[navigator.language||'en'];for(const l of ls){if(l.toLowerCase()==='en-gb'){lang='gb';break}const p=l.split('-')[0].toLowerCase();if(m[p]){lang=m[p];break}}}
 
     createStars();applyLanguage();
+
+    /* Shared result URL — skip setup and jump to result if ?r= present */
+    const shared=decodeResultParam();
+    if(shared&&shared.length){
+        teamResults=shared;
+        document.getElementById('setupWrap').style.display='none';
+        setTimeout(showResult,80);
+    }
 
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
 
