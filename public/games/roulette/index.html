@@ -311,9 +311,15 @@ const DARK_COLORS=['#c0392b','#2980b9','#27ae60','#d68910','#8e44ad','#16a085','
 let playerCount=4,players=[],spinning=false;
 
 /* Audio */
-const SFX=(()=>{let c;function g(){if(!c)c=new(window.AudioContext||window.webkitAudioContext)();return c}
+/* AudioContext starts suspended on modern Chrome/Edge until a user
+   gesture. Calling resume() inside g() unlocks it — important because
+   startGame kicks off doSpin via setTimeout, which drops out of the
+   user-gesture context and would otherwise leave the context muted.
+   Tick is 200 Hz (deep thud) with slightly higher gain and a touch
+   longer duration to compensate for low-frequency perceptual loudness. */
+const SFX=(()=>{let c;function g(){if(!c)c=new(window.AudioContext||window.webkitAudioContext)();if(c.state==='suspended')c.resume();return c}
 function p(f,d,t='sine',v=0.12){try{const x=g(),o=x.createOscillator(),ga=x.createGain();o.type=t;o.frequency.value=f;ga.gain.setValueAtTime(v,x.currentTime);ga.gain.exponentialRampToValueAtTime(0.001,x.currentTime+d);o.connect(ga);ga.connect(x.destination);o.start();o.stop(x.currentTime+d)}catch(e){}}
-return{tick(){p(500,0.04,'square',0.075)},win(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,0.25,'sine',0.18),i*100))},click(){p(600,0.04,'square',0.08)},g}
+return{tick(){p(200,0.05,'square',0.11)},win(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,0.25,'sine',0.18),i*100))},click(){p(600,0.04,'square',0.08)},g}
 })();
 
 /* Stars */
