@@ -39,7 +39,7 @@ if __name__ == '__main__':
     local_ip = get_local_ip()
 
     print('=' * 56)
-    print('  NotMePlz Game Server')
+    print('  LuckyPlz - 행운은 나의 것!!')
     print('=' * 56)
     print(f'  Local:    http://localhost:{port}')
     print(f'  Network:  http://{local_ip}:{port}')
