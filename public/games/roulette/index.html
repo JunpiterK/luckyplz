@@ -578,12 +578,19 @@ function loop(ts){
             if(lastTick!==-1){
                 SFX.tick();
                 const sf=Math.min(1,Math.abs(velocity)/9);
-                const dir=velocity>=0?1:-1;
-                /* Kick amplitude: 9 rad/s at full speed, minimum 45% floor
-                   so even slow-crawl pegs still visibly nudge the flapper.
-                   Previous 6.0*(0.3+0.7*sf) went to ~1.8 at low speed —
-                   essentially invisible. */
-                flapperVel+=9*dir*(0.45+0.55*sf);
+                /* Kick direction flipped from the obvious sign. On Canvas
+                   (Y axis points DOWN), ctx.rotate(+θ) sends a downward-
+                   pointing arm visually LEFT, not right. So to match a
+                   CW-spinning wheel (positive velocity) where pegs travel
+                   to the right across the top, the flapper tip must go
+                   right — which requires a NEGATIVE rotation angle.
+                   Using dir = -sign(velocity) keeps the arm bouncing in
+                   the direction the pegs are actually traveling. */
+                const dir=velocity>=0?-1:1;
+                /* Kick amplitude up to 12 rad/s so the pegs actually
+                   whack the flapper visibly. Minimum 45% floor so even
+                   slow-crawl pegs at the tail of a spin still nudge it. */
+                flapperVel+=12*dir*(0.45+0.55*sf);
                 velocity*=(1-0.00065-0.0021*sf);
             }
             lastTick=pegSlot;
@@ -595,18 +602,22 @@ function loop(ts){
        overdamped return. Parameters:
          K = 380 (ω₀ ≈ 19.5 rad/s) — softer spring so the same impulse
              produces a larger, slower arc instead of a snappy blip.
-         Cbase = 12 (ζ ≈ 0.31) — underdamped in the spin direction; the
+         Cbase = 12 (ζ ≈ 0.31) — underdamped in the kick direction; the
              arm swings out and lingers, giving a clear directional lean.
          Cagainst = 3× Cbase = 36 (ζ ≈ 0.92) — near critical damping on
              the return stroke, so the arm doesn't bounce back past
              center and stays biased toward the wheel direction.
-         maxA = 0.55 rad (~31°) — deflection cap tuned to fit inside
-             the canvas top reserve. */
+         maxA = 0.55 rad (~31°) — deflection cap.
+       Note: because the kick sign is flipped (see comment above),
+       peg-pushed motion has sign -wheelDir and the spring-restoring
+       return has sign +wheelDir. We want heavier damping on the
+       return, so the flag condition is flapperVel*wheelDir > 0
+       (NOT the naive < 0). */
     const K=380;
     const Cbase=12;
     const wheelDir=velocity>=0?1:-1;
     const movingEnough=Math.abs(velocity)>0.3;
-    const againstWheel=movingEnough&&flapperVel*wheelDir<0;
+    const againstWheel=movingEnough&&flapperVel*wheelDir>0;
     const C=againstWheel?Cbase*3:Cbase;
     flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
     flapperAngle+=flapperVel*dt;
