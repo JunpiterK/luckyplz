@@ -106,8 +106,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--dur) ease-in-out infinite}
 @keyframes twinkle{0%,100%{opacity:.2;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}
 
-/* Setup */
-#setupWrap{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;display:flex;justify-content:center;align-items:flex-start;padding:10px;overflow-y:auto}
+/* Setup + overlay behavior
+   The setup form is presented as a modal floating over a blurred
+   preview of the game machine. When the user hits PREPARE the body
+   gets the .prepared class, which fades the setup out and clears the
+   machine blur. Keeping both on the page at once (instead of toggling
+   display) lets the transition feel seamless — the drum the user sees
+   behind the modal is the drum they'll shortly be pulling from. */
+#setupWrap{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;display:flex;justify-content:center;align-items:flex-start;padding:10px;overflow-y:auto;transition:opacity .28s ease,visibility .28s}
+body.prepared #setupWrap{opacity:0;visibility:hidden;pointer-events:none}
+body.prepared #setupWrap .floating-home{display:none}
 #setupScreen{background:linear-gradient(145deg,rgba(20,20,40,.95),rgba(10,10,30,.98));backdrop-filter:blur(30px);border-radius:24px;padding:24px 28px;text-align:center;border:2px solid rgba(255,230,109,.2);box-shadow:0 25px 80px rgba(0,0,0,.7);max-width:600px;width:98vw;margin:20px auto}
 #setupScreen::-webkit-scrollbar{width:6px}
 #setupScreen::-webkit-scrollbar-thumb{background:var(--accent);border-radius:3px}
@@ -145,8 +153,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 @keyframes startP{0%,100%{box-shadow:0 12px 35px rgba(255,230,109,.3)}50%{box-shadow:0 16px 45px rgba(255,230,109,.5)}}
 
 /* Game screen */
-#gameScreen{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:50;background:linear-gradient(180deg,#080818 0%,#101028 50%,#080818 100%)}
+#gameScreen{display:block;position:fixed;top:0;left:0;width:100%;height:100%;z-index:50;background:linear-gradient(180deg,#080818 0%,#101028 50%,#080818 100%);filter:blur(12px);transform:scale(1.02);transition:filter .35s ease,transform .35s ease;pointer-events:none}
+body.prepared #gameScreen{filter:none;transform:scale(1);pointer-events:auto}
 #gameCanvas{display:block;width:100%;height:100%}
+/* Hide the sidebar entirely while setup is still showing — otherwise
+   the blurred drum preview competes with a sidebar full of controls. */
+body:not(.prepared) #lottoSidebar{display:none}
 
 /* Result screen */
 #resultScreen{display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:300;justify-content:center;align-items:center;background:rgba(5,5,15,.92);backdrop-filter:blur(10px);padding:20px;overflow-y:auto}
@@ -626,8 +638,13 @@ let _pendingDraw=null;
    with the preset flag + name so each entry renders in its home
    country's format (Korean 6/45, US Powerball, UK 6/59, etc.) no
    matter what locale the user is viewing the results in later. */
+/* Storage version bumped v1 → v2 so any stale test data from earlier
+   builds is dropped on the user's next load. The old key is simply
+   ignored; we don't migrate because the v1 schema predates several
+   fields the UI now relies on. */
+const LOTTO_HIST_KEY='luckyplz_lotto_history_v2';
 let lottoHistory=[];
-try{lottoHistory=JSON.parse(localStorage.getItem('luckyplz_lotto_history')||'[]')}catch(e){lottoHistory=[]}
+try{lottoHistory=JSON.parse(localStorage.getItem(LOTTO_HIST_KEY)||'[]')}catch(e){lottoHistory=[]}
 
 let drawnResults=[];
 
@@ -1568,26 +1585,27 @@ function _loadMachineForSet(cfg){
 
 function prepareLottoMachine(){
     const cfg=_buildPoolConfig();
-    document.getElementById('setupWrap').style.display='none';
-    document.getElementById('gameScreen').style.display='block';
-    initCanvas();
+    /* The machine canvas has already been initialized and tumbling
+       behind the setup modal since init(). Here we just repopulate
+       with the user's final preset/range selection and flip the
+       body into 'prepared' mode — CSS fades the setup out and
+       removes the blur. NO audio on this transition; the user
+       hasn't pressed START yet. */
+    if(!ctx)initCanvas();else resizeCanvas();
     _loadMachineForSet(cfg);
     _pendingDraw=cfg;
     currentSet=0;
-    /* Start the physics + ambient blower so balls tumble while the
-       user decides speed / sets. No draw until they press START. */
     blowerStartTime=performance.now()*.001;lastTime=0;
     if(animId)cancelAnimationFrame(animId);
     animId=requestAnimationFrame(loop);
-    SFX.startWind();
     /* Unlock controls (they may have been locked from a prior draw). */
     const lsb=document.getElementById('lottoSidebar');
     if(lsb)lsb.classList.remove('gc-locked');
     const sb=document.getElementById('gcStartBtn');
     if(sb)sb.disabled=false;
-    /* Render once on entry so the count badge reflects any prior session
-       history immediately. */
     renderHistory();
+    /* Fade setup out, reveal sharp machine. */
+    document.body.classList.add('prepared');
 }
 
 function beginDrawing(){
@@ -1607,6 +1625,9 @@ function beginDrawing(){
     if(lsb)lsb.classList.add('gc-locked');
     const sb=document.getElementById('gcStartBtn');
     if(sb)sb.disabled=true;
+    /* Audio begins NOW — the wind/blower soundtrack was intentionally
+       silent while the user was browsing settings behind the modal. */
+    SFX.startWind();
     currentSet++;
     if(cfg.isSeparatePool){
         startSeparatePoolDraw(cfg.allNums,cfg.mainColors,cfg.count,cfg.bonusNums,cfg.bonusColors,bonusConfig.draw);
@@ -1837,7 +1858,7 @@ function saveHistoryEntry(mainBalls,bonusBalls,bonusClr){
     /* Cap at 30 — enough to feel populated, small enough to keep
        localStorage under a few KB and rendering under 16ms. */
     if(lottoHistory.length>30)lottoHistory.length=30;
-    try{localStorage.setItem('luckyplz_lotto_history',JSON.stringify(lottoHistory))}catch(e){}
+    try{localStorage.setItem(LOTTO_HIST_KEY,JSON.stringify(lottoHistory))}catch(e){}
 }
 
 function _timeAgo(ts){
@@ -1908,6 +1929,22 @@ let confetti=[],confCanvas,confCtx;
 function startConfetti(){confCanvas=document.getElementById('confettiCanvas');confCtx=confCanvas.getContext('2d');confCanvas.width=W||window.innerWidth;confCanvas.height=H||window.innerHeight;confetti=[];for(let i=0;i<120;i++)confetti.push({x:Math.random()*confCanvas.width,y:Math.random()*-confCanvas.height,vx:(Math.random()-.5)*3,vy:Math.random()*4+2,rot:Math.random()*360,rv:(Math.random()-.5)*10,w:Math.random()*8+4,h:Math.random()*4+2,color:BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)],life:3+Math.random()*2});let lt=0;function cl(ts){const dt=Math.min((ts-(lt||ts))/1000,.05);lt=ts;confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);confetti=confetti.filter(c=>{c.life-=dt;if(c.life<=0)return false;c.x+=c.vx;c.y+=c.vy;c.rot+=c.rv;c.vy+=.1;confCtx.save();confCtx.translate(c.x,c.y);confCtx.rotate(c.rot*Math.PI/180);confCtx.globalAlpha=Math.min(1,c.life);confCtx.fillStyle=c.color;confCtx.fillRect(-c.w/2,-c.h/2,c.w,c.h);confCtx.restore();return true});if(confetti.length)requestAnimationFrame(cl)}requestAnimationFrame(cl)}
 
 /* Init */
+/* Spin up the canvas + Matter world + default-preset balls so the
+   machine renders behind the setup modal as a blurred preview. This
+   runs on page load (from init) and after Replay resets — never plays
+   audio, just drives the physics visual. */
+function _initBackgroundMachine(){
+    if(!ctx)initCanvas();else resizeCanvas();
+    /* Use whatever preset the user is currently looking at so the
+       preview balls match the flag/colors they'll get on PREPARE. */
+    const cfg=_buildPoolConfig();
+    _loadMachineForSet(cfg);
+    _pendingDraw=cfg;
+    blowerStartTime=performance.now()*.001;lastTime=0;
+    if(animId)cancelAnimationFrame(animId);
+    animId=requestAnimationFrame(loop);
+}
+
 function init(){
     const saved=localStorage.getItem('luckyplz_lang');
     if(saved&&I18N[saved])lang=saved;
@@ -1978,7 +2015,7 @@ function init(){
         histClear.addEventListener('click',()=>{
             if(!confirm(T('histClearConfirm')||'Clear draw history?'))return;
             lottoHistory=[];
-            try{localStorage.removeItem('luckyplz_lotto_history')}catch(e){}
+            try{localStorage.removeItem(LOTTO_HIST_KEY);localStorage.removeItem('luckyplz_lotto_history')}catch(e){}
             renderHistory();
         });
     }
@@ -1990,26 +2027,34 @@ function init(){
     document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();startLottoDraw()});
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
-        if(animId)cancelAnimationFrame(animId);
         SFX.stopWind();
         confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
         document.getElementById('resultScreen').style.display='none';
-        document.getElementById('gameScreen').style.display='none';
-        document.getElementById('setupWrap').style.display='flex';
         drawnResults=[];drawnBalls=[];
         suctionActive=false;waitingForCapture=false;
         drawnMainCount=0;drawnBonusCount=0;mainToDraw=0;bonusToDraw=0;totalSlots=0;
         separatePhase=0;
+        /* Drop the old bodies and rebuild the machine behind the setup
+           modal so the blurred preview matches whatever config the user
+           lands on next. */
         balls.forEach(b=>{if(b.body)Composite.remove(world,b.body)});balls=[];
-        /* Clear the batch-draw state so the next Prepare starts clean. */
         _pendingDraw=null;currentSet=0;
         const lsb=document.getElementById('lottoSidebar');
         if(lsb)lsb.classList.remove('gc-locked');
         const gcs=document.getElementById('gcStartBtn');
         if(gcs)gcs.disabled=false;
+        /* Back to setup-modal state (blurred machine in the background). */
+        document.body.classList.remove('prepared');
+        _initBackgroundMachine();
     });
 
-    window.addEventListener('resize',()=>{if(document.getElementById('gameScreen').style.display==='block')resizeCanvas()});
+    /* gameScreen is always in the DOM now (blurred behind setup, sharp
+       after PREPARE), so resize should always refresh the canvas. */
+    window.addEventListener('resize',()=>{if(ctx)resizeCanvas()});
+
+    /* Boot the blurred machine preview. No audio — just ambient
+       physics so the setup modal sits over a living backdrop. */
+    _initBackgroundMachine();
 }
 init();
 </script>
