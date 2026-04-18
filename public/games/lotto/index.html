@@ -332,7 +332,14 @@ body:not(.prepared) #lottoSidebar{display:none}
 
 /* PC: 3-column layout (ad 280 | canvas | sidebar 320) */
 @media(min-width:900px){
-    body.has-top-nav #gameScreen{
+    /* PC 3-column layout. Rules used to be gated on .has-top-nav so they
+       wouldn't fire before topNav.js ran — but that made layout flicker
+       on pages where the script loads late, and the user saw the setup
+       modal drift back to the middle. Now the media query alone is the
+       gate: ≥900px always wants the 3-column layout, nav or no nav. The
+       nav offset (top:56px) is still correct because the top-nav script
+       always mounts on these game pages. */
+    #gameScreen{
         top:56px !important;left:280px !important;right:320px !important;
         bottom:0 !important;width:auto !important;height:auto !important;
     }
@@ -341,21 +348,19 @@ body:not(.prepared) #lottoSidebar{display:none}
         overflow-y:auto;z-index:60;
     }
     /* Setup modal occupies the SAME right-edge 320px column as the
-       eventual sidebar, so the PREPARE transition is a clean content
-       swap in-place rather than a layout jump. The canvas preview
-       behind it gets the ad reserve (280 left) + the main 3-col gap,
-       and stays blurred until prepared. */
-    body.has-top-nav #setupWrap{
-        position:fixed !important;top:56px !important;right:0 !important;
-        left:auto !important;bottom:0 !important;
+       eventual sidebar, so PREPARE is a pure content swap in-place
+       with no layout jump. */
+    #setupWrap{
+        top:56px !important;right:0 !important;left:auto !important;
+        bottom:0 !important;
         width:320px !important;height:auto !important;
         padding:14px !important;align-items:stretch !important;
         justify-content:flex-start !important;
-        background:rgba(10,12,24,0.96);
+        background:rgba(10,12,24,0.96) !important;
         border-left:1px solid rgba(255,255,255,0.08);
         overflow-y:auto;
     }
-    body.has-top-nav #setupWrap #setupScreen{
+    #setupWrap #setupScreen{
         width:100% !important;max-width:none !important;margin:0 !important;
         padding:18px 14px !important;border-radius:14px;
     }
@@ -1987,7 +1992,22 @@ function init(){
             c.classList.add('selected');
             const v=parseInt(c.dataset.speed);
             drawSpeed=Number.isFinite(v)?v:2;
+            _updateStartBtnLabel();
         });
+    }
+    /* The START button's label shifts to clearly advertise what will
+       happen. In Instant mode it becomes "GENERATE N LINES" so there's
+       no ambiguity — click and N full lines drop into the history in
+       one go, no drum. Any other speed keeps the plain START label. */
+    function _updateStartBtnLabel(){
+        const el=document.getElementById('gcStartText');
+        if(!el)return;
+        if(drawSpeed===0){
+            const n=setCount||1;
+            el.textContent=(T('gcGenerate')||'GENERATE')+' '+n+' '+(n===1?(T('gcLine')||'LINE'):(T('gcLines')||'LINES'));
+        } else {
+            el.textContent=T('gcStartText')||'START';
+        }
     }
 
     /* Set-count stepper: number input clamped to 1–10, flanked by −/+
@@ -2008,6 +2028,9 @@ function init(){
             if(btns[0])btns[0].disabled=(v<=1);
             if(btns[1])btns[1].disabled=(v>=10);
         }
+        /* Refresh the START button label since Instant mode shows the
+           line count in it. */
+        if(typeof _updateStartBtnLabel==='function')_updateStartBtnLabel();
     }
     if(setInput){
         setInput.addEventListener('input',()=>_syncSetCount(setInput.value));
