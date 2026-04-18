@@ -221,7 +221,34 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     background:linear-gradient(135deg,rgba(255,230,109,0.2),rgba(255,107,53,0.2));
     border-color:#FFE66D;color:#fff;
 }
-#lottoSidebar.gc-locked .gc-chips{opacity:.45;pointer-events:none}
+#lottoSidebar.gc-locked .gc-chips,
+#lottoSidebar.gc-locked .set-stepper{opacity:.45;pointer-events:none}
+
+/* Set-count stepper: bare number input flanked by ± buttons. Range
+   1–10, enforced both by input[min/max] and JS clamp on every change
+   so pasting or typing out-of-range values still snaps back. */
+.set-stepper{display:flex;align-items:center;gap:6px;flex:1}
+.set-stepper .set-step{
+    width:32px;height:32px;border-radius:8px;cursor:pointer;
+    background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
+    color:#fff;font-family:'Orbitron',sans-serif;font-size:1.05em;font-weight:700;
+    line-height:1;display:flex;align-items:center;justify-content:center;
+    transition:background .15s,border-color .15s,transform .1s;
+    user-select:none;
+}
+.set-stepper .set-step:hover{background:rgba(255,230,109,0.12);border-color:rgba(255,230,109,0.4)}
+.set-stepper .set-step:active{transform:scale(0.92)}
+.set-stepper .set-step:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.set-stepper input{
+    flex:1;min-width:0;width:100%;text-align:center;
+    background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
+    color:#FFE66D;font-family:'Orbitron','Noto Sans KR',sans-serif;
+    font-size:1.05em;font-weight:800;border-radius:8px;padding:5px 6px;
+    outline:none;-moz-appearance:textfield;
+}
+.set-stepper input::-webkit-outer-spin-button,
+.set-stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.set-stepper input:focus{border-color:rgba(255,230,109,0.5);background:rgba(255,230,109,0.06)}
 
 #gcStartBtn{
     width:100%;padding:12px;margin-top:6px;font-weight:900;letter-spacing:3px;
@@ -478,11 +505,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
             </div>
             <div class="gc-row">
                 <span class="gc-label" id="gcSetLabel">SETS</span>
-                <div class="opt-row gc-chips" id="gcSetRow">
-                    <div class="opt-chip selected" data-set="1">1</div>
-                    <div class="opt-chip" data-set="3">3</div>
-                    <div class="opt-chip" data-set="5">5</div>
-                    <div class="opt-chip" data-set="10">10</div>
+                <div class="set-stepper" id="gcSetStepper">
+                    <button type="button" class="set-step" data-delta="-1" aria-label="decrease">&minus;</button>
+                    <input type="number" id="gcSetInput" min="1" max="10" value="1" inputmode="numeric">
+                    <button type="button" class="set-step" data-delta="1" aria-label="increase">&plus;</button>
                 </div>
             </div>
             <button id="gcStartBtn"><span id="gcStartText">START</span></button>
@@ -943,7 +969,16 @@ function initCanvas(){
 }
 
 function resizeCanvas(){
-    W=window.innerWidth;H=window.innerHeight;
+    /* Use parent (#gameScreen) size so the canvas fills exactly the
+       column the sidebar + ad reserve leave behind. window.innerWidth
+       was making the canvas a full-viewport block clipped by the
+       sidebar — visually it looked shoved to the right because the
+       machine center (W/2) was drawn at window-center, which is no
+       longer gameScreen-center once 280px of left ad reserve + 320px
+       of right sidebar are taken out. */
+    const parent=canvas.parentElement;
+    W=(parent&&parent.clientWidth)||window.innerWidth;
+    H=(parent&&parent.clientHeight)||window.innerHeight;
     canvas.width=W*dpr;canvas.height=H*dpr;
     canvas.style.width=W+'px';canvas.style.height=H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -1611,6 +1646,11 @@ function instantDraw(cfg){
         saveHistoryEntry(mainBalls,bonusBalls,bonusClr);
     }
     renderHistory(total);
+    /* Auto-scroll sidebar history to top so the user sees the just-
+       dropped batch without hunting for it. The new entries carry
+       hist-new for 800ms to confirm they landed. */
+    const histList=document.getElementById('historyList');
+    if(histList)histList.scrollTop=0;
     SFX.fanfare();
     _pendingDraw=null;
     currentSet=0;
@@ -1889,17 +1929,39 @@ function init(){
         });
     }
 
-    /* In-machine set-count chips (1 / 3 / 5 batches). */
-    const setRow=document.getElementById('gcSetRow');
-    if(setRow){
-        setRow.addEventListener('click',e=>{
-            const c=e.target.closest('.opt-chip');
-            if(!c)return;
-            setRow.querySelectorAll('.opt-chip').forEach(x=>x.classList.remove('selected'));
-            c.classList.add('selected');
-            setCount=parseInt(c.dataset.set)||1;
+    /* Set-count stepper: number input clamped to 1–10, flanked by −/+
+       buttons. Keeping the single source of truth on the input means
+       typing, pasting, or clicking the steppers all flow through one
+       normalizer (_syncSetCount). */
+    const setInput=document.getElementById('gcSetInput');
+    const setStepper=document.getElementById('gcSetStepper');
+    function _syncSetCount(raw){
+        let v=parseInt(raw);
+        if(!Number.isFinite(v))v=1;
+        v=Math.max(1,Math.min(10,v));
+        setCount=v;
+        if(setInput&&setInput.value!==String(v))setInput.value=String(v);
+        /* Visual feedback on the − / + buttons at range ends. */
+        if(setStepper){
+            const btns=setStepper.querySelectorAll('.set-step');
+            if(btns[0])btns[0].disabled=(v<=1);
+            if(btns[1])btns[1].disabled=(v>=10);
+        }
+    }
+    if(setInput){
+        setInput.addEventListener('input',()=>_syncSetCount(setInput.value));
+        setInput.addEventListener('blur',()=>_syncSetCount(setInput.value));
+        setInput.addEventListener('change',()=>_syncSetCount(setInput.value));
+    }
+    if(setStepper){
+        setStepper.addEventListener('click',e=>{
+            const b=e.target.closest('.set-step');
+            if(!b)return;
+            const delta=parseInt(b.dataset.delta)||0;
+            _syncSetCount((setInput?parseInt(setInput.value)||setCount:setCount)+delta);
         });
     }
+    _syncSetCount(setCount);
 
     /* In-machine START button — fires the actual draw. */
     const gcStart=document.getElementById('gcStartBtn');
