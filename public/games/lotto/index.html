@@ -210,9 +210,24 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .btn-history-clear{margin:10px auto 0;display:block;background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.55);font-size:.75em;padding:6px 14px;border-radius:14px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:border-color .2s,color .2s}
 .btn-history-clear:hover{border-color:rgba(255,51,102,.5);color:rgba(255,102,120,.9)}
 
-/* ============ DRAW SPEED SELECTOR ============ */
-#drawSpeedRow .opt-chip{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;font-size:.74em}
-#drawSpeedRow .opt-chip .speed-ico{font-size:.95em}
+/* ============ IN-GAME CONTROLS (speed + sets + start) ============
+   Fixed dock at the bottom of the lotto machine screen. Appears when
+   Prepare is clicked; the START button inside starts the actual draw.
+   Speed and set-count chips stay visible during the draw but become
+   non-interactive (pointer-events:none) so the user can't change tempo
+   mid-pull. */
+#gameControls{position:fixed;left:0;right:0;bottom:0;z-index:60;display:none;flex-direction:column;align-items:center;gap:8px;padding:14px 16px 18px;background:linear-gradient(180deg,rgba(10,12,24,0) 0%,rgba(10,12,24,0.88) 30%,rgba(10,12,24,0.95) 100%);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid rgba(255,255,255,0.06)}
+#gameScreen[style*="block"] #gameControls{display:flex}
+#gameControls .gc-row{display:flex;align-items:center;gap:10px;font-size:.85em}
+#gameControls .gc-label{color:rgba(255,255,255,.55);font-size:.78em;min-width:50px;text-align:right;letter-spacing:1px;text-transform:uppercase}
+#gameControls .gc-chips .opt-chip{padding:6px 14px;font-size:.8em;font-weight:700}
+#gameControls.gc-locked .gc-chips{opacity:.45;pointer-events:none}
+#gcStartBtn{margin-top:4px;padding:11px 48px;font-weight:900;background:linear-gradient(135deg,#FFE66D,#FF6B35);color:#0A0A1A;border:none;border-radius:24px;cursor:pointer;font-size:1em;letter-spacing:3px;font-family:'Orbitron','Noto Sans KR',sans-serif;box-shadow:0 6px 18px rgba(255,107,53,.35);transition:transform .15s,filter .15s}
+#gcStartBtn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+#gcStartBtn:disabled{opacity:.35;cursor:not-allowed;transform:none;filter:grayscale(.3)}
+@media(min-width:900px){
+    #gameControls{max-width:640px;margin:0 auto;left:50%;right:auto;transform:translateX(-50%);border-radius:18px 18px 0 0}
+}
     </style>
 </head>
 <body>
@@ -341,17 +356,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         </div>
     </div>
 
-    <!-- Draw speed -->
-    <div class="section"><h3>⏱️ <span id="speedLabel">Draw Speed</span></h3>
-        <div class="opt-row" id="drawSpeedRow" style="gap:6px;flex-wrap:wrap">
-            <div class="opt-chip" data-speed="2"><span class="speed-ico">⚡</span> <span id="speedFast">Fast</span> · 2s</div>
-            <div class="opt-chip selected" data-speed="4"><span class="speed-ico">●</span> <span id="speedNormal">Normal</span> · 4s</div>
-            <div class="opt-chip" data-speed="6"><span class="speed-ico">🐢</span> <span id="speedSlow">Slow</span> · 6s</div>
-        </div>
-    </div>
-
     <div class="btn-group">
-        <button id="startBtn">START!</button>
+        <button id="startBtn">PREPARE</button>
     </div>
 </div>
 </div>
@@ -366,7 +372,31 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 </aside>
 
 <!-- GAME -->
-<div id="gameScreen"><canvas id="gameCanvas"></canvas></div>
+<div id="gameScreen">
+    <canvas id="gameCanvas"></canvas>
+    <!-- In-machine controls: speed + set count + start. Speed and set
+         count can be adjusted anytime before the actual draw begins and
+         remain visible (disabled) during the pull. -->
+    <div id="gameControls">
+        <div class="gc-row">
+            <span class="gc-label"><span id="gcSpeedLabel">Speed</span></span>
+            <div class="opt-row gc-chips" id="gcSpeedRow" style="gap:4px">
+                <div class="opt-chip" data-speed="1"><span id="gcSpeedFast">Fast</span></div>
+                <div class="opt-chip selected" data-speed="2"><span id="gcSpeedNormal">Normal</span></div>
+                <div class="opt-chip" data-speed="3"><span id="gcSpeedSlow">Slow</span></div>
+            </div>
+        </div>
+        <div class="gc-row">
+            <span class="gc-label"><span id="gcSetLabel">Sets</span></span>
+            <div class="opt-row gc-chips" id="gcSetRow" style="gap:4px">
+                <div class="opt-chip selected" data-set="1">1</div>
+                <div class="opt-chip" data-set="3">3</div>
+                <div class="opt-chip" data-set="5">5</div>
+            </div>
+        </div>
+        <button id="gcStartBtn"><span id="gcStartText">START</span></button>
+    </div>
+</div>
 
 <!-- RESULT -->
 <div id="resultScreen"><div class="result-card">
@@ -394,8 +424,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 ======================================== */
 
 const I18N={
-en:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!',speedLabel:'Draw Speed',speedFast:'Fast',speedNormal:'Normal',speedSlow:'Slow',histTitle:'RECENT DRAWS',histClearText:'Clear history',histEmpty:'No previous draws yet — pull some numbers!',histClearConfirm:'Clear draw history?',histJustNow:'just now',histMinAgo:'m ago',histHourAgo:'h ago',histDayAgo:'d ago'},
-ko:{title:'\uB85C\uB610\uBCFC \uBF51\uAE30',subtitle:'\uC6B4\uBA85\uC758 \uACF5\uC744 \uBF51\uC544\uB77C!',lottoOpt:'\uBC88\uD638 \uC124\uC815',preset:'\uAD6D\uAC00\uBCC4 \uB85C\uB610 \uD504\uB9AC\uC14B',range:'\uBC94\uC704:',drawCount:'\uBF51\uAE30:',balls:'\uAC1C',start:'\uC2DC\uC791!',result:'\uACB0\uACFC \uBC1C\uD45C!',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!',speedLabel:'\uBF51\uAE30 \uC18D\uB3C4',speedFast:'\uBE60\uB984',speedNormal:'\uBCF4\uD1B5',speedSlow:'\uB290\uB9BC',histTitle:'\uCD5C\uADFC \uBF51\uAE30',histClearText:'\uAE30\uB85D \uC9C0\uC6B0\uAE30',histEmpty:'\uC544\uC9C1 \uBF51\uAE30 \uAE30\uB85D\uC774 \uC5C6\uC5B4\uC694 \u2014 \uBC88\uD638\uB97C \uBF51\uC544\uBCF4\uC138\uC694!',histClearConfirm:'\uBF51\uAE30 \uAE30\uB85D\uC744 \uBAA8\uB450 \uC9C0\uC6B8\uAE4C\uC694?',histJustNow:'\uBC29\uAE08',histMinAgo:'\uBD84 \uC804',histHourAgo:'\uC2DC\uAC04 \uC804',histDayAgo:'\uC77C \uC804'},
+en:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',prepare:'PREPARE',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!',speedLabel:'Draw Speed',speedFast:'Fast',speedNormal:'Normal',speedSlow:'Slow',gcSpeedLabel:'SPEED',gcSetLabel:'SETS',gcStartText:'START',histTitle:'RECENT DRAWS',histClearText:'Clear history',histEmpty:'No previous draws yet — pull some numbers!',histClearConfirm:'Clear draw history?',histJustNow:'just now',histMinAgo:'m ago',histHourAgo:'h ago',histDayAgo:'d ago'},
+ko:{title:'\uB85C\uB610\uBCFC \uBF51\uAE30',subtitle:'\uC6B4\uBA85\uC758 \uACF5\uC744 \uBF51\uC544\uB77C!',lottoOpt:'\uBC88\uD638 \uC124\uC815',preset:'\uAD6D\uAC00\uBCC4 \uB85C\uB610 \uD504\uB9AC\uC14B',range:'\uBC94\uC704:',drawCount:'\uBF51\uAE30:',balls:'\uAC1C',start:'\uC2DC\uC791!',prepare:'\uC900\uBE44',result:'\uACB0\uACFC \uBC1C\uD45C!',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!',speedLabel:'\uBF51\uAE30 \uC18D\uB3C4',speedFast:'\uBE60\uB984',speedNormal:'\uBCF4\uD1B5',speedSlow:'\uB290\uB9BC',gcSpeedLabel:'\uC18D\uB3C4',gcSetLabel:'\uC138\uD2B8',gcStartText:'\uC2DC\uC791',histTitle:'\uCD5C\uADFC \uBF51\uAE30',histClearText:'\uAE30\uB85D \uC9C0\uC6B0\uAE30',histEmpty:'\uC544\uC9C1 \uBF51\uAE30 \uAE30\uB85D\uC774 \uC5C6\uC5B4\uC694 \u2014 \uBC88\uD638\uB97C \uBF51\uC544\uBCF4\uC138\uC694!',histClearConfirm:'\uBF51\uAE30 \uAE30\uB85D\uC744 \uBAA8\uB450 \uC9C0\uC6B8\uAE4C\uC694?',histJustNow:'\uBC29\uAE08',histMinAgo:'\uBD84 \uC804',histHourAgo:'\uC2DC\uAC04 \uC804',histDayAgo:'\uC77C \uC804'},
 gb:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!'},
 ja:{title:'\u30ED\u30C3\u30C8\u30DC\u30FC\u30EB',subtitle:'\u904B\u547D\u306E\u30DC\u30FC\u30EB\u3092\u5F15\u3051\uFF01',lottoOpt:'\u756A\u53F7\u8A2D\u5B9A',preset:'\u5404\u56FD\u30ED\u30C8\u30D7\u30EA\u30BB\u30C3\u30C8',range:'\u7BC4\u56F2:',drawCount:'\u62BD\u9078:',balls:'\u500B',start:'\u30B9\u30BF\u30FC\u30C8\uFF01',result:'\u7D50\u679C\uFF01',again:'\u3082\u3046\u4E00\u5EA6',drawing:'\u62BD\u9078\u4E2D...',complete:'\u5B8C\u4E86\uFF01',copied:'\u30B3\u30D4\u30FC\uFF01'},
 zh:{title:'\u4E50\u900F\u7403',subtitle:'\u62BD\u51FA\u547D\u8FD0\u4E4B\u7403\uFF01',lottoOpt:'\u53F7\u7801\u8BBE\u7F6E',preset:'\u5404\u56FD\u5F69\u7968\u9884\u8BBE',range:'\u8303\u56F4:',drawCount:'\u62BD\u53D6:',balls:'\u4E2A',start:'\u5F00\u59CB\uFF01',result:'\u7ED3\u679C\uFF01',again:'\u518D\u6765',drawing:'\u62BD\u7403\u4E2D...',complete:'\u5B8C\u6210\uFF01',copied:'\u5DF2\u590D\u5236\uFF01'},
@@ -450,12 +480,26 @@ const LOTTO_PRESETS=[
 ];
 let activePreset=null;// currently selected preset
 
-/* Draw speed (seconds). User-selectable: 2 = fast, 4 = normal, 6 = slow.
-   Replaces the old hard-coded 4000+random(2000) spread — using a single
-   integer keeps the tempo predictable and matches what the speed chip
-   advertises. Bonus balls scale 1.5× so they still feel like the
-   dramatic final pull instead of blurring into the main sequence. */
-let drawSpeed=4;
+/* Draw speed (seconds per ball). User picks via in-game chip:
+   1 = Fast, 2 = Normal, 3 = Slow. Replaces the old random spread so
+   the tempo is exactly what the chip advertises. Bonus balls scale
+   1.5× so the finale still feels longer than the main pulls. */
+let drawSpeed=2;
+
+/* Multi-set batch draw.
+   setCount: how many full lotto lines the user wants this session
+   (1, 3, or 5). currentSet: which line we're currently pulling.
+   When a line finishes we save it to history, reset the machine,
+   and start the next line — the result modal only appears after
+   the whole batch is done. */
+let setCount=1;
+let currentSet=0;
+
+/* Cached prepare args — filled by prepareLottoMachine() and consumed
+   by beginDrawing() when the user hits the in-machine START. Lets
+   the user fiddle with speed/set-count after PREPARE without losing
+   the carefully-computed pool configuration. */
+let _pendingDraw=null;
 
 /* Draw history — survives across page loads via localStorage. Stored
    with the preset flag + name so each entry renders in its home
@@ -667,12 +711,17 @@ function applyLanguage(){
        English text in T() when a specific locale doesn't define the
        key, so new keys can be added gradually without broken UI. */
     const _set=(id,k,fb)=>{const el=document.getElementById(id);if(el)el.textContent=T(k)||fb};
-    _set('speedLabel','speedLabel','Draw Speed');
-    _set('speedFast','speedFast','Fast');
-    _set('speedNormal','speedNormal','Normal');
-    _set('speedSlow','speedSlow','Slow');
+    _set('gcSpeedLabel','gcSpeedLabel','SPEED');
+    _set('gcSpeedFast','speedFast','Fast');
+    _set('gcSpeedNormal','speedNormal','Normal');
+    _set('gcSpeedSlow','speedSlow','Slow');
+    _set('gcSetLabel','gcSetLabel','SETS');
+    _set('gcStartText','gcStartText','START');
     _set('histTitle','histTitle','RECENT DRAWS');
     _set('histClearText','histClearText','Clear history');
+    /* Setup START button is now a PREPARE step (user still has to hit
+       the real START inside the machine). */
+    document.getElementById('startBtn').textContent=T('prepare')||'PREPARE';
     document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
     renderLottoPresets();
     /* Refresh history so "5m ago" etc. re-render in the new locale's
@@ -1329,14 +1378,21 @@ function loop(ts){
 ============================================ */
 let bonusConfig=null;// {start,end,draw,label} or null
 
+/* Split into prepareLottoMachine (read setup, build balls, tumble them
+   in the chamber) and beginDrawing (actually start pulling balls).
+   Lets the user change speed / set count on the machine screen before
+   committing to the pull. */
 function startLottoDraw(){
+    prepareLottoMachine();
+}
+
+function _buildPoolConfig(){
     const start=parseInt(document.getElementById('numStart').value)||1;
     const end=parseInt(document.getElementById('numEnd').value)||45;
     const count=parseInt(document.getElementById('drawCount').value)||6;
     const range=Math.max(end,start)-Math.min(end,start)+1;
     const lo=Math.min(start,end);
 
-    // Check for bonus balls
     const bs=document.getElementById('bonusSection');
     if(bs.style.display!=='none'){
         const bStart=parseInt(document.getElementById('bonusStart').value)||1;
@@ -1347,43 +1403,104 @@ function startLottoDraw(){
         bonusConfig=null;
     }
 
-    // Main pool balls - use preset color function if available
     const colorFn=activePreset?.mainColorFn||genericColor;
     const allNums=[];for(let i=0;i<range;i++)allNums.push(lo+i);
     const mainColors=allNums.map(n=>colorFn(n));
-
-    // Bonus pool balls - use preset bonus color
     const bonusNums=[];const bonusColors=[];
     const bonusClr=(activePreset?.bonus?.color)||'#2980b9';
     if(bonusConfig){
         const bRange=bonusConfig.end-bonusConfig.start+1;
         for(let i=0;i<bRange;i++){bonusNums.push(bonusConfig.start+i);bonusColors.push(bonusClr)}
     }
+    return {allNums,mainColors,count,bonusNums,bonusColors,isSeparatePool:!!(activePreset&&activePreset.separatePool&&bonusConfig)};
+}
 
+function _loadMachineForSet(cfg){
+    drawnResults=[];drawnBalls=[];
+    /* Clean up any previous set's Matter bodies before repopulating. */
+    try{balls.forEach(b=>{if(b.body)Composite.remove(world,b.body)});}catch(e){}
+    balls=[];
+    if(cfg.isSeparatePool){
+        createBalls(cfg.allNums,cfg.mainColors);
+    }else{
+        const allLabels=[...cfg.allNums,...cfg.bonusNums];
+        const allColors=[...cfg.mainColors,...cfg.bonusColors];
+        const allBonusFlags=[...cfg.allNums.map(()=>false),...cfg.bonusNums.map(()=>true)];
+        createBalls(allLabels,allColors,allBonusFlags);
+    }
+    drawing=false;gateOpen=false;
+    suctionActive=false;waitingForCapture=false;
+    drawnMainCount=0;drawnBonusCount=0;mainToDraw=0;bonusToDraw=0;totalSlots=0;
+    separatePhase=0;pendingBonusNums=[];pendingBonusColors=[];pendingBonusCount=0;
+}
+
+function prepareLottoMachine(){
+    const cfg=_buildPoolConfig();
     document.getElementById('setupWrap').style.display='none';
     document.getElementById('gameScreen').style.display='block';
     initCanvas();
-    drawnResults=[];drawnBalls=[];
+    _loadMachineForSet(cfg);
+    _pendingDraw=cfg;
+    currentSet=0;
+    /* Start the physics + ambient blower so balls tumble while the
+       user decides speed / sets. No draw until they press START. */
+    blowerStartTime=performance.now()*.001;lastTime=0;
+    if(animId)cancelAnimationFrame(animId);
+    animId=requestAnimationFrame(loop);
+    SFX.startWind();
+    /* Unlock controls (they may have been locked from a prior draw). */
+    const gc=document.getElementById('gameControls');
+    if(gc)gc.classList.remove('gc-locked');
+    const sb=document.getElementById('gcStartBtn');
+    if(sb)sb.disabled=false;
+}
 
-    // Check if this is a separate-pool preset (like China 双色球)
-    const isSeparatePool=activePreset&&activePreset.separatePool&&bonusConfig;
-
-    if(isSeparatePool){
-        // PHASE 1: Load main (red) balls only
-        createBalls(allNums,mainColors);
-        blowerStartTime=performance.now()*.001;lastTime=0;animId=requestAnimationFrame(loop);
-        SFX.startWind();
-        startSeparatePoolDraw(allNums,mainColors,count,bonusNums,bonusColors,bonusConfig.draw);
+function beginDrawing(){
+    if(!_pendingDraw){return}
+    const cfg=_pendingDraw;
+    /* Freeze controls once the draw actually begins — changing tempo
+       mid-pull would make rollTime inconsistent. */
+    const gc=document.getElementById('gameControls');
+    if(gc)gc.classList.add('gc-locked');
+    const sb=document.getElementById('gcStartBtn');
+    if(sb)sb.disabled=true;
+    currentSet++;
+    if(cfg.isSeparatePool){
+        startSeparatePoolDraw(cfg.allNums,cfg.mainColors,cfg.count,cfg.bonusNums,cfg.bonusColors,bonusConfig.draw);
     }else{
-        // Standard: all balls in one machine
-        const allLabels=[...allNums,...bonusNums];
-        const allColors=[...mainColors,...bonusColors];
-        const allBonusFlags=[...allNums.map(()=>false),...bonusNums.map(()=>true)];
-        createBalls(allLabels,allColors,allBonusFlags);
-        blowerStartTime=performance.now()*.001;lastTime=0;animId=requestAnimationFrame(loop);
-        SFX.startWind();
-        startStandardDraw(allNums.length,count,bonusNums.length,bonusConfig?bonusConfig.draw:0);
+        startStandardDraw(cfg.allNums.length,cfg.count,cfg.bonusNums.length,bonusConfig?bonusConfig.draw:0);
     }
+}
+
+/* Called when one full line finishes. Either starts the next line
+   (still have sets remaining) or rolls into showResult(). */
+function _onSetComplete(){
+    if(!_pendingDraw){showResult();return}
+    const cfg=_pendingDraw;
+    /* Snapshot this line into history immediately so batches are
+       visible in the history panel one-by-one. */
+    const mainBalls=[...drawnResults].filter(b=>!b.isBonus).sort((a,b)=>a.label-b.label);
+    const bonusBalls=[...drawnResults].filter(b=>b.isBonus).sort((a,b)=>a.label-b.label);
+    const bonusClr=(activePreset?.bonus?.color)||'#2980b9';
+    saveHistoryEntry(mainBalls,bonusBalls,bonusClr);
+    renderHistory();
+
+    if(currentSet>=setCount){
+        _pendingDraw=null;
+        showResult();
+        return;
+    }
+    /* Otherwise repopulate and auto-pull the next set after a beat. */
+    setTimeout(()=>{
+        _loadMachineForSet(cfg);
+        SFX.startWind();
+        currentSet++;
+        if(cfg.isSeparatePool){
+            startSeparatePoolDraw(cfg.allNums,cfg.mainColors,cfg.count,cfg.bonusNums,cfg.bonusColors,bonusConfig.draw);
+        }else{
+            startStandardDraw(cfg.allNums.length,cfg.count,cfg.bonusNums.length,bonusConfig?bonusConfig.draw:0);
+        }
+    },1400);
 }
 
 /* === Standard draw (single machine, all balls together) === */
@@ -1451,7 +1568,9 @@ function drawNextBall(){
         }
         drawing=false;gateOpen=false;
         SFX.stopWind();
-        setTimeout(()=>{SFX.fanfare();setTimeout(showResult,1500)},500);
+        /* Either fanfare+showResult (last set of the batch) or silent
+           continue into the next set. _onSetComplete decides. */
+        setTimeout(()=>{SFX.fanfare();setTimeout(_onSetComplete,1500)},500);
         return;
     }
 
@@ -1502,10 +1621,10 @@ function showResult(){
     const shareNums=mainBalls.map(b=>b.label).join(', ')+(bonusBalls.length?' + '+bonusBalls.map(b=>b.label).join(', '):'');
     buildShareBtns('Numbers: '+shareNums);
 
-    /* Log this draw to history + refresh the panel below. Stored per
-       preset so the list mixes freely (e.g. a 6/45 Korean line next
-       to a Powerball 5+1 line) without losing their native format. */
-    saveHistoryEntry(mainBalls,bonusBalls,bonusClr);
+    /* NOTE: history is saved per-set in _onSetComplete() so batches
+       accumulate entry-by-entry instead of only at the end. Just
+       refresh the panel here in case the user landed on a single-set
+       draw (history already has the entry). */
     renderHistory();
 }
 
@@ -1588,15 +1707,36 @@ function init(){
 
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
 
-    /* Draw speed chip row */
-    const speedRow=document.getElementById('drawSpeedRow');
+    /* In-machine speed chips (Fast/Normal/Slow → 1/2/3s per ball). */
+    const speedRow=document.getElementById('gcSpeedRow');
     if(speedRow){
         speedRow.addEventListener('click',e=>{
             const c=e.target.closest('.opt-chip');
             if(!c)return;
             speedRow.querySelectorAll('.opt-chip').forEach(x=>x.classList.remove('selected'));
             c.classList.add('selected');
-            drawSpeed=parseInt(c.dataset.speed)||4;
+            drawSpeed=parseInt(c.dataset.speed)||2;
+        });
+    }
+
+    /* In-machine set-count chips (1 / 3 / 5 batches). */
+    const setRow=document.getElementById('gcSetRow');
+    if(setRow){
+        setRow.addEventListener('click',e=>{
+            const c=e.target.closest('.opt-chip');
+            if(!c)return;
+            setRow.querySelectorAll('.opt-chip').forEach(x=>x.classList.remove('selected'));
+            c.classList.add('selected');
+            setCount=parseInt(c.dataset.set)||1;
+        });
+    }
+
+    /* In-machine START button — fires the actual draw. */
+    const gcStart=document.getElementById('gcStartBtn');
+    if(gcStart){
+        gcStart.addEventListener('click',()=>{
+            SFX.g();
+            beginDrawing();
         });
     }
 
@@ -1629,6 +1769,12 @@ function init(){
         drawnMainCount=0;drawnBonusCount=0;mainToDraw=0;bonusToDraw=0;totalSlots=0;
         separatePhase=0;
         balls.forEach(b=>{if(b.body)Composite.remove(world,b.body)});balls=[];
+        /* Clear the batch-draw state so the next Prepare starts clean. */
+        _pendingDraw=null;currentSet=0;
+        const gc=document.getElementById('gameControls');
+        if(gc)gc.classList.remove('gc-locked');
+        const gcs=document.getElementById('gcStartBtn');
+        if(gcs)gcs.disabled=false;
     });
 
     window.addEventListener('resize',()=>{if(document.getElementById('gameScreen').style.display==='block')resizeCanvas()});
