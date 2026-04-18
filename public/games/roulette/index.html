@@ -538,6 +538,87 @@ function drawFlapper(){
     ctx.restore();
 }
 
+/* Rigid-body contact constraint between the flapper tip and pegs.
+   The spring+damper pendulum above runs a ballistic step each frame,
+   which left the tip free to penetrate pegs (both are supposed to be
+   rigid). This resolver runs AFTER the ballistic step: for every peg
+   near the top it checks whether the tip is inside the peg's contact
+   circle and, if so, snaps the tip to the nearest point on the
+   flapper-arc × peg-circle intersection — i.e. slides the tip around
+   the peg along its own rotation arc. Velocity is bled heavily when
+   a contact happens so the naive spring velocity (which was driving
+   the tip into the peg) can't immediately re-penetrate next frame.
+   Up to 3 iterations so a single frame can resolve contact with
+   multiple neighboring pegs. */
+function resolveFlapperContact(){
+    if(!players.length)return;
+    const pegOrbitR=radius+6;
+    const flapperLen=32;
+    const pivotX=cx;
+    const pivotY=cy-pegOrbitR-flapperLen+5;
+    const pegR=4.5, tipR=3;
+    const contactR=pegR+tipR;
+    const pegCount=36;
+    const pegStep=Math.PI*2/pegCount;
+    const maxA=0.55;
+
+    const tipPos=(a)=>({x:pivotX-Math.sin(a)*flapperLen,y:pivotY+Math.cos(a)*flapperLen});
+    const normAngle=((angle%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+    const topOff=((-Math.PI/2-normAngle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+    const centerSlot=Math.floor(topOff/pegStep);
+
+    let flAngle=flapperAngle;
+    let anyContact=false;
+
+    for(let iter=0;iter<3;iter++){
+        const tp=tipPos(flAngle);
+        let bestPeg=null, bestPen=0;
+        for(let ds=-3;ds<=3;ds++){
+            const pegI=((centerSlot+ds)%pegCount+pegCount)%pegCount;
+            const pegScreenAngle=angle+pegI*pegStep;
+            const px=cx+Math.cos(pegScreenAngle)*pegOrbitR;
+            const py=cy+Math.sin(pegScreenAngle)*pegOrbitR;
+            const dx=tp.x-px, dy=tp.y-py;
+            const d=Math.sqrt(dx*dx+dy*dy);
+            const pen=contactR-d;
+            if(pen>bestPen){bestPen=pen;bestPeg={x:px,y:py}}
+        }
+        if(!bestPeg)break;
+        anyContact=true;
+
+        /* Circle-circle intersection: flapper-tip arc (pivot, flapperLen)
+           vs peg contact circle (bestPeg, contactR). Two intersection
+           points; choose the one closer to the current tip so the tip
+           slides around the peg naturally. */
+        const dcx=bestPeg.x-pivotX, dcy=bestPeg.y-pivotY;
+        const D=Math.sqrt(dcx*dcx+dcy*dcy);
+        if(D>flapperLen+contactR||D<Math.abs(flapperLen-contactR))break;
+        const aProj=(D*D+flapperLen*flapperLen-contactR*contactR)/(2*D);
+        const h2=flapperLen*flapperLen-aProj*aProj;
+        if(h2<0)break;
+        const h=Math.sqrt(h2);
+        const baseX=pivotX+aProj*dcx/D, baseY=pivotY+aProj*dcy/D;
+        const perpX=-dcy/D, perpY=dcx/D;
+        const p1x=baseX+h*perpX, p1y=baseY+h*perpY;
+        const p2x=baseX-h*perpX, p2y=baseY-h*perpY;
+        const tpNow=tipPos(flAngle);
+        const d1=(p1x-tpNow.x)**2+(p1y-tpNow.y)**2;
+        const d2=(p2x-tpNow.x)**2+(p2y-tpNow.y)**2;
+        const pickX=d1<d2?p1x:p2x, pickY=d1<d2?p1y:p2y;
+        const newAngle=Math.atan2(-(pickX-pivotX),pickY-pivotY);
+        flAngle=Math.max(-maxA,Math.min(maxA,newAngle));
+    }
+
+    if(anyContact){
+        flapperAngle=flAngle;
+        /* Naive ballistic velocity was driving tip INTO the peg; keep just
+           a small residual so the peg feels like it "carries" the flapper
+           rather than instantly stopping it. 0.3 tuned to stay visually
+           lively without re-penetrating. */
+        flapperVel*=0.3;
+    }
+}
+
 function getSelectedIndex(){
     const n=players.length;
     const sliceAngle=Math.PI*2/n;
@@ -624,6 +705,11 @@ function loop(ts){
     const maxA=0.55;
     if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.2}
     if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.2}
+
+    /* Rigid-body contact: the ballistic spring step above can shove the
+       tip into a peg. Resolve before drawing so the tip stays outside
+       every peg's contact circle (both are rigid — cannot overlap). */
+    resolveFlapperContact();
 
     /* Stop condition — wheel velocity has decayed AND we're past the held
        spin phase. Lock in the result. */
