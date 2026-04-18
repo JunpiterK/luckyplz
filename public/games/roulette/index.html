@@ -580,45 +580,45 @@ function loop(ts){
                 const sf=Math.min(1,Math.abs(velocity)/9);
                 /* Kick direction flipped from the obvious sign. On Canvas
                    (Y axis points DOWN), ctx.rotate(+θ) sends a downward-
-                   pointing arm visually LEFT, not right. So to match a
-                   CW-spinning wheel (positive velocity) where pegs travel
-                   to the right across the top, the flapper tip must go
-                   right — which requires a NEGATIVE rotation angle.
-                   Using dir = -sign(velocity) keeps the arm bouncing in
-                   the direction the pegs are actually traveling. */
+                   pointing arm visually LEFT, not right. So a CW-spinning
+                   wheel (positive velocity) where pegs travel right
+                   across the top needs the flapper tip to go right —
+                   which is a NEGATIVE rotation angle on canvas. */
                 const dir=velocity>=0?-1:1;
-                /* Kick amplitude up to 12 rad/s so the pegs actually
-                   whack the flapper visibly. Minimum 45% floor so even
-                   slow-crawl pegs at the tail of a spin still nudge it. */
-                flapperVel+=12*dir*(0.45+0.55*sf);
+                /* Strong kick (15 rad/s at full wheel speed) with a low
+                   15% floor so the swing amplitude tracks wheel speed
+                   dramatically: big whacks at spin start, gentle taps
+                   as it decays. Clamped to maxA below. */
+                flapperVel+=15*dir*(0.15+0.85*sf);
                 velocity*=(1-0.00065-0.0021*sf);
             }
             lastTick=pegSlot;
         }
     }
 
-    /* Flapper dynamics — asymmetric-damped pendulum.
-       Tuned for a big visible swing in the spin direction and a calm,
-       overdamped return. Parameters:
-         K = 380 (ω₀ ≈ 19.5 rad/s) — softer spring so the same impulse
-             produces a larger, slower arc instead of a snappy blip.
-         Cbase = 12 (ζ ≈ 0.31) — underdamped in the kick direction; the
-             arm swings out and lingers, giving a clear directional lean.
-         Cagainst = 3× Cbase = 36 (ζ ≈ 0.92) — near critical damping on
-             the return stroke, so the arm doesn't bounce back past
-             center and stays biased toward the wheel direction.
-         maxA = 0.55 rad (~31°) — deflection cap.
-       Note: because the kick sign is flipped (see comment above),
-       peg-pushed motion has sign -wheelDir and the spring-restoring
-       return has sign +wheelDir. We want heavier damping on the
-       return, so the flag condition is flapperVel*wheelDir > 0
-       (NOT the naive < 0). */
-    const K=380;
-    const Cbase=12;
+    /* Flapper dynamics — a leaf-spring pendulum that naturally wants its
+       tip pointing straight down. Retuned for "snappy return":
+         K = 650 (ω₀ ≈ 25.5 rad/s) — stiff spring, fast restoring arc.
+         Cbase = 9 (ζ ≈ 0.18) — clearly underdamped; the arm actually
+             springs back to center after each strike instead of being
+             dragged along by the wheel.
+         Cagainst = 1.4× Cbase (ζ ≈ 0.25) — only a mild asymmetry; we
+             still bias the arm slightly toward the spin direction, but
+             nothing like the old 3× which felt limp. The tip tracks
+             wheel direction while still clearly bouncing back.
+         maxA = 0.55 rad (~31°) — deflection cap; fast wheels kick the
+             arm hard enough that it frequently reaches this cap (looks
+             like a big swing), slow wheels never do (tiny wiggle).
+       Note: kick sign is flipped (see comment above), so peg-pushed
+       motion has sign -wheelDir and spring-restoring return has sign
+       +wheelDir. The "damp return harder" flag is flapperVel*wheelDir
+       > 0. */
+    const K=650;
+    const Cbase=9;
     const wheelDir=velocity>=0?1:-1;
     const movingEnough=Math.abs(velocity)>0.3;
     const againstWheel=movingEnough&&flapperVel*wheelDir>0;
-    const C=againstWheel?Cbase*3:Cbase;
+    const C=againstWheel?Cbase*1.4:Cbase;
     flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
     flapperAngle+=flapperVel*dt;
     const maxA=0.55;
