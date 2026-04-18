@@ -802,10 +802,19 @@ function onPointerUp(e){
        a swipe intent). Only a decisive one-shot flick counts. */
     if(dt<0.01||dt>1)return;
     const swipeVel=da/dt;
-    if(Math.abs(swipeVel)>2){
+    /* Two-axis gate: the drag must cover meaningful angular DISTANCE
+       AND reach meaningful angular SPEED. Previously only speed was
+       checked, so a nudge of 5° at moderate speed passed, committed
+       to a weak spin, and locked the Start button for 2.5–4s while
+       the pretend-spin ran out its spinning timer. Tighter gate here
+       means gentle exploratory drags leave spinActive=false and the
+       Start button stays responsive. */
+    if(Math.abs(da)>Math.PI/6&&Math.abs(swipeVel)>5){
         spinActive=true;
         SFX.g();SFX.click();
-        velocity=Math.min(Math.abs(swipeVel)*1.5,25);
+        /* Floor at 10 rad/s so any accepted spin is visibly spinning,
+           not a near-stop crawl. */
+        velocity=Math.min(Math.max(Math.abs(swipeVel)*1.5,10),25);
         spinning=true;selectedIdx=-1;
         flapperAngle=0;flapperVel=0;
         document.getElementById('msgBar').textContent=T('spinning');
@@ -852,6 +861,11 @@ function renderPreview(){
 }
 
 function startGame(){
+    /* Clear any stale spin state. If a weak prior drag somehow slipped
+       through the swipe gate and left us mid-pretend-spin, Start must
+       still work — never let the flag lock a user out of restarting. */
+    spinActive=false;
+    spinning=false;
     collectData();
     const pcMode=isPCLayout();
     if(!pcMode){
