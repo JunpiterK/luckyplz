@@ -2187,10 +2187,19 @@ window.addEventListener('resize',resize);resize();
  *  rawPath(제어점 보간 결과)를 받아서:
  *  스무딩 → 클램프 → 랩 반복 → 노멀 계산 → 보더 계산 → 존/아이템/배경 생성
  *  smoothPasses: 스무딩 횟수 (기본 3, 기어는 1로 톱니 보존) */
+/* NOTE: this function also refreshes GUARDRAIL_LIMIT to match the actual
+   per-course track half-width. Without this, courses that pass a
+   trackWidth override (e.g. gear = TRACK_WIDTH*1.3) were rendering wide
+   roads but still clamping cars to the default narrower limit — making
+   the outer 30% of the visible track unreachable. */
 function buildTrackFromBasePath(rawPath,smoothPasses,opts){
     if(smoothPasses===undefined)smoothPasses=3;
     if(!opts)opts={};
     const trackWidthOverride=opts.trackWidth||TRACK_WIDTH;
+    /* Refresh the guardrail clamp so cars can use the full width of
+       whatever course we're about to build. Must happen BEFORE any
+       per-lap car state is calculated. */
+    GUARDRAIL_LIMIT=trackWidthOverride/2-10;
     const borderSmooth=opts.borderSmooth||3;  /* border 스무딩 패스 수 */
     const borderRadius=opts.borderRadius||4;  /* border 스무딩 반경 */
     const normalSmooth=opts.normalSmooth||4;  /* normal 스무딩 패스 수 */
@@ -2885,6 +2894,21 @@ function updatePlayers(dt){
          *  → 타겟의 laneOffset을 추종하고, progress를 타겟 바로 뒤로 유지
          *  → 1.8x 속도 부스트 적용
          * ------------------------------------------------------------ */
+        if(car.state===CarState.STICKY_BOOST){
+            /* If the attached target finishes mid-boost, bail out cleanly.
+               The old code just skipped the body when target was finished,
+               but left state=STICKY_BOOST and a 1.8x speed multiplier
+               running for up to 7 seconds — attacker kept racing with a
+               dead target reference, sometimes getting dragged into
+               weird positions. Reset to RACING immediately. */
+            if(car.stickyTarget&&car.stickyTarget.finished){
+                car.state=CarState.RACING;
+                car.stickyTarget=null;
+                car.stickySource=null;
+                car.stateTimer=0;
+                car.targetLaneOffset=0;
+            }
+        }
         if(car.state===CarState.STICKY_BOOST){
             /* 7초간 일정 부스터 속도 1.8x */
             speed*=1.8;
@@ -3692,9 +3716,14 @@ function updatePlayers(dt){
         /* NaN safety */
         if(isNaN(p.x)||isNaN(p.y)){p.x=p.target.x;p.y=p.target.y}
 
-        /* Homing toward target's display position */
-        const targetX=p.target.displayX!=null?p.target.displayX:p.target.x;
-        const targetY=p.target.displayY!=null?p.target.displayY:p.target.y;
+        /* Home on the target's TRUE position, not displayX/Y. displayX/Y
+           are a 1-frame visual-smoothing lag used only for rendering —
+           if we home on them, a projectile chases a phantom trail when
+           the target teleports (sticky boost, state changes, finish
+           freeze) and misses or clips past. Always use x/y for game
+           logic. */
+        const targetX=p.target.x;
+        const targetY=p.target.y;
         const dx=targetX-p.x,dy=targetY-p.y;
         const dist=Math.sqrt(dx*dx+dy*dy)||1;
         const spd=(p.type===ItemType.STICKY?3000:1200)*dt;
@@ -4067,12 +4096,18 @@ function handleCollision(car1,car2){
     /* 목표 레인으로 부드럽게 밀림 (즉시 점프 대신 targetLaneOffset 변경) */
     const pushAmount=TRACK_WIDTH*(0.10+diffNorm*0.15);
     weaker.targetLaneOffset=clamp(weaker.laneOffset+pushDir*pushAmount,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
+    /* Defensive clamp: also lock current laneOffset into bounds this
+       frame. Even though the per-frame lerp-to-target will keep it in
+       range next tick, a large-dt frame (tab backgrounded, etc.) can
+       let a car visibly exit the road until the next clamp lands. */
+    weaker.laneOffset=clamp(weaker.laneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
     /* 약한 차 감속 */
     weaker.slowTimer=Math.max(weaker.slowTimer,0.6+diffNorm*0.8);
 
     /* Stronger car: 약간의 반작용 (반대 방향으로 살짝 밀림) */
     const strongPush=TRACK_WIDTH*(0.03+diffNorm*0.05);
     stronger.targetLaneOffset=clamp(stronger.laneOffset-pushDir*strongPush,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
+    stronger.laneOffset=clamp(stronger.laneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
     /* 강한 차도 약간 감속 (현실적) */
     stronger.slowTimer=Math.max(stronger.slowTimer,0.2+diffNorm*0.3);
 
