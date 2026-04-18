@@ -760,12 +760,15 @@ function doSpin(){
 
 /* Swipe/drag to spin.
    Behavior rules:
-   - Once a spin is live (spinActive), all pointer events are ignored —
-     the user can't juice a slowing wheel with extra shoves.
-   - Only the FIRST uninterrupted drag triggers a spin. The drag must
-     start AND end within 1 second; longer drags aren't treated as a
-     swipe (user was probably just playing with the wheel). */
-let dragStart=null,dragAngle=0,dragTime=0;
+   - Once a spin is live (spinActive), all pointer events are ignored.
+   - Spin triggers on the FINAL flick of a drag — we keep the last
+     ~150ms of pointer samples and use their delta to compute release
+     velocity. This means a user can slowly explore the wheel and
+     still trigger a spin if they whip the mouse at the end.
+   - Angular deltas are unwrapped across the ±π atan2 seam so drags
+     that cross the left (x<0,y=0) boundary don't produce a bogus 2π
+     jump in the wheel rotation. */
+let dragStart=null,dragAngle=0,dragSamples=[];
 function onPointerDown(e){
     if(spinActive)return;
     const r=canvas.getBoundingClientRect();
@@ -775,7 +778,16 @@ function onPointerDown(e){
     /* Hub is gone — only skip drags that start outside the wheel or on the
        tiny center nail (where radial drag has no meaningful angular delta). */
     if(dist<8||dist>radius+30)return;
-    dragStart={x,y,a:Math.atan2(y,x),t:performance.now()};dragAngle=angle;
+    const now=performance.now();
+    const ang=Math.atan2(y,x);
+    dragStart={x,y,a:ang,t:now};
+    dragAngle=angle;
+    dragSamples=[{t:now,a:ang}];
+}
+function normDa(d){
+    while(d>Math.PI)d-=Math.PI*2;
+    while(d<-Math.PI)d+=Math.PI*2;
+    return d;
 }
 function onPointerMove(e){
     if(!dragStart||spinActive)return;
@@ -784,9 +796,14 @@ function onPointerMove(e){
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.touches?.[0]?.clientY)-r.top-cy;
     const a=Math.atan2(y,x);
-    const da=a-dragStart.a;
+    const da=normDa(a-dragStart.a);
     angle=dragAngle+da;
-    dragTime=performance.now();
+    /* Record the sample and prune anything older than 150ms so the
+       release-velocity estimate only sees the most recent motion. */
+    const now=performance.now();
+    dragSamples.push({t:now,a:a});
+    const cutoff=now-150;
+    while(dragSamples.length>1&&dragSamples[0].t<cutoff)dragSamples.shift();
 }
 function onPointerUp(e){
     if(!dragStart)return;
@@ -794,27 +811,34 @@ function onPointerUp(e){
     const x=(e.clientX||e.changedTouches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.changedTouches?.[0]?.clientY)-r.top-cy;
     const a=Math.atan2(y,x);
-    const da=a-dragStart.a;
-    const dt=(performance.now()-dragStart.t)/1000;
+    const totalDa=normDa(a-dragStart.a);
     dragStart=null;
-    if(spinActive)return;
-    /* Reject: too short (accidental tap) OR too long (slow pan, not
-       a swipe intent). Only a decisive one-shot flick counts. */
-    if(dt<0.01||dt>1)return;
-    const swipeVel=da/dt;
-    /* Two-axis gate: the drag must cover meaningful angular DISTANCE
-       AND reach meaningful angular SPEED. Previously only speed was
-       checked, so a nudge of 5° at moderate speed passed, committed
-       to a weak spin, and locked the Start button for 2.5–4s while
-       the pretend-spin ran out its spinning timer. Tighter gate here
-       means gentle exploratory drags leave spinActive=false and the
-       Start button stays responsive. */
-    if(Math.abs(da)>Math.PI/6&&Math.abs(swipeVel)>5){
+    if(spinActive){dragSamples=[];return;}
+
+    /* Release velocity from the last 150ms window, not the whole drag.
+       Captures the "flick at the end" intent correctly even when the
+       user took a while to line up the motion. */
+    let releaseVel=0;
+    if(dragSamples.length>=2){
+        const first=dragSamples[0];
+        const last=dragSamples[dragSamples.length-1];
+        const rdt=(last.t-first.t)/1000;
+        if(rdt>0.001){
+            releaseVel=normDa(last.a-first.a)/rdt;
+        }
+    }
+    dragSamples=[];
+
+    /* Gate: drag must have covered ~15° total AND the last-150ms
+       release velocity must clear 3 rad/s. Both guards are needed —
+       pure-speed gates false-triggered on accidental nudges, pure-
+       distance gates missed legitimate slow-then-flick drags. */
+    if(Math.abs(totalDa)>Math.PI/12&&Math.abs(releaseVel)>3){
         spinActive=true;
         SFX.g();SFX.click();
-        /* Floor at 10 rad/s so any accepted spin is visibly spinning,
-           not a near-stop crawl. */
-        velocity=Math.min(Math.max(Math.abs(swipeVel)*1.5,10),25);
+        /* Floor 10, ceiling 25 rad/s — visible spin but never a
+           physics-breaking jump. */
+        velocity=Math.min(Math.max(Math.abs(releaseVel)*1.5,10),25);
         spinning=true;selectedIdx=-1;
         flapperAngle=0;flapperVel=0;
         document.getElementById('msgBar').textContent=T('spinning');
