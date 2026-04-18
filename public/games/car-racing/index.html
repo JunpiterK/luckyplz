@@ -5993,25 +5993,19 @@ function init(){
     }
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-/* Auto-clear cache on every visit (keep player lists + lang only) */
+/* Cache-bust the BGM mp3 on every visit so track swaps land immediately.
+   SW unregister is handled by the shared inline block below. */
 (function(){
-    /* 1. Unregister old service workers & clear SW caches */
-    if('serviceWorker' in navigator){
-        navigator.serviceWorker.getRegistrations().then(regs=>{regs.forEach(r=>r.unregister())});
-    }
-    if('caches' in window){
-        caches.keys().then(keys=>{keys.forEach(k=>caches.delete(k))});
-    }
-    /* 2. Clear browser cache via fetch headers (force reload assets) */
-    if(performance&&performance.getEntriesByType){
-        /* Add cache-bust query to MP3 on each visit */
-        const bust='?v='+Date.now();
-        if(typeof bgmAudio!=='undefined'&&bgmAudio.src&&!bgmAudio.src.includes('?v=')){
-            bgmAudio.src=bgmAudio.src.split('?')[0]+bust;
-        }
+    if(typeof bgmAudio!=='undefined'&&bgmAudio.src&&!bgmAudio.src.includes('?v=')){
+        bgmAudio.src=bgmAudio.src.split('?')[0]+'?v='+Date.now();
     }
 })();
 </script>
+<script>/* Nuke any legacy service worker + its caches on every page load.
+   See public/sw.js comments. Safe to remove once server logs show
+   no one hits /sw.js anymore. */
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
 <script src="/js/siteFooter.js" defer></script>
 </body>
 </html>
