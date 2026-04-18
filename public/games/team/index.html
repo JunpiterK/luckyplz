@@ -335,6 +335,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <canvas id="confettiCanvas"></canvas>
 <div class="share-toast" id="shareToast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
 <script src="/js/topNav.js"></script>
 <script src="/js/langBar.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -2080,6 +2081,337 @@ function copyS(){navigator.clipboard.writeText(window._st).then(()=>{const t=doc
 let confetti=[],confCanvas,confCtx;
 function startConfetti(){confCanvas=document.getElementById('confettiCanvas');confCtx=confCanvas.getContext('2d');confCanvas.width=W||window.innerWidth;confCanvas.height=H||window.innerHeight;confetti=[];for(let i=0;i<120;i++)confetti.push({x:Math.random()*confCanvas.width,y:Math.random()*-confCanvas.height,vx:(Math.random()-.5)*3,vy:Math.random()*4+2,rot:Math.random()*360,rv:(Math.random()-.5)*10,w:Math.random()*8+4,h:Math.random()*4+2,color:BALL_COLORS[Math.floor(Math.random()*BALL_COLORS.length)],life:3+Math.random()*2});let lt=0;function cl(ts){const dt=Math.min((ts-(lt||ts))/1000,.05);lt=ts;confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);confetti=confetti.filter(c=>{c.life-=dt;if(c.life<=0)return false;c.x+=c.vx;c.y+=c.vy;c.rot+=c.rv;c.vy+=.1;confCtx.save();confCtx.translate(c.x,c.y);confCtx.rotate(c.rot*Math.PI/180);confCtx.globalAlpha=Math.min(1,c.life);confCtx.fillStyle=c.color;confCtx.fillRect(-c.w/2,-c.h/2,c.w,c.h);confCtx.restore();return true});if(confetti.length)requestAnimationFrame(cl)}requestAnimationFrame(cl)}
 
+/* ============================================================
+   LOTTERY DRUM MODE (matter-js ball pickup)
+   ============================================================
+   Fisher-Yates shuffle determines team assignment — physics is
+   pure visualization. The drum mixing, flying balls, and guided
+   dispense are all cosmetic: the outcome is already decided the
+   moment the user clicks Start. That makes the distribution
+   mathematically uniform (same guarantee as Fisher-Yates), which
+   Plinko/Galton-board style "natural" physics doesn't give you.
+
+   Turn off by flipping USE_LOTTERY_MODE = false — the file still
+   contains the legacy gacha machine and will fall through to
+   buildTeams() as before. */
+const USE_LOTTERY_MODE=true;
+
+let mEngine=null, mWorld=null;
+let lotteryBalls=[];
+let teamBuckets=[];
+let dispenseQueue=[];
+let lotteryPhase='idle';     // idle | mixing | dispensing | settling | done
+let lotteryPhaseTime=0;
+let lastDispenseTime=0;
+let DRUM_CX=0, DRUM_CY=0, DRUM_R=0, EXIT_X=0, EXIT_Y=0, TUBE_BOTTOM=0;
+const LOTTERY_MIX_MS=2500;
+const LOTTERY_INTERVAL_MS=1300;
+const LOTTERY_SETTLE_MS=1500;
+const TEAM_COLORS_LOT=['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#e67e22','#1abc9c','#e84393'];
+
+function _lottComputeGeometry(){
+    DRUM_CX=W*0.5;
+    DRUM_CY=H*0.36;
+    DRUM_R=Math.min(W*0.40, H*0.30);
+    EXIT_X=DRUM_CX;
+    EXIT_Y=DRUM_CY+DRUM_R;
+    TUBE_BOTTOM=H*0.62;
+}
+
+function _lottClearWorld(){
+    if(mEngine){
+        try{ Matter.Engine.clear(mEngine); }catch(e){}
+        try{ Matter.World.clear(mWorld, false); }catch(e){}
+    }
+    mEngine=null; mWorld=null;
+    lotteryBalls=[]; teamBuckets=[];
+}
+
+function initLotteryWorld(){
+    _lottClearWorld();
+    _lottComputeGeometry();
+
+    mEngine=Matter.Engine.create();
+    mWorld=mEngine.world;
+    mEngine.world.gravity.y=1.0;
+
+    /* Drum as a ring of short segments, with a small hole at the bottom
+       for the exit tube. angle 0 = right, PI/2 = bottom (canvas Y-down). */
+    const segments=56;
+    const holeHalfAngle=0.08*Math.PI;
+    for(let i=0;i<segments;i++){
+        const a1=(i/segments)*Math.PI*2;
+        const a2=((i+1)/segments)*Math.PI*2;
+        const mid=(a1+a2)/2;
+        const angFromBottom=Math.abs(((mid-Math.PI/2)%(Math.PI*2)+Math.PI*3)%(Math.PI*2)-Math.PI);
+        if(angFromBottom>Math.PI-holeHalfAngle)continue;
+        const x1=DRUM_CX+Math.cos(a1)*DRUM_R;
+        const y1=DRUM_CY+Math.sin(a1)*DRUM_R;
+        const x2=DRUM_CX+Math.cos(a2)*DRUM_R;
+        const y2=DRUM_CY+Math.sin(a2)*DRUM_R;
+        const midX=(x1+x2)/2, midY=(y1+y2)/2;
+        const segLen=Math.hypot(x2-x1,y2-y1);
+        const segAng=Math.atan2(y2-y1,x2-x1);
+        Matter.World.add(mWorld, Matter.Bodies.rectangle(midX, midY, segLen*1.15, 4, {
+            isStatic:true, angle:segAng, restitution:0.4, friction:0.03
+        }));
+    }
+
+    /* Vertical tube walls from exit hole to bucket row */
+    const tubeHalfW=DRUM_R*0.25;
+    Matter.World.add(mWorld, [
+        Matter.Bodies.rectangle(EXIT_X-tubeHalfW-4, (EXIT_Y+TUBE_BOTTOM)/2, 6, TUBE_BOTTOM-EXIT_Y, {isStatic:true}),
+        Matter.Bodies.rectangle(EXIT_X+tubeHalfW+4, (EXIT_Y+TUBE_BOTTOM)/2, 6, TUBE_BOTTOM-EXIT_Y, {isStatic:true})
+    ]);
+
+    /* Team buckets along the bottom strip */
+    const bucketY=H*0.78;
+    const bucketH=H*0.16;
+    const bucketW=W/teamCount*0.88;
+    for(let t=0;t<teamCount;t++){
+        const bx=(W/teamCount)*(t+0.5);
+        teamBuckets.push({cx:bx, cy:bucketY, w:bucketW, h:bucketH, team:t, caught:0});
+        Matter.World.add(mWorld, [
+            Matter.Bodies.rectangle(bx, bucketY+bucketH/2+6, bucketW+20, 12, {isStatic:true, friction:0.5}),
+            Matter.Bodies.rectangle(bx-bucketW/2-6, bucketY, 8, bucketH, {isStatic:true}),
+            Matter.Bodies.rectangle(bx+bucketW/2+6, bucketY, 8, bucketH, {isStatic:true})
+        ]);
+    }
+
+    /* Member balls (large, labeled) — spawned inside the drum */
+    const memberR=Math.max(18, Math.min(26, DRUM_R*0.10));
+    const decoyR=Math.max(10, memberR*0.6);
+    for(let i=0;i<members.length;i++){
+        const m=members[i];
+        const a=Math.random()*Math.PI*2;
+        const r=Math.random()*DRUM_R*0.6;
+        const b=Matter.Bodies.circle(
+            DRUM_CX+Math.cos(a)*r,
+            DRUM_CY+Math.sin(a)*r-DRUM_R*0.2,
+            memberR,
+            {restitution:0.55, friction:0.02, frictionAir:0.005, density:0.0015}
+        );
+        b.__lott={isMember:true, memberIdx:i, label:m.name,
+                  color:BALL_COLORS[i%BALL_COLORS.length], dispensed:false,
+                  settled:false, teamIdx:-1};
+        Matter.World.add(mWorld, b);
+        lotteryBalls.push(b);
+    }
+
+    /* Decoy balls — pure visual filler so the drum looks full and busy */
+    const decoyCount=Math.max(22, members.length*4);
+    for(let i=0;i<decoyCount;i++){
+        const a=Math.random()*Math.PI*2;
+        const r=Math.random()*DRUM_R*0.75;
+        const b=Matter.Bodies.circle(
+            DRUM_CX+Math.cos(a)*r,
+            DRUM_CY+Math.sin(a)*r-DRUM_R*0.2,
+            decoyR,
+            {restitution:0.45, friction:0.02, frictionAir:0.005, density:0.001}
+        );
+        b.__lott={isMember:false, color:'rgba(170,175,200,0.35)'};
+        Matter.World.add(mWorld, b);
+        lotteryBalls.push(b);
+    }
+}
+
+function startLottery(){
+    collectMembers();
+    if(members.length<2||teamCount<2){return}
+
+    /* THE RANDOMNESS: Fisher-Yates over member indices.
+       Each permutation of N members is produced with exactly 1/N! chance
+       — mathematically uniform. Team assignment below is deterministic
+       from this permutation, so the final team mapping is also uniform
+       (every possible legal team partition is equally likely). */
+    const order=[...Array(members.length).keys()];
+    for(let i=order.length-1;i>0;i--){
+        const j=Math.floor(Math.random()*(i+1));
+        [order[i],order[j]]=[order[j],order[i]];
+    }
+
+    /* Round-robin assignment spreads team sizes evenly:
+       N=7, T=3 → sizes [3,2,2]. First-come teams get the extras. */
+    dispenseQueue=order.map((mi,pos)=>({memberIdx:mi, teamIdx:pos%teamCount}));
+
+    /* Prebuild teamResults (read by showResult) from the same queue so
+       what the user sees match what the drum eventually plays. */
+    teamResults=[];
+    for(let t=0;t<teamCount;t++)teamResults.push([]);
+    dispenseQueue.forEach(it=>teamResults[it.teamIdx].push(members[it.memberIdx]));
+
+    document.getElementById('setupWrap').style.display='none';
+    document.getElementById('gameScreen').style.display='block';
+    resizeCanvas();
+
+    initLotteryWorld();
+    lotteryPhase='mixing';
+    lotteryPhaseTime=0;
+    lastDispenseTime=0;
+    lastTime=0;
+    if(animId)cancelAnimationFrame(animId);
+    animId=requestAnimationFrame(lotteryLoop);
+}
+
+function lotteryLoop(ts){
+    const dt=Math.min((ts-(lastTime||ts))/1000, 0.033);
+    lastTime=ts;
+    lotteryPhaseTime+=dt*1000;
+
+    if(mEngine)Matter.Engine.update(mEngine, Math.min(dt*1000, 33));
+
+    /* Upward air flow on balls still inside the drum — creates the
+       lottery-tumbler chaos look without the need for a rotating shell. */
+    lotteryBalls.forEach(b=>{
+        if(b.__lott.dispensed)return;
+        const p=b.position;
+        const d=Math.hypot(p.x-DRUM_CX, p.y-DRUM_CY);
+        if(d<DRUM_R*1.05){
+            Matter.Body.applyForce(b, p, {
+                x:(Math.random()-0.5)*0.0004*b.mass,
+                y:-0.0018*b.mass*(0.5+Math.random())
+            });
+        }
+    });
+
+    /* Phase transitions */
+    if(lotteryPhase==='mixing'&&lotteryPhaseTime>LOTTERY_MIX_MS){
+        lotteryPhase='dispensing';
+        lastDispenseTime=lotteryPhaseTime;
+    }
+
+    if(lotteryPhase==='dispensing'){
+        if(lotteryPhaseTime-lastDispenseTime>LOTTERY_INTERVAL_MS){
+            if(dispenseQueue.length>0){
+                const next=dispenseQueue.shift();
+                dispenseNextBall(next.memberIdx, next.teamIdx);
+                lastDispenseTime=lotteryPhaseTime;
+            }else{
+                lotteryPhase='settling';
+                lotteryPhaseTime=0;
+            }
+        }
+    }
+
+    if(lotteryPhase==='settling'&&lotteryPhaseTime>LOTTERY_SETTLE_MS){
+        lotteryPhase='done';
+        setTimeout(showResult, 300);
+    }
+
+    /* Guide dispensed balls laterally toward their bucket as they fall */
+    lotteryBalls.forEach(b=>{
+        if(!b.__lott.dispensed||b.__lott.settled)return;
+        const bucket=teamBuckets[b.__lott.teamIdx];
+        if(!bucket)return;
+        const dx=bucket.cx-b.position.x;
+        if(b.position.y<bucket.cy-bucket.h/2 && Math.abs(dx)>4){
+            Matter.Body.applyForce(b, b.position, {
+                x:Math.sign(dx)*0.0025*b.mass,
+                y:0
+            });
+        }
+        if(b.position.y>bucket.cy-bucket.h/2 && Math.abs(b.position.x-bucket.cx)<bucket.w/2){
+            b.__lott.settled=true;
+        }
+    });
+
+    renderLottery();
+    if(lotteryPhase!=='done')animId=requestAnimationFrame(lotteryLoop);
+}
+
+function dispenseNextBall(memberIdx, teamIdx){
+    const ball=lotteryBalls.find(b=>b.__lott.isMember&&b.__lott.memberIdx===memberIdx&&!b.__lott.dispensed);
+    if(!ball)return;
+    ball.__lott.dispensed=true;
+    ball.__lott.teamIdx=teamIdx;
+    /* Teleport the chosen ball to the tube mouth and kick it downward.
+       (Alternatives: apply huge downward force while in drum, but other
+       balls often block the exit — teleport is cleaner and the user
+       just sees a ball emerge from the tube, which matches a real
+       lottery tumbler's visible output.) */
+    Matter.Body.setPosition(ball, {x:EXIT_X, y:EXIT_Y+25});
+    Matter.Body.setVelocity(ball, {x:0, y:7});
+    try{ SFX.p && SFX.p(900, 0.05, 'square', 0.08); }catch(e){}
+}
+
+function renderLottery(){
+    ctx.fillStyle='#0A0A1A';
+    ctx.fillRect(0, 0, W, H);
+
+    /* Drum outer ring (decorative, rendered independent of physics walls) */
+    ctx.strokeStyle='rgba(255,215,0,0.55)';
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.arc(DRUM_CX, DRUM_CY, DRUM_R+4, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.strokeStyle='rgba(255,215,0,0.2)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(DRUM_CX, DRUM_CY, DRUM_R+10, 0, Math.PI*2);
+    ctx.stroke();
+
+    /* Tube */
+    ctx.fillStyle='rgba(120,130,160,0.25)';
+    const tubeHalfW=DRUM_R*0.25;
+    ctx.fillRect(EXIT_X-tubeHalfW, EXIT_Y, tubeHalfW*2, TUBE_BOTTOM-EXIT_Y);
+
+    /* Decoy balls first, members on top so labels are always visible */
+    lotteryBalls.forEach(b=>{
+        if(b.__lott.isMember)return;
+        ctx.beginPath();
+        ctx.arc(b.position.x, b.position.y, b.circleRadius, 0, Math.PI*2);
+        ctx.fillStyle=b.__lott.color;
+        ctx.fill();
+    });
+    lotteryBalls.forEach(b=>{
+        if(!b.__lott.isMember)return;
+        ctx.beginPath();
+        ctx.arc(b.position.x, b.position.y, b.circleRadius, 0, Math.PI*2);
+        ctx.fillStyle=b.__lott.dispensed
+            ? TEAM_COLORS_LOT[b.__lott.teamIdx%TEAM_COLORS_LOT.length]
+            : b.__lott.color;
+        ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.85)';
+        ctx.lineWidth=2;
+        ctx.stroke();
+        /* Label */
+        ctx.fillStyle='#fff';
+        ctx.font='bold 11px "Noto Sans KR",sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        const lbl=(b.__lott.label||'').slice(0, 6);
+        ctx.fillText(lbl, b.position.x, b.position.y);
+    });
+
+    /* Buckets */
+    teamBuckets.forEach((bk,i)=>{
+        const col=TEAM_COLORS_LOT[i%TEAM_COLORS_LOT.length];
+        ctx.fillStyle='rgba(0,0,0,0.35)';
+        ctx.fillRect(bk.cx-bk.w/2, bk.cy-bk.h/2, bk.w, bk.h);
+        ctx.strokeStyle=col;
+        ctx.lineWidth=3;
+        ctx.strokeRect(bk.cx-bk.w/2, bk.cy-bk.h/2, bk.w, bk.h);
+        ctx.fillStyle=col;
+        ctx.font='bold 18px "Noto Sans KR",sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='alphabetic';
+        ctx.fillText((T('team',{n:i+1})||('Team '+(i+1))), bk.cx, bk.cy-bk.h/2-10);
+    });
+
+    /* Status */
+    ctx.fillStyle='#FFE66D';
+    ctx.font='bold 18px "Noto Sans KR",sans-serif';
+    ctx.textAlign='center';
+    const totalM=members.length;
+    const doneM=lotteryBalls.filter(b=>b.__lott.isMember&&b.__lott.dispensed).length;
+    let msg='';
+    if(lotteryPhase==='mixing')msg=T('mixing')||'Mixing...';
+    else if(lotteryPhase==='dispensing')msg=`${doneM} / ${totalM}`;
+    else if(lotteryPhase==='settling')msg=T('settling')||'Settling...';
+    else msg=T('done')||'Done!';
+    ctx.fillText(msg, W/2, 32);
+}
+
 /* Init */
 function init(){
     const saved=localStorage.getItem('luckyplz_lang');
@@ -2130,7 +2462,10 @@ function init(){
 
     document.getElementById('balanceRow').addEventListener('click',e=>{const c=e.target.closest('.opt-chip');if(!c)return;document.querySelectorAll('#balanceRow .opt-chip').forEach(x=>x.classList.remove('selected'));c.classList.add('selected');balanceMode=c.dataset.bal;SFX.click()});
 
-    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();buildTeams()});
+    /* Start button now launches the new matter-js lottery drum mode.
+       The old buildTeams() (gacha machine) is kept in the file for
+       possible future use; switch USE_LOTTERY_MODE to false to revive it. */
+    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();if(USE_LOTTERY_MODE){startLottery()}else{buildTeams()}});
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
         if(animId)cancelAnimationFrame(animId);
@@ -2141,6 +2476,10 @@ function init(){
         drawnResults=[];capsules=[];teamTrays=[];particles=[];
         machines=[];activeMachineIdx=0;tierTransition=0;currentMachineTheme=null;
         drawPhase='idle';drawingCapsule=null;
+        /* Lottery state cleanup — otherwise a second run keeps the old
+           matter-js world and balls around, ghosting into the new run. */
+        _lottClearWorld();
+        dispenseQueue=[];lotteryPhase='idle';lotteryPhaseTime=0;
     });
 
     window.addEventListener('resize',()=>{if(document.getElementById('gameScreen').style.display==='block')resizeCanvas()});
