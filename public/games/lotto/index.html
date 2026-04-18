@@ -340,6 +340,25 @@ body:not(.prepared) #lottoSidebar{display:none}
         position:fixed;top:56px;right:0;bottom:0;width:320px;
         overflow-y:auto;z-index:60;
     }
+    /* Setup modal occupies the SAME right-edge 320px column as the
+       eventual sidebar, so the PREPARE transition is a clean content
+       swap in-place rather than a layout jump. The canvas preview
+       behind it gets the ad reserve (280 left) + the main 3-col gap,
+       and stays blurred until prepared. */
+    body.has-top-nav #setupWrap{
+        position:fixed !important;top:56px !important;right:0 !important;
+        left:auto !important;bottom:0 !important;
+        width:320px !important;height:auto !important;
+        padding:14px !important;align-items:stretch !important;
+        justify-content:flex-start !important;
+        background:rgba(10,12,24,0.96);
+        border-left:1px solid rgba(255,255,255,0.08);
+        overflow-y:auto;
+    }
+    body.has-top-nav #setupWrap #setupScreen{
+        width:100% !important;max-width:none !important;margin:0 !important;
+        padding:18px 14px !important;border-radius:14px;
+    }
 }
 /* Mobile: sidebar collapses into a bottom sheet over the canvas.
    Short height so the machine stays visible above it. */
@@ -1954,7 +1973,11 @@ function init(){
 
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
 
-    /* In-machine speed chips (Fast/Normal/Slow → 1/2/3s per ball). */
+    /* In-machine speed chips: Instant(0) / Fast(1) / Normal(2) / Slow(3).
+       IMPORTANT — cannot use `parseInt(...) || 2` here: Instant sets 0,
+       and 0 || 2 === 2 in JS. That bug silently rerouted every Instant
+       click back to physics mode. Use a NaN check instead so 0 is a
+       valid accepted value. */
     const speedRow=document.getElementById('gcSpeedRow');
     if(speedRow){
         speedRow.addEventListener('click',e=>{
@@ -1962,7 +1985,8 @@ function init(){
             if(!c)return;
             speedRow.querySelectorAll('.opt-chip').forEach(x=>x.classList.remove('selected'));
             c.classList.add('selected');
-            drawSpeed=parseInt(c.dataset.speed)||2;
+            const v=parseInt(c.dataset.speed);
+            drawSpeed=Number.isFinite(v)?v:2;
         });
     }
 
