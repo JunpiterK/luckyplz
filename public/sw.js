@@ -4,7 +4,7 @@
   - Images/Audio/Fonts: Cache-first (fast load, update in background)
   - Version bump CACHE_VERSION on every deploy to purge old caches
 */
-const CACHE_VERSION = 20;
+const CACHE_VERSION = 21;
 const CACHE_NAME = 'luckyplz-v' + CACHE_VERSION;
 
 const PRECACHE = [
