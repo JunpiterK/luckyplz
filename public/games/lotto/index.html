@@ -179,6 +179,40 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     .lang-btn{width:26px;height:19px}.lang-btn img{width:20px;height:14px}
     .floating-home{width:38px;height:38px;font-size:1em;bottom:10px;left:10px}
 }
+
+/* ============ PC AD SLOT (reserved, hidden for now) ============
+   Matches the pattern already used on roulette/ladder. The slot is
+   kept in the DOM so AdSense can drop into it later without layout
+   surgery, but display:none in every breakpoint until we flip it
+   on. See future AdSense integration. */
+.pc-ad-slot{display:none !important}
+
+/* ============ LOTTO DRAW HISTORY ============
+   Appears inside resultScreen below the current draw. Stored in
+   localStorage so users can see their past lotto pulls across
+   sessions. Each entry is rendered with the preset's flag + name
+   so the country-specific format stays recognizable. */
+#historySection{margin-top:18px;padding-top:16px;border-top:1px solid rgba(255,255,255,.08);text-align:left}
+#historySection h3{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.9em;color:rgba(255,230,109,.85);margin:0 0 10px;text-align:center;letter-spacing:2px}
+#historyList{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;padding-right:6px}
+#historyList::-webkit-scrollbar{width:6px}
+#historyList::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:3px}
+.hist-empty{text-align:center;color:rgba(255,255,255,.4);font-size:.85em;padding:16px 8px;font-style:italic}
+.hist-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;padding:10px 12px}
+.hist-card .hist-head{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:.8em;color:rgba(255,255,255,.75)}
+.hist-card .hist-flag{font-size:1.15em;line-height:1;flex-shrink:0}
+.hist-card .hist-name{font-weight:700;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-card .hist-time{font-size:.85em;color:rgba(255,255,255,.4);flex-shrink:0}
+.hist-card .hist-balls{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.hist-ball{display:inline-flex;align-items:center;justify-content:center;min-width:32px;height:32px;padding:0 6px;border-radius:50%;font-weight:800;font-size:.82em;font-family:'Orbitron','Noto Sans KR',sans-serif;box-shadow:0 2px 4px rgba(0,0,0,.3)}
+.hist-ball.hist-bonus{box-shadow:0 0 0 2px rgba(255,255,255,.2),0 2px 4px rgba(0,0,0,.3);color:#fff}
+.hist-sep{color:rgba(255,255,255,.35);font-weight:700;margin:0 2px;font-size:.9em}
+.btn-history-clear{margin:10px auto 0;display:block;background:transparent;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.55);font-size:.75em;padding:6px 14px;border-radius:14px;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:border-color .2s,color .2s}
+.btn-history-clear:hover{border-color:rgba(255,51,102,.5);color:rgba(255,102,120,.9)}
+
+/* ============ DRAW SPEED SELECTOR ============ */
+#drawSpeedRow .opt-chip{display:inline-flex;align-items:center;gap:4px;padding:6px 11px;font-size:.74em}
+#drawSpeedRow .opt-chip .speed-ico{font-size:.95em}
     </style>
 </head>
 <body>
@@ -307,11 +341,29 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         </div>
     </div>
 
+    <!-- Draw speed -->
+    <div class="section"><h3>⏱️ <span id="speedLabel">Draw Speed</span></h3>
+        <div class="opt-row" id="drawSpeedRow" style="gap:6px;flex-wrap:wrap">
+            <div class="opt-chip" data-speed="2"><span class="speed-ico">⚡</span> <span id="speedFast">Fast</span> · 2s</div>
+            <div class="opt-chip selected" data-speed="4"><span class="speed-ico">●</span> <span id="speedNormal">Normal</span> · 4s</div>
+            <div class="opt-chip" data-speed="6"><span class="speed-ico">🐢</span> <span id="speedSlow">Slow</span> · 6s</div>
+        </div>
+    </div>
+
     <div class="btn-group">
         <button id="startBtn">START!</button>
     </div>
 </div>
 </div>
+
+<!-- PC left ad slot (reserved, hidden for now — flip display on when
+     AdSense approves. Kept in DOM so future wiring is code-free.) -->
+<aside class="pc-ad-slot" aria-hidden="true">
+    <div class="pc-ad-placeholder">
+        <div class="pc-ad-title">AD</div>
+        <div class="pc-ad-hint">280×600</div>
+    </div>
+</aside>
 
 <!-- GAME -->
 <div id="gameScreen"><canvas id="gameCanvas"></canvas></div>
@@ -322,6 +374,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <div id="resultContent"></div>
     <div class="share-panel"><h3>&#x1F4E2; SHARE</h3><div class="share-buttons" id="shareButtons"></div></div>
     <div class="result-btns"><button class="btn btn-replay" id="replayBtn">&#x1F504; Again</button></div>
+    <div id="historySection">
+        <h3>&#x1F4DC; <span id="histTitle">RECENT DRAWS</span></h3>
+        <div id="historyList"></div>
+        <button id="histClearBtn" class="btn-history-clear"><span id="histClearText">Clear history</span></button>
+    </div>
     <div data-lp-next-games="lotto"></div>
 </div></div>
 <canvas id="confettiCanvas"></canvas>
@@ -337,8 +394,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 ======================================== */
 
 const I18N={
-en:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!'},
-ko:{title:'\uB85C\uB610\uBCFC \uBF51\uAE30',subtitle:'\uC6B4\uBA85\uC758 \uACF5\uC744 \uBF51\uC544\uB77C!',lottoOpt:'\uBC88\uD638 \uC124\uC815',preset:'\uAD6D\uAC00\uBCC4 \uB85C\uB610 \uD504\uB9AC\uC14B',range:'\uBC94\uC704:',drawCount:'\uBF51\uAE30:',balls:'\uAC1C',start:'\uC2DC\uC791!',result:'\uACB0\uACFC \uBC1C\uD45C!',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!'},
+en:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!',speedLabel:'Draw Speed',speedFast:'Fast',speedNormal:'Normal',speedSlow:'Slow',histTitle:'RECENT DRAWS',histClearText:'Clear history',histEmpty:'No previous draws yet — pull some numbers!',histClearConfirm:'Clear draw history?',histJustNow:'just now',histMinAgo:'m ago',histHourAgo:'h ago',histDayAgo:'d ago'},
+ko:{title:'\uB85C\uB610\uBCFC \uBF51\uAE30',subtitle:'\uC6B4\uBA85\uC758 \uACF5\uC744 \uBF51\uC544\uB77C!',lottoOpt:'\uBC88\uD638 \uC124\uC815',preset:'\uAD6D\uAC00\uBCC4 \uB85C\uB610 \uD504\uB9AC\uC14B',range:'\uBC94\uC704:',drawCount:'\uBF51\uAE30:',balls:'\uAC1C',start:'\uC2DC\uC791!',result:'\uACB0\uACFC \uBC1C\uD45C!',again:'\uB2E4\uC2DC\uD558\uAE30',drawing:'\uACF5 \uBF51\uB294 \uC911...',complete:'\uC644\uB8CC!',copied:'\uBCF5\uC0AC\uB428!',speedLabel:'\uBF51\uAE30 \uC18D\uB3C4',speedFast:'\uBE60\uB984',speedNormal:'\uBCF4\uD1B5',speedSlow:'\uB290\uB9BC',histTitle:'\uCD5C\uADFC \uBF51\uAE30',histClearText:'\uAE30\uB85D \uC9C0\uC6B0\uAE30',histEmpty:'\uC544\uC9C1 \uBF51\uAE30 \uAE30\uB85D\uC774 \uC5C6\uC5B4\uC694 \u2014 \uBC88\uD638\uB97C \uBF51\uC544\uBCF4\uC138\uC694!',histClearConfirm:'\uBF51\uAE30 \uAE30\uB85D\uC744 \uBAA8\uB450 \uC9C0\uC6B8\uAE4C\uC694?',histJustNow:'\uBC29\uAE08',histMinAgo:'\uBD84 \uC804',histHourAgo:'\uC2DC\uAC04 \uC804',histDayAgo:'\uC77C \uC804'},
 gb:{title:'Lotto Ball',subtitle:'PICK YOUR DESTINY!',lottoOpt:'Number Settings',preset:'Country Lotto Preset',range:'Range:',drawCount:'Draw:',balls:'balls',start:'START!',result:'Results!',again:'Again',drawing:'Drawing balls...',complete:'Complete!',copied:'Copied!'},
 ja:{title:'\u30ED\u30C3\u30C8\u30DC\u30FC\u30EB',subtitle:'\u904B\u547D\u306E\u30DC\u30FC\u30EB\u3092\u5F15\u3051\uFF01',lottoOpt:'\u756A\u53F7\u8A2D\u5B9A',preset:'\u5404\u56FD\u30ED\u30C8\u30D7\u30EA\u30BB\u30C3\u30C8',range:'\u7BC4\u56F2:',drawCount:'\u62BD\u9078:',balls:'\u500B',start:'\u30B9\u30BF\u30FC\u30C8\uFF01',result:'\u7D50\u679C\uFF01',again:'\u3082\u3046\u4E00\u5EA6',drawing:'\u62BD\u9078\u4E2D...',complete:'\u5B8C\u4E86\uFF01',copied:'\u30B3\u30D4\u30FC\uFF01'},
 zh:{title:'\u4E50\u900F\u7403',subtitle:'\u62BD\u51FA\u547D\u8FD0\u4E4B\u7403\uFF01',lottoOpt:'\u53F7\u7801\u8BBE\u7F6E',preset:'\u5404\u56FD\u5F69\u7968\u9884\u8BBE',range:'\u8303\u56F4:',drawCount:'\u62BD\u53D6:',balls:'\u4E2A',start:'\u5F00\u59CB\uFF01',result:'\u7ED3\u679C\uFF01',again:'\u518D\u6765',drawing:'\u62BD\u7403\u4E2D...',complete:'\u5B8C\u6210\uFF01',copied:'\u5DF2\u590D\u5236\uFF01'},
@@ -392,6 +449,20 @@ const LOTTO_PRESETS=[
     {id:'sa',flag:'🇸🇦',name:'Emirates Loto',start:1,end:49,draw:6,mainColorFn:genericColor,langs:['ar']}
 ];
 let activePreset=null;// currently selected preset
+
+/* Draw speed (seconds). User-selectable: 2 = fast, 4 = normal, 6 = slow.
+   Replaces the old hard-coded 4000+random(2000) spread — using a single
+   integer keeps the tempo predictable and matches what the speed chip
+   advertises. Bonus balls scale 1.5× so they still feel like the
+   dramatic final pull instead of blurring into the main sequence. */
+let drawSpeed=4;
+
+/* Draw history — survives across page loads via localStorage. Stored
+   with the preset flag + name so each entry renders in its home
+   country's format (Korean 6/45, US Powerball, UK 6/59, etc.) no
+   matter what locale the user is viewing the results in later. */
+let lottoHistory=[];
+try{lottoHistory=JSON.parse(localStorage.getItem('luckyplz_lotto_history')||'[]')}catch(e){lottoHistory=[]}
 
 let drawnResults=[];
 
@@ -592,8 +663,22 @@ function applyLanguage(){
     document.getElementById('drawCountLabel').textContent=T('drawCount');
     document.getElementById('ballsText').textContent=T('balls');
     document.getElementById('startBtn').textContent=T('start');
+    /* Speed selector + history panel labels. All fall back to the
+       English text in T() when a specific locale doesn't define the
+       key, so new keys can be added gradually without broken UI. */
+    const _set=(id,k,fb)=>{const el=document.getElementById(id);if(el)el.textContent=T(k)||fb};
+    _set('speedLabel','speedLabel','Draw Speed');
+    _set('speedFast','speedFast','Fast');
+    _set('speedNormal','speedNormal','Normal');
+    _set('speedSlow','speedSlow','Slow');
+    _set('histTitle','histTitle','RECENT DRAWS');
+    _set('histClearText','histClearText','Clear history');
     document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
     renderLottoPresets();
+    /* Refresh history so "5m ago" etc. re-render in the new locale's
+       abbreviations. Safe to call before renderHistory is reachable
+       because the element lookup inside guards null. */
+    if(typeof renderHistory==='function')renderHistory();
 }
 
 function renderLottoPresets(){
@@ -1372,7 +1457,9 @@ function drawNextBall(){
 
     // Venus-style: mix balls for a while, then open the valve (suction)
     const isBonus=drawnMainCount>=mainToDraw&&bonusToDraw>0;
-    const rollTime=isBonus?7000+Math.random()*3000:4000+Math.random()*2000;
+    /* drawSpeed is user-chosen (2/4/6 seconds). Bonus balls use 1.5×
+       for a longer pre-suction mix so they land with more drama. */
+    const rollTime=isBonus?drawSpeed*1500:drawSpeed*1000;
 
     // Drum roll tension ~1.5s before valve opens
     setTimeout(()=>{SFX.drumRoll(1.5)},Math.max(0,rollTime-1600));
@@ -1414,6 +1501,68 @@ function showResult(){
     rc.innerHTML=html;
     const shareNums=mainBalls.map(b=>b.label).join(', ')+(bonusBalls.length?' + '+bonusBalls.map(b=>b.label).join(', '):'');
     buildShareBtns('Numbers: '+shareNums);
+
+    /* Log this draw to history + refresh the panel below. Stored per
+       preset so the list mixes freely (e.g. a 6/45 Korean line next
+       to a Powerball 5+1 line) without losing their native format. */
+    saveHistoryEntry(mainBalls,bonusBalls,bonusClr);
+    renderHistory();
+}
+
+/* ============ DRAW HISTORY ============ */
+function saveHistoryEntry(mainBalls,bonusBalls,bonusClr){
+    lottoHistory.unshift({
+        presetId:activePreset?.id||'custom',
+        presetName:activePreset?.name||'Lotto',
+        flag:activePreset?.flag||'\uD83C\uDFB1',
+        bonusColor:bonusClr,
+        bonusLabel:activePreset?.bonus?.label||'Bonus',
+        main:mainBalls.map(b=>({n:b.label,color:b.color})),
+        bonus:bonusBalls.map(b=>({n:b.label})),
+        ts:Date.now()
+    });
+    /* Cap at 30 — enough to feel populated, small enough to keep
+       localStorage under a few KB and rendering under 16ms. */
+    if(lottoHistory.length>30)lottoHistory.length=30;
+    try{localStorage.setItem('luckyplz_lotto_history',JSON.stringify(lottoHistory))}catch(e){}
+}
+
+function _timeAgo(ts){
+    const diff=Math.floor((Date.now()-ts)/1000);
+    if(diff<60)return T('histJustNow')||'just now';
+    if(diff<3600)return Math.floor(diff/60)+(T('histMinAgo')||'m ago');
+    if(diff<86400)return Math.floor(diff/3600)+(T('histHourAgo')||'h ago');
+    return Math.floor(diff/86400)+(T('histDayAgo')||'d ago');
+}
+
+function renderHistory(){
+    const el=document.getElementById('historyList');
+    if(!el)return;
+    if(lottoHistory.length===0){
+        el.innerHTML=`<div class="hist-empty">${T('histEmpty')||'No previous draws yet — pull some numbers!'}</div>`;
+        const clearBtn=document.getElementById('histClearBtn');
+        if(clearBtn)clearBtn.style.display='none';
+        return;
+    }
+    const clearBtn=document.getElementById('histClearBtn');
+    if(clearBtn)clearBtn.style.display='block';
+    el.innerHTML=lottoHistory.map(h=>{
+        const mainHtml=h.main.map(m=>{
+            const light=isLightColor(m.color);
+            return `<span class="hist-ball" style="background:${m.color};color:${light?'#333':'#fff'};${light?'border:1px solid rgba(0,0,0,.2);':''}">${m.n}</span>`;
+        }).join('');
+        const bonusHtml=h.bonus.length
+            ?` <span class="hist-sep">+</span> ${h.bonus.map(b=>`<span class="hist-ball hist-bonus" style="background:${h.bonusColor}">${b.n}</span>`).join('')}`
+            :'';
+        return `<div class="hist-card">
+            <div class="hist-head">
+                <span class="hist-flag">${h.flag}</span>
+                <span class="hist-name">${h.presetName}</span>
+                <span class="hist-time">${_timeAgo(h.ts)}</span>
+            </div>
+            <div class="hist-balls">${mainHtml}${bonusHtml}</div>
+        </div>`;
+    }).join('');
 }
 
 function buildShareBtns(text){
@@ -1438,6 +1587,33 @@ function init(){
     createStars();applyLanguage();
 
     document.getElementById('langBar').addEventListener('click',e=>{const b=e.target.closest('.lang-btn');if(!b)return;lang=b.dataset.lang;localStorage.setItem('luckyplz_lang',lang);applyLanguage()});
+
+    /* Draw speed chip row */
+    const speedRow=document.getElementById('drawSpeedRow');
+    if(speedRow){
+        speedRow.addEventListener('click',e=>{
+            const c=e.target.closest('.opt-chip');
+            if(!c)return;
+            speedRow.querySelectorAll('.opt-chip').forEach(x=>x.classList.remove('selected'));
+            c.classList.add('selected');
+            drawSpeed=parseInt(c.dataset.speed)||4;
+        });
+    }
+
+    /* History clear button */
+    const histClear=document.getElementById('histClearBtn');
+    if(histClear){
+        histClear.addEventListener('click',()=>{
+            if(!confirm(T('histClearConfirm')||'Clear draw history?'))return;
+            lottoHistory=[];
+            try{localStorage.removeItem('luckyplz_lotto_history')}catch(e){}
+            renderHistory();
+        });
+    }
+
+    /* Initial render so the panel is populated if a previous session
+       left history in localStorage. */
+    renderHistory();
 
     document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();startLottoDraw()});
 
