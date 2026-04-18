@@ -310,6 +310,12 @@ function T(k,v){let s=(I18N[lang]&&I18N[lang][k])||I18N.en[k]||k;if(v)Object.key
 const COLORS=['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#00bcd4','#ff6b81','#a29bfe','#fd79a8','#00cec9'];
 const DARK_COLORS=['#c0392b','#2980b9','#27ae60','#d68910','#8e44ad','#16a085','#ca6f1e','#0097a7','#e84363','#6c5ce7','#e84393','#00b5ad'];
 let playerCount=6,players=[],spinning=false;
+/* spinActive = true from the moment a spin starts (either via doSpin
+   or a swipe impulse) until the result modal appears. While active,
+   pointer drags on the wheel are fully ignored so the user can't
+   juice a slowing wheel with extra shoves. Cleared in showResult()
+   and on Replay/backToSetup. */
+let spinActive=false;
 
 /* Audio */
 /* AudioContext starts suspended on modern Chrome/Edge until a user
@@ -737,7 +743,8 @@ function onStopped(){
 /* Spin — kick off with enough initial energy for a ~10s run given the
    friction + peg-damping tuning above. */
 function doSpin(){
-    if(Math.abs(velocity)>0.5)return;
+    if(spinActive)return;
+    spinActive=true;
     SFX.g();SFX.click();
     spinning=true;
     selectedIdx=-1;
@@ -751,10 +758,16 @@ function doSpin(){
     setTimeout(()=>{spinning=false},holdTime);
 }
 
-/* Swipe/drag to spin */
+/* Swipe/drag to spin.
+   Behavior rules:
+   - Once a spin is live (spinActive), all pointer events are ignored —
+     the user can't juice a slowing wheel with extra shoves.
+   - Only the FIRST uninterrupted drag triggers a spin. The drag must
+     start AND end within 1 second; longer drags aren't treated as a
+     swipe (user was probably just playing with the wheel). */
 let dragStart=null,dragAngle=0,dragTime=0;
 function onPointerDown(e){
-    if(Math.abs(velocity)>0.5)return;
+    if(spinActive)return;
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.touches?.[0]?.clientY)-r.top-cy;
@@ -765,7 +778,7 @@ function onPointerDown(e){
     dragStart={x,y,a:Math.atan2(y,x),t:performance.now()};dragAngle=angle;
 }
 function onPointerMove(e){
-    if(!dragStart)return;
+    if(!dragStart||spinActive)return;
     e.preventDefault();
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
@@ -784,9 +797,13 @@ function onPointerUp(e){
     const da=a-dragStart.a;
     const dt=(performance.now()-dragStart.t)/1000;
     dragStart=null;
-    if(dt<0.01)return;
+    if(spinActive)return;
+    /* Reject: too short (accidental tap) OR too long (slow pan, not
+       a swipe intent). Only a decisive one-shot flick counts. */
+    if(dt<0.01||dt>1)return;
     const swipeVel=da/dt;
     if(Math.abs(swipeVel)>2){
+        spinActive=true;
         SFX.g();SFX.click();
         velocity=Math.min(Math.abs(swipeVel)*1.5,25);
         spinning=true;selectedIdx=-1;
@@ -799,6 +816,7 @@ function onPointerUp(e){
 
 /* Result */
 function showResult(name){
+    spinActive=false;
     document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='flex';
     document.getElementById('wName').textContent=name;
@@ -855,6 +873,7 @@ function startGame(){
 }
 
 function backToSetup(){
+    spinActive=false;
     if(animId)cancelAnimationFrame(animId);
     document.getElementById('resultScreen').style.display='none';
     if(isPCLayout()){
@@ -927,7 +946,7 @@ function init(){
     document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderPreview()});
     document.getElementById('startBtn').addEventListener('click',startGame);
     document.getElementById('backBtn').addEventListener('click',backToSetup);
-    document.getElementById('replayBtn').addEventListener('click',()=>{confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;flapperAngle=0;flapperVel=0;document.getElementById('msgBar').textContent=T('tapToSpin');document.getElementById('msgBar').className='msg-bar';lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);if(isPCLayout())setTimeout(doSpin,80)});
+    document.getElementById('replayBtn').addEventListener('click',()=>{spinActive=false;confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;flapperAngle=0;flapperVel=0;document.getElementById('msgBar').textContent=T('tapToSpin');document.getElementById('msgBar').className='msg-bar';lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);if(isPCLayout())setTimeout(doSpin,80)});
     document.getElementById('backToSetupBtn').addEventListener('click',backToSetup);
 
     // Canvas events
