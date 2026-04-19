@@ -27,7 +27,46 @@
         /* Defense-in-depth: even if a stale cached script version still
            injects the footer or PWA button, hide them on game pages. */
         +'body.lp-game-page .lp-site-footer{display:none!important}'
-        +'body.lp-game-page .lp-pwa-btn{display:none!important}';
+        +'body.lp-game-page .lp-pwa-btn{display:none!important}'
+        /* ========= UNIFIED BUTTON DESIGN SYSTEM =========
+           Game pages still set their own accent gradients on #startBtn etc.
+           so each game keeps its colour personality. These rules polish the
+           geometry / micro-interactions / focus / typography across the
+           whole site so the buttons look hand-crafted, not thrown-together. */
+        /* Base: smoother easing everywhere + tighter active press */
+        +'button,.btn{transition:transform .15s cubic-bezier(.2,.8,.4,1),box-shadow .22s ease,filter .18s ease,background .2s ease,border-color .2s ease;font-feature-settings:"tnum","cv11";-webkit-tap-highlight-color:transparent}'
+        +'button:active,.btn:active{transform:translateY(1px) scale(.985);transition-duration:.08s}'
+        +'button:focus-visible,.btn:focus-visible,input:focus-visible{outline:2px solid rgba(255,230,109,.75);outline-offset:3px}'
+        /* Primary action — unified geometry + layered shadow + shimmer sweep on hover.
+           Each game keeps its own background gradient (specificity wins) — we only
+           tune radius, padding, letter-spacing, shadow depth, and add the sweep. */
+        +'#startBtn{border-radius:14px!important;letter-spacing:.12em!important;text-transform:uppercase!important;position:relative!important;overflow:hidden!important;border:0!important;box-shadow:0 8px 24px -6px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.22)!important}'
+        +'#startBtn::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 35%,rgba(255,255,255,.22) 50%,transparent 65%);transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.8,.4,1);pointer-events:none}'
+        +'#startBtn:hover::after{transform:translateX(120%)}'
+        +'#startBtn:hover{filter:brightness(1.06);transform:translateY(-2px)}'
+        /* Replay / back-to-setup / modal primaries — calmer weight. */
+        +'.btn-replay,.btn-primary,.lp-room-modal .btn.primary{border-radius:12px!important;letter-spacing:.04em!important;font-weight:700!important;box-shadow:0 6px 18px -6px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.2)!important}'
+        +'.btn-replay:hover,.btn-primary:hover,.lp-room-modal .btn.primary:hover{filter:brightness(1.08);transform:translateY(-2px)}'
+        /* Ghost / cancel in modals */
+        +'.lp-room-modal .btn.ghost{border-radius:12px!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.12)!important}'
+        +'.lp-room-modal .btn.ghost:hover{background:rgba(255,255,255,.09)!important;border-color:rgba(255,255,255,.22)!important;transform:translateY(-1px)}'
+        /* Watch-Together button — crisper silver-cyan chip, match start geometry */
+        +'.lp-room-online-btn{padding:12px 18px!important;border-radius:14px!important;font-family:"Orbitron","Noto Sans KR",sans-serif!important;font-weight:700!important;letter-spacing:.08em!important;font-size:.82em!important;background:linear-gradient(145deg,rgba(0,217,255,.12),rgba(0,217,255,.04))!important;border:1.5px solid rgba(0,217,255,.4)!important;color:#00D9FF!important;box-shadow:0 4px 14px -4px rgba(0,217,255,.25)!important;position:relative;overflow:hidden}'
+        +'.lp-room-online-btn::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(0,217,255,.18) 50%,transparent 60%);transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.8,.4,1);pointer-events:none}'
+        +'.lp-room-online-btn:hover::after{transform:translateX(120%)}'
+        +'.lp-room-online-btn:hover{border-color:rgba(0,217,255,.75)!important;box-shadow:0 8px 22px -4px rgba(0,217,255,.4)!important;transform:translateY(-2px)}'
+        /* Share buttons — add soft depth + firmer hover */
+        +'.share-btn{padding:9px 14px!important;border-radius:12px!important;font-weight:700!important;letter-spacing:.015em!important;box-shadow:0 3px 10px -3px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.14)!important}'
+        +'.share-btn:hover{transform:translateY(-2px);filter:brightness(1.1);box-shadow:0 8px 22px -4px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.2)!important}'
+        /* Ladder 5-button toolbar */
+        +'.pab-btn{border-radius:12px!important;letter-spacing:.02em!important}'
+        +'.pab-btn:hover:not(:disabled){background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.28)!important;transform:translateY(-1px)!important;box-shadow:0 4px 12px -4px rgba(0,0,0,.35)!important}'
+        +'.pab-start{box-shadow:0 6px 18px -6px rgba(255,107,53,.55),inset 0 1px 0 rgba(255,255,255,.22)!important}'
+        /* Small chips / toggles — consistent radius + hover lift */
+        +'.opt-chip,.add-chip,.preset-btn{border-radius:999px!important;letter-spacing:.02em!important;transition:background .2s,border-color .2s,transform .15s,box-shadow .2s}'
+        +'.opt-chip:hover,.preset-btn:hover{transform:translateY(-1px);box-shadow:0 4px 10px -3px rgba(0,0,0,.3)}'
+        /* Home page CTAs */
+        +'.lp-site-footer a,.lp-pwa-btn,.auth-btn,.dl-cta{font-feature-settings:"tnum"}';
     document.head.appendChild(style);
 
     if(!isGamePage){
