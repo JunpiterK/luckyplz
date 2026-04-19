@@ -44,4 +44,16 @@
         rr.src='/js/recentResults.js';
         document.body.appendChild(rr);
     }
+
+    /* PWA install prompt — listens for beforeinstallprompt everywhere. */
+    var pwa=document.createElement('script');
+    pwa.src='/js/pwaInstall.js';
+    pwa.defer=true;
+    document.body.appendChild(pwa);
+
+    /* Analytics event helper — delegated listeners + LpRecent bridge. */
+    var tr=document.createElement('script');
+    tr.src='/js/lpTrack.js';
+    tr.defer=true;
+    document.body.appendChild(tr);
 })();

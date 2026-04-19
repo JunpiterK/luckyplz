@@ -5,6 +5,36 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'lotto-country-compare',
+        date: '2026-04-19',
+        readMinutes: 7,
+        coverEmoji: '🎱',
+        tags: { ko: ['로또', '국가별', '비교'], en: ['lotto', 'global', 'compare'] },
+        title: {
+            ko: '로또 번호 생성기 8개국 비교 — 어느 나라 로또가 제일 재밌을까',
+            en: 'Lotto Generator: 8 Countries Compared — Which Rules Are the Most Fun?',
+        },
+        excerpt: {
+            ko: '한국·미국·중국·일본·유럽 8개국 로또 규칙 비교. 당첨 확률·재미 포인트까지 정리.',
+            en: 'KR/US/CN/JP/EU lotto rules side-by-side — odds, structure, and which feels best to play.',
+        },
+    },
+    {
+        slug: 'team-split-fair',
+        date: '2026-04-19',
+        readMinutes: 6,
+        coverEmoji: '👥',
+        tags: { ko: ['팀 나누기', 'MT', '워크샵'], en: ['teams', 'workshop', 'fair-split'] },
+        title: {
+            ko: 'MT·워크샵 팀 나누기 공정하게 하는 3가지 방법',
+            en: 'Fair Team Split for MT/Workshops/Classes — 3 Methods That Actually Work',
+        },
+        excerpt: {
+            ko: '완전 랜덤·실력 균형·친밀도 분산 3가지 방식과 상황별 추천. 팀 갈등 줄이는 팁까지.',
+            en: 'Pure random, skill-balanced, or relationship-aware — pick the right method for your group.',
+        },
+    },
+    {
         slug: 'coffee-1-minute',
         date: '2026-04-19',
         readMinutes: 5,
