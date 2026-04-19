@@ -24,7 +24,7 @@
         +'<a href="/about/">About</a><span class="sep">·</span>'
         +'<a href="/privacy/">Privacy</a><span class="sep">·</span>'
         +'<a href="/blog/">Blog</a><span class="sep">·</span>'
-        +'<a href="mailto:coolk81@gmail.com">Contact</a>'
+        +'<a href="mailto:luckyplz.contact@gmail.com">Contact</a>'
         +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
     document.body.appendChild(f);
 })();
