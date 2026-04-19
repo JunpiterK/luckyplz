@@ -2581,9 +2581,9 @@ function init(){
         });
     });
     _waitForLpRoom(function(){
-        const code=window.LpRoom.detectGuestIntent();
-        if(!code)return;
-        window.LpRoom.showGuestJoinModal(code,{gameId:'team',onJoined:function(g){
+        const auto=window.LpRoom.detectAutoJoinParams();
+        if(!auto.code)return;
+        window.LpRoom.showGuestJoinModal(auto.code,{gameId:'team',prefillPin:auto.pin,prefillNick:auto.nickname,onJoined:function(g){
             window._lpGuest=g;
             const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
             document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
@@ -2633,6 +2633,12 @@ function init(){
     }
     window._lpBroadcastResult=function(){
         if(!window._lpHost||typeof teamResults==='undefined')return;
+        /* Team reveal is the "start" of the reveal animation — lock the
+           room from here so a latecomer can't jump in between reveal and
+           final display. */
+        if(typeof window._lpHost.lock==='function')window._lpHost.lock();
+        const bar=document.getElementById('lpRoomStatus');
+        if(bar&&bar._lpRefresh)bar._lpRefresh();
         const teams=teamResults.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,idx:m.origIdx||0}})});
         window._lpHost.broadcast('host:result',{game:'team',teams:teams});
     };

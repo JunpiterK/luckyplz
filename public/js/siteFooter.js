@@ -123,15 +123,16 @@
     sh.defer=true;
     document.body.appendChild(sh);
 
-    /* Online room (host/guest) — only useful on game pages, and needs
-       Supabase already in the page for the Realtime client. Query-string
-       version on the src is a defensive cache-bust: browsers on mobile
-       have been observed to ignore the no-cache header on /js/* when
-       loading dynamically-injected scripts, so pin a version we bump on
-       breaking changes to force a fresh fetch. */
-    if(isGamePage&&window.supabase){
+    /* Online room (host/guest) — loaded on game pages AND the home page
+       (so the home-page "Join Watch-Together" button can use LpRoom's
+       probeRoom + join modal). Requires Supabase to already be on the
+       page for the Realtime client.
+       Query-string version is a defensive cache-bust — mobile browsers
+       have been observed to ignore the no-cache header on /js/* for
+       dynamically-injected scripts. Bump this on breaking changes. */
+    if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=20260420c';
+        rr2.src='/js/lpRoom.js?v=20260420d';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }

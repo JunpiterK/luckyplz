@@ -144,10 +144,14 @@
         .game-card.coming-soon::before{display:none}
 
         /* Auth button */
-        .auth-bar{position:fixed;top:16px;right:16px;z-index:10}
-        .auth-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:rgba(255,255,255,0.7);font-size:0.8em;font-weight:700;cursor:pointer;backdrop-filter:blur(10px);transition:all 0.3s;text-decoration:none}
+        .auth-bar{position:fixed;top:16px;right:16px;z-index:10;display:flex;gap:8px}
+        .auth-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:rgba(255,255,255,0.7);font-size:0.8em;font-weight:700;cursor:pointer;backdrop-filter:blur(10px);transition:all 0.3s;text-decoration:none;font-family:inherit}
         .auth-btn:hover{background:rgba(255,255,255,0.1);color:#fff;border-color:var(--primary)}
         .auth-btn .auth-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-size:0.75em;font-weight:900;color:#fff}
+        /* Watch-Together entry — tinted cyan so it reads as a distinct
+           "live / realtime" action vs. the neutral Login chip. */
+        .lp-home-join-btn{background:rgba(0,217,255,.1);border-color:rgba(0,217,255,.4);color:#00D9FF}
+        .lp-home-join-btn:hover{background:rgba(0,217,255,.2);border-color:#00D9FF;color:#fff}
 
         /* Footer */
         .footer{margin-top:auto;padding-top:40px;text-align:center;color:rgba(255,255,255,0.25);font-size:0.8em}
@@ -208,7 +212,10 @@
 <p>Deciding who pays the bill (누가 계산하기), who drinks, who does chores (집안일 분담), who gets the penalty, random team splits for sports, choosing game order, office lottery, classroom name picker, party drinking game penalties.</p>
 </div>
     <div class="stars" id="stars"></div>
-    <div class="auth-bar"><a href="/auth/" class="auth-btn" id="authBtn">👤 <span id="authLabel">Login</span></a></div>
+    <div class="auth-bar">
+        <button class="auth-btn lp-home-join-btn" id="lpHomeJoinBtn" type="button" title="Watch Together">👥 <span id="lpHomeJoinLabel">Join Room</span></button>
+        <a href="/auth/" class="auth-btn" id="authBtn">👤 <span id="authLabel">Login</span></a>
+    </div>
     <div class="container">
         <header class="header">
             <div class="logo">Lucky Please!</div>
@@ -419,6 +426,14 @@ function applyLanguage() {
     const uc=document.getElementById('useCase');if(uc)uc.textContent=T('useCase');
     const authLabel = document.getElementById('authLabel');
     if (authLabel) authLabel.textContent = T('login');
+    /* Home-page Watch-Together entry — localized per current lang. */
+    const joinLbl = document.getElementById('lpHomeJoinLabel');
+    if (joinLbl) {
+        const map = {ko:'같이 보기',ja:'一緒に見る',zh:'一起看',es:'Ver juntos',de:'Zusammen ansehen',
+                     fr:'Regarder ensemble',pt:'Assistir juntos',ru:'Смотреть вместе',vi:'Xem cùng',
+                     id:'Nonton bareng',th:'ดูด้วยกัน',tr:'Birlikte izle',ar:'مشاهدة معًا',hi:'साथ देखें'};
+        joinLbl.textContent = map[currentLang] || 'Watch Together';
+    }
     document.documentElement.lang = currentLang === 'gb' ? 'en-GB' : currentLang;
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.lang === currentLang);
@@ -465,6 +480,35 @@ function init() {
         localStorage.setItem('luckyplz_lang', currentLang);
         applyLanguage();
     });
+
+    /* Watch-Together entry. lpRoom.js is loaded by siteFooter.js on
+       every page now, so we wait for it to land before opening the
+       modal. Handles the race where the button is clicked before
+       siteFooter has finished injecting lpRoom. */
+    const joinBtn = document.getElementById('lpHomeJoinBtn');
+    if (joinBtn) {
+        joinBtn.addEventListener('click', () => {
+            let tries = 0;
+            (function wait(){
+                if (window.LpRoom && typeof window.LpRoom.showHomeJoinModal === 'function') {
+                    window.LpRoom.showHomeJoinModal();
+                } else if (tries++ < 40) {
+                    setTimeout(wait, 100);
+                }
+            })();
+        });
+    }
+
+    /* If someone shares a plain /?room=XXX link (e.g. from a messaging
+       app that stripped the /games/... path), auto-open the home modal
+       so they aren't stuck on the home page wondering what happened. */
+    if (/[?&]room=[A-Z0-9]+/i.test(location.search)) {
+        setTimeout(() => {
+            if (window.LpRoom && typeof window.LpRoom.showHomeJoinModal === 'function') {
+                window.LpRoom.showHomeJoinModal();
+            }
+        }, 600);
+    }
 }
 
 init();

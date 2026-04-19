@@ -1114,12 +1114,16 @@ function init(){
     });
 
     /* Guest entry: URL has ?room=CODE → prompt for PIN+nickname, then
-       watch host's events. Guest UI is read-only (Start button hidden). */
+       watch host's events. Guest UI is read-only (Start button hidden).
+       Picks up &pin= / &nick= so a scanned QR with full credentials can
+       skip the manual prompt. */
     _waitForLpRoom(function(){
-        const code=window.LpRoom.detectGuestIntent();
-        if(!code)return;
-        window.LpRoom.showGuestJoinModal(code,{
+        const auto=window.LpRoom.detectAutoJoinParams();
+        if(!auto.code)return;
+        window.LpRoom.showGuestJoinModal(auto.code,{
             gameId:'roulette',
+            prefillPin:auto.pin,
+            prefillNick:auto.nickname,
             onJoined:function(g){
                 window._lpGuest=g;
                 _enableGuestMode(g);
@@ -1229,6 +1233,12 @@ function _wireLpSetupSync(){
 }
 function _lpBroadcastStart(){
     if(!window._lpHost)return;
+    /* Lock the room the moment the host starts — new guests from now on
+       get reason:'locked' so they can't slide in mid-spin and see a
+       partial animation with stale state. */
+    if(typeof window._lpHost.lock==='function')window._lpHost.lock();
+    const bar=document.getElementById('lpRoomStatus');
+    if(bar&&bar._lpRefresh)bar._lpRefresh();
     const payload={game:'roulette',players:_currentRoulettePlayers(),playerCount:playerCount,startedAt:Date.now(),angle:angle};
     window._lpHost.snapshot(payload);
     window._lpHost.broadcast('host:config',payload);

@@ -29,7 +29,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.20c';
+    const LP_ROOM_VERSION='2026.04.20d';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Debug log surfaced in the guest status bar (and console). Toggled
@@ -87,11 +87,20 @@
         const guestJoinCbs=[];
         const guestLeaveCbs=[];
         let subscribed=false;
+        /* Once the host presses the game's Start button, additional guest
+           join_requests are rejected with reason:'locked'. This gives
+           hosts a clear "no more spectators" checkpoint so late joiners
+           can't land mid-spin with half-initialized state. */
+        let locked=false;
 
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
             dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin));
+            if(locked){
+                chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'locked'}});
+                return;
+            }
             if(p.pin!==pin){
                 /* wrong PIN */
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'bad_pin'}});
@@ -120,6 +129,17 @@
             const info=guests.get(p.gid);
             guests.delete(p.gid);
             guestLeaveCbs.forEach(function(cb){try{cb({id:p.gid,nickname:info.nickname})}catch(e){}});
+        });
+
+        /* Lightweight discovery — the home-page join flow uses this to
+           look up which game a room code belongs to before redirecting
+           the user. No PIN required; response includes gameId + lock
+           state so the joiner can show a helpful error if the room is
+           already closed. */
+        chan.on('broadcast',{event:'guest:probe'},function(msg){
+            const p=msg.payload||{};
+            if(!p.pid)return;
+            chan.send({type:'broadcast',event:'host:probe_ack',payload:{pid:p.pid,gameId:gameId,hostName:hostName,locked:locked,guestCount:guests.size}});
         });
 
         let currentSnapshot=null;
@@ -156,6 +176,11 @@
             },
             onGuestJoin:function(cb){if(typeof cb==='function')guestJoinCbs.push(cb)},
             onGuestLeave:function(cb){if(typeof cb==='function')guestLeaveCbs.push(cb)},
+            /* Called by game code when the host clicks Start. After this
+               point, new guest:join_requests get reason:'locked'. */
+            lock:function(){locked=true;dbgLog('host: room LOCKED')},
+            unlock:function(){locked=false},
+            isLocked:function(){return locked},
             close:function(){
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
@@ -174,10 +199,41 @@
        dropped messages in the wild). Add any new host event name here
        when a game starts using it. */
     const KNOWN_HOST_EVENTS=[
-        'host:join_ack','host:snapshot','host:close',
+        'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action'
     ];
+
+    /* Look up a room without actually joining. Used by the home-page
+       join flow so the user can enter just a code and we can figure out
+       which game page to redirect them to. Times out at 4s if the host
+       doesn't respond (bad code, host offline, different channel). */
+    async function probeRoom(code){
+        code=String(code||'').trim().toUpperCase();
+        if(!code)return {ok:false,error:'no_code'};
+        const sb=await waitForSupabase();
+        const chan=sb.channel(channelName(code),{config:{broadcast:{self:false,ack:false}}});
+        const pid=shortId()+'-'+shortId();
+        let resolved=false;
+        return new Promise(function(resolve){
+            function done(result){
+                if(resolved)return;resolved=true;
+                try{sb.removeChannel(chan)}catch(e){}
+                resolve(result);
+            }
+            chan.on('broadcast',{event:'host:probe_ack'},function(msg){
+                const p=msg.payload||{};
+                if(p.pid!==pid)return;
+                done({ok:true,gameId:p.gameId,hostName:p.hostName,locked:!!p.locked,guestCount:p.guestCount||0});
+            });
+            chan.subscribe(function(status){
+                if(status==='SUBSCRIBED'){
+                    chan.send({type:'broadcast',event:'guest:probe',payload:{pid:pid}});
+                    setTimeout(function(){done({ok:false,error:'not_found'})},4000);
+                }
+            });
+        });
+    }
 
     async function guestJoin(opts){
         opts=opts||{};
@@ -331,6 +387,25 @@
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
            +'.lp-room-status.lp-room-flash{animation:lpRoomFlash .6s ease-out}'
            +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);transform:translateX(-50%) scale(1)}}'
+           +'.lp-room-status .lp-caret{margin-left:6px;cursor:pointer;opacity:.7;font-weight:700}'
+           +'.lp-room-status .lp-caret:hover{opacity:1}'
+           /* Expandable host-side guest list panel, pinned just under the
+              status pill. Scrollable so a packed room with 30+ spectators
+              doesn\'t push the toolbar off-screen. */
+           +'.lp-room-guest-panel{position:fixed;top:48px;left:50%;transform:translateX(-50%);background:rgba(14,14,28,.98);border:1px solid rgba(0,217,255,.3);color:#fff;border-radius:12px;padding:10px 14px;font-family:"Noto Sans KR",sans-serif;font-size:.82em;z-index:8999;max-width:92vw;min-width:220px;max-height:55vh;overflow:auto;box-shadow:0 16px 40px rgba(0,0,0,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}'
+           +'.lp-room-guest-panel .title{color:#00D9FF;font-size:.78em;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;font-weight:700}'
+           +'.lp-room-guest-panel .lock-note{color:#FFE66D;font-size:.82em;margin-bottom:8px;padding:6px 8px;border-radius:6px;background:rgba(255,230,109,.08);border:1px solid rgba(255,230,109,.25)}'
+           +'.lp-room-guest-panel .empty{color:rgba(255,255,255,.45);font-style:italic}'
+           +'.lp-room-guest-panel .rows{display:flex;flex-direction:column;gap:4px}'
+           +'.lp-room-guest-panel .row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04)}'
+           +'.lp-room-guest-panel .row .nick{font-weight:700}'
+           +'.lp-room-guest-panel .row .t{opacity:.5;font-size:.84em;font-variant-numeric:tabular-nums}'
+           /* Join/leave toast — tiny banner that drops in near the status
+              pill so the host notices a new spectator. */
+           +'.lp-room-join-toast{position:fixed;top:52px;left:50%;transform:translate(-50%,0);background:rgba(0,217,255,.95);color:#001220;font-family:"Noto Sans KR",sans-serif;font-weight:700;font-size:.82em;padding:8px 16px;border-radius:999px;z-index:9100;box-shadow:0 6px 20px rgba(0,217,255,.35);animation:lpRoomToastIn .3s ease}'
+           +'.lp-room-join-toast.leave{background:rgba(255,107,139,.95);color:#1a0004;box-shadow:0 6px 20px rgba(255,107,139,.35)}'
+           +'.lp-room-join-toast.out{opacity:0;transform:translate(-50%,-10px);transition:opacity .6s,transform .6s}'
+           +'@keyframes lpRoomToastIn{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}'
            +'.lp-room-status .x{margin-left:6px;cursor:pointer;opacity:.5;font-weight:700}'
            +'.lp-room-status .x:hover{opacity:1}'
            /* QR in share modal */
@@ -569,18 +644,77 @@
         bar=document.createElement('div');
         bar.id='lpRoomStatus';
         bar.className='lp-room-status';
+        const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
+
         function refresh(){
-            const count=room.guests().length;
-            const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-            const lbl=lang==='ko'?`👥 ${room.code} · ${count}명 같이 보는중`:`👥 ${room.code} · ${count} watching`;
-            bar.innerHTML='<span class="dot"></span><span>'+lbl+'</span><span class="x" id="lpRoomStatusX" title="'+(lang==='ko'?'방 닫기':'End room')+'">×</span>';
+            const gs=room.guests();
+            const count=gs.length;
+            const lockFlag=room.isLocked&&room.isLocked()?' 🔒':'';
+            const lbl=lang==='ko'?`👥 ${room.code}${lockFlag} · ${count}명 관전 중`:`👥 ${room.code}${lockFlag} · ${count} watching`;
+            const caret=count>0?'<span class="lp-caret" id="lpRoomStatusCaret" title="'+(lang==='ko'?'접속자 목록':'Guest list')+'">▾</span>':'';
+            bar.innerHTML='<span class="dot"></span><span>'+lbl+'</span>'+caret+'<span class="x" id="lpRoomStatusX" title="'+(lang==='ko'?'방 닫기':'End room')+'">×</span>';
             const x=document.getElementById('lpRoomStatusX');
-            if(x)x.addEventListener('click',function(){room.close();bar.remove()});
+            if(x)x.addEventListener('click',function(e){e.stopPropagation();room.close();bar.remove();const panel=document.getElementById('lpRoomGuestPanel');if(panel)panel.remove()});
+            const c=document.getElementById('lpRoomStatusCaret');
+            if(c)c.addEventListener('click',function(e){e.stopPropagation();toggleGuestPanel()});
+            /* Auto-refresh the expanded list if it's open. */
+            if(document.getElementById('lpRoomGuestPanel'))renderGuestPanel();
         }
+
+        function toggleGuestPanel(){
+            const existing=document.getElementById('lpRoomGuestPanel');
+            if(existing){existing.remove();return}
+            const panel=document.createElement('div');
+            panel.id='lpRoomGuestPanel';
+            panel.className='lp-room-guest-panel';
+            document.body.appendChild(panel);
+            renderGuestPanel();
+        }
+        function renderGuestPanel(){
+            const panel=document.getElementById('lpRoomGuestPanel');
+            if(!panel)return;
+            const gs=room.guests().slice().sort(function(a,b){return a.joinedAt-b.joinedAt});
+            const title=lang==='ko'?'👀 접속자 ('+gs.length+'명)':'👀 Guests ('+gs.length+')';
+            const lockNote=(room.isLocked&&room.isLocked())?(lang==='ko'?'<div class="lock-note">🔒 게임 시작됨 — 추가 참가 차단</div>':'<div class="lock-note">🔒 Game started — no new joiners</div>'):'';
+            if(!gs.length){
+                panel.innerHTML='<div class="title">'+title+'</div>'+lockNote+'<div class="empty">'+(lang==='ko'?'아직 접속자가 없어요':'No guests yet')+'</div>';
+                return;
+            }
+            const rows=gs.map(function(g){
+                const when=new Date(g.joinedAt);
+                const hh=String(when.getHours()).padStart(2,'0');
+                const mm=String(when.getMinutes()).padStart(2,'0');
+                return '<div class="row"><span class="nick">'+escapeHtml(g.nickname)+'</span><span class="t">'+hh+':'+mm+'</span></div>';
+            }).join('');
+            panel.innerHTML='<div class="title">'+title+'</div>'+lockNote+'<div class="rows">'+rows+'</div>';
+        }
+
         refresh();
-        room.onGuestJoin(refresh);
-        room.onGuestLeave(refresh);
+        room.onGuestJoin(function(info){
+            refresh();
+            /* Brief toast-like inline announcement so the host notices a
+               new joiner even when the list is collapsed. */
+            const who=(info&&info.nickname)||(lang==='ko'?'새 접속자':'new guest');
+            const toast=document.createElement('div');
+            toast.className='lp-room-join-toast';
+            toast.textContent=(lang==='ko'?'➕ ':'')+who+(lang==='ko'?' 님 입장':' joined');
+            document.body.appendChild(toast);
+            setTimeout(function(){toast.classList.add('out')},2400);
+            setTimeout(function(){toast.remove()},3000);
+        });
+        room.onGuestLeave(function(info){
+            refresh();
+            const who=(info&&info.nickname)||(lang==='ko'?'접속자':'guest');
+            const toast=document.createElement('div');
+            toast.className='lp-room-join-toast leave';
+            toast.textContent=(lang==='ko'?'➖ ':'')+who+(lang==='ko'?' 님 나감':' left');
+            document.body.appendChild(toast);
+            setTimeout(function(){toast.classList.add('out')},2400);
+            setTimeout(function(){toast.remove()},3000);
+        });
         document.body.appendChild(bar);
+        /* Expose a refresh hook so game code can redraw after lock(). */
+        bar._lpRefresh=refresh;
     }
 
     function showGuestJoinModal(code,opts){
@@ -605,6 +739,12 @@
         const nick=document.getElementById('lpGuestNick');
         const err=document.getElementById('lpGuestErr');
         const saved=localStorage.getItem('luckyplz_nick');if(saved)nick.value=saved;
+        /* Accept prefills from URL params / home-page flow. If both PIN
+           and nickname are prefilled, auto-submit after a short delay so
+           users coming from a scanned QR with full credentials don't see
+           a redundant "press Join" step. */
+        if(opts.prefillPin)pin.value=String(opts.prefillPin).slice(0,4);
+        if(opts.prefillNick)nick.value=String(opts.prefillNick).slice(0,20);
         setTimeout(function(){(nick.value?pin:nick).focus()},50);
         pin.addEventListener('input',function(){pin.value=pin.value.replace(/\D/g,'').slice(0,4)});
         pin.addEventListener('keydown',function(e){if(e.key==='Enter')doJoin()});
@@ -622,6 +762,7 @@
                 err.textContent=(g.error==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
                     :(g.error==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
                     :(g.error==='wrong_game')?_t('다른 게임 방이에요','That room is for a different game')
+                    :(g.error==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
                     :_t('입장 실패','Join failed');
                 return;
             }
@@ -630,6 +771,10 @@
             if(opts.onJoined)opts.onJoined(g);
         }
         document.getElementById('lpGuestJoin').addEventListener('click',doJoin);
+        /* Auto-submit when both credentials arrived via prefill. */
+        if(opts.prefillPin&&opts.prefillNick&&pin.value.length===4&&nick.value.trim()){
+            setTimeout(doJoin,250);
+        }
     }
 
     function showGuestStatus(g){
@@ -756,11 +901,198 @@
     const langObs=new MutationObserver(localizeOnlineBtn);
     langObs.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
 
+    /* ============ HOME-PAGE JOIN FLOW ============
+       Single entry the home page exposes via a "👥 같이 보기 참여"
+       button. Collects a room code (typed, pasted link, or scanned QR)
+       + PIN + nickname, probes the host to learn which game to open,
+       then redirects the user into the correct /games/<id>/?room= URL
+       with pin/nick prefills so the game page can auto-join without a
+       redundant second prompt. */
+    function showHomeJoinModal(opts){
+        opts=opts||{};
+        injectStyles();
+        const ko=_t(true,false);
+        const lbl={
+            title:_t('👥 같이 보기 참여','👥 Join Watch-Together'),
+            sub:_t('호스트가 알려준 방에 참가하세요. QR 코드 스캔, 공유 링크, 방 코드 중 하나를 사용할 수 있어요.','Join a room shared by the host. Use the QR code, a shared link, or the room code.'),
+            qrBtn:_t('📷 QR 카메라로 스캔','📷 Scan QR with camera'),
+            linkLabel:_t('공유 링크 붙여넣기','Paste shared link'),
+            linkPh:_t('https://luckyplz.com/games/.../?room=...','https://luckyplz.com/games/.../?room=...'),
+            codeLabel:_t('또는 방 코드','Or room code'),
+            codePh:_t('예: ABCD12','e.g. ABCD12'),
+            nickLabel:_t('닉네임','Nickname'),
+            nickPh:_t('나','Your name'),
+            pinLabel:_t('비밀번호 4자리','4-digit PIN'),
+            cancel:_t('취소','Cancel'),
+            join:_t('참가하기','Join'),
+            connecting:_t('방 확인 중…','Looking up room…')
+        };
+        mountBackdrop(
+            '<h3>'+lbl.title+'</h3>'
+           +'<div class="sub">'+lbl.sub+'</div>'
+           +'<button class="btn primary" id="lpHomeQrBtn" style="width:100%;margin-top:4px">'+lbl.qrBtn+'</button>'
+           +'<div id="lpHomeQrWrap" style="display:none;margin-top:12px;background:#000;border-radius:10px;overflow:hidden;position:relative"><video id="lpHomeQrVid" playsinline autoplay muted style="width:100%;display:block;aspect-ratio:1/1;object-fit:cover"></video><canvas id="lpHomeQrCv" style="display:none"></canvas><button id="lpHomeQrStop" style="position:absolute;top:6px;right:6px;padding:6px 10px;border:0;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-weight:700;cursor:pointer">×</button></div>'
+           +'<label>'+lbl.linkLabel+'</label>'
+           +'<input id="lpHomeLink" placeholder="'+lbl.linkPh+'" autocomplete="off" style="font-size:.82em">'
+           +'<label>'+lbl.codeLabel+'</label>'
+           +'<input id="lpHomeCode" class="pin-input" style="letter-spacing:4px" placeholder="'+lbl.codePh+'" autocomplete="off" maxlength="10">'
+           +'<label>'+lbl.nickLabel+'</label>'
+           +'<input id="lpHomeNick" maxlength="20" placeholder="'+lbl.nickPh+'" autocomplete="off">'
+           +'<label>'+lbl.pinLabel+'</label>'
+           +'<input id="lpHomePin" class="pin-input" type="tel" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">'
+           +'<div class="lp-room-error" id="lpHomeErr"></div>'
+           +'<div class="row">'
+           +'<button class="btn ghost" id="lpHomeCancel">'+lbl.cancel+'</button>'
+           +'<button class="btn primary" id="lpHomeJoin">'+lbl.join+'</button>'
+           +'</div>'
+        );
+
+        const codeIn=document.getElementById('lpHomeCode');
+        const linkIn=document.getElementById('lpHomeLink');
+        const nickIn=document.getElementById('lpHomeNick');
+        const pinIn=document.getElementById('lpHomePin');
+        const err=document.getElementById('lpHomeErr');
+        const saved=localStorage.getItem('luckyplz_nick');if(saved)nickIn.value=saved;
+
+        codeIn.addEventListener('input',function(){
+            codeIn.value=codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,10);
+        });
+        linkIn.addEventListener('input',function(){
+            const c=parseRoomInput(linkIn.value);
+            if(c)codeIn.value=c;
+        });
+        pinIn.addEventListener('input',function(){pinIn.value=pinIn.value.replace(/\D/g,'').slice(0,4)});
+        pinIn.addEventListener('keydown',function(e){if(e.key==='Enter')doJoin()});
+
+        document.getElementById('lpHomeCancel').addEventListener('click',function(){
+            stopQr();closeBackdrop();
+            if(opts.onCancel)opts.onCancel();
+        });
+        document.getElementById('lpHomeQrBtn').addEventListener('click',startQr);
+        document.getElementById('lpHomeQrStop').addEventListener('click',stopQr);
+
+        let qrStream=null,qrRaf=null,qrDetector=null;
+        async function startQr(){
+            const wrap=document.getElementById('lpHomeQrWrap');
+            wrap.style.display='block';
+            if(!('mediaDevices' in navigator)||!navigator.mediaDevices.getUserMedia){
+                err.textContent=_t('이 브라우저는 카메라 API를 지원하지 않아요','Camera API unsupported in this browser');return;
+            }
+            try{
+                qrStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+                const vid=document.getElementById('lpHomeQrVid');
+                vid.srcObject=qrStream;
+                await vid.play().catch(function(){});
+                if('BarcodeDetector' in window){
+                    qrDetector=new window.BarcodeDetector({formats:['qr_code']});
+                    scanLoop();
+                }else{
+                    err.textContent=_t('이 브라우저는 QR 자동 스캔을 지원하지 않아 링크를 붙여넣어 주세요','QR auto-scan not supported — paste the link instead');
+                }
+            }catch(e){
+                err.textContent=_t('카메라 접근이 거부되었어요','Camera access denied');
+                wrap.style.display='none';
+            }
+        }
+        function scanLoop(){
+            const vid=document.getElementById('lpHomeQrVid');
+            if(!vid||!qrDetector||!qrStream)return;
+            qrDetector.detect(vid).then(function(codes){
+                if(codes&&codes.length){
+                    const raw=codes[0].rawValue||'';
+                    const c=parseRoomInput(raw);
+                    if(c){
+                        codeIn.value=c;
+                        /* If scanned URL has pin/nick params, fill them too. */
+                        try{
+                            const u=new URL(raw,location.origin);
+                            const p=u.searchParams.get('pin');if(p)pinIn.value=p.slice(0,4);
+                            const n=u.searchParams.get('nick');if(n&&!nickIn.value)nickIn.value=n.slice(0,20);
+                        }catch(_){}
+                        stopQr();
+                        setTimeout(function(){pinIn.focus()},50);
+                        return;
+                    }
+                }
+                qrRaf=requestAnimationFrame(scanLoop);
+            }).catch(function(){qrRaf=requestAnimationFrame(scanLoop)});
+        }
+        function stopQr(){
+            const wrap=document.getElementById('lpHomeQrWrap');
+            if(wrap)wrap.style.display='none';
+            if(qrRaf){cancelAnimationFrame(qrRaf);qrRaf=null}
+            if(qrStream){qrStream.getTracks().forEach(function(t){try{t.stop()}catch(_){}});qrStream=null}
+            qrDetector=null;
+        }
+
+        async function doJoin(){
+            err.textContent='';
+            const code=parseRoomInput(codeIn.value||linkIn.value);
+            if(!code){err.textContent=_t('방 코드 또는 링크를 입력해주세요','Enter a room code or link');return}
+            if(!nickIn.value.trim()){err.textContent=_t('닉네임을 입력해주세요','Enter a nickname');return}
+            if(pinIn.value.length!==4){err.textContent=_t('비밀번호 4자리','4 digits');return}
+
+            localStorage.setItem('luckyplz_nick',nickIn.value.trim());
+            err.textContent=lbl.connecting;
+            const probe=await probeRoom(code);
+            if(!probe.ok){
+                err.textContent=_t('방을 찾을 수 없어요. 코드 확인!','Room not found — check the code');return;
+            }
+            if(probe.locked){
+                err.textContent=_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners');return;
+            }
+            stopQr();
+            /* Redirect into the correct game page with credentials as URL
+               params so the game page can auto-join without a second
+               prompt. The game page reads ?room / ?pin / ?nick. */
+            const target='/games/'+encodeURIComponent(probe.gameId||'roulette')+'/?room='+encodeURIComponent(code)
+                +'&pin='+encodeURIComponent(pinIn.value)
+                +'&nick='+encodeURIComponent(nickIn.value.trim());
+            location.href=target;
+        }
+        document.getElementById('lpHomeJoin').addEventListener('click',doJoin);
+
+        /* If the page URL already has ?room=, prefill it so the user
+           doesn't need to re-enter. (Handy when home-page is shared with
+           the room query.) */
+        const auto=detectAutoJoinParams();
+        if(auto.code){codeIn.value=auto.code}
+        if(auto.pin){pinIn.value=String(auto.pin).slice(0,4)}
+        if(auto.nickname&&!nickIn.value){nickIn.value=String(auto.nickname).slice(0,20)}
+        setTimeout(function(){(codeIn.value?(nickIn.value?pinIn:nickIn):codeIn).focus()},60);
+    }
+
+    /* Extract a room code from various inputs the home-page modal will
+       accept: a full shared URL, a "luckyplz.com/games/.../?room=ABC"
+       fragment, or just the 6-character code. Returns uppercase code or
+       null. Used by the home-page join flow. */
+    function parseRoomInput(raw){
+        if(!raw)return null;
+        const s=String(raw).trim();
+        const m=s.match(/[?&]room=([A-Za-z0-9]+)/i);
+        if(m)return m[1].toUpperCase();
+        const code=s.toUpperCase().replace(/[^A-Z0-9]/g,'');
+        if(code.length>=4&&code.length<=10)return code;
+        return null;
+    }
+
+    /* Read PIN + nickname from URL params so a scanned QR with full
+       credentials (or a one-click "auto join" link) can skip the prompt.
+       Used by game pages when they see ?room=XXX. */
+    function detectAutoJoinParams(){
+        const q=new URLSearchParams(location.search);
+        return {code:q.get('room'),pin:q.get('pin'),nickname:q.get('nick')};
+    }
+
     window.LpRoom={
         hostCreate:hostCreate,
         guestJoin:guestJoin,
+        probeRoom:probeRoom,
+        parseRoomInput:parseRoomInput,
+        detectAutoJoinParams:detectAutoJoinParams,
         showHostModal:showHostModal,
         showGuestJoinModal:showGuestJoinModal,
+        showHomeJoinModal:showHomeJoinModal,
         detectGuestIntent:detectGuestIntent,
         localizeOnlineBtn:localizeOnlineBtn,
         _injectStyles:injectStyles
