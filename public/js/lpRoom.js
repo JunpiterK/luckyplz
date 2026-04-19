@@ -295,6 +295,8 @@
            +'.lp-room-status{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,217,255,.12);border:1px solid rgba(0,217,255,.4);color:#00D9FF;padding:6px 14px;border-radius:999px;font-family:"Noto Sans KR",sans-serif;font-size:.78em;font-weight:700;z-index:9000;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;gap:8px;max-width:92vw}'
            +'.lp-room-status .dot{width:8px;height:8px;border-radius:50%;background:#00D9FF;animation:lpRoomPulse 1.6s ease-in-out infinite}'
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
+           +'.lp-room-status.lp-room-flash{animation:lpRoomFlash .6s ease-out}'
+           +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);transform:translateX(-50%) scale(1)}}'
            +'.lp-room-status .x{margin-left:6px;cursor:pointer;opacity:.5;font-weight:700}'
            +'.lp-room-status .x:hover{opacity:1}'
            /* QR in share modal */
@@ -604,9 +606,55 @@
         bar.id='lpRoomStatus';
         bar.className='lp-room-status';
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-        const lbl=lang==='ko'?`👀 ${g.hostName} 님의 방 관전 중 · ${g.code}`:`👀 Watching ${g.hostName}'s room · ${g.code}`;
-        bar.innerHTML='<span class="dot"></span><span>'+lbl+'</span>';
+        function baseLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
+        const waitingMsg=lang==='ko'?'· 호스트 설정 대기 중…':'· waiting for host…';
+        bar.innerHTML='<span class="dot"></span><span id="lpRoomStatusMain">'+baseLbl()+' '+waitingMsg+'</span>';
         document.body.appendChild(bar);
+
+        /* Wire a live-counter so the user can visually verify the guest is
+           actually receiving events from the host. Without this the guest
+           silently gets config updates and — if the host hasn't customized
+           anything — the visible setup screen looks identical to the guest's
+           own defaults, making sync indistinguishable from no-sync. */
+        let eventCount=0;
+        function label(ev){
+            if(lang==='ko')return {
+                'host:config':'설정 동기화',
+                'host:snapshot':'설정 동기화',
+                'host:start':'게임 시작',
+                'host:spin_start':'스핀 시작',
+                'host:result':'결과 도착',
+                'host:action':'액션'
+            }[ev]||ev;
+            return {
+                'host:config':'synced',
+                'host:snapshot':'synced',
+                'host:start':'game started',
+                'host:spin_start':'spinning',
+                'host:result':'result in',
+                'host:action':'action'
+            }[ev]||ev;
+        }
+        g.on('*',function(ev,payload){
+            if(ev==='host:tick')return; /* too chatty to show */
+            if(ev[0]==='_')return; /* internal */
+            eventCount++;
+            const main=document.getElementById('lpRoomStatusMain');
+            if(!main)return;
+            let detail=label(ev);
+            if(ev==='host:config'||ev==='host:snapshot'){
+                const n=(payload&&Array.isArray(payload.players))?payload.players.length
+                    :(payload&&Array.isArray(payload.memberNames))?payload.memberNames.length
+                    :(payload&&Array.isArray(payload.names))?payload.names.length:null;
+                if(n)detail+=' · '+n+(lang==='ko'?'명':' entries');
+            }
+            main.textContent=baseLbl()+' · '+detail+' ('+eventCount+')';
+            /* Flash the status bar so the user notices the update even
+               when the synced content looks identical to local defaults. */
+            bar.classList.remove('lp-room-flash');
+            void bar.offsetWidth; /* reflow */
+            bar.classList.add('lp-room-flash');
+        });
     }
 
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}

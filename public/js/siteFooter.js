@@ -124,10 +124,14 @@
     document.body.appendChild(sh);
 
     /* Online room (host/guest) — only useful on game pages, and needs
-       Supabase already in the page for the Realtime client. */
+       Supabase already in the page for the Realtime client. Query-string
+       version on the src is a defensive cache-bust: browsers on mobile
+       have been observed to ignore the no-cache header on /js/* when
+       loading dynamically-injected scripts, so pin a version we bump on
+       breaking changes to force a fresh fetch. */
     if(isGamePage&&window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js';
+        rr2.src='/js/lpRoom.js?v=20260420a';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
