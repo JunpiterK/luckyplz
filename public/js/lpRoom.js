@@ -23,6 +23,15 @@
     guest.on('host:result', payload => ...);
 */
 (function(){
+    /* Bump this whenever the wire protocol or guest UI semantics change.
+       Surfaced in the guest status bar so a user screenshotting a bug
+       can tell at a glance whether they're on the latest build — if the
+       status bar still says "Watching Host's room" (old label) or the
+       version tag is missing, their browser is serving a stale copy
+       from a legacy service-worker cache. */
+    const LP_ROOM_VERSION='2026.04.20b';
+    try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
+
     const CODE_ALPHABET='23456789ABCDEFGHJKMNPQRSTVWXYZ'; // no 0/O/1/I/L
     function genCode(){
         let s='';
@@ -608,7 +617,11 @@
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
         function baseLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
         const waitingMsg=lang==='ko'?'· 호스트 설정 대기 중…':'· waiting for host…';
-        bar.innerHTML='<span class="dot"></span><span id="lpRoomStatusMain">'+baseLbl()+' '+waitingMsg+'</span>';
+        /* v-tag at the end lets users confirm at a glance whether the
+           page loaded the latest lpRoom build. A stale cached copy
+           won't have this suffix in its status bar. */
+        const vTag=' · v'+LP_ROOM_VERSION;
+        bar.innerHTML='<span class="dot"></span><span id="lpRoomStatusMain">'+baseLbl()+' '+waitingMsg+'</span><span style="opacity:.35;font-size:.75em;margin-left:6px">'+vTag+'</span>';
         document.body.appendChild(bar);
 
         /* Wire a live-counter so the user can visually verify the guest is

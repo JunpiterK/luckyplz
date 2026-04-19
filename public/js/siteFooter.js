@@ -131,7 +131,7 @@
        breaking changes to force a fresh fetch. */
     if(isGamePage&&window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=20260420a';
+        rr2.src='/js/lpRoom.js?v=20260420b';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
