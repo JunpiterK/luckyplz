@@ -762,8 +762,11 @@ function cnColor(){return'#D4232A'}
 function usColor(){return'#FFFFFF'}
 /* UK: 1-9 white, 10-19 blue, 20-29 pink, 30-39 green, 40-49 yellow, 50-59 purple */
 function gbColor(n){if(n<=9)return'#FFFFFF';if(n<=19)return'#0066CC';if(n<=29)return'#FF69B4';if(n<=39)return'#00AA44';if(n<=49)return'#FFD700';return'#9966CC'}
-/* Japan: similar range coloring */
-function jpColor(n){if(n<=9)return'#FFFFFF';if(n<=19)return'#FF6B6B';if(n<=29)return'#4ECDC4';if(n<=39)return'#FFD93D';return'#6C5CE7'}
+/* Japan Loto (all variants): the televised Mizuho draw uses uniform
+   white balls with black numerals — no banded color scheme. The
+   bonus ball is differentiated by draw order, not color. We render
+   dark text (mainTextDark:true) for contrast on the white ball. */
+function jpColor(){return'#FFFFFF'}
 /* Generic: colorful by range */
 function genericColor(n){return BALL_COLORS[(n-1)%BALL_COLORS.length]}
 
@@ -771,7 +774,9 @@ const LOTTO_PRESETS=[
     {id:'kr',flag:'🇰🇷',name:'Lotto 6/45',start:1,end:45,draw:6,mainColorFn:krColor,langs:['ko']},
     {id:'us',flag:'🇺🇸',name:'Powerball',start:1,end:69,draw:5,mainColorFn:usColor,mainTextDark:true,bonus:{start:1,end:26,draw:1,label:'Powerball',color:'#E22D36'},separatePool:true,langs:['en']},
     {id:'gb',flag:'🇬🇧',name:'UK Lotto',start:1,end:59,draw:6,mainColorFn:gbColor,langs:['gb']},
-    {id:'jp',flag:'🇯🇵',name:'Loto 6',start:1,end:43,draw:6,mainColorFn:jpColor,langs:['ja']},
+    {id:'jp6',flag:'🇯🇵',name:'\u30ED\u30C86',start:1,end:43,draw:6,mainColorFn:jpColor,mainTextDark:true,bonus:{start:1,end:43,draw:1,label:'\u30DC\u30FC\u30CA\u30B9\u6570\u5B57',color:'#FFD700'},samePoolBonus:true,langs:['ja']},
+    {id:'jp7',flag:'🇯🇵',name:'\u30ED\u30C87',start:1,end:37,draw:7,mainColorFn:jpColor,mainTextDark:true,bonus:{start:1,end:37,draw:2,label:'\u30DC\u30FC\u30CA\u30B9\u6570\u5B57',color:'#FFD700'},samePoolBonus:true,langs:['ja']},
+    {id:'jpm',flag:'🇯🇵',name:'\u30DF\u30CB\u30ED\u30C8',start:1,end:31,draw:5,mainColorFn:jpColor,mainTextDark:true,bonus:{start:1,end:31,draw:1,label:'\u30DC\u30FC\u30CA\u30B9\u6570\u5B57',color:'#FFD700'},samePoolBonus:true,langs:['ja']},
     {id:'cn',flag:'🇨🇳',name:'双色球',start:1,end:33,draw:6,mainColorFn:cnColor,bonus:{start:1,end:16,draw:1,label:'蓝球',color:'#1A56DB'},separatePool:true,langs:['zh']},
     {id:'es',flag:'🇪🇸',name:'La Primitiva',start:1,end:49,draw:6,mainColorFn:genericColor,langs:['es']},
     {id:'de',flag:'🇩🇪',name:'Lotto 6/49',start:1,end:49,draw:6,mainColorFn:genericColor,bonus:{start:0,end:9,draw:1,label:'Superzahl',color:'#FFD700'},separatePool:true,langs:['de']},
@@ -1056,12 +1061,16 @@ function applyLanguage(){
 
 function renderLottoPresets(){
     const row=document.getElementById('lottoPresetRow');
-    // Find which preset matches current language
-    const defaultPreset=LOTTO_PRESETS.find(p=>p.langs.includes(lang))||LOTTO_PRESETS[0];
-    // Sort: matching language first, then rest
-    const sorted=[defaultPreset,...LOTTO_PRESETS.filter(p=>p!==defaultPreset)];
+    /* Show only presets matching the visitor's language. Users pick
+       a country on the home page, so forcing them to scan all 16
+       global options once they're inside the game just adds choice
+       fatigue. Fall back to 'en' presets if the current lang has
+       none configured so nobody gets stuck with a blank selector. */
+    let matches=LOTTO_PRESETS.filter(p=>p.langs.includes(lang));
+    if(matches.length===0)matches=LOTTO_PRESETS.filter(p=>p.langs.includes('en'));
+    const defaultPreset=matches[0]||LOTTO_PRESETS[0];
 
-    row.innerHTML=sorted.map(p=>{
+    row.innerHTML=matches.map(p=>{
         const sel=p===defaultPreset?'selected':'';
         return `<div class="opt-chip ${sel}" data-preset="${p.id}" style="font-size:.72em;padding:5px 10px">${p.flag} ${p.name}<span style="color:rgba(255,255,255,.35);margin-left:4px;font-size:.85em">${p.start}-${p.end}/${p.draw}</span></div>`;
     }).join('');
@@ -1743,7 +1752,7 @@ function _buildPoolConfig(){
         const bRange=bonusConfig.end-bonusConfig.start+1;
         for(let i=0;i<bRange;i++){bonusNums.push(bonusConfig.start+i);bonusColors.push(bonusClr)}
     }
-    return {allNums,mainColors,count,bonusNums,bonusColors,isSeparatePool:!!(activePreset&&activePreset.separatePool&&bonusConfig)};
+    return {allNums,mainColors,count,bonusNums,bonusColors,isSeparatePool:!!(activePreset&&activePreset.separatePool&&bonusConfig),samePoolBonus:!!(activePreset&&activePreset.samePoolBonus&&bonusConfig)};
 }
 
 function _loadMachineForSet(cfg){
@@ -1752,6 +1761,10 @@ function _loadMachineForSet(cfg){
     try{balls.forEach(b=>{if(b.body)Composite.remove(world,b.body)});}catch(e){}
     balls=[];
     if(cfg.isSeparatePool){
+        createBalls(cfg.allNums,cfg.mainColors);
+    }else if(cfg.samePoolBonus){
+        /* Japanese Loto: bonus balls are drawn from the remaining
+           main pool (no duplicate bonus range in the drum). */
         createBalls(cfg.allNums,cfg.mainColors);
     }else{
         const allLabels=[...cfg.allNums,...cfg.bonusNums];
@@ -1823,6 +1836,10 @@ function beginDrawing(){
     currentSet++;
     if(cfg.isSeparatePool){
         startSeparatePoolDraw(cfg.allNums,cfg.mainColors,cfg.count,cfg.bonusNums,cfg.bonusColors,bonusConfig.draw);
+    }else if(cfg.samePoolBonus){
+        /* Bonus comes from balls still in the drum after the main
+           count, so the bonus pool size is (mainPool - mainDraw). */
+        startStandardDraw(cfg.allNums.length,cfg.count,cfg.allNums.length-cfg.count,bonusConfig.draw);
     }else{
         startStandardDraw(cfg.allNums.length,cfg.count,cfg.bonusNums.length,bonusConfig?bonusConfig.draw:0);
     }
@@ -1848,7 +1865,11 @@ function instantDraw(cfg){
 
         let bonusBalls=[];
         if(bonusConfig&&cfg.bonusNums.length){
-            const bonusPool=[...cfg.bonusNums];
+            /* Same-pool bonus (Japan Loto style): draw from what's
+               left after main picks so a number can't repeat. */
+            const bonusPool=cfg.samePoolBonus
+                ?cfg.allNums.filter(n=>!mainPicks.includes(n))
+                :[...cfg.bonusNums];
             for(let i=bonusPool.length-1;i>0;i--){
                 const j=Math.floor(Math.random()*(i+1));
                 [bonusPool[i],bonusPool[j]]=[bonusPool[j],bonusPool[i]];
