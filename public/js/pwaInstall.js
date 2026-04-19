@@ -12,7 +12,13 @@
    - Dismissal is remembered in localStorage for 30 days (avoid nagging).
    - Auto-hides after native install dialog is accepted. */
 (function(){
-    const COOLDOWN_DAYS=30;
+    /* 7 days instead of the original 30. On Android Chrome the prompt
+       felt "random" to real users — Chrome's own engagement heuristic
+       already skips sessions where the user isn't engaged enough, so
+       stacking another 30-day dismiss cooldown on top made it feel
+       broken. 7 days = once a week max if they keep dismissing, which
+       is still polite but recoverable. */
+    const COOLDOWN_DAYS=7;
     const KEY='luckyplz_pwa_dismissed_at';
 
     /* Already in PWA mode? Skip. */
@@ -94,16 +100,40 @@
     function onPrompt(e){
         /* iOS Safari doesn't fire this event; we skip iOS entirely — Apple
            doesn't expose a programmatic install flow. */
-        e.preventDefault();
+        try{e.preventDefault&&e.preventDefault()}catch(_){}
         deferredPrompt=e;
         if(isStandalone()||inCooldown())return;
         injectStyles();
         createBtn().classList.add('show');
     }
 
+    /* Two-way hook-up: (a) pick up any event that siteFooter.js already
+       captured before this script loaded, (b) also register a live
+       listener for events that fire AFTER this script is live. Without
+       (a) we'd silently miss the prompt when Chrome fires it during
+       the window between siteFooter's early-capture and the defer
+       injection of pwaInstall.js — which is exactly the "sometimes it
+       shows, sometimes it doesn't" bug users reported on Android. */
+    if(window._lpDeferredPrompt){
+        onPrompt(window._lpDeferredPrompt);
+    }
     window.addEventListener('beforeinstallprompt',onPrompt);
     window.addEventListener('appinstalled',function(){
         if(btn)btn.classList.remove('show');
         deferredPrompt=null;
+        try{localStorage.removeItem(KEY)}catch(_){}
     });
+
+    /* Debug helper: `window.LpPwaReset()` from DevTools clears the
+       cooldown and, if the prompt is currently available, immediately
+       shows the button. Handy when testing or when a user says "I
+       accidentally dismissed it and want it back". */
+    window.LpPwaReset=function(){
+        try{localStorage.removeItem(KEY)}catch(_){}
+        if(deferredPrompt&&!isStandalone()){
+            injectStyles();
+            createBtn().classList.add('show');
+        }
+        return !!deferredPrompt;
+    };
 })();
