@@ -277,8 +277,18 @@ body:not(.prepared) #lottoSidebar{display:none}
 /* History panel */
 .ls-history{flex:1;min-height:0;display:flex;flex-direction:column;
     margin-top:4px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
-.ls-hist-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.ls-hist-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
 .ls-hist-head .ls-h3{margin:0}
+.ls-hist-head .ls-hist-count{flex-shrink:0}
+
+/* Collapsible section machinery — honored on mobile only (see media
+   queries below). Drum fills the screen when DRAWS is collapsed by
+   default and Draw Settings collapses on START. */
+.ls-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;user-select:none}
+.ls-head .ls-h3{margin:0;flex-shrink:0}
+.ls-chevron{margin-left:auto;font-size:.85em;color:rgba(255,255,255,.55);transition:transform .25s;flex-shrink:0;line-height:1;font-family:'Orbitron',sans-serif}
+.ls-section.collapsed .ls-chevron{transform:rotate(-90deg)}
+.ls-body{display:flex;flex-direction:column;flex:1;min-height:0}
 .ls-hist-count{
     font-family:'Orbitron',sans-serif;font-size:.72em;font-weight:800;
     color:rgba(255,107,53,0.92);padding:3px 10px;
@@ -442,16 +452,29 @@ body:not(.prepared) #lottoSidebar{display:none}
     }
 }
 /* Mobile: sidebar collapses into a bottom sheet over the canvas.
-   Short height so the machine stays visible above it. */
+   Short height so the machine stays visible above it.
+   Collapsible sections (Draw Settings + DRAWS) shrink the sheet
+   further so the drum is never covered once START is pressed. */
 @media(max-width:899px){
     #lottoSidebar{
         position:fixed;left:0;right:0;bottom:0;max-height:52vh;
         overflow-y:auto;z-index:60;
         border-top:1px solid rgba(255,255,255,.06);
         border-radius:14px 14px 0 0;
+        transition:max-height .25s;
     }
     #lottoSidebar .ls-controls .gc-label{font-size:.68em}
     #lottoSidebar .ls-controls .gc-chips .opt-chip{padding:5px 9px;font-size:.72em}
+    .ls-head{cursor:pointer;padding:2px 0}
+    .ls-section.collapsed{flex:0 0 auto !important}
+    .ls-section.collapsed .ls-head{margin-bottom:0}
+    .ls-section.collapsed .ls-body{display:none}
+}
+@media(min-width:900px){
+    /* PC always shows everything — no collapse affordance, no chevron. */
+    .ls-chevron{display:none}
+    .ls-head{cursor:default}
+    .ls-section.collapsed .ls-body{display:flex}
 }
     </style>
 </head>
@@ -605,35 +628,43 @@ body:not(.prepared) #lottoSidebar{display:none}
          stays reserved for future AdSense even though display:none is on. -->
     <aside id="lottoSidebar">
         <div class="ls-section ls-controls">
-            <h3 class="ls-h3">&#x2699;&#xFE0F; <span id="lsSettingsLabel">Draw Settings</span></h3>
-            <div class="gc-row">
-                <span class="gc-label" id="gcSpeedLabel">SPEED</span>
-                <div class="opt-row gc-chips" id="gcSpeedRow">
-                    <div class="opt-chip gc-instant" data-speed="0"><span id="gcSpeedInstant">Instant</span></div>
-                    <div class="opt-chip" data-speed="1"><span id="gcSpeedFast">Fast</span></div>
-                    <div class="opt-chip selected" data-speed="2"><span id="gcSpeedNormal">Normal</span></div>
-                    <div class="opt-chip" data-speed="3"><span id="gcSpeedSlow">Slow</span></div>
-                </div>
+            <div class="ls-head" data-toggle="section">
+                <h3 class="ls-h3">&#x2699;&#xFE0F; <span id="lsSettingsLabel">Draw Settings</span></h3>
+                <span class="ls-chevron" aria-hidden="true">&#x25BE;</span>
             </div>
-            <div class="gc-row">
-                <span class="gc-label" id="gcSetLabel">SETS</span>
-                <div class="set-stepper" id="gcSetStepper">
-                    <button type="button" class="set-step" data-delta="-1" aria-label="decrease">&minus;</button>
-                    <input type="number" id="gcSetInput" min="1" max="10" value="1" inputmode="numeric">
-                    <button type="button" class="set-step" data-delta="1" aria-label="increase">&plus;</button>
+            <div class="ls-body">
+                <div class="gc-row">
+                    <span class="gc-label" id="gcSpeedLabel">SPEED</span>
+                    <div class="opt-row gc-chips" id="gcSpeedRow">
+                        <div class="opt-chip gc-instant" data-speed="0"><span id="gcSpeedInstant">Instant</span></div>
+                        <div class="opt-chip" data-speed="1"><span id="gcSpeedFast">Fast</span></div>
+                        <div class="opt-chip selected" data-speed="2"><span id="gcSpeedNormal">Normal</span></div>
+                        <div class="opt-chip" data-speed="3"><span id="gcSpeedSlow">Slow</span></div>
+                    </div>
                 </div>
+                <div class="gc-row">
+                    <span class="gc-label" id="gcSetLabel">SETS</span>
+                    <div class="set-stepper" id="gcSetStepper">
+                        <button type="button" class="set-step" data-delta="-1" aria-label="decrease">&minus;</button>
+                        <input type="number" id="gcSetInput" min="1" max="10" value="1" inputmode="numeric">
+                        <button type="button" class="set-step" data-delta="1" aria-label="increase">&plus;</button>
+                    </div>
+                </div>
+                <button id="gcStartBtn"><span id="gcStartText">START</span></button>
             </div>
-            <button id="gcStartBtn"><span id="gcStartText">START</span></button>
         </div>
-        <div class="ls-section ls-history">
-            <div class="ls-hist-head">
+        <div class="ls-section ls-history collapsed">
+            <div class="ls-head ls-hist-head" data-toggle="section">
                 <h3 class="ls-h3">&#x1F4DC; <span id="histTitle">DRAWS</span></h3>
                 <span class="ls-hist-count" id="histCount">0</span>
+                <span class="ls-chevron" aria-hidden="true">&#x25BE;</span>
             </div>
-            <div id="historyList"></div>
-            <div class="hist-actions">
-                <button id="viewRecordsBtn" class="btn-view-records">&#x1F4DA; <span id="viewRecordsText">My records</span></button>
-                <button id="histClearBtn" class="btn-history-clear"><span id="histClearText">Clear</span></button>
+            <div class="ls-body">
+                <div id="historyList"></div>
+                <div class="hist-actions">
+                    <button id="viewRecordsBtn" class="btn-view-records">&#x1F4DA; <span id="viewRecordsText">My records</span></button>
+                    <button id="histClearBtn" class="btn-history-clear"><span id="histClearText">Clear</span></button>
+                </div>
             </div>
         </div>
     </aside>
@@ -1731,6 +1762,11 @@ function prepareLottoMachine(){
     if(lsb)lsb.classList.remove('gc-locked');
     const sb=document.getElementById('gcStartBtn');
     if(sb)sb.disabled=false;
+    /* Expand Draw Settings so the user can see speed/sets/START
+       immediately after PREPARE (on mobile this was collapsed by
+       the previous draw cycle). */
+    const ctrlSec=document.querySelector('.ls-section.ls-controls');
+    if(ctrlSec)ctrlSec.classList.remove('collapsed');
     renderHistory();
     /* Fade setup out, reveal sharp machine. */
     document.body.classList.add('prepared');
@@ -1753,6 +1789,11 @@ function beginDrawing(){
     if(lsb)lsb.classList.add('gc-locked');
     const sb=document.getElementById('gcStartBtn');
     if(sb)sb.disabled=true;
+    /* Collapse Draw Settings so the drum + falling balls are the
+       focal point during the draw. Mobile-only visual effect (PC
+       ignores the .collapsed class via media query). */
+    const ctrlSec=document.querySelector('.ls-section.ls-controls');
+    if(ctrlSec)ctrlSec.classList.add('collapsed');
     /* Audio begins NOW — the wind/blower soundtrack was intentionally
        silent while the user was browsing settings behind the modal. */
     SFX.startWind();
@@ -2311,6 +2352,21 @@ function init(){
         });
     }
 
+    /* Collapsible sidebar sections — tapping the header of Draw
+       Settings or DRAWS toggles that section's body. Only visible on
+       mobile (PC ignores .collapsed via CSS), but the class state
+       survives breakpoint changes so rotation works naturally. */
+    document.querySelectorAll('#lottoSidebar .ls-head[data-toggle="section"]').forEach(h=>{
+        h.addEventListener('click',e=>{
+            /* Don't toggle when the user taps a button inside the header
+               (e.g. hypothetical future inline actions) — only the chevron
+               and titles should fold/unfold. */
+            if(e.target.closest('button'))return;
+            const sec=h.closest('.ls-section');
+            if(sec)sec.classList.toggle('collapsed');
+        });
+    });
+
     /* Initial renders. Sidebar starts empty each session — no
        localStorage hydration anymore. */
     renderHistory();
@@ -2334,6 +2390,11 @@ function init(){
         if(lsb)lsb.classList.remove('gc-locked');
         const gcs=document.getElementById('gcStartBtn');
         if(gcs)gcs.disabled=false;
+        /* Re-expand Draw Settings — user is going back to setup and
+           will need speed/sets visible. DRAWS stays in whatever state
+           the user last left it. */
+        const ctrlSec=document.querySelector('.ls-section.ls-controls');
+        if(ctrlSec)ctrlSec.classList.remove('collapsed');
         /* Back to setup-modal state (blurred machine in the background). */
         document.body.classList.remove('prepared');
         _initBackgroundMachine();
