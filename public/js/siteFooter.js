@@ -56,4 +56,10 @@
     tr.src='/js/lpTrack.js';
     tr.defer=true;
     document.body.appendChild(tr);
+
+    /* Share helper — Web Share API + clipboard fallback for Kakao. */
+    var sh=document.createElement('script');
+    sh.src='/js/lpShare.js';
+    sh.defer=true;
+    document.body.appendChild(sh);
 })();
