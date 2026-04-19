@@ -29,8 +29,22 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.20b';
+    const LP_ROOM_VERSION='2026.04.20c';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
+
+    /* Debug log surfaced in the guest status bar (and console). Toggled
+       on by default while we're diagnosing why some phone/PC pairs see
+       host:join_ack but no subsequent host:snapshot/config. Each entry
+       gets a timestamp so ordering is visible in the screenshot. */
+    const dbg=[];
+    function dbgLog(msg){
+        const t=new Date().toISOString().split('T')[1].slice(0,8);
+        dbg.push(t+' '+msg);
+        if(dbg.length>12)dbg.shift();
+        try{console.log('[LpRoom]',msg)}catch(_){}
+        const el=document.getElementById('lpRoomDbgBody');
+        if(el)el.innerHTML=dbg.map(function(s){return '<div>'+s.replace(/</g,'&lt;')+'</div>'}).join('');
+    }
 
     const CODE_ALPHABET='23456789ABCDEFGHJKMNPQRSTVWXYZ'; // no 0/O/1/I/L
     function genCode(){
@@ -66,6 +80,7 @@
         const hostName=opts.hostName||'Host';
         const sb=await waitForSupabase();
         const code=opts.code||genCode();
+        dbgLog('host: create '+code+' game='+gameId);
         const chan=sb.channel(channelName(code),{config:{broadcast:{self:false,ack:false},presence:{key:'h-'+shortId()}}});
 
         const guests=new Map(); /* guestId -> {nickname, joinedAt} */
@@ -76,6 +91,7 @@
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
+            dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin));
             if(p.pin!==pin){
                 /* wrong PIN */
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'bad_pin'}});
@@ -87,10 +103,14 @@
             }
             guests.set(p.gid,{nickname:p.nickname||'Guest',joinedAt:Date.now()});
             chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,gameId:gameId}});
+            dbgLog('host: sent join_ack');
             guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:p.nickname||'Guest'})}catch(e){}});
             /* replay last snapshot so the newcomer catches up */
             if(currentSnapshot){
                 chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
+                dbgLog('host: sent snapshot ('+Object.keys(currentSnapshot).length+' keys)');
+            }else{
+                dbgLog('host: NO snapshot to send (currentSnapshot null)');
             }
         });
 
@@ -122,8 +142,9 @@
             hostName:hostName,
             guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt}})},
             broadcast:function(event,payload){
-                if(!subscribed)return false;
+                if(!subscribed){dbgLog('host: broadcast '+event+' DROPPED (not subscribed)');return false}
                 chan.send({type:'broadcast',event:event,payload:payload||{}});
+                if(event!=='host:tick')dbgLog('host: broadcast '+event);
                 return true;
             },
             snapshot:function(payload){
@@ -131,6 +152,7 @@
                    joiners will receive it as a host:snapshot so they can
                    render immediately without waiting for the next event. */
                 currentSnapshot=Object.assign({},payload||{});
+                dbgLog('host: snapshot set ('+Object.keys(currentSnapshot).length+' keys)');
             },
             onGuestJoin:function(cb){if(typeof cb==='function')guestJoinCbs.push(cb)},
             onGuestLeave:function(cb){if(typeof cb==='function')guestLeaveCbs.push(cb)},
@@ -163,6 +185,7 @@
         const pin=String(opts.pin||'').padStart(4,'0');
         const nickname=(opts.nickname||'Guest').trim().slice(0,20)||'Guest';
         const gameId=opts.gameId||null;
+        dbgLog('guest: join '+code+' game='+gameId);
         const sb=await waitForSupabase();
         const chan=sb.channel(channelName(code),{config:{broadcast:{self:false,ack:false},presence:{key:'g-'+shortId()}}});
         const gid=shortId()+'-'+shortId();
@@ -206,6 +229,7 @@
 
         KNOWN_HOST_EVENTS.forEach(function(evName){
             chan.on('broadcast',{event:evName},function(msg){
+                if(evName!=='host:tick')dbgLog('guest: recv '+evName);
                 dispatch(msg.event||evName,msg.payload||{});
             });
         });
@@ -218,6 +242,7 @@
         await new Promise(function(resolve,reject){
             const to=setTimeout(function(){reject(new Error('subscribe timeout'))},10000);
             chan.subscribe(function(status){
+                dbgLog('guest: subscribe status='+status);
                 if(status==='SUBSCRIBED'){clearTimeout(to);resolve()}
             });
         });
@@ -623,6 +648,22 @@
         const vTag=' · v'+LP_ROOM_VERSION;
         bar.innerHTML='<span class="dot"></span><span id="lpRoomStatusMain">'+baseLbl()+' '+waitingMsg+'</span><span style="opacity:.35;font-size:.75em;margin-left:6px">'+vTag+'</span>';
         document.body.appendChild(bar);
+
+        /* Visible debug panel — pinned under the status bar so a user can
+           screenshot it and we can see exactly what events arrived (or
+           didn't). We can strip this block later once sync is proven
+           working on real phones. */
+        let dp=document.getElementById('lpRoomDbg');
+        if(dp)dp.remove();
+        dp=document.createElement('div');
+        dp.id='lpRoomDbg';
+        dp.style.cssText='position:fixed;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.82);color:#00D9FF;font-family:monospace;font-size:10px;padding:6px 10px;border-radius:8px;z-index:9000;max-width:92vw;max-height:30vh;overflow:auto;border:1px solid rgba(0,217,255,.35);line-height:1.4';
+        dp.innerHTML='<div style="color:#FFE66D;font-weight:700;margin-bottom:4px">🔍 debug · tap to hide</div><div id="lpRoomDbgBody"></div>';
+        dp.addEventListener('click',function(){dp.style.display='none'});
+        document.body.appendChild(dp);
+        /* Render any logs that accumulated before the panel existed. */
+        const body=document.getElementById('lpRoomDbgBody');
+        if(body)body.innerHTML=dbg.map(function(s){return '<div>'+s.replace(/</g,'&lt;')+'</div>'}).join('');
 
         /* Wire a live-counter so the user can visually verify the guest is
            actually receiving events from the host. Without this the guest
