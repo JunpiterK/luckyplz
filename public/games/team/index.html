@@ -378,8 +378,14 @@ let members=[],drawnResults=[],teamResults=[];
 const SFX=(()=>{let c;function g(){if(!c)c=new(window.AudioContext||window.webkitAudioContext)();return c}
 function p(f,d,t='sine',v=.12){try{const x=g(),o=x.createOscillator(),ga=x.createGain();o.type=t;o.frequency.value=f;ga.gain.setValueAtTime(v,x.currentTime);ga.gain.exponentialRampToValueAtTime(.001,x.currentTime+d);o.connect(ga);ga.connect(x.destination);o.start();o.stop(x.currentTime+d)}catch(e){}}
 function noise(d,v=.06){try{const x=g(),buf=x.createBuffer(1,x.sampleRate*d,x.sampleRate),data=buf.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;const src=x.createBufferSource(),ga=x.createGain();src.buffer=buf;ga.gain.setValueAtTime(v,x.currentTime);ga.gain.exponentialRampToValueAtTime(.001,x.currentTime+d);src.connect(ga);ga.connect(x.destination);src.start()}catch(e){}}
-return{pop(){p(800,.08,'sine',.15);noise(.03,.08)},whoosh(){noise(.15,.04)},fanfare(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,.25,'sine',.18),i*100))},click(){p(600,.04,'square',.08)},bounce(){noise(.02,.05);p(200,.05,'sine',.06)},g}
+return{pop(){p(800,.08,'sine',.15);noise(.03,.08)},whoosh(){noise(.15,.04)},fanfare(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,.25,'sine',.18),i*100))},click(){p(600,.04,'square',.08)},bounce(){noise(.02,.05);p(200,.05,'sine',.06)},crank(){try{const x=g();const o=x.createOscillator();const ga=x.createGain();o.type='sawtooth';o.frequency.value=60+Math.random()*40;const dur=0.025+Math.random()*0.02;ga.gain.setValueAtTime(0.18,x.currentTime);ga.gain.exponentialRampToValueAtTime(.001,x.currentTime+dur);o.connect(ga);ga.connect(x.destination);o.start();o.stop(x.currentTime+dur);const buf=x.createBuffer(1,Math.floor(x.sampleRate*0.02),x.sampleRate);const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1);const src=x.createBufferSource();const nga=x.createGain();src.buffer=buf;nga.gain.setValueAtTime(0.08,x.currentTime);nga.gain.exponentialRampToValueAtTime(.001,x.currentTime+0.02);src.connect(nga);nga.connect(x.destination);src.start()}catch(e){}},g}
 })();
+/* Crank sound driver — runs an irregular ~20Hz ratchet loop while the
+   gacha mechanism is actively spinning. Uses setTimeout (not rAF) so
+   the cadence is in real time regardless of the GACHA_SPEED dt scale. */
+let _crankLoopId=null;
+function startCrankSound(){if(_crankLoopId)return;const tick=()=>{SFX.crank();_crankLoopId=setTimeout(tick,30+Math.random()*40)};tick()}
+function stopCrankSound(){if(_crankLoopId){clearTimeout(_crankLoopId);_crankLoopId=null}}
 
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2.5+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -1420,10 +1426,10 @@ function drawAnimationOverlay(dt){
         crankSpeed=14;
         turbulence=Math.min(1,drawPhaseTime/0.3)*0.8;
         ledPhase+=dt*3;
-        if(Math.random()<dt*8)SFX.click();
         if(drawPhaseTime>=1.5){
             drawPhase='drop';drawPhaseTime=0;
             turbulence=0;crankSpeed=0;
+            stopCrankSound();
             SFX.whoosh();
             if(drawingCapsule){
                 drawingCapsule.drawn=true;
@@ -2018,6 +2024,7 @@ function buildTeams(){
 function drawNextTeam(){
     if(teamDrawCurrent>=teamDrawQueue.length){
         drawing=false;
+        stopCrankSound();
         setTimeout(()=>{SFX.fanfare();setTimeout(showResult,938)},313);
         return;
     }
@@ -2056,6 +2063,7 @@ function drawNextTeam(){
     drawPhase='crank';
     drawPhaseTime=0;
     crankSpeed=0;turbulence=0;
+    startCrankSound();
 }
 
 /* Result */
@@ -2292,6 +2300,7 @@ function startLottery(){
     lastTime=0;
     if(animId)cancelAnimationFrame(animId);
     animId=requestAnimationFrame(lotteryLoop);
+    startCrankSound();
 }
 
 function lotteryLoop(ts){
@@ -2319,6 +2328,7 @@ function lotteryLoop(ts){
     if(lotteryPhase==='mixing'&&lotteryPhaseTime>LOTTERY_MIX_MS){
         lotteryPhase='dispensing';
         lastDispenseTime=lotteryPhaseTime;
+        stopCrankSound();
     }
 
     if(lotteryPhase==='dispensing'){
