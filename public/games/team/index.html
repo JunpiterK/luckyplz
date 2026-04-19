@@ -321,6 +321,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
     <div class="btn-group">
         <button id="startBtn">START!</button>
+        <button id="onlineBtn" class="lp-room-online-btn" type="button" title="Online room">🌐 <span id="onlineBtnLabel">Online</span></button>
     </div>
 </div>
 </div>
@@ -1962,6 +1963,7 @@ const TEAM_COLORS=['#e74c3c','#3498db','#2ecc71','#f1c40f'];
 
 function buildTeams(){
     collectMembers();
+    if(typeof _lpBroadcastConfig==='function')_lpBroadcastConfig();
     const n=members.length;
 
     let assignment;
@@ -2125,6 +2127,7 @@ function decodeResultParam(){
 
 function showResult(){
     if(animId)cancelAnimationFrame(animId);
+    if(typeof _lpBroadcastResult==='function')_lpBroadcastResult();
     document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='flex';
     document.getElementById('resultH1').textContent='\uD83D\uDC65 '+T('result');
@@ -2303,6 +2306,7 @@ function initLotteryWorld(){
 }
 
 function startLottery(){
+    if(typeof _lpBroadcastConfig==='function')_lpBroadcastConfig();
     collectMembers();
     if(members.length<2||teamCount<2){return}
 
@@ -2558,6 +2562,57 @@ function init(){
        The old buildTeams() (gacha machine) is kept in the file for
        possible future use; switch USE_LOTTERY_MODE to false to revive it. */
     document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();recordCurrentAsPreset();if(USE_LOTTERY_MODE){startLottery()}else{buildTeams()}});
+
+    /* Online room wiring */
+    window._lpHost=null;window._lpGuest=null;
+    function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
+    const _onBtn=document.getElementById('onlineBtn');
+    if(_onBtn)_onBtn.addEventListener('click',function(){
+        if(window._lpHost)return;
+        _waitForLpRoom(function(){
+            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+            window.LpRoom.showHostModal({gameId:'team',hostName:hn,onReady:function(room){window._lpHost=room}});
+        });
+    });
+    _waitForLpRoom(function(){
+        const code=window.LpRoom.detectGuestIntent();
+        if(!code)return;
+        window.LpRoom.showGuestJoinModal(code,{gameId:'team',onJoined:function(g){
+            window._lpGuest=g;
+            const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
+            const ob=document.getElementById('onlineBtn');if(ob)ob.style.display='none';
+            g.on('host:config',function(p){
+                if(Array.isArray(p.memberNames)&&p.memberNames.length){
+                    memberCount=Math.max(2,Math.min(40,p.memberNames.length));
+                    renderMembers();
+                    const inputs=document.querySelectorAll('#memberInputs .member-row input');
+                    p.memberNames.forEach(function(n,i){if(inputs[i])inputs[i].value=n});
+                }
+                if(typeof p.teamCount==='number'){teamCount=p.teamCount;document.querySelectorAll('#teamCountRow .opt-chip').forEach(c=>c.classList.toggle('selected',parseInt(c.dataset.tc)===teamCount))}
+                if(typeof updateDistPreview==='function')updateDistPreview();
+            });
+            g.on('host:result',function(p){
+                if(Array.isArray(p.teams)){
+                    teamResults=p.teams.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,origIdx:m.idx||0}})});
+                    setTimeout(function(){showResult&&showResult()},50);
+                }
+            });
+            g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
+        }});
+    });
+    window._lpBroadcastConfig=function(){
+        if(!window._lpHost)return;
+        const inputs=document.querySelectorAll('#memberInputs .member-row input');
+        const names=[...inputs].map(function(i){return i.value.trim()||i.placeholder||''});
+        const p={game:'team',memberNames:names,teamCount:teamCount,balanceMode:balanceMode};
+        window._lpHost.snapshot(p);
+        window._lpHost.broadcast('host:config',p);
+    };
+    window._lpBroadcastResult=function(){
+        if(!window._lpHost||typeof teamResults==='undefined')return;
+        const teams=teamResults.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,idx:m.origIdx||0}})});
+        window._lpHost.broadcast('host:result',{game:'team',teams:teams});
+    };
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
         if(animId)cancelAnimationFrame(animId);

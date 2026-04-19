@@ -638,6 +638,7 @@ body:not(.prepared) #lottoSidebar{display:none}
 
     <div class="btn-group">
         <button id="startBtn">PREPARE</button>
+        <button id="onlineBtn" class="lp-room-online-btn" type="button" title="Online room">🌐 <span id="onlineBtnLabel">Online</span></button>
     </div>
 </div>
 </div>
@@ -733,6 +734,8 @@ body:not(.prepared) #lottoSidebar{display:none}
 
 <script src="/js/topNav.js"></script>
 <script src="/js/langBar.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/supabase-config.js"></script>
 <script src="/js/nextGames.js"></script>
 <script>
 /* ========================================
@@ -1769,6 +1772,7 @@ let bonusConfig=null;// {start,end,draw,label} or null
    Lets the user change speed / set count on the machine screen before
    committing to the pull. */
 function startLottoDraw(){
+    if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
     prepareLottoMachine();
 }
 
@@ -2069,6 +2073,7 @@ function drawNextBall(){
 /* Result */
 function showResult(){
     if(animId)cancelAnimationFrame(animId);
+    if(typeof _lpBroadcastResult==='function')_lpBroadcastResult();
     document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='flex';
     document.getElementById('resultH1').textContent='\uD83C\uDFB1 '+T('result');
@@ -2494,6 +2499,55 @@ function init(){
     renderHistory();
 
     document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();startLottoDraw()});
+
+    /* Online room wiring */
+    window._lpHost=null;window._lpGuest=null;
+    function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
+    const _onBtn=document.getElementById('onlineBtn');
+    if(_onBtn)_onBtn.addEventListener('click',function(){
+        if(window._lpHost)return;
+        _waitForLpRoom(function(){
+            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+            window.LpRoom.showHostModal({gameId:'lotto',hostName:hn,onReady:function(room){window._lpHost=room}});
+        });
+    });
+    _waitForLpRoom(function(){
+        const code=window.LpRoom.detectGuestIntent();
+        if(!code)return;
+        window.LpRoom.showGuestJoinModal(code,{gameId:'lotto',onJoined:function(g){
+            window._lpGuest=g;
+            /* read-only: disable Start + Online */
+            const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
+            const ob=document.getElementById('onlineBtn');if(ob)ob.style.display='none';
+            g.on('host:start',function(p){
+                /* Mirror host's start so guest ball machine begins too */
+                try{startLottoDraw&&startLottoDraw()}catch(e){}
+            });
+            g.on('host:result',function(p){
+                /* Force-show host's exact numbers even if guest's local draw differs */
+                if(Array.isArray(p.numbers)){
+                    drawnResults=p.numbers.map(function(n,i){return{label:n,isBonus:i>=(p.mainCount||n),color:p.colors?p.colors[i]:'#FFE66D'}});
+                }
+                setTimeout(function(){showResult&&showResult()},50);
+            });
+            g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
+        }});
+    });
+
+    /* Broadcast helpers — called inline from startLottoDraw/showResult. */
+    window._lpBroadcastStart=function(){
+        if(!window._lpHost)return;
+        const p={game:'lotto',t:Date.now()};
+        window._lpHost.snapshot(p);
+        window._lpHost.broadcast('host:start',p);
+    };
+    window._lpBroadcastResult=function(){
+        if(!window._lpHost||typeof drawnResults==='undefined')return;
+        const nums=drawnResults.map(function(b){return b.label});
+        const colors=drawnResults.map(function(b){return b.color});
+        const mainCount=drawnResults.filter(function(b){return !b.isBonus}).length;
+        window._lpHost.broadcast('host:result',{game:'lotto',numbers:nums,colors:colors,mainCount:mainCount});
+    };
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
         SFX.stopWind();

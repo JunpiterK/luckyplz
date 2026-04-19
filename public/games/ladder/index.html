@@ -374,6 +374,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
         <div class="btn-group">
             <button id="startBtn">START!</button>
+            <button id="onlineBtn" class="lp-room-online-btn" type="button" title="Online room">🌐 <span id="onlineBtnLabel">Online</span></button>
         </div>
     </div>
     </div>
@@ -1083,6 +1084,7 @@ function renderPreview(forceRegenerate){
 function startGame(){
     Audio.getCtx();
     recordCurrentAsPreset();
+    if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
     gamePhase='playing';
     tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];
 
@@ -1309,6 +1311,55 @@ function init(){
 
     // Start
     document.getElementById('startBtn').addEventListener('click',startGame);
+
+    /* Online room wiring */
+    window._lpHost=null;window._lpGuest=null;
+    function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
+    const _onBtn=document.getElementById('onlineBtn');
+    if(_onBtn)_onBtn.addEventListener('click',function(){
+        if(window._lpHost)return;
+        _waitForLpRoom(function(){
+            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+            window.LpRoom.showHostModal({gameId:'ladder',hostName:hn,onReady:function(room){window._lpHost=room}});
+        });
+    });
+    _waitForLpRoom(function(){
+        const code=window.LpRoom.detectGuestIntent();
+        if(!code)return;
+        window.LpRoom.showGuestJoinModal(code,{gameId:'ladder',onJoined:function(g){
+            window._lpGuest=g;
+            const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
+            const ob=document.getElementById('onlineBtn');if(ob)ob.style.display='none';
+            const pabSt=document.getElementById('pabStart');if(pabSt){pabSt.disabled=true;pabSt.style.opacity='.4'}
+            g.on('host:config',function(p){
+                if(!p||!p.ladder)return;
+                ladder=p.ladder;
+                playerCount=ladder.n;
+                renderPlayers();renderResults();
+                const ni=document.querySelectorAll('#playerInputs input');
+                const ri=document.querySelectorAll('#resultInputs input');
+                if(Array.isArray(p.names))p.names.forEach(function(n,i){if(ni[i])ni[i].value=n});
+                if(Array.isArray(p.results))p.results.forEach(function(r,i){if(ri[i])ri[i].value=r});
+                renderPreview&&renderPreview(true);
+            });
+            g.on('host:start',function(){
+                /* Start guest's playback with host-sent ladder */
+                if(typeof startGame==='function')startGame();
+            });
+            g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
+        }});
+    });
+    window._lpBroadcastStart=function(){
+        if(!window._lpHost)return;
+        const ni=document.querySelectorAll('#playerInputs input');
+        const ri=document.querySelectorAll('#resultInputs input');
+        const names=[...ni].map(function(i){return i.value.trim()||i.placeholder||''});
+        const results=[...ri].map(function(i){return i.value.trim()||i.placeholder||''});
+        const p={game:'ladder',ladder:ladder,names:names,results:results};
+        window._lpHost.snapshot(p);
+        window._lpHost.broadcast('host:config',p);
+        window._lpHost.broadcast('host:start',{t:Date.now()});
+    };
 
     // Replay
     document.getElementById('replayBtn').addEventListener('click',()=>{
