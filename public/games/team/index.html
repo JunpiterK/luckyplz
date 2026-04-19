@@ -694,12 +694,17 @@ function createCapsules(labels,colors,tiers){
 }
 
 function updateCapsules(dt){
+    /* Capsules only tumble while the handle is actively turning.
+       In other phases (idle/drop/open/reveal/assign) wind + turbulence
+       are zeroed so they sit still — still react to gravity + collisions
+       so dispensed/settled ones can fall naturally. */
+    const isCranking=drawPhase==='crank';
     const windPhase=performance.now()*.002;
-    const baseWindX=Math.sin(windPhase)*25;
-    const baseWindY=Math.cos(windPhase*1.3)*18-12;
+    const baseWindX=isCranking?Math.sin(windPhase)*25:0;
+    const baseWindY=isCranking?Math.cos(windPhase*1.3)*18-12:0;
 
-    const turbX=turbulence*(Math.sin(performance.now()*.017)*200+Math.cos(performance.now()*.023)*150);
-    const turbY=turbulence*(Math.cos(performance.now()*.019)*180+Math.sin(performance.now()*.031)*120);
+    const turbX=isCranking?turbulence*(Math.sin(performance.now()*.017)*200+Math.cos(performance.now()*.023)*150):0;
+    const turbY=isCranking?turbulence*(Math.cos(performance.now()*.019)*180+Math.sin(performance.now()*.031)*120):0;
 
     /* Run physics per-machine. Only active machine gets turbulence during crank phase.
        All machines have mild idle wind for subtle jostle. */
@@ -2300,7 +2305,8 @@ function startLottery(){
     lastTime=0;
     if(animId)cancelAnimationFrame(animId);
     animId=requestAnimationFrame(lotteryLoop);
-    startCrankSound();
+    /* Ball-tumbler mode has no crank handle, so no ratchet sound here —
+       sound is reserved for the capsule machine's drawPhase='crank'. */
 }
 
 function lotteryLoop(ts){
@@ -2328,7 +2334,6 @@ function lotteryLoop(ts){
     if(lotteryPhase==='mixing'&&lotteryPhaseTime>LOTTERY_MIX_MS){
         lotteryPhase='dispensing';
         lastDispenseTime=lotteryPhaseTime;
-        stopCrankSound();
     }
 
     if(lotteryPhase==='dispensing'){
