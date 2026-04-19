@@ -29,7 +29,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.20d';
+    const LP_ROOM_VERSION='2026.04.20e';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Debug log surfaced in the guest status bar (and console). Toggled
@@ -366,6 +366,12 @@
            +'.lp-room-modal input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#fff;font-family:inherit;font-size:1em;box-sizing:border-box;transition:border-color .2s}'
            +'.lp-room-modal input:focus{outline:none;border-color:#00D9FF}'
            +'.lp-room-modal .pin-input{letter-spacing:8px;text-align:center;font-family:"Orbitron",monospace;font-size:1.35em;font-weight:700}'
+           /* Room-code input is alphanumeric (uppercase A-Z + digits). Keep
+              the monospace/uppercase feel so the 6-char code lines up
+              visually, but tighten letter-spacing vs .pin-input (8px is
+              too sparse for 6 chars) and skip the font-size bump so it
+              reads as different from the numeric PIN below it. */
+           +'.lp-room-modal .lp-room-code-input{letter-spacing:4px;text-align:center;font-family:"Orbitron",monospace;font-size:1.15em;font-weight:700;text-transform:uppercase}'
            +'.lp-room-modal .row{display:flex;gap:10px;margin-top:18px}'
            +'.lp-room-modal .btn{flex:1;padding:12px 14px;border-radius:10px;border:0;font-family:inherit;font-weight:700;font-size:.95em;cursor:pointer;transition:all .18s}'
            +'.lp-room-modal .btn.primary{background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001220}'
@@ -935,7 +941,7 @@
            +'<label>'+lbl.linkLabel+'</label>'
            +'<input id="lpHomeLink" placeholder="'+lbl.linkPh+'" autocomplete="off" style="font-size:.82em">'
            +'<label>'+lbl.codeLabel+'</label>'
-           +'<input id="lpHomeCode" class="pin-input" style="letter-spacing:4px" placeholder="'+lbl.codePh+'" autocomplete="off" maxlength="10">'
+           +'<input id="lpHomeCode" type="text" inputmode="text" class="lp-room-code-input" placeholder="'+lbl.codePh+'" autocomplete="off" spellcheck="false" autocapitalize="characters" maxlength="10">'
            +'<label>'+lbl.nickLabel+'</label>'
            +'<input id="lpHomeNick" maxlength="20" placeholder="'+lbl.nickPh+'" autocomplete="off">'
            +'<label>'+lbl.pinLabel+'</label>'
