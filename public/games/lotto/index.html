@@ -492,6 +492,15 @@ body:not(.prepared) #lottoSidebar{display:none}
     .ls-section.collapsed{flex:0 0 auto !important}
     .ls-section.collapsed .ls-head{margin-bottom:0}
     .ls-section.collapsed .ls-body{display:none}
+    /* Fullscreen mode: user tapped to expand DRAWS, so we auto-collapse
+       Draw Settings and let the sidebar take the entire viewport so the
+       results list fills the screen. Settings header stays pinned at the
+       top (still tappable to re-expand). */
+    #lottoSidebar.ls-full{
+        top:0;height:100dvh;height:100vh;max-height:none;
+        border-top:0;border-radius:0;
+    }
+    #lottoSidebar.ls-full .ls-history{flex:1 1 auto;min-height:0}
 }
 @media(min-width:900px){
     /* PC always shows everything — no collapse affordance, no chevron. */
@@ -2436,6 +2445,16 @@ function init(){
        Settings or DRAWS toggles that section's body. Only visible on
        mobile (PC ignores .collapsed via CSS), but the class state
        survives breakpoint changes so rotation works naturally. */
+    function _syncSidebarFull(){
+        const sb=document.getElementById('lottoSidebar');
+        if(!sb)return;
+        const hist=sb.querySelector('.ls-section.ls-history');
+        const ctrl=sb.querySelector('.ls-section.ls-controls');
+        /* Fullscreen only when DRAWS is open AND Settings is collapsed —
+           any other combo falls back to the normal bottom-sheet height. */
+        const want=hist&&ctrl&&!hist.classList.contains('collapsed')&&ctrl.classList.contains('collapsed');
+        sb.classList.toggle('ls-full',!!want);
+    }
     document.querySelectorAll('#lottoSidebar .ls-head[data-toggle="section"]').forEach(h=>{
         h.addEventListener('click',e=>{
             /* Don't toggle when the user taps a button inside the header
@@ -2443,7 +2462,25 @@ function init(){
                and titles should fold/unfold. */
             if(e.target.closest('button'))return;
             const sec=h.closest('.ls-section');
-            if(sec)sec.classList.toggle('collapsed');
+            if(!sec)return;
+            const wasCollapsed=sec.classList.contains('collapsed');
+            sec.classList.toggle('collapsed');
+            /* Expanding DRAWS on mobile → auto-collapse Settings + go
+               fullscreen so the results list fills the whole viewport.
+               Collapsing DRAWS just shrinks back to the bottom sheet. */
+            if(sec.classList.contains('ls-history')&&wasCollapsed){
+                const ctrl=document.querySelector('.ls-section.ls-controls');
+                if(ctrl)ctrl.classList.add('collapsed');
+            }
+            _syncSidebarFull();
+            /* Scroll so the now-collapsed Settings header sits at the top
+               of the sidebar — matches the user's "pinned at top" ask. */
+            if(sec.classList.contains('ls-history')&&wasCollapsed){
+                requestAnimationFrame(()=>{
+                    const sb=document.getElementById('lottoSidebar');
+                    if(sb)sb.scrollTop=0;
+                });
+            }
         });
     });
 
