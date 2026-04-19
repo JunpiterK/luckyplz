@@ -1347,7 +1347,12 @@ function captureBall(ball){
     waitingForCapture=false;
     suctionActive=false;
 
-    const isBonus=ball.isBonus;
+    /* Same-pool bonus (Japan Loto): balls carry no preset flag because
+       the drum is a single main pool — infer main/bonus from draw
+       order (first mainToDraw balls are main, the rest bonus). */
+    const isBonus=(_pendingDraw&&_pendingDraw.samePoolBonus)
+        ?(drawnMainCount>=mainToDraw&&drawnBonusCount<bonusToDraw)
+        :ball.isBonus;
 
     // Start tube extraction animation
     ball.extracting=true;
@@ -1564,9 +1569,13 @@ function drawGlassOverlay(){
     ctx.restore();
 }
 
-function drawSingleTray(tx,ty,slots){
+/* bonusStart = slot index where bonus balls begin (0 = no split).
+   When set, an extra visual gap + gold divider separates main from
+   bonus so users can instantly read "7 main + 2 bonus" on the tray. */
+function drawSingleTray(tx,ty,slots,bonusStart,bonusColor){
     const gap=BALL_R*2.4;
-    const trayW=Math.max(slots,1)*gap+20;
+    const splitGap=(bonusStart>0&&bonusStart<slots)?BALL_R*1.2:0;
+    const trayW=Math.max(slots,1)*gap+20+splitGap;
     const trayH=BALL_R*2+14;
 
     ctx.save();
@@ -1602,31 +1611,58 @@ function drawSingleTray(tx,ty,slots){
 
     // Dividers
     ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=1;
-    for(let i=1;i<slots;i++){const sx=tx+10+i*gap;ctx.beginPath();ctx.moveTo(sx,ty+3);ctx.lineTo(sx,ty+trayH-3);ctx.stroke()}
+    for(let i=1;i<slots;i++){
+        const shift=(splitGap&&i>=bonusStart)?splitGap:0;
+        const sx=tx+10+i*gap+shift;
+        /* Bonus boundary: thicker gold stripe so the split reads at a
+           glance. All other slot dividers stay subtle. */
+        if(splitGap&&i===bonusStart){
+            ctx.save();
+            ctx.strokeStyle=bonusColor||'#FFD700';
+            ctx.lineWidth=2.5;
+            ctx.shadowColor=bonusColor||'#FFD700';ctx.shadowBlur=6;
+            ctx.beginPath();ctx.moveTo(sx-splitGap/2,ty+3);ctx.lineTo(sx-splitGap/2,ty+trayH-3);ctx.stroke();
+            ctx.restore();
+        }else{
+            ctx.beginPath();ctx.moveTo(sx,ty+3);ctx.lineTo(sx,ty+trayH-3);ctx.stroke();
+        }
+    }
 
     ctx.restore();
-    return{tx:tx+10,gap};
+    return{tx:tx+10,gap,splitGap:splitGap||0,bonusStart:bonusStart||0};
+}
+
+/* Shared slot geometry so the tray outline and the drawn-ball target
+   positions stay in sync (same gap, same bonus split). */
+function _trayGeom(){
+    const total=totalSlots||6;
+    const gap=BALL_R*2.4;
+    /* Use totalSlots vs mainToDraw, not bonusToDraw — in separate-pool
+       mode bonusToDraw stays 0 during phase 0 but totalSlots already
+       reflects the final main+bonus count, so the split renders from
+       the first pull instead of popping in mid-draw. */
+    const bonusStart=(mainToDraw>0&&total>mainToDraw)?mainToDraw:0;
+    const splitGap=(bonusStart>0&&bonusStart<total)?BALL_R*1.2:0;
+    const trayW=total*gap+20+splitGap;
+    return{total,gap,bonusStart,splitGap,trayW};
 }
 
 function drawWoodenTray(){
-    // Single tray for lotto mode
-    const total=totalSlots||6;
-    const gap=BALL_R*2.4;
-    const trayW=total*gap+20;
+    const{total,bonusStart,trayW}=_trayGeom();
     const tx=machineX-trayW/2;
     const ty=trayY-BALL_R-4;
-    drawSingleTray(tx,ty,total);
+    const bonusColor=(activePreset&&activePreset.bonus&&activePreset.bonus.color)||'#FFD700';
+    drawSingleTray(tx,ty,total,bonusStart,bonusColor);
 }
 
 function drawDrawnBalls(){
-    const total=totalSlots||6;
-    const gap=BALL_R*2.4;
-    const trayW=total*gap+20;
+    const{gap,bonusStart,splitGap,trayW}=_trayGeom();
     const tx=machineX-trayW/2+10;
     const capY=machineY-machineR-20+BALL_R+6;// ball starts at cap
 
     drawnBalls.forEach((b,i)=>{
-        const targetX=tx+i*gap+gap/2;
+        const shift=(splitGap&&i>=bonusStart)?splitGap:0;
+        const targetX=tx+i*gap+gap/2+shift;
         const targetY=trayY;
 
         if(b.exitAnim<1){
