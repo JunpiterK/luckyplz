@@ -12,6 +12,16 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'lotto-history-story',
+        lang: 'ko',
+        date: '2026-04-20',
+        readMinutes: 7,
+        coverEmoji: '🏛️',
+        tags: ['로또', '역사', '스토리'],
+        title: '근데 로또 언제부터 있었어? 2000년 역사 썰 풀어줄게',
+        excerpt: '로마 황제 연회부터 엘리자베스 여왕, 하버드 대학, 조선시대 산통계까지. 친구가 풀어주는 복권 2000년 족보.',
+    },
+    {
         slug: 'random-name-picker-guide',
         lang: 'en',
         date: '2026-04-19',
