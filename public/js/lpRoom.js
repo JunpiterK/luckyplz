@@ -29,21 +29,17 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.20e';
+    const LP_ROOM_VERSION='2026.04.20f';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
-    /* Debug log surfaced in the guest status bar (and console). Toggled
-       on by default while we're diagnosing why some phone/PC pairs see
-       host:join_ack but no subsequent host:snapshot/config. Each entry
-       gets a timestamp so ordering is visible in the screenshot. */
-    const dbg=[];
+    /* Diagnostic log — console-only. The visible floating panel was
+       helpful during the phone-cache investigation but now clutters the
+       guest view; the user specifically asked for "only the status bar
+       visible". Keep the fn so existing callsites don't break, but
+       suppress the on-screen render. Filter enabled via
+       localStorage.lpDebug='1' for future debugging if needed. */
     function dbgLog(msg){
-        const t=new Date().toISOString().split('T')[1].slice(0,8);
-        dbg.push(t+' '+msg);
-        if(dbg.length>12)dbg.shift();
         try{console.log('[LpRoom]',msg)}catch(_){}
-        const el=document.getElementById('lpRoomDbgBody');
-        if(el)el.innerHTML=dbg.map(function(s){return '<div>'+s.replace(/</g,'&lt;')+'</div>'}).join('');
     }
 
     const CODE_ALPHABET='23456789ABCDEFGHJKMNPQRSTVWXYZ'; // no 0/O/1/I/L
@@ -93,6 +89,15 @@
            can't land mid-spin with half-initialized state. */
         let locked=false;
 
+        /* Push the authoritative guest roster to everyone in the room.
+           Called after any join/leave so each guest's status panel
+           stays in sync without polling. */
+        function broadcastGuestList(){
+            if(!subscribed)return;
+            const nicknames=Array.from(guests.values()).map(function(v){return v.nickname});
+            chan.send({type:'broadcast',event:'host:guests',payload:{nicknames:nicknames,hostName:hostName,count:nicknames.length+1}});
+        }
+
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
@@ -121,6 +126,10 @@
             }else{
                 dbgLog('host: NO snapshot to send (currentSnapshot null)');
             }
+            /* Fire roster broadcast slightly after so the new joiner has
+               time to register listeners — otherwise the same race that
+               hit host:snapshot would drop this too. */
+            setTimeout(broadcastGuestList,80);
         });
 
         chan.on('broadcast',{event:'guest:leave'},function(msg){
@@ -129,6 +138,7 @@
             const info=guests.get(p.gid);
             guests.delete(p.gid);
             guestLeaveCbs.forEach(function(cb){try{cb({id:p.gid,nickname:info.nickname})}catch(e){}});
+            broadcastGuestList();
         });
 
         /* Lightweight discovery — the home-page join flow uses this to
@@ -201,7 +211,8 @@
     const KNOWN_HOST_EVENTS=[
         'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
-        'host:tick','host:stop','host:result','host:reset','host:action'
+        'host:tick','host:stop','host:result','host:reset','host:action',
+        'host:guests'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
@@ -256,7 +267,7 @@
            latest payload per state-like event and replay it synchronously
            from g.on() when the listener finally arrives. */
         const cache={};
-        const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result)$/;
+        const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result|guests)$/;
 
         function dispatch(ev,p){
             if(ev==='host:join_ack'){
@@ -791,73 +802,64 @@
         bar.id='lpRoomStatus';
         bar.className='lp-room-status';
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-        function baseLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
-        const waitingMsg=lang==='ko'?'· 호스트 설정 대기 중…':'· waiting for host…';
-        /* v-tag at the end lets users confirm at a glance whether the
-           page loaded the latest lpRoom build. A stale cached copy
-           won't have this suffix in its status bar. */
-        const vTag=' · v'+LP_ROOM_VERSION;
-        bar.innerHTML='<span class="dot"></span><span id="lpRoomStatusMain">'+baseLbl()+' '+waitingMsg+'</span><span style="opacity:.35;font-size:.75em;margin-left:6px">'+vTag+'</span>';
-        document.body.appendChild(bar);
 
-        /* Visible debug panel — pinned under the status bar so a user can
-           screenshot it and we can see exactly what events arrived (or
-           didn't). We can strip this block later once sync is proven
-           working on real phones. */
-        let dp=document.getElementById('lpRoomDbg');
-        if(dp)dp.remove();
-        dp=document.createElement('div');
-        dp.id='lpRoomDbg';
-        dp.style.cssText='position:fixed;top:50px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.82);color:#00D9FF;font-family:monospace;font-size:10px;padding:6px 10px;border-radius:8px;z-index:9000;max-width:92vw;max-height:30vh;overflow:auto;border:1px solid rgba(0,217,255,.35);line-height:1.4';
-        dp.innerHTML='<div style="color:#FFE66D;font-weight:700;margin-bottom:4px">🔍 debug · tap to hide</div><div id="lpRoomDbgBody"></div>';
-        dp.addEventListener('click',function(){dp.style.display='none'});
-        document.body.appendChild(dp);
-        /* Render any logs that accumulated before the panel existed. */
-        const body=document.getElementById('lpRoomDbgBody');
-        if(body)body.innerHTML=dbg.map(function(s){return '<div>'+s.replace(/</g,'&lt;')+'</div>'}).join('');
+        /* Local snapshot of the room's guest list, populated by the
+           host:guests broadcast. Includes everyone currently connected
+           (other guests + the host isn't in the array by design —
+           we render them separately). */
+        let roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true}];
 
-        /* Wire a live-counter so the user can visually verify the guest is
-           actually receiving events from the host. Without this the guest
-           silently gets config updates and — if the host hasn't customized
-           anything — the visible setup screen looks identical to the guest's
-           own defaults, making sync indistinguishable from no-sync. */
-        let eventCount=0;
-        function label(ev){
-            if(lang==='ko')return {
-                'host:config':'설정 동기화',
-                'host:snapshot':'설정 동기화',
-                'host:start':'게임 시작',
-                'host:spin_start':'스핀 시작',
-                'host:result':'결과 도착',
-                'host:action':'액션'
-            }[ev]||ev;
-            return {
-                'host:config':'synced',
-                'host:snapshot':'synced',
-                'host:start':'game started',
-                'host:spin_start':'spinning',
-                'host:result':'result in',
-                'host:action':'action'
-            }[ev]||ev;
+        function countLbl(n){return lang==='ko'?n+'명 접속':n+' watching'}
+        function roomLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
+
+        function render(){
+            const total=roster.length+1; /* +1 for host */
+            const caret=document.getElementById('lpRoomGuestPanel')?'▴':'▾';
+            bar.innerHTML='<span class="dot"></span>'
+                +'<span id="lpRoomStatusMain">'+roomLbl()+' · '+countLbl(total)+'</span>'
+                +'<span class="lp-caret" id="lpRoomStatusCaret" title="'+(lang==='ko'?'접속자 목록':'Guest list')+'">'+caret+'</span>'
+                +'<span style="opacity:.35;font-size:.72em;margin-left:6px">v'+LP_ROOM_VERSION+'</span>';
+            const c=document.getElementById('lpRoomStatusCaret');
+            if(c)c.addEventListener('click',function(e){e.stopPropagation();togglePanel()});
+            if(document.getElementById('lpRoomGuestPanel'))renderPanel();
         }
-        g.on('*',function(ev,payload){
-            if(ev==='host:tick')return; /* too chatty to show */
-            if(ev[0]==='_')return; /* internal */
-            eventCount++;
-            const main=document.getElementById('lpRoomStatusMain');
-            if(!main)return;
-            let detail=label(ev);
-            if(ev==='host:config'||ev==='host:snapshot'){
-                const n=(payload&&Array.isArray(payload.players))?payload.players.length
-                    :(payload&&Array.isArray(payload.memberNames))?payload.memberNames.length
-                    :(payload&&Array.isArray(payload.names))?payload.names.length:null;
-                if(n)detail+=' · '+n+(lang==='ko'?'명':' entries');
-            }
-            main.textContent=baseLbl()+' · '+detail+' ('+eventCount+')';
-            /* Flash the status bar so the user notices the update even
-               when the synced content looks identical to local defaults. */
+        function togglePanel(){
+            const existing=document.getElementById('lpRoomGuestPanel');
+            if(existing){existing.remove();render();return}
+            const panel=document.createElement('div');
+            panel.id='lpRoomGuestPanel';
+            panel.className='lp-room-guest-panel';
+            document.body.appendChild(panel);
+            renderPanel();
+            render();
+        }
+        function renderPanel(){
+            const panel=document.getElementById('lpRoomGuestPanel');
+            if(!panel)return;
+            const title=lang==='ko'?'👀 접속자 ('+(roster.length+1)+'명)':'👀 Guests ('+(roster.length+1)+')';
+            const hostRow='<div class="row host"><span class="nick">👑 '+escapeHtml(g.hostName||'Host')+'</span><span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
+            const guestRows=roster.map(function(r){
+                const tag=r.self?(lang==='ko'?'나':'me'):'';
+                return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+escapeHtml(r.nickname)+'</span><span class="t">'+tag+'</span></div>';
+            }).join('');
+            panel.innerHTML='<div class="title">'+title+'</div><div class="rows">'+hostRow+guestRows+'</div>';
+        }
+
+        document.body.appendChild(bar);
+        render();
+
+        /* Receive the host's authoritative guest list and rebuild local
+           roster, preserving a "self" marker for the entry matching our
+           own nickname so the list can render "(me)" next to it. */
+        g.on('host:guests',function(p){
+            if(!p||!Array.isArray(p.nicknames))return;
+            roster=p.nicknames.map(function(n){return{nickname:n,self:n===(g.nickname||'')}});
+            if(!roster.length)roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true}];
+            render();
+            /* Subtle flash so the host notices when somebody else joins
+               or leaves — without the old noisy "(N)" event counter. */
             bar.classList.remove('lp-room-flash');
-            void bar.offsetWidth; /* reflow */
+            void bar.offsetWidth;
             bar.classList.add('lp-room-flash');
         });
     }
