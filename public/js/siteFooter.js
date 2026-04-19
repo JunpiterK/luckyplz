@@ -27,4 +27,13 @@
         +'<a href="mailto:luckyplz.contact@gmail.com">Contact</a>'
         +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
     document.body.appendChild(f);
+
+    /* AdSense slot injector — only loads if the page has a
+       <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
+    if(document.querySelector('[data-lp-ad]')){
+        var s=document.createElement('script');
+        s.src='/js/adSlots.js';
+        s.defer=true;
+        document.body.appendChild(s);
+    }
 })();
