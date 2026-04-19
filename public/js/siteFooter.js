@@ -36,4 +36,12 @@
         s.defer=true;
         document.body.appendChild(s);
     }
+
+    /* Recent-results memory — small module, loaded everywhere so game
+       pages can write results on finish and home page can read them. */
+    if(!window.LpRecent){
+        var rr=document.createElement('script');
+        rr.src='/js/recentResults.js';
+        document.body.appendChild(rr);
+    }
 })();

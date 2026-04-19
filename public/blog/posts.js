@@ -3,7 +3,22 @@
   One source of truth. Adding a post = push an entry + create /blog/<slug>/index.html.
   Each field can be a string (single-language) or object keyed by lang code.
 */
-const BLOG_POSTS = [
+window.BLOG_POSTS = [
+    {
+        slug: 'coffee-1-minute',
+        date: '2026-04-19',
+        readMinutes: 5,
+        coverEmoji: '☕️',
+        tags: { ko: ['회식', '커피', '1분'], en: ['after-work', 'coffee', '1-minute'] },
+        title: {
+            ko: '회식 커피 누가 쏠지 1분 안에 정하는 법',
+            en: 'Who Pays for After-Work Coffee? Decide Fairly in 60 Seconds',
+        },
+        excerpt: {
+            ko: '회식 후 눈치싸움 3분 대신 게임 1분. 상황별 룰렛·사다리·카레이싱 추천과 반복 당첨 방지 노하우까지.',
+            en: 'Skip the 3-minute standoff. 1-minute fair-decision flow with situation-specific game picks + anti-repeat tips.',
+        },
+    },
     {
         slug: 'coffee-who-pays',
         date: '2026-04-17',
