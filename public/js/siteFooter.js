@@ -80,4 +80,13 @@
     sh.src='/js/lpShare.js';
     sh.defer=true;
     document.body.appendChild(sh);
+
+    /* Online room (host/guest) — only useful on game pages, and needs
+       Supabase already in the page for the Realtime client. */
+    if(isGamePage&&window.supabase){
+        var rr2=document.createElement('script');
+        rr2.src='/js/lpRoom.js';
+        rr2.defer=true;
+        document.body.appendChild(rr2);
+    }
 })();

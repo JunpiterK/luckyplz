@@ -250,6 +250,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
         <div class="btn-group">
             <button id="startBtn">SPIN!</button>
+            <button id="onlineBtn" class="lp-room-online-btn" type="button" title="Online room">🌐 <span id="onlineBtnLabel">Online</span></button>
         </div>
     </div>
     </div>
@@ -766,6 +767,7 @@ function loop(ts){
 function onStopped(){
     const name=players[selectedIdx].name;
     SFX.win();
+    if(typeof _lpBroadcastResult==='function')_lpBroadcastResult(name);
     setTimeout(()=>showResult(name),2000);
 }
 
@@ -921,6 +923,7 @@ function startGame(){
     spinning=false;
     recordCurrentAsPreset();
     collectData();
+    if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
     const pcMode=isPCLayout();
     if(!pcMode){
         document.getElementById('setupWrap').style.display='none';
@@ -1056,8 +1059,126 @@ function init(){
         const origApplyLanguage=applyLanguage;
         applyLanguage=function(){origApplyLanguage();widget.setLabels(labels())};
     }
+
+    /* ============ ONLINE ROOM WIRING ============ */
+    /* Host state: when set, showResult broadcasts the winner so every
+       connected guest sees the same outcome. Guest state: when set, the
+       page is read-only and we override showResult on host events. */
+    window._lpHost=null;
+    window._lpGuest=null;
+
+    function _waitForLpRoom(cb,tries){
+        tries=tries||0;
+        if(window.LpRoom)return cb();
+        if(tries>40)return;
+        setTimeout(function(){_waitForLpRoom(cb,tries+1)},100);
+    }
+
+    /* Online button: open host modal, then on room-ready stay on setup
+       — host plays the game as normal, broadcasts fire inside showResult. */
+    const onlineBtn=document.getElementById('onlineBtn');
+    if(onlineBtn){
+        onlineBtn.addEventListener('click',function(){
+            if(window._lpHost){
+                /* already hosting — re-open share screen by closing + reopening */
+                return;
+            }
+            _waitForLpRoom(function(){
+                const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+                window.LpRoom.showHostModal({
+                    gameId:'roulette',
+                    hostName:hn,
+                    onReady:function(room){
+                        window._lpHost=room;
+                    }
+                });
+            });
+        });
+    }
+
+    /* Guest entry: URL has ?room=CODE → prompt for PIN+nickname, then
+       watch host's events. Guest UI is read-only (Start button hidden). */
+    _waitForLpRoom(function(){
+        const code=window.LpRoom.detectGuestIntent();
+        if(!code)return;
+        window.LpRoom.showGuestJoinModal(code,{
+            gameId:'roulette',
+            onJoined:function(g){
+                window._lpGuest=g;
+                _enableGuestMode(g);
+            }
+        });
+    });
+
+    function _enableGuestMode(g){
+        /* Block the guest from starting — they're here to watch. */
+        const sb=document.getElementById('startBtn');
+        if(sb){sb.disabled=true;sb.style.opacity='.4';sb.style.pointerEvents='none'}
+        const ob=document.getElementById('onlineBtn');
+        if(ob){ob.style.display='none'}
+        const pab=document.getElementById('pabStart');
+        if(pab){pab.disabled=true;pab.style.opacity='.4'}
+
+        g.on('host:config',function(p){
+            if(!Array.isArray(p.players)||!p.players.length)return;
+            playerCount=Math.max(2,Math.min(12,p.players.length));
+            renderPlayers();
+            const inputs=document.querySelectorAll('#playerInputs input');
+            p.players.forEach(function(n,i){if(inputs[i])inputs[i].value=n});
+            renderPreview&&renderPreview();
+        });
+        g.on('host:snapshot',function(p){
+            /* Snapshot = config replay for late joiners */
+            if(Array.isArray(p.players)&&p.players.length){
+                playerCount=Math.max(2,Math.min(12,p.players.length));
+                renderPlayers();
+                const inputs=document.querySelectorAll('#playerInputs input');
+                p.players.forEach(function(n,i){if(inputs[i])inputs[i].value=n});
+                renderPreview&&renderPreview();
+            }
+        });
+        g.on('host:spin_start',function(){
+            /* Start guest's spin as well — locally-driven so it feels live;
+               final winner syncs with host:result. */
+            if(typeof startGame==='function'&&document.getElementById('setupWrap').style.display!=='none'){
+                collectData();
+                document.getElementById('setupWrap').style.display='none';
+                document.getElementById('gameScreen').style.display='block';
+                if(!ctx)initCanvas();else resize();
+                if(typeof doSpin==='function')doSpin();
+            }
+        });
+        g.on('host:result',function(p){
+            if(!p||!p.winner)return;
+            /* If guest spin is still running, just force the winner visible
+               via showResult; otherwise show immediately. */
+            setTimeout(function(){
+                spinning=false;
+                if(typeof showResult==='function')showResult(p.winner);
+            },50);
+        });
+        g.on('host:close',function(){
+            alert((localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko')?'방장이 방을 닫았어요':'Host closed the room');
+            location.href='/';
+        });
+    }
+
 }
 init();
+
+/* Host broadcast hooks — called from inside startGame/onStopped directly. */
+function _lpBroadcastStart(){
+    if(!window._lpHost)return;
+    const names=[...document.querySelectorAll('#playerInputs input')].map(function(i){return i.value.trim()||i.placeholder||''});
+    const payload={game:'roulette',players:names,startedAt:Date.now()};
+    window._lpHost.snapshot(payload);
+    window._lpHost.broadcast('host:config',payload);
+    window._lpHost.broadcast('host:spin_start',{t:Date.now()});
+}
+function _lpBroadcastResult(name){
+    if(!window._lpHost)return;
+    window._lpHost.broadcast('host:result',{winner:name});
+}
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
