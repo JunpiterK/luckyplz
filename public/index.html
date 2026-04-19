@@ -144,14 +144,24 @@
         .game-card.coming-soon::before{display:none}
 
         /* Auth button */
-        .auth-bar{position:fixed;top:16px;right:16px;z-index:10;display:flex;gap:8px}
-        .auth-btn{display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:rgba(255,255,255,0.7);font-size:0.8em;font-weight:700;cursor:pointer;backdrop-filter:blur(10px);transition:all 0.3s;text-decoration:none;font-family:inherit}
+        .auth-bar{position:fixed;top:16px;right:16px;z-index:10;display:flex;gap:8px;align-items:center}
+        .auth-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:rgba(255,255,255,0.7);font-size:0.8em;font-weight:700;cursor:pointer;backdrop-filter:blur(10px);transition:all 0.3s;text-decoration:none;font-family:inherit;height:36px;box-sizing:border-box;white-space:nowrap;line-height:1}
         .auth-btn:hover{background:rgba(255,255,255,0.1);color:#fff;border-color:var(--primary)}
         .auth-btn .auth-avatar{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--accent));display:flex;align-items:center;justify-content:center;font-size:0.75em;font-weight:900;color:#fff}
         /* Watch-Together entry — tinted cyan so it reads as a distinct
            "live / realtime" action vs. the neutral Login chip. */
         .lp-home-join-btn{background:rgba(0,217,255,.1);border-color:rgba(0,217,255,.4);color:#00D9FF}
         .lp-home-join-btn:hover{background:rgba(0,217,255,.2);border-color:#00D9FF;color:#fff}
+        /* Mobile: split the two chips to opposite corners so the
+           Watch-Together action isn't squeezed against Login. Both
+           stay on the same baseline via a fixed height on .auth-btn. */
+        @media(max-width:600px){
+            .auth-bar{top:8px;left:8px;right:8px;display:block;pointer-events:none;height:0}
+            .auth-bar > .auth-btn{pointer-events:auto;position:fixed;top:8px}
+            .auth-bar > .lp-home-join-btn{left:8px}
+            .auth-bar > #authBtn{right:8px}
+            .auth-btn{padding:6px 12px;font-size:0.72em;height:30px}
+        }
 
         /* Footer */
         .footer{margin-top:auto;padding-top:40px;text-align:center;color:rgba(255,255,255,0.25);font-size:0.8em}
@@ -484,16 +494,25 @@ function init() {
     /* Watch-Together entry. lpRoom.js is loaded by siteFooter.js on
        every page now, so we wait for it to land before opening the
        modal. Handles the race where the button is clicked before
-       siteFooter has finished injecting lpRoom. */
+       siteFooter has finished injecting lpRoom. If lpRoom never loads
+       within 6 seconds, we alert the user — almost always because an
+       old cached siteFooter.js (with the isGamePage gate) is still
+       serving and they need to hard-refresh. */
     const joinBtn = document.getElementById('lpHomeJoinBtn');
     if (joinBtn) {
         joinBtn.addEventListener('click', () => {
+            console.log('[LpHome] join button clicked, LpRoom ready:', !!window.LpRoom);
             let tries = 0;
             (function wait(){
                 if (window.LpRoom && typeof window.LpRoom.showHomeJoinModal === 'function') {
                     window.LpRoom.showHomeJoinModal();
-                } else if (tries++ < 40) {
+                } else if (tries++ < 60) {
                     setTimeout(wait, 100);
+                } else {
+                    const ko = (localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko');
+                    alert(ko
+                        ? '연결 모듈을 불러오지 못했어요. 페이지를 새로고침해주세요. (브라우저 캐시 문제일 수 있어요.)'
+                        : 'Connection module failed to load. Please refresh the page — your browser may be serving a cached copy.');
                 }
             })();
         });
@@ -536,6 +555,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js" defer></script>
+<script src="/js/siteFooter.js?v=20260420d" defer></script>
 </body>
 </html>
