@@ -255,7 +255,28 @@
            +'.lp-room-status .dot{width:8px;height:8px;border-radius:50%;background:#00D9FF;animation:lpRoomPulse 1.6s ease-in-out infinite}'
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
            +'.lp-room-status .x{margin-left:6px;cursor:pointer;opacity:.5;font-weight:700}'
-           +'.lp-room-status .x:hover{opacity:1}';
+           +'.lp-room-status .x:hover{opacity:1}'
+           /* QR in share modal */
+           +'.lp-room-qr-wrap{position:relative;margin:14px auto 6px;max-width:220px}'
+           +'.lp-room-qr{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);min-height:220px}'
+           +'.lp-room-qr-big{position:absolute;top:6px;right:6px;padding:5px 9px;border-radius:8px;border:0;background:rgba(0,0,0,.55);color:#fff;font-family:inherit;font-size:.72em;font-weight:700;cursor:pointer;backdrop-filter:blur(6px);transition:background .2s}'
+           +'.lp-room-qr-big:hover{background:rgba(0,0,0,.8)}'
+           /* Fullscreen QR overlay */
+           +'.lp-room-qr-full{position:fixed;inset:0;background:rgba(5,5,15,.97);z-index:9800;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:"Noto Sans KR",sans-serif;color:#fff;animation:lpQrFadeIn .25s ease}'
+           +'@keyframes lpQrFadeIn{from{opacity:0}to{opacity:1}}'
+           +'.lp-room-qr-close{position:absolute;top:16px;right:20px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.08);color:#fff;font-size:1.5em;line-height:1;cursor:pointer;transition:background .2s}'
+           +'.lp-room-qr-close:hover{background:rgba(255,255,255,.15)}'
+           +'.lp-room-qr-inner{display:flex;flex-direction:column;align-items:center;gap:18px;max-width:560px;width:100%}'
+           +'.lp-room-qr-label{font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:1.2em;font-weight:700;color:#00D9FF;letter-spacing:.02em;text-align:center}'
+           +'.lp-room-qr-big-canvas{width:min(75vmin,480px);height:min(75vmin,480px);display:flex;align-items:center;justify-content:center;background:#fff;border-radius:20px;padding:20px;box-shadow:0 30px 80px rgba(0,217,255,.25)}'
+           +'.lp-room-qr-big-canvas img{width:100%;height:auto;max-width:100%;display:block}'
+           +'.lp-room-qr-footer{text-align:center;width:100%}'
+           +'.lp-room-qr-enter{font-size:.85em;color:rgba(255,255,255,.55);letter-spacing:.04em;margin-bottom:10px}'
+           +'.lp-room-qr-codes{display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:center;font-family:"Orbitron","Noto Sans KR",sans-serif;align-items:baseline}'
+           +'.lp-room-qr-codes .lbl{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.14em;font-weight:700;text-transform:uppercase}'
+           +'.lp-room-qr-codes .val{font-size:1.9em;font-weight:900;letter-spacing:.1em;color:#fff}'
+           +'.lp-room-qr-codes .val.pin{color:#FFE66D}'
+           +'@media(max-width:500px){.lp-room-qr-codes .val{font-size:1.4em}.lp-room-qr-label{font-size:1em}}';
         document.head.appendChild(s);
     }
 
@@ -315,12 +336,47 @@
         document.getElementById('lpRoomConfirm').addEventListener('click',doCreate);
     }
 
+    /* QR library loader — lazy load on first host-share view.
+       Using qrcode-generator (qrcode.js by Kazuhiko Arase): pure JS,
+       ~12KB, no dependencies, hundreds of millions of deploys, renders
+       into an <img> with data URL so there's no canvas permission prompt
+       on mobile Safari. */
+    function _loadQrLib(){
+        if(window.qrcode)return Promise.resolve();
+        if(window._lpQrPromise)return window._lpQrPromise;
+        window._lpQrPromise=new Promise(function(resolve,reject){
+            const s=document.createElement('script');
+            s.src='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';
+            s.onload=resolve;
+            s.onerror=reject;
+            document.head.appendChild(s);
+        });
+        return window._lpQrPromise;
+    }
+    function _renderQr(container,text,sizePx){
+        _loadQrLib().then(function(){
+            try{
+                const qr=qrcode(0,'M'); /* type auto, error correction M (15%) */
+                qr.addData(text);
+                qr.make();
+                const cell=Math.max(3,Math.floor(sizePx/(qr.getModuleCount()+4)));
+                container.innerHTML=qr.createImgTag(cell,cell*2);
+                const img=container.querySelector('img');
+                if(img){img.alt='Room QR';img.style.cssText='display:block;width:100%;max-width:'+sizePx+'px;height:auto;border-radius:8px;background:#fff;padding:'+(cell*2)+'px;box-sizing:border-box'}
+            }catch(e){container.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:.75em">QR unavailable</div>'}
+        }).catch(function(){container.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:.75em">QR library failed</div>'});
+    }
+
     function showHostShare(room,opts){
         opts=opts||{};
         const url=room.shareUrl();
         mountBackdrop(
             '<h3>'+_t('🌐 방 생성 완료','🌐 Room Created')+'</h3>'
-           +'<div class="sub">'+_t('아래 링크와 비밀번호를 친구에게 카톡/메신저로 공유하세요.','Share the link and PIN with friends via chat.')+'</div>'
+           +'<div class="sub">'+_t('카메라로 QR을 찍거나 링크를 공유하세요. 4자리 비밀번호도 같이 알려줘야 합니다.','Scan the QR with a camera, or share the link. Don\'t forget to share the 4-digit PIN too.')+'</div>'
+           +'<div class="lp-room-qr-wrap">'
+           +  '<div class="lp-room-qr" id="lpRoomQr"></div>'
+           +  '<button class="lp-room-qr-big" id="lpRoomQrBig" type="button" title="Big QR">⛶ '+_t('큰 QR 보기','Fullscreen')+'</button>'
+           +'</div>'
            +'<label>'+_t('방 코드','Room Code')+'</label>'
            +'<div class="lp-room-code">'+room.code+'</div>'
            +'<label>'+_t('비밀번호','PIN')+'</label>'
@@ -337,6 +393,9 @@
            +'<button class="btn primary" id="lpRoomStart">'+_t('시작!','Start!')+'</button>'
            +'</div>'
         );
+        _renderQr(document.getElementById('lpRoomQr'),url,220);
+        const qrBigBtn=document.getElementById('lpRoomQrBig');
+        if(qrBigBtn)qrBigBtn.addEventListener('click',function(){showQrFullscreen(room,url)});
 
         function renderGuests(){
             const body=document.getElementById('lpRoomGuestsBody');
@@ -382,6 +441,41 @@
             showHostStatus(room);
             if(opts.onReady)opts.onReady(room);
         });
+    }
+
+    /* Fullscreen QR overlay — event hosts display this on a big screen /
+       projector so attendees scan with their phone camera. Tap / ESC to
+       close. Shows the room code + PIN underneath so audience can enter
+       manually if they prefer. */
+    function showQrFullscreen(room,url){
+        injectStyles();
+        const prev=document.getElementById('lpRoomBackdrop');
+        if(prev)prev.remove();
+        const overlay=document.createElement('div');
+        overlay.id='lpRoomQrFull';
+        overlay.className='lp-room-qr-full';
+        const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
+        const scanLabel=lang==='ko'?'📷 카메라로 QR을 찍으세요':(lang==='ja'?'📷 QRをスキャン':(lang==='zh'?'📷 用相机扫描':'📷 Scan with your camera'));
+        const enterLabel=lang==='ko'?'직접 입력':(lang==='ja'?'手動で入力':(lang==='zh'?'手动输入':'Or enter manually'));
+        const closeLabel=lang==='ko'?'닫기':(lang==='ja'?'閉じる':(lang==='zh'?'关闭':'Close'));
+        overlay.innerHTML=
+            '<button class="lp-room-qr-close" id="lpRoomQrClose" aria-label="'+closeLabel+'">×</button>'
+           +'<div class="lp-room-qr-inner">'
+           +'  <div class="lp-room-qr-label">'+scanLabel+'</div>'
+           +'  <div class="lp-room-qr-big-canvas" id="lpRoomQrBigCanvas"></div>'
+           +'  <div class="lp-room-qr-footer">'
+           +'    <div class="lp-room-qr-enter">'+enterLabel+'</div>'
+           +'    <div class="lp-room-qr-codes"><span class="lbl">Room</span><span class="val">'+room.code+'</span><span class="lbl">PIN</span><span class="val pin">'+room.pin+'</span></div>'
+           +'  </div>'
+           +'</div>';
+        document.body.appendChild(overlay);
+        /* Render QR at big size — 400px target but lets CSS scale down */
+        _renderQr(document.getElementById('lpRoomQrBigCanvas'),url,400);
+        function close(){overlay.remove();document.removeEventListener('keydown',onKey);showHostShare(room,{})}
+        function onKey(e){if(e.key==='Escape')close()}
+        document.addEventListener('keydown',onKey);
+        document.getElementById('lpRoomQrClose').addEventListener('click',close);
+        overlay.addEventListener('click',function(e){if(e.target===overlay)close()});
     }
 
     function showHostStatus(room){
