@@ -11,7 +11,7 @@
     s.textContent = `
 .lp-next-wrap{margin-top:24px;padding:20px 4px 6px;border-top:1px solid rgba(255,255,255,.08);font-family:'Noto Sans KR',sans-serif}
 .lp-next-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.78em;color:rgba(255,255,255,.5);letter-spacing:2.5px;text-align:center;margin-bottom:14px;font-weight:700}
-.lp-next-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;max-width:440px;margin:0 auto}
+.lp-next-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:560px;margin:0 auto}
 .lp-next-card{display:flex;flex-direction:column;align-items:center;gap:5px;padding:14px 8px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);cursor:pointer;transition:transform .18s,background .25s,border-color .25s;text-decoration:none;color:#fff}
 .lp-next-card:hover{background:rgba(255,230,109,.1);border-color:rgba(255,230,109,.45);transform:translateY(-2px)}
 .lp-next-icon{font-size:1.8em;line-height:1;margin-bottom:2px}
@@ -20,6 +20,7 @@
 .lp-next-home:hover{color:#FFE66D}
 @media(max-width:500px){
   .lp-next-wrap{margin-top:18px;padding:14px 2px 4px}
+  .lp-next-grid{grid-template-columns:repeat(2,1fr);max-width:320px}
   .lp-next-card{padding:10px 6px}
   .lp-next-icon{font-size:1.5em}
   .lp-next-name{font-size:.68em}
@@ -101,18 +102,15 @@ const LP_HOME_LINK = {
 
 function lpRenderNextGames(container, currentGame, count) {
     if (!container) return;
-    count = Math.min(Math.max(2, count || 3), 5);
     const lang = localStorage.getItem('luckyplz_lang') || 'en';
     const names = LP_GAME_NAMES[lang] || LP_GAME_NAMES.en;
     const title = LP_NEXT_TITLE[lang] || LP_NEXT_TITLE.en;
     const homeText = LP_HOME_LINK[lang] || LP_HOME_LINK.en;
 
-    const others = LP_GAMES.filter(g => g.id !== currentGame);
-    for (let i = others.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [others[i], others[j]] = [others[j], others[i]];
-    }
-    const picks = others.slice(0, count);
+    /* Show every other game — with only 5 total games, recommending all 4
+       remaining ones is cleaner than a random subset. `count` argument is
+       retained for backward-compat but ignored. */
+    const picks = LP_GAMES.filter(g => g.id !== currentGame);
 
     container.innerHTML = `
       <div class="lp-next-wrap">
