@@ -4176,7 +4176,38 @@ function handleCollision(car1,car2){
 }
 
 /* ===== COMMENTARY ===== */
+/* Commentary scheduling — previously every event joined an unbounded
+   3s-per-message FIFO, so a flurry of icey-drift-drift-item-use
+   events would pile up and a late important one (finish / landmine)
+   would appear 10+ seconds after it happened. New rules:
+     · Per-type cooldown: repeat of the same type within N seconds is
+       dropped at the source. Keeps the feed varied.
+     · Queue cap: never more than 3 pending; oldest drops when full.
+     · Shorter default display (3s → 1.8s) so the feed drains fast
+       enough for important late events to stay visible.
+     · A few one-shot types (raceStart, finish, lastBoost, itemHit,
+       landmine) bypass cooldown — they're rare and high-signal. */
+const _COMMENTARY_COOLDOWN={
+    _default:2.5,
+    raceStart:0, finish:0, lastBoost:0, landmine:0, itemHit:0.8,
+    iceSlip:4, driftGood:3, driftBad:3, guardrail:2, nearMiss:3,
+    sticky:2, stickyStack:1.5, netLand:0, netCatch:1.5,
+    wingUse:2, wingEnd:2.5, ghostUse:2, ghostEnd:2.5,
+    boostUse:2, boostDodge:1.5, ghostDodge:1.5, wingDodge:1.5,
+    itemGet:1.5, itemUse:1.2, netLaunch:1.5, legChange:2, wind:3,
+    collision:2, checkpoint:2
+};
+const _commentaryLastAt={};
+const COMMENTARY_MAX_QUEUE=3;
+const COMMENTARY_DEFAULT_DUR=1.8;
+
 function addCommentary(type,data){
+    /* Cooldown: drop at source so queue never bloats with same-type. */
+    const cd=(_COMMENTARY_COOLDOWN[type]!==undefined)?_COMMENTARY_COOLDOWN[type]:_COMMENTARY_COOLDOWN._default;
+    const now=performance.now()/1000;
+    if(cd>0&&_commentaryLastAt[type]&&(now-_commentaryLastAt[type])<cd)return;
+    _commentaryLastAt[type]=now;
+
     let msg='';
     switch(type){
         case 'raceStart':msg=T('c_raceStart');break;
@@ -4212,7 +4243,10 @@ function addCommentary(type,data){
         case 'wingEnd':msg=T('c_wingEnd',data);break;
         case 'landmine':msg=T('c_landmine',data);break;
     }
-    if(msg)commentaryQueue.push({message:msg,duration:3});
+    if(!msg)return;
+    /* Drop oldest pending if cap exceeded — recent events > stale ones. */
+    while(commentaryQueue.length>=COMMENTARY_MAX_QUEUE)commentaryQueue.shift();
+    commentaryQueue.push({message:msg,duration:COMMENTARY_DEFAULT_DUR,type:type});
 }
 
 function updateCommentary(dt){
