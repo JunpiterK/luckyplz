@@ -52,7 +52,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .post-tags{margin-top:12px;display:flex;gap:6px;flex-wrap:wrap}
 .post-tag{font-size:.7em;padding:3px 10px;border-radius:999px;background:rgba(255,230,109,.08);color:rgba(255,230,109,.75);border:1px solid rgba(255,230,109,.18);letter-spacing:.02em}
 
-.empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.35);font-size:.9em}
+.empty{text-align:center;padding:60px 20px;color:rgba(255,255,255,.35);font-size:.9em;line-height:1.8}
+.empty-cta{display:inline-block;margin-top:10px;padding:8px 16px;border-radius:999px;background:rgba(255,230,109,.1);border:1px solid rgba(255,230,109,.3);color:#FFE66D;text-decoration:none;font-size:.9em;transition:background .2s,border-color .2s}
+.empty-cta:hover{background:rgba(255,230,109,.2);border-color:rgba(255,230,109,.5)}
 
 .footer-nav{margin-top:50px;text-align:center;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
 .footer-nav a{color:rgba(255,255,255,.4);text-decoration:none;font-size:.8em;transition:color .2s;margin:0 10px}
@@ -113,19 +115,41 @@ function formatDate(dateStr, lang){
 }
 
 function renderPosts(){
-    const lang = localStorage.getItem('luckyplz_lang') || 'ko';
+    const rawLang = (localStorage.getItem('luckyplz_lang') || 'ko').toLowerCase();
+    /* Posts are authored natively per-language. ko users see ko posts;
+       everyone else sees en posts. Primary locales only — other langs
+       fall through to en so visitors always see *some* content rather
+       than a blank page. */
+    const bucket = rawLang === 'ko' ? 'ko' : 'en';
     const list = document.getElementById('postsList');
     if (!window.BLOG_POSTS || !BLOG_POSTS.length){
         list.innerHTML = `<div class="empty">첫 글을 준비 중입니다 ✨</div>`;
         return;
     }
-    // newest first
-    const posts = [...BLOG_POSTS].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const allPosts = [...BLOG_POSTS].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const posts = allPosts.filter(p => (p.lang||'ko') === bucket);
+
+    if (!posts.length){
+        const otherBucket = bucket === 'ko' ? 'en' : 'ko';
+        const otherCount = allPosts.filter(p => (p.lang||'ko') === otherBucket).length;
+        const msgs = bucket === 'ko'
+            ? {none:'한국어 글을 준비 중입니다 ✨', cta:`영어 글 ${otherCount}편 보기 →`}
+            : {none:'English posts coming soon ✨', cta:`Read ${otherCount} Korean posts →`};
+        list.innerHTML = `<div class="empty">${msgs.none}${otherCount ? `<br><a class="empty-cta" href="#" data-switch-lang="${otherBucket}">${msgs.cta}</a>` : ''}</div>`;
+        const switchLink = list.querySelector('[data-switch-lang]');
+        if (switchLink) switchLink.addEventListener('click', e => {
+            e.preventDefault();
+            localStorage.setItem('luckyplz_lang', otherBucket);
+            renderPosts();
+        });
+        return;
+    }
+
     list.innerHTML = posts.map(p => {
-        const title = pick(p.title, lang);
-        const excerpt = pick(p.excerpt, lang);
-        const tags = pick(p.tags, lang) || [];
-        const dateText = p.date ? formatDate(p.date, lang) : '';
+        const title = pick(p.title, bucket);
+        const excerpt = pick(p.excerpt, bucket);
+        const tags = pick(p.tags, bucket) || [];
+        const dateText = p.date ? formatDate(p.date, bucket) : '';
         const readText = p.readMinutes ? `· ${p.readMinutes} min` : '';
         return `
           <a class="post-card" href="/blog/${p.slug}/">
