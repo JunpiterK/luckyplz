@@ -132,7 +132,7 @@
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776637030';
+        rr2.src='/js/lpRoom.js?v=1776639053';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
