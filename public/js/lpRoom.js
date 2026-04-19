@@ -307,7 +307,7 @@
         const ko=_t(true,false);
 
         const step1=mountBackdrop(
-            '<h3>'+_t('🌐 온라인 방 만들기','🌐 Create Online Room')+'</h3>'
+            '<h3>'+_t('👥 같이 보기 방 만들기','👥 Create Watch-Together Room')+'</h3>'
            +'<div class="sub">'+_t('4자리 비밀번호를 설정하세요. 친구에게 알려줄 숫자입니다.','Set a 4-digit PIN. You\'ll share this with friends.')+'</div>'
            +'<label>'+_t('비밀번호 4자리','4-digit PIN')+'</label>'
            +'<input id="lpRoomPin" class="pin-input" type="tel" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">'
@@ -371,7 +371,7 @@
         opts=opts||{};
         const url=room.shareUrl();
         mountBackdrop(
-            '<h3>'+_t('🌐 방 생성 완료','🌐 Room Created')+'</h3>'
+            '<h3>'+_t('👥 방 생성 완료','👥 Room Created')+'</h3>'
            +'<div class="sub">'+_t('카메라로 QR을 찍거나 링크를 공유하세요. 4자리 비밀번호도 같이 알려줘야 합니다.','Scan the QR with a camera, or share the link. Don\'t forget to share the 4-digit PIN too.')+'</div>'
            +'<div class="lp-room-qr-wrap">'
            +  '<div class="lp-room-qr" id="lpRoomQr"></div>'
@@ -414,8 +414,8 @@
         renderGuests();
 
         const shareText=_t(
-            '🌐 Lucky Please 온라인 방\n방 코드: '+room.code+'\n비밀번호: '+room.pin+'\n'+url,
-            '🌐 Lucky Please Online Room\nRoom: '+room.code+'\nPIN: '+room.pin+'\n'+url
+            '👥 Lucky Please 같이 보기\n방 코드: '+room.code+'\n비밀번호: '+room.pin+'\n'+url,
+            '👥 Lucky Please Watch Together\nRoom: '+room.code+'\nPIN: '+room.pin+'\n'+url
         );
 
         document.getElementById('lpRoomCopy').addEventListener('click',function(){
@@ -489,7 +489,7 @@
         function refresh(){
             const count=room.guests().length;
             const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-            const lbl=lang==='ko'?`🌐 ${room.code} · 접속자 ${count}명`:`🌐 ${room.code} · ${count} guest${count===1?'':'s'}`;
+            const lbl=lang==='ko'?`👥 ${room.code} · ${count}명 같이 보는중`:`👥 ${room.code} · ${count} watching`;
             bar.innerHTML='<span class="dot"></span><span>'+lbl+'</span><span class="x" id="lpRoomStatusX" title="'+(lang==='ko'?'방 닫기':'End room')+'">×</span>';
             const x=document.getElementById('lpRoomStatusX');
             if(x)x.addEventListener('click',function(){room.close();bar.remove()});
@@ -504,7 +504,7 @@
         opts=opts||{};
         const gameId=opts.gameId;
         mountBackdrop(
-            '<h3>'+_t('🌐 온라인 방 참가','🌐 Join Online Room')+'</h3>'
+            '<h3>'+_t('👥 같이 보기 방 참가','👥 Join Watch-Together Room')+'</h3>'
            +'<div class="sub">'+_t('방장이 알려준 4자리 비밀번호와 닉네임을 입력하세요.','Enter the 4-digit PIN from the host and a nickname.')+'</div>'
            +'<label>'+_t('방 코드','Room Code')+'</label>'
            +'<div class="lp-room-code" style="font-size:1.4em">'+code.toUpperCase()+'</div>'
@@ -570,12 +570,49 @@
         return m?m[1].toUpperCase():null;
     }
 
+    /* Auto-localize the "Watch Together" button label if a game page
+       placed one. Games put a default English label in HTML; we swap it
+       to the user's language on load and whenever lang changes. */
+    function localizeOnlineBtn(){
+        const lbl=document.getElementById('onlineBtnLabel');
+        if(!lbl)return;
+        const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
+        lbl.textContent=(
+            lang==='ko'?'같이 보기':
+            lang==='ja'?'一緒に見る':
+            lang==='zh'?'一起看':
+            lang==='es'?'Ver juntos':
+            lang==='de'?'Zusammen ansehen':
+            lang==='fr'?'Regarder ensemble':
+            lang==='pt'?'Assistir juntos':
+            lang==='ru'?'Смотреть вместе':
+            lang==='vi'?'Xem cùng':
+            lang==='id'?'Nonton bareng':
+            lang==='th'?'ดูด้วยกัน':
+            lang==='tr'?'Birlikte izle':
+            'Watch Together'
+        );
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',localizeOnlineBtn);
+    }else{
+        localizeOnlineBtn();
+    }
+    /* Re-localize when lang changes (the lang selector uses a storage
+       event we can hook into; fallback: observe document.documentElement.lang). */
+    window.addEventListener('storage',function(e){
+        if(e.key==='luckyplz_lang')localizeOnlineBtn();
+    });
+    const langObs=new MutationObserver(localizeOnlineBtn);
+    langObs.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+
     window.LpRoom={
         hostCreate:hostCreate,
         guestJoin:guestJoin,
         showHostModal:showHostModal,
         showGuestJoinModal:showGuestJoinModal,
         detectGuestIntent:detectGuestIntent,
+        localizeOnlineBtn:localizeOnlineBtn,
         _injectStyles:injectStyles
     };
 })();
