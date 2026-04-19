@@ -30,14 +30,17 @@
 
 /* Dice is retained as a file but intentionally excluded from cross-promotion
    so the home funnel focuses on betting games + team/lotto utilities. */
-/* Ladder emoji (🪜) isn't in Edge/Windows default emoji set on many systems,
-   so use the same SVG the home grid uses to avoid a tofu square. */
+/* Keep these SVGs 1:1 with the home grid's LADDER_SVG/ROULETTE_SVG/TEAM_SVG
+   so every surface of the site shows the same icon for the same game. Ladder
+   emoji (🪜) also tofus on Edge/Windows, which is another reason to use SVG. */
 const LP_LADDER_SVG = '<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><rect x="9" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="23.5" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="11" y="7" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="16.5" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="26" width="14" height="3" rx="1" fill="#e8a848"/></svg>';
+const LP_ROULETTE_SVG = '<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><path d="M18 18 L18 4 A14 14 0 0 1 30.1 11 Z" fill="#e74c3c" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 11 A14 14 0 0 1 30.1 25 Z" fill="#f39c12" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 25 A14 14 0 0 1 18 32 Z" fill="#f1c40f" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L18 32 A14 14 0 0 1 5.9 25 Z" fill="#2ecc71" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 25 A14 14 0 0 1 5.9 11 Z" fill="#3498db" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 11 A14 14 0 0 1 18 4 Z" fill="#9b59b6" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><circle cx="18" cy="18" r="1.8" fill="#1a1a1a"/></svg>';
+const LP_TEAM_SVG = '<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><g transform="translate(-5.2 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><g transform="translate(8.8 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></svg>';
 const LP_GAMES = [
     { id: 'lotto', icon: '🎱', url: '/games/lotto/' },
-    { id: 'team', icon: '👥', url: '/games/team/' },
+    { id: 'team', icon: LP_TEAM_SVG, url: '/games/team/' },
     { id: 'car-racing', icon: '🏎️', url: '/games/car-racing/' },
-    { id: 'roulette', icon: '🎯', url: '/games/roulette/' },
+    { id: 'roulette', icon: LP_ROULETTE_SVG, url: '/games/roulette/' },
     { id: 'ladder', icon: LP_LADDER_SVG, url: '/games/ladder/' },
 ];
 

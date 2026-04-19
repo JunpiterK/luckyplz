@@ -8,15 +8,19 @@
 */
 
 (function(){
-    /* Ladder emoji (🪜) renders as tofu on Edge / Windows systems without a
-       full emoji font. Use the same SVG the home page uses so the icon is
-       consistent and glyph-independent. */
+    /* Mirror the home-page icon set exactly so every surface (home grid +
+       nav bar + cross-promo) shows the same glyph per game. Ladder emoji
+       (🪜) tofus on Windows/Edge without full emoji fonts, and the roulette
+       / team icons on the home page have diverged from the stock emojis
+       (🎯 / 👥) — custom SVGs replicate each. */
     const LADDER_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><rect x="9" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="23.5" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="11" y="7" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="16.5" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="26" width="14" height="3" rx="1" fill="#e8a848"/></svg>';
+    const ROULETTE_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><path d="M18 18 L18 4 A14 14 0 0 1 30.1 11 Z" fill="#e74c3c" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 11 A14 14 0 0 1 30.1 25 Z" fill="#f39c12" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 25 A14 14 0 0 1 18 32 Z" fill="#f1c40f" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L18 32 A14 14 0 0 1 5.9 25 Z" fill="#2ecc71" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 25 A14 14 0 0 1 5.9 11 Z" fill="#3498db" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 11 A14 14 0 0 1 18 4 Z" fill="#9b59b6" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><circle cx="18" cy="18" r="1.8" fill="#1a1a1a"/></svg>';
+    const TEAM_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><g transform="translate(-5.2 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><g transform="translate(8.8 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></svg>';
     const GAMES=[
-        {id:'roulette',  icon:'🎯', url:'/games/roulette/'},
+        {id:'roulette',  icon:ROULETTE_SVG, url:'/games/roulette/'},
         {id:'ladder',    icon:LADDER_SVG, url:'/games/ladder/'},
         {id:'car-racing',icon:'🏎️',url:'/games/car-racing/'},
-        {id:'team',      icon:'👥', url:'/games/team/'},
+        {id:'team',      icon:TEAM_SVG, url:'/games/team/'},
         {id:'lotto',     icon:'🎱', url:'/games/lotto/'},
     ];
 
