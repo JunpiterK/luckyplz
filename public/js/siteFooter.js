@@ -50,11 +50,14 @@
         /* Ghost / cancel in modals */
         +'.lp-room-modal .btn.ghost{border-radius:12px!important;background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.12)!important}'
         +'.lp-room-modal .btn.ghost:hover{background:rgba(255,255,255,.09)!important;border-color:rgba(255,255,255,.22)!important;transform:translateY(-1px)}'
-        /* Watch-Together button — crisper silver-cyan chip, match start geometry */
-        +'.lp-room-online-btn{padding:12px 18px!important;border-radius:14px!important;font-family:"Orbitron","Noto Sans KR",sans-serif!important;font-weight:700!important;letter-spacing:.08em!important;font-size:.82em!important;background:linear-gradient(145deg,rgba(0,217,255,.12),rgba(0,217,255,.04))!important;border:1.5px solid rgba(0,217,255,.4)!important;color:#00D9FF!important;box-shadow:0 4px 14px -4px rgba(0,217,255,.25)!important;position:relative;overflow:hidden}'
-        +'.lp-room-online-btn::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(0,217,255,.18) 50%,transparent 60%);transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.8,.4,1);pointer-events:none}'
-        +'.lp-room-online-btn:hover::after{transform:translateX(120%)}'
-        +'.lp-room-online-btn:hover{border-color:rgba(0,217,255,.75)!important;box-shadow:0 8px 22px -4px rgba(0,217,255,.4)!important;transform:translateY(-2px)}'
+        /* Watch-Together chip — only style the standalone-row version. When
+           the class is combined with .pab-btn (the pc-action-bar variant),
+           defer to pab-btn\'s column layout so it sits with its toolbar
+           siblings. */
+        +'.lp-room-online-btn:not(.pab-btn){padding:12px 18px!important;border-radius:14px!important;font-family:"Orbitron","Noto Sans KR",sans-serif!important;font-weight:700!important;letter-spacing:.08em!important;font-size:.82em!important;background:linear-gradient(145deg,rgba(0,217,255,.12),rgba(0,217,255,.04))!important;border:1.5px solid rgba(0,217,255,.4)!important;color:#00D9FF!important;box-shadow:0 4px 14px -4px rgba(0,217,255,.25)!important;position:relative;overflow:hidden}'
+        +'.lp-room-online-btn:not(.pab-btn)::after{content:"";position:absolute;inset:0;background:linear-gradient(120deg,transparent 40%,rgba(0,217,255,.18) 50%,transparent 60%);transform:translateX(-120%);transition:transform .7s cubic-bezier(.2,.8,.4,1);pointer-events:none}'
+        +'.lp-room-online-btn:not(.pab-btn):hover::after{transform:translateX(120%)}'
+        +'.lp-room-online-btn:not(.pab-btn):hover{border-color:rgba(0,217,255,.75)!important;box-shadow:0 8px 22px -4px rgba(0,217,255,.4)!important;transform:translateY(-2px)}'
         /* Share buttons — add soft depth + firmer hover */
         +'.share-btn{padding:9px 14px!important;border-radius:12px!important;font-weight:700!important;letter-spacing:.015em!important;box-shadow:0 3px 10px -3px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.14)!important}'
         +'.share-btn:hover{transform:translateY(-2px);filter:brightness(1.1);box-shadow:0 8px 22px -4px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.2)!important}'

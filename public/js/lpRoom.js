@@ -137,6 +137,17 @@
     }
 
     /* ============ GUEST ============ */
+    /* Known host→guest events. We register an explicit chan.on() per event
+       rather than {event:'*'} because wildcard broadcast subscriptions
+       have been historically flaky across supabase-js versions (silently
+       dropped messages in the wild). Add any new host event name here
+       when a game starts using it. */
+    const KNOWN_HOST_EVENTS=[
+        'host:join_ack','host:snapshot','host:close',
+        'host:config','host:state','host:start','host:spin_start',
+        'host:tick','host:stop','host:result','host:reset','host:action'
+    ];
+
     async function guestJoin(opts){
         opts=opts||{};
         const code=String(opts.code||'').trim().toUpperCase();
@@ -148,10 +159,18 @@
         const gid=shortId()+'-'+shortId();
         const listeners={}; /* event → [fn] */
         let accepted=false;
+        /* Event cache for late listeners. The host broadcasts host:snapshot
+           (and the initial host:config) almost immediately after we send
+           guest:join_request — often before the game-code callback has a
+           chance to register its g.on(...) handlers. Without caching,
+           those payloads would be dispatched to an empty listener array
+           and lost, leaving the guest stuck on default setup. We store the
+           latest payload per state-like event and replay it synchronously
+           from g.on() when the listener finally arrives. */
+        const cache={};
+        const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result)$/;
 
-        chan.on('broadcast',{event:'*'},function(msg){
-            const ev=msg.event;
-            const p=msg.payload||{};
+        function dispatch(ev,p){
             if(ev==='host:join_ack'){
                 if(p.gid!==gid)return; /* not for us */
                 if(p.ok){
@@ -165,11 +184,21 @@
             /* Host:snapshot targeted replay to newly-joined guest */
             if(ev==='host:snapshot'){
                 if(p.gid&&p.gid!==gid)return;
+                cache['host:snapshot']=p;
                 emit('host:snapshot',p);
                 return;
             }
             /* Regular host events after acceptance */
-            if(accepted)emit(ev,p);
+            if(accepted){
+                if(STATEFUL.test(ev))cache[ev]=p;
+                emit(ev,p);
+            }
+        }
+
+        KNOWN_HOST_EVENTS.forEach(function(evName){
+            chan.on('broadcast',{event:evName},function(msg){
+                dispatch(msg.event||evName,msg.payload||{});
+            });
         });
 
         function emit(event,payload){
@@ -206,6 +235,18 @@
             on:function(event,cb){
                 if(!listeners[event])listeners[event]=[];
                 listeners[event].push(cb);
+                /* Replay any cached payload synchronously. If the event
+                   already fired during the join handshake (before the game
+                   code had a chance to register this listener), the cache
+                   still has it, so the listener won't miss the initial
+                   state. host:config listeners also see the host:snapshot
+                   payload since a snapshot is just a targeted-replay of
+                   the current config. */
+                if(cache[event]){
+                    try{cb(cache[event])}catch(e){}
+                }else if(event==='host:config'&&cache['host:snapshot']){
+                    try{cb(cache['host:snapshot'])}catch(e){}
+                }
             },
             close:function(){
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
@@ -330,6 +371,12 @@
             err.textContent=_t('방 연결 중…','Connecting…');
             try{
                 const room=await hostCreate({gameId:gameId,pin:pin,hostName:hostName});
+                /* Fire onCreated as soon as the channel is live, before the
+                   share modal shows. Games hook this to register their
+                   snapshot provider and start live config broadcasting, so
+                   any guest that joins via QR while the modal is still up
+                   immediately sees the host's setup instead of defaults. */
+                if(opts.onCreated)try{opts.onCreated(room)}catch(_){}
                 showHostShare(room,opts);
             }catch(e){err.textContent=_t('연결 실패. 다시 시도해주세요','Connection failed. Try again')}
         }
@@ -574,10 +621,10 @@
        placed one. Games put a default English label in HTML; we swap it
        to the user's language on load and whenever lang changes. */
     function localizeOnlineBtn(){
-        const lbl=document.getElementById('onlineBtnLabel');
-        if(!lbl)return;
+        const lbls=document.querySelectorAll('.online-btn-label, #onlineBtnLabel');
+        if(!lbls.length)return;
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-        lbl.textContent=(
+        const label=(
             lang==='ko'?'같이 보기':
             lang==='ja'?'一緒に見る':
             lang==='zh'?'一起看':
@@ -592,6 +639,7 @@
             lang==='tr'?'Birlikte izle':
             'Watch Together'
         );
+        lbls.forEach(function(l){l.textContent=label});
     }
     if(document.readyState==='loading'){
         document.addEventListener('DOMContentLoaded',localizeOnlineBtn);

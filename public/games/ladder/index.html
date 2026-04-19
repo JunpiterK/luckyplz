@@ -74,7 +74,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
    + #addPlayerBtn pair at the bottom of the setup form; we keep the
    buttons in the DOM but hide them so the toolbar is the single control
    surface across all viewports. */
-.pc-action-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:10px 8px;margin-bottom:14px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25);position:sticky;top:6px;z-index:10}
+.pc-action-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;padding:10px 8px;margin-bottom:14px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25);position:sticky;top:6px;z-index:10}
+.pab-online{background:linear-gradient(145deg,rgba(0,217,255,.16),rgba(0,217,255,.04))!important;border-color:rgba(0,217,255,.4)!important;color:#00D9FF!important}
+/* Ladder's .pc-action-bar is visible on all viewports, so the standalone
+   .online-row Watch-Together button is always a duplicate — hide it. */
+.online-row{display:none}
 .pab-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:10px 2px;border:1.5px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(255,255,255,.05);color:rgba(255,255,255,.9);font-family:'Noto Sans KR',sans-serif;font-size:.7em;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:background .18s,border-color .18s,transform .15s;line-height:1.2;min-width:0}
 .pab-btn .pab-ico{font-family:'Noto Sans KR','Segoe UI Symbol',sans-serif;font-size:1.2em;line-height:1;margin-bottom:1px;opacity:.92;font-weight:500}
 .pab-btn:active{transform:translateY(0)}
@@ -105,7 +109,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     .pc-ad-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.82em;font-weight:700;letter-spacing:.16em}
     .pc-ad-hint{font-family:'Orbitron',sans-serif;font-size:.68em;opacity:.75;letter-spacing:.08em}
 
-    .pc-action-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;position:sticky;top:-22px;z-index:10;padding:12px;margin:0 -12px 18px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .pc-action-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;position:sticky;top:-22px;z-index:10;padding:12px;margin:0 -12px 18px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25)}
     .pab-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:13px 4px;border:1.5px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.05);color:rgba(255,255,255,.9);font-family:'Noto Sans KR',sans-serif;font-size:.84em;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:background .18s,border-color .18s,transform .15s;line-height:1.2}
     .pab-btn .pab-ico{font-family:'Noto Sans KR','Segoe UI Symbol',sans-serif;font-size:1.4em;line-height:1;margin-bottom:1px;opacity:.92;font-weight:500}
     .pab-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.3);transform:translateY(-1px)}
@@ -347,6 +351,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
             <button class="pab-btn pab-shuffle" id="pabShuffle" type="button"><span class="pab-ico">⇌</span><span id="pabShuffleLabel">Shuffle</span></button>
             <button class="pab-btn pab-sort" id="pabSort" type="button"><span class="pab-ico" id="pabSortIco">↕</span><span id="pabSortLabel">Sort</span></button>
             <button class="pab-btn pab-start" id="pabStart" type="button"><span class="pab-ico">▶</span><span id="pabStartLabel">Start</span></button>
+            <button class="pab-btn pab-online lp-room-online-btn" data-online-action="host" type="button" title="Watch together"><span class="pab-ico">👥</span><span class="online-btn-label">Watch Together</span></button>
         </div>
 
         <!-- Saved groups -->
@@ -969,27 +974,27 @@ function drawPrompt(){
 }
 
 /* ===== CLICK HANDLING ===== */
+function _spawnInitialTracers(){
+    if(gamePhase!=='playing')return;
+    if(tracers.length>0)return;
+    if(playMode==='all'){
+        for(let i=0;i<ladder.n;i++)tracers.push(createTracer(i));
+    }else{
+        tracers.push(createTracer(0));
+    }
+    promptAlpha=0;
+}
 function handleCanvasClick(e){
     if(gamePhase!=='playing')return;
+    if(window._lpGuest)return; /* guest is read-only — host drives */
     Audio.getCtx();
-    const rect=canvas.getBoundingClientRect();
-    const cx=(e.clientX||e.touches?.[0]?.clientX||0)-rect.left;
-    const cy=(e.clientY||e.touches?.[0]?.clientY||0)-rect.top;
-
-    if(playMode==='all'){
-        // Start all at once
-        if(tracers.length===0){
-            for(let i=0;i<ladder.n;i++)tracers.push(createTracer(i));
-            promptAlpha=0;
-        }
-        return;
-    }
-
-    /* Sequential (default): any click anywhere triggers auto-chained start.
-       Player 1 starts immediately; each subsequent player auto-starts when previous finishes. */
-    if(tracers.length===0){
-        tracers.push(createTracer(0));
-        promptAlpha=0;
+    const wasEmpty=tracers.length===0;
+    _spawnInitialTracers();
+    /* Mirror the "start" click to any watchers — only the first click
+       actually spawns anything, so only broadcast when we actually
+       changed state. */
+    if(wasEmpty&&window._lpHost){
+        window._lpHost.broadcast('host:action',{type:'ladder_spawn',t:Date.now()});
     }
 }
 
@@ -1086,7 +1091,6 @@ function renderPreview(forceRegenerate){
 function startGame(){
     Audio.getCtx();
     recordCurrentAsPreset();
-    if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
     gamePhase='playing';
     tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];
 
@@ -1113,6 +1117,11 @@ function startGame(){
         ladder.names=names;ladder.results=results;
     }
 
+    /* Broadcast AFTER generateLadder / name-refresh so guests receive the
+       exact ladder structure that's about to be animated. Before this
+       move, the broadcast ran with a stale (or empty, on mobile) ladder. */
+    if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
+
     promptText=playMode==='all'?T('tapAll'):T('tapSeq');
     promptAlpha=1;
 
@@ -1120,15 +1129,16 @@ function startGame(){
     animId=requestAnimationFrame(gameLoop);
 
     /* On PC, auto-launch tracers so ▶ Start behaves as "go!" without a second tap */
-    if(pcMode){
+    if(pcMode&&!window._lpGuest){
         setTimeout(()=>{
             if(tracers.length)return;
-            if(playMode==='all'){
-                for(let i=0;i<ladder.n;i++)tracers.push(createTracer(i));
-            } else {
-                tracers.push(createTracer(0));
+            _spawnInitialTracers();
+            /* Tell any watching guests. Mobile guests don't auto-launch
+               (their PC check is false), so they rely on this broadcast
+               to start the animation. */
+            if(window._lpHost){
+                window._lpHost.broadcast('host:action',{type:'ladder_spawn',t:Date.now()});
             }
-            promptAlpha=0;
         },120);
     }
 }
@@ -1317,12 +1327,18 @@ function init(){
     /* Online room wiring */
     window._lpHost=null;window._lpGuest=null;
     function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
-    const _onBtn=document.getElementById('onlineBtn');
-    if(_onBtn)_onBtn.addEventListener('click',function(){
-        if(window._lpHost)return;
-        _waitForLpRoom(function(){
-            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
-            window.LpRoom.showHostModal({gameId:'ladder',hostName:hn,onReady:function(room){window._lpHost=room}});
+    document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            if(window._lpHost)return;
+            _waitForLpRoom(function(){
+                const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+                window.LpRoom.showHostModal({gameId:'ladder',hostName:hn,onCreated:function(room){
+                    window._lpHost=room;
+                    window._lpBroadcastConfig();
+                    _wireLpSetupSync();
+                    room.onGuestJoin(function(){window._lpBroadcastConfig()});
+                }});
+            });
         });
     });
     _waitForLpRoom(function(){
@@ -1331,33 +1347,70 @@ function init(){
         window.LpRoom.showGuestJoinModal(code,{gameId:'ladder',onJoined:function(g){
             window._lpGuest=g;
             const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
-            const ob=document.getElementById('onlineBtn');if(ob)ob.style.display='none';
+            document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
             const pabSt=document.getElementById('pabStart');if(pabSt){pabSt.disabled=true;pabSt.style.opacity='.4'}
-            g.on('host:config',function(p){
-                if(!p||!p.ladder)return;
-                ladder=p.ladder;
-                playerCount=ladder.n;
+            function applyConfig(p){
+                if(!p)return;
+                if(p.ladder){ladder=p.ladder;playerCount=ladder.n}
+                if(typeof p.playMode==='string')playMode=p.playMode;
                 renderPlayers();renderResults();
                 const ni=document.querySelectorAll('#playerInputs input');
                 const ri=document.querySelectorAll('#resultInputs input');
                 if(Array.isArray(p.names))p.names.forEach(function(n,i){if(ni[i])ni[i].value=n});
                 if(Array.isArray(p.results))p.results.forEach(function(r,i){if(ri[i])ri[i].value=r});
-                renderPreview&&renderPreview(true);
-            });
+                renderPreview&&renderPreview(false);
+            }
+            g.on('host:config',applyConfig);
+            g.on('host:snapshot',applyConfig);
             g.on('host:start',function(){
-                /* Start guest's playback with host-sent ladder */
+                /* Start guest's playback with host-sent ladder. Guest's own
+                   PC auto-launch is suppressed (see startGame), so we rely
+                   on the subsequent host:action{ladder_spawn} to actually
+                   start the tracers at the same moment the host sees them. */
                 if(typeof startGame==='function')startGame();
+            });
+            g.on('host:action',function(p){
+                if(!p)return;
+                if(p.type==='ladder_spawn'){
+                    if(typeof _spawnInitialTracers==='function')_spawnInitialTracers();
+                }
             });
             g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
         }});
     });
+    /* Config broadcast — sends current ladder + labels so any joiner sees
+       what the host is looking at. Called on onCreated, on every guest
+       join, and debounced on setup changes via _wireLpSetupSync. */
+    let _lpCfgTimer=null;
+    window._lpBroadcastConfig=function(){
+        if(!window._lpHost)return;
+        clearTimeout(_lpCfgTimer);
+        _lpCfgTimer=setTimeout(function(){
+            const ni=document.querySelectorAll('#playerInputs input');
+            const ri=document.querySelectorAll('#resultInputs input');
+            const names=[...ni].map(function(i){return i.value.trim()||i.placeholder||''});
+            const results=[...ri].map(function(i){return i.value.trim()||i.placeholder||''});
+            const p={game:'ladder',ladder:ladder,names:names,results:results,playerCount:playerCount,playMode:playMode};
+            window._lpHost.snapshot(p);
+            window._lpHost.broadcast('host:config',p);
+        },120);
+    };
+    let _lpSetupWired=false;
+    function _wireLpSetupSync(){
+        if(_lpSetupWired)return;_lpSetupWired=true;
+        const setup=document.getElementById('setupWrap');
+        if(!setup)return;
+        setup.addEventListener('input',window._lpBroadcastConfig);
+        setup.addEventListener('change',window._lpBroadcastConfig);
+        setup.addEventListener('click',function(){setTimeout(window._lpBroadcastConfig,0)});
+    }
     window._lpBroadcastStart=function(){
         if(!window._lpHost)return;
         const ni=document.querySelectorAll('#playerInputs input');
         const ri=document.querySelectorAll('#resultInputs input');
         const names=[...ni].map(function(i){return i.value.trim()||i.placeholder||''});
         const results=[...ri].map(function(i){return i.value.trim()||i.placeholder||''});
-        const p={game:'ladder',ladder:ladder,names:names,results:results};
+        const p={game:'ladder',ladder:ladder,names:names,results:results,playerCount:playerCount,playMode:playMode};
         window._lpHost.snapshot(p);
         window._lpHost.broadcast('host:config',p);
         window._lpHost.broadcast('host:start',{t:Date.now()});

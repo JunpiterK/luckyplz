@@ -2566,12 +2566,18 @@ function init(){
     /* Online room wiring */
     window._lpHost=null;window._lpGuest=null;
     function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
-    const _onBtn=document.getElementById('onlineBtn');
-    if(_onBtn)_onBtn.addEventListener('click',function(){
-        if(window._lpHost)return;
-        _waitForLpRoom(function(){
-            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
-            window.LpRoom.showHostModal({gameId:'team',hostName:hn,onReady:function(room){window._lpHost=room}});
+    document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            if(window._lpHost)return;
+            _waitForLpRoom(function(){
+                const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+                window.LpRoom.showHostModal({gameId:'team',hostName:hn,onCreated:function(room){
+                    window._lpHost=room;
+                    window._lpBroadcastConfig();
+                    _wireLpSetupSync();
+                    room.onGuestJoin(function(){window._lpBroadcastConfig()});
+                }});
+            });
         });
     });
     _waitForLpRoom(function(){
@@ -2580,8 +2586,9 @@ function init(){
         window.LpRoom.showGuestJoinModal(code,{gameId:'team',onJoined:function(g){
             window._lpGuest=g;
             const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
-            const ob=document.getElementById('onlineBtn');if(ob)ob.style.display='none';
-            g.on('host:config',function(p){
+            document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
+            function applyConfig(p){
+                if(!p)return;
                 if(Array.isArray(p.memberNames)&&p.memberNames.length){
                     memberCount=Math.max(2,Math.min(40,p.memberNames.length));
                     renderMembers();
@@ -2589,8 +2596,11 @@ function init(){
                     p.memberNames.forEach(function(n,i){if(inputs[i])inputs[i].value=n});
                 }
                 if(typeof p.teamCount==='number'){teamCount=p.teamCount;document.querySelectorAll('#teamCountRow .opt-chip').forEach(c=>c.classList.toggle('selected',parseInt(c.dataset.tc)===teamCount))}
+                if(typeof p.balanceMode==='string'){balanceMode=p.balanceMode;document.querySelectorAll('#balanceRow .opt-chip').forEach(c=>c.classList.toggle('selected',c.dataset.bal===balanceMode))}
                 if(typeof updateDistPreview==='function')updateDistPreview();
-            });
+            }
+            g.on('host:config',applyConfig);
+            g.on('host:snapshot',applyConfig);
             g.on('host:result',function(p){
                 if(Array.isArray(p.teams)){
                     teamResults=p.teams.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,origIdx:m.idx||0}})});
@@ -2600,14 +2610,27 @@ function init(){
             g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
         }});
     });
+    let _lpCfgTimer=null;
     window._lpBroadcastConfig=function(){
         if(!window._lpHost)return;
-        const inputs=document.querySelectorAll('#memberInputs .member-row input');
-        const names=[...inputs].map(function(i){return i.value.trim()||i.placeholder||''});
-        const p={game:'team',memberNames:names,teamCount:teamCount,balanceMode:balanceMode};
-        window._lpHost.snapshot(p);
-        window._lpHost.broadcast('host:config',p);
+        clearTimeout(_lpCfgTimer);
+        _lpCfgTimer=setTimeout(function(){
+            const inputs=document.querySelectorAll('#memberInputs .member-row input');
+            const names=[...inputs].map(function(i){return i.value.trim()||i.placeholder||''});
+            const p={game:'team',memberNames:names,teamCount:teamCount,balanceMode:balanceMode};
+            window._lpHost.snapshot(p);
+            window._lpHost.broadcast('host:config',p);
+        },120);
     };
+    let _lpSetupWired=false;
+    function _wireLpSetupSync(){
+        if(_lpSetupWired)return;_lpSetupWired=true;
+        const setup=document.getElementById('setupWrap');
+        if(!setup)return;
+        setup.addEventListener('input',window._lpBroadcastConfig);
+        setup.addEventListener('change',window._lpBroadcastConfig);
+        setup.addEventListener('click',function(){setTimeout(window._lpBroadcastConfig,0)});
+    }
     window._lpBroadcastResult=function(){
         if(!window._lpHost||typeof teamResults==='undefined')return;
         const teams=teamResults.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,idx:m.origIdx||0}})});

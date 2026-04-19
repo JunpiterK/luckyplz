@@ -164,7 +164,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     .pc-ad-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.82em;font-weight:700;letter-spacing:.16em}
     .pc-ad-hint{font-family:'Orbitron',sans-serif;font-size:.68em;opacity:.75;letter-spacing:.08em}
 
-    .pc-action-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;position:sticky;top:-22px;z-index:10;padding:12px;margin:0 -12px 18px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .pc-action-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;position:sticky;top:-22px;z-index:10;padding:12px;margin:0 -12px 18px;background:linear-gradient(145deg,rgba(22,24,38,.98),rgba(28,30,46,.98));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:14px;border:1px solid rgba(255,255,255,.08);box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .pab-online{background:linear-gradient(145deg,rgba(0,217,255,.16),rgba(0,217,255,.04))!important;border-color:rgba(0,217,255,.4)!important;color:#00D9FF!important}
+    /* On PC the Online button lives in the top toolbar; hide the mobile-row duplicate. */
+    .online-row{display:none}
     .pab-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:13px 4px;border:1.5px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.05);color:rgba(255,255,255,.9);font-family:'Noto Sans KR',sans-serif;font-size:.84em;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:background .18s,border-color .18s,transform .15s;line-height:1.2}
     .pab-btn .pab-ico{font-family:'Noto Sans KR','Segoe UI Symbol',sans-serif;font-size:1.4em;line-height:1;margin-bottom:1px;opacity:.92;font-weight:500}
     .pab-btn:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.3);transform:translateY(-1px)}
@@ -239,6 +242,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
             <button class="pab-btn pab-shuffle" id="pabShuffle" type="button"><span class="pab-ico">⇌</span><span id="pabShuffleLabel">Shuffle</span></button>
             <button class="pab-btn pab-sort" id="pabSort" type="button"><span class="pab-ico" id="pabSortIco">↕</span><span id="pabSortLabel">Sort</span></button>
             <button class="pab-btn pab-start" id="pabStart" type="button"><span class="pab-ico">▶</span><span id="pabStartLabel">Start</span></button>
+            <button class="pab-btn pab-online lp-room-online-btn" data-online-action="host" type="button" title="Watch together"><span class="pab-ico">👥</span><span class="online-btn-label">Watch Together</span></button>
         </div>
 
         <div class="section"><h3>👥 <span id="playersTitle">Players / Options</span></h3>
@@ -763,6 +767,10 @@ function loop(ts){
     }
 
     drawWheel();
+    /* Stream the current wheel angle to any watching guests. No-op when
+       not hosting, so the render loop stays cheap for everyone else.
+       Throttled to ~20 Hz inside the helper. */
+    if(typeof _lpBroadcastTick==='function')_lpBroadcastTick(ts);
     animId=requestAnimationFrame(loop);
 }
 
@@ -1076,27 +1084,34 @@ function init(){
         setTimeout(function(){_waitForLpRoom(cb,tries+1)},100);
     }
 
-    /* Online button: open host modal, then on room-ready stay on setup
-       — host plays the game as normal, broadcasts fire inside showResult. */
-    const onlineBtn=document.getElementById('onlineBtn');
-    if(onlineBtn){
-        onlineBtn.addEventListener('click',function(){
-            if(window._lpHost){
-                /* already hosting — re-open share screen by closing + reopening */
-                return;
-            }
+    /* Online button(s): wire every .lp-room-online-btn (there may be
+       more than one — the PC toolbar copy + a mobile-row fallback) via
+       class selector, not ID. */
+    document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
+        btn.addEventListener('click',function(){
+            if(window._lpHost)return;
             _waitForLpRoom(function(){
                 const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
                 window.LpRoom.showHostModal({
                     gameId:'roulette',
                     hostName:hn,
-                    onReady:function(room){
+                    /* onCreated fires as soon as the channel is live (before
+                       the share modal). Register the room object + prime the
+                       snapshot so any guest that joins while the host is
+                       still on the share screen immediately sees the current
+                       setup (player names/count), not blank defaults. */
+                    onCreated:function(room){
                         window._lpHost=room;
+                        _lpBroadcastConfig();
+                        _wireLpSetupSync();
+                        /* Rebroadcast on every new guest — cheap insurance
+                           in case the targeted host:snapshot replay missed. */
+                        room.onGuestJoin(function(){_lpBroadcastConfig()});
                     }
                 });
             });
         });
-    }
+    });
 
     /* Guest entry: URL has ?room=CODE → prompt for PIN+nickname, then
        watch host's events. Guest UI is read-only (Start button hidden). */
@@ -1116,8 +1131,7 @@ function init(){
         /* Block the guest from starting — they're here to watch. */
         const sb=document.getElementById('startBtn');
         if(sb){sb.disabled=true;sb.style.opacity='.4';sb.style.pointerEvents='none'}
-        const ob=document.getElementById('onlineBtn');
-        if(ob){ob.style.display='none'}
+        document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
         const pab=document.getElementById('pabStart');
         if(pab){pab.disabled=true;pab.style.opacity='.4'}
 
@@ -1139,25 +1153,40 @@ function init(){
                 renderPreview&&renderPreview();
             }
         });
-        g.on('host:spin_start',function(){
-            /* Start guest's spin as well — locally-driven so it feels live;
-               final winner syncs with host:result. */
-            if(typeof startGame==='function'&&document.getElementById('setupWrap').style.display!=='none'){
-                collectData();
-                document.getElementById('setupWrap').style.display='none';
-                document.getElementById('gameScreen').style.display='block';
-                if(!ctx)initCanvas();else resize();
-                if(typeof doSpin==='function')doSpin();
+        g.on('host:spin_start',function(p){
+            /* Transition to the game screen. The guest does NOT run physics
+               — it just renders whatever angle the host broadcasts via
+               host:tick. That way the wheel on both sides lines up exactly,
+               and the pointer on the guest's wheel always points at the
+               final winner (no physics-determinism needed). */
+            if(p&&Array.isArray(p.players)&&p.players.length){
+                playerCount=Math.max(2,Math.min(12,p.players.length));
+                renderPlayers();
+                const inputs=document.querySelectorAll('#playerInputs input');
+                p.players.forEach(function(n,i){if(inputs[i])inputs[i].value=n});
             }
+            collectData();
+            if(!isPCLayout())document.getElementById('setupWrap').style.display='none';
+            document.getElementById('gameScreen').style.display='block';
+            if(!ctx)initCanvas();else resize();
+            /* Halt any running physics loop (shouldn't be, but be safe) and
+               start the pure-render loop driven by host:tick. */
+            spinActive=true;spinning=false;velocity=0;selectedIdx=-1;
+            if(typeof p.angle==='number')angle=p.angle;
+            _startGuestRenderLoop();
+        });
+        g.on('host:tick',function(p){
+            if(typeof p.angle==='number')angle=p.angle;
+            if(typeof p.flapperAngle==='number')flapperAngle=p.flapperAngle;
         });
         g.on('host:result',function(p){
             if(!p||!p.winner)return;
-            /* If guest spin is still running, just force the winner visible
-               via showResult; otherwise show immediately. */
+            if(typeof p.finalAngle==='number')angle=p.finalAngle;
+            _stopGuestRenderLoop();
             setTimeout(function(){
-                spinning=false;
+                spinning=false;spinActive=false;
                 if(typeof showResult==='function')showResult(p.winner);
-            },50);
+            },150);
         });
         g.on('host:close',function(){
             alert((localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko')?'방장이 방을 닫았어요':'Host closed the room');
@@ -1168,18 +1197,70 @@ function init(){
 }
 init();
 
-/* Host broadcast hooks — called from inside startGame/onStopped directly. */
+/* ============ Host broadcast hooks ============
+   Called inline from setup/start/result. All are no-ops when the user
+   isn't hosting, so games that never open a room pay ~0 cost. */
+function _currentRoulettePlayers(){
+    return [...document.querySelectorAll('#playerInputs input')]
+        .map(function(i){return i.value.trim()||i.placeholder||''});
+}
+let _lpCfgTimer=null;
+function _lpBroadcastConfig(){
+    if(!window._lpHost)return;
+    clearTimeout(_lpCfgTimer);
+    _lpCfgTimer=setTimeout(function(){
+        const payload={game:'roulette',players:_currentRoulettePlayers(),playerCount:playerCount};
+        window._lpHost.snapshot(payload);
+        window._lpHost.broadcast('host:config',payload);
+    },120);
+}
+/* Attach listeners so any setup mutation on the host rebroadcasts the
+   config. Covers player name edits, player count chip clicks, preset
+   applies, add/remove buttons. Debounced so fast typing only fires one
+   broadcast per keystroke burst. */
+let _lpSetupWired=false;
+function _wireLpSetupSync(){
+    if(_lpSetupWired)return;_lpSetupWired=true;
+    const setup=document.getElementById('setupWrap');
+    if(!setup)return;
+    setup.addEventListener('input',_lpBroadcastConfig);
+    setup.addEventListener('change',_lpBroadcastConfig);
+    setup.addEventListener('click',function(){setTimeout(_lpBroadcastConfig,0)});
+}
 function _lpBroadcastStart(){
     if(!window._lpHost)return;
-    const names=[...document.querySelectorAll('#playerInputs input')].map(function(i){return i.value.trim()||i.placeholder||''});
-    const payload={game:'roulette',players:names,startedAt:Date.now()};
+    const payload={game:'roulette',players:_currentRoulettePlayers(),playerCount:playerCount,startedAt:Date.now(),angle:angle};
     window._lpHost.snapshot(payload);
     window._lpHost.broadcast('host:config',payload);
-    window._lpHost.broadcast('host:spin_start',{t:Date.now()});
+    window._lpHost.broadcast('host:spin_start',payload);
+}
+let _lpLastTickT=0;
+function _lpBroadcastTick(ts){
+    if(!window._lpHost)return;
+    if((ts||performance.now())-_lpLastTickT<50)return; /* ~20 Hz */
+    _lpLastTickT=ts||performance.now();
+    window._lpHost.broadcast('host:tick',{angle:angle,flapperAngle:flapperAngle});
 }
 function _lpBroadcastResult(name){
     if(!window._lpHost)return;
-    window._lpHost.broadcast('host:result',{winner:name});
+    window._lpHost.broadcast('host:result',{winner:name,finalAngle:angle});
+}
+
+/* ============ Guest render loop ============
+   The guest doesn't run physics — it just paints the wheel at whatever
+   angle the host broadcast last. A single rAF loop calls drawWheel();
+   host:tick handlers mutate `angle`/`flapperAngle` in place. */
+let _guestRenderId=null;
+function _startGuestRenderLoop(){
+    if(_guestRenderId)return;
+    function render(){
+        if(typeof drawWheel==='function')drawWheel();
+        _guestRenderId=requestAnimationFrame(render);
+    }
+    render();
+}
+function _stopGuestRenderLoop(){
+    if(_guestRenderId){cancelAnimationFrame(_guestRenderId);_guestRenderId=null}
 }
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
