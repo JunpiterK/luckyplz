@@ -294,6 +294,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                 <button class="add-chip" data-add="5">+5</button>
                 <button class="add-chip" data-add="10">+10</button>
             </div>
+            <div id="presetsMount"></div>
             <div id="memberInputs"></div>
         </div>
         <div class="section"><h3>&#x2699;&#xFE0F; <span id="teamOptTitle">Team Options</span></h3>
@@ -339,6 +340,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
 <script src="/js/topNav.js"></script>
 <script src="/js/langBar.js"></script>
+<script src="/js/participantPresets.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/supabase-config.js"></script>
 <script src="/js/groups.js"></script>
@@ -486,6 +488,29 @@ function applyLanguage(){
     document.getElementById('startBtn').textContent=T('start');
     document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));
     renderMembers();
+    mountParticipantPresets();
+}
+
+function _participantPresetLabel(){return lang==='ko'?'최근 사용':(lang==='ja'?'最近':(lang==='zh'?'最近':'Recent'))}
+function applyParticipantPreset(items){
+    memberCount=Math.max(2,Math.min(40,items.length));
+    renderMembers();
+    const inputs=document.querySelectorAll('#memberInputs .member-row input');
+    items.forEach((v,i)=>{if(inputs[i])inputs[i].value=v});
+    mountParticipantPresets();
+    if(typeof updateDistPreview==='function')updateDistPreview();
+}
+function mountParticipantPresets(){
+    const mount=document.getElementById('presetsMount');
+    if(!mount||!window.LpPresets)return;
+    window.LpPresets.render('team',mount,applyParticipantPreset,{recent:_participantPresetLabel()});
+}
+function recordCurrentAsPreset(){
+    if(!window.LpPresets)return;
+    const inputs=document.querySelectorAll('#memberInputs .member-row input');
+    const items=[...inputs].map(i=>(i.value||'').trim()).filter(Boolean);
+    const phs=[...inputs].map(i=>i.placeholder||'');
+    window.LpPresets.record('team',items,phs);
 }
 
 function collectMembers(){
@@ -2522,7 +2547,7 @@ function init(){
     /* Start button now launches the new matter-js lottery drum mode.
        The old buildTeams() (gacha machine) is kept in the file for
        possible future use; switch USE_LOTTERY_MODE to false to revive it. */
-    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();if(USE_LOTTERY_MODE){startLottery()}else{buildTeams()}});
+    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();recordCurrentAsPreset();if(USE_LOTTERY_MODE){startLottery()}else{buildTeams()}});
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
         if(animId)cancelAnimationFrame(animId);

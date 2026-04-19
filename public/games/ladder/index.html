@@ -354,6 +354,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         <!-- Players -->
         <div class="section">
             <h3>👥 <span id="playersTitle">Players</span></h3>
+            <div id="presetsMount"></div>
             <div id="playerInputs"></div>
             <button id="addPlayerBtn">+ <span id="addPlayerText">Add Player</span></button>
         </div>
@@ -399,6 +400,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <script src="/js/topNav.js"></script>
 <script src="/js/langBar.js"></script>
 <script src="/js/starNames.js"></script>
+<script src="/js/participantPresets.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/supabase-config.js"></script>
 <script src="/js/groups.js"></script>
@@ -568,6 +570,29 @@ function applyLanguage(){
     renderPresets();
     renderPlayers();
     renderResults();
+    mountParticipantPresets();
+}
+
+function _participantPresetLabel(){return lang==='ko'?'최근 사용':(lang==='ja'?'最近':(lang==='zh'?'最近':'Recent'))}
+function applyParticipantPreset(items){
+    playerCount=Math.max(2,Math.min(12,items.length));
+    renderPlayers();renderResults();
+    const inputs=document.querySelectorAll('#playerInputs input');
+    items.forEach((v,i)=>{if(inputs[i])inputs[i].value=v});
+    mountParticipantPresets();
+    if(typeof renderPreview==='function')renderPreview(true);
+}
+function mountParticipantPresets(){
+    const mount=document.getElementById('presetsMount');
+    if(!mount||!window.LpPresets)return;
+    window.LpPresets.render('ladder',mount,applyParticipantPreset,{recent:_participantPresetLabel()});
+}
+function recordCurrentAsPreset(){
+    if(!window.LpPresets)return;
+    const inputs=document.querySelectorAll('#playerInputs input');
+    const items=[...inputs].map(i=>(i.value||'').trim()).filter(Boolean);
+    const phs=[...inputs].map(i=>i.placeholder||'');
+    window.LpPresets.record('ladder',items,phs);
 }
 
 /* ===== LADDER GENERATION ===== */
@@ -1052,6 +1077,7 @@ function renderPreview(forceRegenerate){
 
 function startGame(){
     Audio.getCtx();
+    recordCurrentAsPreset();
     gamePhase='playing';
     tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];
 

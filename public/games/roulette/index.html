@@ -240,6 +240,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
         <div class="section"><h3>👥 <span id="playersTitle">Players / Options</span></h3>
             <div id="groupsWidget" class="rou-groups-widget" style="justify-content:flex-start;margin-bottom:10px"></div>
+            <div id="presetsMount"></div>
             <div id="playerInputs"></div>
             <button id="addPlayerBtn">+ <span id="addPlayerText">Add</span></button>
         </div>
@@ -275,6 +276,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <script src="/js/topNav.js"></script>
 <script src="/js/langBar.js"></script>
 <script src="/js/starNames.js"></script>
+<script src="/js/participantPresets.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/supabase-config.js"></script>
 <script src="/js/groups.js"></script>
@@ -350,10 +352,32 @@ function applyLanguage(){
     const pabSh=document.getElementById('pabShuffleLabel');if(pabSh)pabSh.textContent=T('pabShuffle');
     const pabSo=document.getElementById('pabSortLabel');if(pabSo)pabSo.textContent=T('pabSort');
     const pabSt=document.getElementById('pabStartLabel');if(pabSt)pabSt.textContent=T('pabStart');
-    document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));renderPlayers();
+    document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));renderPlayers();mountPresets();
 }
 
 function collectData(){const ne=document.querySelectorAll('#playerInputs input');players=[];ne.forEach((e,i)=>players.push({name:e.value.trim()||e.placeholder||'',color:COLORS[i%COLORS.length],dark:DARK_COLORS[i%DARK_COLORS.length]}))}
+
+function _presetLabel(){return lang==='ko'?'최근 사용':(lang==='ja'?'最近':(lang==='zh'?'最近':'Recent'))}
+function applyPreset(items){
+    playerCount=Math.max(2,Math.min(12,items.length));
+    renderPlayers();
+    const inputs=document.querySelectorAll('#playerInputs input');
+    items.forEach((v,i)=>{if(inputs[i])inputs[i].value=v});
+    mountPresets();
+    if(typeof renderPreview==='function')renderPreview();
+}
+function mountPresets(){
+    const mount=document.getElementById('presetsMount');
+    if(!mount||!window.LpPresets)return;
+    window.LpPresets.render('roulette',mount,applyPreset,{recent:_presetLabel()});
+}
+function recordCurrentAsPreset(){
+    if(!window.LpPresets)return;
+    const inputs=document.querySelectorAll('#playerInputs input');
+    const items=[...inputs].map(i=>(i.value||'').trim()).filter(Boolean);
+    const phs=[...inputs].map(i=>i.placeholder||'');
+    window.LpPresets.record('roulette',items,phs);
+}
 
 /* ============================================
    CANVAS ROULETTE WHEEL - 60fps smooth
@@ -888,6 +912,7 @@ function startGame(){
        still work — never let the flag lock a user out of restarting. */
     spinActive=false;
     spinning=false;
+    recordCurrentAsPreset();
     collectData();
     const pcMode=isPCLayout();
     if(!pcMode){

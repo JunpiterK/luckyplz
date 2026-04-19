@@ -356,6 +356,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         </div>
 
         <div class="section"><h3>👥 <span id="playersTitle">Players</span></h3>
+            <div id="presetsMount"></div>
             <div id="playerInputs"></div>
             <button id="addPlayerBtn">+ <span id="addPlayerText">Add Player</span></button>
         </div>
@@ -399,6 +400,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <div class="share-toast" id="shareToast"></div>
 
 <script src="/js/langBar.js"></script>
+<script src="/js/participantPresets.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="/js/supabase-config.js"></script>
 <script src="/js/groups.js"></script>
@@ -494,9 +496,30 @@ function applyPreset(t){const l=T(t);if(!l||!Array.isArray(l))return;document.qu
 function renderPresets(){const c=document.getElementById('presetRow');c.innerHTML=[{key:'drinks',label:T('presetDrinks')},{key:'pays',label:T('presetPay')},{key:'chores',label:T('presetChores')},{key:'dares',label:T('presetDare')}].map(p=>`<button class="preset-btn" data-preset="${p.key}">${p.label}</button>`).join('');c.querySelectorAll('.preset-btn').forEach(b=>b.addEventListener('click',()=>applyPreset(b.dataset.preset)))}
 function applyLanguage(){
     document.getElementById('titleText').textContent=T('title');document.getElementById('subtitleText').textContent=T('subtitle');document.getElementById('modeTitle').textContent=T('gameMode');document.getElementById('mcQuick').textContent=T('quickRoll');document.getElementById('mcQuickDesc').textContent=T('quickDesc');document.getElementById('mcPig').textContent=T('pigGame');document.getElementById('mcPigDesc').textContent=T('pigDesc');document.getElementById('playersTitle').textContent=T('players');document.getElementById('addPlayerText').textContent=T('addPlayer');document.getElementById('diceCountTitle').textContent=T('diceCount');document.getElementById('penLowest').textContent=T('lowestLoses');document.getElementById('penHighest').textContent=T('highestLoses');document.getElementById('penaltyLabel').textContent=T('loserRule');document.getElementById('pigSettingsTitle').textContent=T('pigSettings');document.getElementById('targetLabel').textContent=T('targetScore');document.getElementById('penaltyTitle').textContent=T('penalties');document.getElementById('startBtn').textContent=T('start');document.getElementById('resultH1').textContent='🎲 '+T('resultTitle');document.getElementById('shareH3').textContent='📢 '+T('share');document.getElementById('replayText').textContent=T('replay');
-    document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));renderPresets();renderPlayers();renderPenalties();
+    document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===lang));renderPresets();renderPlayers();renderPenalties();mountParticipantPresets();
 }
 function collectData(){const ne=document.querySelectorAll('#playerInputs input'),pe=document.querySelectorAll('#resultInputs input');players=[];penalties=[];ne.forEach((e,i)=>players.push({name:e.value.trim()||e.placeholder||'',color:COLORS[i%COLORS.length],score:0,turnScore:0}));pe.forEach((e,i)=>penalties.push(e.value.trim()||(e.dataset.cleared?'':e.placeholder)||''))}
+
+function _participantPresetLabel(){return lang==='ko'?'최근 사용':(lang==='ja'?'最近':(lang==='zh'?'最近':'Recent'))}
+function applyParticipantPreset(items){
+    playerCount=Math.max(2,Math.min(12,items.length));
+    renderPlayers();renderPenalties();
+    const inputs=document.querySelectorAll('#playerInputs input');
+    items.forEach((v,i)=>{if(inputs[i])inputs[i].value=v});
+    mountParticipantPresets();
+}
+function mountParticipantPresets(){
+    const mount=document.getElementById('presetsMount');
+    if(!mount||!window.LpPresets)return;
+    window.LpPresets.render('dice',mount,applyParticipantPreset,{recent:_participantPresetLabel()});
+}
+function recordCurrentAsPreset(){
+    if(!window.LpPresets)return;
+    const inputs=document.querySelectorAll('#playerInputs input');
+    const items=[...inputs].map(i=>(i.value||'').trim()).filter(Boolean);
+    const phs=[...inputs].map(i=>i.placeholder||'');
+    window.LpPresets.record('dice',items,phs);
+}
 
 /* ===== ANIMATE DICE (unique physics per dice) ===== */
 let diceAnimId=0;
@@ -800,7 +823,7 @@ function init(){
     document.querySelectorAll('.penalty-btn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.penalty-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');penaltyRule=b.dataset.penalty;SFX.click()}));
     document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderPenalties()});
     const ts=document.getElementById('targetScore');ts.addEventListener('input',()=>{targetScoreVal=parseInt(ts.value);document.getElementById('targetVal').textContent=targetScoreVal});
-    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();document.getElementById('setupWrap').style.display='none';document.getElementById('gameScreen').style.display='block';if(gameMode==='quick')startQuickRoll();else startPigGame()});
+    document.getElementById('startBtn').addEventListener('click',()=>{SFX.g();recordCurrentAsPreset();document.getElementById('setupWrap').style.display='none';document.getElementById('gameScreen').style.display='block';if(gameMode==='quick')startQuickRoll();else startPigGame()});
     document.getElementById('replayBtn').addEventListener('click',()=>{confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='none';document.getElementById('setupWrap').style.display='flex'});
 
     /* Saved Groups widget */
