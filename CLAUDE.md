@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Run local dev server: `python server.py` (or double-click `start.bat` on Windows). Serves `public/` on `http://localhost:8080`; `HOST`/`PORT` env vars override. The LAN IP is printed so same-Wi-Fi devices can test mobile.
 - Install deps: `pip install -r requirements.txt` (only Flask).
+- **Bump cache version before every commit that touches HTML or shared JS:** `bash scripts/bump-cache.sh`. Rewrites every `?v=<stamp>` query on `/js/*.js` references to the current epoch so browsers ignoring `no-cache` still fetch fresh bundles. See the "Cache policy" section.
 - There is no build step, bundler, lint, or test suite. Production is served as static files by Cloudflare Pages — `server.py` exists only for local preview and must mirror Pages' routing (directory → `index.html`).
 
 ## Architecture
@@ -13,6 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Static multi-page site, no framework.** Every game lives at `public/games/<name>/index.html` as a standalone, self-contained HTML file (inline CSS + JS, own `<head>` SEO block). Keep games independent — do not introduce shared bundlers or cross-game imports; copy-paste is the intended pattern so a game can be edited without regression risk to others. Games currently shipped: `car-racing`, `dice`, `ladder`, `lotto`, `roulette`, `team`.
 
 **Hosting & deploy.** Repo is `JunpiterK/luckyplz`; Cloudflare Pages project `luckyplz` auto-deploys `main` with build output dir `public`. `public/_headers` controls Cloudflare cache rules — HTML, `/games/*`, and `/js/*` are `no-cache` so edits go live immediately; `/assets/*` and `*.mp3` are cached 1 week.
+
+**Cache policy (MUST READ before committing).** Some mobile browsers ignore the `no-cache` header for dynamically-injected `<script>` tags, which meant every new shared-JS feature used to need a manual `?v=` bump followed by an hour of cache-debugging. That is now automated — **run `bash scripts/bump-cache.sh` before every commit that touches HTML or any file under `public/js/`**. The script rewrites every `<script src="/js/…?v=…">` reference (plus the dynamic one inside `siteFooter.js`) to a fresh UNIX timestamp, so browsers are forced to fetch the new bundle because the URL literally changed. Belt-and-suspenders: every HTML file also carries `<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">` just after the viewport meta. The only state that SHOULD survive across visits is localStorage (saved groups/presets/nicknames + game history). Everything else should reach users on the next page load; if it doesn't, start your debugging with "did we bump `?v=`?" before anything else.
 
 **No service worker.** `public/sw.js` exists only as a self-destruct routine for legacy installs (deletes all caches and unregisters itself on activation). Every HTML page also includes an inline `navigator.serviceWorker.getRegistrations().forEach(unregister)` right before `siteFooter.js` as a belt-and-suspenders cleanup. **Do not re-introduce a caching service worker.** Stale-SW debugging cost hours during the April 2026 Lotto redesign; if you need offline support later, use versioned asset filenames or a signed-off-on plan, not a revival of the old network-first SW.
 
