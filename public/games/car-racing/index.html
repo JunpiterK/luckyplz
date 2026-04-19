@@ -2078,13 +2078,31 @@ const AudioEngine=(function(){
         },1000/60);
     }
 
+    /* Try to play() with one automatic retry if the browser rejects
+       (usually because the AudioContext wasn't yet unlocked). Second
+       attempt is gated on a resume() of the context which is legal once
+       we're inside a user-gesture call stack. */
+    function safePlayBgm(){
+        return bgmAudio.play().catch(function(){
+            try{
+                const c=getCtx();
+                if(c.state==='suspended'){
+                    return c.resume().then(function(){return bgmAudio.play()});
+                }
+            }catch(e){}
+            /* load() forces a fresh fetch + buffer readiness before retry */
+            try{bgmAudio.load()}catch(e){}
+            return new Promise(function(resolve){
+                setTimeout(function(){bgmAudio.play().then(resolve).catch(function(err){console.warn('[BGM] play failed:',err&&err.name);resolve()})},200);
+            });
+        });
+    }
+
     function startBGM(){
         if(!bgmEnabled)return;
         bgmAudio.volume=0;
         bgmAudio.currentTime=0;
-        bgmAudio.play().then(()=>{
-            fadeVolume(BGM_MAX_VOL,BGM_FADE_DURATION);
-        }).catch(()=>{});
+        safePlayBgm().then(function(){fadeVolume(BGM_MAX_VOL,BGM_FADE_DURATION)});
     }
     function stopBGM(){
         fadeVolume(0,0.5,()=>{
@@ -2097,13 +2115,36 @@ const AudioEngine=(function(){
     }
     function resumeBGM(){
         if(!bgmEnabled)return;
-        bgmAudio.play().then(()=>{
-            fadeVolume(BGM_MAX_VOL,0.6);
-        }).catch(()=>{});
+        safePlayBgm().then(function(){fadeVolume(BGM_MAX_VOL,0.6)});
     }
     function toggleBGM(){bgmEnabled=!bgmEnabled;if(!bgmEnabled)stopBGM();return bgmEnabled}
     function isBGMEnabled(){return bgmEnabled}
-    return{sfx,startBGM,stopBGM,pauseBGM,resumeBGM,toggleBGM,isBGMEnabled,getCtx}
+
+    /* Pre-warm audio on the user's first interaction anywhere on the page.
+       iOS/Safari and Chrome's autoplay policy require AudioContext to be
+       created/resumed inside a user-gesture stack; doing this up-front
+       during the setup screen means by the time the race starts the
+       context is already live and BGM play() won't fail. */
+    let warmed=false;
+    function warmAudio(){
+        if(warmed)return;
+        warmed=true;
+        try{
+            const c=getCtx();
+            if(c.state==='suspended')c.resume();
+            /* Touch the <audio> element so iOS registers it as user-initiated.
+               Immediate pause keeps actual playback silent until startBGM. */
+            const p=bgmAudio.play();
+            if(p&&typeof p.then==='function'){
+                p.then(function(){bgmAudio.pause();bgmAudio.currentTime=0}).catch(function(){});
+            }
+        }catch(e){}
+    }
+    ['click','touchstart','keydown'].forEach(function(ev){
+        document.addEventListener(ev,warmAudio,{once:true,capture:true,passive:true});
+    });
+
+    return{sfx,startBGM,stopBGM,pauseBGM,resumeBGM,toggleBGM,isBGMEnabled,getCtx,warmAudio}
 })();
 
 document.getElementById('soundToggle').addEventListener('click',function(){

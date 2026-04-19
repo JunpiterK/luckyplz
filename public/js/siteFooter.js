@@ -6,6 +6,13 @@
 (function(){
     if(document.querySelector('.lp-site-footer'))return;
 
+    /* Game pages are fixed-overlay UIs (setupWrap / gameScreen). The global
+       footer leaks into mobile scroll when rendered there, and the PWA
+       install button overlaps in-game controls. Flag the body so both can
+       be CSS-suppressed on /games/* while still visible on home/blog. */
+    var isGamePage=/^\/games\//.test(location.pathname);
+    if(isGamePage)document.body.classList.add('lp-game-page');
+
     var style=document.createElement('style');
     style.textContent=
         '.lp-site-footer{position:relative;z-index:1;padding:22px 16px 28px;text-align:center;'
@@ -14,7 +21,12 @@
         +'.lp-site-footer a{color:rgba(255,255,255,.65);margin:0 8px;text-decoration:none;transition:color .18s}'
         +'.lp-site-footer a:hover{color:#FF6B35}'
         +'.lp-site-footer .sep{opacity:.25;margin:0 2px}'
-        +'.lp-site-footer .copy{display:block;margin-top:6px;opacity:.6}';
+        +'.lp-site-footer .copy{display:block;margin-top:6px;opacity:.6}'
+        /* On game pages, keep the footer in the DOM (SEO + AdSense policy)
+           but visually collapse it — games are full-viewport apps, not
+           scrollable pages, so a footer below "the fold" is just noise. */
+        +'body.lp-game-page .lp-site-footer{display:none}'
+        +'body.lp-game-page .lp-pwa-btn{display:none!important}';
     document.head.appendChild(style);
 
     var f=document.createElement('footer');
