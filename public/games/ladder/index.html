@@ -944,19 +944,92 @@ function updateTracer(t,dt){
         /* Sequential mode: chain the next player automatically when current one finishes */
         if(playMode==='seq'&&tracers.length<ladder.n){
             const nextIdx=tracers.length;// next player to run
-            /* Last player in the sequence — there's only one result
-               left, so their outcome is already determined. Skip the
-               suspense and rip through the trace at 8× speed so the
-               game ends promptly instead of forcing viewers to watch
-               a foregone conclusion. */
             const isLastPlayer=nextIdx===ladder.n-1;
-            setTimeout(()=>{
-                if(gamePhase==='playing'&&!tracers.some(tr=>tr.playerIdx===nextIdx)){
+            if(isLastPlayer){
+                /* Last player — result is already decided (only one
+                   slot left on the results row). User-requested flow:
+                     · 2-second pause so audience processes the prior
+                       result before attention shifts
+                     · pre-compute the full path, pop the ENTIRE
+                       trail into view at once (not animated)
+                     · hold 2 more seconds on the completed ladder
+                     · result screen */
+                setTimeout(()=>{
+                    if(gamePhase!=='playing')return;
+                    if(tracers.some(tr=>tr.playerIdx===nextIdx))return;
                     const tracer=createTracer(nextIdx);
-                    if(isLastPlayer)tracer.speed*=8;
+                    /* Sample every segment at ~6 px so the trail reads
+                       dense + continuous when it pops in. */
+                    const fullTrail=[];
+                    tracer.segs.forEach(seg=>{
+                        const steps=Math.max(4,Math.ceil(seg.len/6));
+                        for(let s=0;s<=steps;s++){
+                            const f=s/steps;
+                            fullTrail.push({
+                                x:seg.from.x+(seg.to.x-seg.from.x)*f,
+                                y:seg.from.y+(seg.to.y-seg.from.y)*f,
+                                alpha:1
+                            });
+                        }
+                    });
+                    /* Snap to end + mark done so the renderer paints
+                       the full static trail + the token at the
+                       finishing vertical. */
+                    const lastSeg=tracer.segs[tracer.segs.length-1];
+                    tracer.x=lastSeg.to.x;tracer.y=lastSeg.to.y;
+                    tracer.progress=tracer.totalLen;
+                    tracer.done=true;
+                    tracer.trail=fullTrail;
                     tracers.push(tracer);
-                }
-            },isLastPlayer?200:400);
+                    /* Register completion manually (we bypass the
+                       updateTracer arrival path). */
+                    arrivedCount++;
+                    matchResults.push({
+                        name:tracer.name,result:ladder.results[tracer.endCol],
+                        color:tracer.color,playerIdx:tracer.playerIdx,endCol:tracer.endCol
+                    });
+                    Audio.arrive();
+                    /* Arrival-burst particles — keeps the finish
+                       energy same as a normal arrival. */
+                    for(let i=0;i<20;i++){
+                        const ang=Math.random()*Math.PI*2;
+                        const spd=Math.random()*80+20;
+                        particles.push({
+                            x:tracer.x,y:tracer.y,
+                            vx:Math.cos(ang)*spd,vy:Math.sin(ang)*spd,
+                            life:0.8,maxLife:0.8,color:tracer.color,size:Math.random()*4+2
+                        });
+                    }
+                    /* Second 2-second hold, then transition along the
+                       same path updateTracer takes at arrivedCount>=n. */
+                    setTimeout(()=>{
+                        if(gamePhase!=='playing')return;
+                        if(window._lpHost){
+                            try{window._lpHost.broadcast('host:result',{
+                                game:'ladder',
+                                matchResults:matchResults.map(m=>({
+                                    name:m.name,result:m.result,color:m.color,
+                                    playerIdx:m.playerIdx,endCol:m.endCol
+                                }))
+                            })}catch(_){}
+                        }
+                        if(window._lpGuest){
+                            gamePhase='waitResult';
+                            setTimeout(()=>{
+                                if(gamePhase==='waitResult'){gamePhase='done';showResultScreen()}
+                            },1500);
+                        }else{
+                            gamePhase='done';showResultScreen();
+                        }
+                    },2000);
+                },2000);
+            }else{
+                setTimeout(()=>{
+                    if(gamePhase==='playing'&&!tracers.some(tr=>tr.playerIdx===nextIdx)){
+                        tracers.push(createTracer(nextIdx));
+                    }
+                },400);
+            }
         }
 
         if(arrivedCount>=ladder.n){
@@ -1645,6 +1718,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776694303" defer></script>
+<script src="/js/siteFooter.js?v=1776694855" defer></script>
 </body>
 </html>
