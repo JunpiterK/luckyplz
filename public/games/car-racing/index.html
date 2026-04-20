@@ -6242,6 +6242,7 @@ function _lpBroadcastTick(){
         bT:c.boostTimer,gT:c.ghostTimer,wT:c.wingTimer,
         stn:c.stunTimer,slw:c.slowTimer,
         by:c.bounceY,p:c.progress,f:c.finished,fr:c.finishRank,cl:c.currentLap,
+        ft:c.finishTime||0,lpb:c.lastPlaceBoostTimer||0,
         hf:c.hitFlash,hi:c.heldItem,
         /* Sticky connections cross-reference other cars — serialize
            as indices so the guest can re-link to its own players[]. */
@@ -6293,8 +6294,10 @@ function finishedCount(){return players.filter(p=>p.finished).length}
    players[] already populated from host:tick. No physics, no
    updatePlayers. Just paint what host said. */
 let _lpGuestRafId=null;
+let _lpGuestLbLast=0;
 function _lpStartGuestRender(){
     if(_lpGuestRafId)return;
+    _lpGuestLbLast=0;
     function loop(){
         if(!window._lpGuest){_lpGuestRafId=null;return}
         /* Interpolate car state to renderTime before painting so
@@ -6302,6 +6305,14 @@ function _lpStartGuestRender(){
            ~20Hz. Event-shaped state (effects / items / commentary)
            was already applied latest-wins when the tick landed. */
         try{_lpLerpCarsForRender();render()}catch(_){}
+        /* Update the right-side leaderboard ~1.25 Hz, matching the
+           host's 0.8s throttle. Without this the #rankings pane stays
+           empty for the entire race on the guest. */
+        const now=performance.now();
+        if(now-_lpGuestLbLast>800){
+            _lpGuestLbLast=now;
+            try{if(typeof updateLeaderboard==='function')updateLeaderboard()}catch(_){}
+        }
         _lpGuestRafId=requestAnimationFrame(loop);
     }
     _lpGuestRafId=requestAnimationFrame(loop);
@@ -6606,6 +6617,11 @@ function _applyLerpedCars(pa,pb,f,sx,sy){
         c.finished=useNew?cb.f:ca.f;
         c.finishRank=useNew?cb.fr:ca.fr;
         c.currentLap=useNew?cb.cl:ca.cl;
+        /* finishTime + lastPlaceBoostTimer were missing — broke the
+           "✅ 12.3s" badge in the guest leaderboard for cars that
+           finished mid-race, and the last-place 🔥 indicator. */
+        c.finishTime=useNew?(cb.ft||0):(ca.ft||0);
+        c.lastPlaceBoostTimer=useNew?(cb.lpb||0):(ca.lpb||0);
         c.heldItem=useNew?cb.hi:ca.hi;
         c.windPenalty=(useNew?cb.wp:ca.wp)||0;
         const stT=useNew?cb.stT:ca.stT;
@@ -6619,7 +6635,15 @@ function _lpApplyResultOnGuest(p){
     if(!p||!Array.isArray(p.finishOrder))return;
     finishOrder=p.finishOrder.map(f=>{
         const c=players[f.i];if(!c)return null;
-        c.finished=true;c.finishRank=f.rank;c.finishTime=f.time;
+        /* Host sends f.time=null for DNF cars. Previously we forced
+           c.finished=true regardless, then showResults() called
+           undefined.toFixed(2) on the null finishTime and threw —
+           that's why the guest never saw the results screen at all.
+           Set finished based on whether they actually finished, and
+           keep finishTime falsy so the 'DNF' branch renders. */
+        c.finished=(f.time!=null);
+        c.finishRank=f.rank;
+        c.finishTime=f.time||0;
         return c;
     }).filter(Boolean);
     gameRunning=false;_lpStopGuestRender();
@@ -6696,6 +6720,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776698090" defer></script>
+<script src="/js/siteFooter.js?v=1776698607" defer></script>
 </body>
 </html>
