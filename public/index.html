@@ -157,15 +157,33 @@
         .lp-home-join-btn{background:rgba(0,217,255,.1);border-color:rgba(0,217,255,.4);color:#00D9FF}
         .lp-home-join-btn:hover{background:rgba(0,217,255,.2);border-color:#00D9FF;color:#fff}
         @media(max-width:600px){
-            /* Split the two chips to opposite corners and align their
-               vertical center with the .use-case line so they sit on the
-               same baseline as the "누가 쏠래?" row. The chip label is
-               short enough per-locale ("참석" / "Join" / "Unirse" etc.)
-               that the old short/full split isn't needed anymore. */
-            .auth-bar{top:0;left:8px;right:8px;display:block;pointer-events:none;height:0}
-            .auth-bar > .auth-btn{pointer-events:auto;position:fixed;top:96px;padding:0 12px;font-size:0.72em;height:30px;min-width:84px}
-            .auth-bar > .lp-home-join-btn{left:8px}
-            .auth-bar > #authBtn{right:8px}
+            /* Dedicated top chip strip — a 44-px frosted-glass band that
+               pins Join on the left and Login on the right. Used to
+               float the chips at the useCase line, which put them on a
+               collision course with both the tagline/useCase text AND
+               the wrapped 16-language lang-bar below it. Fixing the
+               strip at the top gives every element its own lane:
+                 0–44  chip strip (glass)
+                 44+   header content (logo / tagline / useCase / langs)
+               The dark-to-transparent gradient lets the starfield bleed
+               through while keeping the chips legible against the logo. */
+            .auth-bar{
+                position:fixed;top:0;left:0;right:0;
+                height:44px;
+                display:flex;align-items:center;justify-content:space-between;
+                padding:7px 12px;gap:8px;
+                background:linear-gradient(180deg,rgba(10,10,26,.82) 0%,rgba(10,10,26,.5) 60%,rgba(10,10,26,0) 100%);
+                backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+                z-index:20;pointer-events:none;
+            }
+            .auth-bar > .auth-btn{
+                pointer-events:auto;
+                position:static;
+                padding:0 14px;
+                font-size:.72em;
+                height:30px;
+                min-width:76px;
+            }
         }
 
         /* Footer */
@@ -179,7 +197,8 @@
                footer — in ONE mobile viewport (≈ 640–800 px tall)
                without vertical scrolling. Every vertical dimension
                below is shrunk with that in mind. */
-            .container{padding:10px 10px 0;min-height:0}
+            /* padding-top = 44px glass chip strip + 8px breathing room. */
+            .container{padding:52px 10px 0;min-height:0}
             .header{margin-bottom:10px}
             .logo{font-size:1.55em;margin-bottom:2px}
             .tagline{font-size:.7em}
@@ -229,8 +248,6 @@
             .game-name{font-size:0.82em;margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
             .game-desc{font-size:0.66em;line-height:1.25}
             .game-badge{font-size:0.6em;padding:2px 6px;margin-top:4px}
-            .auth-bar{top:8px;right:8px}
-            .auth-btn{padding:5px 10px;font-size:0.7em}
         }
     </style>
 </head>
@@ -495,32 +512,6 @@ function applyLanguage() {
     });
     renderGames();
     renderRecent();
-    /* Realign chips after the new useCase text may have changed its
-       vertical position (different locale = different text length /
-       wrapping). Run once inline + one extra rAF tick to catch any
-       webfont swap that changes metrics. */
-    alignHomeChips();
-    requestAnimationFrame(alignHomeChips);
-}
-
-/* Position the mobile Watch-Together + Login chips on the same y-axis
-   as the .use-case line ("🎯 누가 쏠래? ..."). On PC the CSS already
-   groups them top-right, so this is a no-op above 600px. */
-function alignHomeChips(){
-    const chips = document.querySelectorAll('.auth-bar > .auth-btn');
-    if (!chips.length) return;
-    if (window.innerWidth > 600) {
-        chips.forEach(c => c.style.top = '');
-        return;
-    }
-    const uc = document.getElementById('useCase');
-    if (!uc) return;
-    const r = uc.getBoundingClientRect();
-    /* Center a 30px chip on the useCase vertical midpoint. Clamp to a
-       safe 8px minimum so the chip never slips under the viewport top
-       when useCase is weirdly short or the window is tiny. */
-    const target = Math.max(8, Math.round(r.top + (r.height - 30) / 2));
-    chips.forEach(c => c.style.top = target + 'px');
 }
 
 function renderRecent(){
@@ -561,11 +552,6 @@ function init() {
         localStorage.setItem('luckyplz_lang', currentLang);
         applyLanguage();
     });
-
-    /* Keep the mobile chips aligned to .use-case on resize + orientation
-       change. applyLanguage() already calls this for the initial render. */
-    window.addEventListener('resize', alignHomeChips);
-    window.addEventListener('orientationchange', alignHomeChips);
 
     /* Watch-Together entry. lpRoom.js is loaded by siteFooter.js on
        every page now, so we wait for it to land before opening the
@@ -631,6 +617,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776651836" defer></script>
+<script src="/js/siteFooter.js?v=1776652455" defer></script>
 </body>
 </html>
