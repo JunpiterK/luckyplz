@@ -311,12 +311,39 @@
         .help-emoji{font-size:1.3em;margin-right:4px;vertical-align:middle}
         .help-highlight{color:var(--accent);font-weight:700}
         .help-note{color:rgba(255,255,255,0.4);font-size:0.8em;margin-top:8px;font-style:italic}
-        /* Rotate phone overlay */
-        #rotateOverlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(10,10,26,0.97);z-index:9999;justify-content:center;align-items:center;flex-direction:column;gap:20px;text-align:center;padding:40px}
-        #rotateOverlay .rotate-icon{font-size:4em;animation:rotateAnim 2s ease-in-out infinite}
-        @keyframes rotateAnim{0%,100%{transform:rotate(0deg)}50%{transform:rotate(90deg)}}
-        #rotateOverlay .rotate-text{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.1em;color:var(--accent);letter-spacing:2px}
-        #rotateOverlay .rotate-sub{color:rgba(255,255,255,0.5);font-size:0.85em}
+        /* Rotate phone overlay — retained for fallback but never shown
+           now that force-landscape rotates the UI via CSS transform.
+           Kept in the DOM so older bookmarks/state transitions don't
+           NPE on getElementById('rotateOverlay'). */
+        #rotateOverlay{display:none!important}
+        /* ===== FORCE LANDSCAPE ON MOBILE (car-racing only) =====
+           iOS doesn't support screen.orientation.lock at all and Android
+           only locks inside fullscreen — past attempts hit both of those
+           walls. The only universal fix is to rotate the UI ourselves:
+           when the device is held portrait during active gameplay, we
+           rotate the whole body 90deg so the user always sees landscape
+           regardless of how they're holding the phone. Touch events are
+           automatically re-mapped through the CSS transform so every
+           button still hits where the user's finger lands.
+
+           top+left+origin trio is calibrated so a clockwise 90° rotation
+           around the top-left corner lands the rotated box back inside
+           the viewport (0,0)→(innerWidth,innerHeight). Width/height
+           swap so the rotated stage fills the device. */
+        html.lp-force-landscape-root,html.lp-force-landscape-root body{overflow:hidden}
+        body.lp-force-landscape{
+            position:fixed!important;
+            top:0;
+            left:100vw;
+            width:100vh!important;
+            height:100vw!important;
+            min-height:0!important;
+            max-height:100vw!important;
+            transform-origin:top left;
+            transform:rotate(90deg);
+            overflow:hidden;
+            margin:0;
+        }
         /* ===== MOBILE: SETUP = portrait, fill screen ===== */
         @media(max-width:600px){
             #setupScreen{padding:14px 10px;border-radius:16px;max-height:97vh;width:98vw}
@@ -2166,9 +2193,26 @@ document.getElementById('soundToggle').addEventListener('click',function(){
 });
 
 const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d');
+
+/* ===== FORCE-LANDSCAPE VIEWPORT HELPERS =====
+   When body.lp-force-landscape is active the whole UI is rotated 90°
+   via CSS transform. Device still reports its natural (portrait) dims
+   via window.innerWidth/innerHeight — we need the SWAPPED dims so
+   canvas + track sizing match the rotated visible area. Use _lpVW()/
+   _lpVH() everywhere the code previously read innerWidth/innerHeight
+   for layout. Orientation-DETECTION code (to decide whether to force
+   the rotation) must still use the raw window dims. */
+function _lpIsForcedLandscape(){return document.body.classList.contains('lp-force-landscape')}
+function _lpVW(){return _lpIsForcedLandscape()?window.innerHeight:window.innerWidth}
+function _lpVH(){return _lpIsForcedLandscape()?window.innerWidth:window.innerHeight}
+function _lpInGameView(){
+    const sw=document.getElementById('setupWrap');
+    return !!(sw&&sw.style.display==='none');
+}
+
 /* Dynamic track sizing based on screen — scales for mobile */
 function _calcTrackParams(){
-    const w=window.innerWidth,h=window.innerHeight;
+    const w=_lpVW(),h=_lpVH();
     const minDim=Math.min(w,h);
     const isMobile=minDim<=500||('ontouchstart' in window&&w<1024);
     if(isMobile){
@@ -2242,7 +2286,7 @@ function applyCanvasDPR(){
     canvas.style.width=WIDTH+'px';canvas.style.height=HEIGHT+'px';
     ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-function resize(){WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR()}
+function resize(){WIDTH=_lpVW();HEIGHT=_lpVH();applyCanvasDPR()}
 window.addEventListener('resize',resize);resize();
 
 /* ===== TRACK GENERATION ===== */
@@ -5503,7 +5547,10 @@ function startGame(){
     document.getElementById('pauseBtn').classList.remove('resumed');
     document.getElementById('pauseOverlay').style.display='none';
     canvas.style.display='block';
-    WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR();
+    /* Apply force-landscape class BEFORE reading dims so _lpVW/_lpVH
+       return the swapped values when device is held portrait. */
+    if(typeof checkOrientation==='function')checkOrientation();
+    WIDTH=_lpVW();HEIGHT=_lpVH();applyCanvasDPR();
     _refreshTrackParams(); /* Recalculate track size for current screen */
     COURSES[selectedCourse].generator();
     /* Shuffle player order completely: names, numbers, colors, grid positions all randomized */
@@ -5786,7 +5833,7 @@ function initEventListeners(){
     document.getElementById('listModal').addEventListener('click',e=>{if(e.target.id==='listModal')closeListModal()});
     document.getElementById('savedListsContainer').addEventListener('click',e=>{const btn=e.target.closest('.list-item-btn');if(!btn)return;const action=btn.dataset.action,index=parseInt(btn.dataset.index);if(action==='load')loadList(index);else if(action==='delete')deleteList(index)});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSaveModal();closeListModal()}if(e.key===' '&&gameRunning)togglePause()});
-    window.addEventListener('resize',()=>{if(gameRunning){WIDTH=window.innerWidth;HEIGHT=window.innerHeight;canvas.width=WIDTH;canvas.height=HEIGHT}});
+    window.addEventListener('resize',()=>{if(gameRunning){WIDTH=_lpVW();HEIGHT=_lpVH();canvas.width=WIDTH;canvas.height=HEIGHT}});
     initRewardListeners();
     /* Language selector */
     document.getElementById('langSelector').addEventListener('click',e=>{
@@ -6068,24 +6115,29 @@ const ROTATE_I18N={
     tr:{land:'📱 YATAY ÇEVİRİN',landSub:'En iyi deneyim için yatay mod',port:'📱 DİKEY ÇEVİRİN',portSub:'Ayar ekranı dikey modda çalışır'}
 };
 
+/* Decide whether to force the UI into landscape via CSS transform.
+   Rule: mobile device + held portrait + user is past the setup screen
+   (i.e. countdown/race/results are visible). Setup stays in the
+   device's natural orientation because the setup form is already
+   portrait-optimized; only the gameplay view suffers when held
+   portrait (track layout gets squeezed and unreadable). Called on
+   resize, orientationchange, setup→game transitions, and
+   game→setup resets. */
 function checkOrientation(){
     const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
-    if(!isMobile){document.getElementById('rotateOverlay').style.display='none';return}
     const isPortrait=window.innerHeight>window.innerWidth;
-    const overlay=document.getElementById('rotateOverlay');
-
-    if(gameRunning&&isPortrait){
-        /* Game running + portrait = show rotate message */
-        const ri=ROTATE_I18N[currentLang]||ROTATE_I18N.en;
-        document.getElementById('rotateText').textContent=ri.land;
-        document.getElementById('rotateSub').textContent=ri.landSub;
-        overlay.style.display='flex';
-    }else{
-        overlay.style.display='none';
+    const shouldForce=isMobile&&isPortrait&&_lpInGameView();
+    const currentlyForced=document.body.classList.contains('lp-force-landscape');
+    if(shouldForce!==currentlyForced){
+        document.body.classList.toggle('lp-force-landscape',shouldForce);
+        document.documentElement.classList.toggle('lp-force-landscape-root',shouldForce);
     }
-    if(gameRunning){
-        WIDTH=window.innerWidth;HEIGHT=window.innerHeight;
+    /* Whether the class changed or just the window resized, re-sync
+       the canvas + track params to the (possibly-swapped) viewport. */
+    if(_lpInGameView()){
+        WIDTH=_lpVW();HEIGHT=_lpVH();
         applyCanvasDPR();
+        if(typeof _refreshTrackParams==='function')_refreshTrackParams();
     }
 }
 
@@ -6390,8 +6442,13 @@ function _lpApplyRaceStartOnGuest(p){
        engine's safePlayBgm has a retry path anyway. */
     try{if(AudioEngine.isBGMEnabled())AudioEngine.startBGM()}catch(e){}
     if(typeof p.lapLength==='number')lapLength=p.lapLength;
+    /* Guest enters the game view here — hide setup + flip the
+       force-landscape class BEFORE sizing the canvas so WIDTH/HEIGHT
+       come from the rotated viewport on portrait-held mobile. */
+    document.getElementById('setupWrap').style.display='none';
+    if(typeof checkOrientation==='function')checkOrientation();
     /* Canvas sizing → compute scale factors against host's viewport. */
-    WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR();
+    WIDTH=_lpVW();HEIGHT=_lpVH();applyCanvasDPR();
     const sx=WIDTH/(p.hostW||WIDTH),sy=HEIGHT/(p.hostH||HEIGHT);
     const sAvg=(sx+sy)/2;
     _lpHostWidthCache=p.hostW||WIDTH;_lpHostHeightCache=p.hostH||HEIGHT;
@@ -6705,8 +6762,8 @@ _waitForLpRoom(()=>{
         });
         g.on('host:snapshot',p=>{if(p)_lpBroadcastConfigPreview&&_lpBroadcastConfigPreview(p)});
         g.on('host:start',p=>{
-            _lpHostWidthCache=p.hostW||window.innerWidth;
-            _lpHostHeightCache=p.hostH||window.innerHeight;
+            _lpHostWidthCache=p.hostW||_lpVW();
+            _lpHostHeightCache=p.hostH||_lpVH();
             _lpApplyRaceStartOnGuest(p);
         });
         g.on('host:tick',_lpApplyTickOnGuest);
@@ -6720,6 +6777,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776698607" defer></script>
+<script src="/js/siteFooter.js?v=1776699472" defer></script>
 </body>
 </html>
