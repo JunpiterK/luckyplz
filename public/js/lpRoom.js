@@ -141,6 +141,17 @@
             broadcastGuestList();
         });
 
+        /* Generic guest→host action channel. Games register a handler
+           via `room.onGuestAction(cb)` to receive things like "a guest
+           claims bingo". The payload carries `gid` + `nickname` so the
+           host can validate the sender is actually in the room. */
+        const guestActionCbs=[];
+        chan.on('broadcast',{event:'guest:action'},function(msg){
+            const p=msg.payload||{};
+            if(!p.gid||!guests.has(p.gid))return; /* ignore spoof */
+            guestActionCbs.forEach(function(cb){try{cb(p)}catch(_){}});
+        });
+
         /* Lightweight discovery — the home-page join flow uses this to
            look up which game a room code belongs to before redirecting
            the user. No PIN required; response includes gameId + lock
@@ -186,6 +197,10 @@
             },
             onGuestJoin:function(cb){if(typeof cb==='function')guestJoinCbs.push(cb)},
             onGuestLeave:function(cb){if(typeof cb==='function')guestLeaveCbs.push(cb)},
+            /* Game code subscribes here to receive guest:action events
+               (e.g. "guest X claims bingo at draw #N"). Payload always
+               includes gid + nickname. */
+            onGuestAction:function(cb){if(typeof cb==='function')guestActionCbs.push(cb)},
             /* Called by game code when the host clicks Start. After this
                point, new guest:join_requests get reason:'locked'. */
             lock:function(){locked=true;dbgLog('host: room LOCKED')},
@@ -212,7 +227,7 @@
         'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
-        'host:guests'
+        'host:guests','host:bingo_winners'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
@@ -348,6 +363,21 @@
                 }else if(event==='host:config'&&cache['host:snapshot']){
                     try{cb(cache['host:snapshot'])}catch(e){}
                 }
+            },
+            /* Send a generic guest→host event. The host sees it via
+               `room.onGuestAction(cb)`. Useful when a guest needs to
+               tell the host "I just bingoed" or any other out-of-band
+               claim that the host then authoritatively broadcasts to
+               everyone. Always stamps gid + nickname so the host can
+               attribute + validate. */
+            action:function(type,payload){
+                try{
+                    chan.send({
+                        type:'broadcast',
+                        event:'guest:action',
+                        payload:Object.assign({gid:gid,nickname:nickname,type:type,t:Date.now()},payload||{})
+                    });
+                }catch(_){}
             },
             close:function(){
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
