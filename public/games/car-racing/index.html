@@ -534,6 +534,9 @@
             </div>
         </div>
         <div class="btn-group" style="margin-top:20px"><button id="startBtn" class="btn btn-primary" type="button">🏁 레이스 시작!</button><button id="resetBtn" class="btn btn-secondary" type="button">🔄 초기화</button></div>
+        <div class="online-row" style="text-align:center;margin-top:14px">
+            <button class="lp-room-online-btn" data-online-action="host" type="button">👥 <span class="online-btn-label">Open</span></button>
+        </div>
     </div>
     <div class="modal-overlay" id="saveModal">
         <div class="modal-content">
@@ -599,6 +602,11 @@
 <script src="/js/starNames.js"></script>
 <script src="/js/participantPresets.js"></script>
 <script src="/js/nextGames.js"></script>
+<!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
+     for Watch-Together. Without window.supabase the room-create /
+     room-join flow silently no-ops. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/supabase-config.js"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -5167,6 +5175,9 @@ function gameLoop(currentTime){
         updatePlayers(deltaTime);updateEffects(deltaTime);updateCommentary(deltaTime);render();
     }catch(e){console.error('Game loop error:',e)}
     _lbAccum+=deltaTime;if(_lbAccum>=0.8){_lbAccum=0;try{updateLeaderboard()}catch(e){}}
+    /* Broadcast car state to guests at 20 Hz (throttle is inside
+       _lpBroadcastTick). No-op if we're not hosting. */
+    if(window._lpHost&&typeof _lpBroadcastTick==='function')_lpBroadcastTick();
     animationId=requestAnimationFrame(gameLoop);
 }
 
@@ -5527,6 +5538,18 @@ function startGame(){
     document.getElementById('timer').textContent=raceTime.toFixed(1);
     document.getElementById('centerTimer').style.color='rgba(255,230,109,0.7)';
     document.getElementById('centerTimer').style.animation='titleGlow 2s ease-in-out infinite';
+    /* Broadcast full race start state to guests BEFORE countdown so
+       they have time to populate their track + cars and start
+       rendering while the countdown plays on their side via the
+       subsequent ticks. */
+    if(window._lpHost&&typeof _lpCaptureRaceStartPayload==='function'){
+        try{
+            if(window._lpHost.lock)window._lpHost.lock();
+            const pl=_lpCaptureRaceStartPayload();
+            window._lpHost.snapshot(pl);
+            window._lpHost.broadcast('host:start',pl);
+        }catch(_){}
+    }
     showCountdown(()=>{
         gameRunning=true;lastTime=performance.now();
         addCommentary('raceStart',{});
@@ -5552,6 +5575,16 @@ function endGame(){
     gameRunning=false;cancelAnimationFrame(animationId);AudioEngine.stopBGM();AudioEngine.sfx.gameEnd();
     const unfinished=players.filter(p=>!p.finished).sort((a,b)=>b.progress-a.progress);
     unfinished.forEach(player=>{player.finishRank=finishOrder.length+1;finishOrder.push(player)});
+    /* Host: broadcast the authoritative finishOrder so guests show
+       identical rankings regardless of any floating-point drift in
+       their mirrored state. Minimal payload — just {car index,
+       rank, time} per finisher. */
+    if(window._lpHost){
+        try{
+            const fo=finishOrder.map(c=>({i:c.index,rank:c.finishRank,time:c.finished?c.finishTime:null}));
+            window._lpHost.broadcast('host:result',{game:'car-racing',finishOrder:fo});
+        }catch(_){}
+    }
     showResults();
 }
 
@@ -6112,12 +6145,252 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
         bgmAudio.src=bgmAudio.src.split('?')[0]+'?v='+Date.now();
     }
 })();
+
+/* ===== Watch-Together (car-racing) =====
+   Host authoritative: runs all physics locally. Broadcasts at key
+   moments:
+     - host:start (game-start): full race config + track data + car
+       configs so the guest can spawn matching players[] array and
+       render the same track at its own canvas scale.
+     - host:tick (20 Hz): compact {x,y,angle,state} per car so the
+       guest can mirror car positions without running its own
+       physics. State is enough for rendering + effects.
+     - host:result (end of race): final finishOrder. Guest shows
+       results screen with identical rankings.
+   Guest runs NO physics. gameLoop is replaced with a pure-render
+   loop that only interpolates from last-received tick state. */
+window._lpHost=null;window._lpGuest=null;
+function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
+
+/* Track data snapshot — captured at race start on host, sent to
+   guest so its own render paints the same track geometry (host's
+   exact points, scaled to guest's WIDTH/HEIGHT). */
+function _lpCaptureRaceStartPayload(){
+    /* Deep-ish copy of track points + borders + zones so the guest
+       has a frozen snapshot independent of the host's mutable state. */
+    const pt=arr=>arr.map(p=>({x:p.x,y:p.y}));
+    const zone=arr=>arr?arr.map(z=>Object.assign({},z)):[];
+    return {
+        game:'car-racing',t:Date.now(),
+        course:selectedCourse,raceTime:raceTime,gameSpeed:gameSpeed,
+        eventFrequency:eventFrequency,totalLaps:totalLaps,
+        hostW:WIDTH,hostH:HEIGHT,
+        trackWidth:typeof TRACK_WIDTH!=='undefined'?TRACK_WIDTH:120,
+        trackMargin:typeof MARGIN!=='undefined'?MARGIN:80,
+        track:pt(track||[]),
+        trackNormals:(trackNormals||[]).map(n=>({x:n.x,y:n.y})),
+        trackBorderLeft:pt(trackBorderLeft||[]),
+        trackBorderRight:pt(trackBorderRight||[]),
+        waterZones:zone(typeof waterZones!=='undefined'?waterZones:[]),
+        hillZones:zone(typeof hillZones!=='undefined'?hillZones:[]),
+        mudZones:zone(typeof mudZones!=='undefined'?mudZones:[]),
+        iceZones:zone(typeof iceZones!=='undefined'?iceZones:[]),
+        cars:players.map(c=>({
+            index:c.index,name:c.name,color:c.color,accentColor:c.accentColor,
+            numberPlate:c.numberPlate,driftSkill:c.driftSkill,
+            speedRatio:c.speedRatio,physical:c.physical,
+            laneSlot:c.laneSlot,laneOffset:c.laneOffset,
+            progress:c.progress,x:c.x,y:c.y,angle:c.angle
+        }))
+    };
+}
+
+/* 20 Hz tick — keeps bandwidth reasonable (~700KB per 2-min race
+   for 12 cars) while looking smooth with guest-side interpolation. */
+let _lpLastTickMs=0;
+function _lpBroadcastTick(){
+    if(!window._lpHost||!gameRunning)return;
+    const now=performance.now();
+    if(now-_lpLastTickMs<50)return;
+    _lpLastTickMs=now;
+    /* Pack only the fields the renderer reads. Skip anything
+       physics-derived that the guest could compute itself from
+       these inputs, but we're not running physics on guest so we
+       send what render() needs: position, angle, lane, state flags,
+       lap + progress + effects that change visuals. */
+    const payload={t:now,cars:players.map(c=>({
+        i:c.index,x:c.x,y:c.y,a:c.angle,
+        dx:c.displayX,dy:c.displayY,da:c.displayAngle,
+        lo:c.laneOffset,
+        st:c.state,sT:c.stateTimer,sA:c.spinAngle,sS:c.spinSpeed,
+        bT:c.boostTimer,gT:c.ghostTimer,wT:c.wingTimer,
+        stn:c.stunTimer,slw:c.slowTimer,
+        by:c.bounceY,p:c.progress,f:c.finished,fr:c.finishRank,cl:c.currentLap,
+        hf:c.hitFlash,hi:c.heldItem
+    })),rem:remainingTime,fin:finishedCount(),tot:players.length};
+    try{window._lpHost.broadcast('host:tick',payload)}catch(_){}
+}
+function finishedCount(){return players.filter(p=>p.finished).length}
+
+/* Guest renderer — runs the existing render() each frame with
+   players[] already populated from host:tick. No physics, no
+   updatePlayers. Just paint what host said. */
+let _lpGuestRafId=null;
+function _lpStartGuestRender(){
+    if(_lpGuestRafId)return;
+    function loop(){
+        if(!window._lpGuest){_lpGuestRafId=null;return}
+        try{render()}catch(_){}
+        _lpGuestRafId=requestAnimationFrame(loop);
+    }
+    _lpGuestRafId=requestAnimationFrame(loop);
+}
+function _lpStopGuestRender(){
+    if(_lpGuestRafId){cancelAnimationFrame(_lpGuestRafId);_lpGuestRafId=null}
+}
+
+/* Rebuild track + cars on the guest from host's host:start payload.
+   Scales host's coordinates to guest's own WIDTH/HEIGHT so the race
+   fits the device. Pure data population — no track.generator() call
+   because the guest trusts host's geometry. */
+function _lpApplyRaceStartOnGuest(p){
+    if(!p)return;
+    selectedCourse=p.course;raceTime=p.raceTime;gameSpeed=p.gameSpeed;
+    eventFrequency=p.eventFrequency;totalLaps=p.totalLaps;
+    remainingTime=p.raceTime;
+    /* Canvas sizing to our viewport, THEN scale host's points. */
+    WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR();
+    const sx=WIDTH/(p.hostW||WIDTH),sy=HEIGHT/(p.hostH||HEIGHT);
+    const scalePt=pt=>({x:pt.x*sx,y:pt.y*sy});
+    const scaleZone=z=>Object.assign({},z,{x:z.x!=null?z.x*sx:z.x,y:z.y!=null?z.y*sy:z.y,w:z.w!=null?z.w*sx:z.w,h:z.h!=null?z.h*sy:z.h,r:z.r!=null?z.r*Math.min(sx,sy):z.r});
+    track=(p.track||[]).map(scalePt);
+    trackNormals=(p.trackNormals||[]).map(n=>({x:n.x,y:n.y}));
+    trackBorderLeft=(p.trackBorderLeft||[]).map(scalePt);
+    trackBorderRight=(p.trackBorderRight||[]).map(scalePt);
+    waterZones=(p.waterZones||[]).map(scaleZone);
+    hillZones=(p.hillZones||[]).map(scaleZone);
+    mudZones=(p.mudZones||[]).map(scaleZone);
+    iceZones=(p.iceZones||[]).map(scaleZone);
+    /* Cars: spawn with host's initial positions (scaled). */
+    players=(p.cars||[]).map(cd=>{
+        const c=createCar(cd.index,cd.name,cd.index);
+        c.color=cd.color;c.accentColor=cd.accentColor;
+        c.numberPlate=cd.numberPlate;c.driftSkill=cd.driftSkill;
+        c.speedRatio=cd.speedRatio;c.physical=cd.physical;
+        c.laneSlot=cd.laneSlot;c.laneOffset=cd.laneOffset;
+        c.progress=cd.progress;
+        c.x=cd.x*sx;c.y=cd.y*sy;c.angle=cd.angle;
+        c.displayX=c.x;c.displayY=c.y;c.displayAngle=c.angle;
+        return c;
+    });
+    /* UI transition matches host.startGame. */
+    document.getElementById('setupWrap').style.display='none';
+    document.getElementById('infoPanel').style.display='flex';
+    document.getElementById('resultScreen').style.display='none';
+    document.getElementById('centerTimer').style.display='block';
+    document.getElementById('totalCount').textContent=players.length;
+    document.getElementById('finishedCount').textContent='0';
+    canvas.style.display='block';
+    gameRunning=false; /* Guest doesn't drive physics */
+    _lpStartGuestRender();
+}
+
+/* Apply host:tick car state — just write the received fields onto
+   the existing players[] entries. Render reads the same fields. */
+function _lpApplyTickOnGuest(p){
+    if(!p||!Array.isArray(p.cars)||!players)return;
+    const sx=WIDTH/(_lpHostWidthCache||WIDTH),sy=HEIGHT/(_lpHostHeightCache||HEIGHT);
+    p.cars.forEach(cd=>{
+        const c=players[cd.i];if(!c)return;
+        c.x=cd.x*sx;c.y=cd.y*sy;c.angle=cd.a;
+        c.displayX=cd.dx*sx;c.displayY=cd.dy*sy;c.displayAngle=cd.da;
+        c.laneOffset=cd.lo;
+        c.state=cd.st;c.stateTimer=cd.sT;c.spinAngle=cd.sA;c.spinSpeed=cd.sS;
+        c.boostTimer=cd.bT;c.ghostTimer=cd.gT;c.wingTimer=cd.wT;
+        c.stunTimer=cd.stn;c.slowTimer=cd.slw;
+        c.bounceY=cd.by;c.progress=cd.p;c.finished=cd.f;
+        c.finishRank=cd.fr;c.currentLap=cd.cl;
+        c.hitFlash=cd.hf;c.heldItem=cd.hi;
+    });
+    if(typeof p.rem==='number')remainingTime=p.rem;
+    if(typeof p.fin==='number')document.getElementById('finishedCount').textContent=p.fin;
+    if(typeof document.getElementById('timer')!=='undefined'){
+        const tel=document.getElementById('timer');
+        if(tel)tel.textContent=Math.max(0,remainingTime).toFixed(1);
+        const cel=document.getElementById('centerTimer');
+        if(cel&&cel.style.display!=='none')cel.textContent=Math.max(0,remainingTime).toFixed(1);
+    }
+}
+let _lpHostWidthCache=0,_lpHostHeightCache=0;
+
+function _lpApplyResultOnGuest(p){
+    if(!p||!Array.isArray(p.finishOrder))return;
+    finishOrder=p.finishOrder.map(f=>{
+        const c=players[f.i];if(!c)return null;
+        c.finished=true;c.finishRank=f.rank;c.finishTime=f.time;
+        return c;
+    }).filter(Boolean);
+    gameRunning=false;_lpStopGuestRender();
+    if(typeof showResults==='function')setTimeout(()=>showResults(),50);
+}
+
+/* Host button wiring (same pattern as the other 5 games). */
+function _lpWireHostRoom(room){
+    window._lpHost=room;
+    _lpBroadcastConfig();
+    room.onGuestJoin(()=>_lpBroadcastConfig());
+}
+/* Lightweight setup-config broadcast so a guest joining BEFORE the
+   host clicks Start already sees the current course + names. Full
+   race state goes through host:start when racing actually begins. */
+function _lpBroadcastConfig(){
+    if(!window._lpHost)return;
+    const nameInputs=document.querySelectorAll('#playerNameInputs input[type="text"]');
+    const names=[...nameInputs].map(i=>i.value.trim()||i.placeholder||'');
+    const payload={game:'car-racing',course:selectedCourse,raceTime:parseInt(document.getElementById('raceTime').value),gameSpeed:parseFloat(document.getElementById('gameSpeed').value),totalLaps:parseInt(document.getElementById('lapCount').value)||3,names};
+    try{window._lpHost.snapshot(payload);window._lpHost.broadcast('host:config',payload)}catch(_){}
+}
+document.querySelectorAll('.lp-room-online-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+        if(window._lpHost)return;
+        _waitForLpRoom(()=>{
+            const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
+            window.LpRoom.showHostModal({gameId:'car-racing',hostName:hn,onCreated:_lpWireHostRoom});
+        });
+    });
+});
+/* Silent resume from transferTo. */
+_waitForLpRoom(()=>{
+    if(!window.LpRoom||!window.LpRoom.tryResumeHost)return;
+    window.LpRoom.tryResumeHost({gameId:'car-racing'}).then(room=>{if(room)_lpWireHostRoom(room)});
+});
+/* Guest: auto-join via URL params, subscribe to host events. */
+_waitForLpRoom(()=>{
+    const auto=window.LpRoom.detectAutoJoinParams();
+    if(!auto.code)return;
+    window.LpRoom.showGuestJoinModal(auto.code,{gameId:'car-racing',prefillPin:auto.pin,prefillNick:auto.nickname,onJoined:g=>{
+        window._lpGuest=g;
+        /* Lock down host-only controls. */
+        const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4';sb.textContent='👀 Waiting for host…'}
+        const rb=document.getElementById('resetBtn');if(rb)rb.disabled=true;
+        document.querySelectorAll('.lp-room-online-btn').forEach(b=>b.style.display='none');
+        g.on('host:config',p=>{
+            if(!p)return;
+            /* Mirror readable setup state so the guest sees host's
+               chosen course + names while waiting. */
+            if(typeof p.course==='string')selectedCourse=p.course;
+            if(Array.isArray(p.names)){
+                const inputs=document.querySelectorAll('#playerNameInputs input[type="text"]');
+                p.names.forEach((n,i)=>{if(inputs[i])inputs[i].value=n});
+            }
+        });
+        g.on('host:snapshot',p=>{if(p)_lpBroadcastConfigPreview&&_lpBroadcastConfigPreview(p)});
+        g.on('host:start',p=>{
+            _lpHostWidthCache=p.hostW||window.innerWidth;
+            _lpHostHeightCache=p.hostH||window.innerHeight;
+            _lpApplyRaceStartOnGuest(p);
+        });
+        g.on('host:tick',_lpApplyTickOnGuest);
+        g.on('host:result',_lpApplyResultOnGuest);
+        g.on('host:close',()=>{alert('방장이 방을 닫았어요');location.href='/'});
+    }});
+});
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776686097" defer></script>
+<script src="/js/siteFooter.js?v=1776687040" defer></script>
 </body>
 </html>
