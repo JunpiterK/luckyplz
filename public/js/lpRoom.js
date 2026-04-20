@@ -277,7 +277,7 @@
         'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
-        'host:guests','host:bingo_winners'
+        'host:guests','host:bingo_winners','host:heartbeat'
     ];
 
     /* Look up a room without actually joining. Used by the home-page

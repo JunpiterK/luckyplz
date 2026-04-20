@@ -254,6 +254,15 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
    after ~3 s. Stays in viewport overlay so it's visible even over
    the drum. Multi-winner list comma-separated. */
 .winner-banner{position:fixed;top:0;left:0;right:0;z-index:40;padding:16px 20px;text-align:center;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);color:#0A0A1A;box-shadow:0 8px 30px rgba(255,154,60,.4);transform:translateY(-110%);transition:transform .5s cubic-bezier(.2,.9,.35,1.2);pointer-events:none}
+/* Guest-side host-disconnect banner. Drops down when we haven't
+   heard anything from the host in 20s+. Non-blocking (pointer-
+   events:none) so the user can still interact with whatever they
+   can — leave, play offline on their own card, etc. Hides itself
+   the moment host traffic resumes. */
+#hostDcBanner{position:fixed;top:48px;left:50%;transform:translate(-50%,-200%);z-index:42;padding:10px 22px;background:linear-gradient(135deg,rgba(255,51,102,.95),rgba(255,100,130,.95));color:#fff;border-radius:20px;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:700;font-size:.82em;letter-spacing:.04em;box-shadow:0 8px 24px -4px rgba(255,51,102,.5);transition:transform .4s cubic-bezier(.2,.9,.35,1.2);pointer-events:none;display:flex;align-items:center;gap:8px}
+#hostDcBanner.show{transform:translate(-50%,0)}
+#hostDcBanner .dc-dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:dcpulse 1.2s ease-in-out infinite}
+@keyframes dcpulse{0%,100%{opacity:.4}50%{opacity:1;transform:scale(1.25)}}
 .winner-banner.show{transform:translateY(0)}
 .winner-banner .wb-inner{max-width:720px;margin:0 auto}
 .winner-banner .wb-label{font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1.2em;letter-spacing:.18em;margin-bottom:4px}
@@ -438,6 +447,10 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
     </div>
 </div>
 
+<!-- Guest-only: host-disconnected indicator. Appears when we
+     haven't heard anything from the host for 20+ seconds. -->
+<div id="hostDcBanner"><span class="dc-dot"></span><span id="hostDcLabel">Host disconnected · reconnecting…</span></div>
+
 <!-- Mid-game winner banner (drops down from top whenever a bingo
      is registered — includes everyone tied on the same draw). -->
 <div id="winnerBanner" class="winner-banner"><div class="wb-inner">
@@ -456,26 +469,26 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776665830"></script>
+<script src="/js/supabase-config.js?v=1776666769"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
-    en:{title:'Bingo',subtitle:'Host a room, friends join on their phones.',variant:'Grid size',drawMode:'Draw mode',manual:'Manual',offline:"Offline",auto:'Auto',every:'Every',seconds:'seconds',start:'START',draw:'DRAW',yourCard:'Your Card',called:'Called',empty:'No numbers drawn yet',bingoBtn:'🎉 BINGO!',winner:'Winner',replay:'Play Again',autoBadge:'AUTO {n}s',hostRole:'Host role',hostPlay:'Play + Call',hostCallerOnly:'Caller only',leaveBtn:"Leave",setupBack:'← Back',host:'Host',free:'FREE',hostOnly:'Host-only action',winGroupLbl:"Win conditions",participantsLbl:"Participants",participantsHint:"host + guests",maxPrefix:"max ",winLinesLbl:'Lines to win',winnersLbl:'Winners',lineUnit:'line',linesUnit:'lines',personUnit:'person',peopleUnit:'people',soloNote:'Solo — 1 winner',gameEndNote:'Game ends when {n} win',rankLbl:'Rank',atDrawFmt:'at draw #{n}',bingoShout:'🎉 BINGO!',wasCalled:'was called'},
-    ko:{title:'빙고',subtitle:'방을 만들고, 친구들은 폰으로 접속.',variant:'판 크기',drawMode:'뽑기 방식',manual:'수동',offline:"오프라인",auto:'자동',every:'간격',seconds:'초',start:'시작',draw:'뽑기',yourCard:'내 카드',called:'뽑힌 번호',empty:'아직 뽑힌 번호 없음',bingoBtn:'🎉 빙고!',winner:'우승자',replay:'다시하기',autoBadge:'자동 {n}초',hostRole:'호스트 역할',hostPlay:'같이 참가',hostCallerOnly:'진행만',leaveBtn:"나가기",setupBack:'← 설정',host:'호스트',free:'FREE',hostOnly:'호스트만 뽑을 수 있어요',winGroupLbl:"우승 조건",participantsLbl:"참석자",participantsHint:"호스트 포함",maxPrefix:"최대 ",winLinesLbl:'성공 줄수',winnersLbl:'당첨자',lineUnit:'줄',linesUnit:'줄',personUnit:'명',peopleUnit:'명',soloNote:'혼자 플레이 - 1명',gameEndNote:'{n}명 달성 시 종료',rankLbl:'순위',atDrawFmt:'{n}번째 뽑기',bingoShout:'🎉 빙고!',wasCalled:'당첨!'},
-    ja:{title:'ビンゴ',subtitle:'部屋を作って友達を招待。',variant:'盤のサイズ',drawMode:'抽選方法',manual:'手動',offline:"オフライン",auto:'自動',every:'間隔',seconds:'秒',start:'スタート',draw:'引く',yourCard:'マイカード',called:'呼ばれた番号',empty:'まだ番号なし',bingoBtn:'🎉 ビンゴ！',winner:'勝者',replay:'もう一度',autoBadge:'自動 {n}秒',hostRole:'ホスト役割',hostPlay:'参加＋進行',hostCallerOnly:'進行のみ',leaveBtn:"退出",setupBack:'← 戻る',host:'ホスト',free:'FREE',hostOnly:'ホストのみ可能',winGroupLbl:"勝利条件",participantsLbl:"参加者",participantsHint:"ホスト含む",maxPrefix:"最大 ",winLinesLbl:'勝ちの線数',winnersLbl:'当選者',lineUnit:'列',linesUnit:'列',personUnit:'人',peopleUnit:'人',soloNote:'ソロ - 1人',gameEndNote:'{n}人達成で終了',rankLbl:'順位',atDrawFmt:'引き{n}回目',bingoShout:'🎉 ビンゴ！',wasCalled:'当選！'},
-    zh:{title:'宾果',subtitle:'开房间，朋友手机加入。',variant:'格子大小',drawMode:'抽签方式',manual:'手动',offline:"线下",auto:'自动',every:'间隔',seconds:'秒',start:'开始',draw:'抽号',yourCard:'你的卡',called:'已抽',empty:'还没抽号',bingoBtn:'🎉 宾果!',winner:'赢家',replay:'再来',autoBadge:'自动 {n}秒',hostRole:'房主角色',hostPlay:'参与+主持',hostCallerOnly:'只主持',leaveBtn:"离开",setupBack:'← 返回',host:'房主',free:'FREE',hostOnly:'仅房主可操作',winGroupLbl:"获胜条件",participantsLbl:"参与者",participantsHint:"含房主",maxPrefix:"最多 ",winLinesLbl:'中奖线',winnersLbl:'中奖人数',lineUnit:'线',linesUnit:'线',personUnit:'人',peopleUnit:'人',soloNote:'单人 - 1人',gameEndNote:'{n}人达成时结束',rankLbl:'排名',atDrawFmt:'第{n}次抽',bingoShout:'🎉 宾果!',wasCalled:'中奖!'},
-    es:{title:'Bingo',subtitle:'Crea una sala, amigos se unen.',variant:'Tamaño',drawMode:'Modo sorteo',manual:'Manual',offline:"Sin línea",auto:'Auto',every:'Cada',seconds:'segundos',start:'EMPEZAR',draw:'SACAR',yourCard:'Tu Cartón',called:'Sacados',empty:'Ningún número aún',bingoBtn:'🎉 ¡BINGO!',winner:'Ganador',replay:'Otra vez',autoBadge:'AUTO {n}s',hostRole:'Rol anfitrión',hostPlay:'Jugar + Llamar',hostCallerOnly:'Solo llamador',leaveBtn:"Salir",setupBack:'← Atrás',host:'Anfitrión',free:'LIBRE',hostOnly:'Solo el anfitrión',winGroupLbl:"Condiciones",participantsLbl:"Participantes",participantsHint:"anfitrión + invitados",maxPrefix:"máx ",winLinesLbl:'Líneas para ganar',winnersLbl:'Ganadores',lineUnit:'línea',linesUnit:'líneas',personUnit:'persona',peopleUnit:'personas',soloNote:'Solo - 1 ganador',gameEndNote:'Termina con {n} ganadores',rankLbl:'Rango',atDrawFmt:'sorteo #{n}',bingoShout:'🎉 ¡BINGO!',wasCalled:'¡ganó!'},
-    de:{title:'Bingo',subtitle:'Raum erstellen, Freunde beitreten lassen.',variant:'Größe',drawMode:'Zugmodus',manual:'Manuell',offline:"Offline",auto:'Auto',every:'Alle',seconds:'Sekunden',start:'START',draw:'ZIEHEN',yourCard:'Deine Karte',called:'Gezogen',empty:'Noch keine Zahlen',bingoBtn:'🎉 BINGO!',winner:'Gewinner',replay:'Nochmal',autoBadge:'AUTO {n}s',hostRole:'Hostrolle',hostPlay:'Spielen + Rufen',hostCallerOnly:'Nur Caller',leaveBtn:"Verlassen",setupBack:'← Zurück',host:'Host',free:'FREI',hostOnly:'Nur Host',winGroupLbl:"Bedingungen",participantsLbl:"Teilnehmer",participantsHint:"Host + Gäste",maxPrefix:"max ",winLinesLbl:'Gewinnlinien',winnersLbl:'Gewinner',lineUnit:'Linie',linesUnit:'Linien',personUnit:'Person',peopleUnit:'Personen',soloNote:'Solo - 1 Gewinner',gameEndNote:'Ende bei {n} Gewinnern',rankLbl:'Rang',atDrawFmt:'Zug #{n}',bingoShout:'🎉 BINGO!',wasCalled:'gewonnen!'},
-    fr:{title:'Bingo',subtitle:'Crée un salon, invite tes amis.',variant:'Taille',drawMode:'Tirage',manual:'Manuel',offline:"Hors-ligne",auto:'Auto',every:'Toutes les',seconds:'secondes',start:'DÉMARRER',draw:'TIRER',yourCard:'Ta Carte',called:'Tirés',empty:'Aucun numéro',bingoBtn:'🎉 BINGO !',winner:'Gagnant',replay:'Rejouer',autoBadge:'AUTO {n}s',hostRole:'Rôle hôte',hostPlay:'Jouer + Appeler',hostCallerOnly:'Appelant seul',leaveBtn:"Quitter",setupBack:'← Retour',host:'Hôte',free:'LIBRE',hostOnly:"Réservé à l'hôte",winGroupLbl:"Conditions",participantsLbl:"Participants",participantsHint:"hôte + invités",maxPrefix:"max ",winLinesLbl:'Lignes pour gagner',winnersLbl:'Gagnants',lineUnit:'ligne',linesUnit:'lignes',personUnit:'personne',peopleUnit:'personnes',soloNote:'Solo - 1 gagnant',gameEndNote:'Fin à {n} gagnants',rankLbl:'Rang',atDrawFmt:'tirage #{n}',bingoShout:'🎉 BINGO !',wasCalled:'a gagné !'},
-    pt:{title:'Bingo',subtitle:'Crie uma sala, amigos entram.',variant:'Tamanho',drawMode:'Modo',manual:'Manual',offline:"Offline",auto:'Auto',every:'A cada',seconds:'segundos',start:'COMEÇAR',draw:'SORTEAR',yourCard:'Sua Cartela',called:'Sorteados',empty:'Sem números',bingoBtn:'🎉 BINGO!',winner:'Vencedor',replay:'Jogar de novo',autoBadge:'AUTO {n}s',hostRole:'Papel anfitrião',hostPlay:'Jogar + Chamar',hostCallerOnly:'Só chamador',leaveBtn:"Sair",setupBack:'← Voltar',host:'Anfitrião',free:'LIVRE',hostOnly:'Só anfitrião',winGroupLbl:"Condições",participantsLbl:"Participantes",participantsHint:"anfitrião + convidados",maxPrefix:"máx ",winLinesLbl:'Linhas para vencer',winnersLbl:'Vencedores',lineUnit:'linha',linesUnit:'linhas',personUnit:'pessoa',peopleUnit:'pessoas',soloNote:'Solo - 1 vencedor',gameEndNote:'Termina com {n} vencedores',rankLbl:'Posição',atDrawFmt:'sorteio #{n}',bingoShout:'🎉 BINGO!',wasCalled:'venceu!'},
-    ru:{title:'Бинго',subtitle:'Создай комнату, друзья подключаются.',variant:'Размер',drawMode:'Жеребьёвка',manual:'Вручную',offline:"Офлайн",auto:'Авто',every:'Каждые',seconds:'сек',start:'СТАРТ',draw:'ВЫПАСТЬ',yourCard:'Твоя карта',called:'Выпало',empty:'Ещё нет',bingoBtn:'🎉 БИНГО!',winner:'Победитель',replay:'Ещё раз',autoBadge:'АВТО {n}с',hostRole:'Роль хоста',hostPlay:'Играю + Веду',hostCallerOnly:'Только ведущий',leaveBtn:"Выйти",setupBack:'← Назад',host:'Хост',free:'FREE',hostOnly:'Только хост',winGroupLbl:"Условия",participantsLbl:"Участники",participantsHint:"хост + гости",maxPrefix:"макс ",winLinesLbl:'Линий для победы',winnersLbl:'Победители',lineUnit:'линия',linesUnit:'линии',personUnit:'человек',peopleUnit:'человек',soloNote:'Соло - 1 победитель',gameEndNote:'Конец при {n} победителях',rankLbl:'Ранг',atDrawFmt:'тираж #{n}',bingoShout:'🎉 БИНГО!',wasCalled:'победил!'},
-    ar:{title:'بينغو',subtitle:'أنشئ غرفة وأصدقاؤك ينضمون.',variant:'الحجم',drawMode:'السحب',manual:'يدوي',offline:"دون اتصال",auto:'تلقائي',every:'كل',seconds:'ثانية',start:'ابدأ',draw:'اسحب',yourCard:'بطاقتك',called:'المسحوبة',empty:'لا شيء بعد',bingoBtn:'🎉 بينغو!',winner:'الفائز',replay:'مرة أخرى',autoBadge:'AUTO {n}s',hostRole:'دور المضيف',hostPlay:'ألعب + أنادي',hostCallerOnly:'المنادي فقط',leaveBtn:"مغادرة",setupBack:'← رجوع',host:'المضيف',free:'FREE',hostOnly:'للمضيف فقط',winGroupLbl:"شروط الفوز",participantsLbl:"المشاركون",participantsHint:"المضيف والضيوف",maxPrefix:"حد أقصى ",winLinesLbl:'خطوط الفوز',winnersLbl:'الفائزون',lineUnit:'خط',linesUnit:'خطوط',personUnit:'شخص',peopleUnit:'أشخاص',soloNote:'فردي - 1 فائز',gameEndNote:'ينتهي عند {n} فائزين',rankLbl:'الترتيب',atDrawFmt:'السحب #{n}',bingoShout:'🎉 بينغو!',wasCalled:'فاز!'},
-    hi:{title:'बिंगो',subtitle:'रूम बनाओ, दोस्त जुड़ें।',variant:'आकार',drawMode:'चयन',manual:'मैनुअल',offline:"ऑफ़लाइन",auto:'ऑटो',every:'हर',seconds:'सेकंड',start:'शुरू',draw:'निकालो',yourCard:'आपका कार्ड',called:'निकले',empty:'कुछ नहीं',bingoBtn:'🎉 बिंगो!',winner:'विजेता',replay:'फिर',autoBadge:'AUTO {n}s',hostRole:'होस्ट भूमिका',hostPlay:'खेलें + बुलाएँ',hostCallerOnly:'केवल बुलाएँ',leaveBtn:"बाहर",setupBack:'← वापस',host:'होस्ट',free:'FREE',hostOnly:'केवल होस्ट',winGroupLbl:"जीत की शर्तें",participantsLbl:"प्रतिभागी",participantsHint:"होस्ट + मेहमान",maxPrefix:"अधिकतम ",winLinesLbl:'जीत की लाइनें',winnersLbl:'विजेता',lineUnit:'लाइन',linesUnit:'लाइनें',personUnit:'व्यक्ति',peopleUnit:'लोग',soloNote:'अकेले - 1 विजेता',gameEndNote:'{n} विजेताओं पर अंत',rankLbl:'रैंक',atDrawFmt:'ड्रॉ #{n}',bingoShout:'🎉 बिंगो!',wasCalled:'जीता!'},
-    th:{title:'บิงโก',subtitle:'สร้างห้อง เพื่อนๆ เข้าร่วมได้ทันที',variant:'ขนาด',drawMode:'โหมดจับ',manual:'ด้วยมือ',offline:"ออฟไลน์",auto:'อัตโนมัติ',every:'ทุก',seconds:'วินาที',start:'เริ่ม',draw:'จับ',yourCard:'การ์ดของคุณ',called:'จับแล้ว',empty:'ยังไม่มี',bingoBtn:'🎉 บิงโก!',winner:'ผู้ชนะ',replay:'เล่นอีก',autoBadge:'AUTO {n}s',hostRole:'บทบาทโฮสต์',hostPlay:'เล่น + เรียก',hostCallerOnly:'เรียกอย่างเดียว',leaveBtn:"ออก",setupBack:'← กลับ',host:'โฮสต์',free:'FREE',hostOnly:'โฮสต์เท่านั้น',winGroupLbl:"เงื่อนไขชนะ",participantsLbl:"ผู้ร่วม",participantsHint:"โฮสต์ + ผู้ร่วม",maxPrefix:"สูงสุด ",winLinesLbl:'เส้นที่ชนะ',winnersLbl:'ผู้ชนะ',lineUnit:'เส้น',linesUnit:'เส้น',personUnit:'คน',peopleUnit:'คน',soloNote:'คนเดียว - 1 คน',gameEndNote:'จบเมื่อได้ {n} คน',rankLbl:'อันดับ',atDrawFmt:'จับที่ #{n}',bingoShout:'🎉 บิงโก!',wasCalled:'ชนะ!'},
-    id:{title:'Bingo',subtitle:'Buat ruang, teman-teman bergabung.',variant:'Ukuran',drawMode:'Mode',manual:'Manual',offline:"Luring",auto:'Auto',every:'Setiap',seconds:'detik',start:'MULAI',draw:'TARIK',yourCard:'Kartu Anda',called:'Terambil',empty:'Belum ada',bingoBtn:'🎉 BINGO!',winner:'Pemenang',replay:'Main lagi',autoBadge:'AUTO {n}d',hostRole:'Peran host',hostPlay:'Main + Panggil',hostCallerOnly:'Hanya panggil',leaveBtn:"Keluar",setupBack:'← Kembali',host:'Host',free:'FREE',hostOnly:'Hanya host',winGroupLbl:"Syarat Menang",participantsLbl:"Peserta",participantsHint:"host + tamu",maxPrefix:"maks ",winLinesLbl:'Baris menang',winnersLbl:'Pemenang',lineUnit:'baris',linesUnit:'baris',personUnit:'orang',peopleUnit:'orang',soloNote:'Solo - 1 pemenang',gameEndNote:'Selesai di {n} pemenang',rankLbl:'Peringkat',atDrawFmt:'undian #{n}',bingoShout:'🎉 BINGO!',wasCalled:'menang!'},
-    vi:{title:'Bingo',subtitle:'Tạo phòng, bạn bè tham gia trên điện thoại.',variant:'Kích cỡ',drawMode:'Chế độ',manual:'Thủ công',offline:"Ngoại tuyến",auto:'Tự động',every:'Mỗi',seconds:'giây',start:'BẮT ĐẦU',draw:'RÚT',yourCard:'Thẻ Của Bạn',called:'Đã rút',empty:'Chưa có',bingoBtn:'🎉 BINGO!',winner:'Người thắng',replay:'Chơi lại',autoBadge:'AUTO {n}s',hostRole:'Vai trò chủ',hostPlay:'Chơi + Gọi',hostCallerOnly:'Chỉ gọi',leaveBtn:"Rời khỏi",setupBack:'← Quay lại',host:'Chủ phòng',free:'FREE',hostOnly:'Chỉ chủ phòng',winGroupLbl:"Điều kiện thắng",participantsLbl:"Người tham gia",participantsHint:"chủ + khách",maxPrefix:"tối đa ",winLinesLbl:'Số hàng thắng',winnersLbl:'Người thắng',lineUnit:'hàng',linesUnit:'hàng',personUnit:'người',peopleUnit:'người',soloNote:'Một mình - 1 người',gameEndNote:'Kết thúc khi có {n}',rankLbl:'Hạng',atDrawFmt:'lượt #{n}',bingoShout:'🎉 BINGO!',wasCalled:'thắng!'},
-    tr:{title:'Bingo',subtitle:'Oda aç, arkadaşların telefondan katılsın.',variant:'Boyut',drawMode:'Çekiliş',manual:'Elle',offline:"Çevrimdışı",auto:'Otomatik',every:'Her',seconds:'saniye',start:'BAŞLA',draw:'ÇEK',yourCard:'Kartın',called:'Çekilen',empty:'Henüz yok',bingoBtn:'🎉 BINGO!',winner:'Kazanan',replay:'Tekrar',autoBadge:'AUTO {n}s',hostRole:'Host rolü',hostPlay:'Oyna + Çağır',hostCallerOnly:'Sadece çağır',leaveBtn:"Ayrıl",setupBack:'← Geri',host:'Host',free:'FREE',hostOnly:'Sadece host',winGroupLbl:"Kazanma",participantsLbl:"Katılımcılar",participantsHint:"host + misafirler",maxPrefix:"maks ",winLinesLbl:'Kazanma çizgisi',winnersLbl:'Kazananlar',lineUnit:'çizgi',linesUnit:'çizgi',personUnit:'kişi',peopleUnit:'kişi',soloNote:'Tek - 1 kazanan',gameEndNote:'{n} kazananda biter',rankLbl:'Sıra',atDrawFmt:'çekiliş #{n}',bingoShout:'🎉 BINGO!',wasCalled:'kazandı!'},
-    gb:{title:'Bingo',subtitle:'Host a room, mates join on their phones.',variant:'Grid size',drawMode:'Draw mode',manual:'Manual',offline:"Offline",auto:'Auto',every:'Every',seconds:'seconds',start:'START',draw:'DRAW',yourCard:'Your Card',called:'Called',empty:'No numbers drawn yet',bingoBtn:'🎉 BINGO!',winner:'Winner',replay:'Play Again',autoBadge:'AUTO {n}s',hostRole:'Host role',hostPlay:'Play + Call',hostCallerOnly:'Caller only',leaveBtn:"Leave",setupBack:'← Back',host:'Host',free:'FREE',hostOnly:'Host-only action',winGroupLbl:"Win conditions",participantsLbl:"Participants",participantsHint:"host + guests",maxPrefix:"max ",winLinesLbl:'Lines to win',winnersLbl:'Winners',lineUnit:'line',linesUnit:'lines',personUnit:'person',peopleUnit:'people',soloNote:'Solo - 1 winner',gameEndNote:'Game ends when {n} win',rankLbl:'Rank',atDrawFmt:'at draw #{n}',bingoShout:'🎉 BINGO!',wasCalled:'was called'}
+    en:{title:'Bingo',subtitle:'Host a room, friends join on their phones.',variant:'Grid size',drawMode:'Draw mode',manual:'Manual',offline:"Offline",auto:'Auto',every:'Every',seconds:'seconds',start:'START',draw:'DRAW',yourCard:'Your Card',called:'Called',empty:'No numbers drawn yet',bingoBtn:'🎉 BINGO!',winner:'Winner',replay:'Play Again',autoBadge:'AUTO {n}s',hostRole:'Host role',hostPlay:'Play + Call',hostCallerOnly:'Caller only',leaveBtn:"Leave",setupBack:'← Back',host:'Host',free:'FREE',hostOnly:'Host-only action',winGroupLbl:"Win conditions",participantsLbl:"Participants",participantsHint:"host + guests",maxPrefix:"max ",winLinesLbl:'Lines to win',winnersLbl:'Winners',lineUnit:'line',linesUnit:'lines',personUnit:'person',peopleUnit:'people',soloNote:'Solo — 1 winner',gameEndNote:'Game ends when {n} win',rankLbl:'Rank',atDrawFmt:'at draw #{n}',hostDc:"Host disconnected · reconnecting…",bingoShout:'🎉 BINGO!',wasCalled:'was called'},
+    ko:{title:'빙고',subtitle:'방을 만들고, 친구들은 폰으로 접속.',variant:'판 크기',drawMode:'뽑기 방식',manual:'수동',offline:"오프라인",auto:'자동',every:'간격',seconds:'초',start:'시작',draw:'뽑기',yourCard:'내 카드',called:'뽑힌 번호',empty:'아직 뽑힌 번호 없음',bingoBtn:'🎉 빙고!',winner:'우승자',replay:'다시하기',autoBadge:'자동 {n}초',hostRole:'호스트 역할',hostPlay:'같이 참가',hostCallerOnly:'진행만',leaveBtn:"나가기",setupBack:'← 설정',host:'호스트',free:'FREE',hostOnly:'호스트만 뽑을 수 있어요',winGroupLbl:"우승 조건",participantsLbl:"참석자",participantsHint:"호스트 포함",maxPrefix:"최대 ",winLinesLbl:'성공 줄수',winnersLbl:'당첨자',lineUnit:'줄',linesUnit:'줄',personUnit:'명',peopleUnit:'명',soloNote:'혼자 플레이 - 1명',gameEndNote:'{n}명 달성 시 종료',rankLbl:'순위',atDrawFmt:'{n}번째 뽑기',hostDc:"호스트 연결 끊김 · 재연결 중…",bingoShout:'🎉 빙고!',wasCalled:'당첨!'},
+    ja:{title:'ビンゴ',subtitle:'部屋を作って友達を招待。',variant:'盤のサイズ',drawMode:'抽選方法',manual:'手動',offline:"オフライン",auto:'自動',every:'間隔',seconds:'秒',start:'スタート',draw:'引く',yourCard:'マイカード',called:'呼ばれた番号',empty:'まだ番号なし',bingoBtn:'🎉 ビンゴ！',winner:'勝者',replay:'もう一度',autoBadge:'自動 {n}秒',hostRole:'ホスト役割',hostPlay:'参加＋進行',hostCallerOnly:'進行のみ',leaveBtn:"退出",setupBack:'← 戻る',host:'ホスト',free:'FREE',hostOnly:'ホストのみ可能',winGroupLbl:"勝利条件",participantsLbl:"参加者",participantsHint:"ホスト含む",maxPrefix:"最大 ",winLinesLbl:'勝ちの線数',winnersLbl:'当選者',lineUnit:'列',linesUnit:'列',personUnit:'人',peopleUnit:'人',soloNote:'ソロ - 1人',gameEndNote:'{n}人達成で終了',rankLbl:'順位',atDrawFmt:'引き{n}回目',hostDc:"ホスト切断 · 再接続中…",bingoShout:'🎉 ビンゴ！',wasCalled:'当選！'},
+    zh:{title:'宾果',subtitle:'开房间，朋友手机加入。',variant:'格子大小',drawMode:'抽签方式',manual:'手动',offline:"线下",auto:'自动',every:'间隔',seconds:'秒',start:'开始',draw:'抽号',yourCard:'你的卡',called:'已抽',empty:'还没抽号',bingoBtn:'🎉 宾果!',winner:'赢家',replay:'再来',autoBadge:'自动 {n}秒',hostRole:'房主角色',hostPlay:'参与+主持',hostCallerOnly:'只主持',leaveBtn:"离开",setupBack:'← 返回',host:'房主',free:'FREE',hostOnly:'仅房主可操作',winGroupLbl:"获胜条件",participantsLbl:"参与者",participantsHint:"含房主",maxPrefix:"最多 ",winLinesLbl:'中奖线',winnersLbl:'中奖人数',lineUnit:'线',linesUnit:'线',personUnit:'人',peopleUnit:'人',soloNote:'单人 - 1人',gameEndNote:'{n}人达成时结束',rankLbl:'排名',atDrawFmt:'第{n}次抽',hostDc:"房主断线 · 重连中…",bingoShout:'🎉 宾果!',wasCalled:'中奖!'},
+    es:{title:'Bingo',subtitle:'Crea una sala, amigos se unen.',variant:'Tamaño',drawMode:'Modo sorteo',manual:'Manual',offline:"Sin línea",auto:'Auto',every:'Cada',seconds:'segundos',start:'EMPEZAR',draw:'SACAR',yourCard:'Tu Cartón',called:'Sacados',empty:'Ningún número aún',bingoBtn:'🎉 ¡BINGO!',winner:'Ganador',replay:'Otra vez',autoBadge:'AUTO {n}s',hostRole:'Rol anfitrión',hostPlay:'Jugar + Llamar',hostCallerOnly:'Solo llamador',leaveBtn:"Salir",setupBack:'← Atrás',host:'Anfitrión',free:'LIBRE',hostOnly:'Solo el anfitrión',winGroupLbl:"Condiciones",participantsLbl:"Participantes",participantsHint:"anfitrión + invitados",maxPrefix:"máx ",winLinesLbl:'Líneas para ganar',winnersLbl:'Ganadores',lineUnit:'línea',linesUnit:'líneas',personUnit:'persona',peopleUnit:'personas',soloNote:'Solo - 1 ganador',gameEndNote:'Termina con {n} ganadores',rankLbl:'Rango',atDrawFmt:'sorteo #{n}',hostDc:"Anfitrión desconectado · reconectando…",bingoShout:'🎉 ¡BINGO!',wasCalled:'¡ganó!'},
+    de:{title:'Bingo',subtitle:'Raum erstellen, Freunde beitreten lassen.',variant:'Größe',drawMode:'Zugmodus',manual:'Manuell',offline:"Offline",auto:'Auto',every:'Alle',seconds:'Sekunden',start:'START',draw:'ZIEHEN',yourCard:'Deine Karte',called:'Gezogen',empty:'Noch keine Zahlen',bingoBtn:'🎉 BINGO!',winner:'Gewinner',replay:'Nochmal',autoBadge:'AUTO {n}s',hostRole:'Hostrolle',hostPlay:'Spielen + Rufen',hostCallerOnly:'Nur Caller',leaveBtn:"Verlassen",setupBack:'← Zurück',host:'Host',free:'FREI',hostOnly:'Nur Host',winGroupLbl:"Bedingungen",participantsLbl:"Teilnehmer",participantsHint:"Host + Gäste",maxPrefix:"max ",winLinesLbl:'Gewinnlinien',winnersLbl:'Gewinner',lineUnit:'Linie',linesUnit:'Linien',personUnit:'Person',peopleUnit:'Personen',soloNote:'Solo - 1 Gewinner',gameEndNote:'Ende bei {n} Gewinnern',rankLbl:'Rang',atDrawFmt:'Zug #{n}',hostDc:"Host getrennt · verbinde erneut…",bingoShout:'🎉 BINGO!',wasCalled:'gewonnen!'},
+    fr:{title:'Bingo',subtitle:'Crée un salon, invite tes amis.',variant:'Taille',drawMode:'Tirage',manual:'Manuel',offline:"Hors-ligne",auto:'Auto',every:'Toutes les',seconds:'secondes',start:'DÉMARRER',draw:'TIRER',yourCard:'Ta Carte',called:'Tirés',empty:'Aucun numéro',bingoBtn:'🎉 BINGO !',winner:'Gagnant',replay:'Rejouer',autoBadge:'AUTO {n}s',hostRole:'Rôle hôte',hostPlay:'Jouer + Appeler',hostCallerOnly:'Appelant seul',leaveBtn:"Quitter",setupBack:'← Retour',host:'Hôte',free:'LIBRE',hostOnly:"Réservé à l'hôte",winGroupLbl:"Conditions",participantsLbl:"Participants",participantsHint:"hôte + invités",maxPrefix:"max ",winLinesLbl:'Lignes pour gagner',winnersLbl:'Gagnants',lineUnit:'ligne',linesUnit:'lignes',personUnit:'personne',peopleUnit:'personnes',soloNote:'Solo - 1 gagnant',gameEndNote:'Fin à {n} gagnants',rankLbl:'Rang',atDrawFmt:'tirage #{n}',hostDc:"Hôte déconnecté · reconnexion…",bingoShout:'🎉 BINGO !',wasCalled:'a gagné !'},
+    pt:{title:'Bingo',subtitle:'Crie uma sala, amigos entram.',variant:'Tamanho',drawMode:'Modo',manual:'Manual',offline:"Offline",auto:'Auto',every:'A cada',seconds:'segundos',start:'COMEÇAR',draw:'SORTEAR',yourCard:'Sua Cartela',called:'Sorteados',empty:'Sem números',bingoBtn:'🎉 BINGO!',winner:'Vencedor',replay:'Jogar de novo',autoBadge:'AUTO {n}s',hostRole:'Papel anfitrião',hostPlay:'Jogar + Chamar',hostCallerOnly:'Só chamador',leaveBtn:"Sair",setupBack:'← Voltar',host:'Anfitrião',free:'LIVRE',hostOnly:'Só anfitrião',winGroupLbl:"Condições",participantsLbl:"Participantes",participantsHint:"anfitrião + convidados",maxPrefix:"máx ",winLinesLbl:'Linhas para vencer',winnersLbl:'Vencedores',lineUnit:'linha',linesUnit:'linhas',personUnit:'pessoa',peopleUnit:'pessoas',soloNote:'Solo - 1 vencedor',gameEndNote:'Termina com {n} vencedores',rankLbl:'Posição',atDrawFmt:'sorteio #{n}',hostDc:"Anfitrião desconectado · reconectando…",bingoShout:'🎉 BINGO!',wasCalled:'venceu!'},
+    ru:{title:'Бинго',subtitle:'Создай комнату, друзья подключаются.',variant:'Размер',drawMode:'Жеребьёвка',manual:'Вручную',offline:"Офлайн",auto:'Авто',every:'Каждые',seconds:'сек',start:'СТАРТ',draw:'ВЫПАСТЬ',yourCard:'Твоя карта',called:'Выпало',empty:'Ещё нет',bingoBtn:'🎉 БИНГО!',winner:'Победитель',replay:'Ещё раз',autoBadge:'АВТО {n}с',hostRole:'Роль хоста',hostPlay:'Играю + Веду',hostCallerOnly:'Только ведущий',leaveBtn:"Выйти",setupBack:'← Назад',host:'Хост',free:'FREE',hostOnly:'Только хост',winGroupLbl:"Условия",participantsLbl:"Участники",participantsHint:"хост + гости",maxPrefix:"макс ",winLinesLbl:'Линий для победы',winnersLbl:'Победители',lineUnit:'линия',linesUnit:'линии',personUnit:'человек',peopleUnit:'человек',soloNote:'Соло - 1 победитель',gameEndNote:'Конец при {n} победителях',rankLbl:'Ранг',atDrawFmt:'тираж #{n}',hostDc:"Хост отключён · переподключение…",bingoShout:'🎉 БИНГО!',wasCalled:'победил!'},
+    ar:{title:'بينغو',subtitle:'أنشئ غرفة وأصدقاؤك ينضمون.',variant:'الحجم',drawMode:'السحب',manual:'يدوي',offline:"دون اتصال",auto:'تلقائي',every:'كل',seconds:'ثانية',start:'ابدأ',draw:'اسحب',yourCard:'بطاقتك',called:'المسحوبة',empty:'لا شيء بعد',bingoBtn:'🎉 بينغو!',winner:'الفائز',replay:'مرة أخرى',autoBadge:'AUTO {n}s',hostRole:'دور المضيف',hostPlay:'ألعب + أنادي',hostCallerOnly:'المنادي فقط',leaveBtn:"مغادرة",setupBack:'← رجوع',host:'المضيف',free:'FREE',hostOnly:'للمضيف فقط',winGroupLbl:"شروط الفوز",participantsLbl:"المشاركون",participantsHint:"المضيف والضيوف",maxPrefix:"حد أقصى ",winLinesLbl:'خطوط الفوز',winnersLbl:'الفائزون',lineUnit:'خط',linesUnit:'خطوط',personUnit:'شخص',peopleUnit:'أشخاص',soloNote:'فردي - 1 فائز',gameEndNote:'ينتهي عند {n} فائزين',rankLbl:'الترتيب',atDrawFmt:'السحب #{n}',hostDc:"المضيف غير متصل · إعادة الاتصال…",bingoShout:'🎉 بينغو!',wasCalled:'فاز!'},
+    hi:{title:'बिंगो',subtitle:'रूम बनाओ, दोस्त जुड़ें।',variant:'आकार',drawMode:'चयन',manual:'मैनुअल',offline:"ऑफ़लाइन",auto:'ऑटो',every:'हर',seconds:'सेकंड',start:'शुरू',draw:'निकालो',yourCard:'आपका कार्ड',called:'निकले',empty:'कुछ नहीं',bingoBtn:'🎉 बिंगो!',winner:'विजेता',replay:'फिर',autoBadge:'AUTO {n}s',hostRole:'होस्ट भूमिका',hostPlay:'खेलें + बुलाएँ',hostCallerOnly:'केवल बुलाएँ',leaveBtn:"बाहर",setupBack:'← वापस',host:'होस्ट',free:'FREE',hostOnly:'केवल होस्ट',winGroupLbl:"जीत की शर्तें",participantsLbl:"प्रतिभागी",participantsHint:"होस्ट + मेहमान",maxPrefix:"अधिकतम ",winLinesLbl:'जीत की लाइनें',winnersLbl:'विजेता',lineUnit:'लाइन',linesUnit:'लाइनें',personUnit:'व्यक्ति',peopleUnit:'लोग',soloNote:'अकेले - 1 विजेता',gameEndNote:'{n} विजेताओं पर अंत',rankLbl:'रैंक',atDrawFmt:'ड्रॉ #{n}',hostDc:"होस्ट डिस्कनेक्ट · पुनः कनेक्ट…",bingoShout:'🎉 बिंगो!',wasCalled:'जीता!'},
+    th:{title:'บิงโก',subtitle:'สร้างห้อง เพื่อนๆ เข้าร่วมได้ทันที',variant:'ขนาด',drawMode:'โหมดจับ',manual:'ด้วยมือ',offline:"ออฟไลน์",auto:'อัตโนมัติ',every:'ทุก',seconds:'วินาที',start:'เริ่ม',draw:'จับ',yourCard:'การ์ดของคุณ',called:'จับแล้ว',empty:'ยังไม่มี',bingoBtn:'🎉 บิงโก!',winner:'ผู้ชนะ',replay:'เล่นอีก',autoBadge:'AUTO {n}s',hostRole:'บทบาทโฮสต์',hostPlay:'เล่น + เรียก',hostCallerOnly:'เรียกอย่างเดียว',leaveBtn:"ออก",setupBack:'← กลับ',host:'โฮสต์',free:'FREE',hostOnly:'โฮสต์เท่านั้น',winGroupLbl:"เงื่อนไขชนะ",participantsLbl:"ผู้ร่วม",participantsHint:"โฮสต์ + ผู้ร่วม",maxPrefix:"สูงสุด ",winLinesLbl:'เส้นที่ชนะ',winnersLbl:'ผู้ชนะ',lineUnit:'เส้น',linesUnit:'เส้น',personUnit:'คน',peopleUnit:'คน',soloNote:'คนเดียว - 1 คน',gameEndNote:'จบเมื่อได้ {n} คน',rankLbl:'อันดับ',atDrawFmt:'จับที่ #{n}',hostDc:"โฮสต์หลุด · กำลังเชื่อมต่อใหม่…",bingoShout:'🎉 บิงโก!',wasCalled:'ชนะ!'},
+    id:{title:'Bingo',subtitle:'Buat ruang, teman-teman bergabung.',variant:'Ukuran',drawMode:'Mode',manual:'Manual',offline:"Luring",auto:'Auto',every:'Setiap',seconds:'detik',start:'MULAI',draw:'TARIK',yourCard:'Kartu Anda',called:'Terambil',empty:'Belum ada',bingoBtn:'🎉 BINGO!',winner:'Pemenang',replay:'Main lagi',autoBadge:'AUTO {n}d',hostRole:'Peran host',hostPlay:'Main + Panggil',hostCallerOnly:'Hanya panggil',leaveBtn:"Keluar",setupBack:'← Kembali',host:'Host',free:'FREE',hostOnly:'Hanya host',winGroupLbl:"Syarat Menang",participantsLbl:"Peserta",participantsHint:"host + tamu",maxPrefix:"maks ",winLinesLbl:'Baris menang',winnersLbl:'Pemenang',lineUnit:'baris',linesUnit:'baris',personUnit:'orang',peopleUnit:'orang',soloNote:'Solo - 1 pemenang',gameEndNote:'Selesai di {n} pemenang',rankLbl:'Peringkat',atDrawFmt:'undian #{n}',hostDc:"Host terputus · menyambung kembali…",bingoShout:'🎉 BINGO!',wasCalled:'menang!'},
+    vi:{title:'Bingo',subtitle:'Tạo phòng, bạn bè tham gia trên điện thoại.',variant:'Kích cỡ',drawMode:'Chế độ',manual:'Thủ công',offline:"Ngoại tuyến",auto:'Tự động',every:'Mỗi',seconds:'giây',start:'BẮT ĐẦU',draw:'RÚT',yourCard:'Thẻ Của Bạn',called:'Đã rút',empty:'Chưa có',bingoBtn:'🎉 BINGO!',winner:'Người thắng',replay:'Chơi lại',autoBadge:'AUTO {n}s',hostRole:'Vai trò chủ',hostPlay:'Chơi + Gọi',hostCallerOnly:'Chỉ gọi',leaveBtn:"Rời khỏi",setupBack:'← Quay lại',host:'Chủ phòng',free:'FREE',hostOnly:'Chỉ chủ phòng',winGroupLbl:"Điều kiện thắng",participantsLbl:"Người tham gia",participantsHint:"chủ + khách",maxPrefix:"tối đa ",winLinesLbl:'Số hàng thắng',winnersLbl:'Người thắng',lineUnit:'hàng',linesUnit:'hàng',personUnit:'người',peopleUnit:'người',soloNote:'Một mình - 1 người',gameEndNote:'Kết thúc khi có {n}',rankLbl:'Hạng',atDrawFmt:'lượt #{n}',hostDc:"Mất kết nối chủ · đang kết nối lại…",bingoShout:'🎉 BINGO!',wasCalled:'thắng!'},
+    tr:{title:'Bingo',subtitle:'Oda aç, arkadaşların telefondan katılsın.',variant:'Boyut',drawMode:'Çekiliş',manual:'Elle',offline:"Çevrimdışı",auto:'Otomatik',every:'Her',seconds:'saniye',start:'BAŞLA',draw:'ÇEK',yourCard:'Kartın',called:'Çekilen',empty:'Henüz yok',bingoBtn:'🎉 BINGO!',winner:'Kazanan',replay:'Tekrar',autoBadge:'AUTO {n}s',hostRole:'Host rolü',hostPlay:'Oyna + Çağır',hostCallerOnly:'Sadece çağır',leaveBtn:"Ayrıl",setupBack:'← Geri',host:'Host',free:'FREE',hostOnly:'Sadece host',winGroupLbl:"Kazanma",participantsLbl:"Katılımcılar",participantsHint:"host + misafirler",maxPrefix:"maks ",winLinesLbl:'Kazanma çizgisi',winnersLbl:'Kazananlar',lineUnit:'çizgi',linesUnit:'çizgi',personUnit:'kişi',peopleUnit:'kişi',soloNote:'Tek - 1 kazanan',gameEndNote:'{n} kazananda biter',rankLbl:'Sıra',atDrawFmt:'çekiliş #{n}',hostDc:"Host bağlantısı koptu · yeniden bağlanıyor…",bingoShout:'🎉 BINGO!',wasCalled:'kazandı!'},
+    gb:{title:'Bingo',subtitle:'Host a room, mates join on their phones.',variant:'Grid size',drawMode:'Draw mode',manual:'Manual',offline:"Offline",auto:'Auto',every:'Every',seconds:'seconds',start:'START',draw:'DRAW',yourCard:'Your Card',called:'Called',empty:'No numbers drawn yet',bingoBtn:'🎉 BINGO!',winner:'Winner',replay:'Play Again',autoBadge:'AUTO {n}s',hostRole:'Host role',hostPlay:'Play + Call',hostCallerOnly:'Caller only',leaveBtn:"Leave",setupBack:'← Back',host:'Host',free:'FREE',hostOnly:'Host-only action',winGroupLbl:"Win conditions",participantsLbl:"Participants",participantsHint:"host + guests",maxPrefix:"max ",winLinesLbl:'Lines to win',winnersLbl:'Winners',lineUnit:'line',linesUnit:'lines',personUnit:'person',peopleUnit:'people',soloNote:'Solo - 1 winner',gameEndNote:'Game ends when {n} win',rankLbl:'Rank',atDrawFmt:'at draw #{n}',hostDc:"Host disconnected · reconnecting…",bingoShout:'🎉 BINGO!',wasCalled:'was called'}
 };
 let lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
 if(!I18N[lang])lang='en';
@@ -527,6 +540,8 @@ function applyLang(){
     document.getElementById('replayBtn').textContent=T('replay');
     document.getElementById('setupBackBtn').textContent=T('setupBack');
     document.getElementById('leaveBtn').innerHTML='🚪 '+(T('leaveBtn')||'Leave');
+    const dcL=document.getElementById('hostDcLabel');
+    if(dcL)dcL.textContent=T('hostDc')||'Host disconnected · reconnecting…';
     document.getElementById('autoBadgeLabel').textContent=T('autoBadge').replace('{n}',autoIntervalSec);
     const lh=document.getElementById('lblHostRole');if(lh)lh.textContent=T('hostRole');
     const hy=document.getElementById('hostPlayYesLbl');if(hy)hy.textContent=T('hostPlay');
@@ -1229,6 +1244,14 @@ function _completeDraw(n){
     /* Host: update snapshot so any guest that joins/rejoins right
        after this draw gets the updated drawn list. */
     if(window._lpHost&&typeof _updateGameSnapshot==='function')_updateGameSnapshot();
+    /* All numbers drawn but no one hit the win threshold — host or
+       caller-only hosts would otherwise sit in a frozen game. Call
+       time! End the game and show whatever winners we do have (may
+       be empty if everyone missed). */
+    if(drawn.length>=variant.max&&!gameEnded){
+        setTimeout(()=>{if(!gameEnded)endGame()},1500);
+        return;
+    }
     /* Auto-mode reschedules AFTER extraction so short intervals
        never overlap the suction animation. */
     if(drawn.length<variant.max&&gameActive&&drawMode==='auto'&&!window._lpGuest){
@@ -1433,19 +1456,27 @@ function _currentRoomCode(){
 /* Subscribe to every bingo_winners INSERT for this room. Called on
    host-room-created + guest-joined (one channel per session). Also
    backfills existing winners on subscribe so a reconnecting client
-   sees who already won before they dropped. */
+   sees who already won before they dropped.
+   IMPORTANT: backfill is filtered by gameStartedAt so winners from
+   a PREVIOUS game that reused the same room code (lobby cycling)
+   don't pollute the current round's leaderboard. */
 function subscribeWinners(code){
     if(!code||_winnersChannel)return;
     if(!window.getSupabase)return;
     const supa=window.getSupabase();
-    /* Backfill: fetch rows that already exist for this room. Fires
-       concurrently with the realtime subscription — any row that
-       arrives between fetch + subscription is deduped by nickname
-       in registerWinner(). */
-    supa.from('bingo_winners')
+    /* Backfill: fetch rows for this room, only those claimed after
+       the current game started. Falls back to all rows if we don't
+       know the start time yet (e.g. guest subscribing before
+       snapshot arrives — the snapshot handler re-runs this with
+       _gameStartedAt set). Dedupe-by-nickname in registerWinner
+       handles the race with realtime INSERTs. */
+    let q=supa.from('bingo_winners')
         .select('nickname,at_draw,lines,claimed_at')
-        .eq('room_code',code)
-        .order('claimed_at',{ascending:true})
+        .eq('room_code',code);
+    if(_gameStartedAt){
+        q=q.gte('claimed_at',new Date(_gameStartedAt).toISOString());
+    }
+    q.order('claimed_at',{ascending:true})
         .then(({data,error})=>{
             if(error||!Array.isArray(data))return;
             data.forEach(w=>registerWinner({
@@ -1735,7 +1766,10 @@ function startGame(isFromHostBroadcast){
         /* Seed the snapshot so reconnecting guests know a game is
            in progress with an empty drawn list. */
         _updateGameSnapshot();
+        _startHeartbeat();
     }
+    /* Guest-side: begin the disconnect watchdog. */
+    if(window._lpGuest)_startGuestWatchdog();
 }
 function scheduleAuto(){
     if(autoTimerId){clearTimeout(autoTimerId);autoTimerId=null}
@@ -1750,6 +1784,8 @@ function stopGame(){
     if(rafId){cancelAnimationFrame(rafId);rafId=null}
     /* Reset suction state so a fresh game doesn't start mid-extraction. */
     gateOpen=false;suctionActive=false;waitingForCapture=false;targetN=null;
+    _stopHeartbeat();
+    _stopGuestWatchdog();
 }
 function showResult(){
     stopGame();
@@ -1832,6 +1868,15 @@ document.getElementById('replayBtn').addEventListener('click',()=>{
 document.getElementById('setupBackBtn').addEventListener('click',e=>{
     e.preventDefault();
     stopGame();
+    /* Mark the snapshot as not-running so a guest joining during
+       the gap between this Back click and the next START doesn't
+       auto-replay into a dead game. Also clear drawn[] so the
+       stale list doesn't leak into the next round. */
+    drawn=[];
+    if(window._lpHost&&typeof _updateGameSnapshot==='function'){
+        _gameStartedAt=0;
+        _updateGameSnapshot({started:false,ended:false});
+    }
     document.getElementById('gameScreen').classList.remove('active');
     document.getElementById('setupWrap').style.display='flex';
     document.getElementById('setupBackBtn').style.display='none';
@@ -1918,6 +1963,9 @@ _waitForLpRoom(()=>{
             if(typeof p.targetWinnerCount==='number')targetWinnerCount=p.targetWinnerCount;
             if(typeof p.totalParticipants==='number')totalParticipants=p.totalParticipants;
         }
+        /* Any host event at all counts as "host is alive" — clears
+           the disconnect banner the moment traffic resumes. */
+        g.on('*',()=>_noteHostSignal());
         g.on('host:config',applyConfig);
         /* Snapshot is replayed automatically when a guest joins/rejoins.
            Three distinct cases to handle:
@@ -1984,6 +2032,64 @@ function _updateGameSnapshot(extra){
     try{window._lpHost.snapshot(p)}catch(_){}
 }
 let _gameStartedAt=0;
+
+/* ===== Host heartbeat + guest disconnect detection =====
+   The host broadcasts `host:heartbeat` every 10s while a game is
+   active. Guests track the wall-clock time of the most recent
+   host signal (ANY host:* event counts — config/action/snapshot/
+   heartbeat/bingo_winners). If more than 20s pass with no signal,
+   a red banner drops down and we probe the host with
+   requestSnapshot every 10s until we hear back. The banner hides
+   as soon as ANY host event arrives. */
+let _heartbeatTimer=null;
+function _startHeartbeat(){
+    if(_heartbeatTimer||!window._lpHost)return;
+    _heartbeatTimer=setInterval(()=>{
+        if(!window._lpHost||!gameActive){_stopHeartbeat();return}
+        try{window._lpHost.broadcast('host:heartbeat',{t:Date.now()})}catch(_){}
+    },10000);
+}
+function _stopHeartbeat(){
+    if(_heartbeatTimer){clearInterval(_heartbeatTimer);_heartbeatTimer=null}
+}
+
+let _lastHostSignalMs=0;
+let _guestWatchdogTimer=null;
+let _lastProbedAt=0;
+function _noteHostSignal(){
+    _lastHostSignalMs=Date.now();
+    _hideDcBanner();
+}
+function _showDcBanner(){
+    const el=document.getElementById('hostDcBanner');
+    if(el)el.classList.add('show');
+}
+function _hideDcBanner(){
+    const el=document.getElementById('hostDcBanner');
+    if(el)el.classList.remove('show');
+}
+function _startGuestWatchdog(){
+    if(_guestWatchdogTimer)return;
+    _lastHostSignalMs=Date.now();
+    _guestWatchdogTimer=setInterval(()=>{
+        if(!window._lpGuest||!gameActive)return;
+        const since=Date.now()-_lastHostSignalMs;
+        if(since>20000){
+            _showDcBanner();
+            /* Probe every 10s — more often than that just wastes
+               traffic since socket reconnect itself takes seconds. */
+            if(Date.now()-_lastProbedAt>10000&&window._lpGuest.requestSnapshot){
+                _lastProbedAt=Date.now();
+                try{window._lpGuest.requestSnapshot()}catch(_){}
+            }
+        }
+    },5000);
+}
+function _stopGuestWatchdog(){
+    if(_guestWatchdogTimer){clearInterval(_guestWatchdogTimer);_guestWatchdogTimer=null}
+    _hideDcBanner();
+}
+
 let _setupWired=false;
 function _wireSetupSync(){
     if(_setupWired)return;_setupWired=true;
@@ -2017,6 +2123,13 @@ function _onVisibilityRestore(){
     try{SFX.resume&&SFX.resume()}catch(_){}
     if(!gameActive)return;
     const code=_currentRoomCode();
+    /* Host auto-mode resume: the setTimeout chain driving
+       scheduleAuto was broken while the tab was hidden. Restart
+       if the game is still running + no extraction in flight.
+       scheduleAuto itself no-ops if one is already scheduled. */
+    if(!window._lpGuest&&drawMode==='auto'&&!waitingForCapture&&drawn.length<variant.max){
+        try{scheduleAuto()}catch(_){}
+    }
     /* Guest path: pull the latest snapshot from host so we catch
        any draws / ends that happened during the outage. The guest
        snapshot handler runs silentReplayDraws which dedupes on
@@ -2081,6 +2194,6 @@ window.addEventListener('pageshow',_onVisibilityRestore);
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776665830" defer></script>
+<script src="/js/siteFooter.js?v=1776666769" defer></script>
 </body>
 </html>
