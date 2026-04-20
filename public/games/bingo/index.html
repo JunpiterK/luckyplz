@@ -456,7 +456,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776663997"></script>
+<script src="/js/supabase-config.js?v=1776664470"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -1219,6 +1219,9 @@ function _completeDraw(n){
         const lever=document.getElementById('drawLever');
         if(lever)lever.disabled=false;
     }
+    /* Host: update snapshot so any guest that joins/rejoins right
+       after this draw gets the updated drawn list. */
+    if(window._lpHost&&typeof _updateGameSnapshot==='function')_updateGameSnapshot();
     /* Auto-mode reschedules AFTER extraction so short intervals
        never overlap the suction animation. */
     if(drawn.length<variant.max&&gameActive&&drawMode==='auto'&&!window._lpGuest){
@@ -1366,6 +1369,8 @@ function markCard(n){
        that the number actually helped me. Fires slightly after the
        callout bell so the two don't smear together. */
     if(hit)setTimeout(()=>SFX.mark(),120);
+    /* Persist marks so reconnect restores where we left off. */
+    if(hit)_persistCard();
 }
 function checkBingo(){
     if(!myCard||iAlreadyWon)return;
@@ -1419,11 +1424,30 @@ function _currentRoomCode(){
 }
 
 /* Subscribe to every bingo_winners INSERT for this room. Called on
-   host-room-created + guest-joined (one channel per session). */
+   host-room-created + guest-joined (one channel per session). Also
+   backfills existing winners on subscribe so a reconnecting client
+   sees who already won before they dropped. */
 function subscribeWinners(code){
     if(!code||_winnersChannel)return;
     if(!window.getSupabase)return;
     const supa=window.getSupabase();
+    /* Backfill: fetch rows that already exist for this room. Fires
+       concurrently with the realtime subscription — any row that
+       arrives between fetch + subscription is deduped by nickname
+       in registerWinner(). */
+    supa.from('bingo_winners')
+        .select('nickname,at_draw,lines,claimed_at')
+        .eq('room_code',code)
+        .order('claimed_at',{ascending:true})
+        .then(({data,error})=>{
+            if(error||!Array.isArray(data))return;
+            data.forEach(w=>registerWinner({
+                nickname:w.nickname,
+                atDraw:w.at_draw,
+                atMs:+new Date(w.claimed_at),
+                lines:w.lines
+            }));
+        });
     _winnersChannel=supa.channel('bingo-winners:'+code)
         .on('postgres_changes',{
             event:'INSERT',schema:'public',table:'bingo_winners',
@@ -1439,6 +1463,93 @@ function subscribeWinners(code){
             });
         })
         .subscribe();
+}
+
+/* ===== Rejoin / reconnect support =====
+   Two pieces of state need to survive a disconnect:
+     1. the player's card (grid + marks) — otherwise they get a
+        fresh random card on rejoin and the numbers already called
+        look random.
+     2. the draws that happened while they were gone — the host
+        relays them via snapshot, and we silent-replay so marks
+        land on the same card.
+   Both keyed by (room_code, nickname, grid_size) so nothing from
+   a previous room leaks across. */
+function _cardStoreKey(){
+    const nick=localStorage.getItem('luckyplz_nick')||'';
+    const code=_currentRoomCode()||'solo';
+    return 'lpbingo_card:'+code+':'+nick.toLowerCase()+':'+variant.size;
+}
+function _persistCard(){
+    try{
+        if(!myCard)return;
+        localStorage.setItem(_cardStoreKey(),JSON.stringify({
+            grid:myCard.grid,marks:myCard.marks,serial:myCardSerial,
+            max:variant.max,savedAt:Date.now()
+        }));
+    }catch(_){}
+}
+function _restoreCard(){
+    try{
+        const raw=localStorage.getItem(_cardStoreKey());
+        if(!raw)return null;
+        const o=JSON.parse(raw);
+        if(!o||!Array.isArray(o.grid)||o.grid.length!==variant.size)return null;
+        if(o.max!==variant.max)return null;
+        /* 4h staleness — past that it's a different event. */
+        if(Date.now()-(o.savedAt||0)>4*60*60*1000)return null;
+        return o;
+    }catch(_){return null}
+}
+function _clearCardStore(){
+    try{localStorage.removeItem(_cardStoreKey())}catch(_){}
+}
+
+/* Silently replay a list of drawn numbers on the local card without
+   firing suction/pop/callout/mark sounds or animations. Used when a
+   rejoining guest catches up. */
+function silentReplayDraws(list){
+    if(!Array.isArray(list))return;
+    for(const n of list){
+        if(typeof n!=='number'||drawn.includes(n))continue;
+        drawn.push(n);
+        /* Remove the ball from the drum without the extraction anim. */
+        const b=balls.find(x=>x.n===n);
+        if(b){
+            if(b.body&&world&&Composite){Composite.remove(world,b.body);b.body=null}
+            balls=balls.filter(x=>x!==b);
+        }
+        /* Mark card (if this player has one) without the tick sound. */
+        if(myCard){
+            const size=variant.size;
+            for(let r=0;r<size;r++){
+                for(let c=0;c<size;c++){
+                    if(myCard.grid[r][c]===n){
+                        myCard.marks[r][c]=true;
+                        const cell=document.querySelector('.bingo-card .cell[data-r="'+r+'"][data-c="'+c+'"]');
+                        if(cell&&!cell.classList.contains('marked')){
+                            applyPenMark(cell);
+                            cell.classList.add('marked');
+                        }
+                    }
+                }
+            }
+        }
+    }
+    /* Show the last called number in the big callout + rebuild history. */
+    if(drawn.length){
+        const last=drawn[drawn.length-1];
+        const el=document.getElementById('lastCallout');
+        const letterEl=document.getElementById('lastLetter');
+        const numEl=document.getElementById('lastNum');
+        if(letterEl)letterEl.textContent=letterFor(last);
+        if(numEl)numEl.textContent=String(last);
+        if(el)el.classList.add('show');
+    }
+    renderHistory();
+    if(myCard)_persistCard();
+    /* Re-run win detection in case the catch-up just completed a line. */
+    if(myCard)checkBingo();
 }
 
 function claimWin(linesCount){
@@ -1515,6 +1626,12 @@ function endGame(){
     gameEnded=true;
     SFX.gameEnd();
     stopGame();
+    /* Game's done — drop the saved card so the next time this
+       player joins a room they get a fresh random card. */
+    _clearCardStore();
+    /* Snapshot marks the game as finished so late-joining guests
+       don't try to silently replay into a finished round. */
+    if(window._lpHost&&typeof _updateGameSnapshot==='function')_updateGameSnapshot({started:false,ended:true});
     showResult();
 }
 
@@ -1537,11 +1654,21 @@ function startGame(isFromHostBroadcast){
     const cardBox=document.querySelector('.card-box');
     const gameScreen=document.getElementById('gameScreen');
     if(shouldHaveCard){
-        const seed=genSeedFromString(selfNick+'::'+variant.size+'::'+Date.now()+'::'+Math.random());
-        myCard=generateCard(seed);
-        /* Fresh paper serial each game — printed in the card corner. */
-        myCardSerial=String(Math.floor(Math.random()*900+100));
+        /* Rejoin: if we have a saved card for this (room, nick, size)
+           in localStorage — and it's from the same running game —
+           restore it so the player keeps their original numbers +
+           whatever marks they had. Falls back to fresh generation. */
+        const saved=_restoreCard();
+        if(saved){
+            myCard={grid:saved.grid,marks:saved.marks};
+            myCardSerial=saved.serial||String(Math.floor(Math.random()*900+100));
+        }else{
+            const seed=genSeedFromString(selfNick+'::'+variant.size+'::'+Date.now()+'::'+Math.random());
+            myCard=generateCard(seed);
+            myCardSerial=String(Math.floor(Math.random()*900+100));
+        }
         renderCard();
+        _persistCard();
         if(cardBox)cardBox.style.display='';
         gameScreen.classList.remove('caller-only');
     }else{
@@ -1584,7 +1711,11 @@ function startGame(isFromHostBroadcast){
     }
     if(window._lpHost){
         window._lpHost.lock&&window._lpHost.lock();
-        window._lpHost.broadcast('host:start',{game:'bingo',size:variant.size,max:variant.max,drawMode,autoIntervalSec,winLines,targetWinnerCount,totalParticipants,startedAt:Date.now()});
+        _gameStartedAt=Date.now();
+        window._lpHost.broadcast('host:start',{game:'bingo',size:variant.size,max:variant.max,drawMode,autoIntervalSec,winLines,targetWinnerCount,totalParticipants,startedAt:_gameStartedAt});
+        /* Seed the snapshot so reconnecting guests know a game is
+           in progress with an empty drawn list. */
+        _updateGameSnapshot();
     }
 }
 function scheduleAuto(){
@@ -1692,6 +1823,10 @@ document.getElementById('setupBackBtn').addEventListener('click',e=>{
 document.getElementById('leaveBtn').addEventListener('click',e=>{
     e.preventDefault();
     try{stopGame();}catch(_){}
+    /* Clear the saved card before the room code drops out of
+       _currentRoomCode() — otherwise the key computation sees
+       "solo" and leaves a stale card behind. */
+    try{_clearCardStore();}catch(_){}
     try{if(_winnersChannel&&window.getSupabase){window.getSupabase().removeChannel(_winnersChannel);_winnersChannel=null;}}catch(_){}
     try{if(window._lpGuest&&window._lpGuest.close)window._lpGuest.close();}catch(_){}
     window._lpGuest=null;
@@ -1765,7 +1900,24 @@ _waitForLpRoom(()=>{
             if(typeof p.totalParticipants==='number')totalParticipants=p.totalParticipants;
         }
         g.on('host:config',applyConfig);
-        g.on('host:snapshot',applyConfig);
+        /* Snapshot is replayed automatically when a guest joins/rejoins.
+           Three distinct cases to handle:
+             - setup phase (no started) → apply config + stay on setup
+             - in-progress (started=true, drawn=[...]) → jump straight
+               into the game screen and silent-replay missed numbers
+             - just-ended (ended=true) → apply config, ignore replay */
+        g.on('host:snapshot',p=>{
+            applyConfig(p);
+            if(p&&p.started&&!p.ended&&Array.isArray(p.drawn)&&!gameActive){
+                startGame(true);
+                /* Let startGame's card render settle one tick before
+                   stamping all the marks. */
+                setTimeout(()=>silentReplayDraws(p.drawn),40);
+            }else if(p&&p.started&&!p.ended&&Array.isArray(p.drawn)&&gameActive){
+                /* Already in game but snapshot has extra draws — catch up. */
+                silentReplayDraws(p.drawn);
+            }
+        });
         g.on('host:start',p=>{
             applyConfig(p);
             startGame(true);
@@ -1792,6 +1944,27 @@ window._lpBroadcastConfig=function(){
         window._lpHost.broadcast('host:config',p);
     },120);
 };
+/* Push the live game state (started flag + drawn list) onto the
+   snapshot. LpRoom auto-replays the latest snapshot to any guest
+   joining after this point — so a late-arriving or reconnecting
+   guest can jump straight into the game with all prior numbers
+   already marked. Called whenever drawn changes or the game
+   transitions start/end. */
+function _updateGameSnapshot(extra){
+    if(!window._lpHost)return;
+    const p={
+        game:'bingo',
+        size:variant.size,max:variant.max,
+        drawMode,autoIntervalSec,hostPlays,
+        winLines,targetWinnerCount,totalParticipants,
+        started:!!gameActive,
+        drawn:drawn.slice(),
+        startedAt:_gameStartedAt||0
+    };
+    if(extra)Object.assign(p,extra);
+    try{window._lpHost.snapshot(p)}catch(_){}
+}
+let _gameStartedAt=0;
 let _setupWired=false;
 function _wireSetupSync(){
     if(_setupWired)return;_setupWired=true;
@@ -1807,6 +1980,6 @@ applyDrawModeVisibility();
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776663997" defer></script>
+<script src="/js/siteFooter.js?v=1776664470" defer></script>
 </body>
 </html>
