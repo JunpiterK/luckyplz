@@ -330,19 +330,54 @@
            around the top-left corner lands the rotated box back inside
            the viewport (0,0)→(innerWidth,innerHeight). Width/height
            swap so the rotated stage fills the device. */
-        html.lp-force-landscape-root,html.lp-force-landscape-root body{overflow:hidden}
-        body.lp-force-landscape{
+        html.lp-force-landscape-root,html.lp-force-landscape-root body{overflow:hidden;height:100%}
+        /* Step 1 — Game stage lock (applies whenever mobile + in-game,
+           regardless of device orientation). This gives natural-
+           landscape and forced-landscape IDENTICAL host boxes for the
+           canvas: a fullscreen, non-scrolling, margin-free stage. This
+           was the root cause of "가로로 들면 조금 이상" — natural
+           landscape was inheriting body{min-height:100vh;overflow-x:
+           hidden} which leaves overflow-y scrollable, so a 1-2 px
+           content overshoot produced a scroll band / layout shift that
+           the forced path (position:fixed + overflow:hidden) never
+           hit. Now both paths share the stage rule. */
+        body.lp-game-stage{
             position:fixed!important;
             top:0;
-            left:100vw;
-            width:100vh!important;
-            height:100vw!important;
+            left:0;
+            /* dvw/dvh are dynamic viewport units (CSS Values L4, 2022)
+               that track the browser-UI-VISIBLE area. Mobile Safari's
+               100vh notoriously includes the space behind the URL bar,
+               causing 60+px overflow jumps when the bar collapses; dvh
+               avoids this. vh/vw fallback for ancient browsers. */
+            width:100vw;
+            height:100vh;
+            width:100dvw;
+            height:100dvh;
             min-height:0!important;
-            max-height:100vw!important;
-            transform-origin:top left;
-            transform:rotate(90deg);
+            max-height:100dvh!important;
             overflow:hidden;
             margin:0;
+            /* Respect the iPhone notch / Android system bars so canvas
+               edges don't disappear under the hardware cutouts. */
+            padding-left:env(safe-area-inset-left,0);
+            padding-right:env(safe-area-inset-right,0);
+        }
+        /* Step 2 — Forced-landscape rotation (only when device is
+           portrait + in-game). Layered on top of .lp-game-stage so
+           the stage dims are already correct; we just swap width/
+           height and rotate 90° around top-left. */
+        body.lp-force-landscape{
+            /* Pre-rotation box: width = device height, height = device
+               width. After a 90° CW rotation around the top-left plus
+               a translation by the device width (left:100dvw), the box
+               lands exactly on (0,0) → (innerWidth, innerHeight). */
+            left:100dvw;
+            width:100dvh!important;
+            height:100dvw!important;
+            max-height:100dvw!important;
+            transform-origin:top left;
+            transform:rotate(90deg);
         }
         /* ===== MOBILE: SETUP = portrait, fill screen ===== */
         @media(max-width:600px){
@@ -2203,8 +2238,17 @@ const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d');
    for layout. Orientation-DETECTION code (to decide whether to force
    the rotation) must still use the raw window dims. */
 function _lpIsForcedLandscape(){return document.body.classList.contains('lp-force-landscape')}
-function _lpVW(){return _lpIsForcedLandscape()?window.innerHeight:window.innerWidth}
-function _lpVH(){return _lpIsForcedLandscape()?window.innerWidth:window.innerHeight}
+/* Raw device dims — read from visualViewport when available. The
+   visualViewport API (W3C CSSOM View L1, 2018) reports the VISIBLE
+   viewport excluding browser chrome like the collapsing URL bar; on
+   iOS Safari and Chrome Android this is more reliable than
+   window.innerWidth/innerHeight which can briefly include chrome
+   area during scroll-driven bar animations. Fallback when API is
+   missing. */
+function _lpRawW(){return (window.visualViewport&&window.visualViewport.width)||window.innerWidth}
+function _lpRawH(){return (window.visualViewport&&window.visualViewport.height)||window.innerHeight}
+function _lpVW(){return _lpIsForcedLandscape()?_lpRawH():_lpRawW()}
+function _lpVH(){return _lpIsForcedLandscape()?_lpRawW():_lpRawH()}
 function _lpInGameView(){
     const sw=document.getElementById('setupWrap');
     return !!(sw&&sw.style.display==='none');
@@ -6125,20 +6169,42 @@ const ROTATE_I18N={
    game→setup resets. */
 function checkOrientation(){
     const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
+    /* Orientation detection has to read RAW window dims — visualViewport
+       can briefly mis-report during rotation transitions, and the
+       landscape/portrait decision must match what the device physically
+       is, not what the visible area momentarily looks like. */
     const isPortrait=window.innerHeight>window.innerWidth;
-    const shouldForce=isMobile&&isPortrait&&_lpInGameView();
-    const currentlyForced=document.body.classList.contains('lp-force-landscape');
-    if(shouldForce!==currentlyForced){
-        document.body.classList.toggle('lp-force-landscape',shouldForce);
-        document.documentElement.classList.toggle('lp-force-landscape-root',shouldForce);
+    const inGame=_lpInGameView();
+    const shouldStage=isMobile&&inGame;           /* lock fullscreen stage */
+    const shouldRotate=shouldStage&&isPortrait;   /* rotate only when device is portrait */
+    const stagedNow=document.body.classList.contains('lp-game-stage');
+    const rotatedNow=document.body.classList.contains('lp-force-landscape');
+    if(shouldStage!==stagedNow){
+        document.body.classList.toggle('lp-game-stage',shouldStage);
     }
-    /* Whether the class changed or just the window resized, re-sync
-       the canvas + track params to the (possibly-swapped) viewport. */
-    if(_lpInGameView()){
+    if(shouldRotate!==rotatedNow){
+        document.body.classList.toggle('lp-force-landscape',shouldRotate);
+        document.documentElement.classList.toggle('lp-force-landscape-root',shouldRotate);
+    }
+    /* Re-sync canvas + track params on every resize (and on every
+       class toggle) so both orientations produce an identical canvas
+       resolution + track layout. */
+    if(inGame){
         WIDTH=_lpVW();HEIGHT=_lpVH();
         applyCanvasDPR();
         if(typeof _refreshTrackParams==='function')_refreshTrackParams();
     }
+}
+
+/* Also listen to visualViewport changes — mobile Safari's URL bar
+   collapse/expand fires resize on visualViewport but not always on
+   window. Without this, a URL bar that hides mid-race leaves the
+   canvas sized to the old (smaller) area until the next explicit
+   resize event. */
+if(window.visualViewport){
+    window.visualViewport.addEventListener('resize',function(){
+        if(typeof checkOrientation==='function')checkOrientation();
+    });
 }
 
 /* Collapse advanced settings (course, sliders, reward) behind a toggle so the
@@ -6777,6 +6843,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776699472" defer></script>
+<script src="/js/siteFooter.js?v=1776700161" defer></script>
 </body>
 </html>
