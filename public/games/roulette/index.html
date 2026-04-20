@@ -1188,9 +1188,15 @@ function init(){
             if(typeof p.angle==='number')angle=p.angle;
             _startGuestRenderLoop();
         });
+        /* Buffer ticks with timestamps for snapshot interpolation —
+           host broadcasts at ~20Hz but we paint at 60Hz, so applying
+           angle directly on receipt looks stepped. The render loop
+           picks two buffered ticks straddling (now - BUFFER_MS) and
+           lerps between them. See _lpRouletteLerp below. */
         g.on('host:tick',function(p){
-            if(typeof p.angle==='number')angle=p.angle;
-            if(typeof p.flapperAngle==='number')flapperAngle=p.flapperAngle;
+            if(typeof p.angle!=='number')return;
+            _lpTickBuf.push({t:performance.now(),a:p.angle,fa:typeof p.flapperAngle==='number'?p.flapperAngle:flapperAngle});
+            if(_lpTickBuf.length>_LP_MAX_BUFFER)_lpTickBuf.shift();
         });
         g.on('host:result',function(p){
             if(!p||!p.winner)return;
@@ -1265,21 +1271,63 @@ function _lpBroadcastResult(name){
     window._lpHost.broadcast('host:result',{winner:name,finalAngle:angle});
 }
 
-/* ============ Guest render loop ============
-   The guest doesn't run physics — it just paints the wheel at whatever
-   angle the host broadcast last. A single rAF loop calls drawWheel();
-   host:tick handlers mutate `angle`/`flapperAngle` in place. */
+/* ============ Guest render loop + snapshot interpolation ============
+   Host broadcasts host:tick at ~20Hz (50ms) with {angle, flapperAngle}.
+   Applying those values directly at receipt makes the wheel step in
+   50ms increments — 60fps paint, 20Hz value update = visible chunks.
+   Fix: buffer the last few ticks with their arrival timestamps, and
+   each render frame lerp between the pair straddling renderTime =
+   now - BUFFER_MS. Same Valve Source pattern we use in car-racing.
+   Angle lerp takes the shortest path so 2π boundary crossings are
+   smooth (no 358° reverse spin between 359° and 1°). */
 let _guestRenderId=null;
+const _lpTickBuf=[];
+const _LP_BUFFER_MS=100;
+const _LP_MAX_BUFFER=8;
+function _lpAngleLerp(a,b,t){
+    const TAU=Math.PI*2;
+    const d=((b-a)%TAU+TAU+Math.PI)%TAU-Math.PI;
+    return a+d*t;
+}
+function _lpRouletteInterpolate(){
+    if(!_lpTickBuf.length)return;
+    const rt=performance.now()-_LP_BUFFER_MS;
+    let a=null,b=null;
+    for(let i=0;i<_lpTickBuf.length-1;i++){
+        if(_lpTickBuf[i].t<=rt&&_lpTickBuf[i+1].t>=rt){a=_lpTickBuf[i];b=_lpTickBuf[i+1];break}
+    }
+    if(!a){
+        /* Past the newest tick — extrapolate up to 200ms so a brief
+           socket stall doesn't freeze the wheel. */
+        const last=_lpTickBuf[_lpTickBuf.length-1];
+        const prev=_lpTickBuf[_lpTickBuf.length-2];
+        if(prev&&last&&rt-last.t<200){
+            const span=last.t-prev.t||1;
+            const f=(rt-prev.t)/span; /* f > 1 during extrapolation */
+            angle=_lpAngleLerp(prev.a,last.a,f);
+            flapperAngle=_lpAngleLerp(prev.fa,last.fa,f);
+        }else if(last){
+            angle=last.a;flapperAngle=last.fa;
+        }
+        return;
+    }
+    const span=b.t-a.t||1;
+    const f=Math.max(0,Math.min(1,(rt-a.t)/span));
+    angle=_lpAngleLerp(a.a,b.a,f);
+    flapperAngle=_lpAngleLerp(a.fa,b.fa,f);
+}
 function _startGuestRenderLoop(){
     if(_guestRenderId)return;
-    function render(){
+    function loop(){
+        _lpRouletteInterpolate();
         if(typeof drawWheel==='function')drawWheel();
-        _guestRenderId=requestAnimationFrame(render);
+        _guestRenderId=requestAnimationFrame(loop);
     }
-    render();
+    loop();
 }
 function _stopGuestRenderLoop(){
     if(_guestRenderId){cancelAnimationFrame(_guestRenderId);_guestRenderId=null}
+    _lpTickBuf.length=0;
 }
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -1287,6 +1335,6 @@ function _stopGuestRenderLoop(){
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776688617" defer></script>
+<script src="/js/siteFooter.js?v=1776689061" defer></script>
 </body>
 </html>
