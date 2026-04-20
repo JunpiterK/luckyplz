@@ -445,7 +445,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776659497"></script>
+<script src="/js/supabase-config.js?v=1776660441"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -559,7 +559,12 @@ function liveRoomCount(){
 function getStepperSpec(key){
     const specs={
         winLines:{get:()=>winLines,set:v=>winLines=v,min:()=>1,max:()=>totalLinesFor(variant.size),valueId:'winLinesValue'},
-        totalPart:{get:()=>totalParticipants,set:v=>{totalParticipants=v;if(targetWinnerCount>v)targetWinnerCount=v},min:()=>Math.max(1,liveRoomCount()),max:()=>50,valueId:'totalPartValue'},
+        /* Max 100 — matches the DB-backed winner-claim architecture
+           ceiling. 100 concurrent players fit comfortably within
+           Supabase Pro (500 connection pool) + Realtime Broadcast
+           fan-out budget; beyond that the fan-out latency widens
+           enough that drum draws start to de-sync across clients. */
+        totalPart:{get:()=>totalParticipants,set:v=>{totalParticipants=v;if(targetWinnerCount>v)targetWinnerCount=v},min:()=>Math.max(1,liveRoomCount()),max:()=>100,valueId:'totalPartValue'},
         winnerCount:{get:()=>targetWinnerCount,set:v=>targetWinnerCount=v,min:()=>1,max:()=>totalParticipants,valueId:'winnerCountValue'}
     };
     return specs[key];
@@ -1196,46 +1201,85 @@ function checkBingo(){
     }
 }
 
-/* ===== Winner state + broadcast =====
-   `winners` is the authoritative list every client maintains. Ranks
-   are recomputed on demand with competition ranking (ties share a
-   rank, next non-tied entry skips to the group size + 1). */
+/* ===== Winner state + DB-backed sync =====
+   `winners` is the list every client maintains. Authoritative source
+   is the bingo_winners DB table — every client subscribes via
+   postgres_changes so incoming INSERTs replicate to all. Handles
+   claim storm at 100 concurrent players cleanly because Postgres
+   serializes + the unique(room_code, nickname) index dedupes.
+   Competition ranking (ties share a rank, next non-tied entry
+   skips to group-size + 1) is computed client-side per render. */
 let winners=[];           /* [{nickname, atDraw, atMs, lines}] */
 let iAlreadyWon=false;    /* guard so checkBingo() doesn't re-claim */
 let gameEnded=false;
 const bannerTimers=[];
+let _winnersChannel=null; /* Supabase Realtime channel — lives as long as the room */
+
+/* Returns the current room code (host or guest) or null if solo. */
+function _currentRoomCode(){
+    if(window._lpHost&&window._lpHost.code)return window._lpHost.code;
+    if(window._lpGuest&&window._lpGuest.code)return window._lpGuest.code;
+    return null;
+}
+
+/* Subscribe to every bingo_winners INSERT for this room. Called on
+   host-room-created + guest-joined (one channel per session). */
+function subscribeWinners(code){
+    if(!code||_winnersChannel)return;
+    if(!window.getSupabase)return;
+    const supa=window.getSupabase();
+    _winnersChannel=supa.channel('bingo-winners:'+code)
+        .on('postgres_changes',{
+            event:'INSERT',schema:'public',table:'bingo_winners',
+            filter:'room_code=eq.'+code
+        },payload=>{
+            const w=payload.new;
+            if(!w)return;
+            registerWinner({
+                nickname:w.nickname,
+                atDraw:w.at_draw,
+                atMs:+new Date(w.claimed_at),
+                lines:w.lines
+            });
+        })
+        .subscribe();
+}
 
 function claimWin(linesCount){
     const myNick=localStorage.getItem('luckyplz_nick')||T('host');
     const payload={nickname:myNick,atDraw:drawn.length,atMs:Date.now(),lines:linesCount};
-    if(window._lpHost){
-        /* Host adds directly + broadcasts to all. */
+    const code=_currentRoomCode();
+    if(code&&window.getSupabase){
+        /* Optimistic local add so the winner feels instant feedback,
+           then INSERT to DB. Everyone (including me) will also get
+           an echoed postgres_changes event, but registerWinner
+           dedupes on nickname so the echo is a safe no-op. */
         registerWinner(payload);
-    }else if(window._lpGuest&&window._lpGuest.action){
-        /* Guest → host claim. Host validates + broadcasts the final
-           authoritative list back to everyone. */
-        window._lpGuest.action('bingo_claim',payload);
+        window.getSupabase().from('bingo_winners').insert({
+            room_code:code,nickname:myNick,at_draw:drawn.length,lines:linesCount
+        }).then(({error})=>{
+            /* 23505 = unique index violation. Happens on echoed claim
+               or double-click. Intentionally silent. */
+            if(error&&error.code!=='23505')console.warn('[bingo] claim insert failed',error);
+        });
     }else{
-        /* Solo play — just register locally + show result. */
+        /* Solo play — no DB hit, just local. */
         registerWinner(payload);
     }
 }
 
 function registerWinner(w){
     if(gameEnded)return;
-    /* Skip if this nickname already won — prevents same player
-       multi-claiming on subsequent lines. */
+    /* One entry per nickname — dedupes echoed DB events + repeat
+       line claims on the same card. */
     if(winners.some(x=>x.nickname===w.nickname))return;
     winners.push(w);
     showWinnerBanner(w.nickname);
-    /* Host only: broadcast authoritative list so every client sees
-       the same ranks (clients compute their own from the list). */
-    if(window._lpHost){
-        window._lpHost.broadcast('host:bingo_winners',{winners:winners,ended:winners.length>=targetWinnerCount});
-    }
-    /* Auto-end check. */
+    /* Auto-end: every client independently hits the threshold at
+       the same time because they all receive the same DB events
+       in order. No host-authoritative broadcast needed. */
     if(winners.length>=targetWinnerCount){
-        setTimeout(endGame,900); /* tiny pause so the banner reads */
+        setTimeout(endGame,900);
     }
 }
 
@@ -1438,6 +1482,10 @@ document.querySelectorAll('.lp-room-online-btn').forEach(btn=>{
                 window._lpHost=room;
                 window._lpBroadcastConfig();
                 _wireSetupSync();
+                /* Winner channel — host subscribes to its own room's
+                   bingo_winners INSERTs. Claims (including host's)
+                   now flow through Postgres, not broadcast. */
+                subscribeWinners(room.code);
                 /* Guest join → auto-bump totalParticipants upward so
                    the winner-count cap grows with the room (host can
                    still override manually). Never auto-shrink on leave
@@ -1452,12 +1500,6 @@ document.querySelectorAll('.lp-room-online-btn').forEach(btn=>{
                     refreshSteppers();
                     window._lpBroadcastConfig();
                 });
-                /* Guest claims bingo → validate + add to winners list +
-                   broadcast updated list back to all. */
-                room.onGuestAction(p=>{
-                    if(!p||p.type!=='bingo_claim'||gameEnded)return;
-                    registerWinner({nickname:p.nickname||'?',atDraw:p.atDraw||0,atMs:p.atMs||Date.now(),lines:p.lines||winLines});
-                });
             }});
         });
     });
@@ -1467,6 +1509,10 @@ _waitForLpRoom(()=>{
     if(!auto.code)return;
     window.LpRoom.showGuestJoinModal(auto.code,{gameId:'bingo',prefillPin:auto.pin,prefillNick:auto.nickname,onJoined:g=>{
         window._lpGuest=g;
+        /* Winner channel — guest also subscribes to the same room's
+           bingo_winners INSERTs so they see everyone's claims with
+           the same ordering the host sees. */
+        subscribeWinners(g.code);
         document.getElementById('startBtn').disabled=true;
         document.getElementById('startBtn').style.opacity='.4';
         document.querySelectorAll('.lp-room-online-btn').forEach(b=>b.style.display='none');
@@ -1501,19 +1547,9 @@ _waitForLpRoom(()=>{
                 performDraw(p.n);
             }
         });
-        /* Host pushes the authoritative winners list on each new claim
-           (including its own). Replace locally + render banner for the
-           most-recent addition + switch to result screen when the host
-           signals `ended`. */
-        g.on('host:bingo_winners',p=>{
-            if(!p||!Array.isArray(p.winners))return;
-            const prevLen=winners.length;
-            winners=p.winners.slice();
-            if(winners.length>prevLen){
-                showWinnerBanner(winners[winners.length-1].nickname);
-            }
-            if(p.ended)setTimeout(endGame,900);
-        });
+        /* Winner list is now DB-backed — no host:bingo_winners
+           handler needed. subscribeWinners() wired above handles the
+           postgres_changes stream for both host and guest. */
         g.on('host:close',()=>{alert((lang==='ko'?'방장이 방을 닫았어요':'Host closed the room'));location.href='/'});
     }});
 });
@@ -1542,6 +1578,6 @@ applyLang();
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776659497" defer></script>
+<script src="/js/siteFooter.js?v=1776660441" defer></script>
 </body>
 </html>
