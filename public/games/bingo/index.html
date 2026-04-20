@@ -456,7 +456,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776665354"></script>
+<script src="/js/supabase-config.js?v=1776665830"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -720,6 +720,13 @@ const SFX=(()=>{
         }catch(e){}
     }
     return{
+        /* Force-resume the AudioContext. Mobile browsers suspend
+           it when the tab goes background (phone call, app switch,
+           home button) — without this the next SFX.* call plays
+           silently on iOS until the user taps again. */
+        resume(){
+            try{const ctx=g();if(ctx&&ctx.state==='suspended')ctx.resume()}catch(_){}
+        },
         start(){
             [523.25,659.25,784].forEach((f,i)=>setTimeout(()=>tone(f,.18,'triangle',.09),i*70));
         },
@@ -1988,10 +1995,92 @@ function _wireSetupSync(){
 /* ===== Init ===== */
 applyLang();
 applyDrawModeVisibility();
+
+/* ===== Background/foreground lifecycle recovery =====
+   The reliability contract the user depends on: "answer a phone
+   call, come back, everything is still there." Mobile browsers
+   (a) suspend the AudioContext, (b) pause RAF, (c) throttle
+   timers, and (d) may kill the WebSocket after ~30s. Supabase
+   Realtime auto-reconnects the socket but doesn't replay missed
+   broadcasts — so we pull authoritative state ourselves each time
+   the page becomes visible again. */
+let _lastVisibleRestore=0;
+function _onVisibilityRestore(){
+    if(document.hidden)return;
+    /* Debounce: multiple visibility events can fire back-to-back
+       (focus + visibilitychange). 400ms is enough to coalesce. */
+    const now=Date.now();
+    if(now-_lastVisibleRestore<400)return;
+    _lastVisibleRestore=now;
+    /* Audio: resume the suspended context so the next SFX call
+       plays instead of silent-dropping on iOS. */
+    try{SFX.resume&&SFX.resume()}catch(_){}
+    if(!gameActive)return;
+    const code=_currentRoomCode();
+    /* Guest path: pull the latest snapshot from host so we catch
+       any draws / ends that happened during the outage. The guest
+       snapshot handler runs silentReplayDraws which dedupes on
+       drawn.includes, so this is cheap + idempotent. */
+    if(window._lpGuest&&window._lpGuest.requestSnapshot){
+        try{window._lpGuest.requestSnapshot()}catch(_){}
+    }
+    /* Winner re-fetch — covers bingo_winners INSERTs we missed
+       while the realtime socket was dropped. registerWinner
+       dedupes by nickname so duplicates are no-ops. */
+    if(code&&window.getSupabase){
+        try{
+            window.getSupabase().from('bingo_winners')
+                .select('nickname,at_draw,lines,claimed_at')
+                .eq('room_code',code)
+                .order('claimed_at',{ascending:true})
+                .then(({data,error})=>{
+                    if(error||!Array.isArray(data))return;
+                    data.forEach(w=>registerWinner({
+                        nickname:w.nickname,atDraw:w.at_draw,
+                        atMs:+new Date(w.claimed_at),lines:w.lines
+                    }));
+                });
+        }catch(_){}
+    }
+    /* Host stuck-extraction safeguard. Two hangs can happen if
+       the tab was backgrounded mid-draw:
+         A. ball is `extracting` but the _completeDraw setTimeout
+            was throttled past its deadline → ball floats forever
+         B. `waitingForCapture` is true but the target never got
+            pulled to the mouth → lever permanently locked
+       Fire ~400ms after restore so real in-flight draws finish
+       normally — only intervene on genuinely stuck state. */
+    if(!window._lpGuest&&(waitingForCapture||balls.some(b=>b.extracting))){
+        setTimeout(()=>{
+            const stuck=balls.find(b=>b.extracting&&performance.now()-b.extractStart>2500);
+            if(stuck){
+                balls=balls.filter(b=>b!==stuck);
+                waitingForCapture=false;suctionActive=false;gateOpen=false;
+                const lever=document.getElementById('drawLever');
+                if(lever)lever.disabled=false;
+                _completeDraw(stuck.n);
+                return;
+            }
+            if(waitingForCapture&&!balls.some(b=>b.extracting)){
+                /* State B — lever locked but no extraction in flight.
+                   Drop targetN so the next DRAW picks a fresh number. */
+                waitingForCapture=false;suctionActive=false;gateOpen=false;
+                targetN=null;
+                const lever=document.getElementById('drawLever');
+                if(lever)lever.disabled=false;
+            }
+        },400);
+    }
+}
+document.addEventListener('visibilitychange',_onVisibilityRestore);
+/* pageshow fires when iOS restores a page from the back-forward
+   cache (common after returning from another app) — visibilitychange
+   doesn't always fire in that case. */
+window.addEventListener('pageshow',_onVisibilityRestore);
 </script>
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776665354" defer></script>
+<script src="/js/siteFooter.js?v=1776665830" defer></script>
 </body>
 </html>

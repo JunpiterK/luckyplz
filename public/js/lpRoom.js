@@ -175,6 +175,22 @@
             broadcastGuestList();
         });
 
+        /* A guest returning from background (phone call / app switch)
+           asks for a fresh snapshot. The Supabase socket reconnected
+           on its own but the broadcasts that fired during the outage
+           are lost, so we explicitly push current state to just that
+           guest. Ignored if we have no snapshot yet. */
+        chan.on('broadcast',{event:'guest:request_snapshot'},function(msg){
+            const p=msg.payload||{};
+            if(!p||!p.gid)return;
+            dbgLog('host: snapshot requested by '+p.gid.slice(0,6));
+            if(currentSnapshot){
+                chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
+            }
+            /* Also re-push the guest roster so they know who's here. */
+            broadcastGuestList();
+        });
+
         /* Generic guest→host action channel. Games register a handler
            via `room.onGuestAction(cb)` to receive things like "a guest
            claims bingo". The payload carries `gid` + `nickname` so the
@@ -418,6 +434,13 @@
                claim that the host then authoritatively broadcasts to
                everyone. Always stamps gid + nickname so the host can
                attribute + validate. */
+            /* Ask the host to re-broadcast the current snapshot at
+               us. Used after the tab comes back from background —
+               Supabase Realtime reconnects the socket but doesn't
+               replay missed broadcasts, so we pull state ourselves. */
+            requestSnapshot:function(){
+                try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid}})}catch(_){}
+            },
             action:function(type,payload){
                 try{
                     chan.send({
