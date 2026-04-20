@@ -12,9 +12,9 @@
 (function(){
     const CLIENT_ID='ca-pub-5370817769801923';
     const SLOTS={
-        result:'TODO_REPLACE_WITH_SLOT_ID',
-        home:  'TODO_REPLACE_WITH_SLOT_ID',
-        blog:  'TODO_REPLACE_WITH_SLOT_ID'
+        result:'3406981908',  /* Game Result — 5 games' result screens */
+        home:  '1104252197',  /* Home Grid — below the game cards */
+        blog:  '8046124551'   /* Blog Article — below each post */
     };
 
     function mountAd(container){
