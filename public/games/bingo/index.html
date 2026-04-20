@@ -31,6 +31,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+    <!-- Matter.js physics — same drum engine as Lotto for consistent
+         ball chaos + gold-rimmed globe + Venus extraction tube. -->
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
     <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
     <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -321,7 +324,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776652455"></script>
+<script src="/js/supabase-config.js?v=1776653093"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -499,18 +502,61 @@ document.querySelectorAll('[data-hostplay]').forEach(btn=>{
     });
 });
 
-/* ===== Drum canvas (simple animated ball chamber, no physics engine) =====
-   Draws N small circles bouncing inside a large rounded container with
-   some stochastic velocity. When a number is drawn, we visually "eject"
-   one ball toward the lastCallout and remove it from the pool. */
+/* ===== Drum canvas (Matter.js physics — matches Lotto drum) =====
+   Glass globe + gold rim + Venus-style center extraction tube. Balls
+   pile up under gravity, multiple air jets lift them in a chaotic
+   swirl, and when a number is drawn the suction valve opens and
+   steers THAT specific ball up through the tube to the cap. */
 const cv=document.getElementById('drumCanvas');
 const cx=cv.getContext('2d');
 const W=cv.width,H=cv.height;
-let balls=[];        /* {n, x, y, vx, vy, r, hue, ejecting?, ejectT?} */
+let balls=[];        /* {n, hue, body, extracting?, extractStart?, extractDur?, z, vz} */
 let rafId=null;
 
+/* Drum geometry — canvas is a fixed 1040×1040 internal, CSS-sized
+   to fit drum-canvas-wrap. Center the globe, reserve the top slice
+   for the extraction tube + cap. */
+let machineX=W/2, machineY=H*0.54, machineR=Math.min(W,H)*0.40, BALL_R=22;
+/* Extraction state */
+let gateOpen=false, gateAnim=0;
+let suctionActive=false, targetN=null, waitingForCapture=false;
+let lastTime=0, blowerStartTime=0;
+
+/* Matter.js engine — shared across variant rebuilds. */
+const {Engine,World,Bodies,Body,Composite}=Matter;
+let engine=null,world=null,wallSegments=[];
+
+function initPhysics(){
+    if(engine)return;
+    engine=Engine.create({gravity:{x:0,y:2.0}});
+    world=engine.world;
+    buildWalls();
+}
+
+function buildWalls(){
+    if(!world)return;
+    wallSegments.forEach(w=>Composite.remove(world,w));
+    wallSegments=[];
+    const segs=Math.max(64,Math.round(machineR*0.4));
+    const thick=Math.max(30,machineR*0.12);
+    for(let i=0;i<segs;i++){
+        const a1=(i/segs)*Math.PI*2;
+        const a2=((i+1)/segs)*Math.PI*2;
+        const midA=(a1+a2)/2;
+        const mx=machineX+Math.cos(midA)*(machineR+thick/2-4);
+        const my=machineY+Math.sin(midA)*(machineR+thick/2-4);
+        const len=2*machineR*Math.sin(Math.PI/segs)+6;
+        const seg=Bodies.rectangle(mx,my,len,thick,{
+            isStatic:true,angle:midA+Math.PI/2,
+            restitution:0.8,friction:0.02
+        });
+        wallSegments.push(seg);
+    }
+    Composite.add(world,wallSegments);
+}
+
 function colFor(n){
-    /* Return column letter + hue based on bingo-column for size=5 (1-75). */
+    /* Column letter + hue per bingo-column (B I N G O for size=5). */
     const size=variant.size;
     const perCol=Math.ceil(variant.max/size);
     const col=Math.min(size-1,Math.floor((n-1)/perCol));
@@ -520,72 +566,282 @@ function colFor(n){
 }
 
 function spawnBalls(){
+    initPhysics();
+    /* Scale ball radius to pool size so 9-ball (3×3) and 90-ball
+       (6×6) variants both fill the globe nicely. */
+    BALL_R=variant.max<=30?32:(variant.max<=50?26:22);
+    /* Rebuild walls when BALL_R changes — thickness is derived from R. */
+    buildWalls();
+    /* Clear previous balls */
+    balls.forEach(b=>{if(b.body)Composite.remove(world,b.body)});
     balls=[];
-    const r=22;
     for(let n=1;n<=variant.max;n++){
-        const ang=Math.random()*Math.PI*2;
-        const dist=Math.random()*(W*0.32);
-        balls.push({
-            n,
-            x:W/2+Math.cos(ang)*dist,
-            y:H/2+Math.sin(ang)*dist,
-            vx:(Math.random()-.5)*3,
-            vy:(Math.random()-.5)*3,
-            r,
-            hue:colFor(n).hue
+        /* Pile the balls near the bottom — gravity + air jets will
+           lift them into chaotic motion. */
+        const spreadX=(Math.random()-.5)*machineR*0.8;
+        const x=machineX+spreadX;
+        const y=machineY+machineR*0.5+Math.random()*machineR*0.3;
+        const body=Bodies.circle(x,y,BALL_R,{
+            restitution:0.85,friction:0.01,
+            frictionAir:0.002,density:0.0005
         });
+        Body.setVelocity(body,{x:0,y:0});
+        Composite.add(world,body);
+        balls.push({
+            n,hue:colFor(n).hue,body,
+            z:Math.random()*2-1,vz:(Math.random()-.5)*2,
+            extracting:false
+        });
+    }
+    /* Reset extraction state (carries over between games otherwise). */
+    gateOpen=false;gateAnim=0;
+    suctionActive=false;targetN=null;waitingForCapture=false;
+    blowerStartTime=performance.now()*.001;
+}
+
+function applyWindForces(){
+    const t=performance.now()*.001;
+    const elapsed=t-blowerStartTime;
+    const ramp=Math.min(1,elapsed/2);
+    const jet1Str=Math.sin(t*1.1)*0.5+0.5;
+    const jet2Str=Math.sin(t*1.7+2)*0.5+0.5;
+    const jet3Str=Math.sin(t*0.8+4)*0.5+0.5;
+    for(const b of balls){
+        if(b.extracting||!b.body)continue;
+        const pos=b.body.position;
+        const dx=pos.x-machineX,dy=pos.y-machineY;
+        const dist=Math.sqrt(dx*dx+dy*dy)||1;
+        const vertPos=(pos.y-machineY)/machineR;
+        const horizPos=(pos.x-machineX)/machineR;
+        const seed=b.n*7.13;
+        const centerDist=Math.abs(horizPos);
+        const jet1=Math.max(0,vertPos+0.3)*(1-centerDist*0.5)*0.025*jet1Str*ramp;
+        Body.applyForce(b.body,pos,{x:0,y:-jet1});
+        const nearLeft=Math.max(0,-horizPos)*Math.max(0,vertPos+0.2);
+        const jet2=nearLeft*0.018*jet2Str*ramp;
+        Body.applyForce(b.body,pos,{x:jet2*0.6,y:-jet2});
+        const nearRight=Math.max(0,horizPos)*Math.max(0,vertPos+0.2);
+        const jet3=nearRight*0.018*jet3Str*ramp;
+        Body.applyForce(b.body,pos,{x:-jet3*0.6,y:-jet3});
+        const turbMag=0.004*ramp;
+        Body.applyForce(b.body,pos,{
+            x:Math.sin(t*4.7+seed)*turbMag+Math.sin(t*7.3+seed*2.1)*turbMag*0.4,
+            y:Math.cos(t*3.9+seed*1.4)*turbMag+Math.cos(t*6.1+seed*0.7)*turbMag*0.4
+        });
+        /* Safety: keep inside globe */
+        if(dist>machineR-BALL_R-4){
+            const nx=dx/dist,ny=dy/dist;
+            Body.setPosition(b.body,{
+                x:machineX+nx*(machineR-BALL_R-5),
+                y:machineY+ny*(machineR-BALL_R-5)
+            });
+            const vel=b.body.velocity;
+            const dot=vel.x*nx+vel.y*ny;
+            if(dot>0)Body.setVelocity(b.body,{x:vel.x-1.8*dot*nx,y:vel.y-1.8*dot*ny});
+        }
+    }
+    /* Targeted suction: we already know which number was drawn
+       (performDraw picked it). Steer that ball to the tube mouth
+       so the physics show a convincing "it got sucked up" instead
+       of teleporting. */
+    if(suctionActive&&waitingForCapture&&targetN!=null){
+        const target=balls.find(b=>b.n===targetN&&!b.extracting&&b.body);
+        if(target){
+            const mouthX=machineX,mouthY=machineY-machineR*0.15;
+            const pos=target.body.position;
+            const sdx=mouthX-pos.x,sdy=mouthY-pos.y;
+            const sDist=Math.sqrt(sdx*sdx+sdy*sdy)||1;
+            const strength=0.012;
+            Body.applyForce(target.body,pos,{
+                x:sdx/sDist*strength,
+                y:sdy/sDist*strength-0.002
+            });
+            if(sDist<BALL_R*1.6){
+                captureBall(target);
+            }
+        }
     }
 }
 
-function drawDrum(){
-    cx.clearRect(0,0,W,H);
-    /* Drum chamber: big glowing circle */
-    const cxp=W/2,cyp=H/2,chamberR=W*0.42;
-    const grad=cx.createRadialGradient(cxp,cyp-80,40,cxp,cyp,chamberR+60);
-    grad.addColorStop(0,'rgba(0,217,255,.1)');
-    grad.addColorStop(.7,'rgba(0,217,255,.03)');
-    grad.addColorStop(1,'rgba(255,154,60,.02)');
-    cx.fillStyle=grad;
-    cx.beginPath();cx.arc(cxp,cyp,chamberR+20,0,Math.PI*2);cx.fill();
-    /* Rim */
-    cx.strokeStyle='rgba(0,217,255,.25)';cx.lineWidth=2;
-    cx.beginPath();cx.arc(cxp,cyp,chamberR,0,Math.PI*2);cx.stroke();
-    cx.strokeStyle='rgba(255,255,255,.08)';cx.lineWidth=1;
-    cx.beginPath();cx.arc(cxp,cyp,chamberR-18,0,Math.PI*2);cx.stroke();
+function captureBall(ball){
+    if(!waitingForCapture)return;
+    waitingForCapture=false;
+    suctionActive=false;
+    ball.extracting=true;
+    ball.extractStart=performance.now();
+    ball.extractDur=1000;
+    if(ball.body){Composite.remove(world,ball.body);ball.body=null}
+    setTimeout(()=>{
+        balls=balls.filter(b=>b!==ball);
+        gateOpen=false;
+        _completeDraw(ball.n);
+    },ball.extractDur+100);
+}
 
-    /* Balls */
-    balls.forEach(b=>{
-        if(b.ejecting)return;
-        /* Physics: gentle gravity-ish swirl + bounds */
-        b.vx+=(Math.random()-.5)*0.15;
-        b.vy+=(Math.random()-.5)*0.15;
-        const maxV=4;
-        b.vx=Math.max(-maxV,Math.min(maxV,b.vx*.985));
-        b.vy=Math.max(-maxV,Math.min(maxV,b.vy*.985));
-        b.x+=b.vx;b.y+=b.vy;
-        /* Reflect off chamber boundary */
-        const dx=b.x-cxp,dy=b.y-cyp,d=Math.sqrt(dx*dx+dy*dy);
-        if(d+b.r>chamberR-4){
-            const nx=dx/d,ny=dy/d;
-            b.x=cxp+nx*(chamberR-4-b.r);
-            b.y=cyp+ny*(chamberR-4-b.r);
-            const dot=b.vx*nx+b.vy*ny;
-            b.vx-=2*dot*nx*.9;
-            b.vy-=2*dot*ny*.9;
-        }
-        /* Render */
-        const bGrad=cx.createRadialGradient(b.x-b.r/3,b.y-b.r/3,2,b.x,b.y,b.r);
-        bGrad.addColorStop(0,'hsl('+b.hue+',90%,78%)');
-        bGrad.addColorStop(.55,'hsl('+b.hue+',80%,55%)');
-        bGrad.addColorStop(1,'hsl('+b.hue+',75%,42%)');
-        cx.fillStyle=bGrad;
-        cx.beginPath();cx.arc(b.x,b.y,b.r,0,Math.PI*2);cx.fill();
-        /* Number */
-        cx.fillStyle='rgba(20,12,0,.75)';
-        cx.font='700 '+(b.r*0.9)+'px Orbitron, sans-serif';
-        cx.textAlign='center';cx.textBaseline='middle';
-        cx.fillText(String(b.n),b.x,b.y+1);
-    });
+function updatePhysics(dt){
+    if(!engine)return;
+    applyWindForces();
+    Engine.update(engine,dt*1000);
+}
+
+function drawMachine(){
+    const mx=machineX,my=machineY,mr=machineR;
+    /* Glass globe (behind balls) */
+    cx.save();
+    cx.beginPath();cx.arc(mx,my,mr,0,Math.PI*2);
+    const glassFill=cx.createRadialGradient(mx,my,mr*.2,mx,my,mr);
+    glassFill.addColorStop(0,'rgba(200,220,255,.03)');
+    glassFill.addColorStop(.7,'rgba(150,200,255,.02)');
+    glassFill.addColorStop(1,'rgba(100,150,200,.04)');
+    cx.fillStyle=glassFill;cx.fill();
+    cx.restore();
+    /* Gold rim */
+    cx.save();
+    cx.beginPath();cx.arc(mx,my,mr+5,0,Math.PI*2);
+    const rimGrad=cx.createLinearGradient(mx-mr,my-mr,mx+mr,my+mr);
+    rimGrad.addColorStop(0,'#8B7320');rimGrad.addColorStop(.2,'#D4AF37');
+    rimGrad.addColorStop(.4,'#FFD700');rimGrad.addColorStop(.5,'#FFF8DC');
+    rimGrad.addColorStop(.6,'#FFD700');rimGrad.addColorStop(.8,'#D4AF37');
+    rimGrad.addColorStop(1,'#8B7320');
+    cx.strokeStyle=rimGrad;cx.lineWidth=6;cx.stroke();
+    cx.beginPath();cx.arc(mx,my,mr+1,0,Math.PI*2);
+    cx.strokeStyle='rgba(255,255,255,.08)';cx.lineWidth=1;cx.stroke();
+    cx.restore();
+    /* Venus-style center extraction tube */
+    const tubeW=BALL_R*2+8;
+    const tubeMouthY=my-mr*0.15;
+    const tubeTop=my-mr-20;
+    const capR=BALL_R+8;
+    cx.save();
+    const tubeGrad=cx.createLinearGradient(mx-tubeW/2,0,mx+tubeW/2,0);
+    tubeGrad.addColorStop(0,'rgba(80,80,100,.4)');
+    tubeGrad.addColorStop(.3,'rgba(150,150,170,.3)');
+    tubeGrad.addColorStop(.5,'rgba(180,180,200,.35)');
+    tubeGrad.addColorStop(.7,'rgba(150,150,170,.3)');
+    tubeGrad.addColorStop(1,'rgba(80,80,100,.4)');
+    cx.fillStyle=tubeGrad;
+    cx.fillRect(mx-tubeW/2,tubeTop+capR,tubeW,tubeMouthY-tubeTop-capR);
+    cx.strokeStyle='rgba(200,200,220,.25)';cx.lineWidth=1.5;
+    cx.beginPath();cx.moveTo(mx-tubeW/2,tubeMouthY);cx.lineTo(mx-tubeW/2,tubeTop+capR);cx.stroke();
+    cx.beginPath();cx.moveTo(mx+tubeW/2,tubeMouthY);cx.lineTo(mx+tubeW/2,tubeTop+capR);cx.stroke();
+    /* Gate glow animates toward target state */
+    if(gateOpen){gateAnim=Math.min(1,gateAnim+.06)}
+    else{gateAnim=Math.max(0,gateAnim-.04)}
+    if(gateAnim>0){
+        cx.save();
+        const neonAlpha=gateAnim*0.6;
+        const neonGrad=cx.createLinearGradient(mx,tubeMouthY,mx,tubeTop+capR);
+        neonGrad.addColorStop(0,`rgba(0,200,255,${neonAlpha*0.8})`);
+        neonGrad.addColorStop(.5,`rgba(0,255,200,${neonAlpha})`);
+        neonGrad.addColorStop(1,`rgba(0,200,255,${neonAlpha*0.5})`);
+        cx.fillStyle=neonGrad;
+        cx.fillRect(mx-tubeW/2+2,tubeTop+capR,tubeW-4,tubeMouthY-tubeTop-capR);
+        const vortexR=BALL_R*2.5;
+        const vortexGrad=cx.createRadialGradient(mx,tubeMouthY,0,mx,tubeMouthY,vortexR);
+        vortexGrad.addColorStop(0,`rgba(0,255,220,${neonAlpha*0.4})`);
+        vortexGrad.addColorStop(.5,`rgba(0,200,255,${neonAlpha*0.15})`);
+        vortexGrad.addColorStop(1,'rgba(0,200,255,0)');
+        cx.fillStyle=vortexGrad;
+        cx.beginPath();cx.arc(mx,tubeMouthY,vortexR,0,Math.PI*2);cx.fill();
+        cx.shadowColor='rgba(0,220,255,0.6)';cx.shadowBlur=15;
+        cx.strokeStyle=`rgba(0,255,220,${neonAlpha})`;cx.lineWidth=2;
+        cx.beginPath();cx.moveTo(mx-tubeW/2,tubeMouthY);cx.lineTo(mx-tubeW/2,tubeTop+capR);cx.stroke();
+        cx.beginPath();cx.moveTo(mx+tubeW/2,tubeMouthY);cx.lineTo(mx+tubeW/2,tubeTop+capR);cx.stroke();
+        cx.restore();
+    }
+    /* Cap dome */
+    cx.beginPath();cx.arc(mx,tubeTop+capR,capR,Math.PI,0);
+    const capGrad=cx.createRadialGradient(mx-capR*.2,tubeTop+capR-capR*.3,0,mx,tubeTop+capR,capR);
+    capGrad.addColorStop(0,'#bbb');capGrad.addColorStop(.5,'#888');capGrad.addColorStop(1,'#555');
+    cx.fillStyle=capGrad;cx.fill();
+    cx.strokeStyle='rgba(255,255,255,.2)';cx.lineWidth=1;cx.stroke();
+    /* Funnel at tube mouth */
+    cx.beginPath();
+    cx.moveTo(mx-tubeW*1.2,tubeMouthY+8);
+    cx.lineTo(mx-tubeW/2,tubeMouthY);
+    cx.lineTo(mx+tubeW/2,tubeMouthY);
+    cx.lineTo(mx+tubeW*1.2,tubeMouthY+8);
+    cx.strokeStyle='rgba(200,200,220,.25)';cx.lineWidth=1.5;cx.stroke();
+    cx.beginPath();cx.arc(mx,tubeMouthY,tubeW/2+2,Math.PI,0);
+    cx.strokeStyle='rgba(180,180,200,.2)';cx.lineWidth=2;cx.stroke();
+    cx.restore();
+}
+
+function drawGlassOverlay(){
+    const mx=machineX,my=machineY,mr=machineR;
+    cx.save();
+    cx.beginPath();cx.arc(mx,my,mr-2,Math.PI*1.15,Math.PI*1.85);
+    const ref=cx.createLinearGradient(mx-mr*.6,my-mr*.6,mx+mr*.2,my+mr*.2);
+    ref.addColorStop(0,'rgba(255,255,255,.12)');
+    ref.addColorStop(.5,'rgba(255,255,255,.04)');
+    ref.addColorStop(1,'rgba(255,255,255,0)');
+    cx.strokeStyle=ref;cx.lineWidth=mr*.15;cx.stroke();
+    cx.beginPath();cx.ellipse(mx-mr*.35,my-mr*.4,mr*.15,mr*.08,-0.5,0,Math.PI*2);
+    cx.fillStyle='rgba(255,255,255,.15)';cx.fill();
+    cx.beginPath();cx.arc(mx,my,mr,0,Math.PI*2);
+    cx.strokeStyle='rgba(200,230,255,.1)';cx.lineWidth=2;cx.stroke();
+    cx.restore();
+}
+
+function drawBallAt(x,y,r,hue,n,highlight){
+    cx.save();
+    cx.shadowColor='rgba(0,0,0,.4)';cx.shadowBlur=8;cx.shadowOffsetY=3;
+    const mainCol=`hsl(${hue},80%,55%)`;
+    const darkCol=`hsl(${hue},75%,32%)`;
+    const g=cx.createRadialGradient(x-r*.3,y-r*.3,r*.1,x,y,r);
+    g.addColorStop(0,'rgba(255,255,255,.35)');
+    g.addColorStop(.3,mainCol);
+    g.addColorStop(.8,mainCol);
+    g.addColorStop(1,darkCol);
+    cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);cx.fillStyle=g;cx.fill();
+    /* Glossy highlight */
+    cx.shadowColor='transparent';
+    const hl=cx.createRadialGradient(x-r*.25,y-r*.3,0,x-r*.25,y-r*.3,r*.6);
+    hl.addColorStop(0,'rgba(255,255,255,.5)');
+    hl.addColorStop(.5,'rgba(255,255,255,.15)');
+    hl.addColorStop(1,'rgba(255,255,255,0)');
+    cx.beginPath();cx.arc(x,y,r,0,Math.PI*2);cx.fillStyle=hl;cx.fill();
+    /* Number medallion */
+    const cr=r*.55;
+    cx.beginPath();cx.arc(x,y+r*.05,cr,0,Math.PI*2);
+    cx.fillStyle='rgba(255,255,255,.92)';cx.fill();
+    const fs=Math.min(r*.7,cr*1.2);
+    cx.font=`900 ${fs}px 'Orbitron','Noto Sans KR',sans-serif`;
+    cx.fillStyle='#222';cx.textAlign='center';cx.textBaseline='middle';
+    cx.fillText(String(n),x,y+r*.08,cr*1.8);
+    if(highlight){
+        cx.strokeStyle='rgba(255,230,109,.8)';cx.lineWidth=3;
+        cx.beginPath();cx.arc(x,y,r+2,0,Math.PI*2);cx.stroke();
+    }
+    cx.restore();
+}
+
+function drawDrum(ts){
+    const dt=Math.min(((ts||performance.now())-(lastTime||ts||performance.now()))/1000,.033);
+    lastTime=ts||performance.now();
+    cx.clearRect(0,0,W,H);
+    drawMachine();
+    updatePhysics(dt);
+    /* Balls in the globe — clip so stray physics doesn't leak out. */
+    cx.save();
+    cx.beginPath();cx.arc(machineX,machineY,machineR-2,0,Math.PI*2);cx.clip();
+    for(const b of balls){
+        if(b.extracting||!b.body)continue;
+        drawBallAt(b.body.position.x,b.body.position.y,BALL_R,b.hue,b.n,false);
+    }
+    cx.restore();
+    /* Extracting ball — animate up through the tube to the cap. */
+    for(const b of balls){
+        if(!b.extracting)continue;
+        const elapsed=performance.now()-b.extractStart;
+        const prog=Math.min(1,elapsed/b.extractDur);
+        const ease=1-Math.pow(1-prog,3);
+        const tubeMouthY=machineY-machineR*0.15;
+        const tubeCapY=machineY-machineR-20+BALL_R+8;
+        const ballY=tubeMouthY+(tubeCapY-tubeMouthY)*ease;
+        drawBallAt(machineX,ballY,BALL_R,b.hue,b.n,true);
+    }
+    drawGlassOverlay();
     rafId=requestAnimationFrame(drawDrum);
 }
 
@@ -599,13 +855,14 @@ function letterFor(n){return colFor(n).letter}
 
 function performDraw(numberOverride){
     if(!gameActive)return;
-    /* Host picks a number from remaining balls OR uses the number the
-       host broadcast to us (guests receive via host:action). */
+    /* Only one extraction in flight at a time — guards against rapid
+       auto-ticks overlapping with the suction animation. */
+    if(waitingForCapture)return;
     let n;
     if(typeof numberOverride==='number'){
         n=numberOverride;
     }else{
-        const remaining=balls.filter(b=>!b.ejecting).map(b=>b.n);
+        const remaining=balls.filter(b=>!b.extracting&&b.body).map(b=>b.n);
         if(!remaining.length)return;
         n=remaining[Math.floor(Math.random()*remaining.length)];
         /* Host: broadcast the number so guests mirror it. */
@@ -613,14 +870,35 @@ function performDraw(numberOverride){
             window._lpHost.broadcast('host:action',{type:'bingo_draw',n,seq:drawn.length});
         }
     }
-    /* Mark ball as ejecting then remove after tiny animation. */
-    const b=balls.find(x=>x.n===n);
-    if(b){b.ejecting=true;setTimeout(()=>{balls=balls.filter(x=>x!==b)},400)}
+    /* Target that specific ball — physics will suck it up through the
+       tube and fire _completeDraw when the capture animation finishes. */
+    const target=balls.find(b=>b.n===n&&!b.extracting&&b.body);
+    if(!target){
+        /* Desync safety: if we can't find the ball (e.g. guest
+           state got out of sync) just complete the draw directly. */
+        _completeDraw(n);
+        return;
+    }
+    targetN=n;
+    waitingForCapture=true;
+    suctionActive=true;
+    gateOpen=true;
+}
+
+/* Fired once the ball has been extracted + removed from the globe.
+   Splits the draw logic from the physics so suction can take as long
+   as it needs without blocking state updates. */
+function _completeDraw(n){
     drawn.push(n);
     renderCallout(n);
     renderHistory();
     markCard(n);
     checkBingo();
+    /* Auto-mode reschedules AFTER extraction so short intervals
+       never overlap the suction animation. */
+    if(drawn.length<variant.max&&gameActive&&drawMode==='auto'&&!window._lpGuest){
+        scheduleAuto();
+    }
 }
 function renderCallout(n){
     const el=document.getElementById('lastCallout');
@@ -883,15 +1161,16 @@ function startGame(isFromHostBroadcast){
 function scheduleAuto(){
     if(autoTimerId){clearTimeout(autoTimerId);autoTimerId=null}
     if(!gameActive||drawMode!=='auto'||window._lpGuest)return;
-    autoTimerId=setTimeout(()=>{
-        performDraw();
-        if(drawn.length<variant.max&&gameActive)scheduleAuto();
-    },Math.max(1,autoIntervalSec)*1000);
+    /* Next tick fires `interval` seconds from now. Reschedule happens
+       inside _completeDraw so the timer never overlaps suction. */
+    autoTimerId=setTimeout(()=>{performDraw()},Math.max(1,autoIntervalSec)*1000);
 }
 function stopGame(){
     gameActive=false;
     if(autoTimerId){clearTimeout(autoTimerId);autoTimerId=null}
     if(rafId){cancelAnimationFrame(rafId);rafId=null}
+    /* Reset suction state so a fresh game doesn't start mid-extraction. */
+    gateOpen=false;suctionActive=false;waitingForCapture=false;targetN=null;
 }
 function showResult(){
     stopGame();
@@ -1083,6 +1362,6 @@ applyLang();
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776652455" defer></script>
+<script src="/js/siteFooter.js?v=1776653093" defer></script>
 </body>
 </html>
