@@ -876,7 +876,10 @@
         async function doJoin(){
             if(!nick.value.trim()){err.textContent=_t('닉네임을 입력해주세요','Enter a nickname');return}
             if(pin.value.length!==4){err.textContent=_t('4자리 숫자','4 digits');return}
-            localStorage.setItem('luckyplz_nick',nick.value.trim());
+            /* Private-mode Safari / iOS throws on setItem — don't let a
+               storage failure abort the join. The remembered nickname
+               is a UX convenience, not a correctness requirement. */
+            try{localStorage.setItem('luckyplz_nick',nick.value.trim())}catch(_){}
             err.textContent=_t('방 연결 중…','Connecting…');
             const g=await guestJoin({code:code,pin:pin.value,nickname:nick.value,gameId:gameId});
             if(!g.ok){
@@ -1148,7 +1151,9 @@
             if(!nickIn.value.trim()){err.textContent=_t('닉네임을 입력해주세요','Enter a nickname');return}
             if(pinIn.value.length!==4){err.textContent=_t('비밀번호 4자리','4 digits');return}
 
-            localStorage.setItem('luckyplz_nick',nickIn.value.trim());
+            /* Private-mode Safari / iOS throws on setItem — fail soft so
+               storage errors don't block the join. */
+            try{localStorage.setItem('luckyplz_nick',nickIn.value.trim())}catch(_){}
             err.textContent=lbl.connecting;
             const probe=await probeRoom(code);
             if(!probe.ok){
