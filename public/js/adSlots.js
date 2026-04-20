@@ -23,6 +23,13 @@
         if(!slot||slot.indexOf('TODO_')===0)return;
         if(container.dataset.lpAdMounted)return;
         container.dataset.lpAdMounted='1';
+        /* Hide the whole container until we confirm the ad actually
+           filled. While the site is in AdSense "준비 중" (pre-
+           approval) status every push returns no-fill and the <ins>
+           sits as an empty block with margin → users see a blank
+           white rectangle where the ad would be. Start hidden +
+           reveal on successful fill. */
+        container.style.display='none';
         const ins=document.createElement('ins');
         ins.className='adsbygoogle';
         ins.style.display='block';
@@ -35,6 +42,26 @@
         ins.setAttribute('data-full-width-responsive','true');
         container.appendChild(ins);
         try{(window.adsbygoogle=window.adsbygoogle||[]).push({})}catch(e){}
+        /* Google sets data-ad-status="filled" on the <ins> when it
+           delivers an ad, or "unfilled" when it's a no-fill
+           (pre-approval OR low-demand). Poll for up to 3 seconds —
+           once filled we reveal the container; if still unfilled
+           (or the attribute never appears because the script failed
+           to load) we keep the container hidden so no empty box
+           shows on the page. Google typically marks status within
+           1 second of the push. */
+        let attempts=0;
+        const poll=setInterval(function(){
+            attempts++;
+            const status=ins.getAttribute('data-ad-status');
+            if(status==='filled'){
+                container.style.display='';
+                clearInterval(poll);
+            }else if(status==='unfilled'||attempts>=15){ /* 15 * 200ms = 3s */
+                clearInterval(poll);
+                /* container stays display:none — no blank rectangle */
+            }
+        },200);
     }
 
     /* Wait for the container to be visible before pushing — result screens
