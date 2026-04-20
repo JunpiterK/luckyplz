@@ -1269,7 +1269,7 @@
         showGuestJoinModal:showGuestJoinModal,
         showHomeJoinModal:showHomeJoinModal,
         detectGuestIntent:detectGuestIntent,
-        localizeOnlineBtn:localizeOnlineBtn,
+        normalizeOnlineBtn:normalizeOnlineBtn,
         tryResumeHost:tryResumeHost,
         _injectStyles:injectStyles
     };
