@@ -675,7 +675,39 @@ function generateLadder(){
     nameInputs.forEach((inp,i)=>names.push(inp.value.trim()||inp.placeholder||''));
     resultInputs.forEach((inp,i)=>results.push(inp.value.trim()||(inp.dataset.cleared?'':inp.placeholder)||''));
 
-    ladder={verticals:verts,horizontals:horiz,names,results,n};
+    /* Topology — the device-independent description of the ladder:
+       how many columns, and for each rung which column-pair it
+       spans at what RELATIVE height (0..1 along topY..botY). Pixel
+       positions are derived from this on each device via
+       layoutLadder() so phone / tablet / desktop canvases all
+       draw the same topology at their own scale. */
+    const rungs=horiz.map(h=>({col:h.col,yFrac:(h.y-topY)/(botY-topY)}));
+    ladder={verticals:verts,horizontals:horiz,names,results,n,rungs};
+}
+
+/* Derive pixel geometry (verticals + horizontals coordinates) from
+   the device-independent topology stored in ladder.rungs + ladder.n.
+   Called on guest after applyConfig and on every canvas resize so
+   that a 375px phone and a 1280px desktop show an identically-
+   routed ladder but each at its own spacing. */
+function layoutLadder(){
+    if(!ladder||!ladder.n||!Array.isArray(ladder.rungs))return;
+    const n=ladder.n;
+    const margin=60;
+    const topY=80;
+    const botY=H-80;
+    const usableW=W-margin*2;
+    const gap=usableW/(n-1);
+    const verts=[];
+    for(let i=0;i<n;i++)verts.push({x:margin+i*gap,topY,botY});
+    const horiz=ladder.rungs.map(r=>({
+        col:r.col,
+        y:topY+r.yFrac*(botY-topY),
+        x1:verts[r.col].x,
+        x2:verts[r.col+1].x
+    })).sort((a,b)=>a.y-b.y);
+    ladder.verticals=verts;
+    ladder.horizontals=horiz;
 }
 
 /* ===== TRACE PATH ===== */
@@ -740,6 +772,12 @@ function resizeCanvas(){
         confCanvas.style.width=W+'px';confCanvas.style.height=H+'px';
         confCtx.setTransform(dpr,0,0,dpr,0,0);
     }
+    /* Re-derive pixel positions so rungs/verticals track the new
+       canvas size. Topology (ladder.rungs) is preserved — only the
+       absolute x/y coords change. Lets guests on a different form
+       factor than host still draw the same ladder routing, and
+       lets device rotation keep the ladder aligned. */
+    if(ladder&&Array.isArray(ladder.rungs)&&typeof layoutLadder==='function')layoutLadder();
 }
 
 function drawLadder(){
@@ -1142,9 +1180,16 @@ function startGame(){
        structure so ▶ Start traces exactly what was shown). */
     const isGuest=!!window._lpGuest;
     if(isGuest){
-        /* Use host's ladder as-is. Refresh names/results from the
-           latest config payload (stored on ladder.names/.results by
-           applyConfig); fall back to input fields if empty. */
+        /* Use host's ladder TOPOLOGY as-is, but lay it out at this
+           device's own canvas size so phone / tablet / desktop each
+           draw at their correct spacing. layoutLadder reads from
+           ladder.rungs (the device-independent description) and
+           populates ladder.verticals + ladder.horizontals for our
+           own W/H. */
+        if(Array.isArray(ladder.rungs)&&typeof layoutLadder==='function'){
+            layoutLadder();
+        }
+        /* Refresh names/results if applyConfig hadn't set them yet. */
         if(!ladder.names||!ladder.names.length){
             const ni=document.querySelectorAll('#playerInputs input');
             ladder.names=[...ni].map(i=>i.value.trim()||i.placeholder||'');
@@ -1405,13 +1450,27 @@ function init(){
                 const ri=document.querySelectorAll('#resultInputs input');
                 if(Array.isArray(p.names))p.names.forEach(function(n,i){if(ni[i])ni[i].value=n});
                 if(Array.isArray(p.results))p.results.forEach(function(r,i){if(ri[i])ri[i].value=r});
-                /* Also mirror names/results onto the ladder object
-                   itself — drawLadder(), createTracer() and match
-                   resolution all read from ladder.names/.results
-                   (not from the input fields). Without this the
-                   guest would paint an unlabeled ladder. */
+                /* Mirror names/results onto the ladder object itself —
+                   drawLadder() / createTracer() / match resolution
+                   read from ladder.names/.results, not from the
+                   input fields. */
                 if(Array.isArray(p.names))ladder.names=p.names.slice();
                 if(Array.isArray(p.results))ladder.results=p.results.slice();
+                /* Re-layout the ladder for THIS device's canvas. The
+                   host sent the topology (n + rungs with col/yFrac);
+                   we build our own vertical spacing + rung pixel-Y
+                   from our own W/H so phone / tablet / desktop all
+                   paint the same topology at their own scale.
+                   Backward compat: if ladder carries the old
+                   verticals/horizontals without rungs, derive rungs
+                   from horizontals first. */
+                if(ladder&&!Array.isArray(ladder.rungs)&&Array.isArray(ladder.horizontals)&&Array.isArray(ladder.verticals)&&ladder.verticals[0]){
+                    const topY=ladder.verticals[0].topY;
+                    const botY=ladder.verticals[0].botY;
+                    const span=Math.max(1,botY-topY);
+                    ladder.rungs=ladder.horizontals.map(h=>({col:h.col,yFrac:(h.y-topY)/span}));
+                }
+                if(canvas&&typeof layoutLadder==='function')layoutLadder();
                 renderPreview&&renderPreview(false);
             }
             g.on('host:config',applyConfig);
@@ -1564,6 +1623,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776682697" defer></script>
+<script src="/js/siteFooter.js?v=1776684270" defer></script>
 </body>
 </html>
