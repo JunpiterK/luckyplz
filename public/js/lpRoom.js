@@ -872,27 +872,31 @@
         return m?m[1].toUpperCase():null;
     }
 
-    /* Auto-localize the "Watch Together" button label if a game page
-       placed one. Games put a default English label in HTML; we swap it
-       to the user's language on load and whenever lang changes. */
+    /* Auto-localize the game-page chip label. The in-game chip OPENS
+       a new room (host action); the home-page chip JOINS an existing
+       one. They use different verbs deliberately so the user never
+       confuses create-vs-join: "Open" / "개설" here, "Join" / "참석"
+       on /index.html. */
     function localizeOnlineBtn(){
         const lbls=document.querySelectorAll('.online-btn-label, #onlineBtnLabel');
         if(!lbls.length)return;
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
         const label=(
-            lang==='ko'?'같이 보기':
-            lang==='ja'?'一緒に見る':
-            lang==='zh'?'一起看':
-            lang==='es'?'Ver juntos':
-            lang==='de'?'Zusammen ansehen':
-            lang==='fr'?'Regarder ensemble':
-            lang==='pt'?'Assistir juntos':
-            lang==='ru'?'Смотреть вместе':
-            lang==='vi'?'Xem cùng':
-            lang==='id'?'Nonton bareng':
-            lang==='th'?'ดูด้วยกัน':
-            lang==='tr'?'Birlikte izle':
-            'Watch Together'
+            lang==='ko'?'개설':
+            lang==='ja'?'開設':
+            lang==='zh'?'开设':
+            lang==='es'?'Abrir':
+            lang==='de'?'Öffnen':
+            lang==='fr'?'Ouvrir':
+            lang==='pt'?'Abrir':
+            lang==='ru'?'Открыть':
+            lang==='vi'?'Mở':
+            lang==='id'?'Buka':
+            lang==='th'?'เปิด':
+            lang==='tr'?'Aç':
+            lang==='ar'?'افتح':
+            lang==='hi'?'खोलें':
+            'Open'
         );
         lbls.forEach(function(l){l.textContent=label});
     }
