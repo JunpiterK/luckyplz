@@ -141,3 +141,34 @@ function lpRenderNextGames(container, currentGame, count) {
         run();
     }
 })();
+
+/* When the host is inside an active Watch-Together room, clicking a
+   "try another game" card should transfer the whole room (host +
+   guests) to the chosen game — NOT just navigate the host away
+   (which would leave guests stranded on the old page). Hook into
+   [data-lp-next-games] clicks via event delegation so it works
+   regardless of when the container is mounted. */
+document.addEventListener('click', function(e) {
+    const card = e.target.closest('.lp-next-card');
+    if (!card) return;
+    const host = window._lpHost;
+    if (!host || typeof host.transferTo !== 'function') return;
+    /* Intercept — do NOT let the anchor's default navigation fire.
+       transferTo handles broadcasting host:navigate to guests +
+       navigating host after a short delay. */
+    e.preventDefault();
+    try { host.transferTo(card.getAttribute('href')) } catch (_) {}
+});
+
+/* Guests with an active room + card clicks on result-screen next-
+   games: they shouldn't be driving navigation at all. The host
+   transfers everyone via host:navigate. Disable the cards so
+   clicks don't stranded the guest on a room-less page. */
+document.addEventListener('DOMContentLoaded', function() {
+    if (!window._lpGuest) return;
+    document.querySelectorAll('.lp-next-card').forEach(function(c) {
+        c.style.pointerEvents = 'none';
+        c.style.opacity = '0.45';
+        c.title = 'Waiting for host to pick next game';
+    });
+});

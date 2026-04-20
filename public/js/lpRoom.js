@@ -260,6 +260,33 @@
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
             },
+            /* Transfer the room to a new URL — host navigates there, guests
+               auto-follow via the host:navigate broadcast. The room code +
+               pin are persisted to localStorage so the new page can silently
+               re-create the host channel (same code = same logical room).
+               Guests hit the target URL with ?room=&pin=&nick= appended so
+               detectAutoJoinParams picks them up and auto-joins. */
+            transferTo:function(targetUrl){
+                try{
+                    const hostUrl=new URL(targetUrl,location.href);
+                    const guestUrl=new URL(targetUrl,location.href);
+                    guestUrl.searchParams.set('room',code);
+                    guestUrl.searchParams.set('pin',pin);
+                    /* Fire host:navigate first with target for guests. */
+                    chan.send({type:'broadcast',event:'host:navigate',payload:{url:guestUrl.toString()}});
+                    /* Persist host context so the next page can resume
+                       this exact room silently (same code, same pin,
+                       same hostName). 60s TTL — any longer and a stray
+                       localStorage entry would silently revive a room
+                       the user meant to abandon. */
+                    try{localStorage.setItem('lp_hostTransit',JSON.stringify({
+                        code:code,pin:pin,hostName:hostName,gameId:gameId,t:Date.now()
+                    }))}catch(_){}
+                    /* Give the broadcast ~250ms to actually flush over
+                       the socket before the page unload kills it. */
+                    setTimeout(function(){location.href=hostUrl.toString()},250);
+                }catch(e){dbgLog('host: transferTo failed '+e.message)}
+            },
             shareUrl:function(base){
                 const root=(base||location.origin+location.pathname).replace(/\?.*$/,'').replace(/#.*$/,'');
                 return root+'?room='+code;
@@ -277,7 +304,7 @@
         'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
-        'host:guests','host:bingo_winners','host:heartbeat'
+        'host:guests','host:bingo_winners','host:heartbeat','host:navigate'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
@@ -355,6 +382,23 @@
                 cache['host:snapshot']=p;
                 emit('host:snapshot',p);
                 return;
+            }
+            /* Host transferring the room to a new page — follow them
+               there with our own nickname appended so we auto-join on
+               arrival. Short delay gives the game code a chance to
+               handle host:navigate too if it registered its own
+               listener (e.g. to save state), but the navigation wins
+               even if nothing happens on the page side. */
+            if(ev==='host:navigate'&&accepted&&p&&p.url){
+                try{
+                    const u=new URL(p.url,location.href);
+                    if(nickname&&!u.searchParams.get('nick')){
+                        u.searchParams.set('nick',nickname);
+                    }
+                    dbgLog('guest: following host to '+u.toString());
+                    setTimeout(function(){location.href=u.toString()},200);
+                }catch(_){location.href=p.url}
+                /* Fall through to emit so game code can hook too. */
             }
             /* Regular host events after acceptance */
             if(accepted){
@@ -1205,6 +1249,41 @@
         return {code:q.get('room'),pin:q.get('pin'),nickname:q.get('nick')};
     }
 
+    /* If a host-transferred room is sitting in localStorage (set by
+       room.transferTo in the previous page), silently re-open the
+       same Supabase channel with the same code + pin + hostName so
+       guests that followed the host:navigate broadcast re-attach to
+       the same logical room. Returns a room object on success or
+       null if there's no pending transit, the transit has expired,
+       or the gameId doesn't match. */
+    async function tryResumeHost(opts){
+        opts=opts||{};
+        var raw=null;
+        try{raw=localStorage.getItem('lp_hostTransit')}catch(_){}
+        if(!raw)return null;
+        var rec;try{rec=JSON.parse(raw)}catch(_){return null}
+        if(!rec||!rec.code||!rec.pin)return null;
+        /* 60-second TTL — beyond that treat the pending transit as
+           stale so a forgotten localStorage entry doesn't silently
+           resurrect an old room days later. */
+        if(Date.now()-(rec.t||0)>60*1000){
+            try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+            return null;
+        }
+        /* Consume the transit entry so a page refresh doesn't keep
+           re-resuming. */
+        try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+        try{
+            const room=await hostCreate({
+                gameId:opts.gameId||rec.gameId,
+                pin:rec.pin,
+                hostName:rec.hostName||opts.hostName||'Host',
+                code:rec.code
+            });
+            return room;
+        }catch(e){return null}
+    }
+
     window.LpRoom={
         hostCreate:hostCreate,
         guestJoin:guestJoin,
@@ -1216,6 +1295,7 @@
         showHomeJoinModal:showHomeJoinModal,
         detectGuestIntent:detectGuestIntent,
         localizeOnlineBtn:localizeOnlineBtn,
+        tryResumeHost:tryResumeHost,
         _injectStyles:injectStyles
     };
 })();

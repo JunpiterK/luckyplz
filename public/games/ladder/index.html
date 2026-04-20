@@ -1419,18 +1419,32 @@ function init(){
     /* Online room wiring */
     window._lpHost=null;window._lpGuest=null;
     function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
+    /* Shared wiring — runs whether the room was created fresh via the
+       Open button OR silently resumed from a previous page's transferTo.
+       Extracted so both code paths land in the exact same state. */
+    function _lpWireHostRoom(room){
+        window._lpHost=room;
+        window._lpBroadcastConfig();
+        _wireLpSetupSync();
+        room.onGuestJoin(function(){window._lpBroadcastConfig()});
+    }
     document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
         btn.addEventListener('click',function(){
             if(window._lpHost)return;
             _waitForLpRoom(function(){
                 const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
-                window.LpRoom.showHostModal({gameId:'ladder',hostName:hn,onCreated:function(room){
-                    window._lpHost=room;
-                    window._lpBroadcastConfig();
-                    _wireLpSetupSync();
-                    room.onGuestJoin(function(){window._lpBroadcastConfig()});
-                }});
+                window.LpRoom.showHostModal({gameId:'ladder',hostName:hn,onCreated:_lpWireHostRoom});
             });
+        });
+    });
+    /* Silent resume — if the previous page called room.transferTo we
+       land here with a pending lp_hostTransit in localStorage. Pick
+       it up and re-open the same channel so guests who followed the
+       host:navigate broadcast reattach to the same logical room. */
+    _waitForLpRoom(function(){
+        if(!window.LpRoom||!window.LpRoom.tryResumeHost)return;
+        window.LpRoom.tryResumeHost({gameId:'ladder'}).then(function(room){
+            if(room)_lpWireHostRoom(room);
         });
     });
     _waitForLpRoom(function(){
@@ -1623,6 +1637,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776684700" defer></script>
+<script src="/js/siteFooter.js?v=1776686097" defer></script>
 </body>
 </html>

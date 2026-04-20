@@ -1093,6 +1093,14 @@ function init(){
         setTimeout(function(){_waitForLpRoom(cb,tries+1)},100);
     }
 
+    /* Shared wiring — runs whether created fresh or silently resumed
+       from a previous page's transferTo (Next Game picker). */
+    function _lpWireHostRoom(room){
+        window._lpHost=room;
+        _lpBroadcastConfig();
+        _wireLpSetupSync();
+        room.onGuestJoin(function(){_lpBroadcastConfig()});
+    }
     /* Online button(s): wire every .lp-room-online-btn (there may be
        more than one — the PC toolbar copy + a mobile-row fallback) via
        class selector, not ID. */
@@ -1101,24 +1109,16 @@ function init(){
             if(window._lpHost)return;
             _waitForLpRoom(function(){
                 const hn=(localStorage.getItem('luckyplz_nick')||'Host').slice(0,20);
-                window.LpRoom.showHostModal({
-                    gameId:'roulette',
-                    hostName:hn,
-                    /* onCreated fires as soon as the channel is live (before
-                       the share modal). Register the room object + prime the
-                       snapshot so any guest that joins while the host is
-                       still on the share screen immediately sees the current
-                       setup (player names/count), not blank defaults. */
-                    onCreated:function(room){
-                        window._lpHost=room;
-                        _lpBroadcastConfig();
-                        _wireLpSetupSync();
-                        /* Rebroadcast on every new guest — cheap insurance
-                           in case the targeted host:snapshot replay missed. */
-                        room.onGuestJoin(function(){_lpBroadcastConfig()});
-                    }
-                });
+                window.LpRoom.showHostModal({gameId:'roulette',hostName:hn,onCreated:_lpWireHostRoom});
             });
+        });
+    });
+    /* Silent resume — previous page called transferTo; re-open the
+       same channel with same code+pin so followers reattach. */
+    _waitForLpRoom(function(){
+        if(!window.LpRoom||!window.LpRoom.tryResumeHost)return;
+        window.LpRoom.tryResumeHost({gameId:'roulette'}).then(function(room){
+            if(room)_lpWireHostRoom(room);
         });
     });
 
@@ -1287,6 +1287,6 @@ function _stopGuestRenderLoop(){
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776684700" defer></script>
+<script src="/js/siteFooter.js?v=1776686097" defer></script>
 </body>
 </html>
