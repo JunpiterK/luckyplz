@@ -1023,46 +1023,21 @@
         return m?m[1].toUpperCase():null;
     }
 
-    /* Auto-localize the game-page chip label. The in-game chip OPENS
-       a new room (host action); the home-page chip JOINS an existing
-       one. They use different verbs deliberately so the user never
-       confuses create-vs-join: "Open" / "개설" here, "Join" / "참석"
-       on /index.html. */
-    function localizeOnlineBtn(){
+    /* Chip label is intentionally English-only + identical across every
+       locale. Survey of Discord/Zoom/Skribbl/Among Us/Kahoot showed
+       "Create Room" is the clearest universal phrasing — translating
+       it into 14 languages only made it harder for users (especially
+       kids + older folks) to recognize what the button does. The
+       home-page twin uses "Join" for the same reason. */
+    function normalizeOnlineBtn(){
         const lbls=document.querySelectorAll('.online-btn-label, #onlineBtnLabel');
-        if(!lbls.length)return;
-        const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
-        const label=(
-            lang==='ko'?'개설':
-            lang==='ja'?'開設':
-            lang==='zh'?'开设':
-            lang==='es'?'Abrir':
-            lang==='de'?'Öffnen':
-            lang==='fr'?'Ouvrir':
-            lang==='pt'?'Abrir':
-            lang==='ru'?'Открыть':
-            lang==='vi'?'Mở':
-            lang==='id'?'Buka':
-            lang==='th'?'เปิด':
-            lang==='tr'?'Aç':
-            lang==='ar'?'افتح':
-            lang==='hi'?'खोलें':
-            'Open'
-        );
-        lbls.forEach(function(l){l.textContent=label});
+        lbls.forEach(function(l){l.textContent='Create Room'});
     }
     if(document.readyState==='loading'){
-        document.addEventListener('DOMContentLoaded',localizeOnlineBtn);
+        document.addEventListener('DOMContentLoaded',normalizeOnlineBtn);
     }else{
-        localizeOnlineBtn();
+        normalizeOnlineBtn();
     }
-    /* Re-localize when lang changes (the lang selector uses a storage
-       event we can hook into; fallback: observe document.documentElement.lang). */
-    window.addEventListener('storage',function(e){
-        if(e.key==='luckyplz_lang')localizeOnlineBtn();
-    });
-    const langObs=new MutationObserver(localizeOnlineBtn);
-    langObs.observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
 
     /* ============ HOME-PAGE JOIN FLOW ============
        Single entry the home page exposes via a "👥 같이 보기 참여"
