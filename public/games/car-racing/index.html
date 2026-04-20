@@ -6316,11 +6316,68 @@ function _lpStopGuestRender(){
    STARTLINE_IDX) copies as-is. TRACK_WIDTH scales with the average
    of sx/sy — it controls the checkerboard + zone thickness and
    guardrail clamp distance, all proportional to track size. */
+/* Guest audio diff state — tracked across ticks so we can detect
+   discrete events (a new collision, a new item pickup, a car
+   finishing) from wholesale-replaced tick arrays. Reset on every
+   host:start so a second race doesn't inherit the counters. */
+let _lpPrevCollisionCount=0;
+let _lpPrevPopupCount=0;
+let _lpPrevProjCount=0;
+let _lpPrevShockCount=0;
+const _lpPrevFinishedSet=new Set();
+const _lpPrevCarStates=new Map();
+function _lpResetGuestSfxDiff(){
+    _lpPrevCollisionCount=0;
+    _lpPrevPopupCount=0;
+    _lpPrevProjCount=0;
+    _lpPrevShockCount=0;
+    _lpPrevFinishedSet.clear();
+    _lpPrevCarStates.clear();
+}
+function _lpGuestDetectSfxEvents(p){
+    if(!p)return;
+    /* New collision effect appeared → someone just crashed. */
+    const newColl=(p.ce||[]).length;
+    if(newColl>_lpPrevCollisionCount){try{AudioEngine.sfx.crash()}catch(e){}}
+    _lpPrevCollisionCount=newColl;
+    /* New item popup → someone picked up an item box. Popups also
+       fire on item USE (missile launch etc.) but itemGet is the
+       more common case and the two-tone chirp fits both. */
+    const newPop=(p.pop||[]).length;
+    if(newPop>_lpPrevPopupCount){try{AudioEngine.sfx.itemGet()}catch(e){}}
+    _lpPrevPopupCount=newPop;
+    /* New projectile → missile/shell launched. */
+    const newProj=(p.projs||[]).length;
+    if(newProj>_lpPrevProjCount){try{AudioEngine.sfx.missile()}catch(e){}}
+    _lpPrevProjCount=newProj;
+    /* Any car transitioned to finished=true → finish fanfare for
+       that car. Played once per player. */
+    (p.cars||[]).forEach(c=>{
+        if(c.f&&!_lpPrevFinishedSet.has(c.i)){
+            _lpPrevFinishedSet.add(c.i);
+            try{AudioEngine.sfx.finish()}catch(e){}
+        }
+        /* Boost state transition (not boosting → boosting). `bT` is
+           the boost timer — rising from 0 means boost just triggered. */
+        const prev=_lpPrevCarStates.get(c.i)||{bT:0};
+        if((c.bT||0)>0.1 && (prev.bT||0)<=0.01){
+            try{AudioEngine.sfx.boost()}catch(e){}
+        }
+        _lpPrevCarStates.set(c.i,{bT:c.bT||0});
+    });
+}
+
 function _lpApplyRaceStartOnGuest(p){
     if(!p)return;
     selectedCourse=p.course;raceTime=p.raceTime;gameSpeed=p.gameSpeed;
     eventFrequency=p.eventFrequency;totalLaps=p.totalLaps;
     remainingTime=p.raceTime;
+    _lpResetGuestSfxDiff();
+    /* Start BGM on the guest too. Mirrors host.startGame which calls
+       startBGM when isBGMEnabled. The earlier Join tap unlocked the
+       AudioContext so this shouldn't hit the autoplay block, but the
+       engine's safePlayBgm has a retry path anyway. */
+    try{if(AudioEngine.isBGMEnabled())AudioEngine.startBGM()}catch(e){}
     if(typeof p.lapLength==='number')lapLength=p.lapLength;
     /* Canvas sizing → compute scale factors against host's viewport. */
     WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR();
@@ -6472,11 +6529,13 @@ function _lpApplyEventState(p){
 }
 
 /* Tick handler — buffer for interpolation + apply latest-wins
-   event state immediately. */
+   event state immediately. Audio event detection runs BEFORE
+   _lpApplyEventState overwrites the arrays so we can diff. */
 function _lpApplyTickOnGuest(p){
     if(!p||!players)return;
     _lpTickBuf.push({t:performance.now(),p});
     if(_lpTickBuf.length>_LP_MAX_BUFFER)_lpTickBuf.shift();
+    _lpGuestDetectSfxEvents(p);
     _lpApplyEventState(p);
 }
 
@@ -6564,6 +6623,9 @@ function _lpApplyResultOnGuest(p){
         return c;
     }).filter(Boolean);
     gameRunning=false;_lpStopGuestRender();
+    /* Match host: race end fanfare + BGM fade out. */
+    try{AudioEngine.sfx.gameEnd()}catch(e){}
+    try{AudioEngine.stopBGM()}catch(e){}
     if(typeof showResults==='function')setTimeout(()=>showResults(),50);
 }
 
@@ -6634,6 +6696,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776697477" defer></script>
+<script src="/js/siteFooter.js?v=1776698090" defer></script>
 </body>
 </html>

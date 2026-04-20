@@ -1186,6 +1186,10 @@ function init(){
                start the pure-render loop driven by host:tick. */
             spinActive=true;spinning=false;velocity=0;selectedIdx=-1;
             if(typeof p.angle==='number')angle=p.angle;
+            /* Guest should hear the wheel kick-off exactly like the host
+               does — SFX are local so this costs no network, and the
+               AudioContext was unlocked by the earlier Join tap. */
+            try{SFX.g();SFX.click()}catch(e){}
             _startGuestRenderLoop();
         });
         /* Buffer ticks with timestamps for snapshot interpolation —
@@ -1201,6 +1205,7 @@ function init(){
         g.on('host:result',function(p){
             if(!p||!p.winner)return;
             if(typeof p.finalAngle==='number')angle=p.finalAngle;
+            try{SFX.win()}catch(e){}
             _stopGuestRenderLoop();
             setTimeout(function(){
                 spinning=false;spinActive=false;
@@ -1316,10 +1321,30 @@ function _lpRouletteInterpolate(){
     angle=_lpAngleLerp(a.a,b.a,f);
     flapperAngle=_lpAngleLerp(a.fa,b.fa,f);
 }
+/* Guest-side peg-tick SFX. Host plays SFX.tick() every time the flapper
+   crosses into a new peg slot (see peg-collision logic ~L706 in the
+   host loop). Guest has the same 36-peg topology + the interpolated
+   angle, so we can replay the same crossing check at render time and
+   play tick locally. Keeps the wheel click/click/click audio coherent
+   without a per-peg broadcast (36×~10spin = 360 messages per spin
+   would blow the Realtime budget). */
+const _LP_GUEST_PEG_COUNT=36;
+const _LP_GUEST_PEG_STEP=Math.PI*2/_LP_GUEST_PEG_COUNT;
+let _lpGuestLastPegSlot=-1;
+function _lpGuestPegTickCheck(){
+    const topAngle=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
+    const pegSlot=Math.floor(topAngle/_LP_GUEST_PEG_STEP);
+    if(pegSlot!==_lpGuestLastPegSlot){
+        if(_lpGuestLastPegSlot!==-1){try{SFX.tick()}catch(e){}}
+        _lpGuestLastPegSlot=pegSlot;
+    }
+}
 function _startGuestRenderLoop(){
     if(_guestRenderId)return;
+    _lpGuestLastPegSlot=-1;
     function loop(){
         _lpRouletteInterpolate();
+        _lpGuestPegTickCheck();
         if(typeof drawWheel==='function')drawWheel();
         _guestRenderId=requestAnimationFrame(loop);
     }
@@ -1328,6 +1353,7 @@ function _startGuestRenderLoop(){
 function _stopGuestRenderLoop(){
     if(_guestRenderId){cancelAnimationFrame(_guestRenderId);_guestRenderId=null}
     _lpTickBuf.length=0;
+    _lpGuestLastPegSlot=-1;
 }
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -1335,6 +1361,6 @@ function _stopGuestRenderLoop(){
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776697477" defer></script>
+<script src="/js/siteFooter.js?v=1776698090" defer></script>
 </body>
 </html>
