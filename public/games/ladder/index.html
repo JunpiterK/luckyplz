@@ -914,7 +914,33 @@ function updateTracer(t,dt){
         }
 
         if(arrivedCount>=ladder.n){
-            setTimeout(()=>{gamePhase='done';showResultScreen()},800);
+            /* Host: broadcast the authoritative result right when all
+               tracers land. Guest's host:result listener will override
+               its local matchResults with this before showResultScreen
+               runs — belt-and-suspenders so even if the two sides
+               somehow produced a different order or labeling, the
+               displayed result is always host's truth. */
+            if(window._lpHost){
+                try{window._lpHost.broadcast('host:result',{
+                    game:'ladder',
+                    matchResults:matchResults.map(m=>({
+                        name:m.name,result:m.result,color:m.color,
+                        playerIdx:m.playerIdx,endCol:m.endCol
+                    }))
+                })}catch(_){}
+            }
+            /* Guest: if host:result hasn't arrived yet by the time our
+               local anim finishes, hold off showing the screen briefly
+               so the override has a chance to land. Fallback timeout
+               shows local result if host is unreachable. */
+            if(window._lpGuest){
+                gamePhase='waitResult';
+                setTimeout(()=>{
+                    if(gamePhase==='waitResult'){gamePhase='done';showResultScreen()}
+                },1500);
+            }else{
+                setTimeout(()=>{gamePhase='done';showResultScreen()},800);
+            }
         }
     }
 }
@@ -1403,6 +1429,19 @@ function init(){
                     if(typeof _spawnInitialTracers==='function')_spawnInitialTracers();
                 }
             });
+            /* Authoritative result override — host broadcasts the final
+               matchResults the moment all tracers land. Guest replaces
+               its local list and jumps straight to the result screen
+               so what the audience sees on EVERY device is byte-for-
+               byte identical to the host's screen. */
+            g.on('host:result',function(p){
+                if(!p||!Array.isArray(p.matchResults))return;
+                matchResults=p.matchResults.slice();
+                if(gamePhase!=='done'){
+                    gamePhase='done';
+                    if(typeof showResultScreen==='function')showResultScreen();
+                }
+            });
             g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
         }});
     });
@@ -1525,6 +1564,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776681781" defer></script>
+<script src="/js/siteFooter.js?v=1776682697" defer></script>
 </body>
 </html>
