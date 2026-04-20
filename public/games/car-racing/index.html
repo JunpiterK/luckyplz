@@ -6162,13 +6162,15 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 window._lpHost=null;window._lpGuest=null;
 function _waitForLpRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>40)return;setTimeout(()=>_waitForLpRoom(cb,t+1),100)}
 
-/* Track data snapshot — captured at race start on host, sent to
-   guest so its own render paints the same track geometry (host's
-   exact points, scaled to guest's WIDTH/HEIGHT). */
+/* Race-start snapshot: full world state the guest needs to spawn
+   identical track + items + scenery. Coordinate fields stay keyed
+   {x,y}; normals keep {nx,ny} because the draw code reads n.nx
+   (earlier version silently dropped these renaming them to x,y so
+   the finish line's checkerboard band never painted). Zones are
+   progress-indexed (start/end) and device-independent. */
 function _lpCaptureRaceStartPayload(){
-    /* Deep-ish copy of track points + borders + zones so the guest
-       has a frozen snapshot independent of the host's mutable state. */
     const pt=arr=>arr.map(p=>({x:p.x,y:p.y}));
+    const norm=arr=>arr.map(n=>({nx:n.nx,ny:n.ny}));
     const zone=arr=>arr?arr.map(z=>Object.assign({},z)):[];
     return {
         game:'car-racing',t:Date.now(),
@@ -6177,14 +6179,27 @@ function _lpCaptureRaceStartPayload(){
         hostW:WIDTH,hostH:HEIGHT,
         trackWidth:typeof TRACK_WIDTH!=='undefined'?TRACK_WIDTH:120,
         trackMargin:typeof MARGIN!=='undefined'?MARGIN:80,
+        lapLength:lapLength,
+        startlineIdx:typeof STARTLINE_IDX!=='undefined'?STARTLINE_IDX:40,
         track:pt(track||[]),
-        trackNormals:(trackNormals||[]).map(n=>({x:n.x,y:n.y})),
+        trackNormals:norm(trackNormals||[]),
         trackBorderLeft:pt(trackBorderLeft||[]),
         trackBorderRight:pt(trackBorderRight||[]),
         waterZones:zone(typeof waterZones!=='undefined'?waterZones:[]),
         hillZones:zone(typeof hillZones!=='undefined'?hillZones:[]),
         mudZones:zone(typeof mudZones!=='undefined'?mudZones:[]),
         iceZones:zone(typeof iceZones!=='undefined'?iceZones:[]),
+        /* Item boxes: send only the LOGICAL fields (trackIndex +
+           laneOff); guest re-derives worldX/worldY from its own
+           scaled track so the box position matches host's after
+           scaling even for different canvas sizes. */
+        itemBoxes:(typeof itemBoxes!=='undefined'?itemBoxes:[]).map(b=>({
+            ti:b.trackIndex,lo:b.laneOff,c:!!b.collected,r:b.respawnTimer||0,fr:!!b.fastRespawn
+        })),
+        /* Scenery positions are world pixels — scale on guest. */
+        sceneryObjects:(typeof sceneryObjects!=='undefined'?sceneryObjects:[]).map(s=>({
+            type:s.type,x:s.x,y:s.y,size:s.size,color:s.color
+        })),
         cars:players.map(c=>({
             index:c.index,name:c.name,color:c.color,accentColor:c.accentColor,
             numberPlate:c.numberPlate,driftSkill:c.driftSkill,
@@ -6195,20 +6210,31 @@ function _lpCaptureRaceStartPayload(){
     };
 }
 
-/* 20 Hz tick — keeps bandwidth reasonable (~700KB per 2-min race
-   for 12 cars) while looking smooth with guest-side interpolation. */
+/* 20 Hz tick — bandwidth budget: ~7KB/tick × 20 = 140KB/s, 16MB
+   per 2-min race. Still trivially within Supabase Pro's quota.
+   Includes every render-path array so guests see items, flying
+   projectiles, active webs, shockwaves, collisions, popups,
+   near-miss callouts, and commentary exactly like the host —
+   ending the "items don't show" / "finish line missing" visual
+   gaps users reported.
+
+   Deliberately omitted: dustEffects / sparkEffects / splashEffects.
+   They're high-frequency (50+/s) ephemeral particles — each lives
+   <0.6s, so re-broadcasting their state adds noise but no semantic
+   information. Guests miss some gravel-tire spray but see every
+   ITEM + every WEAPON + every COLLISION BURST that matters. */
 let _lpLastTickMs=0;
 function _lpBroadcastTick(){
     if(!window._lpHost||!gameRunning)return;
     const now=performance.now();
     if(now-_lpLastTickMs<50)return;
     _lpLastTickMs=now;
-    /* Pack only the fields the renderer reads. Skip anything
-       physics-derived that the guest could compute itself from
-       these inputs, but we're not running physics on guest so we
-       send what render() needs: position, angle, lane, state flags,
-       lap + progress + effects that change visuals. */
-    const payload={t:now,cars:players.map(c=>({
+    const refIdx=r=>{
+        if(!r)return -1;
+        const i=players.indexOf(r);
+        return i>=0?i:(typeof r.index==='number'?r.index:-1);
+    };
+    const cars=players.map(c=>({
         i:c.index,x:c.x,y:c.y,a:c.angle,
         dx:c.displayX,dy:c.displayY,da:c.displayAngle,
         lo:c.laneOffset,
@@ -6216,8 +6242,49 @@ function _lpBroadcastTick(){
         bT:c.boostTimer,gT:c.ghostTimer,wT:c.wingTimer,
         stn:c.stunTimer,slw:c.slowTimer,
         by:c.bounceY,p:c.progress,f:c.finished,fr:c.finishRank,cl:c.currentLap,
-        hf:c.hitFlash,hi:c.heldItem
-    })),rem:remainingTime,fin:finishedCount(),tot:players.length};
+        hf:c.hitFlash,hi:c.heldItem,
+        /* Sticky connections cross-reference other cars — serialize
+           as indices so the guest can re-link to its own players[]. */
+        stT:refIdx(c.stickyTarget),stS:refIdx(c.stickySource),
+        wp:c.windPenalty||0
+    }));
+    /* Item boxes: only state that changes mid-race is `collected`
+       + `respawnTimer`. Everything else came in host:start. */
+    const items=(typeof itemBoxes!=='undefined'?itemBoxes:[]).map(b=>({
+        c:!!b.collected,r:b.respawnTimer||0,lo:b.laneOff,fr:!!b.fastRespawn
+    }));
+    /* Projectiles — flying items. Include target/source by index. */
+    const projs=(projectiles||[]).map(pr=>({
+        t:pr.type,x:pr.x,y:pr.y,e:pr.emoji||'',
+        s:refIdx(pr.source),tg:refIdx(pr.target),
+        vx:pr.vx||0,vy:pr.vy||0,l:pr.life||0
+    }));
+    /* Spider-web nets — deployed state matters visually. */
+    const nets=(activeNets||[]).map(n=>({
+        x:n.x,y:n.y,cx:n.centerX,cy:n.centerY,
+        d:!!n.deployed,o:n.opacity||1,l:n.life||0,
+        tg:refIdx(n.target)
+    }));
+    /* Shockwaves — expanding rings (item use, big collisions). */
+    const sw=(shockwaveEffects||[]).map(s=>({
+        x:s.x,y:s.y,r:s.radius,mr:s.maxRadius,l:s.life,c:s.color||'#FFE66D'
+    }));
+    /* Collision bursts — summary only (position + life + color);
+       particle-level detail regenerates locally from collision
+       position at guest-side if the renderer needs it. */
+    const ce=(collisionEffects||[]).map(c=>({
+        x:c.x,y:c.y,l:c.life,c:c.color||'#fff'
+    }));
+    /* Floating pickup / use emoji popups. */
+    const pop=(itemPopups||[]).map(i=>({x:i.x,y:i.y,e:i.emoji,l:i.life}));
+    /* Near-miss text callouts. */
+    const nm=(nearMissEffects||[]).map(n=>({x:n.x,y:n.y,t:n.text,l:n.life}));
+    const payload={
+        t:now,cars,items,projs,nets,sw,ce,pop,nm,
+        comm:typeof currentCommentary!=='undefined'&&currentCommentary
+            ?{m:currentCommentary.message,d:currentCommentary.duration}:null,
+        rem:remainingTime,fin:finishedCount(),tot:players.length
+    };
     try{window._lpHost.broadcast('host:tick',payload)}catch(_){}
 }
 function finishedCount(){return players.filter(p=>p.finished).length}
@@ -6239,28 +6306,58 @@ function _lpStopGuestRender(){
     if(_lpGuestRafId){cancelAnimationFrame(_lpGuestRafId);_lpGuestRafId=null}
 }
 
-/* Rebuild track + cars on the guest from host's host:start payload.
-   Scales host's coordinates to guest's own WIDTH/HEIGHT so the race
-   fits the device. Pure data population — no track.generator() call
-   because the guest trusts host's geometry. */
+/* Rebuild world on the guest from host:start. Scales host's pixel
+   coords to the guest's own WIDTH/HEIGHT so the race fits the
+   device. Logical state (zones by progress range, lapLength,
+   STARTLINE_IDX) copies as-is. TRACK_WIDTH scales with the average
+   of sx/sy — it controls the checkerboard + zone thickness and
+   guardrail clamp distance, all proportional to track size. */
 function _lpApplyRaceStartOnGuest(p){
     if(!p)return;
     selectedCourse=p.course;raceTime=p.raceTime;gameSpeed=p.gameSpeed;
     eventFrequency=p.eventFrequency;totalLaps=p.totalLaps;
     remainingTime=p.raceTime;
-    /* Canvas sizing to our viewport, THEN scale host's points. */
+    if(typeof p.lapLength==='number')lapLength=p.lapLength;
+    /* Canvas sizing → compute scale factors against host's viewport. */
     WIDTH=window.innerWidth;HEIGHT=window.innerHeight;applyCanvasDPR();
     const sx=WIDTH/(p.hostW||WIDTH),sy=HEIGHT/(p.hostH||HEIGHT);
+    const sAvg=(sx+sy)/2;
+    _lpHostWidthCache=p.hostW||WIDTH;_lpHostHeightCache=p.hostH||HEIGHT;
     const scalePt=pt=>({x:pt.x*sx,y:pt.y*sy});
-    const scaleZone=z=>Object.assign({},z,{x:z.x!=null?z.x*sx:z.x,y:z.y!=null?z.y*sy:z.y,w:z.w!=null?z.w*sx:z.w,h:z.h!=null?z.h*sy:z.h,r:z.r!=null?z.r*Math.min(sx,sy):z.r});
     track=(p.track||[]).map(scalePt);
-    trackNormals=(p.trackNormals||[]).map(n=>({x:n.x,y:n.y}));
+    /* Normals are unit-ish directions — keep nx/ny verbatim. */
+    trackNormals=(p.trackNormals||[]).map(n=>({nx:n.nx,ny:n.ny}));
     trackBorderLeft=(p.trackBorderLeft||[]).map(scalePt);
     trackBorderRight=(p.trackBorderRight||[]).map(scalePt);
-    waterZones=(p.waterZones||[]).map(scaleZone);
-    hillZones=(p.hillZones||[]).map(scaleZone);
-    mudZones=(p.mudZones||[]).map(scaleZone);
-    iceZones=(p.iceZones||[]).map(scaleZone);
+    /* Zones are progress-indexed (start/end floats into track[])
+       so they're device-independent — copy intact. */
+    waterZones=(p.waterZones||[]).slice();
+    hillZones=(p.hillZones||[]).slice();
+    mudZones=(p.mudZones||[]).slice();
+    iceZones=(p.iceZones||[]).slice();
+    /* TRACK_WIDTH drives finish-line checker band, zone overlay
+       thickness, guardrail-from-center. Must scale or nothing
+       lines up with the (scaled) track points. */
+    if(typeof p.trackWidth==='number')TRACK_WIDTH=p.trackWidth*sAvg;
+    /* Item boxes: derive worldX/worldY from guest's own (already
+       scaled) track using the same trackIndex + laneOffset the
+       host used — same topology, correct positions on our scale. */
+    itemBoxes=(p.itemBoxes||[]).map(b=>{
+        const box={trackIndex:b.ti,laneOff:b.lo,collected:!!b.c,
+            respawnTimer:b.r||0,fastRespawn:!!b.fr,worldX:0,worldY:0};
+        const idx=Math.max(0,Math.min(b.ti|0,track.length-2));
+        const tp=track[idx],tn=track[idx+1]||tp;
+        const nrm=trackNormals[idx]||{nx:0,ny:0};
+        box.worldX=tp.x+nrm.nx*box.laneOff;
+        box.worldY=tp.y+nrm.ny*box.laneOff;
+        return box;
+    });
+    sceneryObjects=(p.sceneryObjects||[]).map(s=>({
+        type:s.type,x:s.x*sx,y:s.y*sy,size:(s.size||1)*sAvg,color:s.color
+    }));
+    /* Clear runtime dynamic arrays — they'll be refilled from ticks. */
+    projectiles=[];activeNets=[];collisionEffects=[];shockwaveEffects=[];
+    dustEffects=[];sparkEffects=[];splashEffects=[];itemPopups=[];nearMissEffects=[];
     /* Cars: spawn with host's initial positions (scaled). */
     players=(p.cars||[]).map(cd=>{
         const c=createCar(cd.index,cd.name,cd.index);
@@ -6285,12 +6382,18 @@ function _lpApplyRaceStartOnGuest(p){
     _lpStartGuestRender();
 }
 
-/* Apply host:tick car state — just write the received fields onto
-   the existing players[] entries. Render reads the same fields. */
+/* Apply host:tick — mirror cars + every dynamic array render reads
+   so guests see items, projectiles, webs, shockwaves, collisions,
+   popups, near-miss text, commentary banner. Pixel coords all get
+   scaled against host's viewport so everything aligns with the
+   guest's (already-scaled) track. */
+let _lpHostWidthCache=0,_lpHostHeightCache=0;
 function _lpApplyTickOnGuest(p){
-    if(!p||!Array.isArray(p.cars)||!players)return;
+    if(!p||!players)return;
     const sx=WIDTH/(_lpHostWidthCache||WIDTH),sy=HEIGHT/(_lpHostHeightCache||HEIGHT);
-    p.cars.forEach(cd=>{
+    const sAvg=(sx+sy)/2;
+    /* Cars */
+    (p.cars||[]).forEach(cd=>{
         const c=players[cd.i];if(!c)return;
         c.x=cd.x*sx;c.y=cd.y*sy;c.angle=cd.a;
         c.displayX=cd.dx*sx;c.displayY=cd.dy*sy;c.displayAngle=cd.da;
@@ -6300,18 +6403,73 @@ function _lpApplyTickOnGuest(p){
         c.stunTimer=cd.stn;c.slowTimer=cd.slw;
         c.bounceY=cd.by;c.progress=cd.p;c.finished=cd.f;
         c.finishRank=cd.fr;c.currentLap=cd.cl;
-        c.hitFlash=cd.hf;c.heldItem=cd.hi;
+        c.hitFlash=cd.hf;c.heldItem=cd.hi;c.windPenalty=cd.wp||0;
+        c.stickyTarget=(cd.stT>=0&&players[cd.stT])?players[cd.stT]:null;
+        c.stickySource=(cd.stS>=0&&players[cd.stS])?players[cd.stS]:null;
     });
-    if(typeof p.rem==='number')remainingTime=p.rem;
-    if(typeof p.fin==='number')document.getElementById('finishedCount').textContent=p.fin;
-    if(typeof document.getElementById('timer')!=='undefined'){
-        const tel=document.getElementById('timer');
-        if(tel)tel.textContent=Math.max(0,remainingTime).toFixed(1);
-        const cel=document.getElementById('centerTimer');
-        if(cel&&cel.style.display!=='none')cel.textContent=Math.max(0,remainingTime).toFixed(1);
+    /* Item boxes — collected + respawn state. worldX/worldY may
+       shift slightly as respawn moves laneOff, so re-derive from
+       the guest's own track using received laneOff. */
+    if(Array.isArray(p.items)&&itemBoxes&&itemBoxes.length){
+        p.items.forEach((it,i)=>{
+            const b=itemBoxes[i];if(!b)return;
+            b.collected=!!it.c;b.respawnTimer=it.r||0;
+            b.fastRespawn=!!it.fr;
+            if(typeof it.lo==='number'&&it.lo!==b.laneOff){
+                b.laneOff=it.lo;
+                const idx=Math.max(0,Math.min(b.trackIndex|0,track.length-2));
+                const tp=track[idx];const nrm=trackNormals[idx]||{nx:0,ny:0};
+                b.worldX=tp.x+nrm.nx*b.laneOff;
+                b.worldY=tp.y+nrm.ny*b.laneOff;
+            }
+        });
     }
+    /* Projectiles, nets, shockwaves, collisions, popups, near-miss —
+       overwrite in full every tick. These arrays are short (tens of
+       items), so full replace is cheap + keeps guest state exactly
+       aligned with host (no phantom leftovers from a missed tick). */
+    projectiles=(p.projs||[]).map(pr=>({
+        type:pr.t,x:pr.x*sx,y:pr.y*sy,emoji:pr.e,
+        source:(pr.s>=0&&players[pr.s])?players[pr.s]:null,
+        target:(pr.tg>=0&&players[pr.tg])?players[pr.tg]:null,
+        vx:(pr.vx||0)*sx,vy:(pr.vy||0)*sy,life:pr.l||0
+    }));
+    activeNets=(p.nets||[]).map(n=>({
+        x:n.x*sx,y:n.y*sy,centerX:n.cx*sx,centerY:n.cy*sy,
+        deployed:!!n.d,opacity:n.o,life:n.l||0,
+        target:(n.tg>=0&&players[n.tg])?players[n.tg]:null,
+        trail:[]
+    }));
+    shockwaveEffects=(p.sw||[]).map(s=>({
+        x:s.x*sx,y:s.y*sy,radius:s.r*sAvg,maxRadius:s.mr*sAvg,
+        life:s.l,color:s.c||'#FFE66D'
+    }));
+    collisionEffects=(p.ce||[]).map(c=>({
+        x:c.x*sx,y:c.y*sy,life:c.l,color:c.c||'#fff',particles:[]
+    }));
+    itemPopups=(p.pop||[]).map(i=>({x:i.x*sx,y:i.y*sy,emoji:i.e,life:i.l}));
+    nearMissEffects=(p.nm||[]).map(n=>({x:n.x*sx,y:n.y*sy,text:n.t,life:n.l}));
+    /* Commentary */
+    if(p.comm){
+        currentCommentary={message:p.comm.m,duration:p.comm.d};
+        const el=document.getElementById('commentary');
+        if(el){el.textContent=currentCommentary.message;el.style.display='block'}
+    }else if(typeof currentCommentary!=='undefined'&&currentCommentary){
+        currentCommentary=null;
+        const el=document.getElementById('commentary');
+        if(el)el.style.display='none';
+    }
+    /* Timer + finisher counter */
+    if(typeof p.rem==='number')remainingTime=p.rem;
+    if(typeof p.fin==='number'){
+        const fc=document.getElementById('finishedCount');
+        if(fc)fc.textContent=p.fin;
+    }
+    const tel=document.getElementById('timer');
+    if(tel)tel.textContent=Math.max(0,remainingTime).toFixed(1);
+    const cel=document.getElementById('centerTimer');
+    if(cel&&cel.style.display!=='none')cel.textContent=Math.max(0,remainingTime).toFixed(1);
 }
-let _lpHostWidthCache=0,_lpHostHeightCache=0;
 
 function _lpApplyResultOnGuest(p){
     if(!p||!Array.isArray(p.finishOrder))return;
@@ -6391,6 +6549,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776687040" defer></script>
+<script src="/js/siteFooter.js?v=1776688135" defer></script>
 </body>
 </html>
