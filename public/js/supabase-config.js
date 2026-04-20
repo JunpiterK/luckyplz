@@ -2,6 +2,28 @@
   Lucky Please - Supabase Configuration
   Shared auth module for all pages
 */
+
+/* Persistent per-device player ID. Stable across sessions/tabs,
+   scoped to this browser origin. Used as the stable identity for
+   Watch-Together rooms — lets a disconnected guest match their
+   previous bingo card / roster slot on rejoin even when the
+   host-assigned nickname has drifted (진희2 → 진희3 on zombie
+   dedupe). Generated lazily on first read. */
+function getLpPlayerId() {
+    try {
+        let p = localStorage.getItem('lp_pid');
+        if (p && p.length >= 10) return p;
+        p = 'pid-' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem('lp_pid', p);
+        return p;
+    } catch (_) {
+        /* private mode / storage blocked — fall back to session-only */
+        if (!window._lpPidSession) {
+            window._lpPidSession = 'pid-sess-' + Math.random().toString(36).slice(2, 10);
+        }
+        return window._lpPidSession;
+    }
+}
 const SUPABASE_URL = 'https://owvaarmnlednfkgmgerf.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_A8o6dBEEc9YXHQy4KPzURw_9pwVZUAu';
 

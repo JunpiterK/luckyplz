@@ -115,19 +115,43 @@
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'wrong_game'}});
                 return;
             }
+            /* Returning-player recognition. If the incoming pid
+               matches an existing guest entry (stale/zombie from a
+               tab crash that never broadcast guest:leave), drop
+               that entry BEFORE dedupe so the returner gets their
+               original nickname back instead of being bumped to
+               nick+1. This keeps the roster stable across
+               reconnects and matches what the client's pid-keyed
+               card store expects. */
+            var reusedNick=null;
+            if(p.pid){
+                guests.forEach(function(g,k){
+                    if(g.pid===p.pid&&k!==p.gid){
+                        reusedNick=g.nickname;
+                        guests.delete(k);
+                        dbgLog('host: cleared zombie '+k.slice(0,6)+' ('+g.nickname+') for returning pid');
+                    }
+                });
+            }
             /* Dedupe the nickname against the host + all current
                guests (case-insensitive). 진희 + 진희 → 진희 / 진희2,
-               Alice + alice → Alice / alice2. Max 99 suffixes; after
-               that we keep appending without collision check. */
+               Alice + alice → Alice / alice2. Max 99 suffixes. */
             var want=(p.nickname||'Guest').trim().slice(0,18)||'Guest';
             var taken={};
             taken[hostName.toLowerCase()]=1;
             guests.forEach(function(g){taken[(g.nickname||'').toLowerCase()]=1});
             var finalNick=want,i=2;
-            while(taken[finalNick.toLowerCase()]&&i<=99){finalNick=want+i;i++}
-            guests.set(p.gid,{nickname:finalNick,joinedAt:Date.now()});
+            /* If we just freed a slot for this returning pid AND the
+               incoming base name matches the start of the old name,
+               prefer the old name so 진희2 stays 진희2 on reconnect. */
+            if(reusedNick&&reusedNick.toLowerCase().indexOf(want.toLowerCase())===0){
+                finalNick=reusedNick;
+            }else{
+                while(taken[finalNick.toLowerCase()]&&i<=99){finalNick=want+i;i++}
+            }
+            guests.set(p.gid,{nickname:finalNick,pid:p.pid||'',joinedAt:Date.now()});
             chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,gameId:gameId,nickname:finalNick}});
-            dbgLog('host: sent join_ack (nick='+finalNick+(finalNick!==want?' from '+want:'')+')');
+            dbgLog('host: sent join_ack (nick='+finalNick+(finalNick!==want?' from '+want:'')+(reusedNick?' [returning]':'')+')');
             guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:finalNick})}catch(e){}});
             /* replay last snapshot so the newcomer catches up */
             if(currentSnapshot){
@@ -348,7 +372,13 @@
             const timer=setTimeout(function(){resolve({ok:false,error:'host_unreachable'})},8000);
             listeners._accepted=[function(d){clearTimeout(timer);resolve({ok:true,hostName:d.hostName,gameId:d.gameId,nickname:d.nickname})}];
             listeners._rejected=[function(d){clearTimeout(timer);resolve({ok:false,error:d.reason})}];
-            chan.send({type:'broadcast',event:'guest:join_request',payload:{gid:gid,pin:pin,nickname:nickname,gameId:gameId}});
+            /* pid — persistent device ID (window.getLpPlayerId). The
+               host uses it to recognize a returning guest whose old
+               gid is still a zombie in the guests map, so they get
+               their original nickname/slot back instead of being
+               re-deduped to nick+1. */
+            var pid='';try{pid=(window.getLpPlayerId&&window.getLpPlayerId())||''}catch(_){}
+            chan.send({type:'broadcast',event:'guest:join_request',payload:{gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId}});
         });
 
         if(!result.ok){
