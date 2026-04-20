@@ -6297,7 +6297,11 @@ function _lpStartGuestRender(){
     if(_lpGuestRafId)return;
     function loop(){
         if(!window._lpGuest){_lpGuestRafId=null;return}
-        try{render()}catch(_){}
+        /* Interpolate car state to renderTime before painting so
+           motion looks 60Hz-smooth even though ticks arrive at
+           ~20Hz. Event-shaped state (effects / items / commentary)
+           was already applied latest-wins when the tick landed. */
+        try{_lpLerpCarsForRender();render()}catch(_){}
         _lpGuestRafId=requestAnimationFrame(loop);
     }
     _lpGuestRafId=requestAnimationFrame(loop);
@@ -6382,34 +6386,35 @@ function _lpApplyRaceStartOnGuest(p){
     _lpStartGuestRender();
 }
 
-/* Apply host:tick — mirror cars + every dynamic array render reads
-   so guests see items, projectiles, webs, shockwaves, collisions,
-   popups, near-miss text, commentary banner. Pixel coords all get
-   scaled against host's viewport so everything aligns with the
-   guest's (already-scaled) track. */
+/* ===== Snapshot interpolation (Valve Source Engine pattern) =====
+   Ticks arrive ~20Hz but the browser paints at 60Hz. Applying each
+   tick directly on receipt makes cars teleport every 50ms. Classic
+   fix: buffer incoming ticks with their arrival timestamps and
+   render at renderTime = now - BUFFER_MS, lerping between the two
+   ticks that straddle it. 100ms of buffer absorbs normal jitter
+   without feeling like input lag (there's no guest input anyway).
+
+   Event-shaped state (effects / items / commentary / timer) is
+   NOT lerped — those are latest-wins snapshots applied on receipt.
+   Only cars' x/y/angle/timers need the smoothing. */
 let _lpHostWidthCache=0,_lpHostHeightCache=0;
-function _lpApplyTickOnGuest(p){
+const _lpTickBuf=[];
+const _LP_BUFFER_MS=100;
+const _LP_MAX_BUFFER=8;
+/* Shortest-path angle lerp — avoids a 359°→1° transition spinning
+   the car 358° backward. */
+function _lpAngleLerp(a,b,t){
+    const TAU=Math.PI*2;
+    let d=((b-a)%TAU+TAU+Math.PI)%TAU-Math.PI;
+    return a+d*t;
+}
+/* Apply only the "event-shaped" half of a tick (effects, items,
+   commentary, timer) — these are latest-wins and don't benefit
+   from interpolation. Called once per tick on receipt. */
+function _lpApplyEventState(p){
     if(!p||!players)return;
     const sx=WIDTH/(_lpHostWidthCache||WIDTH),sy=HEIGHT/(_lpHostHeightCache||HEIGHT);
     const sAvg=(sx+sy)/2;
-    /* Cars */
-    (p.cars||[]).forEach(cd=>{
-        const c=players[cd.i];if(!c)return;
-        c.x=cd.x*sx;c.y=cd.y*sy;c.angle=cd.a;
-        c.displayX=cd.dx*sx;c.displayY=cd.dy*sy;c.displayAngle=cd.da;
-        c.laneOffset=cd.lo;
-        c.state=cd.st;c.stateTimer=cd.sT;c.spinAngle=cd.sA;c.spinSpeed=cd.sS;
-        c.boostTimer=cd.bT;c.ghostTimer=cd.gT;c.wingTimer=cd.wT;
-        c.stunTimer=cd.stn;c.slowTimer=cd.slw;
-        c.bounceY=cd.by;c.progress=cd.p;c.finished=cd.f;
-        c.finishRank=cd.fr;c.currentLap=cd.cl;
-        c.hitFlash=cd.hf;c.heldItem=cd.hi;c.windPenalty=cd.wp||0;
-        c.stickyTarget=(cd.stT>=0&&players[cd.stT])?players[cd.stT]:null;
-        c.stickySource=(cd.stS>=0&&players[cd.stS])?players[cd.stS]:null;
-    });
-    /* Item boxes — collected + respawn state. worldX/worldY may
-       shift slightly as respawn moves laneOff, so re-derive from
-       the guest's own track using received laneOff. */
     if(Array.isArray(p.items)&&itemBoxes&&itemBoxes.length){
         p.items.forEach((it,i)=>{
             const b=itemBoxes[i];if(!b)return;
@@ -6424,10 +6429,6 @@ function _lpApplyTickOnGuest(p){
             }
         });
     }
-    /* Projectiles, nets, shockwaves, collisions, popups, near-miss —
-       overwrite in full every tick. These arrays are short (tens of
-       items), so full replace is cheap + keeps guest state exactly
-       aligned with host (no phantom leftovers from a missed tick). */
     projectiles=(p.projs||[]).map(pr=>({
         type:pr.t,x:pr.x*sx,y:pr.y*sy,emoji:pr.e,
         source:(pr.s>=0&&players[pr.s])?players[pr.s]:null,
@@ -6449,7 +6450,6 @@ function _lpApplyTickOnGuest(p){
     }));
     itemPopups=(p.pop||[]).map(i=>({x:i.x*sx,y:i.y*sy,emoji:i.e,life:i.l}));
     nearMissEffects=(p.nm||[]).map(n=>({x:n.x*sx,y:n.y*sy,text:n.t,life:n.l}));
-    /* Commentary */
     if(p.comm){
         currentCommentary={message:p.comm.m,duration:p.comm.d};
         const el=document.getElementById('commentary');
@@ -6469,6 +6469,91 @@ function _lpApplyTickOnGuest(p){
     if(tel)tel.textContent=Math.max(0,remainingTime).toFixed(1);
     const cel=document.getElementById('centerTimer');
     if(cel&&cel.style.display!=='none')cel.textContent=Math.max(0,remainingTime).toFixed(1);
+}
+
+/* Tick handler — buffer for interpolation + apply latest-wins
+   event state immediately. */
+function _lpApplyTickOnGuest(p){
+    if(!p||!players)return;
+    _lpTickBuf.push({t:performance.now(),p});
+    if(_lpTickBuf.length>_LP_MAX_BUFFER)_lpTickBuf.shift();
+    _lpApplyEventState(p);
+}
+
+/* Per-frame interpolated car state application. Called by the
+   guest render loop before render() — picks the two buffered
+   ticks straddling (now - BUFFER_MS), lerps cars, writes to
+   players[]. If the next tick hasn't landed yet, falls through
+   to linear extrapolation from the last two ticks (dead
+   reckoning) capped at 200ms past the newest tick. */
+function _lpLerpCarsForRender(){
+    if(!players||!players.length||!_lpTickBuf.length)return;
+    const sx=WIDTH/(_lpHostWidthCache||WIDTH),sy=HEIGHT/(_lpHostHeightCache||HEIGHT);
+    const rt=performance.now()-_LP_BUFFER_MS;
+    let a=null,b=null;
+    for(let i=0;i<_lpTickBuf.length-1;i++){
+        if(_lpTickBuf[i].t<=rt&&_lpTickBuf[i+1].t>=rt){a=_lpTickBuf[i];b=_lpTickBuf[i+1];break}
+    }
+    if(!a){
+        /* Past the newest tick — extrapolate from the last two
+           so cars don't visually freeze during a brief network
+           stall. Hard cap at 200ms to prevent runaway drift. */
+        const last=_lpTickBuf[_lpTickBuf.length-1];
+        const prev=_lpTickBuf[_lpTickBuf.length-2];
+        if(prev&&last&&rt-last.t<200){
+            const span=last.t-prev.t||1;
+            const f=(rt-prev.t)/span; /* f > 1 when extrapolating */
+            _applyLerpedCars(prev.p,last.p,f,sx,sy);
+        }else if(last){
+            _applyLerpedCars(last.p,last.p,0,sx,sy);
+        }
+        return;
+    }
+    const span=b.t-a.t||1;
+    const f=Math.max(0,Math.min(1,(rt-a.t)/span));
+    _applyLerpedCars(a.p,b.p,f,sx,sy);
+}
+function _applyLerpedCars(pa,pb,f,sx,sy){
+    const byIdx={};(pb.cars||[]).forEach(c=>byIdx[c.i]=c);
+    (pa.cars||[]).forEach(ca=>{
+        const cb=byIdx[ca.i]||ca;
+        const c=players[ca.i];if(!c)return;
+        const L=(v0,v1)=>v0+(v1-v0)*f;
+        c.x=L(ca.x,cb.x)*sx;
+        c.y=L(ca.y,cb.y)*sy;
+        c.angle=_lpAngleLerp(ca.a,cb.a,f);
+        c.displayX=L(ca.dx,cb.dx)*sx;
+        c.displayY=L(ca.dy,cb.dy)*sy;
+        c.displayAngle=_lpAngleLerp(ca.da,cb.da,f);
+        c.laneOffset=L(ca.lo,cb.lo);
+        c.bounceY=L(ca.by,cb.by);
+        /* Timers drift linearly toward 0 between ticks — lerp keeps
+           flash/boost/ghost visuals smooth instead of stepping. */
+        c.stateTimer=L(ca.sT,cb.sT);
+        c.hitFlash=L(ca.hf,cb.hf);
+        c.boostTimer=L(ca.bT,cb.bT);
+        c.ghostTimer=L(ca.gT,cb.gT);
+        c.wingTimer=L(ca.wT,cb.wT);
+        c.stunTimer=L(ca.stn,cb.stn);
+        c.slowTimer=L(ca.slw,cb.slw);
+        c.spinAngle=_lpAngleLerp(ca.sA,cb.sA,f);
+        /* Discrete fields (state enum, finished flag, heldItem,
+           etc.) snap at the tick midpoint so transitions land
+           cleanly on tick boundaries. */
+        const useNew=f>0.5;
+        c.state=useNew?cb.st:ca.st;
+        c.spinSpeed=useNew?cb.sS:ca.sS;
+        c.progress=useNew?cb.p:ca.p;
+        c.finished=useNew?cb.f:ca.f;
+        c.finishRank=useNew?cb.fr:ca.fr;
+        c.currentLap=useNew?cb.cl:ca.cl;
+        c.heldItem=useNew?cb.hi:ca.hi;
+        c.windPenalty=(useNew?cb.wp:ca.wp)||0;
+        const stT=useNew?cb.stT:ca.stT;
+        const stS=useNew?cb.stS:ca.stS;
+        c.stickyTarget=(stT>=0&&players[stT])?players[stT]:null;
+        c.stickySource=(stS>=0&&players[stS])?players[stS]:null;
+    });
 }
 
 function _lpApplyResultOnGuest(p){
@@ -6549,6 +6634,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776688135" defer></script>
+<script src="/js/siteFooter.js?v=1776688617" defer></script>
 </body>
 </html>
