@@ -110,19 +110,97 @@ canvas#drumCanvas{display:block;width:100%;height:100%;background:radial-gradien
 .side-panel{display:flex;flex-direction:column;gap:14px;overflow:hidden}
 .card-box,.history-box{background:linear-gradient(165deg,rgba(22,22,42,.7),rgba(12,12,28,.9));border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:14px}
 .card-box h3,.history-box h3{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.72em;letter-spacing:.14em;color:rgba(255,255,255,.55);text-transform:uppercase;margin-bottom:10px;font-weight:700}
-.bingo-card{display:grid;gap:5px;width:100%;aspect-ratio:1/1;max-width:320px;margin:0 auto}
-.bingo-card .col-header{display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-weight:900;font-size:1.05em;padding:6px 0;border-radius:6px;color:#0A0A1A}
-.bingo-card .col-header.B{background:linear-gradient(145deg,#FF6B8B,#FF3366)}
-.bingo-card .col-header.I{background:linear-gradient(145deg,#FFE66D,#FF9A3C);color:#0A0A1A}
-.bingo-card .col-header.N{background:linear-gradient(145deg,#00FF88,#00C853);color:#0A0A1A}
-.bingo-card .col-header.G{background:linear-gradient(145deg,#00D9FF,#0099CC);color:#0A0A1A}
-.bingo-card .col-header.O{background:linear-gradient(145deg,#B388FF,#7C4DFF);color:#fff}
-.bingo-card .cell{display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.08);border-radius:7px;font-family:'Orbitron',sans-serif;font-weight:700;font-size:.95em;color:#fff;transition:all .2s;position:relative;aspect-ratio:1/1}
-.bingo-card .cell.free{background:linear-gradient(145deg,rgba(255,230,109,.18),rgba(255,154,60,.1));border-color:rgba(255,230,109,.4);color:var(--accent);font-size:.7em;letter-spacing:.1em}
-.bingo-card .cell.marked{background:linear-gradient(145deg,rgba(0,255,136,.25),rgba(0,200,83,.18));border-color:rgba(0,255,136,.6);color:#00FF88;transform:scale(.94);box-shadow:0 4px 14px rgba(0,255,136,.25)}
-.bingo-card .cell.marked::after{content:'';position:absolute;inset:0;background:radial-gradient(circle,rgba(0,255,136,.15),transparent);pointer-events:none}
-.bingo-card .cell.winning{background:linear-gradient(145deg,#FFE66D,#FF9A3C);border-color:#FFE66D;color:#0A0A1A;box-shadow:0 6px 22px rgba(255,230,109,.5);animation:winpulse 1.2s ease-in-out infinite}
-@keyframes winpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+/* ===== Paper bingo card — printed-ticket aesthetic =====
+   Cream stock, black bordered grid, bold sans-serif numbers, sitting
+   on top of the dark side-panel with a subtle drop shadow + tiny
+   tilt so it feels like a physical ticket resting on a table.
+   Marked numbers get a hand-drawn red pen circle overlay (three
+   path variants + randomized rotation per mark so no two marks
+   look identical — real pen imperfection). */
+.bingo-card{
+    display:grid;gap:0;width:100%;aspect-ratio:auto;max-width:310px;margin:6px auto 4px;
+    background:#faf4e4;
+    background-image:
+        radial-gradient(circle at 23% 17%,rgba(0,0,0,.018) 1px,transparent 1.5px),
+        radial-gradient(circle at 71% 63%,rgba(0,0,0,.022) 1px,transparent 1.5px),
+        radial-gradient(circle at 44% 88%,rgba(0,0,0,.015) 1px,transparent 1.5px);
+    background-size:5px 5px,7px 7px,9px 9px;
+    padding:14px 10px 22px;
+    border:2px solid #161616;
+    border-radius:2px;
+    box-shadow:0 1px 2px rgba(0,0,0,.35),0 12px 34px rgba(0,0,0,.55),inset 0 0 0 1px rgba(0,0,0,.06);
+    transform:rotate(-.35deg);
+    position:relative;
+    color:#161616;
+}
+/* Paper serial number — purely decorative corner accent. */
+.bingo-card::after{
+    content:'#'attr(data-serial);
+    position:absolute;top:5px;right:8px;
+    font-family:'Courier New','Courier',monospace;font-size:.52em;
+    color:#777;letter-spacing:.05em;font-weight:700;
+}
+.bingo-card .col-header{
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Arial Black','Helvetica Neue','Noto Sans KR',sans-serif;
+    font-weight:900;font-size:1.75em;letter-spacing:0;
+    padding:2px 0 8px;margin:0;
+    border:0;background:transparent!important;color:#161616!important;
+    border-radius:0;
+    line-height:1;
+}
+.bingo-card .cell{
+    display:flex;align-items:center;justify-content:center;
+    background:#faf4e4;
+    border:1.5px solid #161616;
+    border-radius:0;
+    font-family:'Arial Black','Helvetica Neue','Noto Sans KR',sans-serif;
+    font-weight:900;font-size:1.05em;
+    color:#161616;
+    transition:none;
+    position:relative;aspect-ratio:1/1;
+    overflow:hidden;
+    /* Collapse shared borders between adjacent cells — tabular look. */
+    margin:-.75px;
+}
+.bingo-card .cell.free{
+    background:#faf4e4;color:#161616;
+    font-family:'Georgia','Times New Roman',serif;
+    font-style:italic;font-weight:400;font-size:.7em;letter-spacing:.03em;
+    text-transform:lowercase;
+}
+/* ===== Pen-mark overlay =====
+   The ::before pseudo hosts the hand-drawn SVG circle. JS sets
+   --pen-url (one of three random variants) and --pen-r (random
+   rotation) at mark-time, plus --pen-s (scale) so every circle
+   looks subtly different. The number remains legible underneath. */
+.bingo-card .cell.marked::before{
+    content:'';position:absolute;inset:4%;
+    background:var(--pen-url) no-repeat center/contain;
+    transform:rotate(var(--pen-r,0deg)) scale(var(--pen-s,1));
+    pointer-events:none;
+    animation:penDraw .42s cubic-bezier(.2,.7,.3,1.1) both;
+    z-index:2;
+    filter:drop-shadow(0 1px 0 rgba(120,20,20,.15));
+}
+/* Subtle second "darkening" pass on marked numbers — mimics how
+   the felt-tip bleeds into the paper around the circle. */
+.bingo-card .cell.marked{background:#f6ecd3}
+@keyframes penDraw{
+    0%{opacity:0;transform:rotate(calc(var(--pen-r,0deg) - 18deg)) scale(calc(var(--pen-s,1) * 1.35))}
+    55%{opacity:1}
+    100%{opacity:1;transform:rotate(var(--pen-r,0deg)) scale(var(--pen-s,1))}
+}
+/* Winning line — soft highlighter wash + a second circle variant
+   layered on top so the win stays readable against the pen marks. */
+.bingo-card .cell.winning{
+    background:#fff3b0;
+    animation:winPaper 1.4s ease-in-out infinite;
+}
+@keyframes winPaper{
+    0%,100%{box-shadow:inset 0 0 0 0 rgba(255,200,60,0)}
+    50%{box-shadow:inset 0 0 22px 4px rgba(255,200,60,.55)}
+}
 
 .history-list{display:flex;flex-wrap:wrap;gap:4px;max-height:160px;overflow-y:auto}
 .history-list::-webkit-scrollbar{width:6px}
@@ -324,7 +402,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776653093"></script>
+<script src="/js/supabase-config.js?v=1776654773"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -921,6 +999,28 @@ function renderHistory(){
 let myCard=null;        /* 2D array of numbers (size x size), 0 = FREE */
 let myMarks=null;       /* 2D array of booleans */
 let myBingoLines=[];    /* array of arrays of {r,c} when won */
+let myCardSerial='';    /* tiny serial printed in the paper corner */
+
+/* Three hand-drawn pen-circle SVG variants. The paths are
+   deliberately imperfect — overshoots, slightly offset centers,
+   non-closing strokes — so a marked card feels like someone
+   actually drew on it with a red ballpoint instead of stamping. */
+const PEN_CIRCLES=[
+    /* variant A: classic overshoot */
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M 54 10 C 78 12, 92 27, 93 50 C 94 73, 74 93, 50 92 C 26 93, 8 74, 7 51 C 6 28, 27 10, 50 8 C 55 8, 58 9, 60 11' fill='none' stroke='%23c0392b' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    /* variant B: slightly oval, tilted */
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M 48 9 C 73 7, 94 26, 93 52 C 92 76, 70 93, 46 92 C 22 90, 6 69, 10 45 C 13 24, 32 9, 55 7' fill='none' stroke='%23c0392b' stroke-width='3.8' stroke-linecap='round' stroke-linejoin='round'/></svg>",
+    /* variant C: sharper, more aggressive strokes */
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M 50 12 C 77 11, 90 29, 91 52 C 92 75, 73 90, 49 91 C 25 91, 9 72, 9 48 C 10 27, 29 10, 52 10 C 55 11, 57 12, 59 14' fill='none' stroke='%23c0392b' stroke-width='4.2' stroke-linecap='round' stroke-linejoin='round'/></svg>"
+];
+/* Apply a random pen-circle to a cell. Called once per mark so each
+   circle has its own variant / rotation / scale fingerprint. */
+function applyPenMark(cell){
+    const v=PEN_CIRCLES[Math.floor(Math.random()*PEN_CIRCLES.length)];
+    cell.style.setProperty('--pen-url',"url(\"data:image/svg+xml;utf8,"+v+"\")");
+    cell.style.setProperty('--pen-r',(Math.random()*14-7).toFixed(1)+'deg');
+    cell.style.setProperty('--pen-s',(0.92+Math.random()*0.12).toFixed(3));
+}
 
 function genSeedFromString(s){
     let h=2166136261>>>0;
@@ -971,6 +1071,10 @@ function renderCard(){
     const size=variant.size;
     card.style.gridTemplateColumns='repeat('+size+',1fr)';
     card.style.gridTemplateRows='auto repeat('+size+',1fr)';
+    /* Tiny 3-digit paper serial — cosmetic; tied to card state so
+       shared-screen sessions don't flicker on re-render. */
+    if(!myCardSerial)myCardSerial=String(Math.floor(Math.random()*900+100));
+    card.setAttribute('data-serial',myCardSerial);
     const letters=VARIANT_LETTERS[size]||[];
     let html='';
     for(let c=0;c<size;c++){
@@ -980,11 +1084,19 @@ function renderCard(){
     for(let r=0;r<size;r++){
         for(let c=0;c<size;c++){
             const v=myCard.grid[r][c];
-            const cls=v===0?'cell free':('cell'+(myCard.marks[r][c]?' marked':''));
+            /* Include `.marked` on the FREE cell too — otherwise the
+               center square has its mark state set but no pen circle
+               rendered. User reads that as "did I forget to mark it?" */
+            const mk=myCard.marks[r][c]?' marked':'';
+            const cls=v===0?('cell free'+mk):('cell'+mk);
             html+='<div class="'+cls+'" data-r="'+r+'" data-c="'+c+'">'+(v===0?T('free'):v)+'</div>';
         }
     }
     card.innerHTML=html;
+    /* Apply pen-circle fingerprint to any pre-marked cell (FREE
+       center on odd grids). Without this the center cell would
+       show `.marked` styling but no visible circle. */
+    card.querySelectorAll('.cell.marked').forEach(applyPenMark);
 }
 function markCard(n){
     if(!myCard)return;
@@ -994,7 +1106,10 @@ function markCard(n){
             if(myCard.grid[r][c]===n){
                 myCard.marks[r][c]=true;
                 const cell=document.querySelector('.bingo-card .cell[data-r="'+r+'"][data-c="'+c+'"]');
-                if(cell)cell.classList.add('marked');
+                if(cell){
+                    applyPenMark(cell);
+                    cell.classList.add('marked');
+                }
             }
         }
     }
@@ -1120,6 +1235,8 @@ function startGame(isFromHostBroadcast){
     if(shouldHaveCard){
         const seed=genSeedFromString(selfNick+'::'+variant.size+'::'+Date.now()+'::'+Math.random());
         myCard=generateCard(seed);
+        /* Fresh paper serial each game — printed in the card corner. */
+        myCardSerial=String(Math.floor(Math.random()*900+100));
         renderCard();
         if(cardBox)cardBox.style.display='';
         gameScreen.classList.remove('caller-only');
@@ -1362,6 +1479,6 @@ applyLang();
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776653093" defer></script>
+<script src="/js/siteFooter.js?v=1776654773" defer></script>
 </body>
 </html>
