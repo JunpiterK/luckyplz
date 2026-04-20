@@ -247,6 +247,19 @@ canvas#drumCanvas{display:block;width:100%;height:100%;background:radial-gradien
 #resultScreen .winner-name{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.8em;font-weight:800;color:#fff;margin-bottom:28px}
 #resultScreen .btn-replay{padding:14px 32px;border:0;border-radius:14px;background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001220;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:800;font-size:.9em;letter-spacing:.1em;cursor:pointer;transition:all .2s}
 #resultScreen .btn-replay:hover{transform:translateY(-2px);filter:brightness(1.08)}
+#resultScreen .share-panel{margin-top:22px;max-width:520px;width:100%}
+#resultScreen .share-panel h3{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:.7em;color:rgba(255,230,109,.7);margin-bottom:10px;letter-spacing:2px}
+#resultScreen .share-buttons{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.share-btn{padding:9px 14px;border:0;border-radius:10px;font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:.8em;cursor:pointer;transition:all .2s;color:#fff;display:inline-flex;align-items:center;gap:4px}
+.share-btn:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.share-btn.kakao{background:#FEE500;color:#391C0C}
+.share-btn.line{background:#06C755}
+.share-btn.whatsapp{background:#25D366}
+.share-btn.telegram{background:#0088CC}
+.share-btn.twitter{background:#1DA1F2}
+.share-btn.copy-link{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
+.share-btn.native-share{background:linear-gradient(135deg,#FF6B35,#FFE66D);color:#0A0A1A}
+.share-toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);padding:10px 18px;background:rgba(10,10,26,.92);color:#fff;border-radius:999px;font-size:.85em;z-index:10000;display:none;border:1px solid rgba(255,230,109,.3)}
 canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 
 /* ========= WINNER BANNER (mid-game announcement) =========
@@ -472,12 +485,14 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
     <div class="winner-label" id="lblWinner">Winners</div>
     <div class="rankings" id="rankings"></div>
     <button class="btn-replay" id="replayBtn" type="button">Play Again</button>
+    <div class="share-panel"><h3>📢 SHARE</h3><div class="share-buttons" id="shareButtons"></div></div>
 </div>
+<div id="shareToast" class="share-toast"></div>
 
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776700161"></script>
+<script src="/js/supabase-config.js?v=1776701571"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -1822,6 +1837,58 @@ function showResult(){
     if(rankingsEl)rankingsEl.innerHTML=ranksHtml;
     document.getElementById('resultScreen').classList.add('active');
     launchConfetti(160);
+    /* Recent-results feed on home. */
+    if(window.LpRecent&&ranked.length){
+        const top=ranked[0];
+        const ko=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko');
+        const summary=ko?(top.nickname+' 빙고!'):(top.nickname+' · BINGO!');
+        window.LpRecent.save('bingo',summary,'/games/bingo/');
+    }
+    /* Share panel wiring. */
+    buildBingoShareButtons(ranked);
+}
+
+function buildBingoShareButtons(ranked){
+    if(!ranked||!ranked.length)return;
+    const ko=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko');
+    const top=ranked[0];
+    const lines=ranked.slice(0,5).map(function(w){
+        const medal={1:'🥇',2:'🥈',3:'🥉'}[w.rank]||('#'+w.rank);
+        return medal+' '+w.nickname;
+    }).join('\n');
+    const title='Lucky Please Bingo 🎱';
+    const url='https://luckyplz.com/games/bingo/';
+    const full=title+'\n'+lines+'\n'+url;
+    const enc=encodeURIComponent(full);const eu=encodeURIComponent(url);
+    let h='<button class="share-btn kakao" onclick="shareKakaoBingo()">💬 Kakao</button>'
+         +'<button class="share-btn line" onclick="window.open(\'https://social-plugins.line.me/lineit/share?url='+eu+'&text='+enc+'\',\'_blank\')">💚 LINE</button>'
+         +'<button class="share-btn whatsapp" onclick="window.open(\'https://wa.me/?text='+enc+'\',\'_blank\')">💬 WhatsApp</button>'
+         +'<button class="share-btn telegram" onclick="window.open(\'https://t.me/share/url?url='+eu+'&text='+enc+'\',\'_blank\')">✈️ Telegram</button>'
+         +'<button class="share-btn twitter" onclick="window.open(\'https://twitter.com/intent/tweet?text='+enc+'\',\'_blank\')">🐦 X</button>'
+         +'<button class="share-btn copy-link" onclick="copyBingoShare()">🔗 Copy</button>';
+    if(navigator.share)h+='<button class="share-btn native-share" onclick="shareKakaoBingo()">📤 Share</button>';
+    document.getElementById('shareButtons').innerHTML=h;
+    window._shareText=full;window._shareUrl=url;window._shareImage=null;
+    if(window.LpShare&&window.LpShare.buildResultCardBlob){
+        window.LpShare.buildResultCardBlob({
+            title:'🎱  Lucky Please · '+(ko?'빙고':'Bingo'),
+            subtitle:ko?(ranked.length+'명 빙고 결과'):(ranked.length+'-player bingo'),
+            winner:'🥇 '+top.nickname,
+            color:'#FFE66D',
+            highlight:ko?'🎉 빙고 당첨!':'🎉 BINGO winner!',
+            tagline:ko?'10초 안에 결정':'Decide in 10 seconds'
+        }).then(function(b){window._shareImage=b});
+    }
+}
+function shareKakaoBingo(){if(window.LpShare)return window.LpShare.kakao(window._shareText,window._shareUrl,window._shareImage);copyBingoShare()}
+function copyBingoShare(){
+    const t=document.getElementById('shareToast');
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+        navigator.clipboard.writeText(window._shareText).then(function(){
+            t.textContent='📋 Copied!';t.style.display='block';
+            setTimeout(function(){t.style.display='none'},2000);
+        });
+    }
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c])}
 
@@ -2213,6 +2280,6 @@ window.addEventListener('pageshow',_onVisibilityRestore);
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776700161" defer></script>
+<script src="/js/siteFooter.js?v=1776701571" defer></script>
 </body>
 </html>
