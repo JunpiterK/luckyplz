@@ -456,7 +456,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776664470"></script>
+<script src="/js/supabase-config.js?v=1776664925"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -1475,8 +1475,16 @@ function subscribeWinners(code){
         land on the same card.
    Both keyed by (room_code, nickname, grid_size) so nothing from
    a previous room leaks across. */
+/* Effective nickname — the host-assigned (deduped) name if we're a
+   guest, otherwise our localStorage name. Guests who collided with
+   another 진희 get renamed to 진희2 etc., and that final name is
+   what the card key, DB claim, and result screen should all use. */
+function _effectiveNick(){
+    if(window._lpGuest&&window._lpGuest.nickname)return window._lpGuest.nickname;
+    return localStorage.getItem('luckyplz_nick')||T('host');
+}
 function _cardStoreKey(){
-    const nick=localStorage.getItem('luckyplz_nick')||'';
+    const nick=_effectiveNick()||'';
     const code=_currentRoomCode()||'solo';
     return 'lpbingo_card:'+code+':'+nick.toLowerCase()+':'+variant.size;
 }
@@ -1553,7 +1561,7 @@ function silentReplayDraws(list){
 }
 
 function claimWin(linesCount){
-    const myNick=localStorage.getItem('luckyplz_nick')||T('host');
+    const myNick=_effectiveNick();
     const payload={nickname:myNick,atDraw:drawn.length,atMs:Date.now(),lines:linesCount};
     SFX.bingoShout();
     const code=_currentRoomCode();
@@ -1581,7 +1589,7 @@ function registerWinner(w){
     /* One entry per nickname — dedupes echoed DB events + repeat
        line claims on the same card. */
     if(winners.some(x=>x.nickname===w.nickname))return;
-    const myNick=localStorage.getItem('luckyplz_nick')||T('host');
+    const myNick=_effectiveNick();
     const isOther=w.nickname!==myNick;
     winners.push(w);
     showWinnerBanner(w.nickname);
@@ -1641,7 +1649,7 @@ function startGame(isFromHostBroadcast){
     drawn=[];myBingoLines=[];
     spawnBalls();
     SFX.start();
-    const selfNick=localStorage.getItem('luckyplz_nick')||T('host');
+    const selfNick=_effectiveNick();
     /* Host-as-pure-caller: no card, no marking, just drum + history.
        Guests always generate a card. */
     const iAmHost=!!window._lpHost;
@@ -1980,6 +1988,6 @@ applyDrawModeVisibility();
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776664470" defer></script>
+<script src="/js/siteFooter.js?v=1776664925" defer></script>
 </body>
 </html>

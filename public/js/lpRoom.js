@@ -115,10 +115,20 @@
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'wrong_game'}});
                 return;
             }
-            guests.set(p.gid,{nickname:p.nickname||'Guest',joinedAt:Date.now()});
-            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,gameId:gameId}});
-            dbgLog('host: sent join_ack');
-            guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:p.nickname||'Guest'})}catch(e){}});
+            /* Dedupe the nickname against the host + all current
+               guests (case-insensitive). 진희 + 진희 → 진희 / 진희2,
+               Alice + alice → Alice / alice2. Max 99 suffixes; after
+               that we keep appending without collision check. */
+            var want=(p.nickname||'Guest').trim().slice(0,18)||'Guest';
+            var taken={};
+            taken[hostName.toLowerCase()]=1;
+            guests.forEach(function(g){taken[(g.nickname||'').toLowerCase()]=1});
+            var finalNick=want,i=2;
+            while(taken[finalNick.toLowerCase()]&&i<=99){finalNick=want+i;i++}
+            guests.set(p.gid,{nickname:finalNick,joinedAt:Date.now()});
+            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,gameId:gameId,nickname:finalNick}});
+            dbgLog('host: sent join_ack (nick='+finalNick+(finalNick!==want?' from '+want:'')+')');
+            guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:finalNick})}catch(e){}});
             /* replay last snapshot so the newcomer catches up */
             if(currentSnapshot){
                 chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
@@ -289,7 +299,11 @@
                 if(p.gid!==gid)return; /* not for us */
                 if(p.ok){
                     accepted=true;
-                    emit('_accepted',{hostName:p.hostName,gameId:p.gameId});
+                    /* Host may have renamed us to avoid collision
+                       (진희 → 진희2). Fall back to our originally
+                       requested nick if the host didn't include one
+                       (older host builds). */
+                    emit('_accepted',{hostName:p.hostName,gameId:p.gameId,nickname:p.nickname||nickname});
                 }else{
                     emit('_rejected',{reason:p.reason||'rejected'});
                 }
@@ -332,7 +346,7 @@
         /* Send join request, wait for ack (or timeout) */
         const result=await new Promise(function(resolve){
             const timer=setTimeout(function(){resolve({ok:false,error:'host_unreachable'})},8000);
-            listeners._accepted=[function(d){clearTimeout(timer);resolve({ok:true,hostName:d.hostName,gameId:d.gameId})}];
+            listeners._accepted=[function(d){clearTimeout(timer);resolve({ok:true,hostName:d.hostName,gameId:d.gameId,nickname:d.nickname})}];
             listeners._rejected=[function(d){clearTimeout(timer);resolve({ok:false,error:d.reason})}];
             chan.send({type:'broadcast',event:'guest:join_request',payload:{gid:gid,pin:pin,nickname:nickname,gameId:gameId}});
         });
@@ -342,12 +356,16 @@
             return {ok:false,error:result.error};
         }
 
+        /* If the host renamed us, propagate — the rest of the code
+           should treat result.nickname as the canonical identity. */
+        const finalNick=result.nickname||nickname;
         return {
             ok:true,
             code:code,
             gid:gid,
             hostName:result.hostName,
             gameId:result.gameId,
+            nickname:finalNick,
             on:function(event,cb){
                 if(!listeners[event])listeners[event]=[];
                 listeners[event].push(cb);
@@ -375,7 +393,10 @@
                     chan.send({
                         type:'broadcast',
                         event:'guest:action',
-                        payload:Object.assign({gid:gid,nickname:nickname,type:type,t:Date.now()},payload||{})
+                        /* Use host-assigned (deduped) nickname so
+                           guest:action payloads match whatever the
+                           host + DB store under. */
+                        payload:Object.assign({gid:gid,nickname:finalNick,type:type,t:Date.now()},payload||{})
                     });
                 }catch(_){}
             },
