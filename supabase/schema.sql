@@ -1603,7 +1603,7 @@ begin
     select * into inv from public.game_invites where id = p_invite_id;
     if not found then raise exception 'not_found'; end if;
     if inv.to_id <> me then raise exception 'not_your_invite'; end if;
-    if inv.status <> 'pending' then raise exception 'already_'||inv.status; end if;
+    if inv.status <> 'pending' then raise exception 'already_%', inv.status; end if;
     if inv.created_at < now() - interval '2 minutes' then
         update public.game_invites
            set status='expired', responded_at=now()
