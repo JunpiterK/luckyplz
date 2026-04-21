@@ -33,6 +33,16 @@
         _cache.friends = null;
         _cache.inbox = null;
         _cache.uid = null;
+        /* Tear down the shared incoming-message channel so the next
+           login re-creates it for the new user id. */
+        if (_incomingChannel) {
+            try { getSupabase().removeChannel(_incomingChannel); } catch (_) {}
+            _incomingChannel = null;
+            _incomingChannelUid = null;
+        }
+        _incomingListeners.length = 0;
+        /* Also drop the mute cache — the next user has their own list. */
+        if (_muteCache) { _muteCache.ready = false; _muteCache.set = new Set(); }
     }
 
     /* ---- Friend list ----------------------------------------- */
@@ -314,25 +324,58 @@
      * all threads). Used for global unread-badge updates. Returns
      * an unsubscribe fn.
      */
+    /* Multiple callers want to know about incoming DMs — the
+       /messages/ page (updates inbox + sidebar) AND LpNotify (fires
+       the OS/in-page notification). Supabase Realtime forbids
+       adding .on() listeners after .subscribe() on the same channel,
+       so the naïve "create a channel per caller" approach crashes
+       the second subscriber. Instead we create ONE channel per user,
+       fan-out INSERT events to a local listeners array, and each
+       caller gets their own unsubscribe handle that only removes
+       their callback (not the channel). */
+    const _incomingListeners = [];
+    let _incomingChannel = null;
+    let _incomingChannelUid = null;
+
+    async function _ensureIncomingChannel(sb, userId) {
+        if (_incomingChannel && _incomingChannelUid === userId) return;
+        /* If we had a channel for a different user (rare — session
+           swap), tear the old one down before wiring the new user. */
+        if (_incomingChannel) {
+            try { sb.removeChannel(_incomingChannel); } catch (_) {}
+            _incomingChannel = null;
+        }
+        _incomingChannelUid = userId;
+        _incomingChannel = sb.channel('lp_inbox_' + userId.slice(0, 8))
+            .on('postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: 'to_id=eq.' + userId },
+                (payload) => {
+                    _cache.inbox = null;
+                    for (const cb of _incomingListeners) {
+                        try { cb(payload.new); } catch (_) {}
+                    }
+                });
+        _incomingChannel.subscribe();
+    }
+
     function subscribeToIncoming(onMessage) {
+        if (onMessage) _incomingListeners.push(onMessage);
         const sb = getSupabase();
-        let chan = null;
         let cleaned = false;
         (async () => {
             const user = await getUser();
             if (!user || cleaned) return;
-            chan = sb.channel('lp_inbox_' + user.id.slice(0, 8))
-                .on('postgres_changes',
-                    { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: 'to_id=eq.' + user.id },
-                    (payload) => {
-                        _cache.inbox = null; /* invalidate so next fetch reflects */
-                        if (onMessage) try { onMessage(payload.new); } catch (_) {}
-                    })
-                .subscribe();
+            await _ensureIncomingChannel(sb, user.id);
         })();
         return function unsubscribe() {
             cleaned = true;
-            if (chan) { try { getSupabase().removeChannel(chan); } catch (_) {} chan = null; }
+            if (onMessage) {
+                const i = _incomingListeners.indexOf(onMessage);
+                if (i !== -1) _incomingListeners.splice(i, 1);
+            }
+            /* We leave _incomingChannel alive — other listeners may
+               still need it. On full sign-out, _clearCache tears it
+               down via the auth listener at the bottom of this file. */
         };
     }
 
