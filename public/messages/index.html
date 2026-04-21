@@ -759,14 +759,14 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1776805695"></script>
+<script src="/js/supabase-config.js?v=1776809208"></script>
 <!-- Explicit ?v= cache-buster so the bump-cache.sh script updates
      these refs on every commit. Without it, browsers (especially
      mobile Safari / Chrome) cling to old JS across deploys. -->
-<script src="/js/lpSocial.js?v=1776805695"></script>
-<script src="/js/lpPresence.js?v=1776805695"></script>
-<script src="/js/lpInvite.js?v=1776805695"></script>
-<script src="/js/lpNotify.js?v=1776805695"></script>
+<script src="/js/lpSocial.js?v=1776809208"></script>
+<script src="/js/lpPresence.js?v=1776809208"></script>
+<script src="/js/lpInvite.js?v=1776809208"></script>
+<script src="/js/lpNotify.js?v=1776809208"></script>
 <script>
 /* ================================================================
    Messages controller
@@ -1066,29 +1066,22 @@ async function boot(){
        the browser permission is still 'default' (never asked) AND
        the user hasn't explicitly declined in our local pref. */
     maybeShowNotifyBanner();
-    /* Auto-open thread from URL param OR hash OR localStorage.
-         ?friend=<uuid> / ?room=<uuid>   — deep-link from notification
-         #dm/<uuid> / #group/<uuid>      — survives a soft refresh
-         localStorage lp_last_thread     — survives a cold open
-       Most specific wins. When a thread is later opened, openThread
-       writes the hash + localStorage so the next refresh restores. */
+    /* Auto-open thread from URL param (deep-link from OS notification
+       or from another tab's share link). Explicit ?friend=/?room= only
+       — hash/localStorage auto-restore was tripping up mobile pull-
+       to-refresh so we dropped it. Refresh now lands the user on the
+       sidebar; they tap the row to reopen. The inbox row keeps its
+       unread count so it's obvious where to go. */
     const params=new URLSearchParams(location.search);
-    let wantFriend=params.get('friend');
-    let wantRoom=params.get('room');
-    if(!wantFriend && !wantRoom){
-        const m=(location.hash||'').match(/^#(dm|group)\/([A-Za-z0-9-]+)$/);
-        if(m){
-            if(m[1]==='dm')    wantFriend=m[2];
-            else               wantRoom=m[2];
-        }
+    const wantFriend=params.get('friend');
+    const wantRoom=params.get('room');
+    /* Clear any leftover hash/localStorage from the old auto-restore
+       path so a stale entry doesn't confuse the user on the next
+       reload of an older cached HTML. */
+    if (location.hash) {
+        try { history.replaceState(null,'',location.pathname+location.search); } catch(_){}
     }
-    if(!wantFriend && !wantRoom){
-        try{
-            const saved=JSON.parse(localStorage.getItem('lp_last_thread')||'null');
-            if(saved && saved.kind==='dm'   && saved.id) wantFriend=saved.id;
-            if(saved && saved.kind==='group'&& saved.id) wantRoom=saved.id;
-        }catch(_){}
-    }
+    try { localStorage.removeItem('lp_last_thread'); } catch(_){}
     if(wantFriend){
         const f=latestFriends.find(x=>x.friend_id===wantFriend&&x.direction==='accepted');
         if(f)openThread({kind:'dm',friend_id:f.friend_id,friend_nickname:f.nickname,friend_avatar:f.avatar_url,friend_authed:f.profile_complete});
@@ -1098,28 +1091,12 @@ async function boot(){
     }
 }
 
-/* Persist the currently-open thread so a refresh (soft reload, pull-
-   to-refresh on mobile, tab reopen) lands the user back in the same
-   conversation instead of the sidebar. Called from openThread +
-   closeThread. */
-function _persistOpenThread(meta){
-    try{
-        if(!meta){
-            history.replaceState(null,'',location.pathname+location.search);
-            localStorage.removeItem('lp_last_thread');
-            return;
-        }
-        const frag = meta.kind==='dm'
-            ? '#dm/'+encodeURIComponent(meta.friend_id)
-            : '#group/'+encodeURIComponent(meta.room_id);
-        history.replaceState(null,'',location.pathname+location.search+frag);
-        localStorage.setItem('lp_last_thread', JSON.stringify({
-            kind: meta.kind,
-            id: meta.kind==='dm' ? meta.friend_id : meta.room_id,
-            at: Date.now()
-        }));
-    }catch(_){}
-}
+/* No-op placeholder — the hash/localStorage persistence was causing
+   mobile pull-to-refresh to crash into an empty chat pane. Kept as an
+   empty function so openThread/closeThread don't need to branch, and
+   a future re-introduction can fill this in with a less fragile
+   persistence strategy. */
+function _persistOpenThread(_meta){ /* intentionally empty */ }
 
 function maybeShowNotifyBanner(){
     if(!window.LpNotify)return;
