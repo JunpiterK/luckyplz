@@ -547,13 +547,28 @@
            +'.lp-room-guest-list .title{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px}'
            +'.lp-room-guest-list .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(0,217,255,.12);color:#00D9FF;font-size:.78em;font-weight:600;margin:0 4px 4px 0}'
            +'.lp-room-guest-list .empty{font-size:.78em;color:rgba(255,255,255,.3);font-style:italic}'
-           +'.lp-room-status{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,217,255,.12);border:1px solid rgba(0,217,255,.4);color:#00D9FF;padding:6px 14px;border-radius:999px;font-family:"Noto Sans KR",sans-serif;font-size:.78em;font-weight:700;z-index:9000;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;gap:8px;max-width:92vw}'
-           +'.lp-room-status .dot{width:8px;height:8px;border-radius:50%;background:#00D9FF;animation:lpRoomPulse 1.6s ease-in-out infinite}'
+           +'.lp-room-status{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(10,14,28,.55);border:1px solid rgba(0,217,255,.35);color:#00D9FF;padding:6px 14px;border-radius:999px;font-family:"Noto Sans KR",sans-serif;font-size:.78em;font-weight:700;z-index:9000;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;gap:8px;max-width:92vw;cursor:pointer;transition:background .2s,padding .2s,border-color .2s}'
+           +'.lp-room-status:hover{background:rgba(10,14,28,.72);border-color:rgba(0,217,255,.55)}'
+           +'.lp-room-status .dot{width:8px;height:8px;border-radius:50%;background:#00D9FF;animation:lpRoomPulse 1.6s ease-in-out infinite;flex-shrink:0}'
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
            +'.lp-room-status.lp-room-flash{animation:lpRoomFlash .6s ease-out}'
-           +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);transform:translateX(-50%) scale(1)}}'
+           +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(10,14,28,.55);border-color:rgba(0,217,255,.35);transform:translateX(-50%) scale(1)}}'
            +'.lp-room-status .lp-caret{margin-left:6px;cursor:pointer;opacity:.7;font-weight:700}'
            +'.lp-room-status .lp-caret:hover{opacity:1}'
+           /* Always-visible participant count badge — pill shrinks to this
+              alone when collapsed so the user never loses sight of how
+              many people are in the room even in minimal mode. */
+           +'.lp-room-status .lp-count{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;background:rgba(0,217,255,.18);color:#FFE66D;font-weight:900;font-variant-numeric:tabular-nums;font-size:.95em;line-height:1.2;flex-shrink:0}'
+           +'.lp-room-status .lp-count .lp-count-n{font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:1.05em}'
+           /* Collapsed (mobile-default) state — strip everything except the
+              pulse dot and the count badge so the pill is the size of a
+              finger tap. Tap anywhere on it to expand. Semi-transparent
+              backdrop keeps the game visuals underneath fully readable. */
+           +'.lp-room-status.lp-collapsed{padding:4px 9px;background:rgba(10,14,28,.42);border-color:rgba(0,217,255,.22);font-size:.7em;gap:5px}'
+           +'.lp-room-status.lp-collapsed:hover{background:rgba(10,14,28,.65);border-color:rgba(0,217,255,.45)}'
+           +'.lp-room-status.lp-collapsed .lp-room-main,'
+           +'.lp-room-status.lp-collapsed .lp-caret,'
+           +'.lp-room-status.lp-collapsed .x{display:none}'
            /* Expandable host-side guest list panel, pinned just under the
               status pill. Scrollable so a packed room with 30+ spectators
               doesn\'t push the toolbar off-screen. */
@@ -814,10 +829,18 @@
         function refresh(){
             const gs=room.guests();
             const count=gs.length;
+            const total=count+1; /* +1 for the host themselves */
             const lockFlag=room.isLocked&&room.isLocked()?' 🔒':'';
-            const lbl=lang==='ko'?`👥 ${room.code}${lockFlag} · ${count}명 관전 중`:`👥 ${room.code}${lockFlag} · ${count} watching`;
+            const mainLbl=lang==='ko'?`👥 ${room.code}${lockFlag} · 방장`:`👥 ${room.code}${lockFlag} · host`;
             const caret=count>0?'<span class="lp-caret" id="lpRoomStatusCaret" title="'+(lang==='ko'?'접속자 목록':'Guest list')+'">▾</span>':'';
-            bar.innerHTML='<span class="dot"></span><span>'+lbl+'</span>'+caret+'<span class="x" id="lpRoomStatusX" title="'+(lang==='ko'?'방 닫기':'End room')+'">×</span>';
+            /* Count badge is ALWAYS visible (even when the pill is
+               collapsed to its minimum footprint on mobile) so both
+               host and guests can glance at participant count at any
+               time. */
+            bar.innerHTML='<span class="dot"></span>'
+                +'<span class="lp-count" title="'+(lang==='ko'?'접속 인원':'Participants')+'">👥<span class="lp-count-n">'+total+'</span></span>'
+                +'<span class="lp-room-main">'+mainLbl+caret+'</span>'
+                +'<span class="x" id="lpRoomStatusX" title="'+(lang==='ko'?'방 닫기':'End room')+'">×</span>';
             const x=document.getElementById('lpRoomStatusX');
             if(x)x.addEventListener('click',function(e){e.stopPropagation();room.close();bar.remove();const panel=document.getElementById('lpRoomGuestPanel');if(panel)panel.remove()});
             const c=document.getElementById('lpRoomStatusCaret');
@@ -878,6 +901,37 @@
             setTimeout(function(){toast.remove()},3000);
         });
         document.body.appendChild(bar);
+        /* Mobile default = collapsed. Users can tap the pill to expand
+           into full code/list/controls. Desktop stays expanded since
+           screen real-estate is plentiful. */
+        if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches){
+            bar.classList.add('lp-collapsed');
+        }
+        /* Whole-pill tap toggles collapse + guest list. Clicks on × or
+           the explicit caret still work because those handlers
+           stopPropagation. */
+        bar.addEventListener('click',function(){
+            const wasCollapsed=bar.classList.contains('lp-collapsed');
+            if(wasCollapsed){
+                bar.classList.remove('lp-collapsed');
+                if(!document.getElementById('lpRoomGuestPanel'))toggleGuestPanel();
+            }else{
+                const p=document.getElementById('lpRoomGuestPanel');
+                if(p)p.remove();
+                if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches){
+                    bar.classList.add('lp-collapsed');
+                }
+            }
+        });
+        /* Outside click on mobile → re-collapse. */
+        document.addEventListener('click',function(e){
+            if(!window.matchMedia||!window.matchMedia('(max-width:700px)').matches)return;
+            if(bar.contains(e.target))return;
+            const panel=document.getElementById('lpRoomGuestPanel');
+            if(panel&&panel.contains(e.target))return;
+            if(panel)panel.remove();
+            bar.classList.add('lp-collapsed');
+        });
         /* Expose a refresh hook so game code can redraw after lock(). */
         bar._lpRefresh=refresh;
     }
@@ -966,10 +1020,13 @@
         function render(){
             const total=roster.length+1; /* +1 for host */
             const caret=document.getElementById('lpRoomGuestPanel')?'▴':'▾';
+            /* Same shape as host pill: always-visible count badge +
+               expandable main section (room name + caret). */
             bar.innerHTML='<span class="dot"></span>'
-                +'<span id="lpRoomStatusMain">'+roomLbl()+' · '+countLbl(total)+'</span>'
+                +'<span class="lp-count" title="'+(lang==='ko'?'접속 인원':'Participants')+'">👥<span class="lp-count-n">'+total+'</span></span>'
+                +'<span class="lp-room-main" id="lpRoomStatusMain">'+roomLbl()
                 +'<span class="lp-caret" id="lpRoomStatusCaret" title="'+(lang==='ko'?'접속자 목록':'Guest list')+'">'+caret+'</span>'
-                +'<span style="opacity:.35;font-size:.72em;margin-left:6px">v'+LP_ROOM_VERSION+'</span>';
+                +'<span style="opacity:.35;font-size:.72em;margin-left:6px">v'+LP_ROOM_VERSION+'</span></span>';
             const c=document.getElementById('lpRoomStatusCaret');
             if(c)c.addEventListener('click',function(e){e.stopPropagation();togglePanel()});
             if(document.getElementById('lpRoomGuestPanel'))renderPanel();
@@ -998,6 +1055,34 @@
 
         document.body.appendChild(bar);
         render();
+
+        /* Mobile default = collapsed. Tap pill → expand + show roster.
+           Mirrors host-side behaviour so both roles get the same compact
+           participant-count badge by default on phones. */
+        if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches){
+            bar.classList.add('lp-collapsed');
+        }
+        bar.addEventListener('click',function(){
+            const wasCollapsed=bar.classList.contains('lp-collapsed');
+            if(wasCollapsed){
+                bar.classList.remove('lp-collapsed');
+                if(!document.getElementById('lpRoomGuestPanel'))togglePanel();
+            }else{
+                const p=document.getElementById('lpRoomGuestPanel');
+                if(p)p.remove();
+                if(window.matchMedia&&window.matchMedia('(max-width:700px)').matches){
+                    bar.classList.add('lp-collapsed');
+                }
+            }
+        });
+        document.addEventListener('click',function(e){
+            if(!window.matchMedia||!window.matchMedia('(max-width:700px)').matches)return;
+            if(bar.contains(e.target))return;
+            const panel=document.getElementById('lpRoomGuestPanel');
+            if(panel&&panel.contains(e.target))return;
+            if(panel)panel.remove();
+            bar.classList.add('lp-collapsed');
+        });
 
         /* Receive the host's authoritative guest list and rebuild local
            roster, preserving a "self" marker for the entry matching our
