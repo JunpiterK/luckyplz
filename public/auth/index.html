@@ -143,9 +143,14 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                     <svg class="oauth-ico" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571.001-.001.002-.001.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
                     <span id="googleBtnText">Continue with Google</span>
                 </button>
-                <!-- Kakao-branded button follows Kakao's design guidelines:
-                     #FEE500 fill, dark text, rounded corners. Prominent on
-                     KR market where Kakao is the default social login. -->
+                <!-- Kakao — bypasses Supabase's built-in OAuth flow
+                     (which hardcodes account_email scope → breaks on
+                     non-biz-verified Kakao apps, GitHub #36878). We
+                     instead do a direct Kakao OIDC authorize redirect,
+                     exchange the code → id_token via our own Edge
+                     Function, then call supabase.auth.signInWithIdToken
+                     to create the Supabase session. Zero dependency on
+                     Kakao biz-app verification. -->
                 <button type="button" class="oauth-btn oauth-btn-kakao" id="kakaoBtn" onclick="handleKakaoLogin()">
                     <svg class="oauth-ico" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#000" d="M12 3C6.477 3 2 6.463 2 10.732c0 2.78 1.883 5.215 4.717 6.584-.173.637-1.094 4.028-1.125 4.272 0 0-.023.19.105.262.129.072.28.016.28.016.336-.046 3.895-2.537 4.51-2.967.46.063.933.103 1.413.103 5.523 0 10-3.463 10-7.732C22 6.463 17.523 3 12 3z"/></svg>
                     <span id="kakaoBtnText">카카오로 시작</span>
@@ -418,30 +423,106 @@ async function handleGoogleLogin(){
     // On success, browser redirects to Google — no further action here
 }
 
-// Kakao OAuth — requires Kakao Developer app + Supabase Auth provider
-// configuration. Supabase by default requests account_email in the
-// authorize scope, but non-business Kakao apps can't opt into that
-// consent item (it's gated by business-verification status). Request
-// only the scopes every personal-developer app can grant — nickname
-// + profile image — so the consent screen loads instead of failing
-// with KOE205 "설정하지 않은 동의 항목: account_email". The
-// /auth/setup/ page treats email as optional anyway (user can
-// type in an alt address manually).
+/* Kakao login — direct OIDC flow that bypasses Supabase's OAuth
+   handler. Reason: Supabase GoTrue hardcodes `account_email` in the
+   Kakao scope list (https://github.com/supabase/supabase/issues/36878),
+   which breaks every non-biz-verified Kakao app with KOE205. We
+   instead:
+     1. Redirect the user straight to kauth.kakao.com/oauth/authorize
+        with ONLY the scopes a personal-dev app can grant
+        (openid + profile_nickname + profile_image).
+     2. Kakao bounces back to /auth/?code=... with an authorization
+        code after consent.
+     3. Our Edge Function (supabase/functions/kakao-token) exchanges
+        the code for an id_token using the client_secret — kept
+        server-side so it never reaches the browser.
+     4. Client calls supabase.auth.signInWithIdToken with that
+        id_token, and Supabase verifies + creates a session exactly
+        as it would for any other OIDC provider. No biz-app needed. */
+const KAKAO_CLIENT_ID='847abad1c7bd5a9242197654386bdc0d';   /* REST API key — public */
+const KAKAO_REDIRECT_URI=window.location.origin+'/auth/';
+const KAKAO_TOKEN_ENDPOINT='https://owvaarmnlednfkgmgerf.supabase.co/functions/v1/kakao-token';
+
 async function handleKakaoLogin(){
     clearMsg();
     const btn=document.getElementById('kakaoBtn');
     btn.disabled=true;
-    const ret=getReturnUrl();
-    const redirectTo=window.location.origin+'/auth/'+(ret?('?return='+encodeURIComponent(ret)):'');
-    const{error}=await getSupabase().auth.signInWithOAuth({
-        provider:'kakao',
-        options:{
-            redirectTo,
-            scopes:'profile_nickname profile_image'
-        }
+    /* OAuth state + nonce for CSRF/replay protection. state echoed
+       back by Kakao; nonce baked into id_token for signInWithIdToken
+       to verify (Supabase checks it matches). */
+    const state=(crypto.randomUUID&&crypto.randomUUID())||(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
+    const nonce=(crypto.randomUUID&&crypto.randomUUID())||(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
+    try{
+        sessionStorage.setItem('kakao_oauth_state',state);
+        sessionStorage.setItem('kakao_oauth_nonce',nonce);
+        const ret=getReturnUrl();
+        if(ret)sessionStorage.setItem('kakao_oauth_return',ret);
+    }catch(_){}
+    const params=new URLSearchParams({
+        client_id:KAKAO_CLIENT_ID,
+        redirect_uri:KAKAO_REDIRECT_URI,
+        response_type:'code',
+        scope:'openid profile_nickname profile_image',
+        state:state,
+        nonce:nonce
     });
-    if(error){btn.disabled=false;showMsg(error.message,'error')}
+    window.location.href='https://kauth.kakao.com/oauth/authorize?'+params.toString();
 }
+
+/* Handle return from Kakao authorize. Runs once on every /auth/
+   page load and early-returns unless ?code= is present. */
+(async function handleKakaoReturn(){
+    const p=new URLSearchParams(location.search);
+    const code=p.get('code');
+    if(!code)return;
+    const state=p.get('state');
+    let savedState=null,nonce=null,returnUrl=null;
+    try{
+        savedState=sessionStorage.getItem('kakao_oauth_state');
+        nonce=sessionStorage.getItem('kakao_oauth_nonce');
+        returnUrl=sessionStorage.getItem('kakao_oauth_return');
+        sessionStorage.removeItem('kakao_oauth_state');
+        sessionStorage.removeItem('kakao_oauth_nonce');
+        sessionStorage.removeItem('kakao_oauth_return');
+    }catch(_){}
+    /* state mismatch = someone forged the callback; refuse. */
+    if(!savedState||savedState!==state){
+        showMsg('Kakao login: invalid state','error');
+        history.replaceState({},'','/auth/');
+        return;
+    }
+    /* Clean query string right away so a refresh doesn't retry the
+       same (already-spent) code. */
+    history.replaceState({},'','/auth/');
+    try{
+        const r=await fetch(KAKAO_TOKEN_ENDPOINT,{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({code:code,redirect_uri:KAKAO_REDIRECT_URI})
+        });
+        const data=await r.json();
+        if(!r.ok||!data.id_token){
+            showMsg('Kakao token exchange failed: '+(data.error||r.status),'error');
+            return;
+        }
+        const{error}=await getSupabase().auth.signInWithIdToken({
+            provider:'kakao',
+            token:data.id_token,
+            nonce:nonce||undefined
+        });
+        if(error){
+            showMsg('Kakao session failed: '+error.message,'error');
+            return;
+        }
+        /* Success — route to setup if profile incomplete, otherwise
+           the ?return= the user came from (or home). Mirrors the
+           Google flow. */
+        const next=returnUrl||'/';
+        location.replace(/^\/[^\/]/.test(next)?next:'/');
+    }catch(e){
+        showMsg('Kakao login failed: '+String(e),'error');
+    }
+})();
 
 async function resendVerification(){
     const user=await getUser();
@@ -496,6 +577,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776746262" defer></script>
+<script src="/js/siteFooter.js?v=1776750593" defer></script>
 </body>
 </html>
