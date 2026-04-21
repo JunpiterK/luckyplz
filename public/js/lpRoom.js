@@ -547,25 +547,28 @@
            +'.lp-room-guest-list .title{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px}'
            +'.lp-room-guest-list .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(0,217,255,.12);color:#00D9FF;font-size:.78em;font-weight:600;margin:0 4px 4px 0}'
            +'.lp-room-guest-list .empty{font-size:.78em;color:rgba(255,255,255,.3);font-style:italic}'
-           +'.lp-room-status{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(10,14,28,.55);border:1px solid rgba(0,217,255,.35);color:#00D9FF;padding:6px 14px;border-radius:999px;font-family:"Noto Sans KR",sans-serif;font-size:.78em;font-weight:700;z-index:9000;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:flex;align-items:center;gap:8px;max-width:92vw;cursor:pointer;transition:background .2s,padding .2s,border-color .2s}'
-           +'.lp-room-status:hover{background:rgba(10,14,28,.72);border-color:rgba(0,217,255,.55)}'
+           /* Cyan-tinted translucent pill — matches the original palette
+              the user was already used to. Background intentionally
+              light so game visuals bleed through (user feedback:
+              "원래 쓰던 하늘색 테마로"). */
+           +'.lp-room-status{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:rgba(0,217,255,.12);border:1px solid rgba(0,217,255,.4);color:#00D9FF;padding:6px 14px;border-radius:999px;font-family:"Noto Sans KR",sans-serif;font-size:.78em;font-weight:700;z-index:9000;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;gap:8px;max-width:92vw;cursor:pointer;transition:background .2s,padding .2s,border-color .2s}'
+           +'.lp-room-status:hover{background:rgba(0,217,255,.2);border-color:rgba(0,217,255,.6)}'
            +'.lp-room-status .dot{width:8px;height:8px;border-radius:50%;background:#00D9FF;animation:lpRoomPulse 1.6s ease-in-out infinite;flex-shrink:0}'
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
            +'.lp-room-status.lp-room-flash{animation:lpRoomFlash .6s ease-out}'
-           +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(10,14,28,.55);border-color:rgba(0,217,255,.35);transform:translateX(-50%) scale(1)}}'
+           +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);transform:translateX(-50%) scale(1)}}'
            +'.lp-room-status .lp-caret{margin-left:6px;cursor:pointer;opacity:.7;font-weight:700}'
            +'.lp-room-status .lp-caret:hover{opacity:1}'
-           /* Always-visible participant count badge — pill shrinks to this
-              alone when collapsed so the user never loses sight of how
-              many people are in the room even in minimal mode. */
-           +'.lp-room-status .lp-count{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;background:rgba(0,217,255,.18);color:#FFE66D;font-weight:900;font-variant-numeric:tabular-nums;font-size:.95em;line-height:1.2;flex-shrink:0}'
-           +'.lp-room-status .lp-count .lp-count-n{font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:1.05em}'
-           /* Collapsed (mobile-default) state — strip everything except the
-              pulse dot and the count badge so the pill is the size of a
-              finger tap. Tap anywhere on it to expand. Semi-transparent
-              backdrop keeps the game visuals underneath fully readable. */
-           +'.lp-room-status.lp-collapsed{padding:4px 9px;background:rgba(10,14,28,.42);border-color:rgba(0,217,255,.22);font-size:.7em;gap:5px}'
-           +'.lp-room-status.lp-collapsed:hover{background:rgba(10,14,28,.65);border-color:rgba(0,217,255,.45)}'
+           /* Always-visible participant count badge. Cyan-family so it
+              reads as an extension of the pill (not a stranger theme).
+              Number in bold Orbitron for fast glance-recognition. */
+           +'.lp-room-status .lp-count{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:999px;background:rgba(0,217,255,.22);color:#00D9FF;font-weight:900;font-variant-numeric:tabular-nums;font-size:.95em;line-height:1.2;flex-shrink:0;border:1px solid rgba(0,217,255,.35)}'
+           +'.lp-room-status .lp-count .lp-count-n{font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:1.05em;color:#FFE66D}'
+           /* Collapsed (mobile-default) state — strip everything except
+              the pulse dot and the count badge so the pill is the size
+              of a finger tap. Same cyan family as expanded. */
+           +'.lp-room-status.lp-collapsed{padding:4px 9px;background:rgba(0,217,255,.1);border-color:rgba(0,217,255,.3);font-size:.7em;gap:5px}'
+           +'.lp-room-status.lp-collapsed:hover{background:rgba(0,217,255,.18);border-color:rgba(0,217,255,.5)}'
            +'.lp-room-status.lp-collapsed .lp-room-main,'
            +'.lp-room-status.lp-collapsed .lp-caret,'
            +'.lp-room-status.lp-collapsed .x{display:none}'
@@ -580,6 +583,15 @@
            +'.lp-room-guest-panel .row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04)}'
            +'.lp-room-guest-panel .row .nick{font-weight:700}'
            +'.lp-room-guest-panel .row .t{opacity:.5;font-size:.84em;font-variant-numeric:tabular-nums}'
+           /* Pagination controls for host-side list (20/page) */
+           +'.lp-room-guest-panel .pager{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,217,255,.15);font-size:.78em}'
+           +'.lp-room-guest-panel .pager button{padding:4px 12px;border-radius:8px;border:1px solid rgba(0,217,255,.35);background:rgba(0,217,255,.1);color:#00D9FF;font-family:inherit;font-weight:700;cursor:pointer;transition:background .15s}'
+           +'.lp-room-guest-panel .pager button:hover:not(:disabled){background:rgba(0,217,255,.2)}'
+           +'.lp-room-guest-panel .pager button:disabled{opacity:.3;cursor:not-allowed}'
+           +'.lp-room-guest-panel .pager .page-num{font-family:"Orbitron","Noto Sans KR",sans-serif;color:rgba(255,255,255,.65);font-variant-numeric:tabular-nums}'
+           /* Overflow hint for guest-side list (12-cap). Sits below the
+              visible rows in the same card, kept muted. */
+           +'.lp-room-guest-panel .more{padding:6px 10px;font-size:.85em;color:rgba(0,217,255,.7);text-align:center;font-style:italic;margin-top:4px;border-top:1px dashed rgba(0,217,255,.15);padding-top:8px}'
            /* Join/leave toast — tiny banner that drops in near the status
               pill so the host notices a new spectator. */
            +'.lp-room-join-toast{position:fixed;top:52px;left:50%;transform:translate(-50%,0);background:rgba(0,217,255,.95);color:#001220;font-family:"Noto Sans KR",sans-serif;font-weight:700;font-size:.82em;padding:8px 16px;border-radius:999px;z-index:9100;box-shadow:0 6px 20px rgba(0,217,255,.35);animation:lpRoomToastIn .3s ease}'
@@ -849,6 +861,11 @@
             if(document.getElementById('lpRoomGuestPanel'))renderGuestPanel();
         }
 
+        /* Pagination state — survives re-renders of the panel (new
+           joiners, refresh triggers) so the host stays on the same
+           page while scrolling through a large room. */
+        let guestPageIdx=0;
+        const GUEST_PAGE_SIZE=20;
         function toggleGuestPanel(){
             const existing=document.getElementById('lpRoomGuestPanel');
             if(existing){existing.remove();return}
@@ -856,25 +873,54 @@
             panel.id='lpRoomGuestPanel';
             panel.className='lp-room-guest-panel';
             document.body.appendChild(panel);
+            guestPageIdx=0; /* fresh panel starts at page 1 */
             renderGuestPanel();
         }
         function renderGuestPanel(){
             const panel=document.getElementById('lpRoomGuestPanel');
             if(!panel)return;
-            const gs=room.guests().slice().sort(function(a,b){return a.joinedAt-b.joinedAt});
+            /* Sort by nickname ascending (locale-aware) so the host can
+               find a name predictably as the room fills. Empty/undefined
+               names sink to the bottom. */
+            const gs=room.guests().slice().sort(function(a,b){
+                const na=(a.nickname||'').toLowerCase();
+                const nb=(b.nickname||'').toLowerCase();
+                if(!na&&nb)return 1;
+                if(na&&!nb)return -1;
+                return na.localeCompare(nb);
+            });
             const title=lang==='ko'?'👀 접속자 ('+gs.length+'명)':'👀 Guests ('+gs.length+')';
             const lockNote=(room.isLocked&&room.isLocked())?(lang==='ko'?'<div class="lock-note">🔒 게임 시작됨 — 추가 참가 차단</div>':'<div class="lock-note">🔒 Game started — no new joiners</div>'):'';
             if(!gs.length){
                 panel.innerHTML='<div class="title">'+title+'</div>'+lockNote+'<div class="empty">'+(lang==='ko'?'아직 접속자가 없어요':'No guests yet')+'</div>';
                 return;
             }
-            const rows=gs.map(function(g){
+            /* Paginate 20 per page. Clamp page index if guests left and
+               the list shrunk below the current page. */
+            const totalPages=Math.max(1,Math.ceil(gs.length/GUEST_PAGE_SIZE));
+            if(guestPageIdx>=totalPages)guestPageIdx=totalPages-1;
+            const start=guestPageIdx*GUEST_PAGE_SIZE;
+            const slice=gs.slice(start,start+GUEST_PAGE_SIZE);
+            const rows=slice.map(function(g){
                 const when=new Date(g.joinedAt);
                 const hh=String(when.getHours()).padStart(2,'0');
                 const mm=String(when.getMinutes()).padStart(2,'0');
                 return '<div class="row"><span class="nick">'+escapeHtml(g.nickname)+'</span><span class="t">'+hh+':'+mm+'</span></div>';
             }).join('');
-            panel.innerHTML='<div class="title">'+title+'</div>'+lockNote+'<div class="rows">'+rows+'</div>';
+            /* Pager only renders when there's >1 page. Single-page rooms
+               (most typical 2-10 user parties) skip the chrome entirely. */
+            const pager=totalPages>1
+                ?'<div class="pager">'
+                    +'<button type="button" id="lpGuestPagePrev"'+(guestPageIdx===0?' disabled':'')+'>◀</button>'
+                    +'<span class="page-num">'+(guestPageIdx+1)+' / '+totalPages+'</span>'
+                    +'<button type="button" id="lpGuestPageNext"'+(guestPageIdx>=totalPages-1?' disabled':'')+'>▶</button>'
+                +'</div>'
+                :'';
+            panel.innerHTML='<div class="title">'+title+'</div>'+lockNote+'<div class="rows">'+rows+'</div>'+pager;
+            const prev=document.getElementById('lpGuestPagePrev');
+            if(prev)prev.addEventListener('click',function(e){e.stopPropagation();guestPageIdx=Math.max(0,guestPageIdx-1);renderGuestPanel()});
+            const next=document.getElementById('lpGuestPageNext');
+            if(next)next.addEventListener('click',function(e){e.stopPropagation();guestPageIdx=Math.min(totalPages-1,guestPageIdx+1);renderGuestPanel()});
         }
 
         refresh();
@@ -1041,16 +1087,37 @@
             renderPanel();
             render();
         }
+        /* Guests see at most 12 rows (incl. host) then an "외 N명"
+           hint — the full roster lives on the host side. This keeps
+           the popover tiny on a phone even when a party hits 30+
+           people while still answering "who's here" at a glance. */
+        const GUEST_MAX_VISIBLE=12;
         function renderPanel(){
             const panel=document.getElementById('lpRoomGuestPanel');
             if(!panel)return;
-            const title=lang==='ko'?'👀 접속자 ('+(roster.length+1)+'명)':'👀 Guests ('+(roster.length+1)+')';
+            const total=roster.length+1;
+            const title=lang==='ko'?'👀 접속자 ('+total+'명)':'👀 Guests ('+total+')';
+            /* Host always pinned at top. Remaining guests sorted
+               alphabetically (case-insensitive, locale-aware), with
+               the current user ("self") marked but still sorted in
+               place — easier to find your own row than if it floats. */
+            const sortedRoster=roster.slice().sort(function(a,b){
+                const na=(a.nickname||'').toLowerCase();
+                const nb=(b.nickname||'').toLowerCase();
+                return na.localeCompare(nb);
+            });
             const hostRow='<div class="row host"><span class="nick">👑 '+escapeHtml(g.hostName||'Host')+'</span><span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
-            const guestRows=roster.map(function(r){
+            /* Host row counts toward the 12-row cap. */
+            const guestsToShow=sortedRoster.slice(0,GUEST_MAX_VISIBLE-1);
+            const hidden=sortedRoster.length-guestsToShow.length;
+            const guestRows=guestsToShow.map(function(r){
                 const tag=r.self?(lang==='ko'?'나':'me'):'';
                 return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+escapeHtml(r.nickname)+'</span><span class="t">'+tag+'</span></div>';
             }).join('');
-            panel.innerHTML='<div class="title">'+title+'</div><div class="rows">'+hostRow+guestRows+'</div>';
+            const moreRow=hidden>0
+                ?'<div class="more">'+(lang==='ko'?'외 '+hidden+'명':'and '+hidden+' more')+'</div>'
+                :'';
+            panel.innerHTML='<div class="title">'+title+'</div><div class="rows">'+hostRow+guestRows+'</div>'+moreRow;
         }
 
         document.body.appendChild(bar);
