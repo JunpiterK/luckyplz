@@ -206,8 +206,14 @@
         return inb.rows.reduce((n, r) => n + Number(r.unread_count || 0), 0);
     }
 
-    /** Fetch messages for a specific thread, paginated newest-first.
-        `before` is an ISO timestamp for cursor pagination. */
+    /** Column list for every DM read path — centralised so we stay in
+        sync across the three query sites (initial load, pagination,
+        reply-target lookup). Deleted rows are returned too: the UI
+        renders them as a tombstone instead of hiding them outright,
+        which matches how KakaoTalk / WhatsApp handle delete-for-
+        everyone and tells the reader that *something* was there. */
+    const DM_COLUMNS = 'id, thread_id, from_id, to_id, body, created_at, read_at, deleted_at, attachment_url, attachment_type, attachment_size, attachment_name, reply_to_id';
+
     async function getThreadMessages(friendId, { before = null, limit = 50 } = {}) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
@@ -215,20 +221,30 @@
         try {
             let q = getSupabase()
                 .from('direct_messages')
-                .select('id, thread_id, from_id, to_id, body, created_at, read_at, deleted_at')
+                .select(DM_COLUMNS)
                 .eq('thread_id', threadId)
-                .is('deleted_at', null)
                 .order('created_at', { ascending: false })
                 .limit(Math.min(limit, 200));
             if (before) q = q.lt('created_at', before);
             const { data, error } = await q;
             if (error) return { ok: false, error: error.message };
-            /* Reverse so the UI renders chronologically (oldest top). */
             return { ok: true, rows: (data || []).slice().reverse() };
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
-    async function sendMessage(friendId, body, attachment) {
+    /** Fetch a single DM row (used to resolve reply_to quotes). */
+    async function getDmById(id) {
+        if (!id) return { ok: false, error: 'missing_id' };
+        try {
+            const { data, error } = await getSupabase()
+                .from('direct_messages')
+                .select(DM_COLUMNS).eq('id', id).maybeSingle();
+            if (error) return { ok: false, error: error.message };
+            return { ok: true, row: data || null };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function sendMessage(friendId, body, attachment, opts) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
         const trimmed = String(body || '').trim();
@@ -236,8 +252,6 @@
         if (trimmed && trimmed.length > 2000) return { ok: false, error: 'too_long' };
         try {
             const row = { from_id: user.id, to_id: friendId };
-            /* Body is optional when there's an attachment — DB CHECK
-               (dm_body_or_attach) requires at least one. */
             if (trimmed) row.body = trimmed;
             if (attachment) {
                 row.attachment_url  = attachment.url;
@@ -245,9 +259,10 @@
                 row.attachment_size = attachment.size;
                 row.attachment_name = attachment.name;
             }
+            if (opts && opts.replyToId) row.reply_to_id = opts.replyToId;
             const { data, error } = await getSupabase()
                 .from('direct_messages')
-                .insert(row).select().single();
+                .insert(row).select(DM_COLUMNS).single();
             if (error) {
                 const msg = String(error.message || '').toLowerCase();
                 if (msg.includes('not_friends')) return { ok: false, error: 'not_friends' };
@@ -257,6 +272,22 @@
             }
             _cache.inbox = null;
             return { ok: true, message: data };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Soft-delete a DM (author only, 5-min grace). Server clears body
+        + attachment fields and sets deleted_at. UI renders a tombstone. */
+    async function deleteDm(messageId) {
+        try {
+            const { data, error } = await getSupabase()
+                .rpc('delete_dm', { p_msg_id: messageId });
+            if (error) {
+                const m = (error.message || '').toLowerCase();
+                if (m.includes('too_old'))   return { ok: false, error: 'too_old' };
+                if (m.includes('not_author'))return { ok: false, error: 'not_author' };
+                return { ok: false, error: error.message };
+            }
+            return data || { ok: true };
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
@@ -517,15 +548,17 @@
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
-    /** Newest-first message fetch with cursor pagination (same shape
-        as DM getThreadMessages — UI reuses its renderer). */
+    /* Shared column list for group messages. Like DMs we now include
+       the deleted rows + attachment fields + reply_to_id, and let the
+       UI render tombstones for deleted ones. */
+    const GROUP_COLUMNS = 'id, room_id, from_id, body, created_at, edited_at, deleted_at, attachment_url, attachment_type, attachment_size, attachment_name, reply_to_id';
+
     async function getGroupMessages(roomId, { before = null, limit = 50 } = {}) {
         try {
             let q = getSupabase()
                 .from('chat_messages')
-                .select('id, room_id, from_id, body, created_at, edited_at, deleted_at')
+                .select(GROUP_COLUMNS)
                 .eq('room_id', roomId)
-                .is('deleted_at', null)
                 .order('created_at', { ascending: false })
                 .limit(Math.min(limit, 200));
             if (before) q = q.lt('created_at', before);
@@ -535,7 +568,19 @@
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
-    async function sendGroupMessage(roomId, body, attachment) {
+    /** Single-row fetch for reply-quote resolution. */
+    async function getGroupMessageById(id) {
+        if (!id) return { ok: false, error: 'missing_id' };
+        try {
+            const { data, error } = await getSupabase()
+                .from('chat_messages')
+                .select(GROUP_COLUMNS).eq('id', id).maybeSingle();
+            if (error) return { ok: false, error: error.message };
+            return { ok: true, row: data || null };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function sendGroupMessage(roomId, body, attachment, opts) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
         const trimmed = String(body || '').trim();
@@ -550,12 +595,28 @@
                 row.attachment_size = attachment.size;
                 row.attachment_name = attachment.name;
             }
+            if (opts && opts.replyToId) row.reply_to_id = opts.replyToId;
             const { data, error } = await getSupabase()
                 .from('chat_messages')
-                .insert(row).select().single();
+                .insert(row).select(GROUP_COLUMNS).single();
             if (error) return { ok: false, error: error.message };
             _grpCache.list = null;
             return { ok: true, message: data };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Delete group message — author (5 min) or room creator (any age). */
+    async function deleteGroupMessage(messageId) {
+        try {
+            const { data, error } = await getSupabase()
+                .rpc('delete_group_msg', { p_msg_id: messageId });
+            if (error) {
+                const m = (error.message || '').toLowerCase();
+                if (m.includes('too_old'))       return { ok: false, error: 'too_old' };
+                if (m.includes('not_authorized'))return { ok: false, error: 'not_authorized' };
+                return { ok: false, error: error.message };
+            }
+            return data || { ok: true };
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
@@ -721,10 +782,12 @@
         getFriends, sendFriendRequest, acceptFriendRequest,
         removeFriend, blockFriend,
         getInbox, getUnreadCount, getThreadMessages, sendMessage, markThreadRead,
+        getDmById, deleteDm,
         subscribeToIncoming, subscribeToThread,
         /* Group chat */
         getGroupChats, createGroupChat, inviteToGroupChat, leaveGroupChat,
         getGroupMembers, getGroupMessages, sendGroupMessage, markGroupRead,
+        getGroupMessageById, deleteGroupMessage,
         subscribeToGroupRoom, subscribeToGroupMembers, getGroupUnreadCount,
         /* Attachments */
         uploadAttachment,
