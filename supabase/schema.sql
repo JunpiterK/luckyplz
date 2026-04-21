@@ -1098,3 +1098,136 @@ end;
 $$;
 grant execute on function public.mark_group_chat_read(uuid) to authenticated;
 
+
+-- ============================================================
+-- 7. Attachments — image (and later, file) upload columns on
+--    both direct_messages and chat_messages
+-- ============================================================
+-- Two pieces:
+--   (a) Schema additions below — additive, idempotent.
+--   (b) Storage bucket — must be created in the Supabase dashboard
+--       (see comment block at the bottom of this file). The public
+--       bucket pattern is the standard messenger trade-off: file
+--       paths are uuid-prefixed under each user's folder, so URLs
+--       aren't enumerable, and we get cheap CDN-served downloads
+--       without per-fetch signed-URL minting.
+--
+-- Constraints chosen for both safety and predictability:
+--   • 10 MB cap matches what Slack / Telegram allow for attachments
+--     before they switch to a different upload path
+--   • mime check rejects garbage early at INSERT time so a hostile
+--     client can't write a row with type='<script>...'
+--   • body becomes nullable so attachment-only messages work; the
+--     paired body_or_attach CHECK keeps the row meaningful
+
+alter table public.direct_messages
+    add column if not exists attachment_url   text,
+    add column if not exists attachment_type  text,
+    add column if not exists attachment_size  bigint,
+    add column if not exists attachment_name  text;
+
+alter table public.direct_messages
+    drop constraint if exists dm_attach_type_format;
+alter table public.direct_messages
+    add  constraint dm_attach_type_format
+    check (attachment_type is null
+           or attachment_type ~ '^[a-z]+/[a-z0-9.\-+]+$');
+alter table public.direct_messages
+    drop constraint if exists dm_attach_size_bound;
+alter table public.direct_messages
+    add  constraint dm_attach_size_bound
+    check (attachment_size is null
+           or (attachment_size between 0 and 10485760));
+alter table public.direct_messages
+    drop constraint if exists dm_attach_name_len;
+alter table public.direct_messages
+    add  constraint dm_attach_name_len
+    check (attachment_name is null
+           or char_length(attachment_name) <= 200);
+
+-- Body may now be null IF an attachment is present. The original
+-- length CHECK (1-2000) treats null as passing, so no rewrite needed.
+alter table public.direct_messages
+    alter column body drop not null;
+alter table public.direct_messages
+    drop constraint if exists dm_body_or_attach;
+alter table public.direct_messages
+    add  constraint dm_body_or_attach
+    check (body is not null or attachment_url is not null);
+
+alter table public.chat_messages
+    add column if not exists attachment_url   text,
+    add column if not exists attachment_type  text,
+    add column if not exists attachment_size  bigint,
+    add column if not exists attachment_name  text;
+
+alter table public.chat_messages
+    drop constraint if exists chat_attach_type_format;
+alter table public.chat_messages
+    add  constraint chat_attach_type_format
+    check (attachment_type is null
+           or attachment_type ~ '^[a-z]+/[a-z0-9.\-+]+$');
+alter table public.chat_messages
+    drop constraint if exists chat_attach_size_bound;
+alter table public.chat_messages
+    add  constraint chat_attach_size_bound
+    check (attachment_size is null
+           or (attachment_size between 0 and 10485760));
+alter table public.chat_messages
+    drop constraint if exists chat_attach_name_len;
+alter table public.chat_messages
+    add  constraint chat_attach_name_len
+    check (attachment_name is null
+           or char_length(attachment_name) <= 200);
+
+alter table public.chat_messages
+    alter column body drop not null;
+alter table public.chat_messages
+    drop constraint if exists chat_body_or_attach;
+alter table public.chat_messages
+    add  constraint chat_body_or_attach
+    check (body is not null or attachment_url is not null);
+
+-- ── STORAGE BUCKET SETUP (one-time, dashboard) ─────────────────
+-- After running this SQL, in the Supabase dashboard:
+--   1. Storage → New Bucket → name: 'chat-attachments'
+--      Public: YES (so img URLs render without signed-URL minting)
+--      File size limit: 10 MB
+--      Allowed MIME types: image/png, image/jpeg, image/jpg,
+--                          image/gif, image/webp, image/heic
+--   2. Storage → Policies → chat-attachments → New Policy
+--      Use the SQL editor with these (or click "Insert Template"):
+--
+--   create policy "chat_attach_read_public"
+--     on storage.objects for select
+--     using (bucket_id = 'chat-attachments');
+--
+--   create policy "chat_attach_write_own_folder"
+--     on storage.objects for insert
+--     with check (
+--       bucket_id = 'chat-attachments'
+--       and auth.role() = 'authenticated'
+--       and (storage.foldername(name))[1] = auth.uid()::text
+--     );
+--
+--   create policy "chat_attach_update_own_folder"
+--     on storage.objects for update
+--     using (
+--       bucket_id = 'chat-attachments'
+--       and (storage.foldername(name))[1] = auth.uid()::text
+--     );
+--
+--   create policy "chat_attach_delete_own_folder"
+--     on storage.objects for delete
+--     using (
+--       bucket_id = 'chat-attachments'
+--       and (storage.foldername(name))[1] = auth.uid()::text
+--     );
+--
+-- The "own folder" gate means uploads are forced to start with
+-- `<user_id>/<anything>`, which (a) makes per-user cleanup a
+-- cascade-style delete by prefix, and (b) prevents one user from
+-- overwriting another's file. Public read is the standard messenger
+-- pattern (any URL holder can fetch — the URL itself is the secret,
+-- and file IDs are uuid-prefixed so they're not enumerable).
+

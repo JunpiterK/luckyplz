@@ -197,6 +197,51 @@ body{
 }
 .composer .send-btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08)}
 .composer .send-btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
+.composer .attach-btn{
+    width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.08);
+    background:rgba(255,255,255,.03);color:rgba(255,255,255,.7);cursor:pointer;
+    font-size:1.15em;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:all .2s
+}
+.composer .attach-btn:hover{background:rgba(255,230,109,.08);border-color:rgba(255,230,109,.35);color:#FFE66D}
+.composer input[type="file"]{display:none}
+
+/* Composer preview chip — shows up between the composer and the
+   message list when an attachment is staged but not yet sent. */
+.attach-preview{
+    display:none;padding:10px 14px;border-top:1px solid rgba(255,255,255,.06);
+    background:rgba(255,230,109,.04);align-items:center;gap:12px;
+    backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)
+}
+.attach-preview.on{display:flex}
+.attach-preview .ap-thumb{width:48px;height:48px;border-radius:8px;overflow:hidden;background:#000;flex-shrink:0;position:relative}
+.attach-preview .ap-thumb img{width:100%;height:100%;object-fit:cover}
+.attach-preview .ap-thumb.up::after{content:'';position:absolute;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center}
+.attach-preview .ap-meta{flex:1;min-width:0}
+.attach-preview .ap-name{font-size:.86em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attach-preview .ap-size{font-size:.72em;color:var(--muted-2);font-variant-numeric:tabular-nums}
+.attach-preview .ap-clear{width:30px;height:30px;border-radius:50%;border:0;background:rgba(255,51,102,.15);color:#FF6B8B;cursor:pointer;font-size:1em;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.attach-preview .ap-clear:hover{background:rgba(255,51,102,.3)}
+.attach-preview .ap-progress{font-size:.72em;color:#FFE66D;letter-spacing:.05em;font-weight:700;margin-left:auto;flex-shrink:0}
+
+/* Drag-over state — covers the message scroller with a dashed
+   highlight while the user drags an image into the chat area. */
+.chat-messages.drag-over{outline:2px dashed rgba(255,230,109,.5);outline-offset:-12px;background:rgba(255,230,109,.04)}
+
+/* Image bubble — img sits inside the bubble box, capped at 280 px
+   wide so a portrait selfie doesn't dominate the thread. Cursor
+   pointer signals the lightbox is reachable on click. */
+.bubble.has-image{padding:6px;background:rgba(0,0,0,.18)!important;border:1px solid rgba(255,255,255,.06)!important}
+.bubble.has-image img{display:block;max-width:280px;max-height:340px;border-radius:12px;cursor:zoom-in;background:#000}
+.bubble.has-image .img-caption{padding:6px 8px 4px;font-size:.88em;line-height:1.4;color:#fff}
+.bubble-row.me .bubble.has-image{background:rgba(0,217,255,.1)!important;border-color:rgba(0,217,255,.3)!important}
+
+/* Lightbox overlay for full-resolution viewing. Tap anywhere to close. */
+.lightbox{position:fixed;inset:0;background:rgba(5,5,15,.96);display:none;align-items:center;justify-content:center;z-index:200;padding:20px;cursor:zoom-out;animation:fade .2s ease}
+.lightbox.on{display:flex}
+.lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 30px 80px rgba(0,0,0,.7);cursor:default}
+.lightbox .lb-close{position:absolute;top:16px;right:20px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.1);color:#fff;font-size:1.4em;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.lightbox .lb-close:hover{background:rgba(255,255,255,.2)}
 
 /* Add friend modal */
 .modal-backdrop{
@@ -298,8 +343,19 @@ body{
                 </div>
             </header>
             <div class="chat-messages" id="chatMessages"></div>
+            <div class="attach-preview" id="attachPreview">
+                <div class="ap-thumb" id="attachThumb"></div>
+                <div class="ap-meta">
+                    <div class="ap-name" id="attachName">image.jpg</div>
+                    <div class="ap-size" id="attachSize">—</div>
+                </div>
+                <div class="ap-progress" id="attachProgress" style="display:none">UPLOADING…</div>
+                <button type="button" class="ap-clear" id="attachClear" title="Remove">×</button>
+            </div>
             <form class="composer" id="composerForm" style="position:relative">
                 <div class="mention-pop" id="mentionPop"></div>
+                <button type="button" class="attach-btn" id="attachBtn" aria-label="Attach image" title="Attach image">📎</button>
+                <input type="file" id="attachInput" accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/heic">
                 <textarea id="composerInput" rows="1" placeholder="Type a message…" maxlength="2000"></textarea>
                 <button type="submit" class="send-btn" id="sendBtn" aria-label="Send" disabled>➤</button>
             </form>
@@ -343,6 +399,12 @@ body{
             <button type="button" class="btn-primary" id="newGroupCreate" disabled>Create</button>
         </div>
     </div>
+</div>
+
+<!-- Image lightbox -->
+<div class="lightbox" id="lightbox">
+    <button class="lb-close" id="lbClose" aria-label="Close">×</button>
+    <img id="lbImg" alt="">
 </div>
 
 <!-- Group members sheet -->
@@ -598,6 +660,14 @@ let latestGroups=[];
 let groupEmoji='💬';
 const EMOJI_CHOICES=['💬','🎉','☕','🍕','🏀','🎮','📚','🎯','🏆','🎲','🎵','🚀','🌟','🍜','🏎️','✨'];
 
+/* Staged attachment — a File object the user picked or dropped, with
+   an objectURL cache for the preview thumbnail. Stays staged until
+   the message is sent (or cleared). Composer 📎 + drag-drop both
+   funnel through stageAttachment(). */
+let pendingAttachment=null;
+const ATTACH_MAX_BYTES=10*1024*1024;
+const ATTACH_ALLOWED=/^image\/(png|jpeg|jpg|gif|webp|heic)$/;
+
 /* ---- Auth gate ----------------------------------------------- */
 async function boot(){
     const state=await ensureProfile();
@@ -667,6 +737,50 @@ function wireEvents(){
     /* Close mention popup on outside click or blur. */
     document.addEventListener('click',(e)=>{
         if(!$('composerForm').contains(e.target))closeMentionPop();
+    });
+    /* Attachment buttons + drag-drop wiring. */
+    $('attachBtn').addEventListener('click',()=>$('attachInput').click());
+    $('attachInput').addEventListener('change',(e)=>{
+        const f=e.target.files&&e.target.files[0];
+        if(f)stageAttachment(f);
+        e.target.value=''; /* allow same-file re-pick */
+    });
+    $('attachClear').addEventListener('click',clearAttachment);
+    /* Drag-drop on the chat-messages scroller. dragenter/over need
+       preventDefault to allow the drop event. */
+    const dropZone=$('chatMessages');
+    ['dragenter','dragover'].forEach(ev=>dropZone.addEventListener(ev,(e)=>{
+        if(!currentThread)return;
+        if(!e.dataTransfer)return;
+        const types=Array.from(e.dataTransfer.types||[]);
+        if(!types.includes('Files'))return;
+        e.preventDefault();
+        dropZone.classList.add('drag-over');
+    }));
+    ['dragleave','drop'].forEach(ev=>dropZone.addEventListener(ev,(e)=>{
+        e.preventDefault();
+        if(ev==='drop'){
+            const f=e.dataTransfer.files&&e.dataTransfer.files[0];
+            if(f)stageAttachment(f);
+        }
+        dropZone.classList.remove('drag-over');
+    }));
+    /* Lightbox close — outside click + explicit X + Esc. */
+    $('lightbox').addEventListener('click',(e)=>{if(e.target===$('lightbox')||e.target===$('lbClose'))closeLightbox()});
+    $('lbClose').addEventListener('click',closeLightbox);
+    document.addEventListener('keydown',(e)=>{if(e.key==='Escape'&&$('lightbox').classList.contains('on'))closeLightbox()});
+    /* Paste-an-image-from-clipboard: many users will copy a screenshot
+       and want to paste it directly. The composer textarea catches
+       paste events; we extract the first image File and stage it. */
+    $('composerInput').addEventListener('paste',(e)=>{
+        const items=e.clipboardData&&e.clipboardData.items;
+        if(!items)return;
+        for(const it of items){
+            if(it.kind==='file'){
+                const f=it.getAsFile();
+                if(f&&ATTACH_ALLOWED.test(f.type)){e.preventDefault();stageAttachment(f);break}
+            }
+        }
     });
     $('composerForm').addEventListener('submit',(e)=>{e.preventDefault();submitMessage()});
     /* Modal labels */
@@ -1028,22 +1142,33 @@ function bubbleEl(m,myId){
     row.className='bubble-row '+(mine?'me':'them');
     row.dataset.mid=m.id;
     row.dataset.readAt=m.read_at||'';
-    /* Read ticks: DM-only, my own bubbles only. Single muted check
-       when the message has been stored but not yet read by the peer;
-       double cyan check once read_at is set. Hidden for group chats
-       because "read by N of M" is more involved — ships in a later
-       phase if the signal is missed. */
+    /* Read ticks: DM-only, my own bubbles only. */
     let readTickHtml='';
     if(mine&&currentThread&&currentThread.kind==='dm'){
         const isRead=!!m.read_at;
         readTickHtml='<span class="read-tick'+(isRead?' read':'')+'" title="'+escape(isRead?t.readTitle:t.sentTitle)+'">'+(isRead?'✓✓':'✓')+'</span>';
     }
     const myNick=me&&me.profile?me.profile.nickname:'';
-    row.innerHTML='<div class="bubble">'+renderBody(m.body,myNick)+'</div>'
+    /* Bubble inner: image (if attachment) + optional text caption.
+       has-image class swaps the bubble background to a darker tint
+       so the image dominates visually. */
+    let bubbleHtml;
+    if(m.attachment_url&&/^image\//.test(m.attachment_type||'')){
+        const captionHtml=m.body?'<div class="img-caption">'+renderBody(m.body,myNick)+'</div>':'';
+        bubbleHtml='<div class="bubble has-image">'
+            +'<img src="'+escape(m.attachment_url)+'" alt="'+escape(m.attachment_name||'image')+'" loading="lazy" data-full="'+escape(m.attachment_url)+'">'
+            +captionHtml+'</div>';
+    } else {
+        bubbleHtml='<div class="bubble">'+renderBody(m.body||'',myNick)+'</div>';
+    }
+    row.innerHTML=bubbleHtml
         +'<div class="bubble-time">'
             +'<span>'+escape(new Date(m.created_at).toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'}))+'</span>'
             +readTickHtml
         +'</div>';
+    /* Click-to-zoom on images. */
+    const img=row.querySelector('img[data-full]');
+    if(img)img.addEventListener('click',(e)=>{e.stopPropagation();openLightbox(img.dataset.full)});
     return row;
 }
 
@@ -1067,26 +1192,86 @@ function autoGrowComposer(){
     const ta=$('composerInput');
     ta.style.height='auto';
     ta.style.height=Math.min(120,ta.scrollHeight)+'px';
-    $('sendBtn').disabled=!ta.value.trim();
+    /* Send is enabled if there's text OR a staged attachment. */
+    $('sendBtn').disabled=!ta.value.trim()&&!pendingAttachment;
 }
 async function submitMessage(){
     const ta=$('composerInput');
     const body=ta.value.trim();
-    if(!body||!currentThread)return;
+    if(!currentThread)return;
+    if(!body&&!pendingAttachment)return;
     $('sendBtn').disabled=true;
+    /* Snapshot the staged attachment + clear immediately so a second
+       send (after upload completes) can stage a new one. */
+    const stagedFile=pendingAttachment;
+    let attachment=null;
+    /* Upload first if there's a staged file. UI stays visible with
+       "UPLOADING…" tag so the user sees progress. */
+    if(stagedFile){
+        $('attachProgress').style.display='inline';
+        $('attachThumb').classList.add('up');
+        const up=await LpSocial.uploadAttachment(stagedFile);
+        $('attachProgress').style.display='none';
+        $('attachThumb').classList.remove('up');
+        if(!up.ok){
+            $('sendBtn').disabled=!ta.value.trim()&&!pendingAttachment;
+            alert('Upload failed: '+(up.error||'unknown'));
+            return;
+        }
+        attachment=up;
+    }
     ta.value='';autoGrowComposer();
+    clearAttachment();
     const res=currentThread.kind==='dm'
-        ? await LpSocial.sendMessage(currentThread.friend_id,body)
-        : await LpSocial.sendGroupMessage(currentThread.room_id,body);
+        ? await LpSocial.sendMessage(currentThread.friend_id,body,attachment)
+        : await LpSocial.sendGroupMessage(currentThread.room_id,body,attachment);
     if(res.ok){
         appendMessage(res.message);
         scrollToBottom();
     }else{
-        /* Put the text back + surface error inline. */
         ta.value=body;autoGrowComposer();
         alert('Send failed: '+(res.error||'unknown'));
     }
     ta.focus();
+}
+
+/* ---- Attachment staging + lightbox --------------------------- */
+function fmtBytes(n){
+    if(!n&&n!==0)return '';
+    if(n<1024)return n+' B';
+    if(n<1024*1024)return (n/1024).toFixed(1)+' KB';
+    return (n/1024/1024).toFixed(1)+' MB';
+}
+function stageAttachment(file){
+    if(!ATTACH_ALLOWED.test(file.type)){alert('Image only (PNG/JPG/GIF/WEBP/HEIC)');return}
+    if(file.size>ATTACH_MAX_BYTES){alert('Max 10 MB');return}
+    if(pendingAttachment&&pendingAttachment._url)try{URL.revokeObjectURL(pendingAttachment._url)}catch(_){}
+    pendingAttachment=file;
+    pendingAttachment._url=URL.createObjectURL(file);
+    $('attachThumb').innerHTML='<img src="'+pendingAttachment._url+'" alt="">';
+    $('attachName').textContent=file.name||'image';
+    $('attachSize').textContent=fmtBytes(file.size);
+    $('attachPreview').classList.add('on');
+    /* Re-enable Send even with an empty textarea, since attachment
+       alone is a valid message. */
+    $('sendBtn').disabled=false;
+}
+function clearAttachment(){
+    if(pendingAttachment&&pendingAttachment._url)try{URL.revokeObjectURL(pendingAttachment._url)}catch(_){}
+    pendingAttachment=null;
+    $('attachPreview').classList.remove('on');
+    $('attachThumb').innerHTML='';
+    $('sendBtn').disabled=!$('composerInput').value.trim();
+}
+function openLightbox(url){
+    $('lbImg').src=url;
+    $('lightbox').classList.add('on');
+    document.body.style.overflow='hidden';
+}
+function closeLightbox(){
+    $('lightbox').classList.remove('on');
+    $('lbImg').src='';
+    document.body.style.overflow='';
 }
 
 /* ---- New-group modal ----------------------------------------- */

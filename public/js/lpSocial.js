@@ -228,18 +228,26 @@
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
-    async function sendMessage(friendId, body) {
+    async function sendMessage(friendId, body, attachment) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
         const trimmed = String(body || '').trim();
-        if (!trimmed) return { ok: false, error: 'empty' };
-        if (trimmed.length > 2000) return { ok: false, error: 'too_long' };
+        if (!trimmed && !attachment) return { ok: false, error: 'empty' };
+        if (trimmed && trimmed.length > 2000) return { ok: false, error: 'too_long' };
         try {
+            const row = { from_id: user.id, to_id: friendId };
+            /* Body is optional when there's an attachment — DB CHECK
+               (dm_body_or_attach) requires at least one. */
+            if (trimmed) row.body = trimmed;
+            if (attachment) {
+                row.attachment_url  = attachment.url;
+                row.attachment_type = attachment.type;
+                row.attachment_size = attachment.size;
+                row.attachment_name = attachment.name;
+            }
             const { data, error } = await getSupabase()
                 .from('direct_messages')
-                .insert({ from_id: user.id, to_id: friendId, body: trimmed })
-                .select()
-                .single();
+                .insert(row).select().single();
             if (error) {
                 const msg = String(error.message || '').toLowerCase();
                 if (msg.includes('not_friends')) return { ok: false, error: 'not_friends' };
@@ -527,20 +535,68 @@
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
-    async function sendGroupMessage(roomId, body) {
+    async function sendGroupMessage(roomId, body, attachment) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
         const trimmed = String(body || '').trim();
-        if (!trimmed) return { ok: false, error: 'empty' };
-        if (trimmed.length > 2000) return { ok: false, error: 'too_long' };
+        if (!trimmed && !attachment) return { ok: false, error: 'empty' };
+        if (trimmed && trimmed.length > 2000) return { ok: false, error: 'too_long' };
         try {
+            const row = { room_id: roomId, from_id: user.id };
+            if (trimmed) row.body = trimmed;
+            if (attachment) {
+                row.attachment_url  = attachment.url;
+                row.attachment_type = attachment.type;
+                row.attachment_size = attachment.size;
+                row.attachment_name = attachment.name;
+            }
             const { data, error } = await getSupabase()
                 .from('chat_messages')
-                .insert({ room_id: roomId, from_id: user.id, body: trimmed })
-                .select().single();
+                .insert(row).select().single();
             if (error) return { ok: false, error: error.message };
             _grpCache.list = null;
             return { ok: true, message: data };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /* ---- Attachments ----------------------------------------- */
+    /* Upload a file to the chat-attachments storage bucket. Path is
+       always {user_id}/{uuid}-{safe_name} so:
+         (a) Storage RLS gates write access by folder prefix
+         (b) Filenames are non-enumerable across the bucket
+         (c) Per-user cleanup is a single prefix delete
+       Returns the public URL + metadata for embedding in a message
+       row. Caller validates type/size locally before calling so we
+       don't waste an upload that the DB CHECK would reject anyway. */
+    const ATTACH_MAX_BYTES = 10 * 1024 * 1024;
+    const ATTACH_ALLOWED = /^image\/(png|jpeg|jpg|gif|webp|heic)$/;
+
+    async function uploadAttachment(file) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        if (!file) return { ok: false, error: 'no_file' };
+        if (file.size > ATTACH_MAX_BYTES) return { ok: false, error: 'too_large' };
+        const type = String(file.type || '').toLowerCase();
+        if (!ATTACH_ALLOWED.test(type)) return { ok: false, error: 'bad_type' };
+
+        /* Sanitise the filename — strip path separators and weird
+           chars, enforce a max length. The uuid prefix guarantees
+           uniqueness even when two users upload "photo.jpg". */
+        const rawName = String(file.name || 'image').replace(/[/\\?%*:|"<>]/g, '_').slice(-100);
+        const ext = (rawName.match(/\.[A-Za-z0-9]+$/) || [''])[0];
+        const stem = rawName.replace(/\.[A-Za-z0-9]+$/, '').replace(/[^A-Za-z0-9_\-가-힣]/g, '_').slice(0, 60) || 'image';
+        const safeName = stem + ext;
+        const id = (crypto.randomUUID && crypto.randomUUID()) ||
+                   (Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+        const path = user.id + '/' + id + '-' + safeName;
+
+        try {
+            const sb = getSupabase();
+            const up = await sb.storage.from('chat-attachments')
+                .upload(path, file, { contentType: type, cacheControl: '31536000', upsert: false });
+            if (up.error) return { ok: false, error: up.error.message };
+            const { data: pub } = sb.storage.from('chat-attachments').getPublicUrl(path);
+            return { ok: true, url: pub.publicUrl, type, size: file.size, name: safeName };
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
@@ -607,6 +663,8 @@
         getGroupChats, createGroupChat, inviteToGroupChat, leaveGroupChat,
         getGroupMembers, getGroupMessages, sendGroupMessage, markGroupRead,
         subscribeToGroupRoom, subscribeToGroupMembers, getGroupUnreadCount,
+        /* Attachments */
+        uploadAttachment,
         clearCache: _clearCache
     };
 })();
