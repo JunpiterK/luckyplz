@@ -227,25 +227,27 @@
     async function getThreadMessages(friendId, { before = null, limit = 50 } = {}) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
-        /* Query by the (from_id, to_id) pair directly instead of the
-           md5-computed thread_id. Reason: the client-side md5 path
-           sometimes disagrees with Postgres's md5() in edge-case
-           browsers — mobile Chrome/Samsung were returning 0 rows
-           because the computed thread_id didn't match the stored
-           one. from_id/to_id are indexed + RLS-gated the same way,
-           so this is equally fast and 100% browser-agnostic. */
+        /* Call the server-side SECURITY DEFINER RPC. Mirrors the
+           pattern dm_inbox uses. Sidesteps:
+             - client-side md5 thread_id ambiguity (mobile Chrome
+               Android + Samsung Internet returned empty result when
+               the hash disagreed with the DB md5 by a single byte)
+             - RLS evaluation edge cases on mobile WebViews that
+               sometimes returned 0 rows on direct SELECTs even when
+               dm_inbox (also SECURITY DEFINER) worked fine
+             - PostgREST .or() filter parser variations between
+               environments
+           Only input is the friend id; auth.uid() is resolved
+           server-side. Returns chronological oldest-first so the
+           caller can render directly. */
         try {
-            const a = user.id, b = friendId;
-            let q = getSupabase()
-                .from('direct_messages')
-                .select(DM_COLUMNS)
-                .or('and(from_id.eq.'+a+',to_id.eq.'+b+'),and(from_id.eq.'+b+',to_id.eq.'+a+')')
-                .order('created_at', { ascending: false })
-                .limit(Math.min(limit, 200));
-            if (before) q = q.lt('created_at', before);
-            const { data, error } = await q;
+            const { data, error } = await getSupabase().rpc('get_dm_thread_messages', {
+                p_friend: friendId,
+                p_before: before || null,
+                p_limit: Math.min(limit, 200)
+            });
             if (error) return { ok: false, error: error.message };
-            return { ok: true, rows: (data || []).slice().reverse() };
+            return { ok: true, rows: data || [] };
         } catch (e) { return { ok: false, error: String(e) }; }
     }
 
