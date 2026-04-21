@@ -24,8 +24,13 @@ function getLpPlayerId() {
         return window._lpPidSession;
     }
 }
-const SUPABASE_URL = 'https://owvaarmnlednfkgmgerf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_A8o6dBEEc9YXHQy4KPzURw_9pwVZUAu';
+/* Seoul (ap-northeast-2) region — migrated 2026-04-21 from Sydney
+   (ap-southeast-2). Primary audience is Korean, and the Sydney box
+   added ~250 ms of avoidable RTT to every request. The old Sydney
+   project (owvaarmnlednfkgmgerf) is kept alive for ~2 weeks as a
+   rollback safety net, then deleted. */
+const SUPABASE_URL = 'https://jkrpxijybuljdxkrbsan.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Ypa1NMQCVGxFWidBOd5iEA_ECBldTAb';
 
 let _supabase = null;
 
