@@ -156,13 +156,18 @@ body{
     background:var(--bubble-them);border:1px solid var(--bubble-them-br);
     border-bottom-left-radius:6px
 }
-/* Optimistic-send bubble states. .pending = shown before RPC returns
-   (faded so user reads it as "sending…"); .failed = server rejected
-   (red outline + disabled send feedback). On real response the
-   class is cleared + data-mid is swapped from tmp→server id. */
-.bubble-row.pending .bubble{opacity:.55;filter:saturate(.8)}
-.bubble-row.failed .bubble{border-color:rgba(255,51,102,.55);box-shadow:0 0 0 1px rgba(255,51,102,.2)}
-.bubble-row.failed::after{content:'!';position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#FF3366;color:#fff;font-size:.7em;font-weight:900;display:flex;align-items:center;justify-content:center}
+/* Optimistic-send bubble states (WhatsApp/Telegram conventions):
+    .pending = INSERT in flight, bubble faded + clock tick
+    .failed  = server rejected; red outline + '!' badge; tap to retry
+   On a successful RPC response the class is cleared and data-mid is
+   swapped from the local tmp id to the server id. */
+.bubble-row.pending .bubble{opacity:.6;filter:saturate(.85)}
+/* Swap the ✓ tick for a clock icon while sending. */
+.bubble-row.pending .read-tick{color:var(--muted-2)}
+.bubble-row.pending .read-tick::before{content:'⏱ ';font-size:.9em}
+.bubble-row.pending .read-tick>span:not(.__keep){display:none}
+.bubble-row.failed .bubble{border-color:rgba(255,51,102,.55);box-shadow:0 0 0 1px rgba(255,51,102,.2);cursor:pointer}
+.bubble-row.failed::after{content:'!';position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#FF3366;color:#fff;font-size:.7em;font-weight:900;display:flex;align-items:center;justify-content:center;pointer-events:none}
 .bubble-time{font-size:.68em;color:var(--muted-2);align-self:flex-end;padding:0 4px;white-space:nowrap;margin-bottom:3px;display:inline-flex;align-items:center;gap:4px}
 /* Read-receipts — single check = delivered (sent only), double cyan check = peer has read. Shown only on my own outgoing bubbles in DM threads. */
 .read-tick{font-size:.9em;letter-spacing:-2px;color:var(--muted-2);font-weight:900;line-height:1}
@@ -1236,15 +1241,17 @@ async function openThread(meta){
     if(meta.kind==='dm'){
         threadUnsub=LpSocial.subscribeToThread(meta.friend_id,(ev)=>{
             if(ev.kind==='insert'){
+                /* Skip self-echoes: our own sends are already rendered
+                   optimistically and promoted on the RPC response — the
+                   Realtime echo is just a duplicate in that case. */
+                if(ev.row.from_id===me.authUser.id)return;
                 appendMessage(ev.row);scrollToBottom();
-                if(ev.row.from_id===meta.friend_id){
-                    /* Peer just messaged me while I'm looking at this
-                       thread — mark read server-side + keep the sidebar
-                       badge at 0 locally so it doesn't flicker up. */
-                    LpSocial.markThreadRead(meta.friend_id);
-                    const row=latestInbox.find(r=>r.friend_id===meta.friend_id);
-                    if(row){row.unread_count=0}
-                }
+                /* Peer just messaged me while I'm looking at this
+                   thread — mark read server-side + keep the sidebar
+                   badge at 0 locally so it doesn't flicker up. */
+                LpSocial.markThreadRead(meta.friend_id);
+                const row=latestInbox.find(r=>r.friend_id===meta.friend_id);
+                if(row){row.unread_count=0}
             }else if(ev.kind==='update'){
                 /* Peer marked one of my messages read → flip my ✓ to ✓✓
                    live. Find the bubble by id and mutate the tick
@@ -1258,11 +1265,12 @@ async function openThread(meta){
         });
     }else{
         threadUnsub=LpSocial.subscribeToGroupRoom(meta.room_id,(m)=>{
+            /* Skip self-echoes — RPC-response path already rendered
+               the bubble optimistically (submitMessage → _sendNow). */
+            if(m.from_id===me.authUser.id)return;
             appendMessage(m);scrollToBottom();
-            if(m.from_id!==me.authUser.id){
-                const row=latestGroups.find(r=>r.room_id===meta.room_id);
-                if(row){row.unread_count=0}
-            }
+            const row=latestGroups.find(r=>r.room_id===meta.room_id);
+            if(row){row.unread_count=0}
             /* Skip self-echo mark (already our own message). */
             if(m.from_id!==me.authUser.id)LpSocial.markGroupRead(meta.room_id);
         });
@@ -1336,35 +1344,12 @@ function renderMessages(rows){
     });
 }
 function appendMessage(m){
-    /* Guard against dupes — message might arrive both from the insert
-       response and the realtime subscription. */
+    /* Guard against dupes — e.g. initial render already included this
+       id, or a delayed Realtime echo arrives after we've already
+       rendered the server response. */
     const existing=$('chatMessages').querySelector('[data-mid="'+m.id+'"]');
     if(existing)return;
     const myId=me.authUser.id;
-    /* Optimistic-send dedupe: when a Realtime echo arrives for a
-       message we sent ourselves (from_id === me), see if one of our
-       pending tmp bubbles has the same body. If so, promote that
-       bubble to the real id rather than adding a duplicate — the
-       user keeps seeing the same DOM element, just no longer faded. */
-    if(m.from_id===myId&&!String(m.id).startsWith('tmp-')&&_pendingSends&&_pendingSends.size){
-        for(const [tmpId,info] of _pendingSends.entries()){
-            if((info.body||'')===(m.body||'')){
-                const row=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
-                if(row){
-                    row.dataset.mid=m.id;
-                    row.classList.remove('pending');
-                    /* Swap blob image → server URL if the echo carries one. */
-                    if(m.attachment_url){
-                        const img=row.querySelector('img[data-full]');
-                        if(img){img.src=m.attachment_url;img.dataset.full=m.attachment_url}
-                    }
-                    if(info.stagedUrl)try{URL.revokeObjectURL(info.stagedUrl)}catch(_){}
-                    _pendingSends.delete(tmpId);
-                    return;
-                }
-            }
-        }
-    }
     const container=$('chatMessages');
     /* Maybe insert day divider if the day just rolled over. */
     const dk=dayKey(m.created_at);
@@ -1560,34 +1545,36 @@ function autoGrowComposer(){
     /* Send is enabled if there's text OR a staged attachment. */
     $('sendBtn').disabled=!ta.value.trim()&&!pendingAttachment;
 }
-/* Optimistic send: the bubble appears in the thread the instant the
-   user hits Enter — no waiting for the INSERT round-trip. We paint
-   it with `.pending` (faded) and a client-only tmp id, then either
-   (a) swap tmp→server id when the INSERT response lands, (b) mark
-   it `.failed` if the server rejects, or (c) silently discard the
-   tmp bubble if the Realtime echo beat the INSERT response (the
-   real row is already on screen). Same dance for attachments —
-   we preview via the local blob: URL, then swap to the public URL
-   after upload. Net effect: perceived latency ≈ 0 ms even on
-   high-RTT networks. */
-const _pendingSends = new Map(); /* tmpId → {body, stagedUrl} for fallback matching */
+/* Optimistic send — WhatsApp / Telegram pattern:
+     1. Paint the bubble the instant the user hits Enter, keyed by a
+        local tmp id. State = 'sending' (faded + clock tick).
+     2. Fire upload + INSERT in the background. When the INSERT returns,
+        swap the tmp id for the server id and flip state → 'sent'.
+     3. Realtime subscription SKIPS the echo for our own sends (see
+        openThread) because the RPC response path is already handling
+        it. This eliminates the race + duplicate-render footgun that
+        a body-matching dedupe would need to solve.
+     4. On failure the bubble flips to 'failed' (red border + '!'
+        indicator) and tapping it retries the same payload. Nothing
+        silent — the user always sees a final state.
+   Image attachments: we hold onto a REF to the staged file (so
+   clearAttachment can revoke its blob URL without breaking our
+   bubble), re-create a preview blob URL that is independent of
+   the attach-preview lifecycle, and swap it for the server URL
+   once the upload lands. */
 async function submitMessage(){
     const ta=$('composerInput');
     const body=ta.value.trim();
     if(!currentThread)return;
     if(!body&&!pendingAttachment)return;
     const stagedFile=pendingAttachment;
-    const stagedUrl=stagedFile?stagedFile._url:null;
-    const stagedType=stagedFile?stagedFile.type:null;
-    const stagedName=stagedFile?stagedFile.name:null;
-    const stagedSize=stagedFile?stagedFile.size:null;
-    /* Clear composer UI immediately so the textarea is ready for the
-       next message before the server has even been contacted. */
+    /* Hold a fresh blob URL that WE own — clearAttachment() will
+       revoke the preview's URL, which would kill our optimistic
+       <img> if we shared it. */
+    const previewUrl=stagedFile?URL.createObjectURL(stagedFile):null;
     ta.value='';autoGrowComposer();
     clearAttachment();
     $('sendBtn').disabled=true;
-    /* Paint optimistic bubble. blob: URL means the image is visible
-       instantly; server URL replaces it on upload completion. */
     const tmpId='tmp-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
     const optimistic={
         id:tmpId,
@@ -1597,66 +1584,82 @@ async function submitMessage(){
         body:body||null,
         created_at:new Date().toISOString(),
         read_at:null,
-        attachment_url:stagedUrl,
-        attachment_type:stagedType,
-        attachment_size:stagedSize,
-        attachment_name:stagedName,
+        attachment_url:previewUrl,
+        attachment_type:stagedFile?stagedFile.type:null,
+        attachment_size:stagedFile?stagedFile.size:null,
+        attachment_name:stagedFile?stagedFile.name:null,
         _pending:true
     };
-    _pendingSends.set(tmpId,{body,stagedUrl});
     appendMessage(optimistic);
     scrollToBottom();
     ta.focus();
-    /* Fire upload + insert in the background. */
-    (async()=>{
+    /* Remember the payload on the DOM node so tap-to-retry can
+       re-send the exact same thing without the user typing again. */
+    const row=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
+    if(row){row._retryPayload={body,file:stagedFile,previewUrl}}
+    _sendNow(tmpId,body,stagedFile,previewUrl);
+}
+/* The actual network call — split out so tap-to-retry on a failed
+   bubble can invoke it again without duplicating the UI setup code.
+   Wrapped in try/catch so an unexpected throw (e.g. offline blip)
+   still leaves the bubble in a final 'failed' state instead of a
+   perpetual 'pending'. */
+async function _sendNow(tmpId,body,stagedFile,previewUrl){
+    try{
+        const thread=currentThread;
+        if(!thread){_markBubbleFailed(tmpId,'no_thread');return}
         let attachment=null;
         if(stagedFile){
             const up=await LpSocial.uploadAttachment(stagedFile);
-            if(!up.ok){
-                _markBubbleFailed(tmpId);
-                _pendingSends.delete(tmpId);
-                $('sendBtn').disabled=!$('composerInput').value.trim()&&!pendingAttachment;
-                alert('Upload failed: '+(up.error||'unknown'));
-                return;
-            }
+            if(!up.ok){_markBubbleFailed(tmpId,up.error||'upload_failed');return}
             attachment=up;
         }
-        const res=currentThread.kind==='dm'
-            ? await LpSocial.sendMessage(currentThread.friend_id,body,attachment)
-            : await LpSocial.sendGroupMessage(currentThread.room_id,body,attachment);
-        $('sendBtn').disabled=!$('composerInput').value.trim()&&!pendingAttachment;
-        if(res.ok&&res.message){
-            const tmp=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
-            if(!tmp){_pendingSends.delete(tmpId);return}
-            const real=$('chatMessages').querySelector('[data-mid="'+res.message.id+'"]');
-            if(real&&real!==tmp){
-                /* Realtime echo beat us — drop our tmp, the real row is
-                   already rendered. Revoke the blob so we don't leak. */
-                if(stagedUrl)try{URL.revokeObjectURL(stagedUrl)}catch(_){}
-                tmp.remove();
-            }else{
-                tmp.dataset.mid=res.message.id;
-                tmp.classList.remove('pending');
-                /* Swap the blob: URL for the server URL so the image
-                   survives a refresh. Also refresh the full-size pointer
-                   for the lightbox. */
-                if(attachment){
-                    const img=tmp.querySelector('img[data-full]');
-                    if(img){img.src=attachment.url;img.dataset.full=attachment.url}
-                    if(stagedUrl)try{URL.revokeObjectURL(stagedUrl)}catch(_){}
-                }
-            }
-            _pendingSends.delete(tmpId);
-        }else{
-            _markBubbleFailed(tmpId);
-            _pendingSends.delete(tmpId);
-            alert('Send failed: '+(res.error||'unknown'));
+        const res=thread.kind==='dm'
+            ? await LpSocial.sendMessage(thread.friend_id,body,attachment)
+            : await LpSocial.sendGroupMessage(thread.room_id,body,attachment);
+        if(!(res.ok&&res.message)){
+            _markBubbleFailed(tmpId,res.error||'send_failed');
+            return;
         }
-    })();
+        /* Promote tmp → server id. The Realtime subscription for the
+           same thread does NOT fire appendMessage for our own sends
+           (see openThread), so there's no duplicate to dedupe. */
+        const tmp=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
+        if(!tmp)return;
+        tmp.dataset.mid=res.message.id;
+        tmp.classList.remove('pending','failed');
+        if(attachment){
+            const img=tmp.querySelector('img[data-full]');
+            if(img){img.src=attachment.url;img.dataset.full=attachment.url}
+        }
+        if(previewUrl)try{URL.revokeObjectURL(previewUrl)}catch(_){}
+        if(tmp._retryPayload)delete tmp._retryPayload;
+    }catch(e){
+        _markBubbleFailed(tmpId,String(e&&e.message||e));
+    }finally{
+        $('sendBtn').disabled=!$('composerInput').value.trim()&&!pendingAttachment;
+    }
 }
-function _markBubbleFailed(tmpId){
+function _markBubbleFailed(tmpId,reason){
     const row=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
-    if(row){row.classList.remove('pending');row.classList.add('failed')}
+    if(!row)return;
+    row.classList.remove('pending');
+    row.classList.add('failed');
+    if(reason)row.title='Tap to retry ('+reason+')';
+    /* Tap-to-retry: one-shot listener, flips back to pending and
+       re-fires _sendNow with the saved payload. */
+    if(!row._retryWired){
+        row._retryWired=true;
+        row.addEventListener('click',(e)=>{
+            if(!row.classList.contains('failed'))return;
+            if(e.target.closest('.reaction-chip, .react-trigger, .reaction-picker'))return;
+            const p=row._retryPayload;
+            if(!p)return;
+            row.classList.remove('failed');
+            row.classList.add('pending');
+            _sendNow(row.dataset.mid,p.body,p.file,p.previewUrl);
+        });
+    }
 }
 
 /* ---- Attachment staging + lightbox --------------------------- */
