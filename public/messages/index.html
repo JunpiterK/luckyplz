@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>Messages · Lucky Please</title>
+    <meta name="description" content="Chat with your Lucky Please friends.">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0A0A1A">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1776639849">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+    --primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--accent-warm:#FF9A3C;
+    --danger:#FF3366;--success:#00D98A;--dark:#0A0A1A;
+    --muted:rgba(255,255,255,.55);--muted-2:rgba(255,255,255,.35);--muted-3:rgba(255,255,255,.15);
+    --panel-bg:rgba(14,14,28,.88);--panel-br:rgba(255,255,255,.06);
+    --bubble-me:rgba(0,217,255,.22);--bubble-me-br:rgba(0,217,255,.5);
+    --bubble-them:rgba(255,255,255,.05);--bubble-them-br:rgba(255,255,255,.08);
+}
+html,body{height:100%}
+body{
+    font-family:'Noto Sans KR',sans-serif;background:var(--dark);color:#fff;
+    min-height:100dvh;letter-spacing:.01em;
+    background-image:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)
+}
+
+/* ================================================================
+   2-pane layout. Desktop: sidebar (360) + chat. Mobile: one pane
+   at a time; data-pane toggles which slide is visible.
+   ================================================================ */
+.msg-app{
+    max-width:1200px;margin:0 auto;min-height:100dvh;
+    display:grid;grid-template-columns:360px 1fr;gap:0;
+    border-left:1px solid var(--panel-br);border-right:1px solid var(--panel-br);
+    background:var(--dark)
+}
+.msg-sidebar{
+    border-right:1px solid var(--panel-br);display:flex;flex-direction:column;
+    min-height:100dvh;background:linear-gradient(180deg,rgba(14,14,28,.4),rgba(10,10,26,.2))
+}
+.msg-main{
+    display:flex;flex-direction:column;min-height:100dvh;
+    background:linear-gradient(180deg,rgba(14,14,28,.2),rgba(10,10,26,.4))
+}
+
+/* Headers */
+.msg-header{
+    display:flex;align-items:center;gap:10px;padding:16px 18px;
+    border-bottom:1px solid var(--panel-br);background:rgba(10,10,26,.8);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    position:sticky;top:0;z-index:10
+}
+.msg-header .back-btn{display:none;width:32px;height:32px;border-radius:50%;border:0;background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:1.1em;align-items:center;justify-content:center}
+.msg-header .back-btn:hover{background:rgba(255,255,255,.12)}
+.msg-header .title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.1em;font-weight:800;letter-spacing:-.01em;flex:1}
+.msg-header .icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.03);color:#fff;cursor:pointer;font-size:1em;display:inline-flex;align-items:center;justify-content:center;transition:all .2s}
+.msg-header .icon-btn:hover{background:rgba(255,230,109,.08);border-color:rgba(255,230,109,.35);color:#FFE66D}
+
+/* Sidebar tabs */
+.sidebar-tabs{display:flex;gap:0;padding:6px 14px 0;background:rgba(10,10,26,.5)}
+.sidebar-tab{flex:1;padding:10px 0;background:none;color:var(--muted-2);border:0;border-bottom:2px solid transparent;font-size:.82em;font-weight:700;letter-spacing:.08em;cursor:pointer;font-family:inherit;text-transform:uppercase;transition:all .2s;position:relative}
+.sidebar-tab.active{color:#fff;border-bottom-color:#FFE66D}
+.sidebar-tab:hover:not(.active){color:rgba(255,255,255,.75)}
+.sidebar-tab .badge{position:absolute;top:6px;right:8px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#FF3366;color:#fff;font-size:.66em;font-weight:800;display:inline-flex;align-items:center;justify-content:center;letter-spacing:0}
+
+/* Sidebar scrollable list */
+.sidebar-body{flex:1;overflow-y:auto;padding:8px 0}
+.sidebar-body::-webkit-scrollbar{width:6px}
+.sidebar-body::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
+
+.empty-state{padding:40px 20px;text-align:center;color:var(--muted-2);font-size:.88em;line-height:1.6}
+.empty-state .emoji{font-size:2.4em;margin-bottom:10px;display:block;opacity:.7}
+
+/* Thread / friend row */
+.row-item{
+    display:flex;align-items:center;gap:12px;padding:12px 18px;cursor:pointer;
+    transition:background .15s;border:0;background:none;width:100%;text-align:left;
+    font-family:inherit;color:inherit
+}
+.row-item:hover{background:rgba(255,255,255,.03)}
+.row-item.active{background:rgba(0,217,255,.06);border-left:3px solid #00D9FF;padding-left:15px}
+.row-avatar{
+    width:44px;height:44px;border-radius:50%;flex-shrink:0;overflow:hidden;position:relative;
+    background:linear-gradient(135deg,#FF6B35,#FF6B8B);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Orbitron',sans-serif;font-weight:900;font-size:1em;color:#fff;
+    box-shadow:0 4px 12px rgba(255,107,53,.2)
+}
+.row-avatar img{width:100%;height:100%;object-fit:cover}
+.row-avatar .verify-dot{
+    position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;border-radius:50%;
+    background:#00D9FF;border:2px solid var(--dark);
+    display:flex;align-items:center;justify-content:center;font-size:.58em;font-weight:900;color:#001220
+}
+.row-body{flex:1;min-width:0}
+.row-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px}
+.row-name{font-weight:700;font-size:.95em;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-time{font-size:.68em;color:var(--muted-2);flex-shrink:0;font-variant-numeric:tabular-nums}
+.row-preview{font-size:.82em;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.01em}
+.row-preview.from-me::before{content:'↪  ';color:var(--muted-2)}
+.row-unread{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#FF3366;color:#fff;font-size:.7em;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;flex-shrink:0}
+
+.row-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.row-actions button{padding:5px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:#fff;font-family:inherit;font-size:.74em;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.02em}
+.row-actions button:hover{background:rgba(255,255,255,.1)}
+.row-actions .accept-btn{background:rgba(0,217,138,.14);border-color:rgba(0,217,138,.5);color:#00D98A}
+.row-actions .accept-btn:hover{background:rgba(0,217,138,.24)}
+.row-actions .reject-btn{background:rgba(255,51,102,.1);border-color:rgba(255,51,102,.3);color:#FF6B8B}
+.row-actions .reject-btn:hover{background:rgba(255,51,102,.2)}
+
+/* Main chat pane */
+.chat-empty{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:40px;text-align:center;gap:14px
+}
+.chat-empty .emoji{font-size:3.2em;opacity:.55}
+.chat-empty .msg{color:var(--muted-2);font-size:.9em;max-width:340px;line-height:1.55}
+
+.chat-view{flex:1;display:none;flex-direction:column;min-height:0}
+.chat-view.on{display:flex}
+.chat-thread-header{
+    display:flex;align-items:center;gap:12px;padding:14px 18px;
+    border-bottom:1px solid var(--panel-br);background:rgba(10,10,26,.8);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    position:sticky;top:0;z-index:9
+}
+.chat-thread-header .back-btn{display:none}
+.chat-thread-header .peer-info{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
+.chat-thread-header .peer-info .row-avatar{width:38px;height:38px;font-size:.9em}
+.chat-thread-header .peer-name{font-weight:700;font-size:1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-thread-header .peer-sub{font-size:.72em;color:var(--muted-2);margin-top:2px}
+
+.chat-messages{
+    flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px
+}
+.chat-messages::-webkit-scrollbar{width:6px}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
+.day-divider{text-align:center;padding:8px 0;font-size:.72em;color:var(--muted-2);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.bubble-row{display:flex;gap:8px;max-width:76%;animation:slideIn .18s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.bubble-row.me{align-self:flex-end;flex-direction:row-reverse}
+.bubble-row.them{align-self:flex-start}
+.bubble{
+    padding:10px 14px;border-radius:18px;font-size:.92em;line-height:1.5;
+    word-break:break-word;white-space:pre-wrap;letter-spacing:.01em
+}
+.bubble-row.me .bubble{
+    background:var(--bubble-me);border:1px solid var(--bubble-me-br);
+    color:#fff;border-bottom-right-radius:6px
+}
+.bubble-row.them .bubble{
+    background:var(--bubble-them);border:1px solid var(--bubble-them-br);
+    border-bottom-left-radius:6px
+}
+.bubble-time{font-size:.68em;color:var(--muted-2);align-self:flex-end;padding:0 4px;white-space:nowrap;margin-bottom:3px}
+
+/* Composer */
+.composer{
+    padding:12px 16px;border-top:1px solid var(--panel-br);
+    display:flex;align-items:flex-end;gap:10px;background:rgba(10,10,26,.85);
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)
+}
+.composer textarea{
+    flex:1;max-height:120px;min-height:44px;padding:12px 14px;
+    border:1px solid rgba(255,255,255,.08);border-radius:18px;
+    background:rgba(255,255,255,.03);color:#fff;outline:none;
+    font-family:inherit;font-size:.93em;resize:none;letter-spacing:.01em;
+    transition:border-color .2s,background .2s;line-height:1.45
+}
+.composer textarea:focus{border-color:rgba(0,217,255,.45);background:rgba(255,255,255,.05)}
+.composer textarea::placeholder{color:rgba(255,255,255,.2)}
+.composer .send-btn{
+    width:44px;height:44px;border-radius:50%;border:0;cursor:pointer;
+    background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001220;
+    font-size:1.1em;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:all .2s;box-shadow:0 4px 14px rgba(0,217,255,.25)
+}
+.composer .send-btn:hover:not(:disabled){transform:translateY(-1px);filter:brightness(1.08)}
+.composer .send-btn:disabled{opacity:.35;cursor:not-allowed;box-shadow:none}
+
+/* Add friend modal */
+.modal-backdrop{
+    position:fixed;inset:0;background:rgba(5,5,15,.85);backdrop-filter:blur(8px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:16px;
+    animation:fade .2s ease
+}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.modal-backdrop.on{display:flex}
+.modal-card{
+    background:linear-gradient(165deg,rgba(22,22,42,.98),rgba(12,12,28,.98));
+    border:1px solid rgba(255,255,255,.08);border-radius:18px;
+    padding:28px 26px;max-width:400px;width:100%;
+    box-shadow:0 30px 80px rgba(0,0,0,.55)
+}
+.modal-card h3{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.1em;color:#FFE66D;margin-bottom:6px;letter-spacing:.02em}
+.modal-card .sub{font-size:.82em;color:var(--muted);margin-bottom:18px;line-height:1.5}
+.modal-card label{display:block;font-size:.7em;color:var(--muted-2);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-bottom:6px}
+.modal-card input{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.03);color:#fff;font-size:.95em;outline:none;font-family:inherit;transition:border-color .2s}
+.modal-card input:focus{border-color:rgba(255,230,109,.5)}
+.modal-card .msg{font-size:.78em;margin-top:6px;min-height:18px}
+.modal-card .msg.ok{color:#00D98A}
+.modal-card .msg.err{color:#FF6B8B}
+.modal-actions{display:flex;gap:8px;margin-top:16px}
+.modal-actions button{flex:1;padding:11px;border-radius:10px;border:0;font-family:inherit;font-weight:700;cursor:pointer;font-size:.85em;transition:all .2s}
+.btn-ghost{background:rgba(255,255,255,.05);color:#fff;border:1px solid rgba(255,255,255,.08)!important}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.btn-primary{background:linear-gradient(135deg,#FF9A3C,#FF6B35);color:#fff;letter-spacing:.05em}
+.btn-primary:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.3)}
+
+/* Mobile: stack, swipe between panes */
+@media(max-width:760px){
+    .msg-app{grid-template-columns:1fr;border:0}
+    .msg-sidebar,.msg-main{border:0}
+    .msg-app[data-pane="sidebar"] .msg-main{display:none}
+    .msg-app[data-pane="chat"]    .msg-sidebar{display:none}
+    .chat-thread-header .back-btn{display:inline-flex;width:32px;height:32px;border-radius:50%;border:0;background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:1.1em;align-items:center;justify-content:center;margin-right:4px}
+}
+
+/* Sign-in prompt (for signed-out visitors) */
+.signin-prompt{
+    max-width:420px;margin:60px auto;padding:40px 28px;text-align:center;
+    background:linear-gradient(165deg,rgba(22,22,42,.72),rgba(12,12,28,.88));
+    border:1px solid rgba(255,255,255,.06);border-radius:20px;
+    backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)
+}
+.signin-prompt h2{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.3em;margin-bottom:10px;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.signin-prompt p{color:var(--muted);font-size:.92em;line-height:1.6;margin-bottom:20px}
+.signin-prompt .primary{display:inline-block;padding:12px 28px;border-radius:12px;background:linear-gradient(135deg,#FF9A3C,#FF6B35);color:#fff;font-weight:800;text-decoration:none;letter-spacing:.08em;font-size:.85em;transition:transform .2s,filter .2s}
+.signin-prompt .primary:hover{transform:translateY(-1px);filter:brightness(1.08)}
+.signin-prompt .home-link{display:block;margin-top:14px;font-size:.8em;color:var(--muted-2);text-decoration:none}
+.signin-prompt .home-link:hover{color:#FFE66D}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+</head>
+<body>
+<div id="signedOutRoot" style="display:none">
+    <div class="signin-prompt">
+        <h2>Sign in to chat</h2>
+        <p>Friends &amp; messages are for logged-in Lucky Please members. Sign in with Google or Kakao in seconds.</p>
+        <a class="primary" href="/auth/?next=%2Fmessages%2F">SIGN IN</a>
+        <a class="home-link" href="/">← Back to home</a>
+    </div>
+</div>
+
+<div class="msg-app" id="app" data-pane="sidebar" style="display:none">
+    <aside class="msg-sidebar">
+        <header class="msg-header">
+            <a href="/" class="icon-btn" title="Home" aria-label="Home">🏠</a>
+            <div class="title" id="sidebarTitle">Messages</div>
+            <button class="icon-btn" id="addFriendBtn" title="Add friend" aria-label="Add friend">＋</button>
+        </header>
+        <div class="sidebar-tabs">
+            <button class="sidebar-tab active" data-tab="chats" id="tabChats">Chats</button>
+            <button class="sidebar-tab" data-tab="friends" id="tabFriends">Friends</button>
+            <button class="sidebar-tab" data-tab="requests" id="tabRequests">
+                Requests<span class="badge" id="requestsBadge" style="display:none">0</span>
+            </button>
+        </div>
+        <div class="sidebar-body" id="sidebarBody"></div>
+    </aside>
+
+    <main class="msg-main">
+        <div class="chat-empty" id="chatEmpty">
+            <div class="emoji">💬</div>
+            <div class="msg" id="chatEmptyMsg">Select a friend on the left to start chatting, or add someone new with the ＋ button.</div>
+        </div>
+        <div class="chat-view" id="chatView">
+            <header class="chat-thread-header">
+                <button class="back-btn" id="chatBackBtn" aria-label="Back">←</button>
+                <div class="peer-info">
+                    <div class="row-avatar" id="peerAvatar">?</div>
+                    <div>
+                        <div class="peer-name" id="peerName">—</div>
+                        <div class="peer-sub" id="peerSub">—</div>
+                    </div>
+                </div>
+            </header>
+            <div class="chat-messages" id="chatMessages"></div>
+            <form class="composer" id="composerForm">
+                <textarea id="composerInput" rows="1" placeholder="Type a message…" maxlength="2000"></textarea>
+                <button type="submit" class="send-btn" id="sendBtn" aria-label="Send" disabled>➤</button>
+            </form>
+        </div>
+    </main>
+</div>
+
+<div class="modal-backdrop" id="addFriendModal">
+    <div class="modal-card">
+        <h3>Add a friend</h3>
+        <div class="sub" id="addFriendSub">Enter your friend's Lucky Please nickname to send a request.</div>
+        <label for="addFriendInput">Nickname</label>
+        <input id="addFriendInput" type="text" maxlength="20" autocomplete="off" spellcheck="false" placeholder="e.g. luckyminsu">
+        <div class="msg" id="addFriendMsg" role="status" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="addFriendCancel">Cancel</button>
+            <button type="button" class="btn-primary" id="addFriendSend" disabled>Send request</button>
+        </div>
+    </div>
+</div>
+
+<script src="/js/supabase-config.js"></script>
+<script src="/js/lpSocial.js"></script>
+<script>
+/* ================================================================
+   Messages controller
+   ================================================================ */
+
+/* ---- i18n ----------------------------------------------------- */
+const T = {
+    en: {
+        msgs:'Messages', chats:'Chats', friends:'Friends', requests:'Requests',
+        addFriend:'Add a friend', addFriendSub:'Enter your friend\'s Lucky Please nickname to send a request.',
+        nick:'Nickname', cancel:'Cancel', send:'Send request', ph:'e.g. luckyminsu',
+        chatEmpty:'Select a friend on the left to start chatting, or add someone new with the ＋ button.',
+        noChats:'No conversations yet. Add a friend to start messaging.',
+        noFriends:'Your friends list is empty.',
+        noRequests:'No pending requests.',
+        noMessages:'Start the conversation — say hi!',
+        composerPh:'Type a message…', peerGuest:'Lucky Please member',
+        accept:'Accept', reject:'Reject', unfriend:'Unfriend', block:'Block', chat:'Chat',
+        outgoing:'Request sent', verified:'Verified member',
+        err_not_found:'No member with that nickname.',
+        err_cannot_friend_self:'You can\'t add yourself.',
+        err_already_friends:'You\'re already friends.',
+        err_already_requested:'Request already sent.',
+        err_blocked:'Cannot send — blocked.',
+        ok_requested:'✓ Request sent!',
+        ok_auto_accepted:'✓ You\'re now friends!',
+        signOutRootH:'Sign in to chat',
+        signOutRootP:'Friends & messages are for logged-in Lucky Please members. Sign in with Google or Kakao in seconds.',
+        signIn:'SIGN IN', backHome:'← Back to home',
+        setupNeededH:'Finish your profile',
+        setupNeededP:'Pick a nickname to unlock friends and messages.',
+        setupCTA:'FINISH SETUP'
+    },
+    ko: {
+        msgs:'메시지', chats:'대화', friends:'친구', requests:'요청',
+        addFriend:'친구 추가', addFriendSub:'친구의 Lucky Please 닉네임을 입력해 요청을 보내세요.',
+        nick:'닉네임', cancel:'취소', send:'요청 보내기', ph:'예: 럭키민수',
+        chatEmpty:'왼쪽에서 친구를 선택하거나 ＋ 버튼으로 새 친구를 추가하세요.',
+        noChats:'아직 대화가 없어요. 친구를 추가하고 메시지를 시작해보세요.',
+        noFriends:'친구 목록이 비어있어요.',
+        noRequests:'대기 중인 요청이 없어요.',
+        noMessages:'먼저 인사해보세요!',
+        composerPh:'메시지 입력…', peerGuest:'Lucky Please 회원',
+        accept:'수락', reject:'거절', unfriend:'친구 삭제', block:'차단', chat:'대화',
+        outgoing:'요청 전송됨', verified:'인증 회원',
+        err_not_found:'해당 닉네임의 회원을 찾을 수 없어요.',
+        err_cannot_friend_self:'본인에게 요청을 보낼 수 없어요.',
+        err_already_friends:'이미 친구예요.',
+        err_already_requested:'이미 요청을 보냈어요.',
+        err_blocked:'차단되어 요청을 보낼 수 없어요.',
+        ok_requested:'✓ 요청을 보냈어요!',
+        ok_auto_accepted:'✓ 친구가 되었어요!',
+        signOutRootH:'로그인 후 이용하세요',
+        signOutRootP:'친구·메시지 기능은 Lucky Please 회원 전용이에요. Google 또는 Kakao로 몇 초 만에 로그인할 수 있어요.',
+        signIn:'로그인', backHome:'← 홈으로',
+        setupNeededH:'프로필을 완성해주세요',
+        setupNeededP:'닉네임을 정해야 친구·메시지 기능이 열려요.',
+        setupCTA:'프로필 완성하기'
+    },
+    ja: {
+        msgs:'メッセージ', chats:'トーク', friends:'フレンド', requests:'リクエスト',
+        addFriend:'フレンド追加', addFriendSub:'フレンドの Lucky Please ニックネームでリクエストを送信します。',
+        nick:'ニックネーム', cancel:'キャンセル', send:'送信', ph:'例: luckyminsu',
+        chatEmpty:'左からフレンドを選ぶか、＋ で新しく追加してください。',
+        noChats:'まだ会話がありません。フレンドを追加してメッセージを始めましょう。',
+        noFriends:'フレンドリストは空です。',
+        noRequests:'保留中のリクエストはありません。',
+        noMessages:'挨拶から始めましょう！',
+        composerPh:'メッセージを入力…', peerGuest:'Lucky Please 会員',
+        accept:'承認', reject:'拒否', unfriend:'削除', block:'ブロック', chat:'トーク',
+        outgoing:'リクエスト送信済', verified:'認証会員',
+        err_not_found:'該当のニックネームの会員が見つかりません。',
+        err_cannot_friend_self:'自分には送信できません。',
+        err_already_friends:'既にフレンドです。',
+        err_already_requested:'既にリクエストを送っています。',
+        err_blocked:'ブロックのため送信できません。',
+        ok_requested:'✓ リクエストを送信しました！',
+        ok_auto_accepted:'✓ フレンドになりました！',
+        signOutRootH:'ログインしてください',
+        signOutRootP:'フレンド・メッセージ機能は会員限定です。',
+        signIn:'ログイン', backHome:'← ホームへ',
+        setupNeededH:'プロフィールを完成させてください',
+        setupNeededP:'ニックネームを設定してフレンド機能を解放します。',
+        setupCTA:'設定へ'
+    },
+    zh: {
+        msgs:'消息', chats:'聊天', friends:'好友', requests:'请求',
+        addFriend:'添加好友', addFriendSub:'输入好友的 Lucky Please 昵称发送请求。',
+        nick:'昵称', cancel:'取消', send:'发送请求', ph:'例: luckyminsu',
+        chatEmpty:'从左侧选择好友开始聊天，或通过 ＋ 添加新好友。',
+        noChats:'还没有对话。添加好友开始聊天吧。',
+        noFriends:'好友列表为空。',
+        noRequests:'没有待处理的请求。',
+        noMessages:'打个招呼开始对话吧！',
+        composerPh:'输入消息…', peerGuest:'Lucky Please 会员',
+        accept:'接受', reject:'拒绝', unfriend:'删除', block:'屏蔽', chat:'聊天',
+        outgoing:'请求已发送', verified:'认证会员',
+        err_not_found:'找不到该昵称的会员。',
+        err_cannot_friend_self:'不能向自己发送请求。',
+        err_already_friends:'已经是好友了。',
+        err_already_requested:'请求已发送。',
+        err_blocked:'已屏蔽，无法发送。',
+        ok_requested:'✓ 请求已发送！',
+        ok_auto_accepted:'✓ 已成为好友！',
+        signOutRootH:'登录后使用',
+        signOutRootP:'好友和消息功能仅限 Lucky Please 会员。',
+        signIn:'登录', backHome:'← 返回首页',
+        setupNeededH:'完成你的档案',
+        setupNeededP:'设置昵称以解锁好友和消息。',
+        setupCTA:'完成设置'
+    }
+};
+function detectLang(){
+    const s=(localStorage.getItem('luckyplz_lang')||'').toLowerCase().split('-')[0];
+    if(T[s])return s;
+    const n=(navigator.language||'en').toLowerCase().split('-')[0];
+    return T[n]?n:'en';
+}
+const lang=detectLang();
+const t=T[lang]||T.en;
+document.title=t.msgs+' · Lucky Please';
+
+function $(id){return document.getElementById(id)}
+function escape(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function initials(name){return (name||'?').trim()[0]?.toUpperCase()||'?'}
+function timeAgo(iso){
+    if(!iso)return '';
+    const s=Math.max(1,Math.floor((Date.now()-new Date(iso).getTime())/1000));
+    if(s<60){return lang==='ko'?'방금':(lang==='ja'?'たった今':'now')}
+    const m=Math.floor(s/60);if(m<60){return lang==='ko'?m+'분':(lang==='ja'?m+'分':m+'m')}
+    const h=Math.floor(m/60);if(h<24){return lang==='ko'?h+'시간':(lang==='ja'?h+'時間':h+'h')}
+    const d=Math.floor(h/24);if(d<7){return lang==='ko'?d+'일':(lang==='ja'?d+'日':d+'d')}
+    return new Date(iso).toLocaleDateString(lang,{month:'short',day:'numeric'});
+}
+function dayKey(iso){return new Date(iso).toLocaleDateString(lang,{year:'numeric',month:'short',day:'numeric'})}
+
+/* Static UI strings */
+$('sidebarTitle').textContent=t.msgs;
+$('tabChats').textContent=t.chats;
+$('tabFriends').textContent=t.friends;
+$('tabRequests').childNodes[0].textContent=t.requests;
+$('chatEmptyMsg').textContent=t.chatEmpty;
+$('composerInput').placeholder=t.composerPh;
+$('addFriendBtn').title=t.addFriend;
+
+/* ---- State --------------------------------------------------- */
+let me=null;
+let currentTab='chats';
+let currentThread=null; /* {friend_id, friend_nickname, avatar, authed} */
+let threadUnsub=null;
+let incomingUnsub=null;
+
+/* ---- Auth gate ----------------------------------------------- */
+async function boot(){
+    const state=await ensureProfile();
+    if(!state.signedIn){
+        $('signedOutRoot').querySelector('h2').textContent=t.signOutRootH;
+        $('signedOutRoot').querySelector('p').textContent=t.signOutRootP;
+        $('signedOutRoot').querySelector('.primary').textContent=t.signIn;
+        $('signedOutRoot').querySelector('.home-link').textContent=t.backHome;
+        $('signedOutRoot').style.display='block';
+        return;
+    }
+    if(state.needsSetup){
+        location.replace('/auth/setup/?next='+encodeURIComponent('/messages/'));
+        return;
+    }
+    me=state;
+    $('app').style.display='grid';
+    wireEvents();
+    await refresh();
+    /* Global incoming-message subscription keeps inbox + unread counts
+       fresh without polling. Thread subscription is separate, set up
+       when the user opens a specific conversation. */
+    incomingUnsub=LpSocial.subscribeToIncoming(()=>{refresh()});
+}
+
+function wireEvents(){
+    document.querySelectorAll('.sidebar-tab').forEach(b=>{
+        b.addEventListener('click',()=>{currentTab=b.dataset.tab;updateTabActive();renderSidebar()});
+    });
+    $('addFriendBtn').addEventListener('click',openAddFriend);
+    $('addFriendCancel').addEventListener('click',closeAddFriend);
+    $('addFriendInput').addEventListener('input',()=>{
+        const v=$('addFriendInput').value.trim();
+        $('addFriendSend').disabled=v.length<2;
+        $('addFriendMsg').textContent='';
+    });
+    $('addFriendSend').addEventListener('click',submitAddFriend);
+    $('addFriendInput').addEventListener('keydown',(e)=>{if(e.key==='Enter')submitAddFriend()});
+    $('addFriendModal').addEventListener('click',(e)=>{if(e.target===$('addFriendModal'))closeAddFriend()});
+
+    $('chatBackBtn').addEventListener('click',()=>{
+        $('app').dataset.pane='sidebar';
+        closeThread();
+    });
+    $('composerInput').addEventListener('input',autoGrowComposer);
+    $('composerInput').addEventListener('keydown',(e)=>{
+        if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitMessage()}
+    });
+    $('composerForm').addEventListener('submit',(e)=>{e.preventDefault();submitMessage()});
+    /* Modal labels */
+    $('addFriendModal').querySelector('h3').textContent=t.addFriend;
+    $('addFriendSub').textContent=t.addFriendSub;
+    $('addFriendModal').querySelector('label').textContent=t.nick;
+    $('addFriendCancel').textContent=t.cancel;
+    $('addFriendSend').textContent=t.send;
+    $('addFriendInput').placeholder=t.ph;
+}
+
+function updateTabActive(){
+    document.querySelectorAll('.sidebar-tab').forEach(b=>{
+        b.classList.toggle('active',b.dataset.tab===currentTab);
+    });
+}
+
+/* ---- Data fetch + sidebar render ----------------------------- */
+let latestInbox=[];
+let latestFriends=[];
+async function refresh(){
+    const [inb,fri]=await Promise.all([LpSocial.getInbox({force:true}),LpSocial.getFriends({force:true})]);
+    if(inb.ok)latestInbox=inb.rows;
+    if(fri.ok)latestFriends=fri.rows;
+    /* Update request badge */
+    const pendingIn=latestFriends.filter(f=>f.direction==='incoming-pending').length;
+    const badge=$('requestsBadge');
+    if(pendingIn>0){badge.textContent=pendingIn;badge.style.display='inline-flex'}
+    else badge.style.display='none';
+    renderSidebar();
+    /* If the currently-open thread has new unread from our peer,
+       mark them read since we're viewing. */
+    if(currentThread){
+        LpSocial.markThreadRead(currentThread.friend_id).then(()=>LpSocial.getInbox({force:true}));
+    }
+}
+
+function renderSidebar(){
+    const body=$('sidebarBody');
+    let html='';
+    if(currentTab==='chats'){
+        if(!latestInbox.length){
+            html=emptyState('💬',t.noChats);
+        }else{
+            html=latestInbox.map(r=>inboxRow(r)).join('');
+        }
+    }else if(currentTab==='friends'){
+        const list=latestFriends.filter(f=>f.direction==='accepted');
+        if(!list.length){html=emptyState('🤝',t.noFriends)}
+        else html=list.map(f=>friendRow(f)).join('');
+    }else if(currentTab==='requests'){
+        const incoming=latestFriends.filter(f=>f.direction==='incoming-pending');
+        const outgoing=latestFriends.filter(f=>f.direction==='outgoing-pending');
+        if(!incoming.length&&!outgoing.length){html=emptyState('📨',t.noRequests)}
+        else html=incoming.map(f=>requestRow(f,'incoming')).join('')+outgoing.map(f=>requestRow(f,'outgoing')).join('');
+    }
+    body.innerHTML=html;
+    /* Wire row clicks for inbox & friends — open chat */
+    body.querySelectorAll('[data-friend-id]').forEach(el=>{
+        if(el.dataset.noopen)return;
+        el.addEventListener('click',(e)=>{
+            if(e.target.closest('.row-actions'))return;
+            openThread({
+                friend_id:el.dataset.friendId,
+                friend_nickname:el.dataset.nickname,
+                friend_avatar:el.dataset.avatar||null,
+                friend_authed:el.dataset.authed==='1'
+            });
+        });
+    });
+    body.querySelectorAll('[data-action]').forEach(btn=>{
+        btn.addEventListener('click',async(e)=>{
+            e.stopPropagation();
+            const fid=btn.dataset.targetFriend;
+            const act=btn.dataset.action;
+            btn.disabled=true;
+            if(act==='accept')       await LpSocial.acceptFriendRequest(fid);
+            else if(act==='reject')  await LpSocial.removeFriend(fid);
+            else if(act==='unfriend')await LpSocial.removeFriend(fid);
+            else if(act==='block')   await LpSocial.blockFriend(fid);
+            await refresh();
+        });
+    });
+}
+
+function emptyState(emoji,msg){
+    return '<div class="empty-state"><span class="emoji">'+emoji+'</span><div>'+escape(msg)+'</div></div>';
+}
+function avatarHtml(url,name,verified){
+    const dot=verified?'<span class="verify-dot" title="'+escape(t.verified)+'">✓</span>':'';
+    if(url){return '<div class="row-avatar"><img src="'+escape(url)+'" referrerpolicy="no-referrer" alt="">'+dot+'</div>'}
+    return '<div class="row-avatar">'+initials(name)+dot+'</div>';
+}
+function inboxRow(r){
+    const unreadBadge=Number(r.unread_count)>0?'<span class="row-unread">'+r.unread_count+'</span>':'';
+    const previewCls=r.last_from_me?'row-preview from-me':'row-preview';
+    return '<button class="row-item'+(currentThread&&currentThread.friend_id===r.friend_id?' active':'')+'" '
+        +'data-friend-id="'+escape(r.friend_id)+'" data-nickname="'+escape(r.friend_nickname)
+        +'" data-avatar="'+escape(r.friend_avatar||'')+'" data-authed="'+(r.friend_authed?'1':'0')+'">'
+        +avatarHtml(r.friend_avatar,r.friend_nickname,r.friend_authed)
+        +'<div class="row-body">'
+        +'<div class="row-top"><span class="row-name">'+escape(r.friend_nickname)+'</span>'
+        +'<span class="row-time">'+escape(timeAgo(r.last_created_at))+'</span></div>'
+        +'<div class="row-top"><span class="'+previewCls+'">'+escape(r.last_body||'')+'</span>'+unreadBadge+'</div>'
+        +'</div></button>';
+}
+function friendRow(f){
+    return '<button class="row-item" data-friend-id="'+escape(f.friend_id)+'" data-nickname="'+escape(f.nickname)
+        +'" data-avatar="'+escape(f.avatar_url||'')+'" data-authed="'+(f.profile_complete?'1':'0')+'">'
+        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete)
+        +'<div class="row-body"><div class="row-top"><span class="row-name">'+escape(f.nickname)+'</span></div></div>'
+        +'</button>';
+}
+function requestRow(f,kind){
+    const actions=kind==='incoming'
+        ? '<div class="row-actions"><button class="accept-btn" data-action="accept" data-target-friend="'+escape(f.friend_id)+'">'+escape(t.accept)+'</button>'
+          +'<button class="reject-btn" data-action="reject" data-target-friend="'+escape(f.friend_id)+'">'+escape(t.reject)+'</button></div>'
+        : '<div class="row-actions"><span style="font-size:.74em;color:rgba(255,255,255,.35);font-style:italic">'+escape(t.outgoing)+'</span>'
+          +'<button data-action="reject" data-target-friend="'+escape(f.friend_id)+'">'+escape(t.cancel)+'</button></div>';
+    return '<div class="row-item" data-friend-id="'+escape(f.friend_id)+'" data-noopen="1">'
+        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete)
+        +'<div class="row-body"><div class="row-top"><span class="row-name">'+escape(f.nickname)+'</span></div></div>'
+        +actions+'</div>';
+}
+
+/* ---- Add friend modal ---------------------------------------- */
+function openAddFriend(){
+    $('addFriendInput').value='';$('addFriendMsg').textContent='';$('addFriendMsg').className='msg';
+    $('addFriendSend').disabled=true;
+    $('addFriendModal').classList.add('on');
+    setTimeout(()=>$('addFriendInput').focus(),40);
+}
+function closeAddFriend(){$('addFriendModal').classList.remove('on')}
+async function submitAddFriend(){
+    if($('addFriendSend').disabled)return;
+    const val=$('addFriendInput').value.trim();
+    if(val.length<2)return;
+    $('addFriendSend').disabled=true;
+    $('addFriendMsg').className='msg';$('addFriendMsg').textContent='…';
+    const res=await LpSocial.sendFriendRequest(val);
+    if(res.ok){
+        $('addFriendMsg').className='msg ok';
+        $('addFriendMsg').textContent=res.auto_accepted?t.ok_auto_accepted:t.ok_requested;
+        await refresh();
+        setTimeout(closeAddFriend,900);
+    }else{
+        $('addFriendMsg').className='msg err';
+        const key='err_'+(res.error||'');
+        $('addFriendMsg').textContent=t[key]||res.error||'Error';
+        $('addFriendSend').disabled=false;
+    }
+}
+
+/* ---- Thread view --------------------------------------------- */
+async function openThread(friend){
+    if(threadUnsub){threadUnsub();threadUnsub=null}
+    currentThread=friend;
+    $('chatEmpty').style.display='none';
+    $('chatView').classList.add('on');
+    $('app').dataset.pane='chat';
+    const av=$('peerAvatar');
+    if(friend.friend_avatar){av.innerHTML='<img src="'+escape(friend.friend_avatar)+'" referrerpolicy="no-referrer" alt="">'}
+    else av.textContent=initials(friend.friend_nickname);
+    if(friend.friend_authed){av.innerHTML+='<span class="verify-dot">✓</span>'}
+    $('peerName').textContent=friend.friend_nickname;
+    $('peerSub').textContent=friend.friend_authed?t.verified:t.peerGuest;
+    $('chatMessages').innerHTML='';
+    const res=await LpSocial.getThreadMessages(friend.friend_id);
+    if(res.ok){
+        renderMessages(res.rows);
+        scrollToBottom();
+    }
+    /* Mark unread as read. */
+    await LpSocial.markThreadRead(friend.friend_id);
+    await refresh();
+    /* Live updates for this thread */
+    threadUnsub=LpSocial.subscribeToThread(friend.friend_id,(m)=>{
+        appendMessage(m);
+        scrollToBottom();
+        if(m.from_id===friend.friend_id)LpSocial.markThreadRead(friend.friend_id);
+    });
+    $('composerInput').focus();
+}
+function closeThread(){
+    if(threadUnsub){threadUnsub();threadUnsub=null}
+    currentThread=null;
+    $('chatView').classList.remove('on');
+    $('chatEmpty').style.display='flex';
+}
+
+function renderMessages(rows){
+    const container=$('chatMessages');
+    container.innerHTML='';
+    if(!rows.length){
+        container.innerHTML='<div class="empty-state"><span class="emoji">👋</span><div>'+escape(t.noMessages)+'</div></div>';
+        return;
+    }
+    let lastDay=null;
+    const myId=me.authUser.id;
+    rows.forEach(m=>{
+        const dk=dayKey(m.created_at);
+        if(dk!==lastDay){
+            const div=document.createElement('div');
+            div.className='day-divider';div.textContent=dk;
+            container.appendChild(div);
+            lastDay=dk;
+        }
+        container.appendChild(bubbleEl(m,myId));
+    });
+}
+function appendMessage(m){
+    /* Guard against dupes — message might arrive both from the insert
+       response and the realtime subscription. */
+    const existing=$('chatMessages').querySelector('[data-mid="'+m.id+'"]');
+    if(existing)return;
+    const myId=me.authUser.id;
+    const container=$('chatMessages');
+    /* Maybe insert day divider if the day just rolled over. */
+    const dk=dayKey(m.created_at);
+    const lastDividerText=container.querySelector('.day-divider:last-of-type')?.textContent;
+    if(dk!==lastDividerText){
+        const div=document.createElement('div');
+        div.className='day-divider';div.textContent=dk;
+        container.appendChild(div);
+    }
+    container.appendChild(bubbleEl(m,myId));
+}
+function bubbleEl(m,myId){
+    const mine=m.from_id===myId;
+    const row=document.createElement('div');
+    row.className='bubble-row '+(mine?'me':'them');
+    row.dataset.mid=m.id;
+    row.innerHTML='<div class="bubble">'+escape(m.body)+'</div>'
+        +'<div class="bubble-time">'+escape(new Date(m.created_at).toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'}))+'</div>';
+    return row;
+}
+function scrollToBottom(){
+    const c=$('chatMessages');c.scrollTop=c.scrollHeight;
+}
+
+/* ---- Composer ------------------------------------------------ */
+function autoGrowComposer(){
+    const ta=$('composerInput');
+    ta.style.height='auto';
+    ta.style.height=Math.min(120,ta.scrollHeight)+'px';
+    $('sendBtn').disabled=!ta.value.trim();
+}
+async function submitMessage(){
+    const ta=$('composerInput');
+    const body=ta.value.trim();
+    if(!body||!currentThread)return;
+    $('sendBtn').disabled=true;
+    ta.value='';autoGrowComposer();
+    const res=await LpSocial.sendMessage(currentThread.friend_id,body);
+    if(res.ok){
+        appendMessage(res.message);
+        scrollToBottom();
+    }else{
+        /* Put the text back + surface error inline. */
+        ta.value=body;autoGrowComposer();
+        alert('Send failed: '+(res.error||'unknown'));
+    }
+    ta.focus();
+}
+
+boot();
+window.addEventListener('beforeunload',()=>{
+    if(threadUnsub)threadUnsub();
+    if(incomingUnsub)incomingUnsub();
+});
+</script>
+</body>
+</html>

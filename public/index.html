@@ -330,6 +330,7 @@
     <div class="stars" id="stars"></div>
     <div class="auth-bar">
         <button class="auth-btn lp-home-join-btn" id="lpHomeJoinBtn" type="button" title="Join a room">👥 <span id="lpHomeJoinLabel">Join</span></button>
+        <a href="/messages/" class="auth-btn lp-home-msgs-btn" id="lpHomeMsgsBtn" title="Messages" style="display:none;position:relative">💬 <span id="lpHomeMsgsLabel">Chat</span><span id="lpHomeMsgsBadge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#FF3366;color:#fff;font-size:.65em;font-weight:900;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(255,51,102,.4);letter-spacing:0"></span></a>
         <a href="/auth/" class="auth-btn" id="authBtn">👤 <span id="authLabel">Login</span></a>
     </div>
     <div class="container">
@@ -692,6 +693,28 @@ init();
                 const name=(state.profile&&state.profile.nickname)||getDisplayName(state.authUser);
                 btn.innerHTML=`<span class="auth-avatar">${name.charAt(0).toUpperCase()}</span>${name}`;
                 btn.href='/auth/';
+                /* Show Messages chip + unread badge. LpSocial is loaded
+                   lazily by siteFooter.js — wait for it. */
+                const msgsBtn=document.getElementById('lpHomeMsgsBtn');
+                if(msgsBtn)msgsBtn.style.display='inline-flex';
+                (async function(){
+                    for(let i=0;i<40;i++){if(window.LpSocial)break;await new Promise(r=>setTimeout(r,120))}
+                    if(!window.LpSocial)return;
+                    async function refreshBadge(){
+                        try{
+                            const n=await window.LpSocial.getUnreadCount();
+                            const b=document.getElementById('lpHomeMsgsBadge');
+                            if(!b)return;
+                            if(n>0){b.textContent=n>99?'99+':String(n);b.style.display='inline-flex'}
+                            else b.style.display='none';
+                        }catch(_){}
+                    }
+                    refreshBadge();
+                    /* Live update when a new DM lands — subscribeToIncoming
+                       invalidates the inbox cache, then we re-query. Cheap
+                       because inbox is a single RPC. */
+                    window.LpSocial.subscribeToIncoming(()=>refreshBadge());
+                })();
             }
         }
     }catch(e){console.warn('[home auth]',e);}
@@ -703,6 +726,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776732210" defer></script>
+<script src="/js/siteFooter.js?v=1776732817" defer></script>
 </body>
 </html>
