@@ -112,6 +112,35 @@ h1.headline{
 .footer-row .view-profile{font-size:.82em;color:var(--muted-2);text-decoration:none;transition:color .2s}
 .footer-row .view-profile:hover{color:#FFE66D}
 
+/* Danger zone — account deletion. Separated from the normal footer
+   with extra whitespace + a red tint so a careless click can't land
+   on it. Matches Discord / Slack "red-bordered destructive section"
+   convention. */
+.danger-zone{margin-top:26px;padding:16px 18px;border:1px solid rgba(255,51,102,.28);border-radius:14px;background:rgba(255,51,102,.04)}
+.danger-zone .dz-title{font-size:.74em;letter-spacing:.12em;text-transform:uppercase;font-weight:800;color:#FF6B8B;margin-bottom:6px}
+.danger-zone .dz-body{font-size:.82em;color:var(--muted);line-height:1.55;margin-bottom:10px}
+.danger-zone .dz-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:10px;border:1px solid rgba(255,51,102,.4);background:rgba(255,51,102,.08);color:#FF6B8B;font-family:inherit;font-size:.82em;font-weight:700;cursor:pointer;transition:all .15s}
+.danger-zone .dz-btn:hover{background:rgba(255,51,102,.18);border-color:rgba(255,51,102,.6)}
+
+/* Confirm modal — matches the admin modal style so future modals
+   can share. Forces the user to type their nickname so a reflex
+   double-click can't delete the account. */
+.confirm-modal{position:fixed;inset:0;background:rgba(5,5,15,.72);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;padding:16px;z-index:200}
+.confirm-modal.on{display:flex;animation:fade .18s ease-out}
+.confirm-card{background:linear-gradient(160deg,rgba(22,22,42,.98),rgba(12,12,28,1));border:1px solid rgba(255,51,102,.3);border-radius:18px;padding:24px;max-width:420px;width:100%;box-shadow:0 24px 60px rgba(0,0,0,.6)}
+.confirm-card h3{font-size:1.06em;font-weight:800;color:#FF6B8B;margin-bottom:10px}
+.confirm-card p{font-size:.88em;color:var(--muted);line-height:1.6;margin-bottom:14px}
+.confirm-card p strong{color:#fff}
+.confirm-card .confirm-input{width:100%;padding:11px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:#fff;font-family:inherit;font-size:.92em;outline:none;margin-bottom:14px}
+.confirm-card .confirm-input:focus{border-color:rgba(255,51,102,.5)}
+.confirm-card .row{display:flex;gap:10px;justify-content:flex-end}
+.confirm-card button{padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;font-family:inherit;font-size:.86em;font-weight:700;transition:all .15s}
+.confirm-card button:hover{background:rgba(255,255,255,.1)}
+.confirm-card button.danger{background:linear-gradient(135deg,#FF3366,#FF6B8B);border-color:transparent;color:#fff}
+.confirm-card button.danger:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.5)}
+.confirm-card button.danger:not(:disabled):hover{filter:brightness(1.08)}
+.confirm-card .err{color:var(--danger);font-size:.82em;margin-top:10px;min-height:1em}
+
 .char-count{font-size:.7em;color:var(--muted-2);font-variant-numeric:tabular-nums}
 .char-count.near{color:#FFE66D}
 .char-count.over{color:#FF6B8B}
@@ -209,10 +238,34 @@ h1.headline{
         <button type="button" class="signout" id="signOutBtn">Sign out</button>
         <a class="view-profile" id="viewProfileLink" target="_blank" rel="noopener">View public page →</a>
     </div>
+
+    <div class="danger-zone">
+        <div class="dz-title" id="dzTitle">위험 구역</div>
+        <div class="dz-body" id="dzBody">
+            계정을 영구 탈퇴하면 프로필, 친구 관계, 주고받은 메시지, 그룹방, 내가 올린 이미지까지 <strong>전부 삭제되고 복구되지 않아요</strong>.
+        </div>
+        <button type="button" class="dz-btn" id="deleteAcctBtn">🗑 계정 탈퇴…</button>
+    </div>
 </div>
 </div>
 
 <div class="overlay" id="loadingOverlay"><div class="big-spinner"></div></div>
+
+<!-- Delete-account confirm modal -->
+<div class="confirm-modal" id="delModal" role="dialog" aria-modal="true">
+    <div class="confirm-card">
+        <h3 id="delModalTitle">계정 영구 탈퇴</h3>
+        <p id="delModalBody">
+            되돌릴 수 없어요. 계속하려면 아래에 본인의 닉네임 <strong id="delMyNick">—</strong> 을 정확히 입력하세요.
+        </p>
+        <input type="text" class="confirm-input" id="delConfirmInput" placeholder="닉네임" autocomplete="off" spellcheck="false">
+        <div class="row">
+            <button type="button" id="delCancelBtn">취소</button>
+            <button type="button" class="danger" id="delConfirmBtn" disabled>영구 탈퇴</button>
+        </div>
+        <div class="err" id="delErr"></div>
+    </div>
+</div>
 
 <script src="/js/supabase-config.js"></script>
 <script>
@@ -521,6 +574,73 @@ $('signOutBtn').addEventListener('click',async()=>{
     try { clearProfileCache(); } catch(_){}
     location.replace('/');
 });
+
+/* ---- Account self-delete ------------------------------------
+   Two-step guard against accidental clicks:
+     1. Click the danger-zone button → modal opens.
+     2. Confirm button stays disabled until the user TYPES their
+        exact nickname. Case-insensitive so a typo-on-case isn't a
+        wall, but still requires a conscious match.
+   On success we wipe the profile cache, sign out, and redirect to
+   the home page. The RPC server-side cascades every row tied to
+   the account; we don't need to clean up anything else client-
+   side. */
+(function wireSelfDelete(){
+    const modal = $('delModal');
+    const input = $('delConfirmInput');
+    const btnConfirm = $('delConfirmBtn');
+    const errEl = $('delErr');
+
+    function openModal(){
+        if(!currentProfile || !currentProfile.nickname){ return; }
+        $('delMyNick').textContent = currentProfile.nickname;
+        input.value=''; errEl.textContent='';
+        btnConfirm.disabled=true;
+        modal.classList.add('on');
+        setTimeout(()=>input.focus(), 30);
+    }
+    function closeModal(){ modal.classList.remove('on'); }
+
+    $('deleteAcctBtn').addEventListener('click', openModal);
+    $('delCancelBtn').addEventListener('click', closeModal);
+    modal.addEventListener('click', e => { if(e.target===modal) closeModal(); });
+
+    input.addEventListener('input', () => {
+        const typed = input.value.trim().toLowerCase();
+        const target = (currentProfile && currentProfile.nickname || '').toLowerCase();
+        btnConfirm.disabled = !target || typed !== target;
+        errEl.textContent='';
+    });
+
+    btnConfirm.addEventListener('click', async () => {
+        btnConfirm.disabled = true;
+        errEl.textContent='';
+        $('loadingOverlay').classList.add('on');
+        let rpcErr = null;
+        try {
+            const { error } = await getSupabase().rpc('delete_my_account');
+            if(error) rpcErr = error.message || 'unknown_error';
+        } catch (e) {
+            rpcErr = String(e && e.message || e);
+        }
+        if (rpcErr) {
+            $('loadingOverlay').classList.remove('on');
+            /* super_admin_cannot_self_delete gets a friendlier label. */
+            if (/super_admin_cannot_self_delete/.test(rpcErr)) {
+                errEl.textContent = '최고 관리자 계정은 직접 탈퇴할 수 없어요. 먼저 관리자에서 일반 유저로 역할을 낮춰주세요.';
+            } else {
+                errEl.textContent = '탈퇴 실패: ' + rpcErr;
+            }
+            btnConfirm.disabled = false;
+            return;
+        }
+        /* auth.users row is gone — client still holds a JWT but every
+           subsequent request will 401. Sign out + clear cache + go home. */
+        try { clearProfileCache(); } catch(_){}
+        try { await signOut(); } catch(_){}
+        location.replace('/');
+    });
+})();
 </script>
 </body>
 </html>
