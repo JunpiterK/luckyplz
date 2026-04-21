@@ -148,6 +148,10 @@
         if (!user) return;
         initialized = true;
 
+        /* Prime the mute cache once at init. After this the synchronous
+           LpSocial.isMuted() answers the per-message gate instantly. */
+        try { if (window.LpSocial && LpSocial.getMutes) await LpSocial.getMutes(); } catch(_){}
+
         /* Cache sender profiles so a chatty friend doesn't generate
            a profile fetch per message. 5-min TTL is fine — nicknames
            rarely change inside a session. */
@@ -166,6 +170,10 @@
         window.LpSocial.subscribeToIncoming(async (msg) => {
             const senderId = msg.from_id;
             if (!senderId || senderId === user.id) return;
+            /* Respect the per-thread mute list — the message still
+               arrives + counts toward unread, we just don't fire any
+               toast / OS notification for this sender. */
+            if (LpSocial.isMuted && LpSocial.isMuted('dm', senderId)) return;
             const prof = await fetchProfile(senderId);
             const nick = (prof && prof.nickname) || 'Someone';
             let body = msg.body;

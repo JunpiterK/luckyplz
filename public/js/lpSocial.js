@@ -374,6 +374,102 @@
     }
 
     /* ================================================================
+       Per-thread mute
+       =================
+       Stored server-side in thread_mutes (RLS: owner-only). Cached
+       locally in a Set<string> keyed by `<kind>:<threadKey>` so
+       LpNotify's show() path can consult it synchronously on every
+       incoming message without a round-trip.
+       ================================================================ */
+    const _muteCache = { ready: false, set: new Set() };
+    async function _loadMutes() {
+        const user = await getUser();
+        if (!user) { _muteCache.ready = true; return; }
+        try {
+            const { data, error } = await getSupabase()
+                .from('thread_mutes')
+                .select('kind, thread_key')
+                .eq('user_id', user.id);
+            if (!error && data) {
+                _muteCache.set = new Set(data.map(r => r.kind + ':' + r.thread_key));
+            }
+        } catch (_) {}
+        _muteCache.ready = true;
+    }
+    /* Kick off cache load once per session — idempotent. */
+    let _muteLoadPromise = null;
+    function _ensureMutesLoaded() {
+        if (_muteCache.ready) return Promise.resolve();
+        if (_muteLoadPromise) return _muteLoadPromise;
+        _muteLoadPromise = _loadMutes().finally(() => { _muteLoadPromise = null; });
+        return _muteLoadPromise;
+    }
+
+    /** Synchronous check — assumes caller awaited getMutes() at least
+        once. For pre-load reliability the notification path calls
+        getMutes() at init; after that, isMuted is fire-and-answer. */
+    function isMuted(kind, threadKey) {
+        return _muteCache.set.has(kind + ':' + threadKey);
+    }
+
+    /** Public: fetch (and cache) the user's mute list. Returns an
+        array of { kind, thread_key } rows. */
+    async function getMutes() {
+        await _ensureMutesLoaded();
+        return Array.from(_muteCache.set).map(s => {
+            const i = s.indexOf(':');
+            return { kind: s.slice(0, i), thread_key: s.slice(i + 1) };
+        });
+    }
+
+    async function muteThread(kind, threadKey) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        try {
+            const { error } = await getSupabase()
+                .from('thread_mutes')
+                .upsert({ user_id: user.id, kind, thread_key: threadKey },
+                        { onConflict: 'user_id,kind,thread_key' });
+            if (error) return { ok: false, error: error.message };
+            _muteCache.set.add(kind + ':' + threadKey);
+            return { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function unmuteThread(kind, threadKey) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        try {
+            const { error } = await getSupabase()
+                .from('thread_mutes').delete()
+                .eq('user_id', user.id)
+                .eq('kind', kind)
+                .eq('thread_key', threadKey);
+            if (error) return { ok: false, error: error.message };
+            _muteCache.set.delete(kind + ':' + threadKey);
+            return { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Group chat owner-only — remove a member. */
+    async function kickGroupChatMember(roomId, targetUserId) {
+        try {
+            const { data, error } = await getSupabase()
+                .rpc('kick_group_chat_member',
+                     { p_room: roomId, p_target: targetUserId });
+            if (error) {
+                const m = (error.message || '').toLowerCase();
+                if (m.includes('not_owner'))      return { ok: false, error: 'not_owner' };
+                if (m.includes('cannot_kick_self'))return { ok: false, error: 'cannot_kick_self' };
+                if (m.includes('not_a_member'))   return { ok: false, error: 'not_a_member' };
+                if (m.includes('room_not_found')) return { ok: false, error: 'room_not_found' };
+                return { ok: false, error: error.message };
+            }
+            return data || { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /* ================================================================
        Typing indicator — Realtime broadcast (no DB writes).
        Pattern used by WhatsApp / Signal: the sender pushes a cheap
        "I'm typing" signal on a shared channel, and the receiver's UI
@@ -850,6 +946,10 @@
         subscribeToIncoming, subscribeToThread,
         /* Typing indicator (Realtime broadcast, thread-key partitioned) */
         sendTyping, subscribeToTyping,
+        /* Per-thread mute (DM + group) */
+        getMutes, muteThread, unmuteThread, isMuted,
+        /* Group admin — kick member (owner only) */
+        kickGroupChatMember,
         /* Group chat */
         getGroupChats, createGroupChat, inviteToGroupChat, leaveGroupChat,
         getGroupMembers, getGroupMessages, sendGroupMessage, markGroupRead,
