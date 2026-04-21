@@ -227,12 +227,19 @@
     async function getThreadMessages(friendId, { before = null, limit = 50 } = {}) {
         const user = await getUser();
         if (!user) return { ok: false, error: 'not_authenticated' };
-        const threadId = await _computeThreadId(user.id, friendId);
+        /* Query by the (from_id, to_id) pair directly instead of the
+           md5-computed thread_id. Reason: the client-side md5 path
+           sometimes disagrees with Postgres's md5() in edge-case
+           browsers — mobile Chrome/Samsung were returning 0 rows
+           because the computed thread_id didn't match the stored
+           one. from_id/to_id are indexed + RLS-gated the same way,
+           so this is equally fast and 100% browser-agnostic. */
         try {
+            const a = user.id, b = friendId;
             let q = getSupabase()
                 .from('direct_messages')
                 .select(DM_COLUMNS)
-                .eq('thread_id', threadId)
+                .or('and(from_id.eq.'+a+',to_id.eq.'+b+'),and(from_id.eq.'+b+',to_id.eq.'+a+')')
                 .order('created_at', { ascending: false })
                 .limit(Math.min(limit, 200));
             if (before) q = q.lt('created_at', before);
