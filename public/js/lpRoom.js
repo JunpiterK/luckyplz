@@ -112,16 +112,21 @@
            Called after any join/leave so each guest's status panel
            stays in sync without polling. Payload carries BOTH the
            legacy `nicknames` string array (old clients) and a new
-           `roster` array of objects with authed flags so new clients
-           can render verified badges. */
+           `roster` array of objects with authed flags + authedName
+           so new clients can render verified badges + the "+ friend"
+           shortcut on each row. */
         function broadcastGuestList(){
             if(!subscribed)return;
             const arr=Array.from(guests.values());
             const nicknames=arr.map(function(v){return v.nickname});
-            const roster=arr.map(function(v){return {nickname:v.nickname,authed:!!v.authed}});
+            const roster=arr.map(function(v){return {
+                nickname:v.nickname,authed:!!v.authed,authedName:v.authedName||null
+            }});
             chan.send({type:'broadcast',event:'host:guests',payload:{
                 nicknames:nicknames,roster:roster,
-                hostName:hostName,hostAuthed:!!hostAuth.authed,
+                hostName:hostName,
+                hostAuthed:!!hostAuth.authed,
+                hostAuthedName:hostAuth.authedName||null,
                 count:nicknames.length+1
             }});
         }
@@ -633,6 +638,14 @@
               feel class-segregated. */
            +'.lp-room-guest-panel .row .verified-badge{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(0,217,255,.2);color:#00D9FF;font-size:.68em;font-weight:900;border:1px solid rgba(0,217,255,.5)}'
            +'.lp-room-guest-panel .row .guest-tag{font-size:.7em;color:rgba(255,255,255,.35);font-weight:500;margin-left:4px;font-style:italic}'
+           /* Add-friend shortcut button on roster rows. Appears only
+              for authed peers we\'re not already friends with. Small
+              and understated so it doesn\'t clutter a busy room. */
+           +'.lp-room-guest-panel .row .add-fr-btn{margin-left:6px;padding:3px 8px;border-radius:999px;border:1px solid rgba(0,217,255,.35);background:rgba(0,217,255,.1);color:#00D9FF;font-family:inherit;font-size:.78em;font-weight:700;cursor:pointer;transition:background .15s,border-color .15s,transform .12s;line-height:1.2;white-space:nowrap}'
+           +'.lp-room-guest-panel .row .add-fr-btn:hover{background:rgba(0,217,255,.22);border-color:rgba(0,217,255,.6);transform:translateY(-1px)}'
+           +'.lp-room-guest-panel .row .add-fr-btn.pending{background:rgba(255,230,109,.08);border-color:rgba(255,230,109,.35);color:#FFE66D;cursor:default}'
+           +'.lp-room-guest-panel .row .add-fr-btn.friend{background:rgba(0,217,138,.1);border-color:rgba(0,217,138,.4);color:#00D98A;cursor:default}'
+           +'.lp-room-guest-panel .row .add-fr-btn.err{background:rgba(255,51,102,.1);border-color:rgba(255,51,102,.35);color:#FF6B8B;cursor:default}'
            +'.lp-room-guest-panel .row .t{opacity:.5;font-size:.84em;font-variant-numeric:tabular-nums}'
            /* Pagination controls for host-side list (20/page) */
            +'.lp-room-guest-panel .pager{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,217,255,.15);font-size:.78em}'
@@ -917,6 +930,28 @@
            page while scrolling through a large room. */
         let guestPageIdx=0;
         const GUEST_PAGE_SIZE=20;
+        /* Cache of my current friend relationships keyed by the
+           friend's nickname (lowercase). Populated on panel open
+           and after each add-friend click so the ＋ button shows
+           the right state for everyone in the room without having
+           to look up user_ids. */
+        let friendStateByNick={};
+        let myAuthedName=null;
+        async function refreshFriendState(){
+            if(typeof window.LpSocial==='undefined')return;
+            try{
+                const r=await window.LpSocial.getFriends();
+                if(!r.ok)return;
+                friendStateByNick={};
+                r.rows.forEach(function(f){
+                    friendStateByNick[(f.nickname||'').toLowerCase()]=f.direction;
+                });
+                if(typeof window.ensureProfile==='function'){
+                    const s=await window.ensureProfile();
+                    myAuthedName=(s&&s.profile&&s.profile.nickname)||null;
+                }
+            }catch(_){}
+        }
         function toggleGuestPanel(){
             const existing=document.getElementById('lpRoomGuestPanel');
             if(existing){existing.remove();return}
@@ -926,6 +961,9 @@
             document.body.appendChild(panel);
             guestPageIdx=0; /* fresh panel starts at page 1 */
             renderGuestPanel();
+            /* Re-render once friend state arrives so ＋ buttons flip
+               to "Friend" / "Pending" for existing relationships. */
+            refreshFriendState().then(renderGuestPanel);
         }
         function renderGuestPanel(){
             const panel=document.getElementById('lpRoomGuestPanel');
@@ -958,7 +996,8 @@
                 const mm=String(when.getMinutes()).padStart(2,'0');
                 const badge=g.authed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
                 const guestTag=g.authed?'':'<span class="guest-tag">'+(lang==='ko'?'게스트':'guest')+'</span>';
-                return '<div class="row"><span class="nick">'+badge+escapeHtml(g.nickname)+guestTag+'</span><span class="t">'+hh+':'+mm+'</span></div>';
+                const addBtn=_lpAddFriendBtnHtml(g.authed,g.authedName,myAuthedName,friendStateByNick,lang);
+                return '<div class="row" data-authed-name="'+escapeHtml(g.authedName||'')+'"><span class="nick">'+badge+escapeHtml(g.nickname)+guestTag+'</span>'+addBtn+'<span class="t">'+hh+':'+mm+'</span></div>';
             }).join('');
             /* Pager only renders when there's >1 page. Single-page rooms
                (most typical 2-10 user parties) skip the chrome entirely. */
@@ -974,6 +1013,14 @@
             if(prev)prev.addEventListener('click',function(e){e.stopPropagation();guestPageIdx=Math.max(0,guestPageIdx-1);renderGuestPanel()});
             const next=document.getElementById('lpGuestPageNext');
             if(next)next.addEventListener('click',function(e){e.stopPropagation();guestPageIdx=Math.min(totalPages-1,guestPageIdx+1);renderGuestPanel()});
+            /* Wire ＋ friend buttons via delegation — one listener for
+               the whole panel handles pagination transitions cleanly. */
+            panel.querySelectorAll('.add-fr-btn.active').forEach(function(btn){
+                btn.addEventListener('click',function(e){
+                    e.stopPropagation();
+                    _lpHandleAddFriendClick(btn,friendStateByNick,renderGuestPanel,lang);
+                });
+            });
         }
 
         refresh();
@@ -1109,10 +1156,30 @@
 
         /* Local snapshot of the room's guest list, populated by the
            host:guests broadcast. Entries carry authed (✓ badge) alongside
-           nickname. Host rendered separately; hostAuthed tracked in a
-           scalar flag updated on each broadcast. */
-        let roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false}];
+           nickname. Host rendered separately; hostAuthed/Name tracked
+           in scalar flags updated on each broadcast. */
+        let roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false,authedName:null}];
         let hostAuthed=false;
+        let hostAuthedName=null;
+        /* Friend-state cache + own authed nickname for the + friend
+           shortcut on each peer row, same model as the host-side
+           panel. Populated lazily when the panel opens. */
+        let guestFriendStateByNick={};
+        let guestMyAuthedName=null;
+        async function refreshGuestFriendState(){
+            if(typeof window.LpSocial==='undefined')return;
+            try{
+                const r=await window.LpSocial.getFriends();
+                if(r.ok){
+                    guestFriendStateByNick={};
+                    r.rows.forEach(function(f){guestFriendStateByNick[(f.nickname||'').toLowerCase()]=f.direction});
+                }
+                if(typeof window.ensureProfile==='function'){
+                    const s=await window.ensureProfile();
+                    guestMyAuthedName=(s&&s.profile&&s.profile.nickname)||null;
+                }
+            }catch(_){}
+        }
 
         function countLbl(n){return lang==='ko'?n+'명 접속':n+' watching'}
         function roomLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
@@ -1134,6 +1201,9 @@
         function togglePanel(){
             const existing=document.getElementById('lpRoomGuestPanel');
             if(existing){existing.remove();render();return}
+            /* Refresh friend state on open so the ＋ button shows the
+               right relationship label for every peer. */
+            refreshGuestFriendState().then(function(){renderPanel();render()});
             const panel=document.createElement('div');
             panel.id='lpRoomGuestPanel';
             panel.className='lp-room-guest-panel';
@@ -1161,7 +1231,8 @@
                 return na.localeCompare(nb);
             });
             const hostBadge=hostAuthed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
-            const hostRow='<div class="row host"><span class="nick">👑 '+hostBadge+escapeHtml(g.hostName||'Host')+'</span><span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
+            const hostAddBtn=_lpAddFriendBtnHtml(hostAuthed,hostAuthedName,guestMyAuthedName,guestFriendStateByNick,lang);
+            const hostRow='<div class="row host"><span class="nick">👑 '+hostBadge+escapeHtml(g.hostName||'Host')+'</span>'+hostAddBtn+'<span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
             /* Host row counts toward the 12-row cap. */
             const guestsToShow=sortedRoster.slice(0,GUEST_MAX_VISIBLE-1);
             const hidden=sortedRoster.length-guestsToShow.length;
@@ -1169,12 +1240,20 @@
                 const tag=r.self?(lang==='ko'?'나':'me'):'';
                 const badge=r.authed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
                 const guestTag=r.authed||r.self?'':'<span class="guest-tag">'+(lang==='ko'?'게스트':'guest')+'</span>';
-                return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+badge+escapeHtml(r.nickname)+guestTag+'</span><span class="t">'+tag+'</span></div>';
+                const addBtn=r.self?'':_lpAddFriendBtnHtml(r.authed,r.authedName,guestMyAuthedName,guestFriendStateByNick,lang);
+                return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+badge+escapeHtml(r.nickname)+guestTag+'</span>'+addBtn+'<span class="t">'+tag+'</span></div>';
             }).join('');
             const moreRow=hidden>0
                 ?'<div class="more">'+(lang==='ko'?'외 '+hidden+'명':'and '+hidden+' more')+'</div>'
                 :'';
             panel.innerHTML='<div class="title">'+title+'</div><div class="rows">'+hostRow+guestRows+'</div>'+moreRow;
+            /* Wire ＋ friend clicks via delegation. */
+            panel.querySelectorAll('.add-fr-btn.active').forEach(function(btn){
+                btn.addEventListener('click',function(e){
+                    e.stopPropagation();
+                    _lpHandleAddFriendClick(btn,guestFriendStateByNick,renderPanel,lang);
+                });
+            });
         }
 
         document.body.appendChild(bar);
@@ -1217,12 +1296,13 @@
                string-only `nicknames` for older hosts so rooms during
                a rolling deploy still render. */
             if(Array.isArray(p.roster)){
-                roster=p.roster.map(function(e){return{nickname:e.nickname,authed:!!e.authed,self:e.nickname===(g.nickname||'')}});
+                roster=p.roster.map(function(e){return{nickname:e.nickname,authed:!!e.authed,authedName:e.authedName||null,self:e.nickname===(g.nickname||'')}});
             }else if(Array.isArray(p.nicknames)){
-                roster=p.nicknames.map(function(n){return{nickname:n,authed:false,self:n===(g.nickname||'')}});
+                roster=p.nicknames.map(function(n){return{nickname:n,authed:false,authedName:null,self:n===(g.nickname||'')}});
             }else return;
             if(typeof p.hostAuthed==='boolean')hostAuthed=p.hostAuthed;
-            if(!roster.length)roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false}];
+            if(typeof p.hostAuthedName!=='undefined')hostAuthedName=p.hostAuthedName;
+            if(!roster.length)roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false,authedName:null}];
             render();
             /* Subtle flash so the host notices when somebody else joins
                or leaves — without the old noisy "(N)" event counter. */
@@ -1233,6 +1313,74 @@
     }
 
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+
+    /* Render the ＋ friend button for a single roster row. Returns
+       empty string when: target isn't an authed member, we don't
+       know their authed nickname, they're us, or they're already
+       a friend/pending. Returns a disabled chip showing the current
+       relationship otherwise. */
+    function _lpAddFriendBtnHtml(isAuthed,authedName,myAuthedName,stateMap,lang){
+        if(!isAuthed||!authedName)return '';
+        if(myAuthedName&&authedName.toLowerCase()===myAuthedName.toLowerCase())return '';
+        const state=stateMap[authedName.toLowerCase()];
+        if(state==='accepted') return '<span class="add-fr-btn friend" title="'+(lang==='ko'?'이미 친구':'already friends')+'">'+(lang==='ko'?'친구':'friend')+'</span>';
+        if(state==='outgoing-pending') return '<span class="add-fr-btn pending">'+(lang==='ko'?'요청됨':'pending')+'</span>';
+        if(state==='incoming-pending') return '<span class="add-fr-btn pending">'+(lang==='ko'?'수락?':'accept?')+'</span>';
+        if(state==='blocked-by-me'||state==='blocked-by-them') return '';
+        /* Active ＋ button — actually clickable. */
+        return '<button class="add-fr-btn active" data-authed-name="'+escapeHtml(authedName)+'" title="'+(lang==='ko'?'친구 추가':'add friend')+'">＋ '+(lang==='ko'?'친구':'add')+'</button>';
+    }
+
+    /* Handle a ＋ friend click in a roster panel. Sends the request,
+       updates the button to its new state in place, and patches the
+       local stateMap so any re-renders reflect the change. Status
+       toast surfaces success/error. */
+    function _lpHandleAddFriendClick(btn,stateMap,rerender,lang){
+        if(!window.LpSocial)return;
+        const target=btn.getAttribute('data-authed-name');
+        if(!target)return;
+        btn.disabled=true;
+        btn.textContent=lang==='ko'?'전송 중…':'sending…';
+        window.LpSocial.sendFriendRequest(target).then(function(r){
+            if(r.ok){
+                const newState=r.auto_accepted?'accepted':'outgoing-pending';
+                stateMap[target.toLowerCase()]=newState;
+                _lpSimpleToast((r.auto_accepted
+                    ?(lang==='ko'?'✓ 친구가 되었어요!':'✓ Friends!')
+                    :(lang==='ko'?'✓ 친구 요청 전송':'✓ Request sent')),'ok');
+            }else{
+                const map={
+                    not_found:(lang==='ko'?'대상을 찾을 수 없어요':'User not found'),
+                    already_friends:(lang==='ko'?'이미 친구예요':'Already friends'),
+                    already_requested:(lang==='ko'?'이미 요청됨':'Already requested'),
+                    blocked:(lang==='ko'?'차단되어 전송 불가':'Blocked'),
+                    cannot_friend_self:(lang==='ko'?'본인에겐 보낼 수 없어요':'Cannot friend self')
+                };
+                _lpSimpleToast(map[r.error]||(lang==='ko'?'전송 실패':'Failed')+': '+(r.error||'unknown'),'err');
+                /* Reflect server truth even when client state was
+                   stale — e.g. we thought 'none' but the other side
+                   already requested us. */
+                if(r.error==='already_friends')stateMap[target.toLowerCase()]='accepted';
+                if(r.error==='already_requested')stateMap[target.toLowerCase()]='outgoing-pending';
+            }
+            if(typeof rerender==='function')rerender();
+        }).catch(function(){
+            _lpSimpleToast(lang==='ko'?'네트워크 오류':'Network error','err');
+            if(typeof rerender==='function')rerender();
+        });
+    }
+
+    /* Lightweight toast for friend-request feedback — reuses the
+       join/leave toast styles so the panel doesn't need its own
+       UI state surface. */
+    function _lpSimpleToast(msg,tone){
+        const el=document.createElement('div');
+        el.className='lp-room-join-toast'+(tone==='err'?' leave':'');
+        el.textContent=msg;
+        document.body.appendChild(el);
+        setTimeout(function(){el.classList.add('out')},2400);
+        setTimeout(function(){el.remove()},3000);
+    }
 
     /* ============ Auto guest prompt when URL has ?room=XXX ============ */
     function detectGuestIntent(){
