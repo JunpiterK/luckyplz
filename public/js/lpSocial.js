@@ -300,6 +300,10 @@
     /**
      * Subscribe to messages in ONE thread. Fires for both directions
      * (receiver + echo of sender's own INSERT via postgres_changes).
+     * Caller gets {kind, row} — kind is 'insert' for new messages,
+     * 'update' for field changes (read_at flipping null → timestamp
+     * when the other side marks read). Senders use 'update' to
+     * flip their own ✓ → ✓✓ read indicator live.
      * Caller should dedupe by id since the sender also sees the row
      * via the insert RPC return.
      */
@@ -315,7 +319,12 @@
                 .on('postgres_changes',
                     { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: 'thread_id=eq.' + threadId },
                     (payload) => {
-                        if (onMessage) try { onMessage(payload.new); } catch (_) {}
+                        if (onMessage) try { onMessage({kind:'insert', row: payload.new}); } catch (_) {}
+                    })
+                .on('postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'direct_messages', filter: 'thread_id=eq.' + threadId },
+                    (payload) => {
+                        if (onMessage) try { onMessage({kind:'update', row: payload.new, old: payload.old}); } catch (_) {}
                     })
                 .subscribe();
         })();

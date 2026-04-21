@@ -156,7 +156,23 @@ body{
     background:var(--bubble-them);border:1px solid var(--bubble-them-br);
     border-bottom-left-radius:6px
 }
-.bubble-time{font-size:.68em;color:var(--muted-2);align-self:flex-end;padding:0 4px;white-space:nowrap;margin-bottom:3px}
+.bubble-time{font-size:.68em;color:var(--muted-2);align-self:flex-end;padding:0 4px;white-space:nowrap;margin-bottom:3px;display:inline-flex;align-items:center;gap:4px}
+/* Read-receipts — single check = delivered (sent only), double cyan check = peer has read. Shown only on my own outgoing bubbles in DM threads. */
+.read-tick{font-size:.9em;letter-spacing:-2px;color:var(--muted-2);font-weight:900;line-height:1}
+.read-tick.read{color:#00D9FF}
+/* @mentions — subtle accent so the reader's eye finds their name without screaming. Slightly darker when self-mentioned. */
+.mention{color:#FFE66D;background:rgba(255,230,109,.12);padding:1px 5px;border-radius:6px;font-weight:700;font-size:.94em}
+.mention.self{background:rgba(255,230,109,.28);color:#0A0A1A;box-shadow:0 0 0 1px rgba(255,230,109,.5)}
+
+/* Composer mention autocomplete popup — absolute-positioned just above the textarea, 200 px wide, max 5 results. Keyboard-nav (up/down/enter/esc). */
+.mention-pop{position:absolute;bottom:calc(100% + 6px);left:14px;background:rgba(14,14,28,.98);border:1px solid rgba(0,217,255,.3);border-radius:12px;padding:6px;box-shadow:0 16px 40px rgba(0,0,0,.55);backdrop-filter:blur(10px);min-width:220px;max-width:88vw;z-index:50;display:none}
+.mention-pop.on{display:block}
+.mention-pop .mp-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;cursor:pointer;transition:background .12s}
+.mention-pop .mp-item.active,.mention-pop .mp-item:hover{background:rgba(0,217,255,.12)}
+.mention-pop .mp-item .mp-avatar{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#FF6B35,#FF6B8B);display:flex;align-items:center;justify-content:center;font-size:.78em;font-weight:900;color:#fff;overflow:hidden;flex-shrink:0}
+.mention-pop .mp-item .mp-avatar img{width:100%;height:100%;object-fit:cover}
+.mention-pop .mp-item .mp-name{font-weight:700;font-size:.88em}
+.mention-pop .mp-empty{font-size:.78em;color:var(--muted-2);padding:8px 10px;font-style:italic}
 
 /* Composer */
 .composer{
@@ -282,7 +298,8 @@ body{
                 </div>
             </header>
             <div class="chat-messages" id="chatMessages"></div>
-            <form class="composer" id="composerForm">
+            <form class="composer" id="composerForm" style="position:relative">
+                <div class="mention-pop" id="mentionPop"></div>
                 <textarea id="composerInput" rows="1" placeholder="Type a message…" maxlength="2000"></textarea>
                 <button type="submit" class="send-btn" id="sendBtn" aria-label="Send" disabled>➤</button>
             </form>
@@ -392,7 +409,9 @@ const T = {
         err_cannot_invite_self:'Cannot invite yourself.',
         ok_left:'Left group.',
         kickConfirm:'Leave this group?',
-        peerVerified:'Verified member', peerGroup:'Group chat'
+        peerVerified:'Verified member', peerGroup:'Group chat',
+        sentTitle:'Sent', readTitle:'Read',
+        mentionEmpty:'No matches'
     },
     ko: {
         msgs:'메시지', chats:'대화', friends:'친구', requests:'요청',
@@ -436,7 +455,9 @@ const T = {
         err_cannot_invite_self:'본인은 초대할 수 없어요.',
         ok_left:'그룹에서 나왔어요.',
         kickConfirm:'이 그룹에서 나갈까요?',
-        peerVerified:'인증 회원', peerGroup:'그룹 채팅'
+        peerVerified:'인증 회원', peerGroup:'그룹 채팅',
+        sentTitle:'전송됨', readTitle:'읽음',
+        mentionEmpty:'일치하는 친구 없음'
     },
     ja: {
         msgs:'メッセージ', chats:'トーク', friends:'フレンド', requests:'リクエスト',
@@ -480,7 +501,9 @@ const T = {
         err_cannot_invite_self:'自分は招待できません。',
         ok_left:'グループを退出しました。',
         kickConfirm:'このグループを退出しますか？',
-        peerVerified:'認証会員', peerGroup:'グループチャット'
+        peerVerified:'認証会員', peerGroup:'グループチャット',
+        sentTitle:'送信済', readTitle:'既読',
+        mentionEmpty:'一致なし'
     },
     zh: {
         msgs:'消息', chats:'聊天', friends:'好友', requests:'请求',
@@ -524,7 +547,9 @@ const T = {
         err_cannot_invite_self:'不能邀请自己。',
         ok_left:'已退出群组。',
         kickConfirm:'退出此群组？',
-        peerVerified:'认证会员', peerGroup:'群聊'
+        peerVerified:'认证会员', peerGroup:'群聊',
+        sentTitle:'已发送', readTitle:'已读',
+        mentionEmpty:'无匹配好友'
     }
 };
 function detectLang(){
@@ -626,9 +651,22 @@ function wireEvents(){
         $('app').dataset.pane='sidebar';
         closeThread();
     });
-    $('composerInput').addEventListener('input',autoGrowComposer);
+    $('composerInput').addEventListener('input',(e)=>{autoGrowComposer();maybeShowMentionPop()});
     $('composerInput').addEventListener('keydown',(e)=>{
+        if(mentionPopOpen()){
+            /* Arrow keys + Enter + Escape navigate/select mention
+               candidates when the popup is open. Enter WITHOUT the
+               popup still sends the message. */
+            if(e.key==='ArrowDown'){e.preventDefault();moveMentionActive(1);return}
+            if(e.key==='ArrowUp')  {e.preventDefault();moveMentionActive(-1);return}
+            if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();chooseMention();return}
+            if(e.key==='Escape'){e.preventDefault();closeMentionPop();return}
+        }
         if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submitMessage()}
+    });
+    /* Close mention popup on outside click or blur. */
+    document.addEventListener('click',(e)=>{
+        if(!$('composerForm').contains(e.target))closeMentionPop();
     });
     $('composerForm').addEventListener('submit',(e)=>{e.preventDefault();submitMessage()});
     /* Modal labels */
@@ -903,9 +941,20 @@ async function openThread(meta){
     await refresh();
     /* Live updates for this thread / room */
     if(meta.kind==='dm'){
-        threadUnsub=LpSocial.subscribeToThread(meta.friend_id,(m)=>{
-            appendMessage(m);scrollToBottom();
-            if(m.from_id===meta.friend_id)LpSocial.markThreadRead(meta.friend_id);
+        threadUnsub=LpSocial.subscribeToThread(meta.friend_id,(ev)=>{
+            if(ev.kind==='insert'){
+                appendMessage(ev.row);scrollToBottom();
+                if(ev.row.from_id===meta.friend_id)LpSocial.markThreadRead(meta.friend_id);
+            }else if(ev.kind==='update'){
+                /* Peer marked one of my messages read → flip my ✓ to ✓✓
+                   live. Find the bubble by id and mutate the tick
+                   in place (cheaper + smoother than re-render). */
+                const row=$('chatMessages').querySelector('[data-mid="'+ev.row.id+'"]');
+                if(row&&ev.row.read_at&&!row.dataset.readAt){
+                    row.dataset.readAt=ev.row.read_at;
+                    updateBubbleRead(row);
+                }
+            }
         });
     }else{
         threadUnsub=LpSocial.subscribeToGroupRoom(meta.room_id,(m)=>{
@@ -960,14 +1009,54 @@ function appendMessage(m){
     }
     container.appendChild(bubbleEl(m,myId));
 }
+/* Escape body text for safe HTML insertion, THEN linkify @mentions.
+   Escaping first means an attacker-controlled nickname can't inject
+   markup — the mention substitution only re-wraps already-escaped
+   text in a <span>. Self-mention gets a stronger highlight so the
+   user notices faster. */
+function renderBody(body,myNick){
+    const safe=escape(body||'');
+    const myNickLower=(myNick||'').toLowerCase();
+    return safe.replace(/@([A-Za-z0-9_\-가-힣]{2,20})/g,function(full,name){
+        const cls=name.toLowerCase()===myNickLower?'mention self':'mention';
+        return '<span class="'+cls+'">@'+name+'</span>';
+    });
+}
 function bubbleEl(m,myId){
     const mine=m.from_id===myId;
     const row=document.createElement('div');
     row.className='bubble-row '+(mine?'me':'them');
     row.dataset.mid=m.id;
-    row.innerHTML='<div class="bubble">'+escape(m.body)+'</div>'
-        +'<div class="bubble-time">'+escape(new Date(m.created_at).toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'}))+'</div>';
+    row.dataset.readAt=m.read_at||'';
+    /* Read ticks: DM-only, my own bubbles only. Single muted check
+       when the message has been stored but not yet read by the peer;
+       double cyan check once read_at is set. Hidden for group chats
+       because "read by N of M" is more involved — ships in a later
+       phase if the signal is missed. */
+    let readTickHtml='';
+    if(mine&&currentThread&&currentThread.kind==='dm'){
+        const isRead=!!m.read_at;
+        readTickHtml='<span class="read-tick'+(isRead?' read':'')+'" title="'+escape(isRead?t.readTitle:t.sentTitle)+'">'+(isRead?'✓✓':'✓')+'</span>';
+    }
+    const myNick=me&&me.profile?me.profile.nickname:'';
+    row.innerHTML='<div class="bubble">'+renderBody(m.body,myNick)+'</div>'
+        +'<div class="bubble-time">'
+            +'<span>'+escape(new Date(m.created_at).toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'}))+'</span>'
+            +readTickHtml
+        +'</div>';
     return row;
+}
+
+/* Update an existing bubble's read-tick in place when the subscription
+   delivers an UPDATE event (peer marked read). Cheaper + smoother
+   than re-rendering the whole row. */
+function updateBubbleRead(row){
+    if(!row)return;
+    const tick=row.querySelector('.read-tick');
+    if(!tick)return;
+    tick.classList.add('read');
+    tick.textContent='✓✓';
+    tick.title=t.readTitle;
 }
 function scrollToBottom(){
     const c=$('chatMessages');c.scrollTop=c.scrollHeight;
@@ -1093,6 +1182,110 @@ async function leaveCurrentGroup(){
     }else{
         alert('Error: '+res.error);
     }
+}
+
+/* ---- @mention autocomplete ---------------------------------- */
+/* Detects a leading-@ token right before the caret: show a popup of
+   matching candidates from friends (DM) or room members (group).
+   Enter/Tab inserts; arrow keys navigate; Esc dismisses.
+   Candidate pool is cached per thread so typing doesn't spam queries. */
+let mentionCandidates=[]; /* [{id, nickname, avatar_url, profile_complete}] */
+let mentionActive=0;
+let mentionToken=''; /* current query after @ */
+let mentionStart=-1; /* char index of the @ symbol */
+let mentionLoadedFor=null;
+
+function mentionPopOpen(){return $('mentionPop').classList.contains('on')}
+function closeMentionPop(){$('mentionPop').classList.remove('on');mentionStart=-1;mentionToken=''}
+
+async function ensureCandidates(){
+    if(!currentThread)return;
+    const key=currentThread.kind+':'+(currentThread.kind==='dm'?currentThread.friend_id:currentThread.room_id);
+    if(mentionLoadedFor===key)return;
+    mentionLoadedFor=key;
+    if(currentThread.kind==='dm'){
+        /* DM: the only other person is the friend themselves. Also
+           include self so users can @self for emphasis/highlight. */
+        mentionCandidates=[
+            {id:currentThread.friend_id,nickname:currentThread.friend_nickname,
+             avatar_url:currentThread.friend_avatar,profile_complete:!!currentThread.friend_authed}
+        ];
+    }else{
+        const r=await LpSocial.getGroupMembers(currentThread.room_id);
+        if(r.ok){
+            const myId=me.authUser.id;
+            mentionCandidates=r.rows
+                .filter(m=>m.user_id!==myId)
+                .map(m=>({id:m.user_id,nickname:m.nickname,avatar_url:m.avatar_url,profile_complete:m.profile_complete}));
+        }else mentionCandidates=[];
+    }
+}
+
+async function maybeShowMentionPop(){
+    const ta=$('composerInput');
+    const caret=ta.selectionStart||0;
+    const before=ta.value.slice(0,caret);
+    /* Find the last @ that starts a mention token (whitespace / line
+       start / string start precedes it, and nothing after it yet has
+       whitespace). */
+    const m=before.match(/(^|[\s\n])@([A-Za-z0-9_\-가-힣]{0,20})$/);
+    if(!m){closeMentionPop();return}
+    mentionStart=before.length-m[0].length+m[1].length; /* position of the @ */
+    mentionToken=m[2]||'';
+    await ensureCandidates();
+    const q=mentionToken.toLowerCase();
+    const filtered=(q
+        ? mentionCandidates.filter(c=>c.nickname.toLowerCase().includes(q))
+        : mentionCandidates
+    ).slice(0,5);
+    const pop=$('mentionPop');
+    if(!filtered.length){
+        pop.innerHTML='<div class="mp-empty">'+escape(t.mentionEmpty)+'</div>';
+        pop.classList.add('on');return;
+    }
+    mentionActive=0;
+    pop.innerHTML=filtered.map((c,i)=>{
+        const av=c.avatar_url
+            ? '<div class="mp-avatar"><img src="'+escape(c.avatar_url)+'" referrerpolicy="no-referrer" alt=""></div>'
+            : '<div class="mp-avatar">'+initials(c.nickname)+'</div>';
+        return '<div class="mp-item'+(i===0?' active':'')+'" data-nick="'+escape(c.nickname)+'" data-idx="'+i+'">'
+            +av+'<span class="mp-name">@'+escape(c.nickname)+'</span></div>';
+    }).join('');
+    pop.classList.add('on');
+    pop._items=filtered;
+    pop.querySelectorAll('.mp-item').forEach((el,i)=>{
+        el.addEventListener('mouseenter',()=>{mentionActive=i;refreshMentionActive()});
+        el.addEventListener('mousedown',(e)=>{e.preventDefault();mentionActive=i;chooseMention()});
+    });
+}
+function refreshMentionActive(){
+    $('mentionPop').querySelectorAll('.mp-item').forEach((el,i)=>{
+        el.classList.toggle('active',i===mentionActive);
+    });
+}
+function moveMentionActive(delta){
+    const items=$('mentionPop').querySelectorAll('.mp-item');
+    if(!items.length)return;
+    mentionActive=(mentionActive+delta+items.length)%items.length;
+    refreshMentionActive();
+}
+function chooseMention(){
+    const items=$('mentionPop').querySelectorAll('.mp-item');
+    const el=items[mentionActive];
+    if(!el)return;
+    const nick=el.dataset.nick;
+    const ta=$('composerInput');
+    const caret=ta.selectionStart||0;
+    const before=ta.value.slice(0,caret);
+    const after=ta.value.slice(caret);
+    /* Replace from mentionStart to caret with @nick + trailing space. */
+    const newBefore=before.slice(0,mentionStart)+'@'+nick+' ';
+    ta.value=newBefore+after;
+    const newCaret=newBefore.length;
+    ta.setSelectionRange(newCaret,newCaret);
+    closeMentionPop();
+    autoGrowComposer();
+    ta.focus();
 }
 
 boot();
