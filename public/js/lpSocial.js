@@ -373,6 +373,70 @@
         };
     }
 
+    /* ================================================================
+       Typing indicator — Realtime broadcast (no DB writes).
+       Pattern used by WhatsApp / Signal: the sender pushes a cheap
+       "I'm typing" signal on a shared channel, and the receiver's UI
+       shows a "..." hint. Throttled client-side to one broadcast per
+       3 seconds and auto-cleared by the listener 5 seconds after the
+       last signal. No persistence — if the listener joins late, they
+       simply don't see past typing activity.
+
+       threadKey is the thread_id (DM) OR room_id (group) — same value
+       we already use as the reactions subscribe key, so reusing that
+       partition keeps the client-side channel map simple.
+       ================================================================ */
+    const _typingChannels = new Map(); /* threadKey -> channel (send side, cached) */
+    const _typingLastSent = new Map(); /* threadKey -> ts for throttle */
+
+    function _getOrCreateTypingChannel(threadKey) {
+        if (_typingChannels.has(threadKey)) return _typingChannels.get(threadKey);
+        const sb = getSupabase();
+        const ch = sb.channel('lp_typing_' + threadKey.slice(0, 12), {
+            config: { broadcast: { self: false, ack: false } }
+        });
+        ch.subscribe();
+        _typingChannels.set(threadKey, ch);
+        return ch;
+    }
+
+    /** Called from the composer's input handler. Throttles internally
+        so a rapid-fire typing user only generates one broadcast per
+        3 seconds — keeps Realtime quota + network usage trivial. */
+    async function sendTyping(threadKey) {
+        if (!threadKey) return;
+        const now = Date.now();
+        const last = _typingLastSent.get(threadKey) || 0;
+        if (now - last < 2800) return;      /* throttle window */
+        _typingLastSent.set(threadKey, now);
+        const user = await getUser();
+        if (!user) return;
+        const ch = _getOrCreateTypingChannel(threadKey);
+        try {
+            await ch.send({ type: 'broadcast', event: 'typing',
+                            payload: { from: user.id, at: now } });
+        } catch (_) {}
+    }
+
+    /** Subscribe to typing events on the given thread. Callback gets
+        { from, at } for each ping. Callers are expected to auto-hide
+        the indicator themselves after ~5s of no ping — this module
+        doesn't own that timer because UI animations differ per page. */
+    function subscribeToTyping(threadKey, onPing) {
+        if (!threadKey) return function(){};
+        const sb = getSupabase();
+        const ch = sb.channel('lp_typing_' + threadKey.slice(0, 12), {
+            config: { broadcast: { self: false, ack: false } }
+        });
+        ch.on('broadcast', { event: 'typing' }, (msg) => {
+            try { onPing && onPing(msg.payload || {}); } catch (_) {}
+        });
+        ch.subscribe();
+        return function unsubscribe() {
+            try { sb.removeChannel(ch); } catch (_) {}
+        };
+    }
+
     /* ---- Util ------------------------------------------------ */
     /** Client-side thread_id computation (matches the DB trigger).
         md5(a_uuid || '_' || b_uuid) cast to uuid. */
@@ -784,6 +848,8 @@
         getInbox, getUnreadCount, getThreadMessages, sendMessage, markThreadRead,
         getDmById, deleteDm,
         subscribeToIncoming, subscribeToThread,
+        /* Typing indicator (Realtime broadcast, thread-key partitioned) */
+        sendTyping, subscribeToTyping,
         /* Group chat */
         getGroupChats, createGroupChat, inviteToGroupChat, leaveGroupChat,
         getGroupMembers, getGroupMessages, sendGroupMessage, markGroupRead,

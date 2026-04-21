@@ -200,7 +200,22 @@ body{
 .chat-thread-header .peer-info{display:flex;align-items:center;gap:12px;flex:1;min-width:0}
 .chat-thread-header .peer-info .row-avatar{width:38px;height:38px;font-size:.9em}
 .chat-thread-header .peer-name{font-weight:700;font-size:1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chat-thread-header .peer-sub{font-size:.72em;color:var(--muted-2);margin-top:2px}
+.chat-thread-header .peer-sub{font-size:.72em;color:var(--muted-2);margin-top:2px;transition:color .2s}
+/* While the other side is typing, pulse the peer-sub line so the
+   indicator is visible without needing extra DOM. */
+.chat-thread-header .peer-sub.typing{color:#00D9FF;font-weight:600}
+.chat-thread-header .peer-sub.typing::after{
+    content:'';display:inline-block;width:3px;height:3px;border-radius:50%;
+    background:#00D9FF;margin-left:4px;
+    box-shadow:6px 0 0 #00D9FF, 12px 0 0 #00D9FF;
+    animation:typingDots 1.2s infinite;vertical-align:middle
+}
+@keyframes typingDots{
+    0%,60%,100%{opacity:.25}
+    15%{opacity:1;transform:translateY(-2px)}
+    30%{opacity:1}
+    45%{opacity:.5}
+}
 
 .chat-messages{
     flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px
@@ -1124,7 +1139,15 @@ function wireEvents(){
         $('app').dataset.pane='sidebar';
         closeThread();
     });
-    $('composerInput').addEventListener('input',(e)=>{autoGrowComposer();maybeShowMentionPop()});
+    $('composerInput').addEventListener('input',(e)=>{
+        autoGrowComposer();
+        maybeShowMentionPop();
+        /* Fire a "typing" broadcast on each input; lpSocial throttles
+           internally so this is only one network event per ~3 s. */
+        if(currentThreadKey&&window.LpSocial&&LpSocial.sendTyping){
+            LpSocial.sendTyping(currentThreadKey);
+        }
+    });
     $('composerInput').addEventListener('keydown',(e)=>{
         if(mentionPopOpen()){
             /* Arrow keys + Enter + Escape navigate/select mention
@@ -1585,15 +1608,91 @@ async function openThread(meta){
             if(m.from_id!==me.authUser.id)LpSocial.markGroupRead(meta.room_id);
         });
     }
-    /* Reactions subscription — one channel per thread keyed by
-       thread_id (DM) or room_id (group). */
+    /* Reactions + typing share the same thread_key partition (DM
+       thread_id or group room_id) so realtime channels line up. */
     const threadKey=meta.kind==='dm'
         ? await computeThreadIdLocal(me.authUser.id,meta.friend_id)
         : meta.room_id;
     if(threadKey){
         reactionsUnsub=LpSocial.subscribeToReactions(threadKey,applyReactionEvent);
+        _subscribeTyping(threadKey);
     }
+    /* Live peer status line — DM only for now. Refreshes when
+       LpPresence changes OR every 60s to keep "3분 전" accurate. */
+    if(meta.kind==='dm')_startPeerStatusRefresh(meta);
+    currentThreadKey=threadKey;
     $('composerInput').focus();
+}
+
+/* ---- Typing indicator --------------------------------------- */
+let typingUnsub=null, typingHideTimer=null, currentThreadKey=null;
+function _subscribeTyping(threadKey){
+    if(typingUnsub){typingUnsub();typingUnsub=null}
+    if(typingHideTimer){clearTimeout(typingHideTimer);typingHideTimer=null}
+    _hideTyping();
+    if(!window.LpSocial||!LpSocial.subscribeToTyping)return;
+    typingUnsub=LpSocial.subscribeToTyping(threadKey,(p)=>{
+        if(!p||!p.from)return;
+        if(me&&me.authUser&&p.from===me.authUser.id)return; /* ignore self-echo even though self:false is set */
+        _showTyping();
+        if(typingHideTimer)clearTimeout(typingHideTimer);
+        typingHideTimer=setTimeout(_hideTyping,4500);
+    });
+}
+function _showTyping(){
+    const el=$('peerSub');
+    if(!el)return;
+    if(el.dataset.origText==null)el.dataset.origText=el.textContent;
+    el.classList.add('typing');
+    el.textContent='입력 중';
+}
+function _hideTyping(){
+    const el=$('peerSub');
+    if(!el)return;
+    el.classList.remove('typing');
+    if(el.dataset.origText!=null){el.textContent=el.dataset.origText;delete el.dataset.origText}
+}
+
+/* ---- Peer last-seen line (DM only) ------------------------- */
+let peerStatusTimer=null;
+async function _startPeerStatusRefresh(meta){
+    if(peerStatusTimer){clearInterval(peerStatusTimer);peerStatusTimer=null}
+    const render=async()=>{
+        if(!currentThread||currentThread.kind!=='dm'||currentThread.friend_id!==meta.friend_id)return;
+        const live=window.LpPresence?LpPresence.getStatus(meta.friend_id):'offline';
+        let label;
+        if(live==='online') label='온라인';
+        else if(live==='dnd') label='방해금지';
+        else{
+            /* Offline → show "마지막 접속 N분 전" from profiles.last_seen_at. */
+            try{
+                const {data}=await getSupabase().from('profiles')
+                    .select('last_seen_at').eq('id',meta.friend_id).maybeSingle();
+                if(data&&data.last_seen_at){
+                    label='마지막 접속 '+_relTime(data.last_seen_at);
+                }else{
+                    label=meta.friend_authed?t.verified:t.peerGuest;
+                }
+            }catch(_){label=meta.friend_authed?t.verified:t.peerGuest}
+        }
+        const el=$('peerSub');
+        /* Don't overwrite the typing indicator — it takes precedence
+           until the 5 s timeout clears it. */
+        if(el&&!el.classList.contains('typing')){el.textContent=label;el.dataset.origText=label}
+    };
+    await render();
+    peerStatusTimer=setInterval(render,60*1000);
+}
+function _relTime(iso){
+    const d=new Date(iso), now=Date.now(), diffMs=now-d.getTime();
+    if(diffMs<60*1000) return '방금';
+    const mins=Math.floor(diffMs/60000);
+    if(mins<60)return mins+'분 전';
+    const hrs=Math.floor(mins/60);
+    if(hrs<24)return hrs+'시간 전';
+    const days=Math.floor(hrs/24);
+    if(days<7)return days+'일 전';
+    return d.toLocaleDateString(lang||'ko');
 }
 
 /* Client-side thread_id for DM reactions — mirrors the DB trigger
@@ -1626,8 +1725,12 @@ async function computeThreadIdLocal(a,b){
 function closeThread(){
     if(threadUnsub){threadUnsub();threadUnsub=null}
     if(reactionsUnsub){reactionsUnsub();reactionsUnsub=null}
+    if(typingUnsub){typingUnsub();typingUnsub=null}
+    if(typingHideTimer){clearTimeout(typingHideTimer);typingHideTimer=null}
+    if(peerStatusTimer){clearInterval(peerStatusTimer);peerStatusTimer=null}
     reactionsByMsg={};
     currentThread=null;
+    currentThreadKey=null;
     window._lpActiveThread=null;
     $('chatView').classList.remove('on');
     $('chatEmpty').style.display='flex';
