@@ -447,14 +447,15 @@ async function handleKakaoLogin(){
     clearMsg();
     const btn=document.getElementById('kakaoBtn');
     btn.disabled=true;
-    /* OAuth state + nonce for CSRF/replay protection. state echoed
-       back by Kakao; nonce baked into id_token for signInWithIdToken
-       to verify (Supabase checks it matches). */
+    /* CSRF protection via state (echoed back by Kakao, verified on
+       return). We intentionally do NOT send a nonce — Kakao's id_token
+       nonce-claim format doesn't match Supabase's raw-nonce
+       verification path and causes "Nonces mismatch" failures.
+       Replay protection is still covered by the authorization code
+       being single-use server-side. */
     const state=(crypto.randomUUID&&crypto.randomUUID())||(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
-    const nonce=(crypto.randomUUID&&crypto.randomUUID())||(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
     try{
         sessionStorage.setItem('kakao_oauth_state',state);
-        sessionStorage.setItem('kakao_oauth_nonce',nonce);
         const ret=getReturnUrl();
         if(ret)sessionStorage.setItem('kakao_oauth_return',ret);
     }catch(_){}
@@ -463,8 +464,7 @@ async function handleKakaoLogin(){
         redirect_uri:KAKAO_REDIRECT_URI,
         response_type:'code',
         scope:'openid profile_nickname profile_image',
-        state:state,
-        nonce:nonce
+        state:state
     });
     window.location.href='https://kauth.kakao.com/oauth/authorize?'+params.toString();
 }
@@ -476,14 +476,14 @@ async function handleKakaoLogin(){
     const code=p.get('code');
     if(!code)return;
     const state=p.get('state');
-    let savedState=null,nonce=null,returnUrl=null;
+    let savedState=null,returnUrl=null;
     try{
         savedState=sessionStorage.getItem('kakao_oauth_state');
-        nonce=sessionStorage.getItem('kakao_oauth_nonce');
         returnUrl=sessionStorage.getItem('kakao_oauth_return');
         sessionStorage.removeItem('kakao_oauth_state');
-        sessionStorage.removeItem('kakao_oauth_nonce');
         sessionStorage.removeItem('kakao_oauth_return');
+        /* legacy nonce key cleanup (from previous deploys) */
+        sessionStorage.removeItem('kakao_oauth_nonce');
     }catch(_){}
     /* state mismatch = someone forged the callback; refuse. */
     if(!savedState||savedState!==state){
@@ -507,8 +507,7 @@ async function handleKakaoLogin(){
         }
         const{error}=await getSupabase().auth.signInWithIdToken({
             provider:'kakao',
-            token:data.id_token,
-            nonce:nonce||undefined
+            token:data.id_token
         });
         if(error){
             showMsg('Kakao session failed: '+error.message,'error');
@@ -577,6 +576,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776750593" defer></script>
+<script src="/js/siteFooter.js?v=1776752016" defer></script>
 </body>
 </html>
