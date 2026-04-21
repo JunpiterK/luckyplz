@@ -1231,3 +1231,155 @@ alter table public.chat_messages
 -- pattern (any URL holder can fetch — the URL itself is the secret,
 -- and file IDs are uuid-prefixed so they're not enumerable).
 
+
+-- ============================================================
+-- 8. message_reactions — emoji reactions on DM + group messages
+-- ============================================================
+-- Single table with a `kind` discriminator (dm | group) pointing at
+-- direct_messages.id or chat_messages.id. Two tables would give
+-- cleaner RLS but force the client to branch twice for every
+-- operation; one table + a SECURITY DEFINER can_see_message()
+-- helper keeps the client path uniform.
+--
+-- thread_key is auto-populated by trigger (= direct_messages.thread_id
+-- for DMs, chat_messages.room_id for groups). Lets Realtime
+-- subscriptions filter by a single "I'm in thread X" key across both
+-- kinds.
+--
+-- UNIQUE (kind, message_id, user_id, emoji) allows one row per
+-- (user, message, emoji) — second-press-to-remove semantics are
+-- implemented by the toggle_reaction RPC (DELETE-then-INSERT).
+
+create table if not exists public.message_reactions (
+    id           bigserial    primary key,
+    kind         text         not null check (kind in ('dm','group')),
+    message_id   bigint       not null,
+    thread_key   uuid,
+    user_id      uuid         not null references auth.users(id) on delete cascade,
+    emoji        text         not null check (char_length(emoji) between 1 and 16),
+    created_at   timestamptz  not null default now(),
+    unique (kind, message_id, user_id, emoji)
+);
+
+create index if not exists message_reactions_message_idx
+    on public.message_reactions (kind, message_id);
+create index if not exists message_reactions_thread_idx
+    on public.message_reactions (thread_key);
+
+-- Compute thread_key by joining the parent message table at insert
+-- time. Keeps Realtime filter simple + cheap.
+create or replace function public.set_reaction_thread_key()
+returns trigger language plpgsql security definer
+set search_path = public
+as $$
+begin
+    if new.kind = 'dm' then
+        select thread_id into new.thread_key
+        from public.direct_messages where id = new.message_id;
+    else
+        select room_id into new.thread_key
+        from public.chat_messages where id = new.message_id;
+    end if;
+    if new.thread_key is null then
+        raise exception using errcode = 'P0006', message = 'message_not_found';
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists set_reaction_thread_key on public.message_reactions;
+create trigger set_reaction_thread_key
+    before insert on public.message_reactions
+    for each row execute function public.set_reaction_thread_key();
+
+-- Access helper: the caller sees this reaction iff they can see the
+-- underlying message. Runs as SECURITY DEFINER so we can read both
+-- message tables without the caller needing direct SELECT access.
+create or replace function public.can_see_message(p_kind text, p_msg_id bigint)
+returns boolean language sql stable security definer
+set search_path = public
+as $$
+    select case
+        when p_kind = 'dm' then
+            exists (
+                select 1 from public.direct_messages
+                where id = p_msg_id
+                  and auth.uid() in (from_id, to_id)
+            )
+        when p_kind = 'group' then
+            exists (
+                select 1 from public.chat_messages m
+                where m.id = p_msg_id
+                  and public.is_room_member(m.room_id)
+            )
+        else false
+    end;
+$$;
+grant execute on function public.can_see_message(text, bigint) to authenticated;
+
+alter table public.message_reactions enable row level security;
+
+drop policy if exists "reactions_select_access" on public.message_reactions;
+drop policy if exists "reactions_insert_own"    on public.message_reactions;
+drop policy if exists "reactions_delete_own"    on public.message_reactions;
+
+create policy "reactions_select_access"
+    on public.message_reactions for select
+    using (public.can_see_message(kind, message_id));
+
+create policy "reactions_insert_own"
+    on public.message_reactions for insert
+    with check (
+        user_id = auth.uid()
+        and public.can_see_message(kind, message_id)
+    );
+
+create policy "reactions_delete_own"
+    on public.message_reactions for delete
+    using (user_id = auth.uid());
+
+-- Add to the Realtime publication so subscribers see live INSERT/DELETE.
+do $$
+begin
+    if not exists (
+        select 1 from pg_publication_tables
+        where pubname='supabase_realtime' and schemaname='public' and tablename='message_reactions'
+    ) then
+        alter publication supabase_realtime add table public.message_reactions;
+    end if;
+end$$;
+
+-- Toggle RPC: single-roundtrip add-or-remove based on whether the
+-- row already exists. Returns {ok, action:'added'|'removed'} so the
+-- client can update its local chip state without waiting for the
+-- Realtime echo.
+create or replace function public.toggle_reaction(
+    p_kind text, p_msg_id bigint, p_emoji text
+) returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    me uuid := auth.uid();
+    deleted int;
+    safe_emoji text := left(p_emoji, 16);
+begin
+    if me is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+    if p_kind not in ('dm','group') then return jsonb_build_object('ok', false, 'error', 'bad_kind'); end if;
+    if not public.can_see_message(p_kind, p_msg_id) then
+        return jsonb_build_object('ok', false, 'error', 'no_access');
+    end if;
+    delete from public.message_reactions
+        where kind = p_kind and message_id = p_msg_id
+          and user_id = me and emoji = safe_emoji;
+    get diagnostics deleted = row_count;
+    if deleted > 0 then
+        return jsonb_build_object('ok', true, 'action', 'removed', 'emoji', safe_emoji);
+    end if;
+    insert into public.message_reactions (kind, message_id, user_id, emoji)
+        values (p_kind, p_msg_id, me, safe_emoji);
+    return jsonb_build_object('ok', true, 'action', 'added', 'emoji', safe_emoji);
+end;
+$$;
+grant execute on function public.toggle_reaction(text, bigint, text) to authenticated;
+

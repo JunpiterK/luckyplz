@@ -654,6 +654,69 @@
         return r.rows.reduce((n, x) => n + Number(x.unread_count || 0), 0);
     }
 
+    /* ================================================================
+       Reactions (schema §8) — unified across DM + group messages.
+       kind='dm'|'group' + message_id discriminates. toggle_reaction
+       RPC handles add-or-remove in one round-trip. Realtime filter
+       uses thread_key so both kinds share a single subscription
+       pattern. Client never needs to know the pg table name of the
+       parent message.
+       ================================================================ */
+
+    async function getReactions(kind, messageIds) {
+        if (!Array.isArray(messageIds) || !messageIds.length) return { ok: true, byId: {} };
+        try {
+            const { data, error } = await getSupabase()
+                .from('message_reactions')
+                .select('message_id, user_id, emoji')
+                .eq('kind', kind)
+                .in('message_id', messageIds);
+            if (error) return { ok: false, error: error.message };
+            /* Shape: { [msgId]: { [emoji]: [user_id, ...] } } — O(1)
+               lookup in the bubble renderer + cheap "did I react?"
+               check by user_id. */
+            const byId = {};
+            (data || []).forEach(r => {
+                const m = byId[r.message_id] || (byId[r.message_id] = {});
+                (m[r.emoji] || (m[r.emoji] = [])).push(r.user_id);
+            });
+            return { ok: true, byId };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function toggleReaction(kind, messageId, emoji) {
+        try {
+            const { data, error } = await getSupabase()
+                .rpc('toggle_reaction', { p_kind: kind, p_msg_id: messageId, p_emoji: emoji });
+            if (error) return { ok: false, error: error.message };
+            return data || { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Subscribe to reaction changes in a specific thread (DM thread_id
+        or group room_id). Fires for INSERT + DELETE with the new/old
+        row so the caller can patch local chip state without a refetch. */
+    function subscribeToReactions(threadKey, onChange) {
+        const sb = getSupabase();
+        let chan = null; let cleaned = false;
+        (async () => {
+            if (cleaned) return;
+            const shortKey = (threadKey || '').slice(0, 8);
+            chan = sb.channel('lp_reactions_' + shortKey)
+                .on('postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: 'thread_key=eq.' + threadKey },
+                    (p) => { if (onChange) try { onChange({ kind: 'insert', row: p.new }); } catch (_) {} })
+                .on('postgres_changes',
+                    { event: 'DELETE', schema: 'public', table: 'message_reactions', filter: 'thread_key=eq.' + threadKey },
+                    (p) => { if (onChange) try { onChange({ kind: 'delete', row: p.old }); } catch (_) {} })
+                .subscribe();
+        })();
+        return function unsubscribe() {
+            cleaned = true;
+            if (chan) { try { sb.removeChannel(chan); } catch (_) {} chan = null; }
+        };
+    }
+
     window.LpSocial = {
         getFriends, sendFriendRequest, acceptFriendRequest,
         removeFriend, blockFriend,
@@ -665,6 +728,8 @@
         subscribeToGroupRoom, subscribeToGroupMembers, getGroupUnreadCount,
         /* Attachments */
         uploadAttachment,
+        /* Reactions */
+        getReactions, toggleReaction, subscribeToReactions,
         clearCache: _clearCache
     };
 })();

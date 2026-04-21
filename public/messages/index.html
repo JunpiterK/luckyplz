@@ -243,6 +243,68 @@ body{
 .lightbox .lb-close{position:absolute;top:16px;right:20px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(255,255,255,.1);color:#fff;font-size:1.4em;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .lightbox .lb-close:hover{background:rgba(255,255,255,.2)}
 
+/* ============== Reactions ============== */
+/* Bubble gets `position:relative` when it has reactions so the
+   hover picker button can dock against its edge. */
+.bubble-row{position:relative}
+/* Reaction chips row — sits beneath the bubble, wraps to multiple
+   lines if many emoji. Mine-side alignment matches bubble. */
+.reactions-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;padding:0 4px}
+.bubble-row.me .reactions-row{justify-content:flex-end}
+.reaction-chip{
+    display:inline-flex;align-items:center;gap:4px;
+    padding:2px 8px;border-radius:999px;
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);
+    font-size:.78em;line-height:1.25;cursor:pointer;
+    color:rgba(255,255,255,.85);
+    transition:background .15s,border-color .15s,transform .12s;
+    user-select:none
+}
+.reaction-chip:hover{background:rgba(255,255,255,.1);transform:translateY(-1px)}
+.reaction-chip.mine{background:rgba(0,217,255,.16);border-color:rgba(0,217,255,.5);color:#00D9FF;font-weight:700}
+.reaction-chip .emoji{font-size:1.02em}
+.reaction-chip .count{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+
+/* Hover pill — a tiny "😊+" button that appears on the side of the
+   bubble when the pointer is over it (desktop) or on long-press
+   (mobile, via .react-open class toggled by JS). */
+.react-trigger{
+    position:absolute;top:-10px;
+    width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;
+    background:rgba(14,14,28,.92);color:#fff;font-size:.95em;
+    display:none;align-items:center;justify-content:center;
+    box-shadow:0 4px 12px rgba(0,0,0,.4);border:1px solid rgba(0,217,255,.4);
+    transition:transform .15s,background .15s;z-index:3
+}
+.react-trigger:hover{background:rgba(0,217,255,.2);transform:scale(1.08)}
+.bubble-row.me .react-trigger{left:-14px}
+.bubble-row.them .react-trigger{right:-14px}
+.bubble-row:hover .react-trigger,
+.bubble-row.react-open .react-trigger{display:inline-flex}
+
+/* Quick-pick panel — 6 common emoji in a horizontal strip. Appears
+   just above the bubble when the ＋ pill is clicked. Frequency-
+   ordered from left (most used) to right. */
+.reaction-picker{
+    position:absolute;display:none;gap:6px;
+    padding:8px;border-radius:999px;
+    background:rgba(14,14,28,.98);border:1px solid rgba(0,217,255,.3);
+    box-shadow:0 12px 30px rgba(0,0,0,.55);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    z-index:4;top:-52px
+}
+.bubble-row.me .reaction-picker{right:0}
+.bubble-row.them .reaction-picker{left:0}
+.bubble-row.react-open .reaction-picker{display:flex;animation:pickerIn .18s ease}
+@keyframes pickerIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.reaction-picker button{
+    width:34px;height:34px;border-radius:50%;border:0;cursor:pointer;
+    background:transparent;font-size:1.2em;line-height:1;
+    display:flex;align-items:center;justify-content:center;
+    transition:background .12s,transform .12s
+}
+.reaction-picker button:hover{background:rgba(255,230,109,.18);transform:scale(1.15)}
+
 /* Add friend modal */
 .modal-backdrop{
     position:fixed;inset:0;background:rgba(5,5,15,.85);backdrop-filter:blur(8px);
@@ -669,6 +731,14 @@ let pendingAttachment=null;
 const ATTACH_MAX_BYTES=10*1024*1024;
 const ATTACH_ALLOWED=/^image\/(png|jpeg|jpg|gif|webp|heic)$/;
 
+/* Reactions state for the currently-open thread:
+     reactionsByMsg = { [msgId]: { [emoji]: Set<user_id> } }
+   Rebuilt on thread open, then patched live by the Realtime sub.
+   Sets give O(1) "did I react?" checks + cheap toggle operations. */
+let reactionsByMsg={};
+let reactionsUnsub=null;
+const QUICK_EMOJI=['👍','❤️','😂','😮','😢','🔥'];
+
 /* ---- Auth gate ----------------------------------------------- */
 async function boot(){
     const state=await ensureProfile();
@@ -785,6 +855,10 @@ function wireEvents(){
     /* Close mention popup on outside click or blur. */
     document.addEventListener('click',(e)=>{
         if(!$('composerForm').contains(e.target))closeMentionPop();
+        /* Close any open reaction picker on outside click too. */
+        if(!e.target.closest('.react-trigger')&&!e.target.closest('.reaction-picker')){
+            document.querySelectorAll('.bubble-row.react-open').forEach(r=>r.classList.remove('react-open'));
+        }
     });
     /* Attachment buttons + drag-drop wiring. */
     $('attachBtn').addEventListener('click',()=>$('attachInput').click());
@@ -1096,10 +1170,24 @@ async function openThread(meta){
         headerInfo.onclick=openMembersSheet;
     }
     $('chatMessages').innerHTML='';
+    /* Reset reaction state for the new thread. */
+    reactionsByMsg={};
+    if(reactionsUnsub){reactionsUnsub();reactionsUnsub=null}
     const res=meta.kind==='dm'
         ? await LpSocial.getThreadMessages(meta.friend_id)
         : await LpSocial.getGroupMessages(meta.room_id);
     if(res.ok){
+        /* Bulk-fetch reactions for these messages BEFORE rendering so
+           the chip row is populated on first paint rather than
+           popping in a frame later. */
+        const msgIds=res.rows.map(r=>r.id);
+        const rx=await LpSocial.getReactions(meta.kind,msgIds);
+        if(rx.ok){
+            Object.entries(rx.byId).forEach(([mid,byEmoji])=>{
+                const bucket=reactionsByMsg[mid]={};
+                Object.entries(byEmoji).forEach(([e,uids])=>{bucket[e]=new Set(uids)});
+            });
+        }
         renderMessages(res.rows);
         scrollToBottom();
     }
@@ -1131,10 +1219,48 @@ async function openThread(meta){
             if(m.from_id!==me.authUser.id)LpSocial.markGroupRead(meta.room_id);
         });
     }
+    /* Reactions subscription — one channel per thread keyed by
+       thread_id (DM) or room_id (group). */
+    const threadKey=meta.kind==='dm'
+        ? await computeThreadIdLocal(me.authUser.id,meta.friend_id)
+        : meta.room_id;
+    if(threadKey){
+        reactionsUnsub=LpSocial.subscribeToReactions(threadKey,applyReactionEvent);
+    }
     $('composerInput').focus();
+}
+
+/* Client-side thread_id for DM reactions — mirrors the DB trigger
+   (md5(least_uuid||'_'||greatest_uuid)) so our Realtime filter
+   value matches the stored thread_key. Uses the same MD5 helper
+   path LpSocial does internally (SubtleCrypto when available). */
+async function computeThreadIdLocal(a,b){
+    const lo=a<b?a:b, hi=a<b?b:a;
+    const text=lo+'_'+hi;
+    try{
+        const enc=new TextEncoder().encode(text);
+        const digest=await crypto.subtle.digest('MD5',enc);
+        const bytes=Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0'));
+        return bytes.slice(0,4).join('')+'-'+bytes.slice(4,6).join('')+'-'+bytes.slice(6,8).join('')+'-'+bytes.slice(8,10).join('')+'-'+bytes.slice(10,16).join('');
+    }catch(_){
+        /* Fallback for browsers without MD5 support (Safari). Read
+           LpSocial's internal JS-MD5 via a test message id query —
+           simpler: ask the DB by fetching our most recent DM row's
+           thread_id. Round-trip-cheaper than a JS MD5 reimpl here. */
+        try{
+            const u=await getUser();
+            const { data } = await getSupabase()
+                .from('direct_messages').select('thread_id')
+                .or('and(from_id.eq.'+u.id+',to_id.eq.'+b+'),and(from_id.eq.'+b+',to_id.eq.'+u.id+')')
+                .limit(1).single();
+            return data&&data.thread_id||null;
+        }catch(_){return null}
+    }
 }
 function closeThread(){
     if(threadUnsub){threadUnsub();threadUnsub=null}
+    if(reactionsUnsub){reactionsUnsub();reactionsUnsub=null}
+    reactionsByMsg={};
     currentThread=null;
     window._lpActiveThread=null;
     $('chatView').classList.remove('on');
@@ -1216,15 +1342,127 @@ function bubbleEl(m,myId){
     } else {
         bubbleHtml='<div class="bubble">'+renderBody(m.body||'',myNick)+'</div>';
     }
-    row.innerHTML=bubbleHtml
+    /* Hover trigger + quick-pick picker — always present in DOM,
+       CSS toggles visibility on hover or on react-open class. */
+    const triggerHtml='<button type="button" class="react-trigger" aria-label="React">😊</button>'
+        +'<div class="reaction-picker">'
+            +QUICK_EMOJI.map(e=>'<button type="button" data-emoji="'+e+'">'+e+'</button>').join('')
+        +'</div>';
+    row.innerHTML=triggerHtml+bubbleHtml
         +'<div class="bubble-time">'
             +'<span>'+escape(new Date(m.created_at).toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'}))+'</span>'
             +readTickHtml
-        +'</div>';
+        +'</div>'
+        +'<div class="reactions-row"></div>';
     /* Click-to-zoom on images. */
     const img=row.querySelector('img[data-full]');
     if(img)img.addEventListener('click',(e)=>{e.stopPropagation();openLightbox(img.dataset.full)});
+    /* Reaction handlers */
+    wireReactionRow(row,m);
+    renderReactionChips(row,m.id);
     return row;
+}
+
+/* Wire the trigger + picker on a bubble row. Kept in its own fn so
+   it's easy to re-apply on re-rendered rows. */
+function wireReactionRow(row,m){
+    const trig=row.querySelector('.react-trigger');
+    const picker=row.querySelector('.reaction-picker');
+    if(!trig||!picker)return;
+    /* Toggle picker open (also closes any other open picker). */
+    trig.addEventListener('click',(e)=>{
+        e.stopPropagation();
+        const already=row.classList.contains('react-open');
+        document.querySelectorAll('.bubble-row.react-open').forEach(r=>r.classList.remove('react-open'));
+        if(!already)row.classList.add('react-open');
+    });
+    /* Emoji pick — toggle reaction via RPC, close picker, optimistic
+       local update so the chip appears before the server round-trip. */
+    picker.querySelectorAll('button[data-emoji]').forEach(b=>{
+        b.addEventListener('click',async(e)=>{
+            e.stopPropagation();
+            const emoji=b.dataset.emoji;
+            row.classList.remove('react-open');
+            await applyReactionToggle(m.id,emoji);
+        });
+    });
+    /* Long-press on mobile — also opens the picker. */
+    let pressTimer=null;
+    row.querySelector('.bubble').addEventListener('touchstart',(e)=>{
+        pressTimer=setTimeout(()=>{
+            document.querySelectorAll('.bubble-row.react-open').forEach(r=>r.classList.remove('react-open'));
+            row.classList.add('react-open');
+        },450);
+    },{passive:true});
+    ['touchend','touchmove','touchcancel'].forEach(ev=>{
+        row.querySelector('.bubble').addEventListener(ev,()=>{if(pressTimer){clearTimeout(pressTimer);pressTimer=null}});
+    });
+}
+
+/* Render the chip row under a bubble from reactionsByMsg[msgId]. */
+function renderReactionChips(row,msgId){
+    const chipRow=row.querySelector('.reactions-row');
+    if(!chipRow)return;
+    const data=reactionsByMsg[msgId]||{};
+    const myId=me&&me.authUser?me.authUser.id:null;
+    const entries=Object.entries(data).filter(([_,set])=>set.size>0);
+    if(!entries.length){chipRow.innerHTML='';return}
+    chipRow.innerHTML=entries.map(([emoji,set])=>{
+        const mine=myId&&set.has(myId);
+        return '<button type="button" class="reaction-chip'+(mine?' mine':'')+'" data-emoji="'+escape(emoji)+'" data-mid="'+msgId+'" title="'+set.size+'">'
+            +'<span class="emoji">'+escape(emoji)+'</span>'
+            +'<span class="count">'+set.size+'</span>'
+        +'</button>';
+    }).join('');
+    chipRow.querySelectorAll('.reaction-chip').forEach(c=>{
+        c.addEventListener('click',async(e)=>{
+            e.stopPropagation();
+            await applyReactionToggle(Number(c.dataset.mid),c.dataset.emoji);
+        });
+    });
+}
+
+/* Optimistic toggle: flip local state, render immediately, fire RPC
+   in background. If the server returns the opposite action (rare —
+   only when local + server disagree because of stale state), the
+   Realtime subscription patches the chip back into consistency. */
+async function applyReactionToggle(msgId,emoji){
+    if(!currentThread||!me)return;
+    const kind=currentThread.kind;
+    const myId=me.authUser.id;
+    const bucket=(reactionsByMsg[msgId]||(reactionsByMsg[msgId]={}));
+    const set=(bucket[emoji]||(bucket[emoji]=new Set()));
+    const had=set.has(myId);
+    if(had)set.delete(myId);
+    else    set.add(myId);
+    /* Clean empty buckets so the chip disappears when count=0. */
+    if(!set.size)delete bucket[emoji];
+    rerenderChipsForMsg(msgId);
+    const res=await LpSocial.toggleReaction(kind,msgId,emoji);
+    if(!res.ok){
+        /* Revert on failure. */
+        if(had){(bucket[emoji]||(bucket[emoji]=new Set())).add(myId)}
+        else   {(bucket[emoji]||new Set()).delete(myId);if(bucket[emoji]&&!bucket[emoji].size)delete bucket[emoji]}
+        rerenderChipsForMsg(msgId);
+    }
+}
+function rerenderChipsForMsg(msgId){
+    const row=$('chatMessages').querySelector('[data-mid="'+msgId+'"]');
+    if(row)renderReactionChips(row,msgId);
+}
+
+/* Handle a Realtime reaction event from LpSocial.subscribeToReactions.
+   Patches reactionsByMsg, re-renders the chips for that message. */
+function applyReactionEvent(ev){
+    const r=ev.row||{};
+    const msgId=r.message_id;
+    if(!msgId)return;
+    const bucket=reactionsByMsg[msgId]||(reactionsByMsg[msgId]={});
+    const set=bucket[r.emoji]||(bucket[r.emoji]=new Set());
+    if(ev.kind==='insert')set.add(r.user_id);
+    else if(ev.kind==='delete')set.delete(r.user_id);
+    if(!set.size)delete bucket[r.emoji];
+    rerenderChipsForMsg(msgId);
 }
 
 /* Update an existing bubble's read-tick in place when the subscription
