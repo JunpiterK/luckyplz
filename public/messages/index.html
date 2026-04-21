@@ -422,6 +422,7 @@ body{
 
 <script src="/js/supabase-config.js"></script>
 <script src="/js/lpSocial.js"></script>
+<script src="/js/lpNotify.js"></script>
 <script>
 /* ================================================================
    Messages controller
@@ -691,6 +692,53 @@ async function boot(){
        fresh without polling. Thread subscription is separate, set up
        when the user opens a specific conversation. */
     incomingUnsub=LpSocial.subscribeToIncoming(()=>{refresh()});
+    /* Notification permission banner — first visit only, shown when
+       the browser permission is still 'default' (never asked) AND
+       the user hasn't explicitly declined in our local pref. */
+    maybeShowNotifyBanner();
+    /* Auto-open thread from URL param. Click on an OS notification
+       routes here with ?friend=<uuid> or ?room=<uuid>; deep-link the
+       thread immediately so the user lands on what they tapped. */
+    const params=new URLSearchParams(location.search);
+    const wantFriend=params.get('friend');
+    const wantRoom=params.get('room');
+    if(wantFriend){
+        const f=latestFriends.find(x=>x.friend_id===wantFriend&&x.direction==='accepted');
+        if(f)openThread({kind:'dm',friend_id:f.friend_id,friend_nickname:f.nickname,friend_avatar:f.avatar_url,friend_authed:f.profile_complete});
+    } else if(wantRoom){
+        const r=latestGroups.find(x=>x.room_id===wantRoom);
+        if(r)openThread({kind:'group',room_id:r.room_id,name:r.name,icon_emoji:r.icon_emoji,member_count:r.member_count,my_role:r.my_role});
+    }
+}
+
+function maybeShowNotifyBanner(){
+    if(!window.LpNotify)return;
+    if(LpNotify.permissionState()!=='default')return;
+    if(LpNotify.getPref()==='declined')return;
+    const banner=document.createElement('div');
+    banner.id='lpNotifyBanner';
+    banner.style.cssText='position:sticky;top:0;z-index:20;'
+        +'padding:10px 14px;background:rgba(255,230,109,.1);border-bottom:1px solid rgba(255,230,109,.3);'
+        +'display:flex;align-items:center;gap:10px;font-size:.82em;color:#FFE66D';
+    const langKey=lang;
+    const enableLbl=langKey==='ko'?'알림 켜기':langKey==='ja'?'通知をオン':langKey==='zh'?'开启通知':'Enable notifications';
+    const dismissLbl=langKey==='ko'?'다음에':langKey==='ja'?'あとで':langKey==='zh'?'稍后':'Later';
+    const reasonLbl=langKey==='ko'?'🔔 새 메시지를 바로 받아보세요':langKey==='ja'?'🔔 新着メッセージをすぐに受け取れます':langKey==='zh'?'🔔 立即接收新消息':'🔔 Get instant alerts for new messages';
+    banner.innerHTML='<span style="flex:1">'+reasonLbl+'</span>'
+        +'<button id="lpNotifyEnable" style="padding:6px 12px;border-radius:8px;border:0;background:#FFE66D;color:#0A0A1A;font-weight:800;cursor:pointer;font-family:inherit;font-size:.92em">'+enableLbl+'</button>'
+        +'<button id="lpNotifyDismiss" style="padding:6px 10px;border-radius:8px;background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.65);cursor:pointer;font-family:inherit;font-size:.86em">'+dismissLbl+'</button>';
+    $('app').insertBefore(banner,$('app').firstChild);
+    document.getElementById('lpNotifyEnable').addEventListener('click',async()=>{
+        const r=await LpNotify.requestPermission();
+        banner.remove();
+        if(r==='granted'){
+            LpNotify.show({title:'Lucky Please',body:lang==='ko'?'알림이 켜졌어요!':'Notifications enabled!'});
+        }
+    });
+    document.getElementById('lpNotifyDismiss').addEventListener('click',()=>{
+        LpNotify.setPref('declined');
+        banner.remove();
+    });
 }
 
 function wireEvents(){
@@ -1014,6 +1062,12 @@ async function submitAddFriend(){
 async function openThread(meta){
     if(threadUnsub){threadUnsub();threadUnsub=null}
     currentThread=meta;
+    /* Tell LpNotify we're actively viewing this thread so incoming
+       messages from this peer don't fire redundant toasts/OS
+       notifications. Cleared on closeThread + page hide. */
+    window._lpActiveThread = meta.kind==='dm'
+        ? 'dm:'+meta.friend_id
+        : 'group:'+meta.room_id;
     $('chatEmpty').style.display='none';
     $('chatView').classList.add('on');
     $('app').dataset.pane='chat';
@@ -1082,6 +1136,7 @@ async function openThread(meta){
 function closeThread(){
     if(threadUnsub){threadUnsub();threadUnsub=null}
     currentThread=null;
+    window._lpActiveThread=null;
     $('chatView').classList.remove('on');
     $('chatEmpty').style.display='flex';
 }
