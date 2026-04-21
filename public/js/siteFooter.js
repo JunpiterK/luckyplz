@@ -110,7 +110,7 @@ try{
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1776740534';
+        s.src='/js/adSlots.js?v=1776741069';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -119,7 +119,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1776740534';
+        rr.src='/js/recentResults.js?v=1776741069';
         document.body.appendChild(rr);
     }
 
@@ -127,20 +127,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1776740534';
+        pwa.src='/js/pwaInstall.js?v=1776741069';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1776740534';
+    tr.src='/js/lpTrack.js?v=1776741069';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1776740534';
+    sh.src='/js/lpShare.js?v=1776741069';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -153,7 +153,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776740534';
+        rr2.src='/js/lpRoom.js?v=1776741069';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
@@ -163,7 +163,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1776740534';
+        ls.src='/js/lpSocial.js?v=1776741069';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -172,7 +172,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1776740534';
+        ln.src='/js/lpNotify.js?v=1776741069';
         ln.defer=true;
         document.body.appendChild(ln);
     }
