@@ -96,12 +96,18 @@ grant execute on function public.is_active() to authenticated;
 -- ---------------------------------------------------------------------
 create table if not exists public.admin_audit_log (
     id         bigserial   primary key,
-    admin_id   uuid        not null references auth.users(id) on delete set null,
+    /* admin_id is nullable: when an admin or user self-deletes, the
+       FK's ON DELETE SET NULL fires to preserve the audit row even
+       after the actor is gone. The metadata column captures a snapshot
+       of who it was (nickname/email/role) for post-hoc forensics. */
+    admin_id   uuid        references auth.users(id) on delete set null,
     action     text        not null check (char_length(action) between 1 and 60),
     target_id  uuid,
     metadata   jsonb       default '{}'::jsonb,
     created_at timestamptz not null default now()
 );
+-- Retroactive fix for earlier migrations that set NOT NULL.
+alter table public.admin_audit_log alter column admin_id drop not null;
 
 create index if not exists admin_audit_admin_idx  on public.admin_audit_log (admin_id, created_at desc);
 create index if not exists admin_audit_target_idx on public.admin_audit_log (target_id, created_at desc) where target_id is not null;
