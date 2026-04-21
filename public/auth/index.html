@@ -419,10 +419,14 @@ async function handleGoogleLogin(){
 }
 
 // Kakao OAuth — requires Kakao Developer app + Supabase Auth provider
-// configuration. Kakao returns nickname + profile_image_url +
-// account_email (if user granted the email scope); these land in
-// user_metadata and are picked up by /auth/setup/ to pre-fill the
-// nickname field + avatar preview.
+// configuration. Supabase by default requests account_email in the
+// authorize scope, but non-business Kakao apps can't opt into that
+// consent item (it's gated by business-verification status). Request
+// only the scopes every personal-developer app can grant — nickname
+// + profile image — so the consent screen loads instead of failing
+// with KOE205 "설정하지 않은 동의 항목: account_email". The
+// /auth/setup/ page treats email as optional anyway (user can
+// type in an alt address manually).
 async function handleKakaoLogin(){
     clearMsg();
     const btn=document.getElementById('kakaoBtn');
@@ -431,7 +435,10 @@ async function handleKakaoLogin(){
     const redirectTo=window.location.origin+'/auth/'+(ret?('?return='+encodeURIComponent(ret)):'');
     const{error}=await getSupabase().auth.signInWithOAuth({
         provider:'kakao',
-        options:{redirectTo}
+        options:{
+            redirectTo,
+            scopes:'profile_nickname profile_image'
+        }
     });
     if(error){btn.disabled=false;showMsg(error.message,'error')}
 }
@@ -489,6 +496,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776741069" defer></script>
+<script src="/js/siteFooter.js?v=1776746262" defer></script>
 </body>
 </html>
