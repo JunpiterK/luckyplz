@@ -156,6 +156,13 @@ body{
     background:var(--bubble-them);border:1px solid var(--bubble-them-br);
     border-bottom-left-radius:6px
 }
+/* Optimistic-send bubble states. .pending = shown before RPC returns
+   (faded so user reads it as "sending…"); .failed = server rejected
+   (red outline + disabled send feedback). On real response the
+   class is cleared + data-mid is swapped from tmp→server id. */
+.bubble-row.pending .bubble{opacity:.55;filter:saturate(.8)}
+.bubble-row.failed .bubble{border-color:rgba(255,51,102,.55);box-shadow:0 0 0 1px rgba(255,51,102,.2)}
+.bubble-row.failed::after{content:'!';position:absolute;top:-6px;right:-6px;width:16px;height:16px;border-radius:50%;background:#FF3366;color:#fff;font-size:.7em;font-weight:900;display:flex;align-items:center;justify-content:center}
 .bubble-time{font-size:.68em;color:var(--muted-2);align-self:flex-end;padding:0 4px;white-space:nowrap;margin-bottom:3px;display:inline-flex;align-items:center;gap:4px}
 /* Read-receipts — single check = delivered (sent only), double cyan check = peer has read. Shown only on my own outgoing bubbles in DM threads. */
 .read-tick{font-size:.9em;letter-spacing:-2px;color:var(--muted-2);font-weight:900;line-height:1}
@@ -760,8 +767,15 @@ async function boot(){
     await refresh();
     /* Global incoming-message subscription keeps inbox + unread counts
        fresh without polling. Thread subscription is separate, set up
-       when the user opens a specific conversation. */
-    incomingUnsub=LpSocial.subscribeToIncoming(()=>{refresh()});
+       when the user opens a specific conversation. The callback only
+       refetches the inbox (not friends / groups) — nothing about a
+       new message changes the friends list, and the thread sub has
+       already updated the room if it's currently open. This saves
+       ~2 round trips per incoming message. */
+    incomingUnsub=LpSocial.subscribeToIncoming(async()=>{
+        const inb=await LpSocial.getInbox({force:true});
+        if(inb.ok){latestInbox=inb.rows;renderSidebar()}
+    });
     /* Notification permission banner — first visit only, shown when
        the browser permission is still 'default' (never asked) AND
        the user hasn't explicitly declined in our local pref. */
@@ -956,6 +970,10 @@ function updateTabActive(){
 let latestInbox=[];
 let latestFriends=[];
 async function refresh(){
+    /* All three caches refetched in parallel. Callers should fire this
+       in the background (no await) wherever possible — UI should never
+       block on it thanks to optimistic local updates in the action
+       handlers above. */
     const [inb,fri,grp]=await Promise.all([
         LpSocial.getInbox({force:true}),
         LpSocial.getFriends({force:true}),
@@ -964,19 +982,11 @@ async function refresh(){
     if(inb.ok)latestInbox=inb.rows;
     if(fri.ok)latestFriends=fri.rows;
     if(grp.ok)latestGroups=grp.rows;
-    /* Update request badge */
     const pendingIn=latestFriends.filter(f=>f.direction==='incoming-pending').length;
     const badge=$('requestsBadge');
     if(pendingIn>0){badge.textContent=pendingIn;badge.style.display='inline-flex'}
     else badge.style.display='none';
     renderSidebar();
-    /* If the currently-open thread has new unread, mark read. */
-    if(currentThread){
-        if(currentThread.kind==='dm')
-            LpSocial.markThreadRead(currentThread.friend_id).then(()=>LpSocial.getInbox({force:true}));
-        else if(currentThread.kind==='group')
-            LpSocial.markGroupRead(currentThread.room_id).then(()=>LpSocial.getGroupChats({force:true}));
-    }
 }
 
 function renderSidebar(){
@@ -1030,16 +1040,29 @@ function renderSidebar(){
         });
     });
     body.querySelectorAll('[data-action]').forEach(btn=>{
-        btn.addEventListener('click',async(e)=>{
+        btn.addEventListener('click',(e)=>{
             e.stopPropagation();
             const fid=btn.dataset.targetFriend;
             const act=btn.dataset.action;
             btn.disabled=true;
-            if(act==='accept')       await LpSocial.acceptFriendRequest(fid);
-            else if(act==='reject')  await LpSocial.removeFriend(fid);
-            else if(act==='unfriend')await LpSocial.removeFriend(fid);
-            else if(act==='block')   await LpSocial.blockFriend(fid);
-            await refresh();
+            /* Optimistic: mutate the local list + re-render immediately
+               so the row visibly updates before the server round-trip.
+               If the RPC later fails, we call refresh() to recover truth
+               from the DB. */
+            if(act==='accept'){
+                const f=latestFriends.find(x=>x.friend_id===fid);
+                if(f){f.direction='accepted';f.status='accepted';f.accepted_at=new Date().toISOString()}
+            }else{
+                /* reject / unfriend / block all remove the row from the
+                   current view (block keeps a blocked entry in the DB
+                   but it's hidden from accepted/pending lists). */
+                latestFriends=latestFriends.filter(x=>x.friend_id!==fid);
+            }
+            renderSidebar();
+            const fn=act==='accept'?LpSocial.acceptFriendRequest
+                    :act==='block' ?LpSocial.blockFriend
+                                   :LpSocial.removeFriend;
+            fn(fid).then(res=>{if(!res.ok)refresh()}).catch(()=>refresh());
         });
     });
 }
@@ -1122,8 +1145,11 @@ async function submitAddFriend(){
     if(res.ok){
         $('addFriendMsg').className='msg ok';
         $('addFriendMsg').textContent=res.auto_accepted?t.ok_auto_accepted:t.ok_requested;
-        await refresh();
-        setTimeout(closeAddFriend,900);
+        /* Close modal fast — don't make the user wait on the post-op
+           refetch. Fire refresh() in the background so the sidebar
+           catches up once the DB has the new row. */
+        setTimeout(closeAddFriend,500);
+        refresh();
     }else{
         $('addFriendMsg').className='msg err';
         const key='err_'+(res.error||'');
@@ -1191,16 +1217,34 @@ async function openThread(meta){
         renderMessages(res.rows);
         scrollToBottom();
     }
-    /* Mark unread as read. */
-    if(meta.kind==='dm')       await LpSocial.markThreadRead(meta.friend_id);
-    else                       await LpSocial.markGroupRead(meta.room_id);
-    await refresh();
+    /* Mark unread as read + refresh sidebar in the background. Neither
+       blocks the user from typing, scrolling, or reacting — and the
+       thread subscription below is what actually keeps the bubbles
+       live. Awaiting these here was ~600 ms of dead time per open.
+       We also zero the unread count locally so the sidebar badge
+       updates on the same frame rather than after the server echo. */
+    if(meta.kind==='dm'){
+        const row=latestInbox.find(r=>r.friend_id===meta.friend_id);
+        if(row&&row.unread_count){row.unread_count=0;renderSidebar()}
+        LpSocial.markThreadRead(meta.friend_id);
+    }else{
+        const row=latestGroups.find(r=>r.room_id===meta.room_id);
+        if(row&&row.unread_count){row.unread_count=0;renderSidebar()}
+        LpSocial.markGroupRead(meta.room_id);
+    }
     /* Live updates for this thread / room */
     if(meta.kind==='dm'){
         threadUnsub=LpSocial.subscribeToThread(meta.friend_id,(ev)=>{
             if(ev.kind==='insert'){
                 appendMessage(ev.row);scrollToBottom();
-                if(ev.row.from_id===meta.friend_id)LpSocial.markThreadRead(meta.friend_id);
+                if(ev.row.from_id===meta.friend_id){
+                    /* Peer just messaged me while I'm looking at this
+                       thread — mark read server-side + keep the sidebar
+                       badge at 0 locally so it doesn't flicker up. */
+                    LpSocial.markThreadRead(meta.friend_id);
+                    const row=latestInbox.find(r=>r.friend_id===meta.friend_id);
+                    if(row){row.unread_count=0}
+                }
             }else if(ev.kind==='update'){
                 /* Peer marked one of my messages read → flip my ✓ to ✓✓
                    live. Find the bubble by id and mutate the tick
@@ -1215,6 +1259,10 @@ async function openThread(meta){
     }else{
         threadUnsub=LpSocial.subscribeToGroupRoom(meta.room_id,(m)=>{
             appendMessage(m);scrollToBottom();
+            if(m.from_id!==me.authUser.id){
+                const row=latestGroups.find(r=>r.room_id===meta.room_id);
+                if(row){row.unread_count=0}
+            }
             /* Skip self-echo mark (already our own message). */
             if(m.from_id!==me.authUser.id)LpSocial.markGroupRead(meta.room_id);
         });
@@ -1293,6 +1341,30 @@ function appendMessage(m){
     const existing=$('chatMessages').querySelector('[data-mid="'+m.id+'"]');
     if(existing)return;
     const myId=me.authUser.id;
+    /* Optimistic-send dedupe: when a Realtime echo arrives for a
+       message we sent ourselves (from_id === me), see if one of our
+       pending tmp bubbles has the same body. If so, promote that
+       bubble to the real id rather than adding a duplicate — the
+       user keeps seeing the same DOM element, just no longer faded. */
+    if(m.from_id===myId&&!String(m.id).startsWith('tmp-')&&_pendingSends&&_pendingSends.size){
+        for(const [tmpId,info] of _pendingSends.entries()){
+            if((info.body||'')===(m.body||'')){
+                const row=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
+                if(row){
+                    row.dataset.mid=m.id;
+                    row.classList.remove('pending');
+                    /* Swap blob image → server URL if the echo carries one. */
+                    if(m.attachment_url){
+                        const img=row.querySelector('img[data-full]');
+                        if(img){img.src=m.attachment_url;img.dataset.full=m.attachment_url}
+                    }
+                    if(info.stagedUrl)try{URL.revokeObjectURL(info.stagedUrl)}catch(_){}
+                    _pendingSends.delete(tmpId);
+                    return;
+                }
+            }
+        }
+    }
     const container=$('chatMessages');
     /* Maybe insert day divider if the day just rolled over. */
     const dk=dayKey(m.created_at);
@@ -1320,7 +1392,7 @@ function renderBody(body,myNick){
 function bubbleEl(m,myId){
     const mine=m.from_id===myId;
     const row=document.createElement('div');
-    row.className='bubble-row '+(mine?'me':'them');
+    row.className='bubble-row '+(mine?'me':'them')+(m._pending?' pending':'');
     row.dataset.mid=m.id;
     row.dataset.readAt=m.read_at||'';
     /* Read ticks: DM-only, my own bubbles only. */
@@ -1488,44 +1560,103 @@ function autoGrowComposer(){
     /* Send is enabled if there's text OR a staged attachment. */
     $('sendBtn').disabled=!ta.value.trim()&&!pendingAttachment;
 }
+/* Optimistic send: the bubble appears in the thread the instant the
+   user hits Enter — no waiting for the INSERT round-trip. We paint
+   it with `.pending` (faded) and a client-only tmp id, then either
+   (a) swap tmp→server id when the INSERT response lands, (b) mark
+   it `.failed` if the server rejects, or (c) silently discard the
+   tmp bubble if the Realtime echo beat the INSERT response (the
+   real row is already on screen). Same dance for attachments —
+   we preview via the local blob: URL, then swap to the public URL
+   after upload. Net effect: perceived latency ≈ 0 ms even on
+   high-RTT networks. */
+const _pendingSends = new Map(); /* tmpId → {body, stagedUrl} for fallback matching */
 async function submitMessage(){
     const ta=$('composerInput');
     const body=ta.value.trim();
     if(!currentThread)return;
     if(!body&&!pendingAttachment)return;
-    $('sendBtn').disabled=true;
-    /* Snapshot the staged attachment + clear immediately so a second
-       send (after upload completes) can stage a new one. */
     const stagedFile=pendingAttachment;
-    let attachment=null;
-    /* Upload first if there's a staged file. UI stays visible with
-       "UPLOADING…" tag so the user sees progress. */
-    if(stagedFile){
-        $('attachProgress').style.display='inline';
-        $('attachThumb').classList.add('up');
-        const up=await LpSocial.uploadAttachment(stagedFile);
-        $('attachProgress').style.display='none';
-        $('attachThumb').classList.remove('up');
-        if(!up.ok){
-            $('sendBtn').disabled=!ta.value.trim()&&!pendingAttachment;
-            alert('Upload failed: '+(up.error||'unknown'));
-            return;
-        }
-        attachment=up;
-    }
+    const stagedUrl=stagedFile?stagedFile._url:null;
+    const stagedType=stagedFile?stagedFile.type:null;
+    const stagedName=stagedFile?stagedFile.name:null;
+    const stagedSize=stagedFile?stagedFile.size:null;
+    /* Clear composer UI immediately so the textarea is ready for the
+       next message before the server has even been contacted. */
     ta.value='';autoGrowComposer();
     clearAttachment();
-    const res=currentThread.kind==='dm'
-        ? await LpSocial.sendMessage(currentThread.friend_id,body,attachment)
-        : await LpSocial.sendGroupMessage(currentThread.room_id,body,attachment);
-    if(res.ok){
-        appendMessage(res.message);
-        scrollToBottom();
-    }else{
-        ta.value=body;autoGrowComposer();
-        alert('Send failed: '+(res.error||'unknown'));
-    }
+    $('sendBtn').disabled=true;
+    /* Paint optimistic bubble. blob: URL means the image is visible
+       instantly; server URL replaces it on upload completion. */
+    const tmpId='tmp-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);
+    const optimistic={
+        id:tmpId,
+        from_id:me.authUser.id,
+        to_id:currentThread.kind==='dm'?currentThread.friend_id:null,
+        room_id:currentThread.kind==='group'?currentThread.room_id:null,
+        body:body||null,
+        created_at:new Date().toISOString(),
+        read_at:null,
+        attachment_url:stagedUrl,
+        attachment_type:stagedType,
+        attachment_size:stagedSize,
+        attachment_name:stagedName,
+        _pending:true
+    };
+    _pendingSends.set(tmpId,{body,stagedUrl});
+    appendMessage(optimistic);
+    scrollToBottom();
     ta.focus();
+    /* Fire upload + insert in the background. */
+    (async()=>{
+        let attachment=null;
+        if(stagedFile){
+            const up=await LpSocial.uploadAttachment(stagedFile);
+            if(!up.ok){
+                _markBubbleFailed(tmpId);
+                _pendingSends.delete(tmpId);
+                $('sendBtn').disabled=!$('composerInput').value.trim()&&!pendingAttachment;
+                alert('Upload failed: '+(up.error||'unknown'));
+                return;
+            }
+            attachment=up;
+        }
+        const res=currentThread.kind==='dm'
+            ? await LpSocial.sendMessage(currentThread.friend_id,body,attachment)
+            : await LpSocial.sendGroupMessage(currentThread.room_id,body,attachment);
+        $('sendBtn').disabled=!$('composerInput').value.trim()&&!pendingAttachment;
+        if(res.ok&&res.message){
+            const tmp=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
+            if(!tmp){_pendingSends.delete(tmpId);return}
+            const real=$('chatMessages').querySelector('[data-mid="'+res.message.id+'"]');
+            if(real&&real!==tmp){
+                /* Realtime echo beat us — drop our tmp, the real row is
+                   already rendered. Revoke the blob so we don't leak. */
+                if(stagedUrl)try{URL.revokeObjectURL(stagedUrl)}catch(_){}
+                tmp.remove();
+            }else{
+                tmp.dataset.mid=res.message.id;
+                tmp.classList.remove('pending');
+                /* Swap the blob: URL for the server URL so the image
+                   survives a refresh. Also refresh the full-size pointer
+                   for the lightbox. */
+                if(attachment){
+                    const img=tmp.querySelector('img[data-full]');
+                    if(img){img.src=attachment.url;img.dataset.full=attachment.url}
+                    if(stagedUrl)try{URL.revokeObjectURL(stagedUrl)}catch(_){}
+                }
+            }
+            _pendingSends.delete(tmpId);
+        }else{
+            _markBubbleFailed(tmpId);
+            _pendingSends.delete(tmpId);
+            alert('Send failed: '+(res.error||'unknown'));
+        }
+    })();
+}
+function _markBubbleFailed(tmpId){
+    const row=$('chatMessages').querySelector('[data-mid="'+tmpId+'"]');
+    if(row){row.classList.remove('pending');row.classList.add('failed')}
 }
 
 /* ---- Attachment staging + lightbox --------------------------- */
