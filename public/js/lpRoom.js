@@ -69,12 +69,31 @@
     function shortId(){return Math.random().toString(36).slice(2,10)}
 
     /* ============ HOST ============ */
+    /* Look up whether the caller is a logged-in Lucky Please user with
+       a verified profile. Used to tag roster entries with a ✓ badge
+       so participants can tell registered accounts from nickname-only
+       guests. Fails silent — if supabase-config hasn't loaded yet or
+       the user isn't authed, returns {authed:false}. */
+    async function _lpAuthSignature(){
+        try {
+            if (typeof window.ensureProfile !== 'function') return {authed:false};
+            const s = await window.ensureProfile();
+            if (!s || !s.signedIn) return {authed:false};
+            return {
+                authed: !s.needsSetup,              /* only complete profiles get ✓ */
+                authedName: s.profile && s.profile.nickname || null,
+                authUid: s.authUser && s.authUser.id || null
+            };
+        } catch(_) { return {authed:false}; }
+    }
+
     async function hostCreate(opts){
         opts=opts||{};
         const gameId=opts.gameId||'unknown';
         const pin=String(opts.pin||'').padStart(4,'0');
         const hostName=opts.hostName||'Host';
         const sb=await waitForSupabase();
+        const hostAuth=await _lpAuthSignature();
         const code=opts.code||genCode();
         dbgLog('host: create '+code+' game='+gameId);
         const chan=sb.channel(channelName(code),{config:{broadcast:{self:false,ack:false},presence:{key:'h-'+shortId()}}});
@@ -91,11 +110,20 @@
 
         /* Push the authoritative guest roster to everyone in the room.
            Called after any join/leave so each guest's status panel
-           stays in sync without polling. */
+           stays in sync without polling. Payload carries BOTH the
+           legacy `nicknames` string array (old clients) and a new
+           `roster` array of objects with authed flags so new clients
+           can render verified badges. */
         function broadcastGuestList(){
             if(!subscribed)return;
-            const nicknames=Array.from(guests.values()).map(function(v){return v.nickname});
-            chan.send({type:'broadcast',event:'host:guests',payload:{nicknames:nicknames,hostName:hostName,count:nicknames.length+1}});
+            const arr=Array.from(guests.values());
+            const nicknames=arr.map(function(v){return v.nickname});
+            const roster=arr.map(function(v){return {nickname:v.nickname,authed:!!v.authed}});
+            chan.send({type:'broadcast',event:'host:guests',payload:{
+                nicknames:nicknames,roster:roster,
+                hostName:hostName,hostAuthed:!!hostAuth.authed,
+                count:nicknames.length+1
+            }});
         }
 
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
@@ -149,8 +177,11 @@
             }else{
                 while(taken[finalNick.toLowerCase()]&&i<=99){finalNick=want+i;i++}
             }
-            guests.set(p.gid,{nickname:finalNick,pid:p.pid||'',joinedAt:Date.now()});
-            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,gameId:gameId,nickname:finalNick}});
+            guests.set(p.gid,{
+                nickname:finalNick,pid:p.pid||'',joinedAt:Date.now(),
+                authed:!!p.authed,authedName:p.authedName||null
+            });
+            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,hostAuthed:!!hostAuth.authed,gameId:gameId,nickname:finalNick}});
             dbgLog('host: sent join_ack (nick='+finalNick+(finalNick!==want?' from '+want:'')+(reusedNick?' [returning]':'')+')');
             guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:finalNick})}catch(e){}});
             /* replay last snapshot so the newcomer catches up */
@@ -231,7 +262,7 @@
             gameId:gameId,
             pin:pin,
             hostName:hostName,
-            guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt}})},
+            guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt,authed:!!e[1].authed,authedName:e[1].authedName||null}})},
             broadcast:function(event,payload){
                 if(!subscribed){dbgLog('host: broadcast '+event+' DROPPED (not subscribed)');return false}
                 chan.send({type:'broadcast',event:event,payload:payload||{}});
@@ -438,7 +469,20 @@
                their original nickname/slot back instead of being
                re-deduped to nick+1. */
             var pid='';try{pid=(window.getLpPlayerId&&window.getLpPlayerId())||''}catch(_){}
-            chan.send({type:'broadcast',event:'guest:join_request',payload:{gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId}});
+            /* Resolve authed state at join time. Fire-and-forget the
+               lookup so we don't delay the join timer — worst case,
+               authed tag shows up on the NEXT broadcastGuestList after
+               the host processes our join_request with authed=false. */
+            _lpAuthSignature().then(function(sig){
+                chan.send({type:'broadcast',event:'guest:join_request',payload:{
+                    gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId,
+                    authed:!!sig.authed,authedName:sig.authedName||null
+                }});
+            }).catch(function(){
+                chan.send({type:'broadcast',event:'guest:join_request',payload:{
+                    gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId
+                }});
+            });
         });
 
         if(!result.ok){
@@ -581,7 +625,14 @@
            +'.lp-room-guest-panel .empty{color:rgba(255,255,255,.45);font-style:italic}'
            +'.lp-room-guest-panel .rows{display:flex;flex-direction:column;gap:4px}'
            +'.lp-room-guest-panel .row{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04)}'
-           +'.lp-room-guest-panel .row .nick{font-weight:700}'
+           +'.lp-room-guest-panel .row .nick{font-weight:700;display:inline-flex;align-items:center;gap:6px}'
+           /* Verified-user badge — a subtle cyan dot with a check next
+              to the nickname. Distinguishes logged-in registered
+              accounts from nickname-only drop-ins. Kept understated
+              on purpose (no gold or sparkles) so the room doesn't
+              feel class-segregated. */
+           +'.lp-room-guest-panel .row .verified-badge{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:50%;background:rgba(0,217,255,.2);color:#00D9FF;font-size:.68em;font-weight:900;border:1px solid rgba(0,217,255,.5)}'
+           +'.lp-room-guest-panel .row .guest-tag{font-size:.7em;color:rgba(255,255,255,.35);font-weight:500;margin-left:4px;font-style:italic}'
            +'.lp-room-guest-panel .row .t{opacity:.5;font-size:.84em;font-variant-numeric:tabular-nums}'
            /* Pagination controls for host-side list (20/page) */
            +'.lp-room-guest-panel .pager{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:8px;border-top:1px solid rgba(0,217,255,.15);font-size:.78em}'
@@ -905,7 +956,9 @@
                 const when=new Date(g.joinedAt);
                 const hh=String(when.getHours()).padStart(2,'0');
                 const mm=String(when.getMinutes()).padStart(2,'0');
-                return '<div class="row"><span class="nick">'+escapeHtml(g.nickname)+'</span><span class="t">'+hh+':'+mm+'</span></div>';
+                const badge=g.authed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
+                const guestTag=g.authed?'':'<span class="guest-tag">'+(lang==='ko'?'게스트':'guest')+'</span>';
+                return '<div class="row"><span class="nick">'+badge+escapeHtml(g.nickname)+guestTag+'</span><span class="t">'+hh+':'+mm+'</span></div>';
             }).join('');
             /* Pager only renders when there's >1 page. Single-page rooms
                (most typical 2-10 user parties) skip the chrome entirely. */
@@ -1055,10 +1108,11 @@
         const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
 
         /* Local snapshot of the room's guest list, populated by the
-           host:guests broadcast. Includes everyone currently connected
-           (other guests + the host isn't in the array by design —
-           we render them separately). */
-        let roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true}];
+           host:guests broadcast. Entries carry authed (✓ badge) alongside
+           nickname. Host rendered separately; hostAuthed tracked in a
+           scalar flag updated on each broadcast. */
+        let roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false}];
+        let hostAuthed=false;
 
         function countLbl(n){return lang==='ko'?n+'명 접속':n+' watching'}
         function roomLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
@@ -1106,13 +1160,16 @@
                 const nb=(b.nickname||'').toLowerCase();
                 return na.localeCompare(nb);
             });
-            const hostRow='<div class="row host"><span class="nick">👑 '+escapeHtml(g.hostName||'Host')+'</span><span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
+            const hostBadge=hostAuthed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
+            const hostRow='<div class="row host"><span class="nick">👑 '+hostBadge+escapeHtml(g.hostName||'Host')+'</span><span class="t">'+(lang==='ko'?'방장':'host')+'</span></div>';
             /* Host row counts toward the 12-row cap. */
             const guestsToShow=sortedRoster.slice(0,GUEST_MAX_VISIBLE-1);
             const hidden=sortedRoster.length-guestsToShow.length;
             const guestRows=guestsToShow.map(function(r){
                 const tag=r.self?(lang==='ko'?'나':'me'):'';
-                return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+escapeHtml(r.nickname)+'</span><span class="t">'+tag+'</span></div>';
+                const badge=r.authed?'<span class="verified-badge" title="'+(lang==='ko'?'회원':'verified')+'">✓</span>':'';
+                const guestTag=r.authed||r.self?'':'<span class="guest-tag">'+(lang==='ko'?'게스트':'guest')+'</span>';
+                return '<div class="row'+(r.self?' self':'')+'"><span class="nick">'+badge+escapeHtml(r.nickname)+guestTag+'</span><span class="t">'+tag+'</span></div>';
             }).join('');
             const moreRow=hidden>0
                 ?'<div class="more">'+(lang==='ko'?'외 '+hidden+'명':'and '+hidden+' more')+'</div>'
@@ -1155,9 +1212,17 @@
            roster, preserving a "self" marker for the entry matching our
            own nickname so the list can render "(me)" next to it. */
         g.on('host:guests',function(p){
-            if(!p||!Array.isArray(p.nicknames))return;
-            roster=p.nicknames.map(function(n){return{nickname:n,self:n===(g.nickname||'')}});
-            if(!roster.length)roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true}];
+            if(!p)return;
+            /* New hosts send `roster` with authed flags; fall back to
+               string-only `nicknames` for older hosts so rooms during
+               a rolling deploy still render. */
+            if(Array.isArray(p.roster)){
+                roster=p.roster.map(function(e){return{nickname:e.nickname,authed:!!e.authed,self:e.nickname===(g.nickname||'')}});
+            }else if(Array.isArray(p.nicknames)){
+                roster=p.nicknames.map(function(n){return{nickname:n,authed:false,self:n===(g.nickname||'')}});
+            }else return;
+            if(typeof p.hostAuthed==='boolean')hostAuthed=p.hostAuthed;
+            if(!roster.length)roster=[{nickname:g.nickname||(lang==='ko'?'나':'me'),self:true,authed:false}];
             render();
             /* Subtle flash so the host notices when somebody else joins
                or leaves — without the old noisy "(N)" event counter. */

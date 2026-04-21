@@ -664,14 +664,37 @@ init();
 <script>
 (async function(){
     try{
-        const user=await getUser();
+        /* ensureProfile() short-circuits via localStorage cache (5 min
+           TTL / 30 s fresh-window) so this costs 0 round-trips on
+           most page visits. Only fetches when cache is stale or
+           empty. See supabase-config.js for the exact policy. */
+        const state=typeof ensureProfile==='function'?await ensureProfile():{signedIn:false};
         const btn=document.getElementById('authBtn');
-        if(user){
-            const name=getDisplayName(user);
-            btn.innerHTML=`<span class="auth-avatar">${name.charAt(0).toUpperCase()}</span>${name}`;
-            btn.href='/auth/';
+        if(state.signedIn){
+            /* If profile is incomplete, the avatar uses the OAuth
+               initial and the button text links to the setup page so
+               a single tap finishes onboarding. Complete users see
+               their chosen nickname. */
+            if(state.needsSetup){
+                btn.innerHTML='<span class="auth-avatar">⚙</span><span>Complete profile</span>';
+                btn.href='/auth/setup/';
+                /* Lightweight banner just below the chip strip —
+                   non-blocking, dismissible, self-injected here so
+                   the rest of the page doesn't need to know. */
+                if(!document.getElementById('lpSetupBanner')){
+                    const b=document.createElement('a');
+                    b.id='lpSetupBanner';b.href='/auth/setup/';
+                    b.style.cssText='position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:19;padding:7px 14px;border-radius:999px;background:rgba(255,230,109,.14);border:1px solid rgba(255,230,109,.45);color:#FFE66D;font-size:.72em;font-weight:700;letter-spacing:.02em;text-decoration:none;backdrop-filter:blur(8px);box-shadow:0 8px 22px rgba(0,0,0,.25);display:inline-flex;align-items:center;gap:8px;max-width:92vw';
+                    b.innerHTML='⚙️ <span>Pick a nickname to unlock friends & chat</span>';
+                    document.body.appendChild(b);
+                }
+            }else{
+                const name=(state.profile&&state.profile.nickname)||getDisplayName(state.authUser);
+                btn.innerHTML=`<span class="auth-avatar">${name.charAt(0).toUpperCase()}</span>${name}`;
+                btn.href='/auth/';
+            }
         }
-    }catch(e){}
+    }catch(e){console.warn('[home auth]',e);}
 })();
 </script>
 
@@ -680,6 +703,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776731238" defer></script>
+<script src="/js/siteFooter.js?v=1776732210" defer></script>
 </body>
 </html>

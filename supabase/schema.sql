@@ -126,3 +126,153 @@ end$$;
 -- Housekeeping recommendation: purge rows > 24h old periodically.
 -- Not automated here — add via pg_cron when row count grows:
 --   delete from public.bingo_winners where claimed_at < now() - interval '24 hours';
+
+
+-- ============================================================
+-- 3. profiles — authenticated user identity (nickname + avatar)
+-- ============================================================
+-- Why a separate table instead of auth.users.user_metadata?
+--   user_metadata is client-mutable via updateUser() — anyone can
+--   call it and set whatever. For an identity anchor like nickname
+--   that MUST be globally unique, validated, and visible to other
+--   users, we need a proper table with UNIQUE + CHECK + RLS that
+--   only the owner can write and that's queryable by everyone.
+--
+-- Key design choices:
+--   • id = auth.uid (1:1 with auth.users)
+--   • nickname: 2-20 chars, whitelist (latin + digits + 한글 + _-),
+--     case-insensitively unique, not reserved
+--   • email stored separately from auth.users so users can opt to
+--     expose a different contact address (also lets us add column-
+--     level grants later without touching auth schema)
+--   • profile_complete flag gates social features client-side;
+--     defaults false until the signup-completion flow writes the
+--     profile for the first time
+--   • updated_at auto-maintained via trigger for cache invalidation
+
+create table if not exists public.profiles (
+    id               uuid        primary key references auth.users(id) on delete cascade,
+    nickname         text        not null,
+    email            text,
+    avatar_url       text,
+    bio              text        check (bio is null or char_length(bio) <= 160),
+    profile_complete boolean     not null default false,
+    created_at       timestamptz not null default now(),
+    updated_at       timestamptz not null default now(),
+    constraint nickname_length check (char_length(nickname) between 2 and 20),
+    -- Whitelist: A-Z, a-z, 0-9, 한글, underscore, hyphen. No spaces,
+    -- no HTML-breakers, no invisible unicode. Keeps display rendering
+    -- predictable across every surface without needing per-render
+    -- sanitisation. DB rejects violations symmetrically with client.
+    constraint nickname_chars  check (nickname ~ '^[A-Za-z0-9_\-가-힣]+$')
+);
+
+-- Case-insensitive nickname uniqueness. "Alice" and "alice" collide,
+-- which matches user intuition ("that name is taken").
+create unique index if not exists profiles_nickname_lower_idx
+    on public.profiles (lower(nickname));
+
+create index if not exists profiles_updated_idx
+    on public.profiles (updated_at desc);
+
+alter table public.profiles enable row level security;
+
+-- READ: everyone can select. Client code is responsible for only
+-- including email in queries where the row is the user's own. If
+-- the product later requires true column-level isolation for email,
+-- replace this with a view + split policy.
+drop policy if exists "profiles_select_public" on public.profiles;
+drop policy if exists "profiles_insert_own"    on public.profiles;
+drop policy if exists "profiles_update_own"    on public.profiles;
+
+create policy "profiles_select_public"
+    on public.profiles for select using (true);
+
+-- WRITE: strictly own row only. Supabase RLS pins auth.uid() from
+-- the JWT, so there's no way a guest token can forge another user's
+-- id (the FK on id → auth.users would fail regardless).
+create policy "profiles_insert_own"
+    on public.profiles for insert
+    with check (auth.uid() = id);
+
+create policy "profiles_update_own"
+    on public.profiles for update
+    using (auth.uid() = id);
+
+-- Reserved nicknames — names users shouldn't be able to claim so
+-- nobody can impersonate staff/system/etc. Extend over time.
+create table if not exists public.reserved_nicknames (
+    nickname_lower text primary key
+);
+
+insert into public.reserved_nicknames (nickname_lower) values
+    ('admin'),('administrator'),('moderator'),('mod'),('system'),
+    ('host'),('luckyplz'),('lucky'),('support'),('help'),
+    ('official'),('bot'),('null'),('undefined'),('root'),
+    ('guest'),('anonymous'),('anon'),('test'),('staff'),('api'),
+    ('관리자'),('운영자'),('고객센터'),('운영팀'),('스태프'),('공지')
+on conflict do nothing;
+
+-- Guard trigger: enforce reserved-list check and keep updated_at
+-- fresh on every write. Raising a custom exception gives the client
+-- a machine-readable error code it can branch on.
+create or replace function public.profiles_before_write()
+returns trigger language plpgsql as $$
+begin
+    if exists (
+        select 1 from public.reserved_nicknames
+        where nickname_lower = lower(new.nickname)
+    ) then
+        raise exception using errcode = 'P0001',
+            message = 'nickname_reserved';
+    end if;
+    new.updated_at = now();
+    return new;
+end;
+$$;
+
+drop trigger if exists profiles_before_write on public.profiles;
+create trigger profiles_before_write
+    before insert or update on public.profiles
+    for each row execute function public.profiles_before_write();
+
+-- Availability RPC — client calls this while the user types. Kept as
+-- security definer so the caller doesn't need select-on-reserved
+-- privileges (keeps that table readable only via this RPC's filter).
+-- Returns a strict enum-like reason so the UI can localise the
+-- message. Own user's existing nickname returns available=true so
+-- the edit-profile flow never false-positives on itself.
+create or replace function public.check_nickname_available(candidate text)
+returns table(available boolean, reason text)
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    lc text;
+begin
+    if candidate is null then
+        return query select false, 'invalid'::text; return;
+    end if;
+    lc := lower(candidate);
+    if char_length(candidate) < 2 or char_length(candidate) > 20 then
+        return query select false, 'invalid'::text; return;
+    end if;
+    if candidate !~ '^[A-Za-z0-9_\-가-힣]+$' then
+        return query select false, 'invalid'::text; return;
+    end if;
+    if exists (select 1 from public.reserved_nicknames where nickname_lower = lc) then
+        return query select false, 'reserved'::text; return;
+    end if;
+    if exists (
+        select 1 from public.profiles
+        where lower(nickname) = lc
+          and id <> coalesce(auth.uid(), '00000000-0000-0000-0000-000000000000'::uuid)
+    ) then
+        return query select false, 'taken'::text; return;
+    end if;
+    return query select true, null::text;
+end;
+$$;
+
+grant execute on function public.check_nickname_available(text) to authenticated, anon;
+
