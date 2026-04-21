@@ -414,33 +414,44 @@ let currentProfile=null;
     }
 })();
 
-/* --- Live availability check --- */
+/* --- Live availability check ---
+   Two guards to keep the submit button from spuriously disabling:
+     (a) If the value hasn't changed since the last successful check,
+         return early — the button should stay enabled.
+     (b) Only listen to `input` events. A `blur` listener was the old
+         source of the "두 번 클릭해야 submit" bug: clicking the submit
+         button fires blur on the nickname input first, which re-ran
+         the availability check and disabled the button during the
+         300 ms debounce — so the click landed on a disabled button
+         and did nothing. */
 let checkTimer=null;
 let checkSeq=0;
+let lastValidatedValue=null;
 function scheduleCheck(){
     clearTimeout(checkTimer);
     const val=nick.value.trim();
+    if(val===lastValidatedValue && !submitBtn.disabled) return;  /* already green, no flicker */
     submitBtn.disabled=true;
     if(!val){setStatus(null);setMsg('',null);return}
     setStatus('loading');setMsg(t.msg_checking,null);
     const mySeq=++checkSeq;
     checkTimer=setTimeout(async function(){
         const res=await checkNicknameAvailable(val);
-        /* Guard against out-of-order responses. */
         if(mySeq!==checkSeq)return;
         if(res.available){
             setStatus('ok');setMsg(t.msg_available,'ok');
             submitBtn.disabled=false;
+            lastValidatedValue=val;
         }else{
             setStatus('err');
             const key='msg_'+(res.reason||'invalid');
             setMsg(t[key]||t.msg_invalid,'err');
             submitBtn.disabled=true;
+            lastValidatedValue=null;
         }
     },300);
 }
 nick.addEventListener('input',scheduleCheck);
-nick.addEventListener('blur',scheduleCheck);
 
 /* --- Submit --- */
 document.getElementById('setupForm').addEventListener('submit',async function(e){
