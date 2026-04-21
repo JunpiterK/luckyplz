@@ -1051,12 +1051,29 @@ async function boot(){
        the browser permission is still 'default' (never asked) AND
        the user hasn't explicitly declined in our local pref. */
     maybeShowNotifyBanner();
-    /* Auto-open thread from URL param. Click on an OS notification
-       routes here with ?friend=<uuid> or ?room=<uuid>; deep-link the
-       thread immediately so the user lands on what they tapped. */
+    /* Auto-open thread from URL param OR hash OR localStorage.
+         ?friend=<uuid> / ?room=<uuid>   — deep-link from notification
+         #dm/<uuid> / #group/<uuid>      — survives a soft refresh
+         localStorage lp_last_thread     — survives a cold open
+       Most specific wins. When a thread is later opened, openThread
+       writes the hash + localStorage so the next refresh restores. */
     const params=new URLSearchParams(location.search);
-    const wantFriend=params.get('friend');
-    const wantRoom=params.get('room');
+    let wantFriend=params.get('friend');
+    let wantRoom=params.get('room');
+    if(!wantFriend && !wantRoom){
+        const m=(location.hash||'').match(/^#(dm|group)\/([A-Za-z0-9-]+)$/);
+        if(m){
+            if(m[1]==='dm')    wantFriend=m[2];
+            else               wantRoom=m[2];
+        }
+    }
+    if(!wantFriend && !wantRoom){
+        try{
+            const saved=JSON.parse(localStorage.getItem('lp_last_thread')||'null');
+            if(saved && saved.kind==='dm'   && saved.id) wantFriend=saved.id;
+            if(saved && saved.kind==='group'&& saved.id) wantRoom=saved.id;
+        }catch(_){}
+    }
     if(wantFriend){
         const f=latestFriends.find(x=>x.friend_id===wantFriend&&x.direction==='accepted');
         if(f)openThread({kind:'dm',friend_id:f.friend_id,friend_nickname:f.nickname,friend_avatar:f.avatar_url,friend_authed:f.profile_complete});
@@ -1064,6 +1081,29 @@ async function boot(){
         const r=latestGroups.find(x=>x.room_id===wantRoom);
         if(r)openThread({kind:'group',room_id:r.room_id,name:r.name,icon_emoji:r.icon_emoji,member_count:r.member_count,my_role:r.my_role});
     }
+}
+
+/* Persist the currently-open thread so a refresh (soft reload, pull-
+   to-refresh on mobile, tab reopen) lands the user back in the same
+   conversation instead of the sidebar. Called from openThread +
+   closeThread. */
+function _persistOpenThread(meta){
+    try{
+        if(!meta){
+            history.replaceState(null,'',location.pathname+location.search);
+            localStorage.removeItem('lp_last_thread');
+            return;
+        }
+        const frag = meta.kind==='dm'
+            ? '#dm/'+encodeURIComponent(meta.friend_id)
+            : '#group/'+encodeURIComponent(meta.room_id);
+        history.replaceState(null,'',location.pathname+location.search+frag);
+        localStorage.setItem('lp_last_thread', JSON.stringify({
+            kind: meta.kind,
+            id: meta.kind==='dm' ? meta.friend_id : meta.room_id,
+            at: Date.now()
+        }));
+    }catch(_){}
 }
 
 function maybeShowNotifyBanner(){
@@ -1504,6 +1544,8 @@ async function submitAddFriend(){
 async function openThread(meta){
     if(threadUnsub){threadUnsub();threadUnsub=null}
     currentThread=meta;
+    /* Persist so refresh/reopen lands back in this conversation. */
+    _persistOpenThread(meta);
     /* Tell LpNotify we're actively viewing this thread so incoming
        messages from this peer don't fire redundant toasts/OS
        notifications. Cleared on closeThread + page hide. */
@@ -1741,6 +1783,7 @@ function closeThread(){
     currentThread=null;
     currentThreadKey=null;
     window._lpActiveThread=null;
+    _persistOpenThread(null);
     $('chatView').classList.remove('on');
     $('chatEmpty').style.display='flex';
 }
@@ -2138,12 +2181,32 @@ async function _deleteMessage(m,row){
 }
 
 /* Tiny toast for quick feedback after actions. */
-function _toast(msg){
+function _toast(msg,opts){
     const el=document.createElement('div');
-    el.style.cssText='position:fixed;left:50%;bottom:60px;transform:translateX(-50%);padding:9px 16px;border-radius:999px;background:rgba(0,0,0,.82);color:#fff;font-size:.88em;font-family:inherit;z-index:2000;animation:lpToastIn .18s ease';
+    const isErr = opts && opts.error;
+    const bg = isErr?'linear-gradient(135deg,#FF3366,#FF6B8B)':'rgba(0,0,0,.82)';
+    const weight = isErr?'700':'400';
+    el.style.cssText='position:fixed;left:50%;bottom:72px;transform:translateX(-50%);padding:10px 18px;border-radius:999px;background:'+bg+';color:#fff;font-size:.88em;font-weight:'+weight+';font-family:inherit;z-index:2000;animation:lpToastIn .18s ease;max-width:92vw;text-align:center;box-shadow:0 8px 24px -6px rgba(0,0,0,.5)';
     el.textContent=msg;
     document.body.appendChild(el);
-    setTimeout(()=>el.remove(),1600);
+    const ttl = isErr ? 3200 : 1600;
+    setTimeout(()=>el.remove(),ttl);
+}
+/* Map raw backend error codes to human-readable Korean for the fail
+   toast. Unknown codes fall through as-is — better a cryptic string
+   than a silent failure. */
+function _friendlyFailReason(reason){
+    if(!reason) return '알 수 없는 오류';
+    const r=String(reason).toLowerCase();
+    if(r.includes('not_friends'))     return '친구가 아님';
+    if(r.includes('blocked'))         return '차단된 사용자';
+    if(r.includes('pending')||r.includes('not_accepted')) return '친구 요청 수락 대기 중';
+    if(r.includes('upload_failed'))   return '이미지 업로드 실패';
+    if(r.includes('too_large'))       return '이미지가 너무 큼 (10MB 초과)';
+    if(r.includes('bad_type'))        return '지원하지 않는 파일 형식';
+    if(r.includes('not_authenticated'))return '로그인 세션 만료 — 새로고침';
+    if(r.includes('network')||r.includes('fetch')||r.includes('failed to fetch')) return '네트워크 오류';
+    return reason;
 }
 /* Flash highlight on jump-to-quote. */
 (function addFlashStyle(){
@@ -2389,7 +2452,13 @@ function _markBubbleFailed(tmpId,reason){
     if(!row)return;
     row.classList.remove('pending');
     row.classList.add('failed');
-    if(reason)row.title='Tap to retry ('+reason+')';
+    if(reason)row.title='탭해서 재시도 ('+reason+')';
+    /* Loud, visible toast so the user actually realises the send
+       didn't land — the tiny red '!' badge alone was too easy to miss
+       on mobile and that's been the "messages disappearing" complaint
+       source ("보낸 줄 알았는데 새로고침하니 사라짐"). */
+    const label = _friendlyFailReason(reason);
+    _toast('전송 실패 · '+label+' · 탭해서 재시도', {error:true});
     /* Tap-to-retry: one-shot listener, flips back to pending and
        re-fires _sendNow with the saved payload. */
     if(!row._retryWired){
