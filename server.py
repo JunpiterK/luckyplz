@@ -18,6 +18,13 @@ def no_cache(resp):
 def index():
     return send_file(os.path.join(PUBLIC, 'index.html'))
 
+@app.route('/u/<path:nickname>')
+def user_profile(nickname):
+    """Public profile vanity URL: /u/<nickname> → /u/index.html.
+    Cloudflare Pages handles this via public/_redirects; the local
+    Flask server needs an explicit route to mirror that behaviour."""
+    return send_file(os.path.join(PUBLIC, 'u', 'index.html'))
+
 @app.route('/<path:path>')
 def static_files(path):
     full = os.path.join(PUBLIC, path)
