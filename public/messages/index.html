@@ -91,10 +91,78 @@ body{
     box-shadow:0 4px 12px rgba(255,107,53,.2)
 }
 .row-avatar img{width:100%;height:100%;object-fit:cover}
+/* Verify dot moved to top-right to make room for the presence indicator
+   at the bottom-right. Slightly smaller + lower contrast since it's now
+   a secondary signal. */
 .row-avatar .verify-dot{
-    position:absolute;bottom:-2px;right:-2px;width:14px;height:14px;border-radius:50%;
+    position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;
     background:#00D9FF;border:2px solid var(--dark);
-    display:flex;align-items:center;justify-content:center;font-size:.58em;font-weight:900;color:#001220
+    display:flex;align-items:center;justify-content:center;font-size:.5em;font-weight:900;color:#001220
+}
+/* Presence indicator (Kakao/Line/Discord pattern): coloured dot at
+   bottom-right. Colours match the standard messenger palette so the
+   meaning is instantly readable:
+     .online — vivid green, active
+     .dnd    — warm orange, warning
+     .offline — darker grey border only (or hidden entirely — see below)
+   A subtle pulse on 'online' makes it feel live without being noisy. */
+.row-avatar .status-dot{
+    position:absolute;bottom:-1px;right:-1px;width:13px;height:13px;border-radius:50%;
+    border:2px solid var(--dark);background:#6b6f7a;transition:background .2s
+}
+.row-avatar .status-dot.online{background:#00E676}
+.row-avatar .status-dot.online::after{
+    content:'';position:absolute;inset:-3px;border-radius:50%;
+    box-shadow:0 0 0 0 rgba(0,230,118,.6);animation:statusPulse 2.4s infinite
+}
+@keyframes statusPulse{0%{box-shadow:0 0 0 0 rgba(0,230,118,.55)}70%{box-shadow:0 0 0 6px rgba(0,230,118,0)}100%{box-shadow:0 0 0 0 rgba(0,230,118,0)}}
+.row-avatar .status-dot.dnd{background:#FF9A3C}
+.row-avatar .status-dot.offline{background:transparent;border-color:rgba(255,255,255,.25)}
+
+/* Status picker — compact chip in the sidebar header showing my own
+   status. Click opens a tiny menu anchored below it with the 3 state
+   choices. Built inline (no react-style popover) so it doesn't need
+   a dependency. Mobile: becomes a button without the label (icon-only). */
+.status-picker{position:relative}
+.status-picker .status-btn{
+    display:inline-flex;align-items:center;gap:6px;
+    padding:6px 10px;border-radius:999px;
+    border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);
+    color:#fff;cursor:pointer;font-family:inherit;font-size:.78em;font-weight:700;
+    transition:all .2s;height:32px
+}
+.status-picker .status-btn:hover{border-color:rgba(255,230,109,.4);background:rgba(255,230,109,.06)}
+.status-picker .status-btn .sd{width:9px;height:9px;border-radius:50%;background:#6b6f7a}
+.status-picker .status-btn.online .sd{background:#00E676;box-shadow:0 0 6px rgba(0,230,118,.55)}
+.status-picker .status-btn.dnd    .sd{background:#FF9A3C;box-shadow:0 0 6px rgba(255,154,60,.55)}
+.status-picker .status-btn.offline .sd{background:transparent;border:1px solid rgba(255,255,255,.25)}
+.status-picker .status-menu{
+    position:absolute;top:calc(100% + 6px);right:0;
+    min-width:200px;background:rgba(14,14,28,.98);
+    border:1px solid rgba(255,255,255,.08);border-radius:12px;
+    box-shadow:0 16px 40px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.04);
+    padding:6px;display:none;z-index:40
+}
+.status-picker.open .status-menu{display:block;animation:statusMenuIn .16s ease-out}
+@keyframes statusMenuIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+.status-picker .status-menu button{
+    width:100%;display:flex;align-items:center;gap:10px;
+    padding:9px 10px;border-radius:8px;border:0;background:transparent;
+    color:rgba(255,255,255,.85);cursor:pointer;font-family:inherit;
+    font-size:.88em;text-align:left;transition:background .15s
+}
+.status-picker .status-menu button:hover{background:rgba(255,255,255,.05)}
+.status-picker .status-menu button.active{background:rgba(0,217,255,.08);color:#00D9FF}
+.status-picker .status-menu .sd{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.status-picker .status-menu .sd.online{background:#00E676;box-shadow:0 0 8px rgba(0,230,118,.55)}
+.status-picker .status-menu .sd.dnd{background:#FF9A3C}
+.status-picker .status-menu .sd.offline{background:transparent;border:1px solid rgba(255,255,255,.25)}
+.status-picker .status-menu .label{flex:1;font-weight:700}
+.status-picker .status-menu .desc{font-size:.72em;color:rgba(255,255,255,.4);margin-top:2px}
+@media (max-width:560px){
+    .status-picker .status-btn .lbl{display:none}
+    .status-picker .status-btn{padding:6px;gap:0}
+    .status-picker .status-btn .sd{width:11px;height:11px}
 }
 .row-body{flex:1;min-width:0}
 .row-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:2px}
@@ -387,6 +455,25 @@ body{
         <header class="msg-header">
             <a href="/" class="icon-btn" title="Home" aria-label="Home">🏠</a>
             <div class="title" id="sidebarTitle">Messages</div>
+            <div class="status-picker" id="statusPicker">
+                <button class="status-btn online" id="statusBtn" type="button" aria-haspopup="true" aria-expanded="false" title="내 상태">
+                    <span class="sd"></span><span class="lbl" id="statusBtnLabel">온라인</span>
+                </button>
+                <div class="status-menu" id="statusMenu" role="menu">
+                    <button type="button" data-status="online" role="menuitem">
+                        <span class="sd online"></span>
+                        <div><div class="label">온라인</div><div class="desc">친구가 볼 수 있고 초대도 받음</div></div>
+                    </button>
+                    <button type="button" data-status="dnd" role="menuitem">
+                        <span class="sd dnd"></span>
+                        <div><div class="label">방해금지</div><div class="desc">온라인으로 보이지만 초대는 차단</div></div>
+                    </button>
+                    <button type="button" data-status="offline" role="menuitem">
+                        <span class="sd offline"></span>
+                        <div><div class="label">숨김</div><div class="desc">오프라인처럼 표시</div></div>
+                    </button>
+                </div>
+            </div>
             <button class="icon-btn" id="newGroupBtn" title="New group" aria-label="New group">👥</button>
             <button class="icon-btn" id="addFriendBtn" title="Add friend" aria-label="Add friend">＋</button>
         </header>
@@ -496,6 +583,8 @@ body{
 
 <script src="/js/supabase-config.js"></script>
 <script src="/js/lpSocial.js"></script>
+<script src="/js/lpPresence.js"></script>
+<script src="/js/lpInvite.js"></script>
 <script src="/js/lpNotify.js"></script>
 <script>
 /* ================================================================
@@ -781,6 +870,17 @@ async function boot(){
         const inb=await LpSocial.getInbox({force:true});
         if(inb.ok){latestInbox=inb.rows;renderSidebar()}
     });
+    /* Presence wiring — boot ensures the module is initialised, then
+       we subscribe to changes so avatar dots flip in real time whenever
+       a friend signs in / out / changes status. */
+    if(window.LpPresence){
+        try{await LpPresence.boot()}catch(_){}
+        _updateStatusButton(LpPresence.getMyStatus());
+        LpPresence.onChange(()=>{
+            refreshStatusDots();
+            _updateStatusButton(LpPresence.getMyStatus());
+        });
+    }
     /* Notification permission banner — first visit only, shown when
        the browser permission is still 'default' (never asked) AND
        the user hasn't explicitly declined in our local pref. */
@@ -833,6 +933,30 @@ function maybeShowNotifyBanner(){
 function wireEvents(){
     document.querySelectorAll('.sidebar-tab').forEach(b=>{
         b.addEventListener('click',()=>{currentTab=b.dataset.tab;updateTabActive();renderSidebar()});
+    });
+    /* Status picker — toggle menu open/close; close on outside click;
+       select an option = LpPresence.setMyStatus(). Menu closes itself
+       after a selection so the user gets instant feedback. */
+    const sp=$('statusPicker');
+    $('statusBtn').addEventListener('click',(e)=>{
+        e.stopPropagation();
+        sp.classList.toggle('open');
+        $('statusBtn').setAttribute('aria-expanded',sp.classList.contains('open')?'true':'false');
+    });
+    $('statusMenu').querySelectorAll('button[data-status]').forEach(b=>{
+        b.addEventListener('click',async(e)=>{
+            e.stopPropagation();
+            sp.classList.remove('open');
+            const s=b.dataset.status;
+            _updateStatusButton(s); /* optimistic */
+            if(window.LpPresence){
+                const r=await LpPresence.setMyStatus(s);
+                if(!r.ok)_updateStatusButton(LpPresence.getMyStatus()); /* rollback */
+            }
+        });
+    });
+    document.addEventListener('click',(e)=>{
+        if(!sp.contains(e.target))sp.classList.remove('open');
     });
     $('newGroupBtn').addEventListener('click',openNewGroup);
     $('newGroupCancel').addEventListener('click',closeNewGroup);
@@ -1070,15 +1194,54 @@ function renderSidebar(){
             fn(fid).then(res=>{if(!res.ok)refresh()}).catch(()=>refresh());
         });
     });
+    /* Apply current presence statuses to freshly-rendered avatars.
+       Cheap DOM walk — scoped to the sidebar body's [data-uid] dots. */
+    refreshStatusDots();
 }
 
 function emptyState(emoji,msg){
     return '<div class="empty-state"><span class="emoji">'+emoji+'</span><div>'+escape(msg)+'</div></div>';
 }
-function avatarHtml(url,name,verified){
-    const dot=verified?'<span class="verify-dot" title="'+escape(t.verified)+'">✓</span>':'';
-    if(url){return '<div class="row-avatar"><img src="'+escape(url)+'" referrerpolicy="no-referrer" alt="">'+dot+'</div>'}
-    return '<div class="row-avatar">'+initials(name)+dot+'</div>';
+function avatarHtml(url,name,verified,userId){
+    const verifyDot=verified?'<span class="verify-dot" title="'+escape(t.verified)+'">✓</span>':'';
+    /* Presence dot — rendered as a separate child so later DOM patches
+       can flip the class in-place without re-parsing the avatar. Omit
+       for rows that don't correspond to a real user id (e.g. "deleted"
+       placeholder rows where userId is missing). */
+    const statusDot=userId?'<span class="status-dot" data-uid="'+escape(userId)+'" data-status="offline"></span>':'';
+    if(url){return '<div class="row-avatar"><img src="'+escape(url)+'" referrerpolicy="no-referrer" alt="">'+verifyDot+statusDot+'</div>'}
+    return '<div class="row-avatar">'+initials(name)+verifyDot+statusDot+'</div>';
+}
+/* Patch all presence dots currently in the DOM to reflect the latest
+   LpPresence status map. Cheap — scoped to our own [data-uid] markers. */
+function refreshStatusDots(){
+    if(!window.LpPresence)return;
+    document.querySelectorAll('.status-dot[data-uid]').forEach(el=>{
+        const uid=el.dataset.uid;
+        if(!uid)return;
+        const s=LpPresence.getStatus(uid);
+        if(el.dataset.status!==s){
+            el.classList.remove('online','dnd','offline');
+            el.classList.add(s);
+            el.dataset.status=s;
+        }
+    });
+}
+/* Sync the sidebar-header status chip with my own live status. Gets
+   called from the LpPresence.onChange subscriber so another tab's
+   status change is mirrored here too. */
+function _updateStatusButton(status){
+    const btn=$('statusBtn');
+    if(!btn)return;
+    btn.classList.remove('online','dnd','offline');
+    btn.classList.add(status||'offline');
+    const lbl=$('statusBtnLabel');
+    if(lbl)lbl.textContent = status==='dnd'?'방해금지' : status==='offline'?'숨김' : '온라인';
+    /* Mark the active option in the menu so the user can see which is
+       currently selected even if the button is collapsed on mobile. */
+    document.querySelectorAll('#statusMenu button[data-status]').forEach(b=>{
+        b.classList.toggle('active', b.dataset.status===status);
+    });
 }
 function inboxRow(r){
     const unreadBadge=Number(r.unread_count)>0?'<span class="row-unread">'+r.unread_count+'</span>':'';
@@ -1086,7 +1249,7 @@ function inboxRow(r){
     return '<button class="row-item'+(currentThread&&currentThread.kind==='dm'&&currentThread.friend_id===r.friend_id?' active':'')+'" '
         +'data-friend-id="'+escape(r.friend_id)+'" data-nickname="'+escape(r.friend_nickname)
         +'" data-avatar="'+escape(r.friend_avatar||'')+'" data-authed="'+(r.friend_authed?'1':'0')+'">'
-        +avatarHtml(r.friend_avatar,r.friend_nickname,r.friend_authed)
+        +avatarHtml(r.friend_avatar,r.friend_nickname,r.friend_authed,r.friend_id)
         +'<div class="row-body">'
         +'<div class="row-top"><span class="row-name">'+escape(r.friend_nickname)+'</span>'
         +'<span class="row-time">'+escape(timeAgo(r.last_created_at))+'</span></div>'
@@ -1116,7 +1279,7 @@ function groupRow(g){
 function friendRow(f){
     return '<button class="row-item" data-friend-id="'+escape(f.friend_id)+'" data-nickname="'+escape(f.nickname)
         +'" data-avatar="'+escape(f.avatar_url||'')+'" data-authed="'+(f.profile_complete?'1':'0')+'">'
-        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete)
+        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete,f.friend_id)
         +'<div class="row-body"><div class="row-top"><span class="row-name">'+escape(f.nickname)+'</span></div></div>'
         +'</button>';
 }
@@ -1127,7 +1290,7 @@ function requestRow(f,kind){
         : '<div class="row-actions"><span style="font-size:.74em;color:rgba(255,255,255,.35);font-style:italic">'+escape(t.outgoing)+'</span>'
           +'<button data-action="reject" data-target-friend="'+escape(f.friend_id)+'">'+escape(t.cancel)+'</button></div>';
     return '<div class="row-item" data-friend-id="'+escape(f.friend_id)+'" data-noopen="1">'
-        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete)
+        +avatarHtml(f.avatar_url,f.nickname,f.profile_complete,f.friend_id)
         +'<div class="row-body"><div class="row-top"><span class="row-name">'+escape(f.nickname)+'</span></div></div>'
         +actions+'</div>';
 }
@@ -1184,10 +1347,15 @@ async function openThread(meta){
         if(meta.friend_avatar){av.innerHTML='<img src="'+escape(meta.friend_avatar)+'" referrerpolicy="no-referrer" alt="">'}
         else av.textContent=initials(meta.friend_nickname);
         if(meta.friend_authed){av.innerHTML+='<span class="verify-dot">✓</span>'}
+        /* Presence dot for the peer we're chatting with. refreshStatusDots
+           will patch the class based on the live LpPresence map — same
+           code path the sidebar uses. */
+        av.innerHTML+='<span class="status-dot" data-uid="'+escape(meta.friend_id)+'" data-status="offline"></span>';
         av.style.background='';
         av.style.cursor='';av.onclick=null;
         $('peerName').textContent=meta.friend_nickname;
         $('peerSub').textContent=meta.friend_authed?t.verified:t.peerGuest;
+        refreshStatusDots();
     }else{
         av.innerHTML='';
         av.textContent=meta.icon_emoji||'💬';
