@@ -208,7 +208,7 @@ body{
 .chat-messages::-webkit-scrollbar{width:6px}
 .chat-messages::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:3px}
 .day-divider{text-align:center;padding:8px 0;font-size:.72em;color:var(--muted-2);letter-spacing:.1em;text-transform:uppercase;font-weight:700}
-.bubble-row{display:flex;gap:8px;max-width:76%;animation:slideIn .18s ease}
+.bubble-row{display:flex;gap:8px;max-width:76%;animation:slideIn .18s ease;margin-top:10px}
 @keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 .bubble-row.me{align-self:flex-end;flex-direction:row-reverse}
 .bubble-row.them{align-self:flex-start}
@@ -224,6 +224,19 @@ body{
     background:var(--bubble-them);border:1px solid var(--bubble-them-br);
     border-bottom-left-radius:6px
 }
+/* ---- Message grouping (KakaoTalk / WhatsApp pattern) ----
+   .grouped-prev  → HAS a same-sender bubble below within 3 minutes:
+                    hide timestamp line + round the bottom corner to
+                    stack smoothly.
+   .grouped-next  → HAS a same-sender bubble above within 3 minutes:
+                    tighter top margin + round the top corner so the
+                    visual cluster reads as a single block. */
+.bubble-row.grouped-next{margin-top:2px}
+.bubble-row.grouped-prev .bubble-time{display:none}
+.bubble-row.me.grouped-prev .bubble{border-bottom-right-radius:14px}
+.bubble-row.me.grouped-next .bubble{border-top-right-radius:6px}
+.bubble-row.them.grouped-prev .bubble{border-bottom-left-radius:14px}
+.bubble-row.them.grouped-next .bubble{border-top-left-radius:6px}
 /* Optimistic-send bubble states (WhatsApp/Telegram conventions):
     .pending = INSERT in flight, bubble faded + clock tick
     .failed  = server rejected; red outline + '!' badge; tap to retry
@@ -415,6 +428,18 @@ body{
 .btn-primary:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
 .btn-primary:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.3)}
 
+/* Tablet: narrower sidebar, full chat on the right */
+@media(min-width:761px) and (max-width:1023px){
+    .msg-app{grid-template-columns:300px 1fr}
+    /* Hide the redundant status label text on mid-width screens so
+       the header doesn't wrap. Dot alone conveys the state. */
+    .status-picker .status-btn .lbl{display:none}
+    .status-picker .status-btn{padding:6px;gap:0}
+    .status-picker .status-btn .sd{width:11px;height:11px}
+    .row-item{padding:11px 14px}
+    .row-avatar{width:40px;height:40px}
+    .msg-header{padding:14px 16px}
+}
 /* Mobile: stack, swipe between panes */
 @media(max-width:760px){
     .msg-app{grid-template-columns:1fr;border:0}
@@ -422,6 +447,22 @@ body{
     .msg-app[data-pane="sidebar"] .msg-main{display:none}
     .msg-app[data-pane="chat"]    .msg-sidebar{display:none}
     .chat-thread-header .back-btn{display:inline-flex;width:32px;height:32px;border-radius:50%;border:0;background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:1.1em;align-items:center;justify-content:center;margin-right:4px}
+    /* Mobile header: tighten padding + slightly smaller icon buttons
+       so status picker + 👥 + ＋ all fit on one line with the title. */
+    .msg-header{padding:12px 14px;gap:6px}
+    .msg-header .icon-btn{width:34px;height:34px;font-size:.95em}
+    /* Bigger touch target on chat rows — 50px minimum for thumbs. */
+    .row-item{padding:12px 14px;min-height:64px}
+    .row-avatar{width:46px;height:46px}
+    /* Composer comfort on small screens */
+    .composer{padding:10px 12px calc(env(safe-area-inset-bottom, 0) + 10px) 12px}
+    .composer textarea{min-height:42px;font-size:16px /* prevents iOS auto-zoom */}
+    .composer .send-btn{width:42px;height:42px}
+    /* Bubble max-width tighter so avatars don't crowd out text. */
+    .bubble-row{max-width:82%}
+    /* Chat messages padding respects the safe-area so the composer
+       doesn't sit under iOS home indicator. */
+    .chat-messages{padding:14px 12px 10px}
 }
 
 /* Sign-in prompt (for signed-out visitors) */
@@ -1491,6 +1532,30 @@ function closeThread(){
     $('chatEmpty').style.display='flex';
 }
 
+/* Consecutive-message grouping — KakaoTalk / WhatsApp pattern.
+   When two messages come from the same sender within 3 minutes, we
+   drop the timestamp line + visual gap on the earlier one so the
+   whole burst reads as one unit. CSS handles the visible changes via
+   `.grouped-prev` (has a group-member AFTER me) and `.grouped-next`
+   (has a group-member BEFORE me). The last bubble in a group keeps
+   the timestamp; the first keeps the top margin. */
+const GROUP_WINDOW_MS = 3 * 60 * 1000;
+function _shouldGroup(prevRow, thisFromId, thisCreatedAt) {
+    if (!prevRow) return false;
+    if (prevRow.classList.contains('pending') || prevRow.classList.contains('failed')) return false;
+    if (prevRow.dataset.fromId !== thisFromId) return false;
+    const prevTs = Date.parse(prevRow.dataset.createdAt || '');
+    const thisTs = Date.parse(thisCreatedAt || '');
+    if (!prevTs || !thisTs) return false;
+    return (thisTs - prevTs) <= GROUP_WINDOW_MS;
+}
+function _applyGrouping(prevRow, thisRow) {
+    /* prevRow has another same-sender bubble right after it. Hide its
+       timestamp + tighten margin; leave the last-in-group showing time. */
+    if (prevRow) prevRow.classList.add('grouped-prev');
+    if (thisRow) thisRow.classList.add('grouped-next');
+}
+
 function renderMessages(rows){
     const container=$('chatMessages');
     container.innerHTML='';
@@ -1499,6 +1564,7 @@ function renderMessages(rows){
         return;
     }
     let lastDay=null;
+    let prevBubble=null;
     const myId=me.authUser.id;
     rows.forEach(m=>{
         const dk=dayKey(m.created_at);
@@ -1507,8 +1573,12 @@ function renderMessages(rows){
             div.className='day-divider';div.textContent=dk;
             container.appendChild(div);
             lastDay=dk;
+            prevBubble=null;  /* day change breaks the group */
         }
-        container.appendChild(bubbleEl(m,myId));
+        const el=bubbleEl(m,myId);
+        if (_shouldGroup(prevBubble, m.from_id, m.created_at)) _applyGrouping(prevBubble, el);
+        container.appendChild(el);
+        prevBubble=el;
     });
 }
 function appendMessage(m){
@@ -1527,7 +1597,11 @@ function appendMessage(m){
         div.className='day-divider';div.textContent=dk;
         container.appendChild(div);
     }
-    container.appendChild(bubbleEl(m,myId));
+    const el=bubbleEl(m,myId);
+    /* Check if the last rendered bubble should group with this one. */
+    const prev=container.querySelector('.bubble-row:last-of-type');
+    if (_shouldGroup(prev, m.from_id, m.created_at)) _applyGrouping(prev, el);
+    container.appendChild(el);
 }
 /* Escape body text for safe HTML insertion, THEN linkify @mentions.
    Escaping first means an attacker-controlled nickname can't inject
@@ -1548,6 +1622,10 @@ function bubbleEl(m,myId){
     row.className='bubble-row '+(mine?'me':'them')+(m._pending?' pending':'');
     row.dataset.mid=m.id;
     row.dataset.readAt=m.read_at||'';
+    /* Used by _shouldGroup so we can collapse consecutive same-sender
+       bubbles without looking up the data again from message objects. */
+    row.dataset.fromId=m.from_id||'';
+    row.dataset.createdAt=m.created_at||'';
     /* Read ticks: DM-only, my own bubbles only. */
     let readTickHtml='';
     if(mine&&currentThread&&currentThread.kind==='dm'){
