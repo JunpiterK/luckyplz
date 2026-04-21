@@ -428,11 +428,176 @@
         } catch (_) {}
     })();
 
+    /* ================================================================
+       Group chat — schema §6. Parallel surface to the DM API above.
+       Rooms have a concept of "members" (as opposed to the DM model
+       where the pair itself defines membership), so the API exposes
+       member-list + invite/leave flows alongside message send/receive.
+       Caching uses the same TTLs as DMs: 60s inbox-style list, no
+       cache for roster (small enough to refetch on demand).
+       ================================================================ */
+    const _grpCache = { list: null, uid: null };
+    function _grpSetUid(uid){ if(_grpCache.uid!==uid){ _grpCache.list=null; _grpCache.uid=uid; } }
+
+    async function getGroupChats({ force = false } = {}) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        _grpSetUid(user.id);
+        if (!force && _grpCache.list && Date.now() - _grpCache.list.savedAt < INBOX_TTL_MS) {
+            return { ok: true, rows: _grpCache.list.rows };
+        }
+        try {
+            const { data, error } = await getSupabase().rpc('group_chat_list');
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = { rows: data || [], savedAt: Date.now() };
+            return { ok: true, rows: data || [] };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function createGroupChat(name, memberIds, iconEmoji) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        const trimmed = String(name || '').trim();
+        if (!trimmed) return { ok: false, error: 'invalid_name' };
+        if (trimmed.length > 60) return { ok: false, error: 'invalid_name' };
+        try {
+            const { data, error } = await getSupabase().rpc('create_group_chat', {
+                p_name: trimmed,
+                p_member_ids: memberIds || [],
+                p_icon_emoji: iconEmoji || '💬'
+            });
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = null;
+            return data || { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function inviteToGroupChat(roomId, userId) {
+        try {
+            const { data, error } = await getSupabase().rpc('invite_to_group_chat', {
+                p_room: roomId, p_user: userId
+            });
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = null;
+            return data || { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function leaveGroupChat(roomId) {
+        try {
+            const { data, error } = await getSupabase().rpc('leave_group_chat', { p_room: roomId });
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = null;
+            return data || { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function getGroupMembers(roomId) {
+        try {
+            const { data, error } = await getSupabase().rpc('group_chat_members', { p_room: roomId });
+            if (error) return { ok: false, error: error.message };
+            return { ok: true, rows: data || [] };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Newest-first message fetch with cursor pagination (same shape
+        as DM getThreadMessages — UI reuses its renderer). */
+    async function getGroupMessages(roomId, { before = null, limit = 50 } = {}) {
+        try {
+            let q = getSupabase()
+                .from('chat_messages')
+                .select('id, room_id, from_id, body, created_at, edited_at, deleted_at')
+                .eq('room_id', roomId)
+                .is('deleted_at', null)
+                .order('created_at', { ascending: false })
+                .limit(Math.min(limit, 200));
+            if (before) q = q.lt('created_at', before);
+            const { data, error } = await q;
+            if (error) return { ok: false, error: error.message };
+            return { ok: true, rows: (data || []).slice().reverse() };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function sendGroupMessage(roomId, body) {
+        const user = await getUser();
+        if (!user) return { ok: false, error: 'not_authenticated' };
+        const trimmed = String(body || '').trim();
+        if (!trimmed) return { ok: false, error: 'empty' };
+        if (trimmed.length > 2000) return { ok: false, error: 'too_long' };
+        try {
+            const { data, error } = await getSupabase()
+                .from('chat_messages')
+                .insert({ room_id: roomId, from_id: user.id, body: trimmed })
+                .select().single();
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = null;
+            return { ok: true, message: data };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    async function markGroupRead(roomId) {
+        try {
+            const { error } = await getSupabase().rpc('mark_group_chat_read', { p_room: roomId });
+            if (error) return { ok: false, error: error.message };
+            _grpCache.list = null;
+            return { ok: true };
+        } catch (e) { return { ok: false, error: String(e) }; }
+    }
+
+    /** Subscribe to a single room's INSERTs. Same lifecycle contract
+        as subscribeToThread: returns an unsubscribe() fn. */
+    function subscribeToGroupRoom(roomId, onMessage) {
+        const sb = getSupabase();
+        let chan = null; let cleaned = false;
+        (async () => {
+            if (cleaned) return;
+            chan = sb.channel('lp_groupchat_' + roomId.slice(0, 8))
+                .on('postgres_changes',
+                    { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: 'room_id=eq.' + roomId },
+                    (payload) => { if (onMessage) try { onMessage(payload.new); } catch (_) {} })
+                .subscribe();
+        })();
+        return function unsubscribe() {
+            cleaned = true;
+            if (chan) { try { sb.removeChannel(chan); } catch (_) {} chan = null; }
+        };
+    }
+
+    /** Subscribe to room-membership changes (someone invited / left)
+        for a single room. Used by the members sheet to live-update. */
+    function subscribeToGroupMembers(roomId, onChange) {
+        const sb = getSupabase();
+        let chan = null; let cleaned = false;
+        (async () => {
+            if (cleaned) return;
+            chan = sb.channel('lp_groupmem_' + roomId.slice(0, 8))
+                .on('postgres_changes',
+                    { event: '*', schema: 'public', table: 'chat_members', filter: 'room_id=eq.' + roomId },
+                    (payload) => { if (onChange) try { onChange(payload); } catch (_) {} })
+                .subscribe();
+        })();
+        return function unsubscribe() {
+            cleaned = true;
+            if (chan) { try { sb.removeChannel(chan); } catch (_) {} chan = null; }
+        };
+    }
+
+    /** Sum unread across all group rooms. Piggybacks on the list cache. */
+    async function getGroupUnreadCount() {
+        const r = await getGroupChats();
+        if (!r.ok) return 0;
+        return r.rows.reduce((n, x) => n + Number(x.unread_count || 0), 0);
+    }
+
     window.LpSocial = {
         getFriends, sendFriendRequest, acceptFriendRequest,
         removeFriend, blockFriend,
         getInbox, getUnreadCount, getThreadMessages, sendMessage, markThreadRead,
         subscribeToIncoming, subscribeToThread,
+        /* Group chat */
+        getGroupChats, createGroupChat, inviteToGroupChat, leaveGroupChat,
+        getGroupMembers, getGroupMessages, sendGroupMessage, markGroupRead,
+        subscribeToGroupRoom, subscribeToGroupMembers, getGroupUnreadCount,
         clearCache: _clearCache
     };
 })();

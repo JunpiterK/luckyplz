@@ -631,3 +631,470 @@ $$;
 
 grant execute on function public.dm_inbox() to authenticated;
 
+
+-- ============================================================
+-- 6. chat_rooms, chat_members, chat_messages — group chat
+-- ============================================================
+-- Separate tables from direct_messages because the access model
+-- is fundamentally different (N-to-N room membership vs 1-to-1
+-- friendship-gated). Keeping them apart means each query hits a
+-- tighter schema + index, and the RLS policies are easier to
+-- reason about.
+--
+-- Design:
+--   • chat_rooms owns the room + name + creator
+--   • chat_members is the authoritative membership roster, with
+--     per-user last_read_at for unread counts
+--   • chat_messages stores the log
+-- Membership cap enforced at application layer (RPC) rather than
+-- via trigger — lets us return nice error codes instead of raising
+-- a generic constraint violation.
+
+create table if not exists public.chat_rooms (
+    id              uuid        primary key default gen_random_uuid(),
+    name            text        not null check (char_length(name) between 1 and 60),
+    owner_id        uuid        not null references auth.users(id) on delete cascade,
+    icon_emoji      text        check (icon_emoji is null or char_length(icon_emoji) <= 8),
+    description     text        check (description is null or char_length(description) <= 200),
+    created_at      timestamptz not null default now(),
+    last_message_at timestamptz not null default now()
+);
+
+create index if not exists chat_rooms_last_msg_idx
+    on public.chat_rooms (last_message_at desc);
+
+create table if not exists public.chat_members (
+    room_id        uuid        not null references public.chat_rooms(id) on delete cascade,
+    user_id        uuid        not null references auth.users(id) on delete cascade,
+    role           text        not null default 'member'
+                     check (role in ('owner','admin','member')),
+    joined_at      timestamptz not null default now(),
+    last_read_at   timestamptz not null default now(),
+    muted          boolean     not null default false,
+    primary key (room_id, user_id)
+);
+
+-- Per-user "rooms I'm in" lookup — drives the chats list fetch.
+create index if not exists chat_members_user_idx
+    on public.chat_members (user_id);
+
+create table if not exists public.chat_messages (
+    id          bigserial    primary key,
+    room_id     uuid         not null references public.chat_rooms(id) on delete cascade,
+    from_id     uuid         not null references auth.users(id) on delete cascade,
+    body        text         not null check (char_length(body) between 1 and 2000),
+    created_at  timestamptz  not null default now(),
+    edited_at   timestamptz,
+    deleted_at  timestamptz
+);
+
+-- (room_id, created_at desc) serves both "show me the latest N
+-- messages in room X" and "what's the newest message in room X".
+create index if not exists chat_messages_room_time_idx
+    on public.chat_messages (room_id, created_at desc);
+
+-- Trigger: bumping last_message_at on the room whenever a new
+-- message lands. Cheaper than computing MAX() in the list query.
+create or replace function public.chat_messages_bump_room()
+returns trigger language plpgsql security definer as $$
+begin
+    update public.chat_rooms
+        set last_message_at = new.created_at
+        where id = new.room_id;
+    return new;
+end;
+$$;
+
+drop trigger if exists chat_messages_bump_room on public.chat_messages;
+create trigger chat_messages_bump_room
+    after insert on public.chat_messages
+    for each row execute function public.chat_messages_bump_room();
+
+-- Helper: is auth.uid() a member of this room? Used in RLS and
+-- RPCs so we don't duplicate the EXISTS logic everywhere.
+create or replace function public.is_room_member(p_room uuid)
+returns boolean language sql stable security definer
+set search_path = public
+as $$
+    select exists (
+        select 1 from public.chat_members
+        where room_id = p_room and user_id = auth.uid()
+    );
+$$;
+grant execute on function public.is_room_member(uuid) to authenticated;
+
+-- Helper: is auth.uid() the owner of this room?
+create or replace function public.is_room_owner(p_room uuid)
+returns boolean language sql stable security definer
+set search_path = public
+as $$
+    select exists (
+        select 1 from public.chat_rooms
+        where id = p_room and owner_id = auth.uid()
+    );
+$$;
+grant execute on function public.is_room_owner(uuid) to authenticated;
+
+alter table public.chat_rooms    enable row level security;
+alter table public.chat_members  enable row level security;
+alter table public.chat_messages enable row level security;
+
+-- chat_rooms policies --------------------------------------------
+drop policy if exists "chat_rooms_select_member"   on public.chat_rooms;
+drop policy if exists "chat_rooms_insert_self"     on public.chat_rooms;
+drop policy if exists "chat_rooms_update_owner"    on public.chat_rooms;
+drop policy if exists "chat_rooms_delete_owner"    on public.chat_rooms;
+
+-- SELECT: only members can see the room metadata. Non-members can't
+-- even confirm that a given room id exists.
+create policy "chat_rooms_select_member"
+    on public.chat_rooms for select
+    using (public.is_room_member(id));
+
+-- INSERT: creator (= auth.uid()) must set themselves as owner. The
+-- create_group_chat RPC handles adding them to chat_members in the
+-- same transaction.
+create policy "chat_rooms_insert_self"
+    on public.chat_rooms for insert
+    with check (owner_id = auth.uid());
+
+create policy "chat_rooms_update_owner"
+    on public.chat_rooms for update
+    using (owner_id = auth.uid());
+
+create policy "chat_rooms_delete_owner"
+    on public.chat_rooms for delete
+    using (owner_id = auth.uid());
+
+-- chat_members policies ------------------------------------------
+drop policy if exists "chat_members_select_peer"   on public.chat_members;
+drop policy if exists "chat_members_insert_own"    on public.chat_members;
+drop policy if exists "chat_members_update_self"   on public.chat_members;
+drop policy if exists "chat_members_delete_self"   on public.chat_members;
+
+-- SELECT: members of the room can see each other.
+create policy "chat_members_select_peer"
+    on public.chat_members for select
+    using (public.is_room_member(room_id));
+
+-- INSERT: direct INSERTs only permitted for self-join to a room
+-- owned by auth.uid() (room creation path). Adding OTHERS is done
+-- exclusively through invite_to_group_chat() RPC which runs as
+-- SECURITY DEFINER.
+create policy "chat_members_insert_own"
+    on public.chat_members for insert
+    with check (
+        user_id = auth.uid()
+        and exists (
+            select 1 from public.chat_rooms
+            where id = room_id and owner_id = auth.uid()
+        )
+    );
+
+-- UPDATE: a member can update their own row (last_read_at, muted).
+-- Role changes must go through the update_role RPC (future).
+create policy "chat_members_update_self"
+    on public.chat_members for update
+    using (user_id = auth.uid())
+    with check (user_id = auth.uid());
+
+-- DELETE: self-leave anytime, or owner can remove anyone (kick).
+create policy "chat_members_delete_self"
+    on public.chat_members for delete
+    using (
+        user_id = auth.uid()
+        or public.is_room_owner(room_id)
+    );
+
+-- chat_messages policies -----------------------------------------
+drop policy if exists "chat_msgs_select_member"   on public.chat_messages;
+drop policy if exists "chat_msgs_insert_member"   on public.chat_messages;
+drop policy if exists "chat_msgs_update_own"      on public.chat_messages;
+drop policy if exists "chat_msgs_delete_own"      on public.chat_messages;
+
+create policy "chat_msgs_select_member"
+    on public.chat_messages for select
+    using (public.is_room_member(room_id));
+
+create policy "chat_msgs_insert_member"
+    on public.chat_messages for insert
+    with check (
+        from_id = auth.uid()
+        and public.is_room_member(room_id)
+    );
+
+create policy "chat_msgs_update_own"
+    on public.chat_messages for update
+    using (from_id = auth.uid());
+
+create policy "chat_msgs_delete_own"
+    on public.chat_messages for delete
+    using (from_id = auth.uid() or public.is_room_owner(room_id));
+
+-- Realtime publications so clients can subscribe to room messages
+-- and member list changes.
+do $$
+begin
+    if not exists (
+        select 1 from pg_publication_tables
+        where pubname='supabase_realtime' and schemaname='public' and tablename='chat_messages'
+    ) then alter publication supabase_realtime add table public.chat_messages; end if;
+    if not exists (
+        select 1 from pg_publication_tables
+        where pubname='supabase_realtime' and schemaname='public' and tablename='chat_members'
+    ) then alter publication supabase_realtime add table public.chat_members; end if;
+    if not exists (
+        select 1 from pg_publication_tables
+        where pubname='supabase_realtime' and schemaname='public' and tablename='chat_rooms'
+    ) then alter publication supabase_realtime add table public.chat_rooms; end if;
+end$$;
+
+-- ---- RPCs ------------------------------------------------------
+-- Create a group with an initial member list. Must be friends with
+-- every invitee (matches the 1:1 DM rule — you can't pull strangers
+-- into a chat). Caps initial membership at 50.
+create or replace function public.create_group_chat(
+    p_name        text,
+    p_member_ids  uuid[],
+    p_icon_emoji  text default '💬'
+) returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    me       uuid := auth.uid();
+    new_room_id uuid;
+    uid      uuid;
+    a uuid; b uuid;
+begin
+    if me is null then
+        return jsonb_build_object('ok', false, 'error', 'not_authenticated');
+    end if;
+    if p_name is null or char_length(trim(p_name)) < 1 then
+        return jsonb_build_object('ok', false, 'error', 'invalid_name');
+    end if;
+    if array_length(p_member_ids, 1) is null then
+        p_member_ids := array[]::uuid[];
+    end if;
+    if array_length(p_member_ids, 1) > 50 then
+        return jsonb_build_object('ok', false, 'error', 'too_many_members');
+    end if;
+
+    -- Friendship gate: every invitee must be an accepted friend.
+    foreach uid in array p_member_ids loop
+        if uid = me then continue; end if;
+        if me < uid then a := me; b := uid; else a := uid; b := me; end if;
+        if not exists (
+            select 1 from public.friendships
+            where user_a = a and user_b = b and status = 'accepted'
+        ) then
+            return jsonb_build_object('ok', false, 'error', 'not_friends', 'offender', uid);
+        end if;
+    end loop;
+
+    insert into public.chat_rooms (name, owner_id, icon_emoji)
+        values (trim(p_name), me, coalesce(p_icon_emoji, '💬'))
+        returning id into new_room_id;
+
+    -- Owner row
+    insert into public.chat_members (room_id, user_id, role) values (new_room_id, me, 'owner');
+
+    -- Invitee rows (dedupe against self via DISTINCT + filter)
+    insert into public.chat_members (room_id, user_id, role)
+        select new_room_id, uid, 'member'
+        from unnest(p_member_ids) as uid
+        where uid <> me
+        on conflict do nothing;
+
+    return jsonb_build_object('ok', true, 'room_id', new_room_id);
+end;
+$$;
+grant execute on function public.create_group_chat(text, uuid[], text) to authenticated;
+
+-- Invite a single friend into an existing room. Must be room
+-- member (enforced) + friends with target.
+create or replace function public.invite_to_group_chat(
+    p_room uuid, p_user uuid
+) returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    me uuid := auth.uid();
+    a uuid; b uuid;
+    member_count int;
+begin
+    if me is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+    if not public.is_room_member(p_room) then
+        return jsonb_build_object('ok', false, 'error', 'not_a_member');
+    end if;
+    if p_user = me then
+        return jsonb_build_object('ok', false, 'error', 'cannot_invite_self');
+    end if;
+    if me < p_user then a := me; b := p_user; else a := p_user; b := me; end if;
+    if not exists (
+        select 1 from public.friendships
+        where user_a = a and user_b = b and status = 'accepted'
+    ) then
+        return jsonb_build_object('ok', false, 'error', 'not_friends');
+    end if;
+    select count(*) into member_count from public.chat_members where room_id = p_room;
+    if member_count >= 100 then
+        return jsonb_build_object('ok', false, 'error', 'room_full');
+    end if;
+    insert into public.chat_members (room_id, user_id, role)
+        values (p_room, p_user, 'member')
+        on conflict do nothing;
+    return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.invite_to_group_chat(uuid, uuid) to authenticated;
+
+-- Leave a room. Owner leaving transfers ownership to the oldest
+-- remaining member (smallest joined_at). If they were the last
+-- member, the room is deleted entirely.
+create or replace function public.leave_group_chat(p_room uuid)
+returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    me uuid := auth.uid();
+    was_owner boolean := false;
+    successor uuid;
+    remaining int;
+begin
+    if me is null then return jsonb_build_object('ok', false, 'error', 'not_authenticated'); end if;
+    if not public.is_room_member(p_room) then
+        return jsonb_build_object('ok', false, 'error', 'not_a_member');
+    end if;
+
+    was_owner := public.is_room_owner(p_room);
+    delete from public.chat_members where room_id = p_room and user_id = me;
+
+    if was_owner then
+        select count(*) into remaining from public.chat_members where room_id = p_room;
+        if remaining = 0 then
+            delete from public.chat_rooms where id = p_room;
+            return jsonb_build_object('ok', true, 'room_deleted', true);
+        end if;
+        select user_id into successor from public.chat_members
+            where room_id = p_room order by joined_at asc limit 1;
+        update public.chat_rooms set owner_id = successor where id = p_room;
+        update public.chat_members set role = 'owner'
+            where room_id = p_room and user_id = successor;
+    end if;
+    return jsonb_build_object('ok', true);
+end;
+$$;
+grant execute on function public.leave_group_chat(uuid) to authenticated;
+
+-- Chat-list RPC: all rooms the caller is in, plus unread counts
+-- (messages since the caller's last_read_at) and the latest-message
+-- preview. Single-shot render for the Chats tab.
+create or replace function public.group_chat_list()
+returns table (
+    room_id         uuid,
+    name            text,
+    icon_emoji      text,
+    owner_id        uuid,
+    last_message_at timestamptz,
+    last_body       text,
+    last_from_id    uuid,
+    last_from_nick  text,
+    member_count    bigint,
+    unread_count    bigint,
+    my_role         text
+) language sql security definer
+set search_path = public
+as $$
+    with me as (select auth.uid() as uid),
+    my_rooms as (
+        select cm.room_id, cm.last_read_at, cm.role
+        from public.chat_members cm
+        where cm.user_id = (select uid from me)
+    ),
+    last_msg as (
+        select distinct on (m.room_id) m.room_id, m.body, m.from_id, m.created_at
+        from public.chat_messages m
+        join my_rooms r on r.room_id = m.room_id
+        where m.deleted_at is null
+        order by m.room_id, m.created_at desc
+    ),
+    unread as (
+        select m.room_id, count(*) as c
+        from public.chat_messages m
+        join my_rooms r on r.room_id = m.room_id
+        where m.deleted_at is null
+          and m.created_at > r.last_read_at
+          and m.from_id <> (select uid from me)
+        group by m.room_id
+    ),
+    member_counts as (
+        select room_id, count(*) as c
+        from public.chat_members
+        where room_id in (select room_id from my_rooms)
+        group by room_id
+    )
+    select cr.id,
+           cr.name,
+           cr.icon_emoji,
+           cr.owner_id,
+           cr.last_message_at,
+           lm.body,
+           lm.from_id,
+           p.nickname,
+           coalesce(mc.c, 0),
+           coalesce(u.c, 0),
+           r.role
+    from my_rooms r
+    join public.chat_rooms cr on cr.id = r.room_id
+    left join last_msg lm on lm.room_id = cr.id
+    left join public.profiles p on p.id = lm.from_id
+    left join unread u on u.room_id = cr.id
+    left join member_counts mc on mc.room_id = cr.id
+    order by cr.last_message_at desc;
+$$;
+grant execute on function public.group_chat_list() to authenticated;
+
+-- Room members RPC with profile data. Used for the member-list
+-- modal + @mentions (future).
+create or replace function public.group_chat_members(p_room uuid)
+returns table (
+    user_id          uuid,
+    nickname         text,
+    avatar_url       text,
+    profile_complete boolean,
+    role             text,
+    joined_at        timestamptz
+) language sql security definer
+set search_path = public
+as $$
+    select cm.user_id,
+           p.nickname,
+           p.avatar_url,
+           p.profile_complete,
+           cm.role,
+           cm.joined_at
+    from public.chat_members cm
+    join public.profiles p on p.id = cm.user_id
+    where cm.room_id = p_room
+      and public.is_room_member(p_room)  -- enforce: only members see the roster
+    order by cm.joined_at asc;
+$$;
+grant execute on function public.group_chat_members(uuid) to authenticated;
+
+-- Mark a room's messages read up to the caller's current time.
+create or replace function public.mark_group_chat_read(p_room uuid)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+begin
+    update public.chat_members
+        set last_read_at = now()
+        where room_id = p_room and user_id = auth.uid();
+end;
+$$;
+grant execute on function public.mark_group_chat_read(uuid) to authenticated;
+

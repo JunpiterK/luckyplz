@@ -252,6 +252,7 @@ body{
         <header class="msg-header">
             <a href="/" class="icon-btn" title="Home" aria-label="Home">🏠</a>
             <div class="title" id="sidebarTitle">Messages</div>
+            <button class="icon-btn" id="newGroupBtn" title="New group" aria-label="New group">👥</button>
             <button class="icon-btn" id="addFriendBtn" title="Add friend" aria-label="Add friend">＋</button>
         </header>
         <div class="sidebar-tabs">
@@ -303,6 +304,43 @@ body{
     </div>
 </div>
 
+<!-- New group modal: name + emoji icon + friend picker -->
+<div class="modal-backdrop" id="newGroupModal">
+    <div class="modal-card" style="max-width:440px">
+        <h3 id="newGroupH3">Create a group</h3>
+        <div class="sub" id="newGroupSub">Pick friends to start chatting together. You can invite more later.</div>
+        <div style="display:flex;gap:10px;margin-bottom:12px">
+            <button type="button" id="groupIconBtn" title="Icon" style="width:56px;height:56px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);font-size:1.8em;cursor:pointer;flex-shrink:0">💬</button>
+            <div style="flex:1">
+                <label for="groupNameInput" id="groupNameLabel">Group name</label>
+                <input id="groupNameInput" type="text" maxlength="60" autocomplete="off" placeholder="e.g. Lunch crew">
+            </div>
+        </div>
+        <!-- Emoji picker (hidden by default) -->
+        <div id="groupIconPicker" style="display:none;margin-bottom:10px;padding:8px;background:rgba(255,255,255,.03);border-radius:10px;flex-wrap:wrap;gap:4px;justify-content:center"></div>
+        <label id="groupFriendsLabel" style="display:block;margin-top:6px">Pick friends</label>
+        <div id="groupFriendPicker" style="max-height:220px;overflow-y:auto;margin-top:6px;border-radius:10px;border:1px solid rgba(255,255,255,.06);padding:4px"></div>
+        <div class="msg" id="newGroupMsg" role="status" aria-live="polite"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="newGroupCancel">Cancel</button>
+            <button type="button" class="btn-primary" id="newGroupCreate" disabled>Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Group members sheet -->
+<div class="modal-backdrop" id="membersModal">
+    <div class="modal-card">
+        <h3 id="membersH3">Members</h3>
+        <div class="sub" id="membersSub">Everyone in this chat.</div>
+        <div id="membersList" style="max-height:300px;overflow-y:auto"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="membersClose">Close</button>
+            <button type="button" class="btn-primary" id="leaveGroupBtn" style="background:linear-gradient(135deg,#FF6B8B,#FF3366)">Leave</button>
+        </div>
+    </div>
+</div>
+
 <script src="/js/supabase-config.js"></script>
 <script src="/js/lpSocial.js"></script>
 <script>
@@ -336,7 +374,25 @@ const T = {
         signIn:'SIGN IN', backHome:'← Back to home',
         setupNeededH:'Finish your profile',
         setupNeededP:'Pick a nickname to unlock friends and messages.',
-        setupCTA:'FINISH SETUP'
+        setupCTA:'FINISH SETUP',
+        newGroup:'Create a group', newGroupSub:'Pick friends to start chatting together. You can invite more later.',
+        groupName:'Group name', groupNamePh:'e.g. Lunch crew',
+        pickFriends:'Pick friends', create:'Create',
+        members:'Members', membersSub:'Everyone in this chat.',
+        close:'Close', leave:'Leave',
+        roleOwner:'owner', roleAdmin:'admin', roleMember:'member',
+        groupMembers:'{n} members',
+        inviteMore:'Invite more',
+        noFriendsForGroup:'Add some friends first — groups need at least one other member.',
+        err_invalid_name:'Name required.',
+        err_too_many_members:'Too many members (max 50).',
+        err_not_friends:'All invitees must be your friends.',
+        err_room_full:'Group is full (100).',
+        err_not_a_member:'You\'re not in this room.',
+        err_cannot_invite_self:'Cannot invite yourself.',
+        ok_left:'Left group.',
+        kickConfirm:'Leave this group?',
+        peerVerified:'Verified member', peerGroup:'Group chat'
     },
     ko: {
         msgs:'메시지', chats:'대화', friends:'친구', requests:'요청',
@@ -362,7 +418,25 @@ const T = {
         signIn:'로그인', backHome:'← 홈으로',
         setupNeededH:'프로필을 완성해주세요',
         setupNeededP:'닉네임을 정해야 친구·메시지 기능이 열려요.',
-        setupCTA:'프로필 완성하기'
+        setupCTA:'프로필 완성하기',
+        newGroup:'그룹 만들기', newGroupSub:'친구들을 골라 함께 대화를 시작하세요. 나중에 더 초대할 수 있어요.',
+        groupName:'그룹 이름', groupNamePh:'예: 점심 크루',
+        pickFriends:'친구 선택', create:'만들기',
+        members:'멤버', membersSub:'이 채팅에 있는 모든 사람.',
+        close:'닫기', leave:'나가기',
+        roleOwner:'방장', roleAdmin:'관리자', roleMember:'멤버',
+        groupMembers:'{n}명',
+        inviteMore:'친구 더 초대',
+        noFriendsForGroup:'먼저 친구를 추가하세요 — 그룹은 최소 한 명 이상의 친구가 필요해요.',
+        err_invalid_name:'그룹 이름이 필요해요.',
+        err_too_many_members:'멤버가 너무 많아요 (최대 50명).',
+        err_not_friends:'초대하려면 먼저 친구여야 해요.',
+        err_room_full:'그룹이 가득 찼어요 (100명).',
+        err_not_a_member:'이 방의 멤버가 아니에요.',
+        err_cannot_invite_self:'본인은 초대할 수 없어요.',
+        ok_left:'그룹에서 나왔어요.',
+        kickConfirm:'이 그룹에서 나갈까요?',
+        peerVerified:'인증 회원', peerGroup:'그룹 채팅'
     },
     ja: {
         msgs:'メッセージ', chats:'トーク', friends:'フレンド', requests:'リクエスト',
@@ -388,7 +462,25 @@ const T = {
         signIn:'ログイン', backHome:'← ホームへ',
         setupNeededH:'プロフィールを完成させてください',
         setupNeededP:'ニックネームを設定してフレンド機能を解放します。',
-        setupCTA:'設定へ'
+        setupCTA:'設定へ',
+        newGroup:'グループ作成', newGroupSub:'フレンドを選んでグループチャットを始めましょう。',
+        groupName:'グループ名', groupNamePh:'例: ランチ部',
+        pickFriends:'フレンドを選ぶ', create:'作成',
+        members:'メンバー', membersSub:'このチャットの全員。',
+        close:'閉じる', leave:'退出',
+        roleOwner:'オーナー', roleAdmin:'管理者', roleMember:'メンバー',
+        groupMembers:'{n}人',
+        inviteMore:'招待',
+        noFriendsForGroup:'まずフレンドを追加してください。',
+        err_invalid_name:'グループ名を入力してください。',
+        err_too_many_members:'メンバーが多すぎます (最大50人)。',
+        err_not_friends:'フレンドのみ招待できます。',
+        err_room_full:'グループが満員です (100人)。',
+        err_not_a_member:'このグループのメンバーではありません。',
+        err_cannot_invite_self:'自分は招待できません。',
+        ok_left:'グループを退出しました。',
+        kickConfirm:'このグループを退出しますか？',
+        peerVerified:'認証会員', peerGroup:'グループチャット'
     },
     zh: {
         msgs:'消息', chats:'聊天', friends:'好友', requests:'请求',
@@ -414,7 +506,25 @@ const T = {
         signIn:'登录', backHome:'← 返回首页',
         setupNeededH:'完成你的档案',
         setupNeededP:'设置昵称以解锁好友和消息。',
-        setupCTA:'完成设置'
+        setupCTA:'完成设置',
+        newGroup:'创建群组', newGroupSub:'选择好友开始群聊。',
+        groupName:'群组名', groupNamePh:'例: 午饭小队',
+        pickFriends:'选择好友', create:'创建',
+        members:'成员', membersSub:'此聊天的所有成员。',
+        close:'关闭', leave:'退出',
+        roleOwner:'群主', roleAdmin:'管理', roleMember:'成员',
+        groupMembers:'{n}人',
+        inviteMore:'邀请',
+        noFriendsForGroup:'请先添加好友。',
+        err_invalid_name:'请输入群组名。',
+        err_too_many_members:'成员过多 (最多50)。',
+        err_not_friends:'只能邀请好友。',
+        err_room_full:'群组已满 (100)。',
+        err_not_a_member:'你不在此群组中。',
+        err_cannot_invite_self:'不能邀请自己。',
+        ok_left:'已退出群组。',
+        kickConfirm:'退出此群组？',
+        peerVerified:'认证会员', peerGroup:'群聊'
     }
 };
 function detectLang(){
@@ -453,9 +563,15 @@ $('addFriendBtn').title=t.addFriend;
 /* ---- State --------------------------------------------------- */
 let me=null;
 let currentTab='chats';
-let currentThread=null; /* {friend_id, friend_nickname, avatar, authed} */
+/* currentThread is a discriminated union:
+     {kind:'dm',    friend_id, friend_nickname, friend_avatar, friend_authed}
+     {kind:'group', room_id, name, icon_emoji, member_count, my_role} */
+let currentThread=null;
 let threadUnsub=null;
 let incomingUnsub=null;
+let latestGroups=[];
+let groupEmoji='💬';
+const EMOJI_CHOICES=['💬','🎉','☕','🍕','🏀','🎮','📚','🎯','🏆','🎲','🎵','🚀','🌟','🍜','🏎️','✨'];
 
 /* ---- Auth gate ----------------------------------------------- */
 async function boot(){
@@ -486,6 +602,15 @@ function wireEvents(){
     document.querySelectorAll('.sidebar-tab').forEach(b=>{
         b.addEventListener('click',()=>{currentTab=b.dataset.tab;updateTabActive();renderSidebar()});
     });
+    $('newGroupBtn').addEventListener('click',openNewGroup);
+    $('newGroupCancel').addEventListener('click',closeNewGroup);
+    $('newGroupCreate').addEventListener('click',submitNewGroup);
+    $('newGroupModal').addEventListener('click',(e)=>{if(e.target===$('newGroupModal'))closeNewGroup()});
+    $('groupNameInput').addEventListener('input',updateNewGroupReady);
+    $('groupIconBtn').addEventListener('click',toggleIconPicker);
+    $('membersClose').addEventListener('click',()=>$('membersModal').classList.remove('on'));
+    $('leaveGroupBtn').addEventListener('click',leaveCurrentGroup);
+    $('membersModal').addEventListener('click',(e)=>{if(e.target===$('membersModal'))$('membersModal').classList.remove('on')});
     $('addFriendBtn').addEventListener('click',openAddFriend);
     $('addFriendCancel').addEventListener('click',closeAddFriend);
     $('addFriendInput').addEventListener('input',()=>{
@@ -513,6 +638,38 @@ function wireEvents(){
     $('addFriendCancel').textContent=t.cancel;
     $('addFriendSend').textContent=t.send;
     $('addFriendInput').placeholder=t.ph;
+    /* New-group modal labels */
+    $('newGroupH3').textContent=t.newGroup;
+    $('newGroupSub').textContent=t.newGroupSub;
+    $('groupNameLabel').textContent=t.groupName;
+    $('groupNameInput').placeholder=t.groupNamePh;
+    $('groupFriendsLabel').textContent=t.pickFriends;
+    $('newGroupCancel').textContent=t.cancel;
+    $('newGroupCreate').textContent=t.create;
+    $('newGroupBtn').title=t.newGroup;
+    /* Members modal labels */
+    $('membersH3').textContent=t.members;
+    $('membersSub').textContent=t.membersSub;
+    $('membersClose').textContent=t.close;
+    $('leaveGroupBtn').textContent=t.leave;
+    /* Emoji picker */
+    $('groupIconPicker').innerHTML=EMOJI_CHOICES.map(e=>
+        '<button type="button" data-emoji="'+e+'" style="width:36px;height:36px;border-radius:8px;border:0;background:rgba(255,255,255,.04);cursor:pointer;font-size:1.2em;transition:background .15s">'+e+'</button>').join('');
+    $('groupIconPicker').querySelectorAll('button').forEach(b=>{
+        b.addEventListener('click',()=>{groupEmoji=b.dataset.emoji;$('groupIconBtn').textContent=groupEmoji;toggleIconPicker()});
+        b.addEventListener('mouseenter',()=>b.style.background='rgba(255,230,109,.15)');
+        b.addEventListener('mouseleave',()=>b.style.background='rgba(255,255,255,.04)');
+    });
+}
+function toggleIconPicker(){
+    const p=$('groupIconPicker');
+    p.style.display=p.style.display==='none'?'flex':'none';
+}
+function updateNewGroupReady(){
+    const name=$('groupNameInput').value.trim();
+    const anyPicked=$('groupFriendPicker').querySelectorAll('[data-picked="1"]').length>0;
+    $('newGroupCreate').disabled=!(name.length>=1&&anyPicked);
+    $('newGroupMsg').textContent='';
 }
 
 function updateTabActive(){
@@ -525,19 +682,26 @@ function updateTabActive(){
 let latestInbox=[];
 let latestFriends=[];
 async function refresh(){
-    const [inb,fri]=await Promise.all([LpSocial.getInbox({force:true}),LpSocial.getFriends({force:true})]);
+    const [inb,fri,grp]=await Promise.all([
+        LpSocial.getInbox({force:true}),
+        LpSocial.getFriends({force:true}),
+        LpSocial.getGroupChats({force:true})
+    ]);
     if(inb.ok)latestInbox=inb.rows;
     if(fri.ok)latestFriends=fri.rows;
+    if(grp.ok)latestGroups=grp.rows;
     /* Update request badge */
     const pendingIn=latestFriends.filter(f=>f.direction==='incoming-pending').length;
     const badge=$('requestsBadge');
     if(pendingIn>0){badge.textContent=pendingIn;badge.style.display='inline-flex'}
     else badge.style.display='none';
     renderSidebar();
-    /* If the currently-open thread has new unread from our peer,
-       mark them read since we're viewing. */
+    /* If the currently-open thread has new unread, mark read. */
     if(currentThread){
-        LpSocial.markThreadRead(currentThread.friend_id).then(()=>LpSocial.getInbox({force:true}));
+        if(currentThread.kind==='dm')
+            LpSocial.markThreadRead(currentThread.friend_id).then(()=>LpSocial.getInbox({force:true}));
+        else if(currentThread.kind==='group')
+            LpSocial.markGroupRead(currentThread.room_id).then(()=>LpSocial.getGroupChats({force:true}));
     }
 }
 
@@ -545,11 +709,14 @@ function renderSidebar(){
     const body=$('sidebarBody');
     let html='';
     if(currentTab==='chats'){
-        if(!latestInbox.length){
-            html=emptyState('💬',t.noChats);
-        }else{
-            html=latestInbox.map(r=>inboxRow(r)).join('');
-        }
+        /* Unified Chats tab: DM rows + group rows sorted by most-
+           recent activity. Each item carries `kind` so the click
+           handler knows which API to open. */
+        const dmItems=latestInbox.map(r=>({kind:'dm',ts:new Date(r.last_created_at).getTime(),row:r}));
+        const grpItems=latestGroups.map(r=>({kind:'group',ts:new Date(r.last_message_at).getTime(),row:r}));
+        const items=dmItems.concat(grpItems).sort((a,b)=>b.ts-a.ts);
+        if(!items.length){html=emptyState('💬',t.noChats)}
+        else html=items.map(it=>it.kind==='dm'?inboxRow(it.row):groupRow(it.row)).join('');
     }else if(currentTab==='friends'){
         const list=latestFriends.filter(f=>f.direction==='accepted');
         if(!list.length){html=emptyState('🤝',t.noFriends)}
@@ -567,10 +734,24 @@ function renderSidebar(){
         el.addEventListener('click',(e)=>{
             if(e.target.closest('.row-actions'))return;
             openThread({
+                kind:'dm',
                 friend_id:el.dataset.friendId,
                 friend_nickname:el.dataset.nickname,
                 friend_avatar:el.dataset.avatar||null,
                 friend_authed:el.dataset.authed==='1'
+            });
+        });
+    });
+    /* Group chat rows open via room_id. */
+    body.querySelectorAll('[data-room-id]').forEach(el=>{
+        el.addEventListener('click',()=>{
+            openThread({
+                kind:'group',
+                room_id:el.dataset.roomId,
+                name:el.dataset.name,
+                icon_emoji:el.dataset.icon||'💬',
+                member_count:Number(el.dataset.members||0),
+                my_role:el.dataset.role||'member'
             });
         });
     });
@@ -600,7 +781,7 @@ function avatarHtml(url,name,verified){
 function inboxRow(r){
     const unreadBadge=Number(r.unread_count)>0?'<span class="row-unread">'+r.unread_count+'</span>':'';
     const previewCls=r.last_from_me?'row-preview from-me':'row-preview';
-    return '<button class="row-item'+(currentThread&&currentThread.friend_id===r.friend_id?' active':'')+'" '
+    return '<button class="row-item'+(currentThread&&currentThread.kind==='dm'&&currentThread.friend_id===r.friend_id?' active':'')+'" '
         +'data-friend-id="'+escape(r.friend_id)+'" data-nickname="'+escape(r.friend_nickname)
         +'" data-avatar="'+escape(r.friend_avatar||'')+'" data-authed="'+(r.friend_authed?'1':'0')+'">'
         +avatarHtml(r.friend_avatar,r.friend_nickname,r.friend_authed)
@@ -608,6 +789,26 @@ function inboxRow(r){
         +'<div class="row-top"><span class="row-name">'+escape(r.friend_nickname)+'</span>'
         +'<span class="row-time">'+escape(timeAgo(r.last_created_at))+'</span></div>'
         +'<div class="row-top"><span class="'+previewCls+'">'+escape(r.last_body||'')+'</span>'+unreadBadge+'</div>'
+        +'</div></button>';
+}
+function groupRow(g){
+    const unreadBadge=Number(g.unread_count)>0?'<span class="row-unread">'+g.unread_count+'</span>':'';
+    const preview=g.last_body
+        ? (g.last_from_nick?escape(g.last_from_nick)+': '+escape(g.last_body):escape(g.last_body))
+        : '<span style="opacity:.5;font-style:italic">'+escape(t.groupMembers.replace('{n}',g.member_count||0))+'</span>';
+    const timeLbl=g.last_message_at?escape(timeAgo(g.last_message_at)):'';
+    /* Group avatar = emoji in a softly-tinted circle rather than an
+       image, so the room is distinguishable at a glance from DMs. */
+    const av='<div class="row-avatar" style="background:linear-gradient(135deg,rgba(0,217,255,.55),rgba(0,217,255,.25));font-size:1.3em">'+escape(g.icon_emoji||'💬')+'</div>';
+    return '<button class="row-item'+(currentThread&&currentThread.kind==='group'&&currentThread.room_id===g.room_id?' active':'')+'" '
+        +'data-room-id="'+escape(g.room_id)+'" data-name="'+escape(g.name)
+        +'" data-icon="'+escape(g.icon_emoji||'💬')+'" data-members="'+escape(String(g.member_count||0))
+        +'" data-role="'+escape(g.my_role||'member')+'">'
+        +av
+        +'<div class="row-body">'
+        +'<div class="row-top"><span class="row-name">'+escape(g.name)+'</span>'
+        +'<span class="row-time">'+timeLbl+'</span></div>'
+        +'<div class="row-top"><span class="row-preview">'+preview+'</span>'+unreadBadge+'</div>'
         +'</div></button>';
 }
 function friendRow(f){
@@ -658,33 +859,61 @@ async function submitAddFriend(){
 }
 
 /* ---- Thread view --------------------------------------------- */
-async function openThread(friend){
+async function openThread(meta){
     if(threadUnsub){threadUnsub();threadUnsub=null}
-    currentThread=friend;
+    currentThread=meta;
     $('chatEmpty').style.display='none';
     $('chatView').classList.add('on');
     $('app').dataset.pane='chat';
     const av=$('peerAvatar');
-    if(friend.friend_avatar){av.innerHTML='<img src="'+escape(friend.friend_avatar)+'" referrerpolicy="no-referrer" alt="">'}
-    else av.textContent=initials(friend.friend_nickname);
-    if(friend.friend_authed){av.innerHTML+='<span class="verify-dot">✓</span>'}
-    $('peerName').textContent=friend.friend_nickname;
-    $('peerSub').textContent=friend.friend_authed?t.verified:t.peerGuest;
+    /* Header: avatar + name + sub-text. Branches on kind so groups
+       get their emoji + member-count label, DMs get the 1:1 peer
+       status. */
+    if(meta.kind==='dm'){
+        if(meta.friend_avatar){av.innerHTML='<img src="'+escape(meta.friend_avatar)+'" referrerpolicy="no-referrer" alt="">'}
+        else av.textContent=initials(meta.friend_nickname);
+        if(meta.friend_authed){av.innerHTML+='<span class="verify-dot">✓</span>'}
+        av.style.background='';
+        av.style.cursor='';av.onclick=null;
+        $('peerName').textContent=meta.friend_nickname;
+        $('peerSub').textContent=meta.friend_authed?t.verified:t.peerGuest;
+    }else{
+        av.innerHTML='';
+        av.textContent=meta.icon_emoji||'💬';
+        av.style.background='linear-gradient(135deg,rgba(0,217,255,.55),rgba(0,217,255,.25))';
+        av.style.cursor='pointer';
+        $('peerName').textContent=meta.name;
+        $('peerSub').textContent=t.groupMembers.replace('{n}',meta.member_count||0);
+        /* Clicking the header opens the members sheet. */
+        const headerInfo=$('peerName').parentElement;
+        headerInfo.style.cursor='pointer';
+        headerInfo.onclick=openMembersSheet;
+    }
     $('chatMessages').innerHTML='';
-    const res=await LpSocial.getThreadMessages(friend.friend_id);
+    const res=meta.kind==='dm'
+        ? await LpSocial.getThreadMessages(meta.friend_id)
+        : await LpSocial.getGroupMessages(meta.room_id);
     if(res.ok){
         renderMessages(res.rows);
         scrollToBottom();
     }
     /* Mark unread as read. */
-    await LpSocial.markThreadRead(friend.friend_id);
+    if(meta.kind==='dm')       await LpSocial.markThreadRead(meta.friend_id);
+    else                       await LpSocial.markGroupRead(meta.room_id);
     await refresh();
-    /* Live updates for this thread */
-    threadUnsub=LpSocial.subscribeToThread(friend.friend_id,(m)=>{
-        appendMessage(m);
-        scrollToBottom();
-        if(m.from_id===friend.friend_id)LpSocial.markThreadRead(friend.friend_id);
-    });
+    /* Live updates for this thread / room */
+    if(meta.kind==='dm'){
+        threadUnsub=LpSocial.subscribeToThread(meta.friend_id,(m)=>{
+            appendMessage(m);scrollToBottom();
+            if(m.from_id===meta.friend_id)LpSocial.markThreadRead(meta.friend_id);
+        });
+    }else{
+        threadUnsub=LpSocial.subscribeToGroupRoom(meta.room_id,(m)=>{
+            appendMessage(m);scrollToBottom();
+            /* Skip self-echo mark (already our own message). */
+            if(m.from_id!==me.authUser.id)LpSocial.markGroupRead(meta.room_id);
+        });
+    }
     $('composerInput').focus();
 }
 function closeThread(){
@@ -757,7 +986,9 @@ async function submitMessage(){
     if(!body||!currentThread)return;
     $('sendBtn').disabled=true;
     ta.value='';autoGrowComposer();
-    const res=await LpSocial.sendMessage(currentThread.friend_id,body);
+    const res=currentThread.kind==='dm'
+        ? await LpSocial.sendMessage(currentThread.friend_id,body)
+        : await LpSocial.sendGroupMessage(currentThread.room_id,body);
     if(res.ok){
         appendMessage(res.message);
         scrollToBottom();
@@ -767,6 +998,101 @@ async function submitMessage(){
         alert('Send failed: '+(res.error||'unknown'));
     }
     ta.focus();
+}
+
+/* ---- New-group modal ----------------------------------------- */
+function openNewGroup(){
+    const accepted=latestFriends.filter(f=>f.direction==='accepted');
+    if(!accepted.length){
+        alert(t.noFriendsForGroup);
+        return;
+    }
+    $('groupNameInput').value='';
+    groupEmoji='💬';$('groupIconBtn').textContent='💬';
+    $('newGroupMsg').className='msg';$('newGroupMsg').textContent='';
+    $('newGroupCreate').disabled=true;
+    $('groupIconPicker').style.display='none';
+    /* Render friend picker — each row is a tappable chip that
+       toggles data-picked. */
+    $('groupFriendPicker').innerHTML=accepted.map(f=>{
+        const av=f.avatar_url
+            ? '<div class="row-avatar" style="width:32px;height:32px;font-size:.8em"><img src="'+escape(f.avatar_url)+'" referrerpolicy="no-referrer" alt=""></div>'
+            : '<div class="row-avatar" style="width:32px;height:32px;font-size:.8em">'+initials(f.nickname)+'</div>';
+        return '<div class="pick-row" data-friend-id="'+escape(f.friend_id)+'" '
+            +'style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s">'
+            +av
+            +'<span style="flex:1;font-weight:700;font-size:.9em">'+escape(f.nickname)+'</span>'
+            +'<span class="pick-check" style="width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:.8em;color:transparent">✓</span>'
+            +'</div>';
+    }).join('');
+    $('groupFriendPicker').querySelectorAll('.pick-row').forEach(row=>{
+        row.addEventListener('click',()=>{
+            const on=row.dataset.picked==='1';
+            if(on){row.dataset.picked='0';row.style.background='';row.querySelector('.pick-check').style.color='transparent';row.querySelector('.pick-check').style.background='';row.querySelector('.pick-check').style.borderColor='rgba(255,255,255,.2)'}
+            else{row.dataset.picked='1';row.style.background='rgba(0,217,255,.08)';row.querySelector('.pick-check').style.color='#001220';row.querySelector('.pick-check').style.background='#00D9FF';row.querySelector('.pick-check').style.borderColor='#00D9FF'}
+            updateNewGroupReady();
+        });
+    });
+    $('newGroupModal').classList.add('on');
+    setTimeout(()=>$('groupNameInput').focus(),40);
+}
+function closeNewGroup(){$('newGroupModal').classList.remove('on')}
+async function submitNewGroup(){
+    if($('newGroupCreate').disabled)return;
+    const name=$('groupNameInput').value.trim();
+    const ids=[...$('groupFriendPicker').querySelectorAll('[data-picked="1"]')].map(el=>el.dataset.friendId);
+    if(!name||!ids.length)return;
+    $('newGroupCreate').disabled=true;
+    $('newGroupMsg').className='msg';$('newGroupMsg').textContent='…';
+    const res=await LpSocial.createGroupChat(name,ids,groupEmoji);
+    if(res.ok){
+        closeNewGroup();
+        await refresh();
+        /* Jump straight into the new group. */
+        const r=latestGroups.find(g=>g.room_id===res.room_id);
+        if(r)openThread({kind:'group',room_id:r.room_id,name:r.name,icon_emoji:r.icon_emoji,member_count:r.member_count,my_role:r.my_role});
+    }else{
+        $('newGroupMsg').className='msg err';
+        const key='err_'+(res.error||'');
+        $('newGroupMsg').textContent=t[key]||res.error||'Error';
+        $('newGroupCreate').disabled=false;
+    }
+}
+
+/* ---- Members sheet ------------------------------------------- */
+async function openMembersSheet(){
+    if(!currentThread||currentThread.kind!=='group')return;
+    $('membersModal').classList.add('on');
+    $('membersList').innerHTML='<div class="empty-state"><span class="emoji">⏳</span></div>';
+    const r=await LpSocial.getGroupMembers(currentThread.room_id);
+    if(!r.ok){$('membersList').textContent='Error: '+r.error;return}
+    const myId=me.authUser.id;
+    $('membersList').innerHTML=r.rows.map(m=>{
+        const roleLabel=m.role==='owner'?t.roleOwner:(m.role==='admin'?t.roleAdmin:t.roleMember);
+        const crown=m.role==='owner'?'👑 ':(m.role==='admin'?'⭐ ':'');
+        const isSelf=m.user_id===myId;
+        const av=m.avatar_url
+            ? '<div class="row-avatar"><img src="'+escape(m.avatar_url)+'" referrerpolicy="no-referrer" alt="">'+(m.profile_complete?'<span class="verify-dot">✓</span>':'')+'</div>'
+            : '<div class="row-avatar">'+initials(m.nickname)+(m.profile_complete?'<span class="verify-dot">✓</span>':'')+'</div>';
+        return '<div class="row-item" style="cursor:default">'
+            +av
+            +'<div class="row-body"><div class="row-top"><span class="row-name">'+crown+escape(m.nickname)
+            +(isSelf?' <span style="opacity:.5;font-size:.75em;font-weight:500;font-style:italic">('+(lang==='ko'?'나':lang==='ja'?'自分':'me')+')</span>':'')
+            +'</span><span style="font-size:.7em;color:rgba(255,255,255,.35);letter-spacing:.02em">'+escape(roleLabel)+'</span></div></div>'
+            +'</div>';
+    }).join('');
+}
+async function leaveCurrentGroup(){
+    if(!currentThread||currentThread.kind!=='group')return;
+    if(!confirm(t.kickConfirm))return;
+    const res=await LpSocial.leaveGroupChat(currentThread.room_id);
+    if(res.ok){
+        $('membersModal').classList.remove('on');
+        closeThread();
+        await refresh();
+    }else{
+        alert('Error: '+res.error);
+    }
 }
 
 boot();
