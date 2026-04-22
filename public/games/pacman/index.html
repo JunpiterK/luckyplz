@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>팩맨 · Pac-Man | Lucky Please</title>
+    <meta name="description" content="고전 팩맨 게임. 유령을 피하며 점을 모두 먹어라! 파워 쿠키로 유령 역습 가능. 세계·친구 랭킹 경쟁.">
+    <meta name="keywords" content="팩맨, pacman, pac-man, 팩맨 게임, 미로 게임, maze game, online pacman">
+    <link rel="canonical" href="https://luckyplz.com/games/pacman/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="팩맨 · Pac-Man">
+    <meta property="og:description" content="고전 팩맨 게임. 유령 피하며 점 모두 먹기. 랭킹 경쟁.">
+    <meta property="og:url" content="https://luckyplz.com/games/pacman/">
+    <meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1776639849">
+    <link rel="alternate" hreflang="ko" href="https://luckyplz.com/games/pacman/?lang=ko">
+    <link rel="alternate" hreflang="en" href="https://luckyplz.com/games/pacman/">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0A0A1A">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1776639849">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+    <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+    <style>
+/* Mobile-portrait first. See memory/mobile_first_games.md */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+    --dark:#0A0A1A;--accent:#FFE66D;--danger:#FF3366;
+    --success:#00E676;--cyan:#00D9FF;--pac:#FFD500;--wall:#2a2a6e;
+    --muted:rgba(255,255,255,.55);--muted-2:rgba(255,255,255,.35);
+    --panel-br:rgba(255,255,255,.07);
+    --sb-bottom: env(safe-area-inset-bottom, 0px);
+}
+html,body{height:100%;overscroll-behavior:none}
+body{
+    font-family:'Noto Sans KR',sans-serif;background:var(--dark);color:#fff;
+    min-height:100dvh;overflow-x:hidden;letter-spacing:.01em;
+    background-image:radial-gradient(ellipse at 50% 20%,rgba(255,213,0,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%);
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;-webkit-user-select:none
+}
+
+.topbar{display:flex;align-items:center;gap:10px;padding:10px 14px;position:sticky;top:0;z-index:10;background:rgba(10,10,26,.88);backdrop-filter:blur(14px);border-bottom:1px solid var(--panel-br)}
+.topbar .home{text-decoration:none;color:rgba(255,255,255,.8);padding:7px 11px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);font-size:.78em;font-weight:700}
+.topbar h1{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1em;font-weight:900;margin:0;flex:1;text-align:center;background:linear-gradient(135deg,#FFD500,#FFE66D,#FF9A3C);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .slot{min-width:64px;text-align:right;display:flex;gap:6px;align-items:center;justify-content:flex-end}
+.topbar .auth-chip{padding:5px 10px;border-radius:999px;background:rgba(255,230,109,.1);border:1px solid rgba(255,230,109,.25);color:#FFE66D;font-size:.72em;font-weight:700;text-decoration:none;white-space:nowrap}
+.topbar .lb-btn{padding:6px 10px;border-radius:10px;background:rgba(255,213,0,.08);border:1px solid rgba(255,213,0,.3);color:#FFD500;font-size:.78em;font-weight:800;cursor:pointer;font-family:inherit}
+.topbar .lb-btn:active{background:rgba(255,213,0,.2)}
+
+.wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:10px 12px calc(var(--sb-bottom) + 14px);max-width:560px;margin:0 auto}
+
+.score-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.ss{background:linear-gradient(165deg,rgba(22,22,42,.55),rgba(12,12,28,.8));border:1px solid var(--panel-br);border-radius:14px;padding:10px 6px;text-align:center;min-height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ss .v{font-family:'Orbitron',sans-serif;font-size:1.6em;font-weight:900;line-height:1;color:#fff;font-variant-numeric:tabular-nums}
+.ss .v.best{color:#FFD500}
+.ss .l{font-size:.6em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin-top:4px;font-weight:800}
+
+/* Maze is 13 wide × 15 tall → aspect 13/15. Fit portrait-friendly. */
+.canvas-wrap{
+    position:relative;
+    background:#05050f;border:2px solid rgba(255,213,0,.22);border-radius:16px;
+    box-shadow:0 14px 34px -10px rgba(255,213,0,.18),inset 0 0 40px rgba(255,213,0,.04);
+    overflow:hidden;
+    aspect-ratio:13/15;
+    width:min(92vw, 390px);
+    touch-action:none
+}
+#pac-canvas{display:block;width:100%;height:100%}
+
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(5,5,15,.82);backdrop-filter:blur(6px);padding:18px;text-align:center;transition:opacity .18s;z-index:2}
+.overlay.hidden{opacity:0;pointer-events:none}
+.overlay h2{font-family:'Orbitron',sans-serif;font-size:1.6em;font-weight:900;margin-bottom:4px}
+.overlay h2.go{color:#FF6B8B}
+.overlay h2.win{color:#00E676}
+.overlay h2.play{background:linear-gradient(135deg,#FFD500,#FF9A3C);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.overlay p{color:rgba(255,255,255,.72);font-size:.86em;margin-bottom:12px;line-height:1.5;max-width:280px}
+.overlay .score-big{font-family:'Orbitron',sans-serif;font-size:2.6em;font-weight:900;color:#FFD500;margin:6px 0;line-height:1}
+.overlay .pb{font-size:.84em;color:#FFD500;margin-bottom:12px;font-weight:700;min-height:1.1em}
+.overlay .btn{padding:12px 26px;border-radius:14px;border:0;background:linear-gradient(135deg,#FFD500,#FF9A3C);color:#201800;font-family:'Orbitron',sans-serif;font-weight:900;letter-spacing:.08em;font-size:1em;cursor:pointer;box-shadow:0 10px 26px -6px rgba(255,213,0,.5)}
+.overlay .btn:active{transform:translateY(1px)}
+.overlay .kbd-hint{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.35);letter-spacing:.03em}
+.overlay .kbd-hint kbd{padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font-family:inherit;color:#fff}
+
+.dpad-wrap{width:100%;max-width:440px;padding:4px 0 0;display:flex;justify-content:center}
+.dpad{display:grid;grid-template-columns:repeat(3,72px);grid-template-rows:repeat(3,72px);gap:8px}
+.dpad button{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.12);color:rgba(255,255,255,.85);font-size:1.6em;border-radius:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent;transition:transform .08s,background .12s,border-color .12s,color .12s;font-family:inherit;touch-action:none}
+.dpad button:active{background:rgba(255,213,0,.18);border-color:rgba(255,213,0,.5);color:#FFD500;transform:scale(.92)}
+.dpad .dp-up   {grid-column:2;grid-row:1}
+.dpad .dp-left {grid-column:1;grid-row:2}
+.dpad .dp-pause{grid-column:2;grid-row:2;font-size:1.1em;opacity:.55}
+.dpad .dp-right{grid-column:3;grid-row:2}
+.dpad .dp-down {grid-column:2;grid-row:3}
+@media(hover:hover) and (pointer:fine){ .dpad-wrap{display:none} }
+
+.hint{font-size:.78em;color:var(--muted);line-height:1.5;padding:8px 12px;background:rgba(255,255,255,.02);border-radius:10px;border:1px solid rgba(255,255,255,.04);text-align:center;width:100%;max-width:440px}
+
+/* Bottom sheet */
+.sheet-backdrop{position:fixed;inset:0;z-index:50;background:rgba(5,5,15,.6);backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .22s}
+.sheet-backdrop.on{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;max-height:78vh;overflow:hidden;background:linear-gradient(180deg,rgba(22,22,42,.98),rgba(12,12,28,1));border-top-left-radius:22px;border-top-right-radius:22px;border-top:1px solid rgba(255,255,255,.08);transform:translateY(100%);transition:transform .26s cubic-bezier(.2,.8,.4,1);padding-bottom:calc(var(--sb-bottom) + 14px);display:flex;flex-direction:column}
+.sheet.on{transform:translateY(0)}
+.sheet .handle{width:42px;height:4px;border-radius:2px;background:rgba(255,255,255,.25);margin:10px auto}
+.sheet h3{font-family:'Orbitron',sans-serif;font-size:.92em;font-weight:900;text-align:center;letter-spacing:.06em;color:#FFD500;padding:2px 0 10px}
+.sheet-body{overflow-y:auto;padding:0 14px;flex:1;min-height:0}
+
+.lb-tabs{display:flex;gap:6px;background:rgba(10,10,26,.55);padding:4px;border-radius:12px;border:1px solid var(--panel-br);margin:0 14px 12px}
+.lb-tab{flex:1;padding:10px 8px;border:0;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;font-family:inherit;font-size:.82em;font-weight:700;letter-spacing:.04em;border-radius:8px}
+.lb-tab.active{background:rgba(255,213,0,.14);color:#FFD500}
+.lb-list{background:rgba(255,255,255,.02);border:1px solid var(--panel-br);border-radius:14px;overflow:hidden;margin-bottom:10px}
+.lb-row{display:grid;grid-template-columns:38px 1fr 88px;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--panel-br)}
+.lb-row:last-child{border-bottom:0}
+.lb-row.self{background:rgba(255,230,109,.06);border-left:3px solid #FFE66D;padding-left:9px}
+.lb-rnk{font-family:'Orbitron',sans-serif;font-weight:900;font-size:.92em;color:var(--muted-2);text-align:center}
+.lb-who{display:flex;align-items:center;gap:8px;min-width:0}
+.lb-av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#FF6B35,#FF6B8B);display:flex;align-items:center;justify-content:center;font-family:'Orbitron',sans-serif;font-weight:900;font-size:.74em;color:#fff;flex-shrink:0;overflow:hidden}
+.lb-av img{width:100%;height:100%;object-fit:cover}
+.lb-nick{font-weight:600;font-size:.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-score{font-family:'Orbitron',sans-serif;font-weight:800;font-size:.92em;color:#FFD500;text-align:right;font-variant-numeric:tabular-nums}
+.lb-empty{padding:28px 14px;text-align:center;color:var(--muted-2);font-size:.86em}
+
+@keyframes shake{0%,100%{transform:translate(0,0)}20%{transform:translate(-3px,2px)}40%{transform:translate(3px,-2px)}60%{transform:translate(-2px,-2px)}80%{transform:translate(2px,3px)}}
+.canvas-wrap.shake{animation:shake .4s ease}
+
+#adSlot{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px}
+
+@media(min-width:1024px){
+    .wrap{max-width:none;flex-direction:row;align-items:flex-start;justify-content:center;gap:28px;padding:22px 26px;min-height:calc(100dvh - 60px)}
+    .left-col{display:flex;flex-direction:column;gap:12px;align-items:center;flex:0 0 auto}
+    .canvas-wrap{width:min(48vw, 460px)}
+    .score-strip{max-width:460px;width:460px}
+    .hint{max-width:460px;width:460px}
+    .right-col{width:360px;flex-shrink:0}
+    .right-col .sheet{position:static;transform:none!important;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px;pointer-events:auto}
+    .right-col .sheet .handle{display:none}
+    .right-col .sheet-backdrop, .topbar .lb-btn{display:none}
+}
+    </style>
+    <script src="/vendor/supabase.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+    <a href="/" class="home">← 홈</a>
+    <h1>👻 팩맨</h1>
+    <div class="slot">
+        <button class="lb-btn" id="openLb" aria-label="랭킹 보기">🏆</button>
+        <span id="authSlot"></span>
+    </div>
+</header>
+
+<main class="wrap">
+    <div class="left-col">
+
+        <div class="score-strip">
+            <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
+            <div class="ss"><div class="v" id="livesNow">🐵</div><div class="l">LIFE</div></div>
+            <div class="ss"><div class="v best" id="bestScore">—</div><div class="l">BEST</div></div>
+        </div>
+
+        <div class="canvas-wrap" id="canvasWrap">
+            <canvas id="pac-canvas" width="260" height="300"></canvas>
+            <div class="overlay" id="overlay">
+                <h2 class="play">PLAY PAC-MAN</h2>
+                <p>점 모두 먹기. 유령 만나면 끝.<br>모서리 쿠키(🟡)를 먹으면 잠깐 유령을 역으로 잡을 수 있어요.</p>
+                <button class="btn" id="ovBtn">시작</button>
+                <div class="kbd-hint"><kbd>↑↓←→</kbd> 이동 · <kbd>Space</kbd> 일시정지</div>
+            </div>
+        </div>
+
+        <div class="dpad-wrap">
+            <div class="dpad">
+                <button class="dp-up"    data-dir="up">▲</button>
+                <button class="dp-left"  data-dir="left">◀</button>
+                <button class="dp-pause" data-dir="pause">⏸</button>
+                <button class="dp-right" data-dir="right">▶</button>
+                <button class="dp-down"  data-dir="down">▼</button>
+            </div>
+        </div>
+
+        <div class="hint">파워 쿠키 먹으면 유령 색 변함 → 잡으면 <b>+200</b>점. 모든 점 다 먹으면 <b>+500</b> 보너스.</div>
+
+        <div id="adSlot"><ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5370817769801923" data-ad-slot="3456789012" data-ad-format="auto" data-full-width-responsive="true"></ins></div>
+
+    </div>
+
+    <div class="right-col">
+        <div class="sheet-backdrop" id="sheetBack"></div>
+        <aside class="sheet" id="sheet" aria-label="랭킹">
+            <div class="handle"></div>
+            <h3>🏆 랭킹</h3>
+            <div class="lb-tabs">
+                <button class="lb-tab active" data-scope="world">월드</button>
+                <button class="lb-tab" data-scope="today">오늘</button>
+                <button class="lb-tab" data-scope="friends">친구</button>
+            </div>
+            <div class="sheet-body">
+                <div class="lb-list" id="lbList"><div class="lb-empty">불러오는 중…</div></div>
+            </div>
+        </aside>
+    </div>
+</main>
+
+<script src="/js/supabase-config.js?v=1776819959"></script>
+<script>
+const $=(id)=>document.getElementById(id);
+const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
+
+let me=null;
+
+async function initAuth(){
+    try{
+        const u=await getUser();
+        if(!u){ location.replace('/auth/?next='+encodeURIComponent(location.pathname)); return; }
+        me=u;
+        const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
+        const nick=prof.data?.nickname||'나';
+        $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
+        loadMyStats();
+    }catch(e){}
+}
+async function loadMyStats(){
+    if(!me)return;
+    try{
+        const {data,error}=await getSupabase().rpc('pacman_my_stats');
+        if(error||!data||!data.has_record)return;
+        $('bestScore').textContent=data.best_score;
+    }catch(_){}
+}
+
+/* =========================================================
+   Maze — 13 cols × 15 rows.
+   # wall  . dot  P power pellet  _ empty (tunnel / ghost spawn)
+   Symmetric, fully connected, 4 power pellets in the corners.
+   ========================================================= */
+const MAZE_STR = [
+    '#############',
+    '#...........#',
+    '#.###.#.###.#',
+    '#P...#.#...P#',
+    '#.##.#.#.##.#',
+    '#.....#.....#',
+    '#.###.#.###.#',
+    '#..._...._..#',   // ghost spawn row (_ = no dot, free path)
+    '#.###.#.###.#',
+    '#.....#.....#',
+    '#.##.#.#.##.#',
+    '#P...#.#...P#',
+    '#.###.#.###.#',
+    '#...........#',
+    '#############'
+];
+const COLS = MAZE_STR[0].length;
+const ROWS = MAZE_STR.length;
+const CELL = 20;                   /* internal pixel size per cell */
+const BW = COLS * CELL, BH = ROWS * CELL;
+
+const canvas = $('pac-canvas');
+canvas.width = BW; canvas.height = BH;
+const ctx = canvas.getContext('2d');
+
+/* Parse maze into walkable bitmap + dot set. */
+let wall = [];   /* wall[y][x] = true if wall */
+let dots, powers;
+let totalDotsInitial = 0;
+function loadMaze(){
+    wall = MAZE_STR.map(r => r.split('').map(c => c==='#'));
+    dots = new Set();
+    powers = new Set();
+    totalDotsInitial = 0;
+    for(let y=0;y<ROWS;y++) for(let x=0;x<COLS;x++){
+        const c = MAZE_STR[y][x];
+        if(c==='.'){ dots.add(x+','+y); totalDotsInitial++; }
+        else if(c==='P'){ powers.add(x+','+y); totalDotsInitial++; }
+    }
+}
+loadMaze();
+
+/* Game state */
+let player, ghosts, dir, nextDir;
+let score = 0, dotsEaten = 0, ghostsEaten = 0;
+let running = false, paused = false;
+let startedAt = 0, lastTick = 0;
+let playerTickMs = 130, ghostTickMs = 150;
+let vulnerableUntil = 0;
+let mouthPhase = 0;   /* 0..1 for Pac-Man mouth animation */
+
+function cellKey(x,y){ return x+','+y }
+function isWall(x,y){
+    if (x<0||x>=COLS||y<0||y>=ROWS) return true;
+    return wall[y][x];
+}
+function canMove(x,y,d){
+    const nx=x+d.x, ny=y+d.y;
+    return !isWall(nx,ny);
+}
+
+function resetGame(){
+    loadMaze();
+    player = {x:6, y:13, lastMoveAt:0};
+    ghosts = [
+        {x:5, y:7, dir:{x:-1,y:0}, color:'#FF3366', lastMoveAt:0, kind:'chaser'},
+        {x:7, y:7, dir:{x:1,y:0},  color:'#00D9FF', lastMoveAt:0, kind:'wander'}
+    ];
+    dir = {x:-1, y:0}; nextDir = null;
+    score = 0; dotsEaten = 0; ghostsEaten = 0;
+    playerTickMs = 130; ghostTickMs = 150;
+    vulnerableUntil = 0;
+    $('scoreNow').textContent='0';
+    $('livesNow').textContent='🐵';
+}
+
+function startGame(){
+    resetGame();
+    $('overlay').classList.add('hidden');
+    running = true; paused = false;
+    startedAt = performance.now(); lastTick = startedAt;
+    requestAnimationFrame(loop);
+}
+
+function gameOver(won){
+    running = false;
+    const duration = Math.round(performance.now()-startedAt);
+    const wrap = $('canvasWrap');
+    wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+    if(navigator.vibrate)try{navigator.vibrate(won?[20,20,20,20,60]:[30,20,60])}catch(_){}
+
+    const finalScore = score + (won ? 500 : 0);
+    $('overlay').innerHTML =
+        '<h2 class="'+(won?'win':'go')+'">'+(won?'🎉 CLEAR!':'GAME OVER')+'</h2>'
+      + '<div class="score-big">'+finalScore+'</div>'
+      + '<p>점 '+dotsEaten+'개 · 유령 '+ghostsEaten+'마리 · '+(duration/1000).toFixed(1)+'초'+(won?' · 🎁 +500':'')+'</p>'
+      + '<div class="pb" id="ovPbLine"></div>'
+      + '<button class="btn" id="ovBtn">다시하기</button>'
+      + '<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
+    $('overlay').classList.remove('hidden');
+    $('ovBtn').addEventListener('click', startGame);
+
+    (async()=>{
+        try{
+            const {data,error} = await getSupabase().rpc('record_pacman_attempt', {
+                p_dots_eaten: dotsEaten,
+                p_ghosts_eaten: ghostsEaten,
+                p_duration_ms: duration,
+                p_won: !!won
+            });
+            if(!error && data?.is_personal_best){$('ovPbLine').textContent='🏆 개인 신기록!';}
+            else if(error){
+                const m=(error.message||'').toLowerCase();
+                if(m.includes('rate_limited'))$('ovPbLine').textContent='⏸ 1시간 내 30회 한도 초과';
+            }
+        }catch(_){}
+        loadMyStats();
+        loadLeaderboard(currentScope);
+    })();
+
+    try{
+        const ad=$('adSlot');
+        if(ad.style.display==='none' || !ad.style.display){ ad.style.display='block'; (adsbygoogle=window.adsbygoogle||[]).push({}); }
+    }catch(_){}
+}
+
+/* Player movement — try nextDir first if it's valid, else continue dir. */
+function stepPlayer(now){
+    if (now - player.lastMoveAt < playerTickMs) return;
+    player.lastMoveAt = now;
+    if (nextDir && canMove(player.x, player.y, nextDir)){
+        dir = nextDir; nextDir = null;
+    }
+    if (!canMove(player.x, player.y, dir)) return;  /* stuck → wait */
+    player.x += dir.x; player.y += dir.y;
+    /* Tunnel wrap would go here if we had one; current maze has no tunnels */
+    const k = cellKey(player.x, player.y);
+    if (dots.has(k)){
+        dots.delete(k); dotsEaten++;
+        score += 10;
+    } else if (powers.has(k)){
+        powers.delete(k); dotsEaten++;
+        score += 50;
+        vulnerableUntil = now + 6000;
+        if(navigator.vibrate)try{navigator.vibrate([20,30,20])}catch(_){}
+    }
+    $('scoreNow').textContent = score;
+    /* Win check */
+    if (dots.size === 0 && powers.size === 0){
+        gameOver(true);
+        return;
+    }
+}
+
+/* Ghost AI — pick a direction at each step based on kind. */
+const DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
+function pickGhostDir(g, vulnerable){
+    const opposite = {x:-g.dir.x, y:-g.dir.y};
+    /* Candidate directions: not into a wall. At intersections prefer
+       not to reverse unless stuck. */
+    const options = DIRS.filter(d=>{
+        const nx=g.x+d.x, ny=g.y+d.y;
+        if (isWall(nx,ny)) return false;
+        if (d.x===opposite.x && d.y===opposite.y) return false;
+        return true;
+    });
+    const pool = options.length ? options : DIRS.filter(d => !isWall(g.x+d.x, g.y+d.y));
+    if (!pool.length) return g.dir;
+
+    if (g.kind === 'wander'){
+        return pool[Math.floor(Math.random()*pool.length)];
+    }
+    /* chaser: Manhattan distance toward (or away from, if vulnerable) player */
+    let best = pool[0], bestDist = vulnerable ? -Infinity : Infinity;
+    for (const d of pool){
+        const nx = g.x+d.x, ny = g.y+d.y;
+        const dist = Math.abs(nx-player.x) + Math.abs(ny-player.y);
+        if (vulnerable ? dist > bestDist : dist < bestDist){
+            bestDist = dist; best = d;
+        }
+    }
+    return best;
+}
+function stepGhost(g, now){
+    const tickMs = (now < vulnerableUntil) ? ghostTickMs*1.6 : ghostTickMs;
+    if (now - g.lastMoveAt < tickMs) return;
+    g.lastMoveAt = now;
+    g.dir = pickGhostDir(g, now < vulnerableUntil);
+    g.x += g.dir.x; g.y += g.dir.y;
+}
+
+/* Collision check after both player + ghosts have moved. */
+function checkCollisions(now){
+    const vulnerable = now < vulnerableUntil;
+    for (const g of ghosts){
+        if (g.x === player.x && g.y === player.y){
+            if (vulnerable){
+                ghostsEaten++;
+                score += 200;
+                $('scoreNow').textContent = score;
+                /* Respawn ghost at center */
+                g.x = 6; g.y = 7;
+                g.dir = {x:Math.random()<.5?1:-1, y:0};
+                if(navigator.vibrate)try{navigator.vibrate(18)}catch(_){}
+            } else {
+                gameOver(false);
+                return;
+            }
+        }
+    }
+}
+
+/* ========== Render ========== */
+function draw(now){
+    /* Background */
+    ctx.fillStyle = '#05050f';
+    ctx.fillRect(0,0,BW,BH);
+
+    /* Walls — rounded blue lines */
+    ctx.fillStyle = '#1a1a3e';
+    ctx.strokeStyle = '#2a2a6e';
+    ctx.lineWidth = 2;
+    for (let y=0;y<ROWS;y++) for (let x=0;x<COLS;x++){
+        if (wall[y][x]){
+            const px = x*CELL, py = y*CELL;
+            ctx.fillRect(px+1, py+1, CELL-2, CELL-2);
+        }
+    }
+
+    /* Dots */
+    ctx.fillStyle = '#ffe0a8';
+    for (const k of dots){
+        const [x,y] = k.split(',').map(Number);
+        ctx.beginPath();
+        ctx.arc(x*CELL+CELL/2, y*CELL+CELL/2, 1.8, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* Power pellets — pulsing */
+    const pulse = 1 + 0.2*Math.sin(now/140);
+    ctx.fillStyle = '#FFD500';
+    for (const k of powers){
+        const [x,y] = k.split(',').map(Number);
+        ctx.beginPath();
+        ctx.arc(x*CELL+CELL/2, y*CELL+CELL/2, 4*pulse, 0, Math.PI*2);
+        ctx.fill();
+    }
+
+    /* Player — Pac-Man arc */
+    mouthPhase = (mouthPhase + 0.08) % (Math.PI*2);
+    const mouth = 0.25 + 0.22*Math.abs(Math.sin(mouthPhase));  /* radians */
+    const angle = Math.atan2(dir.y, dir.x);
+    const pcx = player.x*CELL + CELL/2;
+    const pcy = player.y*CELL + CELL/2;
+    ctx.fillStyle = '#FFD500';
+    ctx.beginPath();
+    ctx.moveTo(pcx, pcy);
+    ctx.arc(pcx, pcy, CELL*0.45, angle+mouth, angle-mouth+Math.PI*2);
+    ctx.closePath();
+    ctx.fill();
+
+    /* Ghosts — rounded body + wobbly bottom */
+    const vulnerable = now < vulnerableUntil;
+    const vulnRemain = Math.max(0, vulnerableUntil-now);
+    const blinking = vulnerable && vulnRemain < 1500 && Math.floor(now/180)%2===0;
+    for (const g of ghosts){
+        const gcx = g.x*CELL + CELL/2;
+        const gcy = g.y*CELL + CELL/2;
+        const color = vulnerable
+            ? (blinking ? '#fff' : '#2a2ab8')
+            : g.color;
+        ctx.fillStyle = color;
+        const rad = CELL*0.45;
+        ctx.beginPath();
+        /* Head: half circle */
+        ctx.arc(gcx, gcy-2, rad, Math.PI, 0);
+        /* Body side */
+        ctx.lineTo(gcx+rad, gcy+rad-2);
+        /* Wobbly bottom: 3 bumps */
+        const bump = 3;
+        for (let i=0;i<bump;i++){
+            const t = i/(bump);
+            const bx = gcx+rad - (rad*2)*(i+0.5)/bump;
+            const by = gcy+rad-2 - (Math.sin((now/120)+i)*1.5);
+            ctx.quadraticCurveTo(bx + rad/bump/2, gcy+rad+3, bx, by);
+        }
+        ctx.lineTo(gcx-rad, gcy+rad-2);
+        ctx.closePath();
+        ctx.fill();
+        /* Eyes */
+        if (!vulnerable){
+            ctx.fillStyle='#fff';
+            ctx.beginPath(); ctx.arc(gcx-rad*0.35, gcy-2, 2.6, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(gcx+rad*0.25, gcy-2, 2.6, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle='#001144';
+            ctx.beginPath(); ctx.arc(gcx-rad*0.35 + g.dir.x*1.1, gcy-2 + g.dir.y*1.1, 1.3, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(gcx+rad*0.25 + g.dir.x*1.1, gcy-2 + g.dir.y*1.1, 1.3, 0, Math.PI*2); ctx.fill();
+        } else {
+            /* Vulnerable eyes: tiny white dots */
+            ctx.fillStyle=blinking?'#000':'#fff';
+            ctx.beginPath(); ctx.arc(gcx-rad*0.3, gcy-2, 1.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); ctx.arc(gcx+rad*0.2, gcy-2, 1.5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+}
+
+function loop(now){
+    if (!running) return;
+    if (!paused){
+        stepPlayer(now);
+        for (const g of ghosts) stepGhost(g, now);
+        checkCollisions(now);
+        if (!running){ draw(now); return; }
+    }
+    draw(now);
+    requestAnimationFrame(loop);
+}
+
+/* ========== Input ========== */
+function queueDir(x, y){
+    nextDir = {x, y};
+}
+document.addEventListener('keydown',(e)=>{
+    const k=e.key;
+    if (k==='ArrowUp'||k==='w'||k==='W') queueDir(0,-1);
+    else if (k==='ArrowDown'||k==='s'||k==='S') queueDir(0,1);
+    else if (k==='ArrowLeft'||k==='a'||k==='A') queueDir(-1,0);
+    else if (k==='ArrowRight'||k==='d'||k==='D') queueDir(1,0);
+    else if (k===' '){ if(running) paused=!paused; e.preventDefault(); }
+    else if (k==='Enter'){ if(!running) startGame(); }
+    else return;
+    if (k.startsWith('Arrow')) e.preventDefault();
+});
+document.querySelectorAll('.dpad button').forEach(b=>{
+    const fire=(e)=>{
+        e.preventDefault();
+        const d=b.dataset.dir;
+        if(d==='up') queueDir(0,-1);
+        else if(d==='down') queueDir(0,1);
+        else if(d==='left') queueDir(-1,0);
+        else if(d==='right') queueDir(1,0);
+        else if(d==='pause'){ if(running) paused=!paused; }
+    };
+    b.addEventListener('click', fire);
+    b.addEventListener('touchstart', fire, {passive:false});
+});
+let touchStart=null;
+const wrap=$('canvasWrap');
+wrap.addEventListener('touchstart',(e)=>{
+    const t=e.touches[0];
+    touchStart={x:t.clientX,y:t.clientY};
+},{passive:true});
+wrap.addEventListener('touchend',(e)=>{
+    if(!touchStart) return;
+    const t=e.changedTouches[0];
+    const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y;
+    const ax=Math.abs(dx), ay=Math.abs(dy);
+    touchStart=null;
+    if(Math.max(ax,ay)<20) return;
+    if(ax>ay) queueDir(dx>0?1:-1, 0);
+    else      queueDir(0, dy>0?1:-1);
+});
+
+/* ========== Bottom sheet + Leaderboards ========== */
+const sheet=$('sheet'), sheetBack=$('sheetBack');
+function openSheet(){ sheet.classList.add('on'); sheetBack.classList.add('on'); loadLeaderboard(currentScope); }
+function closeSheet(){ sheet.classList.remove('on'); sheetBack.classList.remove('on'); }
+$('openLb').addEventListener('click', openSheet);
+sheetBack.addEventListener('click', closeSheet);
+
+let currentScope='world';
+document.querySelectorAll('.lb-tab').forEach(b=>{
+    b.addEventListener('click', ()=>{
+        document.querySelectorAll('.lb-tab').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        currentScope=b.dataset.scope;
+        loadLeaderboard(currentScope);
+    });
+});
+async function loadLeaderboard(scope){
+    $('lbList').innerHTML='<div class="lb-empty">불러오는 중…</div>';
+    try{
+        const {data,error}=await getSupabase().rpc('pacman_leaderboard',{p_scope:scope,p_limit:50});
+        if(error||!data){ $('lbList').innerHTML='<div class="lb-empty">기록 없음</div>'; return; }
+        if(!data.length){ $('lbList').innerHTML='<div class="lb-empty">첫 기록의 주인공이 되세요!</div>'; return; }
+        $('lbList').innerHTML=data.map(row=>{
+            const isSelf=me && row.user_id===me.id;
+            const rnkCls=row.rnk===1?' gold':row.rnk===2?' silver':row.rnk===3?' bronze':'';
+            const av=row.avatar_url
+                ? '<div class="lb-av"><img src="'+esc(row.avatar_url)+'" referrerpolicy="no-referrer" alt=""></div>'
+                : '<div class="lb-av">'+esc(initials(row.nickname))+'</div>';
+            return '<div class="lb-row'+(isSelf?' self':'')+'">'
+                 +'<div class="lb-rnk'+rnkCls+'">'+(row.rnk<=3?(['🥇','🥈','🥉'][row.rnk-1]):('#'+row.rnk))+'</div>'
+                 +'<div class="lb-who">'+av+'<div class="lb-nick">'+esc(row.nickname||'?')+'</div></div>'
+                 +'<div class="lb-score">'+row.best_score+'</div>'
+                 +'</div>';
+        }).join('');
+    }catch(_){$('lbList').innerHTML='<div class="lb-empty">불러오기 실패</div>';}
+}
+
+/* ========== Boot ========== */
+$('ovBtn').addEventListener('click', startGame);
+(async()=>{
+    await initAuth();
+    if (me){
+        resetGame();
+        draw(performance.now());
+        if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
+    }
+})();
+
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+<script src="/js/siteFooter.js?v=1776819959" defer></script>
+</body>
+</html>
