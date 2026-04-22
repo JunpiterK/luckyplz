@@ -166,15 +166,16 @@ body{
             <canvas id="burger-canvas"></canvas>
             <div class="overlay" id="overlay">
                 <h2 class="play">버거 셰프</h2>
-                <p>떨어지는 재료를 <b>샘플 순서</b>대로 접시에 쌓아요.<br>
-                   화면을 좌우로 <b>드래그</b>하거나 ← → 키로 접시를 움직여요.<br>
-                   틀린 재료를 잡으면 ❤️ 차감!</p>
+                <p>왼쪽 샘플 버거와 <b>같은 순서</b>로<br>
+                   아래 5개 재료 접시를 <b>탭</b>해요.<br>
+                   <b>시간 안에</b> 완성하면 레벨 업!<br>
+                   틀리면 <b>시간 -2초</b>.</p>
                 <button class="btn" id="ovBtn">시작</button>
-                <div class="kbd-hint"><kbd>←→</kbd> 이동 · <kbd>Space</kbd> 일시정지</div>
+                <div class="kbd-hint"><kbd>탭</kbd> 또는 <kbd>1</kbd>-<kbd>5</kbd> · <kbd>Space</kbd> 일시정지</div>
             </div>
         </div>
 
-        <div class="hint">상단 샘플과 <b>같은 순서</b>로 쌓으면 레벨 업! 빠져나간 재료는 괜찮지만 <b>잘못 잡으면 ❤️</b>가 하나 줄어요.</div>
+        <div class="hint">샘플과 <b>동일한 순서</b>로 재료 접시 5개를 탭! 완성할수록 시간이 짧아지고 재료도 길어져요.</div>
 
         <div id="adSlot"><ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5370817769801923" data-ad-slot="3456789012" data-ad-format="auto" data-full-width-responsive="true"></ins></div>
 
@@ -197,7 +198,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1776834031"></script>
+<script src="/js/supabase-config.js?v=1776835440"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -451,58 +452,63 @@ const INGREDIENTS = {
         ctx.fill();
     }}
 };
-const INGREDIENT_IDS = Object.keys(INGREDIENTS);
-const FILLER_IDS = ['patty','cheese','lettuce','tomato','bacon','onion','egg'];
 
 /* ========================================================================
-   Target generation — the sample burger the player must replicate this
-   level. Always bookended by a bottom bun (stacked first) and a top bun
-   (stacked last); middle fillings chosen at random from the filler pool.
-   Length grows with level (3 → 7) up to a hard cap.
+   Sample generation — the target burger's middle fillings (a bottom +
+   top bun are drawn automatically around these in both panels). Each
+   filling is picked from the 5 TAP_IDS with repeats allowed so a L3
+   sample can be "patty / cheese / patty" (a double-cheeseburger). We
+   avoid 3-in-a-row to keep patterns interesting. Length grows from 3
+   at L1 to 7 at L9+, capped so the stack always fits the panel height.
    ======================================================================== */
-function generateTarget(lvl){
-    const totalLen = Math.min(3 + Math.floor(lvl/2), 7);
-    const middles  = totalLen - 2;
-    const pat = ['bunBottom'];
-    for (let i=0; i<middles; i++){
-        pat.push(FILLER_IDS[Math.floor(Math.random()*FILLER_IDS.length)]);
+const TAP_IDS = ['lettuce','patty','cheese','onion','tomato'];
+function generateSample(lvl){
+    const len = Math.min(3 + Math.floor(lvl/2), 7);
+    const out = [];
+    for (let i=0; i<len; i++){
+        let id;
+        do { id = TAP_IDS[Math.floor(Math.random()*TAP_IDS.length)]; }
+        while (out.length >= 2 && out[out.length-1] === id && out[out.length-2] === id);
+        out.push(id);
     }
-    pat.push('bunTop');
-    return pat;
+    return out;
+}
+function timeForLevel(lvl){
+    /* L1 = 14 s, each level shaves 0.6 s; floor at 5 s. Because samples
+       also get longer, at L10+ even a perfect player is under real
+       pressure — that's the "순발력" (quick-reaction) feeling. */
+    return Math.max(5, 14 - (lvl-1) * 0.6);
 }
 
 /* ========================================================================
    Game state
    ======================================================================== */
-let level, score, lives;
-let target, stackIdx;
-let fallers;            /* {id, x, y, vy, rot, vrot} */
-let plate;              /* {x, w} — centre-x and width in logical px */
-let nextSpawnAt;
+let level, score;
+let sample;             /* filling IDs only (no buns) */
+let progress;           /* how many of the sample have been tapped correctly */
+let timeLeft, timeLevelBudget;
+let combo, maxCombo;
 let running, paused;
 let startedAt, lastTick;
 let ingredientsCaught, burgersCompleted;
-let shakeUntil, flashUntil, popUntil, popText;
-let keyLeft, keyRight;
-let dragPointerId;
+let popUntil, popText, popKind;
+let shakeUntil, flashUntil;
+let tapFlashes;         /* [{idx, bornAt, kind:'good'|'bad'}] */
+let stackPops;          /* [{layer, bornAt}] — entry-scale anim on WIP layer */
 
 function resetGame(){
-    level = 1; score = 0; lives = 3;
-    target = generateTarget(level);
-    stackIdx = 0;
-    fallers = [];
-    plate = { x: W/2, w: 96 };
-    nextSpawnAt = 0;
-    ingredientsCaught = 0;
-    burgersCompleted = 0;
-    shakeUntil = 0;
-    flashUntil = 0;
-    popUntil = 0;
-    popText = '';
-    keyLeft = false; keyRight = false;
-    dragPointerId = null;
-    $('scoreNow').textContent='0';
-    $('levelNow').textContent='1';
+    level = 1; score = 0;
+    sample = generateSample(level);
+    progress = 0;
+    timeLevelBudget = timeForLevel(level);
+    timeLeft = timeLevelBudget;
+    combo = 0; maxCombo = 0;
+    ingredientsCaught = 0; burgersCompleted = 0;
+    popUntil = 0; popText = ''; popKind = '';
+    shakeUntil = 0; flashUntil = 0;
+    tapFlashes = []; stackPops = [];
+    $('scoreNow').textContent = '0';
+    $('levelNow').textContent = '1';
 }
 
 function startGame(){
@@ -511,7 +517,6 @@ function startGame(){
     $('overlay').classList.add('hidden');
     running = true; paused = false;
     startedAt = performance.now(); lastTick = startedAt;
-    nextSpawnAt = startedAt + 600;
     requestAnimationFrame(loop);
 }
 
@@ -523,10 +528,10 @@ function gameOver(){
     if(navigator.vibrate) try{ navigator.vibrate([30,20,60]); }catch(_){}
 
     $('overlay').innerHTML =
-        '<h2 class="go">GAME OVER</h2>'
+        '<h2 class="go">TIME OUT</h2>'
       + '<div class="score-big">'+score+'</div>'
-      + '<p>레벨 '+level+' 도달 · 버거 '+burgersCompleted+'개 완성 · 재료 '+ingredientsCaught+'개<br>'
-      + '소요 '+(duration/1000).toFixed(1)+'초</p>'
+      + '<p>레벨 '+level+' 도달 · 버거 '+burgersCompleted+'개 완성 · 탭 '+ingredientsCaught+'회<br>'
+      + '최고 콤보 '+maxCombo+' · 소요 '+(duration/1000).toFixed(1)+'초</p>'
       + '<div class="pb" id="ovPbLine"></div>'
       + '<button class="btn" id="ovBtn">다시하기</button>'
       + '<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
@@ -561,282 +566,389 @@ function gameOver(){
 }
 
 /* ========================================================================
-   Spawning — one ingredient every (1100 - 60*lvl) ms give-or-take. 55 %
-   chance of spawning the NEXT-NEEDED ingredient (so the game rewards
-   attention rather than luck); the other 45 % are random distractors.
-   If there's no correct-ingredient on screen we always spawn correct so
-   the player is never stuck waiting.
+   Layout constants — derived from W × H (360 × 540 logical). All coords
+   below are relative to that logical space; fitCanvas takes care of DPR.
    ======================================================================== */
-function spawnFaller(now){
-    const needed = target[stackIdx];
-    const correctOnScreen = fallers.some(f => f.id === needed);
-    const pickCorrect = !correctOnScreen || Math.random() < 0.55;
-    let id;
-    if (pickCorrect){
-        id = needed;
-    } else {
-        const wrongs = INGREDIENT_IDS.filter(x => x !== needed);
-        id = wrongs[Math.floor(Math.random()*wrongs.length)];
-    }
-    const size = 44;
-    fallers.push({
-        id,
-        x: size/2 + 8 + Math.random() * (W - size - 16),
-        y: -size,
-        vy: 110 + level * 16,
-        rot: (Math.random() - 0.5) * 0.25,
-        vrot: (Math.random() - 0.5) * 1.8,
-        size
-    });
-}
+const HUD_H = 40;
+const PANEL_Y = HUD_H + 14;
+const PANEL_H = 230;
+const TIMEBAR_Y = PANEL_Y + PANEL_H + 10;
+const TIMEBAR_H = 14;
+const PLATE_ROW_Y = TIMEBAR_Y + TIMEBAR_H + 14;
+const PLATE_ROW_H = 114;
+const PLATE_W = 60;
+const PLATE_GAP = 6;
+const PLATE_ROW_TOTAL_W = 5*PLATE_W + 4*PLATE_GAP;
+const PLATE_ROW_X0 = (W - PLATE_ROW_TOTAL_W) / 2;
 
-function maybeSpawn(now){
-    if (now >= nextSpawnAt){
-        spawnFaller(now);
-        const baseMs = 1100 - level * 55;
-        const interval = Math.max(420, baseMs) + Math.random() * 280;
-        nextSpawnAt = now + interval;
+/* ========================================================================
+   Update — pure time decay; all real game state advances inside onTap().
+   ======================================================================== */
+function update(now, dt){
+    timeLeft -= dt;
+    if (timeLeft <= 0){
+        timeLeft = 0;
+        gameOver();
+    }
+    /* Prune stale flash/pop records so the lists don't grow unbounded. */
+    if (tapFlashes.length){
+        tapFlashes = tapFlashes.filter(f => now - f.bornAt < 500);
+    }
+    if (stackPops.length > 16){
+        stackPops = stackPops.filter(s => now - s.bornAt < 400);
     }
 }
 
 /* ========================================================================
-   Update — plate physics, falling, catch detection.
-   The "plate catch zone" is a small rectangle just above the plate disk.
-   When an ingredient's centre enters it, the ingredient is caught.
+   Tap handler — maps a canvas-local (x,y) to an ingredient plate index,
+   or ignores the tap if it landed outside the plate row. Correct tap
+   advances progress + combo; wrong tap resets combo and docks 2 s.
    ======================================================================== */
-const PLATE_Y = H - 54;        /* centre-y of the plate disk */
-const CATCH_Y = PLATE_Y - 14;  /* y at which ingredients can be caught */
-
-function update(now, dt){
-    /* Plate keyboard motion */
-    const plateSpeed = 360;
-    if (keyLeft  && !keyRight) plate.x -= plateSpeed * dt;
-    if (keyRight && !keyLeft)  plate.x += plateSpeed * dt;
-    plate.x = Math.max(plate.w/2, Math.min(W - plate.w/2, plate.x));
-
-    maybeSpawn(now);
-
-    /* Falling ingredients */
-    for (let i = fallers.length - 1; i >= 0; i--){
-        const f = fallers[i];
-        f.y += f.vy * dt;
-        f.rot += f.vrot * dt;
-
-        /* Catch window: ingredient centre crossed CATCH_Y + horizontal
-           overlap with the plate (a bit of grace: plate-width + 10 px). */
-        if (f.y >= CATCH_Y && Math.abs(f.x - plate.x) < plate.w/2 + 10){
-            handleCatch(f, now);
-            fallers.splice(i, 1);
-            continue;
-        }
-        if (f.y > H + 40){
-            fallers.splice(i, 1);
-        }
+function plateHitIndex(x, y){
+    const top = PLATE_ROW_Y - 4;
+    const bot = PLATE_ROW_Y + PLATE_ROW_H + 4;
+    if (y < top || y > bot) return -1;
+    const rel = x - PLATE_ROW_X0;
+    for (let i=0; i<5; i++){
+        const x0 = i*(PLATE_W + PLATE_GAP);
+        if (rel >= x0 - 4 && rel <= x0 + PLATE_W + 4) return i;
     }
+    return -1;
 }
 
-function handleCatch(f, now){
-    const expected = target[stackIdx];
-    if (f.id === expected){
+function onTap(x, y){
+    if (!running || paused) return;
+    const idx = plateHitIndex(x, y);
+    if (idx < 0) return;
+    const id = TAP_IDS[idx];
+    const now = performance.now();
+    const expected = sample[progress];
+
+    if (id === expected){
+        progress++;
         ingredientsCaught++;
-        stackIdx++;
-        score += 10 * level;
-        popText = '+' + (10*level);
-        popUntil = now + 500;
-        if (stackIdx >= target.length){
+        combo++;
+        if (combo > maxCombo) maxCombo = combo;
+        const gain = Math.round(10 * level * (1 + combo*0.05));
+        score += gain;
+        tapFlashes.push({ idx, bornAt: now, kind:'good' });
+        stackPops.push({ layer: progress-1, bornAt: now });
+        popText = combo >= 2 ? (combo + ' COMBO') : ('+' + gain);
+        popKind = 'good';
+        popUntil = now + 550;
+        if(navigator.vibrate) try{ navigator.vibrate(8); }catch(_){}
+
+        if (progress >= sample.length){
+            /* Burger done — level up + small time bonus, capped at the
+               fresh-level budget so we don't accumulate a huge reserve. */
             burgersCompleted++;
-            const bonus = 50 + level * 10;
+            const bonus = 100 * level + Math.floor(timeLeft) * 5;
             score += bonus;
-            flashUntil = now + 500;
-            popText = '🎉 +' + bonus;
+            popText = 'COMPLETE +' + bonus;
+            popKind = 'complete';
+            popUntil = now + 950;
+            flashUntil = now + 550;
             level++;
-            target = generateTarget(level);
-            stackIdx = 0;
-            if(navigator.vibrate) try{ navigator.vibrate([15,25,15,25,60]); }catch(_){}
-        } else {
-            if(navigator.vibrate) try{ navigator.vibrate(8); }catch(_){}
+            sample = generateSample(level);
+            progress = 0;
+            timeLevelBudget = timeForLevel(level);
+            timeLeft = Math.min(timeLevelBudget, timeLeft + 3);
+            stackPops = [];
+            if(navigator.vibrate) try{ navigator.vibrate([20,40,20,40,100]); }catch(_){}
         }
         $('scoreNow').textContent = score;
         $('levelNow').textContent = level;
     } else {
-        lives--;
+        combo = 0;
+        timeLeft = Math.max(0, timeLeft - 2);
+        tapFlashes.push({ idx, bornAt: now, kind:'bad' });
+        popText = '-2초';
+        popKind = 'bad';
+        popUntil = now + 650;
         shakeUntil = now + 320;
-        popText = '-❤';
-        popUntil = now + 600;
         const wrap = $('canvasWrap');
         wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
         setTimeout(()=>wrap.classList.remove('shake'), 420);
         if(navigator.vibrate) try{ navigator.vibrate([40,30,90]); }catch(_){}
-        if (lives <= 0){
-            gameOver();
-            return;
-        }
+        if (timeLeft <= 0) gameOver();
     }
 }
 
 /* ========================================================================
    Render
    ======================================================================== */
-const TARGET_STRIP_H = 52;
-
 function draw(now){
-    /* Background */
-    ctx.fillStyle = '#14092A';
-    ctx.fillRect(0,0,W,H);
-    /* Decorative radial gradient floor-glow where the plate sits */
-    const g = ctx.createRadialGradient(W/2, H-20, 20, W/2, H-20, W*0.7);
-    g.addColorStop(0, 'rgba(255,183,77,.15)');
+    /* Base background + warm floor-glow to echo the image's "cartoon
+       diner" feel without dropping the dark-theme consistency. */
+    ctx.fillStyle = '#1c1230';
+    ctx.fillRect(0, 0, W, H);
+    const g = ctx.createRadialGradient(W/2, H-40, 30, W/2, H-40, W*0.85);
+    g.addColorStop(0, 'rgba(255,183,77,.14)');
     g.addColorStop(1, 'rgba(255,183,77,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    /* Play-area separator line */
-    ctx.strokeStyle = 'rgba(255,255,255,.06)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, TARGET_STRIP_H);
-    ctx.lineTo(W, TARGET_STRIP_H);
-    ctx.stroke();
-
-    drawTargetStrip(now);
-    drawFallers(now);
-    drawPlate(now);
     drawHUD(now);
+    drawBurgerPanels(now);
+    drawTimeBar(now);
+    drawIngredientRow(now);
+    drawPops(now);
 
-    /* Pop text overlay */
-    if (now < popUntil && popText){
-        const rem = popUntil - now;
-        const a = Math.min(1, rem/200);
-        ctx.globalAlpha = a;
-        ctx.fillStyle = popText.includes('❤') ? '#FF6B8B' : '#FFE066';
-        ctx.font = '700 20px Orbitron, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(popText, plate.x, PLATE_Y - 30 - (500-rem)*0.06);
-        ctx.globalAlpha = 1;
-        ctx.textAlign = 'start';
-    }
-    /* Level-up green flash */
     if (now < flashUntil){
         const rem = flashUntil - now;
-        ctx.fillStyle = 'rgba(0,230,118,'+ (rem/1200) +')';
-        ctx.fillRect(0,0,W,H);
+        ctx.fillStyle = 'rgba(0,230,118,'+ (rem/1500) +')';
+        ctx.fillRect(0, 0, W, H);
     }
 }
 
-function drawTargetStrip(now){
-    /* Strip background */
-    ctx.fillStyle = 'rgba(255,255,255,.04)';
-    ctx.fillRect(0, 0, W, TARGET_STRIP_H);
+function drawHUD(now){
+    /* Left: level badge · centre: score · right: seconds remaining */
+    ctx.fillStyle = '#FFE66D';
+    ctx.font = '900 15px Orbitron, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('LV ' + level, 14, HUD_H/2);
 
-    const n = target.length;
-    const pad = 10;
-    const slot = (W - pad*2) / n;
-    for (let i=0; i<n; i++){
-        const cx = pad + slot*i + slot/2;
-        const cy = TARGET_STRIP_H/2;
-        const iw = Math.min(slot - 8, 38);
-        const ih = Math.min(28, iw*0.7);
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 17px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(score, W/2, HUD_H/2);
 
-        /* Status: caught / current / upcoming */
-        const caught = i < stackIdx;
-        const current = i === stackIdx;
+    const critical = timeLeft < 3;
+    ctx.fillStyle = critical ? '#FF6B8B' : '#FFB74D';
+    ctx.font = '900 17px Orbitron, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText((Math.max(0, timeLeft)).toFixed(1) + 's', W-14, HUD_H/2);
 
-        if (current){
-            /* Glowing ring */
-            const pulse = 1 + 0.15*Math.sin(now/180);
-            ctx.strokeStyle = 'rgba(255,230,102,.85)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, (iw/2 + 6)*pulse, (ih/2 + 6)*pulse, 0, 0, Math.PI*2);
-            ctx.stroke();
-        }
-        ctx.globalAlpha = caught ? 0.35 : 1;
-        INGREDIENTS[target[i]].draw(cx, cy, iw, ih);
-        ctx.globalAlpha = 1;
-        if (caught){
-            /* Check mark */
-            ctx.strokeStyle = '#00E676';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(cx-5, cy+1);
-            ctx.lineTo(cx-1, cy+5);
-            ctx.lineTo(cx+6, cy-4);
-            ctx.stroke();
-        }
-    }
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
 }
 
-function drawFallers(now){
-    for (const f of fallers){
-        ctx.save();
-        ctx.translate(f.x, f.y);
-        ctx.rotate(f.rot);
-        /* Drop shadow */
-        ctx.fillStyle = 'rgba(0,0,0,.35)';
-        ctx.beginPath();
-        ctx.ellipse(0, f.size*0.55, f.size*0.38, f.size*0.14, 0, 0, Math.PI*2);
-        ctx.fill();
-        INGREDIENTS[f.id].draw(0, 0, f.size, f.size*0.6);
-        ctx.restore();
-    }
-}
+function drawBurgerPanels(now){
+    const panelW = 150;
+    const gap = 16;
+    const leftX  = (W/2) - panelW - gap/2;
+    const rightX = (W/2) + gap/2;
 
-function drawPlate(now){
-    /* Stack on plate — caught ingredients pile bottom-up. */
-    const stackBaseY = PLATE_Y - 6;
-    const itemH = 16;
-    for (let i = 0; i < stackIdx; i++){
-        const iy = stackBaseY - i*itemH - itemH/2;
-        INGREDIENTS[target[i]].draw(plate.x, iy, plate.w*0.82, itemH-1);
-    }
+    drawBurgerIn(now, leftX,  PANEL_Y, panelW, PANEL_H, sample, sample.length, 'sample');
+    drawBurgerIn(now, rightX, PANEL_Y, panelW, PANEL_H, sample.slice(0, progress), progress, 'wip');
 
-    /* Plate (oval) */
-    const plateW = plate.w, plateH = 18;
-    /* Shadow below plate */
-    ctx.fillStyle = 'rgba(0,0,0,.35)';
+    /* Labels below each plate. 내 버거 turns green on completion. */
+    ctx.textAlign = 'center';
+    ctx.font = '700 11px "Noto Sans KR", sans-serif';
+    ctx.fillStyle = 'rgba(255,230,109,.75)';
+    ctx.fillText('🎯 목표', leftX + panelW/2, PANEL_Y + PANEL_H - 2);
+    ctx.fillStyle = progress >= sample.length ? '#00E676' : 'rgba(255,183,77,.8)';
+    ctx.fillText('내 버거', rightX + panelW/2, PANEL_Y + PANEL_H - 2);
+
+    /* Thin dashed divider down the middle between the two panels. */
+    ctx.strokeStyle = 'rgba(255,255,255,.10)';
+    ctx.setLineDash([4, 5]);
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.ellipse(plate.x, PLATE_Y + 14, plateW*0.55, 5, 0, 0, Math.PI*2);
+    ctx.moveTo(W/2, PANEL_Y + 20);
+    ctx.lineTo(W/2, PANEL_Y + PANEL_H - 28);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.textAlign = 'start';
+}
+
+function drawBurgerIn(now, px, py, pw, ph, fillings, filledCount, kind){
+    const plateCx = px + pw/2;
+    const plateCy = py + ph - 24;
+    const plateW = pw - 28;
+    const plateH = 16;
+
+    /* Plate shadow */
+    ctx.fillStyle = 'rgba(0,0,0,.32)';
+    ctx.beginPath();
+    ctx.ellipse(plateCx, plateCy + 9, plateW*0.55, 5, 0, 0, Math.PI*2);
     ctx.fill();
-    /* Plate base */
-    const pg = ctx.createLinearGradient(0, PLATE_Y-10, 0, PLATE_Y+10);
+
+    /* Plate disk */
+    const pg = ctx.createLinearGradient(0, plateCy-9, 0, plateCy+9);
     pg.addColorStop(0, '#FFFFFF');
     pg.addColorStop(1, '#D6DAE6');
     ctx.fillStyle = pg;
     ctx.beginPath();
-    ctx.ellipse(plate.x, PLATE_Y, plateW/2, plateH/2, 0, 0, Math.PI*2);
+    ctx.ellipse(plateCx, plateCy, plateW/2, plateH/2, 0, 0, Math.PI*2);
     ctx.fill();
-    /* Plate rim */
-    ctx.strokeStyle = 'rgba(0,0,0,.15)';
-    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(0,0,0,.14)';
+    ctx.lineWidth = 1.2;
     ctx.stroke();
-    /* Inner highlight */
-    ctx.fillStyle = 'rgba(255,255,255,.5)';
-    ctx.beginPath();
-    ctx.ellipse(plate.x - plateW*0.2, PLATE_Y - 2, plateW*0.12, 2, 0, 0, Math.PI*2);
-    ctx.fill();
-}
 
-function drawHUD(now){
-    /* Hearts top-right of canvas */
-    const hr = 12;
-    for (let i=0;i<3;i++){
-        const x = W - 14 - i*22;
-        const y = 14 + TARGET_STRIP_H + 8;
-        const alive = i < lives;
-        drawHeart(x, y, hr, alive ? '#FF4B6B' : 'rgba(255,255,255,.15)');
+    /* Stack: bottom bun always visible + filling layers from 0..N-1 + top
+       bun (shown immediately in the sample panel; only shown in the WIP
+       panel once it's been fully assembled). */
+    const itemH = 16;
+    const innerW = Math.min(plateW * 0.9, 118);
+    const stackBaseY = plateCy - 8;
+
+    INGREDIENTS.bunBottom.draw(plateCx, stackBaseY - itemH/2, innerW, itemH);
+
+    for (let i = 0; i < filledCount; i++){
+        const iy = stackBaseY - (i+1)*itemH - itemH/2;
+        let scale = 1;
+        if (kind === 'wip'){
+            const pop = stackPops.find(p => p.layer === i && now - p.bornAt < 260);
+            if (pop){
+                const t = (now - pop.bornAt) / 260;
+                scale = 1 + (1-t) * 0.28;
+            }
+        }
+        ctx.save();
+        ctx.translate(plateCx, iy);
+        ctx.scale(scale, scale);
+        INGREDIENTS[fillings[i]].draw(0, 0, innerW, itemH-1);
+        ctx.restore();
+    }
+
+    const showTop = kind === 'sample' || filledCount >= sample.length;
+    if (showTop){
+        const topIdx = filledCount;
+        const topY = stackBaseY - (topIdx+1)*itemH - itemH*0.62;
+        INGREDIENTS.bunTop.draw(plateCx, topY, innerW, itemH*1.35);
+    } else if (kind === 'wip'){
+        /* Placeholder for the "next needed" ingredient — a translucent
+           silhouette of the expected filling pulsing at the next slot.
+           Helps the player glance at their own panel and immediately
+           see what's missing instead of having to compare to the left. */
+        const nextY = stackBaseY - (filledCount+1)*itemH - itemH/2;
+        const pulse = 0.25 + 0.15*Math.sin(now/240);
+        ctx.save();
+        ctx.globalAlpha = pulse;
+        INGREDIENTS[sample[filledCount]].draw(plateCx, nextY, innerW, itemH-1);
+        ctx.restore();
+        /* dashed outline box around the slot */
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,230,102,.7)';
+        ctx.setLineDash([3,3]);
+        ctx.lineWidth = 1;
+        drawRR(plateCx-innerW/2-2, nextY-itemH/2-2, innerW+4, itemH+4, 5);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
     }
 }
 
-function drawHeart(cx, cy, r, fill){
+function drawTimeBar(now){
+    const x = 18, y = TIMEBAR_Y, w = W - 36, h = TIMEBAR_H;
+    /* Track */
+    ctx.fillStyle = 'rgba(255,255,255,.06)';
+    drawRR(x, y, w, h, h/2); ctx.fill();
+    /* Fill */
+    const frac = timeLevelBudget > 0 ? Math.max(0, Math.min(1, timeLeft / timeLevelBudget)) : 0;
+    const fw = Math.max(0, (w - 2) * frac);
+    let col = '#00E676';
+    if (frac <= 0.25)      col = '#FF6B8B';
+    else if (frac <= 0.5)  col = '#FFE066';
+    if (fw > 0){
+        ctx.fillStyle = col;
+        drawRR(x+1, y+1, fw, h-2, (h-2)/2); ctx.fill();
+    }
+    /* Critical-time pulse overlay */
+    if (frac <= 0.25 && fw > 0){
+        const pulse = 0.35 + 0.35*Math.abs(Math.sin(now/120));
+        ctx.fillStyle = 'rgba(255,107,139,'+pulse+')';
+        drawRR(x+1, y+1, fw, h-2, (h-2)/2); ctx.fill();
+    }
+}
+
+function drawIngredientRow(now){
+    for (let i=0; i<5; i++){
+        const x = PLATE_ROW_X0 + i*(PLATE_W + PLATE_GAP);
+        const y = PLATE_ROW_Y;
+        const cx = x + PLATE_W/2;
+        const cy = y + PLATE_ROW_H*0.44;
+
+        /* Card background — subtle by default, lights up green/red on tap. */
+        const flash = tapFlashes.find(f => f.idx === i);
+        let flashCol = null, flashA = 0;
+        if (flash){
+            const t = (now - flash.bornAt) / 400;
+            if (t < 1){
+                flashA = 1 - t;
+                flashCol = flash.kind === 'good' ? '#00E676' : '#FF6B8B';
+            }
+        }
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,.03)';
+        ctx.strokeStyle = flashCol || 'rgba(255,255,255,.1)';
+        ctx.lineWidth = flashCol ? 2 : 1;
+        drawRR(x, y, PLATE_W, PLATE_ROW_H, 14); ctx.fill(); ctx.stroke();
+        if (flashCol){
+            ctx.globalAlpha = flashA*0.18;
+            ctx.fillStyle = flashCol;
+            drawRR(x, y, PLATE_W, PLATE_ROW_H, 14); ctx.fill();
+        }
+        ctx.restore();
+
+        /* Button plate (small) */
+        const pShadow = 'rgba(0,0,0,.28)';
+        ctx.fillStyle = pShadow;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy+18, PLATE_W*0.36, 4, 0, 0, Math.PI*2);
+        ctx.fill();
+        const pg = ctx.createLinearGradient(0, cy+4, 0, cy+16);
+        pg.addColorStop(0, '#FFFFFF');
+        pg.addColorStop(1, '#C7CCD7');
+        ctx.fillStyle = pg;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy+10, PLATE_W*0.42, 7, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.14)';
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+
+        /* Ingredient rendered larger (~45 px wide) for clear identification. */
+        INGREDIENTS[TAP_IDS[i]].draw(cx, cy-2, PLATE_W*0.76, 28);
+
+        /* Small key-hint badge top-left so desktop users see 1-5 mapping. */
+        ctx.fillStyle = 'rgba(0,0,0,.5)';
+        ctx.beginPath();
+        ctx.arc(x+11, y+11, 9, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = '#FFE066';
+        ctx.font = '900 10px Orbitron, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(i+1), x+11, y+11);
+        ctx.textBaseline = 'alphabetic';
+        ctx.textAlign = 'start';
+    }
+
+    /* One-line progress hint under the row. */
+    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.font = '500 11px "Noto Sans KR", sans-serif';
+    ctx.textAlign = 'center';
+    const hint = progress === 0
+        ? '샘플과 같은 순서로 탭'
+        : (progress + ' / ' + sample.length + ' · 계속!');
+    ctx.fillText(hint, W/2, PLATE_ROW_Y + PLATE_ROW_H + 14);
+    ctx.textAlign = 'start';
+}
+
+function drawPops(now){
+    if (now >= popUntil || !popText) return;
+    const rem = popUntil - now;
+    const total = popKind === 'complete' ? 950 : (popKind === 'bad' ? 650 : 550);
+    const t = 1 - rem/total;
+    const alpha = Math.min(1, rem/180);
+    const yLift = t * 38;
     ctx.save();
-    ctx.fillStyle = fill;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy + r*0.5);
-    ctx.bezierCurveTo(cx - r*1.1, cy - r*0.3, cx - r*0.5, cy - r*1.1, cx, cy - r*0.3);
-    ctx.bezierCurveTo(cx + r*0.5, cy - r*1.1, cx + r*1.1, cy - r*0.3, cx, cy + r*0.5);
-    ctx.closePath();
-    ctx.fill();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    if (popKind === 'complete'){
+        ctx.fillStyle = '#00E676';
+        ctx.font = '900 20px Orbitron, sans-serif';
+    } else if (popKind === 'good'){
+        ctx.fillStyle = '#FFE066';
+        ctx.font = '900 18px Orbitron, sans-serif';
+    } else {
+        ctx.fillStyle = '#FF6B8B';
+        ctx.font = '900 17px Orbitron, sans-serif';
+    }
+    ctx.fillText(popText, W/2, PANEL_Y + PANEL_H*0.45 - yLift);
     ctx.restore();
+    ctx.textAlign = 'start';
 }
 
 function loop(now){
@@ -854,58 +966,37 @@ function loop(now){
 }
 
 /* ========================================================================
-   Input — keyboard arrows for desktop; pointer / touch drag for phone.
-   Drag uses absolute positioning (plate jumps to where the finger is)
-   because for a catch-the-falling-object game this is more responsive
-   than relative-delta dragging. We also capture the pointer so the
-   drag keeps tracking even when the finger leaves the canvas bounds.
+   Input — one pointerdown = one tap (no drag). Desktop 1-5 keys mirror
+   the five plates left-to-right. Space pauses the game; Enter restarts
+   once on the game-over overlay.
    ======================================================================== */
-document.addEventListener('keydown', (e)=>{
-    const k = e.key;
-    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keyLeft = true;
-    else if (k === 'ArrowRight' || k === 'd' || k === 'D') keyRight = true;
-    else if (k === ' '){ if (running) paused = !paused; e.preventDefault(); }
-    else if (k === 'Enter'){ if (!running) startGame(); }
-    else return;
-    if (k.startsWith('Arrow')) e.preventDefault();
-});
-document.addEventListener('keyup', (e)=>{
-    const k = e.key;
-    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keyLeft = false;
-    else if (k === 'ArrowRight' || k === 'd' || k === 'D') keyRight = false;
-});
-
-function pointerXToCanvas(clientX){
-    const rect = canvas.getBoundingClientRect();
-    return (clientX - rect.left) * (W / rect.width);
-}
 canvas.addEventListener('pointerdown', (e)=>{
-    if (!running) return;
-    dragPointerId = e.pointerId;
-    try { canvas.setPointerCapture(e.pointerId); } catch(_){}
-    const x = pointerXToCanvas(e.clientX);
-    plate.x = Math.max(plate.w/2, Math.min(W - plate.w/2, x));
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (W / rect.width);
+    const y = (e.clientY - rect.top)  * (H / rect.height);
+    onTap(x, y);
     e.preventDefault();
 });
-canvas.addEventListener('pointermove', (e)=>{
-    if (dragPointerId === null || e.pointerId !== dragPointerId) return;
-    const x = pointerXToCanvas(e.clientX);
-    plate.x = Math.max(plate.w/2, Math.min(W - plate.w/2, x));
-    e.preventDefault();
-});
-function endPointer(e){
-    if (dragPointerId !== null && e.pointerId === dragPointerId){
-        try { canvas.releasePointerCapture(e.pointerId); } catch(_){}
-        dragPointerId = null;
-    }
-}
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
-canvas.addEventListener('pointerleave', endPointer);
-
-/* Touch — prevent page scroll when dragging on the canvas. */
 canvas.addEventListener('touchstart', e=>e.preventDefault(), {passive:false});
 canvas.addEventListener('touchmove',  e=>e.preventDefault(), {passive:false});
+
+document.addEventListener('keydown', (e)=>{
+    const k = e.key;
+    if (/^[1-5]$/.test(k)){
+        if (!running || paused) return;
+        const idx = parseInt(k, 10) - 1;
+        onTap(
+            PLATE_ROW_X0 + idx*(PLATE_W + PLATE_GAP) + PLATE_W/2,
+            PLATE_ROW_Y + PLATE_ROW_H/2
+        );
+        e.preventDefault();
+    } else if (k === ' '){
+        if (running) paused = !paused;
+        e.preventDefault();
+    } else if (k === 'Enter'){
+        if (!running) startGame();
+    }
+});
 
 /* ========== Bottom sheet + Leaderboards ========== */
 const sheet=$('sheet'), sheetBack=$('sheetBack');
@@ -963,6 +1054,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776834031"></script>
+<script src="/js/siteFooter.js?v=1776835440"></script>
 </body>
 </html>
