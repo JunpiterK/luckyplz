@@ -227,7 +227,9 @@ body{
 .lb-nick .delta{display:inline-block;margin-left:6px;font-size:.72em;font-family:'Orbitron',sans-serif;font-weight:900;padding:1px 6px;border-radius:4px}
 .lb-nick .delta.up{background:rgba(0,230,118,.16);color:#00E676}
 .lb-nick .delta.down{background:rgba(255,107,139,.16);color:#FF6B8B}
-.lb-score{font-family:'Orbitron',sans-serif;font-weight:900;font-size:1em;color:#00D9FF;font-variant-numeric:tabular-nums}
+.lb-score{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-variant-numeric:tabular-nums}
+.lb-score .lb-correct{font-size:.72em;font-weight:800;color:#00E676;letter-spacing:.04em;line-height:1}
+.lb-score .lb-pts{font-family:'Orbitron',sans-serif;font-weight:900;font-size:.95em;color:#00D9FF;line-height:1}
 
 /* ============ FINAL ============ */
 .podium{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:8px;align-items:end;margin-bottom:18px;padding:0 8px}
@@ -425,7 +427,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1776859354"></script>
+<script src="/js/supabase-config.js?v=1776860243"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -942,9 +944,14 @@ function revealHost(){
         info.score += gain;
         perUserGain.set(gid, {gain, isCorrect, choice: ans ? ans.choice : null});
     }
-    /* Sort for rank delta */
+    /* Sort primary = correctCount desc (accuracy first, per user's
+       "맞춘 숫자로 많이 맞춘 순"); tiebreak = score desc so the speed
+       bonus still matters when two players tie on correct-count. */
     const ranked = Array.from(hostRoster.values())
-        .sort((a,b) => b.score - a.score);
+        .sort((a,b) => {
+            if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+            return b.score - a.score;
+        });
     const ranking = ranked.map((r, i) => ({
         gid: r.gid, nickname: r.nickname, score: r.score,
         rank: i+1, prevRank: r.prevRank,
@@ -1163,6 +1170,10 @@ function renderPie(dist, correctIdx, options, totalAnswered){
    Leaderboard render
    ============================================================ */
 function renderLeaderboard(list){
+    /* Top 10 view — each row shows rank / nickname (+ rank-delta
+       arrow) / ✓correctCount · score. Correct-count is promoted as
+       the primary metric (green ✓ chip) since the sort is accuracy-
+       first; score stays as the tiebreaker indicator in Orbitron. */
     $('lbList').innerHTML = (list||[]).slice(0, 10).map(r => {
         const rankCls = r.rank === 1 ? ' gold' : r.rank === 2 ? ' silver' : r.rank === 3 ? ' bronze' : '';
         const selfCls = ((mode === 'guest' && guest && r.gid === guest.gid) ||
@@ -1172,7 +1183,10 @@ function renderLeaderboard(list){
         return `<div class="lb-item${rankCls}${selfCls}">
             <div class="lb-rnk${rankCls}">${r.rank<=3?(['🥇','🥈','🥉'][r.rank-1]):('#'+r.rank)}</div>
             <div class="lb-nick">${esc(r.nickname)}${deltaHtml}</div>
-            <div class="lb-score">${r.score.toLocaleString()}</div>
+            <div class="lb-score">
+                <span class="lb-correct">✓ ${r.correctCount||0}</span>
+                <span class="lb-pts">${(r.score||0).toLocaleString()}</span>
+            </div>
         </div>`;
     }).join('');
 }
@@ -1181,8 +1195,12 @@ function renderLeaderboard(list){
    Finalize
    ============================================================ */
 function finalizeHost(){
+    /* Same accuracy-first sort as mid-game reveal. */
     const ranked = Array.from(hostRoster.values())
-        .sort((a,b) => b.score - a.score)
+        .sort((a,b) => {
+            if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+            return b.score - a.score;
+        })
         .map((r, i) => ({
             gid: r.gid, nickname: r.nickname, score: r.score,
             rank: i+1, correctCount: r.correctCount
@@ -1229,7 +1247,10 @@ function renderFinal(ranking){
         return `<div class="lb-item${rankCls}${selfCls}">
             <div class="lb-rnk${rankCls}">${r.rank<=3?(['🥇','🥈','🥉'][r.rank-1]):('#'+r.rank)}</div>
             <div class="lb-nick">${esc(r.nickname)}</div>
-            <div class="lb-score">${r.score.toLocaleString()}</div>
+            <div class="lb-score">
+                <span class="lb-correct">✓ ${r.correctCount||0}</span>
+                <span class="lb-pts">${(r.score||0).toLocaleString()}</span>
+            </div>
         </div>`;
     }).join('');
     $('finSub').innerHTML = '총 <b>' + (ranking||[]).length + '</b>명 · <b>' + (questions.length || selectedCount) + '</b> 문제';
@@ -1391,6 +1412,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776859354"></script>
+<script src="/js/siteFooter.js?v=1776860243"></script>
 </body>
 </html>
