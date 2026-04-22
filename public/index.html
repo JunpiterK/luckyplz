@@ -102,6 +102,35 @@
             .daily-luck .dl-cta{padding:9px 18px;font-size:.75em}
         }
 
+        /* Honest activity strip — two-cell pill row between lang-bar and
+           the games grid. Only appears once site_activity_stats() returns
+           a non-zero value so we never brag "0 plays". Numbers animate
+           up on first reveal for a bit of personality. */
+        .lp-activity{
+            display:inline-flex;align-items:stretch;gap:0;
+            margin:4px auto 14px;padding:0;
+            background:linear-gradient(145deg,rgba(255,230,109,.07),rgba(0,217,255,.04));
+            border:1px solid rgba(255,230,109,.22);border-radius:14px;
+            backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+            box-shadow:0 6px 24px -8px rgba(255,183,77,.18);
+            opacity:0;transform:translateY(-4px);transition:opacity .5s,transform .5s cubic-bezier(.2,.8,.4,1);
+        }
+        .lp-activity.on{opacity:1;transform:translateY(0)}
+        .lp-activity-cell{display:flex;align-items:center;gap:10px;padding:10px 16px}
+        .lp-activity-icon{font-size:1.4em;line-height:1}
+        .lp-activity-meta{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+        .lp-activity-label{font-size:.56em;color:rgba(255,255,255,.55);letter-spacing:.15em;font-weight:700;text-transform:uppercase;font-family:'Orbitron','Noto Sans KR',sans-serif}
+        .lp-activity-num{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.15em;font-weight:900;color:#FFE66D;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+        .lp-activity-cell.total .lp-activity-num{color:#00D9FF}
+        .lp-activity-divider{width:1px;align-self:stretch;background:linear-gradient(180deg,transparent,rgba(255,255,255,.14),transparent)}
+        @media(max-width:600px){
+            .lp-activity{margin:2px auto 10px;border-radius:12px}
+            .lp-activity-cell{padding:8px 12px;gap:8px}
+            .lp-activity-icon{font-size:1.1em}
+            .lp-activity-label{font-size:.5em;letter-spacing:.1em}
+            .lp-activity-num{font-size:1em}
+        }
+
         /* Language selector */
         .lang-bar{display:flex;gap:6px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
         .lang-btn{background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 8px;cursor:pointer;transition:all 0.3s;display:flex;align-items:center;gap:4px;font-size:0.75em;color:rgba(255,255,255,0.5)}
@@ -528,6 +557,28 @@
             <button class="lang-btn" data-lang="tr" title="Türkçe"><img src="https://flagcdn.com/w40/tr.png" alt="TR">TR</button>
         </div>
 
+        <!-- Honest activity strip. Fetches site_activity_stats() via
+             Supabase on load; hides itself if stats come back empty/err so
+             we never render "0 plays" (which reads worse than not
+             showing it at all). See js/lpActivity.js. -->
+        <div class="lp-activity" id="lpActivity" hidden aria-hidden="true">
+            <div class="lp-activity-cell today">
+                <div class="lp-activity-icon">⚡</div>
+                <div class="lp-activity-meta">
+                    <div class="lp-activity-label" data-i18n="actToday">오늘 플레이</div>
+                    <div class="lp-activity-num" id="lpActToday">0</div>
+                </div>
+            </div>
+            <div class="lp-activity-divider"></div>
+            <div class="lp-activity-cell total">
+                <div class="lp-activity-icon">🎯</div>
+                <div class="lp-activity-meta">
+                    <div class="lp-activity-label" data-i18n="actTotal">누적 결정</div>
+                    <div class="lp-activity-num" id="lpActTotal">0</div>
+                </div>
+            </div>
+        </div>
+
         <div class="games-grid" id="gamesGrid">
             <!-- Games are rendered by JS -->
         </div>
@@ -854,11 +905,70 @@ function init() {
 }
 
 init();
+
+/* ============================================================
+   Honest activity strip. Polls briefly for LpActivity (siteFooter
+   injects it after Supabase is ready), then fetches site stats
+   and count-up-animates the two numbers into view.
+   Hidden entirely if stats fail or both numbers are 0 — never show
+   "0 plays" because that looks worse than not showing at all.
+   ============================================================ */
+function renderActivityStrip(){
+    const strip = document.getElementById('lpActivity');
+    const elToday = document.getElementById('lpActToday');
+    const elTotal = document.getElementById('lpActTotal');
+    if (!strip || !elToday || !elTotal) return;
+
+    /* Localize labels */
+    const LABELS = {
+        actToday: {ko:'오늘 플레이',en:'TODAY',gb:'TODAY',ja:'今日',zh:'今日',es:'HOY',de:'HEUTE',fr:'AUJOURD\'HUI',pt:'HOJE',ru:'СЕГОДНЯ',ar:'اليوم',hi:'आज',th:'วันนี้',id:'HARI INI',vi:'HÔM NAY',tr:'BUGÜN'},
+        actTotal: {ko:'누적 결정',en:'TOTAL',gb:'TOTAL',ja:'累計',zh:'累计',es:'TOTAL',de:'GESAMT',fr:'TOTAL',pt:'TOTAL',ru:'ВСЕГО',ar:'المجموع',hi:'कुल',th:'รวม',id:'TOTAL',vi:'TỔNG',tr:'TOPLAM'}
+    };
+    strip.querySelectorAll('[data-i18n]').forEach(el=>{
+        const k = el.getAttribute('data-i18n');
+        const map = LABELS[k];
+        if (map && (map[currentLang] || map.en)) el.textContent = map[currentLang] || map.en;
+    });
+
+    function countUp(el, target){
+        const dur = 900;
+        const start = performance.now();
+        const from = 0;
+        function step(now){
+            const t = Math.min(1, (now - start)/dur);
+            /* ease-out cubic */
+            const e = 1 - Math.pow(1 - t, 3);
+            const v = Math.round(from + (target - from) * e);
+            el.textContent = v.toLocaleString();
+            if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+    }
+
+    let tries = 0;
+    (function poll(){
+        if (!window.LpActivity){
+            if (tries++ < 40) setTimeout(poll, 100);
+            return;
+        }
+        window.LpActivity.stats().then(s => {
+            if (!s || (!s.today && !s.total)) return;  /* hide if both zero */
+            strip.hidden = false;
+            strip.setAttribute('aria-hidden', 'false');
+            requestAnimationFrame(()=>{
+                strip.classList.add('on');
+                countUp(document.getElementById('lpActToday'), s.today || 0);
+                countUp(document.getElementById('lpActTotal'), s.total || 0);
+            });
+        }).catch(()=>{});
+    })();
+}
+renderActivityStrip();
 </script>
 
 <script src="/js/langBar.js"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776839302"></script>
+<script src="/js/supabase-config.js?v=1776840018"></script>
 <script>
 (async function(){
     try{
@@ -1233,6 +1343,6 @@ document.addEventListener('keydown', (e) => {
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776839302" defer></script>
+<script src="/js/siteFooter.js?v=1776840018" defer></script>
 </body>
 </html>
