@@ -124,21 +124,25 @@ try{
     if(!isGamePage){
         /* Label localization for the activity counter — kept INSIDE the
            footer injector because siteFooter.js can't import index.html's
-           I18N. Reads localStorage (same key index.html writes). */
-        var lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase();
+           I18N. Reads localStorage (same key index.html writes) AND
+           listens for the `lp:langchanged` CustomEvent that
+           applyLanguage() dispatches so live language-switching updates
+           the labels without a reload. */
         var L_TODAY={ko:'오늘',en:'TODAY',gb:'TODAY',ja:'今日',zh:'今日',es:'HOY',de:'HEUTE',fr:'JOUR',pt:'HOJE',ru:'СЕГОДНЯ',ar:'اليوم',hi:'आज',th:'วันนี้',id:'HARI INI',vi:'HÔM NAY',tr:'BUGÜN'};
         var L_TOTAL={ko:'누적',en:'TOTAL',gb:'TOTAL',ja:'累計',zh:'累计',es:'TOTAL',de:'GESAMT',fr:'TOTAL',pt:'TOTAL',ru:'ВСЕГО',ar:'المجموع',hi:'कुल',th:'รวม',id:'TOTAL',vi:'TỔNG',tr:'TOPLAM'};
-        var todayLbl=(L_TODAY[lang]||L_TODAY.en);
-        var totalLbl=(L_TOTAL[lang]||L_TOTAL.en);
+        function pickLang(){ return (localStorage.getItem('luckyplz_lang')||'en').toLowerCase(); }
+        function lblToday(l){ return L_TODAY[l]||L_TODAY.en; }
+        function lblTotal(l){ return L_TOTAL[l]||L_TOTAL.en; }
+        var initLang=pickLang();
 
         var f=document.createElement('footer');
         f.className='lp-site-footer';
         f.innerHTML=
             '<div class="lp-stat-row" id="lpStatRow" hidden>'
-                +'<span class="lp-stat-label">'+todayLbl+'</span>'
+                +'<span class="lp-stat-label" data-lp-stat="today">'+lblToday(initLang)+'</span>'
                 +'<span class="lp-digits" id="lpDigitsToday"></span>'
                 +'<span class="lp-stat-sep">·</span>'
-                +'<span class="lp-stat-label">'+totalLbl+'</span>'
+                +'<span class="lp-stat-label" data-lp-stat="total">'+lblTotal(initLang)+'</span>'
                 +'<span class="lp-digits" id="lpDigitsTotal"></span>'
             +'</div>'
             +'<a href="/">Home</a><span class="sep">·</span>'
@@ -179,13 +183,25 @@ try{
                 setTimeout(function(){ waitActivity(tries-1); }, 100);
             }
         })(40);
+
+        /* Live language switch — index.html's applyLanguage() fires
+           this event after writing to localStorage. We just re-label
+           in place; digit boxes stay untouched. */
+        document.addEventListener('lp:langchanged', function(ev){
+            var l = (ev && ev.detail && ev.detail.lang) || pickLang();
+            l = String(l).toLowerCase();
+            var tEl = document.querySelector('[data-lp-stat="today"]');
+            var nEl = document.querySelector('[data-lp-stat="total"]');
+            if (tEl) tEl.textContent = lblToday(l);
+            if (nEl) nEl.textContent = lblTotal(l);
+        });
     }
 
     /* AdSense slot injector — only loads if the page has a
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1776855967';
+        s.src='/js/adSlots.js?v=1776856494';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -194,7 +210,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1776855967';
+        rr.src='/js/recentResults.js?v=1776856494';
         document.body.appendChild(rr);
     }
 
@@ -202,20 +218,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1776855967';
+        pwa.src='/js/pwaInstall.js?v=1776856494';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1776855967';
+    tr.src='/js/lpTrack.js?v=1776856494';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1776855967';
+    sh.src='/js/lpShare.js?v=1776856494';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -228,7 +244,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776855967';
+        rr2.src='/js/lpRoom.js?v=1776856494';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
@@ -238,7 +254,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1776855967';
+        ls.src='/js/lpSocial.js?v=1776856494';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -249,7 +265,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1776855967';
+        la.src='/js/lpActivity.js?v=1776856494';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -264,7 +280,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1776855967';
+        lp.src='/js/lpPresence.js?v=1776856494';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -274,7 +290,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1776855967';
+        li.src='/js/lpInvite.js?v=1776856494';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -284,7 +300,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1776855967';
+        lib.src='/js/lpInviteButton.js?v=1776856494';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -293,7 +309,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1776855967';
+        ln.src='/js/lpNotify.js?v=1776856494';
         ln.defer=true;
         document.body.appendChild(ln);
     }
