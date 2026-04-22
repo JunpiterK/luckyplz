@@ -313,6 +313,158 @@
                the tiny tile corner. */
             .game-card:not(.coming-soon)::after{font-size:1.1em;top:4px;right:7px}
         }
+
+        /* ============================================================
+           Launch dialog + how-to modal. Two cooperating pieces:
+
+           ①  "Launch dialog"  — compact centred popup that appears on
+              first-time card tap. Two big buttons (이용방법 / 플레이)
+              let the user choose a tutorial or jump straight in.
+
+           ②  "How-to modal"   — full-screen semi-opaque panel that
+              fills >= 85 % of the viewport with scrollable step-by-
+              step content (inline CSS-drawn UI mockups + captions).
+              X button in the top-right; also closes on backdrop tap
+              or Esc.
+
+           Backdrop is shared. lpModal state drives which panel renders. */
+        .lp-mod-back{
+            position:fixed;inset:0;z-index:90;
+            background:rgba(5,5,15,.72);backdrop-filter:blur(6px);
+            opacity:0;pointer-events:none;transition:opacity .22s
+        }
+        .lp-mod-back.on{opacity:1;pointer-events:auto}
+
+        .lp-launch{
+            position:fixed;z-index:91;left:50%;top:50%;
+            transform:translate(-50%,calc(-50% + 20px)) scale(.96);
+            opacity:0;pointer-events:none;transition:opacity .2s,transform .22s cubic-bezier(.2,.9,.2,1);
+            width:min(92vw,360px);
+            background:linear-gradient(165deg,#1a1230 0%,#0e0820 100%);
+            border:1px solid rgba(255,230,109,.22);
+            border-radius:18px;padding:20px 18px 18px;
+            box-shadow:0 20px 60px -10px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.04) inset;
+        }
+        .lp-launch.on{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+        .lp-launch-icon{font-size:2.8em;text-align:center;line-height:1;margin:4px 0 6px}
+        .lp-launch-icon svg{width:58px;height:58px}
+        .lp-launch-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.2em;font-weight:900;text-align:center;color:var(--accent);margin-bottom:4px;letter-spacing:.02em}
+        .lp-launch-desc{font-size:.82em;color:rgba(255,255,255,.55);text-align:center;margin-bottom:16px;line-height:1.4}
+        .lp-launch-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .lp-launch-btn{
+            padding:14px 10px;border-radius:12px;border:0;cursor:pointer;
+            font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:800;font-size:.92em;
+            letter-spacing:.02em;transition:transform .08s,box-shadow .2s,filter .2s;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+        }
+        .lp-launch-btn:active{transform:translateY(1px)}
+        .lp-launch-btn .lpb-ico{font-size:1.15em;line-height:1}
+        .lp-launch-btn .lpb-sub{font-size:.65em;opacity:.75;font-weight:600;letter-spacing:.04em}
+        .lp-launch-btn.howto{background:rgba(0,217,255,.1);color:#00D9FF;border:1.5px solid rgba(0,217,255,.45)}
+        .lp-launch-btn.howto:hover{background:rgba(0,217,255,.18)}
+        .lp-launch-btn.play{background:linear-gradient(135deg,#FFB74D,#FF8A65);color:#2a1400;box-shadow:0 8px 20px -6px rgba(255,183,77,.5)}
+        .lp-launch-btn.play:hover{filter:brightness(1.08)}
+        .lp-launch-close{
+            position:absolute;top:8px;right:10px;width:30px;height:30px;border-radius:50%;
+            border:0;background:rgba(255,255,255,.08);color:rgba(255,255,255,.65);font-size:1.2em;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;line-height:1;font-family:inherit
+        }
+        .lp-launch-close:hover{background:rgba(255,255,255,.16);color:#fff}
+
+        .lp-howto{
+            position:fixed;z-index:91;left:50%;top:50%;
+            transform:translate(-50%,calc(-50% + 20px)) scale(.97);
+            opacity:0;pointer-events:none;transition:opacity .22s,transform .25s cubic-bezier(.2,.9,.2,1);
+            width:min(94vw,520px);max-height:88vh;display:flex;flex-direction:column;
+            background:linear-gradient(168deg,#1a1230 0%,#0c0820 100%);
+            border:1px solid rgba(0,217,255,.22);border-radius:18px;
+            box-shadow:0 20px 60px -10px rgba(0,0,0,.75),0 0 0 1px rgba(255,255,255,.04) inset;
+        }
+        .lp-howto.on{opacity:1;transform:translate(-50%,-50%) scale(1);pointer-events:auto}
+        .lp-howto-head{
+            padding:16px 20px 12px;border-bottom:1px solid rgba(255,255,255,.07);
+            display:flex;align-items:center;gap:10px;
+        }
+        .lp-howto-head .ic{font-size:1.6em;line-height:1}
+        .lp-howto-head .ic svg{width:36px;height:36px}
+        .lp-howto-head h3{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.1em;font-weight:900;color:#00D9FF;flex:1;line-height:1.2}
+        .lp-howto-head h3 .sub{display:block;font-size:.58em;color:rgba(255,255,255,.5);font-weight:600;margin-top:2px;letter-spacing:.04em}
+        .lp-howto-close{
+            width:34px;height:34px;border-radius:50%;border:0;background:rgba(255,255,255,.08);
+            color:rgba(255,255,255,.75);font-size:1.3em;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1
+        }
+        .lp-howto-close:hover{background:rgba(255,255,255,.18);color:#fff}
+        .lp-howto-body{
+            padding:14px 20px 16px;overflow-y:auto;flex:1;
+            -webkit-overflow-scrolling:touch;scroll-behavior:smooth
+        }
+        .lp-howto-foot{padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 12px);border-top:1px solid rgba(255,255,255,.07);display:flex;gap:8px;background:rgba(10,10,26,.7)}
+        .lp-howto-foot .play{flex:1;padding:13px;border-radius:11px;border:0;background:linear-gradient(135deg,#FFB74D,#FF8A65);color:#2a1400;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:.92em;cursor:pointer;letter-spacing:.04em}
+        .lp-howto-foot .play:hover{filter:brightness(1.08)}
+
+        /* Section heads + steps inside how-to */
+        .ht-section{margin-bottom:18px}
+        .ht-section-title{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+        .ht-section-title .num{
+            width:22px;height:22px;border-radius:50%;background:rgba(255,230,109,.15);border:1px solid rgba(255,230,109,.4);
+            color:#FFE66D;font-family:'Orbitron',sans-serif;font-weight:900;font-size:.72em;display:flex;align-items:center;justify-content:center
+        }
+        .ht-section-title h4{font-size:.95em;font-weight:800;color:#FFE66D;letter-spacing:.02em}
+        .ht-section-title.mp h4{color:#00D9FF}
+        .ht-section-title.mp .num{background:rgba(0,217,255,.15);border-color:rgba(0,217,255,.4);color:#00D9FF}
+        .ht-step{
+            margin-bottom:12px;padding:12px;border-radius:12px;
+            background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06)
+        }
+        .ht-step-title{font-size:.9em;font-weight:700;color:#fff;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+        .ht-step-title .badge{
+            display:inline-block;min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+            background:rgba(0,217,255,.18);border:1px solid rgba(0,217,255,.4);color:#00D9FF;
+            font-family:'Orbitron',sans-serif;font-weight:900;font-size:.7em;
+            display:inline-flex;align-items:center;justify-content:center
+        }
+        .ht-step-body{font-size:.82em;color:rgba(255,255,255,.72);line-height:1.55;margin-bottom:8px}
+        .ht-step-body b{color:#FFE66D;font-weight:700}
+
+        /* Tutorial visual mockups (inline CSS-drawn chunks of the real UI) */
+        .tut-visual{background:linear-gradient(180deg,#0a0a1a 0%,#14142a 100%);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px;margin-top:8px}
+        .tut-bar{display:flex;align-items:center;gap:6px;padding:7px 8px;background:rgba(10,10,26,.9);border:1px solid rgba(255,255,255,.1);border-radius:8px}
+        .tut-bar .tut-home{font-size:10px;color:rgba(255,255,255,.55);padding:3px 6px;background:rgba(255,255,255,.04);border-radius:5px}
+        .tut-bar .tut-title{flex:1;font-size:11px;font-weight:900;text-align:center;color:#FFE66D}
+        .tut-bar .tut-chip{font-size:9px;padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);white-space:nowrap}
+        .tut-bar .tut-chip.join{background:rgba(0,217,255,.14);border-color:rgba(0,217,255,.45);color:#00D9FF}
+        .tut-bar .tut-chip.pulse{background:rgba(255,230,109,.2);border-color:rgba(255,230,109,.7);color:#FFE66D;animation:tut-pulse 1.5s ease infinite}
+        @keyframes tut-pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,230,109,.6)}50%{box-shadow:0 0 0 6px rgba(255,230,109,0)}}
+        .tut-arrow{text-align:center;color:rgba(255,255,255,.35);margin:6px 0;font-size:1.1em;font-weight:900}
+        .tut-roomcard{padding:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,230,109,.3);border-radius:10px;text-align:center}
+        .tut-roomcode{display:inline-block;padding:6px 16px;background:#000;border:1px solid rgba(255,230,109,.6);border-radius:8px;color:#FFE66D;font-family:'Orbitron',monospace;font-size:1.4em;font-weight:900;letter-spacing:.15em}
+        .tut-qr{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;width:66px;height:66px;margin:10px auto;background:#fff;padding:3px;border-radius:4px}
+        .tut-qr div{background:#000}
+        .tut-qr div.off{background:#fff}
+        .tut-caption{text-align:center;font-size:10px;color:rgba(255,255,255,.55);margin-top:6px}
+        .tut-phones{display:grid;grid-template-columns:1fr 20px 1fr;align-items:center;gap:8px}
+        .tut-phone{padding:10px 8px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:10px;text-align:center}
+        .tut-phone.host{border-color:rgba(255,230,109,.35)}
+        .tut-phone.guest{border-color:rgba(0,217,255,.35)}
+        .tut-phone .pc{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);margin-bottom:6px}
+        .tut-phone .pc .tag{padding:2px 6px;border-radius:4px;font-size:9px;margin-right:4px}
+        .tut-phone.host .tag{background:rgba(255,230,109,.15);color:#FFE66D}
+        .tut-phone.guest .tag{background:rgba(0,217,255,.15);color:#00D9FF}
+        .tut-phone .code-sm{font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:#FFE66D;letter-spacing:.12em}
+        .tut-input{font-family:'Orbitron',monospace;font-size:12px;font-weight:900;color:#00D9FF;background:rgba(0,0,0,.4);border:1px dashed rgba(0,217,255,.5);border-radius:5px;padding:3px 6px;letter-spacing:.1em;margin-bottom:4px;display:inline-block}
+        .tut-mini-btn{display:inline-block;padding:4px 10px;font-size:9px;border-radius:6px;background:linear-gradient(135deg,#00D9FF,#00A0C0);color:#00232e;font-weight:900;font-family:'Orbitron',sans-serif}
+        .tut-right-arrow{text-align:center;color:rgba(255,255,255,.4);font-weight:900}
+        .tut-players{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid rgba(255,255,255,.08)}
+        .tut-players .tp{padding:4px 10px;background:rgba(255,255,255,.06);border-radius:999px;font-size:11px;color:#fff}
+        .tut-players .tp.host{background:rgba(255,230,109,.18);color:#FFE66D;border:1px solid rgba(255,230,109,.4)}
+        .tut-startbtn{margin-top:8px;padding:10px;text-align:center;background:linear-gradient(135deg,#00E676,#00B45F);color:#002a0d;font-family:'Orbitron',sans-serif;font-weight:900;font-size:12px;border-radius:8px;letter-spacing:.08em}
+
+        /* Inline game-area mini mockups */
+        .tut-gamebox{padding:10px;background:rgba(5,5,15,.6);border:1px solid rgba(255,255,255,.08);border-radius:10px;text-align:center;min-height:110px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+        .tut-gamebox .bg-small{font-size:2.4em;line-height:1}
+        .tut-gamebox .lbl{font-size:10px;color:rgba(255,255,255,.55)}
+        .tut-gamebox .keys{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;justify-content:center}
+        .tut-gamebox .keys kbd{padding:3px 7px;border-radius:5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);font-family:inherit;font-size:10px;color:#fff}
     </style>
 </head>
 <body>
@@ -576,7 +728,12 @@ function renderGames() {
             : `<span class="game-badge badge-soon">${T('comingSoon')}</span>`;
         const tag = g.live ? 'a' : 'div';
         const href = g.live ? ` href="${g.url}"` : '';
-        return `<${tag} class="${cls}"${href}>
+        /* data-game-id lets a single delegated click handler pop the
+           launch dialog instead of the card navigating straight away.
+           Keeping the <a href> intact preserves SEO + "open in new tab"
+           via ctrl/middle-click. */
+        const idAttr = g.live ? ` data-game-id="${g.id}"` : '';
+        return `<${tag} class="${cls}"${href}${idAttr}>
             <span class="game-icon">${g.icon}</span>
             <div class="game-name">${T(g.nameKey)}</div>
             <div class="game-desc">${T(g.descKey)}</div>
@@ -701,7 +858,7 @@ init();
 
 <script src="/js/langBar.js"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776838438"></script>
+<script src="/js/supabase-config.js?v=1776839302"></script>
 <script>
 (async function(){
     try{
@@ -771,11 +928,311 @@ init();
 })();
 </script>
 
+<!-- ============================================================
+     Launch dialog + how-to modal. Tapping a game card pops the
+     launch dialog (이용방법 + 플레이) instead of navigating straight
+     to the game. 이용방법 opens a full-screen scrollable tutorial
+     with inline CSS-drawn UI mockups. Play goes direct like before.
+     ============================================================ -->
+<div class="lp-mod-back" id="lpModBack" aria-hidden="true"></div>
+<div class="lp-launch" id="lpLaunch" role="dialog" aria-modal="true" aria-hidden="true">
+  <button class="lp-launch-close" id="lpLaunchX" aria-label="close">×</button>
+  <div class="lp-launch-icon" id="lpLaunchIcon"></div>
+  <div class="lp-launch-title" id="lpLaunchTitle"></div>
+  <div class="lp-launch-desc" id="lpLaunchDesc"></div>
+  <div class="lp-launch-btns">
+    <button class="lp-launch-btn howto" id="lpLaunchHowto">
+      <span class="lpb-ico">📖</span>
+      <span>이용방법</span>
+      <span class="lpb-sub">HOW TO PLAY</span>
+    </button>
+    <button class="lp-launch-btn play" id="lpLaunchPlay">
+      <span class="lpb-ico">▶</span>
+      <span>플레이</span>
+      <span class="lpb-sub">PLAY NOW</span>
+    </button>
+  </div>
+</div>
+<div class="lp-howto" id="lpHowto" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="lp-howto-head">
+    <div class="ic" id="lpHowtoIcon"></div>
+    <h3 id="lpHowtoTitle"></h3>
+    <button class="lp-howto-close" id="lpHowtoX" aria-label="close">×</button>
+  </div>
+  <div class="lp-howto-body" id="lpHowtoBody"></div>
+  <div class="lp-howto-foot">
+    <button class="play" id="lpHowtoPlay">▶ 바로 시작</button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   How-to content catalog.
+   Multiplayer games get the shared "Create Room → Guest join"
+   preamble automatically. Single-player games only show the
+   game-specific section. Keeping all strings inline (vs. an i18n
+   load) because this dialog is a Korean-first first-timer aid and
+   English content would bloat the bundle with only marginal value.
+   ============================================================ */
+const MULTIPLAYER_GAMES = ['roulette','ladder','car-racing','bingo'];
+
+/* Shared "make a room + invite friends" flow. Rendered as Section
+   ①; the game-specific rules go under it as Section ②. */
+const MP_STEPS = [
+  {
+    badge: '1',
+    title: '우상단 <b>+ Create Room</b> 탭',
+    body: '게임 화면 상단 <b>주황색 버튼</b>을 탭하면 친구를 부를 수 있는 방이 만들어져요.',
+    visual: `
+      <div class="tut-visual">
+        <div class="tut-bar">
+          <span class="tut-home">← 홈</span>
+          <span class="tut-title">🎯 게임</span>
+          <span class="tut-chip pulse">+ Create Room</span>
+        </div>
+        <div class="tut-caption">여기를 탭하세요</div>
+      </div>`
+  },
+  {
+    badge: '2',
+    title: '방 코드 + QR 공유',
+    body: '방을 만들면 <b>6자리 코드</b>와 QR이 나와요. 친구에게 URL을 보내거나 QR을 보여주면 돼요.',
+    visual: `
+      <div class="tut-visual">
+        <div class="tut-roomcard">
+          <div class="tut-roomcode">ABC123</div>
+          <div class="tut-qr">
+            ${Array.from({length:81}).map((_,i)=>{
+              const r=Math.floor(i/9), c=i%9;
+              const on = (r<3&&c<3)||(r<3&&c>5)||(r>5&&c<3)||((r+c)%3===0 && r>2 && r<6);
+              return `<div class="${on?'':'off'}"></div>`;
+            }).join('')}
+          </div>
+          <div class="tut-caption">친구가 QR 찍거나 링크 열면 참가!</div>
+        </div>
+      </div>`
+  },
+  {
+    badge: '3',
+    title: '게스트가 참가',
+    body: '친구는 <b>링크를 탭</b>하거나, 홈에서 <b>Join</b> 버튼 → 방 코드 입력으로 들어와요.',
+    visual: `
+      <div class="tut-visual">
+        <div class="tut-phones">
+          <div class="tut-phone host">
+            <div class="pc"><span class="tag">👑 호스트</span>내 폰</div>
+            <div class="code-sm">ABC123</div>
+            <div class="tut-caption">코드 공유</div>
+          </div>
+          <div class="tut-right-arrow">→</div>
+          <div class="tut-phone guest">
+            <div class="pc"><span class="tag">🫂 게스트</span>친구 폰</div>
+            <div class="tut-input">ABC123</div><br>
+            <span class="tut-mini-btn">참가</span>
+          </div>
+        </div>
+      </div>`
+  },
+  {
+    badge: '4',
+    title: '모두 모이면 호스트가 시작',
+    body: '참가자 목록에 모두 표시되면 호스트가 <b>시작하기</b>를 누르세요. 모두가 동시에 같은 결과를 봐요.',
+    visual: `
+      <div class="tut-visual">
+        <div class="tut-players">
+          <span class="tp host">👑 나</span>
+          <span class="tp">😊 민지</span>
+          <span class="tp">🙂 철수</span>
+          <span class="tp">😎 영희</span>
+        </div>
+        <div class="tut-startbtn">▶ 시작하기</div>
+      </div>`
+  }
+];
+
+/* Per-game rules. badge is just a number shown on the step card. */
+const GAME_STEPS = {
+  roulette: [
+    { badge:'1', title:'선택지 입력', body:'음식 / 활동 / 이름 등 <b>최소 2개</b>를 입력하세요. (예: 돈까스, 피자, 짜장면)', visual:'' },
+    { badge:'2', title:'SPIN 버튼 탭', body:'룰렛이 빠르게 돌다가 천천히 멈춰요.', visual:'' },
+    { badge:'3', title:'화살표가 가리키는 항목이 결과', body:'결과는 자동 저장 → <b>최근 결과</b>에서 다시 확인 가능.', visual:'' }
+  ],
+  ladder: [
+    { badge:'1', title:'참가자 + 결과 입력', body:'참가자 이름과 <b>뽑을 결과</b> (꽝·커피값·벌칙 등)를 같은 개수로 입력.', visual:'' },
+    { badge:'2', title:'GO 탭 → 사다리 생성', body:'사다리가 무작위로 그려지고, 각자의 출발선에서 내려가요.', visual:'' },
+    { badge:'3', title:'각자 도착한 칸이 결과', body:'모두가 <b>같은 사다리</b>를 보기 때문에 공정해요. (멀티플레이도 동일)', visual:'' }
+  ],
+  'car-racing': [
+    { badge:'1', title:'참가자 이름 입력', body:'레이스에 참가할 사람들을 추가하세요.', visual:'' },
+    { badge:'2', title:'START 탭', body:'자동차들이 무작위 속도로 달려요. 꼴등이 쏘기 / 1등 보상 등 내기 결정에 써요!', visual:'' },
+    { badge:'3', title:'결승선 도착 순서로 결과', body:'순위가 화면에 표시돼요. 멀티플레이는 모두가 같은 레이스 관람.', visual:'' }
+  ],
+  bingo: [
+    { badge:'1', title:'빙고판 준비', body:'호스트가 방을 만들면 각 참가자는 <b>자기만의 5×5 빙고판</b>을 자동으로 받아요.', visual:'' },
+    { badge:'2', title:'호스트가 번호 뽑기', body:'1-75 중 무작위 번호가 나오면 모두 자기 판에서 찾아 체크.', visual:'' },
+    { badge:'3', title:'가로·세로·대각 한 줄 완성 = BINGO', body:'먼저 완성한 사람이 승리. 선물 추첨 / 벌칙 정하기에 최고!', visual:'' }
+  ],
+  team: [
+    { badge:'1', title:'멤버 이름 입력', body:'팀으로 나눌 사람들을 한 명씩 추가. 최대 40명.', visual:'' },
+    { badge:'2', title:'팀 개수 선택', body:'2~8팀까지. 각 팀이 <b>비슷한 인원</b>이 되도록 자동 배분.', visual:'' },
+    { badge:'3', title:'(선택) 티어 설정', body:'능력별 S/A/B/C 티어를 주면 실력 밸런스까지 맞춰서 뽑아요.', visual:'' },
+    { badge:'4', title:'뽑기 → 결과 공유', body:'결과 URL을 복사해 친구에게 보내면 동일한 결과를 볼 수 있어요.', visual:'' }
+  ],
+  lotto: [
+    { badge:'1', title:'국가별 로또 선택', body:'파워볼·메가밀리언·한국 6/45·EuroMillions 등 <b>16+ 국가 지원</b>.', visual:'' },
+    { badge:'2', title:'번호 생성 버튼 탭', body:'선택한 나라의 실제 규칙 (숫자 범위, 추가 번호 등)에 맞춰 번호가 뽑혀요.', visual:'' },
+    { badge:'3', title:'당첨 번호 / 통계도 확인', body:'최근 당첨 번호, 자주 나오는 숫자 통계까지 같은 화면에서 볼 수 있어요.', visual:'' }
+  ],
+  snake: [
+    { badge:'1', title:'먹이 먹고 길어지기', body:'<b>빨간 점</b>을 먹으면 뱀이 1칸씩 길어지고 속도도 조금 빨라져요.', visual:`<div class="tut-gamebox"><div class="bg-small">🐍🍎</div><div class="lbl">작은 뱀 + 먹이</div></div>` },
+    { badge:'2', title:'조작', body:'폰: <b>화면 스와이프</b> 또는 하단 D-pad.<br>PC: <kbd>←↑↓→</kbd> 또는 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>.',
+      visual:`<div class="tut-gamebox"><div class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div>` },
+    { badge:'3', title:'벽·자기 몸 부딪히면 끝', body:'최종 점수는 <b>세계 / 오늘 / 친구</b> 랭킹에 자동 등록돼요.', visual:'' }
+  ],
+  pacman: [
+    { badge:'1', title:'점 모두 먹기', body:'미로의 <b>작은 점 전부</b>를 먹으면 스테이지 클리어 + 보너스 500점.', visual:`<div class="tut-gamebox"><div class="bg-small">🟡·····</div><div class="lbl">팩맨 + 점들</div></div>` },
+    { badge:'2', title:'유령 피하기', body:'유령에 닿으면 <b>GAME OVER</b>. 두 마리 중 하나는 쫓아오고, 하나는 무작위로 움직여요.', visual:`<div class="tut-gamebox"><div class="bg-small">🟡 👻 👻</div><div class="lbl">유령을 피하라</div></div>` },
+    { badge:'3', title:'파워 쿠키로 역습', body:'모서리의 <b>빨간 쿠키</b>를 먹으면 6초간 유령을 잡을 수 있어요 (+200점/마리).',
+      visual:`<div class="tut-gamebox"><div class="bg-small">🍒 🟡 👻</div><div class="lbl">파워 쿠키 = 유령 사냥</div></div>` },
+    { badge:'4', title:'조작', body:'폰: <b>스와이프</b> / D-pad. PC: <kbd>←↑↓→</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Space</kbd> 일시정지.', visual:'' }
+  ],
+  burger: [
+    { badge:'1', title:'목표 버거 확인', body:'왼쪽 <b>🎯 목표</b> 패널에 이번 라운드에 만들어야 할 버거의 순서가 나와요 (아래→위).', visual:`<div class="tut-gamebox"><div class="bg-small">🍔</div><div class="lbl">샘플 버거</div></div>` },
+    { badge:'2', title:'아래 재료 접시 탭', body:'5개 재료 (양상추·패티·치즈·양파·토마토)를 <b>샘플 순서대로</b> 탭하면 접시에 쌓여요.', visual:`<div class="tut-gamebox"><div class="bg-small">🥬🥩🧀🧅🍅</div><div class="lbl">5개 재료 접시</div></div>` },
+    { badge:'3', title:'시간 안에 완성', body:'타임바가 다 닳기 전에 버거를 완성하세요. 틀리면 <b>-2초</b> + 콤보 리셋!', visual:'' },
+    { badge:'4', title:'5개 완성 시 레벨업', body:'같은 난이도에서 5번 완성하면 다음 레벨로. 재료가 더 많아지고 시간도 빨라져요.', visual:'' },
+    { badge:'5', title:'조작', body:'폰: <b>재료 탭</b>. PC: <kbd>1</kbd>~<kbd>5</kbd> 키로 왼쪽→오른쪽 재료 선택.', visual:'' }
+  ]
+};
+
+/* Map IDs to resolvable icon HTML (emoji or SVG). Pulled from
+   GAMES_* above — we can't import those constants directly because
+   they reference runtime SVG variables, so we just resolve by id. */
+function iconFor(gameId){
+  const all = [...GAMES_PRIMARY, ...GAMES_SECONDARY, ...GAMES_ACTION];
+  const g = all.find(x => x.id === gameId);
+  return g ? g.icon : '🎮';
+}
+function urlFor(gameId){
+  const all = [...GAMES_PRIMARY, ...GAMES_SECONDARY, ...GAMES_ACTION];
+  const g = all.find(x => x.id === gameId);
+  return g ? g.url : '/';
+}
+function nameFor(gameId){
+  const all = [...GAMES_PRIMARY, ...GAMES_SECONDARY, ...GAMES_ACTION];
+  const g = all.find(x => x.id === gameId);
+  return g ? T(g.nameKey) : gameId;
+}
+function descFor(gameId){
+  const all = [...GAMES_PRIMARY, ...GAMES_SECONDARY, ...GAMES_ACTION];
+  const g = all.find(x => x.id === gameId);
+  return g ? T(g.descKey) : '';
+}
+
+let _currentGameId = null;
+
+function openLaunch(gameId){
+  _currentGameId = gameId;
+  document.getElementById('lpLaunchIcon').innerHTML = iconFor(gameId);
+  document.getElementById('lpLaunchTitle').textContent = nameFor(gameId);
+  document.getElementById('lpLaunchDesc').textContent = descFor(gameId);
+  document.getElementById('lpModBack').classList.add('on');
+  document.getElementById('lpLaunch').classList.add('on');
+  document.getElementById('lpLaunch').setAttribute('aria-hidden','false');
+}
+function closeLaunch(){
+  document.getElementById('lpLaunch').classList.remove('on');
+  document.getElementById('lpLaunch').setAttribute('aria-hidden','true');
+  if (!document.getElementById('lpHowto').classList.contains('on')){
+    document.getElementById('lpModBack').classList.remove('on');
+  }
+}
+
+function openHowto(gameId){
+  _currentGameId = gameId;
+  const isMP = MULTIPLAYER_GAMES.includes(gameId);
+  document.getElementById('lpHowtoIcon').innerHTML = iconFor(gameId);
+  document.getElementById('lpHowtoTitle').innerHTML = nameFor(gameId) + ' <span class="sub">이용방법</span>';
+  const body = document.getElementById('lpHowtoBody');
+
+  function stepCard(step){
+    return `<div class="ht-step">
+      <div class="ht-step-title"><span class="badge">${step.badge}</span>${step.title}</div>
+      <div class="ht-step-body">${step.body}</div>
+      ${step.visual||''}
+    </div>`;
+  }
+
+  let html = '';
+  if (isMP){
+    html += `
+      <div class="ht-section">
+        <div class="ht-section-title mp">
+          <span class="num">①</span>
+          <h4>멀티플레이 — 방 만들고 친구 부르기</h4>
+        </div>
+        ${MP_STEPS.map(stepCard).join('')}
+      </div>`;
+  }
+  html += `
+    <div class="ht-section">
+      <div class="ht-section-title">
+        <span class="num">${isMP?'②':'①'}</span>
+        <h4>게임 방법</h4>
+      </div>
+      ${(GAME_STEPS[gameId]||[]).map(stepCard).join('')}
+    </div>`;
+  body.innerHTML = html;
+  body.scrollTop = 0;
+
+  document.getElementById('lpModBack').classList.add('on');
+  document.getElementById('lpHowto').classList.add('on');
+  document.getElementById('lpHowto').setAttribute('aria-hidden','false');
+  document.getElementById('lpLaunch').classList.remove('on');
+  document.getElementById('lpLaunch').setAttribute('aria-hidden','true');
+}
+function closeHowto(){
+  document.getElementById('lpHowto').classList.remove('on');
+  document.getElementById('lpHowto').setAttribute('aria-hidden','true');
+  document.getElementById('lpModBack').classList.remove('on');
+}
+function closeAll(){ closeLaunch(); closeHowto(); }
+
+function playCurrent(){
+  if (!_currentGameId) return;
+  location.href = urlFor(_currentGameId);
+}
+
+/* Delegated click — intercept only plain left-clicks so ctrl+click /
+   middle-click / right-click "open in new tab" still work as expected.
+   Coming-soon cards have no data-game-id, so they're skipped naturally. */
+document.addEventListener('click', (e) => {
+  const card = e.target.closest('.game-card[data-game-id]');
+  if (!card) return;
+  if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  openLaunch(card.dataset.gameId);
+});
+
+document.getElementById('lpLaunchX').addEventListener('click', closeLaunch);
+document.getElementById('lpLaunchHowto').addEventListener('click', () => openHowto(_currentGameId));
+document.getElementById('lpLaunchPlay').addEventListener('click', playCurrent);
+document.getElementById('lpHowtoX').addEventListener('click', closeHowto);
+document.getElementById('lpHowtoPlay').addEventListener('click', playCurrent);
+document.getElementById('lpModBack').addEventListener('click', closeAll);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape'){
+    if (document.getElementById('lpHowto').classList.contains('on')) closeHowto();
+    else if (document.getElementById('lpLaunch').classList.contains('on')) closeLaunch();
+  }
+});
+</script>
+
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776838438" defer></script>
+<script src="/js/siteFooter.js?v=1776839302" defer></script>
 </body>
 </html>
