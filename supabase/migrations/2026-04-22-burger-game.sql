@@ -1,16 +1,16 @@
 -- =====================================================================
 -- Migration: Burger Chef (record-keeping skill game replacing Reaction)
 -- Date:      2026-04-22
--- Purpose:   Falling-ingredient stacking game. Sample burger shown at
---            the top; ingredients rain down; player slides a plate
---            left-right to catch them in the EXACT order of the sample.
---            Wrong catch = lose a life. Complete the burger = level up,
---            next sample gets longer + faster.
+-- Purpose:   Tap-5-plates timed-order stacking game. Sample burger on
+--            the left; 5 ingredient plates on the bottom; player taps
+--            them in the same order as the sample inside a shrinking
+--            time budget. Wrong tap = -2 s + combo reset. Complete the
+--            burger = level up, longer sample, tighter clock.
 --
 --            Score is derived SERVER-SIDE from ingredients_caught,
 --            burgers_completed and level_reached (so a tampered client
 --            can't submit an arbitrary number). Anti-cheat: minimum
---            pacing (each ingredient takes real time), plus the usual
+--            pacing (each correct tap takes real time), plus the usual
 --            30-per-hour rate limit. Same SECURITY DEFINER pattern as
 --            Pac-Man / Snake.
 -- =====================================================================
@@ -80,7 +80,7 @@ create trigger burger_refresh_record
 -- level/duration; server derives score using a fixed formula so the
 -- client can't make up points. Score = ingredients*10 + burgers*50 +
 -- level_reached*100 (level bonus rewards surviving to higher stages,
--- not just catching a lot of randomly-spawned items at level 1).
+-- not just tapping a lot at level 1).
 create or replace function public.record_burger_attempt(
     p_burgers_completed  int,
     p_ingredients_caught int,
@@ -100,10 +100,11 @@ begin
     if p_ingredients_caught < 0 or p_ingredients_caught > 10000 then raise exception 'bad_ingredients'; end if;
     if p_level_reached < 1 or p_level_reached > 100 then raise exception 'bad_level'; end if;
     if p_duration_ms < 0 or p_duration_ms > 3600000 then raise exception 'bad_duration'; end if;
-    /* Pacing guard — each catch takes at least ~300 ms of real time
-       (spawn + fall + reaction). Reject games that claim to have
-       caught more ingredients than that pacing would allow. Also 2s
-       minimum total so scripted refresh-loops can't flood records. */
+    /* Pacing guard — each tap takes at least ~300 ms of real time
+       (perceive + react + thumb travel). Reject games that claim to
+       have tapped more correct ingredients than that pacing would
+       allow. Also 2s minimum total so scripted refresh-loops can't
+       flood records. */
     if p_duration_ms < 2000 then raise exception 'too_short'; end if;
     if p_ingredients_caught > 0 and p_duration_ms < p_ingredients_caught * 300 then
         raise exception 'impossible_pace';
