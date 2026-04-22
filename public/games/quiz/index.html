@@ -156,23 +156,32 @@ body{
 }
 .q-card::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 0%,rgba(0,217,255,.08),transparent 60%);pointer-events:none}
 
-.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+/* One answer per row (4 rows stacked vertically). Each row = big
+   numbered badge on the left + answer text filling the remainder.
+   Colors are muted dark variants — distinct enough that the pie
+   chart legend still reads distinctly, but calm enough that 4
+   rows of saturated color don't overwhelm the eye. */
+.answers{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:14px}
 .ans-btn{
-    position:relative;padding:22px 12px;min-height:92px;border-radius:16px;
-    border:0;cursor:pointer;font-family:inherit;color:#fff;
-    font-weight:800;font-size:.98em;line-height:1.3;text-align:center;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;
-    box-shadow:0 6px 18px -6px rgba(0,0,0,.55),inset 0 -3px 0 rgba(0,0,0,.2);
-    transition:transform .08s,filter .2s,opacity .3s;
-    overflow:hidden;
+    position:relative;padding:14px 18px;min-height:62px;border-radius:14px;
+    border:1px solid rgba(255,255,255,.08);cursor:pointer;font-family:inherit;color:#fff;
+    font-weight:700;font-size:.98em;line-height:1.35;text-align:left;
+    display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:14px;
+    box-shadow:0 4px 12px -6px rgba(0,0,0,.5);
+    transition:transform .08s,filter .2s,opacity .3s,border-color .2s;
+    overflow:hidden;width:100%;
 }
-.ans-btn:active{transform:scale(.97)}
-.ans-btn .shape{font-size:1.6em;line-height:1;font-weight:900;opacity:.85;filter:drop-shadow(0 2px 3px rgba(0,0,0,.3))}
-.ans-btn .txt{font-size:.95em;color:#fff;max-width:100%;padding:0 2px}
-.ans-btn[data-c="0"]{background:linear-gradient(135deg,#E74C3C,#C0392B)}
-.ans-btn[data-c="1"]{background:linear-gradient(135deg,#3498DB,#2874A6)}
-.ans-btn[data-c="2"]{background:linear-gradient(135deg,#F39C12,#CA8010)}
-.ans-btn[data-c="3"]{background:linear-gradient(135deg,#27AE60,#1E8449)}
+.ans-btn:active{transform:scale(.985)}
+.ans-btn .num{
+    flex:0 0 auto;font-family:'Orbitron',sans-serif;font-size:1.4em;font-weight:900;
+    min-width:30px;text-align:center;color:rgba(255,255,255,.92);line-height:1;
+    text-shadow:0 2px 4px rgba(0,0,0,.35)
+}
+.ans-btn .txt{flex:1;font-size:.98em;color:#fff;line-height:1.35;font-weight:600}
+.ans-btn[data-c="0"]{background:linear-gradient(135deg,#3D5770,#2C3F52)}
+.ans-btn[data-c="1"]{background:linear-gradient(135deg,#3F6352,#2E4839)}
+.ans-btn[data-c="2"]{background:linear-gradient(135deg,#6A5540,#4E3E2E)}
+.ans-btn[data-c="3"]{background:linear-gradient(135deg,#4F3E63,#3A2D48)}
 .ans-btn.picked{outline:3px solid #FFE066;outline-offset:-3px;transform:scale(1.02);filter:brightness(1.1)}
 .ans-btn.locked{opacity:.5;pointer-events:none}
 .ans-btn.correct{outline:4px solid #00E676;outline-offset:-3px;animation:correct-pulse .9s ease-out}
@@ -214,10 +223,10 @@ body{
 .dist-legend{display:flex;flex-direction:column;gap:6px;width:100%}
 .legend-row{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:center;padding:6px 0}
 .legend-sw{width:14px;height:14px;border-radius:4px}
-.legend-sw[data-c="0"]{background:#E74C3C}
-.legend-sw[data-c="1"]{background:#3498DB}
-.legend-sw[data-c="2"]{background:#F39C12}
-.legend-sw[data-c="3"]{background:#27AE60}
+.legend-sw[data-c="0"]{background:#4A6B8A}
+.legend-sw[data-c="1"]{background:#4F8270}
+.legend-sw[data-c="2"]{background:#8A7055}
+.legend-sw[data-c="3"]{background:#6A5688}
 .legend-txt{font-size:.82em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
 .legend-pct{font-family:'Orbitron',sans-serif;font-weight:900;font-size:.88em;color:#FFE066}
 .legend-row.correct{background:rgba(0,230,118,.08);border-radius:6px;padding:6px 8px;margin:0 -8px}
@@ -282,7 +291,8 @@ body{
 @media(min-width:1024px){
     .view{max-width:640px}
     .q-card{font-size:1.5em;min-height:160px}
-    .ans-btn{min-height:110px;font-size:1.08em}
+    .ans-btn{min-height:70px;font-size:1.06em;padding:16px 22px}
+    .ans-btn .num{font-size:1.55em;min-width:34px}
 }
     </style>
     <script src="/vendor/supabase.min.js"></script>
@@ -300,6 +310,18 @@ body{
     <div class="setup-card">
         <div class="setup-title">모드 선택</div>
         <div class="setup-sub">친구들과 실시간으로 대결하는 Live Quiz. 호스트가 방을 만들고 게스트는 방 코드만으로 <b>회원가입 없이</b> 참가. 최대 <b>100명</b>까지.</div>
+
+        <!-- Nickname prompt for anonymous users — only rendered when
+             signedIn === false. Saved to localStorage so the next
+             visit pre-fills. Used by BOTH host and guest paths. -->
+        <div id="nickWrap" style="display:none;margin-bottom:14px">
+            <div style="font-size:.75em;color:var(--muted);letter-spacing:.08em;margin-bottom:6px;font-weight:700">
+                어떻게 불러드릴까요?
+            </div>
+            <input type="text" id="nickInput" maxlength="20" placeholder="닉네임 (2-20자)"
+                   style="width:100%;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.15);color:#fff;font-family:inherit;font-size:.95em;font-weight:600;text-align:center">
+        </div>
+
         <button class="big-btn" id="btnModeHost">🎙 방 만들기 (호스트)</button>
         <button class="big-btn ghost" id="btnModeJoin" style="margin-top:8px">🫂 방 참가 (게스트)</button>
     </div>
@@ -448,7 +470,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1776860824"></script>
+<script src="/js/supabase-config.js?v=1776862759"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -650,6 +672,9 @@ $('btnModeJoin').addEventListener('click', () => {
     if (m) $('inCode').value = m[1].toUpperCase();
     const p = location.search.match(/[?&]pin=(\d{4})/);
     if (p) $('inPin').value = p[1];
+    /* Pass through the nickname the anon user already typed on the
+       mode-select screen — saves them re-entering it on the join form. */
+    if ($('inNick') && myNick && myNick !== '플레이어') $('inNick').value = myNick;
     showView('vJoin');
 });
 $('btnSoloMode').addEventListener('click', (e) => {
@@ -921,9 +946,12 @@ function renderHostQuestionView(payload, q){
 
 function renderAnswerButtons(options){
     const wrap = $('answers');
-    const shapes = ['▲','◆','●','■'];
+    /* Just plain 1-2-3-4 numbers now. Decisions over shapes/colors
+       are guided by the calm-down feedback — the number alone is
+       the primary identifier; color is a secondary grouping hint
+       (same data-c maps to the pie chart slice). */
     wrap.innerHTML = options.map((opt, i) =>
-        `<button class="ans-btn" data-c="${i}"><span class="shape">${shapes[i]}</span><span class="txt">${esc(opt)}</span></button>`
+        `<button class="ans-btn" data-c="${i}"><span class="num">${i+1}</span><span class="txt">${esc(opt)}</span></button>`
     ).join('');
     wrap.querySelectorAll('.ans-btn').forEach(btn => {
         btn.addEventListener('click', () => handleAnswerTap(parseInt(btn.dataset.c, 10)));
@@ -1188,7 +1216,7 @@ function renderPie(dist, correctIdx, options, totalAnswered){
     const total = dist.reduce((a,b) => a+b, 0);
     const svg = $('rvPie');
     svg.innerHTML = '';
-    const colors = ['#E74C3C','#3498DB','#F39C12','#27AE60'];
+    const colors = ['#4A6B8A','#4F8270','#8A7055','#6A5688'];
     const cx=50, cy=50, r=42;
     if (total === 0){
         /* No answers; draw a gray circle */
@@ -1459,7 +1487,30 @@ function finalizeSolo(){
    ============================================================ */
 (async () => {
     const nick = await resolveNickname();
+    const signedIn = !!nick;
     if (nick){ myNick = nick; }
+
+    /* Anon users: surface the nickname input on the mode-select card
+       so the name is set ONCE and flows through to both host and
+       guest paths. Saved lpnick is restored from localStorage for
+       returning visitors. */
+    if (!signedIn){
+        const savedAnon = (function(){ try { return localStorage.getItem('lp_quiz_nick') || ''; } catch(_) { return ''; } })();
+        if (savedAnon) myNick = savedAnon;
+        const nickWrap = $('nickWrap');
+        const nickIn = $('nickInput');
+        if (nickWrap && nickIn){
+            nickWrap.style.display = 'block';
+            nickIn.value = savedAnon || '';
+            nickIn.addEventListener('input', () => {
+                const v = nickIn.value.trim().slice(0, 20);
+                if (v.length >= 1){
+                    myNick = v;
+                    try { localStorage.setItem('lp_quiz_nick', v); } catch(_){}
+                }
+            });
+        }
+    }
 
     /* Auto-open join view if URL has ?room= */
     if (/[?&]room=[A-Z0-9]+/i.test(location.search)){
@@ -1487,6 +1538,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776860824"></script>
+<script src="/js/siteFooter.js?v=1776862759"></script>
 </body>
 </html>

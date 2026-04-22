@@ -340,7 +340,12 @@
         'host:join_ack','host:snapshot','host:close','host:probe_ack',
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
-        'host:guests','host:bingo_winners','host:heartbeat','host:navigate'
+        'host:guests','host:bingo_winners','host:heartbeat','host:navigate',
+        /* Live Quiz events — broadcast from host to all guests during
+           a game session. Without explicit registration here, supabase
+           realtime silently drops the payloads and guests stay stuck
+           on the lobby view after the host presses "시작". */
+        'host:quiz_question','host:quiz_reveal','host:quiz_leaderboard','host:quiz_final'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
