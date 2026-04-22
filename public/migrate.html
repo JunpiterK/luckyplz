@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="robots" content="noindex, nofollow">
+<title>Migration · Burger Chef</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Noto Sans KR',sans-serif;background:#0a0a1a;color:#fff;padding:16px;min-height:100vh;line-height:1.5}
+h1{font-size:20px;margin-bottom:6px;background:linear-gradient(135deg,#FFB74D,#FFE66D,#FF8A65);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{font-size:13px;color:rgba(255,255,255,.55);margin-bottom:16px}
+.steps{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:13px}
+.steps ol{margin-left:18px;margin-top:6px}
+.steps li{margin-bottom:3px}
+.steps a{color:#FFE66D;text-decoration:underline;word-break:break-all}
+.copy-btn{width:100%;padding:18px;font-size:17px;font-weight:800;background:linear-gradient(135deg,#FFB74D,#FF8A65);color:#3a1e00;border:0;border-radius:12px;cursor:pointer;margin-bottom:12px;box-shadow:0 8px 24px -8px rgba(255,183,77,.5)}
+.copy-btn:active{transform:translateY(1px)}
+.copy-btn.done{background:linear-gradient(135deg,#00E676,#00C97A);color:#002818}
+.open-btn{display:block;width:100%;padding:14px;font-size:14px;font-weight:700;background:rgba(0,217,255,.1);color:#00D9FF;border:1px solid rgba(0,217,255,.3);border-radius:10px;text-align:center;text-decoration:none;margin-bottom:16px}
+#status{padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:13px;display:none}
+#status.on{display:block}
+#status.ok{background:rgba(0,230,118,.15);border:1px solid rgba(0,230,118,.4);color:#00E676}
+#status.err{background:rgba(255,107,139,.15);border:1px solid rgba(255,107,139,.4);color:#FF6B8B}
+textarea{width:100%;height:320px;padding:12px;background:#14142a;color:#ccd;border:1px solid #2a2a4a;border-radius:8px;font-family:Consolas,Monaco,monospace;font-size:11px;line-height:1.4}
+.fallback{font-size:12px;color:rgba(255,255,255,.45);margin-top:10px}
+</style>
+</head>
+<body>
+
+<h1>🍔 Burger Chef 마이그레이션</h1>
+<div class="sub">Supabase에 테이블 + RPC 3종 설치</div>
+
+<div class="steps">
+  <b>사용법</b>
+  <ol>
+    <li>아래 <b>SQL 복사</b> 버튼 탭</li>
+    <li>Supabase SQL Editor 열기 (아래 링크)</li>
+    <li>에디터에 붙여넣기 → <b>Run</b></li>
+  </ol>
+</div>
+
+<button class="copy-btn" id="copyBtn" disabled>SQL 불러오는 중…</button>
+
+<div id="status"></div>
+
+<a class="open-btn" href="https://supabase.com/dashboard/project/jkrpxijybuljdxkrbsan/sql/new" target="_blank">
+  → Supabase SQL Editor 열기
+</a>
+
+<details>
+  <summary style="font-size:13px;color:rgba(255,255,255,.6);margin-bottom:8px;cursor:pointer">
+    SQL 미리보기 / 수동 복사
+  </summary>
+  <textarea id="sql" readonly>불러오는 중…</textarea>
+  <div class="fallback">버튼이 안 먹으면 위 영역 길게 눌러서 전체 선택 → 복사</div>
+</details>
+
+<script>
+const SQL_URL = '/migrate-burger.sql?v=' + Date.now();
+const btn = document.getElementById('copyBtn');
+const ta = document.getElementById('sql');
+const status = document.getElementById('status');
+
+let sqlText = '';
+
+function showStatus(msg, kind){
+  status.textContent = msg;
+  status.className = 'on ' + kind;
+}
+
+fetch(SQL_URL, {cache:'no-store'})
+  .then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  })
+  .then(text => {
+    sqlText = text;
+    ta.value = text;
+    btn.disabled = false;
+    btn.textContent = '📋 SQL 전체 복사 (' + text.length.toLocaleString() + 'B)';
+  })
+  .catch(e => {
+    btn.textContent = 'SQL 로드 실패';
+    showStatus('SQL 파일을 불러오지 못했어요: ' + e.message, 'err');
+  });
+
+btn.addEventListener('click', async () => {
+  if (!sqlText) return;
+  try {
+    await navigator.clipboard.writeText(sqlText);
+    btn.classList.add('done');
+    btn.textContent = '✓ 복사 완료 — Supabase에 붙여넣기';
+    showStatus('클립보드 복사됨. 위 링크로 Supabase 열고 붙여넣기 → Run.', 'ok');
+  } catch (e1) {
+    // Fallback: execCommand copy via textarea selection.
+    try {
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand('copy');
+      if (ok){
+        btn.classList.add('done');
+        btn.textContent = '✓ 복사됨 (선택 영역)';
+        showStatus('복사됨. Supabase에 붙여넣기.', 'ok');
+      } else {
+        throw new Error('execCommand returned false');
+      }
+    } catch (e2) {
+      showStatus('자동 복사 실패 (' + (e1.message || e2.message) + '). 아래 미리보기 펼쳐서 수동 복사하세요.', 'err');
+    }
+  }
+});
+</script>
+
+</body>
+</html>
