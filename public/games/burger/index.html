@@ -198,7 +198,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1776835440"></script>
+<script src="/js/supabase-config.js?v=1776838438"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -267,190 +267,380 @@ function drawRR(x, y, w, h, r){
     ctx.closePath();
 }
 
-/* Each drawer receives (cx, cy, w, h). Shapes stay within the (w,h) box. */
+/* ========================================================================
+   Ingredient catalog v2. Each ingredient draws itself within a (cx, cy,
+   w, h) box, but uses DISTINCT silhouettes and volumetric gradients so
+   the stacked burger reads as real food — a puffy domed bun on top, a
+   THICK irregular patty, a THIN glossy tomato round, fluffy overlapping
+   lettuce curls, etc. Layers also have DIFFERENT natural heights (see
+   LAYER_H table below) — previously every layer was the same 16 px so
+   the stack looked like a striped bar, not a burger.
+
+   Each drawer should:
+   - fill the horizontal extent (some fillings extend slightly past the
+     stack width so the bun clearly "holds" them)
+   - use multi-stop gradients (not flat fills) for dimensionality
+   - commit at least one accent detail (seeds, grill marks, juice
+     droplets, cheese holes) to sell the cartoon-illustration look
+   ======================================================================== */
 const INGREDIENTS = {
+    /* Bottom bun — flat top (fillings rest on it), rounded bottom. Rich
+       warm-tan gradient top-to-bottom so it reads domed / baked even
+       though the top edge is horizontal. */
     bunBottom: { name:'밑빵', draw(cx,cy,w,h){
         const x=cx-w/2, y=cy-h/2;
-        /* Tan dome-DOWN: flat top, rounded bottom (classic burger base). */
-        ctx.fillStyle='#E8A868';
-        drawRR(x, y, w, h, [4,4,h*0.7,h*0.7]);
+        // Main shape: flat top, rounded bottom corners
+        const g = ctx.createLinearGradient(0, y, 0, y+h);
+        g.addColorStop(0,   '#F2BC80');
+        g.addColorStop(0.55,'#D48C4B');
+        g.addColorStop(1,   '#8B5423');
+        ctx.fillStyle = g;
+        const br = Math.min(h*0.7, w*0.1);
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x+w, y);
+        ctx.lineTo(x+w, y+h-br);
+        ctx.quadraticCurveTo(x+w, y+h, x+w-br, y+h);
+        ctx.lineTo(x+br, y+h);
+        ctx.quadraticCurveTo(x, y+h, x, y+h-br);
+        ctx.closePath();
         ctx.fill();
-        /* Inner crumb highlight */
-        ctx.fillStyle='rgba(255,255,255,.18)';
-        drawRR(x+2, y+2, w-4, h*0.4, [2,2,0,0]);
+        // Crust darkening along the rounded bottom
+        ctx.fillStyle = 'rgba(90,45,15,.28)';
+        ctx.beginPath();
+        ctx.moveTo(x, y+h-br);
+        ctx.quadraticCurveTo(x, y+h, x+br, y+h);
+        ctx.lineTo(x+w-br, y+h);
+        ctx.quadraticCurveTo(x+w, y+h, x+w, y+h-br);
+        ctx.lineTo(x+w, y+h*0.75);
+        ctx.lineTo(x, y+h*0.75);
+        ctx.closePath();
         ctx.fill();
+        // Crumb highlight strip near the flat top (bakery shine)
+        ctx.fillStyle = 'rgba(255,240,210,.55)';
+        ctx.fillRect(x+w*0.08, y+Math.max(1,h*0.1), w*0.84, Math.max(1,h*0.15));
     }},
+
+    /* Top bun — fully domed, flat bottom (sits on the highest filling).
+       Radial gradient puts the highlight on the upper-left and shades
+       down to a rich bake-brown on the lower-right; 5 irregular sesame
+       seeds each cast their own small shadow. */
     bunTop: { name:'윗빵', draw(cx,cy,w,h){
-        /* Dome UP with sesame seeds. */
-        ctx.fillStyle='#D68F4E';
+        // Dome shape — flat bottom edge, bezier arch over the top
+        const grad = ctx.createRadialGradient(cx-w*.22, cy-h*.25, w*.08, cx, cy+h*.1, w*.65);
+        grad.addColorStop(0,    '#F7C88C');
+        grad.addColorStop(0.45, '#D98B48');
+        grad.addColorStop(1,    '#804520');
+        ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.moveTo(cx-w/2, cy+h/2);
-        ctx.lineTo(cx-w/2, cy+h/4);
-        ctx.quadraticCurveTo(cx-w/2, cy-h/2, cx, cy-h/2);
-        ctx.quadraticCurveTo(cx+w/2, cy-h/2, cx+w/2, cy+h/4);
+        ctx.lineTo(cx-w/2, cy+h*0.28);
+        ctx.bezierCurveTo(cx-w*0.55, cy-h*0.55, cx+w*0.55, cy-h*0.55, cx+w/2, cy+h*0.28);
         ctx.lineTo(cx+w/2, cy+h/2);
         ctx.closePath();
         ctx.fill();
-        /* Lighter top gloss */
-        ctx.fillStyle='rgba(255,235,180,.35)';
+        // Upper-left gloss
+        ctx.fillStyle = 'rgba(255,248,220,.55)';
         ctx.beginPath();
-        ctx.ellipse(cx-w*.12, cy-h*.18, w*.18, h*.18, -.3, 0, Math.PI*2);
+        ctx.ellipse(cx-w*.18, cy-h*.2, w*.22, h*.17, -.35, 0, Math.PI*2);
         ctx.fill();
-        /* Sesame seeds */
-        ctx.fillStyle='#FFF4D0';
-        [[-w*.22,-h*.08],[0,-h*.22],[w*.22,-h*.08]].forEach(([dx,dy])=>{
+        // Crust shadow along the bottom of the dome (where it meets the filling)
+        ctx.fillStyle = 'rgba(80,40,10,.3)';
+        ctx.fillRect(cx-w/2+1, cy+h*0.3, w-2, Math.max(1, h*0.15));
+        // Sesame seeds — 5 in irregular positions, each with a shadow
+        const seeds = [
+            [-w*.30, -h*.12],
+            [-w*.08, -h*.30],
+            [ w*.12, -h*.24],
+            [ w*.26, -h*.06],
+            [-w*.18,  h*.05]
+        ];
+        const sw = Math.max(1.3, w*.038), sh = Math.max(2.4, h*.11);
+        seeds.forEach(([dx,dy])=>{
+            const sx=cx+dx, sy=cy+dy;
+            ctx.fillStyle = 'rgba(90,50,18,.45)';
             ctx.beginPath();
-            ctx.ellipse(cx+dx, cy+dy, Math.max(1.2,w*.035), Math.max(2.2,h*.12), .3, 0, Math.PI*2);
+            ctx.ellipse(sx+.5, sy+.8, sw, sh, .28, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#FFF4D0';
+            ctx.beginPath();
+            ctx.ellipse(sx, sy, sw, sh, .28, 0, Math.PI*2);
+            ctx.fill();
+            // Seed sheen
+            ctx.fillStyle = 'rgba(255,255,255,.55)';
+            ctx.beginPath();
+            ctx.ellipse(sx-sw*.3, sy-sh*.4, sw*.35, sh*.3, .28, 0, Math.PI*2);
             ctx.fill();
         });
     }},
+
+    /* Patty — thickest layer, bumpy edges, rich dark-brown gradient with
+       red-orange undertone. Four visible grill marks + scattered juice
+       droplets sell the "grilled beef" read. */
     patty: { name:'패티', draw(cx,cy,w,h){
         const x=cx-w/2, y=cy-h/2;
-        ctx.fillStyle='#5B2E10';
-        drawRR(x, y, w, h, h*0.28);
-        ctx.fill();
-        /* Darker grill marks */
-        ctx.fillStyle='#3a1d08';
-        for (let i=0;i<3;i++){
-            ctx.fillRect(x+w*0.18 + i*w*0.22, y+h*0.25, w*0.06, h*0.5);
-        }
-        /* Juice highlight */
-        ctx.fillStyle='rgba(255,180,120,.28)';
+        // Extended slightly past stack width so patty pokes out of the bun
+        const pw = w*1.02, px = cx-pw/2;
+        // Irregular bumpy outline (8 bumps top + bottom)
+        const g = ctx.createLinearGradient(0, y, 0, y+h);
+        g.addColorStop(0,    '#6E3C20');
+        g.addColorStop(0.5,  '#4A2512');
+        g.addColorStop(1,    '#2B1205');
+        ctx.fillStyle = g;
+        const r = h*0.38;
+        const bumps = 7;
         ctx.beginPath();
-        ctx.ellipse(cx-w*.2, cy-h*.15, w*.12, h*.14, 0, 0, Math.PI*2);
+        ctx.moveTo(px+r, y);
+        for (let i=1;i<bumps;i++){
+            const t = i/bumps;
+            const bx = px + r + (pw-2*r)*t;
+            const by = y + (i%2===0 ? -h*0.04 : h*0.04);
+            ctx.lineTo(bx, by);
+        }
+        ctx.lineTo(px+pw-r, y);
+        ctx.quadraticCurveTo(px+pw, y, px+pw, y+r);
+        ctx.lineTo(px+pw, y+h-r);
+        ctx.quadraticCurveTo(px+pw, y+h, px+pw-r, y+h);
+        for (let i=bumps-1;i>=1;i--){
+            const t = i/bumps;
+            const bx = px + r + (pw-2*r)*t;
+            const by = y + h + (i%2===0 ? h*0.04 : -h*0.04);
+            ctx.lineTo(bx, by);
+        }
+        ctx.lineTo(px+r, y+h);
+        ctx.quadraticCurveTo(px, y+h, px, y+h-r);
+        ctx.lineTo(px, y+r);
+        ctx.quadraticCurveTo(px, y, px+r, y);
+        ctx.closePath();
         ctx.fill();
+        // Top rim warm highlight
+        ctx.fillStyle = 'rgba(255,160,90,.35)';
+        ctx.beginPath();
+        ctx.moveTo(px+r*0.8, y+h*0.1);
+        for (let i=1;i<bumps;i++){
+            const t = i/bumps;
+            const bx = px + r + (pw-2*r)*t;
+            ctx.lineTo(bx, y+h*0.1 + (i%2===0 ? -h*0.04 : h*0.02));
+        }
+        ctx.lineTo(px+pw-r*0.8, y+h*0.1);
+        ctx.lineTo(px+pw-r*0.8, y+h*0.22);
+        ctx.lineTo(px+r*0.8, y+h*0.22);
+        ctx.closePath();
+        ctx.fill();
+        // Grill marks — 4 darker vertical bands
+        ctx.fillStyle = 'rgba(12,4,0,.55)';
+        for (let i=0;i<4;i++){
+            const gx = px + pw*(0.14 + i*0.22);
+            ctx.fillRect(gx, y+h*0.18, Math.max(1.2, pw*0.035), h*0.64);
+        }
+        // Juice/sear highlights
+        ctx.fillStyle = 'rgba(255,190,130,.4)';
+        [[-.22,-.18],[ .18,-.08],[-.04, .22],[ .24, .12]].forEach(([dx,dy])=>{
+            ctx.beginPath();
+            ctx.ellipse(cx+dx*pw, cy+dy*h, Math.max(.9, pw*.035), Math.max(.8, h*.09), 0, 0, Math.PI*2);
+            ctx.fill();
+        });
     }},
+
+    /* Cheese — BRIGHT yellow thin slice, clearly overhanging on one side
+       (melty droop). Drips along the bottom edge in irregular finger-
+       shapes. A few darker gold cheese holes on the top surface. */
     cheese: { name:'치즈', draw(cx,cy,w,h){
         const x=cx-w/2, y=cy-h/2;
-        /* Base slab */
-        ctx.fillStyle='#FFCB29';
-        drawRR(x, y, w, h*0.7, 3);
-        ctx.fill();
-        /* Melty drip */
-        ctx.fillStyle='#FFCB29';
+        // Extend horizontally past the stack width so cheese "droops" out
+        const cw = w*1.06, cx0 = cx-cw/2;
+        // Main slab (top 65%) + drippy bottom (35%)
+        const g = ctx.createLinearGradient(0, y, 0, y+h*0.65);
+        g.addColorStop(0,   '#FFE570');
+        g.addColorStop(0.5, '#FFCE2E');
+        g.addColorStop(1,   '#E8A412');
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.moveTo(x, y+h*0.7);
-        ctx.lineTo(x+w*0.18, y+h);
-        ctx.lineTo(x+w*0.36, y+h*0.72);
-        ctx.lineTo(x+w*0.58, y+h*0.98);
-        ctx.lineTo(x+w*0.8, y+h*0.7);
-        ctx.lineTo(x+w, y+h*0.9);
-        ctx.lineTo(x+w, y+h*0.7);
+        ctx.moveTo(cx0, y);
+        ctx.lineTo(cx0+cw, y);
+        ctx.lineTo(cx0+cw, y+h*0.6);
+        // Drippy bottom edge — 4 irregular melt fingers
+        const drips = [
+            [0.00, 0.65],
+            [0.12, 1.00],
+            [0.25, 0.70],
+            [0.40, 0.95],
+            [0.55, 0.72],
+            [0.72, 1.05],
+            [0.88, 0.68],
+            [1.00, 0.80]
+        ];
+        for (const [tx,ty] of drips){
+            ctx.lineTo(cx0 + cw*tx, y + h*ty);
+        }
+        ctx.lineTo(cx0, y+h*0.6);
         ctx.closePath();
         ctx.fill();
-        /* Shine */
-        ctx.fillStyle='rgba(255,255,255,.38)';
-        ctx.fillRect(x+w*0.18, y+h*0.1, w*0.16, h*0.12);
+        // Top shine strip
+        ctx.fillStyle = 'rgba(255,255,220,.6)';
+        ctx.fillRect(cx0+cw*0.06, y+Math.max(.5,h*0.07), cw*0.55, Math.max(1, h*0.14));
+        // Cheese holes (3, scattered)
+        ctx.fillStyle = 'rgba(180,130,20,.65)';
+        [[.32,.35],[.58,.28],[.48,.48]].forEach(([tx,ty])=>{
+            ctx.beginPath();
+            ctx.arc(cx0+cw*tx, y+h*ty, Math.max(.8, h*.08), 0, Math.PI*2);
+            ctx.fill();
+        });
+        // Tiny rim shade on the overhangs
+        ctx.strokeStyle = 'rgba(170,110,20,.5)';
+        ctx.lineWidth = Math.max(.7, h*.06);
+        ctx.beginPath();
+        ctx.moveTo(cx0, y+h*0.6);
+        for (const [tx,ty] of drips){
+            ctx.lineTo(cx0 + cw*tx, y + h*ty);
+        }
+        ctx.stroke();
     }},
+
+    /* Lettuce — fluffy multi-curl. Extends BEYOND the stack width; has
+       a darker underside peeking along the bottom and three bright-green
+       curl-bumps on top. Reads as a ruffled leaf, not a flat green bar. */
     lettuce: { name:'양상추', draw(cx,cy,w,h){
-        /* Wavy top edge; thick green base. */
-        ctx.fillStyle='#6FC13B';
+        // Extend WAY past the stack width — lettuce spills out of the bun
+        const lw = w*1.14, lx = cx-lw/2;
+        // Shadowed underside (bottom 40%)
+        ctx.fillStyle = '#2E6A18';
         ctx.beginPath();
-        const segs=7, x0=cx-w/2;
-        ctx.moveTo(x0, cy+h*0.3);
-        for (let i=0; i<=segs; i++){
-            const xp = x0 + (w*i/segs);
-            const dip = (i%2===0) ? cy-h*0.1 : cy-h*0.4;
-            ctx.lineTo(xp, dip);
+        ctx.moveTo(lx, cy+h*0.1);
+        for (let i=0;i<=10;i++){
+            const t = i/10;
+            const px = lx + lw*t;
+            const py = cy + h*0.1 + (i%2===0 ? h*0.12 : h*0.35);
+            ctx.lineTo(px, py);
         }
-        ctx.lineTo(cx+w/2, cy+h*0.5);
-        ctx.lineTo(x0, cy+h*0.5);
+        ctx.lineTo(lx+lw, cy+h*0.1);
         ctx.closePath();
         ctx.fill();
-        /* Lighter ruffle highlight */
-        ctx.fillStyle='#A0E868';
+        // Main green body with top ruffle
+        const g = ctx.createLinearGradient(0, cy-h*0.5, 0, cy+h*0.2);
+        g.addColorStop(0, '#9BE14B');
+        g.addColorStop(1, '#5AAD28');
+        ctx.fillStyle = g;
         ctx.beginPath();
-        ctx.moveTo(x0, cy);
-        for (let i=0; i<=segs; i++){
-            const xp = x0 + (w*i/segs);
-            const dip = (i%2===0) ? cy-h*0.05 : cy-h*0.3;
-            ctx.lineTo(xp, dip);
+        ctx.moveTo(lx, cy+h*0.15);
+        for (let i=0;i<=10;i++){
+            const t = i/10;
+            const px = lx + lw*t;
+            const py = cy + (i%2===0 ? h*0.15 : -h*0.40);
+            ctx.lineTo(px, py);
         }
-        ctx.lineTo(cx+w/2, cy+h*0.15);
-        ctx.lineTo(x0, cy+h*0.15);
+        ctx.lineTo(lx+lw, cy+h*0.15);
         ctx.closePath();
         ctx.fill();
+        // Three bright curl bumps on top (suggest multiple leaf layers)
+        ctx.fillStyle = '#B5F06A';
+        for (let i=0;i<4;i++){
+            const bx = lx + lw*(0.18 + i*0.22);
+            const by = cy - h*0.15 + (i%2===0 ? -h*0.08 : h*0.02);
+            ctx.beginPath();
+            ctx.ellipse(bx, by, lw*0.08, h*0.28, 0, 0, Math.PI*2);
+            ctx.fill();
+        }
+        // Vein highlights
+        ctx.strokeStyle = 'rgba(255,255,255,.25)';
+        ctx.lineWidth = Math.max(.6, h*.05);
+        ctx.beginPath();
+        for (let i=0;i<4;i++){
+            const bx = lx + lw*(0.18 + i*0.22);
+            ctx.moveTo(bx, cy-h*0.1);
+            ctx.lineTo(bx, cy+h*0.1);
+        }
+        ctx.stroke();
     }},
+
+    /* Tomato — thin glossy red slice. Darker red outer rim, brighter
+       red-orange centre via gradient, 5 yellow seeds arranged in a
+       natural scatter, and a single specular gloss highlight up-left. */
     tomato: { name:'토마토', draw(cx,cy,w,h){
-        const x=cx-w/2, y=cy-h/2;
-        ctx.fillStyle='#E94A3F';
-        drawRR(x, y, w, h, h*0.45);
+        // Slight horizontal extension for that "slipping out" look
+        const tw = w*1.06, tx = cx-tw/2;
+        const y = cy-h/2;
+        // Outer rim
+        ctx.fillStyle = '#A8201A';
+        drawRR(tx, y, tw, h, h*0.5);
         ctx.fill();
-        /* Seeds */
-        ctx.fillStyle='#FFE58A';
-        const seeds=4;
-        for (let i=0;i<seeds;i++){
+        // Inner flesh with gradient
+        const inset = Math.max(1, h*0.18);
+        const g = ctx.createLinearGradient(0, y+inset, 0, y+h-inset);
+        g.addColorStop(0,   '#FF7A6A');
+        g.addColorStop(0.5, '#E83535');
+        g.addColorStop(1,   '#B51E1E');
+        ctx.fillStyle = g;
+        drawRR(tx+inset, y+inset, tw-2*inset, h-2*inset, (h-2*inset)*0.5);
+        ctx.fill();
+        // Seeds — 5 in natural scatter, each with its own drop shadow
+        const seeds = [[.22,-.1],[.38, .08],[.52,-.12],[.68, .06],[.82,-.08]];
+        for (const [tx2, ty2] of seeds){
+            const sx = tx + tw*tx2, sy = cy + h*ty2;
+            const sw = Math.max(1.2, w*.032), sh = Math.max(2.2, h*.22);
+            ctx.fillStyle = 'rgba(150,40,30,.5)';
             ctx.beginPath();
-            ctx.ellipse(x+w*(0.2+i*0.2), cy, Math.max(1.4,w*.04), Math.max(2.4,h*.16), 0, 0, Math.PI*2);
+            ctx.ellipse(sx+.4, sy+.7, sw, sh, .3, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#FFE583';
+            ctx.beginPath();
+            ctx.ellipse(sx, sy, sw, sh, .3, 0, Math.PI*2);
             ctx.fill();
         }
-        /* Gloss */
-        ctx.fillStyle='rgba(255,255,255,.25)';
+        // Gloss highlight
+        ctx.fillStyle = 'rgba(255,255,255,.38)';
         ctx.beginPath();
-        ctx.ellipse(cx-w*.25, cy-h*.18, w*.18, h*.12, 0, 0, Math.PI*2);
+        ctx.ellipse(cx-tw*.22, cy-h*.22, tw*.2, h*.16, 0, 0, Math.PI*2);
         ctx.fill();
     }},
-    bacon: { name:'베이컨', draw(cx,cy,w,h){
-        const x=cx-w/2, y=cy-h/2;
-        /* Alternating pink + deep-red streaks for a cartoon bacon look. */
-        ctx.fillStyle='#C93C2C';
-        drawRR(x, y, w, h, h*0.35);
-        ctx.fill();
-        ctx.fillStyle='#F2B4A3';
-        /* Fat ribbons */
-        ctx.beginPath();
-        ctx.moveTo(x, cy-h*0.18);
-        for (let i=0;i<=6;i++){
-            const xp = x + (w*i/6);
-            const yp = cy-h*0.18 + Math.sin(i*1.2)*h*0.08;
-            ctx.lineTo(xp, yp);
-        }
-        for (let i=6;i>=0;i--){
-            const xp = x + (w*i/6);
-            const yp = cy-h*0.02 + Math.sin(i*1.2)*h*0.08;
-            ctx.lineTo(xp, yp);
-        }
-        ctx.closePath();
-        ctx.fill();
-    }},
+
+    /* Onion — VERY thin pale slice with a subtle cool-pink tinge
+       (suggests red onion). Two faint layer lines suggest the rings
+       without making it look like a top-down onion ring. */
     onion: { name:'양파', draw(cx,cy,w,h){
-        const x=cx-w/2, y=cy-h/2;
-        ctx.fillStyle='#F5EFE0';
-        drawRR(x, y, w, h, h*0.45);
+        const ow = w*1.02, ox = cx-ow/2;
+        const y = cy-h/2;
+        const g = ctx.createLinearGradient(0, y, 0, y+h);
+        g.addColorStop(0, '#FDF4F4');
+        g.addColorStop(0.5, '#E7D4D8');
+        g.addColorStop(1, '#B896A1');
+        ctx.fillStyle = g;
+        drawRR(ox, y, ow, h, h*0.5);
         ctx.fill();
-        /* Concentric ring suggestion */
-        ctx.strokeStyle='rgba(180,160,130,.55)';
-        ctx.lineWidth=1.2;
+        // Gloss band
+        ctx.fillStyle = 'rgba(255,255,255,.55)';
+        ctx.fillRect(ox+ow*0.08, y+Math.max(.5,h*0.12), ow*0.5, Math.max(.8, h*0.2));
+        // Layer lines (2 thin horizontal)
+        ctx.strokeStyle = 'rgba(120,70,85,.45)';
+        ctx.lineWidth = Math.max(.5, h*.08);
         ctx.beginPath();
-        ctx.ellipse(cx, cy, w*.38, h*.28, 0, 0, Math.PI*2);
+        ctx.moveTo(ox+h*0.4, cy-h*0.15);
+        ctx.lineTo(ox+ow-h*0.4, cy-h*0.15);
+        ctx.moveTo(ox+h*0.4, cy+h*0.18);
+        ctx.lineTo(ox+ow-h*0.4, cy+h*0.18);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, w*.2, h*.14, 0, 0, Math.PI*2);
+        // Rim tinge along outer edge
+        ctx.strokeStyle = 'rgba(140,80,100,.35)';
+        ctx.lineWidth = Math.max(.6, h*.08);
+        drawRR(ox+.5, y+.5, ow-1, h-1, (h-1)*0.5);
         ctx.stroke();
-    }},
-    egg: { name:'계란', draw(cx,cy,w,h){
-        /* White oval + yellow yolk. */
-        ctx.fillStyle='#FFFFFF';
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, w*0.48, h*0.45, 0, 0, Math.PI*2);
-        ctx.fill();
-        /* Crinkle edge */
-        ctx.fillStyle='#FFFFFF';
-        for (let i=0;i<8;i++){
-            const a = i*Math.PI*2/8;
-            ctx.beginPath();
-            ctx.arc(cx+Math.cos(a)*w*0.46, cy+Math.sin(a)*h*0.42, Math.max(2,w*.07), 0, Math.PI*2);
-            ctx.fill();
-        }
-        ctx.fillStyle='#FFD446';
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, w*0.22, h*0.22, 0, 0, Math.PI*2);
-        ctx.fill();
-        ctx.fillStyle='rgba(255,255,255,.5)';
-        ctx.beginPath();
-        ctx.ellipse(cx-w*.05, cy-h*.05, w*0.08, h*0.07, 0, 0, Math.PI*2);
-        ctx.fill();
     }}
+};
+
+/* Per-ingredient natural stack height. Previously every layer was a
+   uniform 16 px which made the stack read as a striped bar. Real
+   burger layers vary in thickness: buns are domes, patty is thick,
+   cheese + tomato + onion are thin slices, lettuce sits fluffier.
+   The panel plate area is ~200 px tall, so even a 7-filling L9 sample
+   (18*7 ≤ 126 plus 16+26 buns = 168) fits. */
+const LAYER_H = {
+    bunBottom: 16,
+    bunTop:    26,
+    patty:     22,
+    cheese:    12,
+    lettuce:   16,
+    tomato:    10,
+    onion:     8
 };
 
 /* ========================================================================
@@ -495,6 +685,14 @@ let popUntil, popText, popKind;
 let shakeUntil, flashUntil;
 let tapFlashes;         /* [{idx, bornAt, kind:'good'|'bad'}] */
 let stackPops;          /* [{layer, bornAt}] — entry-scale anim on WIP layer */
+let burgersThisLevel;   /* 0..LEVEL_BURGERS — only levels up on LEVEL_BURGERS */
+
+/* Clear 5 burgers at a given level before it ticks over. Previous build
+   incremented level after every single burger, so there was no sense of
+   "settling into" a difficulty tier — each completion immediately made
+   the sample longer AND the clock tighter. 5-per-level lets the player
+   rack up combos at a comfortable tempo before the next jump. */
+const LEVEL_BURGERS = 5;
 
 function resetGame(){
     level = 1; score = 0;
@@ -504,6 +702,7 @@ function resetGame(){
     timeLeft = timeLevelBudget;
     combo = 0; maxCombo = 0;
     ingredientsCaught = 0; burgersCompleted = 0;
+    burgersThisLevel = 0;
     popUntil = 0; popText = ''; popKind = '';
     shakeUntil = 0; flashUntil = 0;
     tapFlashes = []; stackPops = [];
@@ -639,22 +838,33 @@ function onTap(x, y){
         if(navigator.vibrate) try{ navigator.vibrate(8); }catch(_){}
 
         if (progress >= sample.length){
-            /* Burger done — level up + small time bonus, capped at the
-               fresh-level budget so we don't accumulate a huge reserve. */
+            /* Burger done — count it, award bonus, and REFRESH the sample
+               at the SAME level until we've cleared LEVEL_BURGERS (=5) of
+               them. Only then does the difficulty step up. This gives the
+               player a stable tier to settle into before the next jump. */
             burgersCompleted++;
-            const bonus = 100 * level + Math.floor(timeLeft) * 5;
+            burgersThisLevel++;
+            const levelingUp = burgersThisLevel >= LEVEL_BURGERS;
+            const bonus = (levelingUp ? 200 : 100) * level + Math.floor(timeLeft) * 5;
             score += bonus;
-            popText = 'COMPLETE +' + bonus;
+            popText = levelingUp ? ('LEVEL UP! +' + bonus) : ('COMPLETE +' + bonus);
             popKind = 'complete';
-            popUntil = now + 950;
-            flashUntil = now + 550;
-            level++;
+            popUntil = now + (levelingUp ? 1200 : 950);
+            flashUntil = now + (levelingUp ? 800 : 550);
+            if (levelingUp){
+                level++;
+                burgersThisLevel = 0;
+                timeLevelBudget = timeForLevel(level);
+                timeLeft = Math.min(timeLevelBudget, timeLeft + 4);
+            } else {
+                /* Same level — give a small breather and keep the
+                   original budget; the player's been doing well. */
+                timeLeft = Math.min(timeLevelBudget, timeLeft + 2.5);
+            }
             sample = generateSample(level);
             progress = 0;
-            timeLevelBudget = timeForLevel(level);
-            timeLeft = Math.min(timeLevelBudget, timeLeft + 3);
             stackPops = [];
-            if(navigator.vibrate) try{ navigator.vibrate([20,40,20,40,100]); }catch(_){}
+            if(navigator.vibrate) try{ navigator.vibrate(levelingUp ? [25,40,25,40,25,40,120] : [20,40,20,40,100]); }catch(_){}
         }
         $('scoreNow').textContent = score;
         $('levelNow').textContent = level;
@@ -701,11 +911,36 @@ function draw(now){
 }
 
 function drawHUD(now){
-    /* Left: level badge · centre: score · right: seconds remaining */
+    /* Left: LV badge + 5-burgers-per-level progress dots.
+       Centre:  score.
+       Right:   seconds remaining (reddens when critical). */
     ctx.fillStyle = '#FFE66D';
     ctx.font = '900 15px Orbitron, sans-serif';
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillText('LV ' + level, 14, HUD_H/2);
+    const lvLabel = 'LV ' + level;
+    ctx.fillText(lvLabel, 14, HUD_H/2);
+    const lvTextW = ctx.measureText(lvLabel).width;
+    /* Progress dots: filled for completed burgers at this level, hollow
+       for remaining. LEVEL_BURGERS = 5 so the row is always exactly 5
+       pips wide. */
+    const dotR = 3;
+    const dotGap = 5;
+    const dotsX0 = 14 + lvTextW + 8;
+    for (let i=0; i<LEVEL_BURGERS; i++){
+        const dx = dotsX0 + i*(dotR*2 + dotGap);
+        if (i < burgersThisLevel){
+            ctx.fillStyle = '#00E676';
+            ctx.beginPath();
+            ctx.arc(dx, HUD_H/2, dotR, 0, Math.PI*2);
+            ctx.fill();
+        } else {
+            ctx.strokeStyle = 'rgba(255,255,255,.35)';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(dx, HUD_H/2, dotR, 0, Math.PI*2);
+            ctx.stroke();
+        }
+    }
 
     ctx.fillStyle = '#fff';
     ctx.font = '900 17px Orbitron, sans-serif';
@@ -763,10 +998,13 @@ function drawBurgerIn(now, px, py, pw, ph, fillings, filledCount, kind){
     ctx.ellipse(plateCx, plateCy + 9, plateW*0.55, 5, 0, 0, Math.PI*2);
     ctx.fill();
 
-    /* Plate disk */
+    /* Plate disk — soft 3-stop gradient so it reads as actual porcelain
+       instead of a flat oval (matches the bright cartoon vibe of the
+       ingredients above). */
     const pg = ctx.createLinearGradient(0, plateCy-9, 0, plateCy+9);
-    pg.addColorStop(0, '#FFFFFF');
-    pg.addColorStop(1, '#D6DAE6');
+    pg.addColorStop(0,   '#FFFFFF');
+    pg.addColorStop(0.6, '#EEF1F6');
+    pg.addColorStop(1,   '#C8CDD9');
     ctx.fillStyle = pg;
     ctx.beginPath();
     ctx.ellipse(plateCx, plateCy, plateW/2, plateH/2, 0, 0, Math.PI*2);
@@ -774,55 +1012,65 @@ function drawBurgerIn(now, px, py, pw, ph, fillings, filledCount, kind){
     ctx.strokeStyle = 'rgba(0,0,0,.14)';
     ctx.lineWidth = 1.2;
     ctx.stroke();
+    /* Plate rim shine */
+    ctx.fillStyle = 'rgba(255,255,255,.45)';
+    ctx.beginPath();
+    ctx.ellipse(plateCx - plateW*0.18, plateCy - plateH*0.22, plateW*0.12, plateH*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
 
-    /* Stack: bottom bun always visible + filling layers from 0..N-1 + top
-       bun (shown immediately in the sample panel; only shown in the WIP
-       panel once it's been fully assembled). */
-    const itemH = 16;
-    const innerW = Math.min(plateW * 0.9, 118);
-    const stackBaseY = plateCy - 8;
+    /* Per-ingredient stack heights — buns are domes / patty is thick /
+       cheese-tomato-onion are thin slices. Previously every layer was a
+       uniform 16 px, which made the "burger" look like a striped bar
+       instead of real food. */
+    const innerW = Math.min(plateW * 0.92, 124);
+    let y = plateCy - 9;   /* top edge of the topmost item so far (going up) */
 
-    INGREDIENTS.bunBottom.draw(plateCx, stackBaseY - itemH/2, innerW, itemH);
+    /* Bottom bun always visible */
+    y -= LAYER_H.bunBottom;
+    INGREDIENTS.bunBottom.draw(plateCx, y + LAYER_H.bunBottom/2, innerW, LAYER_H.bunBottom);
 
+    /* Filling layers */
     for (let i = 0; i < filledCount; i++){
-        const iy = stackBaseY - (i+1)*itemH - itemH/2;
+        const id = fillings[i];
+        const layerH = LAYER_H[id];
+        y -= layerH;
         let scale = 1;
         if (kind === 'wip'){
             const pop = stackPops.find(p => p.layer === i && now - p.bornAt < 260);
             if (pop){
                 const t = (now - pop.bornAt) / 260;
-                scale = 1 + (1-t) * 0.28;
+                scale = 1 + (1-t) * 0.3;
             }
         }
         ctx.save();
-        ctx.translate(plateCx, iy);
+        ctx.translate(plateCx, y + layerH/2);
         ctx.scale(scale, scale);
-        INGREDIENTS[fillings[i]].draw(0, 0, innerW, itemH-1);
+        INGREDIENTS[id].draw(0, 0, innerW, layerH);
         ctx.restore();
     }
 
     const showTop = kind === 'sample' || filledCount >= sample.length;
     if (showTop){
-        const topIdx = filledCount;
-        const topY = stackBaseY - (topIdx+1)*itemH - itemH*0.62;
-        INGREDIENTS.bunTop.draw(plateCx, topY, innerW, itemH*1.35);
+        y -= LAYER_H.bunTop;
+        INGREDIENTS.bunTop.draw(plateCx, y + LAYER_H.bunTop/2, innerW, LAYER_H.bunTop);
     } else if (kind === 'wip'){
-        /* Placeholder for the "next needed" ingredient — a translucent
-           silhouette of the expected filling pulsing at the next slot.
-           Helps the player glance at their own panel and immediately
-           see what's missing instead of having to compare to the left. */
-        const nextY = stackBaseY - (filledCount+1)*itemH - itemH/2;
-        const pulse = 0.25 + 0.15*Math.sin(now/240);
+        /* "Next needed" ghost — translucent pulsing silhouette of the
+           expected filling at the next slot, plus a dashed yellow frame
+           around it. Lets the player see what to tap without glancing
+           back at the target panel. */
+        const id = sample[filledCount];
+        const layerH = LAYER_H[id];
+        y -= layerH;
+        const pulse = 0.30 + 0.18*Math.sin(now/220);
         ctx.save();
         ctx.globalAlpha = pulse;
-        INGREDIENTS[sample[filledCount]].draw(plateCx, nextY, innerW, itemH-1);
+        INGREDIENTS[id].draw(plateCx, y + layerH/2, innerW, layerH);
         ctx.restore();
-        /* dashed outline box around the slot */
         ctx.save();
-        ctx.strokeStyle = 'rgba(255,230,102,.7)';
+        ctx.strokeStyle = 'rgba(255,230,102,.75)';
         ctx.setLineDash([3,3]);
         ctx.lineWidth = 1;
-        drawRR(plateCx-innerW/2-2, nextY-itemH/2-2, innerW+4, itemH+4, 5);
+        drawRR(plateCx-innerW/2-3, y-2, innerW+6, layerH+4, 5);
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
@@ -1054,6 +1302,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776835440"></script>
+<script src="/js/siteFooter.js?v=1776838438"></script>
 </body>
 </html>
