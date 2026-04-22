@@ -228,7 +228,7 @@ try{
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1776863577';
+        s.src='/js/adSlots.js?v=1776864317';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -237,7 +237,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1776863577';
+        rr.src='/js/recentResults.js?v=1776864317';
         document.body.appendChild(rr);
     }
 
@@ -245,20 +245,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1776863577';
+        pwa.src='/js/pwaInstall.js?v=1776864317';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1776863577';
+    tr.src='/js/lpTrack.js?v=1776864317';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1776863577';
+    sh.src='/js/lpShare.js?v=1776864317';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -271,7 +271,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776863577';
+        rr2.src='/js/lpRoom.js?v=1776864317';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
@@ -281,7 +281,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1776863577';
+        ls.src='/js/lpSocial.js?v=1776864317';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -292,7 +292,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1776863577';
+        la.src='/js/lpActivity.js?v=1776864317';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -307,7 +307,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1776863577';
+        lp.src='/js/lpPresence.js?v=1776864317';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -317,7 +317,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1776863577';
+        li.src='/js/lpInvite.js?v=1776864317';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -327,7 +327,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1776863577';
+        lib.src='/js/lpInviteButton.js?v=1776864317';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -336,7 +336,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1776863577';
+        ln.src='/js/lpNotify.js?v=1776864317';
         ln.defer=true;
         document.body.appendChild(ln);
     }

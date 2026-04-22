@@ -97,6 +97,12 @@ body{
 }
 .count-btn.on{background:rgba(255,230,109,.14);border-color:#FFE66D;color:#FFE66D}
 
+/* iOS-style toggle switch for the host-plays option. Off = neutral
+   grey, on = brand cyan. Knob slides across on state change. */
+.toggle-sw .slider::before{content:'';position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,.3);transition:transform .22s cubic-bezier(.2,.9,.4,1.2)}
+.toggle-sw input:checked + .slider{background:#00D9FF}
+.toggle-sw input:checked + .slider::before{transform:translateX(22px)}
+
 .big-btn{
     width:100%;padding:16px;border-radius:14px;border:0;cursor:pointer;
     font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1.05em;
@@ -361,6 +367,19 @@ body{
                 <button class="count-btn" data-time="30">30초</button>
             </div>
         </div>
+        <!-- Host-play toggle. Default = on (host plays). Off = MC-only
+             mode where host controls flow + sees big-screen view but
+             isn't on the leaderboard — same pattern as Bingo. -->
+        <div class="host-play-row" style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)">
+            <div style="flex:1">
+                <div style="font-size:.88em;font-weight:700;color:#fff">🙋 호스트도 같이 플레이</div>
+                <div style="font-size:.72em;color:var(--muted);margin-top:2px">OFF면 진행만 — 문제 풀지 않고 순위에 안 들어가요</div>
+            </div>
+            <label class="toggle-sw" style="position:relative;display:inline-block;width:50px;height:28px;flex-shrink:0">
+                <input type="checkbox" id="chkHostPlays" checked style="opacity:0;width:0;height:0">
+                <span class="slider" style="position:absolute;cursor:pointer;inset:0;background:rgba(255,255,255,.14);border-radius:28px;transition:background .2s"></span>
+            </label>
+        </div>
     </div>
     <button class="big-btn" id="btnCreate">방 만들기 →</button>
     <button class="big-btn ghost" id="btnSetupBack" style="margin-top:8px">← 뒤로</button>
@@ -470,7 +489,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1776863577"></script>
+<script src="/js/supabase-config.js?v=1776864317"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -527,6 +546,11 @@ let guest = null;           /* LpRoom guest */
 let selectedCats = ['kpop','variety','sports','general','retro','latest'];
 let selectedCount = 10;
 let selectedTime = 15;
+/* When true (default), the host is added to the roster and plays
+   alongside guests. When false, host is MC-only: sees the game flow
+   (timer, reveal, stats) but doesn't get answer buttons and isn't
+   on the leaderboard. Same pattern Bingo uses. */
+let hostPlays = true;
 /* Site-wide language key — used to pre-select the question-bank
    language AND to localize category labels. User can override via
    the region switcher in the setup view. */
@@ -704,6 +728,9 @@ $('btnCreate').addEventListener('click', async () => {
         await startSoloGame();
         return;
     }
+    /* Capture the host-plays toggle value at room-creation time so
+       the guest/host UX is consistent for the whole session. */
+    hostPlays = !!$('chkHostPlays')?.checked;
     $('btnCreate').disabled = true;
     $('btnCreate').textContent = '방 만드는 중…';
     try {
@@ -721,10 +748,15 @@ $('btnCreate').addEventListener('click', async () => {
         }
         room = await window.LpRoom.hostCreate({gameId:'quiz', hostName:nick, pin});
 
-        /* Seed my own roster entry (host also plays) */
-        hostRoster.set('__host__', {
-            nickname: nick + ' (호스트)', score: 0, prevRank: 0, correctCount: 0, gid: '__host__'
-        });
+        /* Seed my own roster entry — only if the host chose to play.
+           When hostPlays is false, the host is MC-only: controls the
+           flow + sees the big-screen view, doesn't get an answer
+           button, and isn't in the leaderboard. */
+        if (hostPlays){
+            hostRoster.set('__host__', {
+                nickname: nick + ' (호스트)', score: 0, prevRank: 0, correctCount: 0, gid: '__host__'
+            });
+        }
         updateLobbyPlayers();
 
         room.onGuestJoin(info => {
@@ -760,7 +792,9 @@ $('btnCreate').addEventListener('click', async () => {
         $('lobbyCode').textContent = room.code;
         $('lobbyPinLine').textContent = 'PIN: ' + pin;
         $('btnStartGame').style.display = 'block';
-        $('lobbyStatus').textContent = '게스트가 들어오면 "게임 시작" 버튼을 눌러주세요';
+        $('lobbyStatus').textContent = hostPlays
+            ? '게스트가 들어오면 "게임 시작" 버튼을 눌러주세요'
+            : '🎤 진행자 모드 — 게스트가 들어오면 시작. (호스트는 순위에 안 들어가요)';
         renderLobbyQR(room.code, pin);
         $('ctxChip').innerHTML = '<span class="role-chip">👑 호스트</span><span class="room-chip" style="margin-left:6px">' + room.code + '</span>';
         showView('vLobby');
@@ -897,7 +931,7 @@ $('btnLobbyLeave').addEventListener('click', () => {
    Host: start game → question loop
    ============================================================ */
 $('btnStartGame').addEventListener('click', () => {
-    if (hostRoster.size < 1){ toast('참가자가 없어요'); return; }
+    if (hostRoster.size < 1){ toast(hostPlays ? '참가자가 없어요' : '게스트를 최소 1명 기다려주세요 (진행자 모드)'); return; }
     currentQIdx = 0;
     gameStartAt = Date.now();
     for (const r of hostRoster.values()){
@@ -942,6 +976,16 @@ function renderHostQuestionView(payload, q){
     $('qAnsN').textContent = '0';
     $('btnHostSkip').style.display = 'block';
     animateTimer(qDurationMs);
+    /* In MC-only mode, disable the answer buttons for the host so
+       a stray tap doesn't look like it should score. Also flip the
+       locked banner text to call out the mode clearly. */
+    if (!hostPlays){
+        $('answers').querySelectorAll('.ans-btn').forEach(b => b.classList.add('locked'));
+        $('qLocked').classList.add('on');
+        $('qLocked').textContent = '🎤 진행자 모드 · 참가자 답변 대기 중…';
+    } else {
+        $('qLocked').textContent = '✓ 답변 제출됨 · 결과 대기중…';
+    }
     showView('vQ');
 }
 
@@ -972,6 +1016,9 @@ function animateTimer(durMs){
 
 function handleAnswerTap(choice){
     if (myChoice !== null) return;  /* already locked */
+    /* MC-only host: taps are no-ops. Extra safety net on top of
+       the CSS `locked` class in case it gets stripped. */
+    if (mode === 'host' && !hostPlays) return;
     myChoice = choice;
     const t = Date.now() - qStartAt;
     const btns = $('answers').querySelectorAll('.ans-btn');
@@ -1539,6 +1586,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776863577"></script>
+<script src="/js/siteFooter.js?v=1776864317"></script>
 </body>
 </html>
