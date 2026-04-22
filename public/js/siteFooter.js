@@ -45,6 +45,31 @@ try{
         +'.lp-site-footer a:hover{color:#FF6B35}'
         +'.lp-site-footer .sep{opacity:.25;margin:0 2px}'
         +'.lp-site-footer .copy{display:block;margin-top:6px;opacity:.6}'
+        /* ========= Digital activity counter ========= */
+        /* Sits ABOVE the Home/About/... link row inside the same footer.
+           Label + zero-padded digits in little white boxes, sky-blue LED-
+           style digit glyphs inside. Hidden until LpActivity.stats()
+           resolves — never renders as zeros while we wait so it doesn't
+           flash. */
+        +'.lp-stat-row{display:inline-flex;flex-wrap:wrap;justify-content:center;align-items:center;'
+        +'gap:8px;margin:0 auto 14px;padding:0;'
+        +'font-family:"Orbitron","Noto Sans KR",sans-serif;'
+        +'font-size:.72em;letter-spacing:.12em;line-height:1;color:rgba(255,255,255,.5)}'
+        +'.lp-stat-label{text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.2em}'
+        +'.lp-stat-sep{opacity:.3;margin:0 2px;font-weight:700}'
+        +'.lp-digits{display:inline-flex;gap:2px}'
+        +'.lp-digit{display:inline-flex;align-items:center;justify-content:center;'
+        +'width:14px;height:20px;background:#fff;color:#00D9FF;'
+        +'font-family:"Orbitron","Courier New",monospace;font-weight:900;font-size:13px;line-height:1;'
+        +'border-radius:3px;font-variant-numeric:tabular-nums;'
+        +'box-shadow:inset 0 -1px 0 rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.2)}'
+        /* Leading zeros dimmed so the "real" number still pops while
+           preserving the LED-counter symmetry the user asked for. */
+        +'.lp-digit.lead{color:rgba(14,165,233,.25)}'
+        +'@media(max-width:600px){'
+        +'.lp-stat-row{font-size:.62em;gap:6px;margin-bottom:10px}'
+        +'.lp-digit{width:12px;height:18px;font-size:11px}'
+        +'}'
         /* Defense-in-depth: even if a stale cached script version still
            injects the footer or PWA button, hide them on game pages. */
         +'body.lp-game-page .lp-site-footer{display:none!important}'
@@ -94,23 +119,70 @@ try{
     document.head.appendChild(style);
 
     if(!isGamePage){
+        /* Label localization for the activity counter — kept INSIDE the
+           footer injector because siteFooter.js can't import index.html's
+           I18N. Reads localStorage (same key index.html writes). */
+        var lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase();
+        var L_TODAY={ko:'오늘',en:'TODAY',gb:'TODAY',ja:'今日',zh:'今日',es:'HOY',de:'HEUTE',fr:'JOUR',pt:'HOJE',ru:'СЕГОДНЯ',ar:'اليوم',hi:'आज',th:'วันนี้',id:'HARI INI',vi:'HÔM NAY',tr:'BUGÜN'};
+        var L_TOTAL={ko:'누적',en:'TOTAL',gb:'TOTAL',ja:'累計',zh:'累计',es:'TOTAL',de:'GESAMT',fr:'TOTAL',pt:'TOTAL',ru:'ВСЕГО',ar:'المجموع',hi:'कुल',th:'รวม',id:'TOTAL',vi:'TỔNG',tr:'TOPLAM'};
+        var todayLbl=(L_TODAY[lang]||L_TODAY.en);
+        var totalLbl=(L_TOTAL[lang]||L_TOTAL.en);
+
         var f=document.createElement('footer');
         f.className='lp-site-footer';
         f.innerHTML=
-            '<a href="/">Home</a><span class="sep">·</span>'
+            '<div class="lp-stat-row" id="lpStatRow" hidden>'
+                +'<span class="lp-stat-label">'+todayLbl+'</span>'
+                +'<span class="lp-digits" id="lpDigitsToday"></span>'
+                +'<span class="lp-stat-sep">·</span>'
+                +'<span class="lp-stat-label">'+totalLbl+'</span>'
+                +'<span class="lp-digits" id="lpDigitsTotal"></span>'
+            +'</div>'
+            +'<a href="/">Home</a><span class="sep">·</span>'
             +'<a href="/about/">About</a><span class="sep">·</span>'
             +'<a href="/privacy/">Privacy</a><span class="sep">·</span>'
             +'<a href="/blog/">Blog</a><span class="sep">·</span>'
             +'<a href="mailto:luckyplz.contact@gmail.com">Contact</a>'
             +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
         document.body.appendChild(f);
+
+        /* Fetch stats once LpActivity is available and zero-pad into
+           fixed-width digit-box rows (5 for today, 9 for total). Leading
+           zeros are dimmed so the real number still reads clearly. Row
+           stays hidden on any failure / null return. */
+        (function waitActivity(tries){
+            if(window.LpActivity && window.LpActivity.stats){
+                window.LpActivity.stats().then(function(s){
+                    if(!s) return;
+                    function pad(n, len){
+                        var cap = Math.pow(10, len) - 1;
+                        var v = Math.max(0, Math.min(cap, (n|0)));
+                        var str = String(v);
+                        var pre = len - str.length;
+                        var html = '';
+                        for (var i=0;i<pre;i++) html += '<span class="lp-digit lead">0</span>';
+                        for (var j=0;j<str.length;j++) html += '<span class="lp-digit">'+str[j]+'</span>';
+                        return html;
+                    }
+                    var td = document.getElementById('lpDigitsToday');
+                    var tt = document.getElementById('lpDigitsTotal');
+                    var row = document.getElementById('lpStatRow');
+                    if(!td||!tt||!row) return;
+                    td.innerHTML = pad(s.today||0, 5);
+                    tt.innerHTML = pad(s.total||0, 9);
+                    row.hidden = false;
+                }).catch(function(){});
+            } else if (tries > 0){
+                setTimeout(function(){ waitActivity(tries-1); }, 100);
+            }
+        })(40);
     }
 
     /* AdSense slot injector — only loads if the page has a
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1776840018';
+        s.src='/js/adSlots.js?v=1776855801';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -119,7 +191,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1776840018';
+        rr.src='/js/recentResults.js?v=1776855801';
         document.body.appendChild(rr);
     }
 
@@ -127,20 +199,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1776840018';
+        pwa.src='/js/pwaInstall.js?v=1776855801';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1776840018';
+    tr.src='/js/lpTrack.js?v=1776855801';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1776840018';
+    sh.src='/js/lpShare.js?v=1776855801';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -153,7 +225,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776840018';
+        rr2.src='/js/lpRoom.js?v=1776855801';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
@@ -163,7 +235,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1776840018';
+        ls.src='/js/lpSocial.js?v=1776855801';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -174,7 +246,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1776840018';
+        la.src='/js/lpActivity.js?v=1776855801';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -189,7 +261,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1776840018';
+        lp.src='/js/lpPresence.js?v=1776855801';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -199,7 +271,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1776840018';
+        li.src='/js/lpInvite.js?v=1776855801';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -209,7 +281,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1776840018';
+        lib.src='/js/lpInviteButton.js?v=1776855801';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -218,7 +290,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1776840018';
+        ln.src='/js/lpNotify.js?v=1776855801';
         ln.defer=true;
         document.body.appendChild(ln);
     }
