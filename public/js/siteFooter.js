@@ -55,6 +55,9 @@ try{
         +'gap:8px;margin:0 auto 14px;padding:0;'
         +'font-family:"Orbitron","Noto Sans KR",sans-serif;'
         +'font-size:.72em;letter-spacing:.12em;line-height:1;color:rgba(255,255,255,.5)}'
+        /* Re-assert the native [hidden] hide because the inline-flex
+           rule above has higher specificity and would otherwise win. */
+        +'.lp-stat-row[hidden]{display:none!important}'
         +'.lp-stat-label{text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.2em}'
         +'.lp-stat-sep{opacity:.3;margin:0 2px;font-weight:700}'
         +'.lp-digits{display:inline-flex;gap:2px}'
@@ -153,11 +156,35 @@ try{
             +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
         document.body.appendChild(f);
 
-        /* Fetch stats once LpActivity is available and zero-pad into
-           fixed-width digit-box rows (5 for today, 9 for total). Leading
-           zeros are dimmed so the real number still reads clearly. Row
-           stays hidden on any failure / null return. */
+        /* Admin-only gate. Early-launch traffic is so low (오늘 1 / 누적 3)
+           that showing the counter publicly reads as "dead site" rather
+           than social proof. So we render it ONLY when the cached
+           profile says the viewer is an admin — the owner can sanity-
+           check traffic from the live site without needing to log into
+           the dashboard. When cumulative traffic hits a marketing-
+           worthy threshold we can lift the gate. */
+        function isCurrentUserAdmin(){
+            try{
+                var raw = localStorage.getItem('lp_profile_cache_v1');
+                if (!raw) return false;
+                var c = JSON.parse(raw);
+                var role = c && c.profile && c.profile.role;
+                return role === 'admin' || role === 'super_admin';
+            } catch(_){ return false; }
+        }
+
+        /* Fetch stats once LpActivity is available AND the viewer is an
+           admin. Zero-pad into fixed-width digit-box rows (5 for today,
+           9 for total); leading zeros dimmed. Row stays hidden on any
+           failure / null return / non-admin viewer. */
         (function waitActivity(tries){
+            if (!isCurrentUserAdmin()){
+                /* Profile cache might arrive after siteFooter runs on a
+                   cold-start login. Retry a few times before giving up
+                   silently — NON-admin viewers just never see the row. */
+                if (tries > 0) setTimeout(function(){ waitActivity(tries-1); }, 150);
+                return;
+            }
             if(window.LpActivity && window.LpActivity.stats){
                 window.LpActivity.stats().then(function(s){
                     if(!s) return;
@@ -201,7 +228,7 @@ try{
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1776856494';
+        s.src='/js/adSlots.js?v=1776856855';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -210,7 +237,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1776856494';
+        rr.src='/js/recentResults.js?v=1776856855';
         document.body.appendChild(rr);
     }
 
@@ -218,20 +245,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1776856494';
+        pwa.src='/js/pwaInstall.js?v=1776856855';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1776856494';
+    tr.src='/js/lpTrack.js?v=1776856855';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1776856494';
+    sh.src='/js/lpShare.js?v=1776856855';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -244,7 +271,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1776856494';
+        rr2.src='/js/lpRoom.js?v=1776856855';
         rr2.defer=true;
         document.body.appendChild(rr2);
     }
@@ -254,7 +281,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1776856494';
+        ls.src='/js/lpSocial.js?v=1776856855';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -265,7 +292,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1776856494';
+        la.src='/js/lpActivity.js?v=1776856855';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -280,7 +307,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1776856494';
+        lp.src='/js/lpPresence.js?v=1776856855';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -290,7 +317,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1776856494';
+        li.src='/js/lpInvite.js?v=1776856855';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -300,7 +327,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1776856494';
+        lib.src='/js/lpInviteButton.js?v=1776856855';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -309,7 +336,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1776856494';
+        ln.src='/js/lpNotify.js?v=1776856855';
         ln.defer=true;
         document.body.appendChild(ln);
     }

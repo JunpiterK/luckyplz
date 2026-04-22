@@ -146,7 +146,7 @@ async function _fetchProfile(userId) {
     try {
         const { data, error } = await getSupabase()
             .from('profiles')
-            .select('id, nickname, email, avatar_url, bio, profile_complete, created_at, updated_at')
+            .select('id, nickname, email, avatar_url, bio, role, profile_complete, created_at, updated_at')
             .eq('id', userId)
             .maybeSingle();
         if (error) { console.warn('[profile] fetch error:', error.message); return null; }
