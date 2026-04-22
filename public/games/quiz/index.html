@@ -56,6 +56,22 @@ body{
 .setup-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.2em;font-weight:900;margin-bottom:12px;color:#FFE66D}
 .setup-sub{font-size:.82em;color:var(--muted);margin-bottom:18px;line-height:1.5}
 
+/* Region / language row — horizontal flag chips. "soon" chips are
+   greyed out until seed content for that locale lands. */
+.lang-row{display:flex;flex-wrap:wrap;gap:8px}
+.lang-chip{
+    padding:10px 14px;border-radius:999px;cursor:pointer;
+    background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.12);
+    color:#fff;font-family:inherit;font-size:.88em;font-weight:700;
+    display:inline-flex;align-items:center;gap:8px;
+    transition:background .18s,border-color .18s,transform .08s
+}
+.lang-chip:active{transform:scale(.97)}
+.lang-chip .flag{font-size:1.2em;line-height:1}
+.lang-chip.on{background:linear-gradient(135deg,rgba(0,217,255,.18),rgba(0,217,255,.06));border-color:#00D9FF;color:#00D9FF}
+.lang-chip.soon{opacity:.5;cursor:not-allowed}
+.lang-chip.soon::after{content:'SOON';margin-left:4px;font-size:.65em;letter-spacing:.1em;font-family:'Orbitron',sans-serif;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5)}
+
 .cat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .cat-chip{
     position:relative;padding:14px 12px;border-radius:14px;cursor:pointer;
@@ -295,6 +311,11 @@ body{
 <!-- ============ SETUP (host pre-create) ============ -->
 <main class="view" id="vSetup">
     <div class="setup-card">
+        <div class="setup-title">🌏 Region · 지역</div>
+        <div class="setup-sub">문제는 이 언어 기준으로 출제돼요. 방에 들어오는 모든 게스트가 같은 언어 문제를 봐요.</div>
+        <div class="lang-row" id="langRow"></div>
+    </div>
+    <div class="setup-card">
         <div class="setup-title">🎲 카테고리 선택</div>
         <div class="setup-sub">여러 개 고르면 섞여서 나와요. 어린이~어른 모두 소외 안 되게 <b>혼합</b> 추천.</div>
         <div class="cat-grid" id="catGrid"></div>
@@ -427,7 +448,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1776860243"></script>
+<script src="/js/supabase-config.js?v=1776860824"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -448,20 +469,28 @@ function toast(msg, ms){
 /* ============================================================
    Category catalog
    ============================================================ */
+/* Category labels per language. Emoji is shared; label/sub change.
+   For locales we haven't translated yet, fall through to English. */
 const CATS = {
-    kpop:    { emoji:'🎤', label:'K팝',     sub:'2000~2020+' },
-    variety: { emoji:'📺', label:'연예·예능', sub:'드라마·예능·밈' },
-    sports:  { emoji:'⚽', label:'스포츠',   sub:'축구·야구·올림픽' },
-    general: { emoji:'🧠', label:'일반상식', sub:'과학·문학·언어' },
-    retro:   { emoji:'🎵', label:'추억',     sub:'70/80/90/00년대' },
-    history: { emoji:'🇰🇷', label:'한국사',   sub:'왕조·지리·인물' },
-    world:   { emoji:'🌏', label:'세계상식', sub:'지리·인물·역사' },
-    latest:  { emoji:'📰', label:'최신',     sub:'2023~2026' }
+    kpop:    { emoji:'🎤', label:{ko:'K팝',       en:'K-Pop'},            sub:{ko:'2000~2020+',       en:'2000s–now'} },
+    variety: { emoji:'📺', label:{ko:'연예·예능',  en:'Entertainment'},     sub:{ko:'드라마·예능·밈',    en:'TV · film · memes'} },
+    sports:  { emoji:'⚽', label:{ko:'스포츠',    en:'Sports'},            sub:{ko:'축구·야구·올림픽',  en:'Football · baseball · Olympics'} },
+    general: { emoji:'🧠', label:{ko:'일반상식',   en:'Trivia'},            sub:{ko:'과학·문학·언어',    en:'Science · lit · words'} },
+    retro:   { emoji:'🎵', label:{ko:'추억',       en:'Retro'},             sub:{ko:'70/80/90/00년대',  en:'70s–00s pop culture'} },
+    history: { emoji:'🇰🇷', label:{ko:'한국사',     en:'History'},           sub:{ko:'왕조·지리·인물',    en:'Past eras · figures'} },
+    world:   { emoji:'🌏', label:{ko:'세계상식',   en:'World'},             sub:{ko:'지리·인물·역사',    en:'Geography · history'} },
+    latest:  { emoji:'📰', label:{ko:'최신',       en:'Latest'},            sub:{ko:'2023~2026',        en:'2023–2026 news'} }
 };
 const CAT_KEYS = Object.keys(CATS);
 
+function catText(cat, key){
+    const c = CATS[cat];
+    if (!c) return cat;
+    const m = c[key] || {};
+    return m[selectedLang] || m.en || m.ko || '';
+}
 function categoryLabel(cat){
-    return CATS[cat] ? (CATS[cat].emoji + ' ' + CATS[cat].label) : cat;
+    return CATS[cat] ? (CATS[cat].emoji + ' ' + catText(cat,'label')) : cat;
 }
 
 /* ============================================================
@@ -475,6 +504,20 @@ let guest = null;           /* LpRoom guest */
 let selectedCats = ['kpop','variety','sports','general','retro','latest'];
 let selectedCount = 10;
 let selectedTime = 15;
+/* Site-wide language key — used to pre-select the question-bank
+   language AND to localize category labels. User can override via
+   the region switcher in the setup view. */
+let selectedLang = (function(){
+    try { return (localStorage.getItem('luckyplz_lang')||'ko').toLowerCase(); }
+    catch(_) { return 'ko'; }
+})();
+/* Supported question-bank languages (must match DB's language CHECK). */
+const QUIZ_LANGS = [
+    { code:'ko', flag:'🇰🇷', label:'한국어',    ready:true },
+    { code:'en', flag:'🇺🇸', label:'English',  ready:true },
+    { code:'ja', flag:'🇯🇵', label:'日本語',    ready:false },
+    { code:'zh', flag:'🇨🇳', label:'中文',      ready:false }
+];
 
 let questions = [];         /* loaded question list (host + solo) */
 let currentQIdx = 0;
@@ -527,8 +570,8 @@ function renderCats(){
         const on = selectedCats.includes(k) ? ' on' : '';
         return `<button class="cat-chip${on}" data-cat="${k}">
             <span class="ico">${c.emoji}</span>
-            <span class="lbl">${c.label}</span>
-            <span class="sub">${c.sub}</span>
+            <span class="lbl">${catText(k,'label')}</span>
+            <span class="sub">${catText(k,'sub')}</span>
         </button>`;
     }).join('');
     g.querySelectorAll('.cat-chip').forEach(btn => {
@@ -542,6 +585,36 @@ function renderCats(){
     });
 }
 renderCats();
+
+/* Render language/region chips. Clicking a "ready" chip sets
+   selectedLang and re-renders category labels (localized). "soon"
+   chips are non-interactive until seed content arrives. */
+function renderLangs(){
+    const host = document.getElementById('langRow');
+    if (!host) return;
+    host.innerHTML = QUIZ_LANGS.map(l => {
+        const on = l.code === selectedLang && l.ready;
+        const cls = 'lang-chip' + (on ? ' on' : '') + (l.ready ? '' : ' soon');
+        return `<button class="${cls}" data-lang="${l.code}"${l.ready?'':' disabled'}>
+            <span class="flag">${l.flag}</span>
+            <span>${l.label}</span>
+        </button>`;
+    }).join('');
+    host.querySelectorAll('.lang-chip').forEach(btn => {
+        if (btn.classList.contains('soon')) return;
+        btn.addEventListener('click', () => {
+            selectedLang = btn.dataset.lang;
+            host.querySelectorAll('.lang-chip').forEach(x => x.classList.toggle('on', x.dataset.lang === selectedLang && !x.classList.contains('soon')));
+            renderCats();  /* re-label chips for the new locale */
+        });
+    });
+}
+/* Coerce saved lang to a supported, ready language — otherwise
+   fall back to 'ko' so the region chip has something selected. */
+if (!QUIZ_LANGS.find(l => l.code === selectedLang && l.ready)){
+    selectedLang = 'ko';
+}
+renderLangs();
 
 /* ============================================================
    Count + time chip toggles
@@ -642,9 +715,11 @@ $('btnCreate').addEventListener('click', async () => {
             }
         });
 
-        /* Preload questions */
+        /* Preload questions — filter by the host's chosen language so
+           guests playing in different locales still see the same
+           bank the host picked (host's choice wins for the room). */
         const { data, error } = await getSupabase().rpc('quiz_random_questions', {
-            p_categories: selectedCats, p_count: selectedCount
+            p_categories: selectedCats, p_count: selectedCount, p_language: selectedLang
         });
         if (error || !data || !data.length){
             toast('문제 로드 실패: ' + ((error && error.message) || '빈 응답'));
@@ -1294,7 +1369,7 @@ async function startSoloGame(){
     $('btnCreate').textContent = '로딩 중…';
     try {
         const { data, error } = await getSupabase().rpc('quiz_random_questions', {
-            p_categories: selectedCats, p_count: selectedCount
+            p_categories: selectedCats, p_count: selectedCount, p_language: selectedLang
         });
         if (error || !data || !data.length){ toast('문제 로드 실패'); return; }
         questions = data;
@@ -1412,6 +1487,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776860243"></script>
+<script src="/js/siteFooter.js?v=1776860824"></script>
 </body>
 </html>
