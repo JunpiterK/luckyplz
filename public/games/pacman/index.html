@@ -202,7 +202,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1776820813"></script>
+<script src="/js/supabase-config.js?v=1776821608"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -278,12 +278,18 @@ function loadMaze(){
 }
 loadMaze();
 
-/* Game state */
+/* Game state.
+   Player/ghost positions are FLOAT tile coordinates so rendering is
+   smooth (continuous movement) instead of tile-hopping every 130 ms.
+   Speed is tiles-per-second; 7.7 tps ≈ the old 130 ms/tile cadence,
+   8.5 tps for player feels noticeably more responsive without
+   outpacing the chaser ghost (7.0 tps) enough to break the chase. */
 let player, ghosts, dir, nextDir;
 let score = 0, dotsEaten = 0, ghostsEaten = 0;
 let running = false, paused = false;
 let startedAt = 0, lastTick = 0;
-let playerTickMs = 130, ghostTickMs = 150;
+let playerSpeed = 8.5;   /* tiles/sec */
+let ghostSpeed  = 7.0;   /* tiles/sec (chaser normal speed) */
 let vulnerableUntil = 0;
 let mouthPhase = 0;   /* 0..1 for Pac-Man mouth animation */
 
@@ -299,14 +305,16 @@ function canMove(x,y,d){
 
 function resetGame(){
     loadMaze();
-    player = {x:6, y:13, lastMoveAt:0};
+    /* x,y are floats in tile units. Ghosts store a lastPickCell to
+       avoid re-picking a new direction multiple times while sitting
+       centered on the same tile. */
+    player = {x:6, y:13};
     ghosts = [
-        {x:5, y:7, dir:{x:-1,y:0}, color:'#FF3366', lastMoveAt:0, kind:'chaser'},
-        {x:7, y:7, dir:{x:1,y:0},  color:'#00D9FF', lastMoveAt:0, kind:'wander'}
+        {x:5, y:7, dir:{x:-1,y:0}, color:'#FF3366', kind:'chaser', lastPickKey:''},
+        {x:7, y:7, dir:{x:1,y:0},  color:'#00D9FF', kind:'wander', lastPickKey:''}
     ];
     dir = {x:-1, y:0}; nextDir = null;
     score = 0; dotsEaten = 0; ghostsEaten = 0;
-    playerTickMs = 130; ghostTickMs = 150;
     vulnerableUntil = 0;
     $('scoreNow').textContent='0';
     $('livesNow').textContent='🐵';
@@ -362,83 +370,137 @@ function gameOver(won){
     }catch(_){}
 }
 
-/* Player movement — try nextDir first if it's valid, else continue dir. */
-function stepPlayer(now){
-    if (now - player.lastMoveAt < playerTickMs) return;
-    player.lastMoveAt = now;
-    if (nextDir && canMove(player.x, player.y, nextDir)){
-        dir = nextDir; nextDir = null;
+/* Player movement — smooth float-based with classic Pac-Man cornering.
+   Previous implementation moved one integer cell per 130 ms tick so
+   both visuals and input response felt step-function jerky. Now:
+   - position is float (tiles), advanced by dt*speed each frame
+   - 180° reverse is accepted INSTANTLY (the cell behind is always open)
+   - 90° turn requires near-tile-center alignment (< 0.2 tiles off) AND
+     the requested neighbor cell to be passable; on accept we snap to
+     the center so the turn tracks the corridor axis
+   - wall contact clamps to the current cell center rather than a tick-
+     wait, so a swipe into a wall instantly stops the player at the
+     center with nextDir pending (tapped early = turn at next opening) */
+function stepPlayer(now, dt){
+    const cx = Math.round(player.x), cy = Math.round(player.y);
+    const ofx = player.x - cx, ofy = player.y - cy;
+
+    if (nextDir){
+        const isReverse = (nextDir.x === -dir.x && nextDir.y === -dir.y);
+        if (isReverse){
+            dir = nextDir; nextDir = null;
+        } else if (Math.abs(ofx) < 0.2 && Math.abs(ofy) < 0.2
+                   && canMove(cx, cy, nextDir)){
+            player.x = cx; player.y = cy;
+            dir = nextDir; nextDir = null;
+        }
     }
-    if (!canMove(player.x, player.y, dir)) return;  /* stuck → wait */
-    player.x += dir.x; player.y += dir.y;
-    /* Tunnel wrap would go here if we had one; current maze has no tunnels */
-    const k = cellKey(player.x, player.y);
-    if (dots.has(k)){
-        dots.delete(k); dotsEaten++;
-        score += 10;
-    } else if (powers.has(k)){
-        powers.delete(k); dotsEaten++;
-        score += 50;
-        vulnerableUntil = now + 6000;
-        if(navigator.vibrate)try{navigator.vibrate([20,30,20])}catch(_){}
-    }
-    $('scoreNow').textContent = score;
-    /* Win check */
-    if (dots.size === 0 && powers.size === 0){
-        gameOver(true);
-        return;
+
+    const mv = dt * playerSpeed;
+    let nx = player.x + dir.x * mv;
+    let ny = player.y + dir.y * mv;
+    /* Wall clamp: don't let the float position overshoot the current
+       cell center if the next cell in this direction is solid. */
+    if (dir.x > 0 && isWall(cx+1, cy) && nx > cx) nx = cx;
+    else if (dir.x < 0 && isWall(cx-1, cy) && nx < cx) nx = cx;
+    if (dir.y > 0 && isWall(cx, cy+1) && ny > cy) ny = cy;
+    else if (dir.y < 0 && isWall(cx, cy-1) && ny < cy) ny = cy;
+    player.x = nx; player.y = ny;
+
+    /* Eat the dot/pellet when Pac-Man is close to a cell's center. */
+    const ncx = Math.round(player.x), ncy = Math.round(player.y);
+    const cdist = Math.hypot(player.x-ncx, player.y-ncy);
+    if (cdist < 0.4){
+        const k = cellKey(ncx, ncy);
+        if (dots.has(k)){
+            dots.delete(k); dotsEaten++;
+            score += 10;
+        } else if (powers.has(k)){
+            powers.delete(k); dotsEaten++;
+            score += 50;
+            vulnerableUntil = now + 6000;
+            if(navigator.vibrate)try{navigator.vibrate([20,30,20])}catch(_){}
+        }
+        $('scoreNow').textContent = score;
+        if (dots.size === 0 && powers.size === 0){
+            gameOver(true);
+            return;
+        }
     }
 }
 
-/* Ghost AI — pick a direction at each step based on kind. */
+/* Ghost AI — pick a direction at each step based on kind.
+   Now operates on the ghost's CURRENT tile (rounded) since the
+   position is a float; distance heuristic compares against the
+   player's rounded tile for the same reason (fractional pursuit
+   was jittery). Vulnerable chaser flees (maximizes distance). */
 const DIRS = [{x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1}];
 function pickGhostDir(g, vulnerable){
+    const gx = Math.round(g.x), gy = Math.round(g.y);
+    const px = Math.round(player.x), py = Math.round(player.y);
     const opposite = {x:-g.dir.x, y:-g.dir.y};
-    /* Candidate directions: not into a wall. At intersections prefer
-       not to reverse unless stuck. */
     const options = DIRS.filter(d=>{
-        const nx=g.x+d.x, ny=g.y+d.y;
-        if (isWall(nx,ny)) return false;
+        if (isWall(gx+d.x, gy+d.y)) return false;
         if (d.x===opposite.x && d.y===opposite.y) return false;
         return true;
     });
-    const pool = options.length ? options : DIRS.filter(d => !isWall(g.x+d.x, g.y+d.y));
+    const pool = options.length ? options : DIRS.filter(d => !isWall(gx+d.x, gy+d.y));
     if (!pool.length) return g.dir;
 
     if (g.kind === 'wander'){
         return pool[Math.floor(Math.random()*pool.length)];
     }
-    /* chaser: Manhattan distance toward (or away from, if vulnerable) player */
     let best = pool[0], bestDist = vulnerable ? -Infinity : Infinity;
     for (const d of pool){
-        const nx = g.x+d.x, ny = g.y+d.y;
-        const dist = Math.abs(nx-player.x) + Math.abs(ny-player.y);
+        const dist = Math.abs(gx+d.x-px) + Math.abs(gy+d.y-py);
         if (vulnerable ? dist > bestDist : dist < bestDist){
             bestDist = dist; best = d;
         }
     }
     return best;
 }
-function stepGhost(g, now){
-    const tickMs = (now < vulnerableUntil) ? ghostTickMs*1.6 : ghostTickMs;
-    if (now - g.lastMoveAt < tickMs) return;
-    g.lastMoveAt = now;
-    g.dir = pickGhostDir(g, now < vulnerableUntil);
-    g.x += g.dir.x; g.y += g.dir.y;
+/* Ghost movement — mirror of stepPlayer. Direction is re-chosen only
+   when the ghost crosses a tile center (tracked via lastPickKey so we
+   don't spam the picker multiple frames in a row on the same cell). */
+function stepGhost(g, now, dt){
+    const vulnerable = now < vulnerableUntil;
+    const speed = vulnerable ? ghostSpeed / 1.6 : ghostSpeed;
+    const cx = Math.round(g.x), cy = Math.round(g.y);
+    const ofx = g.x - cx, ofy = g.y - cy;
+
+    if (Math.abs(ofx) < 0.1 && Math.abs(ofy) < 0.1){
+        const key = cx+','+cy;
+        if (g.lastPickKey !== key){
+            g.x = cx; g.y = cy;
+            g.dir = pickGhostDir(g, vulnerable);
+            g.lastPickKey = key;
+        }
+    }
+
+    const mv = dt * speed;
+    let nx = g.x + g.dir.x * mv;
+    let ny = g.y + g.dir.y * mv;
+    if (g.dir.x > 0 && isWall(cx+1, cy) && nx > cx) nx = cx;
+    else if (g.dir.x < 0 && isWall(cx-1, cy) && nx < cx) nx = cx;
+    if (g.dir.y > 0 && isWall(cx, cy+1) && ny > cy) ny = cy;
+    else if (g.dir.y < 0 && isWall(cx, cy-1) && ny < cy) ny = cy;
+    g.x = nx; g.y = ny;
 }
 
-/* Collision check after both player + ghosts have moved. */
+/* Collision check after both player + ghosts have moved.
+   Distance-based since positions are floats. 0.75 tiles feels fair:
+   ghosts have to pass through Pac-Man's body, not just the same tile. */
 function checkCollisions(now){
     const vulnerable = now < vulnerableUntil;
     for (const g of ghosts){
-        if (g.x === player.x && g.y === player.y){
+        if (Math.hypot(g.x - player.x, g.y - player.y) < 0.75){
             if (vulnerable){
                 ghostsEaten++;
                 score += 200;
                 $('scoreNow').textContent = score;
-                /* Respawn ghost at center */
                 g.x = 6; g.y = 7;
                 g.dir = {x:Math.random()<.5?1:-1, y:0};
+                g.lastPickKey = '';
                 if(navigator.vibrate)try{navigator.vibrate(18)}catch(_){}
             } else {
                 gameOver(false);
@@ -544,10 +606,17 @@ function draw(now){
 function loop(now){
     if (!running) return;
     if (!paused){
-        stepPlayer(now);
-        for (const g of ghosts) stepGhost(g, now);
+        /* dt clamped so a long tab-switch / background resume doesn't
+           teleport the player halfway across the maze. 0.05 s = 50 ms
+           cap ≈ skipped frames at 20 fps or below are silently dropped. */
+        const dt = Math.min(0.05, Math.max(0, (now - lastTick) / 1000));
+        lastTick = now;
+        stepPlayer(now, dt);
+        for (const g of ghosts) stepGhost(g, now, dt);
         checkCollisions(now);
         if (!running){ draw(now); return; }
+    } else {
+        lastTick = now;
     }
     draw(now);
     requestAnimationFrame(loop);
@@ -593,7 +662,10 @@ wrap.addEventListener('touchend',(e)=>{
     const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y;
     const ax=Math.abs(dx), ay=Math.abs(dy);
     touchStart=null;
-    if(Math.max(ax,ay)<20) return;
+    /* 14 px threshold — below 10 triggers on accidental taps, above
+       20 ignores tight finger flicks. 14 was picked after confirming
+       it still survives 300 ms accidental scroll gestures. */
+    if(Math.max(ax,ay)<14) return;
     if(ax>ay) queueDir(dx>0?1:-1, 0);
     else      queueDir(0, dy>0?1:-1);
 });
@@ -649,6 +721,6 @@ $('ovBtn').addEventListener('click', startGame);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1776820813" defer></script>
+<script src="/js/siteFooter.js?v=1776821608" defer></script>
 </body>
 </html>
