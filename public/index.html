@@ -799,6 +799,9 @@ function applyLanguage() {
     });
     renderGames();
     renderRecent();
+    /* Localize the launch dialog + how-to chrome labels every time
+       the language flips (the modal may already be open). */
+    try { if (typeof applyLaunchI18n === 'function') applyLaunchI18n(); } catch(_) {}
     /* Broadcast so siteFooter's stat-counter labels (오늘/누적) update
        live without a page reload. Any other future site-wide widget
        (sub-pages, modals, etc.) can hook into this same event. */
@@ -890,7 +893,7 @@ init();
 
 <script src="/js/langBar.js"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776864317"></script>
+<script src="/js/supabase-config.js?v=1776866575"></script>
 <script>
 (async function(){
     try{
@@ -975,13 +978,13 @@ init();
   <div class="lp-launch-btns">
     <button class="lp-launch-btn howto" id="lpLaunchHowto">
       <span class="lpb-ico">📖</span>
-      <span>이용방법</span>
-      <span class="lpb-sub">HOW TO PLAY</span>
+      <span class="lpb-main" data-i18n-launch="howto">How to play</span>
+      <span class="lpb-sub" data-i18n-launch="howtoSub">TUTORIAL</span>
     </button>
     <button class="lp-launch-btn play" id="lpLaunchPlay">
       <span class="lpb-ico">▶</span>
-      <span>플레이</span>
-      <span class="lpb-sub">PLAY NOW</span>
+      <span class="lpb-main" data-i18n-launch="play">Play</span>
+      <span class="lpb-sub" data-i18n-launch="playSub">PLAY NOW</span>
     </button>
   </div>
 </div>
@@ -993,7 +996,7 @@ init();
   </div>
   <div class="lp-howto-body" id="lpHowtoBody"></div>
   <div class="lp-howto-foot">
-    <button class="play" id="lpHowtoPlay">▶ 바로 시작</button>
+    <button class="play" id="lpHowtoPlay" data-i18n-launch="startNow">▶ Start now</button>
   </div>
 </div>
 
@@ -1010,25 +1013,46 @@ const MULTIPLAYER_GAMES = ['quiz','roulette','ladder','car-racing','bingo'];
 
 /* Shared "make a room + invite friends" flow. Rendered as Section
    ①; the game-specific rules go under it as Section ②. */
+/* How-to step catalog — bilingual. Each title/body/visual-caption
+   is {ko,en}. Helpers below resolve to the active currentLang with
+   EN as the fallback. Numbers/emojis stay language-neutral. */
+function _tx(obj){
+    if (obj == null) return '';
+    if (typeof obj === 'string') return obj;
+    return obj[currentLang] || obj.en || obj.ko || '';
+}
+const LAUNCH_I18N = {
+    howto:     {ko:'이용방법',       en:'How to play'},
+    howtoSub:  {ko:'HOW TO PLAY',    en:'TUTORIAL'},
+    play:      {ko:'플레이',         en:'Play'},
+    playSub:   {ko:'PLAY NOW',       en:'PLAY NOW'},
+    startNow:  {ko:'▶ 바로 시작',     en:'▶ Start now'},
+    sectionMP: {ko:'멀티플레이 — 방 만들고 친구 부르기', en:'Multiplayer — host a room, invite friends'},
+    sectionRules: {ko:'게임 방법',    en:'How the game works'},
+    howToTitle:{ko:'이용방법',       en:'How to play'}
+};
+
 const MP_STEPS = [
   {
     badge: '1',
-    title: '우상단 <b>+ Create Room</b> 탭',
-    body: '게임 화면 상단 <b>주황색 버튼</b>을 탭하면 친구를 부를 수 있는 방이 만들어져요.',
+    title: {ko:'우상단 <b>+ Create Room</b> 탭', en:'Tap <b>+ Create Room</b> (top right)'},
+    body:  {ko:'게임 화면 상단 <b>주황색 버튼</b>을 탭하면 친구를 부를 수 있는 방이 만들어져요.',
+            en:'Tap the <b>orange chip</b> at the top of any game screen to open a room friends can join.'},
     visual: `
       <div class="tut-visual">
         <div class="tut-bar">
-          <span class="tut-home">← 홈</span>
-          <span class="tut-title">🎯 게임</span>
+          <span class="tut-home">← Home</span>
+          <span class="tut-title">🎯 Game</span>
           <span class="tut-chip pulse">+ Create Room</span>
         </div>
-        <div class="tut-caption">여기를 탭하세요</div>
+        <div class="tut-caption" data-tut-cap='{"ko":"여기를 탭하세요","en":"Tap here"}'></div>
       </div>`
   },
   {
     badge: '2',
-    title: '방 코드 + QR 공유',
-    body: '방을 만들면 <b>6자리 코드</b>와 QR이 나와요. 친구에게 URL을 보내거나 QR을 보여주면 돼요.',
+    title: {ko:'방 코드 + QR 공유', en:'Share room code + QR'},
+    body:  {ko:'방을 만들면 <b>6자리 코드</b>와 QR이 나와요. 친구에게 URL을 보내거나 QR을 보여주면 돼요.',
+            en:'Once the room is open you get a <b>6-char code</b> and a QR. Send the URL, or just show the QR.'},
     visual: `
       <div class="tut-visual">
         <div class="tut-roomcard">
@@ -1040,107 +1064,107 @@ const MP_STEPS = [
               return `<div class="${on?'':'off'}"></div>`;
             }).join('')}
           </div>
-          <div class="tut-caption">친구가 QR 찍거나 링크 열면 참가!</div>
+          <div class="tut-caption" data-tut-cap='{"ko":"친구가 QR 찍거나 링크 열면 참가!","en":"Friend scans the QR or opens the link to join!"}'></div>
         </div>
       </div>`
   },
   {
     badge: '3',
-    title: '게스트가 참가',
-    body: '친구는 <b>링크를 탭</b>하거나, 홈에서 <b>Join</b> 버튼 → 방 코드 입력으로 들어와요.',
+    title: {ko:'게스트가 참가',        en:'Guests join'},
+    body:  {ko:'친구는 <b>링크를 탭</b>하거나, 홈에서 <b>Join</b> 버튼 → 방 코드 입력으로 들어와요.',
+            en:'Friends <b>tap the link</b>, or hit <b>Join</b> on the home page and enter the code.'},
     visual: `
       <div class="tut-visual">
         <div class="tut-phones">
           <div class="tut-phone host">
-            <div class="pc"><span class="tag">👑 호스트</span>내 폰</div>
+            <div class="pc"><span class="tag" data-tut-cap='{"ko":"👑 호스트","en":"👑 Host"}'></span><span data-tut-cap='{"ko":"내 폰","en":"My phone"}'></span></div>
             <div class="code-sm">ABC123</div>
-            <div class="tut-caption">코드 공유</div>
+            <div class="tut-caption" data-tut-cap='{"ko":"코드 공유","en":"Share code"}'></div>
           </div>
           <div class="tut-right-arrow">→</div>
           <div class="tut-phone guest">
-            <div class="pc"><span class="tag">🫂 게스트</span>친구 폰</div>
+            <div class="pc"><span class="tag" data-tut-cap='{"ko":"🫂 게스트","en":"🫂 Guest"}'></span><span data-tut-cap='{"ko":"친구 폰","en":"Friend phone"}'></span></div>
             <div class="tut-input">ABC123</div><br>
-            <span class="tut-mini-btn">참가</span>
+            <span class="tut-mini-btn" data-tut-cap='{"ko":"참가","en":"Join"}'></span>
           </div>
         </div>
       </div>`
   },
   {
     badge: '4',
-    title: '모두 모이면 호스트가 시작',
-    body: '참가자 목록에 모두 표시되면 호스트가 <b>시작하기</b>를 누르세요. 모두가 동시에 같은 결과를 봐요.',
+    title: {ko:'모두 모이면 호스트가 시작', en:'Host starts when everyone\'s in'},
+    body:  {ko:'참가자 목록에 모두 표시되면 호스트가 <b>시작하기</b>를 누르세요. 모두가 동시에 같은 결과를 봐요.',
+            en:'Once the player list is complete the host hits <b>Start</b>. Everyone watches the same result live.'},
     visual: `
       <div class="tut-visual">
         <div class="tut-players">
-          <span class="tp host">👑 나</span>
-          <span class="tp">😊 민지</span>
-          <span class="tp">🙂 철수</span>
-          <span class="tp">😎 영희</span>
+          <span class="tp host" data-tut-cap='{"ko":"👑 나","en":"👑 Me"}'></span>
+          <span class="tp" data-tut-cap='{"ko":"😊 민지","en":"😊 Alex"}'></span>
+          <span class="tp" data-tut-cap='{"ko":"🙂 철수","en":"🙂 Sam"}'></span>
+          <span class="tp" data-tut-cap='{"ko":"😎 영희","en":"😎 Jamie"}'></span>
         </div>
-        <div class="tut-startbtn">▶ 시작하기</div>
+        <div class="tut-startbtn" data-tut-cap='{"ko":"▶ 시작하기","en":"▶ Start"}'></div>
       </div>`
   }
 ];
 
-/* Per-game rules. badge is just a number shown on the step card. */
+/* Per-game rules — bilingual {ko,en}. */
 const GAME_STEPS = {
   quiz: [
-    { badge:'1', title:'카테고리 선택', body:'K팝·연예·스포츠·상식·추억·한국사·세계·최신 중 여러 개 선택 (섞을수록 전 연령 재밌음).', visual:'' },
-    { badge:'2', title:'문제수 · 시간 결정', body:'5/10/15/20문제 × 10/15/20/30초. 파티는 <b>10문제 · 15초</b> 추천.', visual:'' },
-    { badge:'3', title:'같은 화면 4개 버튼 탭', body:'모든 참가자 폰에 <b>빨강·파랑·노랑·초록</b> 4개 답안. 빨리 맞출수록 보너스 점수!', visual:'' },
-    { badge:'4', title:'매 문제마다 파이챠트 + 순위', body:'정답 공개 후 <b>전체 정답율 · 번호별 선택자 분포</b>를 실시간 차트로 확인.', visual:'' },
-    { badge:'5', title:'최종 시상대', body:'🥇🥈🥉 자동 애니메이션 + 전체 순위표. 로그인 유저는 기록 자동 저장.', visual:'' }
+    { badge:'1', title:{ko:'카테고리 선택',en:'Pick categories'}, body:{ko:'K팝·연예·스포츠·상식·추억·한국사·세계·최신 중 여러 개 선택 (섞을수록 전 연령 재밌음).',en:'Mix K-pop · Entertainment · Sports · Trivia · Retro · History · World · Latest. A mix keeps every age group engaged.'}, visual:'' },
+    { badge:'2', title:{ko:'문제수 · 시간 결정',en:'Set count + time'}, body:{ko:'5/10/15/20문제 × 10/15/20/30초. 파티는 <b>10문제 · 15초</b> 추천.',en:'5/10/15/20 questions × 10/15/20/30 seconds each. A party works best with <b>10 × 15 s</b>.'}, visual:'' },
+    { badge:'3', title:{ko:'4개 번호 버튼으로 답',en:'Tap 1 of 4 answer buttons'}, body:{ko:'모든 참가자 폰에 <b>1/2/3/4 번호</b> 버튼. 빨리 맞출수록 보너스 점수!',en:'Every phone shows 4 numbered buttons. Answer fast for a speed bonus.'}, visual:'' },
+    { badge:'4', title:{ko:'매 문제마다 파이차트 + 순위',en:'Pie chart + standings per question'}, body:{ko:'정답 공개 후 <b>전체 정답율 · 번호별 선택자 분포</b>를 실시간 차트로 확인.',en:'Each reveal shows the full answer distribution as a pie chart, then the running leaderboard.'}, visual:'' },
+    { badge:'5', title:{ko:'최종 시상대',en:'Final podium'}, body:{ko:'🥇🥈🥉 자동 애니메이션 + 전체 순위표. 로그인 유저는 기록 자동 저장.',en:'Animated 🥇🥈🥉 podium + full rankings. Signed-in players get their best score saved.'}, visual:'' }
   ],
   roulette: [
-    { badge:'1', title:'선택지 입력', body:'음식 / 활동 / 이름 등 <b>최소 2개</b>를 입력하세요. (예: 돈까스, 피자, 짜장면)', visual:'' },
-    { badge:'2', title:'SPIN 버튼 탭', body:'룰렛이 빠르게 돌다가 천천히 멈춰요.', visual:'' },
-    { badge:'3', title:'화살표가 가리키는 항목이 결과', body:'결과는 자동 저장 → <b>최근 결과</b>에서 다시 확인 가능.', visual:'' }
+    { badge:'1', title:{ko:'선택지 입력',en:'Add options'}, body:{ko:'음식 / 활동 / 이름 등 <b>최소 2개</b>를 입력하세요. (예: 돈까스, 피자, 짜장면)',en:'Type at least 2 choices — foods, activities, names, anything.'}, visual:'' },
+    { badge:'2', title:{ko:'SPIN 버튼 탭',en:'Tap SPIN'}, body:{ko:'룰렛이 빠르게 돌다가 천천히 멈춰요.',en:'The wheel spins up fast then slowly settles.'}, visual:'' },
+    { badge:'3', title:{ko:'화살표가 가리키는 항목이 결과',en:'The arrow chooses the winner'}, body:{ko:'결과는 자동 저장 → <b>최근 결과</b>에서 다시 확인 가능.',en:'Result is saved to <b>Recent results</b> so you can review later.'}, visual:'' }
   ],
   ladder: [
-    { badge:'1', title:'참가자 + 결과 입력', body:'참가자 이름과 <b>뽑을 결과</b> (꽝·커피값·벌칙 등)를 같은 개수로 입력.', visual:'' },
-    { badge:'2', title:'GO 탭 → 사다리 생성', body:'사다리가 무작위로 그려지고, 각자의 출발선에서 내려가요.', visual:'' },
-    { badge:'3', title:'각자 도착한 칸이 결과', body:'모두가 <b>같은 사다리</b>를 보기 때문에 공정해요. (멀티플레이도 동일)', visual:'' }
+    { badge:'1', title:{ko:'참가자 + 결과 입력',en:'Enter players + prizes'}, body:{ko:'참가자 이름과 <b>뽑을 결과</b> (꽝·커피값·벌칙 등)를 같은 개수로 입력.',en:'Match N names with N outcomes (loser pays / coffee run / penalty, etc.).'}, visual:'' },
+    { badge:'2', title:{ko:'GO 탭 → 사다리 생성',en:'Tap GO to draw the ladder'}, body:{ko:'사다리가 무작위로 그려지고, 각자의 출발선에서 내려가요.',en:'A random ladder is drawn; each name traces from its start to an outcome.'}, visual:'' },
+    { badge:'3', title:{ko:'각자 도착한 칸이 결과',en:'Where your path lands = your outcome'}, body:{ko:'모두가 <b>같은 사다리</b>를 보기 때문에 공정해요. (멀티플레이도 동일)',en:'Everyone watches the same ladder, so the draw is fair (multiplayer rooms stay in sync).'}, visual:'' }
   ],
   'car-racing': [
-    { badge:'1', title:'참가자 이름 입력', body:'레이스에 참가할 사람들을 추가하세요.', visual:'' },
-    { badge:'2', title:'START 탭', body:'자동차들이 무작위 속도로 달려요. 꼴등이 쏘기 / 1등 보상 등 내기 결정에 써요!', visual:'' },
-    { badge:'3', title:'결승선 도착 순서로 결과', body:'순위가 화면에 표시돼요. 멀티플레이는 모두가 같은 레이스 관람.', visual:'' }
+    { badge:'1', title:{ko:'참가자 이름 입력',en:'Enter racers'}, body:{ko:'레이스에 참가할 사람들을 추가하세요.',en:'Add the people who want to race.'}, visual:'' },
+    { badge:'2', title:{ko:'START 탭',en:'Tap START'}, body:{ko:'자동차들이 무작위 속도로 달려요. 꼴등이 쏘기 / 1등 보상 등 내기 결정에 써요!',en:'Cars run at random speeds — great for "last one buys" or "1st place gets the bonus".'}, visual:'' },
+    { badge:'3', title:{ko:'결승선 도착 순서로 결과',en:'Finishing order = result'}, body:{ko:'순위가 화면에 표시돼요. 멀티플레이는 모두가 같은 레이스 관람.',en:'Final rankings are shown on screen; multiplayer guests watch the exact same race.'}, visual:'' }
   ],
   bingo: [
-    { badge:'1', title:'빙고판 준비', body:'호스트가 방을 만들면 각 참가자는 <b>자기만의 5×5 빙고판</b>을 자동으로 받아요.', visual:'' },
-    { badge:'2', title:'호스트가 번호 뽑기', body:'1-75 중 무작위 번호가 나오면 모두 자기 판에서 찾아 체크.', visual:'' },
-    { badge:'3', title:'가로·세로·대각 한 줄 완성 = BINGO', body:'먼저 완성한 사람이 승리. 선물 추첨 / 벌칙 정하기에 최고!', visual:'' }
+    { badge:'1', title:{ko:'빙고판 준비',en:'Everyone gets a card'}, body:{ko:'호스트가 방을 만들면 각 참가자는 <b>자기만의 5×5 빙고판</b>을 자동으로 받아요.',en:'When the host opens a room every player is handed their own <b>5×5 bingo card</b>.'}, visual:'' },
+    { badge:'2', title:{ko:'호스트가 번호 뽑기',en:'Host calls numbers'}, body:{ko:'1-75 중 무작위 번호가 나오면 모두 자기 판에서 찾아 체크.',en:'Numbers 1-75 are drawn randomly — find and mark them on your own card.'}, visual:'' },
+    { badge:'3', title:{ko:'가로·세로·대각 한 줄 = BINGO',en:'Any row · column · diagonal = BINGO'}, body:{ko:'먼저 완성한 사람이 승리. 선물 추첨 / 벌칙 정하기에 최고!',en:'First to line up 5 wins. Great for prize drawings / deciding penalties.'}, visual:'' }
   ],
   team: [
-    { badge:'1', title:'멤버 이름 입력', body:'팀으로 나눌 사람들을 한 명씩 추가. 최대 40명.', visual:'' },
-    { badge:'2', title:'팀 개수 선택', body:'2~8팀까지. 각 팀이 <b>비슷한 인원</b>이 되도록 자동 배분.', visual:'' },
-    { badge:'3', title:'(선택) 티어 설정', body:'능력별 S/A/B/C 티어를 주면 실력 밸런스까지 맞춰서 뽑아요.', visual:'' },
-    { badge:'4', title:'뽑기 → 결과 공유', body:'결과 URL을 복사해 친구에게 보내면 동일한 결과를 볼 수 있어요.', visual:'' }
+    { badge:'1', title:{ko:'멤버 이름 입력',en:'Add members'}, body:{ko:'팀으로 나눌 사람들을 한 명씩 추가. 최대 40명.',en:'Add up to 40 people to split into teams.'}, visual:'' },
+    { badge:'2', title:{ko:'팀 개수 선택',en:'Pick team count'}, body:{ko:'2~8팀까지. 각 팀이 <b>비슷한 인원</b>이 되도록 자동 배분.',en:'2 to 8 teams. Sizes are balanced automatically.'}, visual:'' },
+    { badge:'3', title:{ko:'(선택) 티어 설정',en:'(Optional) Tier skill levels'}, body:{ko:'능력별 S/A/B/C 티어를 주면 실력 밸런스까지 맞춰서 뽑아요.',en:'Assign S / A / B / C tiers so stronger + weaker players are spread evenly.'}, visual:'' },
+    { badge:'4', title:{ko:'뽑기 → 결과 공유',en:'Draw → share the result'}, body:{ko:'결과 URL을 복사해 친구에게 보내면 동일한 결과를 볼 수 있어요.',en:'Copy the result URL — anyone who opens it sees the same team assignment.'}, visual:'' }
   ],
   lotto: [
-    { badge:'1', title:'국가별 로또 선택', body:'파워볼·메가밀리언·한국 6/45·EuroMillions 등 <b>16+ 국가 지원</b>.', visual:'' },
-    { badge:'2', title:'번호 생성 버튼 탭', body:'선택한 나라의 실제 규칙 (숫자 범위, 추가 번호 등)에 맞춰 번호가 뽑혀요.', visual:'' },
-    { badge:'3', title:'당첨 번호 / 통계도 확인', body:'최근 당첨 번호, 자주 나오는 숫자 통계까지 같은 화면에서 볼 수 있어요.', visual:'' }
+    { badge:'1', title:{ko:'국가별 로또 선택',en:'Pick a country\'s lottery'}, body:{ko:'파워볼·메가밀리언·한국 6/45·EuroMillions 등 <b>16+ 국가 지원</b>.',en:'16+ countries: Powerball, Mega Millions, Korea 6/45, EuroMillions, Mega-Sena, Lotto 6/49 …'}, visual:'' },
+    { badge:'2', title:{ko:'번호 생성 버튼 탭',en:'Tap generate'}, body:{ko:'선택한 나라의 실제 규칙 (숫자 범위, 추가 번호 등)에 맞춰 번호가 뽑혀요.',en:'Numbers are drawn respecting the real rules of that country (range + bonus balls).'}, visual:'' },
+    { badge:'3', title:{ko:'당첨 번호 / 통계도 확인',en:'See winning numbers + stats too'}, body:{ko:'최근 당첨 번호, 자주 나오는 숫자 통계까지 같은 화면에서 볼 수 있어요.',en:'Same page shows recent winning numbers and hot-cold number frequencies.'}, visual:'' }
   ],
   snake: [
-    { badge:'1', title:'먹이 먹고 길어지기', body:'<b>빨간 점</b>을 먹으면 뱀이 1칸씩 길어지고 속도도 조금 빨라져요.', visual:`<div class="tut-gamebox"><div class="bg-small">🐍🍎</div><div class="lbl">작은 뱀 + 먹이</div></div>` },
-    { badge:'2', title:'조작', body:'폰: <b>화면 스와이프</b> 또는 하단 D-pad.<br>PC: <kbd>←↑↓→</kbd> 또는 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>.',
-      visual:`<div class="tut-gamebox"><div class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div>` },
-    { badge:'3', title:'벽·자기 몸 부딪히면 끝', body:'최종 점수는 <b>세계 / 오늘 / 친구</b> 랭킹에 자동 등록돼요.', visual:'' }
+    { badge:'1', title:{ko:'먹이 먹고 길어지기',en:'Eat the food, grow longer'}, body:{ko:'<b>빨간 점</b>을 먹으면 뱀이 1칸씩 길어지고 속도도 조금 빨라져요.',en:'Each <b>red pellet</b> adds one tail segment and a tiny bit of speed.'}, visual:`<div class="tut-gamebox"><div class="bg-small">🐍🍎</div><div class="lbl" data-tut-cap='{"ko":"작은 뱀 + 먹이","en":"Snake + food"}'></div></div>` },
+    { badge:'2', title:{ko:'조작',en:'Controls'}, body:{ko:'폰: <b>화면 스와이프</b> 또는 하단 D-pad.<br>PC: <kbd>←↑↓→</kbd> 또는 <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>.',en:'Mobile: swipe the canvas or use the D-pad.<br>Desktop: <kbd>←↑↓→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>.'}, visual:`<div class="tut-gamebox"><div class="keys"><kbd>↑</kbd><kbd>←</kbd><kbd>↓</kbd><kbd>→</kbd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></div></div>` },
+    { badge:'3', title:{ko:'벽·자기 몸 부딪히면 끝',en:'Hit a wall or yourself → game over'}, body:{ko:'최종 점수는 <b>세계 / 오늘 / 친구</b> 랭킹에 자동 등록돼요.',en:'Final score is auto-submitted to <b>world / today / friends</b> leaderboards.'}, visual:'' }
   ],
   pacman: [
-    { badge:'1', title:'점 모두 먹기', body:'미로의 <b>작은 점 전부</b>를 먹으면 스테이지 클리어 + 보너스 500점.', visual:`<div class="tut-gamebox"><div class="bg-small">🟡·····</div><div class="lbl">팩맨 + 점들</div></div>` },
-    { badge:'2', title:'유령 피하기', body:'유령에 닿으면 <b>GAME OVER</b>. 두 마리 중 하나는 쫓아오고, 하나는 무작위로 움직여요.', visual:`<div class="tut-gamebox"><div class="bg-small">🟡 👻 👻</div><div class="lbl">유령을 피하라</div></div>` },
-    { badge:'3', title:'파워 쿠키로 역습', body:'모서리의 <b>빨간 쿠키</b>를 먹으면 6초간 유령을 잡을 수 있어요 (+200점/마리).',
-      visual:`<div class="tut-gamebox"><div class="bg-small">🍒 🟡 👻</div><div class="lbl">파워 쿠키 = 유령 사냥</div></div>` },
-    { badge:'4', title:'조작', body:'폰: <b>스와이프</b> / D-pad. PC: <kbd>←↑↓→</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Space</kbd> 일시정지.', visual:'' }
+    { badge:'1', title:{ko:'점 모두 먹기',en:'Eat every dot'}, body:{ko:'미로의 <b>작은 점 전부</b>를 먹으면 스테이지 클리어 + 보너스 500점.',en:'Clear all the small dots in the maze to finish the stage and bank a +500 bonus.'}, visual:`<div class="tut-gamebox"><div class="bg-small">🟡·····</div><div class="lbl" data-tut-cap='{"ko":"팩맨 + 점들","en":"Pac-Man + dots"}'></div></div>` },
+    { badge:'2', title:{ko:'유령 피하기',en:'Dodge the ghosts'}, body:{ko:'유령에 닿으면 <b>GAME OVER</b>. 두 마리 중 하나는 쫓아오고, 하나는 무작위로 움직여요.',en:'Touching a ghost = <b>GAME OVER</b>. One chases you; the other roams randomly.'}, visual:`<div class="tut-gamebox"><div class="bg-small">🟡 👻 👻</div><div class="lbl" data-tut-cap='{"ko":"유령을 피하라","en":"Avoid the ghosts"}'></div></div>` },
+    { badge:'3', title:{ko:'파워 쿠키로 역습',en:'Power cookies flip the hunt'}, body:{ko:'모서리의 <b>빨간 쿠키</b>를 먹으면 6초간 유령을 잡을 수 있어요 (+200점/마리).',en:'Grab a corner <b>red cookie</b> and for 6 seconds you can eat the ghosts (+200 each).'}, visual:`<div class="tut-gamebox"><div class="bg-small">🍒 🟡 👻</div><div class="lbl" data-tut-cap='{"ko":"파워 쿠키 = 유령 사냥","en":"Power cookie = ghost hunt"}'></div></div>` },
+    { badge:'4', title:{ko:'조작',en:'Controls'}, body:{ko:'폰: <b>스와이프</b> / D-pad. PC: <kbd>←↑↓→</kbd> / <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd>, <kbd>Space</kbd> 일시정지.',en:'Mobile: swipe / D-pad. Desktop: <kbd>←↑↓→</kbd> or <kbd>WASD</kbd>; <kbd>Space</kbd> to pause.'}, visual:'' }
   ],
   burger: [
-    { badge:'1', title:'목표 버거 확인', body:'왼쪽 <b>🎯 목표</b> 패널에 이번 라운드에 만들어야 할 버거의 순서가 나와요 (아래→위).', visual:`<div class="tut-gamebox"><div class="bg-small">🍔</div><div class="lbl">샘플 버거</div></div>` },
-    { badge:'2', title:'아래 재료 접시 탭', body:'5개 재료 (양상추·패티·치즈·양파·토마토)를 <b>샘플 순서대로</b> 탭하면 접시에 쌓여요.', visual:`<div class="tut-gamebox"><div class="bg-small">🥬🥩🧀🧅🍅</div><div class="lbl">5개 재료 접시</div></div>` },
-    { badge:'3', title:'시간 안에 완성', body:'타임바가 다 닳기 전에 버거를 완성하세요. 틀리면 <b>-2초</b> + 콤보 리셋!', visual:'' },
-    { badge:'4', title:'5개 완성 시 레벨업', body:'같은 난이도에서 5번 완성하면 다음 레벨로. 재료가 더 많아지고 시간도 빨라져요.', visual:'' },
-    { badge:'5', title:'조작', body:'폰: <b>재료 탭</b>. PC: <kbd>1</kbd>~<kbd>5</kbd> 키로 왼쪽→오른쪽 재료 선택.', visual:'' }
+    { badge:'1', title:{ko:'목표 버거 확인',en:'Check the target burger'}, body:{ko:'왼쪽 <b>🎯 목표</b> 패널에 이번 라운드에 만들어야 할 버거의 순서가 나와요 (아래→위).',en:'The left <b>🎯 Target</b> panel shows the order you need to stack this round (bottom → top).'}, visual:`<div class="tut-gamebox"><div class="bg-small">🍔</div><div class="lbl" data-tut-cap='{"ko":"샘플 버거","en":"Sample burger"}'></div></div>` },
+    { badge:'2', title:{ko:'아래 재료 접시 탭',en:'Tap ingredient plates below'}, body:{ko:'5개 재료 (양상추·패티·치즈·양파·토마토)를 <b>샘플 순서대로</b> 탭하면 접시에 쌓여요.',en:'Tap the 5 ingredient plates (lettuce · patty · cheese · onion · tomato) in the <b>same order</b> as the sample.'}, visual:`<div class="tut-gamebox"><div class="bg-small">🥬🥩🧀🧅🍅</div><div class="lbl" data-tut-cap='{"ko":"5개 재료 접시","en":"5 ingredient plates"}'></div></div>` },
+    { badge:'3', title:{ko:'시간 안에 완성',en:'Finish before time runs out'}, body:{ko:'타임바가 다 닳기 전에 버거를 완성하세요. 틀리면 <b>-2초</b> + 콤보 리셋!',en:'Race the timer; a wrong tap costs <b>2 seconds</b> and breaks your combo.'}, visual:'' },
+    { badge:'4', title:{ko:'5개 완성 시 레벨업',en:'5 burgers cleared → level up'}, body:{ko:'같은 난이도에서 5번 완성하면 다음 레벨로. 재료가 더 많아지고 시간도 빨라져요.',en:'Clear 5 burgers at the same level to advance. Ingredients grow, the clock gets tighter.'}, visual:'' },
+    { badge:'5', title:{ko:'조작',en:'Controls'}, body:{ko:'폰: <b>재료 탭</b>. PC: <kbd>1</kbd>~<kbd>5</kbd> 키로 왼쪽→오른쪽 재료 선택.',en:'Mobile: tap an ingredient. Desktop: <kbd>1</kbd>–<kbd>5</kbd> keys map to the plates left→right.'}, visual:'' }
   ]
 };
 
@@ -1191,13 +1215,13 @@ function openHowto(gameId){
   _currentGameId = gameId;
   const isMP = MULTIPLAYER_GAMES.includes(gameId);
   document.getElementById('lpHowtoIcon').innerHTML = iconFor(gameId);
-  document.getElementById('lpHowtoTitle').innerHTML = nameFor(gameId) + ' <span class="sub">이용방법</span>';
+  document.getElementById('lpHowtoTitle').innerHTML = nameFor(gameId) + ' <span class="sub">' + _tx(LAUNCH_I18N.howToTitle) + '</span>';
   const body = document.getElementById('lpHowtoBody');
 
   function stepCard(step){
     return `<div class="ht-step">
-      <div class="ht-step-title"><span class="badge">${step.badge}</span>${step.title}</div>
-      <div class="ht-step-body">${step.body}</div>
+      <div class="ht-step-title"><span class="badge">${step.badge}</span>${_tx(step.title)}</div>
+      <div class="ht-step-body">${_tx(step.body)}</div>
       ${step.visual||''}
     </div>`;
   }
@@ -1208,7 +1232,7 @@ function openHowto(gameId){
       <div class="ht-section">
         <div class="ht-section-title mp">
           <span class="num">①</span>
-          <h4>멀티플레이 — 방 만들고 친구 부르기</h4>
+          <h4>${_tx(LAUNCH_I18N.sectionMP)}</h4>
         </div>
         ${MP_STEPS.map(stepCard).join('')}
       </div>`;
@@ -1217,11 +1241,21 @@ function openHowto(gameId){
     <div class="ht-section">
       <div class="ht-section-title">
         <span class="num">${isMP?'②':'①'}</span>
-        <h4>게임 방법</h4>
+        <h4>${_tx(LAUNCH_I18N.sectionRules)}</h4>
       </div>
       ${(GAME_STEPS[gameId]||[]).map(stepCard).join('')}
     </div>`;
   body.innerHTML = html;
+  /* Hydrate any [data-tut-cap] bilingual captions inside the
+     newly-inserted visuals. The markup ships with a JSON blob per
+     element; we resolve once here so downstream DOM only carries
+     the active-locale text. */
+  body.querySelectorAll('[data-tut-cap]').forEach(el => {
+      try {
+          const m = JSON.parse(el.getAttribute('data-tut-cap'));
+          el.textContent = m[currentLang] || m.en || m.ko || '';
+      } catch(_) {}
+  });
   body.scrollTop = 0;
 
   document.getElementById('lpModBack').classList.add('on');
@@ -1229,6 +1263,15 @@ function openHowto(gameId){
   document.getElementById('lpHowto').setAttribute('aria-hidden','false');
   document.getElementById('lpLaunch').classList.remove('on');
   document.getElementById('lpLaunch').setAttribute('aria-hidden','true');
+}
+
+/* Apply LAUNCH_I18N to static launch/how-to chrome (buttons,
+   captions) on every language change. Invoked from applyLanguage. */
+function applyLaunchI18n(){
+    document.querySelectorAll('[data-i18n-launch]').forEach(el => {
+        const key = el.getAttribute('data-i18n-launch');
+        if (LAUNCH_I18N[key]) el.textContent = _tx(LAUNCH_I18N[key]);
+    });
 }
 function closeHowto(){
   document.getElementById('lpHowto').classList.remove('on');
@@ -1272,6 +1315,6 @@ document.addEventListener('keydown', (e) => {
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776864317" defer></script>
+<script src="/js/siteFooter.js?v=1776866575" defer></script>
 </body>
 </html>
