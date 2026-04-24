@@ -513,6 +513,13 @@
                    CustomEvent here — after the normal emit so any game
                    code hooks still run first. */
                 if(ev==='host:close'){
+                    /* Host tore down the room — any lp_lastRoom pointer for
+                       this code is now dead, wipe it so the home modal
+                       doesn't show a card that would just re-fail. */
+                    try{
+                        var lr=JSON.parse(localStorage.getItem('lp_lastRoom')||'null');
+                        if(lr&&lr.code===code)localStorage.removeItem('lp_lastRoom');
+                    }catch(_){}
                     try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'host_closed'}}))}catch(_){}
                 }
             }
@@ -588,6 +595,7 @@
         var guestApi={
             ok:true,
             code:code,
+            pin:pin,
             gid:gid,
             hostName:result.hostName,
             gameId:result.gameId,
@@ -635,6 +643,19 @@
             },
             close:function(){
                 guestClosing=true;
+                /* Save a 24h rejoin pointer ONLY for voluntary leaves — the
+                   home modal uses this to render a "최근 방" one-click
+                   rejoin card. We intentionally omit this branch from the
+                   host:close path downstream, because a host-closed room
+                   is gone and rejoining would just re-fail. */
+                try{
+                    localStorage.setItem('lp_lastRoom',JSON.stringify({
+                        code:code,pin:pin,hostName:result.hostName||'',
+                        gameId:result.gameId||'',nickname:finalNick,
+                        path:'/games/'+(result.gameId||'roulette')+'/',
+                        t:Date.now()
+                    }));
+                }catch(_){}
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'self'}}))}catch(_){}
@@ -690,6 +711,19 @@
            +'.lp-room-share button{flex:1;padding:9px 12px;border:0;border-radius:8px;background:rgba(255,255,255,.06);color:#fff;font-size:.82em;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}'
            +'.lp-room-share button:hover{background:rgba(255,255,255,.14)}'
            +'.lp-room-error{color:#FF6B8B;font-size:.82em;margin-top:8px;text-align:center;min-height:1.2em}'
+           /* Recent-room rejoin card. Lives at the top of showHomeJoinModal
+              when lp_lastRoom is valid (24h TTL). Visually distinct from
+              the manual join inputs so it reads as a shortcut, not a
+              required field. */
+           +'.lp-room-last-card{position:relative;margin:4px 0 14px;padding:12px 14px 12px;border-radius:12px;background:linear-gradient(145deg,rgba(0,217,255,.10),rgba(79,195,247,.06));border:1px solid rgba(0,217,255,.28);box-shadow:0 0 0 1px rgba(0,217,255,.05) inset}'
+           +'.lp-room-last-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}'
+           +'.lp-room-last-title{font-size:.72em;color:#7ee8ff;font-weight:700;letter-spacing:.08em;text-transform:uppercase}'
+           +'.lp-room-last-x{background:transparent;border:0;color:rgba(255,255,255,.5);font-size:1.25em;line-height:1;cursor:pointer;padding:0 6px;border-radius:6px}'
+           +'.lp-room-last-x:hover{background:rgba(255,255,255,.08);color:#fff}'
+           +'.lp-room-last-body{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}'
+           +'.lp-room-last-code{font-family:"Orbitron","Noto Sans KR",monospace;font-size:1.35em;font-weight:800;letter-spacing:.14em;color:#00D9FF}'
+           +'.lp-room-last-meta{font-size:.78em;color:rgba(255,255,255,.65)}'
+           +'.lp-room-last-go{width:100%;padding:10px 14px!important;font-size:.92em!important}'
            +'.lp-room-guest-list{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}'
            +'.lp-room-guest-list .title{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}'
            +'.lp-room-guest-list .lp-room-guest-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:2px 8px;border-radius:999px;background:rgba(0,217,255,.18);color:#00D9FF;font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:.95em;font-weight:800;letter-spacing:0;text-transform:none}'
@@ -1592,9 +1626,48 @@
             join:_t('참가하기','Join'),
             connecting:_t('방 확인 중…','Looking up room…')
         };
+        /* If the user left a room voluntarily within the last 24h, surface
+           a one-click "최근 방" card at the top of the modal — spec call
+           ("다시 join 버튼을 누르면 가장 최근 접속 정보가 보여서 재접속
+           도 가능하도록"). Host:close wipes this pointer so dead rooms
+           don't reappear. */
+        const _esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})};
+        let _lastRoom=null;
+        const lastCard=(function(){
+            try{
+                const raw=localStorage.getItem('lp_lastRoom');
+                if(!raw)return '';
+                const lr=JSON.parse(raw);
+                if(!lr||!lr.code)return '';
+                if(Date.now()-(lr.t||0)>24*60*60*1000){localStorage.removeItem('lp_lastRoom');return ''}
+                _lastRoom=lr;
+                const gnames={roulette:'룰렛',ladder:'사다리',team:'팀뽑기',lotto:'로또',bingo:'빙고','car-racing':'레이싱',quiz:'퀴즈'};
+                const gameLabel=gnames[lr.gameId]||lr.gameId||'';
+                const titleTxt=_t('최근 방','Recent room');
+                const rejoinTxt=_t('재접속','Rejoin');
+                return ''
+                  +'<div class="lp-room-last-card" id="lpHomeLast">'
+                    +'<div class="lp-room-last-head">'
+                      +'<span class="lp-room-last-title">⚡ '+titleTxt+'</span>'
+                      +'<button type="button" id="lpHomeLastDismiss" class="lp-room-last-x" aria-label="dismiss">×</button>'
+                    +'</div>'
+                    +'<div class="lp-room-last-body">'
+                      +'<div class="lp-room-last-code">'+_esc(lr.code)+'</div>'
+                      +'<div class="lp-room-last-meta">'
+                        +(lr.hostName?('👑 '+_esc(lr.hostName)):'')
+                        +(gameLabel?(' · '+_esc(gameLabel)):'')
+                        +(lr.nickname?(' · '+_esc(lr.nickname)):'')
+                      +'</div>'
+                    +'</div>'
+                    +'<button type="button" class="btn primary lp-room-last-go" id="lpHomeLastGo">↩ '+rejoinTxt+'</button>'
+                  +'</div>';
+            }catch(_){return ''}
+        })();
+
         mountBackdrop(
             '<h3>'+lbl.title+'</h3>'
            +'<div class="sub">'+lbl.sub+'</div>'
+           +lastCard
            +'<button class="btn primary" id="lpHomeQrBtn" style="width:100%;margin-top:4px">'+lbl.qrBtn+'</button>'
            +'<div id="lpHomeQrWrap" style="display:none;margin-top:12px;background:#000;border-radius:10px;overflow:hidden;position:relative"><video id="lpHomeQrVid" playsinline autoplay muted style="width:100%;display:block;aspect-ratio:1/1;object-fit:cover"></video><canvas id="lpHomeQrCv" style="display:none"></canvas><button id="lpHomeQrStop" style="position:absolute;top:6px;right:6px;padding:6px 10px;border:0;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-weight:700;cursor:pointer">×</button></div>'
            +'<label>'+lbl.linkLabel+'</label>'
@@ -1635,6 +1708,29 @@
         });
         document.getElementById('lpHomeQrBtn').addEventListener('click',startQr);
         document.getElementById('lpHomeQrStop').addEventListener('click',stopQr);
+
+        /* Recent-room rejoin: bypass the probe and jump straight to the
+           game page with the saved code/pin/nick. detectAutoJoinParams on
+           the game side will pick them up and auto-join, or fail loudly
+           (e.g. host has since closed) — matching the normal join flow. */
+        const lastGo=document.getElementById('lpHomeLastGo');
+        if(lastGo)lastGo.addEventListener('click',function(){
+            if(!_lastRoom)return;
+            try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
+                code:_lastRoom.code,pin:_lastRoom.pin,nick:_lastRoom.nickname,t:Date.now()
+            }))}catch(_){}
+            try{localStorage.setItem('luckyplz_nick',_lastRoom.nickname||'')}catch(_){}
+            stopQr();
+            const tgt=(_lastRoom.path||('/games/'+(_lastRoom.gameId||'roulette')+'/'))
+              +'?room='+encodeURIComponent(_lastRoom.code);
+            location.href=tgt;
+        });
+        const lastX=document.getElementById('lpHomeLastDismiss');
+        if(lastX)lastX.addEventListener('click',function(){
+            try{localStorage.removeItem('lp_lastRoom')}catch(_){}
+            const card=document.getElementById('lpHomeLast');
+            if(card)card.remove();
+        });
 
         let qrStream=null,qrRaf=null,qrDetector=null;
         async function startQr(){
