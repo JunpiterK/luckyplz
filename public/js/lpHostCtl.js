@@ -128,9 +128,15 @@
       `.lp-hc-pico{font-size:3.8em;margin-bottom:10px;line-height:1;animation:lpHcPulse 1.4s ease-in-out infinite alternate}`,
       `.lp-hc-ptitle{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.35em;font-weight:900;color:#FFE066;margin-bottom:6px;letter-spacing:.12em}`,
       `.lp-hc-psub{font-size:.92em;color:rgba(255,255,255,.7);line-height:1.5}`,
-      `.lp-hc-presume{margin-top:18px;padding:12px 30px;border-radius:999px;border:0;background:linear-gradient(135deg,#FFE066,#FFB84D);color:#0a0a1a;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1em;letter-spacing:.08em;cursor:pointer;box-shadow:0 10px 22px -6px rgba(255,230,109,.45);transition:transform .08s,filter .2s}`,
+      `.lp-hc-presume{margin-top:18px;padding:12px 30px;border-radius:999px;border:0;background:linear-gradient(135deg,#FFE066,#FFB84D);color:#0a0a1a;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1em;letter-spacing:.08em;cursor:pointer;box-shadow:0 10px 22px -6px rgba(255,230,109,.45);transition:transform .08s,filter .2s;min-width:160px}`,
       `.lp-hc-presume:active{transform:scale(.96)}`,
       `.lp-hc-presume:hover{filter:brightness(1.08)}`,
+      `.lp-hc-presume:disabled{cursor:default;filter:none}`,
+      /* Resume countdown. Replaces the title card with a big pulsing
+         number + subtext so both host and guests see the same 5→0
+         rundown before play picks back up. Driven by host:resume_countdown. */
+      `.lp-hc-cd-num{display:inline-flex;align-items:center;justify-content:center;min-width:68px;height:68px;border-radius:50%;background:linear-gradient(135deg,#FFE066,#FFB84D);color:#0a0a1a;font-family:'Orbitron',sans-serif;font-size:2.2em;font-weight:900;line-height:1;box-shadow:0 10px 26px -6px rgba(255,230,109,.55);animation:lpHcCd .95s ease-out}`,
+      `@keyframes lpHcCd{0%{transform:scale(.55);opacity:0}30%{transform:scale(1.12);opacity:1}100%{transform:scale(1);opacity:1}}`,
 
       /* Ended overlay */
       `.lp-hc-eovl{position:fixed;inset:0;z-index:${Z_ENDED};padding:20px;background:rgba(5,5,15,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);display:none;align-items:center;justify-content:center;animation:lpHcFade .22s ease-out;font-family:'Noto Sans KR',sans-serif;color:#fff}`,
@@ -290,8 +296,50 @@
       }
     }
 
+    /* Resume is gated by a 5-second visible countdown so late/distracted
+       guests see the pace change before the timer starts ticking again.
+       The host triggers it; the same countdown UI runs on every guest
+       via host:resume_countdown. After the countdown resolves, the
+       host fires the real host:resumed and game state rolls forward. */
+    const RESUME_COUNTDOWN_SECS = 5;
+    let cdInflight = false;
+
+    function runResumeCountdown(seconds, isHost){
+      return new Promise(function(resolve){
+        if (cdInflight) return resolve();
+        cdInflight = true;
+        btnResume.disabled = true;
+        const origResumeLabel = btnResume.innerHTML;
+        let n = seconds;
+        function render(){
+          povlSub.textContent = isHost
+            ? `${n}초 후 참가자 전원 화면이 다시 움직여요`
+            : `${n}초 후 게임이 다시 시작돼요`;
+          btnResume.innerHTML = `<span class="lp-hc-cd-num" key="${n}">${n}</span>`;
+        }
+        render();
+        const tick = function(){
+          n--;
+          if (n > 0){ render(); setTimeout(tick, 1000); }
+          else {
+            btnResume.innerHTML = origResumeLabel;
+            btnResume.disabled = false;
+            cdInflight = false;
+            resolve();
+          }
+        };
+        setTimeout(tick, 1000);
+      });
+    }
+
     async function doResume(extra){
-      if (role !== 'host' || ended || !isPaused) return;
+      if (role !== 'host' || ended || !isPaused || cdInflight) return;
+      /* Kick the countdown broadcast FIRST so the guests start their
+         local countdown in lockstep with the host's UI tick. */
+      safeBroadcast('host:resume_countdown', {
+        seconds: RESUME_COUNTDOWN_SECS, t: Date.now()
+      });
+      await runResumeCountdown(RESUME_COUNTDOWN_SECS, true);
       isPaused = false;
       let userExtra = null;
       if (typeof opts.onResume === 'function') {
@@ -351,6 +399,11 @@
         if (typeof opts.onHostPaused === 'function') {
           try { opts.onHostPaused(p || {}); } catch(_){}
         }
+      });
+      room.on('host:resume_countdown', p => {
+        if (ended || !isPaused) return;
+        const secs = (p && typeof p.seconds === 'number' && p.seconds > 0) ? p.seconds : RESUME_COUNTDOWN_SECS;
+        runResumeCountdown(secs, false);
       });
       room.on('host:resumed', p => {
         if (ended) return;

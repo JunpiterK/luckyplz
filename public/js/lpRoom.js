@@ -413,7 +413,11 @@
            a game session. Without explicit registration here, supabase
            realtime silently drops the payloads and guests stay stuck
            on the lobby view after the host presses "시작". */
-        'host:quiz_question','host:quiz_reveal','host:quiz_leaderboard','host:quiz_final'
+        'host:quiz_question','host:quiz_reveal','host:quiz_leaderboard','host:quiz_final',
+        /* Host control protocol (lpHostCtl.js). Same "must register or
+           it's silently dropped" rule — guests wouldn't see the pause
+           overlay or resume countdown without these. */
+        'host:paused','host:resumed','host:ended','host:resume_countdown'
     ];
 
     /* Look up a room without actually joining. Used by the home-page

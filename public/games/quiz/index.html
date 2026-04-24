@@ -368,10 +368,10 @@ body{
         <div class="count-row" style="margin-top:12px">
             <span class="lbl">문제당 시간</span>
             <div class="count-btns">
-                <button class="count-btn" data-time="10">10초</button>
-                <button class="count-btn on" data-time="15">15초</button>
+                <button class="count-btn on" data-time="4">4초</button>
+                <button class="count-btn" data-time="8">8초</button>
+                <button class="count-btn" data-time="15">15초</button>
                 <button class="count-btn" data-time="20">20초</button>
-                <button class="count-btn" data-time="30">30초</button>
             </div>
         </div>
         <!-- Host-play toggle. Default = on (host plays). Off = MC-only
@@ -500,7 +500,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1777005597"></script>
+<script src="/js/supabase-config.js?v=1777006400"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -562,7 +562,7 @@ let guest = null;           /* LpRoom guest */
 let hostCtlRef = null;      /* LpHostCtl controller — null in solo */
 let selectedCats = ['kpop','variety','sports','general','retro','latest'];
 let selectedCount = 10;
-let selectedTime = 15;
+let selectedTime = 4;
 /* When true (default), the host is added to the roster and plays
    alongside guests. When false, host is MC-only: sees the game flow
    (timer, reveal, stats) but doesn't get answer buttons and isn't
@@ -586,7 +586,7 @@ const QUIZ_LANGS = [
 let questions = [];         /* loaded question list (host + solo) */
 let currentQIdx = 0;
 let qStartAt = 0;
-let qDurationMs = 15000;
+let qDurationMs = 4000;
 let questionTimer = null;
 let revealTimer = null;
 let lbTimer = null;
@@ -1038,14 +1038,16 @@ function installHostCtlAsHost(){
             return { qIdx: currentQIdx, scaleX };
         },
         onResume: () => {
-            const pauseDur = Date.now() - pauseStartAt;
-            qStartAt += pauseDur;
+            /* Timer restarts from the full qDurationMs — NOT the remaining
+               time at pause. Spec: "정지하고 다시 재개하면 4초부터 다시
+               count". Any mid-question answers locked during the paused
+               state stay locked; only the clock resets. */
             isPaused = false;
             pauseStartAt = 0;
-            const remaining = Math.max(500, qDurationMs - (Date.now() - qStartAt));
-            animateTimer(remaining);
+            qStartAt = Date.now();
+            animateTimer(qDurationMs);
             clearTimeout(questionTimer);
-            questionTimer = setTimeout(revealHost, remaining);
+            questionTimer = setTimeout(revealHost, qDurationMs);
             updateHostCtlVisibility();
             /* If every participant already answered during the pause,
                auto-reveal just like the non-paused path would. */
@@ -1054,7 +1056,7 @@ function installHostCtlAsHost(){
                 clearTimeout(questionTimer);
                 setTimeout(revealHost, 300);
             }
-            return { qIdx: currentQIdx, newStartAt: qStartAt, remainingMs: remaining };
+            return { qIdx: currentQIdx, newStartAt: qStartAt, fullRestart: true, qDurationMs: qDurationMs };
         },
         onEnd: () => {
             gameEnded = true;
@@ -1093,11 +1095,10 @@ function installHostCtlAsGuest(){
             if (gameEnded) return;
             isPaused = false;
             pauseStartAt = 0;
-            if (payload && payload.newStartAt) qStartAt = payload.newStartAt;
-            const remaining = (payload && payload.remainingMs)
-                ? payload.remainingMs
-                : Math.max(500, qDurationMs - (Date.now() - qStartAt));
-            animateTimer(remaining);
+            /* Mirror the host's full-restart semantics. */
+            if (payload && payload.qDurationMs) qDurationMs = payload.qDurationMs;
+            qStartAt = (payload && payload.newStartAt) || Date.now();
+            animateTimer(qDurationMs);
         },
         onHostEnded: () => {
             gameEnded = true;
@@ -1837,6 +1838,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777005597"></script>
+<script src="/js/siteFooter.js?v=1777006400"></script>
 </body>
 </html>
