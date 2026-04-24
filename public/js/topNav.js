@@ -76,10 +76,27 @@
     .pc-top-nav{display:none !important}
 }
 
+/* Host-locked state: when a host room is live, all game links here
+   (and the mobile FAB) are greyed + unclickable so the host is
+   funnelled through the cyan multiplayer panel which is the only
+   entry point that correctly locks + transfers the room. The
+   brand/home tile + the current-page chip stay clickable since
+   they're either "leave the room" (confirmed) or a no-op. */
+.pc-top-nav.host-locked .nav-game:not(.active){pointer-events:none;opacity:.28;filter:grayscale(.9)}
+.pc-top-nav.host-locked .nav-games::after{
+    content:attr(data-host-hint);color:rgba(255,230,109,.65);font-size:.72em;font-weight:700;
+    padding:0 10px;align-self:center;white-space:nowrap;letter-spacing:.02em;flex-shrink:0
+}
+
 /* ---- Mobile game switcher (floating FAB + bottom sheet) ---- */
 .lp-sw-fab{display:none;position:fixed;bottom:84px;right:14px;z-index:600;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#FFE66D,#FF9A3C);box-shadow:0 6px 18px rgba(0,0,0,.35);border:none;color:#0A0A1A;font-size:22px;cursor:pointer;font-family:inherit;font-weight:900;line-height:1;align-items:center;justify-content:center;padding:0}
 .lp-sw-fab:active{transform:scale(.94)}
 @media(max-width:899px){.lp-sw-fab{display:flex}}
+/* Host-locked: hide the mobile FAB so the host's only game-switch
+   entry point is the cyan multiplayer panel. Prevents "two ways to
+   switch" confusion + guards against accidental transfers during
+   an active room. */
+body.lp-host-active .lp-sw-fab{display:none !important}
 
 .lp-sw-modal{display:none;position:fixed;inset:0;z-index:700;font-family:'Noto Sans KR',sans-serif}
 .lp-sw-modal.on{display:block}
@@ -114,6 +131,8 @@
         const lang=localStorage.getItem('luckyplz_lang')||'en';
         const names=NAMES[lang]||NAMES.en;
         const current=currentGameId();
+        const ko=(lang||'en').startsWith('ko');
+        const hostHint=ko?'← 파란 창에서 선택하세요':'← Use the cyan panel';
 
         const nav=document.createElement('nav');
         nav.id='pcTopNav';
@@ -124,7 +143,7 @@
                 <span>Lucky Please</span>
             </a>
             <div class="nav-sep"></div>
-            <div class="nav-games">
+            <div class="nav-games" data-host-hint="${escapeHtml(hostHint)}">
                 ${GAMES.map(g=>`
                     <a class="nav-game${current===g.id?' active':''}" href="${g.url}" data-game-id="${g.id}">
                         <span class="nav-icon">${g.icon}</span>
@@ -167,6 +186,32 @@
         });
 
         mountMobileSwitcher(current,names,lang);
+        wireHostLock();
+    }
+
+    /* Keep the top-nav + mobile FAB in sync with the room state. When
+       a host room is live, BOTH surfaces are locked down so the host
+       can't accidentally step outside the cyan multiplayer panel —
+       which is the only switcher that properly locks + transfers
+       the room. Guests stay unaffected. */
+    function wireHostLock(){
+        function refresh(){
+            const cur=window.LpMultiplayer&&window.LpMultiplayer._current();
+            const isHost=!!(cur&&cur.mode==='host');
+            const nav=document.getElementById('pcTopNav');
+            if(nav)nav.classList.toggle('host-locked',isHost);
+            document.body.classList.toggle('lp-host-active',isHost);
+        }
+        window.addEventListener('lp-room-host-ready',refresh);
+        window.addEventListener('lp-room-closed',refresh);
+        window.addEventListener('lp-room-guest-ready',refresh);
+        /* LpMultiplayer attaches asynchronously after lpRoom fires its
+           host-ready event. A few staggered probes cover the common
+           timing windows (initial load, resume handoff, late-script
+           parse) without needing a long-running interval. */
+        setTimeout(refresh,300);
+        setTimeout(refresh,1200);
+        setTimeout(refresh,3000);
     }
 
     /* Mobile floating game switcher — shown <900px as an always-available
@@ -218,14 +263,11 @@
         Array.prototype.forEach.call(modal.querySelectorAll('.lp-sw-card'),function(card){
             card.addEventListener('click',function(){
                 if(card.classList.contains('active')){close();return}
+                /* Host branch was intentionally removed — when a host
+                   room is live the FAB is hidden via body.lp-host-active,
+                   so any click here means this is a guest / solo /
+                   pre-room visitor and a plain navigation is correct. */
                 const url=card.getAttribute('data-url');
-                const cur=window.LpMultiplayer&&window.LpMultiplayer._current();
-                if(cur&&cur.mode==='host'&&cur.api&&typeof cur.api.transferTo==='function'){
-                    try{
-                        if(cur.api.lock&&!cur.api.isLocked())cur.api.lock();
-                    }catch(_){}
-                    try{cur.api.transferTo(url);close();return}catch(_){}
-                }
                 close();
                 location.href=url;
             });
