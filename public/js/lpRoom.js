@@ -931,7 +931,7 @@
            +'<div class="lp-room-guest-list" id="lpRoomGuests"><div class="title">'+_t('접속자','Guests')+' <span class="lp-room-guest-count" id="lpRoomGuestCount">0</span></div><div class="empty" id="lpRoomGuestsBody">'+_t('아직 아무도 없음 · 친구 기다리는 중…','No one yet — waiting for friends…')+'</div></div>'
            +'<div class="row">'
            +'<button class="btn ghost" id="lpRoomEnd">'+_t('방 닫기','End Room')+'</button>'
-           +'<button class="btn primary" id="lpRoomStart">'+_t('시작!','Start!')+'</button>'
+           +'<button class="btn primary" id="lpRoomStart">'+(opts.fromHome?_t('게임 선택 →','Pick a Game →'):_t('시작!','Start!'))+'</button>'
            +'</div>'
         );
         _renderQr(document.getElementById('lpRoomQr'),url,220);
@@ -981,8 +981,16 @@
         });
         document.getElementById('lpRoomStart').addEventListener('click',function(){
             closeBackdrop();
-            showHostStatus(room);
-            if(opts.onReady)opts.onReady(room);
+            if(opts.fromHome){
+                /* Created from the home page — transferTo sets lp_hostTransit
+                   and broadcasts host:navigate to early-joining guests before
+                   the page unloads. Default game is roulette; host switches
+                   via the multiplayer panel switcher once they arrive. */
+                room.transferTo('/games/roulette/');
+            }else{
+                showHostStatus(room);
+                if(opts.onReady)opts.onReady(room);
+            }
         });
     }
 
