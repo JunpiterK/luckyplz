@@ -336,6 +336,12 @@
                 closing=true;
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
+                /* Explicit shutdown — wipe both the short handoff token and
+                   the long-lived resume token so a later tab-reopen won't
+                   silently re-create the channel for a room the host
+                   already dismissed. */
+                try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+                try{localStorage.removeItem('lp_lastHostRoom')}catch(_){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'host'}}))}catch(_){}
             },
             /* Transfer the room to a new URL — host navigates there, guests
@@ -360,6 +366,13 @@
                     try{localStorage.setItem('lp_hostTransit',JSON.stringify({
                         code:code,pin:pin,hostName:hostName,gameId:gameId,t:Date.now()
                     }))}catch(_){}
+                    /* Also refresh the 24h resume token so if the host tab
+                       crashes mid-navigation we can still recover on
+                       re-open (tryResumeHost falls back to lp_lastHostRoom
+                       when the 60s transit is stale). */
+                    try{localStorage.setItem('lp_lastHostRoom',JSON.stringify({
+                        code:code,pin:pin,hostName:hostName,gameId:gameId,t:Date.now()
+                    }))}catch(_){}
                     /* Give the broadcast ~250ms to actually flush over
                        the socket before the page unload kills it. */
                     setTimeout(function(){location.href=hostUrl.toString()},250);
@@ -370,6 +383,15 @@
                 return root+'?room='+code;
             }
         };
+        /* Persist a 24h "I was hosting this room" pointer so a host who
+           accidentally closes the tab, reloads, or loses connection can
+           silently rejoin the same logical room on return. Cleared by
+           room.close() (explicit dismissal). tryResumeHost falls back to
+           this when the short lp_hostTransit handoff is absent/stale. */
+        try{localStorage.setItem('lp_lastHostRoom',JSON.stringify({
+            code:code,pin:pin,hostName:hostName,gameId:gameId,t:Date.now()
+        }))}catch(_){}
+
         /* Fire once the room is live so shared UI modules (e.g. lpMultiplayer)
            can attach without every game page wiring them manually. */
         try{window.dispatchEvent(new CustomEvent('lp-room-host-ready',{detail:{room:roomApi}}))}catch(_){}
@@ -592,6 +614,23 @@
         /* If the host renamed us, propagate — the rest of the code
            should treat result.nickname as the canonical identity. */
         const finalNick=result.nickname||nickname;
+
+        /* Persist a 24h rejoin pointer the moment the host accepts us —
+           NOT just when the guest voluntarily calls close(). This covers
+           tab crashes, socket drops, mobile app-switching, and hard
+           reloads: the home modal's "최근 방" card can still get the
+           user back into the same room with one click. The pointer is
+           wiped by host:close (room dismissed) or by any later
+           guest.close() call. */
+        try{
+            localStorage.setItem('lp_lastRoom',JSON.stringify({
+                code:code,pin:pin,hostName:result.hostName||'',
+                gameId:result.gameId||gameId||'',nickname:finalNick,
+                path:'/games/'+(result.gameId||gameId||'roulette')+'/',
+                t:Date.now()
+            }));
+        }catch(_){}
+
         var guestApi={
             ok:true,
             code:code,
@@ -1919,25 +1958,58 @@
        same Supabase channel with the same code + pin + hostName so
        guests that followed the host:navigate broadcast re-attach to
        the same logical room. Returns a room object on success or
-       null if there's no pending transit, the transit has expired,
-       or the gameId doesn't match. */
+       null if no pending/recent host session matches this gameId.
+
+       Two-layer resume:
+       1. lp_hostTransit (60s) — normal game-switcher handoff
+       2. lp_lastHostRoom (24h) — accidental reload / tab-close recovery
+
+       The long-lived token MUST match the current gameId so a stale
+       session for a different game doesn't get silently resurrected
+       when the host opens a different game URL. */
     async function tryResumeHost(opts){
         opts=opts||{};
-        var raw=null;
-        try{raw=localStorage.getItem('lp_hostTransit')}catch(_){}
-        if(!raw)return null;
-        var rec;try{rec=JSON.parse(raw)}catch(_){return null}
-        if(!rec||!rec.code||!rec.pin)return null;
-        /* 60-second TTL — beyond that treat the pending transit as
-           stale so a forgotten localStorage entry doesn't silently
-           resurrect an old room days later. */
-        if(Date.now()-(rec.t||0)>60*1000){
-            try{localStorage.removeItem('lp_hostTransit')}catch(_){}
-            return null;
+        var rec=null;
+        var fromTransit=false;
+
+        /* Layer 1: short handoff (any gameId) */
+        try{
+            var rawT=localStorage.getItem('lp_hostTransit');
+            if(rawT){
+                var recT=JSON.parse(rawT);
+                if(recT&&recT.code&&recT.pin&&(Date.now()-(recT.t||0))<=60*1000){
+                    rec=recT;fromTransit=true;
+                }else{
+                    /* Stale transit — clear */
+                    try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+                }
+            }
+        }catch(_){}
+
+        /* Layer 2: 24h resume (must match gameId) */
+        if(!rec){
+            try{
+                var rawL=localStorage.getItem('lp_lastHostRoom');
+                if(rawL){
+                    var recL=JSON.parse(rawL);
+                    var targetGame=opts.gameId||null;
+                    var gameMatch=!targetGame||!recL.gameId||recL.gameId===targetGame;
+                    if(recL&&recL.code&&recL.pin&&(Date.now()-(recL.t||0))<=24*60*60*1000&&gameMatch){
+                        rec=recL;
+                    }else if(recL&&(Date.now()-(recL.t||0))>24*60*60*1000){
+                        try{localStorage.removeItem('lp_lastHostRoom')}catch(_){}
+                    }
+                }
+            }catch(_){}
         }
+
+        if(!rec)return null;
         /* Consume the transit entry so a page refresh doesn't keep
-           re-resuming. */
-        try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+           re-resuming via the short handoff path. lp_lastHostRoom is
+           kept intact and refreshed when the new room spins up. */
+        if(fromTransit){
+            try{localStorage.removeItem('lp_hostTransit')}catch(_){}
+        }
         try{
             const room=await hostCreate({
                 gameId:opts.gameId||rec.gameId,
@@ -1947,6 +2019,27 @@
             });
             return room;
         }catch(e){return null}
+    }
+
+    /* Public probe for the 24h guest resume token. Returns the stored
+       record only when it's still within TTL and (if gameId is passed)
+       matches the current game. Consumers use this to render a
+       "이전 방으로 돌아가기" prompt without duplicating the TTL/gameId
+       gating logic. Returns null otherwise. */
+    function peekLastRoom(opts){
+        opts=opts||{};
+        try{
+            var raw=localStorage.getItem('lp_lastRoom');
+            if(!raw)return null;
+            var rec=JSON.parse(raw);
+            if(!rec||!rec.code||!rec.pin)return null;
+            if(Date.now()-(rec.t||0)>24*60*60*1000){
+                try{localStorage.removeItem('lp_lastRoom')}catch(_){}
+                return null;
+            }
+            if(opts.gameId&&rec.gameId&&rec.gameId!==opts.gameId)return null;
+            return rec;
+        }catch(_){return null}
     }
 
     window.LpRoom={
@@ -1961,6 +2054,7 @@
         detectGuestIntent:detectGuestIntent,
         normalizeOnlineBtn:normalizeOnlineBtn,
         tryResumeHost:tryResumeHost,
+        peekLastRoom:peekLastRoom,
         _injectStyles:injectStyles
     };
 })();
