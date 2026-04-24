@@ -29,7 +29,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.20f';
+    const LP_ROOM_VERSION='2026.04.23a';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Diagnostic log — console-only. The visible floating panel was
@@ -107,6 +107,24 @@
            hosts a clear "no more spectators" checkpoint so late joiners
            can't land mid-spin with half-initialized state. */
         let locked=false;
+        /* Set by room.close() so the CLOSED status that Supabase fires
+           after sb.removeChannel() doesn't get interpreted as an
+           unexpected socket drop and flip the pill to "reconnecting". */
+        let closing=false;
+        /* Connection-health state. Transitions from 'connecting' →
+           'connected' on first SUBSCRIBED. If Supabase Realtime
+           reports CHANNEL_ERROR / TIMED_OUT / CLOSED after we were
+           already subscribed, this flips to 'reconnecting' and the
+           status pill turns yellow so the host sees the socket
+           dropped before broadcasts start silently failing. */
+        let connStatus='connecting';
+        const statusCbs=[];
+        function _setConn(s){
+            if(connStatus===s)return;
+            connStatus=s;
+            dbgLog('host: conn='+s);
+            statusCbs.forEach(function(cb){try{cb(s)}catch(_){}});
+        }
 
         /* Push the authoritative guest roster to everyone in the room.
            Called after any join/leave so each guest's status panel
@@ -252,12 +270,27 @@
         let currentSnapshot=null;
 
         await new Promise(function(resolve,reject){
-            const to=setTimeout(function(){reject(new Error('subscribe timeout'))},10000);
+            const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},10000);
             chan.subscribe(function(status){
                 if(status==='SUBSCRIBED'){
                     subscribed=true;
+                    _setConn('connected');
                     clearTimeout(to);
                     resolve();
+                }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+                    /* Pre-SUBSCRIBED: reject the create promise so
+                       showHostModal's try/catch can surface the error.
+                       Post-SUBSCRIBED: mark connection as degraded and
+                       fire status callbacks so the UI can warn the host.
+                       If we\'re in the middle of closing the room
+                       (host clicked End), stay silent — the drop is
+                       expected. */
+                    if(closing)return;
+                    if(!subscribed){clearTimeout(to);reject(new Error('channel_error'))}
+                    else {subscribed=false;_setConn('reconnecting')}
+                }else if(status==='CLOSED'){
+                    if(closing)return;
+                    if(subscribed){subscribed=false;_setConn('reconnecting')}
                 }
             });
         });
@@ -270,10 +303,17 @@
             guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt,authed:!!e[1].authed,authedName:e[1].authedName||null}})},
             broadcast:function(event,payload){
                 if(!subscribed){dbgLog('host: broadcast '+event+' DROPPED (not subscribed)');return false}
-                chan.send({type:'broadcast',event:event,payload:payload||{}});
+                try{chan.send({type:'broadcast',event:event,payload:payload||{}})}
+                catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
                 if(event!=='host:tick')dbgLog('host: broadcast '+event);
                 return true;
             },
+            /* Subscribe to connection-status transitions: 'connected',
+               'reconnecting'. The status pill wires this up to surface
+               a yellow indicator when the socket drops mid-game so the
+               host knows to refresh rather than blindly keep playing. */
+            onStatusChange:function(cb){if(typeof cb==='function'){statusCbs.push(cb);try{cb(connStatus)}catch(_){}}},
+            connectionStatus:function(){return connStatus},
             snapshot:function(payload){
                 /* Host tells lpRoom "this is the current game state". New
                    joiners will receive it as a host:snapshot so they can
@@ -293,6 +333,7 @@
             unlock:function(){locked=false},
             isLocked:function(){return locked},
             close:function(){
+                closing=true;
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
             },
@@ -391,6 +432,22 @@
         const gid=shortId()+'-'+shortId();
         const listeners={}; /* event → [fn] */
         let accepted=false;
+        let guestSubscribed=false;
+        /* Set by g.close() so the CLOSED status that Supabase emits
+           after removeChannel() doesn\'t flip the pill to
+           "reconnecting" when the user intentionally left the room. */
+        let guestClosing=false;
+        /* Guest-side connection state mirrors the host's. Surfaces
+           on the status pill so a user whose socket dropped mid-game
+           sees "재연결 중" before the game silently desyncs. */
+        let guestConnStatus='connecting';
+        const guestStatusCbs=[];
+        function _setGuestConn(s){
+            if(guestConnStatus===s)return;
+            guestConnStatus=s;
+            dbgLog('guest: conn='+s);
+            guestStatusCbs.forEach(function(cb){try{cb(s)}catch(_){}});
+        }
         /* Event cache for late listeners. The host broadcasts host:snapshot
            (and the initial host:config) almost immediately after we send
            guest:join_request — often before the game-code callback has a
@@ -461,10 +518,22 @@
         }
 
         await new Promise(function(resolve,reject){
-            const to=setTimeout(function(){reject(new Error('subscribe timeout'))},10000);
+            const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},10000);
             chan.subscribe(function(status){
                 dbgLog('guest: subscribe status='+status);
-                if(status==='SUBSCRIBED'){clearTimeout(to);resolve()}
+                if(status==='SUBSCRIBED'){
+                    guestSubscribed=true;
+                    _setGuestConn('connected');
+                    clearTimeout(to);
+                    resolve();
+                }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
+                    if(guestClosing)return;
+                    if(!guestSubscribed){clearTimeout(to);reject(new Error('channel_error'))}
+                    else {guestSubscribed=false;_setGuestConn('reconnecting')}
+                }else if(status==='CLOSED'){
+                    if(guestClosing)return;
+                    if(guestSubscribed){guestSubscribed=false;_setGuestConn('reconnecting')}
+                }
             });
         });
 
@@ -552,9 +621,17 @@
                 }catch(_){}
             },
             close:function(){
+                guestClosing=true;
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
-            }
+            },
+            /* Subscribe to connection-status transitions. Status pill
+               uses this to flash "재연결 중" when the socket drops so
+               users stop expecting live updates. Receives the current
+               status synchronously on subscribe so late listeners
+               catch up. */
+            onStatusChange:function(cb){if(typeof cb==='function'){guestStatusCbs.push(cb);try{cb(guestConnStatus)}catch(_){}}},
+            connectionStatus:function(){return guestConnStatus}
         };
     }
 
@@ -598,7 +675,8 @@
            +'.lp-room-share button:hover{background:rgba(255,255,255,.14)}'
            +'.lp-room-error{color:#FF6B8B;font-size:.82em;margin-top:8px;text-align:center;min-height:1.2em}'
            +'.lp-room-guest-list{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.08)}'
-           +'.lp-room-guest-list .title{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px}'
+           +'.lp-room-guest-list .title{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.12em;text-transform:uppercase;font-weight:700;margin-bottom:8px;display:flex;align-items:center;gap:8px}'
+           +'.lp-room-guest-list .lp-room-guest-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;padding:2px 8px;border-radius:999px;background:rgba(0,217,255,.18);color:#00D9FF;font-family:"Orbitron","Noto Sans KR",sans-serif;font-size:.95em;font-weight:800;letter-spacing:0;text-transform:none}'
            +'.lp-room-guest-list .pill{display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(0,217,255,.12);color:#00D9FF;font-size:.78em;font-weight:600;margin:0 4px 4px 0}'
            +'.lp-room-guest-list .empty{font-size:.78em;color:rgba(255,255,255,.3);font-style:italic}'
            /* Cyan-tinted translucent pill — matches the original palette
@@ -611,6 +689,14 @@
            +'@keyframes lpRoomPulse{0%,100%{opacity:.4}50%{opacity:1}}'
            +'.lp-room-status.lp-room-flash{animation:lpRoomFlash .6s ease-out}'
            +'@keyframes lpRoomFlash{0%{background:rgba(255,230,109,.4);border-color:#FFE66D;transform:translateX(-50%) scale(1.05)}100%{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);transform:translateX(-50%) scale(1)}}'
+           /* Reconnecting state — yellow dot + border so the user can
+              see the socket dropped mid-session without us throwing an
+              intrusive modal. Broadcasts keep trying via Supabase\'s
+              built-in reconnect; this is purely a UI hint. */
+           +'.lp-room-status.lp-reconnecting{background:rgba(255,230,109,.12);border-color:rgba(255,230,109,.5);color:#FFE66D}'
+           +'.lp-room-status.lp-reconnecting .dot{background:#FFE66D}'
+           +'.lp-room-status.lp-reconnecting .lp-count{background:rgba(255,230,109,.22);color:#FFE66D;border-color:rgba(255,230,109,.45)}'
+           +'.lp-room-status.lp-reconnecting .lp-count .lp-count-n{color:#FFE66D}'
            +'.lp-room-status .lp-caret{margin-left:6px;cursor:pointer;opacity:.7;font-weight:700}'
            +'.lp-room-status .lp-caret:hover{opacity:1}'
            /* Always-visible participant count badge. Cyan-family so it
@@ -672,8 +758,8 @@
            /* QR in share modal */
            +'.lp-room-qr-wrap{position:relative;margin:14px auto 6px;max-width:220px}'
            +'.lp-room-qr{width:100%;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;border-radius:12px;overflow:hidden;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);min-height:220px}'
-           +'.lp-room-qr-big{position:absolute;top:6px;right:6px;padding:5px 9px;border-radius:8px;border:0;background:rgba(0,0,0,.55);color:#fff;font-family:inherit;font-size:.72em;font-weight:700;cursor:pointer;backdrop-filter:blur(6px);transition:background .2s}'
-           +'.lp-room-qr-big:hover{background:rgba(0,0,0,.8)}'
+           +'.lp-room-qr-big{position:static;display:block;margin:10px auto 0;padding:7px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);color:#fff;font-family:inherit;font-size:.78em;font-weight:700;cursor:pointer;transition:background .2s;top:auto;right:auto;bottom:auto;left:auto}'
+           +'.lp-room-qr-big:hover{background:rgba(255,255,255,.14)}'
            /* Fullscreen QR overlay */
            +'.lp-room-qr-full{position:fixed;inset:0;background:rgba(5,5,15,.97);z-index:9800;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px;font-family:"Noto Sans KR",sans-serif;color:#fff;animation:lpQrFadeIn .25s ease}'
            +'@keyframes lpQrFadeIn{from{opacity:0}to{opacity:1}}'
@@ -709,38 +795,23 @@
         return bd;
     }
 
-    /* Host creation modal: asks for a 4-digit PIN, then switches to a
-       share screen displaying the generated room code, the PIN, and a
-       one-tap copy/share of the invite link. Calls onCreated(roomObj)
-       when the host finishes and closes the modal. */
+    /* Host creation modal: auto-generates a 4-digit PIN (matching the
+       Quiz flow) and goes straight to the share screen that displays
+       the generated room code, PIN, and one-tap copy/share. Calls
+       onCreated(roomObj) as soon as the channel is live. */
     function showHostModal(opts){
         opts=opts||{};
         const gameId=opts.gameId;
         const hostName=opts.hostName||'Host';
-        const ko=_t(true,false);
+        const pin=opts.pin||String(Math.floor(1000+Math.random()*9000));
 
-        const step1=mountBackdrop(
+        mountBackdrop(
             '<h3>'+_t('👥 같이 보기 방 만들기','👥 Create Watch-Together Room')+'</h3>'
-           +'<div class="sub">'+_t('4자리 비밀번호를 설정하세요. 친구에게 알려줄 숫자입니다.','Set a 4-digit PIN. You\'ll share this with friends.')+'</div>'
-           +'<label>'+_t('비밀번호 4자리','4-digit PIN')+'</label>'
-           +'<input id="lpRoomPin" class="pin-input" type="tel" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="off">'
-           +'<div class="lp-room-error" id="lpRoomErr"></div>'
-           +'<div class="row">'
-           +'<button class="btn ghost" id="lpRoomCancel">'+_t('취소','Cancel')+'</button>'
-           +'<button class="btn primary" id="lpRoomConfirm">'+_t('방 만들기','Create')+'</button>'
-           +'</div>'
+           +'<div class="sub" id="lpRoomErr">'+_t('방 연결 중…','Connecting…')+'</div>'
         );
-        const pinIn=document.getElementById('lpRoomPin');
         const err=document.getElementById('lpRoomErr');
-        setTimeout(function(){pinIn.focus()},50);
-        pinIn.addEventListener('input',function(){pinIn.value=pinIn.value.replace(/\D/g,'').slice(0,4)});
-        pinIn.addEventListener('keydown',function(e){if(e.key==='Enter')doCreate()});
-        document.getElementById('lpRoomCancel').addEventListener('click',function(){closeBackdrop();if(opts.onCancel)opts.onCancel()});
 
-        async function doCreate(){
-            const pin=pinIn.value;
-            if(pin.length!==4){err.textContent=_t('4자리 숫자로 입력해주세요','Please enter 4 digits');return}
-            err.textContent=_t('방 연결 중…','Connecting…');
+        (async function doCreate(){
             try{
                 const room=await hostCreate({gameId:gameId,pin:pin,hostName:hostName});
                 /* Fire onCreated as soon as the channel is live, before the
@@ -750,9 +821,10 @@
                    immediately sees the host's setup instead of defaults. */
                 if(opts.onCreated)try{opts.onCreated(room)}catch(_){}
                 showHostShare(room,opts);
-            }catch(e){err.textContent=_t('연결 실패. 다시 시도해주세요','Connection failed. Try again')}
-        }
-        document.getElementById('lpRoomConfirm').addEventListener('click',doCreate);
+            }catch(e){
+                if(err)err.textContent=_t('연결 실패. 다시 시도해주세요','Connection failed. Try again');
+            }
+        })();
     }
 
     /* QR library loader — lazy load on first host-share view.
@@ -806,7 +878,7 @@
            +'<button id="lpRoomCopy">📋 '+_t('링크 복사','Copy Link')+'</button>'
            +'<button id="lpRoomKakao">💬 '+_t('카톡/메신저','Kakao/Chat')+'</button>'
            +'</div>'
-           +'<div class="lp-room-guest-list" id="lpRoomGuests"><div class="title">'+_t('접속자','Guests')+'</div><div class="empty" id="lpRoomGuestsBody">'+_t('아직 아무도 없음 · 친구 기다리는 중…','No one yet — waiting for friends…')+'</div></div>'
+           +'<div class="lp-room-guest-list" id="lpRoomGuests"><div class="title">'+_t('접속자','Guests')+' <span class="lp-room-guest-count" id="lpRoomGuestCount">0</span></div><div class="empty" id="lpRoomGuestsBody">'+_t('아직 아무도 없음 · 친구 기다리는 중…','No one yet — waiting for friends…')+'</div></div>'
            +'<div class="row">'
            +'<button class="btn ghost" id="lpRoomEnd">'+_t('방 닫기','End Room')+'</button>'
            +'<button class="btn primary" id="lpRoomStart">'+_t('시작!','Start!')+'</button>'
@@ -820,6 +892,8 @@
             const body=document.getElementById('lpRoomGuestsBody');
             if(!body)return;
             const gs=room.guests();
+            const cnt=document.getElementById('lpRoomGuestCount');
+            if(cnt)cnt.textContent=_t(gs.length+'명',String(gs.length));
             if(!gs.length){
                 body.className='empty';
                 body.textContent=_t('아직 아무도 없음 · 친구 기다리는 중…','No one yet — waiting for friends…');
@@ -912,7 +986,9 @@
             const count=gs.length;
             const total=count+1; /* +1 for the host themselves */
             const lockFlag=room.isLocked&&room.isLocked()?' 🔒':'';
-            const mainLbl=lang==='ko'?`👥 ${room.code}${lockFlag} · 방장`:`👥 ${room.code}${lockFlag} · host`;
+            const reconn=(typeof room.connectionStatus==='function'&&room.connectionStatus()==='reconnecting');
+            const reconLbl=reconn?(lang==='ko'?' · 🔌재연결 중':' · 🔌reconnecting'):'';
+            const mainLbl=lang==='ko'?`👥 ${room.code}${lockFlag} · 방장${reconLbl}`:`👥 ${room.code}${lockFlag} · host${reconLbl}`;
             const caret=count>0?'<span class="lp-caret" id="lpRoomStatusCaret" title="'+(lang==='ko'?'접속자 목록':'Guest list')+'">▾</span>':'';
             /* Count badge is ALWAYS visible (even when the pill is
                collapsed to its minimum footprint on mobile) so both
@@ -1029,27 +1105,27 @@
         }
 
         refresh();
+        /* Wire connection-status → status pill CSS so the host notices
+           when the socket drops mid-session. On reconnect, the CSS
+           class is removed and the pill reverts to cyan. */
+        if(typeof room.onStatusChange==='function'){
+            room.onStatusChange(function(s){
+                if(s==='reconnecting')bar.classList.add('lp-reconnecting');
+                else bar.classList.remove('lp-reconnecting');
+                refresh();
+            });
+        }
         room.onGuestJoin(function(info){
             refresh();
             /* Brief toast-like inline announcement so the host notices a
                new joiner even when the list is collapsed. */
             const who=(info&&info.nickname)||(lang==='ko'?'새 접속자':'new guest');
-            const toast=document.createElement('div');
-            toast.className='lp-room-join-toast';
-            toast.textContent=(lang==='ko'?'➕ ':'')+who+(lang==='ko'?' 님 입장':' joined');
-            document.body.appendChild(toast);
-            setTimeout(function(){toast.classList.add('out')},2400);
-            setTimeout(function(){toast.remove()},3000);
+            _lpStackedToast((lang==='ko'?'➕ ':'')+who+(lang==='ko'?' 님 입장':' joined'));
         });
         room.onGuestLeave(function(info){
             refresh();
             const who=(info&&info.nickname)||(lang==='ko'?'접속자':'guest');
-            const toast=document.createElement('div');
-            toast.className='lp-room-join-toast leave';
-            toast.textContent=(lang==='ko'?'➖ ':'')+who+(lang==='ko'?' 님 나감':' left');
-            document.body.appendChild(toast);
-            setTimeout(function(){toast.classList.add('out')},2400);
-            setTimeout(function(){toast.remove()},3000);
+            _lpStackedToast((lang==='ko'?'➖ ':'')+who+(lang==='ko'?' 님 나감':' left'),'leave');
         });
         document.body.appendChild(bar);
         /* Mobile default = collapsed. Users can tap the pill to expand
@@ -1120,6 +1196,16 @@
         pin.addEventListener('keydown',function(e){if(e.key==='Enter')doJoin()});
         document.getElementById('lpGuestCancel').addEventListener('click',function(){
             closeBackdrop();
+            /* Strip the room/pin/nick query params so a page refresh
+               after Cancel doesn't instantly re-prompt the same modal.
+               Users who hit Cancel usually want to use the game solo,
+               not wrestle with a stuck modal loop. */
+            try{
+                const u=new URL(location.href);
+                let dirty=false;
+                ['room','pin','nick'].forEach(function(k){if(u.searchParams.has(k)){u.searchParams.delete(k);dirty=true}});
+                if(dirty)history.replaceState(null,'',u.toString());
+            }catch(_){}
             if(opts.onCancel)opts.onCancel();
         });
         async function doJoin(){
@@ -1129,14 +1215,33 @@
                storage failure abort the join. The remembered nickname
                is a UX convenience, not a correctness requirement. */
             try{localStorage.setItem('luckyplz_nick',nick.value.trim())}catch(_){}
+            const joinBtn=document.getElementById('lpGuestJoin');
+            if(joinBtn)joinBtn.disabled=true;
             err.textContent=_t('방 연결 중…','Connecting…');
-            const g=await guestJoin({code:code,pin:pin.value,nickname:nick.value,gameId:gameId});
+            /* guestJoin resolves to {ok:false,error:'...'} for protocol
+               failures (bad pin / locked room / host unreachable) and
+               THROWS for transport failures (subscribe timeout, channel
+               error, no Supabase). Both need surfacing — without the
+               try/catch the modal used to stay stuck on "연결 중…"
+               forever when the realtime socket failed to connect. */
+            let g;
+            try{
+                g=await guestJoin({code:code,pin:pin.value,nickname:nick.value,gameId:gameId});
+            }catch(e){
+                const code=(e&&e.message)||'transport_error';
+                err.textContent=(code==='subscribe_timeout'||code==='channel_error')
+                    ?_t('연결 지연 · 인터넷 확인 후 다시 시도','Connection failed — check your network and try again')
+                    :_t('입장 실패. 다시 시도해주세요','Join failed — please try again');
+                if(joinBtn)joinBtn.disabled=false;
+                return;
+            }
             if(!g.ok){
                 err.textContent=(g.error==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
                     :(g.error==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
                     :(g.error==='wrong_game')?_t('다른 게임 방이에요','That room is for a different game')
                     :(g.error==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
                     :_t('입장 실패','Join failed');
+                if(joinBtn)joinBtn.disabled=false;
                 return;
             }
             closeBackdrop();
@@ -1187,7 +1292,11 @@
         }
 
         function countLbl(n){return lang==='ko'?n+'명 접속':n+' watching'}
-        function roomLbl(){return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}`:`👀 ${g.hostName}'s room · ${g.code}`}
+        function roomLbl(){
+            const reconn=(typeof g.connectionStatus==='function'&&g.connectionStatus()==='reconnecting');
+            const reconLbl=reconn?(lang==='ko'?' · 🔌재연결':' · 🔌reconnecting'):'';
+            return lang==='ko'?`👀 ${g.hostName} 님의 방 · ${g.code}${reconLbl}`:`👀 ${g.hostName}'s room · ${g.code}${reconLbl}`;
+        }
 
         function render(){
             const total=roster.length+1; /* +1 for host */
@@ -1263,6 +1372,21 @@
 
         document.body.appendChild(bar);
         render();
+        /* Surface guest-side socket drops on the pill — mirrors the
+           host pill so both roles see the same "재연결 중" signal. */
+        if(typeof g.onStatusChange==='function'){
+            g.onStatusChange(function(s){
+                if(s==='reconnecting')bar.classList.add('lp-reconnecting');
+                else bar.classList.remove('lp-reconnecting');
+                render();
+                /* On reconnect, proactively re-request the host snapshot so
+                   the guest catches up on any broadcasts they missed
+                   while the socket was down. Cheap — just one ping. */
+                if(s==='connected'&&typeof g.requestSnapshot==='function'){
+                    try{g.requestSnapshot()}catch(_){}
+                }
+            });
+        }
 
         /* Mobile default = collapsed. Tap pill → expand + show roster.
            Mirrors host-side behaviour so both roles get the same compact
@@ -1377,14 +1501,31 @@
 
     /* Lightweight toast for friend-request feedback — reuses the
        join/leave toast styles so the panel doesn't need its own
-       UI state surface. */
+       UI state surface. Delegates to the stacker so it doesn\'t
+       cover earlier toasts. */
     function _lpSimpleToast(msg,tone){
+        _lpStackedToast(msg,tone==='err'?'leave':'');
+    }
+
+    /* Stack-aware toast. When many guests join in a burst (10 people
+       scanning the QR at once), the old single-position implementation
+       would render all toasts on top of each other — only the last
+       was visible. Each toast now picks the next free vertical slot
+       below the status pill so a short queue scrolls down the screen
+       and every joiner's name is actually seen. */
+    const _lpToastSlots=[];
+    function _lpStackedToast(msg,variant){
+        /* Find the lowest unused slot so toasts don\'t leave gaps. */
+        let slot=0;
+        while(_lpToastSlots[slot])slot++;
+        _lpToastSlots[slot]=true;
         const el=document.createElement('div');
-        el.className='lp-room-join-toast'+(tone==='err'?' leave':'');
+        el.className='lp-room-join-toast'+(variant==='leave'?' leave':'');
+        el.style.top=(52+slot*42)+'px';
         el.textContent=msg;
         document.body.appendChild(el);
         setTimeout(function(){el.classList.add('out')},2400);
-        setTimeout(function(){el.remove()},3000);
+        setTimeout(function(){el.remove();_lpToastSlots[slot]=false;/* shrink tail so indefinite join bursts don\'t leak */while(_lpToastSlots.length&&!_lpToastSlots[_lpToastSlots.length-1])_lpToastSlots.pop()},3000);
     }
 
     /* ============ Auto guest prompt when URL has ?room=XXX ============ */
@@ -1552,12 +1693,19 @@
                 err.textContent=_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners');return;
             }
             stopQr();
-            /* Redirect into the correct game page with credentials as URL
-               params so the game page can auto-join without a second
-               prompt. The game page reads ?room / ?pin / ?nick. */
-            const target='/games/'+encodeURIComponent(probe.gameId||'roulette')+'/?room='+encodeURIComponent(code)
-                +'&pin='+encodeURIComponent(pinIn.value)
-                +'&nick='+encodeURIComponent(nickIn.value.trim());
+            /* Hand credentials to the next page via sessionStorage instead
+               of URL params — PINs in the location bar leak to browser
+               history, HTTP referrers, and analytics payloads. Same-tab
+               sessionStorage survives the navigation but dies the moment
+               the tab closes, so a shared URL can't accidentally carry
+               secrets. Fallback: URL params still accepted by
+               detectAutoJoinParams for QR flows that explicitly encode
+               them. 30-second TTL so stale handoffs don't haunt later
+               navigations. */
+            try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
+                code:code,pin:pinIn.value,nick:nickIn.value.trim(),t:Date.now()
+            }))}catch(_){}
+            const target='/games/'+encodeURIComponent(probe.gameId||'roulette')+'/?room='+encodeURIComponent(code);
             location.href=target;
         }
         document.getElementById('lpHomeJoin').addEventListener('click',doJoin);
@@ -1586,12 +1734,35 @@
         return null;
     }
 
-    /* Read PIN + nickname from URL params so a scanned QR with full
-       credentials (or a one-click "auto join" link) can skip the prompt.
-       Used by game pages when they see ?room=XXX. */
+    /* Read PIN + nickname so a scanned QR with full credentials (or the
+       home-join handoff) can skip the prompt. Primary source is
+       sessionStorage (set by showHomeJoinModal.doJoin) — keeps PINs
+       out of URL bars + history. Secondary source is URL params so
+       QR codes that encode them still work. Consumed once: the
+       sessionStorage entry is cleared after the first successful
+       read so a back-nav doesn't auto-join with stale creds. */
     function detectAutoJoinParams(){
         const q=new URLSearchParams(location.search);
-        return {code:q.get('room'),pin:q.get('pin'),nickname:q.get('nick')};
+        const urlCode=q.get('room');
+        const result={code:urlCode||null,pin:q.get('pin'),nickname:q.get('nick')};
+        try{
+            const raw=sessionStorage.getItem('lp_guestTransit');
+            if(raw){
+                const rec=JSON.parse(raw);
+                /* 60s TTL — covers the slowest legitimate page nav.
+                   Beyond that treat the handoff as stale. */
+                const fresh=rec&&rec.t&&(Date.now()-rec.t)<60*1000;
+                const codeMatch=rec&&rec.code&&urlCode&&String(rec.code).toUpperCase()===String(urlCode).toUpperCase();
+                if(fresh&&codeMatch){
+                    if(!result.pin&&rec.pin)result.pin=rec.pin;
+                    if(!result.nickname&&rec.nick)result.nickname=rec.nick;
+                    sessionStorage.removeItem('lp_guestTransit');
+                }else if(!fresh){
+                    sessionStorage.removeItem('lp_guestTransit');
+                }
+            }
+        }catch(_){}
+        return result;
     }
 
     /* If a host-transferred room is sitting in localStorage (set by

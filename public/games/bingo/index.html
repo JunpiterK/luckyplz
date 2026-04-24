@@ -492,7 +492,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1776867218"></script>
+<script src="/js/supabase-config.js?v=1776989735"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -1998,6 +1998,15 @@ function _lpWireHostRoom(room){
         refreshSteppers();
         window._lpBroadcastConfig();
     });
+    /* Host end control — pause has semantic meaning only in auto-draw
+       mode, but wiring a proper pause would require coordinating the
+       draw interval + watchdog + guest overlay; out of scope for this
+       phase. End lets the host cleanly dismiss the room for everyone. */
+    if(window.LpHostCtl){
+        window.LpHostCtl.install({role:'host',room:room,canPause:false,onEnd:()=>{
+            try{gameActive=false;}catch(_){}
+        }});
+    }
 }
 document.querySelectorAll('.lp-room-online-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
@@ -2029,6 +2038,11 @@ _waitForLpRoom(()=>{
         document.getElementById('startBtn').disabled=true;
         document.getElementById('startBtn').style.opacity='.4';
         document.querySelectorAll('.lp-room-online-btn').forEach(b=>b.style.display='none');
+        if(window.LpHostCtl){
+            window.LpHostCtl.install({role:'guest',room:g,canPause:false,onHostEnded:()=>{
+                try{gameActive=false;}catch(_){}
+            }});
+        }
         function applyConfig(p){
             if(!p)return;
             if(typeof p.size==='number'){
@@ -2083,7 +2097,7 @@ _waitForLpRoom(()=>{
         /* Winner list is now DB-backed — no host:bingo_winners
            handler needed. subscribeWinners() wired above handles the
            postgres_changes stream for both host and guest. */
-        g.on('host:close',()=>{alert((lang==='ko'?'방장이 방을 닫았어요':'Host closed the room'));location.href='/'});
+        /* host:close / host:ended are handled by LpHostCtl (installed above). */
     }});
 });
 
@@ -2280,6 +2294,6 @@ window.addEventListener('pageshow',_onVisibilityRestore);
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776867218" defer></script>
+<script src="/js/siteFooter.js?v=1776989735" defer></script>
 </body>
 </html>

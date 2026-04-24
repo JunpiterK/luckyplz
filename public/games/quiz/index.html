@@ -281,6 +281,9 @@ body{
 .final-sub{text-align:center;color:var(--muted);font-size:.88em;margin-bottom:18px}
 .final-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 
+/* Host control bar (pause/end), paused overlay, and ended overlay
+   are all provided by /js/lpHostCtl.js — no per-game CSS needed. */
+
 /* ============ Status / toast ============ */
 .status-line{text-align:center;padding:10px;font-size:.86em;color:var(--muted);font-weight:600}
 .toast{
@@ -310,6 +313,10 @@ body{
     <h1>🎯 Live Quiz</h1>
     <span id="ctxChip"></span>
 </header>
+
+<!-- Host pause/end controls, paused overlay, and ended overlay are all
+     auto-rendered by /js/lpHostCtl.js (installed in host/guest setup).
+     No markup is needed here. -->
 
 <!-- ============ MODE-SELECT (initial) ============ -->
 <main class="view on" id="vModeSelect">
@@ -472,6 +479,10 @@ body{
     <button class="big-btn" id="btnLbNext" style="display:none">다음 →</button>
 </main>
 
+<!-- Mid-game host termination is shown via LpHostCtl's ended overlay
+     (z-index 9300, covers everything with a 🏠 홈으로 button). No
+     per-game <main id="vEnded"> view required. -->
+
 <!-- ============ FINAL ============ -->
 <main class="view" id="vFinal">
     <div class="final-title">🎉 최종 결과</div>
@@ -489,7 +500,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1776867218"></script>
+<script src="/js/supabase-config.js?v=1776989735"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -498,6 +509,11 @@ function showView(id){
     document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
     $(id).classList.add('on');
     window.scrollTo({top:0, behavior:'smooth'});
+    /* Host floating controls follow the active view. Guarded against
+       being called before updateHostCtlVisibility is defined (script
+       is top-down but this function is called via button handlers
+       that all fire post-parse). */
+    if (typeof updateHostCtlVisibility === 'function') updateHostCtlVisibility();
 }
 function toast(msg, ms){
     const t = $('toast');
@@ -543,6 +559,7 @@ let myNick = '플레이어';
 let myUserId = null;
 let room = null;            /* LpRoom host */
 let guest = null;           /* LpRoom guest */
+let hostCtlRef = null;      /* LpHostCtl controller — null in solo */
 let selectedCats = ['kpop','variety','sports','general','retro','latest'];
 let selectedCount = 10;
 let selectedTime = 15;
@@ -584,6 +601,18 @@ let guestScore = 0;
 let guestCorrect = 0;
 let guestPrevRank = 0;
 let gameStartAt = 0;
+
+/* ==== Pause + end state ====
+   isPaused is the single source of truth for "timer is frozen".
+   pauseStartAt is the wall-clock instant we entered pause; on
+   resume we shift qStartAt forward by (now - pauseStartAt) so the
+   existing timer math keeps working without any other bookkeeping.
+   gameEnded gates the guest's host:close handler — without it, the
+   default "room closed → bounce home" redirect would fire right
+   after our dedicated "ended" screen, stomping it. */
+let isPaused = false;
+let pauseStartAt = 0;
+let gameEnded = false;
 
 /* ============================================================
    Auth (optional for guests; host nickname comes from profile)
@@ -747,6 +776,7 @@ $('btnCreate').addEventListener('click', async () => {
             });
         }
         room = await window.LpRoom.hostCreate({gameId:'quiz', hostName:nick, pin});
+        installHostCtlAsHost();
 
         /* Seed my own roster entry — only if the host chose to play.
            When hostPlays is false, the host is MC-only: controls the
@@ -831,6 +861,7 @@ $('btnJoin').addEventListener('click', async () => {
         guest = await window.LpRoom.guestJoin({code, pin, nickname:nick, gameId:'quiz'});
         myNick = guest.nickname || nick;
         wireGuestListeners();
+        installHostCtlAsGuest();
         $('ctxChip').innerHTML = '<span class="role-chip">🫂 게스트</span><span class="room-chip" style="margin-left:6px">' + code + '</span>';
         $('lobbyCode').textContent = code;
         $('lobbyPinLine').textContent = '';
@@ -848,12 +879,25 @@ $('btnJoin').addEventListener('click', async () => {
 
 function wireGuestListeners(){
     guest.on('host:guests', payload => {
-        if (payload && payload.guests){
-            const list = payload.guests.map(g => ({nickname:g.nickname, host:false}));
-            list.unshift({nickname: payload.hostName || '호스트', host:true});
-            renderPlayers(list);
-            $('lobbyNum').textContent = list.length;
+        /* LpRoom broadcasts the roster under `roster` (object array with
+           authed flags) — older builds also fall back to `nicknames` (a
+           string array). The old code here read `payload.guests`, which
+           LpRoom never actually sends, so the guest lobby participant
+           list silently stayed empty. Check both known shapes. */
+        if (!payload) return;
+        let list = null;
+        if (Array.isArray(payload.roster)){
+            list = payload.roster.map(g => ({nickname:g.nickname, host:false}));
+        } else if (Array.isArray(payload.nicknames)){
+            list = payload.nicknames.map(n => ({nickname:n, host:false}));
+        } else if (Array.isArray(payload.guests)){
+            /* Defensive: if a future host build sends `guests` again, still work. */
+            list = payload.guests.map(g => ({nickname:g.nickname, host:false}));
         }
+        if (!list) return;
+        list.unshift({nickname: payload.hostName || '호스트', host:true});
+        renderPlayers(list);
+        $('lobbyNum').textContent = list.length;
     });
     guest.on('host:quiz_question', payload => {
         startGuestQuestion(payload);
@@ -867,10 +911,10 @@ function wireGuestListeners(){
     guest.on('host:quiz_final', payload => {
         showFinalGuest(payload);
     });
-    guest.on('host:close', () => {
-        toast('호스트가 방을 닫았어요');
-        setTimeout(() => location.href='/games/quiz/', 1500);
-    });
+    /* Pause / resume / end / host-gone are all handled by LpHostCtl —
+       installed in installHostCtlAsGuest() right after guestJoin() so
+       the module's overlay paints instantly, and our per-game timer
+       skew + teardown fire from its onHostPaused/Resumed/Ended hooks. */
 }
 
 /* ============================================================
@@ -941,10 +985,146 @@ $('btnStartGame').addEventListener('click', () => {
     startHostQuestion();
 });
 
+/* ============================================================
+   Pause / resume / end — delegated to /js/lpHostCtl.js
+   ============================================================
+   The host bar (⏸/⏹), paused overlay, and ended overlay are
+   entirely owned by LpHostCtl. The module broadcasts a unified
+   protocol — host:paused / host:resumed / host:ended — and
+   exposes hooks so we can freeze/adopt the per-question timer.
+
+   Pause is only meaningful inside the question view (vQ). The
+   canPause function form is re-evaluated on every click AND on
+   every showView() call (via refreshPauseEnabled), so the button
+   visibly disables itself on lobby / reveal / leaderboard.
+
+   The resume path sends an authoritative {newStartAt, remainingMs}
+   so guests that missed the host:paused frame still land on the
+   same timer as the host. */
+function freezeTimerAt(scaleX){
+    const bar = $('timerFill');
+    if (!bar) return;
+    bar.classList.remove('critical');
+    bar.style.transition = 'none';
+    bar.style.transform = 'scaleX(' + Math.max(0, Math.min(1, scaleX)) + ')';
+}
+
+function installHostCtlAsHost(){
+    if (!window.LpHostCtl || !room) return;
+    hostCtlRef = window.LpHostCtl.install({
+        role: 'host',
+        room: room,
+        /* Pause only while we're on the question view; button stays
+           visible but disabled on lobby / reveal / leaderboard. */
+        canPause: () => $('vQ').classList.contains('on'),
+        onPause: () => {
+            isPaused = true;
+            pauseStartAt = Date.now();
+            clearTimeout(questionTimer);
+            const elapsed = pauseStartAt - qStartAt;
+            const scaleX = Math.max(0, 1 - elapsed / qDurationMs);
+            freezeTimerAt(scaleX);
+            updateHostCtlVisibility();
+            return { qIdx: currentQIdx, scaleX };
+        },
+        onResume: () => {
+            const pauseDur = Date.now() - pauseStartAt;
+            qStartAt += pauseDur;
+            isPaused = false;
+            pauseStartAt = 0;
+            const remaining = Math.max(500, qDurationMs - (Date.now() - qStartAt));
+            animateTimer(remaining);
+            clearTimeout(questionTimer);
+            questionTimer = setTimeout(revealHost, remaining);
+            updateHostCtlVisibility();
+            /* If every participant already answered during the pause,
+               auto-reveal just like the non-paused path would. */
+            const ansMap = hostAnswers.get(currentQIdx);
+            if (ansMap && ansMap.size >= hostRoster.size){
+                clearTimeout(questionTimer);
+                setTimeout(revealHost, 300);
+            }
+            return { qIdx: currentQIdx, newStartAt: qStartAt, remainingMs: remaining };
+        },
+        onEnd: () => {
+            gameEnded = true;
+            clearTimeout(questionTimer);
+            clearTimeout(revealTimer);
+            clearTimeout(lbTimer);
+            isPaused = false;
+            pauseStartAt = 0;
+        }
+    });
+    updateHostCtlVisibility();
+}
+
+function installHostCtlAsGuest(){
+    if (!window.LpHostCtl || !guest) return;
+    hostCtlRef = window.LpHostCtl.install({
+        role: 'guest',
+        room: guest,
+        onHostPaused: (payload) => {
+            if (gameEnded) return;
+            isPaused = true;
+            pauseStartAt = Date.now();
+            clearTimeout(questionTimer);
+            /* Prefer the host's authoritative bar position; fall back
+               to locally computed if the payload was stripped. */
+            let sx;
+            if (payload && typeof payload.scaleX === 'number'){
+                sx = payload.scaleX;
+            } else {
+                const elapsed = Date.now() - qStartAt;
+                sx = Math.max(0, 1 - elapsed / qDurationMs);
+            }
+            freezeTimerAt(sx);
+        },
+        onHostResumed: (payload) => {
+            if (gameEnded) return;
+            isPaused = false;
+            pauseStartAt = 0;
+            if (payload && payload.newStartAt) qStartAt = payload.newStartAt;
+            const remaining = (payload && payload.remainingMs)
+                ? payload.remainingMs
+                : Math.max(500, qDurationMs - (Date.now() - qStartAt));
+            animateTimer(remaining);
+        },
+        onHostEnded: () => {
+            gameEnded = true;
+            clearTimeout(questionTimer);
+            clearTimeout(revealTimer);
+            clearTimeout(lbTimer);
+            isPaused = false;
+            pauseStartAt = 0;
+        }
+    });
+}
+
+function updateHostCtlVisibility(){
+    if (!hostCtlRef) return;
+    const activeId = (document.querySelector('.view.on') || {}).id || '';
+    /* Host control bar is visible from the lobby (for the cancel
+       button) through the live game. Hidden on setup/mode-select and
+       after the game has ended (module handles its own cleanup). */
+    const showOn = ['vLobby','vQ','vReveal','vLb'];
+    if (mode === 'host' && !gameEnded && showOn.indexOf(activeId) >= 0){
+        hostCtlRef.show();
+    } else {
+        hostCtlRef.hide();
+    }
+    hostCtlRef.refreshPauseEnabled();
+}
+
 function startHostQuestion(){
     if (currentQIdx >= questions.length){
         finalizeHost();
         return;
+    }
+    /* Clear any residual pause state from the previous question. */
+    if (isPaused){
+        isPaused = false;
+        pauseStartAt = 0;
+        if (hostCtlRef) hostCtlRef.clearPausedState();
     }
     const q = questions[currentQIdx];
     qStartAt = Date.now();
@@ -1016,6 +1196,7 @@ function animateTimer(durMs){
 
 function handleAnswerTap(choice){
     if (myChoice !== null) return;  /* already locked */
+    if (isPaused) return;  /* frozen — don't accept answers while paused */
     /* MC-only host: taps are no-ops. Extra safety net on top of
        the CSS `locked` class in case it gets stripped. */
     if (mode === 'host' && !hostPlays) return;
@@ -1050,8 +1231,10 @@ function handleGuestAnswer(p){
     if (ansMap.has(p.gid)) return;  /* only first answer counts */
     ansMap.set(p.gid, {choice:p.choice, tMs:p.tMs});
     updateHostAnsCounter();
-    /* All answered? Reveal early. */
-    if (ansMap.size >= hostRoster.size){
+    /* All answered? Reveal early. Suppressed while paused so a
+       racing broadcast can't auto-advance past the host's intent —
+       the reveal fires on resume when the state is consistent. */
+    if (ansMap.size >= hostRoster.size && !isPaused){
         clearTimeout(questionTimer);
         setTimeout(revealHost, 300);
     }
@@ -1064,9 +1247,13 @@ function updateHostAnsCounter(){
 }
 
 $('btnHostSkip').addEventListener('click', () => {
+    if (isPaused) return;  /* can't skip while paused */
     clearTimeout(questionTimer);
     revealHost();
 });
+
+/* Pause/Resume/End button wiring lives inside LpHostCtl.install —
+   the module owns the bar DOM, so we don't bind those handlers here. */
 
 /* ============================================================
    Host reveal: compute scores + broadcast
@@ -1175,6 +1362,12 @@ function nextHostQuestion(){
    Guest side: receive question / reveal / leaderboard
    ============================================================ */
 function startGuestQuestion(p){
+    /* Defensive reset: if we missed a host:quiz_resume broadcast,
+       the new question arriving is implicit proof the pause ended. */
+    if (isPaused){
+        isPaused = false; pauseStartAt = 0;
+        if (hostCtlRef) hostCtlRef.clearPausedState();
+    }
     currentQIdx = p.idx;
     qStartAt = p.startAt || Date.now();
     qDurationMs = p.durationMs;
@@ -1586,6 +1779,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1776867218"></script>
+<script src="/js/siteFooter.js?v=1776989735"></script>
 </body>
 </html>

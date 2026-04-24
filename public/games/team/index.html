@@ -2053,6 +2053,22 @@ function buildTeams(){
         shuffledA.forEach(a=>teamDrawQueue.push({capsuleIdx:a.member.origIdx,teamIdx:a.teamIdx,tier:a.member.tier,name:a.member.name||members[a.member.origIdx].name}));
     }
 
+    /* Mirror the reveal to guests: ship the exact draw queue + member
+       list so their animation plays the same order with the same
+       capsule contents. Guest must not re-randomize. */
+    if(window._lpHost){
+        try{
+            window._lpHost.broadcast('host:start',{
+                game:'team',
+                members:members.map(function(m){return{name:m.name,tier:m.tier||0}}),
+                teamCount:teamCount,
+                balanceMode:balanceMode,
+                drawQueue:teamDrawQueue.map(function(q){return{capsuleIdx:q.capsuleIdx,teamIdx:q.teamIdx,tier:q.tier||0,name:q.name}}),
+                ts:Date.now()
+            });
+        }catch(_){}
+    }
+
     teamDrawCurrent=0;drawing=true;
     drawPhase='idle';drawPhaseTime=0;crankSpeed=0;turbulence=0;
     neonPhase=0;ledPhase=0;tierTransition=0;
@@ -2589,6 +2605,12 @@ function init(){
         window._lpBroadcastConfig();
         _wireLpSetupSync();
         room.onGuestJoin(function(){window._lpBroadcastConfig()});
+        /* Host pause/end controls — pause is meaningless for the team
+           reveal (animations are ≤5s), so the pause button is hidden.
+           End still matters so the host can cleanly dismiss the room. */
+        if(window.LpHostCtl){
+            window.LpHostCtl.install({role:'host',room:room,canPause:false});
+        }
     }
     document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
         btn.addEventListener('click',function(){
@@ -2612,6 +2634,11 @@ function init(){
             window._lpGuest=g;
             const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
             document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
+            /* LpHostCtl shows an ended overlay on host:ended / host:close —
+               replaces the old alert+redirect path. */
+            if(window.LpHostCtl){
+                window.LpHostCtl.install({role:'guest',room:g,canPause:false});
+            }
             function applyConfig(p){
                 if(!p)return;
                 if(Array.isArray(p.memberNames)&&p.memberNames.length){
@@ -2626,13 +2653,78 @@ function init(){
             }
             g.on('host:config',applyConfig);
             g.on('host:snapshot',applyConfig);
+            /* Mirror host reveal: adopt host-computed members + draw queue
+               verbatim (no local randomness), then run the same
+               setupWrap→gameScreen transition and animation loop that
+               buildTeams() runs on the host. */
+            g.on('host:start',function(p){
+                if(!p||!Array.isArray(p.drawQueue))return;
+                try{
+                    if(Array.isArray(p.members)&&p.members.length){
+                        memberCount=Math.max(2,Math.min(40,p.members.length));
+                        renderMembers();
+                        members=p.members.map(function(m,i){return{name:m.name,tier:m.tier||0,idx:i}});
+                        const inputs=document.querySelectorAll('#memberInputs .member-row input');
+                        p.members.forEach(function(m,i){if(inputs[i])inputs[i].value=m.name});
+                    }
+                    if(typeof p.teamCount==='number')teamCount=p.teamCount;
+                    if(typeof p.balanceMode==='string')balanceMode=p.balanceMode;
+
+                    /* Reconstruct teamResults from the authoritative draw
+                       queue so later host:result aligns even if the local
+                       animation is interrupted. */
+                    const teams=Array.from({length:teamCount},()=>[]);
+                    p.drawQueue.forEach(function(item){
+                        const m=members[item.capsuleIdx];
+                        if(m)teams[item.teamIdx].push({name:m.name,tier:m.tier||0,origIdx:item.capsuleIdx});
+                    });
+                    teamResults=teams;
+
+                    teamTrays=[];
+                    for(let t=0;t<teamCount;t++){
+                        teamTrays.push({label:T('team',{n:t+1}),color:TEAM_COLORS[t%TEAM_COLORS.length],members:[]});
+                    }
+
+                    const labels=members.map(function(m){return m.name.substring(0,3)});
+                    const tierVals=members.map(function(m){return m.tier});
+                    const colors=members.map(function(_,i){
+                        const t=members[i].tier||0;
+                        return(TIER_THEMES[t]||TIER_THEMES[0]).capsule;
+                    });
+
+                    const uniqueTiers=[...new Set(tierVals)].sort((a,b)=>(a||99)-(b||99));
+                    if(balanceMode==='balanced'&&uniqueTiers.length>1){
+                        machines=uniqueTiers.map(function(t){return{tier:t,offsetX:0,capsules:[],_idleAngle:0}});
+                    }else{
+                        machines=[{tier:uniqueTiers[0]||0,offsetX:0,capsules:[],_idleAngle:0}];
+                    }
+                    activeMachineIdx=0;
+
+                    document.getElementById('setupWrap').style.display='none';
+                    document.getElementById('gameScreen').style.display='block';
+                    initCanvas();
+                    createCapsules(labels,colors,tierVals);
+                    drawnResults=[];
+
+                    teamDrawQueue=p.drawQueue.map(function(q){
+                        return{capsuleIdx:q.capsuleIdx,teamIdx:q.teamIdx,tier:q.tier||0,name:q.name||(members[q.capsuleIdx]&&members[q.capsuleIdx].name)||''};
+                    });
+
+                    teamDrawCurrent=0;drawing=true;
+                    drawPhase='idle';drawPhaseTime=0;crankSpeed=0;turbulence=0;
+                    neonPhase=0;ledPhase=0;tierTransition=0;
+                    lastTime=0;animId=requestAnimationFrame(loop);
+
+                    setTimeout(drawNextTeam,500);
+                }catch(_){}
+            });
             g.on('host:result',function(p){
                 if(Array.isArray(p.teams)){
                     teamResults=p.teams.map(function(team){return team.map(function(m){return{name:m.name,tier:m.tier||0,origIdx:m.idx||0}})});
                     setTimeout(function(){showResult&&showResult()},50);
                 }
             });
-            g.on('host:close',function(){alert('방장이 방을 닫았어요');location.href='/'});
+            /* host:close / host:ended are handled by LpHostCtl (installed above). */
         }});
     });
     let _lpCfgTimer=null;
@@ -2735,6 +2827,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1776867218" defer></script>
+<script src="/js/siteFooter.js?v=1776989735" defer></script>
 </body>
 </html>
