@@ -426,6 +426,24 @@
   window.addEventListener('lp-room-guest-ready',onGuestReady);
   window.addEventListener('lp-room-closed',onRoomClosed);
 
+  /* Intercept the floating 🏠 home button on game pages so a host room
+     survives clicking it — show a confirm rather than silently dropping
+     the room and all connected guests. */
+  document.addEventListener('click',function(e){
+    if(!current||current.mode!=='host')return;
+    var btn=e.target.closest('.floating-home');
+    if(!btn)return;
+    e.preventDefault();
+    var ko=(localStorage.getItem('luckyplz_lang')||'en').startsWith('ko');
+    var msg=ko
+      ?'홈으로 이동하면 멀티플레이 방이 닫힙니다.\n계속하시겠어요?'
+      :'Going home will close the multiplayer room.\nContinue?';
+    if(confirm(msg)){
+      try{current.api&&current.api.close&&current.api.close()}catch(_){}
+      location.href='/';
+    }
+  },true);
+
   /* Re-clamp on resize/orientation so the panel never ends up off-screen. */
   window.addEventListener('resize',function(){
     if(!current||!current.panel)return;

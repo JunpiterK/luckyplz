@@ -102,7 +102,7 @@
             <div class="nav-sep"></div>
             <div class="nav-games">
                 ${GAMES.map(g=>`
-                    <a class="nav-game${current===g.id?' active':''}" href="${g.url}">
+                    <a class="nav-game${current===g.id?' active':''}" href="${g.url}" data-game-id="${g.id}">
                         <span class="nav-icon">${g.icon}</span>
                         <span>${escapeHtml(names[g.id]||g.id)}</span>
                     </a>
@@ -111,6 +111,36 @@
         `;
         document.body.prepend(nav);
         document.body.classList.add('has-top-nav');
+
+        /* When a host room is active, intercept nav link clicks and use
+           room.transferTo() so the Supabase channel persists across
+           navigation (lp_hostTransit + host:navigate broadcast). Without
+           this, any click on the top nav drops the room entirely. */
+        nav.addEventListener('click',function(e){
+            const cur=window.LpMultiplayer&&window.LpMultiplayer._current();
+            if(!cur||cur.mode!=='host')return;
+            const room=cur.api;
+            if(!room||typeof room.transferTo!=='function')return;
+
+            const gameLink=e.target.closest('a[data-game-id]');
+            if(gameLink&&!gameLink.classList.contains('active')){
+                e.preventDefault();
+                room.transferTo(gameLink.href);
+                return;
+            }
+            const brandLink=e.target.closest('.nav-brand');
+            if(brandLink){
+                e.preventDefault();
+                const ko=(localStorage.getItem('luckyplz_lang')||'en').startsWith('ko');
+                const msg=ko
+                    ?'홈으로 이동하면 멀티플레이 방이 닫힙니다.\n계속하시겠어요?'
+                    :'Going home will close the multiplayer room.\nContinue?';
+                if(confirm(msg)){
+                    try{room.close&&room.close()}catch(_){}
+                    location.href='/';
+                }
+            }
+        });
     }
 
     if(document.readyState==='loading'){
