@@ -75,6 +75,26 @@
 @media(max-width:899px){
     .pc-top-nav{display:none !important}
 }
+
+/* ---- Mobile game switcher (floating FAB + bottom sheet) ---- */
+.lp-sw-fab{display:none;position:fixed;bottom:84px;right:14px;z-index:600;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#FFE66D,#FF9A3C);box-shadow:0 6px 18px rgba(0,0,0,.35);border:none;color:#0A0A1A;font-size:22px;cursor:pointer;font-family:inherit;font-weight:900;line-height:1;align-items:center;justify-content:center;padding:0}
+.lp-sw-fab:active{transform:scale(.94)}
+@media(max-width:899px){.lp-sw-fab{display:flex}}
+
+.lp-sw-modal{display:none;position:fixed;inset:0;z-index:700;font-family:'Noto Sans KR',sans-serif}
+.lp-sw-modal.on{display:block}
+.lp-sw-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.lp-sw-sheet{position:absolute;left:0;right:0;bottom:0;background:#141426;border-top-left-radius:22px;border-top-right-radius:22px;padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));max-height:85vh;overflow-y:auto;box-shadow:0 -4px 20px rgba(0,0,0,.5);transform:translateY(100%);transition:transform .25s ease-out}
+.lp-sw-modal.on .lp-sw-sheet{transform:translateY(0)}
+.lp-sw-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1.05em;color:#FFE66D;text-align:center;margin-bottom:6px;letter-spacing:.02em}
+.lp-sw-sub{font-size:.75em;color:rgba(255,255,255,.55);text-align:center;margin-bottom:14px}
+.lp-sw-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.lp-sw-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.1);color:#fff;font-family:inherit;font-size:.78em;font-weight:700;cursor:pointer;transition:background .2s,border-color .2s,transform .08s}
+.lp-sw-card:active{transform:scale(.96)}
+.lp-sw-card.active{background:linear-gradient(135deg,rgba(255,230,109,.18),rgba(255,230,109,.05));border-color:#FFE66D;color:#FFE66D;cursor:default}
+.lp-sw-ico{font-size:1.8em;line-height:1}
+.lp-sw-close{display:block;width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);color:#fff;font-family:inherit;font-size:.9em;font-weight:700;cursor:pointer}
+.lp-sw-close:active{background:rgba(255,255,255,.1)}
 `;
         document.head.appendChild(s);
     }
@@ -144,6 +164,71 @@
                     location.href='/';
                 }
             }
+        });
+
+        mountMobileSwitcher(current,names,lang);
+    }
+
+    /* Mobile floating game switcher — shown <900px as an always-available
+       "🎮" FAB that opens a bottom sheet with all games. Host flows call
+       room.transferTo() to preserve the room across navigation; everyone
+       else gets a plain location.href. */
+    function mountMobileSwitcher(current,names,lang){
+        if(document.getElementById('lpSwFab'))return;
+        const ko=(lang||'en').startsWith('ko');
+
+        const fab=document.createElement('button');
+        fab.id='lpSwFab';
+        fab.className='lp-sw-fab';
+        fab.type='button';
+        fab.setAttribute('aria-label',ko?'다른 게임으로 이동':'Switch game');
+        fab.title=ko?'다른 게임':'Switch game';
+        fab.textContent='🎮';
+
+        const modal=document.createElement('div');
+        modal.id='lpSwModal';
+        modal.className='lp-sw-modal';
+        modal.innerHTML=
+            '<div class="lp-sw-backdrop"></div>'
+            +'<div class="lp-sw-sheet">'
+            +'<div class="lp-sw-title">'+(ko?'🎮 다른 게임으로':'🎮 Switch Game')+'</div>'
+            +'<div class="lp-sw-sub">'+(ko?'시작 전에는 언제든지 바꿀 수 있어요':'Swap freely before the game starts')+'</div>'
+            +'<div class="lp-sw-grid">'
+            +GAMES.map(function(g){
+                const isCur=(current===g.id);
+                return '<button class="lp-sw-card'+(isCur?' active':'')+'" type="button" data-game-id="'+g.id+'" data-url="'+g.url+'">'
+                    +'<span class="lp-sw-ico">'+g.icon+'</span>'
+                    +'<span>'+escapeHtml(names[g.id]||g.id)+'</span>'
+                +'</button>';
+            }).join('')
+            +'</div>'
+            +'<button type="button" class="lp-sw-close">'+(ko?'닫기':'Close')+'</button>'
+            +'</div>';
+
+        document.body.appendChild(fab);
+        document.body.appendChild(modal);
+
+        function open(){modal.classList.add('on')}
+        function close(){modal.classList.remove('on')}
+
+        fab.addEventListener('click',open);
+        modal.querySelector('.lp-sw-backdrop').addEventListener('click',close);
+        modal.querySelector('.lp-sw-close').addEventListener('click',close);
+
+        Array.prototype.forEach.call(modal.querySelectorAll('.lp-sw-card'),function(card){
+            card.addEventListener('click',function(){
+                if(card.classList.contains('active')){close();return}
+                const url=card.getAttribute('data-url');
+                const cur=window.LpMultiplayer&&window.LpMultiplayer._current();
+                if(cur&&cur.mode==='host'&&cur.api&&typeof cur.api.transferTo==='function'){
+                    try{
+                        if(cur.api.lock&&!cur.api.isLocked())cur.api.lock();
+                    }catch(_){}
+                    try{cur.api.transferTo(url);close();return}catch(_){}
+                }
+                close();
+                location.href=url;
+            });
         });
     }
 
