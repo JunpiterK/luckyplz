@@ -500,7 +500,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1777006745"></script>
+<script src="/js/supabase-config.js?v=1777007221"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1219,10 +1219,21 @@ function animateTimer(durMs){
     bar.classList.remove('critical');
     bar.style.transition = 'none';
     bar.style.transform = 'scaleX(1)';
-    void bar.offsetWidth;
-    bar.style.transition = 'transform ' + (durMs/1000) + 's linear';
-    bar.style.transform = 'scaleX(0)';
-    setTimeout(() => bar.classList.add('critical'), durMs - 3000);
+    /* Double rAF — handles the common case where callers run
+       animateTimer() BEFORE showView('vQ'). The first frame commits
+       the view swap (display:none → block); the second starts the
+       transition. Without this, the bar shrinks while still hidden
+       so users never see the "full → 0" animation. */
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            bar.style.transition = 'transform ' + (durMs/1000) + 's linear';
+            bar.style.transform = 'scaleX(0)';
+        });
+    });
+    /* Warn color the last 3s of the clock; for short timers (< 3s)
+       fire immediately so the whole bar pulses red. */
+    const warnDelay = Math.max(0, durMs - 3000);
+    setTimeout(() => bar.classList.add('critical'), warnDelay);
 }
 
 function handleAnswerTap(choice){
@@ -1858,6 +1869,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777006745"></script>
+<script src="/js/siteFooter.js?v=1777007221"></script>
 </body>
 </html>
