@@ -16,31 +16,35 @@
     const LADDER_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><rect x="9" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="23.5" y="2" width="3.5" height="32" rx="1.5" fill="#e8a848"/><rect x="11" y="7" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="16.5" width="14" height="3" rx="1" fill="#e8a848"/><rect x="11" y="26" width="14" height="3" rx="1" fill="#e8a848"/></svg>';
     const ROULETTE_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><path d="M18 18 L18 4 A14 14 0 0 1 30.1 11 Z" fill="#e74c3c" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 11 A14 14 0 0 1 30.1 25 Z" fill="#f39c12" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L30.1 25 A14 14 0 0 1 18 32 Z" fill="#f1c40f" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L18 32 A14 14 0 0 1 5.9 25 Z" fill="#2ecc71" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 25 A14 14 0 0 1 5.9 11 Z" fill="#3498db" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><path d="M18 18 L5.9 11 A14 14 0 0 1 18 4 Z" fill="#9b59b6" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/><circle cx="18" cy="18" r="1.8" fill="#1a1a1a"/></svg>';
     const TEAM_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><g transform="translate(-5.2 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><g transform="translate(8.8 0) scale(0.9)"><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></g><circle cx="18" cy="9" r="7" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9"/><path d="M10 35 L10 22 Q10 17 18 17 Q26 17 26 22 L26 35 Z" fill="#f0f0f0" stroke="#1a1a1a" stroke-width="0.9" stroke-linejoin="round"/><path d="M17 17 L19 17 L19.3 21 L18 23 L16.7 21 Z" fill="#1a1a1a"/></svg>';
+    const BINGO_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><path d="M3 6 Q3 4 5 4 L24 4 L30 9 L30 30 Q30 32 28 32 L5 32 Q3 32 3 30 Z" fill="#f5b5cf" stroke="#1a1a1a" stroke-width="1" stroke-linejoin="round"/><text x="16.5" y="10.5" text-anchor="middle" font-family="Arial Black,Helvetica,sans-serif" font-size="5.2" font-weight="900" fill="#1a1a1a" letter-spacing="0.2">BINGO</text><g fill="#f7f7f7" stroke="#1a1a1a" stroke-width="0.7"><rect x="5.5" y="13" width="6" height="5.5"/><rect x="11.5" y="13" width="6" height="5.5"/><rect x="17.5" y="13" width="6" height="5.5"/><rect x="5.5" y="18.5" width="6" height="5.5"/><rect x="11.5" y="18.5" width="6" height="5.5"/><rect x="17.5" y="18.5" width="6" height="5.5"/><rect x="5.5" y="24" width="6" height="5.5"/><rect x="11.5" y="24" width="6" height="5.5"/><rect x="17.5" y="24" width="6" height="5.5"/></g><path d="M 8.5 15.7 L 9.2 16.95 L 10.5 17.1 L 9.5 18 L 9.85 19.3 L 8.5 18.6 L 7.15 19.3 L 7.5 18 L 6.5 17.1 L 7.8 16.95 Z" fill="#ffc93c" stroke="#1a1a1a" stroke-width="0.25" stroke-linejoin="round"/><g transform="rotate(-28 25 23)"><rect x="18" y="20.8" width="12" height="4.6" rx="0.9" fill="#6cc5ea" stroke="#1a1a1a" stroke-width="0.8"/><rect x="26" y="21.4" width="2.6" height="3.4" fill="#1a1a1a"/><path d="M 30 21.4 L 33.2 23.1 L 30 24.8 Z" fill="#f7c6dd" stroke="#1a1a1a" stroke-width="0.5" stroke-linejoin="round"/></g></svg>';
+    const QUIZ_SVG='<svg viewBox="0 0 36 36" width="1em" height="1em" style="vertical-align:middle;display:inline-block"><defs><linearGradient id="lpquizgrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFE066"/><stop offset="55%" stop-color="#FFC94D"/><stop offset="100%" stop-color="#FF9A3C"/></linearGradient><path id="lpquizarc" d="M 7.5 17.5 A 10.5 10.5 0 0 1 28.5 17.5"/></defs><circle cx="18" cy="18" r="15.7" fill="url(#lpquizgrad)" stroke="#1a1a1a" stroke-width="1.4"/><text font-family="Arial Black,Impact,sans-serif" font-size="5" font-weight="900" fill="#1a1a1a" letter-spacing="1.2"><textPath href="#lpquizarc" startOffset="50%" text-anchor="middle">QUIZ</textPath></text><text x="18.2" y="29.4" text-anchor="middle" font-family="Arial Black,Impact,sans-serif" font-size="20" font-weight="900" fill="#1a1a1a">?</text></svg>';
     const GAMES=[
         {id:'roulette',  icon:ROULETTE_SVG, url:'/games/roulette/'},
         {id:'ladder',    icon:LADDER_SVG, url:'/games/ladder/'},
         {id:'car-racing',icon:'🏎️',url:'/games/car-racing/'},
         {id:'team',      icon:TEAM_SVG, url:'/games/team/'},
         {id:'lotto',     icon:'🎱', url:'/games/lotto/'},
+        {id:'bingo',     icon:BINGO_SVG, url:'/games/bingo/'},
+        {id:'quiz',      icon:QUIZ_SVG, url:'/games/quiz/'},
     ];
 
     const NAMES={
-        en:{roulette:'Roulette',ladder:'Ladder','car-racing':'Race',team:'Team',lotto:'Lotto'},
-        gb:{roulette:'Roulette',ladder:'Ladder','car-racing':'Race',team:'Team',lotto:'Lotto'},
-        ko:{roulette:'룰렛',ladder:'사다리','car-racing':'카레이싱',team:'팀 뽑기',lotto:'로또'},
-        ja:{roulette:'ルーレット',ladder:'はしご','car-racing':'レース',team:'チーム',lotto:'ロト'},
-        zh:{roulette:'轮盘',ladder:'梯子','car-racing':'赛车',team:'分队',lotto:'乐透'},
-        es:{roulette:'Ruleta',ladder:'Escalera','car-racing':'Carrera',team:'Equipos',lotto:'Lotería'},
-        de:{roulette:'Roulette',ladder:'Leiter','car-racing':'Rennen',team:'Teams',lotto:'Lotto'},
-        fr:{roulette:'Roulette',ladder:'Échelle','car-racing':'Course',team:'Équipes',lotto:'Loto'},
-        pt:{roulette:'Roleta',ladder:'Escada','car-racing':'Corrida',team:'Times',lotto:'Loteria'},
-        ru:{roulette:'Рулетка',ladder:'Лестница','car-racing':'Гонки',team:'Команды',lotto:'Лото'},
-        ar:{roulette:'روليت',ladder:'سلم','car-racing':'سباق',team:'فرق',lotto:'يانصيب'},
-        hi:{roulette:'रूलेट',ladder:'सीढ़ी','car-racing':'रेस',team:'टीम',lotto:'लॉटो'},
-        th:{roulette:'รูเล็ต',ladder:'บันได','car-racing':'แข่งรถ',team:'ทีม',lotto:'ลอตโต'},
-        id:{roulette:'Roulette',ladder:'Tangga','car-racing':'Balap',team:'Tim',lotto:'Undian'},
-        vi:{roulette:'Vòng quay',ladder:'Thang','car-racing':'Đua xe',team:'Đội',lotto:'Xổ số'},
-        tr:{roulette:'Rulet',ladder:'Merdiven','car-racing':'Yarış',team:'Takım',lotto:'Çekiliş'},
+        en:{roulette:'Roulette',ladder:'Ladder','car-racing':'Race',team:'Team',lotto:'Lotto',bingo:'Bingo',quiz:'Quiz'},
+        gb:{roulette:'Roulette',ladder:'Ladder','car-racing':'Race',team:'Team',lotto:'Lotto',bingo:'Bingo',quiz:'Quiz'},
+        ko:{roulette:'룰렛',ladder:'사다리','car-racing':'카레이싱',team:'팀 뽑기',lotto:'로또',bingo:'빙고',quiz:'퀴즈'},
+        ja:{roulette:'ルーレット',ladder:'はしご','car-racing':'レース',team:'チーム',lotto:'ロト',bingo:'ビンゴ',quiz:'クイズ'},
+        zh:{roulette:'轮盘',ladder:'梯子','car-racing':'赛车',team:'分队',lotto:'乐透',bingo:'宾果',quiz:'问答'},
+        es:{roulette:'Ruleta',ladder:'Escalera','car-racing':'Carrera',team:'Equipos',lotto:'Lotería',bingo:'Bingo',quiz:'Quiz'},
+        de:{roulette:'Roulette',ladder:'Leiter','car-racing':'Rennen',team:'Teams',lotto:'Lotto',bingo:'Bingo',quiz:'Quiz'},
+        fr:{roulette:'Roulette',ladder:'Échelle','car-racing':'Course',team:'Équipes',lotto:'Loto',bingo:'Bingo',quiz:'Quiz'},
+        pt:{roulette:'Roleta',ladder:'Escada','car-racing':'Corrida',team:'Times',lotto:'Loteria',bingo:'Bingo',quiz:'Quiz'},
+        ru:{roulette:'Рулетка',ladder:'Лестница','car-racing':'Гонки',team:'Команды',lotto:'Лото',bingo:'Бинго',quiz:'Викторина'},
+        ar:{roulette:'روليت',ladder:'سلم','car-racing':'سباق',team:'فرق',lotto:'يانصيب',bingo:'بينغو',quiz:'مسابقة'},
+        hi:{roulette:'रूलेट',ladder:'सीढ़ी','car-racing':'रेस',team:'टीम',lotto:'लॉटो',bingo:'बिंगो',quiz:'क्विज़'},
+        th:{roulette:'รูเล็ต',ladder:'บันได','car-racing':'แข่งรถ',team:'ทีม',lotto:'ลอตโต',bingo:'บิงโก',quiz:'ควิซ'},
+        id:{roulette:'Roulette',ladder:'Tangga','car-racing':'Balap',team:'Tim',lotto:'Undian',bingo:'Bingo',quiz:'Kuis'},
+        vi:{roulette:'Vòng quay',ladder:'Thang','car-racing':'Đua xe',team:'Đội',lotto:'Xổ số',bingo:'Bingo',quiz:'Câu đố'},
+        tr:{roulette:'Rulet',ladder:'Merdiven','car-racing':'Yarış',team:'Takım',lotto:'Çekiliş',bingo:'Bingo',quiz:'Quiz'},
     };
 
     function injectStyles(){

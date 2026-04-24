@@ -41,7 +41,7 @@
     {id:'lotto',     label:'로또',    emoji:'🎰', path:'/games/lotto/',     resumable:true },
     {id:'bingo',     label:'빙고',    emoji:'🎱', path:'/games/bingo/',     resumable:true },
     {id:'car-racing',label:'레이싱',  emoji:'🏎️', path:'/games/car-racing/',resumable:true },
-    {id:'quiz',      label:'퀴즈',    emoji:'🎓', path:'/games/quiz/',      resumable:false}
+    {id:'quiz',      label:'퀴즈',    emoji:'🎓', path:'/games/quiz/',      resumable:true }
   ];
 
   /* ---------- styles ---------- */
