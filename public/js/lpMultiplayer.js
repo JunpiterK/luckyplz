@@ -29,6 +29,21 @@
   var SS_STATE='lp_mp_panel_state';// {view, pos:{x,y}}
   var current=null;// { mode, api, panel, cleanup[] }
 
+  /* Game list for the host-side switcher. Order follows the home-page
+     priority (룰렛·사다리 먼저). `resumable:false` games cannot be
+     silently rehydrated by `LpRoom.tryResumeHost` today (quiz seeds
+     questions + lobby flow via button clicks), so they're shown
+     greyed-out until their page grows a resume path. */
+  var GAMES=[
+    {id:'roulette',  label:'룰렛',    emoji:'🎯', path:'/games/roulette/',  resumable:true },
+    {id:'ladder',    label:'사다리',  emoji:'🪜', path:'/games/ladder/',    resumable:true },
+    {id:'team',      label:'팀뽑기',  emoji:'👥', path:'/games/team/',      resumable:true },
+    {id:'lotto',     label:'로또',    emoji:'🎰', path:'/games/lotto/',     resumable:true },
+    {id:'bingo',     label:'빙고',    emoji:'🎱', path:'/games/bingo/',     resumable:true },
+    {id:'car-racing',label:'레이싱',  emoji:'🏎️', path:'/games/car-racing/',resumable:true },
+    {id:'quiz',      label:'퀴즈',    emoji:'🎓', path:'/games/quiz/',      resumable:false}
+  ];
+
   /* ---------- styles ---------- */
   var CSS=[
     '.lp-mp-panel{position:fixed;z-index:9050;width:340px;max-width:calc(100vw - 24px);',
@@ -80,6 +95,22 @@
     '.lp-mp-chip[data-self="1"]{background:rgba(79,195,247,.32);border-color:#4FC3F7;font-weight:700}',
     '.lp-mp-chip[data-host="1"]{background:rgba(255,213,79,.2);border-color:#FFD54F;color:#FFF8E1}',
     '.lp-mp-empty{color:#81D4FA;font-size:12px;font-style:italic;opacity:.7}',
+
+    '.lp-mp-switcher-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}',
+    '.lp-mp-sw-btn{background:rgba(79,195,247,.12);border:1px solid rgba(79,195,247,.3);',
+    '  color:#E1F5FE;border-radius:10px;padding:9px 4px 7px;font-size:11.5px;font-weight:600;',
+    '  cursor:pointer;transition:all .15s ease;display:flex;flex-direction:column;',
+    '  align-items:center;gap:3px;line-height:1.1}',
+    '.lp-mp-sw-btn:hover:not([disabled]){background:rgba(79,195,247,.28);border-color:#4FC3F7;',
+    '  box-shadow:0 0 10px rgba(79,195,247,.3)}',
+    '.lp-mp-sw-btn[data-current="1"]{background:rgba(79,195,247,.38);border-color:#4FC3F7;',
+    '  cursor:default;opacity:.85;position:relative}',
+    '.lp-mp-sw-btn[data-current="1"]::after{content:"●";position:absolute;top:2px;right:5px;',
+    '  font-size:7px;color:#4FC3F7}',
+    '.lp-mp-sw-btn[disabled]:not([data-current]){opacity:.35;cursor:not-allowed}',
+    '.lp-mp-sw-btn .lp-mp-sw-emoji{font-size:20px;line-height:1}',
+    '.lp-mp-sw-btn.lp-mp-transiting{background:rgba(79,195,247,.45);border-color:#4FC3F7;',
+    '  box-shadow:0 0 14px rgba(79,195,247,.55);animation:lpMpPulse 1.1s infinite}',
 
     '.lp-mp-footer{border-top:1px solid rgba(79,195,247,.18);padding-top:10px;',
     '  display:flex;gap:8px;flex-wrap:wrap}',
@@ -200,6 +231,7 @@
       +'<div class="lp-mp-body">'
         +'<div class="lp-mp-row lp-mp-host-row"></div>'
         +'<div class="lp-mp-sec lp-mp-guests-sec"></div>'
+        +'<div class="lp-mp-sec lp-mp-switcher-sec" hidden></div>'
         +'<div class="lp-mp-sec lp-mp-footer"></div>'
       +'</div>';
 
@@ -236,6 +268,44 @@
     var panel=buildShell('host');
     var hostAuthedName=null;
 
+    /* Host-only game switcher. Clicking a non-current, resumable game
+       calls room.transferTo(path) which broadcasts host:navigate to
+       guests + persists lp_hostTransit so the next page auto-resumes
+       this same room (identical code+pin). Guests follow automatically. */
+    function switchGame(path,btn){
+      if(!room||typeof room.transferTo!=='function')return;
+      /* Lock the room before jumping so no stale join requests race the
+         navigation — arriving guests on the NEW page can still join via
+         tryResumeHost's unlock path, but mid-transit duplicates are
+         suppressed. */
+      try{if(room.lock&&!room.isLocked())room.lock()}catch(_){}
+      if(btn)btn.classList.add('lp-mp-transiting');
+      try{room.transferTo(path)}catch(_){}
+    }
+
+    function renderSwitcher(){
+      var sec=panel.querySelector('.lp-mp-switcher-sec');
+      if(!sec)return;
+      var currentId=room.gameId||'';
+      var html=GAMES.map(function(g){
+        var isCurrent=(currentId===g.id);
+        var disabled=isCurrent||!g.resumable;
+        var attrs=(isCurrent?' data-current="1"':'')+(disabled?' disabled':'');
+        return '<button type="button" class="lp-mp-sw-btn" data-path="'+g.path+'" data-id="'+g.id+'"'+attrs+'>'
+          +'<span class="lp-mp-sw-emoji">'+g.emoji+'</span>'
+          +'<span>'+esc(g.label)+'</span>'
+        +'</button>';
+      }).join('');
+      sec.hidden=false;
+      sec.innerHTML=
+        '<div class="lp-mp-sec-label"><span>게임 전환</span><b>호스트 전용</b></div>'
+        +'<div class="lp-mp-switcher-grid">'+html+'</div>';
+      Array.prototype.forEach.call(sec.querySelectorAll('.lp-mp-sw-btn'),function(btn){
+        if(btn.disabled)return;
+        btn.onclick=function(){switchGame(btn.getAttribute('data-path'),btn)};
+      });
+    }
+
     function render(){
       var code=room.code||'';
       var hn=hostAuthedName||room.hostName||'Host';
@@ -253,6 +323,8 @@
         '<div class="lp-mp-sec-label"><span>참여자</span><b>'+list.length+'명</b></div>'
         +(list.length?'<div class="lp-mp-guest-list">'+chips+'</div>'
                      :'<div class="lp-mp-empty">아직 참여자 없음 — 링크를 공유해 보세요</div>');
+
+      renderSwitcher();
 
       panel.querySelector('.lp-mp-footer').innerHTML=
         '<button class="lp-mp-copy">🔗 링크 복사</button>'
