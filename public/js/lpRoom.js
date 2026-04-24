@@ -295,7 +295,7 @@
             });
         });
 
-        return {
+        var roomApi={
             code:code,
             gameId:gameId,
             pin:pin,
@@ -336,6 +336,7 @@
                 closing=true;
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
+                try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'host'}}))}catch(_){}
             },
             /* Transfer the room to a new URL — host navigates there, guests
                auto-follow via the host:navigate broadcast. The room code +
@@ -369,6 +370,10 @@
                 return root+'?room='+code;
             }
         };
+        /* Fire once the room is live so shared UI modules (e.g. lpMultiplayer)
+           can attach without every game page wiring them manually. */
+        try{window.dispatchEvent(new CustomEvent('lp-room-host-ready',{detail:{room:roomApi}}))}catch(_){}
+        return roomApi;
     }
 
     /* ============ GUEST ============ */
@@ -502,6 +507,14 @@
             if(accepted){
                 if(STATEFUL.test(ev))cache[ev]=p;
                 emit(ev,p);
+                /* Shared UI modules (lpMultiplayer) want to learn about
+                   host-initiated room shutdown without having to listen
+                   on every game's `g.on('host:close')`. Fire the unified
+                   CustomEvent here — after the normal emit so any game
+                   code hooks still run first. */
+                if(ev==='host:close'){
+                    try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'host_closed'}}))}catch(_){}
+                }
             }
         }
 
@@ -572,7 +585,7 @@
         /* If the host renamed us, propagate — the rest of the code
            should treat result.nickname as the canonical identity. */
         const finalNick=result.nickname||nickname;
-        return {
+        var guestApi={
             ok:true,
             code:code,
             gid:gid,
@@ -624,6 +637,7 @@
                 guestClosing=true;
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
+                try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'self'}}))}catch(_){}
             },
             /* Subscribe to connection-status transitions. Status pill
                uses this to flash "재연결 중" when the socket drops so
@@ -633,6 +647,8 @@
             onStatusChange:function(cb){if(typeof cb==='function'){guestStatusCbs.push(cb);try{cb(guestConnStatus)}catch(_){}}},
             connectionStatus:function(){return guestConnStatus}
         };
+        try{window.dispatchEvent(new CustomEvent('lp-room-guest-ready',{detail:{guest:guestApi}}))}catch(_){}
+        return guestApi;
     }
 
     /* ============ UI MODALS ============ */
