@@ -89,7 +89,7 @@
 
     async function hostCreate(opts){
         opts=opts||{};
-        const gameId=opts.gameId||'unknown';
+        const gameId=opts.gameId||'roulette';
         const pin=String(opts.pin||'').padStart(4,'0');
         const hostName=opts.hostName||'Host';
         const sb=await waitForSupabase();
@@ -851,7 +851,9 @@
        onCreated(roomObj) as soon as the channel is live. */
     function showHostModal(opts){
         opts=opts||{};
-        const gameId=opts.gameId;
+        /* Default to 'roulette' so rooms created from the home page are
+           discoverable — 'unknown' caused guests to be sent to /games/unknown/ */
+        const gameId=opts.gameId||'roulette';
         const hostName=opts.hostName||'Host';
         const pin=opts.pin||String(Math.floor(1000+Math.random()*9000));
 
@@ -1294,9 +1296,32 @@
                 return;
             }
             if(!g.ok){
+                /* wrong_game: host moved to a different game after the
+                   guest landed on this page (stale QR / bookmark). Re-probe
+                   to find the correct game and redirect automatically rather
+                   than showing a dead-end error. */
+                if(g.error==='wrong_game'){
+                    err.textContent=_t('게임 방을 찾는 중…','Finding the right game…');
+                    probeRoom(code).then(function(p){
+                        const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+                        const _gid=_v.includes(p&&p.gameId)?p.gameId:'roulette';
+                        if(p&&p.ok){
+                            try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
+                                code:code,pin:pin.value,nick:nick.value.trim(),t:Date.now()
+                            }))}catch(_){}
+                            location.href='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
+                        }else{
+                            err.textContent=_t('방을 찾을 수 없어요','Room not found');
+                            if(joinBtn)joinBtn.disabled=false;
+                        }
+                    }).catch(function(){
+                        err.textContent=_t('입장 실패. 다시 시도해주세요','Join failed — try again');
+                        if(joinBtn)joinBtn.disabled=false;
+                    });
+                    return;
+                }
                 err.textContent=(g.error==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
                     :(g.error==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
-                    :(g.error==='wrong_game')?_t('다른 게임 방이에요','That room is for a different game')
                     :(g.error==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
                     :_t('입장 실패','Join failed');
                 if(joinBtn)joinBtn.disabled=false;
@@ -1825,7 +1850,11 @@
             try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
                 code:code,pin:pinIn.value,nick:nickIn.value.trim(),t:Date.now()
             }))}catch(_){}
-            const target='/games/'+encodeURIComponent(probe.gameId||'roulette')+'/?room='+encodeURIComponent(code);
+            /* Validate gameId — 'unknown' is truthy so the old fallback
+               never fired; now we whitelist valid ids explicitly. */
+            const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+            const _gid=_validGames.includes(probe.gameId)?probe.gameId:'roulette';
+            const target='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
             location.href=target;
         }
         document.getElementById('lpHomeJoin').addEventListener('click',doJoin);
