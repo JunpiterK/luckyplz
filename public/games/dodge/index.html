@@ -5,12 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>닷지 · Dodge | Lucky Please</title>
-    <meta name="description" content="전투기를 조종해 쏟아지는 총알을 피하세요. 생존 시간이 곧 점수. 세계·친구 랭킹에서 최장 생존에 도전!">
-    <meta name="keywords" content="닷지, dodge game, 총알 피하기, bullet hell, 전투기 게임, 피하기 게임, 생존 게임">
+    <meta name="description" content="테라포밍 탐사선을 조종해 소행성·운석을 피하며 지구에서 말머리 성운까지 우주를 개척하세요! 생존 시간이 곧 점수.">
+    <meta name="keywords" content="닷지, dodge game, 총알 피하기, bullet hell, 전투기 게임, 피하기 게임, 생존 게임, 우주 게임">
     <link rel="canonical" href="https://luckyplz.com/games/dodge/">
     <meta property="og:type" content="website">
     <meta property="og:title" content="닷지 · Dodge">
-    <meta property="og:description" content="전투기 조종, 총알을 피하며 최대한 오래 생존하세요">
+    <meta property="og:description" content="테라포밍 탐사선 조종, 소행성을 피하며 말머리 성운까지">
     <meta property="og:url" content="https://luckyplz.com/games/dodge/">
     <meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1776639849">
     <link rel="alternate" hreflang="ko" href="https://luckyplz.com/games/dodge/?lang=ko">
@@ -91,10 +91,8 @@ body{
     background:#050518;border:2px solid rgba(0,217,255,.22);border-radius:16px;
     box-shadow:0 14px 34px -10px rgba(0,217,255,.18),inset 0 0 40px rgba(0,217,255,.04);
     overflow:hidden;
-    /* 3:5 aspect ratio (360×600 logical canvas) */
     aspect-ratio:3/5;
     width:100%;max-width:360px;
-    /* 모바일: 다른 요소(score·trackpad·hint)가 잘리지 않도록 높이 상한 */
     max-height:calc(100dvh - 405px);
     touch-action:none
 }
@@ -233,7 +231,7 @@ body{
 
 <header class="topbar">
     <a href="/" class="home">← 홈</a>
-    <h1>✈ DODGE</h1>
+    <h1>🚀 DODGE</h1>
     <div class="slot">
         <button class="lb-btn" id="openLb" aria-label="랭킹 보기">🏆</button>
         <span id="authSlot"></span>
@@ -253,9 +251,9 @@ body{
         <div class="canvas-wrap" id="canvasWrap">
             <canvas id="dodge-canvas"></canvas>
             <div class="overlay" id="overlay">
-                <h2 class="play" id="ovTitle">DODGE</h2>
-                <p id="ovDesc">터치·마우스로 전투기를 직접 조종하세요.<br>총알을 피해 최대한 오래 생존하세요!</p>
-                <button class="btn" id="ovBtn">시작하기</button>
+                <h2 class="play" id="ovTitle">✈ DODGE</h2>
+                <p id="ovDesc">테라포밍 탐사선을 조종해<br>소행성·운석을 피하며 우주를 개척하세요!</p>
+                <button class="btn" id="ovBtn">출발하기</button>
                 <div class="kbd-hint"><kbd>WASD</kbd> · <kbd>↑↓←→</kbd> 이동 &nbsp;·&nbsp; <kbd>Space</kbd> 일시정지</div>
             </div>
         </div>
@@ -263,7 +261,7 @@ body{
         <!-- 모바일 원형 조종판: 드래그 → 비행기 델타 이동 + 방향 글로우 -->
         <div class="tp-wrap">
             <div class="tp-zone" id="tpZone">
-                <div class="tp-icon">✈</div>
+                <div class="tp-icon">🚀</div>
                 <div class="tp-ring" id="tpRing"></div>
             </div>
             <div class="tp-label">드래그해서 조종</div>
@@ -293,7 +291,7 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777132529"></script>
+<script src="/js/supabase-config.js?v=1777134032"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -352,8 +350,61 @@ function drawRR(x,y,w,h,r){
     ctx.closePath();
 }
 
+/* ======================================================
+   ZONE SYSTEM — SpaceX terraforming journey
+   ====================================================== */
+const ZONES=[
+    {s:  0, nameEn:'EARTH ORBIT · 400km',  nameKo:'🌍 지구 궤도',         dur:22},
+    {s: 22, nameEn:'LUNAR ORBIT',           nameKo:'🌙 달',               dur:23},
+    {s: 45, nameEn:'MARS · 78M km',         nameKo:'🔴 화성',              dur:25},
+    {s: 70, nameEn:'JUPITER · 629M km',     nameKo:'🟠 목성',              dur:25},
+    {s: 95, nameEn:'SATURN · 1.28B km',     nameKo:'🪐 토성',              dur:23},
+    {s:118, nameEn:'URANUS · 2.72B km',     nameKo:'🔵 천왕성',             dur:20},
+    {s:138, nameEn:'NEPTUNE · 4.35B km',    nameKo:'💙 해왕성',             dur:18},
+    {s:156, nameEn:'PLUTO KUIPER BELT',     nameKo:'⚪ 명왕성·카이퍼벨트',  dur:14},
+    {s:170, nameEn:'HELIOSPHERE EDGE',      nameKo:'🌌 태양계 외곽',        dur:12},
+    {s:182, nameEn:'INTERSTELLAR SPACE',    nameKo:'✨ 태양계 너머',         dur:14},
+    {s:196, nameEn:'HORSEHEAD NEBULA',      nameKo:'🌠 말머리 성운',         dur:9999},
+];
+
+/* Background gradient colors [top, mid, bot] per zone (as hex strings) */
+const ZONE_BG=[
+    ['#000510','#001030','#003878'], // 0 Earth
+    ['#050508','#090910','#101016'], // 1 Moon
+    ['#080200','#180800','#301200'], // 2 Mars
+    ['#080600','#140c00','#201400'], // 3 Jupiter
+    ['#080605','#120e06','#1c1608'], // 4 Saturn
+    ['#010810','#021218','#041e24'], // 5 Uranus
+    ['#010410','#010818','#010c28'], // 6 Neptune
+    ['#050508','#080810','#0c0c14'], // 7 Pluto
+    ['#030304','#060608','#08080c'], // 8 Helio Edge
+    ['#020203','#030306','#050509'], // 9 Interstellar
+    ['#1a0008','#2a0012','#1a0820'], // 10 Horsehead
+];
+
+function hexToRgb(h){
+    const r=parseInt(h.slice(1,3),16);
+    const g=parseInt(h.slice(3,5),16);
+    const b=parseInt(h.slice(5,7),16);
+    return [r,g,b];
+}
+function lerpRgb(a,b,t){
+    return [
+        Math.round(a[0]+(b[0]-a[0])*t),
+        Math.round(a[1]+(b[1]-a[1])*t),
+        Math.round(a[2]+(b[2]-a[2])*t),
+    ];
+}
+function rgbStr(rgb){ return 'rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')'; }
+
+let currentZoneIdx=0;
+let prevZoneIdx=0;
+let zoneTransitionT=1; // 0→1 over 1.5s after zone change
+
+let zoneLabel={ nameEn:'', nameKo:'', timer:0 };
+
 /* ---- Stars ---- */
-const STAR_COUNT=60;
+const STAR_COUNT=70;
 const stars=[];
 function initStars(){
     stars.length=0;
@@ -361,9 +412,10 @@ function initStars(){
         stars.push({
             x:Math.random()*CW,
             y:Math.random()*CH,
-            r:Math.random()*1.4+0.4,
-            speed:Math.random()*60+20,
-            alpha:Math.random()*0.5+0.2
+            r:Math.random()*1.4+0.3,
+            speed:Math.random()*55+18,
+            alpha:Math.random()*0.55+0.15,
+            hue:0 // 0=white; updated per zone
         });
     }
 }
@@ -373,10 +425,33 @@ function updateStars(dt){
         if(s.y>CH) s.y=-2;
     }
 }
+function getStarColor(zIdx, alpha){
+    if(zIdx<=2)  return 'rgba(255,255,255,'+alpha+')';
+    if(zIdx<=4)  return 'rgba(255,250,220,'+alpha+')'; // warm
+    if(zIdx<=6)  return 'rgba(200,220,255,'+alpha+')'; // cool blue
+    if(zIdx<=8)  return 'rgba(180,185,200,'+alpha+')'; // dim
+    if(zIdx===9){
+        // varied: use star index cycle through warm/cool
+        return null; // handled per-star below
+    }
+    // zone 10 nebula — pinkish
+    return 'rgba(255,210,220,'+alpha+')';
+}
 function drawStars(){
-    for(const s of stars){
-        ctx.globalAlpha=s.alpha;
-        ctx.fillStyle='#fff';
+    const zIdx=currentZoneIdx;
+    for(let i=0;i<stars.length;i++){
+        const s=stars[i];
+        let col;
+        if(zIdx===9){
+            const cycle=i%3;
+            if(cycle===0) col='rgba(255,160,120,'+s.alpha+')';
+            else if(cycle===1) col='rgba(180,200,255,'+s.alpha+')';
+            else col='rgba(255,255,255,'+s.alpha+')';
+        } else {
+            col=getStarColor(zIdx, s.alpha)||'rgba(255,255,255,'+s.alpha+')';
+        }
+        ctx.globalAlpha=1;
+        ctx.fillStyle=col;
         ctx.beginPath();
         ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
         ctx.fill();
@@ -384,9 +459,568 @@ function drawStars(){
     ctx.globalAlpha=1;
 }
 
+/* ---- Ambient particles per zone ---- */
+let particles=[];
+
+function resetParticles(zIdx){
+    particles=[];
+    if(zIdx===2){ // Mars dust
+        for(let i=0;i<15;i++) particles.push({
+            x:Math.random()*CW, y:Math.random()*CH,
+            vx:(Math.random()-.5)*18, vy:(Math.random()-.5)*10,
+            r:Math.random()*2+1,
+            col:'rgba(255,140,60,0.55)', type:'dust'
+        });
+    } else if(zIdx===4){ // Saturn ring particles
+        for(let i=0;i<18;i++) particles.push({
+            x:Math.random()*CW, y:Math.random()*CH*0.3+CH*0.1,
+            vx:(Math.random()>.5?1:-1)*(Math.random()*20+10), vy:0,
+            r:Math.random()*1.5+0.5,
+            col:'rgba(220,190,120,0.45)', type:'ring'
+        });
+    } else if(zIdx===10){ // Horsehead nebula dust
+        for(let i=0;i<30;i++) particles.push({
+            x:Math.random()*CW, y:Math.random()*CH,
+            vx:(Math.random()-.5)*6, vy:-(Math.random()*12+3),
+            r:Math.random()*2+1,
+            col:'rgba(255,120,150,0.5)', type:'nebula'
+        });
+    }
+}
+
+function updateParticles(dt){
+    for(const p of particles){
+        p.x+=p.vx*dt;
+        p.y+=p.vy*dt;
+        if(p.x<0)p.x=CW;
+        if(p.x>CW)p.x=0;
+        if(p.y<0)p.y=CH;
+        if(p.y>CH)p.y=0;
+    }
+}
+
+function drawParticles(){
+    for(const p of particles){
+        ctx.globalAlpha=0.7;
+        ctx.fillStyle=p.col;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fill();
+    }
+    ctx.globalAlpha=1;
+}
+
+/* ---- lerp helper ---- */
+function lerp(a,b,t){ return a+(b-a)*t; }
+
+/* ---- drawBackground: zone gradient + blend ---- */
+function drawBackground(){
+    const zi=currentZoneIdx;
+    const pi=prevZoneIdx;
+    const t=Math.min(zoneTransitionT,1);
+
+    // Get blended colors
+    const topA=hexToRgb(ZONE_BG[pi][0]), topB=hexToRgb(ZONE_BG[zi][0]);
+    const midA=hexToRgb(ZONE_BG[pi][1]), midB=hexToRgb(ZONE_BG[zi][1]);
+    const botA=hexToRgb(ZONE_BG[pi][2]), botB=hexToRgb(ZONE_BG[zi][2]);
+
+    const topC=rgbStr(lerpRgb(topA,topB,t));
+    const midC=rgbStr(lerpRgb(midA,midB,t));
+    const botC=rgbStr(lerpRgb(botA,botB,t));
+
+    const grad=ctx.createLinearGradient(0,0,0,CH);
+    grad.addColorStop(0,   topC);
+    grad.addColorStop(0.5, midC);
+    grad.addColorStop(1,   botC);
+    ctx.fillStyle=grad;
+    ctx.fillRect(0,0,CW,CH);
+}
+
+/* ---- Zone planet/object drawing ---- */
+function getZoneT(zIdx){
+    const z=ZONES[zIdx];
+    const s=elapsedMs/1000;
+    const elapsed=s-z.s;
+    const dur=z.dur===9999?30:z.dur;
+    return Math.max(0,Math.min(1,elapsed/dur));
+}
+
+function drawEarth(zoneT){
+    // Giant arc at bottom — Earth's curvature
+    const arcR=lerp(1800,400,zoneT);
+    const arcCenterY=CH+arcR*0.82;
+    const arcAngle=Math.asin((CW*0.7)/arcR)||0.4;
+
+    ctx.save();
+    // Atmosphere glow
+    const atmGrad=ctx.createRadialGradient(CW/2,arcCenterY,arcR-6,CW/2,arcCenterY,arcR+14);
+    atmGrad.addColorStop(0,'rgba(100,200,255,0)');
+    atmGrad.addColorStop(0.5,'rgba(80,180,255,0.25)');
+    atmGrad.addColorStop(1,'rgba(0,120,255,0)');
+    ctx.fillStyle=atmGrad;
+    ctx.beginPath();
+    ctx.arc(CW/2,arcCenterY,arcR+14,-Math.PI-arcAngle-0.05,-arcAngle+0.05);
+    ctx.arc(CW/2,arcCenterY,arcR-6,-arcAngle+0.05,-Math.PI-arcAngle-0.05,true);
+    ctx.fill();
+
+    // Ocean
+    ctx.beginPath();
+    ctx.arc(CW/2,arcCenterY,arcR,-Math.PI-arcAngle,-arcAngle);
+    ctx.lineTo(CW,CH+20);
+    ctx.lineTo(0,CH+20);
+    ctx.closePath();
+    ctx.fillStyle='#0a2850';
+    ctx.fill();
+
+    // Landmasses (seeded blobs)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(CW/2,arcCenterY,arcR,-Math.PI-arcAngle,-arcAngle);
+    ctx.lineTo(CW,CH+20); ctx.lineTo(0,CH+20); ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle='#1a5c28';
+    // blob 1
+    ctx.beginPath(); ctx.ellipse(CW*0.3,arcCenterY-arcR*0.05,arcR*0.18,arcR*0.12,0.3,0,Math.PI*2); ctx.fill();
+    // blob 2
+    ctx.beginPath(); ctx.ellipse(CW*0.7,arcCenterY-arcR*0.08,arcR*0.14,arcR*0.09,-0.4,0,Math.PI*2); ctx.fill();
+    // blob 3
+    ctx.beginPath(); ctx.ellipse(CW*0.55,arcCenterY-arcR*0.02,arcR*0.1,arcR*0.07,0.8,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    // Clouds
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(CW/2,arcCenterY,arcR,-Math.PI-arcAngle,-arcAngle);
+    ctx.lineTo(CW,CH+20); ctx.lineTo(0,CH+20); ctx.closePath();
+    ctx.clip();
+    ctx.strokeStyle='rgba(255,255,255,0.45)';
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(CW*0.4,arcCenterY-arcR*0.12,arcR*0.09,0.2,1.0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(CW*0.65,arcCenterY-arcR*0.06,arcR*0.07,-0.3,0.8); ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+}
+
+function drawMoon(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.35, r=90;
+    ctx.save();
+    // Base
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#b8b8b8');
+    g.addColorStop(0.7,'#7a7a7a');
+    g.addColorStop(1,'#4a4a4a');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    // Terminator shadow
+    ctx.fillStyle='rgba(0,0,0,0.30)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.3,py,r*0.55,r,0,Math.PI/2,Math.PI*3/2); ctx.fill();
+    // Craters
+    const craterData=[
+        [cx-20,py-25,16],[cx+25,py+15,12],[cx-30,py+28,10],[cx+10,py-35,9],
+        [cx+35,py-10,8],[cx-10,py+8,6],[cx+20,py+38,5],[cx-42,py-5,7],
+    ];
+    for(const [cx2,cy2,cr] of craterData){
+        ctx.fillStyle='rgba(80,80,80,0.6)';
+        ctx.beginPath(); ctx.arc(cx2,cy2,cr,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle='rgba(160,160,160,0.35)';
+        ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(cx2,cy2,cr,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+}
+
+function drawMars(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.65, r=70;
+    ctx.save();
+    // Glow aura
+    ctx.shadowColor='rgba(255,100,30,0.45)';
+    ctx.shadowBlur=28;
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#dd5533');
+    g.addColorStop(0.6,'#aa3311');
+    g.addColorStop(1,'#661100');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    // Polar cap
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    ctx.fillStyle='rgba(255,255,255,0.7)';
+    ctx.beginPath(); ctx.ellipse(cx,py-r*0.76,r*0.4,r*0.22,0,0,Math.PI*2); ctx.fill();
+    // Valles Marineris
+    ctx.strokeStyle='rgba(80,20,10,0.7)';
+    ctx.lineWidth=3;
+    ctx.beginPath(); ctx.ellipse(cx,py+r*0.05,r*0.7,r*0.06,-0.1,0.05,Math.PI-0.05); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+}
+
+function drawJupiter(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.5, r=130;
+    ctx.save();
+    ctx.shadowColor='rgba(200,140,40,0.5)';
+    ctx.shadowBlur=40;
+    // Clip to planet circle
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    // Bands
+    const bands=[
+        {y:py-r,h:r*0.22,c:'#e8d090'},{y:py-r+r*0.22,h:r*0.18,c:'#b07030'},
+        {y:py-r+r*0.4,h:r*0.20,c:'#d8c080'},{y:py-r+r*0.60,h:r*0.18,c:'#a06828'},
+        {y:py-r+r*0.78,h:r*0.22,c:'#d4b870'},{y:py-r+r*1.0,h:r*1.0,c:'#c07828'},
+    ];
+    for(const b of bands){
+        ctx.fillStyle=b.c;
+        ctx.fillRect(cx-r,b.y,r*2,b.h);
+    }
+    // Great Red Spot
+    ctx.fillStyle='#c05020';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.2,py+r*0.28,22,13,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(200,80,40,0.4)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.2,py+r*0.28,26,16,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.shadowBlur=0;
+    // Moons
+    ctx.fillStyle='#e8d060'; // Io
+    ctx.beginPath(); ctx.arc(cx+r+30,py+30,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#e0e0e0'; // Europa
+    ctx.beginPath(); ctx.arc(cx-r-10,py-20,5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+}
+
+function drawSaturn(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.5, r=65;
+    ctx.save();
+    // Ring back halves (behind planet)
+    function drawRingHalf(rx,ry,col,front){
+        ctx.save();
+        ctx.strokeStyle=col;
+        ctx.lineWidth=ry*0.6;
+        ctx.globalAlpha=0.65;
+        ctx.beginPath();
+        if(front){
+            ctx.ellipse(cx,py,rx,ry,0,Math.PI,Math.PI*2);
+        } else {
+            ctx.ellipse(cx,py,rx,ry,0,0,Math.PI);
+        }
+        ctx.stroke();
+        ctx.globalAlpha=1;
+        ctx.restore();
+    }
+    // Draw back rings
+    drawRingHalf(160,20,'rgba(200,170,100,0.55)',false);
+    drawRingHalf(140,18,'rgba(220,190,120,0.70)',false);
+    drawRingHalf(120,15,'rgba(180,150,80,0.40)',false);
+    // Planet
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#f0d890');
+    g.addColorStop(1,'#b89840');
+    ctx.fillStyle=g;
+    ctx.shadowColor='rgba(220,180,80,0.3)';
+    ctx.shadowBlur=12;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    // Draw front rings
+    drawRingHalf(160,20,'rgba(200,170,100,0.55)',true);
+    drawRingHalf(140,18,'rgba(220,190,120,0.70)',true);
+    drawRingHalf(120,15,'rgba(180,150,80,0.40)',true);
+    // Titan
+    ctx.fillStyle='rgba(230,160,80,0.9)';
+    ctx.beginPath(); ctx.arc(cx+r+135,py-10,5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+}
+
+function drawUranus(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.4, r=55;
+    ctx.save();
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#aaeeff');
+    g.addColorStop(1,'#2a9999');
+    ctx.fillStyle=g;
+    ctx.shadowColor='rgba(80,220,220,0.35)';
+    ctx.shadowBlur=16;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    // Faint band
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    ctx.strokeStyle='rgba(150,230,230,0.2)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx-r,py); ctx.lineTo(cx+r,py); ctx.stroke();
+    ctx.restore();
+    // Rings (nearly horizontal, slightly tilted)
+    ctx.save();
+    ctx.translate(cx,py);
+    ctx.rotate(0.26);
+    for(let ri=0;ri<2;ri++){
+        const rx=90+ri*14, ry=8+ri*2;
+        ctx.strokeStyle='rgba(100,200,200,0.30)';
+        ctx.lineWidth=ry*0.7;
+        ctx.beginPath(); ctx.ellipse(0,0,rx,ry,0,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+    // Polar aurora
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    const aPol=ctx.createRadialGradient(cx,py-r*0.7,2,cx,py-r*0.7,r*0.35);
+    aPol.addColorStop(0,'rgba(100,255,240,0.45)');
+    aPol.addColorStop(1,'rgba(100,255,240,0)');
+    ctx.fillStyle=aPol;
+    ctx.fillRect(cx-r,py-r,r*2,r);
+    ctx.restore();
+    ctx.restore();
+}
+
+function drawNeptune(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.6, r=55;
+    ctx.save();
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#2255ee');
+    g.addColorStop(1,'#060e66');
+    ctx.fillStyle=g;
+    ctx.shadowColor='rgba(40,80,255,0.55)';
+    ctx.shadowBlur=22;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    // Great Dark Spot
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    ctx.fillStyle='rgba(5,10,60,0.65)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.2,py-r*0.15,18,11,0.2,0,Math.PI*2); ctx.fill();
+    // Methane clouds
+    ctx.strokeStyle='rgba(200,220,255,0.55)';
+    ctx.lineWidth=2;
+    for(const [ox,oy] of [[-20,-30],[15,-10],[-5,25],[25,18]]){
+        ctx.beginPath(); ctx.arc(cx+ox,py+oy,10+Math.abs(ox)*0.3,0.1,1.0); ctx.stroke();
+    }
+    // Wind streaks
+    ctx.strokeStyle='rgba(140,180,255,0.18)';
+    ctx.lineWidth=1;
+    for(let wi=0;wi<4;wi++){
+        const wy=py-r+wi*(r*0.5);
+        ctx.beginPath(); ctx.moveTo(cx-r+5,wy); ctx.lineTo(cx+r-5,wy); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.restore();
+}
+
+function drawPluto(zoneT){
+    const py=CH*(1.4-zoneT*2.0);
+    const cx=CW*0.5, r=28;
+    ctx.save();
+    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
+    g.addColorStop(0,'#b08878');
+    g.addColorStop(1,'#6a4a40');
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
+    // Tombaugh Regio (heart-ish blob)
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    ctx.fillStyle='rgba(240,210,180,0.55)';
+    ctx.beginPath(); ctx.ellipse(cx+4,py+3,r*0.48,r*0.35,-0.2,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    // Charon
+    ctx.fillStyle='#888890';
+    ctx.beginPath(); ctx.arc(cx+65,py-15,14,0,Math.PI*2); ctx.fill();
+    // Haze arc
+    ctx.strokeStyle='rgba(140,180,220,0.18)';
+    ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(cx,py,r+5,0,Math.PI*2); ctx.stroke();
+    // Kuiper belt dots
+    for(let i=0;i<8;i++){
+        const ang=(i/8)*Math.PI*2+0.4;
+        const dist=r*2+i*14;
+        ctx.fillStyle='rgba(180,180,200,0.4)';
+        ctx.beginPath(); ctx.arc(cx+Math.cos(ang)*dist,py+Math.sin(ang)*dist*0.5,1.5,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+}
+
+function drawHelioEdge(zoneT){
+    // Heliosphere boundary — no planet, instead a glowing band + Voyager
+    ctx.save();
+    // Termination shock band
+    const bandY=CH*0.28;
+    const bandG=ctx.createLinearGradient(0,bandY-18,0,bandY+22);
+    bandG.addColorStop(0,'rgba(0,0,0,0)');
+    bandG.addColorStop(0.4,'rgba(255,200,80,0.12)');
+    bandG.addColorStop(0.6,'rgba(255,200,80,0.08)');
+    bandG.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=bandG;
+    ctx.fillRect(0,bandY-18,CW,40);
+    // Faint label
+    ctx.font='9px Orbitron,sans-serif';
+    ctx.fillStyle='rgba(255,200,80,0.22)';
+    ctx.textAlign='center';
+    ctx.fillText('TERMINATION SHOCK',CW/2,bandY+4);
+    // Voyager probe
+    const vx=CW*0.7, vy=CH*0.32;
+    ctx.save();
+    ctx.translate(vx,vy);
+    ctx.rotate(-0.5);
+    // Body (golden disk)
+    ctx.fillStyle='rgba(220,180,60,0.85)';
+    ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='rgba(200,160,40,0.6)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.stroke();
+    // Dish arm
+    ctx.strokeStyle='rgba(200,200,200,0.6)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(20,0); ctx.stroke();
+    // Dish
+    ctx.strokeStyle='rgba(200,200,200,0.55)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(20,0,5,-0.8,0.8); ctx.stroke();
+    // Instruments
+    ctx.strokeStyle='rgba(180,180,180,0.4)';
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(-4,8); ctx.lineTo(-8,18); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(4,8); ctx.lineTo(10,18); ctx.stroke();
+    ctx.restore();
+    // Undulating current sheet
+    ctx.strokeStyle='rgba(100,140,200,0.15)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.moveTo(0, CH*0.5);
+    for(let xw=0;xw<=CW;xw+=10){
+        ctx.lineTo(xw, CH*0.5+Math.sin(xw*0.04)*18);
+    }
+    ctx.stroke();
+    ctx.textAlign='left';
+    ctx.restore();
+}
+
+function drawInterstellar(){
+    // Alpha Centauri system
+    ctx.save();
+    ctx.shadowColor='rgba(255,240,160,0.7)';
+    ctx.shadowBlur=16;
+    ctx.fillStyle='rgba(255,240,160,0.9)';
+    ctx.beginPath(); ctx.arc(CW*0.3,CH*0.25,7,0,Math.PI*2); ctx.fill();
+    ctx.shadowColor='rgba(255,200,100,0.6)';
+    ctx.fillStyle='rgba(255,200,100,0.85)';
+    ctx.beginPath(); ctx.arc(CW*0.35,CH*0.28,5,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    ctx.restore();
+    // Hydrogen filaments
+    ctx.save();
+    ctx.strokeStyle='rgba(160,180,210,0.1)';
+    ctx.lineWidth=2;
+    const paths=[
+        [[0,CH*0.4],[CW*0.3,CH*0.38],[CW*0.7,CH*0.43],[CW,CH*0.40]],
+        [[0,CH*0.6],[CW*0.4,CH*0.55],[CW*0.8,CH*0.62],[CW,CH*0.58]],
+        [[0,CH*0.25],[CW*0.5,CH*0.27],[CW,CH*0.23]],
+    ];
+    for(const pts of paths){
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0],pts[0][1]);
+        for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+        ctx.stroke();
+    }
+    ctx.restore();
+    // Glowing dust mote
+    const dm=[CW*0.6, CH*0.45];
+    const dmG=ctx.createRadialGradient(dm[0],dm[1],0,dm[0],dm[1],6);
+    dmG.addColorStop(0,'rgba(200,220,255,0.35)');
+    dmG.addColorStop(1,'rgba(200,220,255,0)');
+    ctx.fillStyle=dmG;
+    ctx.fillRect(dm[0]-6,dm[1]-6,12,12);
+}
+
+function drawHorseheadNebula(){
+    // Rich crimson nebula overlay
+    ctx.save();
+    ctx.fillStyle='rgba(80,5,25,0.6)';
+    ctx.fillRect(0,0,CW,CH);
+    // Nebula pillar streaks
+    ctx.strokeStyle='rgba(180,40,80,0.12)';
+    ctx.lineWidth=18;
+    for(let i=0;i<4;i++){
+        ctx.beginPath();
+        ctx.moveTo(CW*0.3+i*25, 0);
+        ctx.lineTo(CW*0.28+i*22, CH);
+        ctx.stroke();
+    }
+    // Alnitak star (brilliant blue-white)
+    ctx.shadowColor='rgba(150,180,255,0.9)';
+    ctx.shadowBlur=32;
+    ctx.fillStyle='#d0e0ff';
+    ctx.beginPath(); ctx.arc(CW*0.75,CH*0.15,8,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0;
+    // Horsehead silhouette
+    const hx=CW*0.5, hy=CH*0.4;
+    ctx.fillStyle='rgba(12,2,8,0.88)';
+    ctx.beginPath();
+    // rough horsehead shape
+    ctx.moveTo(hx-18,hy+40);
+    ctx.lineTo(hx-22,hy-10);
+    ctx.quadraticCurveTo(hx-30,hy-35,hx-15,hy-55);
+    ctx.quadraticCurveTo(hx+5,hy-70,hx+20,hy-50);
+    ctx.quadraticCurveTo(hx+32,hy-30,hx+25,hy-5);
+    ctx.quadraticCurveTo(hx+30,hy+10,hx+18,hy+20);
+    ctx.quadraticCurveTo(hx+10,hy+25,hx+12,hy+40);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+}
+
+function drawZonePlanet(zIdx, dt){
+    const zoneT=getZoneT(zIdx);
+    if(zoneT<0||zoneT>1.1) return;
+    switch(zIdx){
+        case 0: drawEarth(zoneT); break;
+        case 1: drawMoon(zoneT); break;
+        case 2: drawMars(zoneT); break;
+        case 3: drawJupiter(zoneT); break;
+        case 4: drawSaturn(zoneT); break;
+        case 5: drawUranus(zoneT); break;
+        case 6: drawNeptune(zoneT); break;
+        case 7: drawPluto(zoneT); break;
+        case 8: drawHelioEdge(zoneT); break;
+        case 9: drawInterstellar(); break;
+        case 10: drawHorseheadNebula(); break;
+    }
+}
+
+/* ---- Zone label ---- */
+function drawZoneLabel(dt){
+    if(!zoneLabel.nameEn) return;
+    zoneLabel.timer+=dt;
+    const FADE=0.6, HOLD=2.3;
+    const t=zoneLabel.timer;
+    let a;
+    if(t<FADE)            a=t/FADE;
+    else if(t<FADE+HOLD)  a=1;
+    else if(t<FADE+HOLD+FADE) a=1-(t-FADE-HOLD)/FADE;
+    else { zoneLabel.nameEn=''; return; }
+
+    const y=CH*0.80;
+    ctx.save();
+    ctx.globalAlpha=a;
+    ctx.fillStyle='rgba(0,0,0,0.55)';
+    drawRR(CW/2-110,y-24,220,44,10);
+    ctx.fill();
+    ctx.fillStyle='#fff';
+    ctx.font='bold 15px Orbitron,sans-serif';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(zoneLabel.nameEn, CW/2, y-8);
+    ctx.fillStyle='#00D9FF';
+    ctx.font='11px Noto Sans KR,sans-serif';
+    ctx.fillText(zoneLabel.nameKo, CW/2, y+10);
+    ctx.restore();
+}
+
 /* ---- Player ---- */
-const PLAYER_SPEED=320;       // keyboard px/s
-const FOLLOW_SPEED=900;       // pointer follow px/s
+const PLAYER_SPEED=320;
+const FOLLOW_SPEED=900;
 const HIT_RADIUS=5;
 const INVINCIBLE_MS=2000;
 const FLASH_INTERVAL=120;
@@ -408,8 +1042,6 @@ canvasWrap.addEventListener('mousemove',(e)=>{
     pointer.y=(e.clientY-r.top)/r.height*CH;
     pointer.active=true;
 });
-/* 캔버스 터치는 스크롤 방지만 담당 (overlay 버튼 제외).
-   실제 이동 조작은 하단 tp-zone 트랙패드가 처리한다. */
 canvasWrap.addEventListener('touchmove',(e)=>{
     if(e.target.closest('.overlay')) return;
     e.preventDefault();
@@ -421,12 +1053,11 @@ canvasWrap.addEventListener('touchstart',(e)=>{
 canvasWrap.addEventListener('mouseleave',()=>{ pointer.active=false; });
 canvasWrap.addEventListener('touchend',()=>{ pointer.active=false; });
 
-/* ---- 원형 트랙패드 (모바일 delta 이동 + 방향 글로우) ---- */
-const TPSENS = 2.4;
+/* ---- 원형 트랙패드 ---- */
+const TPSENS=2.4;
 let tpLastX=0, tpLastY=0, tpCx=0, tpCy=0, tpR=0;
 const tpZone=$('tpZone'), tpRing=$('tpRing');
 
-/* 링을 원 안에 클램핑 (overflow:hidden 에 잘리지 않도록 ring반지름 27px 안쪽) */
 function tpSetRing(cx, cy){
     const dx=cx-tpCx, dy=cy-tpCy;
     const d=Math.sqrt(dx*dx+dy*dy)||0.01;
@@ -436,12 +1067,11 @@ function tpSetRing(cx, cy){
     tpRing.style.top =(tpR+dy*f)+'px';
 }
 
-/* 이동 방향으로 원형 바운더리에 글로우 */
 function tpSetGlow(dx, dy){
     const d=Math.sqrt(dx*dx+dy*dy);
     if(d<0.8){ tpZone.style.boxShadow='none'; return; }
     const nx=dx/d, ny=dy/d;
-    const s=Math.min(d/7, 1);            /* 0~1 속도 스케일 */
+    const s=Math.min(d/7, 1);
     const ox=nx*24, oy=ny*24;
     const blur=16+s*16, spread=3+s*7;
     const aInner=0.12+s*0.22, aOuter=0.42+s*0.48;
@@ -497,27 +1127,25 @@ let elapsedMs=0;
 
 function spawnBullet(now, speed, aimedRatio, multi){
     for(let m=0;m<multi;m++){
-        /* pick a random edge: 0=top,1=right,2=bottom,3=left */
         const edge=Math.floor(Math.random()*4);
         let bx,by,vx,vy;
         let aimed=Math.random()<aimedRatio;
-        let spread=(m-Math.floor(multi/2))*14; /* offset for multi-shot */
+        let spread=(m-Math.floor(multi/2))*14;
 
-        if(edge===0){ /* top */
+        if(edge===0){
             bx=Math.random()*CW; by=-8;
             if(aimed){
                 const dx=player.x-bx, dy=player.y-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             } else {
-                /* toward center area with spread */
                 const tx=CW*0.2+Math.random()*CW*0.6+spread;
                 const ty=CH*0.3+Math.random()*CH*0.4;
                 const dx=tx-bx, dy=ty-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
-        } else if(edge===1){ /* right */
+        } else if(edge===1){
             bx=CW+8; by=Math.random()*CH;
             if(aimed){
                 const dx=player.x-bx, dy=player.y-by;
@@ -530,7 +1158,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
-        } else if(edge===2){ /* bottom */
+        } else if(edge===2){
             bx=Math.random()*CW; by=CH+8;
             if(aimed){
                 const dx=player.x-bx, dy=player.y-by;
@@ -543,7 +1171,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
-        } else { /* left */
+        } else {
             bx=-8; by=Math.random()*CH;
             if(aimed){
                 const dx=player.x-bx, dy=player.y-by;
@@ -564,10 +1192,10 @@ function spawnBullet(now, speed, aimedRatio, multi){
 function updateDifficulty(){
     const s=elapsedMs/1000;
     return {
-        spawnInterval: Math.max(260, 2400 - s*17.8),
-        bulletSpeed:   Math.min(420, 120 + s*2.5),
-        aimedRatio:    Math.min(0.65, s*0.005),
-        multiShot:     s<50?1: s<90?2:3
+        spawnInterval: Math.max(220, 2400 - s*14.2),
+        bulletSpeed:   Math.min(400, 100 + s*1.7),
+        aimedRatio:    Math.min(0.68, s*0.0042),
+        multiShot:     s<75?1: s<130?2:3
     };
 }
 
@@ -588,13 +1216,18 @@ function resetGame(){
     lastSpawn=0;
     elapsedMs=0;
     flamePulse=0;
+    currentZoneIdx=0;
+    prevZoneIdx=0;
+    zoneTransitionT=1;
+    zoneLabel={nameEn:'',nameKo:'',timer:0};
+    particles=[];
+    resetParticles(0);
     $('scoreNow').textContent='0';
     $('timeNow').textContent='0:00';
     initStars();
 }
 
 function startGame(){
-    /* 모바일 브라우저 주소창 숨기기 (Android Chrome 지원, iOS는 홈화면 추가 필요) */
     try{
         const el=document.documentElement;
         if('ontouchstart' in window && el.requestFullscreen)
@@ -608,6 +1241,8 @@ function startGame(){
     totalPausedMs=0;
     pausedAt=0;
     gameOverSent=false;
+    // Show zone 0 label on start
+    zoneLabel={nameEn:ZONES[0].nameEn, nameKo:ZONES[0].nameKo, timer:0};
     requestAnimationFrame(gameLoop);
 }
 
@@ -621,11 +1256,12 @@ function triggerGameOver(){
 
     const mm=String(Math.floor(duration/60000)).padStart(1,'0');
     const ss=String(Math.floor((duration%60000)/1000)).padStart(2,'0');
+    const zoneReached=ZONES[currentZoneIdx];
 
     $('overlay').innerHTML=
         '<h2 class="go">GAME OVER</h2>'
       +'<div class="score-big">'+score+'</div>'
-      +'<p>생존 시간 '+mm+':'+ss+'</p>'
+      +'<p>생존 시간 '+mm+':'+ss+'<br><span style="font-size:.85em;color:rgba(0,217,255,.8)">'+zoneReached.nameKo+' 도달</span></p>'
       +'<div class="pb" id="ovPbLine"></div>'
       +'<button class="btn" id="ovBtn">다시하기</button>'
       +'<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
@@ -656,7 +1292,7 @@ function gameLoop(now){
     lastFrame=now;
 
     if(paused){
-        drawFrame(now);
+        drawFrame(now, 0);
         requestAnimationFrame(gameLoop);
         return;
     }
@@ -664,7 +1300,22 @@ function gameLoop(now){
     const dt=rawDt;
     elapsedMs=now - startedAt - totalPausedMs;
 
-    /* ---- Move player via pointer (smooth follow) ---- */
+    /* ---- Zone detection ---- */
+    let newIdx=0;
+    const secs=elapsedMs/1000;
+    for(let i=ZONES.length-1;i>=0;i--){
+        if(secs>=ZONES[i].s){ newIdx=i; break; }
+    }
+    if(newIdx!==currentZoneIdx){
+        prevZoneIdx=currentZoneIdx;
+        currentZoneIdx=newIdx;
+        zoneTransitionT=0;
+        zoneLabel={nameEn:ZONES[newIdx].nameEn, nameKo:ZONES[newIdx].nameKo, timer:0};
+        resetParticles(newIdx);
+    }
+    zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
+
+    /* ---- Move player ---- */
     if(pointer.active){
         const dx=pointer.x-player.x, dy=pointer.y-player.y;
         const dist=Math.sqrt(dx*dx+dy*dy);
@@ -674,7 +1325,6 @@ function gameLoop(now){
             player.y+=dy/dist*step;
         }
     } else {
-        /* Keyboard movement */
         let mx=0,my=0;
         if(keys['ArrowLeft']||keys['a']||keys['A']) mx-=1;
         if(keys['ArrowRight']||keys['d']||keys['D']) mx+=1;
@@ -686,7 +1336,6 @@ function gameLoop(now){
             player.y+=my/mag*PLAYER_SPEED*dt;
         }
     }
-    /* Clamp player inside canvas */
     player.x=Math.max(16, Math.min(CW-16, player.x));
     player.y=Math.max(18, Math.min(CH-18, player.y));
 
@@ -740,6 +1389,9 @@ function gameLoop(now){
     /* ---- Stars ---- */
     updateStars(dt);
 
+    /* ---- Particles ---- */
+    updateParticles(dt);
+
     /* ---- Flame pulse ---- */
     flamePulse=(flamePulse+dt*12)%(Math.PI*2);
 
@@ -750,21 +1402,25 @@ function gameLoop(now){
     const ss=String(Math.floor((elapsedMs%60000)/1000)).padStart(2,'0');
     $('timeNow').textContent=mm+':'+ss;
 
-    drawFrame(now);
+    drawFrame(now, dt);
     requestAnimationFrame(gameLoop);
 }
 
-function drawFrame(now){
-    /* Background */
-    ctx.fillStyle='#050518';
-    ctx.fillRect(0,0,CW,CH);
+function drawFrame(now, dt){
+    /* ---- Background ---- */
+    drawBackground();
 
-    /* Stars */
+    /* ---- Zone planet/object ---- */
+    drawZonePlanet(currentZoneIdx, dt);
+
+    /* ---- Stars (on top of planet, under everything else) ---- */
     drawStars();
 
-    /* Bullets */
+    /* ---- Ambient particles ---- */
+    drawParticles();
+
+    /* ---- Bullets ---- */
     for(const b of bullets){
-        /* Trail */
         for(let i=0;i<b.trail.length;i++){
             const t=b.trail[i];
             const alpha=(i+1)/b.trail.length*0.35;
@@ -775,8 +1431,6 @@ function drawFrame(now){
             ctx.fill();
         }
         ctx.globalAlpha=1;
-        /* Glow */
-        const gColor=b.aimed?'rgba(255,80,20,0.4)':'rgba(200,200,255,0.35)';
         ctx.shadowColor=b.aimed?'#FF5500':'#aaaaff';
         ctx.shadowBlur=10;
         ctx.fillStyle=b.aimed?'#FF8844':'#ffffff';
@@ -787,13 +1441,13 @@ function drawFrame(now){
     }
     ctx.globalAlpha=1;
 
-    /* Player (fighter jet pointing up) */
+    /* ---- Player (spacecraft pointing up) ---- */
     if(flashVisible){
         const px=player.x, py=player.y;
         ctx.save();
         ctx.translate(px, py);
 
-        /* Engine flame (flicker at tail) */
+        /* Engine flame */
         const flameLen=10+Math.sin(flamePulse)*4;
         const flameW=5+Math.cos(flamePulse*1.3)*2;
         const grad=ctx.createLinearGradient(0,8,0,8+flameLen+4);
@@ -813,20 +1467,14 @@ function drawFrame(now){
         ctx.shadowBlur=8;
         ctx.fillStyle='#00D9FF';
         ctx.beginPath();
-        /* nose */
         ctx.moveTo(0,-14);
-        /* right body */
         ctx.lineTo(5,-4);
         ctx.lineTo(4,8);
-        /* right wing */
         ctx.lineTo(14,4);
         ctx.lineTo(10,10);
-        /* tail right */
         ctx.lineTo(4,10);
-        /* tail left */
         ctx.lineTo(-4,10);
         ctx.lineTo(-10,10);
-        /* left wing */
         ctx.lineTo(-14,4);
         ctx.lineTo(-4,8);
         ctx.lineTo(-5,-4);
@@ -843,7 +1491,10 @@ function drawFrame(now){
         ctx.restore();
     }
 
-    /* HUD: lives */
+    /* ---- Zone label (above player, below HUD) ---- */
+    drawZoneLabel(dt);
+
+    /* ---- HUD: lives ---- */
     const heartSize=16;
     const heartPad=4;
     for(let i=0;i<3;i++){
@@ -855,7 +1506,7 @@ function drawFrame(now){
     }
     ctx.globalAlpha=1;
 
-    /* HUD: level badge (LV N when N>1) */
+    /* ---- HUD: level badge ---- */
     const s=running?elapsedMs/1000:0;
     const lv=Math.floor(s/30)+1;
     if(lv>1){
@@ -867,7 +1518,7 @@ function drawFrame(now){
         ctx.textAlign='left';
     }
 
-    /* Pause indicator */
+    /* ---- Pause indicator ---- */
     if(paused){
         ctx.fillStyle='rgba(5,5,24,.72)';
         ctx.fillRect(0,0,CW,CH);
@@ -889,13 +1540,12 @@ function idleLoop(now){
     lastFrame=now;
     updateStars((now-(idleLoop._last||now))/1000);
     idleLoop._last=now;
-    ctx.fillStyle='#050518';
-    ctx.fillRect(0,0,CW,CH);
+    drawBackground();
     drawStars();
     requestAnimationFrame(idleLoop);
 }
 
-/* Pause on canvas tap when running (pointer events come first; this is fallback) */
+/* Pause on canvas tap when running */
 canvasWrap.addEventListener('click',()=>{
     if(running&&!pointer.active) paused=!paused;
 });
@@ -958,12 +1608,13 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
     if(me){
         fitCanvas();
         initStars();
+        resetParticles(0);
         requestAnimationFrame(idleLoop);
         if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
     }
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777132529"></script>
+<script src="/js/siteFooter.js?v=1777134032"></script>
 </body>
 </html>
