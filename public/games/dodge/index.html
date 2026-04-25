@@ -291,7 +291,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777143048"></script>
+<script src="/js/supabase-config.js?v=1777145140"></script>
+<script src="/js/lpAudio.js?v=1777145140"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1410,6 +1411,40 @@ let startedAt=0, pausedAt=0, totalPausedMs=0;
 let gameOverSent=false;
 let flamePulse=0;
 
+/* ========== Sound (LPAudio) — space dodge synthesis ==========
+   start = rocket takeoff (low rumble + ascending square sweep).
+   hit = sharp impact (noise burst + saw downsweep + chord stab).
+   over = explosion (long noise + low rumble) → descending dirge.
+   zone = harmonic chime (stacked partials = bell). */
+function sfxStart(){
+    /* Two-stage: low rocket rumble + ascending takeoff sweep. */
+    LPAudio.noise({dur:0.35, vol:0.1});
+    LPAudio.beep({freq:120, dur:0.45, vol:0.18, type:'sawtooth', slide:480, decay:0.85});
+    LPAudio.seq([
+        {f:330,d:0.07},{f:440,d:0.07},{f:587,d:0.07},{f:784,d:0.18}
+    ], {vol:0.16, type:'square'});
+}
+function sfxHit(){
+    LPAudio.noise({dur:0.14, vol:0.22});
+    LPAudio.beep({freq:780, dur:0.2, vol:0.2, type:'sawtooth', slide:90, decay:0.8});
+    LPAudio.chord([220, 277], {dur:0.18, vol:0.1, type:'square', decay:0.7});
+}
+function sfxOver(){
+    /* Hull breach: long noise burst + low rumble, then descending dirge. */
+    LPAudio.noise({dur:0.5, vol:0.24});
+    LPAudio.beep({freq:160, dur:0.6, vol:0.24, type:'sawtooth', slide:40, decay:0.9});
+    setTimeout(()=>{
+        LPAudio.seq([
+            {f:523,d:0.12},{f:392,d:0.12},{f:294,d:0.14},{f:196,d:0.18},{f:131,d:0.32}
+        ], {vol:0.22, type:'sawtooth'});
+    }, 280);
+}
+function sfxZone(){
+    /* Bell-style chime — fundamental + perfect-5th + octave. */
+    LPAudio.chord([784, 1175, 1568], {dur:0.32, vol:0.1, type:'triangle', decay:0.85});
+    LPAudio.beep({freq:784, dur:0.08, vol:0.06, type:'square', decay:0.4});
+}
+
 function resetGame(){
     player={x:CW/2, y:CH*0.65};
     pointer={x:CW/2, y:CH*0.65, active:false};
@@ -1441,6 +1476,7 @@ function startGame(){
     }catch(_){}
     resetGame();
     $('overlay').classList.add('hidden');
+    sfxStart();
     running=true; paused=false;
     startedAt=performance.now();
     totalPausedMs=0;
@@ -1453,6 +1489,7 @@ function startGame(){
 
 function triggerGameOver(){
     running=false;
+    sfxOver();
     const duration=elapsedMs;
     const score=Math.floor(duration/100);
     const wrap=$('canvasWrap');
@@ -1517,6 +1554,7 @@ function gameLoop(now){
         zoneTransitionT=0;
         zoneLabel={nameEn:ZONES[newIdx].nameEn, nameKo:ZONES[newIdx].nameKo, timer:0};
         resetParticles(newIdx);
+        sfxZone();
     }
     zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
 
@@ -1576,6 +1614,7 @@ function gameLoop(now){
                 if(navigator.vibrate)try{navigator.vibrate(40)}catch(_){}
                 bullets=bullets.filter(x=>x!==b);
                 if(lives<=0){ triggerGameOver(); return; }
+                sfxHit();
                 break;
             }
         }
@@ -1839,6 +1878,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777143048"></script>
+<script src="/js/siteFooter.js?v=1777145140"></script>
 </body>
 </html>

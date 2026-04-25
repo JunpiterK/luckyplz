@@ -297,7 +297,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777134032"></script>
+<script src="/js/supabase-config.js?v=1777145140"></script>
+<script src="/js/lpAudio.js?v=1777145140"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -355,6 +356,41 @@ function randomEmptyCell(){
     return cands.length?cands[Math.floor(Math.random()*cands.length)]:null;
 }
 
+/* ========== Sound (LPAudio) — sfxr-style 8-bit synthesis ==========
+   eat = "pickup/coin" two-tone ascending square (NES classic).
+   levelup = bright 4-note arpeggio + noise sparkle (speed step).
+   crash = noise burst + low saw downsweep + dissonant chord stab.
+   over = descending mournful 4-note dirge.
+   start = ascending fanfare. */
+function sfxEat(){
+    /* Coin pickup: short low click → high ping. */
+    LPAudio.beep({freq:660, dur:0.05, vol:0.16, type:'square', decay:0.4});
+    setTimeout(()=>LPAudio.beep({freq:990, dur:0.09, vol:0.18, type:'square', decay:0.5}), 45);
+}
+function sfxLevelUp(){
+    LPAudio.seq([
+        {f:523,d:0.07},{f:659,d:0.07},{f:784,d:0.07},{f:1047,d:0.18}
+    ], {vol:0.2, type:'square'});
+    setTimeout(()=>LPAudio.noise({dur:0.18, vol:0.06}), 280);
+}
+function sfxCrash(){
+    /* impact: white noise burst + low rumble + brief dissonant 2-note. */
+    LPAudio.noise({dur:0.22, vol:0.22});
+    LPAudio.beep({freq:240, dur:0.32, vol:0.22, type:'sawtooth', slide:50, decay:0.85});
+    LPAudio.chord([196, 233], {dur:0.18, vol:0.1, type:'square', decay:0.6});
+}
+function sfxStart(){
+    LPAudio.seq([
+        {f:392,d:0.07},{f:523,d:0.07},{f:659,d:0.07},{f:784,d:0.18}
+    ], {vol:0.18, type:'triangle'});
+}
+function sfxOver(){
+    LPAudio.seq([
+        {f:440,d:0.12},{f:349,d:0.12},{f:262,d:0.14},{f:175,d:0.28}
+    ], {vol:0.22, type:'sawtooth'});
+    setTimeout(()=>LPAudio.beep({freq:90, dur:0.4, vol:0.14, type:'triangle', decay:0.85}), 60);
+}
+
 function resetGame(){
     snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
     dir={x:1,y:0}; queued=[];
@@ -367,6 +403,7 @@ function resetGame(){
 function startGame(){
     resetGame();
     $('overlay').classList.add('hidden');
+    sfxStart();
     running=true; paused=false;
     startedAt=performance.now(); lastTick=startedAt;
     requestAnimationFrame(loop);
@@ -374,6 +411,7 @@ function startGame(){
 
 function gameOver(){
     running=false;
+    sfxOver();
     const duration=Math.round(performance.now()-startedAt);
     const wrap=$('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
@@ -418,19 +456,20 @@ function step(){
     }
     const head=snake[0];
     const nx=head.x+dir.x, ny=head.y+dir.y;
-    if(nx<0||nx>=GRID||ny<0||ny>=GRID){ gameOver(); return; }
+    if(nx<0||nx>=GRID||ny<0||ny>=GRID){ sfxCrash(); gameOver(); return; }
     const willEat=(nx===food.x && ny===food.y);
     const body=willEat?snake:snake.slice(0,-1);
-    if(body.some(s=>s.x===nx && s.y===ny)){ gameOver(); return; }
+    if(body.some(s=>s.x===nx && s.y===ny)){ sfxCrash(); gameOver(); return; }
     snake.unshift({x:nx,y:ny});
     if(willEat){
         foodsEaten++; score=foodsEaten*10;
+        sfxEat();
         $('scoreNow').textContent=score;
         $('lenNow').textContent=snake.length;
-        if(foodsEaten===5) tickMs=115;
-        else if(foodsEaten===12) tickMs=100;
-        else if(foodsEaten===22) tickMs=90;
-        else if(foodsEaten===35) tickMs=82;
+        if(foodsEaten===5){ tickMs=115; sfxLevelUp(); }
+        else if(foodsEaten===12){ tickMs=100; sfxLevelUp(); }
+        else if(foodsEaten===22){ tickMs=90; sfxLevelUp(); }
+        else if(foodsEaten===35){ tickMs=82; sfxLevelUp(); }
         food=randomEmptyCell();
         if(!food){ gameOver(); return; }
         if(navigator.vibrate)try{navigator.vibrate(12)}catch(_){}
@@ -619,6 +658,6 @@ $('ovBtn').addEventListener('click', startGame);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777134032" defer></script>
+<script src="/js/siteFooter.js?v=1777145140" defer></script>
 </body>
 </html>

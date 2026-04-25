@@ -198,7 +198,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777134032"></script>
+<script src="/js/supabase-config.js?v=1777145140"></script>
+<script src="/js/lpAudio.js?v=1777145140"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -694,6 +695,55 @@ let burgersThisLevel;   /* 0..LEVEL_BURGERS — only levels up on LEVEL_BURGERS 
    rack up combos at a comfortable tempo before the next jump. */
 const LEVEL_BURGERS = 5;
 
+/* ========== Sound (LPAudio) — kitchen tap synthesis ==========
+   tap = "skewer click" + bell partial; pitch rises with combo so a
+        streak audibly escalates rather than reading flat.
+   wrong = low sawtooth buzz + soft noise = grumpy timer.
+   complete = bright 4-note + sparkle topping (high triangle chord).
+   levelup = 6-note ascending fanfare + final bell chord stab.
+   start = chef's bell (octave chord with click body).
+   over = mournful descending 4-note + low thud. */
+function sfxTap(combo){
+    const c = Math.max(0, Math.min(combo|0, 12));
+    const base = 660 + c * 35;
+    LPAudio.noise({dur:0.025, vol:0.06});
+    LPAudio.beep({freq:base, dur:0.06, vol:0.16, type:'square', decay:0.45});
+    /* Bell partial 1.5x adds a "ding" overtone above the click body. */
+    LPAudio.beep({freq:base*1.5, dur:0.08, vol:0.07, type:'triangle', decay:0.6});
+}
+function sfxWrong(){
+    LPAudio.beep({freq:220, dur:0.2, vol:0.2, type:'sawtooth', slide:80, decay:0.7});
+    LPAudio.noise({dur:0.06, vol:0.08});
+    LPAudio.beep({freq:165, dur:0.18, vol:0.12, type:'square', decay:0.7});
+}
+function sfxComplete(){
+    LPAudio.seq([
+        {f:523,d:0.07},{f:659,d:0.07},{f:784,d:0.07},{f:1047,d:0.18}
+    ], {vol:0.2, type:'square'});
+    /* Sparkle topping on the last beat. */
+    setTimeout(()=>LPAudio.noise({dur:0.06, vol:0.06}), 260);
+    setTimeout(()=>LPAudio.chord([1047, 1568], {dur:0.22, vol:0.08, type:'triangle', decay:0.85}), 280);
+}
+function sfxLevelUp(){
+    LPAudio.seq([
+        {f:523,d:0.07},{f:659,d:0.07},{f:784,d:0.07},{f:1047,d:0.07},
+        {f:1319,d:0.08},{f:1568,d:0.24}
+    ], {vol:0.22, type:'triangle'});
+    /* Final chord stab + sparkle = level-up climax. */
+    setTimeout(()=>LPAudio.chord([784, 1047, 1568], {dur:0.4, vol:0.1, type:'square', decay:0.85}), 470);
+    setTimeout(()=>LPAudio.noise({dur:0.18, vol:0.08}), 490);
+}
+function sfxStart(){
+    LPAudio.chord([523, 1047], {dur:0.3, vol:0.14, type:'triangle', decay:0.85});
+    LPAudio.beep({freq:523, dur:0.06, vol:0.08, type:'square', decay:0.4});
+}
+function sfxOver(){
+    LPAudio.seq([
+        {f:494,d:0.12},{f:392,d:0.12},{f:294,d:0.14},{f:196,d:0.28}
+    ], {vol:0.22, type:'sawtooth'});
+    setTimeout(()=>LPAudio.beep({freq:110, dur:0.4, vol:0.14, type:'triangle', decay:0.85}), 60);
+}
+
 function resetGame(){
     level = 1; score = 0;
     sample = generateSample(level);
@@ -714,6 +764,7 @@ function startGame(){
     resetGame();
     fitCanvas();
     $('overlay').classList.add('hidden');
+    sfxStart();
     running = true; paused = false;
     startedAt = performance.now(); lastTick = startedAt;
     requestAnimationFrame(loop);
@@ -721,6 +772,7 @@ function startGame(){
 
 function gameOver(){
     running = false;
+    sfxOver();
     const duration = Math.round(performance.now() - startedAt);
     const wrap = $('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
@@ -835,6 +887,7 @@ function onTap(x, y){
         popText = combo >= 2 ? (combo + ' COMBO') : ('+' + gain);
         popKind = 'good';
         popUntil = now + 550;
+        sfxTap(combo);
         if(navigator.vibrate) try{ navigator.vibrate(8); }catch(_){}
 
         if (progress >= sample.length){
@@ -857,10 +910,12 @@ function onTap(x, y){
                 burgersThisLevel = 0;
                 timeLevelBudget = timeForLevel(level);
                 timeLeft = Math.min(timeLevelBudget, timeLeft + 4);
+                sfxLevelUp();
             } else {
                 /* Same level — give a small breather and keep the
                    original budget; the player's been doing well. */
                 timeLeft = Math.min(timeLevelBudget, timeLeft + 2.5);
+                sfxComplete();
             }
             sample = generateSample(level);
             progress = 0;
@@ -877,6 +932,7 @@ function onTap(x, y){
         popKind = 'bad';
         popUntil = now + 650;
         shakeUntil = now + 320;
+        sfxWrong();
         const wrap = $('canvasWrap');
         wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
         setTimeout(()=>wrap.classList.remove('shake'), 420);
@@ -1426,6 +1482,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777134032"></script>
+<script src="/js/siteFooter.js?v=1777145140"></script>
 </body>
 </html>
