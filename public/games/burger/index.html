@@ -198,7 +198,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777075786"></script>
+<script src="/js/supabase-config.js?v=1777076932"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -682,7 +682,7 @@ let running, paused;
 let startedAt, lastTick;
 let ingredientsCaught, burgersCompleted;
 let popUntil, popText, popKind;
-let shakeUntil, flashUntil;
+let shakeUntil, flashUntil, clearUntil;
 let tapFlashes;         /* [{idx, bornAt, kind:'good'|'bad'}] */
 let stackPops;          /* [{layer, bornAt}] — entry-scale anim on WIP layer */
 let burgersThisLevel;   /* 0..LEVEL_BURGERS — only levels up on LEVEL_BURGERS */
@@ -704,7 +704,7 @@ function resetGame(){
     ingredientsCaught = 0; burgersCompleted = 0;
     burgersThisLevel = 0;
     popUntil = 0; popText = ''; popKind = '';
-    shakeUntil = 0; flashUntil = 0;
+    shakeUntil = 0; flashUntil = 0; clearUntil = 0;
     tapFlashes = []; stackPops = [];
     $('scoreNow').textContent = '0';
     $('levelNow').textContent = '1';
@@ -844,6 +844,7 @@ function onTap(x, y){
                player a stable tier to settle into before the next jump. */
             burgersCompleted++;
             burgersThisLevel++;
+            clearUntil = now + 1300;
             const levelingUp = burgersThisLevel >= LEVEL_BURGERS;
             const bonus = (levelingUp ? 200 : 100) * level + Math.floor(timeLeft) * 5;
             score += bonus;
@@ -902,6 +903,7 @@ function draw(now){
     drawTimeBar(now);
     drawIngredientRow(now);
     drawPops(now);
+    drawClearBanner(now);
 
     if (now < flashUntil){
         const rem = flashUntil - now;
@@ -1100,14 +1102,91 @@ function drawTimeBar(now){
     }
 }
 
+/* Top-view (overhead) illustration for each ingredient, drawn as a
+   circle of radius r centred at (cx, cy). Clipped to that circle so
+   detail never bleeds outside the roundel. */
+function drawTopView(id, cx, cy, r){
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.clip();
+    switch(id){
+        case 'lettuce':{
+            ctx.fillStyle='#38a169';
+            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='#276749';
+            for(let a=0;a<6;a++){
+                const ang=a/6*Math.PI*2;
+                ctx.beginPath();
+                ctx.arc(cx+Math.cos(ang)*r*.68,cy+Math.sin(ang)*r*.68,r*.38,0,Math.PI*2);
+                ctx.fill();
+            }
+            ctx.fillStyle='rgba(154,230,180,.55)';
+            ctx.beginPath(); ctx.arc(cx,cy,r*.35,0,Math.PI*2); ctx.fill();
+            break;
+        }
+        case 'patty':{
+            ctx.fillStyle='#6b3a1f';
+            ctx.beginPath(); ctx.ellipse(cx,cy,r,r*.88,0,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle='rgba(25,8,0,.65)'; ctx.lineWidth=1.6;
+            for(let i=-1;i<=1;i++){
+                ctx.beginPath(); ctx.moveTo(cx-r*.75,cy+i*r*.3); ctx.lineTo(cx+r*.75,cy+i*r*.3); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx+i*r*.3,cy-r*.75); ctx.lineTo(cx+i*r*.3,cy+r*.75); ctx.stroke();
+            }
+            ctx.fillStyle='rgba(200,120,60,.3)';
+            ctx.beginPath(); ctx.arc(cx,cy,r*.4,0,Math.PI*2); ctx.fill();
+            break;
+        }
+        case 'cheese':{
+            ctx.fillStyle='#f6c231';
+            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='rgba(255,235,120,.55)';
+            ctx.beginPath(); ctx.arc(cx,cy,r*.6,0,Math.PI*2); ctx.fill();
+            ctx.fillStyle='rgba(180,120,10,.45)';
+            [[0,0],[.4,.2],[-.3,.3],[.1,-.42],[-.4,-.12]].forEach(([dx,dy])=>{
+                ctx.beginPath(); ctx.arc(cx+dx*r,cy+dy*r,r*.1,0,Math.PI*2); ctx.fill();
+            });
+            break;
+        }
+        case 'onion':{
+            const oc=['#7b4f8e','#fff','#9b6fae','#e8d0ee','#7b4f8e'];
+            for(let i=0;i<5;i++){
+                ctx.fillStyle=oc[i];
+                ctx.beginPath(); ctx.arc(cx,cy,r*(1-i*.18),0,Math.PI*2); ctx.fill();
+            }
+            break;
+        }
+        case 'tomato':{
+            ctx.fillStyle='#e53935';
+            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+            ctx.strokeStyle='rgba(160,15,15,.5)'; ctx.lineWidth=.9;
+            for(let i=0;i<6;i++){
+                const ang=i/6*Math.PI*2;
+                ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r); ctx.stroke();
+            }
+            ctx.fillStyle='#fff9c4';
+            for(let i=0;i<6;i++){
+                const ang=i/6*Math.PI*2+Math.PI/6;
+                ctx.beginPath(); ctx.ellipse(cx+Math.cos(ang)*r*.58,cy+Math.sin(ang)*r*.58,r*.09,r*.14,ang,0,Math.PI*2); ctx.fill();
+            }
+            ctx.fillStyle='rgba(255,255,255,.22)';
+            ctx.beginPath(); ctx.arc(cx,cy,r*.18,0,Math.PI*2); ctx.fill();
+            break;
+        }
+    }
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+}
+
 function drawIngredientRow(now){
     for (let i=0; i<5; i++){
         const x = PLATE_ROW_X0 + i*(PLATE_W + PLATE_GAP);
         const y = PLATE_ROW_Y;
         const cx = x + PLATE_W/2;
-        const cy = y + PLATE_ROW_H*0.44;
+        /* Shift side-view + plate down to make room for the top-view roundel
+           in the upper 46 px of the tile. cy now references the side-view zone. */
+        const cy = y + 68;
 
-        /* Card background — subtle by default, lights up green/red on tap. */
+        /* Card background */
         const flash = tapFlashes.find(f => f.idx === i);
         let flashCol = null, flashA = 0;
         if (flash){
@@ -1129,9 +1208,22 @@ function drawIngredientRow(now){
         }
         ctx.restore();
 
-        /* Button plate (small) */
-        const pShadow = 'rgba(0,0,0,.28)';
-        ctx.fillStyle = pShadow;
+        /* ── TOP VIEW roundel ── */
+        drawTopView(TAP_IDS[i], cx, y+22, 16);
+        /* "TOP" micro-label */
+        ctx.fillStyle='rgba(255,255,255,.28)';
+        ctx.font='500 7px "Noto Sans KR",sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('TOP', cx, y+42);
+
+        /* Thin separator between top-view and side-view zones */
+        ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1;
+        ctx.setLineDash([3,3]);
+        ctx.beginPath(); ctx.moveTo(x+6,y+47); ctx.lineTo(x+PLATE_W-6,y+47); ctx.stroke();
+        ctx.setLineDash([]);
+
+        /* ── SIDE VIEW: plate + ingredient ── */
+        ctx.fillStyle='rgba(0,0,0,.28)';
         ctx.beginPath();
         ctx.ellipse(cx, cy+18, PLATE_W*0.36, 4, 0, 0, Math.PI*2);
         ctx.fill();
@@ -1146,10 +1238,16 @@ function drawIngredientRow(now){
         ctx.lineWidth = 1.1;
         ctx.stroke();
 
-        /* Ingredient rendered larger (~45 px wide) for clear identification. */
-        INGREDIENTS[TAP_IDS[i]].draw(cx, cy-2, PLATE_W*0.76, 28);
+        INGREDIENTS[TAP_IDS[i]].draw(cx, cy-2, PLATE_W*0.76, 26);
 
-        /* Small key-hint badge top-left so desktop users see 1-5 mapping. */
+        /* "SIDE" micro-label */
+        ctx.fillStyle='rgba(255,255,255,.28)';
+        ctx.font='500 7px "Noto Sans KR",sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('SIDE', cx, cy-17);
+        ctx.textBaseline='alphabetic';
+
+        /* Number badge */
         ctx.fillStyle = 'rgba(0,0,0,.5)';
         ctx.beginPath();
         ctx.arc(x+11, y+11, 9, 0, Math.PI*2);
@@ -1172,6 +1270,32 @@ function drawIngredientRow(now){
         : (progress + ' / ' + sample.length + ' · 계속!');
     ctx.fillText(hint, W/2, PLATE_ROW_Y + PLATE_ROW_H + 14);
     ctx.textAlign = 'start';
+}
+
+function drawClearBanner(now){
+    if (now >= clearUntil) return;
+    const rem = clearUntil - now;
+    const dur = 1300;
+    const t = 1 - rem/dur;
+    /* Fade in fast (first 120ms), hold, then fade out in last 300ms */
+    const alpha = t < 0.09 ? t/0.09 : (rem < 300 ? rem/300 : 1);
+    const scale = t < 0.09 ? (0.6 + 0.4*(t/0.09)) : 1;
+    const yOff = t < 0.09 ? (1-t/0.09)*24 : 0;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(W/2, H*0.42 + yOff);
+    ctx.scale(scale, scale);
+    /* Glow shadow */
+    ctx.shadowColor = '#00E676';
+    ctx.shadowBlur = 28;
+    ctx.fillStyle = '#00E676';
+    ctx.font = '900 52px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('CLEAR!', 0, 0);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'start';
 }
 
 function drawPops(now){
@@ -1302,6 +1426,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777075786"></script>
+<script src="/js/siteFooter.js?v=1777076932"></script>
 </body>
 </html>
