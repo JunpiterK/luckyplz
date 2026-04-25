@@ -291,8 +291,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777158495"></script>
-<script src="/js/lpAudio.js?v=1777158495"></script>
+<script src="/js/supabase-config.js?v=1777158946"></script>
+<script src="/js/lpAudio.js?v=1777158946"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1446,26 +1446,46 @@ function sfxZone(){
 }
 
 /* ========== BGM ==========
-   Plays assets/bgm_dodge.wav on game start, fades out on game over,
-   pause/resume mirrors the in-game pause state. Max volume 0.35 keeps
-   it under sfx so impact/explosion still cuts through. If the file is
-   missing the engine fails silently — game continues without music.
-   Pattern adapted from car-racing's AudioEngine. */
+   Plays bgm_dodge_1.wav → bgm_dodge_2.wav → 1 → 2 … in an infinite
+   queue from game start to game over. Each track has loop=false; the
+   `ended` event advances to the next index (wrapping). Max volume 0.35
+   keeps music under sfx so impacts still cut through. Pattern follows
+   car-racing's AudioEngine but extended for a multi-track playlist.
+   Files missing → audio.error fires silently and the game still runs. */
 const BGM = (function(){
-    const audio = new Audio('assets/bgm_dodge.wav');
-    audio.loop = true;
-    audio.volume = 0;
-    audio.preload = 'auto';
-    /* Suppress "file not loaded" console warnings if the BGM hasn't
-       been uploaded yet — the rest of the game still works. */
-    audio.addEventListener('error', function(){ /* silent */ });
-
+    const TRACKS = ['assets/bgm_dodge_1.wav', 'assets/bgm_dodge_2.wav'];
     const MAX_VOL = 0.35;
-    const FADE_MS = 1400;
+    const FADE_IN_MS = 1400;
+    const FADE_OUT_MS = 600;
+
+    const audios = TRACKS.map(function(src){
+        const a = new Audio(src);
+        a.loop = false;       /* queue handles the loop, not the element */
+        a.volume = 0;
+        a.preload = 'auto';
+        a.addEventListener('error', function(){ /* silent — file may not exist yet */ });
+        return a;
+    });
+
+    let cur = 0;
     let enabled = true;
     let fadeTimer = null;
 
-    function fadeTo(target, durMs, onDone){
+    /* When a track ends, advance to the next (wrapping) and play it
+       immediately at full volume. Hard cut works fine for game BGM
+       loops; switch to crossfade later if it ever feels jarring. */
+    audios.forEach(function(a, idx){
+        a.addEventListener('ended', function(){
+            if(!enabled) return;
+            cur = (idx + 1) % audios.length;
+            const nx = audios[cur];
+            try { nx.currentTime = 0; } catch(_){}
+            nx.volume = MAX_VOL;
+            safePlay(nx);
+        });
+    });
+
+    function fadeTo(audio, target, durMs, onDone){
         if(fadeTimer){ clearInterval(fadeTimer); fadeTimer = null; }
         const from = audio.volume;
         const diff = target - from;
@@ -1479,28 +1499,39 @@ const BGM = (function(){
         }, 16);
     }
 
-    function safePlay(){
+    function safePlay(audio){
         try {
             const p = audio.play();
-            if(p && p.catch) p.catch(function(){ /* autoplay blocked — sfx unlock handler will free it next gesture */ });
+            if(p && p.catch) p.catch(function(){ /* autoplay blocked — next user gesture frees it */ });
         } catch(_){}
     }
 
     function start(){
         if(!enabled) return;
-        try { audio.currentTime = 0; } catch(_){}
-        audio.volume = 0;
-        safePlay();
-        fadeTo(MAX_VOL, FADE_MS);
+        /* Always restart from track 1 each time the game starts so the
+           player gets a consistent intro. Stop any other track first. */
+        audios.forEach(function(a){ try { a.pause(); a.currentTime = 0; } catch(_){} });
+        cur = 0;
+        const a = audios[cur];
+        a.volume = 0;
+        safePlay(a);
+        fadeTo(a, MAX_VOL, FADE_IN_MS);
     }
     function stop(){
-        fadeTo(0, 600, function(){ try { audio.pause(); audio.currentTime = 0; } catch(_){} });
+        const a = audios[cur];
+        fadeTo(a, 0, FADE_OUT_MS, function(){
+            audios.forEach(function(x){ try { x.pause(); x.currentTime = 0; } catch(_){} });
+        });
     }
-    function pause(){ fadeTo(0, 350, function(){ try { audio.pause(); } catch(_){} }); }
+    function pause(){
+        const a = audios[cur];
+        fadeTo(a, 0, 350, function(){ try { a.pause(); } catch(_){} });
+    }
     function resume(){
         if(!enabled) return;
-        safePlay();
-        fadeTo(MAX_VOL, 600);
+        const a = audios[cur];
+        safePlay(a);
+        fadeTo(a, MAX_VOL, 600);
     }
     function toggle(){ enabled = !enabled; if(!enabled) stop(); return enabled; }
     function isOn(){ return enabled; }
@@ -1942,6 +1973,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777158495"></script>
+<script src="/js/siteFooter.js?v=1777158946"></script>
 </body>
 </html>
