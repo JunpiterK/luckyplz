@@ -173,6 +173,35 @@ body{
 /* Ad slot */
 #adSlot{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px}
 
+/* ---- 조종판 (모바일 전용 트랙패드) ---- */
+.tp-zone{
+    width:100%;max-width:360px;height:124px;
+    background:rgba(10,10,26,.7);
+    border:1px solid rgba(0,217,255,.18);border-radius:18px;
+    position:relative;overflow:hidden;touch-action:none;
+    display:flex;align-items:center;justify-content:center
+}
+.tp-zone::before{
+    content:'';position:absolute;inset:0;
+    background:radial-gradient(ellipse at 50% 50%,rgba(0,217,255,.06) 0%,transparent 65%);
+    pointer-events:none
+}
+.tp-icon{font-size:2em;opacity:.18;pointer-events:none;line-height:1}
+.tp-label{
+    position:absolute;bottom:9px;left:0;right:0;
+    text-align:center;font-size:.6em;letter-spacing:.12em;text-transform:uppercase;
+    color:rgba(255,255,255,.22);pointer-events:none
+}
+.tp-ring{
+    position:absolute;width:50px;height:50px;border-radius:50%;
+    border:2px solid rgba(0,217,255,.85);
+    background:rgba(0,217,255,.1);
+    box-shadow:0 0 12px rgba(0,217,255,.35);
+    transform:translate(-50%,-50%);
+    pointer-events:none;display:none
+}
+.tp-zone.on .tp-ring{display:block}
+
 /* ================================================================
    Tablet landscape / desktop (>= 1024px)
    ================================================================ */
@@ -186,6 +215,7 @@ body{
     .right-col .sheet{position:static;transform:none;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px}
     .right-col .sheet .handle{display:none}
     .right-col .sheet-backdrop, .topbar .lb-btn{display:none}
+    .tp-zone{display:none}
     .right-col .sheet{transform:none!important;pointer-events:auto}
     .right-col .sheet-body{max-height:70vh}
 }
@@ -223,7 +253,14 @@ body{
             </div>
         </div>
 
-        <div class="hint">터치/마우스로 직접 조종. <b>Space</b>로 일시정지, <b>Enter</b>로 재시작.</div>
+        <!-- 모바일 조종판: 손가락 드래그 → 비행기 델타 이동 -->
+        <div class="tp-zone" id="tpZone">
+            <div class="tp-icon">✈</div>
+            <div class="tp-label">여기를 드래그해서 조종</div>
+            <div class="tp-ring" id="tpRing"></div>
+        </div>
+
+        <div class="hint"><b>Space</b> 일시정지 &nbsp;·&nbsp; <b>Enter</b> 재시작</div>
 
         <div id="adSlot"><ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5370817769801923" data-ad-slot="3456789012" data-ad-format="auto" data-full-width-responsive="true"></ins></div>
 
@@ -247,7 +284,7 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777130570"></script>
+<script src="/js/supabase-config.js?v=1777131158"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -362,31 +399,49 @@ canvasWrap.addEventListener('mousemove',(e)=>{
     pointer.y=(e.clientY-r.top)/r.height*CH;
     pointer.active=true;
 });
+/* 캔버스 터치는 스크롤 방지만 담당 (overlay 버튼 제외).
+   실제 이동 조작은 하단 tp-zone 트랙패드가 처리한다. */
 canvasWrap.addEventListener('touchmove',(e)=>{
-    /* overlay 버튼 위는 건드리지 않음 */
     if(e.target.closest('.overlay')) return;
     e.preventDefault();
-    if(!running||paused)return;
-    const t=e.touches[0];
-    const r=canvas.getBoundingClientRect();
-    pointer.x=(t.clientX-r.left)/r.width*CW;
-    pointer.y=(t.clientY-r.top)/r.height*CH;
-    pointer.active=true;
 },{passive:false});
 canvasWrap.addEventListener('touchstart',(e)=>{
-    /* overlay 버튼(시작/재시작)은 click 이벤트를 그대로 발생시켜야 함.
-       preventDefault()를 호출하면 브라우저가 click 합성을 취소하여 버튼이 동작하지 않음. */
     if(e.target.closest('.overlay')) return;
     e.preventDefault();
-    if(!running||paused)return;
-    const t=e.touches[0];
-    const r=canvas.getBoundingClientRect();
-    pointer.x=(t.clientX-r.left)/r.width*CW;
-    pointer.y=(t.clientY-r.top)/r.height*CH;
-    pointer.active=true;
 },{passive:false});
 canvasWrap.addEventListener('mouseleave',()=>{ pointer.active=false; });
 canvasWrap.addEventListener('touchend',()=>{ pointer.active=false; });
+
+/* ---- 트랙패드 조종판 (모바일 delta 이동) ---- */
+const TPSENS = 2.4;       /* 게임 px / CSS px */
+let tpLastX=0, tpLastY=0, tpRect=null;
+const tpZone=$('tpZone'), tpRing=$('tpRing');
+
+function tpApplyDelta(cx,cy){
+    player.x = Math.max(16, Math.min(CW-16, player.x + (cx-tpLastX)*TPSENS));
+    player.y = Math.max(18, Math.min(CH-18, player.y + (cy-tpLastY)*TPSENS));
+    tpLastX=cx; tpLastY=cy;
+    /* 링 커서 위치 업데이트 */
+    tpRing.style.left = (cx - tpRect.left) + 'px';
+    tpRing.style.top  = (cy - tpRect.top)  + 'px';
+}
+tpZone.addEventListener('touchstart',(e)=>{
+    e.preventDefault();
+    if(!running||paused) return;
+    tpRect = tpZone.getBoundingClientRect();   /* start 시점에 캐시 */
+    tpLastX = e.touches[0].clientX;
+    tpLastY = e.touches[0].clientY;
+    tpRing.style.left = (tpLastX - tpRect.left) + 'px';
+    tpRing.style.top  = (tpLastY - tpRect.top)  + 'px';
+    tpZone.classList.add('on');
+},{passive:false});
+tpZone.addEventListener('touchmove',(e)=>{
+    e.preventDefault();
+    if(!running||paused) return;
+    tpApplyDelta(e.touches[0].clientX, e.touches[0].clientY);
+},{passive:false});
+tpZone.addEventListener('touchend',  ()=>tpZone.classList.remove('on'));
+tpZone.addEventListener('touchcancel',()=>tpZone.classList.remove('on'));
 
 /* ---- Keyboard state ---- */
 const keys={};
@@ -864,6 +919,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777130570"></script>
+<script src="/js/siteFooter.js?v=1777131158"></script>
 </body>
 </html>
