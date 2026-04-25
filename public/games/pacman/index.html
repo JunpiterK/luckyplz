@@ -216,7 +216,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777072653"></script>
+<script src="/js/supabase-config.js?v=1777075786"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -274,6 +274,74 @@ const BW = COLS * CELL, BH = ROWS * CELL;
 const canvas = $('pac-canvas');
 canvas.width = BW; canvas.height = BH;
 const ctx = canvas.getContext('2d');
+
+/* ========== Sound (Web Audio API) ========== */
+let _ac = null;
+function ac(){
+    if(!_ac) _ac = new (window.AudioContext||window.webkitAudioContext)();
+    return _ac;
+}
+/* Resume AudioContext on first user gesture (browser autoplay policy). */
+document.addEventListener('pointerdown', ()=>{ try{ ac().resume(); }catch(_){} }, {once:true});
+document.addEventListener('keydown',     ()=>{ try{ ac().resume(); }catch(_){} }, {once:true});
+
+function beep(freq, dur, vol=0.18, type='square', decay=0.6){
+    try{
+        const a = ac(), t = a.currentTime;
+        const osc = a.createOscillator();
+        const gain = a.createGain();
+        osc.connect(gain); gain.connect(a.destination);
+        osc.type = type; osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur * decay);
+        osc.start(t); osc.stop(t + dur);
+    }catch(_){}
+}
+function beepSeq(notes, vol=0.18, type='square'){
+    /* notes: [{f,d},...] scheduled in sequence */
+    try{
+        const a = ac(); let t = a.currentTime;
+        for(const n of notes){
+            const osc = a.createOscillator();
+            const gain = a.createGain();
+            osc.connect(gain); gain.connect(a.destination);
+            osc.type = type; osc.frequency.setValueAtTime(n.f, t);
+            gain.gain.setValueAtTime(vol, t);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + n.d * 0.7);
+            osc.start(t); osc.stop(t + n.d);
+            t += n.d;
+        }
+    }catch(_){}
+}
+
+let _wakaToggle = false;
+function sfxDot(){
+    _wakaToggle = !_wakaToggle;
+    beep(_wakaToggle ? 420 : 320, 0.08, 0.12, 'square', 0.5);
+}
+function sfxPower(){
+    beepSeq([{f:200,d:0.07},{f:250,d:0.07},{f:300,d:0.07},{f:380,d:0.12}], 0.22, 'sawtooth');
+}
+function sfxEatGhost(){
+    beepSeq([{f:600,d:0.05},{f:500,d:0.05},{f:700,d:0.05},{f:900,d:0.1}], 0.2, 'square');
+}
+function sfxDie(){
+    beepSeq([
+        {f:480,d:0.07},{f:400,d:0.07},{f:320,d:0.07},{f:240,d:0.07},
+        {f:160,d:0.07},{f:100,d:0.07},{f:60,d:0.18}
+    ], 0.2, 'sawtooth');
+}
+function sfxWin(){
+    beepSeq([
+        {f:330,d:0.1},{f:392,d:0.1},{f:494,d:0.1},{f:523,d:0.1},
+        {f:587,d:0.1},{f:659,d:0.1},{f:784,d:0.2}
+    ], 0.2, 'triangle');
+}
+function sfxStart(){
+    beepSeq([
+        {f:294,d:0.1},{f:370,d:0.1},{f:440,d:0.1},{f:523,d:0.18}
+    ], 0.18, 'triangle');
+}
 
 /* Parse maze into walkable bitmap + dot set. */
 let wall = [];   /* wall[y][x] = true if wall */
@@ -337,6 +405,7 @@ function resetGame(){
 function startGame(){
     resetGame();
     $('overlay').classList.add('hidden');
+    sfxStart();
     running = true; paused = false;
     startedAt = performance.now(); lastTick = startedAt;
     requestAnimationFrame(loop);
@@ -347,6 +416,7 @@ function gameOver(won){
     const duration = Math.round(performance.now()-startedAt);
     const wrap = $('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+    if(won) sfxWin(); /* sfxDie already called before gameOver(false) */
     if(navigator.vibrate)try{navigator.vibrate(won?[20,20,20,20,60]:[30,20,60])}catch(_){}
 
     const finalScore = score + (won ? 500 : 0);
@@ -429,10 +499,12 @@ function stepPlayer(now, dt){
         if (dots.has(k)){
             dots.delete(k); dotsEaten++;
             score += 10;
+            sfxDot();
         } else if (powers.has(k)){
             powers.delete(k); dotsEaten++;
             score += 50;
             vulnerableUntil = now + 6000;
+            sfxPower();
             if(navigator.vibrate)try{navigator.vibrate([20,30,20])}catch(_){}
         }
         $('scoreNow').textContent = score;
@@ -515,8 +587,10 @@ function checkCollisions(now){
                 g.x = 6; g.y = 7;
                 g.dir = {x:Math.random()<.5?1:-1, y:0};
                 g.lastPickKey = '';
+                sfxEatGhost();
                 if(navigator.vibrate)try{navigator.vibrate(18)}catch(_){}
             } else {
+                sfxDie();
                 gameOver(false);
                 return;
             }
@@ -735,6 +809,6 @@ $('ovBtn').addEventListener('click', startGame);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777072653" defer></script>
+<script src="/js/siteFooter.js?v=1777075786" defer></script>
 </body>
 </html>
