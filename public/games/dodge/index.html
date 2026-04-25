@@ -17,6 +17,9 @@
     <link rel="alternate" hreflang="en" href="https://luckyplz.com/games/dodge/">
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#050518">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1776639849">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
@@ -173,34 +176,36 @@ body{
 /* Ad slot */
 #adSlot{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px}
 
-/* ---- 조종판 (모바일 전용 트랙패드) ---- */
+/* ---- 조종판 (모바일 전용 원형 트랙패드) ---- */
+.tp-wrap{
+    display:flex;flex-direction:column;align-items:center;gap:9px;flex-shrink:0
+}
 .tp-zone{
-    width:100%;max-width:360px;height:124px;
-    background:rgba(10,10,26,.7);
-    border:1px solid rgba(0,217,255,.18);border-radius:18px;
+    width:178px;height:178px;border-radius:50%;
+    background:radial-gradient(circle at 50% 50%,rgba(0,217,255,.07) 0%,rgba(6,6,20,.84) 68%);
+    border:2px solid rgba(0,217,255,.3);
     position:relative;overflow:hidden;touch-action:none;
-    display:flex;align-items:center;justify-content:center
+    transition:box-shadow .07s ease
 }
-.tp-zone::before{
-    content:'';position:absolute;inset:0;
-    background:radial-gradient(ellipse at 50% 50%,rgba(0,217,255,.06) 0%,transparent 65%);
-    pointer-events:none
+.tp-icon{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);
+    font-size:2.2em;opacity:.17;pointer-events:none;line-height:1;
+    transition:opacity .15s
 }
-.tp-icon{font-size:2em;opacity:.18;pointer-events:none;line-height:1}
 .tp-label{
-    position:absolute;bottom:9px;left:0;right:0;
-    text-align:center;font-size:.6em;letter-spacing:.12em;text-transform:uppercase;
-    color:rgba(255,255,255,.22);pointer-events:none
+    font-size:.6em;letter-spacing:.1em;text-transform:uppercase;
+    color:rgba(255,255,255,.2);pointer-events:none;text-align:center
 }
 .tp-ring{
-    position:absolute;width:50px;height:50px;border-radius:50%;
-    border:2px solid rgba(0,217,255,.85);
-    background:rgba(0,217,255,.1);
-    box-shadow:0 0 12px rgba(0,217,255,.35);
+    position:absolute;width:54px;height:54px;border-radius:50%;
+    border:2.5px solid rgba(0,217,255,.92);
+    background:rgba(0,217,255,.13);
+    box-shadow:0 0 16px rgba(0,217,255,.6);
     transform:translate(-50%,-50%);
     pointer-events:none;display:none
 }
 .tp-zone.on .tp-ring{display:block}
+.tp-zone.on .tp-icon{opacity:0}
 
 /* ================================================================
    Tablet landscape / desktop (>= 1024px)
@@ -215,7 +220,7 @@ body{
     .right-col .sheet{position:static;transform:none;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px}
     .right-col .sheet .handle{display:none}
     .right-col .sheet-backdrop, .topbar .lb-btn{display:none}
-    .tp-zone{display:none}
+    .tp-wrap{display:none}
     .right-col .sheet{transform:none!important;pointer-events:auto}
     .right-col .sheet-body{max-height:70vh}
 }
@@ -253,11 +258,13 @@ body{
             </div>
         </div>
 
-        <!-- 모바일 조종판: 손가락 드래그 → 비행기 델타 이동 -->
-        <div class="tp-zone" id="tpZone">
-            <div class="tp-icon">✈</div>
-            <div class="tp-label">여기를 드래그해서 조종</div>
-            <div class="tp-ring" id="tpRing"></div>
+        <!-- 모바일 원형 조종판: 드래그 → 비행기 델타 이동 + 방향 글로우 -->
+        <div class="tp-wrap">
+            <div class="tp-zone" id="tpZone">
+                <div class="tp-icon">✈</div>
+                <div class="tp-ring" id="tpRing"></div>
+            </div>
+            <div class="tp-label">드래그해서 조종</div>
         </div>
 
         <div class="hint"><b>Space</b> 일시정지 &nbsp;·&nbsp; <b>Enter</b> 재시작</div>
@@ -284,7 +291,7 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777131158"></script>
+<script src="/js/supabase-config.js?v=1777132017"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -412,27 +419,56 @@ canvasWrap.addEventListener('touchstart',(e)=>{
 canvasWrap.addEventListener('mouseleave',()=>{ pointer.active=false; });
 canvasWrap.addEventListener('touchend',()=>{ pointer.active=false; });
 
-/* ---- 트랙패드 조종판 (모바일 delta 이동) ---- */
-const TPSENS = 2.4;       /* 게임 px / CSS px */
-let tpLastX=0, tpLastY=0, tpRect=null;
+/* ---- 원형 트랙패드 (모바일 delta 이동 + 방향 글로우) ---- */
+const TPSENS = 2.4;
+let tpLastX=0, tpLastY=0, tpCx=0, tpCy=0, tpR=0;
 const tpZone=$('tpZone'), tpRing=$('tpRing');
 
-function tpApplyDelta(cx,cy){
-    player.x = Math.max(16, Math.min(CW-16, player.x + (cx-tpLastX)*TPSENS));
-    player.y = Math.max(18, Math.min(CH-18, player.y + (cy-tpLastY)*TPSENS));
-    tpLastX=cx; tpLastY=cy;
-    /* 링 커서 위치 업데이트 */
-    tpRing.style.left = (cx - tpRect.left) + 'px';
-    tpRing.style.top  = (cy - tpRect.top)  + 'px';
+/* 링을 원 안에 클램핑 (overflow:hidden 에 잘리지 않도록 ring반지름 27px 안쪽) */
+function tpSetRing(cx, cy){
+    const dx=cx-tpCx, dy=cy-tpCy;
+    const d=Math.sqrt(dx*dx+dy*dy)||0.01;
+    const maxR=tpR-27;
+    const f=d>maxR?(maxR/d):1;
+    tpRing.style.left=(tpR+dx*f)+'px';
+    tpRing.style.top =(tpR+dy*f)+'px';
 }
+
+/* 이동 방향으로 원형 바운더리에 글로우 */
+function tpSetGlow(dx, dy){
+    const d=Math.sqrt(dx*dx+dy*dy);
+    if(d<0.8){ tpZone.style.boxShadow='none'; return; }
+    const nx=dx/d, ny=dy/d;
+    const s=Math.min(d/7, 1);            /* 0~1 속도 스케일 */
+    const ox=nx*24, oy=ny*24;
+    const blur=16+s*16, spread=3+s*7;
+    const aInner=0.12+s*0.22, aOuter=0.42+s*0.48;
+    tpZone.style.boxShadow=
+        `0 0 0 2px rgba(0,217,255,${aInner}),`+
+        `${ox}px ${oy}px ${blur}px ${spread}px rgba(0,217,255,${aOuter})`;
+}
+
+function tpApplyDelta(cx, cy){
+    const dx=cx-tpLastX, dy=cy-tpLastY;
+    player.x=Math.max(16,Math.min(CW-16, player.x+dx*TPSENS));
+    player.y=Math.max(18,Math.min(CH-18, player.y+dy*TPSENS));
+    tpLastX=cx; tpLastY=cy;
+    tpSetRing(cx, cy);
+    tpSetGlow(dx, dy);
+}
+
+function tpEnd(){
+    tpZone.classList.remove('on');
+    tpZone.style.boxShadow='none';
+}
+
 tpZone.addEventListener('touchstart',(e)=>{
     e.preventDefault();
     if(!running||paused) return;
-    tpRect = tpZone.getBoundingClientRect();   /* start 시점에 캐시 */
-    tpLastX = e.touches[0].clientX;
-    tpLastY = e.touches[0].clientY;
-    tpRing.style.left = (tpLastX - tpRect.left) + 'px';
-    tpRing.style.top  = (tpLastY - tpRect.top)  + 'px';
+    const r=tpZone.getBoundingClientRect();
+    tpCx=r.left+r.width/2; tpCy=r.top+r.height/2; tpR=r.width/2;
+    tpLastX=e.touches[0].clientX; tpLastY=e.touches[0].clientY;
+    tpSetRing(tpLastX, tpLastY);
     tpZone.classList.add('on');
 },{passive:false});
 tpZone.addEventListener('touchmove',(e)=>{
@@ -440,8 +476,8 @@ tpZone.addEventListener('touchmove',(e)=>{
     if(!running||paused) return;
     tpApplyDelta(e.touches[0].clientX, e.touches[0].clientY);
 },{passive:false});
-tpZone.addEventListener('touchend',  ()=>tpZone.classList.remove('on'));
-tpZone.addEventListener('touchcancel',()=>tpZone.classList.remove('on'));
+tpZone.addEventListener('touchend',   tpEnd);
+tpZone.addEventListener('touchcancel',tpEnd);
 
 /* ---- Keyboard state ---- */
 const keys={};
@@ -556,6 +592,13 @@ function resetGame(){
 }
 
 function startGame(){
+    /* 모바일 브라우저 주소창 숨기기 (Android Chrome 지원, iOS는 홈화면 추가 필요) */
+    try{
+        const el=document.documentElement;
+        if('ontouchstart' in window && el.requestFullscreen)
+            el.requestFullscreen().catch(()=>{});
+        else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    }catch(_){}
     resetGame();
     $('overlay').classList.add('hidden');
     running=true; paused=false;
@@ -919,6 +962,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777131158"></script>
+<script src="/js/siteFooter.js?v=1777132017"></script>
 </body>
 </html>
