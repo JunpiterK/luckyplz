@@ -291,8 +291,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777159389"></script>
-<script src="/js/lpAudio.js?v=1777159389"></script>
+<script src="/js/supabase-config.js?v=1777160156"></script>
+<script src="/js/lpAudio.js?v=1777160156"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1689,7 +1689,7 @@ function gameLoop(now){
     const alive=[];
     for(const b of bullets){
         b.trail.push({x:b.x, y:b.y});
-        if(b.trail.length>7) b.trail.shift();
+        if(b.trail.length>16) b.trail.shift();
         b.x+=b.vx*dt;
         b.y+=b.vy*dt;
         if(b.x<-40||b.x>CW+40||b.y<-40||b.y>CH+40) continue;
@@ -1758,27 +1758,51 @@ function drawFrame(now, dt){
     /* ---- Ambient particles ---- */
     drawParticles();
 
-    /* ---- Bullets ---- */
+    /* ---- Bullets — comet-style trail ----
+       Two-layer trail: an outer glow halo (secondary color) + a hot
+       inner core (head color). Both taper in radius AND alpha from
+       head toward the oldest trail sample, so the bullet reads like a
+       comet. The HEAD itself is unchanged — full opacity, original
+       color, original shadow glow. Collision still uses head x/y only,
+       so the airplane brushing the tail is harmless. */
     for(const b of bullets){
-        for(let i=0;i<b.trail.length;i++){
-            const t=b.trail[i];
-            const alpha=(i+1)/b.trail.length*0.35;
-            ctx.globalAlpha=alpha;
-            ctx.fillStyle=b.aimed?'#FF6622':'#ffffff';
+        const headColor = b.aimed ? '#FF8844' : '#ffffff';
+        const haloColor = b.aimed ? '#FF5500' : '#aaaaff';
+        const N = b.trail.length;
+        /* Outer halo pass (soft glow following the bullet's path). */
+        ctx.fillStyle = haloColor;
+        for(let i=0; i<N; i++){
+            const t = b.trail[i];
+            const k = (i+1)/N;            /* 0 = oldest tail tip, 1 = head */
+            ctx.globalAlpha = k * 0.22;
             ctx.beginPath();
-            ctx.arc(t.x,t.y,3,0,Math.PI*2);
+            ctx.arc(t.x, t.y, 1.2 + 5.0*k, 0, Math.PI*2);
             ctx.fill();
         }
-        ctx.globalAlpha=1;
-        ctx.shadowColor=b.aimed?'#FF5500':'#aaaaff';
-        ctx.shadowBlur=10;
-        ctx.fillStyle=b.aimed?'#FF8844':'#ffffff';
+        /* Inner core pass (head color preserved, tapered radius). */
+        ctx.fillStyle = headColor;
+        for(let i=0; i<N; i++){
+            const t = b.trail[i];
+            const k = (i+1)/N;
+            /* Quadratic alpha makes the head end of the trail visibly
+               brighter than the fading tail tip without going opaque. */
+            ctx.globalAlpha = k*k * 0.78;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, 0.6 + 3.0*k, 0, Math.PI*2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+
+        /* HEAD — unchanged from previous design */
+        ctx.shadowColor = haloColor;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = headColor;
         ctx.beginPath();
-        ctx.arc(b.x,b.y,6,0,Math.PI*2);
+        ctx.arc(b.x, b.y, 6, 0, Math.PI*2);
         ctx.fill();
-        ctx.shadowBlur=0;
+        ctx.shadowBlur = 0;
     }
-    ctx.globalAlpha=1;
+    ctx.globalAlpha = 1;
 
     /* ---- Player: SpaceX Starship (ogive nose, SUS metallic) ---- */
     if(flashVisible){
@@ -1973,6 +1997,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777159389"></script>
+<script src="/js/siteFooter.js?v=1777160156"></script>
 </body>
 </html>
