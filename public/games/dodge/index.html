@@ -291,8 +291,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777145140"></script>
-<script src="/js/lpAudio.js?v=1777145140"></script>
+<script src="/js/supabase-config.js?v=1777158495"></script>
+<script src="/js/lpAudio.js?v=1777158495"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1301,7 +1301,7 @@ tpZone.addEventListener('touchcancel',tpEnd);
 const keys={};
 document.addEventListener('keydown',(e)=>{
     keys[e.key]=true;
-    if(e.key===' '){ e.preventDefault(); if(running) paused=!paused; }
+    if(e.key===' '){ e.preventDefault(); if(running){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); } }
     if(e.key==='Enter'){ if(!running) startGame(); }
 });
 document.addEventListener('keyup',(e)=>{ keys[e.key]=false; });
@@ -1445,6 +1445,68 @@ function sfxZone(){
     LPAudio.beep({freq:784, dur:0.08, vol:0.06, type:'square', decay:0.4});
 }
 
+/* ========== BGM ==========
+   Plays assets/bgm_dodge.wav on game start, fades out on game over,
+   pause/resume mirrors the in-game pause state. Max volume 0.35 keeps
+   it under sfx so impact/explosion still cuts through. If the file is
+   missing the engine fails silently — game continues without music.
+   Pattern adapted from car-racing's AudioEngine. */
+const BGM = (function(){
+    const audio = new Audio('assets/bgm_dodge.wav');
+    audio.loop = true;
+    audio.volume = 0;
+    audio.preload = 'auto';
+    /* Suppress "file not loaded" console warnings if the BGM hasn't
+       been uploaded yet — the rest of the game still works. */
+    audio.addEventListener('error', function(){ /* silent */ });
+
+    const MAX_VOL = 0.35;
+    const FADE_MS = 1400;
+    let enabled = true;
+    let fadeTimer = null;
+
+    function fadeTo(target, durMs, onDone){
+        if(fadeTimer){ clearInterval(fadeTimer); fadeTimer = null; }
+        const from = audio.volume;
+        const diff = target - from;
+        if(Math.abs(diff) < 0.005){ audio.volume = target; if(onDone) onDone(); return; }
+        const steps = Math.max(1, Math.round(durMs/16));
+        let i = 0;
+        fadeTimer = setInterval(function(){
+            i++;
+            audio.volume = Math.max(0, Math.min(1, from + diff * (i/steps)));
+            if(i >= steps){ clearInterval(fadeTimer); fadeTimer = null; if(onDone) onDone(); }
+        }, 16);
+    }
+
+    function safePlay(){
+        try {
+            const p = audio.play();
+            if(p && p.catch) p.catch(function(){ /* autoplay blocked — sfx unlock handler will free it next gesture */ });
+        } catch(_){}
+    }
+
+    function start(){
+        if(!enabled) return;
+        try { audio.currentTime = 0; } catch(_){}
+        audio.volume = 0;
+        safePlay();
+        fadeTo(MAX_VOL, FADE_MS);
+    }
+    function stop(){
+        fadeTo(0, 600, function(){ try { audio.pause(); audio.currentTime = 0; } catch(_){} });
+    }
+    function pause(){ fadeTo(0, 350, function(){ try { audio.pause(); } catch(_){} }); }
+    function resume(){
+        if(!enabled) return;
+        safePlay();
+        fadeTo(MAX_VOL, 600);
+    }
+    function toggle(){ enabled = !enabled; if(!enabled) stop(); return enabled; }
+    function isOn(){ return enabled; }
+    return { start: start, stop: stop, pause: pause, resume: resume, toggle: toggle, isOn: isOn };
+})();
+
 function resetGame(){
     player={x:CW/2, y:CH*0.65};
     pointer={x:CW/2, y:CH*0.65, active:false};
@@ -1477,6 +1539,7 @@ function startGame(){
     resetGame();
     $('overlay').classList.add('hidden');
     sfxStart();
+    BGM.start();
     running=true; paused=false;
     startedAt=performance.now();
     totalPausedMs=0;
@@ -1490,6 +1553,7 @@ function startGame(){
 function triggerGameOver(){
     running=false;
     sfxOver();
+    BGM.stop();
     const duration=elapsedMs;
     const score=Math.floor(duration/100);
     const wrap=$('canvasWrap');
@@ -1810,7 +1874,7 @@ function idleLoop(now){
 
 /* Pause on canvas tap when running */
 canvasWrap.addEventListener('click',()=>{
-    if(running&&!pointer.active) paused=!paused;
+    if(running&&!pointer.active){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); }
 });
 
 /* ======== Bottom sheet ======== */
@@ -1878,6 +1942,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777145140"></script>
+<script src="/js/siteFooter.js?v=1777158495"></script>
 </body>
 </html>
