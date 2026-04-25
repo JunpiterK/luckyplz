@@ -291,7 +291,7 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777135763"></script>
+<script src="/js/supabase-config.js?v=1777136872"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -519,14 +519,15 @@ function drawBackground(){
     const pi=prevZoneIdx;
     const t=Math.min(zoneTransitionT,1);
 
-    // Get blended colors
-    const topA=hexToRgb(ZONE_BG[pi][0]), topB=hexToRgb(ZONE_BG[zi][0]);
-    const midA=hexToRgb(ZONE_BG[pi][1]), midB=hexToRgb(ZONE_BG[zi][1]);
-    const botA=hexToRgb(ZONE_BG[pi][2]), botB=hexToRgb(ZONE_BG[zi][2]);
+    // 위쪽(로켓 전방)이 먼저 새 존 색으로 바뀌고 아래로 내려오도록 staggered lerp
+    // 화성 분위기가 아래서 올라오는 이상한 느낌 제거
+    const tTop = Math.min(t / 0.50, 1.0);          // 위: 전체 전환시간의 50%에 완료
+    const tMid = Math.min(t / 0.80, 1.0);          // 중간: 80%에 완료
+    const tBot = Math.max((t - 0.35) / 0.65, 0.0); // 아래: 35% 이후 시작
 
-    const topC=rgbStr(lerpRgb(topA,topB,t));
-    const midC=rgbStr(lerpRgb(midA,midB,t));
-    const botC=rgbStr(lerpRgb(botA,botB,t));
+    const topC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][0]),hexToRgb(ZONE_BG[zi][0]),tTop));
+    const midC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][1]),hexToRgb(ZONE_BG[zi][1]),tMid));
+    const botC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][2]),hexToRgb(ZONE_BG[zi][2]),tBot));
 
     const grad=ctx.createLinearGradient(0,0,0,CH);
     grad.addColorStop(0,   topC);
@@ -604,56 +605,188 @@ function drawEarth(zoneT){
 
 function drawMoon(zoneT){
     const py=CH*(zoneT*2.0-0.4);
-    const cx=CW*0.35, r=90;
+    const cx=CW*0.38, r=88;
     ctx.save();
-    // Base
-    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
-    g.addColorStop(0,'#b8b8b8');
-    g.addColorStop(0.7,'#7a7a7a');
-    g.addColorStop(1,'#4a4a4a');
-    ctx.fillStyle=g;
+
+    // 달 전체 글로우
+    ctx.shadowColor='rgba(210,205,195,0.28)';
+    ctx.shadowBlur=22;
+
+    // 기본 회색 표면: 하이랜드 밝고 림은 어두운 라디알 그라디언트
+    const base=ctx.createRadialGradient(cx-r*0.22,py-r*0.22,r*0.05,cx,py,r);
+    base.addColorStop(0,'#dedad4');
+    base.addColorStop(0.4,'#bab6b0');
+    base.addColorStop(0.78,'#8c8880');
+    base.addColorStop(1,'#4a4845');
+    ctx.fillStyle=base;
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
-    // Terminator shadow
-    ctx.fillStyle='rgba(0,0,0,0.30)';
-    ctx.beginPath(); ctx.ellipse(cx+r*0.3,py,r*0.55,r,0,Math.PI/2,Math.PI*3/2); ctx.fill();
-    // Craters
-    const craterData=[
-        [cx-20,py-25,16],[cx+25,py+15,12],[cx-30,py+28,10],[cx+10,py-35,9],
-        [cx+35,py-10,8],[cx-10,py+8,6],[cx+20,py+38,5],[cx-42,py-5,7],
+    ctx.shadowBlur=0;
+
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+
+    // ---- MARIA (어두운 현무암 평원) ----
+    // Mare Imbrium: 좌상단 크고 둥근 바다
+    ctx.fillStyle='rgba(18,17,15,0.62)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.26,py-r*0.30,r*0.36,r*0.30,-0.25,0,Math.PI*2); ctx.fill();
+
+    // Mare Serenitatis: 상단 우측
+    ctx.fillStyle='rgba(20,19,17,0.55)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.18,py-r*0.20,r*0.26,r*0.22,0.18,0,Math.PI*2); ctx.fill();
+
+    // Mare Tranquillitatis + Fecunditatis: 중앙 우측 큰 덩어리
+    ctx.fillStyle='rgba(16,15,13,0.58)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.24,py+r*0.10,r*0.30,r*0.36,0.12,0,Math.PI*2); ctx.fill();
+
+    // Oceanus Procellarum: 좌측 넓고 불규칙한 거대 바다
+    ctx.fillStyle='rgba(22,21,19,0.44)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.44,py+r*0.08,r*0.20,r*0.42,0.08,0,Math.PI*2); ctx.fill();
+
+    // Mare Crisium: 우측 테두리쪽 작은 타원 (특징적)
+    ctx.fillStyle='rgba(18,17,15,0.68)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.62,py-r*0.26,r*0.13,r*0.10,0.0,0,Math.PI*2); ctx.fill();
+
+    // Mare Nubium: 하단 좌측 작은 바다
+    ctx.fillStyle='rgba(20,19,17,0.46)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.14,py+r*0.50,r*0.18,r*0.14,-0.28,0,Math.PI*2); ctx.fill();
+
+    // ---- 크레이터 ----
+    const craters=[
+        // 대형
+        [r*0.08,  r*0.62, 15, 0.88], // Tycho (광조의 주인공, 하단)
+        [-r*0.20, r*0.04, 12, 0.78], // Copernicus
+        [r*0.50,  r*0.30, 9,  0.72], // Kepler
+        [-r*0.56,-r*0.54, 8,  0.68], // Highland crater
+        [r*0.30, -r*0.58, 8,  0.72], // 상단
+        // 중형
+        [-r*0.72, r*0.22, 7,  0.62],
+        [r*0.62,  r*0.08, 6,  0.62],
+        [-r*0.08,-r*0.72, 6,  0.58],
+        [r*0.40,  r*0.58, 5,  0.62],
+        [-r*0.40, r*0.54, 5,  0.58],
+        // 소형 산재
+        [r*0.72, -r*0.45, 4, 0.52],
+        [-r*0.30,-r*0.46, 4, 0.52],
+        [r*0.18,  r*0.30, 3, 0.48],
+        [-r*0.62, r*0.50, 3, 0.48],
+        [r*0.55, -r*0.60, 3, 0.50],
     ];
-    for(const [cx2,cy2,cr] of craterData){
-        ctx.fillStyle='rgba(80,80,80,0.6)';
-        ctx.beginPath(); ctx.arc(cx2,cy2,cr,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle='rgba(160,160,160,0.35)';
-        ctx.lineWidth=1;
-        ctx.beginPath(); ctx.arc(cx2,cy2,cr,0,Math.PI*2); ctx.stroke();
+
+    for(const [ox,oy,cr,br] of craters){
+        const crx=cx+ox, cry=py+oy;
+        // 어두운 크레이터 바닥
+        ctx.fillStyle=`rgba(8,8,7,${br*0.55})`;
+        ctx.beginPath(); ctx.arc(crx,cry,cr,0,Math.PI*2); ctx.fill();
+        // 밝은 림 하이라이트 (좌상단쪽 빛)
+        ctx.strokeStyle=`rgba(232,228,222,${br*0.52})`;
+        ctx.lineWidth=Math.max(cr*0.30,1);
+        ctx.beginPath(); ctx.arc(crx-cr*0.15,cry-cr*0.15,cr*0.75,Math.PI*0.75,Math.PI*1.9); ctx.stroke();
+        // 외부 밝은 에젝타 링
+        ctx.strokeStyle=`rgba(195,190,183,${br*0.22})`;
+        ctx.lineWidth=cr*0.18;
+        ctx.beginPath(); ctx.arc(crx,cry,cr*1.18,0,Math.PI*2); ctx.stroke();
     }
+
+    // ---- Tycho 광조 (ray system) ----
+    ctx.globalAlpha=0.075;
+    ctx.strokeStyle='#ece8e2';
+    for(let i=0;i<10;i++){
+        const ang=(i/10)*Math.PI*2+0.18;
+        const len=r*0.88;
+        ctx.lineWidth=1.4+(i%3)*0.4;
+        ctx.beginPath();
+        ctx.moveTo(cx+r*0.08+Math.cos(ang)*16, py+r*0.62+Math.sin(ang)*16);
+        ctx.lineTo(cx+r*0.08+Math.cos(ang)*len, py+r*0.62+Math.sin(ang)*len);
+        ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+
+    // ---- Terminator (우측에서 어두워짐) ----
+    const termGrad=ctx.createRadialGradient(cx+r*0.50,py,r*0.20,cx+r*0.50,py,r*1.05);
+    termGrad.addColorStop(0,'rgba(0,3,12,0)');
+    termGrad.addColorStop(0.45,'rgba(0,3,12,0.12)');
+    termGrad.addColorStop(1,'rgba(0,3,12,0.80)');
+    ctx.fillStyle=termGrad;
+    ctx.fillRect(cx-r,py-r,r*2,r*2);
+
+    ctx.restore(); // clip 해제
     ctx.restore();
 }
 
 function drawMars(zoneT){
     const py=CH*(zoneT*2.0-0.4);
-    const cx=CW*0.65, r=70;
+    const cx=CW*0.65, r=72;
     ctx.save();
-    // Glow aura
-    ctx.shadowColor='rgba(255,100,30,0.45)';
-    ctx.shadowBlur=28;
-    const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
-    g.addColorStop(0,'#dd5533');
-    g.addColorStop(0.6,'#aa3311');
-    g.addColorStop(1,'#661100');
-    ctx.fillStyle=g;
+
+    // 오렌지 글로우 (화성 대기)
+    ctx.shadowColor='rgba(255,90,20,0.50)';
+    ctx.shadowBlur=30;
+    const base=ctx.createRadialGradient(cx-r*0.28,py-r*0.28,r*0.08,cx,py,r);
+    base.addColorStop(0,'#e8622e');
+    base.addColorStop(0.55,'#c04418');
+    base.addColorStop(0.88,'#8a2e0a');
+    base.addColorStop(1,'#601800');
+    ctx.fillStyle=base;
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur=0;
-    // Polar cap
+
     ctx.save();
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
-    ctx.fillStyle='rgba(255,255,255,0.7)';
-    ctx.beginPath(); ctx.ellipse(cx,py-r*0.76,r*0.4,r*0.22,0,0,Math.PI*2); ctx.fill();
-    // Valles Marineris
-    ctx.strokeStyle='rgba(80,20,10,0.7)';
-    ctx.lineWidth=3;
-    ctx.beginPath(); ctx.ellipse(cx,py+r*0.05,r*0.7,r*0.06,-0.1,0.05,Math.PI-0.05); ctx.stroke();
+
+    // Hellas Planitia: 남반구 큰 충돌 분지 (약간 밝은 베이지)
+    ctx.fillStyle='rgba(220,160,100,0.30)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.28,py+r*0.45,r*0.32,r*0.22,0.4,0,Math.PI*2); ctx.fill();
+
+    // Syrtis Major: 어두운 현무암 삼각형 영역
+    ctx.fillStyle='rgba(30,18,10,0.38)';
+    ctx.beginPath(); ctx.moveTo(cx+r*0.05,py-r*0.08); ctx.lineTo(cx+r*0.20,py+r*0.30); ctx.lineTo(cx-r*0.12,py+r*0.30); ctx.closePath(); ctx.fill();
+
+    // Tharsis 고원: 좌상단 약간 더 붉은 돌출부
+    ctx.fillStyle='rgba(100,20,5,0.22)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.38,py-r*0.12,r*0.30,r*0.28,0.2,0,Math.PI*2); ctx.fill();
+
+    // Olympus Mons (가장 큰 화산): Tharsis 위 원형 어두운 원
+    ctx.fillStyle='rgba(80,14,4,0.30)';
+    ctx.beginPath(); ctx.arc(cx-r*0.45,py-r*0.20,r*0.14,0,Math.PI*2); ctx.fill();
+    // 칼데라 (정상 분화구 힌트)
+    ctx.fillStyle='rgba(40,8,2,0.45)';
+    ctx.beginPath(); ctx.arc(cx-r*0.45,py-r*0.20,r*0.045,0,Math.PI*2); ctx.fill();
+
+    // Valles Marineris 협곡 (가장 특징적인 표면 지형)
+    ctx.strokeStyle='rgba(50,14,6,0.72)';
+    ctx.lineWidth=4.5;
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(cx-r*0.18,py+r*0.04);
+    ctx.bezierCurveTo(cx+r*0.05,py+r*0.03,cx+r*0.35,py+r*0.14,cx+r*0.58,py+r*0.10);
+    ctx.stroke();
+    // 협곡 보조선
+    ctx.strokeStyle='rgba(40,10,4,0.40)';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.moveTo(cx-r*0.24,py+r*0.10);
+    ctx.bezierCurveTo(cx+r*0.04,py+r*0.09,cx+r*0.34,py+r*0.18,cx+r*0.56,py+r*0.15);
+    ctx.stroke();
+
+    // 북극 얼음 캡 (크고 밝고 불규칙)
+    ctx.fillStyle='rgba(255,255,252,0.82)';
+    ctx.beginPath();
+    ctx.ellipse(cx,py-r*0.72,r*0.38,r*0.20,0.1,0,Math.PI*2); ctx.fill();
+    // 극 캡 안쪽 더 밝은 중심
+    ctx.fillStyle='rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(cx+r*0.04,py-r*0.76,r*0.22,r*0.10,0.15,0,Math.PI*2); ctx.fill();
+
+    // 남극 얼음 캡 (더 작음)
+    ctx.fillStyle='rgba(248,248,245,0.70)';
+    ctx.beginPath(); ctx.ellipse(cx-r*0.05,py+r*0.76,r*0.22,r*0.10,-0.1,0,Math.PI*2); ctx.fill();
+
+    // 대기 헤이즈 (림 주변 주황빛 glow)
+    const haze=ctx.createRadialGradient(cx,py,r*0.80,cx,py,r*1.0);
+    haze.addColorStop(0,'rgba(255,130,50,0)');
+    haze.addColorStop(1,'rgba(255,130,50,0.30)');
+    ctx.fillStyle=haze;
+    ctx.fillRect(cx-r,py-r,r*2,r*2);
+
     ctx.restore();
     ctx.restore();
 }
@@ -669,53 +802,89 @@ function drawJupiter(zoneT){
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur=0;
     // 2. Clip + draw bands on top
+    ctx.save();
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
     const bands=[
-        {y:py-r,h:r*0.22,c:'#e8d090'},{y:py-r+r*0.22,h:r*0.18,c:'#b07030'},
-        {y:py-r+r*0.4,h:r*0.20,c:'#d8c080'},{y:py-r+r*0.60,h:r*0.18,c:'#a06828'},
-        {y:py-r+r*0.78,h:r*0.22,c:'#d4b870'},{y:py-r+r*1.0,h:r*1.0,c:'#c07828'},
+        {y:py-r,      h:r*0.12, c:'#f0e0a0'}, // 북극대
+        {y:py-r*0.88, h:r*0.14, c:'#a86828'}, // NNB
+        {y:py-r*0.74, h:r*0.16, c:'#ead890'}, // NTZ
+        {y:py-r*0.58, h:r*0.18, c:'#b87830'}, // NEB (북적도대 — 가장 어두운 편)
+        {y:py-r*0.40, h:r*0.20, c:'#ead080'}, // EZ (적도대 — 가장 밝음)
+        {y:py-r*0.20, h:r*0.20, c:'#b47228'}, // SEB (남적도대 — GRS 위치)
+        {y:py+r*0.00, h:r*0.16, c:'#e8d488'}, // STZ
+        {y:py+r*0.16, h:r*0.14, c:'#9a6020'}, // STB
+        {y:py+r*0.30, h:r*0.16, c:'#e0c870'}, // SSTB
+        {y:py+r*0.46, h:r*0.14, c:'#b06a22'}, // 남극대
+        {y:py+r*0.60, h:r*0.40, c:'#c07828'}, // 남극 덮개
     ];
     for(const b of bands){
         ctx.fillStyle=b.c;
         ctx.fillRect(cx-r,b.y,r*2,b.h);
     }
-    // Great Red Spot
-    ctx.fillStyle='#c05020';
-    ctx.beginPath(); ctx.ellipse(cx-r*0.2,py+r*0.28,22,13,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='rgba(200,80,40,0.4)';
-    ctx.beginPath(); ctx.ellipse(cx-r*0.2,py+r*0.28,26,16,0,0,Math.PI*2); ctx.fill();
+    // Great Red Spot — 남적도대(SEB) 안에, 내부에 소용돌이 동심원
+    const gx=cx-r*0.18, gy=py+r*0.10;
+    ctx.fillStyle='#b03818'; // 외부 붉은
+    ctx.beginPath(); ctx.ellipse(gx,gy,30,18,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#c84828'; // 내부 약간 밝음
+    ctx.beginPath(); ctx.ellipse(gx,gy,22,13,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(220,100,60,0.55)'; // 중심 밝은 부분
+    ctx.beginPath(); ctx.ellipse(gx,gy,12,7,0,0,Math.PI*2); ctx.fill();
+    // GRS 테두리 (밝은 테두리)
+    ctx.strokeStyle='rgba(240,180,100,0.35)';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(gx,gy,31,19,0,0,Math.PI*2); ctx.stroke();
+
+    // Oval BA (GRS 아래 흰색 타원 폭풍)
+    ctx.fillStyle='rgba(248,240,200,0.70)';
+    ctx.beginPath(); ctx.ellipse(gx+r*0.35,gy+r*0.20,14,9,0,0,Math.PI*2); ctx.fill();
+
     ctx.restore(); // ends clip
     // Moons (outside clip)
     ctx.fillStyle='rgba(240,200,55,0.95)'; // Io (sulfur-yellow)
     ctx.beginPath(); ctx.arc(cx+r+26,py+28,7,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='rgba(215,215,235,0.95)'; // Europa (icy white)
     ctx.beginPath(); ctx.arc(cx-r-18,py-16,5,0,Math.PI*2); ctx.fill();
+    ctx.restore();
 }
 
 function drawSaturn(zoneT){
     const py=CH*(zoneT*2.0-0.4);
     const cx=CW*0.5, r=65;
     ctx.save();
-    // Ring back halves (behind planet)
-    function drawRingHalf(rx,ry,col,front){
-        ctx.save();
-        ctx.strokeStyle=col;
-        ctx.lineWidth=ry*0.6;
-        ctx.globalAlpha=0.65;
-        ctx.beginPath();
-        if(front){
-            ctx.ellipse(cx,py,rx,ry,0,Math.PI,Math.PI*2);
-        } else {
-            ctx.ellipse(cx,py,rx,ry,0,0,Math.PI);
-        }
-        ctx.stroke();
-        ctx.globalAlpha=1;
+
+    // ring 그리기: 3개 링 + Cassini Division 묘사
+    function drawRingSet(front){
+        const startA = front ? Math.PI : 0;
+        const endA   = front ? Math.PI*2 : Math.PI;
+
+        // C링 (Crepe ring) — 매우 반투명, 안쪽
+        ctx.save(); ctx.globalAlpha=0.28;
+        ctx.strokeStyle='rgba(160,130,70,1)'; ctx.lineWidth=9;
+        ctx.beginPath(); ctx.ellipse(cx,py,98,13,0,startA,endA); ctx.stroke();
+        ctx.restore();
+
+        // B링 — 가장 밝고 두꺼운 링
+        ctx.save(); ctx.globalAlpha=0.72;
+        ctx.strokeStyle='rgba(230,200,130,1)'; ctx.lineWidth=14;
+        ctx.beginPath(); ctx.ellipse(cx,py,120,16,0,startA,endA); ctx.stroke();
+        ctx.restore();
+
+        // Cassini Division (B링과 A링 사이 어두운 간격)
+        ctx.save(); ctx.globalAlpha=0.82;
+        ctx.strokeStyle='rgba(20,16,10,1)'; ctx.lineWidth=5;
+        ctx.beginPath(); ctx.ellipse(cx,py,135,18,0,startA,endA); ctx.stroke();
+        ctx.restore();
+
+        // A링 — 중간 밝기
+        ctx.save(); ctx.globalAlpha=0.62;
+        ctx.strokeStyle='rgba(210,180,110,1)'; ctx.lineWidth=11;
+        ctx.beginPath(); ctx.ellipse(cx,py,150,20,0,startA,endA); ctx.stroke();
         ctx.restore();
     }
-    // Draw back rings
-    drawRingHalf(160,20,'rgba(200,170,100,0.55)',false);
-    drawRingHalf(140,18,'rgba(220,190,120,0.70)',false);
-    drawRingHalf(120,15,'rgba(180,150,80,0.40)',false);
+
+    // Draw back rings (뒤쪽 반원)
+    drawRingSet(false);
+
     // Planet
     const g=ctx.createRadialGradient(cx-r*0.3,py-r*0.3,r*0.1,cx,py,r);
     g.addColorStop(0,'#f0d890');
@@ -725,10 +894,22 @@ function drawSaturn(zoneT){
     ctx.shadowBlur=12;
     ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.fill();
     ctx.shadowBlur=0;
-    // Draw front rings
-    drawRingHalf(160,20,'rgba(200,170,100,0.55)',true);
-    drawRingHalf(140,18,'rgba(220,190,120,0.70)',true);
-    drawRingHalf(120,15,'rgba(180,150,80,0.40)',true);
+
+    // 행성 본체 묽은 줄무늬
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx,py,r,0,Math.PI*2); ctx.clip();
+    const sbands=[
+        {y:py-r,h:r*0.3,c:'rgba(240,220,140,0.20)'},
+        {y:py-r*0.7,h:r*0.25,c:'rgba(180,140,60,0.18)'},
+        {y:py-r*0.45,h:r*0.20,c:'rgba(250,230,160,0.15)'},
+        {y:py-r*0.25,h:r*0.50,c:'rgba(200,165,80,0.12)'},
+    ];
+    for(const b of sbands){ ctx.fillStyle=b.c; ctx.fillRect(cx-r,b.y,r*2,b.h); }
+    ctx.restore();
+
+    // Draw front rings (앞쪽 반원)
+    drawRingSet(true);
+
     // Titan (주황빛, 오른쪽에 가시범위 내 배치)
     ctx.fillStyle='rgba(230,160,80,0.95)';
     ctx.shadowColor='rgba(220,140,50,0.5)';
@@ -1619,6 +1800,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777135763"></script>
+<script src="/js/siteFooter.js?v=1777136872"></script>
 </body>
 </html>
