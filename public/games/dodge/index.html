@@ -291,7 +291,7 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777136872"></script>
+<script src="/js/supabase-config.js?v=1777140381"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1376,12 +1376,32 @@ function spawnBullet(now, speed, aimedRatio, multi){
 
 function updateDifficulty(){
     const s=elapsedMs/1000;
-    return {
-        spawnInterval: Math.max(220, 2400 - s*14.2),
-        bulletSpeed:   Math.min(400, 100 + s*1.7),
-        aimedRatio:    Math.min(0.68, s*0.0042),
-        multiShot:     s<75?1: s<130?2:3
-    };
+
+    // smoothstep: 0→1 부드러운 S커브 (양쪽 끝이 완만, 중간이 가파름)
+    const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
+
+    // ── 스폰 간격 (ms): 1600 → 250 ───────────────────────────────
+    // 0:00=1600ms(여유), 1:00=1280ms, 1:30=900ms, 2:00=550ms, 2:30=330ms, 3:00=250ms
+    const spawnInterval = Math.round(1600 - ss(s/170) * 1350);
+
+    // ── 총알 속도 (px/s): 95 → 370 ───────────────────────────────
+    // 0:00=95, 1:00=155, 1:30=230, 2:00=300, 2:30=350, 3:00=370
+    const bulletSpeed = Math.round(95 + ss(s/180) * 275);
+
+    // ── 조준 비율: 0 → 0.65 ──────────────────────────────────────
+    // 처음 20초는 완전 랜덤, 이후 이차함수로 서서히 증가
+    const arT = Math.max(0, Math.min((s-20)/155, 1));
+    const aimedRatio = Math.min(0.65, arT*arT*0.70);
+
+    // ── 멀티샷: 1 → 3 (점프 없이 확률적으로) ──────────────────────
+    // 50초 이전: 1발 고정
+    // 50~170초: 1발→3발 연속적으로 증가 — 소수점은 확률로 처리
+    // 예) msRaw=1.4 → 60%로 1발, 40%로 2발 (갑작스런 2발 전환 없음)
+    const msRaw   = 1 + Math.min(2, Math.max(0, (s-50)/120)*2);
+    const msFloor = Math.floor(msRaw);
+    const multiShot = Math.min(3, msFloor + (Math.random()<(msRaw-msFloor)?1:0));
+
+    return { spawnInterval, bulletSpeed, aimedRatio, multiShot };
 }
 
 /* ---- Game state ---- */
@@ -1800,6 +1820,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777136872"></script>
+<script src="/js/siteFooter.js?v=1777140381"></script>
 </body>
 </html>
