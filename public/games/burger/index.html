@@ -88,6 +88,7 @@ body{
 .overlay .rank-card-pb{font-size:.88em;font-weight:700;color:#FFE66D;min-height:1em;margin:0;text-align:center}
 .overlay .rank-card-link{margin-top:4px;padding:8px 18px;font-size:.85em;font-weight:800;color:#00D9FF;background:transparent;border:1px solid rgba(0,217,255,.5);border-radius:999px;cursor:pointer;font-family:inherit;letter-spacing:.04em}
 .overlay .rank-card-link:active{transform:translateY(1px);background:rgba(0,217,255,.12)}
+.overlay .rank-card-debug{font-size:.68em;color:rgba(255,107,107,.92);font-family:'Courier New',monospace;letter-spacing:0;margin-top:0;min-height:0;text-align:center;word-break:break-word;max-width:100%;line-height:1.3}
 .overlay .btn{padding:12px 26px;border-radius:14px;border:0;background:linear-gradient(135deg,#FFB74D,#FF8A65);color:#3a1e00;font-family:'Orbitron',sans-serif;font-weight:900;letter-spacing:.08em;font-size:1em;cursor:pointer;box-shadow:0 10px 26px -6px rgba(255,183,77,.5)}
 .overlay .btn:active{transform:translateY(1px)}
 .overlay .kbd-hint{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.35);letter-spacing:.03em}
@@ -204,8 +205,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777183558"></script>
-<script src="/js/lpAudio.js?v=1777183558"></script>
+<script src="/js/supabase-config.js?v=1777186133"></script>
+<script src="/js/lpAudio.js?v=1777186133"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -793,6 +794,7 @@ function gameOver(){
       +   '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
       +   '<div class="rank-card-pct" id="ovRankPct"></div>'
       +   '<div class="rank-card-pb" id="ovRankPb"></div>'
+      +   '<div class="rank-card-debug" id="ovRankDebug"></div>'
       +   '<button class="rank-card-link" id="ovRankBtn">📊 전체 랭킹 보기</button>'
       + '</div>'
       + '<button class="btn" id="ovBtn">다시하기</button>'
@@ -802,7 +804,7 @@ function gameOver(){
     $('ovRankBtn').addEventListener('click', openSheet);
 
     (async()=>{
-        let pbMsg='';
+        let pbMsg='', dbgLines=[];
         try{
             const {data,error}=await getSupabase().rpc('record_burger_attempt',{
                 p_burgers_completed: burgersCompleted,
@@ -815,9 +817,11 @@ function gameOver(){
             }else{
                 const m=(error.message||'').toLowerCase();
                 if(m.includes('rate_limited')) pbMsg='⏸ 1시간 내 30회 한도 초과';
-                else console.warn('[burger.record_burger_attempt]', error);
+                else { console.warn('[burger.record_burger_attempt]', error);
+                       dbgLines.push('record: '+(error.message||'unknown')); }
             }
-        }catch(e){ console.warn('[burger.record_burger_attempt]', e); }
+        }catch(e){ console.warn('[burger.record_burger_attempt]', e);
+                   dbgLines.push('record: '+(e.message||String(e))); }
 
         let rankInfo=null, rankErr=null;
         try{
@@ -838,12 +842,14 @@ function gameOver(){
             $('ovRankPct').textContent=(d.percentile!=null)?('상위 '+d.percentile+'%'):'';
         }else if(rankErr){
             $('ovRankNum').textContent='⚠️ 랭킹 조회 실패';
-            $('ovRankPct').textContent='브라우저 콘솔에서 원인 확인';
+            $('ovRankPct').textContent='SQL 마이그레이션 미배포 가능성';
+            dbgLines.push('rank: '+((rankErr.message||String(rankErr)).slice(0,140)));
         }else{
             $('ovRankNum').textContent='🎉 첫 기록 등록!';
             $('ovRankPct').textContent='월드 랭킹 진입 완료';
         }
         $('ovRankPb').textContent=pbMsg;
+        $('ovRankDebug').textContent=dbgLines.join(' · ');
 
         loadMyStats();
         loadLeaderboard(currentScope);
@@ -1524,6 +1530,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777183558"></script>
+<script src="/js/siteFooter.js?v=1777186133"></script>
 </body>
 </html>
