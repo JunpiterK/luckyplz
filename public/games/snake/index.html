@@ -113,6 +113,13 @@ body{
 .overlay p{color:rgba(255,255,255,.72);font-size:.86em;margin-bottom:12px;line-height:1.5;max-width:280px}
 .overlay .score-big{font-family:'Orbitron',sans-serif;font-size:2.8em;font-weight:900;color:#00E676;margin:6px 0;line-height:1}
 .overlay .pb{font-size:.84em;color:#FFE66D;margin-bottom:12px;font-weight:700;min-height:1.1em}
+/* World ranking card — cyan-bordered panel directly above the
+   "다시하기" button so the player's global standing reads as the
+   primary post-game feedback, not a footnote. */
+.overlay .rank-card{background:linear-gradient(165deg,rgba(0,217,255,.09),rgba(0,217,255,.02));border:1px solid rgba(0,217,255,.32);border-radius:14px;padding:14px 22px;margin:6px 0 14px;min-width:240px;display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:0 6px 20px -8px rgba(0,217,255,.3)}
+.overlay .rank-card-rank{font-family:'Orbitron',sans-serif;font-size:1.35em;font-weight:900;color:#00D9FF;line-height:1.1;letter-spacing:.02em}
+.overlay .rank-card-pct{font-size:.95em;font-weight:700;color:rgba(255,255,255,.92);letter-spacing:.02em}
+.overlay .rank-card-pb{font-size:.84em;font-weight:700;color:#FFE66D;min-height:1em;margin:0}
 .overlay .btn{padding:12px 28px;border-radius:14px;border:0;background:linear-gradient(135deg,#00E676,#00C97A);color:#002818;font-family:'Orbitron',sans-serif;font-weight:900;letter-spacing:.08em;font-size:1em;cursor:pointer;box-shadow:0 10px 26px -6px rgba(0,230,118,.5)}
 .overlay .btn:active{transform:translateY(1px)}
 .overlay .kbd-hint{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.35);letter-spacing:.03em}
@@ -297,8 +304,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777160879"></script>
-<script src="/js/lpAudio.js?v=1777160879"></script>
+<script src="/js/supabase-config.js?v=1777179125"></script>
+<script src="/js/lpAudio.js?v=1777179125"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -421,38 +428,53 @@ function gameOver(){
         '<h2 class="go">GAME OVER</h2>'
       +'<div class="score-big">'+score+'</div>'
       +'<p>먹이 '+foodsEaten+'개 · '+(duration/1000).toFixed(1)+'초</p>'
-      +'<div class="pb" id="ovPbLine"></div>'
-      +'<div class="pb" id="ovRankLine" style="color:#00D9FF;margin-top:-6px"></div>'
+      +'<div class="rank-card" id="ovRankCard">'
+      +  '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
+      +  '<div class="rank-card-pct" id="ovRankPct"></div>'
+      +  '<div class="rank-card-pb" id="ovRankPb"></div>'
+      +'</div>'
       +'<button class="btn" id="ovBtn">다시하기</button>'
       +'<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
     $('overlay').classList.remove('hidden');
     $('ovBtn').addEventListener('click', startGame);
 
     (async()=>{
+        let pbMsg='';
         try{
             const {data,error}=await getSupabase().rpc('record_snake_attempt',{
                 p_foods_eaten:foodsEaten, p_duration_ms:duration
             });
-            if(!error&&data?.is_personal_best){$('ovPbLine').textContent='🏆 개인 신기록!';}
-            else if(error){
-                const m=(error.message||'').toLowerCase();
-                if(m.includes('rate_limited'))$('ovPbLine').textContent='⏸ 1시간 내 30회 한도 초과';
-            }
-            /* World rank: separate RPC kept small + isolated from
-               record_*_attempt so a rank-info schema change can roll
-               out without touching the write path. */
             if(!error){
-                try{
-                    const r=await getSupabase().rpc('snake_rank_info');
-                    if(!r.error&&r.data?.has_record){
-                        const d=r.data;
-                        const total=(d.total_world_players||0).toLocaleString();
-                        const pct=(d.percentile!=null)?(' · 상위 '+d.percentile+'%'):'';
-                        $('ovRankLine').textContent='🌍 월드 #'+d.world_rank+pct+' · 총 '+total+'명';
-                    }
-                }catch(_){}
+                if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+            }else{
+                const m=(error.message||'').toLowerCase();
+                if(m.includes('rate_limited')) pbMsg='⏸ 1시간 내 30회 한도 초과';
+                else console.warn('[snake.record_snake_attempt]', error);
             }
-        }catch(_){}
+        }catch(e){ console.warn('[snake.record_snake_attempt]', e); }
+
+        /* Rank info — separate RPC, isolated from the write path so a
+           schema change here doesn't touch record_snake_attempt. */
+        let rankRendered=false;
+        try{
+            const r=await getSupabase().rpc('snake_rank_info');
+            if(r.error){
+                console.warn('[snake.snake_rank_info]', r.error);
+            }else if(r.data?.has_record){
+                const d=r.data;
+                const total=(d.total_world_players||0).toLocaleString();
+                const rank=(d.world_rank||0).toLocaleString();
+                $('ovRankNum').textContent='🌍 #'+rank+' / 총 '+total+'명';
+                $('ovRankPct').textContent=(d.percentile!=null)?('상위 '+d.percentile+'%'):'';
+                rankRendered=true;
+            }
+        }catch(e){ console.warn('[snake.snake_rank_info]', e); }
+        if(!rankRendered){
+            $('ovRankNum').textContent='— 랭킹 정보 없음 —';
+            $('ovRankPct').textContent='';
+        }
+        $('ovRankPb').textContent=pbMsg;
+
         loadMyStats();
         loadLeaderboard(currentScope);
     })();
@@ -673,6 +695,6 @@ $('ovBtn').addEventListener('click', startGame);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777160879" defer></script>
+<script src="/js/siteFooter.js?v=1777179125" defer></script>
 </body>
 </html>
