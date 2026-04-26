@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777209496"></script>
-<script src="/js/lpAudio.js?v=1777209496"></script>
+<script src="/js/supabase-config.js?v=1777210218"></script>
+<script src="/js/lpAudio.js?v=1777210218"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -694,10 +694,11 @@ function generateSample(lvl){
     return out;
 }
 function timeForLevel(lvl){
-    /* L1 = 14 s, each level shaves 0.6 s; floor at 5 s. Because samples
-       also get longer, at L10+ even a perfect player is under real
-       pressure — that's the "순발력" (quick-reaction) feeling. */
-    return Math.max(5, 14 - (lvl-1) * 0.6);
+    /* All stages share the same time budget. Difficulty rises via
+       sample length (generateSample uses lvl) instead of a tightening
+       clock — the player gets the same window to memorise + tap a
+       longer recipe at higher levels. */
+    return 14;
 }
 
 /* ========================================================================
@@ -875,10 +876,12 @@ function gameOver(){
         if(!rankInfo && rankErr){
             try{
                 const m=await getSupabase().rpc('burger_my_stats');
-                if(!m.error && m.data?.has_record && m.data.world_rank!=null){
-                    rankInfo={has_record:true,world_rank:m.data.world_rank,
-                        total_world_players:null,percentile:null,
-                        best_score:m.data.best_score,_fallback:true};
+                if(!m.error){
+                    if(m.data?.has_record && m.data.world_rank!=null){
+                        rankInfo={has_record:true,world_rank:m.data.world_rank,
+                            total_world_players:null,percentile:null,
+                            best_score:m.data.best_score,_fallback:true};
+                    }
                     rankErr=null;
                 }
             }catch(_){ }
@@ -1011,15 +1014,15 @@ function onTap(x, y){
             if (levelingUp){
                 level++;
                 burgersThisLevel = 0;
-                timeLevelBudget = timeForLevel(level);
-                timeLeft = Math.min(timeLevelBudget, timeLeft + 4);
                 sfxLevelUp();
             } else {
-                /* Same level — give a small breather and keep the
-                   original budget; the player's been doing well. */
-                timeLeft = Math.min(timeLevelBudget, timeLeft + 2.5);
                 sfxComplete();
             }
+            /* Each burger ends a stage → timer refills to the full
+               per-stage budget. Difficulty comes from sample length
+               (generateSample uses level), not a shrinking clock. */
+            timeLevelBudget = timeForLevel(level);
+            timeLeft = timeLevelBudget;
             sample = generateSample(level);
             progress = 0;
             stackPops = [];
@@ -1606,6 +1609,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777209496"></script>
+<script src="/js/siteFooter.js?v=1777210218"></script>
 </body>
 </html>
