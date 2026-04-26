@@ -298,8 +298,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777186133"></script>
-<script src="/js/lpAudio.js?v=1777186133"></script>
+<script src="/js/supabase-config.js?v=1777200041"></script>
+<script src="/js/lpAudio.js?v=1777200041"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1592,7 +1592,10 @@ function triggerGameOver(){
     running=false;
     sfxOver();
     BGM.stop();
-    const duration=elapsedMs;
+    /* Round to integer — record_dodge_attempt's p_duration_ms column
+       is INT, and elapsedMs is a sub-millisecond float from
+       performance.now() math. Postgres rejects 9769.099… verbatim. */
+    const duration=Math.round(elapsedMs);
     const score=Math.floor(duration/100);
     const wrap=$('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
@@ -1620,10 +1623,11 @@ function triggerGameOver(){
     $('ovRankBtn').addEventListener('click', (e)=>{ e.stopPropagation(); openSheet(); });
 
     (async()=>{
-        let pbMsg='', dbgLines=[];
+        let pbMsg='', dbgLines=[], recordOk=false;
         try{
             const {data,error}=await getSupabase().rpc('record_dodge_attempt',{p_duration_ms:duration});
             if(!error){
+                recordOk=true;
                 if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
             }else{
                 const m=(error.message||'').toLowerCase();
@@ -1655,6 +1659,9 @@ function triggerGameOver(){
             $('ovRankNum').textContent='⚠️ 랭킹 조회 실패';
             $('ovRankPct').textContent='SQL 마이그레이션 미배포 가능성';
             dbgLines.push('rank: '+((rankErr.message||String(rankErr)).slice(0,140)));
+        }else if(!recordOk){
+            $('ovRankNum').textContent='⚠️ 기록 저장 실패';
+            $('ovRankPct').textContent='아래 에러 메시지 확인';
         }else{
             $('ovRankNum').textContent='🎉 첫 기록 등록!';
             $('ovRankPct').textContent='월드 랭킹 진입 완료';
@@ -2048,6 +2055,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777186133"></script>
+<script src="/js/siteFooter.js?v=1777200041"></script>
 </body>
 </html>
