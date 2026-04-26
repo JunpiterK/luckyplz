@@ -233,7 +233,10 @@ body{
 .canvas-wrap.shake{animation:shake .4s ease}
 
 /* Ad slot (shows after first game over) */
-#adSlot{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px}
+/* Ad slot — bottom of the stack on mobile/tablet via flex order, full
+   left column on desktop (1280+). Hidden until the ad library populates
+   it (existing js sets display:block once an impression returns). */
+#adSlot.ad-col{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px;align-self:center;order:99}
 
 /* ================================================================
    Tablet portrait / large phone landscape (768–1023px):
@@ -254,19 +257,28 @@ body{
    Persistent right-side leaderboard, D-pad hidden, canvas bigger.
    ================================================================ */
 @media(min-width:1024px){
-    .wrap{max-width:none;flex-direction:row;align-items:flex-start;justify-content:center;gap:28px;padding:22px 26px;min-height:calc(100dvh - 60px)}
-    .left-col{display:flex;flex-direction:column;gap:12px;align-items:center;flex:0 0 auto}
-    .canvas-wrap{width:min(56vw, 620px);max-height:80vh}
-    .score-strip{max-width:620px;width:620px}
-    .game-ctrl{max-width:620px}
-    .hint{max-width:620px;width:620px}
-    .right-col{width:360px;flex-shrink:0}
+    /* PC: grid layout. 1024–1279 has just mid + leaderboard; 1280+
+       reserves a left ad column so AdSense (when active) appears on
+       the left side instead of below the game. */
+    .wrap{max-width:1600px;margin:0 auto;display:grid;grid-template-columns:minmax(0, 1fr) 360px;gap:28px;align-items:start;padding:22px 26px;min-height:calc(100dvh - 60px)}
+    .left-col{display:flex;flex-direction:column;gap:12px;align-items:center;width:100%}
+    .canvas-wrap{width:min(56vw, 80vh);max-width:none;max-height:80vh}
+    .score-strip{max-width:min(56vw, 80vh);width:100%}
+    .game-ctrl{max-width:min(56vw, 80vh)}
+    .hint{max-width:min(56vw, 80vh);width:100%}
+    #adSlot.ad-col{display:none}  /* no room at 1024–1279 */
+    .right-col{width:360px}
     .right-col .sheet{position:static;transform:none;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px}
     .right-col .sheet .handle, .right-col .sheet h3 + *{}
     .right-col .sheet .handle{display:none}
     .right-col .sheet-backdrop, .topbar .lb-btn{display:none}
     .right-col .sheet{transform:none!important;pointer-events:auto}
     .right-col .sheet-body{max-height:70vh}
+}
+@media(min-width:1280px){
+    /* 3-col: AdSense (left) | game (center) | leaderboard (right). */
+    .wrap{grid-template-columns:280px minmax(0, 1fr) 360px}
+    #adSlot.ad-col{display:block;width:100%;max-width:280px;min-height:600px;margin:0;align-self:start;order:0;background:rgba(255,255,255,.02);border:1px dashed rgba(255,255,255,.06);border-radius:14px}
 }
     </style>
     <script src="/vendor/supabase.min.js"></script>
@@ -317,9 +329,9 @@ body{
 
         <div class="hint">벽·자기 몸 충돌 시 게임 오버. <b>Space</b>로 일시정지, <b>Enter</b>로 재시작.</div>
 
-        <div id="adSlot"><ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5370817769801923" data-ad-slot="3456789012" data-ad-format="auto" data-full-width-responsive="true"></ins></div>
-
     </div>
+
+    <aside id="adSlot" class="ad-col" aria-label="광고"><ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5370817769801923" data-ad-slot="3456789012" data-ad-format="auto" data-full-width-responsive="true"></ins></aside>
 
     <div class="right-col">
         <div class="sheet-backdrop" id="sheetBack"></div>
@@ -339,8 +351,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777206360"></script>
-<script src="/js/lpAudio.js?v=1777206360"></script>
+<script src="/js/supabase-config.js?v=1777207935"></script>
+<script src="/js/lpAudio.js?v=1777207935"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -524,8 +536,11 @@ function gameOver(){
             const d=rankInfo;
             const total=(d.total_world_players||0).toLocaleString();
             const rank=(d.world_rank||0).toLocaleString();
-            $('ovRankNum').textContent='🌍 #'+rank+' / 총 '+total+'명';
-            $('ovRankPct').textContent=(d.percentile!=null)?('상위 '+d.percentile+'%'):'';
+            /* Short headline + long subline so a narrow card never
+               clips on the right edge. */
+            const pctTxt=(d.percentile!=null?('상위 '+d.percentile+'% · '):'');
+            $('ovRankNum').textContent='🌍 #'+rank;
+            $('ovRankPct').textContent=pctTxt+total+'명 중';
         }else if(rankErr){
             $('ovRankNum').textContent='⚠️ 랭킹 조회 실패';
             $('ovRankPct').textContent='SQL 마이그레이션 미배포 가능성';
@@ -785,6 +800,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777206360" defer></script>
+<script src="/js/siteFooter.js?v=1777207935" defer></script>
 </body>
 </html>
