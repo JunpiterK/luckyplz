@@ -85,6 +85,16 @@ body{
 .ss .v.best{color:#00D9FF}
 .ss .l{font-size:.6em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin-top:4px;font-weight:800}
 
+/* ---- Game control bar (visible during play across all viewports) ----
+   Desktop already has Space/keyboard pause; phones + tablets did not
+   expose any pause UI, so the kbd-only hint felt unfair to mobile. The
+   bar mounts between score-strip and canvas, hidden until startGame()
+   activates it and hidden again on game over. */
+.game-ctrl{display:none;align-items:center;justify-content:center;width:100%;max-width:360px;gap:10px;margin:-2px 0 0}
+.game-ctrl.on{display:flex}
+.ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
+.ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
+
 /* ---- Canvas ---- */
 .canvas-wrap{
     position:relative;
@@ -223,6 +233,7 @@ body{
 @media(min-width:768px) and (max-width:1023px){
     .canvas-wrap{max-width:440px;max-height:calc(100dvh - 360px)}
     .score-strip{max-width:440px}
+    .game-ctrl{max-width:440px}
     .hint{max-width:440px}
 }
 /* ================================================================
@@ -233,6 +244,7 @@ body{
     .left-col{display:flex;flex-direction:column;gap:12px;align-items:center;flex:0 0 auto}
     .canvas-wrap{width:min(34vw, 460px);max-height:80vh}
     .score-strip{max-width:460px;width:460px}
+    .game-ctrl{max-width:460px}
     .hint{max-width:460px;width:460px}
     .right-col{width:360px;flex-shrink:0}
     .right-col .sheet{position:static;transform:none;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px}
@@ -264,6 +276,10 @@ body{
             <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
             <div class="ss"><div class="v" id="timeNow">0:00</div><div class="l">TIME</div></div>
             <div class="ss"><div class="v best" id="bestScore">—</div><div class="l">BEST</div></div>
+        </div>
+
+        <div class="game-ctrl" id="gameCtrl">
+            <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
@@ -309,8 +325,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777201675"></script>
-<script src="/js/lpAudio.js?v=1777201675"></script>
+<script src="/js/supabase-config.js?v=1777202206"></script>
+<script src="/js/lpAudio.js?v=1777202206"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1319,7 +1335,7 @@ tpZone.addEventListener('touchcancel',tpEnd);
 const keys={};
 document.addEventListener('keydown',(e)=>{
     keys[e.key]=true;
-    if(e.key===' '){ e.preventDefault(); if(running){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); } }
+    if(e.key===' '){ e.preventDefault(); if(running){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI(); } }
     if(e.key==='Enter'){ if(!running) startGame(); }
 });
 document.addEventListener('keyup',(e)=>{ keys[e.key]=false; });
@@ -1425,6 +1441,22 @@ function updateDifficulty(){
 
 /* ---- Game state ---- */
 let running=false, paused=false;
+
+/* ---- Pause UI sync ----
+   Mobile/tablet players had no on-screen pause button (Space-only),
+   which felt unfair. The .game-ctrl bar shows during a live game
+   only and toggles ⏸ ↔ ▶ to mirror the paused flag. */
+function syncPauseUI(){
+    const gc=$('gameCtrl'), btn=$('pauseBtn');
+    if(!gc||!btn) return;
+    if(running){
+        gc.classList.add('on');
+        btn.textContent = paused ? '▶ 재개' : '⏸ 일시정지';
+        btn.setAttribute('aria-label', paused ? '재개' : '일시정지');
+    } else {
+        gc.classList.remove('on');
+    }
+}
 let startedAt=0, pausedAt=0, totalPausedMs=0;
 let gameOverSent=false;
 let flamePulse=0;
@@ -1596,6 +1628,7 @@ function startGame(){
     gameOverSent=false;
     // Show zone 0 label on start
     zoneLabel={nameEn:ZONES[0].nameEn, nameKo:ZONES[0].nameKo, timer:0};
+    syncPauseUI();
     requestAnimationFrame(gameLoop);
 }
 
@@ -1603,6 +1636,7 @@ function triggerGameOver(){
     running=false;
     sfxOver();
     BGM.stop();
+    syncPauseUI();
     /* Round to integer — record_dodge_attempt's p_duration_ms column
        is INT, and elapsedMs is a sub-millisecond float from
        performance.now() math. Postgres rejects 9769.099… verbatim. */
@@ -1980,7 +2014,7 @@ function drawFrame(now, dt){
         ctx.fillText('PAUSED',CW/2,CH/2);
         ctx.font='13px Noto Sans KR,sans-serif';
         ctx.fillStyle='rgba(255,255,255,.55)';
-        ctx.fillText('Space 또는 화면 탭으로 재개',CW/2,CH/2+36);
+        ctx.fillText('▶ 재개 버튼 / Space / 화면 탭',CW/2,CH/2+36);
         ctx.textAlign='left';
     }
 }
@@ -1998,7 +2032,7 @@ function idleLoop(now){
 
 /* Pause on canvas tap when running */
 canvasWrap.addEventListener('click',()=>{
-    if(running&&!pointer.active){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); }
+    if(running&&!pointer.active){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI(); }
 });
 
 /* ======== Bottom sheet ======== */
@@ -2054,6 +2088,13 @@ async function loadLeaderboard(scope){
 
 /* ======== Boot ======== */
 $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); });
+$('pauseBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!running) return;
+    paused=!paused;
+    if(paused) BGM.pause(); else BGM.resume();
+    syncPauseUI();
+});
 (async()=>{
     await initAuth();
     if(me){
@@ -2066,6 +2107,6 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777201675"></script>
+<script src="/js/siteFooter.js?v=1777202206"></script>
 </body>
 </html>
