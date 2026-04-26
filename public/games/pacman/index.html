@@ -64,6 +64,12 @@ body{
 .ss .v.best{color:#FFD500}
 .ss .l{font-size:.6em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin-top:4px;font-weight:800}
 
+/* Game control bar — visible during play across all viewports. */
+.game-ctrl{display:none;align-items:center;justify-content:center;width:100%;max-width:396px;gap:10px;margin:-2px 0 0}
+.game-ctrl.on{display:flex}
+.ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
+.ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
+
 /* Maze is 13 wide × 15 tall → aspect 13/15. Fit portrait-friendly. */
 .canvas-wrap{
     position:relative;
@@ -152,6 +158,7 @@ body{
 @media(min-width:768px) and (max-width:1023px){
     .canvas-wrap{max-width:480px;max-height:72vh}
     .score-strip{max-width:480px}
+    .game-ctrl{max-width:480px}
     .dpad-wrap{max-width:480px}
     .hint{max-width:480px}
 }
@@ -160,6 +167,7 @@ body{
     .left-col{display:flex;flex-direction:column;gap:12px;align-items:center;flex:0 0 auto}
     .canvas-wrap{width:min(48vw, 560px);max-height:82vh}
     .score-strip{max-width:560px;width:560px}
+    .game-ctrl{max-width:560px}
     .hint{max-width:560px;width:560px}
     .right-col{width:360px;flex-shrink:0}
     .right-col .sheet{position:static;transform:none!important;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px;pointer-events:auto}
@@ -187,6 +195,10 @@ body{
             <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
             <div class="ss"><div class="v" id="livesNow">🐵</div><div class="l">LIFE</div></div>
             <div class="ss"><div class="v best" id="bestScore">—</div><div class="l">BEST</div></div>
+        </div>
+
+        <div class="game-ctrl" id="gameCtrl">
+            <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
@@ -231,8 +243,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777202206"></script>
-<script src="/js/lpAudio.js?v=1777202206"></script>
+<script src="/js/supabase-config.js?v=1777203054"></script>
+<script src="/js/lpAudio.js?v=1777203054"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -347,6 +359,19 @@ loadMaze();
 let player, ghosts, dir, nextDir;
 let score = 0, dotsEaten = 0, ghostsEaten = 0;
 let running = false, paused = false;
+
+/* ---- Pause UI sync (mobile/tablet/PC parity) ---- */
+function syncPauseUI(){
+    const gc=$('gameCtrl'), btn=$('pauseBtn');
+    if(!gc||!btn) return;
+    if(running){
+        gc.classList.add('on');
+        btn.textContent = paused ? '▶ 재개' : '⏸ 일시정지';
+        btn.setAttribute('aria-label', paused ? '재개' : '일시정지');
+    } else {
+        gc.classList.remove('on');
+    }
+}
 let startedAt = 0, lastTick = 0;
 let playerSpeed = 8.5;   /* tiles/sec */
 let ghostSpeed  = 7.0;   /* tiles/sec (chaser normal speed) */
@@ -386,11 +411,13 @@ function startGame(){
     sfxStart();
     running = true; paused = false;
     startedAt = performance.now(); lastTick = startedAt;
+    syncPauseUI();
     requestAnimationFrame(loop);
 }
 
 function gameOver(won){
     running = false;
+    syncPauseUI();
     const duration = Math.round(performance.now()-startedAt);
     const wrap = $('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
@@ -712,6 +739,22 @@ function draw(now){
             ctx.beginPath(); ctx.arc(gcx+rad*0.2, gcy-2, 1.5, 0, Math.PI*2); ctx.fill();
         }
     }
+    /* ---- Pause indicator ---- */
+    if(paused && running){
+        const W=canvas.width, H=canvas.height;
+        ctx.fillStyle='rgba(5,5,15,.72)';
+        ctx.fillRect(0,0,W,H);
+        ctx.font='bold 22px Orbitron,sans-serif';
+        ctx.fillStyle='#FFD500';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('PAUSED', W/2, H/2);
+        ctx.font='11px Noto Sans KR,sans-serif';
+        ctx.fillStyle='rgba(255,255,255,.6)';
+        ctx.fillText('▶ 재개 버튼 / Space', W/2, H/2+26);
+        ctx.textAlign='left';
+        ctx.textBaseline='alphabetic';
+    }
 }
 
 function loop(now){
@@ -743,7 +786,7 @@ document.addEventListener('keydown',(e)=>{
     else if (k==='ArrowDown'||k==='s'||k==='S') queueDir(0,1);
     else if (k==='ArrowLeft'||k==='a'||k==='A') queueDir(-1,0);
     else if (k==='ArrowRight'||k==='d'||k==='D') queueDir(1,0);
-    else if (k===' '){ if(running) paused=!paused; e.preventDefault(); }
+    else if (k===' '){ if(running){ paused=!paused; syncPauseUI(); } e.preventDefault(); }
     else if (k==='Enter'){ if(!running) startGame(); }
     else return;
     if (k.startsWith('Arrow')) e.preventDefault();
@@ -756,7 +799,7 @@ document.querySelectorAll('.dpad button').forEach(b=>{
         else if(d==='down') queueDir(0,1);
         else if(d==='left') queueDir(-1,0);
         else if(d==='right') queueDir(1,0);
-        else if(d==='pause'){ if(running) paused=!paused; }
+        else if(d==='pause'){ if(running){ paused=!paused; syncPauseUI(); } }
     };
     b.addEventListener('click', fire);
     b.addEventListener('touchstart', fire, {passive:false});
@@ -820,6 +863,12 @@ async function loadLeaderboard(scope){
 
 /* ========== Boot ========== */
 $('ovBtn').addEventListener('click', startGame);
+$('pauseBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!running) return;
+    paused=!paused;
+    syncPauseUI();
+});
 (async()=>{
     await initAuth();
     if (me){
@@ -832,6 +881,6 @@ $('ovBtn').addEventListener('click', startGame);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777202206" defer></script>
+<script src="/js/siteFooter.js?v=1777203054" defer></script>
 </body>
 </html>

@@ -61,6 +61,12 @@ body{
 .ss .v.lvl{color:#FFE66D}
 .ss .l{font-size:.6em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin-top:4px;font-weight:800}
 
+/* Game control bar — visible during play across all viewports. */
+.game-ctrl{display:none;align-items:center;justify-content:center;width:100%;max-width:396px;gap:10px;margin:-2px 0 0}
+.game-ctrl.on{display:flex}
+.ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
+.ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
+
 /* Play area is 2:3 portrait (360 × 540 base) — fills the left-col. */
 .canvas-wrap{
     position:relative;
@@ -140,6 +146,7 @@ body{
 @media(min-width:768px) and (max-width:1023px){
     .canvas-wrap{max-width:480px;max-height:72vh}
     .score-strip{max-width:480px}
+    .game-ctrl{max-width:480px}
     .hint{max-width:480px}
 }
 @media(min-width:1024px){
@@ -147,6 +154,7 @@ body{
     .left-col{flex:0 0 auto;width:auto}
     .canvas-wrap{width:min(34vw, 540px);max-height:82vh}
     .score-strip{max-width:540px;width:540px}
+    .game-ctrl{max-width:540px}
     .hint{max-width:540px;width:540px}
     .right-col{width:360px;flex-shrink:0}
     .right-col .sheet{position:static;transform:none!important;max-height:none;border-radius:18px;border:1px solid var(--panel-br);background:rgba(14,14,28,.55);padding-bottom:14px;pointer-events:auto}
@@ -174,6 +182,10 @@ body{
             <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
             <div class="ss"><div class="v lvl" id="levelNow">1</div><div class="l">LEVEL</div></div>
             <div class="ss"><div class="v best" id="bestScore">—</div><div class="l">BEST</div></div>
+        </div>
+
+        <div class="game-ctrl" id="gameCtrl">
+            <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
@@ -212,8 +224,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777202206"></script>
-<script src="/js/lpAudio.js?v=1777202206"></script>
+<script src="/js/supabase-config.js?v=1777203054"></script>
+<script src="/js/lpAudio.js?v=1777203054"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -694,6 +706,19 @@ let progress;           /* how many of the sample have been tapped correctly */
 let timeLeft, timeLevelBudget;
 let combo, maxCombo;
 let running, paused;
+
+/* ---- Pause UI sync (mobile/tablet/PC parity) ---- */
+function syncPauseUI(){
+    const gc=$('gameCtrl'), btn=$('pauseBtn');
+    if(!gc||!btn) return;
+    if(running){
+        gc.classList.add('on');
+        btn.textContent = paused ? '▶ 재개' : '⏸ 일시정지';
+        btn.setAttribute('aria-label', paused ? '재개' : '일시정지');
+    } else {
+        gc.classList.remove('on');
+    }
+}
 let startedAt, lastTick;
 let ingredientsCaught, burgersCompleted;
 let popUntil, popText, popKind;
@@ -781,11 +806,13 @@ function startGame(){
     sfxStart();
     running = true; paused = false;
     startedAt = performance.now(); lastTick = startedAt;
+    syncPauseUI();
     requestAnimationFrame(loop);
 }
 
 function gameOver(){
     running = false;
+    syncPauseUI();
     sfxOver();
     const duration = Math.round(performance.now() - startedAt);
     const wrap = $('canvasWrap');
@@ -1024,6 +1051,21 @@ function draw(now){
         const rem = flashUntil - now;
         ctx.fillStyle = 'rgba(0,230,118,'+ (rem/1500) +')';
         ctx.fillRect(0, 0, W, H);
+    }
+    /* ---- Pause indicator ---- */
+    if(paused && running){
+        ctx.fillStyle='rgba(5,5,15,.74)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.font='bold 28px Orbitron,sans-serif';
+        ctx.fillStyle='#FFB74D';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        ctx.fillText('PAUSED', W/2, H/2);
+        ctx.font='13px Noto Sans KR,sans-serif';
+        ctx.fillStyle='rgba(255,255,255,.6)';
+        ctx.fillText('▶ 재개 버튼 / Space', W/2, H/2+34);
+        ctx.textAlign='left';
+        ctx.textBaseline='alphabetic';
     }
 }
 
@@ -1478,7 +1520,7 @@ document.addEventListener('keydown', (e)=>{
         );
         e.preventDefault();
     } else if (k === ' '){
-        if (running) paused = !paused;
+        if (running){ paused = !paused; syncPauseUI(); }
         e.preventDefault();
     } else if (k === 'Enter'){
         if (!running) startGame();
@@ -1524,6 +1566,12 @@ async function loadLeaderboard(scope){
 
 /* ========== Boot ========== */
 $('ovBtn').addEventListener('click', startGame);
+$('pauseBtn').addEventListener('click', (e)=>{
+    e.stopPropagation();
+    if(!running) return;
+    paused=!paused;
+    syncPauseUI();
+});
 (async()=>{
     await initAuth();
     if (me){
@@ -1541,6 +1589,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777202206"></script>
+<script src="/js/siteFooter.js?v=1777203054"></script>
 </body>
 </html>
