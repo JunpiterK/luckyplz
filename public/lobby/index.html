@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Lobby - Waiting for host | Lucky Please</title>
+    <meta name="description" content="Lucky Please multiplayer lobby — waiting for the host to pick a game.">
+    <meta name="robots" content="noindex, nofollow">
+    <link rel="canonical" href="https://luckyplz.com/lobby/">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00D9FF">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+    <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+    <style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--dark:#0A0A1A}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100vh;color:#fff;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+#bg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 35%,rgba(0,217,255,.10) 0%,transparent 55%),radial-gradient(ellipse at 50% 70%,rgba(79,195,247,.06) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#12122A 50%,#0A0A1A 100%)}
+.lobby-card{max-width:520px;width:calc(100% - 24px);margin:80px auto 32px;padding:36px 28px;background:linear-gradient(155deg,rgba(20,20,40,.92),rgba(10,10,30,.96));border:1px solid rgba(0,217,255,.25);border-radius:22px;box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 60px rgba(0,217,255,.06);text-align:center}
+.lobby-icon{font-size:3.5em;margin-bottom:12px;animation:floaty 2.6s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.lobby-title{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.5em;font-weight:900;letter-spacing:.06em;background:linear-gradient(135deg,#00D9FF,#4FC3F7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.lobby-sub{font-size:.95em;color:rgba(255,255,255,.65);line-height:1.6;margin-bottom:24px}
+.lobby-code{display:inline-flex;flex-direction:column;align-items:center;gap:4px;padding:14px 28px;border:1.5px dashed rgba(0,217,255,.4);border-radius:14px;background:rgba(0,217,255,.06);margin:6px 0 20px}
+.lobby-code .lbl{font-size:.7em;color:rgba(0,217,255,.7);letter-spacing:.18em;font-weight:700;text-transform:uppercase}
+.lobby-code .val{font-family:'Orbitron',monospace;font-size:1.6em;font-weight:900;letter-spacing:.14em;color:#00D9FF}
+.lobby-status{display:inline-flex;align-items:center;gap:10px;font-size:.92em;color:#FFE66D;font-weight:700;padding:10px 18px;background:rgba(255,230,109,.08);border:1px solid rgba(255,230,109,.28);border-radius:999px;margin-top:6px}
+.lobby-status .dot{width:8px;height:8px;border-radius:50%;background:#FFE66D;box-shadow:0 0 8px #FFE66D;animation:pulse 1.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+.lobby-tip{margin-top:18px;font-size:.78em;color:rgba(255,255,255,.4);line-height:1.6}
+.floating-home{position:fixed;bottom:14px;left:14px;z-index:1000;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.5);border:2px solid rgba(0,217,255,.4);color:#fff;font-size:1.2em;display:flex;align-items:center;justify-content:center;text-decoration:none;backdrop-filter:blur(10px);transition:all .3s;box-shadow:0 4px 15px rgba(0,0,0,.3)}
+.floating-home:hover{background:rgba(0,217,255,.3);border-color:var(--secondary);transform:scale(1.1)}
+    </style>
+</head>
+<body>
+<div id="bg"></div>
+
+<main class="lobby-card">
+    <div class="lobby-icon" aria-hidden="true">🎲</div>
+    <h1 class="lobby-title" id="lobbyTitle">대기실</h1>
+    <p class="lobby-sub" id="lobbySub">방장이 게임을 선택하는 중입니다</p>
+    <div class="lobby-code">
+        <span class="lbl" id="lobbyCodeLbl">방 코드</span>
+        <span class="val" id="lobbyCodeVal">—</span>
+    </div>
+    <div>
+        <span class="lobby-status">
+            <span class="dot"></span>
+            <span id="lobbyStatusText">방장 응답 대기 중…</span>
+        </span>
+    </div>
+    <p class="lobby-tip" id="lobbyTip">방장이 게임을 누르면 자동으로 함께 이동합니다.</p>
+</main>
+
+<a href="/" class="floating-home" aria-label="Home">🏠</a>
+
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777420268"></script>
+<script>
+/* Locale-aware text. Lobby is intentionally minimal — only Korean and
+   English are first-class; other locales fall through to English. The
+   page is short-lived (host clicks a game and everyone navigates away),
+   so an aggressive i18n investment isn't justified. */
+(function(){
+    const lang=(localStorage.getItem('luckyplz_lang')||navigator.language||'en').toLowerCase().split('-')[0];
+    const ko=lang==='ko';
+    const set=function(id,t){const el=document.getElementById(id);if(el)el.textContent=t};
+    if(!ko){
+        set('lobbyTitle','Waiting Room');
+        set('lobbySub','The host is picking a game');
+        set('lobbyCodeLbl','Room Code');
+        set('lobbyStatusText','Waiting for host…');
+        set('lobbyTip','When the host picks a game, you’ll follow automatically.');
+        document.title='Lobby — Waiting for host | Lucky Please';
+    }
+})();
+
+/* Pull the room code out of ?room= so it's visible immediately, even
+   before LpRoom finishes booting. */
+(function(){
+    const m=location.search.match(/[?&]room=([A-Z0-9]+)/i);
+    if(m){
+        const v=document.getElementById('lobbyCodeVal');
+        if(v)v.textContent=m[1].toUpperCase();
+    }
+})();
+
+/* Auto-join the host's channel as a guest. Mirrors the per-game pages
+   but with gameId='lobby'. The silent fast-path in lpRoom takes over
+   when both pin and nick arrive prefilled (home flow / handoff). The
+   lpMultiplayer panel + lp-room-status pill auto-mount via the
+   lp-room-guest-ready event so this page doesn't need its own UI for
+   roster / leave. */
+function _waitForLpRoom(cb,tries){
+    tries=tries||0;
+    if(window.LpRoom)return cb();
+    if(tries>60)return;
+    setTimeout(function(){_waitForLpRoom(cb,tries+1)},100);
+}
+_waitForLpRoom(function(){
+    const auto=window.LpRoom.detectAutoJoinParams();
+    if(!auto.code){
+        /* Direct visit with no room code — bounce home. The lobby has
+           no purpose without an attached room. */
+        location.replace('/');
+        return;
+    }
+    window.LpRoom.showGuestJoinModal(auto.code,{
+        gameId:'lobby',
+        prefillPin:auto.pin,
+        prefillNick:auto.nickname,
+        onJoined:function(g){
+            window._lpGuest=g;
+            /* Update the visible code (in case it differed from URL). */
+            const v=document.getElementById('lobbyCodeVal');
+            if(v)v.textContent=g.code;
+            const st=document.getElementById('lobbyStatusText');
+            if(st){
+                const ko=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().startsWith('ko');
+                st.textContent=ko?'방장 연결됨 · 게임 선택 대기':'Connected · waiting for game pick';
+            }
+        },
+        onCancel:function(){location.href='/'}
+    });
+});
+</script>
+<script src="/js/siteFooter.js?v=1777420268" defer></script>
+</body>
+</html>

@@ -753,10 +753,16 @@
             }
             /* Host transferring the room to a new page — follow them
                there with our own nickname appended so we auto-join on
-               arrival. Short delay gives the game code a chance to
-               handle host:navigate too if it registered its own
-               listener (e.g. to save state), but the navigation wins
-               even if nothing happens on the page side. */
+               arrival. The delay here is calibrated against the host's
+               own setTimeout(250ms) before navigating — we wait LONGER
+               so the host's new page has a head start to call
+               tryResumeHost + finish chan.subscribe before our join
+               request arrives. Without this gap, ~30% of transfers on
+               cold connections raced the new host channel into a
+               host_unreachable error on the guest. The silent fast-path
+               on the new page additionally retries on host_unreachable
+               as a backstop, so even pathologically slow page loads
+               recover without showing a join error. */
             if(ev==='host:navigate'&&accepted&&p&&p.url){
                 try{
                     const u=new URL(p.url,location.href);
@@ -764,7 +770,7 @@
                         u.searchParams.set('nick',nickname);
                     }
                     dbgLog('guest: following host to '+u.toString());
-                    setTimeout(function(){location.href=u.toString()},200);
+                    setTimeout(function(){location.href=u.toString()},600);
                 }catch(_){location.href=p.url}
                 /* Fall through to emit so game code can hook too. */
             }
@@ -822,9 +828,13 @@
             });
         });
 
-        /* Send join request, wait for ack (or timeout) */
+        /* Send join request, wait for ack (or timeout). Default 8s is
+           generous for slow LTE; callers (e.g. _silentGuestJoin retry on
+           transit) can shorten via opts.joinTimeout to fail fast and
+           retry rather than block the user. */
+        const _joinTimeoutMs=(typeof opts.joinTimeout==='number'&&opts.joinTimeout>0)?opts.joinTimeout:8000;
         const result=await new Promise(function(resolve){
-            const timer=setTimeout(function(){resolve({ok:false,error:'host_unreachable'})},8000);
+            const timer=setTimeout(function(){resolve({ok:false,error:'host_unreachable'})},_joinTimeoutMs);
             listeners._accepted=[function(d){clearTimeout(timer);resolve({ok:true,hostName:d.hostName,gameId:d.gameId,nickname:d.nickname})}];
             listeners._rejected=[function(d){clearTimeout(timer);resolve({ok:false,error:d.reason})}];
             /* pid — persistent device ID (window.getLpPlayerId). The
@@ -1118,7 +1128,28 @@
            +'.lp-room-qr-codes .lbl{font-size:.72em;color:rgba(255,255,255,.45);letter-spacing:.14em;font-weight:700;text-transform:uppercase}'
            +'.lp-room-qr-codes .val{font-size:1.9em;font-weight:900;letter-spacing:.1em;color:#fff}'
            +'.lp-room-qr-codes .val.pin{color:#FFE66D}'
-           +'@media(max-width:500px){.lp-room-qr-codes .val{font-size:1.4em}.lp-room-qr-label{font-size:1em}}';
+           +'@media(max-width:500px){.lp-room-qr-codes .val{font-size:1.4em}.lp-room-qr-label{font-size:1em}}'
+           /* Game-picker grid — replaces the single "Start" button when
+              the host arrives via the home flow (fromHome=true). Lets the
+              host wait for guests to join, then choose a game without a
+              pre-selected default. Same 4-col grid + cyan tile language
+              as the lpMultiplayer panel switcher so the host sees a
+              consistent visual when they switch games later in-session. */
+           +'.lp-room-game-picker{margin:14px 0 4px;padding-top:14px;border-top:1px solid rgba(0,217,255,.18)}'
+           +'.lp-room-pick-label{font-size:.92em;font-weight:800;color:#00D9FF;margin-bottom:10px;letter-spacing:.04em;text-shadow:0 0 8px rgba(0,217,255,.3);text-align:center}'
+           +'.lp-room-game-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
+           +'.lp-room-game-btn{background:rgba(79,195,247,.12);border:1px solid rgba(79,195,247,.32);'
+           +'  color:#E1F5FE;border-radius:12px;padding:12px 4px 9px;font-size:11.5px;font-weight:700;'
+           +'  cursor:pointer;transition:all .15s ease;display:flex;flex-direction:column;'
+           +'  align-items:center;gap:5px;line-height:1.1;font-family:inherit}'
+           +'.lp-room-game-btn:hover:not([disabled]){background:rgba(79,195,247,.28);border-color:#4FC3F7;'
+           +'  box-shadow:0 0 12px rgba(79,195,247,.35);transform:translateY(-1px)}'
+           +'.lp-room-game-btn:active{transform:scale(.96)}'
+           +'.lp-room-game-btn[disabled]{opacity:.4;cursor:not-allowed}'
+           +'.lp-room-game-btn.transiting{background:rgba(79,195,247,.45);border-color:#4FC3F7;'
+           +'  box-shadow:0 0 14px rgba(79,195,247,.55);animation:lpRoomPulse 1.1s infinite}'
+           +'.lp-room-game-emoji{font-size:24px;line-height:1}'
+           +'@media(max-width:520px){.lp-room-game-grid{grid-template-columns:repeat(4,1fr);gap:6px}.lp-room-game-emoji{font-size:21px}.lp-room-game-btn{padding:10px 2px 7px;font-size:10.5px}}';
         document.head.appendChild(s);
     }
 
@@ -1144,9 +1175,14 @@
        onCreated(roomObj) as soon as the channel is live. */
     function showHostModal(opts){
         opts=opts||{};
-        /* Default to 'roulette' so rooms created from the home page are
-           discoverable — 'unknown' caused guests to be sent to /games/unknown/ */
-        const gameId=opts.gameId||'roulette';
+        /* Game-page hosts (Create Room button on /games/<id>/) pass
+           their own gameId. Home-page hosts (fromHome=true) get the
+           special 'lobby' gameId so any guest who joins via the home
+           modal lands on /lobby/ — a passive "waiting for host to
+           pick a game" page — rather than seeing the roulette setup
+           by accident. The host's modal here renders the picker grid
+           which transferTo's everyone into the chosen game when ready. */
+        const gameId=opts.gameId||(opts.fromHome?'lobby':'roulette');
         const hostName=opts.hostName||'Host';
         const pin=opts.pin||String(Math.floor(1000+Math.random()*9000));
 
@@ -1203,9 +1239,47 @@
         }).catch(function(){container.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:.75em">QR library failed</div>'});
     }
 
+    /* Game catalogue used by the home-flow picker grid. Order mirrors
+       the home-page priority (룰렛·사다리 먼저). Kept inline here rather
+       than imported from lpMultiplayer.js because that module isn't
+       guaranteed to load in time on the home page. */
+    const _LP_PICKER_GAMES=[
+        {id:'roulette',  ko:'룰렛',    en:'Roulette', emoji:'🎯', path:'/games/roulette/'},
+        {id:'ladder',    ko:'사다리',  en:'Ladder',   emoji:'🪜', path:'/games/ladder/'},
+        {id:'team',      ko:'팀뽑기',  en:'Teams',    emoji:'👥', path:'/games/team/'},
+        {id:'lotto',     ko:'로또',    en:'Lotto',    emoji:'🎰', path:'/games/lotto/'},
+        {id:'bingo',     ko:'빙고',    en:'Bingo',    emoji:'🎱', path:'/games/bingo/'},
+        {id:'car-racing',ko:'레이싱',  en:'Racing',   emoji:'🏎️', path:'/games/car-racing/'},
+        {id:'quiz',      ko:'퀴즈',    en:'Quiz',     emoji:'🎓', path:'/games/quiz/'}
+    ];
+    function _renderPickerGridHtml(){
+        const lang=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0];
+        const ko=lang==='ko';
+        const tiles=_LP_PICKER_GAMES.map(function(g){
+            const lbl=ko?g.ko:g.en;
+            return '<button type="button" class="lp-room-game-btn" data-path="'+g.path+'" data-id="'+g.id+'">'
+                +'<span class="lp-room-game-emoji">'+g.emoji+'</span>'
+                +'<span>'+escapeHtml(lbl)+'</span>'
+            +'</button>';
+        }).join('');
+        return '<div class="lp-room-game-picker">'
+            +'<div class="lp-room-pick-label">'+_t('▼ 시작할 게임을 선택하세요','▼ Pick a game to start')+'</div>'
+            +'<div class="lp-room-game-grid">'+tiles+'</div>'
+        +'</div>';
+    }
+
     function showHostShare(room,opts){
         opts=opts||{};
         const url=room.shareUrl();
+        /* Home-flow: render the game-picker grid in place of the single
+           "Start" button. No game is pre-selected — the host waits for
+           guests, then picks. Game pages (NOT fromHome) keep the simple
+           "Start!" button since their game is implicit. */
+        const pickerHtml=opts.fromHome?_renderPickerGridHtml():'';
+        const footerHtml=opts.fromHome
+            ?'<div class="row" style="margin-top:14px"><button class="btn ghost" id="lpRoomEnd" style="flex:1">'+_t('방 닫기','End Room')+'</button></div>'
+            :'<div class="row"><button class="btn ghost" id="lpRoomEnd">'+_t('방 닫기','End Room')+'</button>'
+              +'<button class="btn primary" id="lpRoomStart">'+_t('시작!','Start!')+'</button></div>';
         mountBackdrop(
             '<h3>'+_t('👥 방 생성 완료','👥 Room Created')+'</h3>'
            +'<div class="sub">'+_t('카메라로 QR을 찍거나 링크를 공유하세요. 4자리 비밀번호도 같이 알려줘야 합니다.','Scan the QR with a camera, or share the link. Don\'t forget to share the 4-digit PIN too.')+'</div>'
@@ -1224,10 +1298,8 @@
            +'<button id="lpRoomKakao">💬 '+_t('카톡/메신저','Kakao/Chat')+'</button>'
            +'</div>'
            +'<div class="lp-room-guest-list" id="lpRoomGuests"><div class="title">'+_t('접속자','Guests')+' <span class="lp-room-guest-count" id="lpRoomGuestCount">0</span></div><div class="empty" id="lpRoomGuestsBody">'+_t('아직 아무도 없음 · 친구 기다리는 중…','No one yet — waiting for friends…')+'</div></div>'
-           +'<div class="row">'
-           +'<button class="btn ghost" id="lpRoomEnd">'+_t('방 닫기','End Room')+'</button>'
-           +'<button class="btn primary" id="lpRoomStart">'+(opts.fromHome?_t('게임 선택 →','Pick a Game →'):_t('시작!','Start!'))+'</button>'
-           +'</div>'
+           +pickerHtml
+           +footerHtml
         );
         _renderQr(document.getElementById('lpRoomQr'),url,220);
         const qrBigBtn=document.getElementById('lpRoomQrBig');
@@ -1274,19 +1346,40 @@
             closeBackdrop();
             if(opts.onCancel)opts.onCancel();
         });
-        document.getElementById('lpRoomStart').addEventListener('click',function(){
-            closeBackdrop();
-            if(opts.fromHome){
-                /* Created from the home page — transferTo sets lp_hostTransit
-                   and broadcasts host:navigate to early-joining guests before
-                   the page unloads. Default game is roulette; host switches
-                   via the multiplayer panel switcher once they arrive. */
-                room.transferTo('/games/roulette/');
-            }else{
+        if(opts.fromHome){
+            /* Each picker tile is its own start button. Lock + transferTo
+               mirrors the in-game lpMultiplayer panel switcher so a guest
+               arriving via QR mid-pick gets reason:'locked' on the OLD room
+               (the new room they land on is fresh + unlocked, so they can
+               still join after the navigation completes). The visible
+               "transiting" pulse gives the host immediate feedback that
+               their tap registered before the page unloads ~600ms later. */
+            const tiles=document.querySelectorAll('.lp-room-game-btn');
+            tiles.forEach(function(btn){
+                btn.addEventListener('click',function(){
+                    if(btn.disabled)return;
+                    /* Disable siblings so a frantic double-tap on a slow
+                       phone can't queue two transferTo calls. */
+                    tiles.forEach(function(b){b.disabled=true});
+                    btn.classList.add('transiting');
+                    try{if(room.lock&&!room.isLocked())room.lock()}catch(_){}
+                    try{room.transferTo(btn.getAttribute('data-path'))}
+                    catch(_){
+                        /* If transferTo throws synchronously, restore the
+                           buttons so the user can retry. */
+                        tiles.forEach(function(b){b.disabled=false});
+                        btn.classList.remove('transiting');
+                    }
+                });
+            });
+        }else{
+            const startBtn=document.getElementById('lpRoomStart');
+            if(startBtn)startBtn.addEventListener('click',function(){
+                closeBackdrop();
                 showHostStatus(room);
                 if(opts.onReady)opts.onReady(room);
-            }
-        });
+            });
+        }
     }
 
     /* Fullscreen QR overlay — event hosts display this on a big screen /
@@ -1658,12 +1751,18 @@
                 if(g.error==='wrong_game'){
                     err.textContent=_t('게임 방을 찾는 중…','Finding the right game…');
                     probeRoom(code).then(function(p){
-                        const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
-                        const _gid=_v.includes(p&&p.gameId)?p.gameId:'roulette';
                         if(p&&p.ok){
                             try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
                                 code:code,pin:pin.value,nick:nick.value.trim(),t:Date.now()
                             }))}catch(_){}
+                            /* lobby rooms route to /lobby/ — see showHomeJoinModal
+                               for the same branch + rationale. */
+                            if(p.gameId==='lobby'){
+                                location.href='/lobby/?room='+encodeURIComponent(code);
+                                return;
+                            }
+                            const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+                            const _gid=_v.includes(p.gameId)?p.gameId:'roulette';
                             location.href='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
                         }else{
                             err.textContent=_t('방을 찾을 수 없어요','Room not found');
@@ -1696,32 +1795,79 @@
        on the home modal, scanned a QR with full creds, or rejoined via
        the recent-room shortcut). Renders a tiny "Connecting…" pill,
        attempts the join, and falls back to the full form modal with
-       the underlying error if anything goes wrong. */
+       the underlying error if anything goes wrong.
+
+       Retry strategy on host_unreachable:
+         attempt 1 — 3s timeout (fast-fail to detect the transferTo race)
+         attempt 2 — 6s timeout (host's new page should be live by now)
+         attempt 3 — 8s timeout (last chance, full normal budget)
+         800ms sleep between attempts.
+
+       Why this matters: when a host clicks a different game from the
+       lpMultiplayer panel switcher (or the home-flow picker grid), the
+       OLD host's WS dies on page unload and the NEW host's chan needs
+       ~500-2000ms to subscribe. The guest follows the host:navigate
+       broadcast 600ms later but can still arrive before the new host's
+       channel is up, which used to surface as a "방장이 없어요" form
+       modal with no auto-recovery. The fast-fail + retry loop hides
+       that race from users in nearly every case while keeping a 17s
+       worst-case bound before the form modal takes over so a truly
+       broken room still surfaces a recoverable UI. */
     async function _silentGuestJoin(code,opts){
         const pinVal=String(opts.prefillPin).replace(/\D/g,'').slice(0,4);
         const nickVal=String(opts.prefillNick).trim().slice(0,20);
         try{localStorage.setItem('luckyplz_nick',nickVal)}catch(_){}
         const pill=_showConnectingPill();
-        let g;
-        try{
-            g=await guestJoin({code:code,pin:pinVal,nickname:nickVal,gameId:opts.gameId});
-        }catch(e){
-            try{pill.remove()}catch(_){}
-            return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:(e&&e.message)||'transport_error'}));
+        const RETRY_TIMEOUTS=[3000,6000,8000];
+        const RETRY_SLEEP=800;
+
+        function _setPillText(text){
+            if(!pill)return;
+            const main=pill.querySelector('.lp-room-main');
+            if(main)main.textContent=text;
         }
-        if(!g.ok){
+
+        let g=null,lastErr=null;
+        for(let attempt=0;attempt<RETRY_TIMEOUTS.length;attempt++){
+            if(attempt>0){
+                _setPillText(_t('방장 연결 중… ('+(attempt+1)+'/'+RETRY_TIMEOUTS.length+')',
+                              'Reconnecting to host… ('+(attempt+1)+'/'+RETRY_TIMEOUTS.length+')'));
+                await new Promise(function(r){setTimeout(r,RETRY_SLEEP)});
+            }
+            try{
+                g=await guestJoin({code:code,pin:pinVal,nickname:nickVal,gameId:opts.gameId,joinTimeout:RETRY_TIMEOUTS[attempt]});
+            }catch(e){
+                /* Transport-level fault (subscribe timeout, channel error).
+                   Don't retry — a broken socket won't fix itself in 800ms. */
+                try{pill.remove()}catch(_){}
+                return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:(e&&e.message)||'transport_error'}));
+            }
+            if(g.ok)break;
+            lastErr=g.error;
+            /* Only host_unreachable warrants a retry — bad_pin / locked /
+               wrong_game won't change by waiting. */
+            if(g.error!=='host_unreachable')break;
+        }
+
+        if(!g||!g.ok){
             /* wrong_game: re-probe + redirect, same as the form path.
                Stay silent — the user already committed to joining and a
                flash of an error modal before redirect would be jarring. */
-            if(g.error==='wrong_game'){
+            if(lastErr==='wrong_game'){
                 try{
                     const p=await probeRoom(code);
-                    const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
-                    const _gid=_v.includes(p&&p.gameId)?p.gameId:'roulette';
                     if(p&&p.ok){
                         try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
                             code:code,pin:pinVal,nick:nickVal,t:Date.now()
                         }))}catch(_){}
+                        /* lobby rooms route to /lobby/ — keeps guests off
+                           a misleading game setup screen while host picks. */
+                        if(p.gameId==='lobby'){
+                            location.href='/lobby/?room='+encodeURIComponent(code);
+                            return;
+                        }
+                        const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+                        const _gid=_v.includes(p.gameId)?p.gameId:'roulette';
                         location.href='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
                         return;
                     }
@@ -1729,7 +1875,7 @@
                 /* Probe failed — fall through to form. */
             }
             try{pill.remove()}catch(_){}
-            return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:g.error||'unknown'}));
+            return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:lastErr||'unknown'}));
         }
         try{pill.remove()}catch(_){}
         showGuestStatus(g);
@@ -2260,6 +2406,16 @@
             try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
                 code:code,pin:pinIn.value,nick:nickIn.value.trim(),t:Date.now()
             }))}catch(_){}
+            /* 'lobby' rooms (host hasn't picked a game yet) get their own
+               dedicated waiting page so the guest doesn't see the wrong
+               game's setup screen while they wait. /lobby/ auto-joins the
+               same channel; when the host clicks a game in their picker,
+               host:navigate broadcasts everywhere and the guest follows
+               from /lobby/ to the chosen /games/<id>/. */
+            if(probe.gameId==='lobby'){
+                location.href='/lobby/?room='+encodeURIComponent(code);
+                return;
+            }
             /* Validate gameId — 'unknown' is truthy so the old fallback
                never fired; now we whitelist valid ids explicitly. */
             const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
