@@ -500,7 +500,7 @@ body{
 
 <div class="toast" id="toast"></div>
 
-<script src="/js/supabase-config.js?v=1777240048"></script>
+<script src="/js/supabase-config.js?v=1777418853"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -884,6 +884,9 @@ $('btnJoin').addEventListener('click', async () => {
             });
         }
         guest = await window.LpRoom.guestJoin({code, pin, nickname:nick, gameId:'quiz'});
+        /* The silent fast-path may have rendered a connecting pill —
+           remove it now that we're switching to the lobby view. */
+        if(window.LpRoom&&window.LpRoom.hideConnectingPill)window.LpRoom.hideConnectingPill();
         myNick = guest.nickname || nick;
         wireGuestListeners();
         installHostCtlAsGuest();
@@ -896,6 +899,12 @@ $('btnJoin').addEventListener('click', async () => {
         $('lobbyQR').style.display = 'none';
         showView('vLobby');
     } catch (e){
+        /* Silent fast-path failed — drop the pill, surface the form so
+           the user can fix the input (most likely a wrong PIN typed on
+           the home modal). Without this, the user would be staring at
+           the previous view (vModeSelect) with only a toast hint. */
+        if(window.LpRoom&&window.LpRoom.hideConnectingPill)window.LpRoom.hideConnectingPill();
+        if(typeof showView==='function')showView('vJoin');
         toast('참가 실패: ' + e.message);
         $('btnJoin').disabled = false;
         $('btnJoin').textContent = '참가하기 →';
@@ -1814,15 +1823,33 @@ function finalizeSolo(){
         const _p = location.search.match(/[?&]pin=(\d{4})/);
         if (_p) $('inPin').value = _p[1];
         if ($('inNick')) $('inNick').value = myNick || '게스트';
-        showView('vJoin');
-        /* Merge transit token (PIN+nick), then auto-submit */
+        /* Merge transit token (PIN+nick) from sessionStorage, then either
+           silently join OR render the form depending on whether we have
+           full credentials. The old code unconditionally rendered vJoin
+           with a 200ms auto-click, which flashed the form briefly and
+           led users to think they had to press 참가하기 a second time
+           — exact bug reported by the user. Now: full prefill ⇒ silent
+           pill + direct join; partial prefill ⇒ form so they can finish
+           filling in. */
         (function _autoJoin(){
             if(window.LpRoom&&window.LpRoom.detectAutoJoinParams){
                 const auto=window.LpRoom.detectAutoJoinParams();
                 if(auto.pin)$('inPin').value=auto.pin;
                 if(auto.nickname)$('inNick').value=auto.nickname;
-                if($('inCode').value&&$('inPin').value)
-                    setTimeout(()=>$('btnJoin')&&$('btnJoin').click(),200);
+                const haveAll=$('inCode').value&&/^\d{4}$/.test($('inPin').value)&&$('inNick').value.trim();
+                if(haveAll){
+                    /* Silent fast-path: don't show vJoin at all. The
+                       lpRoom connecting pill is enough visual feedback;
+                       on success btnJoin's onclick switches to vLobby.
+                       On failure (handled in btnJoin's catch), we'll
+                       fall back to vJoin so the user can correct. */
+                    if(window.LpRoom.showConnectingPill)window.LpRoom.showConnectingPill();
+                    /* Defer one tick so any pending JS finishes and the
+                       button's onclick runs in a clean stack. */
+                    setTimeout(function(){$('btnJoin')&&$('btnJoin').click()},0);
+                    return;
+                }
+                showView('vJoin');
                 return;
             }
             var _t=0;
@@ -1879,6 +1906,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777240048"></script>
+<script src="/js/siteFooter.js?v=1777418853"></script>
 </body>
 </html>

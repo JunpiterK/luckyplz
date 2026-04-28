@@ -21,6 +21,70 @@
     ...
     const guest = await window.LpRoom.guestJoin({code, pin, nickname, gameId});
     guest.on('host:result', payload => ...);
+
+  ============ Latency / stability hardening (2026-04 pass) ============
+  Improvements grounded in publicly documented multiplayer techniques:
+
+  1. Pre-warming the Supabase WebSocket on /games/* page load —
+     Discord/Slack desktop clients open their gateway WS at app launch.
+     Saves the 200-500ms cold-handshake hit on the user's first
+     "Create Room" / auto-join.
+
+  2. Universal heartbeat (5s) — host fires host:heartbeat regardless of
+     game state; guests reset a watchdog. If 12s pass with no host
+     event of ANY kind, guests auto-fire requestSnapshot to recover.
+     Adapted from Phoenix Channels' built-in 20s heartbeat (we tightened
+     it because mobile WS often dies after ~30s and we want at least
+     two heartbeats inside that window).
+
+  3. visibilitychange auto-resync — Chrome Page Lifecycle docs:
+     https://developer.chrome.com/docs/web-platform/page-lifecycle-api
+     A backgrounded tab can miss broadcasts when supabase-js's WS is
+     killed by the OS. We pull the latest snapshot on visibility-restore.
+
+  4. Tick coalescing (50ms cap = 20 Hz) — Source engine's snapshot rate.
+     Reference: https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking
+     Centralised in roomApi.broadcast so games can naively tick at
+     60Hz without flooding the channel.
+
+  5. RTT measurement via host:ping / guest:pong (4s cadence) —
+     RFC 4585 RTCP feedback timing. Median across guests is exposed
+     as room.rtt(); adaptive UI / tick rate can key off it.
+
+  6. Host-clock skew sampling — host stamps every heartbeat + ping
+     with Date.now(); guests collect 9 most-recent samples and expose
+     the median as g.skew(). NTP-style sample-and-median (RFC 5905).
+     Lets games interpolate animations against a shared "host time"
+     even when phone clocks drift seconds apart.
+
+  ============ Roadmap (NOT yet implemented) ============
+
+  A. WebRTC DataChannel fast-path for SAME-NETWORK / nearby peers.
+     Same-LAN: 1-3 ms vs Supabase cloud: 50-150 ms. Plan:
+       - New module public/js/lpRtc.js, gated behind feature flag
+         (localStorage.lpRtcEnabled='1') so we can canary it.
+       - Use the existing Supabase channel as the SIGNALING bus —
+         exchange offer/answer/ICE candidates as broadcast events
+         (`guest:rtc_offer`, `host:rtc_answer`, `*:rtc_ice`).
+       - 1 host ↔ N guests star topology (NOT mesh). Host opens
+         RTCPeerConnection per joined guest, two DataChannels each:
+           'state'  ordered+reliable   — config/snapshot/result
+           'tick'   unordered+lossy(maxRetransmits:0) — host:tick/frame
+       - room.broadcast(event) routes high-frequency events through
+         RTC when the DC is open for ALL guests; falls back to Supabase
+         for state events and any guest still in negotiation.
+       - ICE: stun:stun.l.google.com:19302 (free Google STUN). No TURN —
+         we accept that ~5% of cellular users with symmetric NAT will
+         silently fall through to the Supabase path.
+     Reference samples: https://webrtc.github.io/samples/src/content/datachannel/
+
+  B. Binary payload encoding (msgpack) for tick events. ~40% smaller
+     wire size, but adds a 30KB lib + per-game decode hooks. ROI is
+     marginal until WebRTC is in.
+
+  C. Guest-side RTT — currently host-only. Could be added by piggybacking
+     a `lastRtt` field in host:ping so guests can surface their own
+     latency to the user without an extra round-trip.
 */
 (function(){
     /* Bump this whenever the wire protocol or guest UI semantics change.
@@ -225,6 +289,9 @@
             if(!p.gid||!guests.has(p.gid))return;
             const info=guests.get(p.gid);
             guests.delete(p.gid);
+            /* Drop the RTT sample for the leaving guest so room.rtt()'s
+               median doesn't include a ghost reading. */
+            try{_rttByGuest&&_rttByGuest.delete(p.gid)}catch(_){}
             guestLeaveCbs.forEach(function(cb){try{cb({id:p.gid,nickname:info.nickname})}catch(e){}});
             broadcastGuestList();
         });
@@ -295,6 +362,71 @@
             });
         });
 
+        /* ---- Tick coalescing + RTT tracking ----
+           Source-engine "send-rate cap" pattern: high-frequency events
+           (host:tick/host:frame) are throttled centrally so a game that
+           naively calls broadcast() every requestAnimationFrame doesn't
+           swamp the channel. 50ms = 20 Hz, the same cadence Source uses
+           by default for snapshots and the value Valve's 2001 networking
+           paper recommends for real-time multiplayer over WAN.
+           Reference: https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking */
+        const TICK_EVENT=/^host:(tick|frame)$/;
+        let _lastTickT=0;
+
+        /* RTT measurement via a lightweight ping/pong loop. The host
+           sends host:ping every 4s with a unique pingId + monotonic
+           timestamp; each guest replies guest:pong{pingId,gid}; the
+           host computes RTT = now - sentAt for each pong. The latest
+           sample per guest is exposed via room.rtt({gid}) and the
+           median across all guests via room.rtt() (no args).
+           Median (not avg) tracks the typical experience instead of
+           being skewed by one phone on shaky LTE. Pattern lifted
+           directly from RFC 4585 RTCP feedback timing. */
+        const _pendingPings=new Map(); // pingId → sentAt(performance.now)
+        const _rttByGuest=new Map();   // gid → latest RTT ms
+        let _pingTimer=null;
+        function _startPingLoop(){
+            if(_pingTimer)return;
+            _pingTimer=setInterval(function(){
+                if(!subscribed||guests.size===0)return;
+                const pingId=shortId();
+                _pendingPings.set(pingId,performance.now());
+                /* Stale ping cleanup — anything older than 12s is a lost
+                   pong, drop it so the map doesn't grow unbounded. */
+                const cutoff=performance.now()-12000;
+                _pendingPings.forEach(function(t,k){if(t<cutoff)_pendingPings.delete(k)});
+                try{chan.send({type:'broadcast',event:'host:ping',payload:{pingId:pingId,t:Date.now()}})}catch(_){}
+            },4000);
+        }
+        chan.on('broadcast',{event:'guest:pong'},function(msg){
+            const p=msg.payload||{};
+            const sentAt=_pendingPings.get(p.pingId);
+            if(sentAt!=null&&p.gid&&guests.has(p.gid)){
+                const rtt=Math.round(performance.now()-sentAt);
+                _rttByGuest.set(p.gid,rtt);
+                _pendingPings.delete(p.pingId);
+            }
+        });
+
+        /* Universal heartbeat — broadcast a no-op host:heartbeat every
+           5s while the channel is live. Guests use it as a liveness
+           signal (independent of game-state events) so they can detect
+           a silent socket drop and trigger requestSnapshot. Lifted from
+           Phoenix Channels' built-in heartbeat (20s by default; we use
+           5s because mobile WS often dies after ~30s and we want at least
+           two heartbeats inside that window for a fast detect). */
+        let _hbTimer=null;
+        let _hbSeq=0;
+        function _startHeartbeat(){
+            if(_hbTimer)return;
+            _hbTimer=setInterval(function(){
+                if(!subscribed)return;
+                try{chan.send({type:'broadcast',event:'host:heartbeat',payload:{seq:++_hbSeq,t:Date.now()}})}catch(_){}
+            },5000);
+        }
+        _startHeartbeat();
+        _startPingLoop();
+
         var roomApi={
             code:code,
             gameId:gameId,
@@ -303,10 +435,31 @@
             guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt,authed:!!e[1].authed,authedName:e[1].authedName||null}})},
             broadcast:function(event,payload){
                 if(!subscribed){dbgLog('host: broadcast '+event+' DROPPED (not subscribed)');return false}
+                /* Centralised tick throttle so games don't have to
+                   re-implement the 50ms cap on every host:tick callsite.
+                   Per-game throttles in roulette/car-racing remain (extra
+                   safety, no harm). */
+                if(TICK_EVENT.test(event)){
+                    const now=performance.now();
+                    if(now-_lastTickT<50)return false;
+                    _lastTickT=now;
+                }
                 try{chan.send({type:'broadcast',event:event,payload:payload||{}})}
                 catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
                 if(event!=='host:tick')dbgLog('host: broadcast '+event);
                 return true;
+            },
+            /* Latest RTT(ms) to a specific guest, or median across all
+               guests when called without args. Returns null when no
+               sample is available yet (room just opened, or this guest
+               hasn't pong'd back yet). */
+            rtt:function(opts){
+                opts=opts||{};
+                if(opts.gid){return _rttByGuest.has(opts.gid)?_rttByGuest.get(opts.gid):null}
+                const arr=Array.from(_rttByGuest.values()).filter(function(v){return typeof v==='number'});
+                if(!arr.length)return null;
+                arr.sort(function(a,b){return a-b});
+                return arr[Math.floor(arr.length/2)];
             },
             /* Subscribe to connection-status transitions: 'connected',
                'reconnecting'. The status pill wires this up to surface
@@ -334,6 +487,11 @@
             isLocked:function(){return locked},
             close:function(){
                 closing=true;
+                /* Stop the keepalive timers BEFORE removing the channel so
+                   the next tick doesn't try to send on a torn-down chan
+                   and trip the reconnecting state. */
+                if(_hbTimer){clearInterval(_hbTimer);_hbTimer=null}
+                if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null}
                 try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
                 /* Explicit shutdown — wipe both the short handoff token and
@@ -409,6 +567,11 @@
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
         'host:guests','host:bingo_winners','host:heartbeat','host:navigate',
+        /* RTT probe — host fires every 4s, guest replies guest:pong
+           with the matching pingId so the host can compute round-trip
+           latency per guest. Must be registered or supabase silently
+           drops it (same wildcard-flakiness reason as the rest). */
+        'host:ping',
         /* Live Quiz events — broadcast from host to all guests during
            a game session. Without explicit registration here, supabase
            realtime silently drops the payloads and guests stay stuck
@@ -490,11 +653,70 @@
         const cache={};
         const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result|guests)$/;
 
+        /* ---- Liveness watchdog + host-clock skew ----
+           Track the wall-clock time of the LAST host event we saw
+           (anything in KNOWN_HOST_EVENTS counts — heartbeat, tick,
+           config, etc). A 5s setInterval checks the gap; once it
+           exceeds 12s we assume Supabase Realtime silently dropped
+           a broadcast (or the socket was paused by mobile background
+           scheduling) and call requestSnapshot to recover state.
+           Threshold = 2.4 × the host's 5s heartbeat — false-positive
+           safe but still recovers within a tight window.
+
+           _hostClockSkew is the median diff between host's Date.now()
+           (in event payloads) and ours, sampled from host:heartbeat
+           and host:ping. Games can use it to interpolate timing
+           consistently across devices with drifted clocks. Pattern
+           taken from NTP's sample-and-median (RFC 5905). */
+        let _lastHostSignalT=Date.now();
+        let _watchdogTimer=null;
+        let _lastWatchdogResync=0;
+        const _skewSamples=[];
+        let _hostClockSkew=null;
+        function _noteHostSignal(){_lastHostSignalT=Date.now()}
+        function _recordSkew(hostT){
+            if(typeof hostT!=='number')return;
+            const sample=hostT-Date.now();
+            _skewSamples.push(sample);
+            if(_skewSamples.length>9)_skewSamples.shift();
+            const sorted=_skewSamples.slice().sort(function(a,b){return a-b});
+            _hostClockSkew=sorted[Math.floor(sorted.length/2)];
+        }
+        function _startWatchdog(){
+            if(_watchdogTimer)return;
+            _watchdogTimer=setInterval(function(){
+                if(guestClosing||!accepted)return;
+                const since=Date.now()-_lastHostSignalT;
+                if(since>12000){
+                    /* Throttle to one resync per 8s so a long outage
+                       doesn't spam guest:request_snapshot. */
+                    if(Date.now()-_lastWatchdogResync<8000)return;
+                    _lastWatchdogResync=Date.now();
+                    try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid}})}catch(_){}
+                    dbgLog('guest: watchdog fired ('+since+'ms silent) → request_snapshot');
+                }
+            },5000);
+        }
+
+        /* Visibility-restore auto-resync. Mobile browsers suspend the
+           tab + may kill the WS socket on background; supabase auto-
+           reconnects but missed broadcasts during the outage are GONE.
+           Pulling the latest snapshot when the page becomes visible
+           covers that gap. Pattern: Chrome dev guide on Page Lifecycle
+           (https://developer.chrome.com/docs/web-platform/page-lifecycle-api). */
+        function _onVisibilityChange(){
+            if(document.hidden||guestClosing||!accepted)return;
+            try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid}})}catch(_){}
+            _lastHostSignalT=Date.now(); /* avoid an immediate watchdog re-fire */
+        }
+        document.addEventListener('visibilitychange',_onVisibilityChange);
+
         function dispatch(ev,p){
             if(ev==='host:join_ack'){
                 if(p.gid!==gid)return; /* not for us */
                 if(p.ok){
                     accepted=true;
+                    _startWatchdog();
                     /* Host may have renamed us to avoid collision
                        (진희 → 진희2). Fall back to our originally
                        requested nick if the host didn't include one
@@ -504,6 +726,23 @@
                     emit('_rejected',{reason:p.reason||'rejected'});
                 }
                 return;
+            }
+            /* Liveness signal — every host:* event resets the silence
+               timer. Heartbeat is the catch-all for idle game states. */
+            _noteHostSignal();
+            /* Auto-respond to RTT probes — payload has pingId; we send
+               guest:pong with our gid + the same id so the host can
+               match it back. Fire-and-forget; errors caught silently. */
+            if(ev==='host:ping'&&p&&p.pingId){
+                if(typeof p.t==='number')_recordSkew(p.t);
+                try{chan.send({type:'broadcast',event:'guest:pong',payload:{pingId:p.pingId,gid:gid,t:Date.now()}})}catch(_){}
+                return;
+            }
+            if(ev==='host:heartbeat'){
+                if(p&&typeof p.t==='number')_recordSkew(p.t);
+                /* Heartbeat is internal liveness — don't surface to
+                   game code (bingo registers its own listener too,
+                   which still works because we still emit below). */
             }
             /* Host:snapshot targeted replay to newly-joined guest */
             if(ev==='host:snapshot'){
@@ -686,6 +925,11 @@
             },
             close:function(){
                 guestClosing=true;
+                /* Stop the watchdog + visibility hook BEFORE removing the
+                   channel so a late tick doesn't try to send on a torn
+                   socket. */
+                if(_watchdogTimer){clearInterval(_watchdogTimer);_watchdogTimer=null}
+                try{document.removeEventListener('visibilitychange',_onVisibilityChange)}catch(_){}
                 /* Save a 24h rejoin pointer ONLY for voluntary leaves — the
                    home modal uses this to render a "최근 방" one-click
                    rejoin card. We intentionally omit this branch from the
@@ -703,6 +947,12 @@
                 try{sb.removeChannel(chan)}catch(e){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'self'}}))}catch(_){}
             },
+            /* Median host-clock skew (host_t - guest_t) in ms, sampled
+               from heartbeat + ping payloads. Null until the first
+               sample arrives. Games can use it to display "what time
+               does the HOST think it is" so animations stay in sync
+               regardless of phone clock drift. */
+            skew:function(){return _hostClockSkew},
             /* Subscribe to connection-status transitions. Status pill
                uses this to flash "재연결 중" when the socket drops so
                users stop expecting live updates. Receives the current
@@ -1264,11 +1514,72 @@
         });
         /* Expose a refresh hook so game code can redraw after lock(). */
         bar._lpRefresh=refresh;
+
+        /* Tear ourselves down when the room is closed via ANY path
+           (lpMultiplayer panel "방 닫기", lpHostCtl ⏹, host:close from
+           a transferTo timeout, etc). Without this the status pill
+           lingers in the corner pointing at a dead channel — clicks
+           on its × would call room.close() on an already-closed
+           channel which is a silent no-op. */
+        function _onClosed(){
+            try{bar.remove()}catch(_){}
+            const _gp=document.getElementById('lpRoomGuestPanel');
+            if(_gp)try{_gp.remove()}catch(_){}
+            try{window.removeEventListener('lp-room-closed',_onClosed)}catch(_){}
+        }
+        window.addEventListener('lp-room-closed',_onClosed);
+    }
+
+    /* Friendly text for known protocol errors. Used by both the form
+       modal and the silent-join fallback to keep messaging consistent. */
+    function _guestErrorText(err){
+        return (err==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
+            :(err==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
+            :(err==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
+            :(err==='subscribe_timeout'||err==='channel_error')
+                ?_t('연결 지연 · 인터넷 확인 후 다시 시도','Connection failed — check your network and try again')
+            :_t('입장 실패. 다시 시도해주세요','Join failed — please try again');
+    }
+
+    /* Minimal "connecting" indicator that reuses the lp-room-status pill
+       styling — small enough not to dim the page like a backdrop, big
+       enough to make clear something is happening. Lives on its own
+       div id so removal is trivial. */
+    function _showConnectingPill(){
+        injectStyles();
+        const prev=document.getElementById('lpRoomConnPill');
+        if(prev)prev.remove();
+        const el=document.createElement('div');
+        el.id='lpRoomConnPill';
+        el.className='lp-room-status';
+        el.style.cursor='default';
+        el.innerHTML='<span class="dot"></span>'
+            +'<span class="lp-room-main">'+_t('방 연결 중…','Connecting…')+'</span>';
+        document.body.appendChild(el);
+        return el;
     }
 
     function showGuestJoinModal(code,opts){
         opts=opts||{};
         const gameId=opts.gameId;
+
+        /* ---- Silent fast-path ----
+           When BOTH pin and nickname are already known (typical home-flow
+           handoff: user filled the home modal, pressed Join, was redirected
+           to /games/<id>/?room=CODE with creds in sessionStorage), the
+           previous behavior briefly rendered this modal with the values
+           prefilled and auto-submitted 250ms later. Users perceived that
+           flash as "I have to press Join again", because they saw the same
+           form + button they thought they already submitted on the home
+           page. Skip the form entirely: show a small "Connecting…" pill
+           and call guestJoin directly. If anything fails, fall back to the
+           full form so the user can fix the input. */
+        const _pinReady=opts.prefillPin&&String(opts.prefillPin).replace(/\D/g,'').length===4;
+        const _nickReady=opts.prefillNick&&String(opts.prefillNick).trim();
+        if(_pinReady&&_nickReady&&!opts._fallbackError){
+            return _silentGuestJoin(code,opts);
+        }
+
         mountBackdrop(
             '<h3>'+_t('👥 같이 보기 방 참가','👥 Join Watch-Together Room')+'</h3>'
            +'<div class="sub">'+_t('방장이 알려준 4자리 비밀번호와 닉네임을 입력하세요.','Enter the 4-digit PIN from the host and a nickname.')+'</div>'
@@ -1288,12 +1599,15 @@
         const nick=document.getElementById('lpGuestNick');
         const err=document.getElementById('lpGuestErr');
         const saved=localStorage.getItem('luckyplz_nick');if(saved)nick.value=saved;
-        /* Accept prefills from URL params / home-page flow. If both PIN
-           and nickname are prefilled, auto-submit after a short delay so
-           users coming from a scanned QR with full credentials don't see
-           a redundant "press Join" step. */
+        /* Accept prefills from URL params / home-page flow. With the
+           silent fast-path above, we only land here when prefills are
+           PARTIAL (e.g. QR with no nick) or after a silent attempt
+           failed and is retrying as a form. */
         if(opts.prefillPin)pin.value=String(opts.prefillPin).slice(0,4);
         if(opts.prefillNick)nick.value=String(opts.prefillNick).slice(0,20);
+        /* Surface fallback error so the user can see what was wrong
+           with their silent attempt before retrying. */
+        if(opts._fallbackError&&err)err.textContent=_guestErrorText(opts._fallbackError);
         setTimeout(function(){(nick.value?pin:nick).focus()},50);
         pin.addEventListener('input',function(){pin.value=pin.value.replace(/\D/g,'').slice(0,4)});
         pin.addEventListener('keydown',function(e){if(e.key==='Enter')doJoin()});
@@ -1331,10 +1645,8 @@
             try{
                 g=await guestJoin({code:code,pin:pin.value,nickname:nick.value,gameId:gameId});
             }catch(e){
-                const code=(e&&e.message)||'transport_error';
-                err.textContent=(code==='subscribe_timeout'||code==='channel_error')
-                    ?_t('연결 지연 · 인터넷 확인 후 다시 시도','Connection failed — check your network and try again')
-                    :_t('입장 실패. 다시 시도해주세요','Join failed — please try again');
+                const ec=(e&&e.message)||'transport_error';
+                err.textContent=_guestErrorText(ec);
                 if(joinBtn)joinBtn.disabled=false;
                 return;
             }
@@ -1363,10 +1675,7 @@
                     });
                     return;
                 }
-                err.textContent=(g.error==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
-                    :(g.error==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
-                    :(g.error==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
-                    :_t('입장 실패','Join failed');
+                err.textContent=_guestErrorText(g.error);
                 if(joinBtn)joinBtn.disabled=false;
                 return;
             }
@@ -1375,10 +1684,56 @@
             if(opts.onJoined)opts.onJoined(g);
         }
         document.getElementById('lpGuestJoin').addEventListener('click',doJoin);
-        /* Auto-submit when both credentials arrived via prefill. */
-        if(opts.prefillPin&&opts.prefillNick&&pin.value.length===4&&nick.value.trim()){
-            setTimeout(doJoin,250);
+        /* No auto-submit here — the silent fast-path at the top of
+           showGuestJoinModal handles full-prefill cases without ever
+           rendering this form. We only land in form mode when the
+           user is expected to interact (partial prefill or explicit
+           retry after an error). */
+    }
+
+    /* Silent guest join — used when both pin and nickname are known up
+       front and the user has already implicitly consented (filled them
+       on the home modal, scanned a QR with full creds, or rejoined via
+       the recent-room shortcut). Renders a tiny "Connecting…" pill,
+       attempts the join, and falls back to the full form modal with
+       the underlying error if anything goes wrong. */
+    async function _silentGuestJoin(code,opts){
+        const pinVal=String(opts.prefillPin).replace(/\D/g,'').slice(0,4);
+        const nickVal=String(opts.prefillNick).trim().slice(0,20);
+        try{localStorage.setItem('luckyplz_nick',nickVal)}catch(_){}
+        const pill=_showConnectingPill();
+        let g;
+        try{
+            g=await guestJoin({code:code,pin:pinVal,nickname:nickVal,gameId:opts.gameId});
+        }catch(e){
+            try{pill.remove()}catch(_){}
+            return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:(e&&e.message)||'transport_error'}));
         }
+        if(!g.ok){
+            /* wrong_game: re-probe + redirect, same as the form path.
+               Stay silent — the user already committed to joining and a
+               flash of an error modal before redirect would be jarring. */
+            if(g.error==='wrong_game'){
+                try{
+                    const p=await probeRoom(code);
+                    const _v=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+                    const _gid=_v.includes(p&&p.gameId)?p.gameId:'roulette';
+                    if(p&&p.ok){
+                        try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({
+                            code:code,pin:pinVal,nick:nickVal,t:Date.now()
+                        }))}catch(_){}
+                        location.href='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
+                        return;
+                    }
+                }catch(_){}
+                /* Probe failed — fall through to form. */
+            }
+            try{pill.remove()}catch(_){}
+            return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:g.error||'unknown'}));
+        }
+        try{pill.remove()}catch(_){}
+        showGuestStatus(g);
+        if(opts.onJoined)opts.onJoined(g);
     }
 
     function showGuestStatus(g){
@@ -1565,6 +1920,18 @@
             void bar.offsetWidth;
             bar.classList.add('lp-room-flash');
         });
+
+        /* Tear the pill down when the host closes the room (host:close
+           → lp-room-closed) or when this guest leaves voluntarily. The
+           ended overlay (lpHostCtl) covers everything visually, but
+           leaving the pill underneath leaks DOM + a stale click target. */
+        function _onClosed(){
+            try{bar.remove()}catch(_){}
+            const _gp=document.getElementById('lpRoomGuestPanel');
+            if(_gp)try{_gp.remove()}catch(_){}
+            try{window.removeEventListener('lp-room-closed',_onClosed)}catch(_){}
+        }
+        window.addEventListener('lp-room-closed',_onClosed);
     }
 
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -2046,6 +2413,46 @@
         }catch(_){return null}
     }
 
+    /* ============ WebSocket pre-warming ============
+       Supabase Realtime opens its WebSocket lazily — on the first
+       channel.subscribe(). On a fresh page load with cold DNS + TLS,
+       that handshake takes 200-500ms on phones (more on flaky LTE),
+       and it sits squarely on the critical path of "user clicks
+       Create Room → modal can show the code". We can hide that latency
+       by warming the socket as soon as the game page is parsed.
+
+       Pattern adopted from Discord / Slack desktop apps, which
+       open their gateway WS at app launch — long before the user
+       clicks anything that needs it. Cost is one idle WS connection
+       (Supabase free tier allows 200 concurrent, our peak is far
+       below that), benefit is a hot path for the next channel.
+
+       Only warms on /games/* — home page rarely triggers a real-time
+       action, and /messages/ etc. have their own auth-gated boot. */
+    function _prewarmRealtime(){
+        if(!/^\/games\//.test(location.pathname))return;
+        if(window._lpRtPrewarmed)return; window._lpRtPrewarmed=true;
+        waitForSupabase(8000).then(function(sb){
+            try{
+                var warm=sb.channel('lp-warm-'+shortId(),{config:{broadcast:{self:false,ack:false}}});
+                warm.subscribe(function(status){
+                    if(status==='SUBSCRIBED'){
+                        /* Free the channel quickly so we don't pin a
+                           server-side slot. The underlying socket stays
+                           connected for ~30s afterwards which is well
+                           past when the user typically clicks Create. */
+                        setTimeout(function(){try{sb.removeChannel(warm)}catch(_){}},800);
+                    }
+                });
+            }catch(_){}
+        }).catch(function(){});
+    }
+    if(document.readyState==='loading'){
+        document.addEventListener('DOMContentLoaded',_prewarmRealtime);
+    }else{
+        _prewarmRealtime();
+    }
+
     window.LpRoom={
         hostCreate:hostCreate,
         guestJoin:guestJoin,
@@ -2059,6 +2466,13 @@
         normalizeOnlineBtn:normalizeOnlineBtn,
         tryResumeHost:tryResumeHost,
         peekLastRoom:peekLastRoom,
+        /* Exposed so games with their own join UI (e.g. quiz's vJoin
+           view) can render the same minimal "Connecting…" pill instead
+           of flashing a redundant join form. Returns the DOM element
+           — caller is responsible for removing it (or just ignoring
+           it; it's harmless to leave). */
+        showConnectingPill:_showConnectingPill,
+        hideConnectingPill:function(){var el=document.getElementById('lpRoomConnPill');if(el)try{el.remove()}catch(_){}},
         _injectStyles:injectStyles
     };
 })();

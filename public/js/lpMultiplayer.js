@@ -168,11 +168,14 @@
     return{x:window.innerWidth-360,y:82};// right-ish, below the status pill
   }
 
-  /* ---------- drag (desktop) ---------- */
+  /* ---------- drag (desktop) ----------
+     Each mount registers four window-level move/up listeners. Without
+     tracking, every game-page transit (transferTo) leaks four more
+     onto window. Returned teardown is invoked from unmount(). */
   function enableDrag(panel){
-    if(window.innerWidth<=640)return;
+    if(window.innerWidth<=640)return function(){};
     var bar=panel.querySelector('.lp-mp-titlebar');
-    if(!bar)return;
+    if(!bar)return function(){};
     var dragging=false,sx=0,sy=0,ox=0,oy=0;
     function onDown(e){
       if(e.target.closest('button'))return;
@@ -200,6 +203,14 @@
     bar.addEventListener('touchstart',onDown,{passive:false});
     window.addEventListener('touchmove',onMove,{passive:true});
     window.addEventListener('touchend',onUp);
+    return function teardown(){
+      try{bar.removeEventListener('mousedown',onDown)}catch(_){}
+      try{window.removeEventListener('mousemove',onMove)}catch(_){}
+      try{window.removeEventListener('mouseup',onUp)}catch(_){}
+      try{bar.removeEventListener('touchstart',onDown)}catch(_){}
+      try{window.removeEventListener('touchmove',onMove)}catch(_){}
+      try{window.removeEventListener('touchend',onUp)}catch(_){}
+    };
   }
 
   /* ---------- shell ---------- */
@@ -258,7 +269,9 @@
       p.setAttribute('data-view',next);writeState({view:next});
     };
 
-    enableDrag(p);
+    /* Stash the drag-teardown on the panel itself so unmount() can
+       reach it without threading it through every mount/render path. */
+    p._lpMpTeardownDrag=enableDrag(p);
     return p;
   }
 
@@ -405,8 +418,19 @@
 
   /* ---------- unmount ---------- */
   function unmount(){
-    if(current&&current.panel&&current.panel.parentNode){
-      try{current.panel.remove()}catch(_){}
+    if(current&&current.panel){
+      /* Drop window-level drag listeners before removing the DOM —
+         otherwise every transferTo + every host/guest swap leaks
+         another four mousemove/up/touchmove/end onto window. */
+      try{
+        if(typeof current.panel._lpMpTeardownDrag==='function'){
+          current.panel._lpMpTeardownDrag();
+          current.panel._lpMpTeardownDrag=null;
+        }
+      }catch(_){}
+      if(current.panel.parentNode){
+        try{current.panel.remove()}catch(_){}
+      }
     }
     current=null;
   }

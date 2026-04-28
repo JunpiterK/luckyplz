@@ -365,6 +365,12 @@
         extra || {}
       );
       safeBroadcast('host:ended', payload);
+      /* Dispatch lp-room-closed up-front so the lpMultiplayer floating
+         panel + lpRoom status pill tear down in the same tick the
+         ended-overlay appears, not 400ms later when the channel is
+         finally removed. _onRoomClosed above guards on `ended` so this
+         doesn't re-trigger ourselves. */
+      try { window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'host',reason:'host_ended'}})); } catch(_){}
       /* Flush the broadcast before closing. Some mobile browsers drop
          in-flight frames when the channel tears down immediately. */
       setTimeout(() => {
@@ -455,7 +461,37 @@
     }
 
     /* ---- Cleanup ---- */
+    /* When the underlying room is closed via ANY path other than this
+       module's own ⏹ button (host clicks the lpRoom status-pill ×, the
+       lpMultiplayer panel's "방 닫기", or a guest's "나가기"), we still
+       need to tear our DOM down — otherwise the floating ⏸ ⏹ bar stays
+       pinned to the corner pointing at a dead channel and the next
+       click on it tries to broadcast on a removed Supabase channel.
+       lpRoom dispatches `lp-room-closed` from every legitimate close
+       path; this listener funnels them all into destroy(). */
+    function _onRoomClosed(e){
+      if (ended) return;
+      /* Self-leaves (guest pressed "나가기" to play solo) shouldn't show
+         the ended overlay — the user explicitly chose to bail; surfacing
+         "GAME ENDED" would be misleading. lpRoom tags those with
+         reason:'self'. Host-side self-close paths (the panel "방 닫기",
+         the status × button, ⏹) all want the overlay so the host knows
+         the room is gone before any further action. */
+      const reason = (e && e.detail && e.detail.reason) || '';
+      if (role === 'guest' && reason === 'self') {
+        try { bar.remove(); }  catch(_){}
+        try { povl.remove(); } catch(_){}
+        try { eovl.remove(); } catch(_){}
+        try { window.removeEventListener('lp-room-closed', _onRoomClosed); } catch(_){}
+        if (_current === ctl) _current = null;
+        return;
+      }
+      try { showEndedOvl(role === 'host'); } catch(_){}
+    }
+    window.addEventListener('lp-room-closed', _onRoomClosed);
+
     function destroy(){
+      try { window.removeEventListener('lp-room-closed', _onRoomClosed); } catch(_){}
       try { bar.remove(); }  catch(_){}
       try { povl.remove(); } catch(_){}
       try { eovl.remove(); } catch(_){}
