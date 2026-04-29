@@ -289,10 +289,18 @@
     var dragging=false,sx=0,sy=0,ox=0,oy=0,isMobile=false,moved=false;
     function onDown(e){
       if(e.target.closest('button'))return;
-      /* Don't let the user drag while expanded — the panel covers the
-         whole screen anyway, and drag would do nothing visible. */
-      if(panel.getAttribute('data-view')==='expanded')return;
       isMobile=window.innerWidth<=640;
+      /* Drag is allowed in EVERY view state on desktop / tablet:
+         - normal: panel sits at user-chosen position, free move
+         - collapsed: only titlebar visible, still draggable
+         - expanded: panel widens to 720px on desktop — user often
+           wants to slide it out of game UI\'s way after expanding,
+           so drag must stay live (the previous "expanded → no drag"
+           gate was the user-reported bug)
+         Mobile: in expanded view the CSS pin-to-edges (top:10!important
+         / bottom:10!important / left:8 / right:8) overrides our inline
+         top so the visual position is locked anyway, but we let the
+         listener run harmlessly rather than special-case mobile here. */
       var pt=e.touches?e.touches[0]:e;
       dragging=true;moved=false;
       sx=pt.clientX;sy=pt.clientY;
@@ -536,6 +544,22 @@
     try{room.onGuestJoin&&room.onGuestJoin(render)}catch(_){}
     try{room.onGuestLeave&&room.onGuestLeave(render)}catch(_){}
 
+    /* Guarantee the titlebar is grabbable: after render() filled the
+       body, the panel may have grown taller than the initial clamp
+       budget (e.g. expanded view with a long guest list), and could
+       end up with its top edge above the viewport — leaving the user
+       no titlebar to grab. Re-clamp after render so the titlebar is
+       always visible. Mobile keeps its own bottom-anchor logic. */
+    try{
+      if(window.innerWidth>640){
+        var rr=panel.getBoundingClientRect();
+        var cc=clampPos(rr.left,rr.top,rr.width,rr.height);
+        if(cc.x!==rr.left||cc.y!==rr.top){
+          panel.style.left=cc.x+'px';panel.style.top=cc.y+'px';
+        }
+      }
+    }catch(_){}
+
     setBodyMpClass('host');
     current={mode:'host',api:room,panel:panel};
   }
@@ -597,6 +621,17 @@
       g.on&&g.on('host:snapshot',function(p){
         if(p&&p.hostName){hostAuthedName=p.hostName;render()}
       });
+    }catch(_){}
+
+    /* Same post-render re-clamp as mountHost — see comment there. */
+    try{
+      if(window.innerWidth>640){
+        var rg=panel.getBoundingClientRect();
+        var cg=clampPos(rg.left,rg.top,rg.width,rg.height);
+        if(cg.x!==rg.left||cg.y!==rg.top){
+          panel.style.left=cg.x+'px';panel.style.top=cg.y+'px';
+        }
+      }
     }catch(_){}
 
     setBodyMpClass('guest');
