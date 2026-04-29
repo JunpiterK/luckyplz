@@ -24,10 +24,19 @@
     --field-bg-focus:rgba(255,255,255,.05);--field-br-focus:rgba(255,230,109,.5)
 }
 html,body{height:100%}
+/* 폰에서 URL 바가 보이는 동안엔 viewport 가 좁아서 카드를 vertically
+   center 할 경우 top-bar (홈 버튼) 가 화면 위로 밀려 안 보이는 버그
+   가 있었음. justify-content 를 flex-start 로 바꿔서 항상 위에서 부터
+   쌓이게 함. 데스크탑에선 카드 max-width 480px 라 화면이 충분히 넓어
+   center 되든 top-align 되든 시각적 차이 미미. */
 body{
     font-family:'Noto Sans KR',sans-serif;background:var(--dark);color:#fff;
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
     min-height:100dvh;padding:24px 16px;letter-spacing:.01em;gap:20px;
+    /* 안전 영역 (iOS 노치) 위 패딩 추가 — fullscreen 진입 전엔 URL
+       바 자리, 진입 후엔 노치/상태 바 영역. env() 미지원 브라우저는
+       fallback 으로 위 padding 24 만 적용됨. */
+    padding-top:max(24px, env(safe-area-inset-top, 24px));
     background-image:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.05) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)
 }
 
@@ -312,28 +321,31 @@ h1.headline{
         <a class="view-profile" id="viewProfileLink" target="_blank" rel="noopener">View public page →</a>
     </div>
 
-    <!-- KISA / GDPR — marketing consent toggle + data export. Sit
-         between the form footer and the danger zone so they read as
-         "account-level settings", visually distinct from profile fields
-         above (the form section) and the destructive button below. -->
-    <div class="account-tools" style="margin-top:18px;padding-top:18px;border-top:1px solid rgba(255,255,255,.05)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0">
-            <div style="flex:1;min-width:0">
-                <div style="font-size:.82em;color:#fff;font-weight:600">마케팅·이벤트 정보 수신</div>
-                <div style="font-size:.72em;color:rgba(255,255,255,.45);margin-top:2px;line-height:1.5">
-                    이벤트 안내, 신규 게임 출시 알림 등을 이메일로 받습니다. 언제든 끌 수 있어요.
-                </div>
-            </div>
-            <label style="display:inline-flex;align-items:center;cursor:pointer;flex-shrink:0">
-                <input type="checkbox" id="marketingToggle" style="cursor:pointer;accent-color:#FF9A3C;width:20px;height:20px">
-            </label>
+    <!-- 개인정보 권리 행사 (전문가용 섹션) — GDPR Art. 20 + 개인정보
+         보호법 §35 응대용. 평소 사용자에겐 보일 필요 없으니 <details>
+         로 접어두고, "법적 권리" 라는 라벨로 일반 사용자가 실수로
+         눌러서 JSON 파일 받지 않게 함.
+
+         마케팅 토글은 제거됨 — 현재 luckyplz 가 마케팅 이메일을
+         발송하지 않고, OAuth-only 전환으로 SMTP 인프라 자체가
+         없음. 향후 발송 시작 시 이 자리에 토글 재추가. -->
+    <details class="legal-rights" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.05);font-size:.74em">
+        <summary style="cursor:pointer;color:rgba(255,255,255,.4);font-weight:500;letter-spacing:.02em;list-style:none;padding:4px 0;display:flex;align-items:center;gap:6px;outline:none;user-select:none">
+            <span style="font-size:.85em">▸</span> 개인정보 권리 행사 (전문가용)
+        </summary>
+        <div style="padding:8px 4px 4px;color:rgba(255,255,255,.45);line-height:1.55">
+            <p style="margin-bottom:8px">
+                개인정보보호법 §35 (열람권) · GDPR Art. 20 (이동권) 행사용입니다.
+                <strong style="color:rgba(255,255,255,.6)">평소엔 사용할 필요 없어요.</strong>
+                클릭하면 본인 계정의 모든 데이터를 기술적 형식 (JSON) 으로 백업합니다.
+            </p>
+            <button type="button" id="dataExportBtn"
+                    style="width:100%;padding:8px 10px;border:1px solid rgba(255,255,255,.1);border-radius:8px;background:rgba(255,255,255,.03);color:rgba(255,255,255,.6);font-family:inherit;font-size:.95em;font-weight:500;cursor:pointer;letter-spacing:.02em;transition:all .15s">
+                📥 내 데이터 다운로드 (JSON)
+            </button>
+            <div id="dataExportMsg" style="font-size:.95em;color:rgba(255,255,255,.4);margin-top:5px;text-align:center;min-height:1em"></div>
         </div>
-        <button type="button" id="dataExportBtn"
-                style="margin-top:10px;width:100%;padding:11px;border:1px solid rgba(0,217,255,.35);border-radius:10px;background:rgba(0,217,255,.05);color:#00D9FF;font-family:inherit;font-size:.82em;font-weight:600;cursor:pointer;letter-spacing:.02em">
-            📥 내 데이터 다운로드 (JSON)
-        </button>
-        <div id="dataExportMsg" style="font-size:.72em;color:rgba(255,255,255,.45);margin-top:6px;text-align:center;min-height:1em"></div>
-    </div>
+    </details>
 
     <!-- Compact danger zone — single muted text button at the
          bottom of the card. The actual warning + side-effects list
@@ -376,7 +388,7 @@ h1.headline{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777504623"></script>
+<script src="/js/supabase-config.js?v=1777506056"></script>
 <script>
 /* ================================================================
    /me/ — own profile editor.
@@ -921,49 +933,10 @@ function _refreshLastSignin(){
     try { el.title = new Date(iso).toLocaleString(); } catch(_){}
 }
 
-/* ---- KISA marketing-consent toggle ----
-   Loads current state from currentProfile.marketing_agreed_at (set by
-   the consent migration) and persists changes via set_consent RPC.
-   Both terms and privacy stay true once originally agreed (the RPC
-   ignores false for those — KISA semantics: can't unagree without
-   account deletion). RPC missing → silent fall-through (graceful). */
-async function _refreshMarketingToggle(){
-    const tg = $('marketingToggle');
-    if (!tg) return;
-    /* Read current state from the loaded profile. The export+migration
-       is async-safe — if the column doesn't exist yet, value is
-       undefined → checkbox unchecked. */
-    tg.checked = !!(currentProfile && currentProfile.marketing_agreed_at);
-}
-async function _saveMarketingConsent(checked){
-    try {
-        const { error } = await getSupabase().rpc('set_consent', {
-            p_terms: true,        /* sticky — stays true once set */
-            p_privacy: true,      /* sticky — stays true once set */
-            p_marketing: checked
-        });
-        if (error){
-            console.warn('[me.consent]', error.message);
-            /* RPC missing or failed — revert UI to the previous state. */
-            const tg = $('marketingToggle');
-            if (tg) tg.checked = !checked;
-        } else {
-            /* Refresh local state so subsequent edits stay consistent. */
-            currentProfile.marketing_agreed_at = checked ? new Date().toISOString() : null;
-        }
-    } catch(e) {
-        console.warn('[me.consent]', e);
-    }
-}
-if ($('marketingToggle')){
-    $('marketingToggle').addEventListener('change', e => {
-        _saveMarketingConsent(e.target.checked);
-    });
-    /* Set initial state once the profile finishes loading. The init
-       IIFE above sets currentProfile then calls paintForm — we hook
-       into that side-effect by re-reading on the next tick. */
-    setTimeout(_refreshMarketingToggle, 100);
-}
+/* 마케팅 토글 + set_consent UI 는 OAuth-only 전환 + 마케팅 메일
+   발송 인프라 부재로 제거됨. profiles.marketing_agreed_at 컬럼은
+   DB 에 그대로 남아있어 향후 발송 시작 시 토글 재추가 가능
+   (회원가입 시 동의한 marketing 값이 set_consent 로 기록되어 있음). */
 
 /* ---- GDPR-style data download ----
    Calls export_my_data() RPC and saves the JSONB blob as a downloadable
