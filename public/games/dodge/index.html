@@ -328,14 +328,22 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777460331"></script>
-<script src="/js/lpAudio.js?v=1777460331"></script>
+<script src="/js/supabase-config.js?v=1777460789"></script>
+<script src="/js/lpAudio.js?v=1777460789"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
 
 let me=null;
+/* ID + nickname captured at initAuth so we can detect mid-game session
+   changes (e.g. another tab signed in/out, token rotated, account
+   switched). The score is server-attributed via auth.uid() at the
+   moment record_dodge_attempt runs — NOT against `me.id` cached
+   client-side. So if `me.id` and the live session diverge, the score
+   silently lands on the WRONG account. We surface this loudly. */
+let meIdAtBoot=null;
+let meNickAtBoot='';
 
 /* ---- Auth gate ---- */
 async function initAuth(){
@@ -343,11 +351,44 @@ async function initAuth(){
         const u=await getUser();
         if(!u){ location.replace('/auth/?next='+encodeURIComponent(location.pathname)); return; }
         me=u;
+        meIdAtBoot=u.id;
+        try{
+            console.log('[dodge.auth] signed in as id=' + u.id +
+                        ' email=' + (u.email||'(none)'));
+        }catch(_){}
         const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
         const nick=prof.data?.nickname||'나';
+        meNickAtBoot=nick;
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
         loadMyStats();
     }catch(e){console.warn('auth init',e)}
+}
+
+/* Subscribe to auth state changes — picks up sign-out / account-switch
+   in other tabs OR token expiry. If the active session changes from
+   what we booted with, log it loud and (when the game isn't actively
+   running) reload so the new identity drives all subsequent state. */
+if(typeof onAuthChange==='function'){
+    onAuthChange((event, session) => {
+        const newId = session && session.user ? session.user.id : null;
+        try{ console.log('[dodge.auth] state change: event=' + event + ' newId=' + (newId||'(null)')); }catch(_){}
+        if(event==='SIGNED_OUT'){
+            /* User signed out somewhere else. We can't safely keep playing
+               since record_dodge_attempt would now fail with not_authenticated.
+               Reload back to the auth gate. */
+            if(typeof running==='undefined' || !running){
+                location.replace('/auth/?next='+encodeURIComponent(location.pathname));
+            }
+            return;
+        }
+        if(meIdAtBoot && newId && newId !== meIdAtBoot){
+            console.warn('[dodge.auth] account switched mid-session from '
+                + meIdAtBoot + ' to ' + newId + ' — reloading to refresh state');
+            if(typeof running==='undefined' || !running){
+                location.reload();
+            }
+        }
+    });
 }
 async function loadMyStats(){
     if(!me)return;
@@ -1659,6 +1700,12 @@ function triggerGameOver(){
     const ss=String(Math.floor((duration%60000)/1000)).padStart(2,'0');
     const zoneReached=ZONES[currentZoneIdx];
 
+    /* Record-as line — shows the player which account this attempt will
+       be saved under. Critical when the device is shared (multiple
+       people with separate accounts) so the player can spot a session-
+       mismatch ("기록 등록 계정: 와이프 닉네임" → "잠깐, 내 계정 아닌데?")
+       and re-login before retrying. Filled in below from the LIVE
+       session (not the cached me) — see the verification block. */
     $('overlay').innerHTML=
         '<h2 class="go">GAME OVER</h2>'
       +'<div class="score-big">'+score+'</div>'
@@ -1668,6 +1715,7 @@ function triggerGameOver(){
       +  '<div class="rank-card-pct" id="ovRankPct"></div>'
       +  '<div class="rank-card-pb" id="ovRankPb"></div>'
       +  '<div class="rank-card-debug" id="ovRankDebug"></div>'
+      +  '<div class="rank-card-acct" id="ovRankAcct" style="font-size:.74em;color:rgba(255,255,255,.55);margin-top:6px;letter-spacing:.02em"></div>'
       +  '<button class="rank-card-link" id="ovRankBtn">📊 전체 랭킹 보기</button>'
       +'</div>'
       +'<button class="btn" id="ovBtn">다시하기</button>'
@@ -1710,12 +1758,54 @@ function triggerGameOver(){
             }catch(_){}
         }
 
+        /* Session verification — fetch the LIVE auth user right before
+           recording so we know exactly which account the score will land
+           on. The server-side record_dodge_attempt uses auth.uid() at
+           call time, NOT our cached `me.id`, so a mid-game session
+           change (account-switch in another tab, token expiry, browser-
+           sync from another device) silently sends the score to a
+           different account. We log this divergence loudly to the
+           console + flag the on-screen "기록 등록 계정" to whatever the
+           server actually saw. */
+        let liveUser = null;
+        let liveNick = '';
+        try {
+            liveUser = await getUser();
+            try{
+                console.log('[dodge.record] live user.id =', liveUser ? liveUser.id : '(null)',
+                            '· me.id at boot =', meIdAtBoot);
+            }catch(_){}
+            if (!liveUser) {
+                console.warn('[dodge.record] no live session — aborting record');
+            } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
+                console.warn('[dodge.record] session changed since boot. boot=' + meIdAtBoot +
+                             ' live=' + liveUser.id + ' — score will go to LIVE user');
+            }
+            /* Fetch the live nickname so the on-screen "기록 등록 계정"
+               reflects who is ACTUALLY signed in, not the cached chip
+               that was set at boot. */
+            if (liveUser) {
+                try {
+                    const lp = await getSupabase().from('profiles')
+                        .select('nickname').eq('id', liveUser.id).maybeSingle();
+                    liveNick = (lp.data && lp.data.nickname) || liveUser.email || '';
+                } catch(_) { liveNick = liveUser.email || ''; }
+            }
+        } catch(e) {
+            console.warn('[dodge.record] getUser threw:', e);
+        }
+
         let pbMsg='', recordOk=false, recordErrKind=null;
         try{
             const {data,error}=await getSupabase().rpc('record_dodge_attempt',{p_duration_ms:duration});
             if(!error){
                 recordOk=true;
                 if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                try{
+                    console.log('[dodge.record] OK score=' + (data&&data.score) +
+                                ' is_pb=' + (data&&data.is_personal_best) +
+                                ' attributed to live user.id=' + (liveUser&&liveUser.id));
+                }catch(_){}
             }else{
                 recordErrKind=_classifyErr(error);
                 console.warn('[dodge.record_dodge_attempt]', error);
@@ -1812,6 +1902,38 @@ function triggerGameOver(){
            Devs can read details in console (we console.warn every error
            with a [game.rpc_name] prefix). */
         $('ovRankDebug').textContent='';
+
+        /* "기록 등록 계정" line — visible reminder of which account just
+           received this score. Reads the LIVE session (resolved above as
+           liveUser/liveNick) so a session mismatch ("아 와이프 계정이었네")
+           is obvious before the user closes the overlay. Also flags an
+           explicit warning if the live session differs from the booted
+           session — this is the case the user reported (someone playing,
+           score landing on a different person's account). */
+        const acctEl = $('ovRankAcct');
+        if (acctEl) {
+            if (!liveUser) {
+                acctEl.textContent = '⚠ 로그인 세션이 끊김 — 점수 미등록';
+                acctEl.style.color = 'rgba(255,180,80,.85)';
+            } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
+                /* Different account than the one we started with. Score
+                   has actually been recorded under liveUser, not the
+                   nickname shown in the topbar. Spell that out. */
+                acctEl.innerHTML = '⚠ 게임 도중 계정 전환 — 기록 등록 계정: <strong>'
+                    + esc(liveNick || '(' + liveUser.id.slice(0,8) + ')') + '</strong>';
+                acctEl.style.color = 'rgba(255,180,80,.95)';
+            } else if (recordOk) {
+                acctEl.innerHTML = '기록 등록 계정: <strong>'
+                    + esc(liveNick || meNickAtBoot || '(나)') + '</strong>';
+                acctEl.style.color = 'rgba(255,255,255,.55)';
+            } else {
+                /* Recording failed — still show the intended account so
+                   the user knows whose record WOULD have been updated. */
+                acctEl.innerHTML = '대상 계정: <strong>'
+                    + esc(liveNick || meNickAtBoot || '(나)') + '</strong>';
+                acctEl.style.color = 'rgba(255,255,255,.45)';
+            }
+        }
 
         loadMyStats();
         loadLeaderboard(currentScope);
@@ -2206,6 +2328,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777460331"></script>
+<script src="/js/siteFooter.js?v=1777460789"></script>
 </body>
 </html>
