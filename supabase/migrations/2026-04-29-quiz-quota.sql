@@ -19,10 +19,14 @@
 --            rows from the caller's quiz_user_questions, RLS-scoped
 --            to themselves.
 --
---            Old quiz_random_questions stays for backward compat —
---            no other code path uses it but we don't want to break
---            future re-exports of this RPC by name.
+-- Idempotent: drop+create the function each time so re-runs on schema
+-- updates land cleanly. The previous version of this migration used
+-- jsonb_object_keys with a relation alias, which Postgres parses
+-- ambiguously across versions; this rewrite uses jsonb_each_text
+-- which has a stable two-column (key,value) shape.
 -- =====================================================================
+
+drop function if exists public.quiz_random_questions_quota(jsonb, text);
 
 create or replace function public.quiz_random_questions_quota(
     p_quotas   jsonb  default '{}'::jsonb,    -- {"kpop":3,"sports":3,"myquiz":2}
@@ -45,20 +49,23 @@ set search_path = public
 as $$
 declare
     me uuid := auth.uid();
-    /* "myquiz" entry triggers user-content lookup; everything else is
-       a curated category. We split the keys here so the curated query
-       below doesn't waste a comparison against the user-content table. */
-    curated_cats text[] := array(
-        select k from jsonb_object_keys(p_quotas) k where k != 'myquiz'
-    );
-    myquiz_quota int := coalesce((p_quotas->>'myquiz')::int, 0);
+    /* curated_cats = every key in p_quotas except 'myquiz' (which
+       targets the user table). jsonb_each_text returns (key, value)
+       pairs — stable, no relation-alias ambiguity. */
+    curated_cats text[];
+    myquiz_quota int := coalesce(nullif(p_quotas->>'myquiz', '')::int, 0);
     /* Hard cap so a malicious payload like {"kpop":99999} can't drag
        a huge result set out of the bank. 30 mirrors the original cap. */
     HARD_CAP constant int := 30;
 begin
-    if jsonb_typeof(p_quotas) is null or jsonb_typeof(p_quotas) != 'object' then
+    if p_quotas is null or jsonb_typeof(p_quotas) != 'object' then
         raise exception 'bad_quotas';
     end if;
+
+    select coalesce(array_agg(key), ARRAY[]::text[])
+      into curated_cats
+      from jsonb_each_text(p_quotas)
+     where key != 'myquiz' and value::int > 0;
 
     return query
     with curated_pool as (
@@ -70,8 +77,10 @@ begin
            and q.category = any(curated_cats)
     ),
     curated_picks as (
-        select cp.* from curated_pool cp
-         where cp.rn <= coalesce((p_quotas->>cp.category)::int, 0)
+        select cp.id, cp.category, cp.era, cp.difficulty, cp.question, cp.options,
+               cp.correct, cp.hint, cp.source, cp.created_at, cp.language
+          from curated_pool cp
+         where cp.rn <= coalesce(nullif(p_quotas->>cp.category, '')::int, 0)
     ),
     myquiz_pool as (
         select uq.id,
@@ -94,9 +103,6 @@ begin
           from myquiz_pool mp
          where mp.rn <= myquiz_quota
     ),
-    /* Final union with a single shuffle so questions don't appear
-       grouped-by-category to the player. Cap to HARD_CAP regardless of
-       what the quotas summed to. */
     everything as (
         select cp.id, cp.category, cp.era, cp.difficulty, cp.question, cp.options,
                cp.correct, cp.hint, cp.source, cp.created_at, cp.language
