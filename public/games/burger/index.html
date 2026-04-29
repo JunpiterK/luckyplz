@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777457010"></script>
-<script src="/js/lpAudio.js?v=1777457010"></script>
+<script src="/js/supabase-config.js?v=1777457895"></script>
+<script src="/js/lpAudio.js?v=1777457895"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1379,23 +1379,22 @@ function drawTimeBar(now){
 }
 
 /* ========================================================================
-   Perspective slice illustration — replaces the old top-down roundel +
-   side-view stack with a single ~5cm-thick slice viewed from 15° above
-   the horizontal. Each ingredient is rendered as a cylinder (or thin
-   slab for cheese) whose top face is a foreshortened ellipse and whose
-   side wall is the visible front strip below it. The 15° elevation
-   keeps the slice mostly side-on (so the ingredient personality reads
-   from its profile) while letting the top texture peek through.
+   drawSliceSide — DEPRECATED (kept for reference only, no longer called).
+   ========================================================================
+   The first iteration of the ingredient palette rendered each filling as
+   an abstract cylinder via this function. User feedback was that the
+   results "looked like different ingredients" — the cylinders didn't
+   carry the personality (bumpy patty, sesame bun-style cheese rim,
+   ruffled lettuce, juicy tomato seed pockets) that makes each ingredient
+   recognisable at a glance.
 
-   Geometry ratios:
-     ry/rx = sin(15°) ≈ 0.26       — top ellipse foreshortening
-     thick = ~1× rx                — visual thickness ("5cm")
-
-   Each call:  drawSliceSide(id, cx, cy, w, thick)
-     cx, cy   — centre of the TOP ellipse on screen
-     w        — slice width (top ellipse rx*2)
-     thick    — vertical pixel height of the side wall
-   The cylinder body fills [cy − ry .. cy + thick + ry]. */
+   The palette now reuses the SAME INGREDIENTS catalog draw functions the
+   stacked burger panel uses (see drawIngredientRow below), with proper
+   per-ingredient thicknesses (PALETTE_H map). This function is kept here
+   purely so a future contributor reading the file can see the original
+   approach and the reasoning behind moving away from it. Safe to delete
+   if anyone cleaning up wants to.
+   ======================================================================== */
 function drawSliceSide(id, cx, cy, w, thick){
     const rx = w / 2;
     const ry = Math.max(2, rx * 0.26);
@@ -1629,47 +1628,136 @@ function drawIngredientRow(now){
         }
         ctx.restore();
 
-        /* Plate centred low in the tile so the slice has room above. The
-           slice + plate share lyOff so they pop together. */
+        /* Plate geometry — viewed from ~15° elevation, so a flat ellipse
+           with ry/rx ≈ sin(15°). Centred low in the tile so the
+           ingredient + the rim highlight have room above. */
         const plateCx = cx;
-        const plateCy = y + 88 + lyOff;
-        const plateW  = PLATE_W * 0.88;   /* 53 px */
-        const plateRy = plateW * 0.13;    /* ~7 px — flat ellipse for 15° view */
+        const plateCy = y + 90 + lyOff;
+        const plateW  = PLATE_W * 0.92;   /* 55 px outer rim */
+        const plateRy = plateW * 0.18;    /* ~10 px — flat ellipse for 15° view */
+        const wellW   = plateW - 7;       /* ~48 px inner well (plate has a 3.5 px rim) */
+        const wellRy  = plateRy - 1.6;
+        const wellY   = plateCy + 0.6;     /* well sits a hair below rim (recessed look) */
 
-        /* Static drop-shadow (anchored to tile, doesn't move with the lift)
-           — when the plate lifts up, the gap to its shadow is the visual
-           cue that it's airborne. */
-        ctx.fillStyle = 'rgba(0,0,0,.34)';
+        /* === Realistic ceramic plate === ----------------------------------
+           Layered for depth, light from upper-left:
+             1. Static ground shadow (anchored to tile so the lift gap
+                visually says "the plate is up").
+             2. Outer rim disc — cool grey gradient, slight glaze.
+             3. Soft inner rim shadow ring (the rim catches light, casts
+                a faint shadow into the well).
+             4. Well disc — warm off-white with a vertical gradient.
+             5. Specular arc on upper rim (porcelain glaze highlight).
+             6. Subtle inner rim line.
+           ------------------------------------------------------------------ */
+
+        /* (1) Ground shadow — softer + larger when plate is lifted. */
+        const liftMag = lyOff < 0 ? -lyOff : 0;
+        const shadowSpread = 4 + liftMag * 0.18;
+        const shadowAlpha  = Math.max(0.18, 0.34 - liftMag * 0.012);
+        ctx.fillStyle = 'rgba(0,0,0,' + shadowAlpha.toFixed(3) + ')';
         ctx.beginPath();
-        ctx.ellipse(plateCx, y + 100, plateW*0.46, 4 + (lyOff < 0 ? 0.3 * (-lyOff) : 0)/3, 0, 0, Math.PI*2);
+        ctx.ellipse(plateCx, y + 102, plateW*0.42 + liftMag*0.08, shadowSpread, 0, 0, Math.PI*2);
         ctx.fill();
 
-        /* Plate disc — gradient from rim highlight to slight shadow. */
-        const pg = ctx.createLinearGradient(0, plateCy - plateRy, 0, plateCy + plateRy);
-        pg.addColorStop(0,    '#FFFFFF');
-        pg.addColorStop(0.55, '#E5E9F1');
-        pg.addColorStop(1,    '#B5BCC9');
-        ctx.fillStyle = pg;
+        /* (2) Outer rim disc — cool porcelain. Vertical gradient for the
+              top-lit feel. */
+        const rimG = ctx.createLinearGradient(0, plateCy - plateRy, 0, plateCy + plateRy);
+        rimG.addColorStop(0,    '#FBFCFD');   /* top edge: brightest highlight */
+        rimG.addColorStop(0.45, '#E2E6EE');   /* mid: cool body */
+        rimG.addColorStop(1,    '#9DA5B3');   /* bottom: shaded underside */
+        ctx.fillStyle = rimG;
         ctx.beginPath();
         ctx.ellipse(plateCx, plateCy, plateW/2, plateRy, 0, 0, Math.PI*2);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,.18)';
-        ctx.lineWidth = 1.1;
-        ctx.stroke();
-        /* Inner rim line — separates rim from well. */
-        ctx.strokeStyle = 'rgba(0,0,0,.1)';
-        ctx.lineWidth = 0.7;
+
+        /* (3) Soft inner rim shadow — radial gradient from well edge fades
+              outward, simulating the rim casting a tiny shadow into the
+              well. Drawn before the well so the well's light surface
+              partially covers it. */
+        const innerShadow = ctx.createRadialGradient(plateCx, wellY, wellW*0.45, plateCx, wellY, wellW*0.5);
+        innerShadow.addColorStop(0,   'rgba(0,0,0,0)');
+        innerShadow.addColorStop(0.7, 'rgba(0,0,0,0)');
+        innerShadow.addColorStop(1,   'rgba(0,0,0,.18)');
+        ctx.fillStyle = innerShadow;
         ctx.beginPath();
-        ctx.ellipse(plateCx, plateCy, plateW/2 - 3, plateRy - 1, 0, 0, Math.PI*2);
+        ctx.ellipse(plateCx, wellY, wellW/2, wellRy, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        /* (4) Well — warm off-white. Slight peach undertone reads as
+              ceramic, not plastic. Vertical gradient (a hair darker at the
+              bottom) adds depth. */
+        const wellG = ctx.createLinearGradient(0, wellY - wellRy, 0, wellY + wellRy);
+        wellG.addColorStop(0,    '#FFFFFF');
+        wellG.addColorStop(0.55, '#FBF6EE');
+        wellG.addColorStop(1,    '#E2DAC9');
+        ctx.fillStyle = wellG;
+        ctx.beginPath();
+        ctx.ellipse(plateCx, wellY, wellW/2, wellRy, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        /* (5) Specular arc — thin glossy highlight along the upper-left
+              rim, suggesting wet/glazed porcelain catching the key light. */
+        ctx.save();
+        ctx.beginPath();
+        ctx.ellipse(plateCx, plateCy, plateW/2 - 0.6, plateRy - 0.6, 0, 0, Math.PI*2);
+        ctx.clip();
+        const specG = ctx.createLinearGradient(plateCx - plateW*0.4, plateCy - plateRy*0.9,
+                                                plateCx + plateW*0.1, plateCy - plateRy*0.2);
+        specG.addColorStop(0,   'rgba(255,255,255,0)');
+        specG.addColorStop(0.5, 'rgba(255,255,255,.55)');
+        specG.addColorStop(1,   'rgba(255,255,255,0)');
+        ctx.fillStyle = specG;
+        ctx.beginPath();
+        ctx.ellipse(plateCx - plateW*0.18, plateCy - plateRy*0.55,
+                    plateW*0.32, plateRy*0.5, -0.4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+
+        /* (6) Subtle outer outline + inner rim line for definition. */
+        ctx.strokeStyle = 'rgba(0,0,0,.22)';
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.ellipse(plateCx, plateCy, plateW/2, plateRy, 0, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(0,0,0,.13)';
+        ctx.lineWidth = 0.6;
+        ctx.beginPath();
+        ctx.ellipse(plateCx, wellY, wellW/2, wellRy, 0, 0, Math.PI*2);
         ctx.stroke();
 
-        /* The 5 cm slice sits ON the plate's well. Top of slice's bottom
-           ellipse aligns with plate top. With ry≈7 + thick=22 + topRy≈5,
-           the whole slice fits in ~34 px above plate centre. */
-        const sliceW     = PLATE_W * 0.66;       /* 40 px */
-        const sliceThick = 22;
-        const sliceCy    = plateCy - sliceThick - sliceW * 0.13;
-        drawSliceSide(TAP_IDS[i], plateCx, sliceCy, sliceW, sliceThick);
+        /* === Ingredient on the plate ====================================
+           Use the SAME draw functions the burger stack uses (INGREDIENTS
+           catalog at the top of this script). Those have already been
+           tuned to look right — bumpy patty edges, sesame-seed bun,
+           overhanging cheese, ruffled lettuce, juicy red tomato.
+
+           Realistic per-burger thicknesses (PALETTE_H below) — patty is
+           thickest, lettuce fluffiest, cheese is the THIN slice you'd
+           actually find on a real cheeseburger. Scaled ~1.4× LAYER_H so
+           each ingredient's thickness reads at a glance in the small
+           tile. The number badge zone (top-left ~22 px) is left clear.
+
+           ANCHORING: each ingredient's draw() takes (cx, cy, w, h) where
+           cy is its centre. For an ingredient sitting on a plate viewed
+           from 15° above, its bottom face contacts the plate at the
+           well's CENTRE Y (that's where the plate's top surface plane
+           is in screen coords). So cy = wellY − h/2. The previous
+           iteration aligned bottom to the well's TOP edge, which made
+           cheese visibly float above the plate.
+           ================================================================ */
+        const PALETTE_H = {
+            patty:   28,   // thickest filling — chunky beef
+            lettuce: 20,   // ruffled fluff
+            tomato:  13,   // thin juicy slice
+            cheese:  8,    // very thin slab — true to a real cheeseburger
+            onion:   10    // thin ring slice
+        };
+        const id = TAP_IDS[i];
+        const ingH = PALETTE_H[id] || 16;
+        const ingW = wellW - 4;          /* ingredient barely smaller than well */
+        const ingCy = wellY - ingH/2;    /* bottom of ingredient = plate surface */
+        INGREDIENTS[id].draw(plateCx, ingCy, ingW, ingH);
 
         /* Number badge — stays anchored to tile (doesn't lift with plate). */
         ctx.fillStyle = 'rgba(0,0,0,.5)';
@@ -1856,6 +1944,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777457010"></script>
+<script src="/js/siteFooter.js?v=1777457895"></script>
 </body>
 </html>
