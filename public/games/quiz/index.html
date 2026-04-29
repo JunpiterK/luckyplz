@@ -461,11 +461,21 @@ body{
      auto-rendered by /js/lpHostCtl.js (installed in host/guest setup).
      No markup is needed here. -->
 
-<!-- ============ MODE-SELECT (initial) ============ -->
+<!-- ============ MODE-SELECT (initial) ============
+     Quiz is multiplayer-only — needs at minimum 1 host + 1 guest.
+     Solo mode was removed (the "혼자 풀어보기" link + startSoloGame
+     path) because the per-question Race element + leaderboard don't
+     work without an audience to compete against. The home page's
+     QUIZ tile is essentially an entry point to this Create/Join
+     screen. -->
 <main class="view on" id="vModeSelect">
     <div class="setup-card">
-        <div class="setup-title">모드 선택</div>
-        <div class="setup-sub">친구들과 실시간으로 대결하는 Live Quiz. 호스트가 방을 만들고 게스트는 방 코드만으로 <b>회원가입 없이</b> 참가. 최대 <b>100명</b>까지.</div>
+        <div class="setup-title">⚡ Live Quiz</div>
+        <div class="setup-sub">
+            친구들과 실시간으로 대결하는 멀티플레이 퀴즈예요.
+            호스트가 방을 만들고 게스트는 방 코드 + 4자리 PIN으로 <b>회원가입 없이</b> 참가합니다.
+            최대 <b>100명</b>까지, <b>최소 2명</b> (호스트 1 + 게스트 1) 부터 시작 가능.
+        </div>
 
         <!-- Nickname prompt for anonymous users — only rendered when
              signedIn === false. Saved to localStorage so the next
@@ -478,11 +488,8 @@ body{
                    style="width:100%;padding:12px 14px;border-radius:10px;background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.15);color:#fff;font-family:inherit;font-size:.95em;font-weight:600;text-align:center">
         </div>
 
-        <button class="big-btn" id="btnModeHost" style="display:none">🎙 방 만들기 (호스트)</button>
-        <button class="big-btn ghost" id="btnModeJoin" style="margin-top:8px">🫂 방 참가 (게스트)</button>
-    </div>
-    <div class="setup-card" style="padding-top:16px;padding-bottom:16px">
-        <div class="setup-sub" style="margin-bottom:0;text-align:center">솔로로 연습하고 싶으면? <a href="#" id="btnSoloMode" style="color:#00D9FF;text-decoration:underline">혼자 풀어보기</a></div>
+        <button class="big-btn" id="btnModeHost">🎙 방 만들기</button>
+        <button class="big-btn ghost" id="btnModeJoin" style="margin-top:8px">🫂 방 참가</button>
     </div>
 </main>
 
@@ -551,7 +558,7 @@ body{
             </label>
         </div>
     </div>
-    <button class="big-btn" id="btnCreate">▶ 게임 시작!</button>
+    <button class="big-btn" id="btnCreate">▶ 방 만들기 (게스트 모집)</button>
     <button class="big-btn ghost" id="btnSetupBack" style="margin-top:8px">← 뒤로</button>
 </main>
 
@@ -718,7 +725,7 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777442921"></script>
+<script src="/js/supabase-config.js?v=1777444001"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -782,12 +789,12 @@ function categoryLabel(cat){
 /* ============================================================
    State
    ============================================================ */
-let mode = null;            /* 'host' | 'guest' | 'solo' */
+let mode = null;            /* 'host' | 'guest' (solo removed — quiz is multiplayer-only) */
 let myNick = '플레이어';
 let myUserId = null;
 let room = null;            /* LpRoom host */
 let guest = null;           /* LpRoom guest */
-let hostCtlRef = null;      /* LpHostCtl controller — null in solo */
+let hostCtlRef = null;      /* LpHostCtl controller */
 /* No default categories — the host explicitly picks one or more
    before starting. The previous default of 6 pre-selected chips meant
    players who didn't carefully un-pick ended up with a topic mix they
@@ -828,7 +835,7 @@ const QUIZ_LANGS = [
     { code:'zh', flag:'🇨🇳', label:'中文',      ready:false }
 ];
 
-let questions = [];         /* loaded question list (host + solo) */
+let questions = [];         /* loaded question list (host-side) */
 let currentQIdx = 0;
 let qStartAt = 0;
 let qDurationMs = 4000;
@@ -1428,12 +1435,10 @@ $('btnModeJoin').addEventListener('click', () => {
     if ($('inNick') && myNick && myNick !== '플레이어') $('inNick').value = myNick;
     showView('vJoin');
 });
-$('btnSoloMode').addEventListener('click', (e) => {
-    e.preventDefault();
-    mode = 'solo';
-    $('ctxChip').innerHTML = '<span class="role-chip">👤 솔로</span>';
-    showView('vSetup');
-});
+/* Solo mode removed — quiz is multiplayer-only.
+   The legacy btnSoloMode link + handler + startSoloGame function are
+   no longer wired. Any deep-link or saved state that previously hit
+   solo mode will land on vModeSelect with only Create/Join options. */
 $('btnSetupBack').addEventListener('click', () => {
     mode = null; $('ctxChip').innerHTML=''; showView('vModeSelect');
 });
@@ -1442,34 +1447,34 @@ $('btnJoinBack').addEventListener('click', () => {
 });
 
 /* ============================================================
-   Host: create room + load questions
-   ============================================================ */
+   Host: setup → create room → land in lobby (DOES NOT start game).
+   The actual question broadcast happens later when the host clicks
+   the lobby's "▶ 게임 시작!" button — gated on >=1 guest joined.
+   ============================================================
+   Refactor history:
+     The previous version of this handler created the room AND
+     immediately broadcast question #1 in a single click. That left
+     the host no chance to share the code/PIN with anyone, and meant
+     "host with zero guests" was a normal launch state.
+     Now: this handler is "▶ 방 만들기 (게스트 모집)" — it creates
+     the room, preloads questions, and parks the host in vLobby
+     where code/PIN/QR are visible and a separate Start button
+     enforces the 1+ guest minimum. */
 $('btnCreate').addEventListener('click', async () => {
     if (selectedCats.length === 0){
         toast('카테고리를 1개 이상 선택해주세요');
         return;
     }
-    if (mode === 'solo'){
-        /* Solo path: fetch questions, no LpRoom needed */
-        await startSoloGame();
+    const totalQuota = Object.values(perCategoryCounts).reduce((a,b)=>a+b,0);
+    if (totalQuota < 1){
+        toast('총 문제 수를 1개 이상으로 설정해주세요');
         return;
     }
     /* Capture the host-plays toggle value at room-creation time so
        the guest/host UX is consistent for the whole session. */
     hostPlays = !!$('chkHostPlays')?.checked;
-    /* Minimum-guest gate moved UP from the lobby's start button so this
-       single "▶ 게임 시작!" click drives straight into the first
-       question. Previously the host had to click start twice (once
-       here, once on the lobby) — wasted step. */
-    if (room){
-        const _guestCount = Array.from(hostRoster.values()).filter(r => r.gid !== '__host__').length;
-        if (_guestCount < 1){
-            toast('게스트가 최소 1명 있어야 시작할 수 있어요');
-            return;
-        }
-    }
     $('btnCreate').disabled = true;
-    $('btnCreate').textContent = '시작 중…';
+    $('btnCreate').textContent = '방 만드는 중…';
     try {
         const nick = myNick || '호스트';
         if (!room){
@@ -1519,58 +1524,44 @@ $('btnCreate').addEventListener('click', async () => {
         /* Preload questions — filter by the host's chosen language so
            guests playing in different locales still see the same
            bank the host picked (host's choice wins for the room).
-           perCategoryCounts is the unified quota source: in 'even'
-           mode it's the auto-computed even split; in 'manual' mode
-           it's the host's explicit per-category numbers. Either way
-           the server enforces the quota strictly so e.g. {kpop:3,
-           sports:3} returns 3 + 3 = 6 questions, not 6 random
-           uniformly drawn from a possibly-skewed pool. */
-        if (!selectedCats.length){
-            toast('카테고리를 1개 이상 선택해주세요');
-            $('btnCreate').disabled = false;
-            $('btnCreate').textContent = '▶ 게임 시작!';
-            return;
-        }
-        const totalQuota = Object.values(perCategoryCounts).reduce((a,b)=>a+b,0);
-        if (totalQuota < 1){
-            toast('총 문제 수를 1개 이상으로 설정해주세요');
-            $('btnCreate').disabled = false;
-            $('btnCreate').textContent = '▶ 게임 시작!';
-            return;
-        }
+           perCategoryCounts is the unified quota source. Server
+           enforces the quota strictly so e.g. {kpop:3,sports:3}
+           returns 3 + 3 = 6, not 6 random uniformly drawn. */
         const data = await _fetchQuestionsWithFallback();
         if (!data || !data.length){
             $('btnCreate').disabled = false;
-            $('btnCreate').textContent = '▶ 게임 시작!';
+            $('btnCreate').textContent = '▶ 방 만들기';
+            toast('선택한 카테고리에 출제할 문제가 없어요');
+            /* If the room was created already, leave it — user can
+               retry the start once question source is fixed (e.g.
+               picked an empty category). */
             return;
         }
         questions = data.map(shuffleQuestion);
         qDurationMs = selectedTime * 1000;
 
-        /* Lock the room so late joiners can't land mid-question with
-           half-initialized state. Guests already in the lobby follow
-           the host:quiz_question broadcast into the game view. */
-        try{ if (room && room.lock && !room.isLocked()) room.lock(); }catch(_){}
-
-        /* Reset per-game state. Previously lived inside the vLobby's
-           start button — moved here so the single setup-screen click
-           carries us all the way into question 1. */
-        currentQIdx = 0;
-        gameStartAt = Date.now();
-        for (const r of hostRoster.values()){
-            r.score = 0; r.correctCount = 0; r.prevRank = 0;
-        }
-        hostAnswers.clear();
+        /* Hand off to the lobby — the host now sees code/PIN/QR and
+           can share. Guests joining via the silent fast-path land in
+           the same view; the lobby's host-only Start button waits
+           for at least one of them before it broadcasts question 1.
+           Inlined (no renderHostLobbyView helper) — the markup is a
+           handful of element updates and reads more straightforwardly
+           here next to btnStartGame's logic. */
         $('ctxChip').innerHTML = '<span class="role-chip">👑 호스트</span><span class="room-chip" style="margin-left:6px">' + room.code + '</span>';
-
-        /* Skip vLobby entirely on the host side — jump straight to the
-           first question. startHostQuestion() broadcasts host:quiz_question
-           which pulls every guest from vLobby into vQ automatically. */
-        startHostQuestion();
-    } catch (e){
-        toast('시작 실패: ' + e.message);
+        $('lobbyCode').textContent = room.code;
+        $('lobbyPinLine').textContent = 'PIN ' + room.pin;
+        if (typeof renderLobbyQR === 'function') renderLobbyQR(room.code, room.pin);
+        $('lobbyShare').style.display = 'flex';
+        $('lobbyQR').style.display = 'block';
+        $('btnStartGame').style.display = 'block';
+        $('lobbyStatus').textContent = '게스트가 1명 이상 들어오면 시작할 수 있어요';
+        showView('vLobby');
         $('btnCreate').disabled = false;
-        $('btnCreate').textContent = '▶ 게임 시작!';
+        $('btnCreate').textContent = '▶ 방 만들기';
+    } catch (e){
+        toast('방 만들기 실패: ' + e.message);
+        $('btnCreate').disabled = false;
+        $('btnCreate').textContent = '▶ 방 만들기';
     }
 });
 
@@ -1728,6 +1719,11 @@ $('btnLobbyLeave').addEventListener('click', () => {
 $('btnStartGame').addEventListener('click', () => {
     const _guestCount = Array.from(hostRoster.values()).filter(r => r.gid !== '__host__').length;
     if (_guestCount < 1){ toast('게스트가 최소 1명 있어야 시작할 수 있어요'); return; }
+    /* Lock the room so late joiners don't drop into a partially-played
+       quiz with stale scores. Wrapped because room.lock might not be
+       available on older LpRoom builds — a missing lock isn't fatal,
+       just less polite. */
+    try { if (room && room.lock && (!room.isLocked || !room.isLocked())) room.lock(); } catch(_){}
     currentQIdx = 0;
     gameStartAt = Date.now();
     for (const r of hostRoster.values()){
@@ -1992,10 +1988,6 @@ function handleAnswerTap(choice){
         }
     } else if (mode === 'guest' && guest){
         guest.action('answer', {qIdx:currentQIdx, choice, tMs:t});
-    } else if (mode === 'solo'){
-        /* Solo: reveal immediately */
-        clearTimeout(questionTimer);
-        setTimeout(() => revealSolo(choice, t), 300);
     }
 }
 
@@ -2360,8 +2352,7 @@ function renderFinal(ranking){
     $('finList').innerHTML = (ranking||[]).map(r => {
         const rankCls = r.rank === 1 ? ' gold' : r.rank === 2 ? ' silver' : r.rank === 3 ? ' bronze' : '';
         const selfCls = ((mode === 'guest' && guest && r.gid === guest.gid) ||
-                        (mode === 'host' && r.gid === '__host__') ||
-                        (mode === 'solo' && r.gid === '__solo__')) ? ' self' : '';
+                        (mode === 'host' && r.gid === '__host__')) ? ' self' : '';
         return `<div class="lb-item${rankCls}${selfCls}">
             <div class="lb-rnk${rankCls}">${r.rank<=3?(['🥇','🥈','🥉'][r.rank-1]):('#'+r.rank)}</div>
             <div class="lb-nick">${esc(r.nickname)}</div>
@@ -2385,8 +2376,7 @@ async function saveAttempt(context){
         const duration = Date.now() - (gameStartAt || Date.now());
         const ranking = context.ranking || [];
         const myGid = (mode === 'host') ? '__host__' :
-                      (mode === 'guest' && guest) ? guest.gid :
-                      (mode === 'solo') ? '__solo__' : null;
+                      (mode === 'guest' && guest) ? guest.gid : null;
         const mine = myGid ? ranking.find(r => r.gid === myGid) : null;
         const score = guestScore || (mine ? mine.score : 0);
         const correct = guestCorrect || (mine ? mine.correctCount : 0);
@@ -2404,113 +2394,14 @@ async function saveAttempt(context){
     } catch(_){}
 }
 
-/* ============================================================
-   SOLO mode — no room, just answer questions locally
-   ============================================================ */
-async function startSoloGame(){
-    $('btnCreate').disabled = true;
-    $('btnCreate').textContent = '로딩 중…';
-    if (!selectedCats.length){
-        toast('카테고리를 1개 이상 선택해주세요');
-        $('btnCreate').disabled = false;
-        $('btnCreate').textContent = '▶ 게임 시작!';
-        return;
-    }
-    const totalQuota = Object.values(perCategoryCounts).reduce((a,b)=>a+b,0);
-    if (totalQuota < 1){
-        toast('총 문제 수를 1개 이상으로 설정해주세요');
-        $('btnCreate').disabled = false;
-        $('btnCreate').textContent = '▶ 게임 시작!';
-        return;
-    }
-    try {
-        const data = await _fetchQuestionsWithFallback();
-        if (!data || !data.length){
-            $('btnCreate').disabled = false;
-            $('btnCreate').textContent = '▶ 게임 시작!';
-            return;
-        }
-        questions = data.map(shuffleQuestion);
-        qDurationMs = selectedTime * 1000;
-        currentQIdx = 0;
-        gameStartAt = Date.now();
-        guestScore = 0; guestCorrect = 0;
-        hostRoster.clear();
-        hostRoster.set('__solo__', {nickname: myNick, score:0, correctCount:0, gid:'__solo__'});
-        startSoloQuestion();
-    } catch(e){
-        toast('오류: ' + e.message);
-    } finally {
-        $('btnCreate').disabled = false;
-        $('btnCreate').textContent = '▶ 게임 시작!';
-    }
-}
-
-function startSoloQuestion(){
-    if (currentQIdx >= questions.length){
-        finalizeSolo();
-        return;
-    }
-    const q = questions[currentQIdx];
-    qStartAt = Date.now();
-    $('qCat').textContent = categoryLabel(q.category);
-    $('qIdx').textContent = (currentQIdx + 1) + ' / ' + questions.length;
-    $('qText').textContent = q.question;
-    renderAnswerButtons(q.options);
-    myChoice = null;
-    $('qLocked').classList.remove('on');
-    $('btnHostSkip').style.display = 'none';
-    $('qAnsTot').textContent = '1';
-    $('qAnsN').textContent = '0';
-    animateTimer(qDurationMs);
-    clearTimeout(questionTimer);
-    questionTimer = setTimeout(() => revealSolo(null, qDurationMs), qDurationMs);
-    showView('vQ');
-}
-
-function revealSolo(choice, tMs){
-    const q = questions[currentQIdx];
-    const dist = [0,0,0,0];
-    let gain = 0, isCorrect = false;
-    if (choice !== null){
-        dist[choice] = 1;
-        if (choice === q.correct){
-            isCorrect = true;
-            const speedFrac = Math.max(0, 1 - (tMs / qDurationMs));
-            gain = 1000 + Math.round(speedFrac * 1000);
-        }
-    }
-    if (gain > 0) guestScore += gain;
-    if (isCorrect) guestCorrect++;
-    const me = hostRoster.get('__solo__');
-    if (me){ me.score = guestScore; me.correctCount = guestCorrect; }
-    renderReveal({
-        correct: q.correct, options: q.options, question: q.question,
-        dist, totalAnswered: choice !== null ? 1 : 0, hint: q.hint,
-        myGain: gain, myCorrect: isCorrect, myChoice: choice
-    });
-    $('btnNextQ').style.display = 'block';
-    $('btnNextQ').textContent = (currentQIdx + 1 >= questions.length) ? '최종 결과 보기 →' : '다음 문제 →';
-    $('rvStatus').textContent = '';
-    $('btnNextQ').onclick = () => {
-        currentQIdx++;
-        if (currentQIdx >= questions.length) finalizeSolo();
-        else startSoloQuestion();
-    };
-    showView('vReveal');
-}
-
-function finalizeSolo(){
-    const ranking = [{
-        gid:'__solo__', nickname: myNick, score: guestScore,
-        rank: 1, correctCount: guestCorrect
-    }];
-    renderFinal(ranking);
-    $('btnFinAgain').style.display = 'block';
-    $('btnFinAgain').onclick = () => location.reload();
-    saveAttempt({ ranking, myRank:1, roomSize:1 });
-    showView('vFinal');
-}
+/* SOLO mode removed — quiz is multiplayer-only.
+   The previous startSoloGame / startSoloQuestion / revealSolo /
+   finalizeSolo functions lived here but were torn out when the home
+   page's "QUIZ" tile became a Create-or-Join entry only. The game
+   needs a host + at least one guest to be meaningful (the per-question
+   leaderboard + race element are pointless against yourself), so
+   there's no longer a code path that ends up with a single __solo__
+   participant. */
 
 /* ============================================================
    Boot
@@ -2612,8 +2503,8 @@ function finalizeSolo(){
                 if(payload.type==='answer')handleGuestAnswer(payload);
             });
             $('ctxChip').innerHTML='<span class="role-chip">👑 호스트</span><span class="room-chip" style="margin-left:6px">'+r.code+'</span>';
-            $('btnCreate').textContent='▶ 게임 시작!';
-            toast('방 재연결됨 · 카테고리를 선택 후 시작하세요');
+            $('btnCreate').textContent='▶ 방 만들기';
+            toast('방 재연결됨 · 카테고리를 선택 후 방을 만드세요');
             showView('vSetup');
         });
     });
@@ -2634,6 +2525,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777442921"></script>
+<script src="/js/siteFooter.js?v=1777444001"></script>
 </body>
 </html>
