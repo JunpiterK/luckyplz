@@ -227,25 +227,66 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777460789"></script>
-<script src="/js/lpAudio.js?v=1777460789"></script>
+<script src="/js/supabase-config.js?v=1777461299"></script>
+<script src="/js/lpAudio.js?v=1777461299"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
 
 let me=null;
+/* ID + nickname captured at initAuth so we can detect mid-game session
+   changes (account switch in another tab, token rotation, browser-sync
+   from another device). The score is server-attributed via auth.uid()
+   at the moment record_burger_attempt runs — NOT against the cached
+   `me.id` — so a divergence between boot and live session means the
+   score lands on a DIFFERENT account than the user thinks. We surface
+   this loudly. Same defensive pattern as dodge/space-z. */
+let meIdAtBoot=null;
+let meNickAtBoot='';
 
 async function initAuth(){
     try{
         const u=await getUser();
         if(!u){ location.replace('/auth/?next='+encodeURIComponent(location.pathname)); return; }
         me=u;
+        meIdAtBoot=u.id;
+        try{
+            console.log('[burger.auth] signed in as id=' + u.id +
+                        ' email=' + (u.email||'(none)'));
+        }catch(_){}
         const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
         const nick=prof.data?.nickname||'나';
+        meNickAtBoot=nick;
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
         loadMyStats();
-    }catch(e){}
+    }catch(e){console.warn('[burger.auth] init',e)}
+}
+
+/* Auth state listener — picks up sign-out / account-switch in other
+   tabs OR token expiry. Mirror of the dodge implementation: if the
+   live session diverges from boot, log loud + reload back to auth gate
+   when the game isn't actively running so the new identity drives
+   subsequent state. Guarded by `running` (game's own flag) so we
+   don't yank the user mid-burger-stack. */
+if(typeof onAuthChange==='function'){
+    onAuthChange((event, session) => {
+        const newId = session && session.user ? session.user.id : null;
+        try{ console.log('[burger.auth] state change: event=' + event + ' newId=' + (newId||'(null)')); }catch(_){}
+        if(event==='SIGNED_OUT'){
+            if(typeof running==='undefined' || !running){
+                location.replace('/auth/?next='+encodeURIComponent(location.pathname));
+            }
+            return;
+        }
+        if(meIdAtBoot && newId && newId !== meIdAtBoot){
+            console.warn('[burger.auth] account switched mid-session from '
+                + meIdAtBoot + ' to ' + newId + ' — reloading to refresh state');
+            if(typeof running==='undefined' || !running){
+                location.reload();
+            }
+        }
+    });
 }
 async function loadMyStats(){
     if(!me)return;
@@ -856,6 +897,11 @@ function gameOver(){
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
     if(navigator.vibrate) try{ navigator.vibrate([30,20,60]); }catch(_){}
 
+    /* "기록 등록 계정" line — visible reminder of which account this
+       attempt will be saved under. Critical when the device is shared
+       (multiple people with separate accounts). Filled in below from
+       the LIVE session (not the cached me) — see the verification block.
+       Same UI as dodge/space-z. */
     $('overlay').innerHTML =
         '<h2 class="go">TIME OUT</h2>'
       + '<div class="score-big">'+score+'</div>'
@@ -866,6 +912,7 @@ function gameOver(){
       +   '<div class="rank-card-pct" id="ovRankPct"></div>'
       +   '<div class="rank-card-pb" id="ovRankPb"></div>'
       +   '<div class="rank-card-debug" id="ovRankDebug"></div>'
+      +   '<div class="rank-card-acct" id="ovRankAcct" style="font-size:.74em;color:rgba(255,255,255,.55);margin-top:6px;letter-spacing:.02em"></div>'
       +   '<button class="rank-card-link" id="ovRankBtn">📊 전체 랭킹 보기</button>'
       + '</div>'
       + '<button class="btn" id="ovBtn">다시하기</button>'
@@ -909,6 +956,40 @@ function gameOver(){
             }catch(_){}
         }
 
+        /* Session verification — fetch the LIVE auth user right before
+           recording so we know exactly which account the score will land
+           on. The server-side record_burger_attempt uses auth.uid() at
+           call time, NOT our cached me.id. Mid-game session change
+           (other-tab account switch, token expiry, browser-sync from
+           another device) silently sends the score to a different
+           account. We log this divergence loudly + flag the on-screen
+           "기록 등록 계정" line so the user notices BEFORE closing the
+           overlay. Same pattern as dodge/space-z. */
+        let liveUser = null;
+        let liveNick = '';
+        try {
+            liveUser = await getUser();
+            try{
+                console.log('[burger.record] live user.id =', liveUser ? liveUser.id : '(null)',
+                            '· me.id at boot =', meIdAtBoot);
+            }catch(_){}
+            if (!liveUser) {
+                console.warn('[burger.record] no live session — aborting record');
+            } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
+                console.warn('[burger.record] session changed since boot. boot=' + meIdAtBoot +
+                             ' live=' + liveUser.id + ' — score will go to LIVE user');
+            }
+            if (liveUser) {
+                try {
+                    const lp = await getSupabase().from('profiles')
+                        .select('nickname').eq('id', liveUser.id).maybeSingle();
+                    liveNick = (lp.data && lp.data.nickname) || liveUser.email || '';
+                } catch(_) { liveNick = liveUser.email || ''; }
+            }
+        } catch(e) {
+            console.warn('[burger.record] getUser threw:', e);
+        }
+
         let pbMsg='', recordOk=false, recordErrKind=null;
         try{
             const {data,error}=await getSupabase().rpc('record_burger_attempt',{
@@ -920,6 +1001,11 @@ function gameOver(){
             if(!error){
                 recordOk=true;
                 if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                try{
+                    console.log('[burger.record] OK score=' + (data&&data.score) +
+                                ' is_pb=' + (data&&data.is_personal_best) +
+                                ' attributed to live user.id=' + (liveUser&&liveUser.id));
+                }catch(_){}
             }else{
                 recordErrKind=_classifyErr(error);
                 console.warn('[burger.record_burger_attempt]', error);
@@ -1016,6 +1102,33 @@ function gameOver(){
            Devs can read details in console (we console.warn every error
            with a [game.rpc_name] prefix). */
         $('ovRankDebug').textContent='';
+
+        /* "기록 등록 계정" line — visible reminder of which account just
+           received this score. Reads the LIVE session (resolved above as
+           liveUser/liveNick) so a session mismatch is obvious before the
+           user closes the overlay. Same logic as dodge/space-z: if the
+           live session differs from the booted session, flag it as a
+           warning since the score has actually been recorded under
+           liveUser, not the cached chip nickname in the topbar. */
+        const acctEl = $('ovRankAcct');
+        if (acctEl) {
+            if (!liveUser) {
+                acctEl.textContent = '⚠ 로그인 세션이 끊김 — 점수 미등록';
+                acctEl.style.color = 'rgba(255,180,80,.85)';
+            } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
+                acctEl.innerHTML = '⚠ 게임 도중 계정 전환 — 기록 등록 계정: <strong>'
+                    + esc(liveNick || '(' + liveUser.id.slice(0,8) + ')') + '</strong>';
+                acctEl.style.color = 'rgba(255,180,80,.95)';
+            } else if (recordOk) {
+                acctEl.innerHTML = '기록 등록 계정: <strong>'
+                    + esc(liveNick || meNickAtBoot || '(나)') + '</strong>';
+                acctEl.style.color = 'rgba(255,255,255,.55)';
+            } else {
+                acctEl.innerHTML = '대상 계정: <strong>'
+                    + esc(liveNick || meNickAtBoot || '(나)') + '</strong>';
+                acctEl.style.color = 'rgba(255,255,255,.45)';
+            }
+        }
 
         loadMyStats();
         loadLeaderboard(currentScope);
@@ -2441,6 +2554,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777460789"></script>
+<script src="/js/siteFooter.js?v=1777461299"></script>
 </body>
 </html>
