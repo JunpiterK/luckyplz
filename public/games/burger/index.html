@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777458920"></script>
-<script src="/js/lpAudio.js?v=1777458920"></script>
+<script src="/js/supabase-config.js?v=1777459392"></script>
+<script src="/js/lpAudio.js?v=1777459392"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1379,6 +1379,151 @@ function drawTimeBar(now){
 }
 
 /* ========================================================================
+   drawCylinderSide — paints the SIDE WALL of a round ingredient (patty,
+   tomato, onion) viewed from 15° above the horizontal. Unlike the flat
+   2D rectangle that INGREDIENTS catalog draw uses, this path has CURVED
+   top + bottom edges (the front halves of each rim ellipse), so the
+   filling reads as "a cylindrical slice tilted toward the viewer", not
+   as a flat decal. Used for round ingredients only — lettuce stays
+   INGREDIENTS-irregular (real lettuce is fluffy/non-cylindrical) and
+   cheese stays INGREDIENTS-rectangular (square slab).
+
+   Path geometry — h is the shape's full vertical extent on screen:
+     - Sides: vertical lines at x = cx ± rx
+     - Top edge: front half of top ellipse (curving DOWN at center,
+       since we see the front rim of the top from slightly above)
+     - Bottom edge: front half of bottom ellipse (same curve)
+     - The shape is taller at the center column (where the front of
+       top dips down + the front of bottom bulges down) than at the
+       sides — exactly the silhouette of a tilted cylinder.
+
+   Per-ingredient fill: vertical gradient + clipped texture pass +
+   outline. Texture echoes the INGREDIENTS catalog (bumpy patty char,
+   tomato seed pockets, onion ring partitions) reinterpreted for a
+   cylinder surface rather than a flat side decal.
+   ======================================================================== */
+function drawCylinderSide(id, cx, cy, w, h){
+    const rx = w / 2;
+    const ry = Math.max(2, rx * 0.26);
+    function _path(){
+        ctx.beginPath();
+        ctx.moveTo(cx - rx, cy - h/2);                              /* top-left corner */
+        ctx.ellipse(cx, cy - h/2, rx, ry, 0, Math.PI, 0, true);     /* front of top rim */
+        ctx.lineTo(cx + rx, cy + h/2 - ry);                         /* down right edge */
+        ctx.ellipse(cx, cy + h/2 - ry, rx, ry, 0, 0, Math.PI, false); /* front of bottom rim */
+        ctx.closePath();
+    }
+
+    switch (id){
+        case 'patty': {
+            /* Dark brown grilled meat. Vertical gradient (lit on top from
+               key light + shaded at the bottom). Texture: char fragments
+               + warm juice droplets, scattered through the side wall. */
+            const g = ctx.createLinearGradient(0, cy - h/2, 0, cy + h/2);
+            g.addColorStop(0,    '#7E4622');
+            g.addColorStop(0.45, '#4A2512');
+            g.addColorStop(1,    '#1F0C04');
+            ctx.fillStyle = g;
+            _path(); ctx.fill();
+            ctx.save();
+            _path(); ctx.clip();
+            ctx.fillStyle = 'rgba(160,90,50,.6)';
+            [[-.5,-.1],[.4,.0],[-.2,.2],[.5,.3],[.0,-.3],[-.4,.3]].forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.ellipse(cx + dx*rx, cy + dy*h*0.4, rx*0.08, ry*0.9, 0, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.fillStyle = 'rgba(255,180,90,.5)';
+            [[-.3,.1],[.2,-.15],[.4,.2]].forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.arc(cx + dx*rx, cy + dy*h*0.35, Math.max(0.7, rx*0.06), 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(0,0,0,.5)';
+            ctx.lineWidth = 0.85;
+            _path(); ctx.stroke();
+            break;
+        }
+        case 'tomato': {
+            /* Glossy red flesh. Pale yellow seed pockets (vertical
+               streaks) scattered around the side, with tiny brown seeds
+               inside. Top half gets a sheen overlay for the wet glossy
+               read. */
+            const g = ctx.createLinearGradient(0, cy - h/2, 0, cy + h/2);
+            g.addColorStop(0,    '#FF7A6A');
+            g.addColorStop(0.4,  '#E73E2E');
+            g.addColorStop(1,    '#9C1F1B');
+            ctx.fillStyle = g;
+            _path(); ctx.fill();
+            ctx.save();
+            _path(); ctx.clip();
+            ctx.fillStyle = 'rgba(255,248,180,.72)';
+            const seeds = [[-.5,0],[-.2,-.15],[.1,.1],[.35,-.15],[.5,.2],[-.35,.3]];
+            seeds.forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.ellipse(cx + dx*rx, cy + dy*h*0.4, rx*0.07, ry*0.9, 0, 0, Math.PI*2);
+                ctx.fill();
+            });
+            ctx.fillStyle = 'rgba(140,100,30,.7)';
+            seeds.forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.arc(cx + dx*rx, cy + dy*h*0.4, Math.max(0.5, rx*0.035), 0, Math.PI*2);
+                ctx.fill();
+            });
+            const sg = ctx.createLinearGradient(0, cy - h/2, 0, cy);
+            sg.addColorStop(0, 'rgba(255,200,180,.42)');
+            sg.addColorStop(1, 'rgba(255,200,180,0)');
+            ctx.fillStyle = sg;
+            ctx.fillRect(cx - rx, cy - h/2, rx*2, h*0.6);
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(120,20,20,.55)';
+            ctx.lineWidth = 0.75;
+            _path(); ctx.stroke();
+            break;
+        }
+        case 'onion': {
+            /* Pale onion flesh. Vertical hairlines mark the radial layer
+               boundaries seen edge-on (concentric onion rings cut
+               vertically project to vertical partitions on the side
+               wall). Subtle horizontal bands suggest the natural curve
+               of the cylinder under the light. */
+            const g = ctx.createLinearGradient(0, cy - h/2, 0, cy + h/2);
+            g.addColorStop(0,    '#FBF4FD');
+            g.addColorStop(0.5,  '#E2D2EC');
+            g.addColorStop(1,    '#A382C0');
+            ctx.fillStyle = g;
+            _path(); ctx.fill();
+            ctx.save();
+            _path(); ctx.clip();
+            ctx.strokeStyle = 'rgba(140,105,170,.55)';
+            ctx.lineWidth = 0.7;
+            for (let i=1; i<=4; i++){
+                const px = cx - rx + (i / 5) * rx * 2;
+                ctx.beginPath();
+                ctx.moveTo(px, cy - h/2);
+                ctx.lineTo(px, cy + h/2);
+                ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(180,160,200,.3)';
+            ctx.lineWidth = 0.5;
+            for (let i=1; i<3; i++){
+                const ly = cy - h/2 + ry + (i / 3) * (h - ry);
+                ctx.beginPath();
+                ctx.moveTo(cx - rx, ly);
+                ctx.lineTo(cx + rx, ly);
+                ctx.stroke();
+            }
+            ctx.restore();
+            ctx.strokeStyle = 'rgba(100,80,140,.55)';
+            ctx.lineWidth = 0.75;
+            _path(); ctx.stroke();
+            break;
+        }
+    }
+}
+
+/* ========================================================================
    drawIngredientTop — paints the 15°-perspective TOP face of an ingredient
    above the side body produced by INGREDIENTS[id].draw(). Combined with
    the side body, this gives each filling the look of "a ~5cm round slice
@@ -1929,15 +2074,35 @@ function drawIngredientRow(now){
         const ingH = PALETTE_H[id] || 14;
         const ingW = wellW - 4;          /* ingredient barely smaller than well */
         const ingCy = wellY - ingH/2;    /* bottom of side body = plate surface */
-        /* Pass 1 — side body (the 2D side view from INGREDIENTS catalog). */
-        INGREDIENTS[id].draw(plateCx, ingCy, ingW, ingH);
-        /* Pass 2 — 15° top face. ry = rx × sin(15°). Centred at the top
-           edge of the side body so its bottom half overlaps the body's
-           top, forming the illusion of a 3D rim. */
-        const topRx = ingW / 2;
-        const topRy = topRx * 0.26;
-        const topCy = ingCy - ingH/2;    /* y-position of side body's top edge */
-        drawIngredientTop(id, plateCx, topCy, topRx, topRy);
+
+        /* Render dispatch. Each ingredient picks the rendering style that
+           matches its real-world shape:
+             - patty / tomato / onion: round cylinder slice, side body is
+               drawCylinderSide (curved top/bottom rims = 15° tilt cue),
+               topped with an elliptical 15° face.
+             - lettuce: irregular leafy mass — INGREDIENTS catalog draw,
+               which already has ruffled curls + multi-tone leaf body, no
+               artificial cylinder top would fit naturally.
+             - cheese: square slab — INGREDIENTS catalog draw (with melt
+               drips), topped with a 15° rectangular face. */
+        if (id === 'patty' || id === 'tomato' || id === 'onion'){
+            drawCylinderSide(id, plateCx, ingCy, ingW, ingH);
+            const topRx = ingW / 2;
+            const topRy = topRx * 0.26;
+            /* The top ellipse's centre y matches the side body's TOP
+               edge — its bottom half overlaps the body's topmost
+               pixels, completing the cylinder illusion. */
+            drawIngredientTop(id, plateCx, ingCy - ingH/2, topRx, topRy);
+        } else if (id === 'lettuce'){
+            /* Lettuce stays organic — no flat top, no cylinder side.
+               Just the catalog's fluffy ruffled drawing. */
+            INGREDIENTS.lettuce.draw(plateCx, ingCy, ingW, ingH);
+        } else { /* cheese */
+            INGREDIENTS.cheese.draw(plateCx, ingCy, ingW, ingH);
+            const topRx = ingW / 2;
+            const topRy = topRx * 0.26;
+            drawIngredientTop(id, plateCx, ingCy - ingH/2, topRx, topRy);
+        }
 
         /* Number badge — stays anchored to tile (doesn't lift with plate). */
         ctx.fillStyle = 'rgba(0,0,0,.5)';
@@ -2124,6 +2289,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777458920"></script>
+<script src="/js/siteFooter.js?v=1777459392"></script>
 </body>
 </html>
