@@ -1,53 +1,58 @@
 -- =====================================================================
--- Lucky Please — Auth Security one-shot redeploy
--- =====================================================================
--- Bundles the three auth-security migrations (#2 nickname cooldown,
--- #3 disposable email blocklist, #4 consent + GDPR export) into a
--- single paste-and-run script for the Supabase SQL Editor.
+-- LuckyPlz — Auth Security redeploy bundle (Priorities #2, #3, #4)
+-- Date: 2026-04-30
 --
--- USAGE:
---   1. Open Supabase dashboard → SQL Editor → "+ New query"
---   2. Paste THIS ENTIRE FILE
---   3. Click Run (Ctrl+Enter)
---   4. Done. The final `notify pgrst, 'reload schema';` refreshes
---      PostgREST so the new RPCs become callable immediately.
+-- Paste-and-run bundle of three independent migrations. Idempotent —
+-- re-running is safe (uses `if not exists`, `create or replace`,
+-- `drop policy if exists`, `add column if not exists`,
+-- `on conflict do nothing`).
 --
--- IDEMPOTENCY:
---   Every section uses `create table if not exists`, `create or
---   replace function`, `drop policy if exists`, `add column if not
---   exists`, `on conflict do nothing` so re-running is safe — existing
---   rows / consents / nickname history are preserved, missing pieces
---   filled in.
+-- Contents:
+--   #2  Nickname change 30-day cooldown + history (anti-impersonation)
+--   #3  Disposable email domain blocklist (~150 seed)
+--   #4  KISA marketing consent split + GDPR-style data export
 --
--- WHAT THIS DOES (in order):
---   1. nickname_changes table + 30-day cooldown trigger + RPCs
---      (anti-impersonation, anti-squatting)
---   2. blocked_email_domains table seeded with ~150 disposable
---      services + is_email_domain_allowed() RPC + profiles trigger
---      (anti-bot signup, sock-puppet defense)
---   3. profiles consent columns + set_consent() + export_my_data()
---      RPCs (KISA marketing-consent split + GDPR data portability)
---
--- WHAT THIS DOES NOT DO:
---   - Cloudflare Turnstile activation. That requires:
---     (a) Cloudflare dashboard → Turnstile → Add a site
---     (b) Paste SITE KEY into public/js/supabase-config.js
---     (c) Paste SECRET KEY into Supabase dashboard → Auth →
---         Captcha protection
---     See CLAUDE.md "Bot protection" for the full procedure.
---
--- AFTER RUNNING:
---   - New signups will see the 3-checkbox consent block + (if you
---     enabled Turnstile separately) a managed-difficulty challenge.
---   - Existing users: nickname is unchanged but a 30-day cooldown
---     starts from any future change. Marketing consent = NULL until
---     they toggle it on /me/. They can download their data right
---     away via the new "내 데이터 다운로드" button on /me/.
+-- After running, PostgREST will reload its schema (final NOTIFY) so the
+-- new RPCs (set_consent, export_my_data, is_email_domain_allowed,
+-- nickname_cooldown_remaining, my_nickname_history) become callable
+-- immediately.
 -- =====================================================================
 
+
 -- ====================================================================
--- 2026-04-30-nickname-cooldown.sql
+-- #2: 2026-04-30-nickname-cooldown.sql
 -- ====================================================================
+-- =====================================================================
+-- Migration: Nickname change cooldown + history (anti-impersonation)
+-- Date:      2026-04-30
+-- Purpose:   Prevent nickname-squatting / impersonation attacks where a
+--            user rapidly cycles through high-profile names. Industry
+--            norms: Twitch 60 days, Discord ~14 days, Naver permanent.
+--            We pick 30 days as a balance — long enough to deter abuse,
+--            short enough that a legitimate rename isn't punishing.
+--
+-- Schema:
+--   - public.nickname_changes — append-only history of every successful
+--     nickname change, scoped per user_id. Admin can audit; users see
+--     only their own.
+--   - public._profile_nickname_cooldown() — BEFORE UPDATE trigger on
+--     profiles that:
+--       (a) detects a nickname change (NEW.nickname IS DISTINCT FROM OLD)
+--       (b) blocks if the user changed within the last 30 days (raise
+--           exception with code 'nickname_cooldown:<remaining_sec>' so
+--           the UI can parse and show countdown)
+--       (c) allows + appends to nickname_changes on success
+--       (d) bypassed for super_admin (recovery / moderation cases)
+--   - public.nickname_cooldown_remaining() — RPC returning seconds
+--     remaining (0 if no cooldown active). Lets the /me/ page disable
+--     the nickname input and show a countdown WITHOUT triggering the
+--     full save flow.
+--
+-- Note on backfill:
+--   Existing users have an empty nickname_changes history, so their
+--   FIRST change after this migration runs without cooldown — desired
+--   behaviour (we don't want to punish them for legacy state). The
+--   first change records OLD → NEW, after which the cooldown kicks in.
 -- =====================================================================
 
 -- ---- History table ---------------------------------------------------
@@ -198,9 +203,43 @@ grant execute on function public.my_nickname_history(int) to authenticated;
 -- callable immediately.
 notify pgrst, 'reload schema';
 
+
 -- ====================================================================
--- 2026-04-30-disposable-email-blocklist.sql
+-- #3: 2026-04-30-disposable-email-blocklist.sql
 -- ====================================================================
+-- =====================================================================
+-- Migration: Disposable / temporary email domain blocklist
+-- Date:      2026-04-30
+-- Purpose:   Block signups from throwaway-email services (Mailinator,
+--            10minutemail, guerrilla-mail, etc). These accounts are the
+--            primary vehicle for: (a) gaming the AdSense impressions
+--            with bots, (b) creating sock-puppets to vote-manipulate
+--            game leaderboards, (c) skirting per-account rate limits.
+--
+-- Architecture:
+--   1. public.blocked_email_domains — append-only blocklist seeded
+--      with ~150 of the most active disposable services. Admin can
+--      INSERT new rows via SQL Editor as new services emerge.
+--   2. public.is_email_domain_allowed(email) — boolean RPC the auth
+--      page calls BEFORE signUp() to give immediate "이 이메일은
+--      사용할 수 없어요" feedback. Idempotent + fast (single index
+--      lookup).
+--   3. BEFORE INSERT/UPDATE trigger on public.profiles — defense in
+--      depth. If a malicious client bypasses the JS check and signs
+--      up directly via the Supabase API, the trigger blocks them
+--      from creating a profile (and thus from saving any game
+--      record). auth.users may still get created, but without a
+--      profile, they're effectively neutered.
+--
+-- Maintenance:
+--   The blocklist evolves — new disposable services launch monthly.
+--   Admin should periodically:
+--     - Check public lists like https://github.com/disposable-email-domains/
+--       and merge new entries via INSERT … ON CONFLICT DO NOTHING.
+--     - Audit blocked attempts via the `note` column for false positives.
+-- =====================================================================
+
+create table if not exists public.blocked_email_domains (
     domain   text primary key,           -- lowercase, no @, no leading dot
     added_at timestamptz not null default now(),
     note     text                         -- optional why-blocked annotation
@@ -371,9 +410,63 @@ create trigger profile_check_email_domain
 -- becomes callable immediately.
 notify pgrst, 'reload schema';
 
+
 -- ====================================================================
--- 2026-04-30-consent-and-export.sql
+-- #4: 2026-04-30-consent-and-export.sql
 -- ====================================================================
+-- =====================================================================
+-- Migration: KISA marketing consent split + GDPR-style data export
+-- Date:      2026-04-30
+-- Purpose:   Two compliance items rolled together:
+--
+--   (A) Korean 정통망법 50조 — marketing emails require SEPARATE consent
+--       from terms-of-service / privacy-policy agreement. Cannot be
+--       bundled into a single "I agree to everything" checkbox. We
+--       record terms_agreed_at, privacy_agreed_at, and
+--       marketing_agreed_at as distinct timestamps so an audit (or
+--       KISA inspection) can prove which the user explicitly agreed
+--       to and when.
+--
+--   (B) GDPR Art. 15 + 20 (right of access + portability) — user can
+--       request a machine-readable copy of all their personal data.
+--       Korean 개인정보보호법 follows the same shape. Implemented as
+--       export_my_data() RPC returning JSONB with profile, game
+--       records, nickname history, friendships, etc. The /me/ page
+--       wires a "내 데이터 다운로드" button that calls this and saves
+--       the response as a .json file.
+--
+-- Schema additions:
+--   profiles.terms_agreed_at      timestamptz NULL — when ToS was accepted
+--   profiles.privacy_agreed_at    timestamptz NULL — when privacy policy accepted
+--   profiles.marketing_agreed_at  timestamptz NULL — set when user opts in,
+--                                  CLEARED to NULL when they opt out (so the
+--                                  "is currently consenting?" check is just
+--                                  IS NOT NULL).
+--
+-- RPCs:
+--   set_consent(p_terms, p_privacy, p_marketing) — toggle all three at once.
+--     boolean true → set timestamp to now() (or preserve existing for terms/
+--     privacy which are append-only after first agreement).
+--     boolean false → clears the timestamp (only affects marketing —
+--     terms/privacy can't be unagreed without account deletion).
+--   export_my_data() — returns JSONB blob covering every table that
+--     references the calling user_id. Uses information_schema to skip
+--     tables that don't exist on this Supabase instance (e.g. user
+--     hasn't deployed all action-game migrations yet) so the export
+--     works on partial deployments without errors.
+-- =====================================================================
+
+-- ---- Schema changes -------------------------------------------------
+alter table public.profiles
+    add column if not exists terms_agreed_at      timestamptz,
+    add column if not exists privacy_agreed_at    timestamptz,
+    add column if not exists marketing_agreed_at  timestamptz;
+
+create index if not exists profiles_marketing_agreed_idx
+    on public.profiles (marketing_agreed_at)
+    where marketing_agreed_at is not null;
+
+comment on column public.profiles.terms_agreed_at      is '이용약관 동의 시점 (필수)';
 comment on column public.profiles.privacy_agreed_at    is '개인정보처리방침 동의 시점 (필수)';
 comment on column public.profiles.marketing_agreed_at  is '마케팅·이벤트 정보 수신 동의 시점 (선택, NULL=미동의/철회)';
 
@@ -578,7 +671,8 @@ grant execute on function public.export_my_data() to authenticated;
 -- Refresh PostgREST cache so new RPCs are immediately callable.
 notify pgrst, 'reload schema';
 
+
 -- ====================================================================
--- Final: refresh PostgREST schema cache so all new RPCs are callable
+-- Final: refresh PostgREST schema cache (covers all 3 migrations)
 -- ====================================================================
 notify pgrst, 'reload schema';
