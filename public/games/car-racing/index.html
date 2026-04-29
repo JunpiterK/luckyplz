@@ -311,73 +311,71 @@
         .help-emoji{font-size:1.3em;margin-right:4px;vertical-align:middle}
         .help-highlight{color:var(--accent);font-weight:700}
         .help-note{color:rgba(255,255,255,0.4);font-size:0.8em;margin-top:8px;font-style:italic}
-        /* Rotate phone overlay — retained for fallback but never shown
-           now that force-landscape rotates the UI via CSS transform.
-           Kept in the DOM so older bookmarks/state transitions don't
-           NPE on getElementById('rotateOverlay'). */
-        #rotateOverlay{display:none!important}
-        /* ===== FORCE LANDSCAPE ON MOBILE (car-racing only) =====
-           iOS doesn't support screen.orientation.lock at all and Android
-           only locks inside fullscreen — past attempts hit both of those
-           walls. The only universal fix is to rotate the UI ourselves:
-           when the device is held portrait during active gameplay, we
-           rotate the whole body 90deg so the user always sees landscape
-           regardless of how they're holding the phone. Touch events are
-           automatically re-mapped through the CSS transform so every
-           button still hits where the user's finger lands.
-
-           top+left+origin trio is calibrated so a clockwise 90° rotation
-           around the top-left corner lands the rotated box back inside
-           the viewport (0,0)→(innerWidth,innerHeight). Width/height
-           swap so the rotated stage fills the device. */
-        html.lp-force-landscape-root,html.lp-force-landscape-root body{overflow:hidden;height:100%}
-        /* Step 1 — Game stage lock (applies whenever mobile + in-game,
-           regardless of device orientation). This gives natural-
-           landscape and forced-landscape IDENTICAL host boxes for the
-           canvas: a fullscreen, non-scrolling, margin-free stage. This
-           was the root cause of "가로로 들면 조금 이상" — natural
-           landscape was inheriting body{min-height:100vh;overflow-x:
-           hidden} which leaves overflow-y scrollable, so a 1-2 px
-           content overshoot produced a scroll band / layout shift that
-           the forced path (position:fixed + overflow:hidden) never
-           hit. Now both paths share the stage rule. */
+        /* ===== ORIENTATION GATE (mobile car-racing only) =====
+           Past iterations tried to FAKE landscape via a 90° CSS body
+           rotation. Two fatal flaws:
+             (a) When the user actually rotated the device mid-race,
+                 the rotation un-applied and the canvas re-sized using
+                 freshly-swapped (then un-swapped) dimensions, which
+                 mid-flight made cars appear off-track because their
+                 world coords stopped matching the regenerated track.
+             (b) Touch + canvas pointer events are notoriously brittle
+                 through a transform:rotate ancestor.
+           New approach: gate the game on the user actually holding the
+           device landscape. Portrait + mobile + in-game → show a
+           "rotate" overlay that fills the whole screen. Landscape →
+           show game normally. No transform, no swapped viewport
+           helpers, no event-coord re-mapping needed. */
+        #rotateOverlay{
+            /* z-index 9040 covers every game-internal UI (highest is
+               #soundToggle/#helpBtn at 1000, #modal-overlay at 300, etc.)
+               but stays UNDER the lpMultiplayer floating panel (9050)
+               so a multiplayer guest still has access to "leave room"
+               from portrait — without that, a phone held wrong would
+               trap the user in a room they can\'t exit. */
+            position:fixed;inset:0;z-index:9040;
+            display:none;
+            flex-direction:column;align-items:center;justify-content:center;
+            gap:18px;padding:30px;text-align:center;
+            background:linear-gradient(160deg,rgba(8,8,20,.98),rgba(20,20,40,.98));
+            color:#fff;font-family:'Noto Sans KR',sans-serif;
+            -webkit-tap-highlight-color:transparent;user-select:none;
+        }
+        #rotateOverlay.show{display:flex}
+        #rotateOverlay .rotate-icon{
+            font-size:5em;line-height:1;
+            animation:rotateHint 1.6s ease-in-out infinite;
+            filter:drop-shadow(0 4px 20px rgba(255,107,53,.35));
+        }
+        @keyframes rotateHint{
+            0%,100%{transform:rotate(0)}
+            45%,55%{transform:rotate(-90deg)}
+        }
+        #rotateOverlay .rotate-text{
+            font-family:'Orbitron','Noto Sans KR',sans-serif;
+            font-size:1.3em;font-weight:900;letter-spacing:.06em;
+            background:linear-gradient(135deg,#FF6B35,#FFE66D);
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+        }
+        #rotateOverlay .rotate-sub{
+            font-size:.95em;color:rgba(255,255,255,.7);line-height:1.5;
+            max-width:320px;
+        }
+        /* Game stage lock — fullscreen, non-scrolling, margin-free
+           container so the canvas can fill the viewport without the
+           body's natural scroll wrapping. Applied whenever mobile +
+           in-game regardless of orientation. dvw/dvh handles the
+           collapsing URL bar correctly (CSS Values L4, 2022). */
         body.lp-game-stage{
             position:fixed!important;
-            top:0;
-            left:0;
-            /* dvw/dvh are dynamic viewport units (CSS Values L4, 2022)
-               that track the browser-UI-VISIBLE area. Mobile Safari's
-               100vh notoriously includes the space behind the URL bar,
-               causing 60+px overflow jumps when the bar collapses; dvh
-               avoids this. vh/vw fallback for ancient browsers. */
-            width:100vw;
-            height:100vh;
-            width:100dvw;
-            height:100dvh;
+            top:0;left:0;
+            width:100vw;height:100vh;
+            width:100dvw;height:100dvh;
             min-height:0!important;
             max-height:100dvh!important;
-            overflow:hidden;
-            margin:0;
-            /* Respect the iPhone notch / Android system bars so canvas
-               edges don't disappear under the hardware cutouts. */
+            overflow:hidden;margin:0;
             padding-left:env(safe-area-inset-left,0);
             padding-right:env(safe-area-inset-right,0);
-        }
-        /* Step 2 — Forced-landscape rotation (only when device is
-           portrait + in-game). Layered on top of .lp-game-stage so
-           the stage dims are already correct; we just swap width/
-           height and rotate 90° around top-left. */
-        body.lp-force-landscape{
-            /* Pre-rotation box: width = device height, height = device
-               width. After a 90° CW rotation around the top-left plus
-               a translation by the device width (left:100dvw), the box
-               lands exactly on (0,0) → (innerWidth, innerHeight). */
-            left:100dvw;
-            width:100dvh!important;
-            height:100dvw!important;
-            max-height:100dvw!important;
-            transform-origin:top left;
-            transform:rotate(90deg);
         }
         /* ===== MOBILE: SETUP = portrait, fill screen ===== */
         @media(max-width:600px){
@@ -2229,26 +2227,21 @@ document.getElementById('soundToggle').addEventListener('click',function(){
 
 const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d');
 
-/* ===== FORCE-LANDSCAPE VIEWPORT HELPERS =====
-   When body.lp-force-landscape is active the whole UI is rotated 90°
-   via CSS transform. Device still reports its natural (portrait) dims
-   via window.innerWidth/innerHeight — we need the SWAPPED dims so
-   canvas + track sizing match the rotated visible area. Use _lpVW()/
-   _lpVH() everywhere the code previously read innerWidth/innerHeight
-   for layout. Orientation-DETECTION code (to decide whether to force
-   the rotation) must still use the raw window dims. */
-function _lpIsForcedLandscape(){return document.body.classList.contains('lp-force-landscape')}
-/* Raw device dims — read from visualViewport when available. The
-   visualViewport API (W3C CSSOM View L1, 2018) reports the VISIBLE
+/* ===== VIEWPORT HELPERS =====
+   visualViewport (W3C CSSOM View L1, 2018) reports the VISIBLE
    viewport excluding browser chrome like the collapsing URL bar; on
    iOS Safari and Chrome Android this is more reliable than
-   window.innerWidth/innerHeight which can briefly include chrome
-   area during scroll-driven bar animations. Fallback when API is
-   missing. */
+   window.innerWidth/innerHeight which can briefly include chrome area
+   during scroll-driven bar animations. Falls back to innerWidth/Height
+   when the API is missing.
+   The previous _lpIsForcedLandscape / dim-swap logic was removed — we
+   no longer rotate the body via CSS. Mobile car-racing now requires
+   actual device-landscape via #rotateOverlay (see checkOrientation),
+   so the viewport dims always read correctly without any swapping. */
 function _lpRawW(){return (window.visualViewport&&window.visualViewport.width)||window.innerWidth}
 function _lpRawH(){return (window.visualViewport&&window.visualViewport.height)||window.innerHeight}
-function _lpVW(){return _lpIsForcedLandscape()?_lpRawH():_lpRawW()}
-function _lpVH(){return _lpIsForcedLandscape()?_lpRawW():_lpRawH()}
+function _lpVW(){return _lpRawW()}
+function _lpVH(){return _lpRawH()}
 function _lpInGameView(){
     const sw=document.getElementById('setupWrap');
     return !!(sw&&sw.style.display==='none');
@@ -6185,31 +6178,53 @@ const ROTATE_I18N={
    game→setup resets. */
 function checkOrientation(){
     const isMobile='ontouchstart' in window||navigator.maxTouchPoints>0;
-    /* Orientation detection has to read RAW window dims — visualViewport
-       can briefly mis-report during rotation transitions, and the
-       landscape/portrait decision must match what the device physically
-       is, not what the visible area momentarily looks like. */
+    /* Orientation detection reads RAW window dims so the decision
+       matches the physical device hold (visualViewport can briefly
+       mis-report during rotation transitions). */
     const isPortrait=window.innerHeight>window.innerWidth;
     const inGame=_lpInGameView();
-    const shouldStage=isMobile&&inGame;           /* lock fullscreen stage */
-    const shouldRotate=shouldStage&&isPortrait;   /* rotate only when device is portrait */
+    const shouldStage=isMobile&&inGame;
+    /* Show the rotate-overlay if and only if the device is portrait,
+       on mobile, and the game view is active. Setup screen stays in
+       portrait because it's already portrait-optimized; only gameplay
+       is gated. */
+    const shouldShowRotate=shouldStage&&isPortrait;
     const stagedNow=document.body.classList.contains('lp-game-stage');
-    const rotatedNow=document.body.classList.contains('lp-force-landscape');
     if(shouldStage!==stagedNow){
         document.body.classList.toggle('lp-game-stage',shouldStage);
     }
-    if(shouldRotate!==rotatedNow){
-        document.body.classList.toggle('lp-force-landscape',shouldRotate);
-        document.documentElement.classList.toggle('lp-force-landscape-root',shouldRotate);
+    const overlay=document.getElementById('rotateOverlay');
+    if(overlay){
+        overlay.classList.toggle('show',shouldShowRotate);
+        if(shouldShowRotate){
+            /* Localize the rotate prompt to the current UI language. */
+            const lang=(typeof currentLang==='string'&&ROTATE_I18N[currentLang])?currentLang:'en';
+            const t=ROTATE_I18N[lang]||ROTATE_I18N.en;
+            const rt=document.getElementById('rotateText');
+            const rs=document.getElementById('rotateSub');
+            if(rt)rt.textContent=t.land.replace(/^📱\s*/,'');
+            if(rs)rs.textContent=t.landSub;
+        }
     }
-    /* Re-sync canvas + track params on every resize (and on every
-       class toggle) so both orientations produce an identical canvas
-       resolution + track layout. */
-    if(inGame){
+    /* When NOT showing the rotate gate, sync canvas + track params to
+       the current viewport. Skip while the gate is up — the next
+       checkOrientation (fired on orientationchange when the user turns
+       the phone) will re-sync with landscape dims. */
+    if(inGame&&!shouldShowRotate){
+        const wasPortraitBefore=overlay&&overlay._wasPortraitBefore===true;
         WIDTH=_lpVW();HEIGHT=_lpVH();
         applyCanvasDPR();
         if(typeof _refreshTrackParams==='function')_refreshTrackParams();
+        /* If we just transitioned from portrait → landscape AND we're
+           a multiplayer guest with cached host payload, rebuild the
+           track at the new (landscape) scale. Without this rebuild,
+           a track scaled for portrait stays portrait-shaped when the
+           user rotates, putting cars visibly off the road. */
+        if(wasPortraitBefore&&window._lpGuest&&_lpLastRaceStartPayload&&typeof _lpApplyRaceStartOnGuest==='function'){
+            try{_lpApplyRaceStartOnGuest(_lpLastRaceStartPayload)}catch(_){}
+        }
     }
+    if(overlay)overlay._wasPortraitBefore=shouldShowRotate;
 }
 
 /* Also listen to visualViewport changes — mobile Safari's URL bar
@@ -6512,8 +6527,16 @@ function _lpGuestDetectSfxEvents(p){
     });
 }
 
+/* Cached so we can re-apply (with new viewport scale factors) when
+   the guest rotates portrait↔landscape mid-race. Without re-applying,
+   a track that was scaled for portrait dimensions stays portrait-shaped
+   when the user finally rotates to landscape — which is the exact
+   "cars off the track" symptom the user reported. */
+let _lpLastRaceStartPayload=null;
+
 function _lpApplyRaceStartOnGuest(p){
     if(!p)return;
+    _lpLastRaceStartPayload=p;
     selectedCourse=p.course;raceTime=p.raceTime;gameSpeed=p.gameSpeed;
     eventFrequency=p.eventFrequency;totalLaps=p.totalLaps;
     remainingTime=p.raceTime;
@@ -6524,9 +6547,10 @@ function _lpApplyRaceStartOnGuest(p){
        engine's safePlayBgm has a retry path anyway. */
     try{if(AudioEngine.isBGMEnabled())AudioEngine.startBGM()}catch(e){}
     if(typeof p.lapLength==='number')lapLength=p.lapLength;
-    /* Guest enters the game view here — hide setup + flip the
-       force-landscape class BEFORE sizing the canvas so WIDTH/HEIGHT
-       come from the rotated viewport on portrait-held mobile. */
+    /* Guest enters the game view here — hide setup, then run
+       checkOrientation. If the device is portrait the rotate-overlay
+       shows immediately and the user is told to flip; if landscape
+       the canvas sizes itself to the visible dims. */
     document.getElementById('setupWrap').style.display='none';
     if(typeof checkOrientation==='function')checkOrientation();
     /* Canvas sizing → compute scale factors against host's viewport. */
@@ -6868,6 +6892,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777427413" defer></script>
+<script src="/js/siteFooter.js?v=1777428613" defer></script>
 </body>
 </html>
