@@ -191,10 +191,29 @@ async function _fetchProfile(userId) {
     try {
         const { data, error } = await getSupabase()
             .from('profiles')
-            .select('id, nickname, email, avatar_url, bio, role, profile_complete, created_at, updated_at')
+            /* Consent columns (terms_agreed_at / privacy_agreed_at /
+               marketing_agreed_at) are added by the consent-and-export
+               migration. We request them here so /me/'s marketing
+               toggle and the consent-status badge can read current
+               state without an extra round-trip. The .select() string
+               is fault-tolerant: if the columns don't exist yet
+               (migration not deployed), Supabase returns the columns
+               that DO exist + a 400. We fall back to a minimal select
+               in that case so the page still loads. */
+            .select('id, nickname, email, avatar_url, bio, role, profile_complete, created_at, updated_at, terms_agreed_at, privacy_agreed_at, marketing_agreed_at')
             .eq('id', userId)
             .maybeSingle();
-        if (error) { console.warn('[profile] fetch error:', error.message); return null; }
+        if (error) {
+            /* Probably the consent columns don't exist yet — retry with
+               the legacy column set so the page renders fine. */
+            const { data: fallback, error: fbErr } = await getSupabase()
+                .from('profiles')
+                .select('id, nickname, email, avatar_url, bio, role, profile_complete, created_at, updated_at')
+                .eq('id', userId)
+                .maybeSingle();
+            if (fbErr) { console.warn('[profile] fetch error:', fbErr.message); return null; }
+            return fallback || null;
+        }
         return data || null;
     } catch (e) {
         console.warn('[profile] fetch exception:', e);
