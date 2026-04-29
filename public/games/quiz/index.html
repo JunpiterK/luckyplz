@@ -725,7 +725,7 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777445830"></script>
+<script src="/js/supabase-config.js?v=1777446553"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -747,6 +747,105 @@ function toast(msg, ms){
     clearTimeout(toast._tm);
     toast._tm = setTimeout(()=>t.classList.remove('on'), ms || 2000);
 }
+
+/* ============================================================
+   Wake Lock — keep screen on during a live multiplayer game.
+   ============================================================
+   Mobile browsers throttle (and eventually suspend) tabs when the
+   screen turns off or the user switches apps. For a host this stalls
+   the whole room; for a guest it means missing broadcasts. The Screen
+   Wake Lock API (https://w3c.github.io/screen-wake-lock/) tells the
+   OS "don't sleep this tab's screen while this lock is held".
+   - Auto-released by the browser when the tab loses visibility.
+   - We re-acquire on visibilitychange→visible.
+   - Best-effort: not every browser supports it (Android Chrome 84+,
+     Safari iOS 16.4+). Where unsupported, we fall through silently
+     and the watchdog/snapshot recovery still handles missed events.
+*/
+let _wakeLock = null;
+let _wakeLockWanted = false;
+async function _acquireWakeLock(){
+    _wakeLockWanted = true;
+    if (!('wakeLock' in navigator)) return;
+    if (_wakeLock) return;
+    try {
+        _wakeLock = await navigator.wakeLock.request('screen');
+        _wakeLock.addEventListener && _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+    } catch(_){ /* permission denied / page hidden — try again on visibility */ }
+}
+function _releaseWakeLock(){
+    _wakeLockWanted = false;
+    if (_wakeLock){ try { _wakeLock.release(); } catch(_){} _wakeLock = null; }
+}
+
+/* ============================================================
+   Wall-clock phase scheduler (host-side only).
+   ============================================================
+   Replaces the previous trio of setTimeout handles
+   (questionTimer / revealTimer / lbTimer). Mobile Chrome throttles
+   timers on backgrounded tabs to ~1/min after a minute, so the host
+   pressing the lock button or switching apps mid-question would stall
+   the game for everyone. Now:
+
+     _setActivePhase(durationMs, fire) — schedules `fire` to run after
+       `durationMs` AND records the wall-clock deadline.
+     _clearActivePhase()              — cancels the pending phase.
+     _catchUpActivePhase()            — if Date.now() ≥ deadline, fire
+       NOW. Called from visibilitychange→visible.
+
+   Even if the browser eventually fires the throttled setTimeout
+   later, our catch-up runs first and clears the timer, so phase
+   transitions can never double-fire.
+*/
+function _setActivePhase(durMs, fire){
+    if (_activePhase){ try { clearTimeout(_activePhase.timerId); } catch(_){} }
+    const deadline = Date.now() + durMs;
+    const timerId = setTimeout(function(){
+        if (_activePhase && _activePhase.timerId === timerId){
+            _activePhase = null;
+        }
+        try { fire(); } catch(e) { try { console.error(e); } catch(_){} }
+    }, durMs);
+    _activePhase = { deadline: deadline, fire: fire, timerId: timerId };
+}
+function _clearActivePhase(){
+    if (_activePhase){
+        try { clearTimeout(_activePhase.timerId); } catch(_){}
+        _activePhase = null;
+    }
+}
+function _catchUpActivePhase(){
+    if (!_activePhase) return;
+    if (Date.now() < _activePhase.deadline) return;
+    const fn = _activePhase.fire;
+    try { clearTimeout(_activePhase.timerId); } catch(_){}
+    _activePhase = null;
+    try { fn(); } catch(e) { try { console.error(e); } catch(_){} }
+}
+
+/* Single visibility handler that does:
+   - host: catch up any phase whose deadline already passed (this is
+     the "game keeps progressing" half of the user's requirement).
+   - guest: snap the timer bar to actual remaining time so the user
+     doesn't see a frozen/wrong-looking bar for the ~hundreds of ms
+     it takes the snapshot reply to arrive. The authoritative
+     re-render still comes from host:snapshot dispatch in
+     wireGuestListeners — this is just an instant visual fix.
+   - both roles: re-acquire Wake Lock if a game session wanted it.
+   The guest's "see live state on return" full recovery is handled
+   in lpRoom.js (auto-fires guest:request_snapshot on visibility),
+   plus our host's room.snapshot() at every phase change. */
+document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    if (mode === 'host' && !isPaused) _catchUpActivePhase();
+    if (mode === 'guest' && !isPaused && qStartAt > 0
+        && document.getElementById('vQ').classList.contains('on')){
+        const elapsed = Math.max(0, Date.now() - qStartAt);
+        const remaining = Math.max(0, qDurationMs - elapsed);
+        if (remaining > 0) animateTimer(remaining);
+    }
+    if (_wakeLockWanted) _acquireWakeLock();
+});
 
 /* ============================================================
    Category catalog
@@ -839,9 +938,13 @@ let questions = [];         /* loaded question list (host-side) */
 let currentQIdx = 0;
 let qStartAt = 0;
 let qDurationMs = 4000;
-let questionTimer = null;
-let revealTimer = null;
-let lbTimer = null;
+/* Host phase scheduler — single active timer slot at any moment
+   (question / reveal / leaderboard timers are mutually exclusive on
+   the host). Wall-clock based so a backgrounded tab whose setTimeout
+   was throttled can force-fire the missed phase the moment it returns
+   to foreground. The user requirement: "백그라운드여도 게임은 멈추지
+   않고 진행되어야 하고, 복귀 시 진행되는 화면이 보여야 해". */
+let _activePhase = null;    /* { deadline, fire, timerId } | null */
 let myChoice = null;        /* guest's latest pick */
 
 /* Host-only: aggregated per-user state */
@@ -1738,6 +1841,7 @@ $('btnLobbyLeave').addEventListener('click', () => {
         ? '방을 해제하시겠습니까?\n게스트들도 모두 연결이 끊깁니다.'
         : '방에서 나가시겠습니까?';
     if (confirm(msg)){
+        _releaseWakeLock();
         try { if (room) room.close(); } catch(_){}
         try { if (guest) guest.close(); } catch(_){}
         location.href = '/';
@@ -1761,6 +1865,12 @@ $('btnStartGame').addEventListener('click', () => {
         r.score = 0; r.correctCount = 0; r.prevRank = 0;
     }
     hostAnswers.clear();
+    /* Hold the screen awake for the duration of the live game. The
+       host driving the room can't afford to background out — a
+       sleeping screen translates directly to a stalled room. Browsers
+       that don't support the API silently no-op (the catch-up
+       scheduler still recovers when the user returns). */
+    _acquireWakeLock();
     startHostQuestion();
 });
 
@@ -1799,7 +1909,7 @@ function installHostCtlAsHost(){
         onPause: () => {
             isPaused = true;
             pauseStartAt = Date.now();
-            clearTimeout(questionTimer);
+            _clearActivePhase();
             const elapsed = pauseStartAt - qStartAt;
             const scaleX = Math.max(0, 1 - elapsed / qDurationMs);
             freezeTimerAt(scaleX);
@@ -1815,23 +1925,20 @@ function installHostCtlAsHost(){
             pauseStartAt = 0;
             qStartAt = Date.now();
             animateTimer(qDurationMs);
-            clearTimeout(questionTimer);
-            questionTimer = setTimeout(revealHost, qDurationMs);
+            _setActivePhase(qDurationMs, revealHost);
             updateHostCtlVisibility();
             /* If every participant already answered during the pause,
                auto-reveal just like the non-paused path would. */
             const ansMap = hostAnswers.get(currentQIdx);
             if (ansMap && ansMap.size >= hostRoster.size){
-                clearTimeout(questionTimer);
-                setTimeout(revealHost, 300);
+                _setActivePhase(300, revealHost);
             }
             return { qIdx: currentQIdx, newStartAt: qStartAt, fullRestart: true, qDurationMs: qDurationMs };
         },
         onEnd: () => {
             gameEnded = true;
-            clearTimeout(questionTimer);
-            clearTimeout(revealTimer);
-            clearTimeout(lbTimer);
+            _clearActivePhase();
+            _releaseWakeLock();
             isPaused = false;
             pauseStartAt = 0;
         }
@@ -1848,7 +1955,6 @@ function installHostCtlAsGuest(){
             if (gameEnded) return;
             isPaused = true;
             pauseStartAt = Date.now();
-            clearTimeout(questionTimer);
             /* Prefer the host's authoritative bar position; fall back
                to locally computed if the payload was stripped. */
             let sx;
@@ -1871,9 +1977,7 @@ function installHostCtlAsGuest(){
         },
         onHostEnded: () => {
             gameEnded = true;
-            clearTimeout(questionTimer);
-            clearTimeout(revealTimer);
-            clearTimeout(lbTimer);
+            _releaseWakeLock();
             isPaused = false;
             pauseStartAt = 0;
         }
@@ -1940,9 +2044,11 @@ function startHostQuestion(){
        was empty and reconnecting guests never caught up. */
     if (room.snapshot) room.snapshot({phase:'question', idx:payload.idx, question:payload});
     renderHostQuestionView(payload, q);
-    /* Host auto-advances when the timer expires OR all answers in */
-    clearTimeout(questionTimer);
-    questionTimer = setTimeout(() => { revealHost(); }, qDurationMs);
+    /* Host auto-advances when the timer expires OR all answers in.
+       _setActivePhase records a wall-clock deadline so a backgrounded
+       host that throttled out of setTimeout still advances the moment
+       the tab returns to foreground (visibilitychange handler). */
+    _setActivePhase(qDurationMs, revealHost);
 }
 
 function renderHostQuestionView(payload, q){
@@ -2042,8 +2148,7 @@ function handleGuestAnswer(p){
        racing broadcast can't auto-advance past the host's intent —
        the reveal fires on resume when the state is consistent. */
     if (ansMap.size >= hostRoster.size && !isPaused){
-        clearTimeout(questionTimer);
-        setTimeout(revealHost, 300);
+        _setActivePhase(300, revealHost);
     }
 }
 
@@ -2055,7 +2160,7 @@ function updateHostAnsCounter(){
 
 $('btnHostSkip').addEventListener('click', () => {
     if (isPaused) return;  /* can't skip while paused */
-    clearTimeout(questionTimer);
+    _clearActivePhase();
     revealHost();
 });
 
@@ -2134,10 +2239,9 @@ function revealHost(){
     $('btnNextQ').style.display = 'block';
     $('btnNextQ').textContent = '중간 순위 보기 →';
     $('rvStatus').textContent = '5초 후 자동 진행…';
-    clearTimeout(revealTimer);
-    revealTimer = setTimeout(() => advanceHostToLeaderboard(ranking), 5000);
+    _setActivePhase(5000, () => advanceHostToLeaderboard(ranking));
     $('btnNextQ').onclick = () => {
-        clearTimeout(revealTimer);
+        _clearActivePhase();
         advanceHostToLeaderboard(ranking);
     };
 }
@@ -2151,10 +2255,9 @@ function advanceHostToLeaderboard(ranking){
     $('lbStatus').textContent = '3초 후 다음 문제…';
     $('btnLbNext').style.display = 'block';
     $('btnLbNext').textContent = '다음 문제 →';
-    clearTimeout(lbTimer);
-    lbTimer = setTimeout(() => nextHostQuestion(), 3000);
+    _setActivePhase(3000, nextHostQuestion);
     $('btnLbNext').onclick = () => {
-        clearTimeout(lbTimer);
+        _clearActivePhase();
         nextHostQuestion();
     };
 }
@@ -2178,6 +2281,11 @@ function startGuestQuestion(p){
         isPaused = false; pauseStartAt = 0;
         if (hostCtlRef) hostCtlRef.clearPausedState();
     }
+    /* First question from the host is the cue that the live game has
+       actually begun for this guest — acquire Wake Lock so the
+       phone/tablet doesn't sleep mid-question. Idempotent: re-calling
+       on subsequent questions just re-asserts intent. */
+    _acquireWakeLock();
     currentQIdx = p.idx;
     qStartAt = p.startAt || Date.now();
     qDurationMs = p.durationMs;
@@ -2229,6 +2337,8 @@ function showFinalGuest(payload){
     $('btnFinAgain').style.display = 'none';
     /* Save guest's own record */
     saveAttempt(payload);
+    /* Match host: drop the Wake Lock once the game is over. */
+    _releaseWakeLock();
     showView('vFinal');
 }
 
@@ -2362,6 +2472,9 @@ function finalizeHost(){
     const payload = { ranking: ranked, total: questions.length };
     room.broadcast('host:quiz_final', payload);
     if (room.snapshot) room.snapshot({phase:'final', final:payload});
+    /* Game over → drop the Wake Lock so the user's phone returns to
+       normal screen-off behavior. Re-acquired on a fresh game. */
+    _releaseWakeLock();
     renderFinal(ranked);
     /* Host record */
     const mine = ranked.find(r => r.gid === '__host__');
@@ -2570,6 +2683,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777445830"></script>
+<script src="/js/siteFooter.js?v=1777446553"></script>
 </body>
 </html>
