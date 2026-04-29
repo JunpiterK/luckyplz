@@ -71,9 +71,9 @@ body{
 }
 .left-col{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
 
-/* ---- Score strip ---- */
+/* ---- Time strip ---- */
 .score-strip{
-    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%
+    display:grid;grid-template-columns:repeat(2,1fr);gap:8px;width:100%
 }
 .ss{
     background:linear-gradient(165deg,rgba(22,22,42,.55),rgba(12,12,28,.8));
@@ -169,7 +169,10 @@ body{
 .lb-tab{flex:1;padding:10px 8px;border:0;background:transparent;color:rgba(255,255,255,.55);cursor:pointer;font-family:inherit;font-size:.82em;font-weight:700;letter-spacing:.04em;border-radius:8px}
 .lb-tab.active{background:rgba(0,217,255,.14);color:#00D9FF}
 .lb-list{background:rgba(255,255,255,.02);border:1px solid var(--panel-br);border-radius:14px;overflow:hidden;margin-bottom:10px}
-.lb-row{display:grid;grid-template-columns:38px 1fr 88px;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--panel-br)}
+/* lb-score column widened from 88px → 104px to fit the new mm:ss:cs
+   format (7–8 chars in Orbitron) without truncation. Old format was a
+   raw 4-digit score number that comfortably fit 88 px. */
+.lb-row{display:grid;grid-template-columns:38px 1fr 104px;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--panel-br)}
 .lb-row:last-child{border-bottom:0}
 .lb-row.self{background:rgba(0,217,255,.06);border-left:3px solid #00D9FF;padding-left:9px}
 .lb-rnk{font-family:'Orbitron',sans-serif;font-weight:900;font-size:.92em;color:var(--muted-2);text-align:center}
@@ -275,9 +278,13 @@ body{
 
     <div class="left-col">
 
+        <!-- Space-Z is a survival game — only the survival TIME matters,
+             and the leaderboard ranks longest survivor first. The old SCORE
+             column was just (time × 10) presented as a number, redundant
+             with TIME, so it's removed. The two remaining columns
+             (TIME, BEST) both display as mm:ss:cs. -->
         <div class="score-strip">
-            <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
-            <div class="ss"><div class="v" id="timeNow">0:00</div><div class="l">TIME</div></div>
+            <div class="ss"><div class="v" id="timeNow">0:00:00</div><div class="l">TIME</div></div>
             <div class="ss"><div class="v best" id="bestScore">—</div><div class="l">BEST</div></div>
         </div>
 
@@ -328,12 +335,45 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777461299"></script>
-<script src="/js/lpAudio.js?v=1777461299"></script>
+<script src="/js/supabase-config.js?v=1777462870"></script>
+<script src="/js/lpAudio.js?v=1777462870"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
+
+/* ---- Time-format helpers ----
+   Space-Z is a survival game. The DB column is `score` for legacy schema
+   reasons, but it stores `floor(duration_ms / 100)` — i.e. a centisecond
+   counter. Wherever we'd display a "score" in the UI, we render mm:ss:cs
+   instead. Two helpers because we sometimes have raw ms (current run),
+   sometimes the score-as-cs (server records).
+
+   formatDuration(ms)  → mm:ss:cs from elapsed milliseconds
+   formatTime(score)   → mm:ss:cs from server score (= cs)
+*/
+function formatDuration(ms){
+    if (ms == null || isNaN(ms)) return '—';
+    const totalCs = Math.floor(ms / 10);
+    const cs = totalCs % 100;
+    const totalSec = Math.floor(totalCs / 100);
+    const ss = totalSec % 60;
+    const mm = Math.floor(totalSec / 60);
+    return String(mm).padStart(1, '0') + ':' +
+           String(ss).padStart(2, '0') + ':' +
+           String(cs).padStart(2, '0');
+}
+function formatTime(score){
+    if (score == null || isNaN(score)) return '—';
+    /* score = floor(duration_ms / 100) → score is already in cs */
+    const cs = score % 100;
+    const totalSec = Math.floor(score / 100);
+    const ss = totalSec % 60;
+    const mm = Math.floor(totalSec / 60);
+    return String(mm).padStart(1, '0') + ':' +
+           String(ss).padStart(2, '0') + ':' +
+           String(cs).padStart(2, '0');
+}
 
 let me=null;
 /* ID + nickname captured at initAuth so we can detect mid-game session
@@ -395,7 +435,10 @@ async function loadMyStats(){
     try{
         const {data,error}=await getSupabase().rpc('dodge_my_stats');
         if(error||!data||!data.has_record)return;
-        $('bestScore').textContent=data.best_score;
+        /* best_score is the centisecond count of the player's longest
+           survival run — render as mm:ss:cs so the BEST tile reads
+           consistently with the live TIME tile next to it. */
+        $('bestScore').textContent=formatTime(data.best_score);
     }catch(_){}
 }
 
@@ -1696,8 +1739,7 @@ function triggerGameOver(){
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
     if(navigator.vibrate)try{navigator.vibrate([40,20,80])}catch(_){}
 
-    const mm=String(Math.floor(duration/60000)).padStart(1,'0');
-    const ss=String(Math.floor((duration%60000)/1000)).padStart(2,'0');
+    const timeStr=formatDuration(duration);
     const zoneReached=ZONES[currentZoneIdx];
 
     /* Record-as line — shows the player which account this attempt will
@@ -1708,8 +1750,8 @@ function triggerGameOver(){
        session (not the cached me) — see the verification block. */
     $('overlay').innerHTML=
         '<h2 class="go">GAME OVER</h2>'
-      +'<div class="score-big">'+score+'</div>'
-      +'<p>생존 시간 '+mm+':'+ss+'<br><span style="font-size:.85em;color:rgba(0,217,255,.8)">'+zoneReached.nameKo+' 도달</span></p>'
+      +'<div class="score-big">'+timeStr+'</div>'
+      +'<p>생존 시간 (분:초:1/100초)<br><span style="font-size:.85em;color:rgba(0,217,255,.8)">'+zoneReached.nameKo+' 도달</span></p>'
       +'<div class="rank-card" id="ovRankCard">'
       +  '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
       +  '<div class="rank-card-pct" id="ovRankPct"></div>'
@@ -2058,12 +2100,11 @@ function gameLoop(now){
     /* ---- Flame pulse ---- */
     flamePulse=(flamePulse+dt*12)%(Math.PI*2);
 
-    /* ---- Update HUD ---- */
-    const score=Math.floor(elapsedMs/100);
-    $('scoreNow').textContent=score;
-    const mm=String(Math.floor(elapsedMs/60000)).padStart(1,'0');
-    const ss=String(Math.floor((elapsedMs%60000)/1000)).padStart(2,'0');
-    $('timeNow').textContent=mm+':'+ss;
+    /* ---- Update HUD ----
+       Score column is gone; only the TIME column shows mm:ss:cs at full
+       100 fps precision so the player can see their personal-best chase
+       in real time. */
+    $('timeNow').textContent=formatDuration(elapsedMs);
 
     drawFrame(now, dt);
     requestAnimationFrame(gameLoop);
@@ -2301,7 +2342,7 @@ async function loadLeaderboard(scope){
             return '<div class="lb-row'+(isSelf?' self':'')+'">'
                  +'<div class="lb-rnk'+rnkCls+'">'+(row.rnk<=3?(['🥇','🥈','🥉'][row.rnk-1]):('#'+row.rnk))+'</div>'
                  +'<div class="lb-who">'+av+'<div class="lb-nick">'+esc(row.nickname||'?')+'</div></div>'
-                 +'<div class="lb-score">'+row.best_score+'</div>'
+                 +'<div class="lb-score">'+formatTime(row.best_score)+'</div>'
                  +'</div>';
         }).join('');
     }catch(_){$('lbList').innerHTML='<div class="lb-empty">불러오기 실패</div>';}
@@ -2328,6 +2369,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777461299"></script>
+<script src="/js/siteFooter.js?v=1777462870"></script>
 </body>
 </html>
