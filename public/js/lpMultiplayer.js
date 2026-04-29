@@ -124,20 +124,51 @@
     '.lp-mp-footer .lp-mp-danger:hover{background:rgba(220,70,70,.3);border-color:rgba(255,110,110,.7);color:#fff;',
     '  box-shadow:0 0 12px rgba(255,100,100,.3)}',
 
-    /* When a multiplayer room is active, the per-game single-player
-       result modal (#resultScreen across roulette / lotto / ladder /
-       team / bingo / car-racing) is suppressed. Reasons:
-         (1) The modal\'s "Settings" / "Spin Again" buttons run local-only
-             handlers that can drift the host away from the room flow
-             (e.g. backToSetup wipes the running config) and confuse
-             guests if the broadcast doesn\'t arrive in time.
-         (2) The multiplayer panel\'s game-switcher + End-Room buttons
-             are the canonical "next step" surface in multiplayer —
-             two competing post-game UIs at once is exactly the kind
-             of state-mismatch the user reported as "방이 쉽게 깨진다".
-       Hide via !important so we win against each game\'s inline-style
-       toggles in showResult() / replay handlers. */
-    'body.lp-mp-active #resultScreen{display:none!important}',
+    /* When a multiplayer room is active, each game\'s #resultScreen
+       (winner card / final ranking) STAYS VISIBLE so users see the
+       outcome the same way they would in single-player. What\'s
+       suppressed are only the modal\'s ACTION BUTTONS — Spin Again /
+       Back to Setup / Play Again / Settings — because:
+         (1) Those handlers run local-only logic (e.g. backToSetup
+             wipes config, replay re-spins) which drifts the host out
+             of the multiplayer flow without notifying guests.
+         (2) The multiplayer panel\'s game switcher + End Room ARE the
+             canonical "next step" surface in multiplayer; two competing
+             post-game control planes are the exact failure mode that
+             surfaced as "방이 쉽게 깨진다".
+       Once the room is closed (unmount → body.lp-mp-active removed),
+       all these buttons reactivate so single-player flows are fully
+       restored.
+       Selector list is conservative — known IDs + classes used by all
+       7 multiplayer-capable games. Share buttons (saveRecordBtn etc.)
+       are NOT hidden because they remain useful in multiplayer too. */
+    /* Hide every per-game replay/back-to-setup control. Selector list
+       enumerates all 6 multiplayer-capable resultScreen variants
+       (quiz uses its own vFinal view + isn\'t in this catalogue):
+         #replayBtn          roulette / lotto / ladder / team / bingo
+         #backToSetupBtn     roulette
+         #restartBtn         car-racing
+         .btn-replay         shared class on most replay buttons
+         .result-btns        roulette / lotto / ladder / team button row
+         .result-btn-container  car-racing button row */
+    'body.lp-mp-active #resultScreen #replayBtn,',
+    'body.lp-mp-active #resultScreen #backToSetupBtn,',
+    'body.lp-mp-active #resultScreen #restartBtn,',
+    'body.lp-mp-active #resultScreen .btn-replay,',
+    'body.lp-mp-active #resultScreen .result-btns,',
+    'body.lp-mp-active #resultScreen .result-btn-container{',
+    '  display:none!important}',
+    /* Inline notice that points users to the multiplayer panel so the
+       missing buttons aren\'t a dead-end. Two selectors cover both the
+       wrapped (.result-card across roulette/lotto/ladder/team/bingo)
+       and unwrapped (#resultScreen direct h1 in car-racing) layouts. */
+    'body.lp-mp-active #resultScreen .result-card::after,',
+    'body.lp-mp-active #resultScreen > h1:first-child::after{',
+    '  content:"👥 다음 게임은 멀티플레이 패널에서 선택하세요";',
+    '  display:block;margin:14px auto 0;padding:10px 16px;',
+    '  background:rgba(79,195,247,.18);border:1px solid rgba(79,195,247,.45);',
+    '  border-radius:10px;color:#4FC3F7;font-size:.85em;font-weight:700;',
+    '  text-align:center;max-width:360px;line-height:1.4}',
     /* Mobile + tablet: full-width pill, draggable on the Y-axis only.
        Phone screens are too small to free-drag horizontally without
        clipping off-screen, so horizontal stays locked at 10px gutters
