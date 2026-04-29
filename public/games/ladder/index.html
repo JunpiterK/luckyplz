@@ -477,8 +477,18 @@ let particles=[];
 let promptText='';
 let promptAlpha=0;
 
-/* ===== AUDIO ENGINE ===== */
-const Audio=(()=>{
+/* ===== AUDIO ENGINE =====
+   Renamed from `Audio` → `Sfx` because top-level `const` declarations
+   in classic scripts go into the Realm's lexical environment, which is
+   shared across every <script> tag on the page — including the
+   lpBgm.js module that siteFooter.js dynamically injects. lpBgm.js
+   calls `new Audio(url)` to construct an HTMLAudioElement, but with a
+   `const Audio = (...)` here, that lookup hit our IIFE-returned object
+   (a plain {click, turn, ...} bag) instead of `window.Audio`, throwing
+   `TypeError: Audio is not a constructor` and silently killing BGM.
+   Other games name their sound module `SFX`/`audio`/`sound` so they
+   never hit this; ladder was the lone offender. */
+const Sfx=(()=>{
     let actx;
     function getCtx(){if(!actx)actx=new(window.AudioContext||window.webkitAudioContext)();return actx}
     function play(freq,dur,type='sine',vol=0.15){
@@ -536,7 +546,7 @@ function applyPreset(type){
     if(!list||!Array.isArray(list))return;
     const inputs=document.querySelectorAll('#resultInputs input');
     inputs.forEach((inp,i)=>{inp.placeholder=list[i%list.length]||'';inp.value=''});
-    Audio.click();
+    Sfx.click();
     if(typeof renderPreview==='function')renderPreview();
 }
 
@@ -903,7 +913,7 @@ function updateTracer(t,dt){
             // Sound on turn
             if(seg.type==='turn'&&frac<0.1&&!seg._sounded){
                 seg._sounded=true;
-                Audio.turn();
+                Sfx.turn();
             }
             break;
         }
@@ -912,7 +922,7 @@ function updateTracer(t,dt){
 
     // Tick sound periodically
     if(Math.floor(t.progress/30)!==Math.floor((t.progress-t.speed*dt)/30)){
-        Audio.tick();
+        Sfx.tick();
     }
 
     // Trail
@@ -932,7 +942,7 @@ function updateTracer(t,dt){
         t.y=t.segs[t.segs.length-1].to.y;
         arrivedCount++;
         matchResults.push({name:t.name,result:ladder.results[t.endCol],color:t.color,playerIdx:t.playerIdx,endCol:t.endCol});
-        Audio.arrive();
+        Sfx.arrive();
 
         // Burst particles
         for(let i=0;i<20;i++){
@@ -993,7 +1003,7 @@ function updateTracer(t,dt){
                         name:tracer.name,result:ladder.results[tracer.endCol],
                         color:tracer.color,playerIdx:tracer.playerIdx,endCol:tracer.endCol
                     });
-                    Audio.arrive();
+                    Sfx.arrive();
                     /* Arrival-burst particles — keeps the finish
                        energy same as a normal arrival. */
                     for(let i=0;i<20;i++){
@@ -1142,7 +1152,7 @@ function _spawnInitialTracers(){
 function handleCanvasClick(e){
     if(gamePhase!=='playing')return;
     if(window._lpGuest)return; /* guest is read-only — host drives */
-    Audio.getCtx();
+    Sfx.getCtx();
     const wasEmpty=tracers.length===0;
     _spawnInitialTracers();
     /* Mirror the "start" click to any watchers — only the first click
@@ -1244,7 +1254,7 @@ function renderPreview(forceRegenerate){
 }
 
 function startGame(){
-    Audio.getCtx();
+    Sfx.getCtx();
     recordCurrentAsPreset();
     gamePhase='playing';
     tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];
@@ -1327,7 +1337,7 @@ function startGame(){
 /* ===== RESULT SCREEN ===== */
 function showResultScreen(){
     cancelAnimationFrame(animId);
-    Audio.fanfare();
+    Sfx.fanfare();
     startConfetti();
 
     // Keep drawing confetti
@@ -1459,7 +1469,7 @@ function init(){
         for(let i=vals.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]]}
         inputs.forEach((inp,i)=>inp.value=vals[i]);
         renderPreview(false);/* label refresh only, no re-generation */
-        Audio.click();
+        Sfx.click();
     });
     let sortDir=0;/* 0=unsorted, 1=asc, -1=desc — toggles on each click */
     const pabSortIco=document.getElementById('pabSortIco');
@@ -1477,7 +1487,7 @@ function init(){
         inputs.forEach((inp,i)=>inp.value=pairs[i].value);
         if(pabSortIco)pabSortIco.textContent=sortDir===1?'↓':'↑';
         renderPreview(false);/* keep the ladder, just relabel top positions */
-        Audio.click();
+        Sfx.click();
     });
     if(pabStart)pabStart.addEventListener('click',startGame);
 
@@ -1488,7 +1498,7 @@ function init(){
     if(pabMode)pabMode.addEventListener('click',()=>{
         playMode=playMode==='seq'?'all':'seq';
         updateModeBtn();
-        Audio.click();
+        Sfx.click();
     });
 
     /* Tab key: jump to next name input, skipping remove buttons */
@@ -1767,6 +1777,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777496700" defer></script>
+<script src="/js/siteFooter.js?v=1777496993" defer></script>
 </body>
 </html>
