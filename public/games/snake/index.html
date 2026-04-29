@@ -141,6 +141,44 @@ body{
 .overlay .kbd-hint{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.35);letter-spacing:.03em}
 .overlay .kbd-hint kbd{padding:2px 6px;border-radius:5px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);font-family:inherit;color:#fff}
 
+/* ---- 3-2-1 countdown overlay ----
+   Sits on top of the canvas after the user presses Start (or restart),
+   gives the player ~2.4s to put their fingers on the d-pad / hand on
+   the keyboard before the snake actually starts moving. Without this,
+   on phones especially, the snake immediately hits the right wall while
+   the user is still reaching for the controls. The number animates in
+   (scale up + opacity fade) so it's recognisable at a glance even
+   peripherally. Same overlay element gets re-used for "GO!" with the
+   accent gradient, signalling "now move". */
+.countdown{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(5,5,15,.55);backdrop-filter:blur(4px);
+    z-index:3;pointer-events:none;
+    font-family:'Orbitron',sans-serif;font-weight:900;
+    font-size:clamp(72px,18vw,140px);line-height:1;letter-spacing:.04em;
+    color:#fff;text-shadow:0 0 32px rgba(0,230,118,.65),0 0 64px rgba(0,230,118,.35)
+}
+.countdown.hidden{display:none}
+.countdown.go{
+    background:linear-gradient(135deg,#00E676,#FFE66D);
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    text-shadow:none;
+    /* go variant gets a tinted backdrop instead of inheriting the count
+       backdrop so the gradient text reads cleanly. */
+}
+.countdown.go::before{
+    content:"";position:absolute;inset:0;background:rgba(5,5,15,.55);
+    backdrop-filter:blur(4px);z-index:-1
+}
+@keyframes countPop{
+    0%  {transform:scale(1.7);opacity:0}
+    20% {transform:scale(1);  opacity:1}
+    80% {transform:scale(1);  opacity:1}
+    100%{transform:scale(.7); opacity:0}
+}
+.countdown.tick{animation:countPop .7s ease-out forwards}
+.countdown.go-anim{animation:countPop .55s ease-out forwards}
+
 /* ---- Thumb-zone D-pad (always visible on touch, fallback on desktop) ---- */
 .dpad-wrap{
     width:100%;max-width:440px;
@@ -314,6 +352,10 @@ body{
                 <button class="btn" id="ovBtn">시작</button>
                 <div class="kbd-hint"><kbd>↑↓←→</kbd> · <kbd>Space</kbd> 일시정지</div>
             </div>
+            <!-- 3-2-1 countdown shown after the user presses Start, before
+                 the snake actually starts moving. Same element re-used for
+                 each tick (text content swapped + animation re-played). -->
+            <div class="countdown hidden" id="countdown" aria-hidden="true"></div>
         </div>
 
         <div class="dpad-wrap">
@@ -349,8 +391,8 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777455375"></script>
-<script src="/js/lpAudio.js?v=1777455375"></script>
+<script src="/js/supabase-config.js?v=1777456031"></script>
+<script src="/js/lpAudio.js?v=1777456031"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -389,6 +431,12 @@ const cell=BASE_SIZE/GRID;
 let snake=[], dir={x:1,y:0}, queued=[], food={x:15,y:10};
 let score=0, foodsEaten=0, tickMs=130;
 let running=false, paused=false, lastTick=0, startedAt=0;
+/* True while the 3-2-1-GO countdown is animating. Blocks the game
+   loop, pause toggles, and re-entry of startGame() so a rapid double-
+   tap on the Start button can't stack two countdowns on top of each
+   other. Cleared the moment the actual game loop starts. */
+let countdownActive=false;
+let countdownTimers=[];   /* setTimeout handles to cancel on early abort */
 
 /* ---- Pause UI sync (mobile/tablet/PC parity) ---- */
 function syncPauseUI(){
@@ -465,14 +513,71 @@ function resetGame(){
     $('lenNow').textContent='3';
 }
 
+/* Pre-game countdown — reset the board immediately (so the player sees
+   their snake's starting position behind the count), display 3 → 2 → 1
+   → GO over ~2.4s, THEN flip running=true and kick off the game loop.
+   Same flow for first start AND restart (overlay's "다시하기" button).
+   On phones especially, the snake immediately hits the right wall before
+   the user can put their thumb on the d-pad — the countdown gives them
+   a beat to settle in. Same UX every device for parity. */
+function _clearCountdownTimers(){
+    countdownTimers.forEach(function(t){clearTimeout(t)});
+    countdownTimers=[];
+}
+function _showCountStep(text,isGo){
+    const el=$('countdown');
+    if(!el)return;
+    /* Wipe + re-trigger the animation. Browsers debounce identical
+       animation re-applications, so we have to remove the class, force
+       a layout flush, and add it back. */
+    el.classList.remove('tick','go-anim','go','hidden');
+    el.textContent=text;
+    void el.offsetWidth; /* reflow */
+    if(isGo){
+        el.classList.add('go','go-anim');
+    }else{
+        el.classList.add('tick');
+    }
+}
+function _hideCountdown(){
+    const el=$('countdown');
+    if(el){el.classList.add('hidden');el.classList.remove('tick','go-anim','go')}
+}
+
 function startGame(){
+    /* Block re-entry while a previous countdown is still animating —
+       a quick double-tap on the start button used to stack two count-
+       downs and then the game ran for both, which manifested as the
+       snake stuttering at start. */
+    if(countdownActive)return;
+    _clearCountdownTimers();
     resetGame();
     $('overlay').classList.add('hidden');
+    /* Render once so the user sees the snake's starting position
+       behind the countdown overlay. Without this initial paint, the
+       canvas is blank during the count and the user can't tell which
+       direction they're facing. */
+    if(typeof draw==='function')draw();
     sfxStart();
-    running=true; paused=false;
-    startedAt=performance.now(); lastTick=startedAt;
-    syncPauseUI();
-    requestAnimationFrame(loop);
+    countdownActive=true;
+    /* Show "3" immediately, then 2/1/GO at 700ms intervals. Animation
+       duration matches each step so the previous number fully fades
+       before the next pops in. */
+    _showCountStep('3',false);
+    countdownTimers.push(setTimeout(function(){_showCountStep('2',false)},700));
+    countdownTimers.push(setTimeout(function(){_showCountStep('1',false)},1400));
+    countdownTimers.push(setTimeout(function(){_showCountStep('GO!',true)},2100));
+    countdownTimers.push(setTimeout(function(){
+        _hideCountdown();
+        countdownActive=false;
+        running=true; paused=false;
+        /* Reset timing AT GAME START not at countdown start — the player's
+           recorded duration / leaderboard time should be the actual play
+           time, not 2.4s padded. */
+        startedAt=performance.now(); lastTick=startedAt;
+        syncPauseUI();
+        requestAnimationFrame(loop);
+    },2700));
 }
 
 function gameOver(){
@@ -882,6 +987,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777455375" defer></script>
+<script src="/js/siteFooter.js?v=1777456031" defer></script>
 </body>
 </html>
