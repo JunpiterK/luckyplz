@@ -260,15 +260,21 @@
 
   /* ---------- first-interaction trigger ---------- */
   function shouldAutoFullscreen(){
-    /* Auto-fullscreen is only desirable on PLAY surfaces — game pages
-       + the lobby waiting room. On the home page, the user is
-       browsing the games carousel + scrolling content; jumping into
-       fullscreen on their first tap is jarring. Same for /blog/,
-       /privacy/, etc. The toggle button still works site-wide for
-       users who explicitly want fullscreen. */
+    /* Auto-fullscreen on every page EXCEPT the home page. User
+       explicitly requested this — the URL bar was eating top space
+       on /me/ (home button hidden) and the same applies to /auth/,
+       /messages/, /u/, /privacy/, /blog/, etc. Home is the only
+       page where the browsing carousel + scroll feel needs the URL
+       bar visible so users can navigate by typing.
+
+       Desktop / large screens unaffected (isSmallScreen() guards
+       the whole feature). The toggle button still works manually
+       on every page for users who want to leave fullscreen. */
     if(!isSmallScreen())return false;
     var path=location.pathname||'';
-    return /^\/(games|lobby)\//.test(path)||/^\/lobby$/.test(path);
+    /* Treat root and trailing-slash + index.html variants as "home". */
+    if(path==='/'||path===''||path==='/index.html')return false;
+    return true;
   }
   function onFirstInteraction(e){
     if(!shouldAutoFullscreen())return cleanupFirstInteraction();
