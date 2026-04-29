@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777457895"></script>
-<script src="/js/lpAudio.js?v=1777457895"></script>
+<script src="/js/supabase-config.js?v=1777458920"></script>
+<script src="/js/lpAudio.js?v=1777458920"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1379,6 +1379,171 @@ function drawTimeBar(now){
 }
 
 /* ========================================================================
+   drawIngredientTop — paints the 15°-perspective TOP face of an ingredient
+   above the side body produced by INGREDIENTS[id].draw(). Combined with
+   the side body, this gives each filling the look of "a ~5cm round slice
+   on a plate, viewed from 15° above" — the side body carries the visual
+   personality (bumpy patty, ruffled lettuce, juicy tomato seed pockets,
+   onion rings, melty cheese) and the top face confirms the 3D shape.
+
+   Round ingredients (lettuce, patty, tomato, onion) get an ELLIPSE top;
+   cheese is the only ingredient with a RECTANGULAR top (real cheese
+   slices are square slabs). The ellipse/rectangle has ry/height equal
+   to rx*sin(15°) ≈ 0.26 — same foreshortening factor used for the plate
+   so all 3D objects in the scene share a consistent viewing angle.
+
+   Geometry: cx = horizontal centre, cy = top-face VERTICAL CENTRE in
+   screen coords. The top face spans [cy − ry, cy + ry]. The bottom half
+   visually overlaps the top of the side body (which is correct — that's
+   the front rim of the cylinder), so callers should place this with
+   cy = side_body_top_y for the front rim to align cleanly.
+   ======================================================================== */
+function drawIngredientTop(id, cx, cy, rx, ry){
+    if (id === 'cheese'){
+        /* Square cheese: 15°-foreshortened rectangle (width unchanged,
+           height = depth × sin(15°)). Placed centred at cy so its bottom
+           half aligns with the side-slab top edge below. */
+        const topY = cy - ry;
+        const cheeseW = rx * 2;
+        const cheeseH = ry * 2;
+        const g = ctx.createLinearGradient(0, topY, 0, topY + cheeseH);
+        g.addColorStop(0,    '#FFEC8A');
+        g.addColorStop(0.5,  '#FFD445');
+        g.addColorStop(1,    '#E8A412');
+        ctx.fillStyle = g;
+        ctx.fillRect(cx - rx, topY, cheeseW, cheeseH);
+        /* Specular sheen across the upper portion. */
+        const sg = ctx.createLinearGradient(0, topY, 0, topY + cheeseH*0.6);
+        sg.addColorStop(0, 'rgba(255,255,220,.55)');
+        sg.addColorStop(1, 'rgba(255,255,220,0)');
+        ctx.fillStyle = sg;
+        ctx.fillRect(cx - rx, topY, cheeseW, cheeseH*0.6);
+        /* Edge outline (darker on bottom for grounding). */
+        ctx.strokeStyle = 'rgba(140,90,10,.45)';
+        ctx.lineWidth = 0.7;
+        ctx.strokeRect(cx - rx, topY, cheeseW, cheeseH);
+        return;
+    }
+
+    /* Round ingredients — foreshortened ellipse with per-ingredient texture. */
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+    ctx.clip();
+    switch(id){
+        case 'lettuce': {
+            const g = ctx.createRadialGradient(cx-rx*0.25, cy-ry*0.4, rx*0.1, cx, cy, rx);
+            g.addColorStop(0, '#A4D973');
+            g.addColorStop(1, '#3F8C26');
+            ctx.fillStyle = g;
+            ctx.fillRect(cx-rx, cy-ry, rx*2, ry*2);
+            /* Curly leaf-tip dots around the rim. */
+            ctx.fillStyle = 'rgba(38,80,30,.55)';
+            for (let a=0; a<10; a++){
+                const ang = a * Math.PI / 5;
+                const px = cx + Math.cos(ang) * rx*0.78;
+                const py = cy + Math.sin(ang) * ry*0.78;
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(0.8, rx*0.06), 0, Math.PI*2);
+                ctx.fill();
+            }
+            /* Pale heart highlight. */
+            ctx.fillStyle = 'rgba(196,235,160,.45)';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx*0.4, ry*0.4, 0, 0, Math.PI*2);
+            ctx.fill();
+            break;
+        }
+        case 'patty': {
+            const g = ctx.createRadialGradient(cx-rx*0.15, cy-ry*0.4, rx*0.1, cx, cy, rx);
+            g.addColorStop(0, '#5C341B');
+            g.addColorStop(1, '#28110A');
+            ctx.fillStyle = g;
+            ctx.fillRect(cx-rx, cy-ry, rx*2, ry*2);
+            /* Three diagonal grill marks. */
+            ctx.strokeStyle = 'rgba(15,5,2,.78)';
+            ctx.lineWidth = 1.2;
+            for (let i=-1; i<=1; i++){
+                ctx.beginPath();
+                ctx.moveTo(cx - rx, cy + i * ry*0.5);
+                ctx.lineTo(cx + rx, cy + i * ry*0.5);
+                ctx.stroke();
+            }
+            /* Speckled char highlights. */
+            ctx.fillStyle = 'rgba(170,90,40,.55)';
+            for (let i=0; i<4; i++){
+                const px = cx + (i - 1.5) * rx*0.45;
+                const py = cy + (i % 2 ? ry*0.35 : -ry*0.35);
+                ctx.beginPath();
+                ctx.ellipse(px, py, rx*0.07, ry*0.5, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+            break;
+        }
+        case 'tomato': {
+            /* Bright red rim, paler pulpy core. */
+            const g = ctx.createRadialGradient(cx, cy, rx*0.05, cx, cy, rx);
+            g.addColorStop(0,    '#FFB3A1');
+            g.addColorStop(0.45, '#E84A4A');
+            g.addColorStop(1,    '#A8221F');
+            ctx.fillStyle = g;
+            ctx.fillRect(cx-rx, cy-ry, rx*2, ry*2);
+            /* Five seed-pocket wedges around the core. */
+            ctx.fillStyle = 'rgba(255,248,170,.7)';
+            for (let i=0; i<5; i++){
+                const ang = i*Math.PI*2/5 + Math.PI/2;
+                const px = cx + Math.cos(ang) * rx*0.45;
+                const py = cy + Math.sin(ang) * ry*0.45;
+                ctx.beginPath();
+                ctx.ellipse(px, py, rx*0.11, ry*0.5, ang, 0, Math.PI*2);
+                ctx.fill();
+            }
+            /* Tiny seeds on the wedges. */
+            ctx.fillStyle = 'rgba(180,140,30,.7)';
+            for (let i=0; i<5; i++){
+                const ang = i*Math.PI*2/5 + Math.PI/2;
+                const px = cx + Math.cos(ang) * rx*0.45;
+                const py = cy + Math.sin(ang) * ry*0.45;
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(0.6, rx*0.04), 0, Math.PI*2);
+                ctx.fill();
+            }
+            break;
+        }
+        case 'onion': {
+            const g = ctx.createLinearGradient(0, cy-ry, 0, cy+ry);
+            g.addColorStop(0,    '#F7ECFA');
+            g.addColorStop(0.55, '#D9C0E5');
+            g.addColorStop(1,    '#9C7FAB');
+            ctx.fillStyle = g;
+            ctx.fillRect(cx-rx, cy-ry, rx*2, ry*2);
+            /* Concentric rings — 3 layers. */
+            const ringFills = ['#9C7FAB', '#F4EAFA', '#B091C4'];
+            for (let i=1; i<=3; i++){
+                const sc = 1 - i*0.21;
+                ctx.fillStyle = ringFills[(i-1) % ringFills.length];
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, rx*sc, ry*sc, 0, 0, Math.PI*2);
+                ctx.fill();
+            }
+            /* Centre highlight. */
+            ctx.fillStyle = 'rgba(255,255,255,.5)';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx*0.16, ry*0.16, 0, 0, Math.PI*2);
+            ctx.fill();
+            break;
+        }
+    }
+    ctx.restore();
+    /* Top edge outline so the 15° face reads against the side body below. */
+    ctx.strokeStyle = 'rgba(0,0,0,.28)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+    ctx.stroke();
+}
+
+/* ========================================================================
    drawSliceSide — DEPRECATED (kept for reference only, no longer called).
    ========================================================================
    The first iteration of the ingredient palette rendered each filling as
@@ -1727,37 +1892,52 @@ function drawIngredientRow(now){
         ctx.stroke();
 
         /* === Ingredient on the plate ====================================
-           Use the SAME draw functions the burger stack uses (INGREDIENTS
-           catalog at the top of this script). Those have already been
-           tuned to look right — bumpy patty edges, sesame-seed bun,
-           overhanging cheese, ruffled lettuce, juicy red tomato.
+           Two-pass render so each filling reads as a 3D round (or square,
+           for cheese) slice viewed from 15° above the horizontal:
 
-           Realistic per-burger thicknesses (PALETTE_H below) — patty is
-           thickest, lettuce fluffiest, cheese is the THIN slice you'd
-           actually find on a real cheeseburger. Scaled ~1.4× LAYER_H so
-           each ingredient's thickness reads at a glance in the small
-           tile. The number badge zone (top-left ~22 px) is left clear.
+             Pass 1 — SIDE BODY: INGREDIENTS[id].draw() from the same
+                catalog the stacked burger panel uses. Carries the visual
+                personality (bumpy patty, ruffled lettuce, overhanging
+                cheese, juicy tomato).
+             Pass 2 — TOP FACE: drawIngredientTop() paints a foreshortened
+                ellipse (or rectangle for cheese) above the side body's
+                top edge. The ellipse's bottom half overlaps the side
+                body's topmost pixels, completing the cylinder illusion.
 
-           ANCHORING: each ingredient's draw() takes (cx, cy, w, h) where
-           cy is its centre. For an ingredient sitting on a plate viewed
-           from 15° above, its bottom face contacts the plate at the
-           well's CENTRE Y (that's where the plate's top surface plane
-           is in screen coords). So cy = wellY − h/2. The previous
-           iteration aligned bottom to the well's TOP edge, which made
-           cheese visibly float above the plate.
+           PALETTE_H — thickness map. Real-burger ratios suggest patty
+           ~3× cheese, but at the small palette tile size (60×114 px) a
+           huge patty just makes the row look unbalanced (user feedback:
+           "고기 패티만 너무 두꺼워보여"). We compress the range to
+           10–20 px so all five ingredients carry similar visual weight
+           while the relative ordering (patty > lettuce > tomato > onion
+           > cheese) still reads correctly.
+
+           ANCHORING: cy = wellY − h/2 places each ingredient's bottom
+           face on the plate's well centre Y (the visible surface plane).
+           The 15° top face sits just above the side body — so the whole
+           rendered shape extends from (wellY − h) up to (wellY − h − ry)
+           where ry = ingW × sin(15°)/2.
            ================================================================ */
         const PALETTE_H = {
-            patty:   28,   // thickest filling — chunky beef
-            lettuce: 20,   // ruffled fluff
-            tomato:  13,   // thin juicy slice
-            cheese:  8,    // very thin slab — true to a real cheeseburger
-            onion:   10    // thin ring slice
+            patty:   20,   // thickest filling
+            lettuce: 18,   // fluffy
+            tomato:  14,   // medium-thin juicy slice
+            onion:   12,   // thin ring slice
+            cheese:  10    // thinnest, square slab
         };
         const id = TAP_IDS[i];
-        const ingH = PALETTE_H[id] || 16;
+        const ingH = PALETTE_H[id] || 14;
         const ingW = wellW - 4;          /* ingredient barely smaller than well */
-        const ingCy = wellY - ingH/2;    /* bottom of ingredient = plate surface */
+        const ingCy = wellY - ingH/2;    /* bottom of side body = plate surface */
+        /* Pass 1 — side body (the 2D side view from INGREDIENTS catalog). */
         INGREDIENTS[id].draw(plateCx, ingCy, ingW, ingH);
+        /* Pass 2 — 15° top face. ry = rx × sin(15°). Centred at the top
+           edge of the side body so its bottom half overlaps the body's
+           top, forming the illusion of a 3D rim. */
+        const topRx = ingW / 2;
+        const topRy = topRx * 0.26;
+        const topCy = ingCy - ingH/2;    /* y-position of side body's top edge */
+        drawIngredientTop(id, plateCx, topCy, topRx, topRy);
 
         /* Number badge — stays anchored to tile (doesn't lift with plate). */
         ctx.fillStyle = 'rgba(0,0,0,.5)';
@@ -1944,6 +2124,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777457895"></script>
+<script src="/js/siteFooter.js?v=1777458920"></script>
 </body>
 </html>
