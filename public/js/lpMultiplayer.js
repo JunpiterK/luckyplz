@@ -135,8 +135,14 @@
     /* Default anchor when JS hasn\'t set a custom top: bottom of
        viewport (matches the original docked behaviour). Once the
        user drags, JS sets data-mob-positioned="1" + inline top:Xpx
-       and bottom:auto, taking over from the default rules below. */
-    '  .lp-mp-panel:not([data-mob-positioned="1"]){top:auto!important;bottom:10px!important}',
+       and bottom:auto, taking over from the default rules below.
+       safe-area-inset-bottom keeps the panel above iOS\'s home
+       indicator when viewport-fit=cover is on (lpFullscreen sets
+       this for proper URL-bar hiding); env() falls back to 0 on
+       browsers without notch support so the value collapses to
+       the original 10px gutter. */
+    '  .lp-mp-panel:not([data-mob-positioned="1"]){top:auto!important;',
+    '    bottom:calc(10px + env(safe-area-inset-bottom,0px))!important}',
     /* touch-action:none lets us preventDefault touchmove on the bar
        so dragging the bar doesn\'t scroll the page underneath. */
     '  .lp-mp-titlebar{cursor:grab;touch-action:none;padding-top:14px;position:relative}',

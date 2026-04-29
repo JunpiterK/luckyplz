@@ -33,7 +33,11 @@ try{
        inject the footer or the PWA prompt at all on /games/*. Home and
        blog still get them. SEO on game pages is fine without the footer —
        crawl graph reaches Privacy/About/Blog from the home page. */
-    var isGamePage=/^\/games\//.test(location.pathname);
+    /* Treat /lobby/ as a game-class page too — it's an interactive
+       waiting room (not browseable content), so the global footer
+       would just push the lobby card around, and the lp-fs-btn
+       toggle should appear there for symmetry with /games/*. */
+    var isGamePage=/^\/games\//.test(location.pathname)||/^\/lobby\/?/.test(location.pathname);
     if(isGamePage)document.body.classList.add('lp-game-page');
 
     var style=document.createElement('style');
@@ -224,11 +228,23 @@ try{
         });
     }
 
+    /* Mobile fullscreen helper — autorun on every page so phone
+       users get the address-bar-hidden experience on first tap.
+       Loaded FIRST among the dynamic scripts so its meta-tag
+       enforcement (viewport-fit, apple-mobile-web-app-status-bar-style)
+       runs as early as possible. The module itself self-bootstraps
+       and is idempotent across multiple loads. */
+    if(!window.LpFullscreen){
+        var fs=document.createElement('script');
+        fs.src='/js/lpFullscreen.js?v=1777423162';
+        document.body.appendChild(fs);
+    }
+
     /* AdSense slot injector — only loads if the page has a
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1777422431';
+        s.src='/js/adSlots.js?v=1777423162';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -237,7 +253,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1777422431';
+        rr.src='/js/recentResults.js?v=1777423162';
         document.body.appendChild(rr);
     }
 
@@ -245,20 +261,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1777422431';
+        pwa.src='/js/pwaInstall.js?v=1777423162';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1777422431';
+    tr.src='/js/lpTrack.js?v=1777423162';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1777422431';
+    sh.src='/js/lpShare.js?v=1777423162';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -271,7 +287,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1777422431';
+        rr2.src='/js/lpRoom.js?v=1777423162';
         rr2.defer=true;
         document.body.appendChild(rr2);
 
@@ -280,7 +296,7 @@ try{
            every online game can `LpHostCtl.install({role,room,...})`
            without per-game script tag bookkeeping. */
         var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1777422431';
+        hc.src='/js/lpHostCtl.js?v=1777423162';
         hc.defer=true;
         document.body.appendChild(hc);
 
@@ -288,7 +304,7 @@ try{
            `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
            fired by lpRoom; auto-mounts without any per-game wiring. */
         var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1777422431';
+        mp.src='/js/lpMultiplayer.js?v=1777423162';
         mp.defer=true;
         document.body.appendChild(mp);
     }
@@ -298,7 +314,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1777422431';
+        ls.src='/js/lpSocial.js?v=1777423162';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -309,7 +325,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1777422431';
+        la.src='/js/lpActivity.js?v=1777423162';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -324,7 +340,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1777422431';
+        lp.src='/js/lpPresence.js?v=1777423162';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -334,7 +350,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1777422431';
+        li.src='/js/lpInvite.js?v=1777423162';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -344,7 +360,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1777422431';
+        lib.src='/js/lpInviteButton.js?v=1777423162';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -353,7 +369,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1777422431';
+        ln.src='/js/lpNotify.js?v=1777423162';
         ln.defer=true;
         document.body.appendChild(ln);
     }
