@@ -1389,6 +1389,27 @@ function captureBall(ball){
         drawnBalls.push({label:ball.label,color:ball.color,exitAnim:0,dispX:machineX,dispY:capY,isBonus});
         drawnResults.push({label:ball.label,color:ball.color,isBonus});
         if(isBonus)drawnBonusCount++;else drawnMainCount++;
+        /* Mirror this exact capture to every guest. Sending the host's
+           authoritative {label,color,isBonus} keeps the trays byte-for-
+           byte identical even though the physics drum on each device
+           uses an independent RNG. The guest's host:action handler
+           pushes the same record into its drawnBalls + drawnResults
+           and (best-effort) marks the matching ball in its local drum
+           as drawn so the same number doesn't appear in two places.
+           Also refresh the cached snapshot so a guest who joins MID-DRAW
+           (between captures) sees the running tally on join — without
+           this they'd land on an empty machine and only the result modal
+           at the end would carry numbers. */
+        if(window._lpHost){
+            try{window._lpHost.broadcast('host:action',{type:'lotto_capture',label:ball.label,color:ball.color,isBonus:isBonus})}catch(_){}
+            try{
+                const _cfg=(typeof _lpReadLottoConfig==='function')?_lpReadLottoConfig():{};
+                window._lpHost.snapshot(Object.assign({},_cfg,{
+                    capturedBalls:drawnResults.slice(),
+                    drawing:true
+                }));
+            }catch(_){}
+        }
         setTimeout(()=>SFX.trayLand(),500);
         setTimeout(()=>{gateOpen=false;setTimeout(drawNextBall,800)},600);
     },800+Math.random()*400);
@@ -1868,6 +1889,16 @@ function prepareLottoMachine(){
 function beginDrawing(){
     if(!_pendingDraw){return}
     const cfg=_pendingDraw;
+    /* Tell guests we're transitioning from the "drum tumbling, balls in
+       drum" state into "actively pulling balls". Without this signal
+       guests sit forever on the prepared-but-idle machine because the
+       host's gcStartBtn click is purely a local DOM event. The
+       lotto_capture stream that follows is what actually fills their
+       tray; this is just the kickoff so they can flip the "drawing"
+       status text and dim the controls. */
+    if(window._lpHost){
+        try{window._lpHost.broadcast('host:action',{type:'lotto_begin',speed:drawSpeed,setCount:setCount})}catch(_){}
+    }
     /* Speed 0 = Instant: skip the physics animation and burn through
        all N sets with pure Fisher-Yates sampling. History panel on the
        right updates in real-time and the fanfare plays once. Useful
@@ -1978,6 +2009,15 @@ function _onSetComplete(){
     /* Otherwise repopulate and auto-pull the next set after a beat. */
     setTimeout(()=>{
         _loadMachineForSet(cfg);
+        /* Tell guests to clear their tray before the next set's
+           captures stream in — _loadMachineForSet wipes drawnBalls +
+           drawnResults locally, but that's a host-side mutation so
+           guests need an explicit signal to do the same. Without it
+           a multi-set draw shows the previous set's balls under the
+           new set's captures, badly desyncing the visual. */
+        if(window._lpHost){
+            try{window._lpHost.broadcast('host:action',{type:'lotto_set_reset',setIdx:currentSet+1})}catch(_){}
+        }
         SFX.startWind();
         currentSet++;
         if(cfg.isSeparatePool){
@@ -2595,6 +2635,28 @@ function init(){
                     const gcInp=document.getElementById('gcGenerateN');
                     if(gcInp){gcInp.value=p.gcGenerateN;gcInp.dispatchEvent(new Event('input',{bubbles:true}))}
                 }
+                /* Late-joiner recovery: snapshot may carry the host's
+                   running tally so the new guest doesn't land on an
+                   empty tray mid-draw. Mirror those balls into our local
+                   drawnBalls/drawnResults so the next render frame
+                   draws them in the tray immediately. */
+                if(Array.isArray(p.capturedBalls)&&p.capturedBalls.length){
+                    const capY=(typeof machineY==='number')
+                        ?machineY-machineR-20+BALL_R+6:0;
+                    const capX=(typeof machineX==='number')?machineX:0;
+                    /* Skip if we already have the same number of captures
+                       — avoids stomping on the live host:action stream. */
+                    if(drawnResults.length<p.capturedBalls.length){
+                        drawnBalls=[];drawnResults=[];
+                        drawnMainCount=0;drawnBonusCount=0;
+                        p.capturedBalls.forEach(function(b){
+                            drawnBalls.push({label:b.label,color:b.color||'#FFE66D',exitAnim:1,dispX:capX,dispY:capY,isBonus:!!b.isBonus});
+                            drawnResults.push({label:b.label,color:b.color||'#FFE66D',isBonus:!!b.isBonus});
+                            if(b.isBonus)drawnBonusCount++;else drawnMainCount++;
+                        });
+                    }
+                    if(p.drawing)drawing=true;
+                }
             }
             g.on('host:config',applyConfig);
             g.on('host:snapshot',applyConfig);
@@ -2610,6 +2672,61 @@ function init(){
                 const _rs=document.getElementById('resultScreen');
                 if(_rs)_rs.style.display='none';
                 try{startLottoDraw&&startLottoDraw()}catch(e){}
+            });
+            /* host:action stream — host fires lotto_begin when its
+               in-machine START is pressed, lotto_capture for every ball
+               that lands in the tray, and lotto_set_reset between sets
+               in a multi-set draw. The guest mirrors each event so the
+               tray on every device matches the host byte-for-byte even
+               though physics RNG diverges per device. Without these
+               handlers the guest would see balls tumble forever in the
+               drum and only the final result modal would surface
+               numbers — exactly the bug the user reported. */
+            g.on('host:action',function(p){
+                if(!p)return;
+                if(p.type==='lotto_begin'){
+                    drawing=true;
+                    return;
+                }
+                if(p.type==='lotto_set_reset'){
+                    /* Multi-set draws: the host wiped drawnBalls/Results
+                       locally and is repopulating the drum. Mirror that
+                       wipe so the next set's captures don't pile on top
+                       of the previous set's ball row. */
+                    drawnBalls=[];drawnResults=[];
+                    drawnMainCount=0;drawnBonusCount=0;
+                    return;
+                }
+                if(p.type==='lotto_capture'&&typeof p.label!=='undefined'){
+                    /* Push the host's captured ball into our local arrays
+                       with the same exitAnim trajectory the host renders.
+                       drawBall coordinates depend on machineX/Y/R which
+                       are set by initCanvas → so this is no-op until
+                       the canvas is up; that's fine because lotto_begin
+                       always arrives AFTER prepareLottoMachine has run. */
+                    const capY=(typeof machineY==='number')
+                        ?machineY-machineR-20+BALL_R+6:0;
+                    const capX=(typeof machineX==='number')?machineX:0;
+                    drawnBalls.push({label:p.label,color:p.color||'#FFE66D',exitAnim:0,dispX:capX,dispY:capY,isBonus:!!p.isBonus});
+                    drawnResults.push({label:p.label,color:p.color||'#FFE66D',isBonus:!!p.isBonus});
+                    if(p.isBonus)drawnBonusCount++;else drawnMainCount++;
+                    /* Best-effort: hide the matching ball in OUR drum so
+                       the same number isn't visible in both the drum and
+                       the tray simultaneously. The guest's drum has a
+                       differently-RNG'd subset still bouncing — once we
+                       remove the captured label, it's visually consistent. */
+                    try{
+                        const drumBall=balls.find(function(b){return !b.drawn&&!b.extracting&&b.label===p.label});
+                        if(drumBall){
+                            drumBall.drawn=true;
+                            if(drumBall.body&&typeof Composite!=='undefined'&&typeof world!=='undefined'){
+                                Composite.remove(world,drumBall.body);
+                            }
+                        }
+                    }catch(_){}
+                    try{SFX.pop&&SFX.pop()}catch(_){}
+                    return;
+                }
             });
             g.on('host:result',function(p){
                 /* Force-show host's exact numbers even if guest's local draw differs */
@@ -2717,6 +2834,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777420268" defer></script>
+<script src="/js/siteFooter.js?v=1777421732" defer></script>
 </body>
 </html>
