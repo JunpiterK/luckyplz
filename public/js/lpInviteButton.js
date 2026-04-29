@@ -47,13 +47,19 @@
         .lp-ib-pill{
             position:fixed;right:14px;bottom:14px;z-index:100;
             display:inline-flex;align-items:center;gap:8px;
-            padding:11px 16px;border-radius:999px;border:0;cursor:pointer;
+            padding:11px 16px;border-radius:999px;border:0;cursor:grab;
             background:linear-gradient(135deg,#00D9FF 0%,#0099CC 100%);
             color:#001220;font-family:'Noto Sans KR',sans-serif;
             font-size:.88em;font-weight:800;letter-spacing:.02em;
             box-shadow:0 10px 28px -8px rgba(0,217,255,.55),inset 0 1px 0 rgba(255,255,255,.28);
             transition:transform .18s,filter .18s,box-shadow .22s;
+            /* touch-action:none disables the browser's default touch
+               gestures (panning/zooming) on the pill so a drag isn't
+               hijacked by the page scroller. */
+            touch-action:none;
+            user-select:none;-webkit-user-select:none;
         }
+        .lp-ib-pill:active{cursor:grabbing}
         .lp-ib-pill:hover{transform:translateY(-2px);filter:brightness(1.08)}
         .lp-ib-pill:active{transform:translateY(1px);transition-duration:.08s}
         .lp-ib-pill .ico{font-size:1.06em}
@@ -121,6 +127,150 @@
         document.head.appendChild(style);
     }
 
+    /* ---- Drag-to-relocate -----------------------------------------
+       The pill anchors bottom-right by default but in some games (e.g.
+       Space-Z on phone) it covers the right thumb-zone of the live
+       game canvas. Letting the user drag it anywhere on screen
+       (with the saved position persisted across sessions) is more
+       flexible than hard-coding a per-game offset.
+
+       Behaviour:
+         • Press + drag past 5 px → enter drag mode, follow finger/mouse.
+         • Stay below threshold + release → treated as a click (open
+           modal). Click is suppressed if the gesture qualified as a drag.
+         • On release, position is clamped within the viewport with a
+           4 px gutter and saved to localStorage.
+         • On mount (and on viewport resize), saved position is restored
+           and re-clamped so a portrait→landscape rotation on phones
+           doesn't strand the pill off-screen.
+    */
+    const DRAG_POS_KEY = 'lp_ib_pos_v1';
+    const DRAG_THRESHOLD = 5;
+    function _clampPos(pos, btn){
+        const w = btn.offsetWidth  || 120;
+        const h = btn.offsetHeight || 44;
+        return {
+            left: Math.max(4, Math.min(window.innerWidth  - w - 4, pos.left)),
+            top:  Math.max(4, Math.min(window.innerHeight - h - 4, pos.top))
+        };
+    }
+    function _applyPos(btn, pos){
+        const c = _clampPos(pos, btn);
+        btn.style.left   = c.left + 'px';
+        btn.style.top    = c.top  + 'px';
+        btn.style.right  = 'auto';
+        btn.style.bottom = 'auto';
+    }
+    function _savePos(btn){
+        try{
+            const r = btn.getBoundingClientRect();
+            localStorage.setItem(DRAG_POS_KEY, JSON.stringify({left:r.left, top:r.top}));
+        }catch(_){}
+    }
+    function _restorePos(btn){
+        try{
+            const saved = JSON.parse(localStorage.getItem(DRAG_POS_KEY) || 'null');
+            if (saved && typeof saved.left === 'number' && typeof saved.top === 'number'){
+                _applyPos(btn, saved);
+            }
+        }catch(_){}
+    }
+    function _enableDrag(btn){
+        let dragging = false;
+        let movedFar  = false;
+        let startX = 0, startY = 0;
+        let originX = 0, originY = 0;
+
+        function _begin(clientX, clientY){
+            const r = btn.getBoundingClientRect();
+            originX = r.left; originY = r.top;
+            startX  = clientX; startY = clientY;
+            movedFar = false;
+            dragging = true;
+            /* Promote the pill to z-top while dragging so it visually
+               sits over any HUD element it crosses. */
+            btn.style.zIndex = 9999;
+            /* Switch positioning model from right/bottom (CSS default)
+               to left/top so the drag math is straightforward. */
+            btn.style.left   = originX + 'px';
+            btn.style.top    = originY + 'px';
+            btn.style.right  = 'auto';
+            btn.style.bottom = 'auto';
+        }
+        function _move(clientX, clientY){
+            if (!dragging) return false;
+            const dx = clientX - startX;
+            const dy = clientY - startY;
+            if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) movedFar = true;
+            if (movedFar){
+                _applyPos(btn, {left: originX + dx, top: originY + dy});
+                return true;
+            }
+            return false;
+        }
+        function _end(){
+            if (!dragging) return;
+            dragging = false;
+            btn.style.zIndex = '';
+            if (movedFar){
+                _savePos(btn);
+                /* Keep movedFar true through the upcoming click event so
+                   the click-suppress capture handler sees it, then clear
+                   it on the next tick. */
+                setTimeout(()=>{ movedFar = false; }, 60);
+            }
+        }
+
+        /* Mouse */
+        btn.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            _begin(e.clientX, e.clientY);
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (_move(e.clientX, e.clientY)) e.preventDefault();
+        });
+        document.addEventListener('mouseup', _end);
+
+        /* Touch */
+        btn.addEventListener('touchstart', (e) => {
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            _begin(t.clientX, t.clientY);
+        }, {passive:true});
+        document.addEventListener('touchmove', (e) => {
+            const t = e.touches && e.touches[0];
+            if (!t) return;
+            if (_move(t.clientX, t.clientY)){
+                /* Prevent page scroll only AFTER we've confirmed it's a
+                   drag, so an accidental tap-near-edge doesn't lock the
+                   page. */
+                if (e.cancelable) e.preventDefault();
+            }
+        }, {passive:false});
+        document.addEventListener('touchend', _end);
+        document.addEventListener('touchcancel', _end);
+
+        /* Capture-phase click suppressor — if the pointer moved past
+           DRAG_THRESHOLD between down and up, the browser still fires
+           a click. We swallow it so the modal doesn't open right after
+           the user finished repositioning the pill. */
+        btn.addEventListener('click', (e) => {
+            if (movedFar){
+                e.stopPropagation();
+                e.preventDefault();
+            }
+        }, true);
+
+        /* Re-clamp on viewport resize / orientation change so a saved
+           position from landscape doesn't strand the pill off-screen
+           after a rotation to portrait. */
+        window.addEventListener('resize', () => {
+            const r = btn.getBoundingClientRect();
+            _applyPos(btn, {left:r.left, top:r.top});
+        });
+    }
+
     function _mountPill() {
         _ensureStyles();
         if (_pillEl) return;
@@ -131,6 +281,10 @@
         btn.addEventListener('click', _openModal);
         document.body.appendChild(btn);
         _pillEl = btn;
+        /* Restore + drag wire-up runs after appending so offsetWidth/
+           offsetHeight are real numbers (otherwise clamp uses fallbacks). */
+        _restorePos(btn);
+        _enableDrag(btn);
     }
 
     function _unmountPill() {
