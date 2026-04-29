@@ -202,6 +202,25 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                     <label id="sConfirm">Confirm Password</label>
                     <input type="password" id="signupConfirm" placeholder="••••••••" required minlength="6" autocomplete="new-password">
                 </div>
+                <!-- 동의 체크박스 — KISA 정통망법 50조: 마케팅 수신 동의는
+                     이용약관/개인정보처리방침 동의와 분리해서 별도로 받아야 함.
+                     첫 두 개는 필수 (체크 안 하면 가입 버튼 비활성화), 마지막은
+                     선택. 체크 시점은 set_consent RPC로 서버에 timestamptz로
+                     기록되어 KISA 감사 시 증빙 가능. -->
+                <div class="consent-block" style="margin:14px 0 6px;padding:12px 14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;text-align:left">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:.78em;color:rgba(255,255,255,.85);cursor:pointer;padding:4px 0">
+                        <input type="checkbox" id="signupTerms" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                        <span>(필수) <a href="/privacy/" target="_blank" style="color:#00D9FF;text-decoration:underline">이용약관</a>에 동의합니다</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:.78em;color:rgba(255,255,255,.85);cursor:pointer;padding:4px 0">
+                        <input type="checkbox" id="signupPrivacy" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                        <span>(필수) <a href="/privacy/" target="_blank" style="color:#00D9FF;text-decoration:underline">개인정보처리방침</a>에 동의합니다</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:.78em;color:rgba(255,255,255,.65);cursor:pointer;padding:4px 0">
+                        <input type="checkbox" id="signupMarketing" style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                        <span>(선택) 마케팅·이벤트 정보 수신에 동의합니다</span>
+                    </label>
+                </div>
                 <div id="turnstileSignup" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
                 <button type="submit" class="submit-btn" id="signupBtn">Sign Up</button>
             </form>
@@ -242,7 +261,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     </div>
 
     <script src="/vendor/supabase.min.js"></script>
-    <script src="/js/supabase-config.js?v=1777492436"></script>
+    <script src="/js/supabase-config.js?v=1777492759"></script>
     <script>
 /* ===== I18N (16 languages) ===== */
 const I18N={
@@ -444,6 +463,17 @@ async function handleSignup(e){
     const email=document.getElementById('signupEmail').value.trim();
     const pw=document.getElementById('signupPassword').value;
     const confirm=document.getElementById('signupConfirm').value;
+    /* KISA consent gating — terms + privacy are mandatory, marketing
+       is optional. The required attribute on the checkboxes also
+       blocks form submission natively, but we double-check here so a
+       JS-disabled bypass still surfaces the error. */
+    const termsAgreed     = document.getElementById('signupTerms').checked;
+    const privacyAgreed   = document.getElementById('signupPrivacy').checked;
+    const marketingAgreed = document.getElementById('signupMarketing').checked;
+    if (!termsAgreed || !privacyAgreed){
+        showMsg('이용약관 및 개인정보처리방침에 동의해주세요','error');
+        return;
+    }
 
     if(pw!==confirm){showMsg(T('passwordMismatch'),'error');return}
 
@@ -487,6 +517,17 @@ async function handleSignup(e){
         _twResetWidget(_twSignupId);
         return;
     }
+    /* Persist consent timestamps. Marketing flag carries through to
+       profiles.marketing_agreed_at = now() if checked, NULL otherwise.
+       Fire-and-forget — if the RPC isn't deployed yet, the signup
+       still succeeds (the user just won't have consent timestamps
+       on their profile until the migration lands). */
+    try {
+        const { error: consentErr } = await getSupabase().rpc('set_consent', {
+            p_terms: termsAgreed, p_privacy: privacyAgreed, p_marketing: marketingAgreed
+        });
+        if (consentErr) console.warn('[auth.signup] set_consent failed:', consentErr.message);
+    } catch(e) { console.warn('[auth.signup] set_consent threw:', e); }
     showMsg(T('signupSuccess'),'success');
 }
 
@@ -688,6 +729,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777492436" defer></script>
+<script src="/js/siteFooter.js?v=1777492759" defer></script>
 </body>
 </html>
