@@ -185,6 +185,25 @@ body{
 .count-custom::-webkit-outer-spin-button,
 .count-custom::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
+/* ===== Time-per-question stepper ===== */
+.time-stepper{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.time-step-btn{width:34px;height:32px;border-radius:8px;
+    border:1.5px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);
+    color:#fff;font-family:inherit;font-weight:900;font-size:1.05em;line-height:1;
+    cursor:pointer;transition:background .15s,border-color .15s,transform .08s}
+.time-step-btn:hover{background:rgba(255,230,109,.14);border-color:#FFE66D;color:#FFE66D}
+.time-step-btn:active{transform:scale(.94)}
+.time-step-btn:disabled{opacity:.35;cursor:not-allowed;transform:none;background:rgba(255,255,255,.04)}
+.time-step-val{width:54px;height:32px;text-align:center;border-radius:8px;
+    border:1.5px solid rgba(255,230,109,.4);background:rgba(255,230,109,.06);
+    color:#FFE66D;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;
+    font-size:1em;-moz-appearance:textfield;outline:none;
+    transition:border-color .15s,background .15s}
+.time-step-val:focus{border-color:#FFE66D;background:rgba(255,230,109,.12)}
+.time-step-val::-webkit-outer-spin-button,
+.time-step-val::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.time-step-unit{font-size:.82em;color:rgba(255,255,255,.55);font-weight:700;letter-spacing:.04em}
+
 /* ===== Per-category quota panel — ALWAYS visible when cats picked ===== */
 .quota-panel{margin-top:14px;padding:12px;border-radius:10px;
     background:rgba(0,217,255,.05);border:1px solid rgba(0,217,255,.22)}
@@ -507,11 +526,15 @@ body{
         </div>
         <div class="count-row" style="margin-top:12px">
             <span class="lbl">문제당 시간</span>
-            <div class="count-btns">
-                <button class="count-btn on" data-time="4">4초</button>
-                <button class="count-btn" data-time="8">8초</button>
-                <button class="count-btn" data-time="15">15초</button>
-                <button class="count-btn" data-time="20">20초</button>
+            <!-- Stepper: 1초 increments, 1~60s range. Default 5초 strikes
+                 a balance between speed-quiz energy and giving players
+                 enough time to read 4 options. -->
+            <div class="time-stepper">
+                <button class="time-step-btn" data-time-step="-1" type="button" aria-label="시간 감소">−</button>
+                <input class="time-step-val" id="timeStepVal" type="number"
+                       min="1" max="60" value="5" inputmode="numeric" autocomplete="off">
+                <span class="time-step-unit">초</span>
+                <button class="time-step-btn" data-time-step="1" type="button" aria-label="시간 증가">＋</button>
             </div>
         </div>
         <!-- Host-play toggle. Default = on (host plays). Off = MC-only
@@ -695,7 +718,7 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777442425"></script>
+<script src="/js/supabase-config.js?v=1777442921"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -778,7 +801,13 @@ let selectedCount = 10;
    via the [-]/[+]/direct-input controls in the panel. The submit path
    reads this map verbatim and sends it to the server. */
 let perCategoryCounts = {};   /* { kpop:3, sports:3, ... } */
-let selectedTime = 4;
+/* Time per question (seconds). Stepper UI binds 1..60s range.
+   Default of 5s is the sweet spot: long enough to read four options
+   without feeling sluggish, short enough that a 10-question game
+   stays under a minute of pure question-time. */
+let selectedTime = 5;
+const TIME_MIN = 1;
+const TIME_MAX = 60;
 /* When true (default), the host is added to the roster and plays
    alongside guests. When false, host is MC-only: sees the game flow
    (timer, reveal, stats) but doesn't get answer buttons and isn't
@@ -1339,13 +1368,44 @@ document.querySelectorAll('.count-btn[data-count]').forEach(b => {
         applyEvenSplit();
     });
 });
-document.querySelectorAll('.count-btn[data-time]').forEach(b => {
-    b.addEventListener('click', () => {
-        document.querySelectorAll('.count-btn[data-time]').forEach(x => x.classList.remove('on'));
-        b.classList.add('on');
-        selectedTime = parseInt(b.dataset.time, 10);
+/* Time-per-question stepper. Wired once at script load. The two
+   step buttons share a single handler that reads data-time-step;
+   the input field commits on change/blur/Enter. All paths funnel
+   through commitTime() which clamps to [TIME_MIN, TIME_MAX] and
+   updates the disabled state on the bound buttons. */
+(function _wireTimeStepper(){
+    const inp = document.getElementById('timeStepVal');
+    if (!inp) return;
+    const minusBtn = document.querySelector('[data-time-step="-1"]');
+    const plusBtn  = document.querySelector('[data-time-step="1"]');
+
+    function syncDisabled(){
+        if (minusBtn) minusBtn.disabled = selectedTime <= TIME_MIN;
+        if (plusBtn)  plusBtn.disabled  = selectedTime >= TIME_MAX;
+    }
+    function commitTime(v){
+        const n = Math.max(TIME_MIN, Math.min(TIME_MAX, parseInt(v, 10) || TIME_MIN));
+        selectedTime = n;
+        inp.value = n;
+        syncDisabled();
+    }
+    /* Initial render — match the declared default. */
+    commitTime(selectedTime);
+
+    document.querySelectorAll('[data-time-step]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const step = parseInt(btn.dataset.timeStep, 10) || 0;
+            commitTime(selectedTime + step);
+        });
     });
-});
+    inp.addEventListener('change', () => commitTime(inp.value));
+    inp.addEventListener('blur',   () => commitTime(inp.value));
+    inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter'){ e.preventDefault(); commitTime(inp.value); inp.blur(); }
+        else if (e.key === 'ArrowUp')   { e.preventDefault(); commitTime(selectedTime + 1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); commitTime(selectedTime - 1); }
+    });
+})();
 
 /* ============================================================
    Mode selection wiring
@@ -2574,6 +2634,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777442425"></script>
+<script src="/js/siteFooter.js?v=1777442921"></script>
 </body>
 </html>
