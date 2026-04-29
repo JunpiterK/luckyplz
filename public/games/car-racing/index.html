@@ -5639,6 +5639,7 @@ function startGame(){
         addCommentary('raceStart',{});
         if(AudioEngine.isBGMEnabled())AudioEngine.startBGM();
         animationId=requestAnimationFrame(gameLoop);
+        try { if(window.LpWakeLock) LpWakeLock.acquire('car-racing'); } catch(_){}
     });
 }
 
@@ -5656,6 +5657,7 @@ function showCountdown(callback){
 
 function endGame(){
     if(!gameRunning)return; /* prevent double call */
+    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
     gameRunning=false;cancelAnimationFrame(animationId);AudioEngine.stopBGM();AudioEngine.sfx.gameEnd();
     const unfinished=players.filter(p=>!p.finished).sort((a,b)=>b.progress-a.progress);
     unfinished.forEach(player=>{player.finishRank=finishOrder.length+1;finishOrder.push(player)});
@@ -5841,7 +5843,7 @@ function initEventListeners(){
     document.getElementById('restartBtn').addEventListener('click',resetGame);
     document.getElementById('resetBtn').addEventListener('click',()=>{generatePlayerNameInputs()});
     document.getElementById('pauseBtn').addEventListener('click',togglePause);
-    document.getElementById('exitBtn').addEventListener('click',()=>{if(confirm(T('confirmExit'))){exitMobileFullscreen();resetGame()}});
+    document.getElementById('exitBtn').addEventListener('click',()=>{if(confirm(T('confirmExit'))){try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}exitMobileFullscreen();resetGame()}});
     document.getElementById('playerNameInputs').addEventListener('click',e=>{const btn=e.target.closest('.btn-remove-player');if(btn)removePlayerAt(parseInt(btn.dataset.index))});
     document.getElementById('carAddBar').addEventListener('click',e=>{
         const chip=e.target.closest('.add-chip');
@@ -6825,7 +6827,7 @@ function _lpWireHostRoom(room){
        a mid-race pause would desync the RAF loops on every guest, so
        host can pause mid-race + end cleanly. */
     if(window.LpHostCtl){
-        window.LpHostCtl.install({role:'host',room:room,canPause:true});
+        window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});
     }
 }
 /* Lightweight setup-config broadcast so a guest joining BEFORE the
@@ -6863,7 +6865,7 @@ _waitForLpRoom(()=>{
         const rb=document.getElementById('resetBtn');if(rb)rb.disabled=true;
         document.querySelectorAll('.lp-room-online-btn').forEach(b=>b.style.display='none');
         if(window.LpHostCtl){
-            window.LpHostCtl.install({role:'guest',room:g,canPause:false});
+            window.LpHostCtl.install({role:'guest',room:g,canPause:false,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});
         }
         g.on('host:config',p=>{
             if(!p)return;
@@ -6892,6 +6894,6 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777446553" defer></script>
+<script src="/js/siteFooter.js?v=1777447998" defer></script>
 </body>
 </html>
