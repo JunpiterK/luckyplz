@@ -32,6 +32,31 @@ function getLpPlayerId() {
 const SUPABASE_URL = 'https://jkrpxijybuljdxkrbsan.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_Ypa1NMQCVGxFWidBOd5iEA_ECBldTAb';
 
+/* =====================================================================
+   Cloudflare Turnstile — bot protection on signup/signin/reset.
+   =====================================================================
+   Empty site key = captcha disabled (forms work as before, no widget).
+   To turn it on:
+     1. Cloudflare dashboard (https://dash.cloudflare.com) → Turnstile →
+        Add a site. Domain: luckyplz.com. Widget mode: Managed.
+     2. Copy the SITE KEY → paste below as TURNSTILE_SITE_KEY value.
+     3. Copy the SECRET KEY → Supabase dashboard → Authentication →
+        Captcha protection → enable, Provider: Turnstile, paste secret.
+     4. Bump cache + redeploy. The auth forms now require a Turnstile
+        challenge to pass before signup/signin/reset succeed.
+   The site key is a PUBLIC value — committing it to the repo is fine
+   (it identifies the site, not the validator). The secret key never
+   leaves the Cloudflare/Supabase boundary.
+
+   Why Turnstile over hCaptcha/reCAPTCHA: it's free at our scale (1 M
+   challenges/month), privacy-respecting (no third-party tracking),
+   and integrates natively with Cloudflare Pages where we already
+   host. Most challenges resolve invisibly with a managed difficulty
+   tier — real users don't see anything; bots get a visible test or
+   are blocked outright.
+   ===================================================================== */
+const TURNSTILE_SITE_KEY = '';
+
 let _supabase = null;
 
 function getSupabase() {
@@ -52,22 +77,31 @@ async function getSession() {
     return session;
 }
 
-async function signUp(email, password, nickname) {
+/* The optional `captchaToken` parameter is the Turnstile widget's
+   solved-challenge token. When TURNSTILE_SITE_KEY is empty (captcha
+   disabled), pass null/undefined and Supabase ignores it. When the
+   admin enables Captcha protection in the Supabase dashboard, ALL
+   auth requests must include a valid token or they're rejected — so
+   the auth UI is responsible for not calling signUp() until the
+   widget has produced a token. */
+async function signUp(email, password, nickname, captchaToken) {
     const { data, error } = await getSupabase().auth.signUp({
         email,
         password,
         options: {
             data: { nickname },
-            emailRedirectTo: window.location.origin + '/auth/?verified=1'
+            emailRedirectTo: window.location.origin + '/auth/?verified=1',
+            captchaToken: captchaToken || undefined
         }
     });
     return { data, error };
 }
 
-async function signIn(email, password) {
+async function signIn(email, password, captchaToken) {
     const { data, error } = await getSupabase().auth.signInWithPassword({
         email,
-        password
+        password,
+        options: { captchaToken: captchaToken || undefined }
     });
     return { data, error };
 }
@@ -77,11 +111,22 @@ async function signOut() {
     return { error };
 }
 
-async function resetPassword(email) {
+async function resetPassword(email, captchaToken) {
     const { data, error } = await getSupabase().auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/auth/?reset=1'
+        redirectTo: window.location.origin + '/auth/?reset=1',
+        captchaToken: captchaToken || undefined
     });
     return { data, error };
+}
+
+/* Helpers exposed to auth UI so the Turnstile widget renders only
+   when the admin has configured a site key. Empty key → no widget,
+   no token expected, auth flow unchanged (existing users unaffected). */
+function isCaptchaEnabled() {
+    return !!TURNSTILE_SITE_KEY;
+}
+function getTurnstileSiteKey() {
+    return TURNSTILE_SITE_KEY;
 }
 
 /* Listen for auth changes */

@@ -175,6 +175,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                     <label id="lPassword">Password</label>
                     <input type="password" id="loginPassword" placeholder="••••••••" required minlength="6" autocomplete="current-password">
                 </div>
+                <!-- Cloudflare Turnstile bot-challenge mount. Empty
+                     until onTurnstileLoad() renders the widget; if the
+                     site key is not configured (TURNSTILE_SITE_KEY=''),
+                     stays empty and the form submits without a token. -->
+                <div id="turnstileLogin" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
                 <button type="submit" class="submit-btn" id="loginBtn">Login</button>
                 <button type="button" class="forgot-link" onclick="showReset()" id="forgotText">Forgot password?</button>
             </form>
@@ -197,6 +202,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                     <label id="sConfirm">Confirm Password</label>
                     <input type="password" id="signupConfirm" placeholder="••••••••" required minlength="6" autocomplete="new-password">
                 </div>
+                <div id="turnstileSignup" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
                 <button type="submit" class="submit-btn" id="signupBtn">Sign Up</button>
             </form>
         </div>
@@ -210,6 +216,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                     <label>Email</label>
                     <input type="email" id="resetEmail" placeholder="you@example.com" required>
                 </div>
+                <div id="turnstileReset" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
                 <button type="submit" class="submit-btn" id="resetBtn">Send Reset Link</button>
             </form>
         </div>
@@ -235,7 +242,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     </div>
 
     <script src="/vendor/supabase.min.js"></script>
-    <script src="/js/supabase-config.js?v=1777490803"></script>
+    <script src="/js/supabase-config.js?v=1777491802"></script>
     <script>
 /* ===== I18N (16 languages) ===== */
 const I18N={
@@ -357,17 +364,74 @@ function applyLanguage(){
     document.getElementById('oauthDivider').textContent=T('or');
 }
 
+/* ===== Cloudflare Turnstile bot-protection =====
+   Loads the widget script and renders 3 invisible/managed widgets
+   (login/signup/reset) ONLY when supabase-config.js exposes a
+   non-empty TURNSTILE_SITE_KEY. With the default empty key, the
+   loader skips entirely and the auth flow runs unchanged.
+
+   On submit, each handler grabs the widget's response token via
+   turnstile.getResponse(widgetId). If captcha is enabled but the
+   token is missing / expired, the handler shows "보안 확인을
+   완료해주세요" and resets the widget so the user can retry. */
+let _twLoginId = null, _twSignupId = null, _twResetId = null;
+function _captchaActive(){
+    return typeof isCaptchaEnabled === 'function' && isCaptchaEnabled();
+}
+function _twTokenFor(widgetId){
+    if (!widgetId || typeof turnstile === 'undefined') return null;
+    try { const t = turnstile.getResponse(widgetId); return t || null; } catch(_) { return null; }
+}
+function _twResetWidget(widgetId){
+    if (!widgetId || typeof turnstile === 'undefined') return;
+    try { turnstile.reset(widgetId); } catch(_){}
+}
+window.onTurnstileLoad = function(){
+    if (!_captchaActive()) return;
+    if (typeof turnstile === 'undefined') return;
+    const sk = getTurnstileSiteKey();
+    try {
+        _twLoginId  = turnstile.render('#turnstileLogin',  { sitekey: sk, theme: 'dark' });
+        _twSignupId = turnstile.render('#turnstileSignup', { sitekey: sk, theme: 'dark' });
+        _twResetId  = turnstile.render('#turnstileReset',  { sitekey: sk, theme: 'dark' });
+    } catch(e) {
+        console.warn('[turnstile] render error', e);
+    }
+};
+(function _maybeLoadTurnstile(){
+    if (!_captchaActive()) return;   /* feature flag off — skip script load */
+    if (document.getElementById('cf-turnstile-script')) return;
+    const s = document.createElement('script');
+    s.id = 'cf-turnstile-script';
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
+    s.async = true; s.defer = true;
+    document.head.appendChild(s);
+})();
+
 /* ===== Auth Handlers ===== */
 async function handleLogin(e){
     e.preventDefault();clearMsg();
     const email=document.getElementById('loginEmail').value.trim();
     const pw=document.getElementById('loginPassword').value;
+    /* Captcha gate — only enforced when the admin has configured
+       Turnstile. With no site key, captchaToken is null and Supabase
+       ignores it (the dashboard's captcha protection is also off in
+       that case, so there's nothing to verify against). */
+    let captchaToken = null;
+    if (_captchaActive()) {
+        captchaToken = _twTokenFor(_twLoginId);
+        if (!captchaToken){ showMsg('보안 확인을 완료해주세요','error'); return; }
+    }
     document.getElementById('loginBtn').disabled=true;
 
-    const{data,error}=await signIn(email,pw);
+    const{data,error}=await signIn(email,pw,captchaToken);
     document.getElementById('loginBtn').disabled=false;
 
-    if(error){showMsg(error.message,'error');return}
+    if(error){
+        showMsg(error.message,'error');
+        _twResetWidget(_twLoginId);   /* let the user retry with a fresh challenge */
+        return;
+    }
     showMsg(T('loginSuccess'),'success');
     const ret=getReturnUrl();
     if(ret){setTimeout(()=>{location.href=ret},700);return}
@@ -383,24 +447,46 @@ async function handleSignup(e){
 
     if(pw!==confirm){showMsg(T('passwordMismatch'),'error');return}
 
+    let captchaToken = null;
+    if (_captchaActive()) {
+        captchaToken = _twTokenFor(_twSignupId);
+        if (!captchaToken){ showMsg('보안 확인을 완료해주세요','error'); return; }
+    }
     document.getElementById('signupBtn').disabled=true;
-    const{data,error}=await signUp(email,pw,nick);
+    const{data,error}=await signUp(email,pw,nick,captchaToken);
     document.getElementById('signupBtn').disabled=false;
 
-    if(error){showMsg(error.message,'error');return}
+    if(error){
+        showMsg(error.message,'error');
+        _twResetWidget(_twSignupId);
+        return;
+    }
     showMsg(T('signupSuccess'),'success');
 }
 
 async function handleReset(e){
     e.preventDefault();
     const email=document.getElementById('resetEmail').value.trim();
+    let captchaToken = null;
+    if (_captchaActive()) {
+        captchaToken = _twTokenFor(_twResetId);
+        if (!captchaToken){
+            const el=document.getElementById('resetMsg');
+            el.textContent='보안 확인을 완료해주세요'; el.className='msg error';
+            return;
+        }
+    }
     document.getElementById('resetBtn').disabled=true;
-    const{data,error}=await resetPassword(email);
+    const{data,error}=await resetPassword(email,captchaToken);
     document.getElementById('resetBtn').disabled=false;
 
     const el=document.getElementById('resetMsg');
-    if(error){el.textContent=error.message;el.className='msg error'}
-    else{el.textContent=T('resetSuccess');el.className='msg success'}
+    if(error){
+        el.textContent=error.message;el.className='msg error';
+        _twResetWidget(_twResetId);
+    } else {
+        el.textContent=T('resetSuccess');el.className='msg success';
+    }
 }
 
 async function handleLogout(){
@@ -576,6 +662,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777490803" defer></script>
+<script src="/js/siteFooter.js?v=1777491802" defer></script>
 </body>
 </html>
