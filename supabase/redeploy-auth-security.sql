@@ -790,13 +790,18 @@ grant execute on function public.delete_unverified_signups() to service_role;
 
 
 -- ---- Schedule: every 5 minutes --------------------------------------
-/* cron.schedule() upserts by job name — calling it again with the
-   same name updates the existing schedule rather than creating a
-   duplicate. Safe to re-run this migration any number of times.
-
-   Cron expression: */5 * * * *  →  every 5 minutes on the minute
-   (00:00, 00:05, 00:10, ...). pg_cron's UTC schedule is fine here —
-   we don't care about wall-clock alignment, just the 5-minute cadence. */
+-- cron.schedule() upserts by job name — calling it again with the
+-- same name updates the existing schedule rather than creating a
+-- duplicate. Safe to re-run this migration any number of times.
+--
+-- Cron expression: every 5 minutes on the minute (00:00, 00:05, ...).
+-- We use `--` line comments here instead of `/* */` block comments
+-- because the cron expression contains the substring '*' followed by
+-- '/' which PostgreSQL would parse as the end of a block comment,
+-- breaking the parse. Same reason this comment doesn't quote the
+-- literal expression inline.
+-- pg_cron's UTC schedule is fine here — we don't care about wall-clock
+-- alignment, just the 5-minute cadence.
 select cron.schedule(
     'delete-unverified-signups',
     '*/5 * * * *',
