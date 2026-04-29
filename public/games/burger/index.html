@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777456031"></script>
-<script src="/js/lpAudio.js?v=1777456031"></script>
+<script src="/js/supabase-config.js?v=1777457010"></script>
+<script src="/js/lpAudio.js?v=1777457010"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -728,6 +728,11 @@ let ingredientsCaught, burgersCompleted;
 let popUntil, popText, popKind;
 let shakeUntil, flashUntil, clearUntil;
 let tapFlashes;         /* [{idx, bornAt, kind:'good'|'bad'}] */
+let plateLifts;         /* [{idx, bornAt}] — fast bounce-up animation
+                           per tap; the plate visually pops ~10 px up
+                           and settles back over 250 ms so the user
+                           gets crisp feedback that their tap landed,
+                           independent of the right/wrong outcome. */
 let stackPops;          /* [{layer, bornAt}] — entry-scale anim on WIP layer */
 let burgersThisLevel;   /* 0..LEVEL_BURGERS — only levels up on LEVEL_BURGERS */
 
@@ -786,6 +791,16 @@ function sfxOver(){
     ], {vol:0.22, type:'sawtooth'});
     setTimeout(()=>LPAudio.beep({freq:110, dur:0.4, vol:0.14, type:'triangle', decay:0.85}), 60);
 }
+/* Plate "tink" — high-pitched ceramic ping that fires alongside the
+   plate-lift animation when the user taps an ingredient. Designed to
+   sit on top of sfxTap (right tap) or sfxWrong (mis-tap) without
+   masking either — short duration + high frequency keeps it in its
+   own spectral band. */
+function sfxPlate(){
+    LPAudio.beep({freq:2100, dur:0.06, vol:0.09, type:'triangle', decay:0.88});
+    LPAudio.beep({freq:2800, dur:0.05, vol:0.05, type:'sine',     decay:0.85});
+    LPAudio.noise({dur:0.018, vol:0.04});
+}
 
 function resetGame(){
     level = 1; score = 0;
@@ -798,7 +813,7 @@ function resetGame(){
     burgersThisLevel = 0;
     popUntil = 0; popText = ''; popKind = '';
     shakeUntil = 0; flashUntil = 0; clearUntil = 0;
-    tapFlashes = []; stackPops = [];
+    tapFlashes = []; stackPops = []; plateLifts = [];
     $('scoreNow').textContent = '0';
     $('levelNow').textContent = '1';
 }
@@ -1029,6 +1044,9 @@ function update(now, dt){
     if (stackPops.length > 16){
         stackPops = stackPops.filter(s => now - s.bornAt < 400);
     }
+    if (plateLifts.length){
+        plateLifts = plateLifts.filter(l => now - l.bornAt < 260);
+    }
 }
 
 /* ========================================================================
@@ -1055,6 +1073,12 @@ function onTap(x, y){
     const id = TAP_IDS[idx];
     const now = performance.now();
     const expected = sample[progress];
+
+    /* Plate-lift bounce + ceramic "tink" — fires for ANY tap (right or
+       wrong) so the player gets immediate physical feedback that their
+       tap landed before the score/timer logic below decides the outcome. */
+    plateLifts.push({ idx, bornAt: now });
+    sfxPlate();
 
     if (id === expected){
         progress++;
@@ -1354,79 +1378,218 @@ function drawTimeBar(now){
     }
 }
 
-/* Top-view (overhead) illustration for each ingredient, drawn as a
-   circle of radius r centred at (cx, cy). Clipped to that circle so
-   detail never bleeds outside the roundel. */
-function drawTopView(id, cx, cy, r){
-    ctx.save();
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.clip();
+/* ========================================================================
+   Perspective slice illustration — replaces the old top-down roundel +
+   side-view stack with a single ~5cm-thick slice viewed from 15° above
+   the horizontal. Each ingredient is rendered as a cylinder (or thin
+   slab for cheese) whose top face is a foreshortened ellipse and whose
+   side wall is the visible front strip below it. The 15° elevation
+   keeps the slice mostly side-on (so the ingredient personality reads
+   from its profile) while letting the top texture peek through.
+
+   Geometry ratios:
+     ry/rx = sin(15°) ≈ 0.26       — top ellipse foreshortening
+     thick = ~1× rx                — visual thickness ("5cm")
+
+   Each call:  drawSliceSide(id, cx, cy, w, thick)
+     cx, cy   — centre of the TOP ellipse on screen
+     w        — slice width (top ellipse rx*2)
+     thick    — vertical pixel height of the side wall
+   The cylinder body fills [cy − ry .. cy + thick + ry]. */
+function drawSliceSide(id, cx, cy, w, thick){
+    const rx = w / 2;
+    const ry = Math.max(2, rx * 0.26);
+    /* Side wall closed path: front-half of top ellipse → down the right
+       edge → front-half of bottom ellipse (back to left) → up the left
+       edge. closePath ties it off. */
+    function _wallPath(){
+        ctx.beginPath();
+        ctx.moveTo(cx - rx, cy);
+        /* Front half of top ellipse: PI → 0 anticlockwise (through PI/2 = bottom). */
+        ctx.ellipse(cx, cy, rx, ry, 0, Math.PI, 0, true);
+        ctx.lineTo(cx + rx, cy + thick);
+        /* Front half of bottom ellipse: 0 → PI clockwise (through PI/2). */
+        ctx.ellipse(cx, cy + thick, rx, ry, 0, 0, Math.PI, false);
+        ctx.closePath();
+    }
+    function _topPath(){
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+    }
+
+    /* Paint side wall first, then top face (paint order = back-to-front). */
     switch(id){
-        case 'lettuce':{
-            ctx.fillStyle='#38a169';
-            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#276749';
-            for(let a=0;a<6;a++){
-                const ang=a/6*Math.PI*2;
+        case 'lettuce': {
+            /* Side: ruffled green band with paler highlights. Top: leafy with
+               curly waves around the rim. */
+            const sg = ctx.createLinearGradient(0, cy, 0, cy + thick);
+            sg.addColorStop(0,    '#5DAE3F');
+            sg.addColorStop(0.55, '#3F8C26');
+            sg.addColorStop(1,    '#23601A');
+            ctx.fillStyle = sg; _wallPath(); ctx.fill();
+            /* Vertical streaks → suggest leaf veins from the side. */
+            ctx.strokeStyle = 'rgba(160,210,120,.4)';
+            ctx.lineWidth = 1;
+            for (let i=-2; i<=2; i++){
                 ctx.beginPath();
-                ctx.arc(cx+Math.cos(ang)*r*.68,cy+Math.sin(ang)*r*.68,r*.38,0,Math.PI*2);
+                const x = cx + (i * rx*0.36);
+                ctx.moveTo(x, cy + 1);
+                ctx.lineTo(x, cy + thick - 1);
+                ctx.stroke();
+            }
+            const tg = ctx.createRadialGradient(cx-rx*.2, cy-ry*.4, rx*.1, cx, cy, rx*1.05);
+            tg.addColorStop(0, '#A4D973');
+            tg.addColorStop(1, '#3F8C26');
+            ctx.fillStyle = tg; _topPath(); ctx.fill();
+            /* Curly leaf-tip dots around the rim. */
+            ctx.fillStyle = 'rgba(38,80,30,.55)';
+            for (let a=0; a<8; a++){
+                const ang = a * Math.PI/4;
+                const px = cx + Math.cos(ang) * rx*0.78;
+                const py = cy + Math.sin(ang) * ry*0.78;
+                ctx.beginPath(); ctx.arc(px, py, Math.max(1, rx*0.07), 0, Math.PI*2); ctx.fill();
+            }
+            break;
+        }
+        case 'patty': {
+            /* Side: very dark grilled crust with even darker bottom. Top:
+               char-brown with three diagonal grill marks. */
+            const sg = ctx.createLinearGradient(0, cy, 0, cy + thick);
+            sg.addColorStop(0,    '#5A2E18');
+            sg.addColorStop(0.5,  '#3A1B0C');
+            sg.addColorStop(1,    '#1F0E04');
+            ctx.fillStyle = sg; _wallPath(); ctx.fill();
+            /* Char highlights — bumpy lighter dots on the side wall. */
+            ctx.fillStyle = 'rgba(120,60,30,.55)';
+            for (let i=0; i<5; i++){
+                const px = cx - rx*0.7 + i * (rx*1.4/4);
+                const py = cy + thick*0.4 + (i%2) * thick*0.2;
+                ctx.beginPath(); ctx.ellipse(px, py, rx*0.1, ry*0.7, 0, 0, Math.PI*2); ctx.fill();
+            }
+            const tg = ctx.createRadialGradient(cx-rx*.1, cy-ry*.4, rx*.1, cx, cy, rx);
+            tg.addColorStop(0, '#5A331C');
+            tg.addColorStop(1, '#2A1408');
+            ctx.fillStyle = tg; _topPath(); ctx.fill();
+            /* Grill marks across the top (visible on the foreshortened ellipse). */
+            ctx.strokeStyle = 'rgba(20,8,2,.7)';
+            ctx.lineWidth = 1.3;
+            ctx.save(); ctx.beginPath(); ctx.ellipse(cx, cy, rx*0.92, ry*0.92, 0, 0, Math.PI*2); ctx.clip();
+            for (let i=-1; i<=1; i++){
+                ctx.beginPath();
+                ctx.moveTo(cx - rx, cy + i * ry*0.45);
+                ctx.lineTo(cx + rx, cy + i * ry*0.45);
+                ctx.stroke();
+            }
+            ctx.restore();
+            break;
+        }
+        case 'cheese': {
+            /* Side: thinner slab — uses thick*0.55 internally so cheese
+               reads as the lone "thin slice" among thicker fillings. */
+            const useThick = thick * 0.55;
+            const sg = ctx.createLinearGradient(0, cy, 0, cy + useThick);
+            sg.addColorStop(0,    '#FFE066');
+            sg.addColorStop(0.5,  '#F4B92E');
+            sg.addColorStop(1,    '#C68B0E');
+            ctx.fillStyle = sg;
+            ctx.beginPath();
+            ctx.moveTo(cx - rx, cy);
+            ctx.ellipse(cx, cy, rx, ry, 0, Math.PI, 0, true);
+            ctx.lineTo(cx + rx, cy + useThick);
+            ctx.ellipse(cx, cy + useThick, rx, ry, 0, 0, Math.PI, false);
+            ctx.closePath();
+            ctx.fill();
+            /* Top face with subtle melt sheen. */
+            const tg = ctx.createRadialGradient(cx-rx*.25, cy-ry*.5, rx*.1, cx, cy, rx);
+            tg.addColorStop(0, '#FFEC8A');
+            tg.addColorStop(1, '#E8A91C');
+            ctx.fillStyle = tg; _topPath(); ctx.fill();
+            /* A few cheese-hole dots. */
+            ctx.fillStyle = 'rgba(190,120,10,.4)';
+            [[-.3,-.1],[.2,-.25],[.3,.15],[-.05,.25]].forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.arc(cx + dx*rx, cy + dy*ry, Math.max(1, rx*0.06), 0, Math.PI*2);
                 ctx.fill();
-            }
-            ctx.fillStyle='rgba(154,230,180,.55)';
-            ctx.beginPath(); ctx.arc(cx,cy,r*.35,0,Math.PI*2); ctx.fill();
-            break;
-        }
-        case 'patty':{
-            ctx.fillStyle='#6b3a1f';
-            ctx.beginPath(); ctx.ellipse(cx,cy,r,r*.88,0,0,Math.PI*2); ctx.fill();
-            ctx.strokeStyle='rgba(25,8,0,.65)'; ctx.lineWidth=1.6;
-            for(let i=-1;i<=1;i++){
-                ctx.beginPath(); ctx.moveTo(cx-r*.75,cy+i*r*.3); ctx.lineTo(cx+r*.75,cy+i*r*.3); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(cx+i*r*.3,cy-r*.75); ctx.lineTo(cx+i*r*.3,cy+r*.75); ctx.stroke();
-            }
-            ctx.fillStyle='rgba(200,120,60,.3)';
-            ctx.beginPath(); ctx.arc(cx,cy,r*.4,0,Math.PI*2); ctx.fill();
-            break;
-        }
-        case 'cheese':{
-            ctx.fillStyle='#f6c231';
-            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='rgba(255,235,120,.55)';
-            ctx.beginPath(); ctx.arc(cx,cy,r*.6,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='rgba(180,120,10,.45)';
-            [[0,0],[.4,.2],[-.3,.3],[.1,-.42],[-.4,-.12]].forEach(([dx,dy])=>{
-                ctx.beginPath(); ctx.arc(cx+dx*r,cy+dy*r,r*.1,0,Math.PI*2); ctx.fill();
             });
             break;
         }
-        case 'onion':{
-            const oc=['#7b4f8e','#fff','#9b6fae','#e8d0ee','#7b4f8e'];
-            for(let i=0;i<5;i++){
-                ctx.fillStyle=oc[i];
-                ctx.beginPath(); ctx.arc(cx,cy,r*(1-i*.18),0,Math.PI*2); ctx.fill();
+        case 'onion': {
+            /* Side: pale translucent rings (concentric vertical layers
+               showing through). Top: classic onion-ring concentric pattern. */
+            const sg = ctx.createLinearGradient(0, cy, 0, cy + thick);
+            sg.addColorStop(0,    '#F5E8FF');
+            sg.addColorStop(0.55, '#D9C0E5');
+            sg.addColorStop(1,    '#9C7FAB');
+            ctx.fillStyle = sg; _wallPath(); ctx.fill();
+            /* Vertical "ring layer" hairlines on the side wall. */
+            ctx.strokeStyle = 'rgba(155,120,180,.45)';
+            ctx.lineWidth = 0.7;
+            for (let i=1; i<=3; i++){
+                const t = i / 4;
+                ctx.beginPath();
+                ctx.moveTo(cx - rx + t*rx, cy);
+                ctx.lineTo(cx - rx + t*rx, cy + thick);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx + rx - t*rx, cy);
+                ctx.lineTo(cx + rx - t*rx, cy + thick);
+                ctx.stroke();
+            }
+            /* Top face — concentric onion rings. */
+            ctx.fillStyle = '#E8DBF1'; _topPath(); ctx.fill();
+            const ringFills = ['#9C7FAB', '#E8DBF1', '#B091C4', '#F4EAFA'];
+            for (let i=1; i<=3; i++){
+                const sc = 1 - i*0.22;
+                ctx.fillStyle = ringFills[i % ringFills.length];
+                ctx.beginPath();
+                ctx.ellipse(cx, cy, rx*sc, ry*sc, 0, 0, Math.PI*2);
+                ctx.fill();
             }
             break;
         }
-        case 'tomato':{
-            ctx.fillStyle='#e53935';
-            ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-            ctx.strokeStyle='rgba(160,15,15,.5)'; ctx.lineWidth=.9;
-            for(let i=0;i<6;i++){
-                const ang=i/6*Math.PI*2;
-                ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(ang)*r,cy+Math.sin(ang)*r); ctx.stroke();
+        case 'tomato': {
+            /* Side: red flesh with seedy interior pockets. Top: red wedges
+               around a central pulpy core. */
+            const sg = ctx.createLinearGradient(0, cy, 0, cy + thick);
+            sg.addColorStop(0,    '#E84A4A');
+            sg.addColorStop(0.5,  '#C12A2A');
+            sg.addColorStop(1,    '#7F1414');
+            ctx.fillStyle = sg; _wallPath(); ctx.fill();
+            /* Seed pockets on the side — pale yellow dots. */
+            ctx.fillStyle = 'rgba(255,248,180,.85)';
+            const seedRows = [
+                [-rx*0.5, thick*0.35],[rx*0.0, thick*0.55],[rx*0.45, thick*0.4],
+                [-rx*0.25, thick*0.7],[rx*0.25, thick*0.75]
+            ];
+            seedRows.forEach(([dx,dy])=>{
+                ctx.beginPath();
+                ctx.ellipse(cx + dx, cy + dy, rx*0.08, ry*0.6, 0, 0, Math.PI*2);
+                ctx.fill();
+            });
+            /* Top face — bright red rim, paler core. */
+            const tg = ctx.createRadialGradient(cx, cy, rx*.05, cx, cy, rx);
+            tg.addColorStop(0,    '#FFB3A1');
+            tg.addColorStop(0.45, '#E84A4A');
+            tg.addColorStop(1,    '#A8221F');
+            ctx.fillStyle = tg; _topPath(); ctx.fill();
+            /* Six pale-yellow wedges around the core (locule pattern). */
+            ctx.fillStyle = 'rgba(255,248,170,.55)';
+            for (let i=0; i<6; i++){
+                const ang = i*Math.PI/3 + Math.PI/6;
+                const px = cx + Math.cos(ang) * rx*0.45;
+                const py = cy + Math.sin(ang) * ry*0.45;
+                ctx.beginPath();
+                ctx.ellipse(px, py, rx*0.13, ry*0.45, ang, 0, Math.PI*2);
+                ctx.fill();
             }
-            ctx.fillStyle='#fff9c4';
-            for(let i=0;i<6;i++){
-                const ang=i/6*Math.PI*2+Math.PI/6;
-                ctx.beginPath(); ctx.ellipse(cx+Math.cos(ang)*r*.58,cy+Math.sin(ang)*r*.58,r*.09,r*.14,ang,0,Math.PI*2); ctx.fill();
-            }
-            ctx.fillStyle='rgba(255,255,255,.22)';
-            ctx.beginPath(); ctx.arc(cx,cy,r*.18,0,Math.PI*2); ctx.fill();
             break;
         }
     }
-    ctx.restore();
-    ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+    /* Subtle outline so the slice reads against any background. */
+    ctx.strokeStyle = 'rgba(0,0,0,.32)';
+    ctx.lineWidth = 0.9;
+    _wallPath(); ctx.stroke();
+    _topPath();  ctx.stroke();
 }
 
 function drawIngredientRow(now){
@@ -1434,11 +1597,17 @@ function drawIngredientRow(now){
         const x = PLATE_ROW_X0 + i*(PLATE_W + PLATE_GAP);
         const y = PLATE_ROW_Y;
         const cx = x + PLATE_W/2;
-        /* Shift side-view + plate down to make room for the top-view roundel
-           in the upper 46 px of the tile. cy now references the side-view zone. */
-        const cy = y + 68;
 
-        /* Card background */
+        /* Per-tile lift offset — half-sine bounce over 250 ms. Applied to
+           plate Y AND slice Y together so the food rides the plate up. */
+        const lift = plateLifts.find(l => l.idx === i);
+        let lyOff = 0;
+        if (lift){
+            const t = (now - lift.bornAt) / 250;
+            if (t > 0 && t < 1) lyOff = -Math.sin(t * Math.PI) * 12;
+        }
+
+        /* Card background — flash colour pulses for ~400 ms after a tap. */
         const flash = tapFlashes.find(f => f.idx === i);
         let flashCol = null, flashA = 0;
         if (flash){
@@ -1460,46 +1629,49 @@ function drawIngredientRow(now){
         }
         ctx.restore();
 
-        /* ── TOP VIEW roundel ── */
-        drawTopView(TAP_IDS[i], cx, y+22, 16);
-        /* "TOP" micro-label */
-        ctx.fillStyle='rgba(255,255,255,.28)';
-        ctx.font='500 7px "Noto Sans KR",sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('TOP', cx, y+42);
+        /* Plate centred low in the tile so the slice has room above. The
+           slice + plate share lyOff so they pop together. */
+        const plateCx = cx;
+        const plateCy = y + 88 + lyOff;
+        const plateW  = PLATE_W * 0.88;   /* 53 px */
+        const plateRy = plateW * 0.13;    /* ~7 px — flat ellipse for 15° view */
 
-        /* Thin separator between top-view and side-view zones */
-        ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1;
-        ctx.setLineDash([3,3]);
-        ctx.beginPath(); ctx.moveTo(x+6,y+47); ctx.lineTo(x+PLATE_W-6,y+47); ctx.stroke();
-        ctx.setLineDash([]);
-
-        /* ── SIDE VIEW: plate + ingredient ── */
-        ctx.fillStyle='rgba(0,0,0,.28)';
+        /* Static drop-shadow (anchored to tile, doesn't move with the lift)
+           — when the plate lifts up, the gap to its shadow is the visual
+           cue that it's airborne. */
+        ctx.fillStyle = 'rgba(0,0,0,.34)';
         ctx.beginPath();
-        ctx.ellipse(cx, cy+18, PLATE_W*0.36, 4, 0, 0, Math.PI*2);
+        ctx.ellipse(plateCx, y + 100, plateW*0.46, 4 + (lyOff < 0 ? 0.3 * (-lyOff) : 0)/3, 0, 0, Math.PI*2);
         ctx.fill();
-        const pg = ctx.createLinearGradient(0, cy+4, 0, cy+16);
-        pg.addColorStop(0, '#FFFFFF');
-        pg.addColorStop(1, '#C7CCD7');
+
+        /* Plate disc — gradient from rim highlight to slight shadow. */
+        const pg = ctx.createLinearGradient(0, plateCy - plateRy, 0, plateCy + plateRy);
+        pg.addColorStop(0,    '#FFFFFF');
+        pg.addColorStop(0.55, '#E5E9F1');
+        pg.addColorStop(1,    '#B5BCC9');
         ctx.fillStyle = pg;
         ctx.beginPath();
-        ctx.ellipse(cx, cy+10, PLATE_W*0.42, 7, 0, 0, Math.PI*2);
+        ctx.ellipse(plateCx, plateCy, plateW/2, plateRy, 0, 0, Math.PI*2);
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0,0,0,.14)';
+        ctx.strokeStyle = 'rgba(0,0,0,.18)';
         ctx.lineWidth = 1.1;
         ctx.stroke();
+        /* Inner rim line — separates rim from well. */
+        ctx.strokeStyle = 'rgba(0,0,0,.1)';
+        ctx.lineWidth = 0.7;
+        ctx.beginPath();
+        ctx.ellipse(plateCx, plateCy, plateW/2 - 3, plateRy - 1, 0, 0, Math.PI*2);
+        ctx.stroke();
 
-        INGREDIENTS[TAP_IDS[i]].draw(cx, cy-2, PLATE_W*0.76, 26);
+        /* The 5 cm slice sits ON the plate's well. Top of slice's bottom
+           ellipse aligns with plate top. With ry≈7 + thick=22 + topRy≈5,
+           the whole slice fits in ~34 px above plate centre. */
+        const sliceW     = PLATE_W * 0.66;       /* 40 px */
+        const sliceThick = 22;
+        const sliceCy    = plateCy - sliceThick - sliceW * 0.13;
+        drawSliceSide(TAP_IDS[i], plateCx, sliceCy, sliceW, sliceThick);
 
-        /* "SIDE" micro-label */
-        ctx.fillStyle='rgba(255,255,255,.28)';
-        ctx.font='500 7px "Noto Sans KR",sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('SIDE', cx, cy-17);
-        ctx.textBaseline='alphabetic';
-
-        /* Number badge */
+        /* Number badge — stays anchored to tile (doesn't lift with plate). */
         ctx.fillStyle = 'rgba(0,0,0,.5)';
         ctx.beginPath();
         ctx.arc(x+11, y+11, 9, 0, Math.PI*2);
@@ -1684,6 +1856,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777456031"></script>
+<script src="/js/siteFooter.js?v=1777457010"></script>
 </body>
 </html>
