@@ -206,6 +206,10 @@ h1.headline{
                 <span class="field-status" id="nicknameStatus" aria-hidden="true"></span>
             </div>
             <div class="field-msg" id="nicknameMsg" role="status" aria-live="polite"></div>
+            <!-- Cooldown badge — populated when nickname_cooldown_remaining()
+                 returns >0. Locks the input + shows when the next change
+                 will be available. Hidden when cooldown_remaining=0. -->
+            <div class="field-msg" id="nicknameCooldown" style="display:none;color:rgba(255,180,80,.95);font-size:.78em;margin-top:4px"></div>
         </div>
 
         <div class="form-group">
@@ -267,7 +271,7 @@ h1.headline{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777491802"></script>
+<script src="/js/supabase-config.js?v=1777492058"></script>
 <script>
 /* ================================================================
    /me/ — own profile editor.
@@ -397,12 +401,59 @@ let currentUser=null, currentProfile=null, originalNickname='';
         originalNickname=currentProfile.nickname;
         paintForm();
         $('appRoot').style.display='block';
+        /* Cooldown check — runs in parallel with the form paint so the
+           main UI doesn't wait on the RPC. If the user is in cooldown,
+           the input gets locked + a countdown badge appears below. */
+        _refreshNicknameCooldown();
     } catch(e){
         console.error('[me init]',e);
     } finally {
         $('loadingOverlay').classList.remove('on');
     }
 })();
+
+/* Format remaining seconds as a human Korean-friendly countdown
+   ("28일 후 변경 가능", "5시간 후", "23분 후"). */
+function _formatRemaining(sec){
+    if (sec <= 0) return '';
+    const day  = Math.floor(sec / 86400);
+    const hour = Math.floor((sec % 86400) / 3600);
+    const min  = Math.floor((sec % 3600) / 60);
+    if (day >= 1) return day + '일 ' + (hour ? hour + '시간 ' : '') + '후';
+    if (hour >= 1) return hour + '시간 ' + (min ? min + '분 ' : '') + '후';
+    if (min >= 1) return min + '분 후';
+    return sec + '초 후';
+}
+
+/* Pull the current cooldown status from the server. Disables the
+   nickname input + paints the countdown when remaining > 0. */
+async function _refreshNicknameCooldown(){
+    try{
+        const { data, error } = await getSupabase().rpc('nickname_cooldown_remaining');
+        const remaining = (typeof data === 'number') ? data : 0;
+        const inp = $('nicknameInput');
+        const badge = $('nicknameCooldown');
+        if (error){
+            /* RPC missing (migration not deployed yet) — silently no-op
+               so the page works the same as before the migration. */
+            console.warn('[me.cooldown]', error.message);
+            return;
+        }
+        if (remaining > 0){
+            inp.disabled = true;
+            inp.style.opacity = '0.6';
+            badge.style.display = 'block';
+            badge.textContent = '🔒 닉네임은 30일에 한 번만 변경 가능. 다음 변경: ' + _formatRemaining(remaining);
+        } else {
+            inp.disabled = false;
+            inp.style.opacity = '';
+            badge.style.display = 'none';
+            badge.textContent = '';
+        }
+    } catch(e){
+        console.warn('[me.cooldown]', e);
+    }
+}
 
 function paintForm(){
     const meta=currentUser.user_metadata||{};
@@ -533,6 +584,20 @@ $('editForm').addEventListener('submit',async function(e){
         if(!res.ok){
             $('loadingOverlay').classList.remove('on');
             $('saveLabel').textContent=t.save;
+            /* Cooldown special-case: the server tells us EXACTLY how many
+               seconds remain via res.remainingSec. Surface that as a
+               human-friendly toast + lock the input + repaint the
+               countdown badge so the user gets immediate feedback. */
+            if(res.error === 'cooldown'){
+                const remaining = res.remainingSec || 0;
+                setMsg('🔒 닉네임은 30일에 한 번만 변경 가능 — 다음 변경: ' + _formatRemaining(remaining), 'err');
+                setStatus('err');
+                /* Also refresh the persistent cooldown badge so the lock
+                   is visible even after the user clicks elsewhere. */
+                _refreshNicknameCooldown();
+                $('saveBtn').disabled=true;
+                return;
+            }
             const key='msg_'+(res.error||'invalid');
             setMsg(t[key]||t.msg_error,'err');
             setStatus('err');
