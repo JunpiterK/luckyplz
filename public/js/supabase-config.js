@@ -295,6 +295,15 @@ async function saveProfile({ nickname, email, avatar_url, bio }) {
             if (msg.includes('duplicate key') || error.code === '23505') {
                 return { ok: false, error: 'taken' };
             }
+            /* Nickname cooldown trigger throws 'nickname_cooldown:<sec>'.
+               P0001 covers both this and reserved; we disambiguate by
+               substring. The remaining-seconds suffix lets the UI render
+               "X days, Y hours remaining" without a separate RPC call. */
+            if (msg.includes('nickname_cooldown')) {
+                const m = (error.message || '').match(/nickname_cooldown:(\d+)/i);
+                const remainingSec = m ? parseInt(m[1], 10) : 0;
+                return { ok: false, error: 'cooldown', remainingSec };
+            }
             if (msg.includes('nickname_reserved') || error.code === 'P0001') {
                 return { ok: false, error: 'reserved' };
             }
