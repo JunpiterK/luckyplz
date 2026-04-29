@@ -77,51 +77,33 @@ async function getSession() {
     return session;
 }
 
-/* The optional `captchaToken` parameter is the Turnstile widget's
-   solved-challenge token. When TURNSTILE_SITE_KEY is empty (captcha
-   disabled), pass null/undefined and Supabase ignores it. When the
-   admin enables Captcha protection in the Supabase dashboard, ALL
-   auth requests must include a valid token or they're rejected — so
-   the auth UI is responsible for not calling signUp() until the
-   widget has produced a token. */
-async function signUp(email, password, nickname, captchaToken) {
-    const { data, error } = await getSupabase().auth.signUp({
-        email,
-        password,
-        options: {
-            data: { nickname },
-            emailRedirectTo: window.location.origin + '/auth/?verified=1',
-            captchaToken: captchaToken || undefined
-        }
-    });
-    return { data, error };
-}
+/* signUp / signIn / resetPassword 함수들은 OAuth-only 전환으로 제거됨.
+   ─────────────────────────────────────────────────────────────────
+   2026-04-30 까지 지원하던 이메일·비밀번호 가입은 Supabase 기본
+   SMTP 의 시간당 3통 한도와 한국 ISP 스팸 필터 차단으로 verification
+   이메일이 안정적으로 전달되지 않아 유저가 아예 가입을 못 끝내는
+   문제가 반복 발생. Custom SMTP 셋업·도메인 인증 비용을 들이는
+   대신 Google · Kakao OAuth 만 허용하도록 단순화.
 
-async function signIn(email, password, captchaToken) {
-    const { data, error } = await getSupabase().auth.signInWithPassword({
-        email,
-        password,
-        options: { captchaToken: captchaToken || undefined }
-    });
-    return { data, error };
-}
+   OAuth provider 가 이메일 검증을 자체적으로 처리하므로 verification
+   이메일 발송이 필요 없음 → 100% 가입 성공률.
+
+   기존 이메일·비번 사용자: 운영자(아내) 1명 정도만 존재 가능.
+   그 계정에 대해서는 같은 이메일로 Google 가입하면 Supabase 가
+   자동으로 동일 auth.users row 에 OAuth identity 를 link 하므로
+   기존 데이터 보존됨.
+
+   향후 OAuth 외 경로 (예: Apple Sign In) 추가하려면 이 위치에
+   동일 패턴으로 wrapper 추가. */
 
 async function signOut() {
     const { error } = await getSupabase().auth.signOut();
     return { error };
 }
 
-async function resetPassword(email, captchaToken) {
-    const { data, error } = await getSupabase().auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin + '/auth/?reset=1',
-        captchaToken: captchaToken || undefined
-    });
-    return { data, error };
-}
-
-/* Helpers exposed to auth UI so the Turnstile widget renders only
-   when the admin has configured a site key. Empty key → no widget,
-   no token expected, auth flow unchanged (existing users unaffected). */
+/* Turnstile 관련 helper — OAuth-only 전환 후 사용 사이트가 없지만,
+   향후 ReCAPTCHA·Turnstile 를 자체 폼에 다시 도입할 때를 위해
+   stub 으로 유지. TURNSTILE_SITE_KEY 가 비어있으면 false 반환. */
 function isCaptchaEnabled() {
     return !!TURNSTILE_SITE_KEY;
 }
