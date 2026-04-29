@@ -174,6 +174,37 @@ body{
 .count-row{display:flex;align-items:center;gap:10px;margin-top:16px}
 .count-row .lbl{font-size:.82em;color:var(--muted);font-weight:700;letter-spacing:.05em}
 .count-row .count-btns{display:inline-flex;gap:6px;margin-left:auto}
+
+/* ===== Per-category quota panel ===== */
+.quota-toggle-row{display:flex;align-items:center;justify-content:space-between;
+    gap:10px;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06)}
+.quota-toggle{display:inline-flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:.85em;font-weight:700;color:#fff}
+.quota-toggle input[type="checkbox"]{accent-color:#00D9FF;width:18px;height:18px;cursor:pointer}
+.quota-hint{font-size:.74em;color:var(--muted);font-style:italic}
+.quota-panel{margin-top:10px;padding:12px;border-radius:10px;
+    background:rgba(0,217,255,.04);border:1px solid rgba(0,217,255,.18)}
+.quota-list{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.quota-row{display:flex;align-items:center;gap:10px;padding:8px 10px;
+    border-radius:8px;background:rgba(255,255,255,.03)}
+.quota-row .qico{font-size:1.1em;line-height:1}
+.quota-row .qname{flex:1;font-size:.88em;font-weight:700;color:#fff}
+.quota-row .qnum{display:inline-flex;align-items:center;gap:4px}
+.quota-row .qnum button{width:26px;height:26px;border-radius:6px;border:1px solid rgba(255,255,255,.15);
+    background:rgba(255,255,255,.04);color:#fff;font-weight:900;font-family:inherit;
+    cursor:pointer;transition:background .15s}
+.quota-row .qnum button:hover{background:rgba(0,217,255,.15);border-color:#00D9FF}
+.quota-row .qnum input{width:42px;height:26px;text-align:center;border-radius:6px;
+    border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.25);color:#fff;
+    font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:800;font-size:.95em;
+    -moz-appearance:textfield;outline:none}
+.quota-row .qnum input::-webkit-outer-spin-button,
+.quota-row .qnum input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.quota-empty{padding:18px 12px;text-align:center;color:rgba(255,255,255,.4);
+    font-size:.85em;font-style:italic}
+.quota-sum{text-align:right;font-size:.85em;color:rgba(255,255,255,.7);font-weight:700;
+    padding-top:8px;border-top:1px dashed rgba(255,255,255,.08)}
+.quota-sum b{color:#00D9FF;font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.15em}
 .count-btn{
     padding:8px 14px;border-radius:10px;background:rgba(255,255,255,.03);
     border:1.5px solid rgba(255,255,255,.1);color:#fff;font-family:'Orbitron',sans-serif;
@@ -441,13 +472,29 @@ body{
     </div>
     <div class="setup-card">
         <div class="count-row">
-            <span class="lbl">문제 수</span>
-            <div class="count-btns">
+            <span class="lbl">총 문제 수</span>
+            <div class="count-btns" id="countBtns">
                 <button class="count-btn" data-count="5">5</button>
                 <button class="count-btn on" data-count="10">10</button>
                 <button class="count-btn" data-count="15">15</button>
                 <button class="count-btn" data-count="20">20</button>
             </div>
+        </div>
+        <!-- Per-category quota panel — collapsible. Even-distribution
+             mode (default) hides it; "직접 설정" toggle expands the
+             panel where the host can override each category's count.
+             quotaListEl is rebuilt every time selectedCats changes,
+             so the inputs always match the chips above. -->
+        <div class="quota-toggle-row">
+            <label class="quota-toggle">
+                <input type="checkbox" id="quotaModeChk">
+                <span>카테고리별 직접 설정</span>
+            </label>
+            <span class="quota-hint" id="quotaHint">균등 분배 중</span>
+        </div>
+        <div class="quota-panel" id="quotaPanel" hidden>
+            <div class="quota-list" id="quotaList"></div>
+            <div class="quota-sum">합계 <b id="quotaSum">0</b> 문제</div>
         </div>
         <div class="count-row" style="margin-top:12px">
             <span class="lbl">문제당 시간</span>
@@ -639,7 +686,7 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777440435"></script>
+<script src="/js/supabase-config.js?v=1777441236"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -709,8 +756,21 @@ let myUserId = null;
 let room = null;            /* LpRoom host */
 let guest = null;           /* LpRoom guest */
 let hostCtlRef = null;      /* LpHostCtl controller — null in solo */
-let selectedCats = ['kpop','variety','sports','general','retro','latest'];
+/* No default categories — the host explicitly picks one or more
+   before starting. The previous default of 6 pre-selected chips meant
+   players who didn't carefully un-pick ended up with a topic mix they
+   didn't want. */
+let selectedCats = [];
 let selectedCount = 10;
+/* Distribution mode for question allocation across categories.
+   'even'   — total split evenly across selected categories (default,
+              matches naive expectations)
+   'manual' — host explicitly types a per-category quota; total
+              becomes the sum.
+   perCategoryCounts mirrors the *current* effective quotas regardless
+   of mode, so the submit path is uniform. */
+let distributionMode = 'even';
+let perCategoryCounts = {};   /* { kpop:3, sports:3, ... } */
 let selectedTime = 4;
 /* When true (default), the host is added to the roster and plays
    alongside guests. When false, host is MC-only: sees the game flow
@@ -996,10 +1056,143 @@ function renderCats(){
             if (i >= 0) selectedCats.splice(i, 1);
             else selectedCats.push(cat);
             btn.classList.toggle('on', selectedCats.includes(cat));
+            /* Categories changed → recompute quotas + redraw the panel
+               so the manual-mode rows match the new chip set. */
+            recomputeQuotas();
         });
     });
 }
 renderCats();
+
+/* ============================================================
+   Per-category quota computation + UI
+   ============================================================ */
+/* Even-distribute total across the currently-selected categories.
+   Remainder goes to the first N categories (so 10 across 3 = 4,3,3
+   not 3,3,3+1-leftover). */
+function evenSplitQuotas(cats, total){
+    const out = {};
+    if (!cats || !cats.length || !total) return out;
+    const n = cats.length;
+    const base = Math.floor(total / n);
+    const extras = total - base * n;
+    cats.forEach((cat, i) => {
+        out[cat] = base + (i < extras ? 1 : 0);
+    });
+    return out;
+}
+
+/* Recompute perCategoryCounts based on current mode + selection.
+   In 'even' mode, derived from selectedCount.
+   In 'manual' mode, the user has typed explicit numbers; we KEEP any
+   that still apply to currently-selected cats and zero-out the rest.
+   Also re-renders the panel + sum + the count-btn selected state. */
+function recomputeQuotas(){
+    if (distributionMode === 'even'){
+        perCategoryCounts = evenSplitQuotas(selectedCats, selectedCount);
+    } else {
+        /* Manual mode — strip cats that were unselected, default newly-
+           added cats to 0. Sum becomes the new total. */
+        const next = {};
+        selectedCats.forEach(c => {
+            next[c] = perCategoryCounts[c] != null ? perCategoryCounts[c] : 0;
+        });
+        perCategoryCounts = next;
+        selectedCount = Object.values(perCategoryCounts).reduce((a, b) => a + b, 0);
+    }
+    renderQuotaPanel();
+    syncCountBtnsHighlight();
+}
+
+/* Re-highlight the 5/10/15/20 count chip that matches selectedCount.
+   Custom values (e.g. user typed 7 in manual mode) leave all chips
+   un-highlighted — that's the visual hint that the count is custom. */
+function syncCountBtnsHighlight(){
+    const btns = document.querySelectorAll('.count-btn[data-count]');
+    btns.forEach(b => {
+        b.classList.toggle('on', parseInt(b.dataset.count, 10) === selectedCount);
+    });
+}
+
+function renderQuotaPanel(){
+    const panel = document.getElementById('quotaPanel');
+    const list = document.getElementById('quotaList');
+    const sumEl = document.getElementById('quotaSum');
+    const hint = document.getElementById('quotaHint');
+    if (!panel || !list || !sumEl) return;
+    /* Always update sum + hint regardless of expand state — the user
+       might switch modes and the values should be in sync. */
+    const sum = Object.values(perCategoryCounts).reduce((a, b) => a + b, 0);
+    sumEl.textContent = sum;
+    if (hint){
+        hint.textContent = distributionMode === 'manual'
+            ? '카테고리별 직접 설정'
+            : (selectedCats.length ? '균등 분배 중' : '카테고리를 먼저 선택하세요');
+    }
+    panel.hidden = (distributionMode !== 'manual');
+    if (distributionMode !== 'manual') return;
+    if (!selectedCats.length){
+        list.innerHTML = '<div class="quota-empty">카테고리를 먼저 선택해주세요</div>';
+        return;
+    }
+    list.innerHTML = selectedCats.map(cat => {
+        const c = CATS[cat] || { emoji:'❓' };
+        const v = perCategoryCounts[cat] || 0;
+        return '<div class="quota-row" data-cat="' + cat + '">'
+            + '<span class="qico">' + c.emoji + '</span>'
+            + '<span class="qname">' + esc(catText(cat,'label')) + '</span>'
+            + '<span class="qnum">'
+            +   '<button data-q-step="-1" type="button" aria-label="감소">−</button>'
+            +   '<input type="number" min="0" max="30" value="' + v + '" data-q-input>'
+            +   '<button data-q-step="1" type="button" aria-label="증가">＋</button>'
+            + '</span>'
+            + '</div>';
+    }).join('');
+    /* Wire ± buttons + direct number input. Each interaction updates
+       perCategoryCounts and refreshes the live sum. */
+    list.querySelectorAll('.quota-row').forEach(row => {
+        const cat = row.dataset.cat;
+        const inp = row.querySelector('[data-q-input]');
+        function commit(v){
+            const n = Math.max(0, Math.min(30, parseInt(v, 10) || 0));
+            perCategoryCounts[cat] = n;
+            inp.value = n;
+            selectedCount = Object.values(perCategoryCounts).reduce((a, b) => a + b, 0);
+            const sum2 = selectedCount;
+            sumEl.textContent = sum2;
+            syncCountBtnsHighlight();
+        }
+        row.querySelectorAll('[data-q-step]').forEach(b => {
+            b.addEventListener('click', () => {
+                const step = parseInt(b.dataset.qStep, 10);
+                commit((perCategoryCounts[cat] || 0) + step);
+            });
+        });
+        inp.addEventListener('input', () => commit(inp.value));
+        inp.addEventListener('blur', () => commit(inp.value));
+    });
+}
+
+/* Wire the mode toggle. When user enables manual, we seed quotas from
+   the current even split (so they don't start from zeros). When they
+   disable, we revert to even split based on whatever selectedCount is. */
+(function _wireQuotaToggle(){
+    const chk = document.getElementById('quotaModeChk');
+    if (!chk) return;
+    chk.addEventListener('change', () => {
+        if (chk.checked){
+            distributionMode = 'manual';
+            /* Seed from current even split so the inputs aren't blank. */
+            if (Object.keys(perCategoryCounts).length === 0 || !selectedCats.every(c => c in perCategoryCounts)){
+                perCategoryCounts = evenSplitQuotas(selectedCats, selectedCount);
+            }
+        } else {
+            distributionMode = 'even';
+            perCategoryCounts = evenSplitQuotas(selectedCats, selectedCount);
+        }
+        renderQuotaPanel();
+    });
+})();
 
 /* Render language/region chips. Clicking a "ready" chip sets
    selectedLang and re-renders category labels (localized). "soon"
@@ -1039,6 +1232,16 @@ document.querySelectorAll('.count-btn[data-count]').forEach(b => {
         document.querySelectorAll('.count-btn[data-count]').forEach(x => x.classList.remove('on'));
         b.classList.add('on');
         selectedCount = parseInt(b.dataset.count, 10);
+        /* In manual mode, clicking a count chip means "redistribute
+           evenly to this new total" — easier than asking the user
+           to retype every per-category number. The chip click is a
+           clear "reset" gesture. */
+        if (distributionMode === 'manual'){
+            perCategoryCounts = evenSplitQuotas(selectedCats, selectedCount);
+            renderQuotaPanel();
+        } else {
+            recomputeQuotas();
+        }
     });
 });
 document.querySelectorAll('.count-btn[data-time]').forEach(b => {
@@ -1160,9 +1363,28 @@ $('btnCreate').addEventListener('click', async () => {
 
         /* Preload questions — filter by the host's chosen language so
            guests playing in different locales still see the same
-           bank the host picked (host's choice wins for the room). */
-        const { data, error } = await getSupabase().rpc('quiz_random_questions', {
-            p_categories: selectedCats, p_count: selectedCount, p_language: selectedLang
+           bank the host picked (host's choice wins for the room).
+           perCategoryCounts is the unified quota source: in 'even'
+           mode it's the auto-computed even split; in 'manual' mode
+           it's the host's explicit per-category numbers. Either way
+           the server enforces the quota strictly so e.g. {kpop:3,
+           sports:3} returns 3 + 3 = 6 questions, not 6 random
+           uniformly drawn from a possibly-skewed pool. */
+        if (!selectedCats.length){
+            toast('카테고리를 1개 이상 선택해주세요');
+            $('btnCreate').disabled = false;
+            $('btnCreate').textContent = '▶ 게임 시작!';
+            return;
+        }
+        const totalQuota = Object.values(perCategoryCounts).reduce((a,b)=>a+b,0);
+        if (totalQuota < 1){
+            toast('총 문제 수를 1개 이상으로 설정해주세요');
+            $('btnCreate').disabled = false;
+            $('btnCreate').textContent = '▶ 게임 시작!';
+            return;
+        }
+        const { data, error } = await getSupabase().rpc('quiz_random_questions_quota', {
+            p_quotas: perCategoryCounts, p_language: selectedLang
         });
         if (error || !data || !data.length){
             toast('문제 로드 실패: ' + ((error && error.message) || '빈 응답'));
@@ -2036,9 +2258,22 @@ async function saveAttempt(context){
 async function startSoloGame(){
     $('btnCreate').disabled = true;
     $('btnCreate').textContent = '로딩 중…';
+    if (!selectedCats.length){
+        toast('카테고리를 1개 이상 선택해주세요');
+        $('btnCreate').disabled = false;
+        $('btnCreate').textContent = '▶ 게임 시작!';
+        return;
+    }
+    const totalQuota = Object.values(perCategoryCounts).reduce((a,b)=>a+b,0);
+    if (totalQuota < 1){
+        toast('총 문제 수를 1개 이상으로 설정해주세요');
+        $('btnCreate').disabled = false;
+        $('btnCreate').textContent = '▶ 게임 시작!';
+        return;
+    }
     try {
-        const { data, error } = await getSupabase().rpc('quiz_random_questions', {
-            p_categories: selectedCats, p_count: selectedCount, p_language: selectedLang
+        const { data, error } = await getSupabase().rpc('quiz_random_questions_quota', {
+            p_quotas: perCategoryCounts, p_language: selectedLang
         });
         if (error || !data || !data.length){ toast('문제 로드 실패'); return; }
         questions = data.map(shuffleQuestion);
@@ -2245,6 +2480,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777440435"></script>
+<script src="/js/siteFooter.js?v=1777441236"></script>
 </body>
 </html>
