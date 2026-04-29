@@ -1899,6 +1899,10 @@ function beginDrawing(){
     if(window._lpHost){
         try{window._lpHost.broadcast('host:action',{type:'lotto_begin',speed:drawSpeed,setCount:setCount})}catch(_){}
     }
+    /* Keep the host's screen awake for the multi-second drum-roll +
+       ball-by-ball reveal. LpWakeLock auto re-acquires on visibility
+       changes, and we release in showResult/replay/leave paths. */
+    try { if(window.LpWakeLock) LpWakeLock.acquire('lotto'); } catch(_){}
     /* Speed 0 = Instant: skip the physics animation and burn through
        all N sets with pure Fisher-Yates sampling. History panel on the
        right updates in real-time and the fanfare plays once. Useful
@@ -1976,6 +1980,9 @@ function instantDraw(cfg){
     SFX.fanfare();
     _pendingDraw=null;
     currentSet=0;
+    /* Instant mode finishes synchronously — release the wake lock that
+       beginDrawing() acquired before checking drawSpeed===0. */
+    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
     /* Keep the user on the machine screen so they can immediately pull
        again with different settings. No result modal — the sidebar
        panel has everything they need. */
@@ -2120,6 +2127,7 @@ function drawNextBall(){
 /* Result */
 function showResult(){
     if(animId)cancelAnimationFrame(animId);
+    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
     if(typeof _lpBroadcastResult==='function')_lpBroadcastResult();
     document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='flex';
@@ -2573,7 +2581,9 @@ function init(){
         room.onGuestJoin(function(){window._lpBroadcastConfig()});
         /* Host gets pause + end buttons during the draw. */
         if(window.LpHostCtl){
-            window.LpHostCtl.install({role:'host',room:room,canPause:true});
+            window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:function(){
+                try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
+            }});
         }
     }
     document.querySelectorAll('.lp-room-online-btn').forEach(function(btn){
@@ -2600,7 +2610,9 @@ function init(){
             const sb=document.getElementById('startBtn');if(sb){sb.disabled=true;sb.style.opacity='.4'}
             document.querySelectorAll('.lp-room-online-btn').forEach(function(b){b.style.display='none'});
             if(window.LpHostCtl){
-                window.LpHostCtl.install({role:'guest',room:g,canPause:false});
+                window.LpHostCtl.install({role:'guest',room:g,canPause:false,onEnd:function(){
+                    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
+                }});
             }
             function applyConfig(p){
                 if(!p)return;
@@ -2790,6 +2802,7 @@ function init(){
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
         SFX.stopWind();
+        try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
         confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
         document.getElementById('resultScreen').style.display='none';
         drawnResults=[];drawnBalls=[];
@@ -2834,6 +2847,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777446553" defer></script>
+<script src="/js/siteFooter.js?v=1777447998" defer></script>
 </body>
 </html>
