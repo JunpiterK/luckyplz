@@ -725,7 +725,7 @@ body{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777444001"></script>
+<script src="/js/supabase-config.js?v=1777445830"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1637,17 +1637,48 @@ function wireGuestListeners(){
         renderPlayers(list);
         $('lobbyNum').textContent = list.length;
     });
+    /* Tracks the last (phase, idx) pair we rendered. Used to dedupe
+       host:snapshot replays so the same reveal pie chart doesn't
+       re-animate every time the guest watchdog fires a request. */
+    let _lastPhaseKey = '';
+    function _phaseKey(phase, idx){ return phase + ':' + (idx == null ? '' : idx); }
+
     guest.on('host:quiz_question', payload => {
+        _lastPhaseKey = _phaseKey('question', payload && payload.idx);
         startGuestQuestion(payload);
     });
     guest.on('host:quiz_reveal', payload => {
+        _lastPhaseKey = _phaseKey('reveal', currentQIdx);
         showRevealGuest(payload);
     });
     guest.on('host:quiz_leaderboard', payload => {
+        _lastPhaseKey = _phaseKey('leaderboard', payload && payload.idx);
         showLeaderboardGuest(payload);
     });
     guest.on('host:quiz_final', payload => {
+        _lastPhaseKey = _phaseKey('final', '');
         showFinalGuest(payload);
+    });
+    /* Snapshot replay — fired by the host either:
+       - in response to our guest:request_snapshot (watchdog after
+         silent socket / tab-background recovery), or
+       - automatically on host:join_ack for late joiners.
+       We dispatch to the same render functions the regular phase
+       events use, with a (phase, idx) dedupe so a watchdog burst on a
+       still-live socket doesn't flicker the UI. This is what stops the
+       "tablet stuck on lobby" bug from the user's PC-host + Android-
+       guest test: even if the tablet missed host:quiz_question, the
+       watchdog kicks request_snapshot 12s later and the host's reply
+       carries the current question. */
+    guest.on('host:snapshot', s => {
+        if (!s || !s.phase) return;
+        const k = _phaseKey(s.phase, s.idx);
+        if (k === _lastPhaseKey) return;
+        _lastPhaseKey = k;
+        if (s.phase === 'question' && s.question)         startGuestQuestion(s.question);
+        else if (s.phase === 'reveal' && s.reveal)        showRevealGuest(s.reveal);
+        else if (s.phase === 'leaderboard' && s.leaderboard) showLeaderboardGuest(s.leaderboard);
+        else if (s.phase === 'final' && s.final)          showFinalGuest(s.final);
     });
     /* Pause / resume / end / host-gone are all handled by LpHostCtl —
        installed in installHostCtlAsGuest() right after guestJoin() so
@@ -1898,6 +1929,16 @@ function startHostQuestion(){
         startAt: qStartAt
     };
     room.broadcast('host:quiz_question', payload);
+    /* Persist current phase as the room's snapshot so:
+       (a) guests joining mid-game receive it on host:join_ack
+       (b) guests recovering from a transient socket drop / background
+           tab throttle (Android Chrome notoriously suspends WS on
+           backgrounded tabs) get it on guest:request_snapshot from
+           the watchdog.
+       This was the root cause of the "tablet stuck on lobby" report —
+       quiz never set a snapshot, so the host's request_snapshot reply
+       was empty and reconnecting guests never caught up. */
+    if (room.snapshot) room.snapshot({phase:'question', idx:payload.idx, question:payload});
     renderHostQuestionView(payload, q);
     /* Host auto-advances when the timer expires OR all answers in */
     clearTimeout(questionTimer);
@@ -2080,6 +2121,7 @@ function revealHost(){
     };
     /* Broadcast reveal. Each guest filters perUserGain by its own gid. */
     room.broadcast('host:quiz_reveal', payload);
+    if (room.snapshot) room.snapshot({phase:'reveal', idx:currentQIdx, reveal:payload});
     /* Render host-side reveal */
     renderReveal({
         correct: q.correct, options: q.options, question: q.question,
@@ -2101,7 +2143,9 @@ function revealHost(){
 }
 
 function advanceHostToLeaderboard(ranking){
-    room.broadcast('host:quiz_leaderboard', {ranking, total:questions.length, idx:currentQIdx});
+    const lbPayload = {ranking, total:questions.length, idx:currentQIdx};
+    room.broadcast('host:quiz_leaderboard', lbPayload);
+    if (room.snapshot) room.snapshot({phase:'leaderboard', idx:currentQIdx, leaderboard:lbPayload});
     renderLeaderboard(ranking);
     showView('vLb');
     $('lbStatus').textContent = '3초 후 다음 문제…';
@@ -2317,6 +2361,7 @@ function finalizeHost(){
         }));
     const payload = { ranking: ranked, total: questions.length };
     room.broadcast('host:quiz_final', payload);
+    if (room.snapshot) room.snapshot({phase:'final', final:payload});
     renderFinal(ranked);
     /* Host record */
     const mine = ranked.find(r => r.gid === '__host__');
@@ -2525,6 +2570,6 @@ try{
 }catch(_){}
 </script>
 <script src="/js/topNav.js"></script>
-<script src="/js/siteFooter.js?v=1777444001"></script>
+<script src="/js/siteFooter.js?v=1777445830"></script>
 </body>
 </html>

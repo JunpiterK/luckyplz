@@ -663,7 +663,19 @@
            latest payload per state-like event and replay it synchronously
            from g.on() when the listener finally arrives. */
         const cache={};
-        const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result|guests)$/;
+        /* STATEFUL events are cached on the guest side so a late
+           `g.on(event, cb)` registration still receives the most recent
+           value (the cb fires synchronously with the cached payload).
+           This catches the listener-registration race: lpRoom resolves
+           `guestJoin()` once the channel is SUBSCRIBED + join_ack
+           landed, after which the game wires its handlers — but if a
+           host broadcast arrives in the microtask gap between the
+           guestJoin promise resolving and the .on() calls running, the
+           event would otherwise be lost. Quiz needs the four phase
+           events here so a guest who joined a fraction late, or whose
+           browser was just slow registering listeners, still picks up
+           the current question / reveal / leaderboard / final. */
+        const STATEFUL=/^host:(snapshot|config|state|start|spin_start|result|guests|quiz_question|quiz_reveal|quiz_leaderboard|quiz_final)$/;
 
         /* ---- Liveness watchdog + host-clock skew ----
            Track the wall-clock time of the LAST host event we saw
