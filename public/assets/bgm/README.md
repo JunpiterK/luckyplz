@@ -14,7 +14,12 @@ public/assets/bgm/<game>/
 
 - 파일명은 `track1.mp3` ~ `track4.mp3` 고정. 그 이상은 인식 안 함 (`MAX_TRACKS=4` 상수).
 - 파일이 없으면 lpBgm.js가 콘솔에 로그만 남기고 BGM 없이 동작.
-- car-racing / dodge는 자체 오디오 엔진이 있어 lpBgm 자동 스킵.
+- **car-racing / dodge** 는 자체 오디오 엔진이 있어 **lpBgm 자동 재생은 스킵**
+  (게임 페이즈에 묶인 페이드 인/아웃·일시정지 등을 직접 제어).
+  - **car-racing**: 파일 저장 위치 표준 컨벤션 따름
+    (`/assets/bgm/car-racing/track1.mp3`). 자체 엔진이 이 경로를 `new Audio()` 로 직접 로드.
+  - **dodge**: 아직 `public/games/dodge/assets/bgm_dodge_*.mp3` 에 머물러 있음. 향후
+    `/assets/bgm/dodge/track*.mp3` 로 이전 예정 (car-racing 과 같은 패턴).
 
 ## 권장 mp3 사양
 

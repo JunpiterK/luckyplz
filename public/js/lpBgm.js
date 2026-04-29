@@ -32,8 +32,16 @@
        handler to retry.
 
    Skipped games: car-racing and dodge ship their own audio engines
-   (in-page logic that handles their game's BGM lifecycle). Adding a
-   second concurrent stream on top would clash.
+   (in-page logic that handles their game's BGM lifecycle — fade-in
+   coupled to race start, pause-with-game, etc). Adding a second
+   concurrent stream on top would clash.
+
+   Note: even though they're skipped from auto-play here, both games
+   STORE their mp3 files at /assets/bgm/<gameId>/track*.mp3 (same
+   convention as the auto-played games) so the directory tree stays
+   symmetric and Cloudflare's /assets/* cache rule applies uniformly.
+   They just construct their own Audio() inside their game scripts
+   pointing at the shared file path.
 
    Public API:
      LpBgm.start()        — kick off (auto-runs on page load + first tap)
