@@ -69,6 +69,7 @@ h1.headline{
 .avatar-meta .label{font-size:.66em;color:var(--muted-2);letter-spacing:.1em;text-transform:uppercase;font-weight:700;margin-bottom:2px}
 .avatar-meta .name{font-size:.92em;color:#fff;font-weight:600}
 .avatar-meta .small{font-size:.78em;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.avatar-meta .last-signin{font-size:.7em;color:rgba(255,255,255,.4);margin-top:4px;font-weight:500;letter-spacing:.01em;line-height:1.4}
 
 .form-group{margin-bottom:12px;text-align:left}
 .form-group .label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;padding:0 2px}
@@ -119,6 +120,14 @@ h1.headline{
 }
 .footer-row .signout:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2);color:#fff}
 .footer-row .signout:active{transform:translateY(1px)}
+.footer-row .signout-group{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.footer-row .signout-all{
+    background:none;border:0;color:rgba(255,255,255,.32);
+    font-size:.7em;font-weight:500;cursor:pointer;
+    padding:2px 4px;letter-spacing:.01em;line-height:1.3;
+    transition:color .2s;font-family:inherit;text-align:left
+}
+.footer-row .signout-all:hover{color:rgba(255,107,139,.85)}
 .footer-row .view-profile{font-size:.8em;color:var(--muted-2);text-decoration:none;transition:color .2s}
 .footer-row .view-profile:hover{color:#FFE66D}
 
@@ -193,7 +202,9 @@ h1.headline{
     .btn-row button{padding:11px;font-size:.82em}
     .footer-row{margin-top:10px;padding-top:10px}
     .footer-row .signout{padding:8px 14px;font-size:.78em}
+    .footer-row .signout-all{font-size:.66em;padding:1px 4px}
     .footer-row .view-profile{font-size:.76em}
+    .avatar-meta .last-signin{font-size:.66em;line-height:1.35}
     .danger-zone-compact{margin-top:8px;padding-top:8px}
     .delete-acct-btn{font-size:.74em;padding:6px 10px}
     .confirm-card{padding:18px 16px 16px}
@@ -235,6 +246,11 @@ h1.headline{
             <div class="label" id="providerLabel">Signed in with</div>
             <div class="name" id="providerName">—</div>
             <div class="small" id="providerEmail"></div>
+            <!-- Last sign-in line — populated from auth.users.last_sign_in_at.
+                 Lets the user see how stale their session is and reminds
+                 them that login persists for 30d unless they sign out
+                 explicitly (Discord/Steam pattern). -->
+            <div class="last-signin" id="lastSigninLine" title=""></div>
         </div>
     </div>
 
@@ -283,7 +299,16 @@ h1.headline{
     </form>
 
     <div class="footer-row">
-        <button type="button" class="signout" id="signOutBtn">Sign out</button>
+        <!-- Sign-out group — primary button + secondary link.
+             "Sign out from all devices" calls Supabase's
+             auth.signOut({scope:'global'}) which revokes every
+             refresh token tied to this user, kicking them out
+             everywhere (including this device). Useful when the
+             user suspects token leak / shared device. -->
+        <div class="signout-group">
+            <button type="button" class="signout" id="signOutBtn">Sign out</button>
+            <button type="button" class="signout-all" id="signOutAllBtn">Sign out from all devices</button>
+        </div>
         <a class="view-profile" id="viewProfileLink" target="_blank" rel="noopener">View public page →</a>
     </div>
 
@@ -351,7 +376,7 @@ h1.headline{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1777494799"></script>
+<script src="/js/supabase-config.js?v=1777496700"></script>
 <script>
 /* ================================================================
    /me/ — own profile editor.
@@ -392,7 +417,13 @@ const T = {
         delFinal:'⚠ You may not be able to sign up again with the same nickname right away.',
         delNo:'No', delYes:'Yes, delete my account',
         delErrAdmin:'Super-admin accounts cannot self-delete. Demote to a regular user role first.',
-        delErrGeneric:'Failed to delete: '
+        delErrGeneric:'Failed to delete: ',
+        lastSigninPrefix:'Last sign-in',
+        autoStaySuffix:'· auto-stays 30 days unless you sign out',
+        signOutAll:'Sign out from all devices',
+        signOutAllConfirm:'Sign out from every device that has your account? You\'ll be signed out here too.',
+        signOutAllDone:'Signed out everywhere. Redirecting…',
+        reauthRequired:'For security, account deletion is only allowed within 30 minutes of signing in. Sign in again now?'
     },
     ko:{
         progress:'프로필 수정', headline:'내 프로필',
@@ -417,6 +448,12 @@ const T = {
         delNo:'아니오', delYes:'예, 탈퇴할게요',
         delErrAdmin:'최고 관리자 계정은 직접 탈퇴할 수 없어요. 먼저 관리자에서 일반 유저로 역할을 낮춰주세요.',
         delErrGeneric:'탈퇴 실패: ',
+        lastSigninPrefix:'최근 로그인',
+        autoStaySuffix:'· 로그아웃하지 않으면 30일간 유지돼요',
+        signOutAll:'다른 기기에서도 로그아웃',
+        signOutAllConfirm:'이 계정으로 로그인된 모든 기기에서 로그아웃할까요? 이 기기에서도 로그아웃 돼요.',
+        signOutAllDone:'모든 기기에서 로그아웃 됐어요. 잠시 후 이동해요…',
+        reauthRequired:'보안을 위해 계정 탈퇴는 최근 30분 이내에 로그인한 경우에만 가능해요. 지금 다시 로그인하시겠어요?',
         ok_saved:'✓ 저장됐어요', msg_checking:'중복 확인 중…', msg_available:'✓ 사용 가능해요',
         msg_invalid:'영문·숫자·한글·_·- 만 가능 (2–20자)',
         msg_taken:'이미 사용 중이에요.', msg_reserved:'사용할 수 없는 이름이에요.',
@@ -447,7 +484,13 @@ const T = {
         delFinal:'⚠ 同じニックネームですぐに再登録できない場合があります。',
         delNo:'いいえ', delYes:'はい、退会します',
         delErrAdmin:'スーパー管理者アカウントは自己退会できません。先に一般ユーザーに降格してください。',
-        delErrGeneric:'退会失敗：'
+        delErrGeneric:'退会失敗：',
+        lastSigninPrefix:'最終ログイン',
+        autoStaySuffix:'· ログアウトしない限り30日間保持されます',
+        signOutAll:'すべてのデバイスからログアウト',
+        signOutAllConfirm:'このアカウントでログイン中のすべてのデバイスからログアウトしますか？このデバイスもログアウトされます。',
+        signOutAllDone:'すべてのデバイスからログアウトしました。リダイレクト中…',
+        reauthRequired:'セキュリティのため、アカウント削除は最終ログインから30分以内のみ可能です。今すぐ再ログインしますか？'
     },
     zh:{
         progress:'编辑资料', headline:'个人资料',
@@ -474,7 +517,13 @@ const T = {
         delFinal:'⚠ 同一昵称可能无法立即重新注册。',
         delNo:'否', delYes:'是的，注销',
         delErrAdmin:'超级管理员账号不能自行注销。请先降级为普通用户。',
-        delErrGeneric:'注销失败：'
+        delErrGeneric:'注销失败：',
+        lastSigninPrefix:'最近登录',
+        autoStaySuffix:'· 不主动退出会自动保持30天',
+        signOutAll:'从所有设备退出',
+        signOutAllConfirm:'要从此账号登录的所有设备退出吗？此设备也会退出。',
+        signOutAllDone:'已从所有设备退出。即将跳转…',
+        reauthRequired:'为了安全，注销账号只能在最近30分钟内登录的情况下进行。是否现在重新登录？'
     }
 };
 function detectLang(){
@@ -503,6 +552,7 @@ $('emailHint').textContent=t.emailHint;
 $('saveLabel').textContent=t.save;
 $('cancelBtn').textContent=t.cancel;
 $('signOutBtn').textContent=t.signOut;
+if($('signOutAllBtn'))$('signOutAllBtn').textContent=t.signOutAll||'다른 기기에서도 로그아웃';
 $('viewProfileLink').textContent=t.viewProfile;
 $('homeLink').textContent=t.home;
 $('soH2').textContent=t.soH;
@@ -551,6 +601,9 @@ let currentUser=null, currentProfile=null, originalNickname='';
            main UI doesn't wait on the RPC. If the user is in cooldown,
            the input gets locked + a countdown badge appears below. */
         _refreshNicknameCooldown();
+        /* Last sign-in display — depends on currentUser. Safe to call
+           synchronously here since currentUser is just set above. */
+        try { _refreshLastSignin(); } catch(_){}
     } catch(e){
         console.error('[me init]',e);
     } finally {
@@ -786,6 +839,88 @@ $('signOutBtn').addEventListener('click',async()=>{
     location.replace('/');
 });
 
+/* ---- "Sign out from all devices" ----
+   Calls Supabase's signOut with scope:'global' which revokes every
+   refresh token tied to this user (server-side), kicking them out
+   on every browser/device they're currently signed in on — including
+   this one. Useful when the user suspects token leakage or wants a
+   clean slate after using a shared computer. Free feature, no extra
+   infra (Supabase exposes it natively). */
+if ($('signOutAllBtn')){
+    $('signOutAllBtn').addEventListener('click', async () => {
+        if (!confirm(t.signOutAllConfirm || '모든 기기에서 로그아웃할까요?')) return;
+        $('loadingOverlay').classList.add('on');
+        try {
+            const sb = getSupabase();
+            await sb.auth.signOut({ scope: 'global' });
+        } catch(e) {
+            console.warn('[me.signOutAll]', e);
+            /* Fall back to local sign-out if global failed (e.g.
+               network blip — local still goes through). */
+            try { await signOut(); } catch(_){}
+        }
+        try { clearProfileCache(); } catch(_){}
+        location.replace('/');
+    });
+}
+
+/* ---- Last sign-in display + Sudo helpers ----
+   `currentUser.last_sign_in_at` is the ISO timestamp of the user's
+   most recent INTERACTIVE sign-in (not refreshed on token rotation),
+   so it's a stable indicator of "how long ago did the user actually
+   prove their identity?". We use it for two things:
+
+     1. Display: "Last sign-in: 2 hours ago" so the user can see
+        their session is fresh / stale and isn't surprised by the
+        30-day persistent-login policy.
+     2. Sudo gate: account deletion requires the value to be within
+        SUDO_WINDOW_MS. If older, we send the user back through
+        /auth/ to re-authenticate before allowing the destructive
+        op (GitHub Sudo Mode pattern).
+
+   30-minute window chosen because: long enough that a normal play
+   session won't trip it, short enough that yesterday's stale
+   browser tab can't delete the account. */
+const SUDO_WINDOW_MS = 30 * 60 * 1000;
+function _sudoFresh(){
+    const t = currentUser && currentUser.last_sign_in_at;
+    if (!t) return false;
+    return (Date.now() - new Date(t).getTime()) < SUDO_WINDOW_MS;
+}
+function _formatRelative(iso){
+    if (!iso) return '';
+    /* Use Intl.RelativeTimeFormat — built-in to all modern browsers,
+       handles all 4 supported locales (en/ko/ja/zh) and en-GB. Free
+       and accurate (handles plurals, etc.). */
+    const ms = new Date(iso).getTime() - Date.now();   /* negative → past */
+    const sec = ms / 1000;
+    let val, unit;
+    if (Math.abs(sec) < 60)        { val = Math.round(sec);          unit='second'; }
+    else if (Math.abs(sec) < 3600) { val = Math.round(sec/60);       unit='minute'; }
+    else if (Math.abs(sec) < 86400){ val = Math.round(sec/3600);     unit='hour';   }
+    else if (Math.abs(sec) < 86400*30){ val=Math.round(sec/86400);  unit='day';    }
+    else                           { val = Math.round(sec/(86400*30)); unit='month'; }
+    try {
+        const loc = (lang==='gb') ? 'en-GB' : lang;
+        return new Intl.RelativeTimeFormat(loc, { numeric: 'auto' }).format(val, unit);
+    } catch(_) {
+        /* Older browser fallback */
+        return new Date(iso).toLocaleDateString();
+    }
+}
+function _refreshLastSignin(){
+    const el = $('lastSigninLine');
+    if (!el || !currentUser) return;
+    const iso = currentUser.last_sign_in_at;
+    if (!iso){ el.textContent=''; return; }
+    const rel = _formatRelative(iso);
+    /* Format: "최근 로그인: 2시간 전 · 30일 자동 유지" */
+    el.textContent = (t.lastSigninPrefix || 'Last sign-in') + ': ' + rel
+                   + ' ' + (t.autoStaySuffix || '');
+    /* Tooltip with the exact local timestamp for power users. */
+    try { el.title = new Date(iso).toLocaleString(); } catch(_){}
+}
+
 /* ---- KISA marketing-consent toggle ----
    Loads current state from currentProfile.marketing_agreed_at (set by
    the consent migration) and persists changes via set_consent RPC.
@@ -895,6 +1030,27 @@ if ($('dataExportBtn')){
 
     function openModal(){
         if(!currentProfile){ return; }
+        /* Sudo gate — for destructive ops (delete account), require
+           the user's last interactive sign-in to be within the last
+           SUDO_WINDOW_MS (30 min). If stale, prompt them to re-auth
+           via /auth/?return=/me/. After re-login, last_sign_in_at
+           updates and they can re-open this modal. Mirrors GitHub's
+           "Sudo Mode" pattern. */
+        if (typeof _sudoFresh === 'function' && !_sudoFresh()){
+            const msg = (t.reauthRequired || '보안을 위해 다시 로그인이 필요해요. 지금 로그인하시겠어요?');
+            if (confirm(msg)){
+                /* Sign out locally + redirect to /auth/. The return
+                   param brings them back to /me/ post-login. The
+                   reauth flag is informational; /auth/ ignores it
+                   today but it's there for future banner UX. */
+                (async () => {
+                    try { await signOut(); } catch(_){}
+                    try { clearProfileCache(); } catch(_){}
+                    location.replace('/auth/?return=' + encodeURIComponent('/me/') + '&reauth=1');
+                })();
+            }
+            return;
+        }
         errEl.textContent='';
         btnConfirm.disabled=false;   /* No typing gate — Yes is always enabled */
         modal.classList.add('on');
