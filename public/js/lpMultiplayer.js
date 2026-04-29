@@ -124,10 +124,33 @@
     '.lp-mp-footer .lp-mp-danger:hover{background:rgba(220,70,70,.3);border-color:rgba(255,110,110,.7);color:#fff;',
     '  box-shadow:0 0 12px rgba(255,100,100,.3)}',
 
-    /* Mobile: bottom docking, no drag. */
+    /* Mobile + tablet: full-width pill, draggable on the Y-axis only.
+       Phone screens are too small to free-drag horizontally without
+       clipping off-screen, so horizontal stays locked at 10px gutters
+       and only the vertical position is user-controllable. The grip
+       bar (::before) is the iOS-style affordance — without it users
+       wouldn't know the bar can be moved. */
     '@media (max-width:640px){.lp-mp-panel{left:10px!important;right:10px!important;',
-    '  top:auto!important;bottom:10px;width:auto!important;max-width:none}',
-    '  .lp-mp-titlebar{cursor:default}',
+    '  width:auto!important;max-width:none}',
+    /* Default anchor when JS hasn\'t set a custom top: bottom of
+       viewport (matches the original docked behaviour). Once the
+       user drags, JS sets data-mob-positioned="1" + inline top:Xpx
+       and bottom:auto, taking over from the default rules below. */
+    '  .lp-mp-panel:not([data-mob-positioned="1"]){top:auto!important;bottom:10px!important}',
+    /* touch-action:none lets us preventDefault touchmove on the bar
+       so dragging the bar doesn\'t scroll the page underneath. */
+    '  .lp-mp-titlebar{cursor:grab;touch-action:none;padding-top:14px;position:relative}',
+    '  .lp-mp-titlebar:active{cursor:grabbing}',
+    /* iOS-style grip bar at the top of the titlebar. Subtle cyan tint
+       matches the panel theme; only shown on touch breakpoints because
+       desktop already has a clear "click and drag" affordance via the
+       hover cursor change. */
+    '  .lp-mp-titlebar::before{content:"";position:absolute;top:5px;left:50%;',
+    '    transform:translateX(-50%);width:42px;height:4px;border-radius:999px;',
+    '    background:rgba(79,195,247,.55);box-shadow:0 0 6px rgba(79,195,247,.35);pointer-events:none}',
+    /* Expanded view always covers the full screen — explicit override
+       so a user who dragged + then expanded doesn\'t see a clipped
+       panel sticking out the top. */
     '  .lp-mp-panel[data-view="expanded"]{top:10px!important;bottom:10px!important;',
     '    left:8px!important;right:8px!important;max-height:none}}',
     ''
@@ -168,41 +191,75 @@
     return{x:window.innerWidth-360,y:82};// right-ish, below the status pill
   }
 
-  /* ---------- drag (desktop) ----------
-     Each mount registers four window-level move/up listeners. Without
-     tracking, every game-page transit (transferTo) leaks four more
-     onto window. Returned teardown is invoked from unmount(). */
+  /* ---------- drag (desktop / mobile / tablet) ----------
+     Desktop + tablet: free X/Y drag.
+     Mobile (≤640px): vertical-only drag — the panel always spans the
+       viewport width minus 10px gutters, horizontal moves would just
+       clip it off-screen on a 360px phone. preventDefault on touchmove
+       (passive:false) keeps the page from scrolling while the user
+       drags the bar.
+     Each mount registers window-level move/up listeners — without
+     teardown they'd leak across every transferTo. Returned function
+     is invoked from unmount(). */
   function enableDrag(panel){
-    if(window.innerWidth<=640)return function(){};
     var bar=panel.querySelector('.lp-mp-titlebar');
     if(!bar)return function(){};
-    var dragging=false,sx=0,sy=0,ox=0,oy=0;
+    var dragging=false,sx=0,sy=0,ox=0,oy=0,isMobile=false,moved=false;
     function onDown(e){
       if(e.target.closest('button'))return;
+      /* Don't let the user drag while expanded — the panel covers the
+         whole screen anyway, and drag would do nothing visible. */
+      if(panel.getAttribute('data-view')==='expanded')return;
+      isMobile=window.innerWidth<=640;
       var pt=e.touches?e.touches[0]:e;
-      dragging=true;sx=pt.clientX;sy=pt.clientY;
+      dragging=true;moved=false;
+      sx=pt.clientX;sy=pt.clientY;
       var r=panel.getBoundingClientRect();ox=r.left;oy=r.top;
       if(e.preventDefault)e.preventDefault();
     }
     function onMove(e){
       if(!dragging)return;
       var pt=e.touches?e.touches[0]:e;
+      var dx=pt.clientX-sx,dy=pt.clientY-sy;
+      /* Track meaningful motion so a tap that moved <4px doesn't
+         persist a position. Avoids false-saves on scrolly phones. */
+      if(!moved&&(Math.abs(dx)>4||Math.abs(dy)>4))moved=true;
       var r=panel.getBoundingClientRect();
-      var pos=clampPos(ox+(pt.clientX-sx),oy+(pt.clientY-sy),r.width,r.height);
-      panel.style.left=pos.x+'px';panel.style.top=pos.y+'px';
+      if(isMobile){
+        /* Mobile: lock X to the gutter, free Y. Touchmove must be
+           preventDefault'd to suppress page scroll — the listener
+           below is registered with passive:false to allow it. */
+        if(e.cancelable&&e.preventDefault)e.preventDefault();
+        var pos=clampPos(r.left,oy+dy,r.width,r.height);
+        panel.style.top=pos.y+'px';
+        panel.style.bottom='auto';
+        panel.setAttribute('data-mob-positioned','1');
+      }else{
+        var pos2=clampPos(ox+dx,oy+dy,r.width,r.height);
+        panel.style.left=pos2.x+'px';panel.style.top=pos2.y+'px';
+      }
     }
     function onUp(){
       if(!dragging)return;
       dragging=false;
+      if(!moved)return;
       var r=panel.getBoundingClientRect();
-      writeState({pos:{x:r.left,y:r.top}});
+      if(isMobile){
+        writeState({mobY:r.top});
+      }else{
+        writeState({pos:{x:r.left,y:r.top}});
+      }
     }
     bar.addEventListener('mousedown',onDown);
     window.addEventListener('mousemove',onMove);
     window.addEventListener('mouseup',onUp);
     bar.addEventListener('touchstart',onDown,{passive:false});
-    window.addEventListener('touchmove',onMove,{passive:true});
+    /* passive:false so onMove can preventDefault the page scroll
+       while dragging on mobile. Negligible perf cost vs the scroll
+       lock benefit during an active drag. */
+    window.addEventListener('touchmove',onMove,{passive:false});
     window.addEventListener('touchend',onUp);
+    window.addEventListener('touchcancel',onUp);
     return function teardown(){
       try{bar.removeEventListener('mousedown',onDown)}catch(_){}
       try{window.removeEventListener('mousemove',onMove)}catch(_){}
@@ -210,6 +267,7 @@
       try{bar.removeEventListener('touchstart',onDown)}catch(_){}
       try{window.removeEventListener('touchmove',onMove)}catch(_){}
       try{window.removeEventListener('touchend',onUp)}catch(_){}
+      try{window.removeEventListener('touchcancel',onUp)}catch(_){}
     };
   }
 
@@ -226,8 +284,25 @@
     var st=readState();
     p.setAttribute('data-view',st.view||'normal');
 
-    var pos=st.pos||defaultPos();
-    if(pos){p.style.left=pos.x+'px';p.style.top=pos.y+'px'}
+    var isMob=window.innerWidth<=640;
+    if(isMob){
+      /* Restore the user's last-dragged Y on mobile so the panel re-
+         appears wherever they parked it on the previous page. Without
+         this, every transferTo would slap the panel back at the bottom
+         even though the user had moved it to the top to expose the
+         floating-home button. */
+      if(typeof st.mobY==='number'){
+        var c=clampPos(0,st.mobY,window.innerWidth-20,200);
+        p.style.top=c.y+'px';
+        p.style.bottom='auto';
+        p.setAttribute('data-mob-positioned','1');
+      }
+      /* else: CSS default (anchored bottom:10px) takes over via
+         :not([data-mob-positioned]) selector. */
+    }else{
+      var pos=st.pos||defaultPos();
+      if(pos){p.style.left=pos.x+'px';p.style.top=pos.y+'px'}
+    }
 
     p.innerHTML=
       '<div class="lp-mp-titlebar">'
@@ -468,17 +543,36 @@
     }
   },true);
 
-  /* Re-clamp on resize/orientation so the panel never ends up off-screen. */
+  /* Re-clamp on resize/orientation so the panel never ends up off-screen.
+     On mobile we used to wipe inline left/top on every resize (relying on
+     the CSS default), but that meant a portrait→landscape rotation would
+     reset a user-dragged position back to the bottom. Now we keep the
+     dragged Y if any, just re-clamp it into the new viewport. */
   window.addEventListener('resize',function(){
     if(!current||!current.panel)return;
     var p=current.panel;
     if(window.innerWidth<=640){
-      p.style.left='';p.style.top='';
+      /* Wipe desktop-only inline left/right that might be stale from
+         a previous landscape session — mobile CSS forces 10px gutters. */
+      p.style.left='';
+      if(p.getAttribute('data-mob-positioned')==='1'){
+        var rM=p.getBoundingClientRect();
+        var cM=clampPos(0,rM.top,rM.width||(window.innerWidth-20),rM.height||200);
+        p.style.top=cM.y+'px';
+        p.style.bottom='auto';
+      }else{
+        p.style.top='';
+      }
       return;
     }
+    /* Desktop / tablet: free-drag, just clamp. */
     var r=p.getBoundingClientRect();
     var c=clampPos(r.left,r.top,r.width,r.height);
     p.style.left=c.x+'px';p.style.top=c.y+'px';
+    /* If we came back from mobile (rare — orientation can swap the
+       breakpoint), drop the data attribute so desktop CSS rules
+       apply cleanly. */
+    p.removeAttribute('data-mob-positioned');
   });
 
   window.LpMultiplayer={
