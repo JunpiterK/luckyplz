@@ -57,6 +57,41 @@
      Lets games interpolate animations against a shared "host time"
      even when phone clocks drift seconds apart.
 
+  ============ Reliability hardening (2026-04 pass 2) ============
+
+  7. Sequence numbering on every broadcast — host stamps _seq on each
+     outbound event (monotonic, per-room). Guests track the highest
+     _seq they've seen; a gap (received seq > expected) immediately
+     fires guest:request_snapshot instead of waiting up to 12s for
+     the silence watchdog. 50ms debounce coalesces close gaps into
+     a single resync. Pattern: Source/Quake/Phoenix Channels all
+     sequence-stamp every server frame for exactly this purpose.
+     Tick events (host:tick / host:frame) are EXCLUDED from gap
+     recovery — losing a tick is normal best-effort and the next
+     tick re-establishes position; we don't want to spam snapshot
+     requests for the 20Hz physics stream.
+
+  8. Snapshot freshness guard — `room.snapshot()` records _seqAtSnap
+     (= current broadcast seq) on every set. On the guest, an arriving
+     host:snapshot is dropped if its _seqAtSnap < last seen seq (we
+     already have newer state) or if it equals the last applied
+     snapshot generation (watchdog re-fire dedupe). Without this, a
+     reordered late snapshot would silently overwrite newer state.
+
+  9. Critical-event retransmit — host:close is sent 3x at 200ms
+     spacing with a shared _id. Guests dedupe redundant copies via
+     a 100-entry LRU set keyed on _id. A single dropped packet no
+     longer leaves guests stuck on a phantom-alive room (they get
+     out within ~600ms even on lossy connections vs. 12s on the
+     watchdog path). Same _id+retry pattern is available to game
+     code for any other "must arrive" event.
+
+ 10. Per-guest action rate limit (token bucket: 10/s sustained,
+     burst 20). The host's guest:action handler drops floods from a
+     buggy/malicious guest before they can pin the host's main
+     thread. Normal play (most games <5 actions/min per guest) is
+     well below the limit.
+
   ============ Roadmap (NOT yet implemented) ============
 
   A. WebRTC DataChannel fast-path for SAME-NETWORK / nearby peers.
@@ -93,7 +128,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.23a';
+    const LP_ROOM_VERSION='2026.04.29-seq';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Diagnostic log — console-only. The visible floating panel was
@@ -315,11 +350,18 @@
         /* Generic guest→host action channel. Games register a handler
            via `room.onGuestAction(cb)` to receive things like "a guest
            claims bingo". The payload carries `gid` + `nickname` so the
-           host can validate the sender is actually in the room. */
+           host can validate the sender is actually in the room.
+           Per-guest token-bucket rate limit (10/s, burst 20) drops
+           floods from a buggy/malicious client without affecting normal
+           play (most games send <5 actions/min per guest). */
         const guestActionCbs=[];
         chan.on('broadcast',{event:'guest:action'},function(msg){
             const p=msg.payload||{};
             if(!p.gid||!guests.has(p.gid))return; /* ignore spoof */
+            if(!_guestActionAllowed(p.gid)){
+                dbgLog('host: rate-limited guest:action from '+p.gid.slice(0,6));
+                return;
+            }
             guestActionCbs.forEach(function(cb){try{cb(p)}catch(_){}});
         });
 
@@ -372,6 +414,34 @@
            Reference: https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking */
         const TICK_EVENT=/^host:(tick|frame)$/;
         let _lastTickT=0;
+
+        /* ---- Broadcast sequence numbering ----
+           Every outbound broadcast gets a monotonic _seq stamp so the
+           guest can detect dropped events ("expected seq=42, got 44 →
+           snapshot resync RIGHT NOW") instead of waiting for the 12s
+           silence watchdog. Pattern: Source/Quake/Phoenix Channels all
+           sequence-stamp every server frame for exactly this purpose.
+           Snapshots also embed _seqAtSnap = _bcastSeq at the time the
+           snapshot was set, so guests can drop stale snapshots whose
+           generation is older than their current state. */
+        let _bcastSeq=0;
+
+        /* ---- Per-guest rate limit on guest:action ----
+           Token bucket: 10 actions/sec sustained, burst up to 20.
+           More than enough for normal play (most games send <5/min),
+           tight enough that a bug or malicious flood can't pin the
+           host's main thread. */
+        const _guestActionBuckets=new Map(); /* gid → {tokens,lastRefillT} */
+        function _guestActionAllowed(gid){
+            const now=performance.now();
+            let b=_guestActionBuckets.get(gid);
+            if(!b){b={tokens:10,lastRefillT:now};_guestActionBuckets.set(gid,b)}
+            const elapsed=now-b.lastRefillT;
+            const refill=(elapsed/1000)*10;
+            if(refill>0){b.tokens=Math.min(20,b.tokens+refill);b.lastRefillT=now}
+            if(b.tokens>=1){b.tokens--;return true}
+            return false;
+        }
 
         /* RTT measurement via a lightweight ping/pong loop. The host
            sends host:ping every 4s with a unique pingId + monotonic
@@ -444,9 +514,14 @@
                     if(now-_lastTickT<50)return false;
                     _lastTickT=now;
                 }
-                try{chan.send({type:'broadcast',event:event,payload:payload||{}})}
+                /* Stamp _seq so the guest can detect gaps and dedupe. We
+                   wrap into a fresh object rather than mutating the
+                   caller's payload — game code may reuse the same
+                   payload reference (e.g. saved as snapshot input). */
+                const wrapped=Object.assign({},payload||{},{_seq:++_bcastSeq});
+                try{chan.send({type:'broadcast',event:event,payload:wrapped})}
                 catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
-                if(event!=='host:tick')dbgLog('host: broadcast '+event);
+                if(event!=='host:tick')dbgLog('host: broadcast '+event+' (seq='+_bcastSeq+')');
                 return true;
             },
             /* Latest RTT(ms) to a specific guest, or median across all
@@ -470,9 +545,12 @@
             snapshot:function(payload){
                 /* Host tells lpRoom "this is the current game state". New
                    joiners will receive it as a host:snapshot so they can
-                   render immediately without waiting for the next event. */
-                currentSnapshot=Object.assign({},payload||{});
-                dbgLog('host: snapshot set ('+Object.keys(currentSnapshot).length+' keys)');
+                   render immediately without waiting for the next event.
+                   _seqAtSnap pins the snapshot to a generation point so
+                   late-arriving snapshots can be safely dropped if the
+                   guest already has newer state (see guest dispatch). */
+                currentSnapshot=Object.assign({},payload||{},{_seqAtSnap:_bcastSeq});
+                dbgLog('host: snapshot set ('+Object.keys(currentSnapshot).length+' keys, seqAtSnap='+_bcastSeq+')');
             },
             onGuestJoin:function(cb){if(typeof cb==='function')guestJoinCbs.push(cb)},
             onGuestLeave:function(cb){if(typeof cb==='function')guestLeaveCbs.push(cb)},
@@ -492,12 +570,33 @@
                    and trip the reconnecting state. */
                 if(_hbTimer){clearInterval(_hbTimer);_hbTimer=null}
                 if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null}
-                try{chan.send({type:'broadcast',event:'host:close',payload:{}})}catch(e){}
-                try{sb.removeChannel(chan)}catch(e){}
+                /* Critical-event retransmit: send host:close 3x at 200ms
+                   spacing. A single dropped packet would leave guests
+                   stuck on a phantom-alive room until their watchdog
+                   times out 12s later — this gets them out within ~600ms
+                   even on lossy connections. _id stamps each retry so
+                   the guest's dispatch dedupes redundant copies. */
+                const closeId=shortId();
+                let _closeAttempts=0;
+                function _sendClose(){
+                    /* Route through roomApi.broadcast so the seq stamp is
+                       consistent with the rest of the protocol. _id rides
+                       the payload as the dedupe key on the guest side. */
+                    roomApi.broadcast('host:close',{_id:closeId});
+                    _closeAttempts++;
+                    if(_closeAttempts<3){
+                        setTimeout(_sendClose,200);
+                    }else{
+                        /* Last retry sent — now actually tear down the channel. */
+                        try{sb.removeChannel(chan)}catch(e){}
+                    }
+                }
+                _sendClose();
                 /* Explicit shutdown — wipe both the short handoff token and
                    the long-lived resume token so a later tab-reopen won't
                    silently re-create the channel for a room the host
-                   already dismissed. */
+                   already dismissed. These are independent of the
+                   broadcast retry above (cleanup runs immediately). */
                 try{localStorage.removeItem('lp_hostTransit')}catch(_){}
                 try{localStorage.removeItem('lp_lastHostRoom')}catch(_){}
                 /* Clear the global pointer so lpMultiplayer\'s late-mount
@@ -730,12 +829,59 @@
            (https://developer.chrome.com/docs/web-platform/page-lifecycle-api). */
         function _onVisibilityChange(){
             if(document.hidden||guestClosing||!accepted)return;
-            try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid}})}catch(_){}
+            try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid,reason:'visible'}})}catch(_){}
             _lastHostSignalT=Date.now(); /* avoid an immediate watchdog re-fire */
         }
         document.addEventListener('visibilitychange',_onVisibilityChange);
 
+        /* ---- Gap detection + dedupe (sequence numbering on guest) ----
+           Host stamps every broadcast with monotonic _seq. Guest tracks
+           the highest seen seq and asks for a snapshot the moment a gap
+           appears (instead of waiting 12s for the watchdog). Snapshots
+           carry _seqAtSnap so a delayed snapshot whose generation point
+           is older than current state is dropped instead of overwriting.
+           Also: critical events (host:close at minimum) carry _id and
+           are sent 3x by the host; this set dedupes redundant copies. */
+        let _lastSeenSeq=0;
+        let _lastSnapApplied=0;     /* highest _seqAtSnap we've applied */
+        let _gapPending=false;
+        let _lastGapRequestT=0;
+        const _seenIds=new Set();
+        const _seenIdsList=[];
+        function _markSeenId(id){
+            if(!id)return false;
+            if(_seenIds.has(id))return true;
+            _seenIds.add(id);_seenIdsList.push(id);
+            if(_seenIdsList.length>100){
+                const stale=_seenIdsList.shift();
+                _seenIds.delete(stale);
+            }
+            return false;
+        }
+        function _maybeRequestSnapshotForGap(){
+            if(_gapPending)return;
+            const now=Date.now();
+            if(now-_lastGapRequestT<1000)return; /* throttle to 1/s */
+            _gapPending=true;
+            _lastGapRequestT=now;
+            /* 50ms debounce so a burst of close-by gaps coalesces into
+               one snapshot request. */
+            setTimeout(function(){
+                _gapPending=false;
+                if(!subscribed||guestClosing||!accepted)return;
+                try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid,reason:'seq_gap'}})}catch(_){}
+                dbgLog('guest: seq gap → request_snapshot');
+            },50);
+        }
+
         function dispatch(ev,p){
+            p=p||{};
+            /* Critical-event dedupe: host:close (and any other event the
+               host sends with _id stamped + retransmitted) arrives more
+               than once. Suppress repeats so render-once semantics
+               (location.href='/' on host_closed, ended overlay, etc) hold. */
+            if(p._id&&_markSeenId(p._id))return;
+
             if(ev==='host:join_ack'){
                 if(p.gid!==gid)return; /* not for us */
                 if(p.ok){
@@ -768,12 +914,42 @@
                    game code (bingo registers its own listener too,
                    which still works because we still emit below). */
             }
-            /* Host:snapshot targeted replay to newly-joined guest */
+            /* Host:snapshot targeted replay to newly-joined guest.
+               Freshness check: if the snapshot's generation is older
+               than our current state, drop it. Re-application of the
+               same generation is also suppressed so a watchdog double-
+               request doesn't flicker the UI. */
             if(ev==='host:snapshot'){
                 if(p.gid&&p.gid!==gid)return;
+                const snapSeq=typeof p._seqAtSnap==='number'?p._seqAtSnap:0;
+                if(snapSeq>0){
+                    if(snapSeq<_lastSeenSeq){
+                        dbgLog('guest: dropped stale snapshot ('+snapSeq+' < lastSeen '+_lastSeenSeq+')');
+                        return;
+                    }
+                    if(snapSeq===_lastSnapApplied&&_lastSnapApplied>0){
+                        dbgLog('guest: dropped redundant snapshot (already applied '+snapSeq+')');
+                        return;
+                    }
+                    _lastSnapApplied=snapSeq;
+                    _lastSeenSeq=Math.max(_lastSeenSeq,snapSeq);
+                }
                 cache['host:snapshot']=p;
                 emit('host:snapshot',p);
                 return;
+            }
+            /* Generic seq-based gap detection for everything else. Tick
+               events are excluded — losing a host:tick is normal (UDP-
+               style best-effort) and the next tick re-establishes
+               position; we don't want to spam request_snapshot for the
+               20Hz physics stream. */
+            if(typeof p._seq==='number'&&!/^host:(tick|frame)$/.test(ev)){
+                if(_lastSeenSeq>0&&p._seq>_lastSeenSeq+1){
+                    const missed=p._seq-_lastSeenSeq-1;
+                    dbgLog('guest: seq gap detected ('+missed+' missed, current='+p._seq+', lastSeen='+_lastSeenSeq+')');
+                    _maybeRequestSnapshotForGap();
+                }
+                if(p._seq>_lastSeenSeq)_lastSeenSeq=p._seq;
             }
             /* Host transferring the room to a new page — follow them
                there with our own nickname appended so we auto-join on
