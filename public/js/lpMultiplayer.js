@@ -69,6 +69,17 @@
     '.lp-mp-code{font-family:"SF Mono",Menlo,ui-monospace,monospace;color:#B3E5FC;',
     '  background:rgba(79,195,247,.18);border:1px solid rgba(79,195,247,.4);border-radius:6px;',
     '  padding:2px 8px;font-size:11.5px;letter-spacing:.5px}',
+    /* Latency pill — read from room.rtt() (host: median across guests)
+       or g.myRtt() (guest: own RTT). Color tier mirrors common ping
+       grades: ≤60 green, ≤150 yellow, >150 red. Hidden when no sample
+       has arrived yet so the user doesn't see a flickering "—". */
+    '.lp-mp-rtt{font-family:"SF Mono",Menlo,ui-monospace,monospace;font-size:10.5px;font-weight:700;',
+    '  letter-spacing:.3px;padding:2px 7px;border-radius:6px;',
+    '  background:rgba(79,195,247,.14);border:1px solid rgba(79,195,247,.35);color:#B3E5FC}',
+    '.lp-mp-rtt[data-tier="good"]{background:rgba(76,217,123,.15);border-color:rgba(76,217,123,.45);color:#B9F6CA}',
+    '.lp-mp-rtt[data-tier="ok"]{background:rgba(255,213,79,.14);border-color:rgba(255,213,79,.4);color:#FFF8E1}',
+    '.lp-mp-rtt[data-tier="bad"]{background:rgba(255,138,138,.14);border-color:rgba(255,110,110,.4);color:#FFCDD2}',
+    '.lp-mp-rtt[hidden]{display:none!important}',
     '.lp-mp-actions{margin-left:auto;display:flex;gap:4px}',
     '.lp-mp-actions button{background:transparent;border:1px solid rgba(79,195,247,.35);color:#B3E5FC;',
     '  width:26px;height:26px;border-radius:6px;cursor:pointer;font-size:13px;line-height:1;padding:0;',
@@ -402,6 +413,7 @@
       +'<span class="lp-mp-icon">🌐</span>'
       +'<span class="lp-mp-title">멀티플레이</span>'
       +'<span class="lp-mp-code"></span>'
+      +'<span class="lp-mp-rtt" hidden title="round-trip latency"></span>'
       +'<div class="lp-mp-actions">'
         +'<button class="lp-mp-btn-min" title="접기" aria-label="접기">–</button>'
         +'<button class="lp-mp-btn-max" title="전체화면" aria-label="전체화면">▢</button>'
@@ -544,6 +556,23 @@
     try{room.onGuestJoin&&room.onGuestJoin(render)}catch(_){}
     try{room.onGuestLeave&&room.onGuestLeave(render)}catch(_){}
 
+    /* Latency pill — host shows the median RTT across all guests
+       (room.rtt() returns the median, or null until the first pong
+       arrives). Updates every 2s so the value stays current without
+       being noisy. cleared in unmount via panel._lpMpRttTimer. */
+    var rttEl=panel.querySelector('.lp-mp-rtt');
+    function _updateHostRtt(){
+      if(!rttEl||!room)return;
+      var rtt=null;
+      try{rtt=(typeof room.rtt==='function')?room.rtt():null}catch(_){}
+      if(typeof rtt!=='number'){rttEl.hidden=true;return}
+      rttEl.hidden=false;
+      rttEl.textContent='⚡ '+rtt+'ms';
+      rttEl.setAttribute('data-tier',rtt<=60?'good':rtt<=150?'ok':'bad');
+    }
+    _updateHostRtt();
+    panel._lpMpRttTimer=setInterval(_updateHostRtt,2000);
+
     /* Guarantee the titlebar is grabbable: after render() filled the
        body, the panel may have grown taller than the initial clamp
        budget (e.g. expanded view with a long guest list), and could
@@ -609,6 +638,21 @@
 
     render();
 
+    /* Latency pill — guest reads its own RTT (host-measured, piggybacked
+       on heartbeat). Same color tier as host side. */
+    var rttElG=panel.querySelector('.lp-mp-rtt');
+    function _updateGuestRtt(){
+      if(!rttElG||!g)return;
+      var rtt=null;
+      try{rtt=(typeof g.myRtt==='function')?g.myRtt():null}catch(_){}
+      if(typeof rtt!=='number'){rttElG.hidden=true;return}
+      rttElG.hidden=false;
+      rttElG.textContent='⚡ '+rtt+'ms';
+      rttElG.setAttribute('data-tier',rtt<=60?'good':rtt<=150?'ok':'bad');
+    }
+    _updateGuestRtt();
+    panel._lpMpRttTimer=setInterval(_updateGuestRtt,2000);
+
     /* host:guests carries the canonical roster. Some hosts re-broadcast
        it on every join/leave, so this is our authoritative source. */
     try{
@@ -648,6 +692,13 @@
         if(typeof current.panel._lpMpTeardownDrag==='function'){
           current.panel._lpMpTeardownDrag();
           current.panel._lpMpTeardownDrag=null;
+        }
+      }catch(_){}
+      /* RTT pill updater — same leak risk as drag if not cleared. */
+      try{
+        if(current.panel._lpMpRttTimer){
+          clearInterval(current.panel._lpMpRttTimer);
+          current.panel._lpMpRttTimer=null;
         }
       }catch(_){}
       if(current.panel.parentNode){
