@@ -242,7 +242,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     </div>
 
     <script src="/vendor/supabase.min.js"></script>
-    <script src="/js/supabase-config.js?v=1777492058"></script>
+    <script src="/js/supabase-config.js?v=1777492436"></script>
     <script>
 /* ===== I18N (16 languages) ===== */
 const I18N={
@@ -447,6 +447,25 @@ async function handleSignup(e){
 
     if(pw!==confirm){showMsg(T('passwordMismatch'),'error');return}
 
+    /* Disposable-email gate — calls is_email_domain_allowed RPC which
+       checks the email's domain against the blocklist. The same check
+       runs server-side via the profiles trigger as a backup, but doing
+       it here gives the user immediate feedback instead of an opaque
+       server error after password validation. RPC missing (migration
+       not deployed) → silent fall-through; signup proceeds. */
+    try {
+        const { data: allowed, error: chkErr } = await getSupabase()
+            .rpc('is_email_domain_allowed', { p_email: email });
+        if (chkErr) {
+            console.warn('[auth.signup] is_email_domain_allowed RPC failed:', chkErr.message);
+        } else if (allowed === false) {
+            showMsg('일회용 이메일은 사용할 수 없어요. 일반 이메일로 다시 시도해주세요.','error');
+            return;
+        }
+    } catch(e) {
+        console.warn('[auth.signup] domain check threw:', e);
+    }
+
     let captchaToken = null;
     if (_captchaActive()) {
         captchaToken = _twTokenFor(_twSignupId);
@@ -457,7 +476,14 @@ async function handleSignup(e){
     document.getElementById('signupBtn').disabled=false;
 
     if(error){
-        showMsg(error.message,'error');
+        /* Friendly remap for the server-side trigger error. The trigger
+           raises 'email_domain_blocked: <domain>'; show the same Korean
+           copy as the client-side check for consistency. */
+        let msg = error.message;
+        if (typeof msg === 'string' && msg.toLowerCase().includes('email_domain_blocked')) {
+            msg = '일회용 이메일은 사용할 수 없어요. 일반 이메일로 다시 시도해주세요.';
+        }
+        showMsg(msg,'error');
         _twResetWidget(_twSignupId);
         return;
     }
@@ -662,6 +688,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777492058" defer></script>
+<script src="/js/siteFooter.js?v=1777492436" defer></script>
 </body>
 </html>
