@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777465216"></script>
-<script src="/js/lpAudio.js?v=1777465216"></script>
+<script src="/js/supabase-config.js?v=1777490803"></script>
+<script src="/js/lpAudio.js?v=1777490803"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -245,10 +245,21 @@ let me=null;
 let meIdAtBoot=null;
 let meNickAtBoot='';
 
+/* ---- Auth init (anon-friendly) ----
+   Anon users CAN play and view leaderboards but cannot save records.
+   When not logged in we show a login chip instead of a profile chip,
+   skip the profile/stats fetch, and let the game-over flow surface a
+   "🔒 로그인하면 기록 저장!" hint while still loading world rankings. */
 async function initAuth(){
     try{
         const u=await getUser();
-        if(!u){ location.replace('/auth/?next='+encodeURIComponent(location.pathname)); return; }
+        if(!u){
+            me=null;
+            meIdAtBoot=null;
+            meNickAtBoot='';
+            $('authSlot').innerHTML='<a class="auth-chip" href="/auth/?next='+encodeURIComponent(location.pathname)+'">로그인</a>';
+            return;
+        }
         me=u;
         meIdAtBoot=u.id;
         try{
@@ -274,8 +285,13 @@ if(typeof onAuthChange==='function'){
         const newId = session && session.user ? session.user.id : null;
         try{ console.log('[burger.auth] state change: event=' + event + ' newId=' + (newId||'(null)')); }catch(_){}
         if(event==='SIGNED_OUT'){
-            if(typeof running==='undefined' || !running){
-                location.replace('/auth/?next='+encodeURIComponent(location.pathname));
+            /* User signed out somewhere else. We can't safely keep playing
+               for a logged-in session — record_burger_attempt would now
+               fail with not_authenticated. Reload to refresh state.
+               Anon-at-boot users (meIdAtBoot=null) never had a session
+               to lose, so we leave them alone. */
+            if(meIdAtBoot && (typeof running==='undefined' || !running)){
+                location.reload();
             }
             return;
         }
@@ -935,10 +951,15 @@ function gameOver(){
              Means the admin hasn't deployed the latest SQL. Console gets
              a deployment hint pointing at the right migration file.
            - 'rate_limit': server enforced 30 attempts / 1h.
-           - 'no_auth': RPC saw auth.uid()=null. Burger gates anon at boot
-             so this should be unreachable but kept as a safety branch.
+           - 'no_auth': RPC saw auth.uid()=null. Anon users now skip the
+             record RPC entirely (see 'no_login' below) so this branch is
+             only reachable if a logged-in session lapsed mid-game.
            - 'invalid': server-side validation tripped (bad_pace etc).
            - 'unknown': anything else. */
+        /* 'no_login' bucket: synthetic — set directly when we skip the
+           record RPC because the user is anonymous. Never returned by
+           _classifyErr (anon path doesn't even hit the RPC); listed here
+           for completeness. */
         function _classifyErr(err){
             const m=(err&&(err.message||err.error_description)||String(err||'')).toLowerCase();
             if(/(could not find|schema cache|does not exist)/.test(m)
@@ -971,82 +992,96 @@ function gameOver(){
            another device) silently sends the score to a different
            account. We log this divergence loudly + flag the on-screen
            "기록 등록 계정" line so the user notices BEFORE closing the
-           overlay. Same pattern as dodge/space-z. */
+           overlay. Same pattern as dodge/space-z.
+           Anon path (me=null): skip this block entirely — there's no
+           session to verify and no record RPC will be called. */
         let liveUser = null;
         let liveNick = '';
-        try {
-            liveUser = await getUser();
-            try{
-                console.log('[burger.record] live user.id =', liveUser ? liveUser.id : '(null)',
-                            '· me.id at boot =', meIdAtBoot);
-            }catch(_){}
-            if (!liveUser) {
-                console.warn('[burger.record] no live session — aborting record');
-            } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
-                console.warn('[burger.record] session changed since boot. boot=' + meIdAtBoot +
-                             ' live=' + liveUser.id + ' — score will go to LIVE user');
-            }
-            if (liveUser) {
-                try {
-                    const lp = await getSupabase().from('profiles')
-                        .select('nickname').eq('id', liveUser.id).maybeSingle();
-                    liveNick = (lp.data && lp.data.nickname) || liveUser.email || '';
-                } catch(_) { liveNick = liveUser.email || ''; }
-            }
-        } catch(e) {
-            console.warn('[burger.record] getUser threw:', e);
-        }
-
         let pbMsg='', recordOk=false, recordErrKind=null;
-        try{
-            const {data,error}=await getSupabase().rpc('record_burger_attempt',{
-                p_burgers_completed: burgersCompleted,
-                p_ingredients_caught: ingredientsCaught,
-                p_level_reached: level,
-                p_duration_ms: duration
-            });
-            if(!error){
-                recordOk=true;
-                if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+        if(!me){
+            /* Anon player: skip the record RPC entirely (it would just
+               return not_authenticated). Mark a synthetic 'no_login'
+               bucket so the dispatch below shows a friendly upsell
+               instead of a generic failure. Leaderboard still loads. */
+            recordErrKind='no_login';
+        }else{
+            try {
+                liveUser = await getUser();
                 try{
-                    console.log('[burger.record] OK score=' + (data&&data.score) +
-                                ' is_pb=' + (data&&data.is_personal_best) +
-                                ' attributed to live user.id=' + (liveUser&&liveUser.id));
+                    console.log('[burger.record] live user.id =', liveUser ? liveUser.id : '(null)',
+                                '· me.id at boot =', meIdAtBoot);
                 }catch(_){}
-            }else{
-                recordErrKind=_classifyErr(error);
-                console.warn('[burger.record_burger_attempt]', error);
-                if(recordErrKind==='missing_migration')_logDeployHint();
-                if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
+                if (!liveUser) {
+                    console.warn('[burger.record] no live session — aborting record');
+                } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
+                    console.warn('[burger.record] session changed since boot. boot=' + meIdAtBoot +
+                                 ' live=' + liveUser.id + ' — score will go to LIVE user');
+                }
+                if (liveUser) {
+                    try {
+                        const lp = await getSupabase().from('profiles')
+                            .select('nickname').eq('id', liveUser.id).maybeSingle();
+                        liveNick = (lp.data && lp.data.nickname) || liveUser.email || '';
+                    } catch(_) { liveNick = liveUser.email || ''; }
+                }
+            } catch(e) {
+                console.warn('[burger.record] getUser threw:', e);
             }
-        }catch(e){
-            recordErrKind=_classifyErr(e);
-            console.warn('[burger.record_burger_attempt]', e);
-            if(recordErrKind==='missing_migration')_logDeployHint();
+
+            try{
+                const {data,error}=await getSupabase().rpc('record_burger_attempt',{
+                    p_burgers_completed: burgersCompleted,
+                    p_ingredients_caught: ingredientsCaught,
+                    p_level_reached: level,
+                    p_duration_ms: duration
+                });
+                if(!error){
+                    recordOk=true;
+                    if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                    try{
+                        console.log('[burger.record] OK score=' + (data&&data.score) +
+                                    ' is_pb=' + (data&&data.is_personal_best) +
+                                    ' attributed to live user.id=' + (liveUser&&liveUser.id));
+                    }catch(_){}
+                }else{
+                    recordErrKind=_classifyErr(error);
+                    console.warn('[burger.record_burger_attempt]', error);
+                    if(recordErrKind==='missing_migration')_logDeployHint();
+                    if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
+                }
+            }catch(e){
+                recordErrKind=_classifyErr(e);
+                console.warn('[burger.record_burger_attempt]', e);
+                if(recordErrKind==='missing_migration')_logDeployHint();
+            }
         }
 
         let rankInfo=null, rankErrKind=null;
-        try{
-            const r=await getSupabase().rpc('burger_rank_info');
-            if(r.error){
-                rankErrKind=_classifyErr(r.error);
-                console.warn('[burger.burger_rank_info]', r.error);
+        if(me){
+            try{
+                const r=await getSupabase().rpc('burger_rank_info');
+                if(r.error){
+                    rankErrKind=_classifyErr(r.error);
+                    console.warn('[burger.burger_rank_info]', r.error);
+                    if(rankErrKind==='missing_migration')_logDeployHint();
+                }else if(r.data?.has_record){
+                    rankInfo=r.data;
+                }
+            }catch(e){
+                rankErrKind=_classifyErr(e);
+                console.warn('[burger.burger_rank_info]', e);
                 if(rankErrKind==='missing_migration')_logDeployHint();
-            }else if(r.data?.has_record){
-                rankInfo=r.data;
             }
-        }catch(e){
-            rankErrKind=_classifyErr(e);
-            console.warn('[burger.burger_rank_info]', e);
-            if(rankErrKind==='missing_migration')_logDeployHint();
         }
+        /* Anon: skip personal rank_info (no auth.uid()). World leaderboard
+           still loaded below via loadLeaderboard(currentScope). */
 
         /* Fallback: burger_my_stats already exposes world_rank since the
            original game migration. If burger_rank_info isn't deployed
            (e.g. user hasn't run the latest SQL yet), we still surface
            a real rank from the legacy RPC. total_world_players + percentile
            remain unknown without rank_info — those slots stay empty. */
-        if(!rankInfo && rankErrKind){
+        if(!rankInfo && rankErrKind && me){
             try{
                 const m=await getSupabase().rpc('burger_my_stats');
                 if(!m.error){
@@ -1096,6 +1131,12 @@ function gameOver(){
         }else if(!recordOk && recordErrKind==='no_auth'){
             $('ovRankNum').textContent='🔐 로그인이 필요해요';
             $('ovRankPct').textContent='로그인 후 다시 시도';
+        }else if(recordErrKind==='no_login'){
+            /* Anon-friendly upsell: not an error — they intentionally
+               played without logging in. Encourage signup, but the world
+               leaderboard still loads (loadLeaderboard call below). */
+            $('ovRankNum').textContent='🔒 로그인하면 기록 저장!';
+            $('ovRankPct').textContent='랭킹 등록은 로그인 사용자만 가능';
         }else if(!recordOk){
             $('ovRankNum').textContent='⚠️ 기록 저장 실패';
             $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
@@ -1119,7 +1160,12 @@ function gameOver(){
            liveUser, not the cached chip nickname in the topbar. */
         const acctEl = $('ovRankAcct');
         if (acctEl) {
-            if (!liveUser) {
+            if (!me) {
+                /* Anon player — friendly upsell, NOT an error. Cyan tone
+                   matches the rest of the anon hint above. */
+                acctEl.textContent = '🌐 비회원 (게스트 플레이) — 로그인하면 기록 저장';
+                acctEl.style.color = 'rgba(0,217,255,.85)';
+            } else if (!liveUser) {
                 acctEl.textContent = '⚠ 로그인 세션이 끊김 — 점수 미등록';
                 acctEl.style.color = 'rgba(255,180,80,.85)';
             } else if (meIdAtBoot && liveUser.id !== meIdAtBoot) {
@@ -2519,8 +2565,17 @@ async function loadLeaderboard(scope){
     $('lbList').innerHTML='<div class="lb-empty">불러오는 중…</div>';
     try{
         const {data,error}=await getSupabase().rpc('burger_leaderboard',{p_scope:scope,p_limit:50});
+        try{ console.log('[burger.leaderboard]', scope, error?'error':(data?data.length+' rows':'null'), error?error.message:''); }catch(_){}
         if(error||!data){ $('lbList').innerHTML='<div class="lb-empty">기록 없음</div>'; return; }
-        if(!data.length){ $('lbList').innerHTML='<div class="lb-empty">첫 기록의 주인공이 되세요!</div>'; return; }
+        if(!data.length){
+            const emptyMsg = scope==='today'
+                ? '🌅 오늘 (한국 시간 기준) 기록이 아직 없어요.<br>첫 기록의 주인공이 되세요!'
+                : scope==='friends'
+                ? '친구가 아직 플레이하지 않았어요.<br>친구 추가는 /messages/ 에서!'
+                : '첫 기록의 주인공이 되세요!';
+            $('lbList').innerHTML='<div class="lb-empty">'+emptyMsg+'</div>';
+            return;
+        }
         $('lbList').innerHTML=data.map(row=>{
             const isSelf=me && row.user_id===me.id;
             const rnkCls=row.rnk===1?' gold':row.rnk===2?' silver':row.rnk===3?' bronze':'';
@@ -2546,11 +2601,11 @@ $('pauseBtn').addEventListener('click', (e)=>{
 });
 (async()=>{
     await initAuth();
-    if (me){
-        resetGame();
-        fitCanvas();
-        draw(performance.now());
-    }
+    /* Initial idle render runs for both logged-in and anon users so the
+       empty plate / overlay layout is visible before first tap. */
+    resetGame();
+    fitCanvas();
+    draw(performance.now());
 })();
 
 /* Inline SW cleanup — same pattern as every other page to nuke any
@@ -2561,6 +2616,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777465216"></script>
+<script src="/js/siteFooter.js?v=1777490803"></script>
 </body>
 </html>

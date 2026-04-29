@@ -246,8 +246,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777465216"></script>
-<script src="/js/lpAudio.js?v=1777465216"></script>
+<script src="/js/supabase-config.js?v=1777490803"></script>
+<script src="/js/lpAudio.js?v=1777490803"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -255,16 +255,25 @@ const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
 
 let me=null;
 
+/* ---- Auth init (anon-friendly) ----
+   Anon users CAN play and view leaderboards but cannot save records.
+   When not logged in we show a login chip instead of a profile chip,
+   skip the profile/stats fetch, and let the game-over flow surface a
+   "🔒 로그인하면 기록 저장!" hint while still loading world rankings. */
 async function initAuth(){
     try{
         const u=await getUser();
-        if(!u){ location.replace('/auth/?next='+encodeURIComponent(location.pathname)); return; }
+        if(!u){
+            me=null;
+            $('authSlot').innerHTML='<a class="auth-chip" href="/auth/?next='+encodeURIComponent(location.pathname)+'">로그인</a>';
+            return;
+        }
         me=u;
         const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
         const nick=prof.data?.nickname||'나';
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
         loadMyStats();
-    }catch(e){}
+    }catch(e){console.warn('auth init',e)}
 }
 async function loadMyStats(){
     if(!me)return;
@@ -557,10 +566,15 @@ function gameOver(won){
              Means the admin hasn't deployed the latest SQL. Console gets
              a deployment hint pointing at the right migration file.
            - 'rate_limit': server enforced 30 attempts / 1h.
-           - 'no_auth': RPC saw auth.uid()=null. Pacman gates anon at boot
-             so this should be unreachable but kept as a safety branch.
+           - 'no_auth': RPC saw auth.uid()=null. Anon users now skip the
+             record RPC entirely (see 'no_login' below) so this branch is
+             only reachable if a logged-in session lapsed mid-game.
            - 'invalid': server-side validation tripped (bad_dots_eaten etc).
            - 'unknown': anything else. */
+        /* 'no_login' bucket: synthetic — set directly when we skip the
+           record RPC because the user is anonymous. Never returned by
+           _classifyErr (anon path doesn't even hit the RPC); listed here
+           for completeness. */
         function _classifyErr(err){
             const m=(err&&(err.message||err.error_description)||String(err||'')).toLowerCase();
             if(/(could not find|schema cache|does not exist)/.test(m)
@@ -586,50 +600,62 @@ function gameOver(won){
         }
 
         let pbMsg='', recordOk=false, recordErrKind=null;
-        try{
-            const {data,error}=await getSupabase().rpc('record_pacman_attempt',{
-                p_dots_eaten: dotsEaten,
-                p_ghosts_eaten: ghostsEaten,
-                p_duration_ms: duration,
-                p_won: !!won
-            });
-            if(!error){
-                recordOk=true;
-                if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
-            }else{
-                recordErrKind=_classifyErr(error);
-                console.warn('[pacman.record_pacman_attempt]', error);
+        if(!me){
+            /* Anon player: skip the record RPC entirely (it would just
+               return not_authenticated). Mark a synthetic 'no_login'
+               bucket so the dispatch below shows a friendly upsell
+               instead of a generic failure. Leaderboard still loads. */
+            recordErrKind='no_login';
+        }else{
+            try{
+                const {data,error}=await getSupabase().rpc('record_pacman_attempt',{
+                    p_dots_eaten: dotsEaten,
+                    p_ghosts_eaten: ghostsEaten,
+                    p_duration_ms: duration,
+                    p_won: !!won
+                });
+                if(!error){
+                    recordOk=true;
+                    if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                }else{
+                    recordErrKind=_classifyErr(error);
+                    console.warn('[pacman.record_pacman_attempt]', error);
+                    if(recordErrKind==='missing_migration')_logDeployHint();
+                    if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
+                }
+            }catch(e){
+                recordErrKind=_classifyErr(e);
+                console.warn('[pacman.record_pacman_attempt]', e);
                 if(recordErrKind==='missing_migration')_logDeployHint();
-                if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
             }
-        }catch(e){
-            recordErrKind=_classifyErr(e);
-            console.warn('[pacman.record_pacman_attempt]', e);
-            if(recordErrKind==='missing_migration')_logDeployHint();
         }
 
         let rankInfo=null, rankErrKind=null;
-        try{
-            const r=await getSupabase().rpc('pacman_rank_info');
-            if(r.error){
-                rankErrKind=_classifyErr(r.error);
-                console.warn('[pacman.pacman_rank_info]', r.error);
+        if(me){
+            try{
+                const r=await getSupabase().rpc('pacman_rank_info');
+                if(r.error){
+                    rankErrKind=_classifyErr(r.error);
+                    console.warn('[pacman.pacman_rank_info]', r.error);
+                    if(rankErrKind==='missing_migration')_logDeployHint();
+                }else if(r.data?.has_record){
+                    rankInfo=r.data;
+                }
+            }catch(e){
+                rankErrKind=_classifyErr(e);
+                console.warn('[pacman.pacman_rank_info]', e);
                 if(rankErrKind==='missing_migration')_logDeployHint();
-            }else if(r.data?.has_record){
-                rankInfo=r.data;
             }
-        }catch(e){
-            rankErrKind=_classifyErr(e);
-            console.warn('[pacman.pacman_rank_info]', e);
-            if(rankErrKind==='missing_migration')_logDeployHint();
         }
+        /* Anon: skip personal rank_info (no auth.uid()). World leaderboard
+           still loaded below via loadLeaderboard(currentScope). */
 
         /* Fallback: pacman_my_stats already exposes world_rank since the
            original game migration. If pacman_rank_info isn't deployed
            (e.g. user hasn't run the latest SQL yet), we still surface
            a real rank from the legacy RPC. total_world_players + percentile
            remain unknown without rank_info — those slots stay empty. */
-        if(!rankInfo && rankErrKind){
+        if(!rankInfo && rankErrKind && me){
             try{
                 const m=await getSupabase().rpc('pacman_my_stats');
                 if(!m.error){
@@ -679,6 +705,12 @@ function gameOver(won){
         }else if(!recordOk && recordErrKind==='no_auth'){
             $('ovRankNum').textContent='🔐 로그인이 필요해요';
             $('ovRankPct').textContent='로그인 후 다시 시도';
+        }else if(!recordOk && recordErrKind==='no_login'){
+            /* Anon-friendly upsell: not an error — they intentionally
+               played without logging in. Encourage signup, but the world
+               leaderboard still loads (loadLeaderboard call below). */
+            $('ovRankNum').textContent='🔒 로그인하면 기록 저장!';
+            $('ovRankPct').textContent='랭킹 등록은 로그인 사용자만 가능';
         }else if(!recordOk){
             $('ovRankNum').textContent='⚠️ 기록 저장 실패';
             $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
@@ -1072,8 +1104,17 @@ async function loadLeaderboard(scope){
     $('lbList').innerHTML='<div class="lb-empty">불러오는 중…</div>';
     try{
         const {data,error}=await getSupabase().rpc('pacman_leaderboard',{p_scope:scope,p_limit:50});
+        try{ console.log('[pacman.leaderboard]', scope, error?'error':(data?data.length+' rows':'null'), error?error.message:''); }catch(_){}
         if(error||!data){ $('lbList').innerHTML='<div class="lb-empty">기록 없음</div>'; return; }
-        if(!data.length){ $('lbList').innerHTML='<div class="lb-empty">첫 기록의 주인공이 되세요!</div>'; return; }
+        if(!data.length){
+            const emptyMsg = scope==='today'
+                ? '🌅 오늘 (한국 시간 기준) 기록이 아직 없어요.<br>첫 기록의 주인공이 되세요!'
+                : scope==='friends'
+                ? '친구가 아직 플레이하지 않았어요.<br>친구 추가는 /messages/ 에서!'
+                : '첫 기록의 주인공이 되세요!';
+            $('lbList').innerHTML='<div class="lb-empty">'+emptyMsg+'</div>';
+            return;
+        }
         $('lbList').innerHTML=data.map(row=>{
             const isSelf=me && row.user_id===me.id;
             const rnkCls=row.rnk===1?' gold':row.rnk===2?' silver':row.rnk===3?' bronze':'';
@@ -1099,16 +1140,17 @@ $('pauseBtn').addEventListener('click', (e)=>{
 });
 (async()=>{
     await initAuth();
-    if (me){
-        resetGame();
-        draw(performance.now());
-        if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
-    }
+    /* Anon-friendly: render the maze and (on PC) the leaderboard regardless
+       of login state. me=null path skips loadMyStats / record RPC; the rest
+       of the game loop is identical. */
+    resetGame();
+    draw(performance.now());
+    if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
 })();
 
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777465216" defer></script>
+<script src="/js/siteFooter.js?v=1777490803" defer></script>
 </body>
 </html>
