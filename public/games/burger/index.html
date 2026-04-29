@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777449851"></script>
-<script src="/js/lpAudio.js?v=1777449851"></script>
+<script src="/js/supabase-config.js?v=1777455375"></script>
+<script src="/js/lpAudio.js?v=1777455375"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -842,7 +842,41 @@ function gameOver(){
     $('ovRankBtn').addEventListener('click', openSheet);
 
     (async()=>{
-        let pbMsg='', dbgLines=[], recordOk=false;
+        /* Categorize Supabase errors into user-friendly buckets so the
+           overlay never surfaces raw PostgREST internals to end users.
+           - 'missing_migration': function/table not found in schema cache.
+             Means the admin hasn't deployed the latest SQL. Console gets
+             a deployment hint pointing at the right migration file.
+           - 'rate_limit': server enforced 30 attempts / 1h.
+           - 'no_auth': RPC saw auth.uid()=null. Burger gates anon at boot
+             so this should be unreachable but kept as a safety branch.
+           - 'invalid': server-side validation tripped (bad_pace etc).
+           - 'unknown': anything else. */
+        function _classifyErr(err){
+            const m=(err&&(err.message||err.error_description)||String(err||'')).toLowerCase();
+            if(/(could not find|schema cache|does not exist)/.test(m)
+               &&/(function|relation|table)/.test(m)){
+                return 'missing_migration';
+            }
+            if(m.includes('rate_limited'))return 'rate_limit';
+            if(m.includes('not_authenticated'))return 'no_auth';
+            if(m.includes('impossible_pace')||/^bad_/.test(m)
+               ||m.includes('bad_burgers_completed')||m.includes('bad_ingredients_caught')
+               ||m.includes('bad_level_reached')||m.includes('bad_duration')){
+                return 'invalid';
+            }
+            return 'unknown';
+        }
+        function _logDeployHint(){
+            try{console.warn(
+              '[burger] Supabase migration not deployed. Apply in SQL Editor:\n'+
+              '  supabase/migrations/2026-04-22-burger-game.sql\n'+
+              '  supabase/migrations/2026-04-26-game-rank-info.sql\n'+
+              'Or run supabase/redeploy-action-games.sql (one-shot).');
+            }catch(_){}
+        }
+
+        let pbMsg='', recordOk=false, recordErrKind=null;
         try{
             const {data,error}=await getSupabase().rpc('record_burger_attempt',{
                 p_burgers_completed: burgersCompleted,
@@ -854,35 +888,58 @@ function gameOver(){
                 recordOk=true;
                 if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
             }else{
-                const m=(error.message||'').toLowerCase();
-                if(m.includes('rate_limited')) pbMsg='⏸ 1시간 내 30회 한도 초과';
-                else { console.warn('[burger.record_burger_attempt]', error);
-                       dbgLines.push('record: '+(error.message||'unknown')); }
+                recordErrKind=_classifyErr(error);
+                console.warn('[burger.record_burger_attempt]', error);
+                if(recordErrKind==='missing_migration')_logDeployHint();
+                if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
             }
-        }catch(e){ console.warn('[burger.record_burger_attempt]', e);
-                   dbgLines.push('record: '+(e.message||String(e))); }
+        }catch(e){
+            recordErrKind=_classifyErr(e);
+            console.warn('[burger.record_burger_attempt]', e);
+            if(recordErrKind==='missing_migration')_logDeployHint();
+        }
 
-        let rankInfo=null, rankErr=null;
+        let rankInfo=null, rankErrKind=null;
         try{
             const r=await getSupabase().rpc('burger_rank_info');
             if(r.error){
-                rankErr=r.error;
+                rankErrKind=_classifyErr(r.error);
                 console.warn('[burger.burger_rank_info]', r.error);
+                if(rankErrKind==='missing_migration')_logDeployHint();
             }else if(r.data?.has_record){
                 rankInfo=r.data;
             }
-        }catch(e){ rankErr=e; console.warn('[burger.burger_rank_info]', e); }
+        }catch(e){
+            rankErrKind=_classifyErr(e);
+            console.warn('[burger.burger_rank_info]', e);
+            if(rankErrKind==='missing_migration')_logDeployHint();
+        }
 
-        if(!rankInfo && rankErr){
+        /* Fallback: burger_my_stats already exposes world_rank since the
+           original game migration. If burger_rank_info isn't deployed
+           (e.g. user hasn't run the latest SQL yet), we still surface
+           a real rank from the legacy RPC. total_world_players + percentile
+           remain unknown without rank_info — those slots stay empty. */
+        if(!rankInfo && rankErrKind){
             try{
                 const m=await getSupabase().rpc('burger_my_stats');
                 if(!m.error){
                     if(m.data?.has_record && m.data.world_rank!=null){
-                        rankInfo={has_record:true,world_rank:m.data.world_rank,
-                            total_world_players:null,percentile:null,
-                            best_score:m.data.best_score,_fallback:true};
+                        rankInfo={
+                            has_record:true,
+                            world_rank:m.data.world_rank,
+                            total_world_players:null,
+                            percentile:null,
+                            best_score:m.data.best_score,
+                            _fallback:true
+                        };
                     }
-                    rankErr=null;
+                    /* my_stats RPC succeeded → dismiss the rank_info error
+                       even when has_record is false. UI then falls into the
+                       recordOk-driven branch below ("🎉 첫 기록" or the
+                       record-failure branch) instead of an alarming
+                       "랭킹 조회 실패". */
+                    rankErrKind=null;
                 }
             }catch(_){ }
         }
@@ -890,24 +947,42 @@ function gameOver(){
         if(rankInfo){
             const d=rankInfo;
             const rank=(d.world_rank||0).toLocaleString();
+            /* Short headline + long subline so a narrow card never
+               clips on the right edge. Subline parts are individually
+               omitted when null so the my_stats fallback (no
+               percentile/total) still renders cleanly. */
             $('ovRankNum').textContent='🌍 #'+rank;
             const parts=[];
             if(d.percentile!=null) parts.push('상위 '+d.percentile+'%');
             if(d.total_world_players!=null) parts.push(d.total_world_players.toLocaleString()+'명 중');
             $('ovRankPct').textContent=parts.join(' · ');
-        }else if(rankErr){
-            $('ovRankNum').textContent='⚠️ 랭킹 조회 실패';
-            $('ovRankPct').textContent='SQL 마이그레이션 미배포 가능성';
-            dbgLines.push('rank: '+((rankErr.message||String(rankErr)).slice(0,140)));
+        }else if(rankErrKind==='missing_migration'||recordErrKind==='missing_migration'){
+            /* Admin needs to deploy the migrations. Calmer language for
+               end users (most won't be the admin); detail in console. */
+            $('ovRankNum').textContent='🛠 랭킹 시스템 점검 중';
+            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
+        }else if(rankErrKind||recordErrKind==='unknown'){
+            $('ovRankNum').textContent='⚠️ 랭킹 등록 실패';
+            $('ovRankPct').textContent='네트워크를 확인하고 다시 시도해주세요';
+        }else if(!recordOk && recordErrKind==='invalid'){
+            $('ovRankNum').textContent='⚠️ 점수 검증 실패';
+            $('ovRankPct').textContent='비정상적으로 빠른 진행 감지';
+        }else if(!recordOk && recordErrKind==='no_auth'){
+            $('ovRankNum').textContent='🔐 로그인이 필요해요';
+            $('ovRankPct').textContent='로그인 후 다시 시도';
         }else if(!recordOk){
             $('ovRankNum').textContent='⚠️ 기록 저장 실패';
-            $('ovRankPct').textContent='아래 에러 메시지 확인';
+            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
         }else{
             $('ovRankNum').textContent='🎉 첫 기록 등록!';
             $('ovRankPct').textContent='월드 랭킹 진입 완료';
         }
         $('ovRankPb').textContent=pbMsg;
-        $('ovRankDebug').textContent=dbgLines.join(' · ');
+        /* Debug slot kept in DOM for inspection but blank for end users.
+           Raw error text used to surface here (alarming + non-actionable).
+           Devs can read details in console (we console.warn every error
+           with a [game.rpc_name] prefix). */
+        $('ovRankDebug').textContent='';
 
         loadMyStats();
         loadLeaderboard(currentScope);
@@ -1609,6 +1684,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777449851"></script>
+<script src="/js/siteFooter.js?v=1777455375"></script>
 </body>
 </html>
