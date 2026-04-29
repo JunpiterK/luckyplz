@@ -92,6 +92,22 @@
      thread. Normal play (most games <5 actions/min per guest) is
      well below the limit.
 
+ 11. Per-guest RTT piggyback on heartbeat — host stamps the latest
+     RTT it has measured for each guest into heartbeat.rtts[gid].
+     Guest looks up its own gid and exposes via g.myRtt(), which the
+     multiplayer panel surfaces as a colored "⚡ 23ms" pill (≤60 green,
+     ≤150 yellow, >150 red). No extra round-trip vs the alternative
+     of a dedicated host:rtt_for_you message; cost is one extra map
+     in the heartbeat payload (~10 bytes per guest, negligible).
+
+ 12. roomApi.broadcastReliable(event, payload, {attempts, gapMs})
+     — game-level helper for "must arrive" events. Stamps a shared
+     _id, re-broadcasts attempts (default 3) at gapMs (default 200ms)
+     spacing. Guest dispatch dedupes on _id. Lifted from the same
+     pattern host:close uses internally; exposed so any game can
+     opt-in for round-end / score-commit / final-result broadcasts
+     without re-implementing the retry loop.
+
   ============ Roadmap (NOT yet implemented) ============
 
   A. WebRTC DataChannel fast-path for SAME-NETWORK / nearby peers.
@@ -117,9 +133,21 @@
      wire size, but adds a 30KB lib + per-game decode hooks. ROI is
      marginal until WebRTC is in.
 
-  C. Guest-side RTT — currently host-only. Could be added by piggybacking
-     a `lastRtt` field in host:ping so guests can surface their own
-     latency to the user without an extra round-trip.
+  C. ✅ DONE (item 11) — guest RTT piggyback on heartbeat.
+
+  D. Per-game snapshot completeness audit — round-based games
+     (lotto/team/ladder/bingo) currently snapshot their CONFIG only.
+     A guest joining mid-draw or recovering from a long socket drop
+     therefore sees the lobby state until the next phase broadcast.
+     Each game should be reviewed and brought up to "snapshot
+     captures full mid-game state" so request_snapshot recovery is
+     self-sufficient.
+
+  E. WebRTC fast-path (roadmap A) is the highest-value remaining
+     improvement for SAME-NETWORK play (1-3ms vs 50-150ms via
+     Supabase cloud). Designed but not implemented; should be a
+     dedicated module gated behind localStorage.lpRtcEnabled='1' so
+     it can be canaried without affecting baseline users.
 */
 (function(){
     /* Bump this whenever the wire protocol or guest UI semantics change.
@@ -491,7 +519,13 @@
             if(_hbTimer)return;
             _hbTimer=setInterval(function(){
                 if(!subscribed)return;
-                try{chan.send({type:'broadcast',event:'host:heartbeat',payload:{seq:++_hbSeq,t:Date.now()}})}catch(_){}
+                /* Piggyback per-guest RTT map onto heartbeat. Guests
+                   look up their own gid to surface "ping: 23ms" without
+                   another round-trip. Map is only the gids we have a
+                   pong from; absent entries mean "not yet measured". */
+                const rttMap={};
+                _rttByGuest.forEach(function(rtt,gid){rttMap[gid]=rtt});
+                try{chan.send({type:'broadcast',event:'host:heartbeat',payload:{seq:++_hbSeq,t:Date.now(),rtts:rttMap}})}catch(_){}
             },5000);
         }
         _startHeartbeat();
@@ -523,6 +557,34 @@
                 catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
                 if(event!=='host:tick')dbgLog('host: broadcast '+event+' (seq='+_bcastSeq+')');
                 return true;
+            },
+            /* Reliable variant — stamp an _id and re-emit `attempts`
+               times at `gapMs` spacing. Guest's dispatch dedupes on
+               _id so the listener fires exactly once. Use this for
+               events whose loss has high consequence (game-end
+               broadcasts, room-tear-down notices, money/score commits)
+               but skip for high-frequency state events where the next
+               broadcast naturally re-establishes truth.
+               Defaults: 3 attempts at 200ms = first arrives ≤200ms,
+               last attempt at +400ms. Adjust gapMs upward for very
+               lossy networks at the cost of dedupe-window pressure. */
+            broadcastReliable:function(event,payload,opts){
+                opts=opts||{};
+                const attempts=Math.max(1,Math.min(5,opts.attempts||3));
+                const gapMs=Math.max(50,Math.min(2000,opts.gapMs||200));
+                const id=shortId();
+                let i=0;
+                const fire=function(){
+                    /* Wrap onto a NEW object each retry so _seq increments
+                       and we don't mutate the caller's payload. _id stays
+                       constant so the guest dedupes. */
+                    const p=Object.assign({},payload||{},{_id:id});
+                    roomApi.broadcast(event,p);
+                    i++;
+                    if(i<attempts)setTimeout(fire,gapMs);
+                };
+                fire();
+                return id;
             },
             /* Latest RTT(ms) to a specific guest, or median across all
                guests when called without args. Returns null when no
@@ -796,6 +858,10 @@
         let _lastWatchdogResync=0;
         const _skewSamples=[];
         let _hostClockSkew=null;
+        /* Latest RTT (ms) from the host's perspective — measured by host
+           via guest:pong, broadcast back in heartbeat.rtts[gid]. Used by
+           lpMultiplayer panel to surface "ping: 23ms" on the guest. */
+        let _myRtt=null;
         function _noteHostSignal(){_lastHostSignalT=Date.now()}
         function _recordSkew(hostT){
             if(typeof hostT!=='number')return;
@@ -910,6 +976,9 @@
             }
             if(ev==='host:heartbeat'){
                 if(p&&typeof p.t==='number')_recordSkew(p.t);
+                /* Pull our own RTT out of the per-guest map so we can
+                   surface latency without an extra round-trip. */
+                if(p&&p.rtts&&typeof p.rtts[gid]==='number')_myRtt=p.rtts[gid];
                 /* Heartbeat is internal liveness — don't surface to
                    game code (bingo registers its own listener too,
                    which still works because we still emit below). */
@@ -1165,6 +1234,12 @@
                does the HOST think it is" so animations stay in sync
                regardless of phone clock drift. */
             skew:function(){return _hostClockSkew},
+            /* Latest RTT (host→us round-trip) in ms, computed by the
+               host from our guest:pong responses and piggybacked on
+               host:heartbeat under {rtts:{<gid>:ms}}. Null until the
+               first heartbeat carrying our gid arrives — typically
+               within 10s of join (one ping cycle + one heartbeat). */
+            myRtt:function(){return _myRtt},
             /* Subscribe to connection-status transitions. Status pill
                uses this to flash "재연결 중" when the socket drops so
                users stop expecting live updates. Receives the current

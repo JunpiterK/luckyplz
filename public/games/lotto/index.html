@@ -1898,6 +1898,17 @@ function beginDrawing(){
        status text and dim the controls. */
     if(window._lpHost){
         try{window._lpHost.broadcast('host:action',{type:'lotto_begin',speed:drawSpeed,setCount:setCount})}catch(_){}
+        /* Refresh the snapshot so a guest who joins (or reconnects) RIGHT
+           after START sees drawing=true and an empty tray — without this
+           they'd land on a config-only snapshot and sit on the prepared-
+           but-idle screen until the first lotto_capture arrives. */
+        try{
+            const _cfg=(typeof _lpReadLottoConfig==='function')?_lpReadLottoConfig():{};
+            window._lpHost.snapshot(Object.assign({},_cfg,{
+                capturedBalls:[],
+                drawing:true
+            }));
+        }catch(_){}
     }
     /* Keep the host's screen awake for the multi-second drum-roll +
        ball-by-ball reveal. LpWakeLock auto re-acquires on visibility
@@ -2024,6 +2035,17 @@ function _onSetComplete(){
            new set's captures, badly desyncing the visual. */
         if(window._lpHost){
             try{window._lpHost.broadcast('host:action',{type:'lotto_set_reset',setIdx:currentSet+1})}catch(_){}
+            /* Snapshot the wiped tray so a guest joining between sets
+               doesn't restore the previous set's captures from a stale
+               snapshot. drawnResults has already been cleared locally
+               by _loadMachineForSet → reading it here yields []. */
+            try{
+                const _cfg=(typeof _lpReadLottoConfig==='function')?_lpReadLottoConfig():{};
+                window._lpHost.snapshot(Object.assign({},_cfg,{
+                    capturedBalls:drawnResults.slice(),
+                    drawing:true
+                }));
+            }catch(_){}
         }
         SFX.startWind();
         currentSet++;
@@ -2652,12 +2674,15 @@ function init(){
                    empty tray mid-draw. Mirror those balls into our local
                    drawnBalls/drawnResults so the next render frame
                    draws them in the tray immediately. */
-                if(Array.isArray(p.capturedBalls)&&p.capturedBalls.length){
+                if(Array.isArray(p.capturedBalls)){
                     const capY=(typeof machineY==='number')
                         ?machineY-machineR-20+BALL_R+6:0;
                     const capX=(typeof machineX==='number')?machineX:0;
-                    /* Skip if we already have the same number of captures
-                       — avoids stomping on the live host:action stream. */
+                    /* Skip if we already have at least as many captures
+                       — avoids stomping on the live host:action stream
+                       which may have advanced past this snapshot. The
+                       lpRoom seq guard already drops out-of-order
+                       snapshots; this is the application-level fallback. */
                     if(drawnResults.length<p.capturedBalls.length){
                         drawnBalls=[];drawnResults=[];
                         drawnMainCount=0;drawnBonusCount=0;
@@ -2667,7 +2692,11 @@ function init(){
                             if(b.isBonus)drawnBonusCount++;else drawnMainCount++;
                         });
                     }
-                    if(p.drawing)drawing=true;
+                    /* Set drawing strictly from the snapshot so a post-
+                       result or lobby-config snapshot can also CLEAR it.
+                       Late-set lotto_begin/lotto_capture stream will
+                       re-flip it back to true if the host is still drawing. */
+                    drawing=!!p.drawing;
                 }
             }
             g.on('host:config',applyConfig);
@@ -2769,7 +2798,14 @@ function init(){
         clearTimeout(_lpCfgTimer);
         _lpCfgTimer=setTimeout(function(){
             const p=_lpReadLottoConfig();
-            window._lpHost.snapshot(p);
+            /* Lobby-config snapshot: explicitly carry an empty tray and
+               drawing:false so a guest who reconnects to a host that has
+               returned to the setup screen sees a clean state (and not
+               a stale drawing=true from a previous round). */
+            window._lpHost.snapshot(Object.assign({},p,{
+                capturedBalls:[],
+                drawing:false
+            }));
             window._lpHost.broadcast('host:config',p);
         },120);
     };
@@ -2789,7 +2825,16 @@ function init(){
         if(bar&&bar._lpRefresh)bar._lpRefresh();
         const p=_lpReadLottoConfig();
         p.t=Date.now();
-        window._lpHost.snapshot(p);
+        /* host:start fires when the round kicks off. Snapshot with an
+           empty tray + drawing flag explicitly false — the host's
+           beginDrawing() will flip drawing:true via the lotto_begin
+           snapshot a beat later. This intermediate state lets a guest
+           who joins between START and the first capture see the right
+           config without the stale capturedBalls of the prior round. */
+        window._lpHost.snapshot(Object.assign({},p,{
+            capturedBalls:[],
+            drawing:false
+        }));
         window._lpHost.broadcast('host:start',p);
     };
     window._lpBroadcastResult=function(){
@@ -2798,6 +2843,18 @@ function init(){
         const colors=drawnResults.map(function(b){return b.color});
         const mainCount=drawnResults.filter(function(b){return !b.isBonus}).length;
         window._lpHost.broadcast('host:result',{game:'lotto',numbers:nums,colors:colors,mainCount:mainCount});
+        /* Refresh the snapshot with drawing:false so a guest joining
+           AFTER the round finishes (while the result modal is up)
+           doesn't see a stale drawing=true flag and re-trigger their
+           local machine. capturedBalls is preserved so the late joiner
+           can still see the final tray under the result overlay. */
+        try{
+            const _cfg=(typeof _lpReadLottoConfig==='function')?_lpReadLottoConfig():{};
+            window._lpHost.snapshot(Object.assign({},_cfg,{
+                capturedBalls:drawnResults.slice(),
+                drawing:false
+            }));
+        }catch(_){}
     };
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
@@ -2847,6 +2904,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777448927" defer></script>
+<script src="/js/siteFooter.js?v=1777449851" defer></script>
 </body>
 </html>
