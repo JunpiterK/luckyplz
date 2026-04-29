@@ -227,8 +227,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777459654"></script>
-<script src="/js/lpAudio.js?v=1777459654"></script>
+<script src="/js/supabase-config.js?v=1777460331"></script>
+<script src="/js/lpAudio.js?v=1777460331"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1542,6 +1542,136 @@ function drawCylinderSide(id, cx, cy, w, h){
 }
 
 /* ========================================================================
+   drawCheesePalette — swiss-style cheese block on a plate, viewed from
+   ~15° diagonal. Different rendering from the burger-stack cheese
+   (INGREDIENTS.cheese, which has melt drips appropriate for between-bun
+   context). Here on the plate, the cheese is a fresh slab with eyes
+   (holes), trapezoidal top via slight one-point perspective (back edge
+   converges to ~88 % of front width), and a thin front-facing side wall
+   showing thickness — matches the swiss-cheese reference image the
+   user shared.
+
+   Inputs:
+     cx        horizontal centre
+     bottomY   y-coordinate where the cheese bottom rests on the plate
+     w         total horizontal width
+     thick     side-wall thickness in screen pixels (typically 2–3 for
+               a thin slice)
+
+   Geometry:
+     Front edge   y = bottomY − thick                 width = w
+     Back edge    y = bottomY − thick − 2·ry          width = w·0.88
+     ry = w/2 × sin(15°) ≈ 0.26 × rx
+     Total visual height = 2·ry + thick (≈ 13 px for w=44, thick=2)
+   ======================================================================== */
+function drawCheesePalette(cx, bottomY, w, thick){
+    const rx = w / 2;
+    const ry = rx * 0.26;
+    const backShrink = 0.88;     /* back edge width = 88 % of front */
+
+    const fY = bottomY - thick;
+    const bY = fY - 2 * ry;
+    const fL = cx - rx,            fR = cx + rx;
+    const bL = cx - rx*backShrink, bR = cx + rx*backShrink;
+
+    /* Side wall (front face), drawn first so anything that overlaps
+       from above lands on top of it. Vertical gradient warm yellow →
+       darker amber at the bottom. */
+    const wallG = ctx.createLinearGradient(0, fY, 0, bottomY);
+    wallG.addColorStop(0, '#E8B92E');
+    wallG.addColorStop(1, '#A87714');
+    ctx.fillStyle = wallG;
+    ctx.fillRect(fL, fY, rx*2, thick);
+    /* Subtle shadow at the joint with the top face. */
+    const wallShadow = ctx.createLinearGradient(0, fY, 0, fY + thick*0.55);
+    wallShadow.addColorStop(0, 'rgba(80,50,5,.35)');
+    wallShadow.addColorStop(1, 'rgba(80,50,5,0)');
+    ctx.fillStyle = wallShadow;
+    ctx.fillRect(fL, fY, rx*2, thick*0.55);
+
+    /* Top face (trapezoid). Bright yellow at the back (key-light face),
+       warmer mid, deeper amber at the front rim. */
+    const topG = ctx.createLinearGradient(0, bY, 0, fY);
+    topG.addColorStop(0,    '#FFEC8A');
+    topG.addColorStop(0.5,  '#FFD445');
+    topG.addColorStop(1,    '#E8A412');
+    ctx.fillStyle = topG;
+    ctx.beginPath();
+    ctx.moveTo(fL, fY);
+    ctx.lineTo(fR, fY);
+    ctx.lineTo(bR, bY);
+    ctx.lineTo(bL, bY);
+    ctx.closePath();
+    ctx.fill();
+
+    /* Cheese eyes — fixed deterministic positions in normalized
+       (u, v) coords. u ∈ [−1, 1] is horizontal at the depth's local
+       half-width, v ∈ [0, 1] interpolates back→front. Sizes shrink
+       slightly toward the back so the perspective scales feel right. */
+    const eyes = [
+        [-0.50, 0.22, 0.13],
+        [-0.12, 0.55, 0.10],
+        [ 0.28, 0.32, 0.08],
+        [ 0.48, 0.68, 0.06],
+        [-0.65, 0.55, 0.06],
+        [ 0.15, 0.85, 0.07],
+        [-0.30, 0.85, 0.05],
+        [ 0.55, 0.18, 0.05]
+    ];
+    ctx.save();
+    /* Clip to the trapezoid so eyes near the rim don't bleed outside. */
+    ctx.beginPath();
+    ctx.moveTo(fL, fY); ctx.lineTo(fR, fY);
+    ctx.lineTo(bR, bY); ctx.lineTo(bL, bY);
+    ctx.closePath();
+    ctx.clip();
+    eyes.forEach(([u, v, s]) => {
+        const halfW = rx * (backShrink + (1 - backShrink) * v);
+        const ex = cx + u * halfW;
+        const ey = bY + (fY - bY) * v;
+        /* Min 0.7 px so even the smallest eye stays visible on a tiny
+           palette tile. */
+        const er = Math.max(0.7, rx * s * (backShrink + (1 - backShrink) * v));
+        /* Outer rim — slightly darker than base so the hole reads as
+           recessed. */
+        ctx.fillStyle = '#A07514';
+        ctx.beginPath();
+        ctx.arc(ex, ey, er, 0, Math.PI*2);
+        ctx.fill();
+        /* Inner shadow gradient — radial, brighter on upper-left where
+           the rim catches light, darker on lower-right. */
+        const eg = ctx.createRadialGradient(
+            ex - er*0.25, ey - er*0.3, er*0.05,
+            ex,            ey,         er*0.95
+        );
+        eg.addColorStop(0,   'rgba(170,110,15,.55)');
+        eg.addColorStop(0.6, 'rgba(110,75,8,.85)');
+        eg.addColorStop(1,   'rgba(70,45,5,.7)');
+        ctx.fillStyle = eg;
+        ctx.beginPath();
+        ctx.arc(ex, ey, er * 0.92, 0, Math.PI*2);
+        ctx.fill();
+    });
+    ctx.restore();
+
+    /* Outline. Trapezoid + front side wall rectangle outlines for
+       crispness against the plate. */
+    ctx.strokeStyle = 'rgba(120,75,8,.55)';
+    ctx.lineWidth = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(fL, fY); ctx.lineTo(fR, fY);
+    ctx.lineTo(bR, bY); ctx.lineTo(bL, bY);
+    ctx.closePath();
+    ctx.stroke();
+    /* Side wall: bottom edge + 2 vertical sides. */
+    ctx.beginPath();
+    ctx.moveTo(fL, bottomY); ctx.lineTo(fR, bottomY);
+    ctx.moveTo(fL, fY);      ctx.lineTo(fL, bottomY);
+    ctx.moveTo(fR, fY);      ctx.lineTo(fR, bottomY);
+    ctx.stroke();
+}
+
+/* ========================================================================
    drawIngredientTop — paints the 15°-perspective TOP face of an ingredient
    above the side body produced by INGREDIENTS[id].draw(). Combined with
    the side body, this gives each filling the look of "a ~5cm round slice
@@ -2116,10 +2246,14 @@ function drawIngredientRow(now){
                Just the catalog's fluffy ruffled drawing. */
             INGREDIENTS.lettuce.draw(plateCx, ingCy, ingW, ingH);
         } else { /* cheese */
-            INGREDIENTS.cheese.draw(plateCx, ingCy, ingW, ingH);
-            const topRx = ingW / 2;
-            const topRy = topRx * 0.26;
-            drawIngredientTop(id, plateCx, ingCy - ingH/2, topRx, topRy);
+            /* Swiss-cheese style block: trapezoidal top (slight back-edge
+               convergence for 15° one-point perspective) + thin front
+               side wall + scattered eyes (holes). Different look from
+               INGREDIENTS.cheese (used in burger stack with melt drips
+               appropriate for between-bun context). bottomY = wellY puts
+               the cheese's base on the plate surface; thick=2 keeps the
+               slice visibly thinner than the round fillings. */
+            drawCheesePalette(plateCx, wellY, ingW, 2);
         }
 
         /* Number badge — stays anchored to tile (doesn't lift with plate). */
@@ -2307,6 +2441,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777459654"></script>
+<script src="/js/siteFooter.js?v=1777460331"></script>
 </body>
 </html>
