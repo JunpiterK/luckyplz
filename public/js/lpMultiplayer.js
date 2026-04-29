@@ -124,6 +124,20 @@
     '.lp-mp-footer .lp-mp-danger:hover{background:rgba(220,70,70,.3);border-color:rgba(255,110,110,.7);color:#fff;',
     '  box-shadow:0 0 12px rgba(255,100,100,.3)}',
 
+    /* When a multiplayer room is active, the per-game single-player
+       result modal (#resultScreen across roulette / lotto / ladder /
+       team / bingo / car-racing) is suppressed. Reasons:
+         (1) The modal\'s "Settings" / "Spin Again" buttons run local-only
+             handlers that can drift the host away from the room flow
+             (e.g. backToSetup wipes the running config) and confuse
+             guests if the broadcast doesn\'t arrive in time.
+         (2) The multiplayer panel\'s game-switcher + End-Room buttons
+             are the canonical "next step" surface in multiplayer —
+             two competing post-game UIs at once is exactly the kind
+             of state-mismatch the user reported as "방이 쉽게 깨진다".
+       Hide via !important so we win against each game\'s inline-style
+       toggles in showResult() / replay handlers. */
+    'body.lp-mp-active #resultScreen{display:none!important}',
     /* Mobile + tablet: full-width pill, draggable on the Y-axis only.
        Phone screens are too small to free-drag horizontally without
        clipping off-screen, so horizontal stays locked at 10px gutters
@@ -178,6 +192,23 @@
     try{sessionStorage.setItem(SS_STATE,JSON.stringify(Object.assign({},readState(),patch)))}catch(_){}
   }
 
+  /* ---------- body-class signalling ----------
+     Single source of truth so the per-game CSS overrides
+     (display:none on #resultScreen, etc.) know when the multiplayer
+     panel is the active control surface. lp-mp-host vs lp-mp-guest
+     lets future per-role rules diverge without re-architecting. */
+  function setBodyMpClass(mode){
+    if(!document||!document.body)return;
+    var cl=document.body.classList;
+    cl.remove('lp-mp-host','lp-mp-guest');
+    if(mode==='host'||mode==='guest'){
+      cl.add('lp-mp-active');
+      cl.add('lp-mp-'+mode);
+    }else{
+      cl.remove('lp-mp-active');
+    }
+  }
+
   /* ---------- helpers ---------- */
   function esc(s){
     return String(s==null?'':s).replace(/[&<>"']/g,function(c){
@@ -192,9 +223,23 @@
       y:Math.max(8,Math.min(vh-h-8,y))
     };
   }
-  function defaultPos(){
+  function defaultPos(mode){
     if(window.innerWidth<=640)return null;// CSS handles mobile
-    return{x:window.innerWidth-360,y:82};// right-ish, below the status pill
+    /* Host: dead-centre default. The panel is the canonical "what
+       happens next" surface in multiplayer (game switcher + roster +
+       end-room button), so it deserves the focal slot on first show.
+       Users who prefer a corner just drag once — sessionStorage holds
+       the position across transferTo / page reloads. */
+    if(mode==='host'){
+      var w=340,h=200;// approximate normal-view footprint
+      return{
+        x:Math.max(8,Math.round((window.innerWidth-w)/2)),
+        y:Math.max(8,Math.round((window.innerHeight-h)/2))
+      };
+    }
+    /* Guest: original right-ish corner — guests are passive, the panel
+       just shows roster + leave button so it doesn\'t need to dominate. */
+    return{x:window.innerWidth-360,y:82};
   }
 
   /* ---------- drag (desktop / mobile / tablet) ----------
@@ -306,7 +351,10 @@
       /* else: CSS default (anchored bottom:10px) takes over via
          :not([data-mob-positioned]) selector. */
     }else{
-      var pos=st.pos||defaultPos();
+      /* Pass mode so host gets the centred default while guest keeps
+         its unobtrusive corner anchor. saved st.pos still wins — once
+         the user drags, that position is sticky across navigations. */
+      var pos=st.pos||defaultPos(mode);
       if(pos){p.style.left=pos.x+'px';p.style.top=pos.y+'px'}
     }
 
@@ -457,6 +505,7 @@
     try{room.onGuestJoin&&room.onGuestJoin(render)}catch(_){}
     try{room.onGuestLeave&&room.onGuestLeave(render)}catch(_){}
 
+    setBodyMpClass('host');
     current={mode:'host',api:room,panel:panel};
   }
 
@@ -519,6 +568,7 @@
       });
     }catch(_){}
 
+    setBodyMpClass('guest');
     current={mode:'guest',api:g,panel:panel};
   }
 
@@ -539,6 +589,9 @@
       }
     }
     current=null;
+    /* Drop body-class signal so the per-game resultScreen returns to
+       its normal display logic (single-player flow restored). */
+    setBodyMpClass(null);
   }
 
   /* ---------- event wiring ---------- */
