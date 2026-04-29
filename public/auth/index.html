@@ -135,120 +135,66 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         <div class="logo" onclick="location.href='/'">Lucky Please!</div>
         <div class="subtitle" id="subtitle">Join the fun! Sign in to play with friends.</div>
 
-        <!-- LOGIN / SIGNUP TABS -->
+        <!-- OAUTH-ONLY AUTH (email/password 가입 제거됨)
+             ─────────────────────────────────────────────
+             이메일 인증 메일 배달 문제 (Supabase 기본 SMTP 시간당
+             3통 한도 + 한국 ISP 스팸 필터 차단) 가 반복적으로
+             가입을 막아서 OAuth 전용으로 단순화. Google · Kakao
+             모두 자체적으로 이메일 검증을 끝낸 상태로 Supabase 에
+             세션을 만들어주므로 verification 메일 발송이 필요
+             없음 → 100% 가입 성공.
+
+             동의 절차는 KISA 정통망법 50조에 따라 반드시 OAuth
+             redirect 전에 이루어져야 함 (사용자가 명시적으로 동의
+             한 후에 외부 서비스로 정보 전송). 따라서 동의 블록을
+             OAuth 버튼 위에 두고, [필수] 두 항목 다 체크되기
+             전까지 버튼 disabled. 체크 상태는 sessionStorage 에
+             저장되어 OAuth redirect → callback 후에도 유지됨.
+             callback 후 set_consent RPC 가 호출되어 timestamp
+             기록. -->
         <div id="authSection">
-            <!-- Social OAuth -->
+            <div id="msgBox" class="msg"></div>
+
+            <!-- 동의 블록 (가입 게이트) — 텍스트는 applyLanguage 가 i18n 으로 채움 -->
+            <div class="consent-block" style="margin:0 0 14px;padding:10px 14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;text-align:left">
+                <label style="display:flex;align-items:center;gap:10px;font-size:.86em;color:#fff;font-weight:700;cursor:pointer;padding:6px 0">
+                    <input type="checkbox" id="signupAgreeAll" style="cursor:pointer;accent-color:#FF9A3C;width:18px;height:18px">
+                    <span id="caAgreeAllText"></span>
+                </label>
+                <div style="height:1px;background:rgba(255,255,255,.08);margin:6px -4px"></div>
+                <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.7);cursor:pointer;padding:4px 0">
+                    <input type="checkbox" id="signupTerms" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                    <span id="caTermsText"></span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.7);cursor:pointer;padding:4px 0">
+                    <input type="checkbox" id="signupPrivacy" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                    <span id="caPrivacyText"></span>
+                </label>
+                <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.55);cursor:pointer;padding:4px 0">
+                    <input type="checkbox" id="signupMarketing" style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
+                    <span id="caMarketingText"></span>
+                </label>
+            </div>
+
+            <!-- OAuth 버튼 — 동의 게이트 통과 전엔 disabled. -->
             <div class="oauth-row">
-                <button type="button" class="oauth-btn" id="googleBtn" onclick="handleGoogleLogin()">
+                <button type="button" class="oauth-btn" id="googleBtn" disabled onclick="handleGoogleLogin()">
                     <svg class="oauth-ico" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"/><path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"/><path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"/><path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571.001-.001.002-.001.003-.002l6.19 5.238C36.971 39.205 44 34 44 24c0-1.341-.138-2.65-.389-3.917z"/></svg>
                     <span id="googleBtnText">Continue with Google</span>
                 </button>
-                <!-- Kakao — bypasses Supabase's built-in OAuth flow
-                     (which hardcodes account_email scope → breaks on
-                     non-biz-verified Kakao apps, GitHub #36878). We
-                     instead do a direct Kakao OIDC authorize redirect,
-                     exchange the code → id_token via our own Edge
-                     Function, then call supabase.auth.signInWithIdToken
-                     to create the Supabase session. Zero dependency on
-                     Kakao biz-app verification. -->
-                <button type="button" class="oauth-btn oauth-btn-kakao" id="kakaoBtn" onclick="handleKakaoLogin()">
+                <!-- Kakao — Supabase 내장 OAuth 흐름 (account_email 스코프
+                     하드코딩으로 non-biz Kakao 앱에서 KOE205) 우회.
+                     Kakao OIDC authorize → 자체 Edge Function 으로
+                     code → id_token 교환 → signInWithIdToken 으로
+                     Supabase 세션 생성. -->
+                <button type="button" class="oauth-btn oauth-btn-kakao" id="kakaoBtn" disabled onclick="handleKakaoLogin()">
                     <svg class="oauth-ico" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path fill="#000" d="M12 3C6.477 3 2 6.463 2 10.732c0 2.78 1.883 5.215 4.717 6.584-.173.637-1.094 4.028-1.125 4.272 0 0-.023.19.105.262.129.072.28.016.28.016.336-.046 3.895-2.537 4.51-2.967.46.063.933.103 1.413.103 5.523 0 10-3.463 10-7.732C22 6.463 17.523 3 12 3z"/></svg>
                     <span id="kakaoBtnText">카카오로 시작</span>
                 </button>
             </div>
-            <div class="oauth-divider" id="oauthDivider">OR</div>
 
-            <div class="tab-bar">
-                <button class="tab-btn active" id="tabLogin" onclick="showTab('login')">Login</button>
-                <button class="tab-btn" id="tabSignup" onclick="showTab('signup')">Sign Up</button>
-            </div>
-
-            <div id="msgBox" class="msg"></div>
-
-            <!-- LOGIN FORM -->
-            <form id="loginForm" onsubmit="handleLogin(event)">
-                <div class="form-group">
-                    <label id="lEmail">Email</label>
-                    <input type="email" id="loginEmail" placeholder="you@example.com" required autocomplete="email">
-                </div>
-                <div class="form-group">
-                    <label id="lPassword">Password</label>
-                    <input type="password" id="loginPassword" placeholder="••••••••" required minlength="6" autocomplete="current-password">
-                </div>
-                <!-- Cloudflare Turnstile bot-challenge mount. Empty
-                     until onTurnstileLoad() renders the widget; if the
-                     site key is not configured (TURNSTILE_SITE_KEY=''),
-                     stays empty and the form submits without a token. -->
-                <div id="turnstileLogin" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
-                <button type="submit" class="submit-btn" id="loginBtn">Login</button>
-                <button type="button" class="forgot-link" onclick="showReset()" id="forgotText">Forgot password?</button>
-            </form>
-
-            <!-- SIGNUP FORM -->
-            <form id="signupForm" style="display:none" onsubmit="handleSignup(event)">
-                <div class="form-group">
-                    <label id="sNickname">Nickname</label>
-                    <input type="text" id="signupNickname" placeholder="YourNickname" required minlength="2" maxlength="20" autocomplete="username">
-                </div>
-                <div class="form-group">
-                    <label id="sEmail">Email</label>
-                    <input type="email" id="signupEmail" placeholder="you@example.com" required autocomplete="email">
-                </div>
-                <div class="form-group">
-                    <label id="sPassword">Password (6+ characters)</label>
-                    <input type="password" id="signupPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
-                </div>
-                <div class="form-group">
-                    <label id="sConfirm">Confirm Password</label>
-                    <input type="password" id="signupConfirm" placeholder="••••••••" required minlength="6" autocomplete="new-password">
-                </div>
-                <!-- 동의 체크박스 — KISA 정통망법 50조 준수.
-                     UX 최적화: "전체 동의" master 체크박스를 위에 두어
-                     1클릭으로 모든 동의가 끝나도록 함 (네이버/카카오/토스
-                     공통 패턴). 신경쓰는 사용자는 아래 개별 체크박스로
-                     fine control 가능. master ↔ children은 양방향 sync
-                     (master 클릭 → 셋 다 체크, 개별 변경 → master 자동
-                     반영). 마케팅이 (선택) 항목인데 "전체 동의"에
-                     포함된다는 점은 부제로 명시 (KISA: 명확성 의무). -->
-                <!-- 동의 블록 — 텍스트는 applyLanguage()가 채워넣음
-                     (16개 언어 i18n). 라벨 안의 spans에 ID를 둬서
-                     번역 시 innerHTML로 한 번에 갱신 가능. -->
-                <div class="consent-block" style="margin:14px 0 6px;padding:10px 14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;text-align:left">
-                    <label style="display:flex;align-items:center;gap:10px;font-size:.86em;color:#fff;font-weight:700;cursor:pointer;padding:6px 0">
-                        <input type="checkbox" id="signupAgreeAll" style="cursor:pointer;accent-color:#FF9A3C;width:18px;height:18px">
-                        <span id="caAgreeAllText"></span>
-                    </label>
-                    <div style="height:1px;background:rgba(255,255,255,.08);margin:6px -4px"></div>
-                    <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.7);cursor:pointer;padding:4px 0">
-                        <input type="checkbox" id="signupTerms" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
-                        <span id="caTermsText"></span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.7);cursor:pointer;padding:4px 0">
-                        <input type="checkbox" id="signupPrivacy" required style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
-                        <span id="caPrivacyText"></span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:10px;font-size:.76em;color:rgba(255,255,255,.55);cursor:pointer;padding:4px 0">
-                        <input type="checkbox" id="signupMarketing" style="cursor:pointer;accent-color:#FF9A3C;width:16px;height:16px">
-                        <span id="caMarketingText"></span>
-                    </label>
-                </div>
-                <div id="turnstileSignup" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
-                <button type="submit" class="submit-btn" id="signupBtn">Sign Up</button>
-            </form>
-        </div>
-
-        <!-- PASSWORD RESET -->
-        <div id="resetSection" class="reset-section">
-            <button class="back-link" onclick="hideReset()">← Back to login</button>
-            <div id="resetMsg" class="msg"></div>
-            <form onsubmit="handleReset(event)">
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" id="resetEmail" placeholder="you@example.com" required>
-                </div>
-                <div id="turnstileReset" class="turnstile-mount" style="margin:10px 0;display:flex;justify-content:center"></div>
-                <button type="submit" class="submit-btn" id="resetBtn">Send Reset Link</button>
-            </form>
+            <!-- 동의 미체크 시 안내 메시지 -->
+            <div id="consentHint" style="margin-top:10px;font-size:.74em;color:rgba(255,230,109,.7);text-align:center;line-height:1.5"></div>
         </div>
 
         <!-- PROFILE (logged in) -->
@@ -272,7 +218,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     </div>
 
     <script src="/vendor/supabase.min.js"></script>
-    <script src="/js/supabase-config.js?v=1777502691"></script>
+    <script src="/js/supabase-config.js?v=1777504623"></script>
     <script>
 /* ===== I18N (16 languages) ===== */
 const I18N={
@@ -343,24 +289,10 @@ function _escHtml(s){
 /* ===== Stars ===== */
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<40;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+0.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
-/* ===== UI ===== */
-function showTab(tab){
-    document.getElementById('tabLogin').classList.toggle('active',tab==='login');
-    document.getElementById('tabSignup').classList.toggle('active',tab==='signup');
-    document.getElementById('loginForm').style.display=tab==='login'?'block':'none';
-    document.getElementById('signupForm').style.display=tab==='signup'?'block':'none';
-    clearMsg();
-}
-
-function showReset(){
-    document.getElementById('authSection').style.display='none';
-    document.getElementById('resetSection').style.display='block';
-}
-function hideReset(){
-    document.getElementById('resetSection').style.display='none';
-    document.getElementById('authSection').style.display='block';
-}
-
+/* ===== UI =====
+   showTab / showReset / hideReset / handleReset 등 email-password
+   가입 시절 함수들은 OAuth-only 전환으로 제거됨. 가입 경로는 이제
+   Google · Kakao 둘 뿐이라 탭이나 비번 재설정 화면이 필요 없음. */
 function showMsg(text,type='error'){
     const el=document.getElementById('msgBox');
     el.textContent=text;el.className='msg '+type;
@@ -387,7 +319,6 @@ function goReturn(){
 
 function showProfile(user){
     document.getElementById('authSection').style.display='none';
-    document.getElementById('resetSection').style.display='none';
     document.getElementById('profileSection').style.display='block';
 
     const name=getDisplayName(user);
@@ -395,6 +326,11 @@ function showProfile(user){
     document.getElementById('profileName').textContent=name;
     document.getElementById('profileEmail').textContent=user.email;
 
+    /* OAuth-only 전환으로 모든 신규 사용자는 provider 가 이메일을
+       이미 검증한 상태로 들어옴 → email_confirmed_at 항상 set.
+       Verified 배지만 표시하고 unverified 케이스의 resend 버튼은
+       legacy 사용자 (이메일/비번으로 가입 후 미인증) 가 남아있을
+       경우 대비해 그대로 둠. */
     const verified=user.email_confirmed_at!=null;
     const badge=document.getElementById('profileBadge');
     badge.textContent=verified?'✅ '+T('verified'):'⚠️ '+T('unverified');
@@ -413,33 +349,23 @@ function showProfile(user){
 
 function showAuth(){
     document.getElementById('authSection').style.display='block';
-    document.getElementById('resetSection').style.display='none';
     document.getElementById('profileSection').style.display='none';
 }
 
 function applyLanguage(){
     document.getElementById('subtitle').textContent=T('subtitle');
-    document.getElementById('tabLogin').textContent=T('login');
-    document.getElementById('tabSignup').textContent=T('signup');
-    document.getElementById('lEmail').textContent=T('email');
-    document.getElementById('lPassword').textContent=T('password');
-    document.getElementById('loginBtn').textContent=T('loginBtn');
-    document.getElementById('forgotText').textContent=T('forgot');
-    document.getElementById('sNickname').textContent=T('nickname');
-    document.getElementById('sEmail').textContent=T('email');
-    document.getElementById('sPassword').textContent=T('passwordHint');
-    document.getElementById('sConfirm').textContent=T('confirm');
-    document.getElementById('signupBtn').textContent=T('signupBtn');
-    document.getElementById('resetBtn').textContent=T('resetBtn');
     document.getElementById('homeLink').textContent='🏠 '+T('backToGames');
     document.getElementById('googleBtnText').textContent=T('google');
     const kk=document.getElementById('kakaoBtnText');
     if(kk)kk.textContent=T('kakao')||'Continue with Kakao';
-    document.getElementById('oauthDivider').textContent=T('or');
     /* <html lang> attribute follows current language so screen readers
        and SEO crawlers see the right locale. en-GB → "en-GB", others
        → 2-letter code. */
     document.documentElement.lang = (lang==='gb'?'en-GB':lang);
+    /* 동의 미체크 안내 메시지 — i18n 'mustAgreeRequired' 재활용
+       (회원가입 시 검증 메시지와 동일 의미). */
+    const hint = document.getElementById('consentHint');
+    if (hint) hint.textContent = T('mustAgreeRequired');
 
     /* ----- Consent block (signup form) — innerHTML render -----
        Templates carry {link} placeholders so each language places the
@@ -464,53 +390,30 @@ function applyLanguage(){
 }
 
 /* ===== Cloudflare Turnstile bot-protection =====
-   Loads the widget script and renders 3 invisible/managed widgets
-   (login/signup/reset) ONLY when supabase-config.js exposes a
-   non-empty TURNSTILE_SITE_KEY. With the default empty key, the
-   loader skips entirely and the auth flow runs unchanged.
+   OAuth-only 전환 후 Turnstile 마운트 자체가 사라짐 — Google/Kakao
+   가 자체 봇 방어 (reCAPTCHA / Kakao 자체 검증) 를 갖고 있어
+   Turnstile 추가는 중복. 향후 OAuth 외 경로 추가 시 재활성화 가능
+   하도록 helper 만 남겨둠 (전부 no-op). */
+function _captchaActive(){ return false; }
 
-   On submit, each handler grabs the widget's response token via
-   turnstile.getResponse(widgetId). If captcha is enabled but the
-   token is missing / expired, the handler shows "보안 확인을
-   완료해주세요" and resets the widget so the user can retry. */
-let _twLoginId = null, _twSignupId = null, _twResetId = null;
-function _captchaActive(){
-    return typeof isCaptchaEnabled === 'function' && isCaptchaEnabled();
+/* ===== Consent checkboxes — master ↔ children sync + OAuth gate =====
+   - 전체 동의 토글 → 셋 다 체크 (네이버/카카오/토스 패턴)
+   - 개별 토글 → master 자동 갱신
+   - 추가: terms + privacy 둘 다 체크돼야 OAuth 버튼 활성화. 안 그러면
+     KISA 정통망법 위반 (외부 서비스로 정보 전송 전 명시적 동의 필요).
+     marketing 은 [선택] 이라 게이트에 안 들어감. */
+const CONSENT_STORAGE_KEY = 'lp_pending_consent';
+function _refreshOauthGate(){
+    const t = document.getElementById('signupTerms');
+    const p = document.getElementById('signupPrivacy');
+    const ok = !!(t && p && t.checked && p.checked);
+    const gBtn = document.getElementById('googleBtn');
+    const kBtn = document.getElementById('kakaoBtn');
+    if (gBtn) gBtn.disabled = !ok;
+    if (kBtn) kBtn.disabled = !ok;
+    const hint = document.getElementById('consentHint');
+    if (hint) hint.style.display = ok ? 'none' : 'block';
 }
-function _twTokenFor(widgetId){
-    if (!widgetId || typeof turnstile === 'undefined') return null;
-    try { const t = turnstile.getResponse(widgetId); return t || null; } catch(_) { return null; }
-}
-function _twResetWidget(widgetId){
-    if (!widgetId || typeof turnstile === 'undefined') return;
-    try { turnstile.reset(widgetId); } catch(_){}
-}
-window.onTurnstileLoad = function(){
-    if (!_captchaActive()) return;
-    if (typeof turnstile === 'undefined') return;
-    const sk = getTurnstileSiteKey();
-    try {
-        _twLoginId  = turnstile.render('#turnstileLogin',  { sitekey: sk, theme: 'dark' });
-        _twSignupId = turnstile.render('#turnstileSignup', { sitekey: sk, theme: 'dark' });
-        _twResetId  = turnstile.render('#turnstileReset',  { sitekey: sk, theme: 'dark' });
-    } catch(e) {
-        console.warn('[turnstile] render error', e);
-    }
-};
-(function _maybeLoadTurnstile(){
-    if (!_captchaActive()) return;   /* feature flag off — skip script load */
-    if (document.getElementById('cf-turnstile-script')) return;
-    const s = document.createElement('script');
-    s.id = 'cf-turnstile-script';
-    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad';
-    s.async = true; s.defer = true;
-    document.head.appendChild(s);
-})();
-
-/* ===== Consent checkboxes — master ↔ children sync =====
-   "전체 동의" toggle propagates to all 3 children; any individual
-   change recomputes master. Korean signup-form standard (네이버/
-   카카오/토스 모두 같은 패턴). Single click on master = all done. */
 (function _wireConsentMaster(){
     const master = document.getElementById('signupAgreeAll');
     const t = document.getElementById('signupTerms');
@@ -521,175 +424,55 @@ window.onTurnstileLoad = function(){
         t.checked = master.checked;
         p.checked = master.checked;
         m.checked = master.checked;
+        _refreshOauthGate();
     });
     [t, p, m].forEach(cb => {
         cb.addEventListener('change', () => {
             master.checked = t.checked && p.checked && m.checked;
+            _refreshOauthGate();
         });
     });
+    _refreshOauthGate();   /* 초기 상태 반영 */
 })();
 
-/* ===== Auth Handlers ===== */
-async function handleLogin(e){
-    e.preventDefault();clearMsg();
-    const email=document.getElementById('loginEmail').value.trim();
-    const pw=document.getElementById('loginPassword').value;
-    /* Captcha gate — only enforced when the admin has configured
-       Turnstile. With no site key, captchaToken is null and Supabase
-       ignores it (the dashboard's captcha protection is also off in
-       that case, so there's nothing to verify against). */
-    let captchaToken = null;
-    if (_captchaActive()) {
-        captchaToken = _twTokenFor(_twLoginId);
-        if (!captchaToken){ showMsg(T('captchaIncomplete'),'error'); return; }
-    }
-    document.getElementById('loginBtn').disabled=true;
-
-    const{data,error}=await signIn(email,pw,captchaToken);
-    document.getElementById('loginBtn').disabled=false;
-
-    if(error){
-        showMsg(error.message,'error');
-        _twResetWidget(_twLoginId);   /* let the user retry with a fresh challenge */
-        return;
-    }
-    showMsg(T('loginSuccess'),'success');
-    const ret=getReturnUrl();
-    if(ret){setTimeout(()=>{location.href=ret},700);return}
-    setTimeout(()=>showProfile(data.user),500);
+/* OAuth redirect 직전에 호출 — 사용자의 동의 상태를 sessionStorage 에
+   저장해서 callback 후 set_consent RPC 호출에 사용. localStorage 가
+   아니라 sessionStorage 인 이유: 다른 탭/세션에 새는 걸 방지 + OAuth
+   왕복은 같은 탭에서 끝남. */
+function _stashPendingConsent(){
+    const data = {
+        terms: !!document.getElementById('signupTerms').checked,
+        privacy: !!document.getElementById('signupPrivacy').checked,
+        marketing: !!document.getElementById('signupMarketing').checked,
+        ts: Date.now()
+    };
+    try { sessionStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(data)); }
+    catch(_) {}
 }
 
-async function handleSignup(e){
-    e.preventDefault();clearMsg();
-    const nick=document.getElementById('signupNickname').value.trim();
-    const email=document.getElementById('signupEmail').value.trim();
-    const pw=document.getElementById('signupPassword').value;
-    const confirm=document.getElementById('signupConfirm').value;
-    /* KISA consent gating — terms + privacy are mandatory, marketing
-       is optional. The required attribute on the checkboxes also
-       blocks form submission natively, but we double-check here so a
-       JS-disabled bypass still surfaces the error. */
-    const termsAgreed     = document.getElementById('signupTerms').checked;
-    const privacyAgreed   = document.getElementById('signupPrivacy').checked;
-    const marketingAgreed = document.getElementById('signupMarketing').checked;
-    if (!termsAgreed || !privacyAgreed){
-        showMsg(T('mustAgreeRequired'),'error');
-        return;
-    }
-
-    if(pw!==confirm){showMsg(T('passwordMismatch'),'error');return}
-
-    /* Disposable-email gate — calls is_email_domain_allowed RPC which
-       checks the email's domain against the blocklist. The same check
-       runs server-side via the profiles trigger as a backup, but doing
-       it here gives the user immediate feedback instead of an opaque
-       server error after password validation. RPC missing (migration
-       not deployed) → silent fall-through; signup proceeds. */
+/* OAuth callback 후 호출 — sessionStorage 에 stash 된 동의 timestamp
+   을 set_consent RPC 로 서버에 영속화. RPC 누락 (마이그레이션 미배포)
+   시 silent fall-through. */
+async function _commitPendingConsent(){
+    let raw = null;
+    try { raw = sessionStorage.getItem(CONSENT_STORAGE_KEY); } catch(_){}
+    if (!raw) return;
+    try { sessionStorage.removeItem(CONSENT_STORAGE_KEY); } catch(_){}
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch(_) { return; }
+    if (!parsed || typeof parsed !== 'object') return;
+    /* 5분 넘은 stash 는 무시 (중간에 OAuth 가 막혔거나 사용자가
+       다른 곳을 거쳐 왔을 수 있음). 안전을 위해 폐기. */
+    if (Date.now() - (parsed.ts||0) > 5*60*1000) return;
     try {
-        const { data: allowed, error: chkErr } = await getSupabase()
-            .rpc('is_email_domain_allowed', { p_email: email });
-        if (chkErr) {
-            console.warn('[auth.signup] is_email_domain_allowed RPC failed:', chkErr.message);
-        } else if (allowed === false) {
-            showMsg(T('disposableEmail'),'error');
-            return;
-        }
-    } catch(e) {
-        console.warn('[auth.signup] domain check threw:', e);
-    }
-
-    let captchaToken = null;
-    if (_captchaActive()) {
-        captchaToken = _twTokenFor(_twSignupId);
-        if (!captchaToken){ showMsg(T('captchaIncomplete'),'error'); return; }
-    }
-    document.getElementById('signupBtn').disabled=true;
-    const{data,error}=await signUp(email,pw,nick,captchaToken);
-    document.getElementById('signupBtn').disabled=false;
-
-    if(error){
-        /* Friendly remap for the server-side trigger error. The trigger
-           raises 'email_domain_blocked: <domain>'; show the same Korean
-           copy as the client-side check for consistency. */
-        let msg = error.message;
-        if (typeof msg === 'string' && msg.toLowerCase().includes('email_domain_blocked')) {
-            msg = T('disposableEmail');
-        }
-        showMsg(msg,'error');
-        _twResetWidget(_twSignupId);
-        return;
-    }
-    /* ---- Diagnostic: detect known Supabase response shapes ----
-       Supabase returns success-shaped responses for two cases that
-       look like normal signup but actually mean something different.
-       We surface clearer messages so the user (or the operator
-       checking the dashboard) knows what's actually happening. */
-
-    /* Case 1: email already registered. Supabase deliberately returns
-       success with `data.user.identities = []` for security (so an
-       attacker can't enumerate which emails exist). We detect this
-       and show a friendlier "go log in / reset password" message. */
-    if (Array.isArray(data?.user?.identities) && data.user.identities.length === 0) {
-        console.warn('[auth.signup] Email already registered — Supabase returned soft-success with empty identities[]. ' +
-                     'No verification email is sent in this case (by design). Suggest user sign in or reset password.');
-        showMsg(T('signupAlreadyExists') || '이미 가입된 이메일이에요.', 'error');
-        _twResetWidget(_twSignupId);
-        return;
-    }
-
-    /* Case 2: account auto-verified without email confirmation.
-       Happens when the Supabase project has Authentication →
-       Providers → Email → "Confirm email" toggle OFF. Account is
-       active immediately, no verification mail sent. The console
-       log makes the misconfig visible to the operator without
-       freaking out end users. */
-    const autoVerified = !!(data?.user?.email_confirmed_at);
-    if (autoVerified) {
-        console.warn('[auth.signup] Account created without verification email. ' +
-                     'If you expected one: Supabase Dashboard → Authentication → Providers → Email → ' +
-                     '"Confirm email" should be ENABLED. Also check URL Configuration → Site URL ' +
-                     'includes https://luckyplz.com and Redirect URLs allow /auth/?verified=1.');
-    }
-
-    /* Persist consent timestamps. Marketing flag carries through to
-       profiles.marketing_agreed_at = now() if checked, NULL otherwise.
-       Fire-and-forget — if the RPC isn't deployed yet, the signup
-       still succeeds (the user just won't have consent timestamps
-       on their profile until the migration lands). */
-    try {
-        const { error: consentErr } = await getSupabase().rpc('set_consent', {
-            p_terms: termsAgreed, p_privacy: privacyAgreed, p_marketing: marketingAgreed
+        const { error } = await getSupabase().rpc('set_consent', {
+            p_terms: !!parsed.terms,
+            p_privacy: !!parsed.privacy,
+            p_marketing: !!parsed.marketing
         });
-        if (consentErr) console.warn('[auth.signup] set_consent failed:', consentErr.message);
-    } catch(e) { console.warn('[auth.signup] set_consent threw:', e); }
-
-    /* Pick the right success message based on whether verification
-       is pending or the account is already active. */
-    showMsg(T(autoVerified ? 'signupAutoVerified' : 'signupSuccess'), 'success');
-}
-
-async function handleReset(e){
-    e.preventDefault();
-    const email=document.getElementById('resetEmail').value.trim();
-    let captchaToken = null;
-    if (_captchaActive()) {
-        captchaToken = _twTokenFor(_twResetId);
-        if (!captchaToken){
-            const el=document.getElementById('resetMsg');
-            el.textContent=T('captchaIncomplete'); el.className='msg error';
-            return;
-        }
-    }
-    document.getElementById('resetBtn').disabled=true;
-    const{data,error}=await resetPassword(email,captchaToken);
-    document.getElementById('resetBtn').disabled=false;
-
-    const el=document.getElementById('resetMsg');
-    if(error){
-        el.textContent=error.message;el.className='msg error';
-        _twResetWidget(_twResetId);
-    } else {
-        el.textContent=T('resetSuccess');el.className='msg success';
+        if (error) console.warn('[auth.oauth] set_consent failed:', error.message);
+    } catch(e) {
+        console.warn('[auth.oauth] set_consent threw:', e);
     }
 }
 
@@ -701,8 +484,18 @@ async function handleLogout(){
 
 async function handleGoogleLogin(){
     clearMsg();
+    /* 게이트 확인 — disabled 속성 우회 가능성에 대비한 백업. */
+    const t = document.getElementById('signupTerms');
+    const p = document.getElementById('signupPrivacy');
+    if (!(t && p && t.checked && p.checked)){
+        showMsg(T('mustAgreeRequired'),'error');
+        return;
+    }
     const btn=document.getElementById('googleBtn');
     btn.disabled=true;
+    /* 동의 상태를 sessionStorage 에 저장 — Google 리다이렉트 후
+       돌아왔을 때 set_consent RPC 호출에 사용. */
+    _stashPendingConsent();
     const ret=getReturnUrl();
     const redirectTo=window.location.origin+'/auth/'+(ret?('?return='+encodeURIComponent(ret)):'');
     const{error}=await getSupabase().auth.signInWithOAuth({
@@ -735,8 +528,17 @@ const KAKAO_TOKEN_ENDPOINT='https://owvaarmnlednfkgmgerf.supabase.co/functions/v
 
 async function handleKakaoLogin(){
     clearMsg();
+    /* 게이트 확인 — disabled 속성 우회 가능성에 대비한 백업. */
+    const t = document.getElementById('signupTerms');
+    const p = document.getElementById('signupPrivacy');
+    if (!(t && p && t.checked && p.checked)){
+        showMsg(T('mustAgreeRequired'),'error');
+        return;
+    }
     const btn=document.getElementById('kakaoBtn');
     btn.disabled=true;
+    /* 동의 상태 stash (Google 과 동일 패턴). */
+    _stashPendingConsent();
     /* CSRF protection via state (echoed back by Kakao, verified on
        return). We intentionally do NOT send a nonce — Kakao's id_token
        nonce-claim format doesn't match Supabase's raw-nonce
@@ -803,6 +605,8 @@ async function handleKakaoLogin(){
             showMsg('Kakao session failed: '+error.message,'error');
             return;
         }
+        /* 신규 가입자라면 stash 된 동의 timestamp 를 서버에 영속화. */
+        await _commitPendingConsent();
         /* Success — route to setup if profile incomplete, otherwise
            the ?return= the user came from (or home). Mirrors the
            Google flow. */
@@ -843,6 +647,9 @@ async function init(){
     // Check existing session
     const user=await getUser();
     if(user){
+        /* OAuth redirect 후 첫 진입이라면 stash 된 동의 RPC 처리.
+           이미 set 돼 있으면 set_consent 가 no-op (sticky). */
+        await _commitPendingConsent();
         // If arrived via OAuth redirect with a return URL, auto-continue to origin
         const ret=getReturnUrl();
         if(ret){setTimeout(()=>{location.href=ret},400);return}
@@ -850,8 +657,12 @@ async function init(){
     }
 
     // Listen for auth changes
-    onAuthChange((event,session)=>{
+    onAuthChange(async (event,session)=>{
         if(event==='SIGNED_IN'&&session?.user){
+            /* SIGNED_IN 도 OAuth 콜백 케이스 처리 (init 의 getUser
+               로는 못 잡는 race 가 있을 수 있음). _commitPendingConsent
+               는 stash 가 없으면 no-op 이라 idempotent. */
+            await _commitPendingConsent();
             showProfile(session.user);
         }else if(event==='SIGNED_OUT'){
             showAuth();
@@ -866,6 +677,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777502691" defer></script>
+<script src="/js/siteFooter.js?v=1777504623" defer></script>
 </body>
 </html>
