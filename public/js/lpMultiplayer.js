@@ -358,8 +358,22 @@
 
   /* ---------- host mount ---------- */
   function mountHost(room){
+    if(!room){return}
+    /* Guard against accidental double-mount of the same room — could
+       happen if the late-attach safety net races with the original
+       lp-room-host-ready dispatch. Same room + already-mounted panel
+       = no-op. */
+    if(current&&current.api===room&&current.panel&&document.body.contains(current.panel)){
+      try{console.log('[LpMultiplayer] mountHost skipped (already mounted for this room)')}catch(_){}
+      return;
+    }
     unmount();
     var panel=buildShell('host');
+    if(!panel||!panel.querySelector('.lp-mp-titlebar')){
+      try{console.error('[LpMultiplayer] mountHost: buildShell produced no titlebar — aborting')}catch(_){}
+      return;
+    }
+    try{console.log('[LpMultiplayer] mountHost code='+(room.code||'?')+' game='+(room.gameId||'?'))}catch(_){}
     var hostAuthedName=null;
 
     /* Host-only game switcher. Clicking a non-current, resumable game
@@ -448,8 +462,19 @@
 
   /* ---------- guest mount ---------- */
   function mountGuest(g){
+    if(!g){return}
+    /* Same double-mount guard as mountHost. */
+    if(current&&current.api===g&&current.panel&&document.body.contains(current.panel)){
+      try{console.log('[LpMultiplayer] mountGuest skipped (already mounted for this guest)')}catch(_){}
+      return;
+    }
     unmount();
     var panel=buildShell('guest');
+    if(!panel||!panel.querySelector('.lp-mp-titlebar')){
+      try{console.error('[LpMultiplayer] mountGuest: buildShell produced no titlebar — aborting')}catch(_){}
+      return;
+    }
+    try{console.log('[LpMultiplayer] mountGuest code='+(g.code||'?')+' game='+(g.gameId||'?'))}catch(_){}
     var roster=[];
     var hostAuthedName=g.hostName||null;
 
@@ -531,6 +556,43 @@
   window.addEventListener('lp-room-guest-ready',onGuestReady);
   window.addEventListener('lp-room-closed',onRoomClosed);
 
+  /* ---- Late-load safety net ----
+     The lp-room-host-ready / lp-room-guest-ready events are CustomEvents
+     dispatched ONCE per room creation. If lpMultiplayer.js is still
+     downloading at the moment lpRoom.js fires the event (a real race on
+     transferTo with a slow CDN edge), the event vanishes into the void
+     and the panel never mounts — the user sees their previous-page panel
+     fade away with the navigation but no replacement appears, leaving
+     a phantom-roomful page that LOOKS connected but has no controls.
+
+     Recovery: on every IIFE boot (which runs on every page load),
+     poll the global pointers lpRoom sets right alongside its dispatch.
+     If a room is already live but no panel is mounted yet, attach now.
+     The poll is short (5 ticks × 100ms) — past that the user would
+     have seen the issue and the next route change resets state anyway. */
+  (function lateAttach(){
+    var tries=0;
+    function tick(){
+      if(current){return}
+      var hr=window.LpRoom_currentHostRoom;
+      var gr=window.LpRoom_currentGuestRoom;
+      if(hr){
+        try{mountHost(hr)}catch(_){}
+        return;
+      }
+      if(gr){
+        try{mountGuest(gr)}catch(_){}
+        return;
+      }
+      if(tries++<5)setTimeout(tick,100);
+    }
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',tick);
+    }else{
+      tick();
+    }
+  })();
+
   /* Intercept the floating 🏠 home button on game pages so a host room
      survives clicking it — show a confirm rather than silently dropping
      the room and all connected guests. */
@@ -581,10 +643,23 @@
     p.removeAttribute('data-mob-positioned');
   });
 
+  /* Manual rescue for the rare case where the panel exists in the DOM
+     but doesn't respond to clicks/drag (handlers detached, stale CSS,
+     etc). Force a teardown + remount from the current global room.
+     Callable from console: `LpMultiplayer.remount()`. */
+  function remount(){
+    var hr=window.LpRoom_currentHostRoom;
+    var gr=window.LpRoom_currentGuestRoom;
+    if(hr){unmount();mountHost(hr);return 'host';}
+    if(gr){unmount();mountGuest(gr);return 'guest';}
+    return 'no-room';
+  }
+
   window.LpMultiplayer={
     mountHost:mountHost,
     mountGuest:mountGuest,
     unmount:unmount,
+    remount:remount,
     _current:function(){return current}
   };
 })();

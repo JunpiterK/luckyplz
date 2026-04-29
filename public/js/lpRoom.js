@@ -500,6 +500,9 @@
                    already dismissed. */
                 try{localStorage.removeItem('lp_hostTransit')}catch(_){}
                 try{localStorage.removeItem('lp_lastHostRoom')}catch(_){}
+                /* Clear the global pointer so lpMultiplayer\'s late-mount
+                   safety net doesn\'t resurrect a torn-down room. */
+                try{if(window.LpRoom_currentHostRoom===roomApi)window.LpRoom_currentHostRoom=null}catch(_){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'host'}}))}catch(_){}
             },
             /* Transfer the room to a new URL — host navigates there, guests
@@ -551,7 +554,16 @@
         }))}catch(_){}
 
         /* Fire once the room is live so shared UI modules (e.g. lpMultiplayer)
-           can attach without every game page wiring them manually. */
+           can attach without every game page wiring them manually. We ALSO
+           stash the room on a global so a late-loading listener (e.g.
+           lpMultiplayer.js still in flight when this fires) can pick it
+           up on its own initialisation rather than miss the event entirely.
+           Without this, transferTo on a slow network would sometimes
+           land on the new page with hostCreate completing before
+           lpMultiplayer.js finished downloading — the event would dispatch
+           into nothing and the panel would never mount, leaving a
+           non-interactive room from the user\'s POV. */
+        try{window.LpRoom_currentHostRoom=roomApi}catch(_){}
         try{window.dispatchEvent(new CustomEvent('lp-room-host-ready',{detail:{room:roomApi}}))}catch(_){}
         return roomApi;
     }
@@ -791,6 +803,7 @@
                         var lr=JSON.parse(localStorage.getItem('lp_lastRoom')||'null');
                         if(lr&&lr.code===code)localStorage.removeItem('lp_lastRoom');
                     }catch(_){}
+                    try{if(window.LpRoom_currentGuestRoom===guestApi)window.LpRoom_currentGuestRoom=null}catch(_){}
                     try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'host_closed'}}))}catch(_){}
                 }
             }
@@ -955,6 +968,7 @@
                 }catch(_){}
                 try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
                 try{sb.removeChannel(chan)}catch(e){}
+                try{if(window.LpRoom_currentGuestRoom===guestApi)window.LpRoom_currentGuestRoom=null}catch(_){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'self'}}))}catch(_){}
             },
             /* Median host-clock skew (host_t - guest_t) in ms, sampled
@@ -971,6 +985,11 @@
             onStatusChange:function(cb){if(typeof cb==='function'){guestStatusCbs.push(cb);try{cb(guestConnStatus)}catch(_){}}},
             connectionStatus:function(){return guestConnStatus}
         };
+        /* Same late-listener safety net as the host path — see comment
+           there. Stash the live guest API globally so lpMultiplayer
+           can pick it up on its own boot if the event fired before
+           the script finished loading. */
+        try{window.LpRoom_currentGuestRoom=guestApi}catch(_){}
         try{window.dispatchEvent(new CustomEvent('lp-room-guest-ready',{detail:{guest:guestApi}}))}catch(_){}
         return guestApi;
     }
