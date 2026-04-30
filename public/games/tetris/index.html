@@ -191,6 +191,15 @@ body{
 }
 .canvas-wrap.shaking-1{animation:shake-1 220ms ease-in-out;will-change:transform}
 .canvas-wrap.shaking-tetris{animation:shake-tetris 460ms ease-in-out;will-change:transform}
+/* Hard drop 임팩트 — 수직 방향 짧은 bounce. 무거운 게 떨어진 느낌. */
+@keyframes shake-impact{
+    0%  {transform:translate3d(0,0,0)}
+    25% {transform:translate3d(0,4px,0)}
+    50% {transform:translate3d(0,-1px,0)}
+    75% {transform:translate3d(0,2px,0)}
+    100%{transform:translate3d(0,0,0)}
+}
+.canvas-wrap.shaking-impact{animation:shake-impact 220ms cubic-bezier(0.2,0,0.4,1);will-change:transform}
 /* TETRIS 4-line 시 캔버스 테두리 자체가 주황 네온으로 펄스 */
 @keyframes tetris-border{
     0%{box-shadow:0 0 20px rgba(0,217,255,.08);border-color:rgba(0,217,255,.18)}
@@ -741,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777579153"></script>
+<script src="/js/supabase-config.js?v=1777579819"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1583,10 +1592,40 @@ function softDrop(){
 }
 function hardDrop(){
     if(!current || paused || gameOverFlag) return;
+    /* Trail snapshot — drop 시작 위치/타입 저장. lock() 후에는 current
+       이 새 piece 로 바뀌므로 미리 캡처. */
+    const startY = current.y;
+    const trailType = current.type;
+    const trailRot = current.rot;
+    const trailX = current.x;
     let cells = 0;
     while(tryPos(current.type, current.rot, current.x, current.y + 1)){
         current.y += 1;
         cells++;
+    }
+    if(cells > 0){
+        /* 잔상 streak — startY 부터 endY 까지 piece 가 통과한 자리에
+           반투명 복제본 그림. 가까이 (head) = 진하고, 멀리 (tail) = 흐림.
+           220ms 동안 점점 페이드 → "쌩 하고 떨어진" 잔상 효과. */
+        dropTrail = {
+            type: trailType,
+            rot: trailRot,
+            x: trailX,
+            startY: startY,
+            endY: current.y,
+            color: PIECES[trailType].color,
+            start: performance.now(),
+            duration: 220
+        };
+        requestAnimationFrame(animateDropTrailTick);
+        /* 임팩트 shake — 수직 bounce 로 "쾅" 박힌 느낌 */
+        const wrap = $('canvasWrap');
+        if(wrap){
+            wrap.classList.remove('shaking-1','shaking-tetris','tetris-glow','shaking-impact');
+            void wrap.offsetWidth;
+            wrap.classList.add('shaking-impact');
+            setTimeout(() => wrap.classList.remove('shaking-impact'), 240);
+        }
     }
     score += cells * 2;   /* +2 per cell hard-dropped */
     $('scoreNow').textContent = score.toLocaleString();
@@ -1648,18 +1687,47 @@ function lock(){
             setTimeout(()=>wrap.classList.remove(shakeCls,'tetris-glow'), dur + 80);
         }
 
+        /* 폭발 파티클 — cleared cell 마다 N 개 파편이 사방으로 튐.
+           각 셀 색을 반영해 화면 전체로 비산. gravity 적용해서 자연
+           낙하. life/fadeRate 로 자동 페이드 아웃. */
+        const particles = [];
+        for(const y of cleared){
+            for(let x = 0; x < COLS; x++){
+                const color = board[y][x] || '#ffffff';
+                const count = isTetris ? 7 : 4;   /* TETRIS 면 더 화려하게 */
+                for(let i = 0; i < count; i++){
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 1.5 + Math.random() * 4.5;
+                    particles.push({
+                        x: x * CELL + CELL/2 + (Math.random() - 0.5) * CELL * 0.4,
+                        y: y * CELL + CELL/2 + (Math.random() - 0.5) * CELL * 0.4,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed - (1 + Math.random() * 1.5),  /* 위로 살짝 튐 */
+                        size: 1.5 + Math.random() * 2.5,
+                        color: color,
+                        life: 1.0,
+                        fadeRate: 0.014 + Math.random() * 0.01
+                    });
+                }
+            }
+        }
         /* burst overlay 애니메이션 시작 — render() 가 clearAnim 보고
-           cleared 줄 위에 sparkle 파티클 + 가로 빛줄기 그림. */
+           cleared 줄 위에 sparkle + 가로 빛줄기 + 폭발 파티클 그림. */
         clearAnim = {
             rows: cleared.slice(),
             start: performance.now(),
             duration: dur,
-            isTetris: isTetris
+            isTetris: isTetris,
+            particles: particles,
+            lastUpdate: performance.now(),
+            rowsDone: false   /* dur 경과 후 collapse 되면 true — particles 만 계속 그림 */
         };
         requestAnimationFrame(animateClearTick);
 
         setTimeout(() => {
-            clearAnim = null;   /* burst 종료 */
+            /* rows phase 종료 — burst overlay 그만, board 수정.
+               clearAnim 은 null 안 함 (particles fade 까지 살려둠). */
+            if(clearAnim) clearAnim.rowsDone = true;
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
@@ -1733,6 +1801,57 @@ function drawCell(cctx, cx, cy, color, alpha){
     cctx.fillRect(px + 4, py + 4, 2, 1);
     cctx.globalAlpha = 1;
 }
+/* ---- Hard drop 잔상 (motion blur trail) ----
+   {type, rot, x, startY, endY, color, start, duration} 형태.
+   설정되면 render() 가 piece 가 통과한 자리에 반투명 복제본 그림 →
+   "쌩 하고 떨어진" 잔상 효과. duration 끝나면 null 리셋. */
+let dropTrail = null;
+
+function animateDropTrailTick(){
+    if(!dropTrail) return;
+    const elapsed = performance.now() - dropTrail.start;
+    if(elapsed >= dropTrail.duration){
+        dropTrail = null;
+        render();
+        return;
+    }
+    render();
+    requestAnimationFrame(animateDropTrailTick);
+}
+
+function drawDropTrail(){
+    if(!dropTrail) return;
+    const elapsed = performance.now() - dropTrail.start;
+    const t = Math.min(1, elapsed / dropTrail.duration);
+    const fade = 1 - t;   /* 1 → 0 over duration */
+    const shape = PIECES[dropTrail.type].shapes[dropTrail.rot];
+    const distance = dropTrail.endY - dropTrail.startY;
+
+    ctx.save();
+    /* additive blend 로 piece 가 통과한 영역이 빛처럼 합성됨 */
+    ctx.globalCompositeOperation = 'lighter';
+
+    /* startY ~ endY-1 까지 각 행에 trail 복제본 (endY 는 lock 된 piece 자리) */
+    const falloffLen = Math.min(distance, 6);
+    for(let dy = 0; dy < distance; dy++){
+        const trailY = dropTrail.startY + dy;
+        const distFromHead = distance - dy;     /* 1 = 가장 가까움(밝음), 멀수록 흐림 */
+        const trailFalloff = Math.max(0, 1 - distFromHead / falloffLen);
+        const alpha = fade * trailFalloff * 0.55;
+        if(alpha < 0.04) continue;
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = dropTrail.color;
+        for(const [sx, sy] of shape){
+            const cx = dropTrail.x + sx;
+            const cy = trailY + sy;
+            if(cy < 0 || cy >= ROWS) continue;
+            ctx.fillRect(cx * CELL + 2, cy * CELL + 2, CELL - 4, CELL - 4);
+        }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
 /* ---- Ghost piece (낙하 예측 위치) ----
    디자인 v3 (사용자 요청 반영):
      · 색깔 무관 흰색 outline only
@@ -1781,13 +1900,29 @@ function drawGhostOutline(){
    lock() 의 setTimeout 이 끝나면 null 로 리셋. */
 let clearAnim = null;
 
-/* requestAnimationFrame 으로 clearAnim 진행 중에만 매 프레임
-   render() 호출. clearAnim 이 null 이 되거나 t≥1 이면 중단. */
+/* clearAnim 진행 중 매 프레임 render. 두 단계:
+     [1] rowsDone=false 인 동안: row burst (beam, sparkle, particles 모두)
+     [2] rowsDone=true: row burst skip, particles 만 계속 (자연 fade)
+   particles 다 죽으면 clearAnim 정리. */
 function animateClearTick(){
     if(!clearAnim) return;
-    const t = (performance.now() - clearAnim.start) / clearAnim.duration;
+    /* particle 살아있는지 체크 + 안전망 (총 1500ms 초과 시 강제 종료
+       — 어떤 edge case 로 particle 이 안 죽어도 무한 loop 방지) */
+    const elapsed = performance.now() - clearAnim.start;
+    const TOTAL_MAX_MS = 1500;
+    let particlesAlive = false;
+    if(clearAnim.particles){
+        for(let i = 0; i < clearAnim.particles.length; i++){
+            if(clearAnim.particles[i].life > 0){ particlesAlive = true; break; }
+        }
+    }
+    if(elapsed > TOTAL_MAX_MS || (clearAnim.rowsDone && !particlesAlive)){
+        clearAnim = null;
+        render();
+        return;
+    }
     render();
-    if(t < 1) requestAnimationFrame(animateClearTick);
+    requestAnimationFrame(animateClearTick);
 }
 
 /* burst overlay 그리기 — render() 마지막에 호출.
@@ -1806,7 +1941,9 @@ function drawClearBurst(){
     /* additive blend 로 빛 합성 — 흰색 위에 색이 합쳐지면 더 밝아짐 */
     ctx.globalCompositeOperation = 'lighter';
 
-    for(const y of clearAnim.rows){
+    /* rowsDone 이후엔 row burst 안 그림 (board 가 collapse 됐으므로
+       원래 cleared 위치가 더 이상 의미 없음). particles 만 계속 그림. */
+    if(!clearAnim.rowsDone) for(const y of clearAnim.rows){
         const py = y * CELL;
         /* (1) 가로 빛줄기 — 풀백색 절대 안 쓰고 alpha 만 펄스로 조절.
            AMOLED burn 방지 위해 max alpha 0.55 로 cap. */
@@ -1838,8 +1975,8 @@ function drawClearBurst(){
     }
 
     /* (4) 테트리스 — 캔버스 전체에 화이트 베일 한 번 더 + 위아래로
-       퍼지는 노란 빔. 강한 만큼 짧게 (t<0.4) 만 표시. */
-    if(clearAnim.isTetris && t < 0.45){
+       퍼지는 노란 빔. 강한 만큼 짧게 (t<0.4) 만 표시. rowsDone 후엔 skip. */
+    if(!clearAnim.rowsDone && clearAnim.isTetris && t < 0.45){
         const tetrisFade = (1 - t / 0.45);
         ctx.fillStyle = `rgba(255,154,60,${tetrisFade * 0.18})`;
         ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
@@ -1851,6 +1988,29 @@ function drawClearBurst(){
         ctx.fillStyle = beam;
         const beamH = (1 - tetrisFade) * ROWS * CELL;
         ctx.fillRect(0, ROWS * CELL / 2 - beamH/2, COLS * CELL, beamH);
+    }
+
+    /* (5) 폭발 파티클 — cleared cell 마다 spawn 된 파편들이 사방으로
+       튐 + gravity 로 자연 낙하. additive blend 로 색이 빛처럼 합성됨.
+       각 파티클 life 따라 자동 페이드. dt 정규화로 frame rate 무관. */
+    if(clearAnim.particles && clearAnim.particles.length){
+        const now = performance.now();
+        const dt = clearAnim.lastUpdate ? Math.min(2, (now - clearAnim.lastUpdate) / 16.67) : 1;
+        clearAnim.lastUpdate = now;
+        for(const p of clearAnim.particles){
+            if(p.life <= 0) continue;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            p.vy += 0.4 * dt;        /* gravity */
+            p.vx *= Math.pow(0.985, dt);  /* 약한 air drag */
+            p.life -= p.fadeRate * dt;
+            if(p.life <= 0) continue;
+            ctx.globalAlpha = p.life;
+            ctx.fillStyle = p.color;
+            const sz = p.size;
+            ctx.fillRect(p.x - sz/2, p.y - sz/2, sz, sz);
+        }
+        ctx.globalAlpha = 1;
     }
     ctx.restore();
 }
@@ -1880,6 +2040,9 @@ function render(){
             if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
         }
     }
+    /* Hard drop 잔상 — locked cells 위에 그려서 piece 가 지나간 자리
+       빛처럼 합성. ghost outline 보다 먼저 (잔상이 ghost 보다 우선). */
+    if(dropTrail) drawDropTrail();
     /* Ghost piece outline — current piece 그리기 전에 배경으로 깔아둠.
        clearAnim 진행 중이거나 paused 상태일 땐 시각 노이즈 방지로 skip. */
     if(current && !clearAnim && !paused) drawGhostOutline();
@@ -2424,6 +2587,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777579153" defer></script>
+<script src="/js/siteFooter.js?v=1777579819" defer></script>
 </body>
 </html>
