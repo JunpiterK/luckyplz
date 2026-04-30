@@ -92,13 +92,12 @@ body{
     display:flex;flex-direction:column;align-items:center;gap:6px;width:100%
 }
 
-/* ---- HUD: SCORE · LINES · LEVEL · NEXT — 한 줄 컴팩트 (~38px) ----
-   y축 공간 최소화 위해 v(숫자) 와 l(라벨) 를 좌우로 인라인 배치.
-   세로 스택 (예전 .ss) 대비 행 높이 16px 절감. NEXT 만 미니 캔버스 +
-   라벨로 다른 셀과 시각적 균형. 4셀 모두 grid 1fr 균등 분할. */
+/* ---- HUD: SCORE · LINES · LEVEL — 한 줄 컴팩트 (~38px) ----
+   NEXT 는 캔버스 옆 .next-queue panel 로 분리됨 (5개 vertical). HUD
+   는 3 cells 로 단순해져서 각 셀이 더 넓어 가독성 ↑. */
 .hud{
     flex-shrink:0;
-    display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px;width:100%
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;width:100%
 }
 .ss{
     background:linear-gradient(165deg,rgba(22,22,42,.55),rgba(12,12,28,.8));
@@ -139,15 +138,15 @@ body{
 .ctrl-btn:active{background:rgba(0,217,255,.32)}
 
 /* ---- Canvas wrap (the 10x20 playfield) ----
-   flex:1 + min-height:0 → 부모(.left-col) 의 남는 공간을 모두 차지.
-   aspect-ratio 1/2 + height:100% + width:auto 조합으로 height 가
-   먼저 정해지고 width 가 height/2 로 자동 산출됨 (10 칸 × 20 줄
-   비율). max-width:100% 로 가로가 좁은 폰에서도 안 넘침. */
+   .game-row (flex-row) 안에서 height 100% + aspect-ratio 1/2 로
+   세로 우선 사이즈 결정. 가로는 height/2 로 산출. NEXT queue 가
+   옆에 56px 차지하므로 max-width 도 그만큼 짧게.
+   margin:0 auto 제거 — flex justify-content:center 가 가운데 정렬. */
 .canvas-wrap{
-    flex:1 1 0;min-height:0;
+    flex:0 1 auto;min-height:0;
     position:relative;
-    aspect-ratio:1/2;height:100%;width:auto;max-width:100%;
-    margin:0 auto;
+    aspect-ratio:1/2;height:100%;width:auto;
+    max-width:calc(100% - 56px);
     border-radius:12px;overflow:hidden;
     background:linear-gradient(165deg,rgba(0,217,255,.04),rgba(168,85,247,.04));
     border:1px solid rgba(0,217,255,.18);
@@ -226,30 +225,29 @@ body{
 .over-rank{margin-top:8px;font-size:.86em;color:var(--cyan);font-weight:700}
 .over-pb{margin-top:4px;font-size:.78em;color:var(--success);font-weight:700}
 
-/* ---- Controls (mobile-first 5-button layout) ----
-   flex-shrink:0 — canvas 가 줄어들어야지 컨트롤이 줄어들면 안 됨.
-   Row 1: ◀ ▶ ↻ (3등분, LEFT/RIGHT/ROTATE 균등)
-   Row 2: ↓↓SOFT  ⇩HARD (2등분)
-   Y축 슬림화 위해 padding 12 → 10, gap 8 → 6 적용. */
+/* ---- Controls (mobile-first 양손 대칭 레이아웃) ----
+   flex-shrink:0 — canvas 줄어드는 게 우선, 컨트롤은 항상 동일 높이.
+   Row 1: ◀ ↺ ↻ ▶ — 4개 버튼 양쪽 대칭. 회전 양쪽 (CCW/CW) 가
+          정중앙에 모이고, 좌우 이동이 양 끝 (양 엄지 도달 영역 자연).
+   Row 2:    [ ▼ DROP ]   — CCW/CW 정중앙 아래, 더블탭=하드/홀드=소프트
+*/
 .controls{
     flex-shrink:0;
     width:100%;display:flex;flex-direction:column;gap:6px;
     padding:0
 }
-/* row-main = [회전] [LEFT] [SOFT] [RIGHT] [회전]
-   row-hard = [   ] [    ] [HARD] [     ] [    ]  ← SOFT 와 같은 칸
-   회전 동그라미는 양 끝 (54px 고정), 가운데 3개는 1fr 균등.
-   SOFT 와 HARD 모두 3번째 컬럼 → 위아래 폭이 정확히 일치 + 화면
-   좌우 정중앙 정렬. row-hard 도 같은 grid 템플릿 (54px 고정)
-   사용해서 빈 좌우 칸이 row-main 의 회전 버튼 자리와 같은 폭을
-   차지하므로 SOFT/HARD 가 정확히 위아래 나란히 정렬. */
+/* 4컬럼 grid: LEFT(1fr) | CCW(64px) | CW(64px) | RIGHT(1fr).
+   row-drop 도 같은 grid 템플릿 사용 — DROP 가 col 2-3 spanning 으로
+   CCW + CW 영역 정확히 위아래 정렬. */
 .ctrl-row{display:grid;gap:8px;align-items:stretch}
-.ctrl-row.row-main{grid-template-columns:54px 1fr 1.1fr 1fr 54px}
-.ctrl-row.row-hard{grid-template-columns:54px 1fr 1.1fr 1fr 54px}
-.ctrl-row.row-hard .cbtn{grid-column:3}
-/* 회전 동그라미 (양 끝, 양손 모두 thumb 닿게) — 3D 입체 + 보라 네온 */
+.ctrl-row.row-main{grid-template-columns:1fr 64px 64px 1fr}
+.ctrl-row.row-drop{grid-template-columns:1fr 64px 64px 1fr}
+.ctrl-row.row-drop .cbtn{grid-column:2 / 4}
+/* 회전 동그라미 — 보라 네온, 64×64. 보이는 건 동그라미지만 실제
+   터치 hit area 는 동그라미에 inscribed (내접) 정사각형 만 (JS 에서
+   체크). corner-bulge 부분은 인접 LEFT/RIGHT 버튼 안 가로채도록 dead. */
 .cbtn.rot-circle{
-    width:54px;height:54px;min-height:54px;
+    width:64px;height:64px;min-height:64px;
     border-radius:50%;padding:0;flex-shrink:0;
     background:radial-gradient(circle at 35% 25%,
         rgba(180,110,255,0.45) 0%,
@@ -265,7 +263,7 @@ body{
     height:50%;
     background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.18), transparent 70%);
 }
-.cbtn.rot-circle .ico{font-size:1.6em;line-height:1;color:#D5B0FF;text-shadow:0 0 10px rgba(168,85,247,0.6)}
+.cbtn.rot-circle .ico{font-size:1.85em;line-height:1;color:#D5B0FF;text-shadow:0 0 10px rgba(168,85,247,0.6);font-family:inherit;font-weight:400}
 .cbtn.rot-circle .lab{display:none}
 /* ---- 3D dimensional buttons with neon press effect ----
    Multi-layer shadows + glossy highlight + per-type neon glow on
@@ -360,33 +358,70 @@ body{
 }
 .cbtn.move .ico{color:#00D9FF}
 .cbtn.rot .ico{color:#C893F9}
-/* Soft drop = ORANGE (changed from green per user request) */
-.cbtn.drop-soft{
+/* DROP 통합 버튼 — 좌우 이동 (move) 과 동일한 시안 톤.
+   더블탭 → hard drop, 홀드 → soft drop. soft 활성 시 .soft-active
+   로 주황 빛 살짝 띠도록. */
+.cbtn.drop{
     background:linear-gradient(180deg,
-        rgba(255,180,80,0.30) 0%,
-        rgba(220,120,40,0.22) 55%,
-        rgba(160,70,15,0.30) 100%);
+        rgba(60,180,220,0.18) 0%,
+        rgba(0,140,180,0.14) 55%,
+        rgba(0,80,120,0.22) 100%);
+    border-color:rgba(0,217,255,0.35);
+    --btn-glow: rgba(0,217,255,0.7);
+}
+.cbtn.drop .ico{color:#00D9FF;font-size:1.7em;line-height:.9}
+.cbtn.drop.soft-active{
     border-color:rgba(255,154,60,0.55);
     --btn-glow: rgba(255,154,60,0.75);
+    box-shadow:
+        0 4px 10px -2px rgba(0,0,0,0.45),
+        inset 0 1px 0 rgba(255,255,255,0.18),
+        0 0 14px -2px rgba(255,154,60,0.5),
+        inset 0 0 10px rgba(255,154,60,0.2);
 }
-.cbtn.drop-soft .ico{color:#FFB050}
-/* Hard drop = PINK (changed from red per user request) */
-.cbtn.drop-hard{
-    background:linear-gradient(180deg,
-        rgba(255,90,160,0.30) 0%,
-        rgba(220,40,120,0.22) 55%,
-        rgba(150,15,80,0.30) 100%);
-    border-color:rgba(233,30,99,0.55);
-    --btn-glow: rgba(233,30,99,0.75);
+.cbtn.drop.soft-active .ico{color:#FFB050}
+
+/* ---- NEXT queue panel (5 pieces vertical, right of canvas) ----
+   playfield 옆 슬림 panel 에 다음 5개 piece 미리보기. 위에서 아래로
+   순서: queue[0] = 다음 piece, queue[4] = 5번째 후. 캐주얼 모바일
+   유저 도전적 플레이감 위해 깊은 lookahead 제공. */
+.next-queue{
+    flex-shrink:0;
+    align-self:flex-start;
+    width:50px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:5px 4px 6px;
+    background:linear-gradient(165deg,rgba(22,22,42,.78),rgba(12,12,28,.92));
+    border:1px solid var(--panel-br);
+    border-radius:10px;
+    box-shadow:0 4px 12px -3px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05);
 }
-.cbtn.drop-hard .ico{color:#FF5A8B}
-/* HARD 트라이앵글은 SOFT 와 똑같은 ▼ 글리프지만 더 크고 좌우로 살짝
-   퍼져서 "쾅 떨어진다" 느낌. SOFT 는 부드럽게 가속, HARD 는 즉시 충돌. */
-.cbtn.drop-hard .ico-hard{
-    font-size:1.85em;line-height:.9;
-    transform:scaleX(1.25);
-    letter-spacing:-.05em;
-    filter:drop-shadow(0 0 6px rgba(255,90,139,0.55));
+.nq-label{
+    font-size:.5em;letter-spacing:.08em;color:var(--muted-2);font-weight:800;
+    text-align:center;line-height:1.1;padding-bottom:1px;
+    border-bottom:1px solid var(--panel-br);width:100%
+}
+.nq-canvas{
+    width:100%;aspect-ratio:1/1;display:block;
+}
+/* 첫 piece (next 1) 강조 — 약간 큰 사이즈 + cyan 글로우 */
+.nq-canvas[data-idx="0"]{
+    width:108%;
+    box-shadow:0 0 8px -1px rgba(0,217,255,0.35);
+    border-radius:6px;
+}
+
+/* ---- Game row (canvas + next queue 가로 배치) ----
+   canvas 가 살짝 좁아지지만 (queue 너비 50 + gap 6 = 56px 만큼),
+   playfield 비율은 그대로 유지. 모바일 portrait 에서도 자연스러운
+   "playfield + side panel" 표준 Tetris 레이아웃. */
+.game-row{
+    flex:1 1 0;min-height:0;
+    width:100%;
+    display:flex;flex-direction:row;
+    align-items:stretch;
+    gap:6px;
+    justify-content:center
 }
 
 /* Hint 텍스트는 모바일에선 공간 우선 으로 숨기고, PC (≥1024px) 에서만
@@ -527,64 +562,61 @@ body{
 <main class="wrap">
     <div class="left-col">
 
-        <!-- HUD: score / lines / level / next-piece -->
+        <!-- HUD: score / lines / level (NEXT 는 옆 panel 로 분리) -->
         <div class="hud">
             <div class="ss"><div class="v" id="scoreNow">0</div><div class="l">SCORE</div></div>
             <div class="ss"><div class="v acc" id="linesNow">0</div><div class="l">LINES</div></div>
             <div class="ss"><div class="v acc" id="levelNow">1</div><div class="l">LEVEL</div></div>
-            <div class="next-tile"><div class="l">NEXT</div><canvas id="next-canvas" width="80" height="80"></canvas></div>
         </div>
 
-        <div class="canvas-wrap" id="canvasWrap">
-            <!-- 일시정지 버튼은 캔버스 우상단 코너에 떠 있어 추가 공간 0.
-                 한 화면에 게임+컨트롤 다 넣기 위한 공간 절약. -->
-            <div class="game-ctrl" id="gameCtrl">
-                <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸</button>
+        <!-- canvas + NEXT queue 가로 배치 (.game-row) -->
+        <div class="game-row">
+            <div class="canvas-wrap" id="canvasWrap">
+                <!-- 일시정지 버튼은 캔버스 우상단 코너에 떠 있어 추가 공간 0. -->
+                <div class="game-ctrl" id="gameCtrl">
+                    <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸</button>
+                </div>
+                <canvas id="tetris-canvas" width="200" height="400"></canvas>
+                <div class="overlay" id="overlay">
+                    <h2 class="play" id="ovTitle">PLAY TETRIS</h2>
+                    <p id="ovDesc">블록을 회전·이동·드롭으로 라인 완성.<br>4줄 동시 = 테트리스 보너스!</p>
+                    <button class="btn" id="ovBtn">시작</button>
+                    <div class="kbd-hint"><kbd>← →</kbd> 이동 · <kbd>↑</kbd>/<kbd>X</kbd> CW · <kbd>Z</kbd> CCW · <kbd>↓</kbd> 소프트 · <kbd>Space</kbd> 하드드롭</div>
+                </div>
             </div>
-            <canvas id="tetris-canvas" width="200" height="400"></canvas>
-            <div class="overlay" id="overlay">
-                <h2 class="play" id="ovTitle">PLAY TETRIS</h2>
-                <p id="ovDesc">블록을 회전·이동·드롭으로 라인 완성.<br>4줄 동시 = 테트리스 보너스!</p>
-                <button class="btn" id="ovBtn">시작</button>
-                <div class="kbd-hint"><kbd>← →</kbd> 이동 · <kbd>↑</kbd>/<kbd>X</kbd> 회전 · <kbd>↓</kbd> 소프트 · <kbd>Space</kbd> 하드드롭</div>
-            </div>
+            <!-- NEXT 5 piece queue, vertical (top=다음, bottom=5번째 후) -->
+            <aside class="next-queue" id="nextQueue" aria-label="다음 블록 5개">
+                <div class="nq-label">NEXT</div>
+                <canvas class="nq-canvas" data-idx="0" width="96" height="96"></canvas>
+                <canvas class="nq-canvas" data-idx="1" width="80" height="80"></canvas>
+                <canvas class="nq-canvas" data-idx="2" width="80" height="80"></canvas>
+                <canvas class="nq-canvas" data-idx="3" width="80" height="80"></canvas>
+                <canvas class="nq-canvas" data-idx="4" width="80" height="80"></canvas>
+            </aside>
         </div>
 
-        <!-- Mobile controls — 사용자 요청 ergonomic 레이아웃:
-             Row 1: [↻] [◀] [↓↓SOFT] [▶] [↻]
-                    ↑               ↑
-                    회전 버튼 양 끝 동그라미 (왼손/오른손 모두 편하게)
-                                ↑
-                          SOFT DROP 정중앙
-             Row 2:        [⇩ HARD DROP]
-                           (SOFT 아래)
-
-             Rationale: SOFT 가 화면 정중앙 → 양쪽 thumb 닿기 좋음.
-             ROT 양쪽 동일 동작 (CW) — 어느 손이든 reach 편함.
-             모바일 캐주얼 표준대로 CW 1방향만. -->
+        <!-- Mobile controls — 양손 대칭 레이아웃:
+             Row 1: [◀ LEFT] [↺ CCW] [↻ CW] [▶ RIGHT]
+             Row 2:      [▼ DROP] (CCW/CW 정중앙 아래)
+                          더블탭 = HARD, 홀드 = SOFT -->
         <div class="controls" id="controls">
-            <!-- Row 1: 회전(좌) · LEFT · SOFT · RIGHT · 회전(우) -->
             <div class="ctrl-row row-main">
-                <button class="cbtn rot rot-circle" data-act="cw" type="button" aria-label="회전 (왼쪽)">
-                    <span class="ico">↻</span>
-                </button>
                 <button class="cbtn move" data-act="left" type="button" aria-label="왼쪽">
                     <span class="ico">◀</span><span class="lab">LEFT</span>
                 </button>
-                <button class="cbtn drop-soft" data-act="soft" type="button" aria-label="소프트 드롭">
-                    <span class="ico">▼</span><span class="lab">SOFT</span>
+                <button class="cbtn rot rot-circle" data-act="ccw" type="button" aria-label="회전 (반시계)">
+                    <span class="ico">↺</span>
+                </button>
+                <button class="cbtn rot rot-circle" data-act="cw" type="button" aria-label="회전 (시계)">
+                    <span class="ico">↻</span>
                 </button>
                 <button class="cbtn move" data-act="right" type="button" aria-label="오른쪽">
                     <span class="ico">▶</span><span class="lab">RIGHT</span>
                 </button>
-                <button class="cbtn rot rot-circle" data-act="cw" type="button" aria-label="회전 (오른쪽)">
-                    <span class="ico">↻</span>
-                </button>
             </div>
-            <!-- Row 2: HARD DROP centered below SOFT -->
-            <div class="ctrl-row row-hard">
-                <button class="cbtn drop-hard" data-act="hard" type="button" aria-label="하드 드롭">
-                    <span class="ico ico-hard">▼</span><span class="lab">HARD</span>
+            <div class="ctrl-row row-drop">
+                <button class="cbtn drop" data-act="drop" type="button" aria-label="드롭 (더블탭=하드, 홀드=소프트)">
+                    <span class="ico">▼</span><span class="lab">DROP</span>
                 </button>
             </div>
         </div>
@@ -613,7 +645,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777571969"></script>
+<script src="/js/supabase-config.js?v=1777573710"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1112,13 +1144,16 @@ const KICKS_I = {
 const COLS = 10, ROWS = 20;
 const canvas = $('tetris-canvas');
 const ctx = canvas.getContext('2d');
-const nextCanvas = $('next-canvas');
-const nextCtx = nextCanvas.getContext('2d');
+/* NEXT queue — 5개 vertical preview canvases (.nq-canvas[data-idx="0..4"]) */
+const nqCanvases = Array.from(document.querySelectorAll('.nq-canvas'));
 
 let board = null;     /* 20x10 array of color strings or null */
 let bag = [];         /* 7-bag random generator */
 let current = null;   /* {type, rot, x, y} */
-let nextType = null;
+/* NEXT queue — 항상 길이 ≥ 5 유지. queue[0] 가 다음에 spawn 될
+   piece, queue[4] 가 5번째 후 piece. spawnPiece() 가 shift() 로
+   front 꺼내고 ensureNextQueue() 가 bag 에서 다시 채움. */
+let nextQueue = [];
 let level = 1, lines = 0, score = 0;
 
 /* ---- 레벨/속도 시스템 (Hangame 패턴 aggressive ramp) ----
@@ -1195,11 +1230,17 @@ function fitCanvas(){
     canvas.width=Math.round(rect.width*dpr);
     canvas.height=Math.round(rect.height*dpr);
     ctx.setTransform(dpr*rect.width/(COLS*20), 0, 0, dpr*rect.height/(ROWS*20), 0, 0);
-    const nrect=nextCanvas.getBoundingClientRect();
-    if(nrect.width === 0 || nrect.height === 0) return;
-    nextCanvas.width=Math.round(nrect.width*dpr);
-    nextCanvas.height=Math.round(nrect.height*dpr);
-    nextCtx.setTransform(dpr*nrect.width/80, 0, 0, dpr*nrect.height/80, 0, 0);
+    /* NEXT queue 의 5개 mini-canvas 도 DPR 맞춤. logical 좌표는 attribute
+       width/height (96 또는 80) 그대로 유지. */
+    nqCanvases.forEach(c => {
+        const r = c.getBoundingClientRect();
+        if(r.width === 0 || r.height === 0) return;
+        const logical = c.getAttribute('width') | 0 || 80;   /* 96 or 80 */
+        c.width = Math.round(r.width * dpr);
+        c.height = Math.round(r.height * dpr);
+        const cctx = c.getContext('2d');
+        cctx.setTransform(dpr * r.width / logical, 0, 0, dpr * r.height / logical, 0, 0);
+    });
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 100));
@@ -1226,9 +1267,22 @@ function refillBag(){
         [bag[i],bag[j]]=[bag[j],bag[i]];
     }
 }
-function drawNextType(){
+function drawFromBag(){
     if(bag.length===0) refillBag();
     return bag.pop();
+}
+/* Queue 가 5개 미만이면 bag 에서 채워줌. spawnPiece 직전·후 모두 호출. */
+function ensureNextQueue(){
+    while(nextQueue.length < 5){
+        nextQueue.push(drawFromBag());
+    }
+}
+/* 다음 piece 꺼냄 (queue front shift). queue 길이 빠진 만큼 bag 으로 보충. */
+function drawNextType(){
+    ensureNextQueue();
+    const t = nextQueue.shift();
+    ensureNextQueue();
+    return t;
 }
 
 /* ---- Collision check ----
@@ -1247,8 +1301,9 @@ function tryPos(type, rot, x, y){
 }
 
 function spawnPiece(){
-    const type = nextType || drawNextType();
-    nextType = drawNextType();
+    /* Queue 의 front 에서 다음 piece 꺼내기. drawNextType 가 자동으로
+       bag 보충해서 항상 5개 lookahead 유지. */
+    const type = drawNextType();
     /* Standard Tetris spawn: top center. I/O spawn x=3, others x=3.
        y=-1 lets piece appear partially above the visible field. */
     current = { type, rot: 0, x: 3, y: type==='I' ? -1 : -1 };
@@ -1259,7 +1314,7 @@ function spawnPiece(){
         gameOver();
         return false;
     }
-    drawNextPreview();
+    drawNextQueuePreview();
     return true;
 }
 
@@ -1660,34 +1715,38 @@ function render(){
         ctx.textBaseline = 'alphabetic';
     }
 }
-function drawNextPreview(){
-    nextCtx.fillStyle = '#020516';
-    nextCtx.fillRect(0, 0, 80, 80);
-    if(!nextType) return;
-    const shape = PIECES[nextType].shapes[0];
-    const color = PIECES[nextType].color;
-    /* Center the piece in the 80×80 preview area.
-       Find shape bounds (could be 2x2 to 4x4) and center. */
-    let minX=99, maxX=-99, minY=99, maxY=-99;
-    for(const [dx, dy] of shape){
-        if(dx < minX) minX = dx;
-        if(dx > maxX) maxX = dx;
-        if(dy < minY) minY = dy;
-        if(dy > maxY) maxY = dy;
-    }
-    const w = maxX - minX + 1, h = maxY - minY + 1;
-    const cellSize = Math.min(80 / Math.max(w, 4), 80 / Math.max(h, 4)) * 0.9;
-    const offsetX = (80 - w * cellSize) / 2 - minX * cellSize;
-    const offsetY = (80 - h * cellSize) / 2 - minY * cellSize;
-    for(const [dx, dy] of shape){
-        const px = offsetX + dx * cellSize;
-        const py = offsetY + dy * cellSize;
-        nextCtx.fillStyle = color;
-        nextCtx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
-        nextCtx.fillStyle = 'rgba(255,255,255,0.18)';
-        nextCtx.fillRect(px + 2, py + 2, cellSize - 4, 2);
-        nextCtx.fillRect(px + 2, py + 2, 2, cellSize - 4);
-    }
+/* NEXT queue 5개 mini-canvas 렌더링.
+   queue[0..4] 의 piece 를 각자 80~96 logical 좌표계 캔버스에 중앙 배치.
+   첫 piece (idx=0) 는 96 logical (살짝 강조), 나머지는 80 logical. */
+function drawNextQueuePreview(){
+    nqCanvases.forEach((c, i) => {
+        const cctx = c.getContext('2d');
+        const L = (c.getAttribute('width') | 0) || 80;   /* logical box size */
+        cctx.fillStyle = '#020516';
+        cctx.fillRect(0, 0, L, L);
+        const type = nextQueue[i];
+        if(!type) return;
+        const shape = PIECES[type].shapes[0];
+        const color = PIECES[type].color;
+        let minX=99, maxX=-99, minY=99, maxY=-99;
+        for(const [dx, dy] of shape){
+            if(dx < minX) minX = dx; if(dx > maxX) maxX = dx;
+            if(dy < minY) minY = dy; if(dy > maxY) maxY = dy;
+        }
+        const w = maxX - minX + 1, h = maxY - minY + 1;
+        const cellSize = Math.min(L / Math.max(w, 4), L / Math.max(h, 4)) * 0.85;
+        const offsetX = (L - w * cellSize) / 2 - minX * cellSize;
+        const offsetY = (L - h * cellSize) / 2 - minY * cellSize;
+        for(const [dx, dy] of shape){
+            const px = offsetX + dx * cellSize;
+            const py = offsetY + dy * cellSize;
+            cctx.fillStyle = color;
+            cctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+            cctx.fillStyle = 'rgba(255,255,255,0.18)';
+            cctx.fillRect(px + 2, py + 2, cellSize - 4, 2);
+            cctx.fillRect(px + 2, py + 2, 2, cellSize - 4);
+        }
+    });
 }
 
 /* ---- Game loop ---- */
@@ -1741,7 +1800,8 @@ function startGame(){
     board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
     bag = [];
     refillBag();
-    nextType = drawNextType();
+    nextQueue = [];           /* reset NEXT queue */
+    ensureNextQueue();        /* prefill 5 pieces */
     score = 0; lines = 0; level = 1;
     dropMs = gravityMsForLevel(1);
     lockDelay = lockDelayForLevel(1);
@@ -1878,9 +1938,11 @@ function onKey(e){
     }
     if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ moveX(-1); e.preventDefault(); }
     else if(k === 'ArrowRight' || k === 'd' || k === 'D'){ moveX(1); e.preventDefault(); }
-    /* CW 회전만 — 모바일 캐주얼 테트리스 표준. ↑/X 모두 같은 방향.
-       ↑ 가 회전인 게 modern Tetris (Tetris 99 등) 표준 매핑. */
-    else if(k === 'ArrowUp' || k === 'x' || k === 'X' || k === 'z' || k === 'Z'){ rotate(1); e.preventDefault(); }
+    /* Modern Tetris 표준 키매핑:
+         ↑ / X = CW (시계방향)
+         Z     = CCW (반시계방향)  */
+    else if(k === 'ArrowUp' || k === 'x' || k === 'X'){ rotate(1); e.preventDefault(); }
+    else if(k === 'z' || k === 'Z'){ rotate(-1); e.preventDefault(); }
     else if(k === 'ArrowDown' || k === 's' || k === 'S'){ softDropping = true; e.preventDefault(); }
     else if(k === ' '){ hardDrop(); e.preventDefault(); }
     else if(k === 'p' || k === 'P'){
@@ -1894,21 +1956,104 @@ function onKeyUp(e){
 document.addEventListener('keydown', onKey);
 document.addEventListener('keyup', onKeyUp);
 
-/* Touch buttons. Soft drop has special hold-to-repeat behavior — most
-   other actions are single-shot per tap. */
+/* Touch buttons.
+   - left/right: hold-to-repeat (DAS-like).
+   - ccw/cw: single-shot per tap, inscribed-square 만 인식 (corner dead zone).
+   - drop: 더블탭 = hard, 홀드 = soft (자세히는 onDropPress/onDropRelease). */
 const HOLD_REPEAT_MS = 110;
 let _holdTimers = {};
 function onCtrlPress(act){
     switch(act){
         case 'left':  moveX(-1); break;
         case 'right': moveX(1); break;
-        case 'cw':    rotate(1); break;     /* CW 회전만 — 모바일 표준 */
-        case 'soft':  softDropping = true; softDrop(); break;
-        case 'hard':  hardDrop(); break;
+        case 'ccw':   rotate(-1); break;
+        case 'cw':    rotate(1); break;
+        /* drop 은 별도 핸들러에서 처리 (더블탭/홀드 분기) */
     }
 }
-function onCtrlRelease(act){
-    if(act === 'soft') softDropping = false;
+function onCtrlRelease(_act){ /* nothing — DROP 은 별도 처리 */ }
+
+/* ---- DROP 버튼 더블탭/홀드 분기 ----
+   사람 반응속도 + 누르는 속도 고려한 임계값:
+     · DROP_HOLD_THRESHOLD = 130ms — 이 이상 눌러야 soft drop 시작
+       (일반 탭 60~110ms 보다 길어서 의도치 않은 soft 방지)
+     · DROP_DOUBLE_TAP_WINDOW = 280ms — 직전 탭 시간차가 이 이내면
+       더블탭으로 인식 (실측 사용자 더블탭 평균 200~280ms)
+   동작 흐름:
+     [press]
+       1. 직전 탭 시간차 체크 → 280ms 이내면 hard drop 즉시 발사 후 종료
+       2. 그렇지 않으면 130ms hold timer arm
+     [hold]
+       3. 130ms 경과 시 softDropping = true, softDrop() 호출 시작
+     [release]
+       4. timer 정리, softDropping = false
+       5. hold 130ms 미만에 release 됐으면 → "탭 1회" 로 기록
+          (다음 press 가 280ms 이내면 hard) */
+const DROP_HOLD_THRESHOLD = 130;
+const DROP_DOUBLE_TAP_WINDOW = 280;
+let dropPressedAt = 0;
+let dropLastTapAt = 0;
+let dropPressActive = false;
+let dropSoftHoldTimer = null;
+const dropBtnRef = function(){return document.querySelector('.cbtn.drop')};
+
+function onDropPress(){
+    const now = performance.now();
+    /* [1] 더블탭 감지 — 직전 single tap 후 이 window 안에 다시 누름 */
+    if(now - dropLastTapAt < DROP_DOUBLE_TAP_WINDOW){
+        hardDrop();
+        dropLastTapAt = 0;        /* 연속 더블탭 방지 reset */
+        dropPressActive = false;  /* 이번 press 는 hard 로 소진 */
+        return;
+    }
+    /* [2] 홀드 감지 timer arm */
+    dropPressActive = true;
+    dropPressedAt = now;
+    if(dropSoftHoldTimer) clearTimeout(dropSoftHoldTimer);
+    dropSoftHoldTimer = setTimeout(function(){
+        if(dropPressActive){
+            softDropping = true;
+            softDrop();
+            const b = dropBtnRef();
+            if(b) b.classList.add('soft-active');   /* 주황 글로우 표시 */
+        }
+        dropSoftHoldTimer = null;
+    }, DROP_HOLD_THRESHOLD);
+}
+
+function onDropRelease(){
+    const now = performance.now();
+    const heldFor = now - dropPressedAt;
+
+    if(dropSoftHoldTimer){
+        clearTimeout(dropSoftHoldTimer);
+        dropSoftHoldTimer = null;
+    }
+    if(softDropping){
+        softDropping = false;
+        const b = dropBtnRef();
+        if(b) b.classList.remove('soft-active');
+    }
+    /* hold threshold 미만이면 single tap 으로 기록 → 다음 press 가
+       window 안에 들어오면 hard drop. soft drop 까지 갔으면 단독 동작
+       으로 이미 끝, lastTapAt 기록 안 함 (의도치 않은 hard drop 방지). */
+    if(dropPressActive && heldFor < DROP_HOLD_THRESHOLD){
+        dropLastTapAt = now;
+    }
+    dropPressActive = false;
+}
+
+/* 동그라미 회전 버튼의 inscribed 정사각형 hit-test.
+   원 안에 내접한 정사각형 반쪽 변 길이 = D / (2√2) ≈ 0.354D.
+   터치 좌표가 버튼 중심에서 (halfSide, halfSide) 박스 안이면 valid.
+   원의 corner-bulge (대각선 모서리) 부분은 dead zone — 옆 LEFT/RIGHT
+   tap 이 회전으로 잘못 인식되는 일 방지. */
+function isInsideInscribedSquare(btn, clientX, clientY){
+    const rect = btn.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const halfSide = Math.min(rect.width, rect.height) / (2 * Math.sqrt(2));
+    return Math.abs(clientX - cx) <= halfSide && Math.abs(clientY - cy) <= halfSide;
 }
 /* Trigger neon flash animation on a button. Removes any in-flight
    .flash class first so the keyframe restarts even on rapid double-
@@ -1931,19 +2076,32 @@ document.addEventListener('animationend', (e) => {
 
 document.querySelectorAll('.cbtn').forEach(b => {
     const act = b.dataset.act;
+    const isCircle = b.classList.contains('rot-circle');
+    const isDrop = act === 'drop';
     /* press = touchstart or mousedown; we wire both for desktop testing.
-       Using {passive:false} on touchstart so preventDefault() can stop
-       the page scroll the finger would otherwise trigger. */
+       {passive:false} on touchstart so preventDefault() blocks page scroll. */
     const press = (e) => {
         e.preventDefault();
         if(!running) return;
+        /* 회전 동그라미 — 내접 정사각형 안에 들어온 터치만 인식.
+           corner 영역은 dead zone (옆 버튼 오인식 방지). */
+        if(isCircle){
+            const t = e.touches ? e.touches[0] : e;
+            if(t && !isInsideInscribedSquare(b, t.clientX, t.clientY)){
+                return;
+            }
+        }
         if(paused){
             paused = false; syncPauseUI();
             try { TetrisBGM.resume(); } catch(_){}
         }
         flashBtn(b);   /* 매 press 마다 네온 flash */
+        if(isDrop){
+            onDropPress();
+            return;
+        }
         onCtrlPress(act);
-        /* Hold-to-repeat for left/right/soft */
+        /* Hold-to-repeat for left/right (DAS) */
         if(act === 'left' || act === 'right'){
             clearInterval(_holdTimers[act]);
             _holdTimers[act] = setInterval(() => onCtrlPress(act), HOLD_REPEAT_MS);
@@ -1951,7 +2109,11 @@ document.querySelectorAll('.cbtn').forEach(b => {
     };
     const release = (e) => {
         if(_holdTimers[act]){ clearInterval(_holdTimers[act]); _holdTimers[act] = null; }
-        onCtrlRelease(act);
+        if(isDrop){
+            onDropRelease();
+        } else {
+            onCtrlRelease(act);
+        }
     };
     b.addEventListener('touchstart', press, {passive: false});
     b.addEventListener('touchend', release);
@@ -2041,6 +2203,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777571969" defer></script>
+<script src="/js/siteFooter.js?v=1777573710" defer></script>
 </body>
 </html>
