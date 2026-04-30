@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777581770"></script>
+<script src="/js/supabase-config.js?v=1777582022"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1837,40 +1837,81 @@ function roundRectPath(cctx, x, y, w, h, r){
     cctx.closePath();
 }
 
-/* drawCell — premium polish pass 버전으로 rollback (사용자 요청
-   "원래게 제일 나아"). gem-like rounded/radial 시도들이 작은 20px 셀
-   에서 다 시각 노이즈로 작용해서 단순 6-layer 가 가장 깔끔하다는 결정.
-   layer 구성:
-     1. solid color fill (CELL-2 inset)
-     2. 위 40% 흰색 알파 16% 오버레이 (top light band)
-     3. 아래 40% 검은색 알파 18% 오버레이 (bottom shadow band)
-     4. 1px top + left bevel (rgba 0.45) — 선명한 가장자리 광채
-     5. 1px bottom + right bevel (rgba 0.5 검은) — 깊이감 있는 그림자
-     6. 작은 specular highlight (top-left 2x1 흰색 65%) — 광택점 */
+/* drawCell v5 — 사용자 레퍼런스 이미지 (파란 광택 버튼) 기반.
+
+   핵심 인사이트: 이전에 시도한 dome/볼록 radial 은 방향이 반대.
+   레퍼런스의 광택은 사실 "concave bowl (오목한 그릇)" + 위쪽 타원형
+   lens highlight 조합. 4-layer concentric 구성:
+
+     1. Outer dark frame — tint-0.6 (3D bezel 효과 외곽)
+     2. Light inner ring — tint+0.3 (bezel 안쪽 lit edge)
+     3. Concave inner area — radial gradient (가장자리 dark, 중앙
+        살짝 light) → 그릇처럼 오목한 표면
+     4. Curved lens highlight — 위쪽 타원형 흰색 반사 (★ 광택의 정체)
+
+   타원 highlight 가 그릇 표면에 빛이 모이는 reflection 시뮬레이션.
+   Performance: ~4 path fills + 1 clip + 1 ellipse + 2 gradients/cell. */
 function drawCell(cctx, cx, cy, color, alpha){
     if(alpha == null) alpha = 1;
     const px = cx * CELL, py = cy * CELL;
     cctx.globalAlpha = alpha;
-    /* (1) base fill */
-    cctx.fillStyle = color;
-    cctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
-    /* (2) top brightness band (40% 높이) */
-    cctx.fillStyle = 'rgba(255,255,255,0.16)';
-    cctx.fillRect(px + 1, py + 1, CELL - 2, (CELL - 2) * 0.4);
-    /* (3) bottom shadow band (40% 높이) */
-    cctx.fillStyle = 'rgba(0,0,0,0.18)';
-    cctx.fillRect(px + 1, py + 1 + (CELL - 2) * 0.6, CELL - 2, (CELL - 2) * 0.4);
-    /* (4) top + left bright bevel */
-    cctx.fillStyle = 'rgba(255,255,255,0.45)';
-    cctx.fillRect(px + 2, py + 2, CELL - 4, 1);
-    cctx.fillRect(px + 2, py + 2, 1, CELL - 4);
-    /* (5) bottom + right dark bevel */
-    cctx.fillStyle = 'rgba(0,0,0,0.5)';
-    cctx.fillRect(px + 2, py + CELL - 3, CELL - 4, 1);
-    cctx.fillRect(px + CELL - 3, py + 2, 1, CELL - 4);
-    /* (6) small specular highlight (top-left 광택점) */
-    cctx.fillStyle = 'rgba(255,255,255,0.65)';
-    cctx.fillRect(px + 4, py + 4, 2, 1);
+
+    const outerR = 3;
+    const middleR = 2.5;
+    const innerR = 2;
+
+    /* (1) Outer dark rounded frame — 3D bezel 외곽 */
+    cctx.fillStyle = tintColor(color, -0.6);
+    roundRectPath(cctx, px, py, CELL, CELL, outerR);
+    cctx.fill();
+
+    /* (2) Lighter inner ring — bezel 안쪽 lit edge */
+    cctx.fillStyle = tintColor(color, 0.3);
+    roundRectPath(cctx, px + 1, py + 1, CELL - 2, CELL - 2, middleR);
+    cctx.fill();
+
+    /* (3) Concave bowl 내부 — 가장자리 어둡, 중심 살짝 밝.
+       중심이 살짝 아래쪽 (CELL*0.55) → 위쪽이 더 어두워서 lens
+       highlight 가 더 강하게 대비됨. */
+    const innerSz = CELL - 4;
+    const innerCx = px + CELL/2;
+    const innerCy = py + CELL * 0.55;
+    const innerGrad = cctx.createRadialGradient(
+        innerCx, innerCy, 0,
+        innerCx, innerCy, innerSz * 0.7
+    );
+    innerGrad.addColorStop(0,   tintColor(color, 0.1));
+    innerGrad.addColorStop(0.7, color);
+    innerGrad.addColorStop(1,   tintColor(color, -0.35));
+    cctx.fillStyle = innerGrad;
+    roundRectPath(cctx, px + 2, py + 2, innerSz, innerSz, innerR);
+    cctx.fill();
+
+    /* (4) Curved lens highlight — 위쪽 타원형 흰색 반사 (★ 광택의 정체).
+       inner 영역에 clip 해서 둥근 모서리 안에만 보이게.
+       타원의 위쪽 0.65 alpha → 아래쪽 0.08 alpha 로 fade. */
+    cctx.save();
+    roundRectPath(cctx, px + 2, py + 2, innerSz, innerSz, innerR);
+    cctx.clip();
+
+    const hlCx = px + CELL/2;
+    const hlCy = py + CELL * 0.32;
+    const hlW = innerSz * 0.78;
+    const hlH = innerSz * 0.32;
+    cctx.beginPath();
+    cctx.ellipse(hlCx, hlCy, hlW/2, hlH/2, 0, 0, Math.PI * 2);
+    const hlGrad = cctx.createLinearGradient(
+        hlCx, hlCy - hlH/2,
+        hlCx, hlCy + hlH/2
+    );
+    hlGrad.addColorStop(0,   'rgba(255,255,255,0.65)');
+    hlGrad.addColorStop(0.6, 'rgba(255,255,255,0.42)');
+    hlGrad.addColorStop(1,   'rgba(255,255,255,0.08)');
+    cctx.fillStyle = hlGrad;
+    cctx.fill();
+
+    cctx.restore();
+
     cctx.globalAlpha = 1;
 }
 /* ---- Hard drop 잔상 (motion blur trail) ----
@@ -2659,6 +2700,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777581770" defer></script>
+<script src="/js/siteFooter.js?v=1777582022" defer></script>
 </body>
 </html>
