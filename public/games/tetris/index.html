@@ -259,14 +259,14 @@ body{
     background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.18), transparent 70%);
 }
 .cbtn.rot-circle .lab{display:none}
-/* SVG 회전 화살표 — 이전 unicode ↺/↻ 글리프는 폰트마다 viewport
-   center 가 안 맞아서 회전 느낌 어긋났음. SVG 로 viewBox 정중앙
-   (16,16) 에 270° 호 그리고 끝에 화살촉 → 정확히 버튼 중심 회전.
-   90% 사이즈 = 이전 unicode (1.85em) 의 약 2배 시각 크기. */
+/* SVG 회전 화살표 — viewBox 정중앙(16,16) 기준 270° 호 + 화살촉.
+   45% 사이즈 = 이전 90% 대비 절반 (사용자 요청 "직경 절반").
+   SVG 비례 축소이므로 stroke 굵기도 자동 절반 됨. 작아진 만큼
+   "원의 정확한 중심에서 회전한다" 시각 인상 강화. */
 .cbtn.rot-circle .rot-svg{
-    width:90%;height:90%;
+    width:45%;height:45%;
     color:#D5B0FF;
-    filter:drop-shadow(0 0 10px rgba(168,85,247,0.55));
+    filter:drop-shadow(0 0 6px rgba(168,85,247,0.5));
     pointer-events:none
 }
 /* ---- 3D dimensional buttons with neon press effect ----
@@ -348,11 +348,22 @@ body{
     }
 }
 .cbtn.rot-circle.flash{animation:cbtn-flash-circle 280ms ease-out}
-.cbtn .ico{font-size:1.7em;line-height:1;font-family:'Orbitron',sans-serif;font-weight:900;
-    /* subtle text glow matching the icon's color, set per-type below */
+/* L/R/DROP/HOLD/RELEASE 의 .ico 는 버튼 정중앙에 absolute 위치 →
+   삼각형이 정확히 한가운데. .lab 는 absolute bottom 으로 살짝
+   아래쪽에 작은 텍스트로 위치. flex 가 아닌 absolute 라 .ico 가
+   .lab 의 영향 없이 (50%, 50%) 에 정렬됨. */
+.cbtn .ico{
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%, -50%);
+    font-size:1.7em;line-height:1;font-family:'Orbitron',sans-serif;font-weight:900;
     text-shadow: 0 0 8px currentColor;
+    pointer-events:none
 }
-.cbtn .lab{font-size:.58em;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2)}
+.cbtn .lab{
+    position:absolute;left:0;right:0;bottom:5px;
+    font-size:.5em;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);
+    text-align:center;line-height:1;pointer-events:none
+}
 
 /* Per-type colored backgrounds + glow colors */
 .cbtn.move{
@@ -387,6 +398,21 @@ body{
         inset 0 0 10px rgba(255,154,60,0.2);
 }
 .cbtn.drop.soft-active .ico{color:#FFB050}
+/* HOLD / RELEASE — 보라 톤 (HOLD slot 색깔 매칭). 두 버튼 모두 동일
+   동작 (holdCurrentPiece 호출), 폰 양손 ergonomic 위해 DROP 좌우 배치.
+   HOLD = 좌측, RELEASE = 우측. */
+.cbtn.hold, .cbtn.release{
+    background:linear-gradient(180deg,
+        rgba(180,110,255,0.22) 0%,
+        rgba(120,55,190,0.16) 55%,
+        rgba(60,20,110,0.26) 100%);
+    border-color:rgba(168,85,247,0.45);
+    --btn-glow: rgba(168,85,247,0.75);
+}
+.cbtn.hold .ico, .cbtn.release .ico{color:#D5B0FF}
+/* canHold=false (이번 piece 이미 hold 사용) 일 때 회색 톤. JS 가
+   .locked 클래스 토글해서 시각적 피드백 제공. */
+.cbtn.hold.locked, .cbtn.release.locked{opacity:.45}
 
 /* ---- NEXT queue panel (5 pieces vertical, right of canvas) ----
    playfield 옆 슬림 panel 에 다음 5개 piece 미리보기. 위에서 아래로
@@ -652,8 +678,17 @@ body{
                 </button>
             </div>
             <div class="ctrl-row row-drop">
+                <!-- HOLD: 현재 piece 를 슬롯에 보관. 양손 어느 손으로든 누를 수
+                     있게 DROP 양쪽 (HOLD 좌, RELEASE 우) 배치. 둘 다 동일 동작
+                     (holdCurrentPiece) — naming 은 직관적 mental model 위해. -->
+                <button class="cbtn hold" data-act="hold" type="button" aria-label="홀드">
+                    <span class="ico">⇤</span><span class="lab">HOLD</span>
+                </button>
                 <button class="cbtn drop" data-act="drop" type="button" aria-label="드롭 (더블탭=하드, 홀드=소프트)">
                     <span class="ico">▼</span><span class="lab">DROP</span>
+                </button>
+                <button class="cbtn release" data-act="release" type="button" aria-label="릴리즈 (홀드 해제)">
+                    <span class="ico">⇥</span><span class="lab">RELEASE</span>
                 </button>
             </div>
         </div>
@@ -682,7 +717,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777574751"></script>
+<script src="/js/supabase-config.js?v=1777575280"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1398,12 +1433,18 @@ function holdCurrentPiece(){
     drawHoldPreview();
 }
 
-/* HOLD slot UI 상태 동기화 — empty/locked 클래스 토글, 캔버스 그리기 */
+/* HOLD slot UI 상태 동기화 — empty/locked 클래스 토글 + 컨트롤 버튼
+   회색 처리. canHold=false 면 .cbtn.hold/.cbtn.release 도 locked. */
 function syncHoldUI(){
     const slot = $('holdSlot');
-    if(!slot) return;
-    slot.classList.toggle('empty', holdPiece === null);
-    slot.classList.toggle('locked', holdPiece !== null && !canHold);
+    if(slot){
+        slot.classList.toggle('empty', holdPiece === null);
+        slot.classList.toggle('locked', holdPiece !== null && !canHold);
+    }
+    const lockedClass = !canHold;
+    document.querySelectorAll('.cbtn.hold, .cbtn.release').forEach(b => {
+        b.classList.toggle('locked', lockedClass);
+    });
 }
 function drawHoldPreview(){
     const c = $('holdCanvas');
@@ -2092,6 +2133,12 @@ function onCtrlPress(act){
         case 'right': moveX(1); break;
         case 'ccw':   rotate(-1); break;
         case 'cw':    rotate(1); break;
+        /* HOLD/RELEASE 양쪽 버튼 모두 동일 동작. canHold 가 false 면
+           holdCurrentPiece 내부에서 자동 무시되므로 추가 체크 불필요. */
+        case 'hold':
+        case 'release':
+            holdCurrentPiece();
+            break;
         /* drop 은 별도 핸들러에서 처리 (더블탭/홀드 분기) */
     }
 }
@@ -2344,6 +2391,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777574751" defer></script>
+<script src="/js/siteFooter.js?v=1777575280" defer></script>
 </body>
 </html>
