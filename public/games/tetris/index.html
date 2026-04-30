@@ -613,7 +613,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777536012"></script>
+<script src="/js/supabase-config.js?v=1777536443"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1264,12 +1264,29 @@ function spawnPiece(){
 }
 
 /* ---- Movement ---- */
+/* 공중 lock 버그 방지 helper.
+   현재 피스가 한 칸 아래로 갈 수 있는지 = 아직 공중에 떠있는지.
+   moveX / rotate 후 이 함수로 재검증해서 절벽 끝으로 옮겨진 피스가
+   공중에 lock 되는 일 없도록 함. */
+function canMoveDown(){
+    return current && tryPos(current.type, current.rot, current.x, current.y + 1);
+}
 function moveX(dx){
     if(!current || paused || gameOverFlag) return false;
     if(tryPos(current.type, current.rot, current.x + dx, current.y)){
         current.x += dx;
         Sfx.move();
-        if(landed){ lockTimer = 0; }   /* lock-delay reset on horizontal move */
+        if(landed){
+            /* landed 상태에서 좌우 이동 → 새 위치가 절벽이면 다시 공중.
+               landed 해제해서 다음 gravity tick 에 자연스럽게 떨어지게.
+               아니면 표준 lock-delay reset (피스 자리 잡기 시간 갱신). */
+            if(canMoveDown()){
+                landed = false;
+                lockTimer = 0;
+            } else {
+                lockTimer = 0;
+            }
+        }
         return true;
     }
     return false;
@@ -1288,7 +1305,16 @@ function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
             current.x += kx;
             current.y -= ky;
             Sfx.rotate();
-            if(landed){ lockTimer = 0; }
+            if(landed){
+                /* SRS kick 으로 위로 띄워지거나 옆 절벽으로 옮겨지면
+                   다시 공중 상태가 됨. moveX 와 동일한 재검증. */
+                if(canMoveDown()){
+                    landed = false;
+                    lockTimer = 0;
+                } else {
+                    lockTimer = 0;
+                }
+            }
             return true;
         }
     }
@@ -1628,9 +1654,18 @@ function loop(now){
             if(landed){
                 lockTimer += interval;
                 if(lockTimer >= lockDelay){
-                    lock();
-                    if(!running) return;
-                    lockTimer = 0;
+                    /* 방어적 재검증 — 어떤 코드 경로 누락으로 landed=true
+                       인데 실제론 떨어질 수 있는 상태면 lock 안 하고
+                       landed 만 해제. moveX/rotate 의 재검증이 1차 방어,
+                       이게 2차 방어. 공중 lock 절대 발생 안 하도록 보장. */
+                    if(canMoveDown()){
+                        landed = false;
+                        lockTimer = 0;
+                    } else {
+                        lock();
+                        if(!running) return;
+                        lockTimer = 0;
+                    }
                 }
             }
             if(!running) return;
@@ -1948,6 +1983,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777536012" defer></script>
+<script src="/js/siteFooter.js?v=1777536443" defer></script>
 </body>
 </html>
