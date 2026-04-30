@@ -431,7 +431,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777527004"></script>
+<script src="/js/supabase-config.js?v=1777527293"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -531,9 +531,12 @@ const TetrisBGM = (function(){
        페이지) 을 7일 max-age 로 캐시함. 이후 파일이 배포돼도 stale
        cache 가 HTML 을 계속 서빙 → 브라우저가 Content-Type:text/html
        보고 NotSupportedError (audio.error code=4) 발생.
-       해결: ?v= query 붙여서 새 URL → Cloudflare cache miss → origin
-       에서 fresh fetch. mp3 교체 시 'a' → 'b' 로 bump. */
-    const CACHE_BUST = '?v=20260430a';
+
+       매 페이지 로드마다 unique timestamp 사용 — 어떤 캐시 레이어
+       (Cloudflare / 브라우저 / 모바일 WebView) 도 stale 로 hit 안
+       함. 비용: 매 방문마다 mp3 다운로드 (~3 MB 합계). 음악 안
+       들리는 것보단 낫고, 안정화 후 stable hash 로 전환 가능. */
+    const CACHE_BUST = '?v=' + Date.now();
 
     for(let i = 1; i <= TRACK_COUNT; i++){
         const a = new Audio('/assets/bgm/tetris/track' + i + '.mp3' + CACHE_BUST);
@@ -688,6 +691,19 @@ const TetrisBGM = (function(){
     function start(){
         log('start() called');
         if(!enabled){ log('  → enabled=false, skip'); return; }
+        /* 자동 진단 — start() 시점의 audio element 들 상태 dump.
+           각 트랙의 src/readyState/networkState/error 한 번에 보임.
+           BGM 안 들릴 때 이 출력만 봐도 어디서 막히는지 즉시 식별. */
+        try {
+            audios.forEach(function(a, i){
+                log('  [pre-start] track' + (i+1) +
+                    ' src=' + a.src.split('/').slice(-1)[0] +
+                    ' readyState=' + a.readyState +
+                    ' networkState=' + a.networkState +
+                    ' error=' + (a.error ? a.error.code : 'null') +
+                    ' failed=' + (a.dataset.failed || 'no'));
+            });
+        } catch(_){}
         currentTier = 0; started = false;
         playTier(0);
     }
@@ -1523,6 +1539,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777527004" defer></script>
+<script src="/js/siteFooter.js?v=1777527293" defer></script>
 </body>
 </html>
