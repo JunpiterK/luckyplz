@@ -155,6 +155,40 @@ body{
 }
 .canvas-wrap canvas{display:block;width:100%;height:100%;background:#020516}
 
+/* ---- Line clear screen-shake ----
+   라인 클리어 시 캔버스를 살짝 흔들어 "쾅 터졌다" 느낌. 1~3 줄은
+   가벼운 shake-1, 4 줄(테트리스) 은 강한 shake-tetris 로 차별화.
+   transform: translate3d 로 GPU 가속, will-change:transform 으로 강제
+   레이어 분리해서 비디오 카드 쪽으로 합성 — JS 캔버스 그리기와
+   분리되어 충돌 없음. */
+@keyframes shake-1{
+    0%,100%{transform:translate3d(0,0,0)}
+    25%{transform:translate3d(-2px,1px,0)}
+    50%{transform:translate3d(2px,-1px,0)}
+    75%{transform:translate3d(-1px,1px,0)}
+}
+@keyframes shake-tetris{
+    0%,100%{transform:translate3d(0,0,0)}
+    10%{transform:translate3d(-5px,2px,0) rotate(-.4deg)}
+    25%{transform:translate3d(4px,-2px,0) rotate(.3deg)}
+    40%{transform:translate3d(-3px,-2px,0) rotate(-.2deg)}
+    55%{transform:translate3d(3px,2px,0) rotate(.2deg)}
+    70%{transform:translate3d(-2px,1px,0) rotate(-.1deg)}
+    85%{transform:translate3d(2px,-1px,0) rotate(.1deg)}
+}
+.canvas-wrap.shaking-1{animation:shake-1 220ms ease-in-out;will-change:transform}
+.canvas-wrap.shaking-tetris{animation:shake-tetris 460ms ease-in-out;will-change:transform}
+/* TETRIS 4-line 시 캔버스 테두리 자체가 주황 네온으로 펄스 */
+@keyframes tetris-border{
+    0%{box-shadow:0 0 20px rgba(0,217,255,.08);border-color:rgba(0,217,255,.18)}
+    20%{
+        box-shadow:0 0 36px 4px rgba(255,154,60,.7),inset 0 0 18px rgba(255,154,60,.35);
+        border-color:rgba(255,154,60,.85)
+    }
+    100%{box-shadow:0 0 20px rgba(0,217,255,.08);border-color:rgba(0,217,255,.18)}
+}
+.canvas-wrap.tetris-glow{animation:tetris-border 520ms ease-out}
+
 /* ---- Overlay (start / game over) ---- */
 .overlay{
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -275,6 +309,40 @@ body{
         0 0 18px 2px var(--btn-glow),                    /* outer neon glow */
         inset 0 0 12px var(--btn-glow);                  /* inner neon halo */
 }
+/* Press flash — 버튼 누른 순간 전체가 테마 색깔로 한번 "번쩍".
+   :active 는 누른 동안만 유지되는 정적 효과인 반면, 이 .flash 는
+   매 press 마다 짧게(280ms) 켜졌다 페이드 아웃되는 애니메이션이라
+   탭의 즉각적인 응답감을 강조. inset box-shadow 로 버튼 전체 내부
+   를 테마 색으로 가득 채우면서, brightness/saturate 살짝만 올림.
+   AMOLED pixel burn 우려해서 풀백색 · 풀화이트 절대 안 쓰고 테마
+   색의 alpha 만 키우는 방식. 280ms 동안 빠르게 가라앉아 시각 잔상
+   안 남음. */
+@keyframes cbtn-flash{
+    0%{filter:brightness(1) saturate(1)}
+    18%{
+        box-shadow:
+            0 0 0 2px var(--btn-glow),
+            0 0 28px 6px var(--btn-glow),
+            inset 0 0 30px 4px var(--btn-glow),
+            0 4px 10px -2px rgba(0,0,0,0.4);
+        filter:brightness(1.22) saturate(1.18)
+    }
+    100%{filter:brightness(1) saturate(1)}
+}
+.cbtn.flash{animation:cbtn-flash 280ms ease-out}
+/* rot-circle 동그라미는 inset box-shadow 가 원형 컷 아웃이라
+   잘 안 보임 → background 톤도 같이 살짝 키움 */
+@keyframes cbtn-flash-circle{
+    0%,100%{filter:brightness(1) saturate(1)}
+    18%{
+        box-shadow:
+            0 0 0 2px var(--btn-glow),
+            0 0 32px 8px var(--btn-glow),
+            inset 0 0 22px 6px var(--btn-glow);
+        filter:brightness(1.35) saturate(1.25)
+    }
+}
+.cbtn.rot-circle.flash{animation:cbtn-flash-circle 280ms ease-out}
 .cbtn .ico{font-size:1.5em;line-height:1;font-family:'Orbitron',sans-serif;font-weight:900;
     /* subtle text glow matching the icon's color, set per-type below */
     text-shadow: 0 0 8px currentColor;
@@ -545,7 +613,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777532047"></script>
+<script src="/js/supabase-config.js?v=1777532954"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -594,18 +662,53 @@ const Sfx=(()=>{
             g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
             o.connect(g);g.connect(c.destination);
             o.start();o.stop(c.currentTime+dur)}catch(_){}}
+    /* High → low frequency sweep — 라인 클리어 직전 "휘이잉" 효과 */
+    function sweep(fStart,fEnd,dur,vol,type){
+        try{const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+            o.type=type||'sawtooth';
+            o.frequency.setValueAtTime(fStart,c.currentTime);
+            o.frequency.exponentialRampToValueAtTime(Math.max(20,fEnd),c.currentTime+dur);
+            g.gain.setValueAtTime(vol,c.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+dur);
+            o.connect(g);g.connect(c.destination);
+            o.start();o.stop(c.currentTime+dur)}catch(_){}}
+    /* 저주파 쿵 (테트리스 4줄 클리어 시 임팩트) */
+    function boom(){
+        try{const c=getCtx(),o=c.createOscillator(),g=c.createGain();
+            o.type='sine';
+            o.frequency.setValueAtTime(160,c.currentTime);
+            o.frequency.exponentialRampToValueAtTime(40,c.currentTime+0.32);
+            g.gain.setValueAtTime(0.14,c.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.32);
+            o.connect(g);g.connect(c.destination);
+            o.start();o.stop(c.currentTime+0.32)}catch(_){}}
     return{
         move(){play(440,0.04,'square',0.04)},
         rotate(){play(660,0.05,'triangle',0.05)},
         soft(){play(330,0.03,'square',0.03)},
         hard(){play(220,0.08,'sawtooth',0.07);setTimeout(()=>play(165,0.05,'square',0.05),40)},
         lock(){play(180,0.06,'square',0.05)},
-        clear1(){play(523,0.1,'square',0.06);setTimeout(()=>play(659,0.1,'square',0.06),80)},
-        clear2(){play(523,0.1,'square',0.07);setTimeout(()=>play(659,0.1,'square',0.07),80);setTimeout(()=>play(784,0.12,'square',0.08),160)},
-        clear3(){[523,659,784,1047].forEach((n,i)=>setTimeout(()=>play(n,0.1,'square',0.07),i*70))},
+        /* clear1~3 앞에 sweep 추가해서 "휘이잉~" 후 멜로디. 스트레스
+           해소감 위해 멜로디 + 상승감 결합. */
+        clear1(){
+            sweep(900,200,0.12,0.05);
+            setTimeout(()=>{play(523,0.1,'square',0.06);setTimeout(()=>play(784,0.12,'square',0.07),90)},60);
+        },
+        clear2(){
+            sweep(1100,180,0.14,0.06);
+            setTimeout(()=>{play(523,0.1,'square',0.07);setTimeout(()=>play(659,0.1,'square',0.07),80);setTimeout(()=>play(880,0.14,'square',0.08),160)},60);
+        },
+        clear3(){
+            sweep(1300,160,0.16,0.07);
+            setTimeout(()=>{[523,659,784,1047].forEach((n,i)=>setTimeout(()=>play(n,0.1,'square',0.07),i*65))},60);
+        },
         tetris(){
-            /* TETRIS! 4-line bonus — bigger fanfare */
-            [523,659,784,1047,1319,1568].forEach((n,i)=>setTimeout(()=>play(n,0.12,'square',0.09),i*55));
+            /* TETRIS! 4-line bonus — boom + sweep + 6단 fanfare 합주.
+               저주파 boom 으로 묵직한 충격감 + sweep 휘이잉 + 멜로디
+               올라가는 환희. 1초 가량 풀어 보상감 최대화. */
+            boom();
+            sweep(1500,140,0.22,0.08);
+            setTimeout(()=>{[523,659,784,1047,1319,1568].forEach((n,i)=>setTimeout(()=>play(n,0.12,'square',0.09),i*55))},90);
         },
         levelUp(){[440,554,659,880].forEach((n,i)=>setTimeout(()=>play(n,0.08,'triangle',0.07),i*60))},
         gameOver(){[330,294,247,196,165].forEach((n,i)=>setTimeout(()=>play(n,0.16,'sawtooth',0.07),i*120))},
@@ -1210,10 +1313,49 @@ function lock(){
         if(board[y].every(c => c != null)) cleared.push(y);
     }
     if(cleared.length > 0){
-        /* Visual: brief flash, then collapse */
+        /* 라인 클리어 시퀀스:
+             1. 즉시 사운드 발사 (sweep + 멜로디 / TETRIS 면 boom + sweep)
+             2. 캔버스 wrap 흔들기 (shake CSS 클래스)
+             3. cleared 줄을 흰색으로 채워두고 render() 가 그 위에
+                burst overlay (sparkle 파티클 + 가로 글로우) 그림
+             4. duration 끝나면 collapse + 점수/레벨/스폰
+           Tetris (4줄) 는 더 길게 (440ms) + 더 강한 효과.
+        */
+        const isTetris = cleared.length === 4;
+        const dur = isTetris ? 440 : 280;
         cleared.forEach(y => board[y].fill('#fff'));
-        render();
+
+        /* SFX: 즉시 발사 — 시각 효과와 동기화 */
+        if(isTetris) Sfx.tetris();
+        else if(cleared.length === 3) Sfx.clear3();
+        else if(cleared.length === 2) Sfx.clear2();
+        else Sfx.clear1();
+
+        /* 캔버스 흔들기 + (테트리스 만) 테두리 주황 펄스. 클래스 한
+           번 빼고 reflow 한 다음 다시 추가해야 매번 애니메이션 새로
+           시작 (연속 클리어 시 부드럽게). */
+        const wrap = $('canvasWrap');
+        if(wrap){
+            const shakeCls = isTetris ? 'shaking-tetris' : 'shaking-1';
+            wrap.classList.remove('shaking-1','shaking-tetris','tetris-glow');
+            void wrap.offsetWidth;
+            wrap.classList.add(shakeCls);
+            if(isTetris) wrap.classList.add('tetris-glow');
+            setTimeout(()=>wrap.classList.remove(shakeCls,'tetris-glow'), dur + 80);
+        }
+
+        /* burst overlay 애니메이션 시작 — render() 가 clearAnim 보고
+           cleared 줄 위에 sparkle 파티클 + 가로 빛줄기 그림. */
+        clearAnim = {
+            rows: cleared.slice(),
+            start: performance.now(),
+            duration: dur,
+            isTetris: isTetris
+        };
+        requestAnimationFrame(animateClearTick);
+
         setTimeout(() => {
+            clearAnim = null;   /* burst 종료 */
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
@@ -1221,11 +1363,6 @@ function lock(){
             lines += cleared.length;
             $('scoreNow').textContent = score.toLocaleString();
             $('linesNow').textContent = lines;
-            /* Sound by line count */
-            if(cleared.length === 4) Sfx.tetris();
-            else if(cleared.length === 3) Sfx.clear3();
-            else if(cleared.length === 2) Sfx.clear2();
-            else Sfx.clear1();
             /* Level-up every 10 lines, speed up */
             const newLevel = 1 + Math.floor(lines / 10);
             if(newLevel > level){
@@ -1240,7 +1377,8 @@ function lock(){
                수 있음). */
             try { TetrisBGM.update(board); } catch(_){}
             spawnPiece();
-        }, 180);
+            render();
+        }, dur);
     } else {
         /* 라인 안 빠진 일반 lock — 새 piece 가 추가됐으니 topRow 가
            위로 올라갔을 수 있음 → BGM tier 재평가. */
@@ -1272,6 +1410,87 @@ function drawCell(cctx, cx, cy, color, alpha){
    원래는 떨어질 위치를 반투명 색으로 미리 보여주던 시각 보조였는데,
    '난이도가 너무 쉬워진다' 는 이유로 제거. 추가 도전적 플레이감.
    하드드롭 사용자는 직접 위치를 가늠해야 함. */
+
+/* ---- 라인 클리어 burst overlay ----
+   {rows:[y,...], start:ms, duration:ms, isTetris:bool} 형태 객체.
+   설정되면 render() 가 cleared 줄 위에 sparkle + 가로 빛줄기를 그림.
+   lock() 의 setTimeout 이 끝나면 null 로 리셋. */
+let clearAnim = null;
+
+/* requestAnimationFrame 으로 clearAnim 진행 중에만 매 프레임
+   render() 호출. clearAnim 이 null 이 되거나 t≥1 이면 중단. */
+function animateClearTick(){
+    if(!clearAnim) return;
+    const t = (performance.now() - clearAnim.start) / clearAnim.duration;
+    render();
+    if(t < 1) requestAnimationFrame(animateClearTick);
+}
+
+/* burst overlay 그리기 — render() 마지막에 호출.
+   t = 0..1 진행도. fade = 1-t (점점 사라짐).
+   효과 구성:
+     1. 가로 흰색 빛줄기 (글로우 강함, 빠르게 페이드)
+     2. cyan/purple 그라디언트 가로 막대 (좌우로 퍼짐)
+     3. 흰색 sparkle 점들 (sin/cos 으로 진동, t<0.7 까지)
+     4. 테트리스 면 추가로 노란 십자 빛줄기 (위아래 방향) */
+function drawClearBurst(){
+    if(!clearAnim) return;
+    const elapsed = performance.now() - clearAnim.start;
+    const t = Math.min(1, elapsed / clearAnim.duration);
+    const fade = 1 - t;
+    ctx.save();
+    /* additive blend 로 빛 합성 — 흰색 위에 색이 합쳐지면 더 밝아짐 */
+    ctx.globalCompositeOperation = 'lighter';
+
+    for(const y of clearAnim.rows){
+        const py = y * CELL;
+        /* (1) 가로 빛줄기 — 풀백색 절대 안 쓰고 alpha 만 펄스로 조절.
+           AMOLED burn 방지 위해 max alpha 0.55 로 cap. */
+        const beamAlpha = fade * 0.55 * (0.6 + 0.4 * Math.sin(t * Math.PI));
+        ctx.fillStyle = `rgba(255,255,255,${beamAlpha})`;
+        ctx.fillRect(0, py + CELL * 0.15, COLS * CELL, CELL * 0.7);
+
+        /* (2) 가로 그라디언트 — cyan(왼)→white(중)→purple(오) */
+        const grad = ctx.createLinearGradient(0, py, COLS * CELL, py);
+        grad.addColorStop(0,    `rgba(0,217,255,${fade * 0.35})`);
+        grad.addColorStop(0.5,  `rgba(255,230,109,${fade * 0.45})`);
+        grad.addColorStop(1,    `rgba(168,85,247,${fade * 0.35})`);
+        const expand = t * CELL * 1.5;
+        ctx.fillStyle = grad;
+        ctx.fillRect(-expand, py - 1, COLS * CELL + 2 * expand, CELL + 2);
+
+        /* (3) sparkle 점들 — t < 0.75 까지만, 줄당 12개 */
+        if(t < 0.75){
+            ctx.fillStyle = `rgba(255,255,255,${fade * 0.85})`;
+            for(let i = 0; i < 12; i++){
+                const seed = (i * 17 + y * 31) % 100;
+                const baseX = (seed / 100) * COLS * CELL;
+                const sx = baseX + Math.cos(elapsed * 0.012 + i * 0.7) * t * CELL * 1.8;
+                const sy = py + CELL/2 + Math.sin(elapsed * 0.014 + i * 1.3) * t * CELL * 1.2;
+                const size = 1.5 + (1 - t) * 2.5;
+                ctx.fillRect(sx - size/2, sy - size/2, size, size);
+            }
+        }
+    }
+
+    /* (4) 테트리스 — 캔버스 전체에 화이트 베일 한 번 더 + 위아래로
+       퍼지는 노란 빔. 강한 만큼 짧게 (t<0.4) 만 표시. */
+    if(clearAnim.isTetris && t < 0.45){
+        const tetrisFade = (1 - t / 0.45);
+        ctx.fillStyle = `rgba(255,154,60,${tetrisFade * 0.18})`;
+        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+        /* 세로 중앙선에서 양쪽으로 퍼지는 노란 빛 */
+        const beam = ctx.createLinearGradient(0, 0, 0, ROWS * CELL);
+        beam.addColorStop(0,   `rgba(255,230,109,${tetrisFade * 0.3})`);
+        beam.addColorStop(0.5, `rgba(255,154,60,${tetrisFade * 0.4})`);
+        beam.addColorStop(1,   `rgba(255,230,109,${tetrisFade * 0.3})`);
+        ctx.fillStyle = beam;
+        const beamH = (1 - tetrisFade) * ROWS * CELL;
+        ctx.fillRect(0, ROWS * CELL / 2 - beamH/2, COLS * CELL, beamH);
+    }
+    ctx.restore();
+}
+
 function render(){
     /* Background */
     ctx.fillStyle = '#020516';
@@ -1300,6 +1519,9 @@ function render(){
             if(cy >= 0) drawCell(ctx, cx, cy, color);
         }
     }
+    /* 라인 클리어 burst overlay — locked cells + current piece 다 그린
+       다음 그 위에 sparkle/빛줄기 합성 */
+    if(clearAnim) drawClearBurst();
     /* Pause overlay */
     if(paused && running){
         ctx.fillStyle = 'rgba(5,5,15,.72)';
@@ -1552,6 +1774,25 @@ function onCtrlPress(act){
 function onCtrlRelease(act){
     if(act === 'soft') softDropping = false;
 }
+/* Trigger neon flash animation on a button. Removes any in-flight
+   .flash class first so the keyframe restarts even on rapid double-
+   tap (browsers don't restart animations on same-frame class re-add
+   without a reflow read). */
+function flashBtn(b){
+    b.classList.remove('flash');
+    /* Force layout recalc so removing+adding within the same frame
+       still triggers a fresh animation cycle. */
+    void b.offsetWidth;
+    b.classList.add('flash');
+}
+/* Cleanup on animation end so the class doesn't accumulate. */
+document.addEventListener('animationend', (e) => {
+    if(e.target.classList && e.target.classList.contains('cbtn')
+       && (e.animationName === 'cbtn-flash' || e.animationName === 'cbtn-flash-circle')){
+        e.target.classList.remove('flash');
+    }
+}, true);
+
 document.querySelectorAll('.cbtn').forEach(b => {
     const act = b.dataset.act;
     /* press = touchstart or mousedown; we wire both for desktop testing.
@@ -1564,6 +1805,7 @@ document.querySelectorAll('.cbtn').forEach(b => {
             paused = false; syncPauseUI();
             try { TetrisBGM.resume(); } catch(_){}
         }
+        flashBtn(b);   /* 매 press 마다 네온 flash */
         onCtrlPress(act);
         /* Hold-to-repeat for left/right/soft */
         if(act === 'left' || act === 'right'){
@@ -1663,6 +1905,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777532047" defer></script>
+<script src="/js/siteFooter.js?v=1777532954" defer></script>
 </body>
 </html>
