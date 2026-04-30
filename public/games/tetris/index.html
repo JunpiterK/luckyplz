@@ -146,7 +146,7 @@ body{
     position:relative;
     aspect-ratio:1/2;height:100%;width:auto;
     max-width:calc(100% - 120px);
-    border-radius:12px;overflow:hidden;
+    border-radius:0;overflow:hidden;
     background:linear-gradient(165deg,rgba(0,217,255,.04),rgba(168,85,247,.04));
     border:1px solid rgba(0,217,255,.18);
     box-shadow:0 0 20px rgba(0,217,255,.08)
@@ -717,7 +717,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777575280"></script>
+<script src="/js/supabase-config.js?v=1777576345"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1689,13 +1689,14 @@ function drawCell(cctx, cx, cy, color, alpha){
     cctx.globalAlpha = 1;
 }
 /* ---- Ghost piece (낙하 예측 위치) ----
-   이전 디자인 (반투명 컬러 fill) → 너무 쉬워서 제거됐다가, 사용자
-   요청으로 재도입하되 디자인 변경: 어떤 piece / 어떤 색이든 무관하게
-   "흰색 외곽선만" 표시.
-
-   외곽선 계산: 각 셀 4면 중 같은 piece 의 인접 셀이 없는 면만 그림.
-   같은 piece 내부 경계는 안 그려져서 도형 perimeter 만 깔끔히 표시.
-   ex) I-piece 가로 (4×1) → 위/아래 한 줄 + 양 끝 짧은 세로선만. */
+   디자인 v3 (사용자 요청 반영):
+     · 색깔 무관 흰색 outline only
+     · 각 셀별로 stroke (perimeter 합치지 않음) — 실제 블럭이
+       cell 마다 fill 그리는 방식과 동일 ((px+1, py+1, CELL-2, CELL-2))
+     · stroke 가 cell 바운더리 밖으로 절대 안 나감 (inscribed):
+         strokeRect 좌표를 (px+0.5, py+0.5, CELL-1, CELL-1) 로 잡으면
+         lineWidth 1 의 stroke 가 cell 의 첫 1px 안에 정확히 들어감
+         (outer edge 가 cell 바운더리에 정확히 접함, 안쪽으로만 그려짐) */
 function getGhostY(){
     if(!current) return -1;
     let gy = current.y;
@@ -1711,40 +1712,21 @@ function drawGhostOutline(){
        piece 와 겹쳐서 시각 노이즈만 됨. */
     if(gy <= current.y) return;
     const shape = PIECES[current.type].shapes[current.rot];
-    /* 같은 piece 의 셀 좌표 집합 — perimeter-only 검사용 */
-    const cells = new Set(shape.map(function(c){return c[0]+','+c[1]}));
-    function has(dx, dy){return cells.has(dx+','+dy)}
 
     ctx.save();
-    /* 흰색 외곽선 — 0.75 alpha 로 살짝 부드럽게 (강한 흰색은 시야
-       부담). lineWidth 2 로 어두운 배경에서도 명확히 보이게. */
-    ctx.strokeStyle = 'rgba(255,255,255,0.75)';
-    ctx.lineWidth = 2;
-    ctx.lineCap = 'square';
-    ctx.beginPath();
+    /* 흰색 outline — 0.78 alpha. lineWidth 1 로 셀 안에 정확히 inscribed.
+       stroke center (px+0.5, py+0.5) → outer edge at (px, py) = cell 경계
+       에 정확히 접함, inner edge at (px+1, py+1) = cell 안쪽 1px 진입. */
+    ctx.strokeStyle = 'rgba(255,255,255,0.78)';
+    ctx.lineWidth = 1;
     for(const [dx, dy] of shape){
         const cx = current.x + dx, cy = gy + dy;
         if(cy < 0) continue;
         const px = cx * CELL, py = cy * CELL;
-        /* 인접 셀 없는 면만 그림 → 도형 perimeter */
-        if(!has(dx, dy-1)){    /* top */
-            ctx.moveTo(px, py);
-            ctx.lineTo(px + CELL, py);
-        }
-        if(!has(dx, dy+1)){    /* bottom */
-            ctx.moveTo(px, py + CELL);
-            ctx.lineTo(px + CELL, py + CELL);
-        }
-        if(!has(dx-1, dy)){    /* left */
-            ctx.moveTo(px, py);
-            ctx.lineTo(px, py + CELL);
-        }
-        if(!has(dx+1, dy)){    /* right */
-            ctx.moveTo(px + CELL, py);
-            ctx.lineTo(px + CELL, py + CELL);
-        }
+        /* 셀별 독립 outline — 실제 blocks 와 동일하게 같은 piece 인접
+           셀들 사이에도 작은 gap 보임 (real Tetris block visual). */
+        ctx.strokeRect(px + 0.5, py + 0.5, CELL - 1, CELL - 1);
     }
-    ctx.stroke();
     ctx.restore();
 }
 
@@ -2391,6 +2373,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777575280" defer></script>
+<script src="/js/siteFooter.js?v=1777576345" defer></script>
 </body>
 </html>
