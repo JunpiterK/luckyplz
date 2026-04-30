@@ -135,6 +135,18 @@
     /* Android Chrome equivalent (deprecated but still respected on
        older versions; modern Chrome uses the manifest). */
     setMeta('mobile-web-app-capable','yes');
+    /* theme-color — controls the Android Chrome URL-bar background
+       and the iOS Safari swipe-down chrome. We force it to match the
+       site's dark page background (#0A0A1A) so the URL bar (when
+       briefly visible before fullscreen kicks in, or on the home
+       page where fullscreen is intentionally skipped) blends into
+       the page rather than appearing as a separate orange / colored
+       strip. Some legacy pages still ship with theme-color="#FF6B35"
+       in their HTML; this enforces the dark value at runtime so
+       there's no brief orange flash before our override applies.
+       Without this, the user sees an orange strip at top until the
+       fullscreen API kicks in. */
+    setMeta('theme-color','#0A0A1A');
   }
 
   /* ---------- safe-area + dynamic viewport CSS ----------
