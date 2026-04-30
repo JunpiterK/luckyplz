@@ -138,15 +138,14 @@ body{
 .ctrl-btn:active{background:rgba(0,217,255,.32)}
 
 /* ---- Canvas wrap (the 10x20 playfield) ----
-   .game-row (flex-row) 안에서 height 100% + aspect-ratio 1/2 로
-   세로 우선 사이즈 결정. 가로는 height/2 로 산출. NEXT queue 가
-   옆에 56px 차지하므로 max-width 도 그만큼 짧게.
-   margin:0 auto 제거 — flex justify-content:center 가 가운데 정렬. */
+   .game-row 안 가운데 위치. 양쪽 HOLD/NEXT panel (각 60px = 54+6)
+   = 총 120px 확보 후 남는 공간 차지. max-width 로 panel 영역 침범
+   안 하게 cap. flex justify-content:center 가 정중앙 정렬 처리. */
 .canvas-wrap{
     flex:0 1 auto;min-height:0;
     position:relative;
     aspect-ratio:1/2;height:100%;width:auto;
-    max-width:calc(100% - 56px);
+    max-width:calc(100% - 120px);
     border-radius:12px;overflow:hidden;
     background:linear-gradient(165deg,rgba(0,217,255,.04),rgba(168,85,247,.04));
     border:1px solid rgba(0,217,255,.18);
@@ -236,18 +235,14 @@ body{
     width:100%;display:flex;flex-direction:column;gap:6px;
     padding:0
 }
-/* 4컬럼 grid: LEFT(1fr) | CCW(64px) | CW(64px) | RIGHT(1fr).
-   row-drop 도 같은 grid 템플릿 사용 — DROP 가 col 2-3 spanning 으로
-   CCW + CW 영역 정확히 위아래 정렬. */
-.ctrl-row{display:grid;gap:8px;align-items:stretch}
-.ctrl-row.row-main{grid-template-columns:1fr 64px 64px 1fr}
-.ctrl-row.row-drop{grid-template-columns:1fr 64px 64px 1fr}
-.ctrl-row.row-drop .cbtn{grid-column:2 / 4}
-/* 회전 동그라미 — 보라 네온, 64×64. 보이는 건 동그라미지만 실제
-   터치 hit area 는 동그라미에 inscribed (내접) 정사각형 만 (JS 에서
-   체크). corner-bulge 부분은 인접 LEFT/RIGHT 버튼 안 가로채도록 dead. */
+/* 4 버튼 모두 64×64 정사각형 (CCW/CW 원의 bounding box 와 동일 사이즈).
+   row 마다 flex 로 가운데 정렬. row-drop 은 LEFT 와 같이 1개만. */
+.ctrl-row{display:flex;gap:8px;align-items:center;justify-content:center}
+/* 회전 동그라미 — 보라 네온, 64×64 원형. 시각은 원이지만 실제
+   터치 hit area 는 원 안에 inscribed 된 정사각형 (JS isInsideInscribedSquare).
+   corner-bulge 부분 dead — LEFT/RIGHT 옆 버튼 오인식 방지. */
 .cbtn.rot-circle{
-    width:64px;height:64px;min-height:64px;
+    width:64px;height:64px;min-height:0;
     border-radius:50%;padding:0;flex-shrink:0;
     background:radial-gradient(circle at 35% 25%,
         rgba(180,110,255,0.45) 0%,
@@ -263,14 +258,26 @@ body{
     height:50%;
     background:radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.18), transparent 70%);
 }
-.cbtn.rot-circle .ico{font-size:1.85em;line-height:1;color:#D5B0FF;text-shadow:0 0 10px rgba(168,85,247,0.6);font-family:inherit;font-weight:400}
 .cbtn.rot-circle .lab{display:none}
+/* SVG 회전 화살표 — 이전 unicode ↺/↻ 글리프는 폰트마다 viewport
+   center 가 안 맞아서 회전 느낌 어긋났음. SVG 로 viewBox 정중앙
+   (16,16) 에 270° 호 그리고 끝에 화살촉 → 정확히 버튼 중심 회전.
+   90% 사이즈 = 이전 unicode (1.85em) 의 약 2배 시각 크기. */
+.cbtn.rot-circle .rot-svg{
+    width:90%;height:90%;
+    color:#D5B0FF;
+    filter:drop-shadow(0 0 10px rgba(168,85,247,0.55));
+    pointer-events:none
+}
 /* ---- 3D dimensional buttons with neon press effect ----
    Multi-layer shadows + glossy highlight + per-type neon glow on
    active. CSS variable --btn-glow used per type so the press effect
    color matches each button's identity. */
 .cbtn{
     position:relative;
+    /* L/R/DROP 도 64×64 정사각형 (CCW/CW 원 bounding 과 동일).
+       모든 4 버튼이 row 1 에 같은 사이즈로 정렬, DROP 은 row 2 정중앙. */
+    width:64px;height:64px;min-height:0;flex-shrink:0;
     background:linear-gradient(180deg,
         rgba(40,40,62,0.92) 0%,
         rgba(22,22,42,0.88) 45%,
@@ -278,7 +285,7 @@ body{
     border:1px solid rgba(255,255,255,0.10);border-radius:12px;
     color:#fff;font-family:inherit;font-weight:800;cursor:pointer;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    gap:2px;padding:10px 4px;min-height:54px;
+    gap:2px;padding:0;
     /* Multi-layer shadows for raised 3D feel */
     box-shadow:
         0 6px 14px -3px rgba(0,0,0,0.55),         /* drop shadow far */
@@ -341,7 +348,7 @@ body{
     }
 }
 .cbtn.rot-circle.flash{animation:cbtn-flash-circle 280ms ease-out}
-.cbtn .ico{font-size:1.5em;line-height:1;font-family:'Orbitron',sans-serif;font-weight:900;
+.cbtn .ico{font-size:1.7em;line-height:1;font-family:'Orbitron',sans-serif;font-weight:900;
     /* subtle text glow matching the icon's color, set per-type below */
     text-shadow: 0 0 8px currentColor;
 }
@@ -385,10 +392,13 @@ body{
    playfield 옆 슬림 panel 에 다음 5개 piece 미리보기. 위에서 아래로
    순서: queue[0] = 다음 piece, queue[4] = 5번째 후. 캐주얼 모바일
    유저 도전적 플레이감 위해 깊은 lookahead 제공. */
-.next-queue{
+/* HOLD (좌) + NEXT (우) 두 panel 동일 디자인. .side-panel 공통 클래스 +
+   각자 .hold-slot / .next-queue 차이는 색깔/내용. 양쪽 동일 폭이라
+   canvas 가 화면 정중앙 정렬됨 (justify-content:center 자동 작동). */
+.next-queue, .hold-slot{
     flex-shrink:0;
     align-self:flex-start;
-    width:50px;
+    width:54px;
     display:flex;flex-direction:column;align-items:center;gap:4px;
     padding:5px 4px 6px;
     background:linear-gradient(165deg,rgba(22,22,42,.78),rgba(12,12,28,.92));
@@ -401,20 +411,33 @@ body{
     text-align:center;line-height:1.1;padding-bottom:1px;
     border-bottom:1px solid var(--panel-br);width:100%
 }
-.nq-canvas{
+.nq-canvas, .hold-canvas{
     width:100%;aspect-ratio:1/1;display:block;
 }
-/* 첫 piece (next 1) 강조 — 약간 큰 사이즈 + cyan 글로우 */
+/* 첫 NEXT piece — cyan 글로우 강조 */
 .nq-canvas[data-idx="0"]{
     width:108%;
     box-shadow:0 0 8px -1px rgba(0,217,255,0.35);
     border-radius:6px;
 }
+/* HOLD slot 탭 가능 (mobile) — 보라 글로우 (rotation 색깔과 매칭).
+   비어있으면 dashed border, hold 사용 후 lock 되면 회색 처리. */
+.hold-slot{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.hold-canvas{
+    width:108%;
+    box-shadow:0 0 8px -1px rgba(168,85,247,0.35);
+    border-radius:6px;
+}
+.hold-slot.empty .hold-canvas{
+    border:1px dashed rgba(168,85,247,0.4);
+    box-shadow:none;
+}
+.hold-slot.locked{opacity:.45;cursor:not-allowed}
+.hold-slot.locked .hold-canvas{box-shadow:none}
 
-/* ---- Game row (canvas + next queue 가로 배치) ----
-   canvas 가 살짝 좁아지지만 (queue 너비 50 + gap 6 = 56px 만큼),
-   playfield 비율은 그대로 유지. 모바일 portrait 에서도 자연스러운
-   "playfield + side panel" 표준 Tetris 레이아웃. */
+/* ---- Game row (HOLD | canvas | NEXT 가로 배치) ----
+   양쪽 동일 폭 (54+6=60px) 두 panel → canvas 가 진짜 정중앙 정렬.
+   playfield 비율 1:2 유지. */
 .game-row{
     flex:1 1 0;min-height:0;
     width:100%;
@@ -569,8 +592,14 @@ body{
             <div class="ss"><div class="v acc" id="levelNow">1</div><div class="l">LEVEL</div></div>
         </div>
 
-        <!-- canvas + NEXT queue 가로 배치 (.game-row) -->
+        <!-- HOLD | canvas | NEXT 가로 배치 (.game-row) — 양쪽 같은 폭 패널이라
+             canvas 가 정확히 화면 정중앙. -->
         <div class="game-row">
+            <!-- HOLD slot (왼쪽) — 1 piece, 탭/C 키로 hold. -->
+            <aside class="hold-slot empty" id="holdSlot" role="button" tabindex="0" aria-label="홀드 (탭 또는 C 키)">
+                <div class="nq-label">HOLD</div>
+                <canvas class="hold-canvas" id="holdCanvas" width="96" height="96"></canvas>
+            </aside>
             <div class="canvas-wrap" id="canvasWrap">
                 <!-- 일시정지 버튼은 캔버스 우상단 코너에 떠 있어 추가 공간 0. -->
                 <div class="game-ctrl" id="gameCtrl">
@@ -581,7 +610,7 @@ body{
                     <h2 class="play" id="ovTitle">PLAY TETRIS</h2>
                     <p id="ovDesc">블록을 회전·이동·드롭으로 라인 완성.<br>4줄 동시 = 테트리스 보너스!</p>
                     <button class="btn" id="ovBtn">시작</button>
-                    <div class="kbd-hint"><kbd>← →</kbd> 이동 · <kbd>↑</kbd>/<kbd>X</kbd> CW · <kbd>Z</kbd> CCW · <kbd>↓</kbd> 소프트 · <kbd>Space</kbd> 하드드롭</div>
+                    <div class="kbd-hint"><kbd>← →</kbd> 이동 · <kbd>↑</kbd>/<kbd>X</kbd> CW · <kbd>Z</kbd> CCW · <kbd>C</kbd> 홀드 · <kbd>↓</kbd> 소프트 · <kbd>Space</kbd> 하드드롭</div>
                 </div>
             </div>
             <!-- NEXT 5 piece queue, vertical (top=다음, bottom=5번째 후) -->
@@ -605,10 +634,18 @@ body{
                     <span class="ico">◀</span><span class="lab">LEFT</span>
                 </button>
                 <button class="cbtn rot rot-circle" data-act="ccw" type="button" aria-label="회전 (반시계)">
-                    <span class="ico">↺</span>
+                    <!-- CCW: 270° arc 9시→6시→3시→12시 + 화살촉 left 방향. viewBox 정중앙(16,16) 기준. -->
+                    <svg class="rot-svg" viewBox="0 0 32 32" aria-hidden="true">
+                        <path d="M 4 16 A 12 12 0 1 0 16 4" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                        <polygon points="9,4 18,1 18,7" fill="currentColor"/>
+                    </svg>
                 </button>
                 <button class="cbtn rot rot-circle" data-act="cw" type="button" aria-label="회전 (시계)">
-                    <span class="ico">↻</span>
+                    <!-- CW: mirror image of CCW. 270° arc 3시→6시→9시→12시 + 화살촉 right. -->
+                    <svg class="rot-svg" viewBox="0 0 32 32" aria-hidden="true">
+                        <path d="M 28 16 A 12 12 0 1 1 16 4" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+                        <polygon points="23,4 14,1 14,7" fill="currentColor"/>
+                    </svg>
                 </button>
                 <button class="cbtn move" data-act="right" type="button" aria-label="오른쪽">
                     <span class="ico">▶</span><span class="lab">RIGHT</span>
@@ -645,7 +682,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777573710"></script>
+<script src="/js/supabase-config.js?v=1777574751"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1154,6 +1191,14 @@ let current = null;   /* {type, rot, x, y} */
    piece, queue[4] 가 5번째 후 piece. spawnPiece() 가 shift() 로
    front 꺼내고 ensureNextQueue() 가 bag 에서 다시 채움. */
 let nextQueue = [];
+/* HOLD slot — 표준 modern Tetris 메커니즘:
+     · holdPiece = null | piece type — slot 에 보관 중인 piece
+     · canHold = 매 spawn 마다 true 로 reset → 한 piece 당 1회만 hold
+       가능 (hold-spam 방지)
+     · 처음 hold: current 를 slot 에 넣고 새 piece spawn
+     · 이후 hold: current 와 holdPiece 교체 spawn */
+let holdPiece = null;
+let canHold = true;
 let level = 1, lines = 0, score = 0;
 
 /* ---- 레벨/속도 시스템 (Hangame 패턴 aggressive ramp) ----
@@ -1232,15 +1277,19 @@ function fitCanvas(){
     ctx.setTransform(dpr*rect.width/(COLS*20), 0, 0, dpr*rect.height/(ROWS*20), 0, 0);
     /* NEXT queue 의 5개 mini-canvas 도 DPR 맞춤. logical 좌표는 attribute
        width/height (96 또는 80) 그대로 유지. */
-    nqCanvases.forEach(c => {
+    const sideCanvases = nqCanvases.concat([$('holdCanvas')].filter(Boolean));
+    sideCanvases.forEach(c => {
         const r = c.getBoundingClientRect();
         if(r.width === 0 || r.height === 0) return;
-        const logical = c.getAttribute('width') | 0 || 80;   /* 96 or 80 */
+        const logical = (c.getAttribute('width') | 0) || 80;   /* 96 or 80 */
         c.width = Math.round(r.width * dpr);
         c.height = Math.round(r.height * dpr);
         const cctx = c.getContext('2d');
         cctx.setTransform(dpr * r.width / logical, 0, 0, dpr * r.height / logical, 0, 0);
     });
+    /* DPR 맞춘 후 다시 그려야 깨끗한 미리보기 */
+    drawNextQueuePreview();
+    drawHoldPreview();
 }
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 100));
@@ -1300,22 +1349,92 @@ function tryPos(type, rot, x, y){
     return true;
 }
 
-function spawnPiece(){
-    /* Queue 의 front 에서 다음 piece 꺼내기. drawNextType 가 자동으로
-       bag 보충해서 항상 5개 lookahead 유지. */
-    const type = drawNextType();
-    /* Standard Tetris spawn: top center. I/O spawn x=3, others x=3.
-       y=-1 lets piece appear partially above the visible field. */
+/* spawnFromType — 명시적으로 type 받아서 spawn (hold swap 시 사용).
+   nextQueue 에 손대지 않음. 충돌 시 game over 체크. */
+function spawnFromType(type){
     current = { type, rot: 0, x: 3, y: type==='I' ? -1 : -1 };
     landed = false;
     lockTimer = 0;
-    /* Check spawn collision = game over (board too full to fit new piece) */
     if(!tryPos(current.type, current.rot, current.x, current.y)){
         gameOver();
         return false;
     }
+    return true;
+}
+
+function spawnPiece(){
+    /* Queue 의 front 에서 다음 piece 꺼내기. drawNextType 가 자동으로
+       bag 보충해서 항상 5개 lookahead 유지. */
+    const type = drawNextType();
+    if(!spawnFromType(type)) return false;
+    /* 매 spawn 마다 hold 가능 상태 reset — piece 당 1회만 hold */
+    canHold = true;
+    syncHoldUI();
     drawNextQueuePreview();
     return true;
+}
+
+/* ---- HOLD 메커니즘 ----
+   Piece 를 slot 에 보관 후 다른 piece (또는 새 piece) 와 교체.
+   canHold 가 false 면 (이번 piece 이미 hold 사용했으면) 무시. */
+function holdCurrentPiece(){
+    if(!current || !canHold || paused || gameOverFlag || !running) return;
+    Sfx.rotate();   /* hold = 회전과 비슷한 trigger SFX */
+    const incoming = current.type;
+    if(holdPiece === null){
+        /* 처음 hold — 현재 piece 를 slot 에 넣고 NEXT 에서 새 piece spawn */
+        holdPiece = incoming;
+        const t = drawNextType();
+        if(!spawnFromType(t)) return;
+        drawNextQueuePreview();
+    } else {
+        /* 교체 — 현재 piece 를 slot 에 넣고 slot 의 기존 piece 를 spawn */
+        const swap = holdPiece;
+        holdPiece = incoming;
+        if(!spawnFromType(swap)) return;
+    }
+    canHold = false;   /* 이번 piece 락 — 다음 spawn 까지 hold 불가 */
+    syncHoldUI();
+    drawHoldPreview();
+}
+
+/* HOLD slot UI 상태 동기화 — empty/locked 클래스 토글, 캔버스 그리기 */
+function syncHoldUI(){
+    const slot = $('holdSlot');
+    if(!slot) return;
+    slot.classList.toggle('empty', holdPiece === null);
+    slot.classList.toggle('locked', holdPiece !== null && !canHold);
+}
+function drawHoldPreview(){
+    const c = $('holdCanvas');
+    if(!c) return;
+    const cctx = c.getContext('2d');
+    const L = (c.getAttribute('width') | 0) || 96;
+    cctx.fillStyle = '#020516';
+    cctx.fillRect(0, 0, L, L);
+    if(!holdPiece) return;
+    const shape = PIECES[holdPiece].shapes[0];
+    const color = PIECES[holdPiece].color;
+    let minX=99, maxX=-99, minY=99, maxY=-99;
+    for(const [dx, dy] of shape){
+        if(dx < minX) minX = dx; if(dx > maxX) maxX = dx;
+        if(dy < minY) minY = dy; if(dy > maxY) maxY = dy;
+    }
+    const w = maxX - minX + 1, h = maxY - minY + 1;
+    const cellSize = Math.min(L / Math.max(w, 4), L / Math.max(h, 4)) * 0.85;
+    const offsetX = (L - w * cellSize) / 2 - minX * cellSize;
+    const offsetY = (L - h * cellSize) / 2 - minY * cellSize;
+    /* canHold=false 면 회색 톤 — hold 사용 후 회수 못함 */
+    const useGray = !canHold;
+    for(const [dx, dy] of shape){
+        const px = offsetX + dx * cellSize;
+        const py = offsetY + dy * cellSize;
+        cctx.fillStyle = useGray ? '#6b6b88' : color;
+        cctx.fillRect(px + 1, py + 1, cellSize - 2, cellSize - 2);
+        cctx.fillStyle = 'rgba(255,255,255,0.18)';
+        cctx.fillRect(px + 2, py + 2, cellSize - 4, 2);
+        cctx.fillRect(px + 2, py + 2, 2, cellSize - 4);
+    }
 }
 
 /* ---- Movement ---- */
@@ -1802,6 +1921,9 @@ function startGame(){
     refillBag();
     nextQueue = [];           /* reset NEXT queue */
     ensureNextQueue();        /* prefill 5 pieces */
+    holdPiece = null; canHold = true;   /* HOLD slot reset */
+    syncHoldUI();
+    drawHoldPreview();
     score = 0; lines = 0; level = 1;
     dropMs = gravityMsForLevel(1);
     lockDelay = lockDelayForLevel(1);
@@ -1943,6 +2065,8 @@ function onKey(e){
          Z     = CCW (반시계방향)  */
     else if(k === 'ArrowUp' || k === 'x' || k === 'X'){ rotate(1); e.preventDefault(); }
     else if(k === 'z' || k === 'Z'){ rotate(-1); e.preventDefault(); }
+    /* C 키 = HOLD (modern Tetris 표준 매핑 — Tetris Effect 등) */
+    else if(k === 'c' || k === 'C'){ holdCurrentPiece(); e.preventDefault(); }
     else if(k === 'ArrowDown' || k === 's' || k === 'S'){ softDropping = true; e.preventDefault(); }
     else if(k === ' '){ hardDrop(); e.preventDefault(); }
     else if(k === 'p' || k === 'P'){
@@ -2132,6 +2256,23 @@ $('pauseBtn').addEventListener('click', (e) => {
     try { if(paused) TetrisBGM.pause(); else TetrisBGM.resume(); } catch(_){}
 });
 
+/* HOLD slot 탭 — mobile 에서 C 키 대신. canHold=false 면 무시.
+   tap 직후 paused 면 resume (다른 컨트롤 버튼과 동일 동작). */
+const holdSlotEl = $('holdSlot');
+if(holdSlotEl){
+    const holdHandler = (e) => {
+        e.preventDefault();
+        if(!running || gameOverFlag) return;
+        if(paused){
+            paused = false; syncPauseUI();
+            try { TetrisBGM.resume(); } catch(_){}
+        }
+        holdCurrentPiece();
+    };
+    holdSlotEl.addEventListener('touchstart', holdHandler, {passive:false});
+    holdSlotEl.addEventListener('click', holdHandler);
+}
+
 /* Start button */
 $('ovBtn').addEventListener('click', startGame);
 
@@ -2203,6 +2344,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777573710" defer></script>
+<script src="/js/siteFooter.js?v=1777574751" defer></script>
 </body>
 </html>
