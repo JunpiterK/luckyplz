@@ -59,7 +59,8 @@
   /* Skip games whose pages already wire their own audio engine. */
   var SKIP_GAMES={
     'car-racing':true,
-    'dodge':true
+    'dodge':true,
+    'tetris':true     /* 3-tier dynamic BGM tied to stack height */
   };
 
   /* Detect game from URL. Lobby + home + blog → no BGM. */

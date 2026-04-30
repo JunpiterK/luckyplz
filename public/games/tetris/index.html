@@ -427,7 +427,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777515405"></script>
+<script src="/js/supabase-config.js?v=1777520967"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -494,6 +494,155 @@ const Sfx=(()=>{
         getCtx
     };
 })();
+
+/* ================================================================
+   TETRIS BGM — 3-tier dynamic music tied to stack height.
+   ================================================================
+   topRow >= 11   → track1 (차분, 스택 ≤ 9 행, ≤ 45%)
+   topRow 6..10   → track2 (긴장, 스택 10-14 행, 50-70%)
+   topRow ≤ 5     → track3 (위급, 스택 ≥ 15 행, 75%+)
+
+   topRow = 가장 위에 채워진 행의 인덱스 (0=맨 위, 빈 보드 = ROWS).
+
+   히스테리시스 (음악 깜빡임 방지):
+     상위 tier 진입 임계 = 위 표 그대로
+     하위 tier 복귀 임계 = +2 행 갭 (track2→track1: top>=12, track3→
+       track2: top>=7). 라인 클리어로 한 행만 빠진 경계선에서 음악이
+       즉시 안 바뀌게 함.
+
+   크로스페이드 800ms — 자연스러운 음악 전환. 모든 트랙 같은 max
+   volume (0.35) 으로 레벨 매칭.
+
+   트랙 누락 시 (mp3 404) 해당 tier 비활성, 다른 tier 는 정상.
+   이 게임은 lpBgm.js 안 씀 — SKIP_GAMES 에 등록됨. */
+const TetrisBGM = (function(){
+    const TRACK_COUNT = 3;
+    const audios = [];
+    for(let i = 1; i <= TRACK_COUNT; i++){
+        const a = new Audio('/assets/bgm/tetris/track' + i + '.mp3');
+        a.loop = true;
+        a.volume = 0;
+        a.preload = 'auto';
+        a.addEventListener('error', function(){ a.dataset.failed = '1'; });
+        audios.push(a);
+    }
+    const MAX_VOL = 0.35;
+    const FADE_MS = 800;
+    let currentTier = 0;
+    let started = false;
+    let enabled = true;
+    const fadeTimers = [null, null, null];
+
+    function computeTopRow(board){
+        for(let y = 0; y < board.length; y++){
+            for(let x = 0; x < board[y].length; x++){
+                if(board[y][x] != null) return y;
+            }
+        }
+        return board.length;   /* 빈 보드 */
+    }
+
+    function tierFor(top, cur){
+        const ESC_TENSE = 10, ESC_CRIT = 5;
+        const DEESC_TENSE = 12, DEESC_CRIT = 7;
+        if(cur === 2){
+            if(top >= DEESC_CRIT) return tierFor(top, 1);
+            return 2;
+        }
+        if(cur === 1){
+            if(top <= ESC_CRIT) return 2;
+            if(top >= DEESC_TENSE) return 0;
+            return 1;
+        }
+        /* cur === 0 */
+        if(top <= ESC_CRIT) return 2;
+        if(top <= ESC_TENSE) return 1;
+        return 0;
+    }
+
+    function fadeAudio(audio, targetVol, durMs, onDone){
+        const idx = audios.indexOf(audio);
+        if(idx < 0) return;
+        if(fadeTimers[idx]){ clearInterval(fadeTimers[idx]); fadeTimers[idx] = null; }
+        const startVol = audio.volume;
+        const diff = targetVol - startVol;
+        if(Math.abs(diff) < 0.01){ audio.volume = targetVol; if(onDone) onDone(); return; }
+        const steps = Math.max(1, Math.round(durMs / 16));
+        const stepVal = diff / steps;
+        let cur = 0;
+        fadeTimers[idx] = setInterval(() => {
+            cur++;
+            audio.volume = Math.min(1, Math.max(0, startVol + stepVal * cur));
+            if(cur >= steps){
+                clearInterval(fadeTimers[idx]);
+                fadeTimers[idx] = null;
+                audio.volume = Math.min(1, Math.max(0, targetVol));
+                if(onDone) onDone();
+            }
+        }, durMs / steps);
+    }
+
+    function playTier(tier){
+        if(!enabled) return;
+        if(audios[tier].dataset.failed) return;
+        if(tier === currentTier && started) return;
+        /* 다른 트랙 페이드 아웃 + 새 트랙 페이드 인 (크로스페이드) */
+        audios.forEach((a, i) => {
+            if(i !== tier && !a.paused){
+                fadeAudio(a, 0, FADE_MS, function(){ try{ a.pause(); }catch(_){} });
+            }
+        });
+        const newAudio = audios[tier];
+        try {
+            if(newAudio.paused){
+                newAudio.currentTime = 0;
+                newAudio.volume = 0;
+                const p = newAudio.play();
+                if(p && p.catch) p.catch(function(){});
+            }
+        } catch(_) {}
+        fadeAudio(newAudio, MAX_VOL, FADE_MS);
+        currentTier = tier;
+        started = true;
+    }
+
+    function start(){
+        if(!enabled) return;
+        currentTier = 0; started = false;
+        playTier(0);
+    }
+    function update(board){
+        if(!started || !enabled) return;
+        const top = computeTopRow(board);
+        const target = tierFor(top, currentTier);
+        if(target !== currentTier) playTier(target);
+    }
+    function stop(){
+        audios.forEach((a, i) => {
+            if(fadeTimers[i]){ clearInterval(fadeTimers[i]); fadeTimers[i] = null; }
+            try { a.pause(); a.currentTime = 0; a.volume = 0; } catch(_){}
+        });
+        started = false; currentTier = 0;
+    }
+    function pauseBgm(){
+        audios.forEach((a, i) => {
+            if(fadeTimers[i]){ clearInterval(fadeTimers[i]); fadeTimers[i] = null; }
+            try { a.pause(); } catch(_){}
+        });
+    }
+    function resumeBgm(){
+        if(!enabled || !started) return;
+        const a = audios[currentTier];
+        if(a && !a.dataset.failed){
+            try { const p = a.play(); if(p && p.catch) p.catch(function(){}); } catch(_){}
+        }
+    }
+    function setEnabled(e){ enabled = !!e; if(!enabled) stop(); }
+
+    return { start, stop, update, pause: pauseBgm, resume: resumeBgm, setEnabled,
+             _state: function(){ return {currentTier, started, enabled}; } };
+})();
+
 
 /* ================================================================
    TETRIS PIECES & SRS ROTATION
@@ -836,9 +985,16 @@ function lock(){
                 dropMs = Math.max(50, 800 - (level - 1) * 60);
                 Sfx.levelUp();
             }
+            /* 라인 클리어 후 보드 settle 됨 → BGM tier 재평가
+               (라인 빠진 만큼 topRow 아래로 내려가서 음악이 차분해질
+               수 있음). */
+            try { TetrisBGM.update(board); } catch(_){}
             spawnPiece();
         }, 180);
     } else {
+        /* 라인 안 빠진 일반 lock — 새 piece 가 추가됐으니 topRow 가
+           위로 올라갔을 수 있음 → BGM tier 재평가. */
+        try { TetrisBGM.update(board); } catch(_){}
         spawnPiece();
     }
     landed = false;
@@ -999,6 +1155,10 @@ function startGame(){
     syncPauseUI();
     spawnPiece();
     Sfx.getCtx();   /* unlock AudioContext on the click that started us */
+    /* BGM 시작 — track1 (차분) 부터. lock 시 마다 update(board) 호출
+       해서 stack height 따라 자동 전환. AudioContext 가 같은 user
+       gesture (클릭) 안에서 풀려있어 autoplay block 안 걸림. */
+    try { TetrisBGM.start(); } catch(_){}
     lastDrop = performance.now();
     requestAnimationFrame(loop);
     fitCanvas();
@@ -1009,6 +1169,9 @@ function gameOver(){
     gameOverFlag = true;
     running = false;
     Sfx.gameOver();
+    /* BGM 정지 — 모든 트랙 페이드 아웃 후 멈춤. Game over SFX 가
+       방해받지 않게 즉시 처리. */
+    try { TetrisBGM.stop(); } catch(_){}
     syncPauseUI();
     render();
     showGameOverOverlay();
@@ -1105,7 +1268,11 @@ function onKey(e){
         return;
     }
     if(paused){
-        if(k === ' '){ paused = false; syncPauseUI(); e.preventDefault(); }
+        if(k === ' '){
+            paused = false; syncPauseUI();
+            try { TetrisBGM.resume(); } catch(_){}
+            e.preventDefault();
+        }
         return;
     }
     if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ moveX(-1); e.preventDefault(); }
@@ -1115,7 +1282,10 @@ function onKey(e){
     else if(k === 'ArrowUp' || k === 'x' || k === 'X' || k === 'z' || k === 'Z'){ rotate(1); e.preventDefault(); }
     else if(k === 'ArrowDown' || k === 's' || k === 'S'){ softDropping = true; e.preventDefault(); }
     else if(k === ' '){ hardDrop(); e.preventDefault(); }
-    else if(k === 'p' || k === 'P'){ paused = !paused; syncPauseUI(); }
+    else if(k === 'p' || k === 'P'){
+        paused = !paused; syncPauseUI();
+        try { if(paused) TetrisBGM.pause(); else TetrisBGM.resume(); } catch(_){}
+    }
 }
 function onKeyUp(e){
     if(e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') softDropping = false;
@@ -1147,7 +1317,10 @@ document.querySelectorAll('.cbtn').forEach(b => {
     const press = (e) => {
         e.preventDefault();
         if(!running) return;
-        if(paused){ paused = false; syncPauseUI(); }
+        if(paused){
+            paused = false; syncPauseUI();
+            try { TetrisBGM.resume(); } catch(_){}
+        }
         onCtrlPress(act);
         /* Hold-to-repeat for left/right/soft */
         if(act === 'left' || act === 'right'){
@@ -1173,6 +1346,7 @@ $('pauseBtn').addEventListener('click', (e) => {
     if(!running || gameOverFlag) return;
     paused = !paused;
     syncPauseUI();
+    try { if(paused) TetrisBGM.pause(); else TetrisBGM.resume(); } catch(_){}
 });
 
 /* Start button */
@@ -1246,6 +1420,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777515405" defer></script>
+<script src="/js/siteFooter.js?v=1777520967" defer></script>
 </body>
 </html>
