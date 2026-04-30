@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777581268"></script>
+<script src="/js/supabase-config.js?v=1777581770"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1837,78 +1837,40 @@ function roundRectPath(cctx, x, y, w, h, r){
     cctx.closePath();
 }
 
-/* Glossy 3D 보석 셀 v4 — neighbor-aware seamless rendering.
-
-   v3 두 문제 (사용자 피드백) 해결:
-     [1] 같은 piece 인접 셀 사이 visible gap (유격) → 셀이 cell 영역
-         100% 채움 + 같은 색 인접 셀 간엔 dark edge 안 그림 → seamless flow
-     [2] glossy 유리 광택 부족 → radial highlight 추가 + 더 강한
-         vertical gradient (tint+0.6 → +0.3 → base → -0.55)
-
-   Bejeweled / Candy Crush / 모바일 match-3 표준 기법 종합:
-     · Strong vertical gradient (top very bright → bottom very dark)
-     · Radial highlight (upper-center bright spot, "domed jewel" feel)
-     · Specular reflection band (top half white gloss)
-     · Edge darkening (perimeter only, neighbor-aware → seamless 같은
-       piece flow)
-     · 1px top rim highlight (only on piece exterior top)
-
-   Layer (5-step):
-     1. Strong vertical gradient (full cell, no gap, no inset, 4-stop)
-     2. Radial highlight (upper 35% center, 3D dome bulge)
-     3. Top half white gloss (specular reflection band)
-     4. Outer edge dark line — only on sides without same-color neighbor
-     5. Top 1px hot rim — only on piece exterior top
-
-   neighbors 인자: {top, bottom, left, right} bool — true 면 같은 색
-   인접 셀 있음 (그쪽 edge 안 그림). 없으면 모든 4면 그림. */
-function drawCell(cctx, cx, cy, color, alpha, neighbors){
+/* drawCell — premium polish pass 버전으로 rollback (사용자 요청
+   "원래게 제일 나아"). gem-like rounded/radial 시도들이 작은 20px 셀
+   에서 다 시각 노이즈로 작용해서 단순 6-layer 가 가장 깔끔하다는 결정.
+   layer 구성:
+     1. solid color fill (CELL-2 inset)
+     2. 위 40% 흰색 알파 16% 오버레이 (top light band)
+     3. 아래 40% 검은색 알파 18% 오버레이 (bottom shadow band)
+     4. 1px top + left bevel (rgba 0.45) — 선명한 가장자리 광채
+     5. 1px bottom + right bevel (rgba 0.5 검은) — 깊이감 있는 그림자
+     6. 작은 specular highlight (top-left 2x1 흰색 65%) — 광택점 */
+function drawCell(cctx, cx, cy, color, alpha){
     if(alpha == null) alpha = 1;
     const px = cx * CELL, py = cy * CELL;
     cctx.globalAlpha = alpha;
-
-    /* (1) Strong vertical 4-stop gradient — fills entire cell, no gap */
-    const mainGrad = cctx.createLinearGradient(px, py, px, py + CELL);
-    mainGrad.addColorStop(0,    tintColor(color, 0.6));
-    mainGrad.addColorStop(0.18, tintColor(color, 0.3));
-    mainGrad.addColorStop(0.5,  color);
-    mainGrad.addColorStop(1,    tintColor(color, -0.55));
-    cctx.fillStyle = mainGrad;
-    cctx.fillRect(px, py, CELL, CELL);
-
-    /* (2) Radial highlight — upper-center bright spot, 3D dome bulge.
-       빛이 위에서 비치는 듯한 glossy convex surface 효과. */
-    const radCx = px + CELL * 0.5;
-    const radCy = py + CELL * 0.35;
-    const radial = cctx.createRadialGradient(radCx, radCy, 0, radCx, radCy, CELL * 0.55);
-    radial.addColorStop(0,   'rgba(255,255,255,0.32)');
-    radial.addColorStop(0.6, 'rgba(255,255,255,0.06)');
-    radial.addColorStop(1,   'rgba(255,255,255,0)');
-    cctx.fillStyle = radial;
-    cctx.fillRect(px, py, CELL, CELL);
-
-    /* (3) Top half white gloss — specular reflection ("wet glass") */
-    const glossH = CELL * 0.5;
-    const glossGrad = cctx.createLinearGradient(px, py, px, py + glossH);
-    glossGrad.addColorStop(0,   'rgba(255,255,255,0.55)');
-    glossGrad.addColorStop(0.5, 'rgba(255,255,255,0.18)');
-    glossGrad.addColorStop(1,   'rgba(255,255,255,0)');
-    cctx.fillStyle = glossGrad;
-    cctx.fillRect(px, py, CELL, glossH);
-
-    /* (4) Outer edges — neighbor-aware. 같은 piece 인접 셀 간엔 안 그림. */
-    cctx.fillStyle = 'rgba(0,0,0,0.45)';
-    if(!neighbors || !neighbors.top)    cctx.fillRect(px, py, CELL, 1);
-    if(!neighbors || !neighbors.bottom) cctx.fillRect(px, py + CELL - 1, CELL, 1);
-    if(!neighbors || !neighbors.left)   cctx.fillRect(px, py, 1, CELL);
-    if(!neighbors || !neighbors.right)  cctx.fillRect(px + CELL - 1, py, 1, CELL);
-
-    /* (5) Top 1px hot rim — piece exterior top 에만. gem cut hot edge. */
-    if(!neighbors || !neighbors.top){
-        cctx.fillStyle = 'rgba(255,255,255,0.75)';
-        cctx.fillRect(px + 1, py + 1, CELL - 2, 1);
-    }
-
+    /* (1) base fill */
+    cctx.fillStyle = color;
+    cctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
+    /* (2) top brightness band (40% 높이) */
+    cctx.fillStyle = 'rgba(255,255,255,0.16)';
+    cctx.fillRect(px + 1, py + 1, CELL - 2, (CELL - 2) * 0.4);
+    /* (3) bottom shadow band (40% 높이) */
+    cctx.fillStyle = 'rgba(0,0,0,0.18)';
+    cctx.fillRect(px + 1, py + 1 + (CELL - 2) * 0.6, CELL - 2, (CELL - 2) * 0.4);
+    /* (4) top + left bright bevel */
+    cctx.fillStyle = 'rgba(255,255,255,0.45)';
+    cctx.fillRect(px + 2, py + 2, CELL - 4, 1);
+    cctx.fillRect(px + 2, py + 2, 1, CELL - 4);
+    /* (5) bottom + right dark bevel */
+    cctx.fillStyle = 'rgba(0,0,0,0.5)';
+    cctx.fillRect(px + 2, py + CELL - 3, CELL - 4, 1);
+    cctx.fillRect(px + CELL - 3, py + 2, 1, CELL - 4);
+    /* (6) small specular highlight (top-left 광택점) */
+    cctx.fillStyle = 'rgba(255,255,255,0.65)';
+    cctx.fillRect(px + 4, py + 4, 2, 1);
     cctx.globalAlpha = 1;
 }
 /* ---- Hard drop 잔상 (motion blur trail) ----
@@ -2144,19 +2106,10 @@ function render(){
     for(let i = 1; i < ROWS; i++){
         ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
     }
-    /* Locked cells — neighbor-aware. 같은 색 인접 셀 사이엔 dark edge
-       안 그려서 seamless flow. drawCell v4 가 perimeter only edge. */
+    /* Locked cells */
     for(let y = 0; y < ROWS; y++){
         for(let x = 0; x < COLS; x++){
-            const c = board[y][x];
-            if(!c) continue;
-            const neighbors = {
-                top:    y > 0      && board[y-1][x] === c,
-                bottom: y < ROWS-1 && board[y+1][x] === c,
-                left:   x > 0      && board[y][x-1] === c,
-                right:  x < COLS-1 && board[y][x+1] === c
-            };
-            drawCell(ctx, x, y, c, 1, neighbors);
+            if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
         }
     }
     /* Hard drop 잔상 — locked cells 위에 그려서 piece 가 지나간 자리
@@ -2165,22 +2118,13 @@ function render(){
     /* Ghost piece outline — current piece 그리기 전에 배경으로 깔아둠.
        clearAnim 진행 중이거나 paused 상태일 땐 시각 노이즈 방지로 skip. */
     if(current && !clearAnim && !paused) drawGhostOutline();
-    /* Current piece — piece shape 기반 neighbor 계산. 같은 piece 셀
-       사이엔 dark edge 안 그려서 seamless 단일 도형. */
+    /* Current piece */
     if(current){
         const shape = PIECES[current.type].shapes[current.rot];
         const color = PIECES[current.type].color;
-        const cellSet = new Set(shape.map(c => c[0]+','+c[1]));
         for(const [dx, dy] of shape){
             const cx = current.x + dx, cy = current.y + dy;
-            if(cy < 0) continue;
-            const neighbors = {
-                top:    cellSet.has(dx+','+(dy-1)),
-                bottom: cellSet.has(dx+','+(dy+1)),
-                left:   cellSet.has((dx-1)+','+dy),
-                right:  cellSet.has((dx+1)+','+dy)
-            };
-            drawCell(ctx, cx, cy, color, 1, neighbors);
+            if(cy >= 0) drawCell(ctx, cx, cy, color);
         }
     }
     /* 라인 클리어 burst overlay — locked cells + current piece 다 그린
@@ -2715,6 +2659,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777581268" defer></script>
+<script src="/js/siteFooter.js?v=1777581770" defer></script>
 </body>
 </html>
