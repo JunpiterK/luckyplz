@@ -431,7 +431,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777527293"></script>
+<script src="/js/supabase-config.js?v=1777528298"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -584,9 +584,18 @@ const TetrisBGM = (function(){
                 const p = a.play();
                 if(p && p.then){
                     p.then(function(){
-                        a.pause();
-                        a.currentTime = 0;
-                        log('track' + (i+1) + ' warmup ✓');
+                        /* CRITICAL race-condition 가드:
+                           사용자가 빠르게 클릭하면 warmup play() Promise 가
+                           start() 호출 후에 resolve 됨. 그때 pause() 호출하면
+                           방금 시작된 BGM 이 끊김 (이전 사용자 보고 케이스).
+                           started === true 면 pause 스킵 → BGM 계속 재생. */
+                        if(!started){
+                            a.pause();
+                            a.currentTime = 0;
+                            log('track' + (i+1) + ' warmup ✓');
+                        } else {
+                            log('track' + (i+1) + ' warmup ✓ (kept playing — game in progress)');
+                        }
                     }).catch(function(err){
                         warn('track' + (i+1) + ' warmup rejected: ' + err.name + ' — ' + err.message);
                     });
@@ -665,27 +674,35 @@ const TetrisBGM = (function(){
         });
         const newAudio = audios[tier];
         try {
+            /* warmup 이 이미 audio 켜놓은 상태일 수 있음. paused 면
+               currentTime 리셋 + play, 아니면 그냥 volume 만 0 으로
+               (fadeAudio 가 MAX_VOL 로 올림). play() 는 멱등 — 이미
+               재생 중이면 no-op + resolved Promise. */
+            newAudio.volume = 0;
             if(newAudio.paused){
                 newAudio.currentTime = 0;
-                newAudio.volume = 0;
-                const p = newAudio.play();
-                if(p && p.then){
-                    p.then(function(){
-                        log('  → play() resolved on track' + (tier+1));
-                    }).catch(function(err){
-                        warn('  → play() REJECTED on track' + (tier+1) + ': ' + err.name + ' — ' + err.message
-                            + '. Autoplay policy 위반? user gesture 안에서 호출됐는지 확인.');
-                    });
-                }
+                log('  → track' + (tier+1) + ' was paused, calling play()');
             } else {
-                log('  → track' + (tier+1) + ' already playing, skip play()');
+                log('  → track' + (tier+1) + ' already playing (likely warmup), keeping');
+            }
+            const p = newAudio.play();
+            if(p && p.then){
+                p.then(function(){
+                    log('  → play() resolved on track' + (tier+1));
+                }).catch(function(err){
+                    warn('  → play() REJECTED on track' + (tier+1) + ': ' + err.name + ' — ' + err.message
+                        + '. Autoplay policy 위반? user gesture 안에서 호출됐는지 확인.');
+                });
             }
         } catch(e) {
             warn('  → play() threw: ' + e.message);
         }
-        fadeAudio(newAudio, MAX_VOL, FADE_MS);
+        /* 중요: started=true 를 fadeAudio 시작 전에 set.
+           warmup 이 microtask 큐에 떠있던 .then() 콜백 fire 시
+           started 가 true 임을 보고 pause 안 함. */
         currentTier = tier;
         started = true;
+        fadeAudio(newAudio, MAX_VOL, FADE_MS);
     }
 
     function start(){
@@ -1539,6 +1556,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777527293" defer></script>
+<script src="/js/siteFooter.js?v=1777528298" defer></script>
 </body>
 </html>
