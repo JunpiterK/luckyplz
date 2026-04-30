@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777579819"></script>
+<script src="/js/supabase-config.js?v=1777580230"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -819,33 +819,67 @@ const Sfx=(()=>{
             g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.32);
             o.connect(g);g.connect(c.destination);
             o.start();o.stop(c.currentTime+0.32)}catch(_){}}
+    /* 보석 박살 효과음 — 6개 high triangle 톤 + 1개 sine sparkle.
+       빠른 cascade (15ms 간격) → 유리 파편이 산발적으로 부서지는 느낌.
+       각 톤은 short attack + exponential decay (220ms) 로 brittle.
+       freqs: 2640 / 3520 / 4400 / 5280 / 3960 / 4720 Hz —
+       harmonic-ish but slightly dissonant 으로 crystalline shatter 색채. */
+    function shatter(){
+        try{
+            const c=getCtx();
+            const now=c.currentTime;
+            const freqs=[2640,3520,4400,5280,3960,4720];
+            for(let i=0;i<freqs.length;i++){
+                const f=freqs[i],t0=now+i*0.015;
+                const o=c.createOscillator(),g=c.createGain();
+                o.type='triangle';
+                o.frequency.setValueAtTime(f,t0);
+                o.frequency.exponentialRampToValueAtTime(f*0.6,t0+0.22);
+                g.gain.setValueAtTime(0,t0);
+                g.gain.linearRampToValueAtTime(0.045,t0+0.003);
+                g.gain.exponentialRampToValueAtTime(0.001,t0+0.22);
+                o.connect(g);g.connect(c.destination);
+                o.start(t0);o.stop(t0+0.22);
+            }
+            /* 추가 high sparkle — 7000Hz sine 빠르게 떨어지는 sweep */
+            const s=c.createOscillator(),sg=c.createGain();
+            s.type='sine';
+            s.frequency.setValueAtTime(7000,now);
+            s.frequency.exponentialRampToValueAtTime(4200,now+0.18);
+            sg.gain.setValueAtTime(0.025,now);
+            sg.gain.exponentialRampToValueAtTime(0.001,now+0.18);
+            s.connect(sg);sg.connect(c.destination);
+            s.start();s.stop(now+0.18);
+        }catch(_){}
+    }
     return{
         move(){play(440,0.04,'square',0.04)},
         rotate(){play(660,0.05,'triangle',0.05)},
         soft(){play(330,0.03,'square',0.03)},
         hard(){play(220,0.08,'sawtooth',0.07);setTimeout(()=>play(165,0.05,'square',0.05),40)},
         lock(){play(180,0.06,'square',0.05)},
-        /* clear1~3 앞에 sweep 추가해서 "휘이잉~" 후 멜로디. 스트레스
-           해소감 위해 멜로디 + 상승감 결합. */
+        /* 보석이 박살나는 brittle shatter SFX 가 immediate, 그 후 melody
+           로 보상감 마무리. sweep (whoosh) 보다 crystalline 한 톤으로
+           "보석 깨지는" 시각효과와 일관. */
         clear1(){
-            sweep(900,200,0.12,0.05);
-            setTimeout(()=>{play(523,0.1,'square',0.06);setTimeout(()=>play(784,0.12,'square',0.07),90)},60);
+            shatter();
+            setTimeout(()=>{play(523,0.1,'square',0.06);setTimeout(()=>play(784,0.12,'square',0.07),90)},80);
         },
         clear2(){
-            sweep(1100,180,0.14,0.06);
-            setTimeout(()=>{play(523,0.1,'square',0.07);setTimeout(()=>play(659,0.1,'square',0.07),80);setTimeout(()=>play(880,0.14,'square',0.08),160)},60);
+            shatter();
+            setTimeout(()=>{play(523,0.1,'square',0.07);setTimeout(()=>play(659,0.1,'square',0.07),80);setTimeout(()=>play(880,0.14,'square',0.08),160)},80);
         },
         clear3(){
-            sweep(1300,160,0.16,0.07);
-            setTimeout(()=>{[523,659,784,1047].forEach((n,i)=>setTimeout(()=>play(n,0.1,'square',0.07),i*65))},60);
+            shatter();
+            setTimeout(()=>{[523,659,784,1047].forEach((n,i)=>setTimeout(()=>play(n,0.1,'square',0.07),i*65))},80);
         },
         tetris(){
-            /* TETRIS! 4-line bonus — boom + sweep + 6단 fanfare 합주.
-               저주파 boom 으로 묵직한 충격감 + sweep 휘이잉 + 멜로디
-               올라가는 환희. 1초 가량 풀어 보상감 최대화. */
+            /* TETRIS! 4-line bonus — boom + shatter + 6단 fanfare 합주.
+               저주파 boom (묵직한 충격) + shatter (유리 박살) + melody
+               (환희). 다층 합성으로 보상감 최대. */
             boom();
-            sweep(1500,140,0.22,0.08);
-            setTimeout(()=>{[523,659,784,1047,1319,1568].forEach((n,i)=>setTimeout(()=>play(n,0.12,'square',0.09),i*55))},90);
+            shatter();
+            setTimeout(()=>{[523,659,784,1047,1319,1568].forEach((n,i)=>setTimeout(()=>play(n,0.12,'square',0.09),i*55))},120);
         },
         levelUp(){[440,554,659,880].forEach((n,i)=>setTimeout(()=>play(n,0.08,'triangle',0.07),i*60))},
         gameOver(){[330,294,247,196,165].forEach((n,i)=>setTimeout(()=>play(n,0.16,'sawtooth',0.07),i*120))},
@@ -1765,40 +1799,81 @@ function lock(){
 
 /* ---- Render ---- */
 const CELL = 20;   /* logical cell size; canvas transform handles scaling */
-/* Premium gem-like 셀 렌더링.
-   layer 구성 (아래에서 위로):
-     1. solid color fill (CELL-2 inset)
-     2. 위 40% 흰색 알파 16% 오버레이 (top light)
-     3. 아래 40% 검은색 알파 16% 오버레이 (bottom shadow)
-     4. 1px top + left bevel (rgba 0.45) — 선명한 가장자리 광채
-     5. 1px bottom + right bevel (rgba 0.5 검은) — 깊이감 있는 그림자
-     6. 작은 specular highlight (top-left 2x1 흰색 65%) — 보석 광택
-   결과: 단색 → "광택 있는 입체 보석" 느낌. fillRect 만 사용해서
-   gradient 객체 생성 없이 빠름. */
+
+/* hex (#rrggbb) 색을 amt 만큼 밝게(amt>0) 또는 어둡게(amt<0) 변환.
+   amt=0.5 → 50% 흰색 쪽으로 / amt=-0.5 → 50% 검은색 쪽으로. */
+function tintColor(hex, amt){
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    let nr, ng, nb;
+    if(amt > 0){
+        nr = Math.round(r + (255 - r) * amt);
+        ng = Math.round(g + (255 - g) * amt);
+        nb = Math.round(b + (255 - b) * amt);
+    } else {
+        const k = 1 + amt;
+        nr = Math.round(r * k);
+        ng = Math.round(g * k);
+        nb = Math.round(b * k);
+    }
+    return 'rgb(' + nr + ',' + ng + ',' + nb + ')';
+}
+
+/* Premium gem-like 셀 (Bejeweled 스타일 광택 보석):
+     1. 강한 vertical gradient — bright top → base → dark bottom
+        (단색 fill 보다 자연스러운 3D + 광택감)
+     2. 1px top horizontal highlight — 강한 흰색 (gem cut 광택)
+     3. 1px left vertical highlight — 약간 약한 흰색
+     4. 1px bottom shadow — 깊이감
+     5. 1px right shadow — 약한 어두움
+     6. Diagonal specular gradient (top-left, 큰 광택 영역)
+     7. Pinpoint sparkle — 집중된 white spot
+   결과: 단색 → "유리 진열장에 놓인 보석" 느낌. */
 function drawCell(cctx, cx, cy, color, alpha){
     if(alpha == null) alpha = 1;
     const px = cx * CELL, py = cy * CELL;
     cctx.globalAlpha = alpha;
-    /* (1) base fill */
-    cctx.fillStyle = color;
-    cctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
-    /* (2) top brightness band (40% 높이) */
-    cctx.fillStyle = 'rgba(255,255,255,0.16)';
-    cctx.fillRect(px + 1, py + 1, CELL - 2, (CELL - 2) * 0.4);
-    /* (3) bottom shadow band (40% 높이) */
-    cctx.fillStyle = 'rgba(0,0,0,0.18)';
-    cctx.fillRect(px + 1, py + 1 + (CELL - 2) * 0.6, CELL - 2, (CELL - 2) * 0.4);
-    /* (4) top + left bright bevel — 1px 라인이지만 더 선명 */
-    cctx.fillStyle = 'rgba(255,255,255,0.45)';
-    cctx.fillRect(px + 2, py + 2, CELL - 4, 1);
-    cctx.fillRect(px + 2, py + 2, 1, CELL - 4);
-    /* (5) bottom + right dark bevel */
-    cctx.fillStyle = 'rgba(0,0,0,0.5)';
-    cctx.fillRect(px + 2, py + CELL - 3, CELL - 4, 1);
-    cctx.fillRect(px + CELL - 3, py + 2, 1, CELL - 4);
-    /* (6) small specular highlight (top-left 광택점) */
+    const ix = px + 1, iy = py + 1, sz = CELL - 2;
+
+    /* (1) Main vertical gradient — top 45% bright, mid base, bottom 40% dark */
+    const mainGrad = cctx.createLinearGradient(ix, iy, ix, iy + sz);
+    mainGrad.addColorStop(0,    tintColor(color, 0.45));
+    mainGrad.addColorStop(0.5,  color);
+    mainGrad.addColorStop(1,    tintColor(color, -0.4));
+    cctx.fillStyle = mainGrad;
+    cctx.fillRect(ix, iy, sz, sz);
+
+    /* (2) Top sharp highlight — gem cut 표면 광택 */
     cctx.fillStyle = 'rgba(255,255,255,0.65)';
-    cctx.fillRect(px + 4, py + 4, 2, 1);
+    cctx.fillRect(ix + 1, iy + 1, sz - 2, 1);
+
+    /* (3) Left highlight — 약간 약하게 */
+    cctx.fillStyle = 'rgba(255,255,255,0.32)';
+    cctx.fillRect(ix + 1, iy + 1, 1, sz - 2);
+
+    /* (4) Bottom shadow line */
+    cctx.fillStyle = 'rgba(0,0,0,0.6)';
+    cctx.fillRect(ix + 1, iy + sz - 2, sz - 2, 1);
+
+    /* (5) Right shadow */
+    cctx.fillStyle = 'rgba(0,0,0,0.32)';
+    cctx.fillRect(ix + sz - 2, iy + 1, 1, sz - 2);
+
+    /* (6) Diagonal specular highlight (top-left) — 광택 반사 영역 */
+    const shineGrad = cctx.createLinearGradient(ix + 2, iy + 2, ix + sz * 0.55, iy + sz * 0.55);
+    shineGrad.addColorStop(0,   'rgba(255,255,255,0.5)');
+    shineGrad.addColorStop(0.6, 'rgba(255,255,255,0.12)');
+    shineGrad.addColorStop(1,   'rgba(255,255,255,0)');
+    cctx.fillStyle = shineGrad;
+    cctx.fillRect(ix + 2, iy + 2, sz * 0.55, sz * 0.45);
+
+    /* (7) Pinpoint sparkle — concentrated bright spot */
+    cctx.fillStyle = 'rgba(255,255,255,0.95)';
+    cctx.fillRect(ix + 3, iy + 3, 2, 1);
+    cctx.fillStyle = 'rgba(255,255,255,0.45)';
+    cctx.fillRect(ix + 3, iy + 4, 1, 1);
+
     cctx.globalAlpha = 1;
 }
 /* ---- Hard drop 잔상 (motion blur trail) ----
@@ -2587,6 +2662,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777579819" defer></script>
+<script src="/js/siteFooter.js?v=1777580230" defer></script>
 </body>
 </html>
