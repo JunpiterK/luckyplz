@@ -431,7 +431,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777526292"></script>
+<script src="/js/supabase-config.js?v=1777526635"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -522,20 +522,71 @@ const Sfx=(()=>{
 const TetrisBGM = (function(){
     const TRACK_COUNT = 3;
     const audios = [];
+    /* console 진단용 — 음악 안 들릴 때 어디서 막히는지 추적 */
+    function log(msg){ try { console.log('[TetrisBGM]', msg); } catch(_){} }
+    function warn(msg){ try { console.warn('[TetrisBGM]', msg); } catch(_){} }
+
     for(let i = 1; i <= TRACK_COUNT; i++){
         const a = new Audio('/assets/bgm/tetris/track' + i + '.mp3');
         a.loop = true;
         a.volume = 0;
         a.preload = 'auto';
-        a.addEventListener('error', function(){ a.dataset.failed = '1'; });
+        const trackNum = i;   /* closure 변수 */
+        a.addEventListener('error', function(){
+            a.dataset.failed = '1';
+            const code = a.error ? a.error.code : '?';
+            warn('track' + trackNum + '.mp3 load failed (code=' + code + '). 서버에 파일 있는지 / 캐시 / CORS 확인.');
+        });
+        a.addEventListener('canplaythrough', function(){
+            log('track' + trackNum + '.mp3 buffered OK (' + Math.round(a.duration) + 's)');
+        });
         audios.push(a);
     }
+    log('initialized with ' + TRACK_COUNT + ' tracks');
+
     const MAX_VOL = 0.35;
     const FADE_MS = 800;
     let currentTier = 0;
     let started = false;
     let enabled = true;
     const fadeTimers = [null, null, null];
+
+    /* ---- WARMUP (autoplay 정책 우회) ----
+       Chrome / Safari / iOS 모두 audio.play() 는 사용자 gesture 가
+       있어야 허용. 게임 페이지 진입 직후엔 어떤 gesture 도 없어서
+       audio element 가 "잠긴" 상태. startGame() 안에서 play() 호출
+       해도 첫 시도가 무음 실패할 수 있음.
+
+       해결: 페이지의 첫 user interaction (어느 클릭/탭이든) 발생 시
+       audio.play() 를 살짝 건드려서 unlock. 그 후 게임 시작 시점의
+       play() 는 정상 동작. car-racing / dodge 가 같은 패턴 사용.
+       once:true 로 한 번만 실행. */
+    let warmed = false;
+    function warmup(){
+        if(warmed) return;
+        warmed = true;
+        log('warmup triggered (first user interaction)');
+        audios.forEach(function(a, i){
+            try {
+                a.volume = 0;
+                const p = a.play();
+                if(p && p.then){
+                    p.then(function(){
+                        a.pause();
+                        a.currentTime = 0;
+                        log('track' + (i+1) + ' warmup ✓');
+                    }).catch(function(err){
+                        warn('track' + (i+1) + ' warmup rejected: ' + err.name + ' — ' + err.message);
+                    });
+                }
+            } catch(e) {
+                warn('track' + (i+1) + ' warmup threw: ' + e.message);
+            }
+        });
+    }
+    ['click','touchstart','keydown'].forEach(function(ev){
+        document.addEventListener(ev, warmup, {once:true, capture:true, passive:true});
+    });
 
     function computeTopRow(board){
         for(let y = 0; y < board.length; y++){
@@ -587,9 +638,13 @@ const TetrisBGM = (function(){
     }
 
     function playTier(tier){
-        if(!enabled) return;
-        if(audios[tier].dataset.failed) return;
-        if(tier === currentTier && started) return;
+        log('playTier(' + tier + ') currentTier=' + currentTier + ' started=' + started);
+        if(!enabled){ log('  → enabled=false, skip'); return; }
+        if(audios[tier].dataset.failed){
+            warn('  → track' + (tier+1) + '.mp3 marked as failed (load 실패), skip');
+            return;
+        }
+        if(tier === currentTier && started){ log('  → already on this tier, skip'); return; }
         /* 다른 트랙 페이드 아웃 + 새 트랙 페이드 인 (크로스페이드) */
         audios.forEach((a, i) => {
             if(i !== tier && !a.paused){
@@ -602,16 +657,28 @@ const TetrisBGM = (function(){
                 newAudio.currentTime = 0;
                 newAudio.volume = 0;
                 const p = newAudio.play();
-                if(p && p.catch) p.catch(function(){});
+                if(p && p.then){
+                    p.then(function(){
+                        log('  → play() resolved on track' + (tier+1));
+                    }).catch(function(err){
+                        warn('  → play() REJECTED on track' + (tier+1) + ': ' + err.name + ' — ' + err.message
+                            + '. Autoplay policy 위반? user gesture 안에서 호출됐는지 확인.');
+                    });
+                }
+            } else {
+                log('  → track' + (tier+1) + ' already playing, skip play()');
             }
-        } catch(_) {}
+        } catch(e) {
+            warn('  → play() threw: ' + e.message);
+        }
         fadeAudio(newAudio, MAX_VOL, FADE_MS);
         currentTier = tier;
         started = true;
     }
 
     function start(){
-        if(!enabled) return;
+        log('start() called');
+        if(!enabled){ log('  → enabled=false, skip'); return; }
         currentTier = 0; started = false;
         playTier(0);
     }
@@ -644,7 +711,30 @@ const TetrisBGM = (function(){
     function setEnabled(e){ enabled = !!e; if(!enabled) stop(); }
 
     return { start, stop, update, pause: pauseBgm, resume: resumeBgm, setEnabled,
-             _state: function(){ return {currentTier, started, enabled}; } };
+             /* 디버깅용 — 콘솔에서 TetrisBGM._state() 로 호출. mp3 로드
+                상태 / 재생 상태 / 모든 audio element 현재 값 보여줌. */
+             _state: function(){
+                 return {
+                     currentTier: currentTier,
+                     started: started,
+                     enabled: enabled,
+                     warmed: warmed,
+                     audios: audios.map(function(a, i){
+                         return {
+                             track: i + 1,
+                             src: a.src,
+                             paused: a.paused,
+                             volume: Math.round(a.volume * 100) / 100,
+                             currentTime: Math.round(a.currentTime * 10) / 10,
+                             duration: Math.round(a.duration * 10) / 10 || 'NaN',
+                             readyState: a.readyState,   /* 0~4: HAVE_NOTHING~HAVE_ENOUGH_DATA */
+                             networkState: a.networkState, /* 0~3: EMPTY/IDLE/LOADING/NO_SOURCE */
+                             error: a.error ? {code: a.error.code, message: a.error.message} : null,
+                             failed: a.dataset.failed === '1'
+                         };
+                     })
+                 };
+             } };
 })();
 
 
@@ -1424,6 +1514,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777526292" defer></script>
+<script src="/js/siteFooter.js?v=1777526635" defer></script>
 </body>
 </html>
