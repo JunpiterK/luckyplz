@@ -613,7 +613,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777535176"></script>
+<script src="/js/supabase-config.js?v=1777536012"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1121,38 +1121,43 @@ let current = null;   /* {type, rot, x, y} */
 let nextType = null;
 let level = 1, lines = 0, score = 0;
 
-/* ---- 레벨/속도 시스템 (Tetris Guideline 호환) ----
-   조사한 벤치마크 (한게임·Tetris Effect·Tetris Worlds·NES 클래식)
-   기준으로 재설계. 솔로 점수랭킹 경쟁이 메인이라 모든 레벨이
-   functionally distinct + 충분한 ceiling 필요.
+/* ---- 레벨/속도 시스템 (Hangame 패턴 aggressive ramp) ----
+   1차: Guideline 표준 (10줄/레벨 + 표준 곡선) → 너무 느슨해서 캐주얼
+   유저도 지루함. 솔로 랭킹 경쟁이 메인이라 빠른 도파민 루프 + 명확한
+   난이도 ceiling 필요.
 
-   ▸ 레벨 캡 = 20 (한게임/Effect 표준 15 + 하드코어 endurance 5)
-     - L1~13: gravity 곡선이 의미 있는 변화 (1000ms → 18ms)
-     - L14~15: 1G 도달 (1프레임/줄)
-     - L16~20: gravity floor + lock delay 단축으로 난이도 차별화
-   ▸ 10줄당 1레벨 (Guideline 표준)
-   ▸ 점수 multiplier = level × [0,40,100,300,1200][lines]
-     · L1 TETRIS = 1,200점 / L20 TETRIS = 24,000점 → top 유저 차별화
+   2차 (현재): 한게임 테트리스 패턴 (HardDrop wiki: "much shorter
+   required points to increase a level"):
+     ▸ 레벨업 5줄당 1레벨 (Guideline 의 절반)
+     ▸ Gravity 곡선 offset +1 → L1 부터 이미 Guideline 의 L2 속도
+     ▸ Lock delay 감소 시점 L13+ (기존 L16 → 8개 레벨 차별화 확장)
+     ▸ 캡 20, 점수 multiplier 그대로 ([0,40,100,300,1200] × level)
+
+   결과:
+     L1=793ms (NES 800ms 거의 동일) · L5=262 · L10=43 · L13=11
+     L13~20 은 lock delay 만 차별화: 470 → 260ms
+     L20 도달 = 100줄 (기존 200줄의 절반, 도파민 2배)
 */
 function gravityMsForLevel(L){
-    /* Tetris Worlds / Guideline 공식:
-         time = (0.8 - (L-1) × 0.007)^(L-1) sec
-       L1=1000ms · L5=355 · L10=64 · L13=18(≈1G@60fps) · L15=7.6(20G).
-       L14+ 부터 1프레임 미만 → 시각적으론 "instant" — 게임 루프가
-       multi-drop 으로 처리. floor=5ms (3 rows/frame) 로 cap. */
-    if(L >= 20) return 5;
-    return Math.max(5, Math.pow(0.8 - (L-1) * 0.007, L-1) * 1000);
+    /* Tetris Guideline 공식 + offset +1:
+         time = (0.8 - L × 0.007)^L sec      (원본은 (L-1) 였음)
+       L1=793ms · L5=262 · L10=43 · L13=11 · L15+=5(floor).
+       L13 부터 1프레임 미만 → multi-drop 처리, 이후 lock delay 가
+       난이도 axis. floor=5ms (3 rows/frame). */
+    if(L >= 16) return 5;
+    return Math.max(5, Math.pow(0.8 - L * 0.007, L) * 1000);
 }
 function lockDelayForLevel(L){
-    /* L1~15: 500ms (Guideline 표준 — 피스 바닥 닿은 후 회전·이동
-       가능 시간). L16+ 부터 gravity 가 이미 1G 라 차별화는 lock
-       delay 단축 (Tetris Ultimate Endless 패턴):
-         L16:450 · L17:400 · L18:350 · L19:300 · L20:250
-       250ms 가 lower bound — 그 이하는 인간 반응속도 부족. */
-    if(L <= 15) return 500;
-    return Math.max(250, 500 - (L - 15) * 50);
+    /* L1~12: 500ms (피스 바닥 닿은 후 회전·이동 가능 시간).
+       L13+ 부터 gravity 가 이미 1G 영역이라 lock delay 단축이 새 압박:
+         L13:470 · L14:440 · L15:410 · L16:380 · L17:350
+         L18:320 · L19:290 · L20:260
+       260ms 가 lower bound — 그 이하는 인간 반응속도 부족. */
+    if(L <= 12) return 500;
+    return Math.max(260, 500 - (L - 12) * 30);
 }
 const MAX_LEVEL = 20;
+const LINES_PER_LEVEL = 5;     /* 한게임 패턴 — Guideline 의 절반 */
 
 let dropMs = gravityMsForLevel(1);      /* gravity per step */
 let lastDrop = 0;
@@ -1397,10 +1402,10 @@ function lock(){
             lines += cleared.length;
             $('scoreNow').textContent = score.toLocaleString();
             $('linesNow').textContent = lines;
-            /* Level-up every 10 lines (Guideline 표준).
+            /* Level-up every LINES_PER_LEVEL (5) — 한게임 패턴.
                캡 = MAX_LEVEL (20). gravity + lock delay 둘 다 갱신 —
-               L1~15 은 gravity 가, L16~20 은 lock delay 가 차별화. */
-            const newLevel = 1 + Math.floor(lines / 10);
+               L1~12 는 gravity 가, L13~20 은 lock delay 가 차별화. */
+            const newLevel = 1 + Math.floor(lines / LINES_PER_LEVEL);
             if(newLevel > level){
                 level = Math.min(newLevel, MAX_LEVEL);
                 $('levelNow').textContent = level;
@@ -1943,6 +1948,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777535176" defer></script>
+<script src="/js/siteFooter.js?v=1777536012" defer></script>
 </body>
 </html>
