@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777580230"></script>
+<script src="/js/supabase-config.js?v=1777580337"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1820,59 +1820,84 @@ function tintColor(hex, amt){
     return 'rgb(' + nr + ',' + ng + ',' + nb + ')';
 }
 
-/* Premium gem-like 셀 (Bejeweled 스타일 광택 보석):
-     1. 강한 vertical gradient — bright top → base → dark bottom
-        (단색 fill 보다 자연스러운 3D + 광택감)
-     2. 1px top horizontal highlight — 강한 흰색 (gem cut 광택)
-     3. 1px left vertical highlight — 약간 약한 흰색
-     4. 1px bottom shadow — 깊이감
-     5. 1px right shadow — 약한 어두움
-     6. Diagonal specular gradient (top-left, 큰 광택 영역)
-     7. Pinpoint sparkle — 집중된 white spot
-   결과: 단색 → "유리 진열장에 놓인 보석" 느낌. */
+/* Rounded rect path helper — manual path 으로 모든 브라우저 호환 */
+function roundRectPath(cctx, x, y, w, h, r){
+    if(r > w/2) r = w/2;
+    if(r > h/2) r = h/2;
+    cctx.beginPath();
+    cctx.moveTo(x + r, y);
+    cctx.lineTo(x + w - r, y);
+    cctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    cctx.lineTo(x + w, y + h - r);
+    cctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    cctx.lineTo(x + r, y + h);
+    cctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    cctx.lineTo(x, y + r);
+    cctx.quadraticCurveTo(x, y, x + r, y);
+    cctx.closePath();
+}
+
+/* Premium gem-like 셀 (사용자 레퍼런스 이미지 반영):
+     1. Dark border background — 셀별 진한 외곽선 (인접 셀 분리 명확)
+     2. Inner rounded rect with strong vertical gradient
+        (top 50% bright, mid base, bottom 40% dark)
+     3. Top glossy highlight — 위쪽 부드러운 white gradient
+     4. Center bottom dimple — 작은 darker dot (특징적 디자인 액센트)
+     5. Pinpoint sparkle — 집중된 흰 빛점
+   결과: 둥근 모서리 + 강한 광택 + 진한 외곽선 → 보석 button 느낌. */
 function drawCell(cctx, cx, cy, color, alpha){
     if(alpha == null) alpha = 1;
     const px = cx * CELL, py = cy * CELL;
     cctx.globalAlpha = alpha;
     const ix = px + 1, iy = py + 1, sz = CELL - 2;
+    const outerR = 3;     /* 외부 rounded corner radius */
+    const innerInset = 1.2;  /* 내부 inset (border 두께) */
+    const innerR = outerR - 1;
 
-    /* (1) Main vertical gradient — top 45% bright, mid base, bottom 40% dark */
-    const mainGrad = cctx.createLinearGradient(ix, iy, ix, iy + sz);
-    mainGrad.addColorStop(0,    tintColor(color, 0.45));
-    mainGrad.addColorStop(0.5,  color);
-    mainGrad.addColorStop(1,    tintColor(color, -0.4));
+    /* (1) Dark border (외곽 rounded rect, 거의 검은색) — 인접 셀이 같은
+       색이어도 시각적으로 분리됨. */
+    cctx.fillStyle = 'rgba(0,0,0,0.55)';
+    roundRectPath(cctx, ix, iy, sz, sz, outerR);
+    cctx.fill();
+
+    /* (2) Inner rounded rect with vertical gradient — 진짜 보석 표면 */
+    const mainGrad = cctx.createLinearGradient(ix, iy + innerInset, ix, iy + sz - innerInset);
+    mainGrad.addColorStop(0,    tintColor(color, 0.5));    /* very bright top */
+    mainGrad.addColorStop(0.45, color);
+    mainGrad.addColorStop(1,    tintColor(color, -0.45));  /* dark bottom */
     cctx.fillStyle = mainGrad;
-    cctx.fillRect(ix, iy, sz, sz);
+    roundRectPath(cctx, ix + innerInset, iy + innerInset, sz - innerInset*2, sz - innerInset*2, innerR);
+    cctx.fill();
 
-    /* (2) Top sharp highlight — gem cut 표면 광택 */
-    cctx.fillStyle = 'rgba(255,255,255,0.65)';
-    cctx.fillRect(ix + 1, iy + 1, sz - 2, 1);
+    /* (3) Top glossy highlight — 위 절반 부드럽게 white 추가 */
+    const innerW = sz - innerInset*2;
+    const innerH = sz - innerInset*2;
+    const topGrad = cctx.createLinearGradient(ix, iy + innerInset, ix, iy + innerInset + innerH * 0.55);
+    topGrad.addColorStop(0,   'rgba(255,255,255,0.55)');
+    topGrad.addColorStop(0.7, 'rgba(255,255,255,0.08)');
+    topGrad.addColorStop(1,   'rgba(255,255,255,0)');
+    cctx.fillStyle = topGrad;
+    roundRectPath(cctx, ix + innerInset, iy + innerInset, innerW, innerH * 0.55, innerR);
+    cctx.fill();
 
-    /* (3) Left highlight — 약간 약하게 */
-    cctx.fillStyle = 'rgba(255,255,255,0.32)';
-    cctx.fillRect(ix + 1, iy + 1, 1, sz - 2);
-
-    /* (4) Bottom shadow line */
-    cctx.fillStyle = 'rgba(0,0,0,0.6)';
-    cctx.fillRect(ix + 1, iy + sz - 2, sz - 2, 1);
-
-    /* (5) Right shadow */
-    cctx.fillStyle = 'rgba(0,0,0,0.32)';
-    cctx.fillRect(ix + sz - 2, iy + 1, 1, sz - 2);
-
-    /* (6) Diagonal specular highlight (top-left) — 광택 반사 영역 */
-    const shineGrad = cctx.createLinearGradient(ix + 2, iy + 2, ix + sz * 0.55, iy + sz * 0.55);
-    shineGrad.addColorStop(0,   'rgba(255,255,255,0.5)');
-    shineGrad.addColorStop(0.6, 'rgba(255,255,255,0.12)');
-    shineGrad.addColorStop(1,   'rgba(255,255,255,0)');
-    cctx.fillStyle = shineGrad;
-    cctx.fillRect(ix + 2, iy + 2, sz * 0.55, sz * 0.45);
-
-    /* (7) Pinpoint sparkle — concentrated bright spot */
+    /* (4) Pinpoint sparkle — top-left 집중된 빛점 */
     cctx.fillStyle = 'rgba(255,255,255,0.95)';
-    cctx.fillRect(ix + 3, iy + 3, 2, 1);
+    cctx.fillRect(ix + 4, iy + 3, 2, 1);
     cctx.fillStyle = 'rgba(255,255,255,0.45)';
-    cctx.fillRect(ix + 3, iy + 4, 1, 1);
+    cctx.fillRect(ix + 4, iy + 4, 1, 1);
+
+    /* (5) 바닥 중앙 dimple — 작은 darker dot (레퍼런스 이미지 시그니처) */
+    const cxDimple = ix + sz/2;
+    const cyDimple = iy + sz - 4;
+    cctx.fillStyle = 'rgba(0,0,0,0.35)';
+    cctx.beginPath();
+    cctx.arc(cxDimple, cyDimple, 1.2, 0, Math.PI * 2);
+    cctx.fill();
+    /* dimple top highlight (반대편 미세한 빛) — 음각 효과 */
+    cctx.fillStyle = 'rgba(255,255,255,0.25)';
+    cctx.beginPath();
+    cctx.arc(cxDimple, cyDimple - 0.6, 0.5, 0, Math.PI * 2);
+    cctx.fill();
 
     cctx.globalAlpha = 1;
 }
@@ -2662,6 +2687,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777580230" defer></script>
+<script src="/js/siteFooter.js?v=1777580337" defer></script>
 </body>
 </html>
