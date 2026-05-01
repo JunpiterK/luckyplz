@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777671093"></script>
+<script src="/js/supabase-config.js?v=1777671618"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -819,37 +819,31 @@ const Sfx=(()=>{
             g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.32);
             o.connect(g);g.connect(c.destination);
             o.start();o.stop(c.currentTime+0.32)}catch(_){}}
-    /* 보석 박살 효과음 — 6개 high triangle 톤 + 1개 sine sparkle.
-       빠른 cascade (15ms 간격) → 유리 파편이 산발적으로 부서지는 느낌.
-       각 톤은 short attack + exponential decay (220ms) 로 brittle.
-       freqs: 2640 / 3520 / 4400 / 5280 / 3960 / 4720 Hz —
-       harmonic-ish but slightly dissonant 으로 crystalline shatter 색채. */
+    /* 박살 효과음 (간단 버전) — 모바일 부담 최소화 위해 2 oscillator 만.
+       이전 7개는 createOscillator/createGain 호출이 너무 많아 모바일
+       audio thread 블로킹 의심. 대신 frequency sweep 으로 brittle 느낌. */
     function shatter(){
         try{
             const c=getCtx();
             const now=c.currentTime;
-            const freqs=[2640,3520,4400,5280,3960,4720];
-            for(let i=0;i<freqs.length;i++){
-                const f=freqs[i],t0=now+i*0.015;
-                const o=c.createOscillator(),g=c.createGain();
-                o.type='triangle';
-                o.frequency.setValueAtTime(f,t0);
-                o.frequency.exponentialRampToValueAtTime(f*0.6,t0+0.22);
-                g.gain.setValueAtTime(0,t0);
-                g.gain.linearRampToValueAtTime(0.045,t0+0.003);
-                g.gain.exponentialRampToValueAtTime(0.001,t0+0.22);
-                o.connect(g);g.connect(c.destination);
-                o.start(t0);o.stop(t0+0.22);
-            }
-            /* 추가 high sparkle — 7000Hz sine 빠르게 떨어지는 sweep */
-            const s=c.createOscillator(),sg=c.createGain();
-            s.type='sine';
-            s.frequency.setValueAtTime(7000,now);
-            s.frequency.exponentialRampToValueAtTime(4200,now+0.18);
-            sg.gain.setValueAtTime(0.025,now);
-            sg.gain.exponentialRampToValueAtTime(0.001,now+0.18);
-            s.connect(sg);sg.connect(c.destination);
-            s.start();s.stop(now+0.18);
+            /* 메인 sweep — 3kHz → 800Hz exponential drop, 유리 박살 톤 */
+            const o1=c.createOscillator(),g1=c.createGain();
+            o1.type='triangle';
+            o1.frequency.setValueAtTime(3200,now);
+            o1.frequency.exponentialRampToValueAtTime(800,now+0.20);
+            g1.gain.setValueAtTime(0.07,now);
+            g1.gain.exponentialRampToValueAtTime(0.001,now+0.20);
+            o1.connect(g1);g1.connect(c.destination);
+            o1.start(now);o1.stop(now+0.20);
+            /* 보조 sparkle — 6kHz sine → 3kHz */
+            const o2=c.createOscillator(),g2=c.createGain();
+            o2.type='sine';
+            o2.frequency.setValueAtTime(6500,now);
+            o2.frequency.exponentialRampToValueAtTime(3000,now+0.15);
+            g2.gain.setValueAtTime(0.03,now);
+            g2.gain.exponentialRampToValueAtTime(0.001,now+0.15);
+            o2.connect(g2);g2.connect(c.destination);
+            o2.start(now);o2.stop(now+0.15);
         }catch(_){}
     }
     return{
@@ -1700,9 +1694,9 @@ function lock(){
            Tetris (4줄) 는 더 길게 (440ms) + 더 강한 효과.
         */
         const isTetris = cleared.length === 4;
-        const dur = isTetris ? 440 : 280;
-        cleared.forEach(y => board[y].fill('#fff'));
-        invalidateBoardLayer();   /* white-fill 도 board 변경 */
+        const dur = isTetris ? 320 : 240;   /* 살짝 짧게 — 클래식 NES Tetris 스타일 */
+        /* fill('#fff') 제거 — 색깔 그대로 두고 위에 흰 overlay 만 깜빡.
+           board 변경 안 하므로 layer rebuild 도 burst 동안 X. */
 
         /* SFX: 즉시 발사 — 시각 효과와 동기화 */
         if(isTetris) Sfx.tetris();
@@ -1710,9 +1704,7 @@ function lock(){
         else if(cleared.length === 2) Sfx.clear2();
         else Sfx.clear1();
 
-        /* 캔버스 흔들기 + (테트리스 만) 테두리 주황 펄스. 클래스 한
-           번 빼고 reflow 한 다음 다시 추가해야 매번 애니메이션 새로
-           시작 (연속 클리어 시 부드럽게). */
+        /* 캔버스 흔들기 — 한게임/Tetris Effect 패턴, CSS 만으로 GPU 처리 */
         const wrap = $('canvasWrap');
         if(wrap){
             const shakeCls = isTetris ? 'shaking-tetris' : 'shaking-1';
@@ -1723,25 +1715,17 @@ function lock(){
             setTimeout(()=>wrap.classList.remove(shakeCls,'tetris-glow'), dur + 80);
         }
 
-        /* Pre-rendered burst sprite 사용. sprite 가 ready 면 frame 만
-           drawImage. 아직 안 ready (게임 시작 직후 첫 클리어) 면 minimal
-           fallback (flash 만, particles 없음) — freeze 보다 백 배 나음. */
-        const sprite = burstSprites[cleared.length] || null;
+        /* 클래식 line clear — 단순 white flash overlay 만. NES Tetris,
+           Tetris Effect 등 mainstream 모두 같은 패턴. 부담 0. */
         clearAnim = {
-            sprite: sprite,                    /* null 이면 fallback */
-            firstClearedY: cleared[0],         /* sprite 위치 anchor */
             cleared: cleared.slice(),
             start: performance.now(),
-            duration: sprite ? sprite.duration : dur,
-            isTetris: isTetris,
-            rowsDone: false
+            duration: dur,
+            isTetris: isTetris
         };
         requestAnimationFrame(animateClearTick);
 
         setTimeout(() => {
-            /* rows phase 종료 — burst overlay 그만, board 수정.
-               clearAnim 은 null 안 함 (particles fade 까지 살려둠). */
-            if(clearAnim) clearAnim.rowsDone = true;
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             invalidateBoardLayer();   /* collapse → layer rebuild */
@@ -1918,180 +1902,8 @@ function drawCell(cctx, cx, cy, color, alpha){
     cctx.drawImage(getCellSprite(color), cx * CELL, cy * CELL, CELL, CELL);
     cctx.globalAlpha = 1;
 }
-/* ---- 라인 클리어 burst sprite pre-rendering (사용자 제안 반영) ----
-   real-time 매 프레임 particles + beam + sparkle 계산하면 모바일 부담.
-   1줄/2줄/3줄/4줄 4가지 case 만 가능하니, 게임 시작 시 백그라운드에서
-   sprite strip (각 line count 별 N frame 가로 strip) 미리 생성해 두고,
-   line clear 때 drawImage frame 만 가져다 쓰면 매 프레임 ~0.5ms 고정.
-
-   장점:
-     · 모바일 부하 0 (per-frame 계산 X)
-     · 멀티플레이 sync 쉬움 (effect type + position 만 전송)
-     · 결정적 (frame-perfect 동기화 가능)
-   단점:
-     · 첫 1초 동안 sprite 안 생성됐을 수 있음 (lazy fallback 으로 minimal flash)
-     · 메모리 ~10MB (sprite strips) — 모던 모바일 OK */
-const burstSprites = {};   /* {1: spriteData, 2: ..., 3: ..., 4: ...} */
-let burstSpriteGenStarted = false;
-
-/* 1 line count 의 burst sprite strip 생성. 동기 작업이라 호출 시
-   100~300ms 블로킹. setTimeout chain 으로 idle 시점에 비동기 처리. */
-function preRenderBurstSprite(lineCount){
-    const isTetris = lineCount === 4;
-    const baseDur = isTetris ? 440 : 280;
-    const totalDur = baseDur + 500;   /* particle fade 포함 */
-    const fps = 24;                   /* 24fps 로 타협 (memory 절약) */
-    const numFrames = Math.ceil(totalDur / 1000 * fps);
-
-    const padV = 80;                  /* particle 위/아래 여유 */
-    const frameW = COLS * CELL;
-    const frameH = lineCount * CELL + 2 * padV;
-
-    const strip = document.createElement('canvas');
-    strip.width = frameW * numFrames;
-    strip.height = frameH;
-    const sc = strip.getContext('2d');
-
-    /* 결정적 PRNG (seeded) — line count 마다 고유 seed */
-    let seed = lineCount * 1009;
-    function rng(){
-        seed = (seed * 1103515245 + 12345) | 0;
-        return ((seed >>> 16) & 0x7fff) / 0x7fff;
-    }
-
-    /* 셀 색깔 — pre-render 시점엔 board 상태 모르므로 평균적인 색 분포
-       사용. 7 piece 색 round-robin → 시각 다양성. */
-    const reprColors = ['#00D9FF','#FFE66D','#A855F7','#00E676','#FF3366','#3B82F6','#FF9A3C'];
-
-    /* 파티클 deterministically 생성 */
-    const particles = [];
-    for(let row = 0; row < lineCount; row++){
-        for(let x = 0; x < COLS; x++){
-            const baseColor = reprColors[(row * COLS + x) % reprColors.length];
-            const count = isTetris ? 4 : 2;   /* 더 줄임 — pre-render 도 무거움 */
-            for(let i = 0; i < count; i++){
-                const angle = rng() * Math.PI * 2;
-                const speed = 1.5 + rng() * 4.5;
-                const isWhiteShard = rng() < 0.4;
-                const w = 1.5 + rng() * 2;
-                const h = 2 + rng() * 3;
-                particles.push({
-                    x: x * CELL + CELL/2,
-                    y: padV + row * CELL + CELL/2,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed - (1 + rng() * 1.2),
-                    w: w, h: h,
-                    color: isWhiteShard ? '#ffffff' : baseColor,
-                    isWhite: isWhiteShard,
-                    life: 1.0,
-                    fadeRate: 0.025 + rng() * 0.015
-                });
-            }
-        }
-    }
-
-    /* dt = 24fps 로 simulation, 60fps 기준 정규화 */
-    const dt = (1000 / fps) / 16.67;
-
-    /* 각 frame 렌더 + particles 시뮬레이션 */
-    for(let f = 0; f < numFrames; f++){
-        const offsetX = f * frameW;
-        const elapsedMs = (f / fps) * 1000;
-        const tBurst = Math.min(1, elapsedMs / baseDur);
-        const fade = 1 - tBurst;
-        const rowsDone = elapsedMs > baseDur;
-
-        sc.save();
-        sc.translate(offsetX, 0);
-
-        /* additive blend — 빛 합성 효과 */
-        sc.globalCompositeOperation = 'lighter';
-
-        /* (1) Row burst — !rowsDone */
-        if(!rowsDone){
-            for(let row = 0; row < lineCount; row++){
-                const py = padV + row * CELL;
-                /* 가로 흰 빛줄기 */
-                const beamAlpha = fade * 0.55 * (0.6 + 0.4 * Math.sin(tBurst * Math.PI));
-                sc.fillStyle = `rgba(255,255,255,${beamAlpha})`;
-                sc.fillRect(0, py + CELL * 0.15, COLS * CELL, CELL * 0.7);
-                /* 색깔 그라디언트 가로 막대 */
-                const grad = sc.createLinearGradient(0, py, COLS * CELL, py);
-                grad.addColorStop(0,   `rgba(0,217,255,${fade * 0.35})`);
-                grad.addColorStop(0.5, `rgba(255,230,109,${fade * 0.45})`);
-                grad.addColorStop(1,   `rgba(168,85,247,${fade * 0.35})`);
-                const expand = tBurst * CELL * 1.5;
-                sc.fillStyle = grad;
-                sc.fillRect(-expand, py - 1, COLS * CELL + 2 * expand, CELL + 2);
-                /* sparkle 점 (적당히) */
-                if(tBurst < 0.75){
-                    sc.fillStyle = `rgba(255,255,255,${fade * 0.85})`;
-                    for(let i = 0; i < 8; i++){
-                        const sd = (i * 17 + row * 31) % 100;
-                        const baseX = (sd / 100) * COLS * CELL;
-                        const sx = baseX + Math.cos(elapsedMs * 0.012 + i * 0.7) * tBurst * CELL * 1.5;
-                        const sy = py + CELL/2 + Math.sin(elapsedMs * 0.014 + i * 1.3) * tBurst * CELL;
-                        const size = 1.5 + (1 - tBurst) * 2;
-                        sc.fillRect(sx - size/2, sy - size/2, size, size);
-                    }
-                }
-            }
-        }
-
-        /* (2) Tetris veil — !rowsDone && isTetris && early */
-        if(!rowsDone && isTetris && tBurst < 0.45){
-            const tFade = (1 - tBurst / 0.45);
-            sc.fillStyle = `rgba(255,154,60,${tFade * 0.18})`;
-            sc.fillRect(0, 0, COLS * CELL, frameH);
-        }
-
-        /* (3) Particles — 매 frame 그리기 (rotated rect 빼고 axis-aligned
-           으로 단순화 — pre-render 시점에도 부담 줄임). */
-        for(const p of particles){
-            if(p.life <= 0) continue;
-            sc.globalAlpha = p.isWhite ? p.life * 0.85 : p.life;
-            sc.fillStyle = p.color;
-            sc.fillRect(p.x - p.w/2, p.y - p.h/2, p.w, p.h);
-        }
-        sc.globalAlpha = 1;
-
-        sc.restore();
-
-        /* 다음 frame 위해 particles update (현재 frame 그린 후) */
-        for(const p of particles){
-            if(p.life <= 0) continue;
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            p.vy += 0.4 * dt;
-            p.vx *= Math.pow(0.985, dt);
-            p.life -= p.fadeRate * dt;
-        }
-    }
-
-    return {
-        canvas: strip, numFrames, frameW, frameH, padV,
-        duration: totalDur, fps
-    };
-}
-
-/* idle 시점에 sprite 4개 비동기 생성. 게임 시작 직후 ~1초 동안 분산
-   처리되어 첫 line clear 전에 ready. */
-function lazyGenerateBurstSprites(){
-    if(burstSpriteGenStarted) return;
-    burstSpriteGenStarted = true;
-    let i = 1;
-    function next(){
-        if(i > 4) return;
-        if(!burstSprites[i]){
-            try { burstSprites[i] = preRenderBurstSprite(i); }
-            catch(e){ /* 실패해도 fallback 동작 */ }
-        }
-        i++;
-        /* setTimeout 으로 main thread 양보 */
-        setTimeout(next, 80);
-    }
-    setTimeout(next, 300);   /* 게임 시작 후 300ms 부터 */
-}
+/* 클래식 line clear flash 만 사용 — sprite/particle 다 제거됨.
+   NES Tetris, Tetris Effect 등 mainstream Tetris 모두 동일 패턴. */
 
 /* ---- Hard drop 잔상 (motion blur trail) ----
    {type, rot, x, startY, endY, color, start, duration} 형태.
@@ -2193,7 +2005,7 @@ function drawGhostOutline(){
 let clearAnim = null;
 
 /* clearAnim 진행 중 매 프레임 render. duration 만큼 진행되면 종료.
-   sprite-based 라 particle 시뮬레이션 없음 — drawImage 만 호출. */
+   클래식 line clear — 단순 white flash 만, particle 없음, sprite 없음. */
 function animateClearTick(){
     if(!clearAnim) return;
     const elapsed = performance.now() - clearAnim.start;
@@ -2206,43 +2018,20 @@ function animateClearTick(){
     requestAnimationFrame(animateClearTick);
 }
 
-/* burst sprite frame 만 그림. drawImage 1회 (cache 된 sprite 의 정해진
-   frame source rect 만 빼서 화면에 blit). per-frame cost ~0.5ms 고정.
-   sprite 가 없으면 (게임 시작 직후 첫 클리어) minimal flash fallback. */
+/* 클래식 line clear flash — cleared 줄 위에 흰 overlay 만.
+   NES Tetris, Tetris Effect 등 mainstream 모두 동일 패턴. 부담 0:
+   매 프레임 1~4 fillRect = ~0.1ms. */
 function drawClearBurst(){
     if(!clearAnim) return;
     const elapsed = performance.now() - clearAnim.start;
-
-    if(clearAnim.sprite){
-        /* Pre-rendered sprite 사용 — 빠른 path. */
-        const sp = clearAnim.sprite;
-        const frameIdx = Math.min(sp.numFrames - 1, Math.floor(elapsed / 1000 * sp.fps));
-        const sx = frameIdx * sp.frameW;
-        /* sprite 의 첫 cleared row 가 sprite local Y = padV 위치.
-           실제 screen Y = clearedY * CELL.
-           → dy = clearedY * CELL - padV (sprite 의 위쪽 padV 가 화면
-           cleared row 위쪽에 위치). */
-        const dy = clearAnim.firstClearedY * CELL - sp.padV;
-        ctx.drawImage(
-            sp.canvas,
-            sx, 0, sp.frameW, sp.frameH,
-            0, dy, sp.frameW, sp.frameH
-        );
-        return;
-    }
-
-    /* Fallback — sprite 미준비 시 minimal flash. board 가 잠깐 흰색
-       으로 깜빡이는 것만으로도 시각 피드백 됨. */
-    if(!clearAnim.rowsDone){
-        const t = Math.min(1, elapsed / (clearAnim.duration || 280));
-        const fade = 1 - t;
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = `rgba(255,255,255,${fade * 0.5})`;
-        for(const y of clearAnim.cleared){
-            ctx.fillRect(0, y * CELL, COLS * CELL, CELL);
-        }
-        ctx.restore();
+    const t = Math.min(1, elapsed / clearAnim.duration);
+    /* sin 펄스로 깜빡임 (1~2회) — 더 강한 시각 임팩트.
+       AMOLED burn 방지 위해 max alpha 0.78 cap. */
+    const pulse = Math.abs(Math.sin(t * Math.PI * 1.5));
+    const alpha = pulse * 0.78 * (1 - t * 0.4);
+    ctx.fillStyle = 'rgba(255,255,255,' + alpha + ')';
+    for(const y of clearAnim.cleared){
+        ctx.fillRect(0, y * CELL, COLS * CELL, CELL);
     }
 }
 
@@ -2438,9 +2227,7 @@ function startGame(){
     for(const t of PIECE_TYPES){
         getCellSprite(PIECES[t].color);
     }
-    /* 라인 클리어 burst sprites 비동기 백그라운드 생성. setTimeout chain
-       으로 분산되어 메인 thread block 안 함. 첫 라인 클리어 전에 ready. */
-    lazyGenerateBurstSprites();
+    /* 클래식 line clear flash 사용 — sprite 생성 안 함 (성능 안전) */
     score = 0; lines = 0; level = 1;
     dropMs = gravityMsForLevel(1);
     lockDelay = lockDelayForLevel(1);
@@ -2868,6 +2655,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777671093" defer></script>
+<script src="/js/siteFooter.js?v=1777671618" defer></script>
 </body>
 </html>
