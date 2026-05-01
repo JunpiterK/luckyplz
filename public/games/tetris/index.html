@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777669829"></script>
+<script src="/js/supabase-config.js?v=1777671093"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1683,6 +1683,7 @@ function lock(){
         board[cy][cx] = color;
         if(cy < topRow) topRow = cy;
     }
+    invalidateBoardLayer();   /* board 변경 → layer rebuild 필요 */
     Sfx.lock();
     /* Detect & clear completed lines */
     const cleared = [];
@@ -1701,6 +1702,7 @@ function lock(){
         const isTetris = cleared.length === 4;
         const dur = isTetris ? 440 : 280;
         cleared.forEach(y => board[y].fill('#fff'));
+        invalidateBoardLayer();   /* white-fill 도 board 변경 */
 
         /* SFX: 즉시 발사 — 시각 효과와 동기화 */
         if(isTetris) Sfx.tetris();
@@ -1742,6 +1744,7 @@ function lock(){
             if(clearAnim) clearAnim.rowsDone = true;
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
+            invalidateBoardLayer();   /* collapse → layer rebuild */
             const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
             score += lineScore * (level + 0);   /* level 1 multiplier = 1, level 2 = 2, ... */
             lines += cleared.length;
@@ -2243,41 +2246,64 @@ function drawClearBurst(){
     }
 }
 
-/* Background gradient cache — 매 프레임 createLinearGradient 호출
-   대신 한 번만 만들고 재사용 (좌표가 항상 동일하므로 cache 가능).
-   GC 압박 감소. */
-let bgGradCache = null;
-function getBgGrad(){
-    if(!bgGradCache){
-        bgGradCache = ctx.createLinearGradient(0, 0, 0, ROWS * CELL);
-        bgGradCache.addColorStop(0,   '#0A0820');
-        bgGradCache.addColorStop(0.5, '#040818');
-        bgGradCache.addColorStop(1,   '#040A1E');
+/* ---- Board layer (캐시 offscreen canvas) — Candy Crush / 모바일
+   match-3 표준 기법. 정적 컨텐츠 (배경 + 그리드 + locked cells) 를
+   별도 canvas 에 캐시해서 매 프레임 1 drawImage 로 표시.
+
+   웹 검색 결과 (MDN, web.dev): "If you draw too many pixels to the
+   same canvas at the same time, frame rate will suffer. Use multiple
+   canvases layered on top of one another. Limiting pixels cleared/
+   painted each frame is one of the best optimization techniques."
+
+   board 변경 시 (lock, line collapse, white-fill) 만 rebuild. 매
+   프레임 200 drawImage → 1 drawImage = 모바일 성능 핵심 개선. */
+let boardLayer = null;
+let boardLayerStale = true;
+let boardLayerBgGrad = null;
+const BOARD_LAYER_SCALE = 2;
+
+function invalidateBoardLayer(){ boardLayerStale = true; }
+
+function ensureBoardLayer(){
+    if(!boardLayer){
+        boardLayer = document.createElement('canvas');
+        boardLayer.width  = COLS * CELL * BOARD_LAYER_SCALE;
+        boardLayer.height = ROWS * CELL * BOARD_LAYER_SCALE;
     }
-    return bgGradCache;
+    if(boardLayerStale){
+        const bc = boardLayer.getContext('2d');
+        bc.setTransform(BOARD_LAYER_SCALE, 0, 0, BOARD_LAYER_SCALE, 0, 0);
+        bc.clearRect(0, 0, COLS * CELL, ROWS * CELL);
+        if(!boardLayerBgGrad){
+            boardLayerBgGrad = bc.createLinearGradient(0, 0, 0, ROWS * CELL);
+            boardLayerBgGrad.addColorStop(0,   '#0A0820');
+            boardLayerBgGrad.addColorStop(0.5, '#040818');
+            boardLayerBgGrad.addColorStop(1,   '#040A1E');
+        }
+        bc.fillStyle = boardLayerBgGrad;
+        bc.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+        bc.strokeStyle = 'rgba(255,255,255,0.07)';
+        bc.lineWidth = 1;
+        for(let i = 1; i < COLS; i++){
+            bc.beginPath(); bc.moveTo(i * CELL, 0); bc.lineTo(i * CELL, ROWS * CELL); bc.stroke();
+        }
+        for(let i = 1; i < ROWS; i++){
+            bc.beginPath(); bc.moveTo(0, i * CELL); bc.lineTo(COLS * CELL, i * CELL); bc.stroke();
+        }
+        for(let y = 0; y < ROWS; y++){
+            for(let x = 0; x < COLS; x++){
+                if(board[y][x]) drawCell(bc, x, y, board[y][x]);
+            }
+        }
+        boardLayerStale = false;
+    }
+    return boardLayer;
 }
 
 function render(){
-    /* bg gradient — cache 적용 (매 프레임 createLinearGradient 안 함). */
-    ctx.fillStyle = getBgGrad();
-    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-    /* Grid lines */
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = 1;
-    for(let i = 1; i < COLS; i++){
-        ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, ROWS * CELL); ctx.stroke();
-    }
-    for(let i = 1; i < ROWS; i++){
-        ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
-    }
-    /* Cells — sprite cache 통해 빠른 drawImage. 200 cells 재렌더 OK
-       (드물게 호출되니 + 셀당 1 op). 이전 snapshot 시도는 동기 생성
-       50-100ms 블로킹이 freeze 원인이라 제거. */
-    for(let y = 0; y < ROWS; y++){
-        for(let x = 0; x < COLS; x++){
-            if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
-        }
-    }
+    /* 1 drawImage 로 static board content 전체 표시 (매 프레임 200
+       cells 안 그림). board 변경 시만 layer rebuild. */
+    ctx.drawImage(ensureBoardLayer(), 0, 0, COLS * CELL, ROWS * CELL);
     /* Hard drop 잔상 — locked cells 위에 그려서 piece 가 지나간 자리
        빛처럼 합성. ghost outline 보다 먼저 (잔상이 ghost 보다 우선). */
     if(dropTrail) drawDropTrail();
@@ -2396,6 +2422,7 @@ function loop(now){
 function startGame(){
     /* Init state */
     board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+    invalidateBoardLayer();   /* 새 board → layer rebuild */
     bag = [];
     refillBag();
     nextQueue = [];           /* reset NEXT queue */
@@ -2833,6 +2860,7 @@ async function loadLeaderboard(scope){
     fitCanvas();
     /* Initial render shows empty board behind the START overlay. */
     board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+    invalidateBoardLayer();
     render();
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
 })();
@@ -2840,6 +2868,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777669829" defer></script>
+<script src="/js/siteFooter.js?v=1777671093" defer></script>
 </body>
 </html>
