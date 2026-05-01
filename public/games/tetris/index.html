@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777582708"></script>
+<script src="/js/supabase-config.js?v=1777632708"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1758,6 +1758,9 @@ function lock(){
                 }
             }
         }
+        /* Snapshot 생성 — burst rowsDone=false 동안 매 프레임 cell
+           재렌더 안 하게 (성능 핵심). rowsDone 후 invalidated. */
+        burstBoardSnapshot = makeBurstBoardSnapshot();
         /* burst overlay 애니메이션 시작 — render() 가 clearAnim 보고
            cleared 줄 위에 sparkle + 가로 빛줄기 + 폭발 파티클 그림. */
         clearAnim = {
@@ -1773,8 +1776,10 @@ function lock(){
 
         setTimeout(() => {
             /* rows phase 종료 — burst overlay 그만, board 수정.
-               clearAnim 은 null 안 함 (particles fade 까지 살려둠). */
+               clearAnim 은 null 안 함 (particles fade 까지 살려둠).
+               snapshot 도 invalidate (board 가 collapse 될 거라 stale). */
             if(clearAnim) clearAnim.rowsDone = true;
+            burstBoardSnapshot = null;
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
@@ -2173,29 +2178,81 @@ function drawClearBurst(){
     ctx.restore();
 }
 
-function render(){
-    /* Premium 배경: 위에서 아래로 미세한 그라디언트 (위 보라색 톤,
-       아래 푸른 톤). 단색 #020516 보다 깊이감 +. */
-    const bgGrad = ctx.createLinearGradient(0, 0, 0, ROWS * CELL);
-    bgGrad.addColorStop(0,   '#0A0820');
-    bgGrad.addColorStop(0.5, '#040818');
-    bgGrad.addColorStop(1,   '#040A1E');
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-    /* Grid lines — alpha 0.04 → 0.07 로 살짝 가시화. cell 경계 분명해
-       져서 piece 위치 가늠 쉬움. 너무 강하면 시각 노이즈, 적당한 선. */
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = 1;
+/* Background gradient cache — 매 프레임 createLinearGradient 호출
+   대신 한 번만 만들고 재사용 (좌표가 항상 동일하므로 cache 가능).
+   GC 압박 감소. */
+let bgGradCache = null;
+function getBgGrad(){
+    if(!bgGradCache){
+        bgGradCache = ctx.createLinearGradient(0, 0, 0, ROWS * CELL);
+        bgGradCache.addColorStop(0,   '#0A0820');
+        bgGradCache.addColorStop(0.5, '#040818');
+        bgGradCache.addColorStop(1,   '#040A1E');
+    }
+    return bgGradCache;
+}
+
+/* Burst board snapshot — 라인 클리어 burst 동안 board content 는
+   변하지 않음 (rowsDone 까지). 매 프레임 200 cells 다시 그리는 건
+   부담 → offscreen canvas 에 한 번만 렌더 후 drawImage 1회로 표시.
+   200 cells (sprite cache 써도) → 1 drawImage = ~50배 빨라짐.
+   rowsDone 이 true 되면 board 가 collapse 되므로 snapshot 무효화. */
+let burstBoardSnapshot = null;
+const SNAP_SCALE = 3;
+function makeBurstBoardSnapshot(){
+    const c = document.createElement('canvas');
+    c.width = COLS * CELL * SNAP_SCALE;
+    c.height = ROWS * CELL * SNAP_SCALE;
+    const cc = c.getContext('2d');
+    cc.scale(SNAP_SCALE, SNAP_SCALE);
+    /* 배경 */
+    const bg = cc.createLinearGradient(0, 0, 0, ROWS * CELL);
+    bg.addColorStop(0,   '#0A0820');
+    bg.addColorStop(0.5, '#040818');
+    bg.addColorStop(1,   '#040A1E');
+    cc.fillStyle = bg;
+    cc.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+    /* Grid */
+    cc.strokeStyle = 'rgba(255,255,255,0.07)';
+    cc.lineWidth = 1;
     for(let i = 1; i < COLS; i++){
-        ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, ROWS * CELL); ctx.stroke();
+        cc.beginPath(); cc.moveTo(i * CELL, 0); cc.lineTo(i * CELL, ROWS * CELL); cc.stroke();
     }
     for(let i = 1; i < ROWS; i++){
-        ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
+        cc.beginPath(); cc.moveTo(0, i * CELL); cc.lineTo(COLS * CELL, i * CELL); cc.stroke();
     }
-    /* Locked cells */
+    /* Cells (cleared 행은 white-filled 상태) */
     for(let y = 0; y < ROWS; y++){
         for(let x = 0; x < COLS; x++){
-            if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
+            if(board[y][x]) drawCell(cc, x, y, board[y][x]);
+        }
+    }
+    return c;
+}
+
+function render(){
+    /* Burst rowsDone=false 단계: snapshot 사용 (한 번만 렌더된 board
+       content 를 1 drawImage 로 표시). rowsDone=true 면 board 가
+       바뀌었으니 snapshot 무효, normal path 사용. */
+    if(clearAnim && !clearAnim.rowsDone && burstBoardSnapshot){
+        ctx.drawImage(burstBoardSnapshot, 0, 0, COLS * CELL, ROWS * CELL);
+    } else {
+        /* Normal path — bg gradient + grid + cells.
+           bgGrad 캐시 사용 (createLinearGradient 매 프레임 X). */
+        ctx.fillStyle = getBgGrad();
+        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+        ctx.lineWidth = 1;
+        for(let i = 1; i < COLS; i++){
+            ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, ROWS * CELL); ctx.stroke();
+        }
+        for(let i = 1; i < ROWS; i++){
+            ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
+        }
+        for(let y = 0; y < ROWS; y++){
+            for(let x = 0; x < COLS; x++){
+                if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
+            }
         }
     }
     /* Hard drop 잔상 — locked cells 위에 그려서 piece 가 지나간 자리
@@ -2319,6 +2376,10 @@ function startGame(){
     holdPiece = null; canHold = true;   /* HOLD slot reset */
     syncHoldUI();
     drawHoldPreview();
+    /* Reset transient effects that might persist across games */
+    clearAnim = null;
+    burstBoardSnapshot = null;
+    dropTrail = null;
     score = 0; lines = 0; level = 1;
     dropMs = gravityMsForLevel(1);
     lockDelay = lockDelayForLevel(1);
@@ -2745,6 +2806,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777582708" defer></script>
+<script src="/js/siteFooter.js?v=1777632708" defer></script>
 </body>
 </html>
