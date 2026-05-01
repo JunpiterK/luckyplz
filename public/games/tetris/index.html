@@ -750,7 +750,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777632708"></script>
+<script src="/js/supabase-config.js?v=1777668706"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1758,11 +1758,10 @@ function lock(){
                 }
             }
         }
-        /* Snapshot 생성 — burst rowsDone=false 동안 매 프레임 cell
-           재렌더 안 하게 (성능 핵심). rowsDone 후 invalidated. */
-        burstBoardSnapshot = makeBurstBoardSnapshot();
         /* burst overlay 애니메이션 시작 — render() 가 clearAnim 보고
-           cleared 줄 위에 sparkle + 가로 빛줄기 + 폭발 파티클 그림. */
+           cleared 줄 위에 sparkle + 가로 빛줄기 + 폭발 파티클 그림.
+           Snapshot 생성 제거됨 — 동기 50-100ms 블로킹이 lock() 순간
+           freeze 의 원인이었음. sprite cache 가 cell 렌더 충분히 빠름. */
         clearAnim = {
             rows: cleared.slice(),
             start: performance.now(),
@@ -1776,10 +1775,8 @@ function lock(){
 
         setTimeout(() => {
             /* rows phase 종료 — burst overlay 그만, board 수정.
-               clearAnim 은 null 안 함 (particles fade 까지 살려둠).
-               snapshot 도 invalidate (board 가 collapse 될 거라 stale). */
+               clearAnim 은 null 안 함 (particles fade 까지 살려둠). */
             if(clearAnim) clearAnim.rowsDone = true;
-            burstBoardSnapshot = null;
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
@@ -2192,67 +2189,25 @@ function getBgGrad(){
     return bgGradCache;
 }
 
-/* Burst board snapshot — 라인 클리어 burst 동안 board content 는
-   변하지 않음 (rowsDone 까지). 매 프레임 200 cells 다시 그리는 건
-   부담 → offscreen canvas 에 한 번만 렌더 후 drawImage 1회로 표시.
-   200 cells (sprite cache 써도) → 1 drawImage = ~50배 빨라짐.
-   rowsDone 이 true 되면 board 가 collapse 되므로 snapshot 무효화. */
-let burstBoardSnapshot = null;
-const SNAP_SCALE = 3;
-function makeBurstBoardSnapshot(){
-    const c = document.createElement('canvas');
-    c.width = COLS * CELL * SNAP_SCALE;
-    c.height = ROWS * CELL * SNAP_SCALE;
-    const cc = c.getContext('2d');
-    cc.scale(SNAP_SCALE, SNAP_SCALE);
-    /* 배경 */
-    const bg = cc.createLinearGradient(0, 0, 0, ROWS * CELL);
-    bg.addColorStop(0,   '#0A0820');
-    bg.addColorStop(0.5, '#040818');
-    bg.addColorStop(1,   '#040A1E');
-    cc.fillStyle = bg;
-    cc.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-    /* Grid */
-    cc.strokeStyle = 'rgba(255,255,255,0.07)';
-    cc.lineWidth = 1;
+function render(){
+    /* bg gradient — cache 적용 (매 프레임 createLinearGradient 안 함). */
+    ctx.fillStyle = getBgGrad();
+    ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
+    /* Grid lines */
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
     for(let i = 1; i < COLS; i++){
-        cc.beginPath(); cc.moveTo(i * CELL, 0); cc.lineTo(i * CELL, ROWS * CELL); cc.stroke();
+        ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, ROWS * CELL); ctx.stroke();
     }
     for(let i = 1; i < ROWS; i++){
-        cc.beginPath(); cc.moveTo(0, i * CELL); cc.lineTo(COLS * CELL, i * CELL); cc.stroke();
+        ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
     }
-    /* Cells (cleared 행은 white-filled 상태) */
+    /* Cells — sprite cache 통해 빠른 drawImage. 200 cells 재렌더 OK
+       (드물게 호출되니 + 셀당 1 op). 이전 snapshot 시도는 동기 생성
+       50-100ms 블로킹이 freeze 원인이라 제거. */
     for(let y = 0; y < ROWS; y++){
         for(let x = 0; x < COLS; x++){
-            if(board[y][x]) drawCell(cc, x, y, board[y][x]);
-        }
-    }
-    return c;
-}
-
-function render(){
-    /* Burst rowsDone=false 단계: snapshot 사용 (한 번만 렌더된 board
-       content 를 1 drawImage 로 표시). rowsDone=true 면 board 가
-       바뀌었으니 snapshot 무효, normal path 사용. */
-    if(clearAnim && !clearAnim.rowsDone && burstBoardSnapshot){
-        ctx.drawImage(burstBoardSnapshot, 0, 0, COLS * CELL, ROWS * CELL);
-    } else {
-        /* Normal path — bg gradient + grid + cells.
-           bgGrad 캐시 사용 (createLinearGradient 매 프레임 X). */
-        ctx.fillStyle = getBgGrad();
-        ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL);
-        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-        ctx.lineWidth = 1;
-        for(let i = 1; i < COLS; i++){
-            ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, ROWS * CELL); ctx.stroke();
-        }
-        for(let i = 1; i < ROWS; i++){
-            ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(COLS * CELL, i * CELL); ctx.stroke();
-        }
-        for(let y = 0; y < ROWS; y++){
-            for(let x = 0; x < COLS; x++){
-                if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
-            }
+            if(board[y][x]) drawCell(ctx, x, y, board[y][x]);
         }
     }
     /* Hard drop 잔상 — locked cells 위에 그려서 piece 가 지나간 자리
@@ -2361,7 +2316,11 @@ function loop(now){
     } else {
         lastDrop = now;
     }
-    render();
+    /* 핵심 버그 수정: animation tick (clearAnim, dropTrail) 이 자체 rAF
+       chain 으로 render 를 호출 중이면 main loop 에선 skip → render
+       2x/frame 중복 방지. 이전엔 burst 동안 매 프레임 render 가 두 번
+       실행되어 모바일에서 멈춤 발생. */
+    if(!clearAnim && !dropTrail) render();
     requestAnimationFrame(loop);
 }
 
@@ -2378,8 +2337,12 @@ function startGame(){
     drawHoldPreview();
     /* Reset transient effects that might persist across games */
     clearAnim = null;
-    burstBoardSnapshot = null;
     dropTrail = null;
+    /* Pre-warm sprite cache — 모든 piece 색의 sprite 를 첫 게임 시작
+       시점에 미리 렌더해서 첫 piece 등장할 때 stutter 방지. */
+    for(const t of PIECE_TYPES){
+        getCellSprite(PIECES[t].color);
+    }
     score = 0; lines = 0; level = 1;
     dropMs = gravityMsForLevel(1);
     lockDelay = lockDelayForLevel(1);
@@ -2806,6 +2769,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777632708" defer></script>
+<script src="/js/siteFooter.js?v=1777668706" defer></script>
 </body>
 </html>
