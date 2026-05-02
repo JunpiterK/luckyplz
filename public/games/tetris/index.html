@@ -372,7 +372,7 @@ body{
     }
 }
 .cbtn.rot-circle.flash{animation:cbtn-flash-circle 280ms ease-out}
-/* L/R/DROP/HOLD/RELEASE 의 .ico 는 버튼 정중앙에 absolute 위치 →
+/* L/R/DROP/HOLD 의 .ico 는 버튼 정중앙에 absolute 위치 →
    삼각형이 정확히 한가운데. .lab 는 absolute bottom 으로 살짝
    아래쪽에 작은 텍스트로 위치. flex 가 아닌 absolute 라 .ico 가
    .lab 의 영향 없이 (50%, 50%) 에 정렬됨. */
@@ -422,10 +422,9 @@ body{
         inset 0 0 10px rgba(255,154,60,0.2);
 }
 .cbtn.drop.soft-active .ico{color:#FFB050}
-/* HOLD / RELEASE — 보라 톤 (HOLD slot 색깔 매칭). 두 버튼 모두 동일
-   동작 (holdCurrentPiece 호출), 폰 양손 ergonomic 위해 DROP 좌우 배치.
-   HOLD = 좌측, RELEASE = 우측. */
-.cbtn.hold, .cbtn.release{
+/* HOLD — 보라 톤 (HOLD slot 색깔 매칭). 단일 버튼 swap 동작 (modern
+   Tetris 표준). 이전 HOLD/RELEASE 2개 분리 형태에서 통합됨. */
+.cbtn.hold{
     background:linear-gradient(180deg,
         rgba(180,110,255,0.22) 0%,
         rgba(120,55,190,0.16) 55%,
@@ -433,10 +432,10 @@ body{
     border-color:rgba(168,85,247,0.45);
     --btn-glow: rgba(168,85,247,0.75);
 }
-.cbtn.hold .ico, .cbtn.release .ico{color:#D5B0FF}
+.cbtn.hold .ico{color:#D5B0FF}
 /* canHold=false (이번 piece 이미 hold 사용) 일 때 회색 톤. JS 가
    .locked 클래스 토글해서 시각적 피드백 제공. */
-.cbtn.hold.locked, .cbtn.release.locked{opacity:.45}
+.cbtn.hold.locked{opacity:.45}
 
 /* ---- NEXT queue panel (5 pieces vertical, right of canvas) ----
    playfield 옆 슬림 panel 에 다음 5개 piece 미리보기. 위에서 아래로
@@ -730,8 +729,8 @@ body{
                             <tr><td><kbd>↓</kbd></td><td>Soft</td></tr>
                             <tr><td><kbd>↓</kbd><kbd>↓</kbd></td><td>Hard</td></tr>
                             <tr><td><kbd>Space</kbd></td><td>Hard</td></tr>
-                            <tr><td><kbd>C</kbd></td><td>Hold</td></tr>
-                            <tr><td><kbd>V</kbd></td><td>Release</td></tr>
+                            <tr><td><kbd>C</kbd>/<kbd>V</kbd></td><td>Hold</td></tr>
+                            <tr><td><kbd>Shift</kbd></td><td>Hold</td></tr>
                             <tr><td><kbd>P</kbd></td><td>Pause</td></tr>
                         </table>
                     </div>
@@ -789,17 +788,14 @@ body{
                 </button>
             </div>
             <div class="ctrl-row row-drop">
-                <!-- HOLD: 현재 piece 를 슬롯에 보관. 양손 어느 손으로든 누를 수
-                     있게 DROP 양쪽 (HOLD 좌, RELEASE 우) 배치. 둘 다 동일 동작
-                     (holdCurrentPiece) — naming 은 직관적 mental model 위해. -->
-                <button class="cbtn hold" data-act="hold" type="button" aria-label="홀드">
-                    <span class="ico">⇤</span><span class="lab">HOLD</span>
+                <!-- HOLD: 현재 piece 를 슬롯에 보관 (또는 슬롯 piece 와 swap).
+                     모던 Tetris 표준 — 단일 버튼으로 swap 동작. 이전엔 HOLD/RELEASE
+                     2개 였으나 둘 다 동일 동작이라 통합. -->
+                <button class="cbtn hold" data-act="hold" type="button" aria-label="홀드 (swap)">
+                    <span class="ico">⇄</span><span class="lab">HOLD</span>
                 </button>
                 <button class="cbtn drop" data-act="drop" type="button" aria-label="드롭 (더블탭=하드, 홀드=소프트)">
                     <span class="ico">▼</span><span class="lab">DROP</span>
-                </button>
-                <button class="cbtn release" data-act="release" type="button" aria-label="릴리즈 (홀드 해제)">
-                    <span class="ico">⇥</span><span class="lab">RELEASE</span>
                 </button>
             </div>
         </div>
@@ -825,7 +821,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777702975"></script>
+<script src="/js/supabase-config.js?v=1777703269"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1594,8 +1590,8 @@ function holdCurrentPiece(){
     drawHoldPreview();
 }
 
-/* HOLD slot UI 상태 동기화 — empty/locked 클래스 토글 + 컨트롤 버튼
-   회색 처리. canHold=false 면 .cbtn.hold/.cbtn.release 도 locked. */
+/* HOLD slot UI 상태 동기화 — empty/locked 클래스 토글 + HOLD 버튼
+   회색 처리. canHold=false (이번 piece 이미 swap 사용) 면 .locked. */
 function syncHoldUI(){
     const slot = $('holdSlot');
     if(slot){
@@ -1603,7 +1599,7 @@ function syncHoldUI(){
         slot.classList.toggle('locked', holdPiece !== null && !canHold);
     }
     const lockedClass = !canHold;
-    document.querySelectorAll('.cbtn.hold, .cbtn.release').forEach(b => {
+    document.querySelectorAll('.cbtn.hold').forEach(b => {
         b.classList.toggle('locked', lockedClass);
     });
 }
@@ -2785,15 +2781,26 @@ function onKey(e){
         }
         return;
     }
-    if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ moveX(-1); e.preventDefault(); }
-    else if(k === 'ArrowRight' || k === 'd' || k === 'D'){ moveX(1); e.preventDefault(); }
+    /* 좌우 키 — DAS/ARR. e.repeat 는 OS typematic auto-repeat → 무시.
+       처음 누름에만 첫 이동 + DAS/ARR 시작. keyup 까지 우리 timer 가
+       처리. 키 osmolality 환경 (Mac vs Win) 차이 없이 일관된 속도. */
+    if(k === 'ArrowLeft' || k === 'a' || k === 'A'){
+        if(!e.repeat){ moveX(-1); startAutoShift(-1); }
+        e.preventDefault();
+    }
+    else if(k === 'ArrowRight' || k === 'd' || k === 'D'){
+        if(!e.repeat){ moveX(1); startAutoShift(1); }
+        e.preventDefault();
+    }
     /* Modern Tetris 표준 키매핑:
          ↑ / X = CW (시계방향)
          Z     = CCW (반시계방향)  */
     else if(k === 'ArrowUp' || k === 'x' || k === 'X'){ rotate(1); e.preventDefault(); }
     else if(k === 'z' || k === 'Z'){ rotate(-1); e.preventDefault(); }
-    /* C / V 키 = HOLD/RELEASE (둘 다 holdCurrentPiece 호출) */
-    else if(k === 'c' || k === 'C' || k === 'v' || k === 'V'){ holdCurrentPiece(); e.preventDefault(); }
+    /* C / V / Shift 키 = HOLD (modern Tetris 표준 매핑 — 통합 swap 동작).
+       V 와 Shift 는 손 위치 다양성 위해 alias. */
+    else if(k === 'c' || k === 'C' || k === 'v' || k === 'V' ||
+            k === 'Shift'){ holdCurrentPiece(); e.preventDefault(); }
     /* 화살표 ↓ — 더블탭 = hard, 홀드 = soft. S 키는 단순 soft (legacy). */
     else if(k === 'ArrowDown'){ onArrowDownPress(); e.preventDefault(); }
     else if(k === 's' || k === 'S'){ softDropping = true; e.preventDefault(); }
@@ -2804,17 +2811,57 @@ function onKey(e){
     }
 }
 function onKeyUp(e){
-    if(e.key === 'ArrowDown'){ onArrowDownRelease(); }
-    else if(e.key === 's' || e.key === 'S'){ softDropping = false; }
+    const k = e.key;
+    if(k === 'ArrowDown'){ onArrowDownRelease(); }
+    else if(k === 's' || k === 'S'){ softDropping = false; }
+    /* 좌우 키 release → DAS/ARR timer 정리 */
+    else if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ stopAutoShift(-1); }
+    else if(k === 'ArrowRight' || k === 'd' || k === 'D'){ stopAutoShift(1); }
 }
 document.addEventListener('keydown', onKey);
 document.addEventListener('keyup', onKeyUp);
+/* 창 blur/visibilitychange 시 stuck-key 방지 — 키 누른 채 alt-tab 하면
+   keyup 안 와서 timer 가 계속 firing. 안전 cleanup. */
+window.addEventListener('blur', () => {
+    stopAutoShift(-1); stopAutoShift(1);
+    softDropping = false;
+});
 
 /* Touch buttons.
-   - left/right: hold-to-repeat (DAS-like).
+   - left/right: DAS (Delayed Auto Shift) + ARR (Auto Repeat Rate) — modern
+     Tetris guideline 표준. 첫 탭 즉시 1칸 이동, DAS_MS 동안 hold 유지 시
+     ARR_MS 간격으로 자동 반복. 사용자 의도 (single move) 와 long-press
+     (slide) 깔끔히 분리.
+       · DAS_MS = 150 — 짧을수록 민감, 너무 짧으면 single tap 이 의도
+         치 않게 slide 로 이어짐. 주류 모바일 Tetris 평균.
+       · ARR_MS = 40 — 작을수록 빠른 slide. 0 에 가까우면 instant
+         slide (TETR.IO style), 50 이상은 답답.
    - ccw/cw: single-shot per tap, inscribed-square 만 인식 (corner dead zone).
    - drop: 더블탭 = hard, 홀드 = soft (자세히는 onDropPress/onDropRelease). */
-const HOLD_REPEAT_MS = 110;
+const DAS_MS = 150;
+const ARR_MS = 40;
+/* 좌우 별도 timer — 동시에 양쪽 누르는 경우 (드물지만) 각자 독립. */
+let _autoShiftTimers = { left: null, right: null };
+/* 시작 — 첫 이동은 caller 가 이미 했음. 이 함수는 DAS 후 ARR 반복 셋업.
+   stopAutoShift 가 호출되기 전엔 계속 반복. */
+function startAutoShift(dir){
+    const key = dir < 0 ? 'left' : 'right';
+    stopAutoShift(dir);   /* 이전 timer 있으면 정리 (안전장치) */
+    /* DAS: 150ms 후 첫 자동 반복 시작, 그 후 ARR 간격으로 계속. */
+    _autoShiftTimers[key] = setTimeout(function arr(){
+        moveX(dir);
+        _autoShiftTimers[key] = setInterval(() => moveX(dir), ARR_MS);
+    }, DAS_MS);
+}
+function stopAutoShift(dir){
+    const key = dir < 0 ? 'left' : 'right';
+    if(_autoShiftTimers[key]){
+        clearTimeout(_autoShiftTimers[key]);
+        clearInterval(_autoShiftTimers[key]);
+        _autoShiftTimers[key] = null;
+    }
+}
+/* 호환용 — 이전 _holdTimers 참조 잔재 보존 (현재는 미사용). */
 let _holdTimers = {};
 function onCtrlPress(act){
     switch(act){
@@ -2822,10 +2869,9 @@ function onCtrlPress(act){
         case 'right': moveX(1); break;
         case 'ccw':   rotate(-1); break;
         case 'cw':    rotate(1); break;
-        /* HOLD/RELEASE 양쪽 버튼 모두 동일 동작. canHold 가 false 면
-           holdCurrentPiece 내부에서 자동 무시되므로 추가 체크 불필요. */
+        /* HOLD swap — canHold 가 false 면 holdCurrentPiece 내부에서
+           자동 무시되므로 추가 체크 불필요. */
         case 'hold':
-        case 'release':
             holdCurrentPiece();
             break;
         /* drop 은 별도 핸들러에서 처리 (더블탭/홀드 분기) */
@@ -2961,14 +3007,14 @@ document.querySelectorAll('.cbtn').forEach(b => {
             return;
         }
         onCtrlPress(act);
-        /* Hold-to-repeat for left/right (DAS) */
-        if(act === 'left' || act === 'right'){
-            clearInterval(_holdTimers[act]);
-            _holdTimers[act] = setInterval(() => onCtrlPress(act), HOLD_REPEAT_MS);
-        }
+        /* DAS/ARR — 좌우 long-press 시 자동 반복. 첫 이동은 위 onCtrlPress
+           가 처리, 여기선 DAS 후 ARR setup 만. */
+        if(act === 'left'){ startAutoShift(-1); }
+        else if(act === 'right'){ startAutoShift(1); }
     };
     const release = (e) => {
-        if(_holdTimers[act]){ clearInterval(_holdTimers[act]); _holdTimers[act] = null; }
+        if(act === 'left'){ stopAutoShift(-1); }
+        else if(act === 'right'){ stopAutoShift(1); }
         if(isDrop){
             onDropRelease();
         } else {
@@ -3081,6 +3127,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777702975" defer></script>
+<script src="/js/siteFooter.js?v=1777703269" defer></script>
 </body>
 </html>
