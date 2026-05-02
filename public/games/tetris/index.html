@@ -601,6 +601,8 @@ body{
 .sheet .lb-tabs{display:flex;gap:6px;padding:0 14px 8px}
 .sheet .lb-tab{flex:1;padding:8px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--panel-br);color:var(--muted);font-size:.78em;font-weight:700;cursor:pointer;font-family:inherit}
 .sheet .lb-tab.active{background:rgba(0,217,255,.12);border-color:rgba(0,217,255,.4);color:#00D9FF}
+/* Mode 토글 (마라톤 vs 스프린트) — scope 토글 위에 별도 행. 보라 톤. */
+.sheet .lb-mode-tabs .lb-tab.active{background:rgba(168,85,247,.14);border-color:rgba(168,85,247,.45);color:#D5B0FF}
 .sheet .sheet-body{overflow-y:auto;padding:0 14px 14px;-webkit-overflow-scrolling:touch}
 .lb-list{display:flex;flex-direction:column;gap:5px}
 .lb-empty{padding:24px;text-align:center;color:var(--muted-2);font-size:.85em;line-height:1.6}
@@ -838,6 +840,11 @@ body{
         <aside class="sheet" id="sheet" aria-label="랭킹">
             <div class="handle"></div>
             <h3>🏆 랭킹</h3>
+            <!-- 모드 선택 (Marathon vs Sprint) — 별도 ranking. -->
+            <div class="lb-tabs lb-mode-tabs">
+                <button class="lb-tab active" data-lbmode="marathon">마라톤 (점수)</button>
+                <button class="lb-tab" data-lbmode="sprint">스프린트 (시간)</button>
+            </div>
             <div class="lb-tabs">
                 <button class="lb-tab active" data-scope="world">월드</button>
                 <button class="lb-tab" data-scope="today">오늘</button>
@@ -850,7 +857,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777703935"></script>
+<script src="/js/supabase-config.js?v=1777704330"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2886,23 +2893,23 @@ async function showGameOverOverlay(){
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard(currentScope);
 }
 
-/* Sprint 완료 화면 — 시간 기반. localStorage 에 personal best 저장.
-   온라인 ranking 은 marathon 만 (sprint 는 별도 RPC 미구현). */
-function showSprintCompleteOverlay(){
+/* Sprint 완료 화면 — 시간 기반. localStorage 에 personal best + Supabase
+   온라인 ranking 제출. 비로그인 시 localStorage 만. */
+async function showSprintCompleteOverlay(){
     const duration = Math.max(0, Math.floor(performance.now() - startedAt));
     const timeStr = formatSprintTime(duration);
 
-    /* localStorage personal best (sprint 40L). */
-    let priorBest = null, isNewPB = false;
+    /* localStorage personal best (sprint 40L) — 비로그인 사용자도 PB 보존. */
+    let localBest = null, isLocalNewPB = false;
     try {
         const saved = localStorage.getItem('tetris-sprint-pb');
         if(saved){
-            priorBest = parseInt(saved, 10);
-            if(isNaN(priorBest)) priorBest = null;
+            localBest = parseInt(saved, 10);
+            if(isNaN(localBest)) localBest = null;
         }
-        if(priorBest === null || duration < priorBest){
+        if(localBest === null || duration < localBest){
             localStorage.setItem('tetris-sprint-pb', String(duration));
-            isNewPB = true;
+            isLocalNewPB = true;
         }
     } catch(_){}
 
@@ -2914,17 +2921,80 @@ function showSprintCompleteOverlay(){
         + '<div class="over-stats">'
         + '<div class="row"><span>Time</span><b>' + timeStr + '</b></div>'
         + '<div class="row"><span>Lines</span><b>' + lines + '</b></div>'
-        + (priorBest !== null
-            ? '<div class="row"><span>이전 베스트</span><b>' + formatSprintTime(priorBest) + '</b></div>'
+        + (localBest !== null
+            ? '<div class="row"><span>이전 베스트</span><b>' + formatSprintTime(localBest) + '</b></div>'
             : '')
         + '</div>'
-        + (isNewPB ? '<div class="over-pb">🎉 자기 최고 기록!</div>' : '')
+        + '<div class="over-rank" id="ovRankNum">기록 등록 중…</div>'
+        + '<div class="over-pb" id="ovRankPb">'
+            + (isLocalNewPB ? '🎉 자기 최고 기록!' : '') + '</div>'
         + buildModeTabsHTML()
         + '<button class="btn" id="ovBtnRetry">다시 도전</button>'
         + '<div class="kbd-hint" style="margin-top:6px"><kbd>Enter</kbd> 재시작</div>';
     ov.classList.remove('hidden');
     $('ovBtnRetry').addEventListener('click', startGame);
     wireModeTabs();
+
+    /* Supabase 제출 — RPC anti-cheat 가 8s ~ 10min duration 만 받음. */
+    let recordOk = false, recordErrKind = null;
+    if(me){
+        try{
+            const {data, error} = await getSupabase().rpc('record_tetris_sprint_attempt', {
+                p_duration_ms: duration
+            });
+            if(error){
+                console.warn('[tetris.sprint.record]', error.message);
+                if(/not_authenticated/.test(error.message)) recordErrKind = 'no_auth';
+                else if(/bad_duration/.test(error.message)) recordErrKind = 'invalid';
+                else if(/rate_limited/.test(error.message)) recordErrKind = 'rate_limited';
+                else recordErrKind = 'unknown';
+            } else if(data?.ok){
+                recordOk = true;
+                if(data.is_personal_best){
+                    $('ovRankPb').textContent = '🎉 자기 최고 기록!';
+                } else if(data.prior_best){
+                    $('ovRankPb').textContent = '온라인 베스트: ' + formatSprintTime(data.prior_best);
+                }
+            }
+        } catch(e){
+            console.warn('[tetris.sprint.record] threw', e);
+            recordErrKind = 'unknown';
+        }
+    } else {
+        recordErrKind = 'no_login';
+    }
+
+    /* World rank 표시 */
+    if(recordOk && me){
+        try{
+            const {data: stats} = await getSupabase().rpc('tetris_sprint_my_stats');
+            if(stats?.has_record){
+                $('ovRankNum').textContent = '🌍 #' + (stats.world_rank||'?').toLocaleString();
+            } else {
+                $('ovRankNum').textContent = '🎉 첫 기록!';
+            }
+        } catch(_){
+            $('ovRankNum').textContent = '🌍 랭킹 조회 실패';
+        }
+    } else if(recordErrKind === 'no_login'){
+        $('ovRankNum').textContent = '🔒 로그인하면 기록 저장!';
+    } else if(recordErrKind === 'rate_limited'){
+        $('ovRankNum').textContent = '⏱ 시간당 30회 초과';
+    } else if(recordErrKind === 'invalid'){
+        $('ovRankNum').textContent = '⚠️ 시간 검증 실패';
+    } else if(recordErrKind === 'no_auth'){
+        $('ovRankNum').textContent = '🔐 로그인이 필요해요';
+    } else if(recordErrKind === 'unknown'){
+        $('ovRankNum').textContent = '⚠️ 기록 저장 실패';
+    } else {
+        $('ovRankNum').textContent = '';
+    }
+
+    /* Sprint 모드 leaderboard 자동 갱신 (PC 화면에서 사이드 sheet 열려있는 경우) */
+    if(typeof lbMode !== 'undefined'){
+        lbMode = 'sprint';
+        if(matchMedia('(min-width:1024px)').matches) loadLeaderboard(currentScope);
+    }
 }
 
 /* 종료 화면에서도 모드 전환 가능하게 — 동일 mode tabs 빌드 + 와이어. */
@@ -3472,19 +3542,49 @@ sheet.querySelector('.handle').addEventListener('touchmove',(e)=>{
 sheet.querySelector('.handle').addEventListener('touchend',()=>{sheetDragY=null},{passive:true});
 
 let currentScope='world';
-document.querySelectorAll('.lb-tab').forEach(b=>{
+/* lbMode = ranking 모드. 'marathon' (점수) vs 'sprint' (시간). 모드별
+   별도 RPC + 다른 컬럼 표시. 시작 모드는 직전 게임 모드 따라감. */
+let lbMode = (typeof gameMode === 'string' ? gameMode : 'marathon');
+/* scope 토글 (월드/오늘/친구) — 기존 동작. */
+document.querySelectorAll('.lb-tab[data-scope]').forEach(b=>{
     b.addEventListener('click', ()=>{
-        document.querySelectorAll('.lb-tab').forEach(x=>x.classList.remove('active'));
+        document.querySelectorAll('.lb-tab[data-scope]').forEach(x=>x.classList.remove('active'));
         b.classList.add('active');
         currentScope=b.dataset.scope;
         loadLeaderboard(currentScope);
     });
 });
+/* 모드 토글 (마라톤 vs 스프린트) — RPC 자체가 다름. */
+document.querySelectorAll('.lb-tab[data-lbmode]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+        document.querySelectorAll('.lb-tab[data-lbmode]').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        lbMode=b.dataset.lbmode;
+        loadLeaderboard(currentScope);
+    });
+});
+function syncLbModeUI(){
+    document.querySelectorAll('.lb-tab[data-lbmode]').forEach(x => {
+        x.classList.toggle('active', x.dataset.lbmode === lbMode);
+    });
+}
+/* Sprint duration_ms → m:ss.cs 표시. */
+function fmtMs(ms){
+    if(typeof formatSprintTime === 'function') return formatSprintTime(ms);
+    const cs = Math.max(0, Math.floor(ms / 10));
+    const totalSec = Math.floor(cs / 100);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    const c = cs % 100;
+    return m + ':' + (s<10?'0':'') + s + '.' + (c<10?'0':'') + c;
+}
 async function loadLeaderboard(scope){
+    syncLbModeUI();
     $('lbList').innerHTML='<div class="lb-empty">불러오는 중…</div>';
     try{
-        const {data,error}=await getSupabase().rpc('tetris_leaderboard',{p_scope:scope,p_limit:50});
-        try{ console.log('[tetris.leaderboard]', scope, error?'error':(data?data.length+' rows':'null'), error?error.message:''); }catch(_){}
+        const rpcName = lbMode === 'sprint' ? 'tetris_sprint_leaderboard' : 'tetris_leaderboard';
+        const {data,error}=await getSupabase().rpc(rpcName,{p_scope:scope,p_limit:50});
+        try{ console.log('[tetris.leaderboard]', lbMode, scope, error?'error':(data?data.length+' rows':'null'), error?error.message:''); }catch(_){}
         if(error||!data){ $('lbList').innerHTML='<div class="lb-empty">기록 없음</div>'; return; }
         if(!data.length){
             const emptyMsg = scope==='today'
@@ -3501,10 +3601,14 @@ async function loadLeaderboard(scope){
             const av=row.avatar_url
                 ? '<div class="lb-av"><img src="'+esc(row.avatar_url)+'" referrerpolicy="no-referrer" alt=""></div>'
                 : '<div class="lb-av">'+esc(initials(row.nickname))+'</div>';
+            /* Marathon: best_score 점수.  Sprint: best_duration_ms 시간 (낮을수록 좋음). */
+            const scoreCell = (lbMode === 'sprint')
+                ? fmtMs(row.best_duration_ms)
+                : row.best_score.toLocaleString();
             return '<div class="lb-row'+(isSelf?' self':'')+'">'
                  +'<div class="lb-rnk'+rnkCls+'">'+(row.rnk<=3?(['🥇','🥈','🥉'][row.rnk-1]):('#'+row.rnk))+'</div>'
                  +'<div class="lb-who">'+av+'<div class="lb-nick">'+esc(row.nickname||'?')+'</div></div>'
-                 +'<div class="lb-score">'+row.best_score.toLocaleString()+'</div>'
+                 +'<div class="lb-score">'+scoreCell+'</div>'
                  +'</div>';
         }).join('');
     }catch(_){$('lbList').innerHTML='<div class="lb-empty">불러오기 실패</div>';}
@@ -3524,6 +3628,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777703935" defer></script>
+<script src="/js/siteFooter.js?v=1777704330" defer></script>
 </body>
 </html>
