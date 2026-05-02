@@ -227,8 +227,9 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777704330"></script>
-<script src="/js/lpAudio.js?v=1777704330"></script>
+<script src="/js/supabase-config.js?v=1777706015"></script>
+<script src="/js/lpRankSheet.js?v=1777706015"></script>
+<script src="/js/lpAudio.js?v=1777706015"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -266,10 +267,15 @@ async function initAuth(){
             console.log('[burger.auth] signed in as id=' + u.id +
                         ' email=' + (u.email||'(none)'));
         }catch(_){}
-        const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
+        const prof=await getSupabase().from('profiles').select('nickname,avatar_url').eq('id',u.id).maybeSingle();
         const nick=prof.data?.nickname||'나';
         meNickAtBoot=nick;
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
+        try {
+            window._lpMe = u;
+            window._lpMyNickname = nick;
+            window._lpMyAvatar = prof.data?.avatar_url || null;
+        } catch(_){}
         loadMyStats();
     }catch(e){console.warn('[burger.auth] init',e)}
 }
@@ -302,6 +308,20 @@ if(typeof onAuthChange==='function'){
                 location.reload();
             }
         }
+    });
+}
+/* 통합 랭크 윈도우 호출 — Burger 옵션. */
+function openBurgerRankSheet(){
+    if(!window.LpRankSheet) return;
+    LpRankSheet.open({
+        gameKey:           'burger',
+        gameTitle:         'BURGER',
+        leaderboardRpc:    'burger_leaderboard',
+        myStatsRpc:        'burger_my_stats',
+        scoreField:        'best_score',
+        myStatsRankField:  'world_rank',
+        myStatsScoreField: 'best_score',
+        formatScore:       n => Number(n).toLocaleString()
     });
 }
 async function loadMyStats(){
@@ -936,13 +956,13 @@ function gameOver(){
       +   '<div class="rank-card-pb" id="ovRankPb"></div>'
       +   '<div class="rank-card-debug" id="ovRankDebug"></div>'
       +   '<div class="rank-card-acct" id="ovRankAcct" style="font-size:.74em;color:rgba(255,255,255,.55);margin-top:6px;letter-spacing:.02em"></div>'
-      +   '<button class="rank-card-link" id="ovRankBtn">📊 전체 랭킹 보기</button>'
+      +   '<button class="rank-card-link" id="ovRankBtn">🏆 랭크</button>'
       + '</div>'
       + '<button class="btn" id="ovBtn">다시하기</button>'
       + '<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
     $('overlay').classList.remove('hidden');
     $('ovBtn').addEventListener('click', startGame);
-    $('ovRankBtn').addEventListener('click', openSheet);
+    $('ovRankBtn').addEventListener('click', openBurgerRankSheet);
 
     (async()=>{
         /* Categorize Supabase errors into user-friendly buckets so the
@@ -2616,6 +2636,6 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1777704330"></script>
+<script src="/js/siteFooter.js?v=1777706015"></script>
 </body>
 </html>
