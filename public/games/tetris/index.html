@@ -800,7 +800,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777679284"></script>
+<script src="/js/supabase-config.js?v=1777681029"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1392,6 +1392,10 @@ let landed = false;
 let running = false, paused = false, gameOverFlag = false;
 let startedAt = 0;
 let softDropping = false;
+/* T-spin / all-spin 인식용 — 마지막 성공 동작이 rotate 였는지 추적.
+   rotate() 성공 시 true, moveX/dropOne/hardDrop/spawn 시 false.
+   lock() 시 true 면 spin 후보 (T-spin 3-corner 또는 immobile 검증). */
+let lastMoveRotated = false;
 
 /* ---- Pause UI sync ---- */
 function syncPauseUI(){
@@ -1515,6 +1519,7 @@ function spawnPiece(){
     if(!spawnFromType(type)) return false;
     /* 매 spawn 마다 hold 가능 상태 reset — piece 당 1회만 hold */
     canHold = true;
+    lastMoveRotated = false;   /* 새 piece — spin 후보 reset */
     syncHoldUI();
     drawNextQueuePreview();
     return true;
@@ -1602,10 +1607,8 @@ function moveX(dx){
     if(tryPos(current.type, current.rot, current.x + dx, current.y)){
         current.x += dx;
         Sfx.move();
+        lastMoveRotated = false;   /* 이동 → spin 후보 X */
         if(landed){
-            /* landed 상태에서 좌우 이동 → 새 위치가 절벽이면 다시 공중.
-               landed 해제해서 다음 gravity tick 에 자연스럽게 떨어지게.
-               아니면 표준 lock-delay reset (피스 자리 잡기 시간 갱신). */
             if(canMoveDown()){
                 landed = false;
                 lockTimer = 0;
@@ -1631,9 +1634,8 @@ function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
             current.x += kx;
             current.y -= ky;
             Sfx.rotate();
+            lastMoveRotated = true;   /* spin 후보 — lock 시 검증 */
             if(landed){
-                /* SRS kick 으로 위로 띄워지거나 옆 절벽으로 옮겨지면
-                   다시 공중 상태가 됨. moveX 와 동일한 재검증. */
                 if(canMoveDown()){
                     landed = false;
                     lockTimer = 0;
@@ -1652,9 +1654,9 @@ function dropOne(){
     if(!current || paused || gameOverFlag) return false;
     if(tryPos(current.type, current.rot, current.x, current.y + 1)){
         current.y += 1;
+        lastMoveRotated = false;   /* gravity 떨어짐 → spin 후보 X */
         return true;
     }
-    /* Can't move down → mark landed, lock-delay timer starts */
     if(!landed){
         landed = true;
         lockTimer = 0;
@@ -1681,6 +1683,7 @@ function hardDrop(){
         current.y += 1;
         cells++;
     }
+    if(cells > 0) lastMoveRotated = false;   /* drop 했으면 spin 후보 X */
     if(cells > 0){
         /* 잔상 streak — startY 부터 endY 까지 piece 가 통과한 자리에
            반투명 복제본 그림. 가까이 (head) = 진하고, 멀리 (tail) = 흐림.
@@ -1711,9 +1714,72 @@ function hardDrop(){
     lock();
 }
 
+/* ---- Spin detection (Tetris Guideline + all-spin) ----
+   참고: hse30.tistory.com 글의 S/Z spin 활용 패턴 + modern Tetris
+   guideline 의 T-spin scoring.
+
+   T-spin (3-corner rule):
+     1. piece.type === 'T'
+     2. lastMoveRotated === true (직전 동작이 회전)
+     3. T 의 center cell 주변 4 corner 중 3개 이상 막힘 (벽/board cell)
+     4. front-corner 2개 모두 막혔으면 "Full T-spin", 아니면 "Mini"
+
+   All-spin (S/Z/L/J/I — 비-T pieces):
+     · lastMoveRotated && immobile (4방향 모두 이동 불가)
+     · S-spin, Z-spin 등 명칭. 점수 보너스 50%.
+*/
+function detectSpin(){
+    if(!current || !lastMoveRotated) return null;
+    const type = current.type;
+
+    if(type === 'T'){
+        /* T 의 center cell — 모든 rot 에서 (current.x+1, current.y+1) */
+        const cx = current.x + 1, cy = current.y + 1;
+        const corners = [
+            [cx-1, cy-1], [cx+1, cy-1],   /* 0: top-left, 1: top-right */
+            [cx-1, cy+1], [cx+1, cy+1]    /* 2: bot-left, 3: bot-right */
+        ];
+        function isFilled([x, y]){
+            if(x < 0 || x >= COLS || y >= ROWS) return true;   /* 벽 = filled */
+            if(y < 0) return false;                            /* 위쪽은 비었음 */
+            return board[y][x] != null;
+        }
+        const filledCount = corners.filter(isFilled).length;
+        if(filledCount < 3) return null;
+
+        /* Front corners — rot 따라 다름 */
+        let frontPair;
+        switch(current.rot){
+            case 0: frontPair = [corners[0], corners[1]]; break;  /* UP */
+            case 1: frontPair = [corners[1], corners[3]]; break;  /* RIGHT */
+            case 2: frontPair = [corners[2], corners[3]]; break;  /* DOWN */
+            case 3: frontPair = [corners[0], corners[2]]; break;  /* LEFT */
+        }
+        const frontFilled = frontPair.filter(isFilled).length;
+        return { type: 'T', isMini: frontFilled < 2 };
+    }
+
+    if(type === 'O') return null;   /* O piece 회전 없음 */
+
+    /* All-spin: 4방향 모두 이동 불가 (immobile) */
+    const cx0 = current.x, cy0 = current.y, rot0 = current.rot;
+    if(!tryPos(type, rot0, cx0 - 1, cy0) &&
+       !tryPos(type, rot0, cx0 + 1, cy0) &&
+       !tryPos(type, rot0, cx0, cy0 + 1) &&
+       !tryPos(type, rot0, cx0, cy0 - 1)){
+        return { type: type, isMini: false };
+    }
+    return null;
+}
+
+/* Spin announcement (floating text 위에 떠오르는 효과) */
+let spinAnnouncement = null;
+
 /* ---- Lock + clear lines + spawn next ---- */
 function lock(){
     if(!current) return;
+    /* Spin 검증 — board 수정 전에 (current piece 위치 그대로 평가) */
+    const spinResult = detectSpin();
     const shape = PIECES[current.type].shapes[current.rot];
     const color = PIECES[current.type].color;
     let topRow = ROWS;
@@ -1779,8 +1845,25 @@ function lock(){
             for(const y of cleared) board.splice(y, 1);
             for(let i = 0; i < cleared.length; i++) board.unshift(Array(COLS).fill(null));
             invalidateBoardLayer();   /* collapse → layer rebuild */
-            const lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
-            score += lineScore * (level + 0);   /* level 1 multiplier = 1, level 2 = 2, ... */
+            /* T-spin / all-spin 보너스 점수 (Tetris Guideline 표준):
+                 · T-spin Mini:        100 (no line) / 200 (1) / 400 (2)
+                 · T-spin Full:        400 (no) / 800 (1) / 1200 (2) / 1600 (3)
+                 · All-spin (S/Z/L/J/I): 일반 점수 × 1.5
+                 · 일반 line clear:     [0, 40, 100, 300, 1200][lines]
+            */
+            let lineScore;
+            if(spinResult && spinResult.type === 'T'){
+                if(spinResult.isMini){
+                    lineScore = [100, 200, 400, 0, 0][cleared.length] || 0;
+                } else {
+                    lineScore = [400, 800, 1200, 1600, 0][cleared.length] || 0;
+                }
+            } else if(spinResult && cleared.length > 0){
+                lineScore = Math.floor(([0, 40, 100, 300, 1200][cleared.length] || 0) * 1.5);
+            } else {
+                lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
+            }
+            score += lineScore * (level + 0);
             lines += cleared.length;
             $('scoreNow').textContent = score.toLocaleString();
             $('linesNow').textContent = lines;
@@ -1804,10 +1887,34 @@ function lock(){
         }, dur);
     } else {
         /* 라인 안 빠진 일반 lock — 새 piece 가 추가됐으니 topRow 가
-           위로 올라갔을 수 있음 → BGM tier 재평가. */
+           위로 올라갔을 수 있음 → BGM tier 재평가.
+           T-spin (no lines) 도 보너스 점수 award. */
+        if(spinResult && spinResult.type === 'T'){
+            const noLineScore = (spinResult.isMini ? 100 : 400) * level;
+            score += noLineScore;
+            $('scoreNow').textContent = score.toLocaleString();
+        }
         try { TetrisBGM.update(board); } catch(_){}
         spawnPiece();
     }
+
+    /* Spin announcement floating text (line clear 여부 무관) */
+    if(spinResult){
+        let text;
+        const linesSuffix = ['', ' SINGLE', ' DOUBLE', ' TRIPLE'][cleared.length] || '';
+        if(spinResult.type === 'T'){
+            text = (spinResult.isMini ? 'T-SPIN MINI' : 'T-SPIN') + linesSuffix + '!';
+        } else {
+            text = spinResult.type + '-SPIN' + linesSuffix + '!';
+        }
+        spinAnnouncement = {
+            text: text,
+            start: performance.now(),
+            duration: 1400,
+            color: spinResult.type === 'T' ? '#FFD700' : '#7DF9FF'
+        };
+    }
+
     landed = false;
     lockTimer = 0;
 }
@@ -2132,6 +2239,36 @@ function drawClearBurst(){
     }
 }
 
+/* T-spin / all-spin floating announcement — board 가운데 위쪽에 떠올라
+   1.4초 fade out. 부담: ctx.fillText 1회 + 약간의 state 변경. */
+function drawSpinAnnouncement(){
+    if(!spinAnnouncement) return;
+    const elapsed = performance.now() - spinAnnouncement.start;
+    if(elapsed >= spinAnnouncement.duration){
+        spinAnnouncement = null;
+        return;
+    }
+    const t = elapsed / spinAnnouncement.duration;
+    /* float up 40px, 70% 시점부터 fade */
+    const yOffset = -t * 40;
+    const fade = t < 0.7 ? 1 : Math.max(0, (1 - t) / 0.3);
+    /* 시작 시 살짝 scale-up bounce (0~0.15s) */
+    const scale = t < 0.15 ? 1 + (0.15 - t) * 1.5 : 1;
+    ctx.save();
+    ctx.font = 'bold ' + (16 * scale) + 'px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalAlpha = fade;
+    /* drop shadow 로 가독성 — 어두운 배경 위에서도 잘 보이게 */
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillText(spinAnnouncement.text,
+        COLS * CELL / 2 + 1, ROWS * CELL * 0.4 + yOffset + 1);
+    ctx.fillStyle = spinAnnouncement.color;
+    ctx.fillText(spinAnnouncement.text,
+        COLS * CELL / 2, ROWS * CELL * 0.4 + yOffset);
+    ctx.restore();
+}
+
 /* ---- Board layer (캐시 offscreen canvas) — Candy Crush / 모바일
    match-3 표준 기법. 정적 컨텐츠 (배경 + 그리드 + locked cells) 를
    별도 canvas 에 캐시해서 매 프레임 1 drawImage 로 표시.
@@ -2208,6 +2345,8 @@ function render(){
     /* 라인 클리어 burst overlay — locked cells + current piece 다 그린
        다음 그 위에 sparkle/빛줄기 합성 */
     if(clearAnim) drawClearBurst();
+    /* T-spin / all-spin floating text (board 가운데 위) */
+    if(spinAnnouncement) drawSpinAnnouncement();
     /* Pause overlay */
     if(paused && running){
         ctx.fillStyle = 'rgba(5,5,15,.72)';
@@ -2319,6 +2458,8 @@ function startGame(){
     /* Reset transient effects that might persist across games */
     clearAnim = null;
     dropTrail = null;
+    spinAnnouncement = null;
+    lastMoveRotated = false;
     /* Pre-warm sprite cache — 모든 piece 색의 sprite 를 첫 게임 시작
        시점에 미리 렌더해서 첫 piece 등장할 때 stutter 방지. */
     for(const t of PIECE_TYPES){
@@ -2801,6 +2942,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777679284" defer></script>
+<script src="/js/siteFooter.js?v=1777681029" defer></script>
 </body>
 </html>
