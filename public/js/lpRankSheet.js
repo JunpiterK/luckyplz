@@ -376,13 +376,19 @@
     }
 
     async function open(opts){
-        injectStyles();
-        buildDom();
-        currentOpts = opts || {};
-        if(!currentOpts.leaderboardRpc){
-            console.warn('[lpRankSheet] missing leaderboardRpc');
+        try {
+            injectStyles();
+            buildDom();
+        } catch(e){
+            console.error('[lpRankSheet] init failed', e);
             return;
         }
+        currentOpts = opts || {};
+        if(!currentOpts.leaderboardRpc){
+            console.warn('[lpRankSheet] missing leaderboardRpc — opts:', opts);
+            return;
+        }
+        try { console.log('[lpRankSheet] open', currentOpts.gameTitle, currentOpts.leaderboardRpc); } catch(_){}
         if(!currentOpts.scoreField) currentOpts.scoreField = 'best_score';
         if(typeof currentOpts.formatScore !== 'function'){
             currentOpts.formatScore = (n) => Number(n).toLocaleString();
