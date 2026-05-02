@@ -821,7 +821,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777703269"></script>
+<script src="/js/supabase-config.js?v=1777703432"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1948,12 +1948,33 @@ function lock(){
             comboCount++;
             const comboBonus = comboCount > 0 ? 50 * comboCount : 0;
 
-            const totalScore = (lineScore + b2bBonus) * level + comboBonus * level;
+            /* Perfect Clear (All Clear) — 보드 전체가 비었으면 PC bonus.
+               Tetris Guideline 표준 보너스:
+                 · PC Single: 800   · PC Double: 1200
+                 · PC Triple: 1800  · PC Tetris: 2000
+               B2B PC Tetris (back-to-back PC tetris) 시 +1200 추가. */
+            let isPerfectClear = true;
+            for(let y = 0; y < ROWS && isPerfectClear; y++){
+                for(let x = 0; x < COLS; x++){
+                    if(board[y][x] !== null){ isPerfectClear = false; break; }
+                }
+            }
+            let pcBonus = 0;
+            if(isPerfectClear){
+                pcBonus = [0, 800, 1200, 1800, 2000][cleared.length] || 0;
+                /* B2B PC Tetris — TETRIS PC 가 연속이면 추가 +1200.
+                   여기서 b2bChain 은 위에서 이미 ++ 됐으므로 >0 이면 연속. */
+                if(cleared.length === 4 && b2bChain > 0) pcBonus += 1200;
+            }
+
+            const totalScore = (lineScore + b2bBonus) * level
+                             + comboBonus * level
+                             + pcBonus * level;
             score += totalScore;
             lines += cleared.length;
 
             /* Score popups — line score + bonuses 시각화. base score 먼저,
-               B2B 가 있으면 그 다음, combo 도 있으면 stack. */
+               B2B 가 있으면 그 다음, combo, PC 도 있으면 stack. */
             addScorePopup('+' + (lineScore * level).toLocaleString(), '#FFE66D');
             if(b2bBonus > 0){
                 addScorePopup('B2B  +' + (b2bBonus * level).toLocaleString(), '#FF9A3C');
@@ -1961,6 +1982,19 @@ function lock(){
             if(comboBonus > 0){
                 addScorePopup('COMBO ' + comboCount + '  +' + (comboBonus * level).toLocaleString(),
                               '#00D9FF');
+            }
+            if(isPerfectClear){
+                /* Perfect Clear announcement — spinAnnouncement 처럼 큰 floating
+                   text 보드 가운데. 1.6초 동안 강렬한 골드 + 플래시. */
+                addScorePopup('PERFECT CLEAR  +' + (pcBonus * level).toLocaleString(),
+                              '#FF66E6');
+                spinAnnouncement = {
+                    text: 'PERFECT CLEAR!',
+                    start: performance.now(),
+                    duration: 1600,
+                    color: '#FF66E6'
+                };
+                Sfx.tetris();   /* 화려한 효과음 재사용 */
             }
             $('scoreNow').textContent = score.toLocaleString();
             $('linesNow').textContent = lines;
@@ -3055,6 +3089,105 @@ if(holdSlotEl){
     holdSlotEl.addEventListener('click', holdHandler);
 }
 
+/* ---- Canvas swipe gestures (mobile) — TETR.IO mobile / Tetris N3TWORK 패턴.
+   기본 버튼은 그대로 유지 (alternative input). 캔버스 위 제스처:
+     · Tap (12px 이내, 200ms 이내):           rotate CW
+     · 가로 드래그 (cell 폭 cross 시):        moveX (1:1 finger-tracking)
+     · 빠른 아래 swipe (80px+, <300ms):       hard drop
+     · 느린 아래 드래그 (40px+ 누적):         soft drop (떼면 멈춤)
+     · 위 swipe (60px+, <300ms):              hard drop (대안)
+   터치만 처리 (mouse 는 데스크탑 키보드 사용 가정).
+   touchstart 가 canvas 에서 시작한 경우만 인식 — 버튼 영역 침범 X. */
+(function setupCanvasGestures(){
+    let startX = 0, startY = 0, startT = 0;
+    let lastX = 0, lastY = 0;
+    let cellPx = 0;            /* DPR-적응형 cell 픽셀 폭 (ResizeObserver 가 갱신) */
+    let dragMoveAccum = 0;     /* 가로 드래그 누적 → cell 단위 변환 */
+    let totalDownDelta = 0;    /* 누적 아래 이동 (soft drop 트리거용) */
+    let softDropActive = false;
+    let active = false;
+
+    function recalcCellPx(){
+        const r = canvas.getBoundingClientRect();
+        cellPx = r.width / COLS;
+    }
+    recalcCellPx();
+    window.addEventListener('resize', recalcCellPx);
+
+    canvas.addEventListener('touchstart', (e) => {
+        if(!running || gameOverFlag || paused) return;
+        if(e.touches.length !== 1) return;
+        const t = e.touches[0];
+        startX = lastX = t.clientX;
+        startY = lastY = t.clientY;
+        startT = performance.now();
+        dragMoveAccum = 0;
+        totalDownDelta = 0;
+        softDropActive = false;
+        active = true;
+        recalcCellPx();
+        e.preventDefault();
+    }, {passive: false});
+
+    canvas.addEventListener('touchmove', (e) => {
+        if(!active || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const dx = t.clientX - lastX;
+        const dy = t.clientY - lastY;
+        lastX = t.clientX;
+        lastY = t.clientY;
+
+        /* 가로 드래그 — cell 폭 cross 시마다 1칸 이동.
+           누적 dragMoveAccum 으로 손가락 따라가는 자연스러운 1:1 매핑. */
+        if(cellPx > 0){
+            dragMoveAccum += dx;
+            while(dragMoveAccum >= cellPx){ moveX(1); dragMoveAccum -= cellPx; }
+            while(dragMoveAccum <= -cellPx){ moveX(-1); dragMoveAccum += cellPx; }
+        }
+
+        /* 세로 — 아래로 누적 이동 시 soft drop 활성. 위로 swipe 는 release
+           시점에 분류 (hard drop 후보). */
+        if(dy > 0) totalDownDelta += dy;
+        if(!softDropActive && totalDownDelta > 40){
+            softDropActive = true;
+            softDropping = true;
+        }
+        e.preventDefault();
+    }, {passive: false});
+
+    function endTouch(e){
+        if(!active) return;
+        active = false;
+        const endT = performance.now();
+        const elapsed = endT - startT;
+        const totalDX = lastX - startX;
+        const totalDY = lastY - startY;
+        const absDX = Math.abs(totalDX);
+        const absDY = Math.abs(totalDY);
+        /* soft drop 활성화 됐었으면 release 시 해제 */
+        if(softDropActive){ softDropping = false; softDropActive = false; }
+
+        /* Tap — 거의 안 움직이고 짧은 시간 → rotate CW */
+        if(absDX < 12 && absDY < 12 && elapsed < 200){
+            rotate(1);
+            return;
+        }
+        /* 빠른 아래 swipe — 80px+ 아래 + 300ms 이내 → hard drop */
+        if(totalDY > 80 && elapsed < 300 && absDY > absDX){
+            hardDrop();
+            return;
+        }
+        /* 빠른 위 swipe — 60px+ 위 + 300ms 이내 → hard drop (대안) */
+        if(totalDY < -60 && elapsed < 300 && absDY > absDX){
+            hardDrop();
+            return;
+        }
+        /* 그 외 — 가로 드래그 결과 이미 적용됐으므로 추가 동작 없음 */
+    }
+    canvas.addEventListener('touchend', endTouch);
+    canvas.addEventListener('touchcancel', endTouch);
+})();
+
 /* Start button */
 $('ovBtn').addEventListener('click', startGame);
 
@@ -3127,6 +3260,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777703269" defer></script>
+<script src="/js/siteFooter.js?v=1777703432" defer></script>
 </body>
 </html>
