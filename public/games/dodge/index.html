@@ -62,6 +62,12 @@ body{
 .topbar .auth-chip{padding:5px 10px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.25);color:#00D9FF;font-size:.72em;font-weight:700;text-decoration:none;white-space:nowrap}
 .topbar .lb-btn{padding:6px 10px;border-radius:10px;background:rgba(0,217,255,.08);border:1px solid rgba(0,217,255,.3);color:#00D9FF;font-size:.78em;font-weight:800;cursor:pointer;font-family:inherit}
 .topbar .lb-btn:active{background:rgba(0,217,255,.16)}
+.lang-bar{display:flex;gap:3px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:180px}
+.lang-bar::-webkit-scrollbar{display:none}
+.lang-btn{flex-shrink:0;width:26px;height:18px;border:1.5px solid rgba(255,255,255,.12);border-radius:4px;background:rgba(255,255,255,.04);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .25s;padding:0;overflow:hidden}
+.lang-btn img{width:18px;height:13px;object-fit:cover;border-radius:1.5px}
+.lang-btn:hover{border-color:#FFE66D;transform:scale(1.1)}
+.lang-btn.active{border-color:#FFE66D;background:rgba(255,230,109,.15)}
 
 /* ---- Main column (phone) ---- */
 .wrap{
@@ -275,10 +281,11 @@ body{
 <body>
 
 <header class="topbar">
-    <a href="/" class="home">← 홈</a>
+    <a href="/" class="home" id="homeLink">← 홈</a>
     <h1>🚀 SPACE-Z</h1>
-    <div class="slot">
-        <button class="lb-btn" id="openLb" aria-label="랭킹 보기">🏆</button>
+    <div class="slot" style="display:flex;align-items:center;gap:6px">
+        <div class="lang-bar" id="langBar"></div>
+        <button class="lb-btn" id="openLb" aria-label="Ranking">🏆</button>
         <span id="authSlot"></span>
     </div>
 </header>
@@ -344,13 +351,51 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777707434"></script>
-<script src="/js/lpRankSheet.js?v=1777707434"></script>
-<script src="/js/lpAudio.js?v=1777707434"></script>
+<script src="/js/supabase-config.js?v=1777711243"></script>
+<script src="/js/lpI18n.js?v=1777711243"></script>
+<script src="/js/langBar.js?v=1777711243"></script>
+<script src="/js/lpRankSheet.js?v=1777711243"></script>
+<script src="/js/lpAudio.js?v=1777711243"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const initials=(n)=>(n||'?').trim()[0]?.toUpperCase()||'?';
+
+/* ---- i18n — Dodge (Space-Z) specific. */
+const DODGE_I18N = {
+    en: { gameTitle: '🚀 SPACE-Z' },
+    ko: { gameTitle: '🚀 SPACE-Z' },
+    ja: { gameTitle: '🚀 SPACE-Z' },
+    zh: { gameTitle: '🚀 SPACE-Z' },
+    es: { gameTitle: '🚀 SPACE-Z' }
+};
+function tT(key){
+    if(window.LpI18n) return window.LpI18n.T(key, DODGE_I18N);
+    return (DODGE_I18N.en[key]) || key;
+}
+function applyLanguage(){
+    const home = $('homeLink'); if(home) home.textContent = '← ' + tT('home');
+    /* SPACE-Z 는 브랜드라 H1 안 바꿈 */
+    const authSlot = $('authSlot');
+    if(authSlot){
+        if(window._lpMe || (typeof me !== 'undefined' && me)){
+            const nick = (window._lpMyNickname) || tT('you');
+            authSlot.innerHTML = '<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
+        } else {
+            authSlot.innerHTML = '<a class="auth-chip" href="/auth/?next='+encodeURIComponent(location.pathname)+'">'+esc(tT('login'))+'</a>';
+        }
+    }
+    const sh3 = document.querySelector('.sheet h3'); if(sh3) sh3.textContent = '🏆 ' + tT('ranking');
+    document.querySelectorAll('.lb-tab[data-scope="world"]').forEach(b => b.textContent = tT('world'));
+    document.querySelectorAll('.lb-tab[data-scope="today"]').forEach(b => b.textContent = tT('today'));
+    document.querySelectorAll('.lb-tab[data-scope="friends"]').forEach(b => b.textContent = tT('friends'));
+}
+if(window.LpI18n){
+    window.LpI18n.onChange(applyLanguage);
+    const langBarEl = $('langBar'); if(langBarEl) window.LpI18n.injectLangBar(langBarEl);
+}
+if(document.readyState !== 'loading') applyLanguage();
+else document.addEventListener('DOMContentLoaded', applyLanguage);
 
 /* ---- Time-format helpers ----
    Space-Z is a survival game. The DB column is `score` for legacy schema
@@ -2457,6 +2502,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777707434"></script>
+<script src="/js/siteFooter.js?v=1777711243"></script>
 </body>
 </html>
