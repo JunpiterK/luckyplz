@@ -270,6 +270,12 @@ body{
 .over-stats .row b{color:#fff;font-weight:700;font-variant-numeric:tabular-nums}
 .over-rank{margin-top:8px;font-size:.86em;color:var(--cyan);font-weight:700}
 .over-pb{margin-top:4px;font-size:.78em;color:var(--success);font-weight:700}
+/* Game-over 화면 액션 버튼 행 — "다시 도전" + "🏆 랭크". */
+.ov-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.overlay .btn-rank{
+    background:linear-gradient(135deg,#FFE66D,#FF9A3C);color:#1a0f00;
+    box-shadow:0 8px 24px -6px rgba(255,154,60,.45),inset 0 1px 0 rgba(255,255,255,.32)
+}
 
 /* ---- Controls (mobile-first 양손 대칭 레이아웃) ----
    flex-shrink:0 — canvas 줄어드는 게 우선, 컨트롤은 항상 동일 높이.
@@ -857,7 +863,8 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777704330"></script>
+<script src="/js/supabase-config.js?v=1777706015"></script>
+<script src="/js/lpRankSheet.js?v=1777706015"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -874,9 +881,15 @@ async function initAuth(){
             return;
         }
         me=u;
-        const prof=await getSupabase().from('profiles').select('nickname').eq('id',u.id).maybeSingle();
+        const prof=await getSupabase().from('profiles').select('nickname,avatar_url').eq('id',u.id).maybeSingle();
         const nick=prof.data?.nickname||'나';
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
+        /* lpRankSheet 가 sticky 본인 행 표시할 때 사용 */
+        try {
+            window._lpMe = u;
+            window._lpMyNickname = nick;
+            window._lpMyAvatar = prof.data?.avatar_url || null;
+        } catch(_){}
         loadMyStats();
     }catch(e){console.warn('auth init',e)}
 }
@@ -2823,7 +2836,10 @@ async function showGameOverOverlay(){
         + (isSprintFail ? '' : '<div class="over-rank" id="ovRankNum">기록 등록 중…</div>')
         + (isSprintFail ? '' : '<div class="over-pb" id="ovRankPb"></div>')
         + buildModeTabsHTML()
-        + '<button class="btn" id="ovBtnRetry">다시 도전</button>'
+        + '<div class="ov-actions">'
+        +   '<button class="btn" id="ovBtnRetry">다시 도전</button>'
+        +   '<button class="btn btn-rank" id="ovBtnRank" type="button">🏆 랭크</button>'
+        + '</div>'
         + '<div class="kbd-hint" style="margin-top:6px"><kbd>Enter</kbd> 재시작</div>';
     ov.classList.remove('hidden');
     $('ovBtnRetry').addEventListener('click', startGame);
@@ -2891,6 +2907,42 @@ async function showGameOverOverlay(){
 
     /* Refresh leaderboard */
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard(currentScope);
+
+    /* 게임 오버 시 "랭크" 버튼 → 풀스크린 통합 랭크 윈도우.
+       Sprint top-out 도 같은 overlay 라 isSprintFail 따라 mode 분기. */
+    const rankBtn = $('ovBtnRank');
+    if(rankBtn){
+        rankBtn.addEventListener('click', () =>
+            openTetrisRankSheet(isSprintFail ? 'sprint' : 'marathon'));
+    }
+}
+
+/* 통합 랭크 윈도우 호출 — Marathon vs Sprint 분기. */
+function openTetrisRankSheet(mode){
+    if(!window.LpRankSheet) return;
+    if(mode === 'sprint'){
+        LpRankSheet.open({
+            gameKey:           'tetris-sprint',
+            gameTitle:         'TETRIS SPRINT',
+            leaderboardRpc:    'tetris_sprint_leaderboard',
+            myStatsRpc:        'tetris_sprint_my_stats',
+            scoreField:        'best_duration_ms',
+            myStatsRankField:  'world_rank',
+            myStatsScoreField: 'best_duration_ms',
+            formatScore:       formatSprintTime
+        });
+    } else {
+        LpRankSheet.open({
+            gameKey:           'tetris',
+            gameTitle:         'TETRIS',
+            leaderboardRpc:    'tetris_leaderboard',
+            myStatsRpc:        'tetris_my_stats',
+            scoreField:        'best_score',
+            myStatsRankField:  'world_rank',
+            myStatsScoreField: 'best_score',
+            formatScore:       n => Number(n).toLocaleString()
+        });
+    }
 }
 
 /* Sprint 완료 화면 — 시간 기반. localStorage 에 personal best + Supabase
@@ -2929,11 +2981,17 @@ async function showSprintCompleteOverlay(){
         + '<div class="over-pb" id="ovRankPb">'
             + (isLocalNewPB ? '🎉 자기 최고 기록!' : '') + '</div>'
         + buildModeTabsHTML()
-        + '<button class="btn" id="ovBtnRetry">다시 도전</button>'
+        + '<div class="ov-actions">'
+        +   '<button class="btn" id="ovBtnRetry">다시 도전</button>'
+        +   '<button class="btn btn-rank" id="ovBtnRank" type="button">🏆 랭크</button>'
+        + '</div>'
         + '<div class="kbd-hint" style="margin-top:6px"><kbd>Enter</kbd> 재시작</div>';
     ov.classList.remove('hidden');
     $('ovBtnRetry').addEventListener('click', startGame);
     wireModeTabs();
+    /* "랭크" 버튼 — sprint 모드 랭크 윈도우 */
+    const rankBtnS = $('ovBtnRank');
+    if(rankBtnS) rankBtnS.addEventListener('click', () => openTetrisRankSheet('sprint'));
 
     /* Supabase 제출 — RPC anti-cheat 가 8s ~ 10min duration 만 받음. */
     let recordOk = false, recordErrKind = null;
@@ -3628,6 +3686,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777704330" defer></script>
+<script src="/js/siteFooter.js?v=1777706015" defer></script>
 </body>
 </html>
