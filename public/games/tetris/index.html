@@ -825,7 +825,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777682231"></script>
+<script src="/js/supabase-config.js?v=1777702975"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1422,6 +1422,25 @@ let softDropping = false;
    lock() 시 true 면 spin 후보 (T-spin 3-corner 또는 immobile 검증). */
 let lastMoveRotated = false;
 
+/* B2B (Back-to-Back) chain — modern Tetris guideline 표준.
+   연속 "difficult clear" (TETRIS 또는 T-spin with lines) 시 1.5x 보너스.
+   -1: chain 없음 (다음 difficult 클리어가 첫 번째)
+    0: 첫 difficult clear 직후 (다음부터 B2B)
+    N: N+1 회 연속 difficult clear (N>0 일 때 보너스 적용) */
+let b2bChain = -1;
+
+/* 콤보 카운트 — 연속 라인 클리어 시 누적.
+   -1: 콤보 없음
+    0: 첫 클리어
+    N: N+1 회 연속 클리어 (N>0 일 때 보너스 50 × combo × level) */
+let comboCount = -1;
+
+/* Lock delay reset 제한 — 무한 stall 방지 (Tetris guideline 표준 15회).
+   moveX/rotate 성공 시 reset 카운트 +1. 15 도달 후엔 reset 무시 → 즉시 lock.
+   spawnPiece 시 0 으로 reset. */
+let lockResetCount = 0;
+const MAX_LOCK_RESETS = 15;
+
 /* ---- Pause UI sync ---- */
 function syncPauseUI(){
     const gc=$('gameCtrl'), btn=$('pauseBtn');
@@ -1545,6 +1564,7 @@ function spawnPiece(){
     /* 매 spawn 마다 hold 가능 상태 reset — piece 당 1회만 hold */
     canHold = true;
     lastMoveRotated = false;   /* 새 piece — spin 후보 reset */
+    lockResetCount = 0;        /* 새 piece — lock reset 카운트 reset */
     syncHoldUI();
     drawNextQueuePreview();
     return true;
@@ -1637,9 +1657,12 @@ function moveX(dx){
             if(canMoveDown()){
                 landed = false;
                 lockTimer = 0;
-            } else {
+            } else if(lockResetCount < MAX_LOCK_RESETS){
+                /* lock delay reset — 단, 15회 한도 (무한 stall 방지) */
                 lockTimer = 0;
+                lockResetCount++;
             }
+            /* 15회 도달 후엔 reset 무시 → lockTimer 그대로, 곧 lock. */
         }
         return true;
     }
@@ -1664,8 +1687,9 @@ function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
                 if(canMoveDown()){
                     landed = false;
                     lockTimer = 0;
-                } else {
+                } else if(lockResetCount < MAX_LOCK_RESETS){
                     lockTimer = 0;
+                    lockResetCount++;
                 }
             }
             return true;
@@ -1800,6 +1824,24 @@ function detectSpin(){
 /* Spin announcement (floating text 위에 떠오르는 효과) */
 let spinAnnouncement = null;
 
+/* Score popups — line clear / spin / B2B / combo / perfect 시 floating 텍스트.
+   각 popup: {text, color, y_offset, start, duration}. 1.1초 동안 위로 floats + fade.
+   여러 개 동시에 가능 (라인 클리어 + B2B + COMBO 등 stack). */
+const scorePopups = [];
+function addScorePopup(text, color){
+    /* y offset 으로 popup 들 stack — 최근 popup 일수록 높은 위치 (하단부터 쌓임) */
+    const offsetIdx = scorePopups.length;
+    scorePopups.push({
+        text: text,
+        color: color || '#FFE66D',
+        offsetIdx: offsetIdx,
+        start: performance.now(),
+        duration: 1100
+    });
+    /* 너무 많으면 oldest 제거 (max 8) */
+    if(scorePopups.length > 8) scorePopups.shift();
+}
+
 /* ---- Lock + clear lines + spawn next ---- */
 function lock(){
     if(!current) return;
@@ -1875,6 +1917,8 @@ function lock(){
                  · T-spin Full:        400 (no) / 800 (1) / 1200 (2) / 1600 (3)
                  · All-spin (S/Z/L/J/I): 일반 점수 × 1.5
                  · 일반 line clear:     [0, 40, 100, 300, 1200][lines]
+                 · B2B (Back-to-Back): difficult clear 연속 시 추가 × 1.5
+                 · Combo:              연속 클리어 시 +50 × combo × level
             */
             let lineScore;
             if(spinResult && spinResult.type === 'T'){
@@ -1888,8 +1932,40 @@ function lock(){
             } else {
                 lineScore = [0, 40, 100, 300, 1200][cleared.length] || 0;
             }
-            score += lineScore * (level + 0);
+
+            /* B2B: difficult clear 연속 시 1.5x. difficult = TETRIS 또는 T-spin (with lines) */
+            const isDifficult = cleared.length === 4 ||
+                                (spinResult && spinResult.type === 'T' && cleared.length > 0);
+            let b2bBonus = 0;
+            if(isDifficult){
+                b2bChain++;
+                if(b2bChain > 0){
+                    /* 연속 difficult — 50% 추가 보너스 */
+                    b2bBonus = Math.floor(lineScore * 0.5);
+                }
+            } else {
+                /* non-difficult line clear → B2B chain 끊김 */
+                b2bChain = -1;
+            }
+
+            /* Combo: 연속 라인 클리어. 첫 클리어는 보너스 없음 (combo=0). */
+            comboCount++;
+            const comboBonus = comboCount > 0 ? 50 * comboCount : 0;
+
+            const totalScore = (lineScore + b2bBonus) * level + comboBonus * level;
+            score += totalScore;
             lines += cleared.length;
+
+            /* Score popups — line score + bonuses 시각화. base score 먼저,
+               B2B 가 있으면 그 다음, combo 도 있으면 stack. */
+            addScorePopup('+' + (lineScore * level).toLocaleString(), '#FFE66D');
+            if(b2bBonus > 0){
+                addScorePopup('B2B  +' + (b2bBonus * level).toLocaleString(), '#FF9A3C');
+            }
+            if(comboBonus > 0){
+                addScorePopup('COMBO ' + comboCount + '  +' + (comboBonus * level).toLocaleString(),
+                              '#00D9FF');
+            }
             $('scoreNow').textContent = score.toLocaleString();
             $('linesNow').textContent = lines;
             /* Level-up every LINES_PER_LEVEL (5) — 한게임 패턴.
@@ -1911,9 +1987,9 @@ function lock(){
             render();
         }, dur);
     } else {
-        /* 라인 안 빠진 일반 lock — 새 piece 가 추가됐으니 topRow 가
-           위로 올라갔을 수 있음 → BGM tier 재평가.
-           T-spin (no lines) 도 보너스 점수 award. */
+        /* 라인 안 빠진 일반 lock — 콤보 끊김 (라인 클리어 없음).
+           T-spin (no lines) 은 점수만 award, B2B chain 은 유지 (Guideline). */
+        comboCount = -1;
         if(spinResult && spinResult.type === 'T'){
             const noLineScore = (spinResult.isMini ? 100 : 400) * level;
             score += noLineScore;
@@ -2294,6 +2370,38 @@ function drawSpinAnnouncement(){
     ctx.restore();
 }
 
+/* Score popups — line clear/B2B/combo/perfect 시 floating "+점수" 텍스트.
+   여러 개 stack 가능 (offsetIdx 로 세로 배치). 1.1초 fade + float up. */
+function drawScorePopups(){
+    if(!scorePopups.length) return;
+    const now = performance.now();
+    ctx.save();
+    ctx.font = 'bold 11px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    /* 뒤에서부터 순회하며 expired 제거 (splice 안전) */
+    for(let i = scorePopups.length - 1; i >= 0; i--){
+        const p = scorePopups[i];
+        const elapsed = now - p.start;
+        if(elapsed >= p.duration){
+            scorePopups.splice(i, 1);
+            continue;
+        }
+        const t = elapsed / p.duration;
+        const fade = t < 0.7 ? 1 : Math.max(0, (1 - t) / 0.3);
+        /* base Y = 보드 가운데 약간 아래. offsetIdx 로 위쪽으로 stack. */
+        const baseY = ROWS * CELL * 0.55 - p.offsetIdx * 16;
+        const yOffset = -t * 25;
+        ctx.globalAlpha = fade;
+        /* drop shadow */
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillText(p.text, COLS * CELL / 2 + 1, baseY + yOffset + 1);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, COLS * CELL / 2, baseY + yOffset);
+    }
+    ctx.restore();
+}
+
 /* ---- Board layer (캐시 offscreen canvas) — Candy Crush / 모바일
    match-3 표준 기법. 정적 컨텐츠 (배경 + 그리드 + locked cells) 를
    별도 canvas 에 캐시해서 매 프레임 1 drawImage 로 표시.
@@ -2372,6 +2480,8 @@ function render(){
     if(clearAnim) drawClearBurst();
     /* T-spin / all-spin floating text (board 가운데 위) */
     if(spinAnnouncement) drawSpinAnnouncement();
+    /* Score popups (B2B / combo / line score) — center 약간 아래에 stack */
+    if(scorePopups.length) drawScorePopups();
     /* Pause overlay */
     if(paused && running){
         ctx.fillStyle = 'rgba(5,5,15,.72)';
@@ -2480,11 +2590,15 @@ function startGame(){
     holdPiece = null; canHold = true;   /* HOLD slot reset */
     syncHoldUI();
     drawHoldPreview();
-    /* Reset transient effects that might persist across games */
+    /* Reset transient effects + spin/B2B/combo state */
     clearAnim = null;
     dropTrail = null;
     spinAnnouncement = null;
     lastMoveRotated = false;
+    b2bChain = -1;
+    comboCount = -1;
+    lockResetCount = 0;
+    scorePopups.length = 0;
     /* Pre-warm sprite cache — 모든 piece 색의 sprite 를 첫 게임 시작
        시점에 미리 렌더해서 첫 piece 등장할 때 stutter 방지. */
     for(const t of PIECE_TYPES){
@@ -2967,6 +3081,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777682231" defer></script>
+<script src="/js/siteFooter.js?v=1777702975" defer></script>
 </body>
 </html>
