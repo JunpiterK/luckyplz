@@ -231,6 +231,29 @@ body{
     box-shadow:0 8px 24px -6px rgba(168,85,247,.5),inset 0 1px 0 rgba(255,255,255,.22)
 }
 .overlay .btn:active{transform:translateY(1px)}
+/* Mode tabs (Marathon vs Sprint) — start overlay 안 작은 토글. */
+.mode-tabs{
+    display:flex;gap:6px;justify-content:center;
+    margin:6px 0 4px;
+}
+.mode-tab{
+    padding:8px 14px;border-radius:10px;cursor:pointer;
+    background:rgba(255,255,255,.04);
+    border:1px solid var(--panel-br);
+    color:var(--muted);
+    font-family:'Orbitron',sans-serif;font-weight:700;
+    font-size:.7em;letter-spacing:.06em;text-transform:uppercase;
+    transition:all .15s ease;
+}
+.mode-tab.active{
+    background:linear-gradient(135deg,rgba(0,217,255,.22),rgba(168,85,247,.22));
+    border-color:rgba(168,85,247,.6);
+    color:#fff;
+    box-shadow:0 0 12px -2px rgba(168,85,247,.4),inset 0 1px 0 rgba(255,255,255,.18);
+}
+.mode-desc{
+    font-size:.72em;color:var(--muted-2);margin:2px 0 6px;min-height:1em
+}
 .kbd-hint{font-size:.72em;color:var(--muted-2);margin-top:4px}
 .kbd-hint kbd{
     display:inline-block;padding:2px 7px;margin:0 2px;
@@ -745,6 +768,12 @@ body{
                 <div class="overlay" id="overlay">
                     <h2 class="play" id="ovTitle">PLAY TETRIS</h2>
                     <p id="ovDesc">블록을 회전·이동·드롭으로 라인 완성.<br>4줄 동시 = 테트리스 보너스!</p>
+                    <!-- Mode 선택: 마라톤 (기본, 끝없는 도전) vs 스프린트 (40줄 시간 도전) -->
+                    <div class="mode-tabs" id="modeTabs">
+                        <button class="mode-tab active" data-mode="marathon" type="button">마라톤</button>
+                        <button class="mode-tab" data-mode="sprint" type="button">스프린트 40L</button>
+                    </div>
+                    <div class="mode-desc" id="modeDesc">레벨업 + 무한 도전. 점수 + 라인 + 레벨 기록.</div>
                     <button class="btn" id="ovBtn">시작</button>
                     <div class="kbd-hint"><kbd>← →</kbd> 이동 · <kbd>↑</kbd>/<kbd>X</kbd> CW · <kbd>Z</kbd> CCW · <kbd>C</kbd> 홀드 · <kbd>↓</kbd> 소프트 · <kbd>Space</kbd> 하드드롭</div>
                 </div>
@@ -821,7 +850,7 @@ body{
     </div>
 </main>
 
-<script src="/js/supabase-config.js?v=1777703432"></script>
+<script src="/js/supabase-config.js?v=1777703935"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1437,6 +1466,25 @@ let comboCount = -1;
 let lockResetCount = 0;
 const MAX_LOCK_RESETS = 15;
 
+/* ---- Game mode ----
+   marathon: 끝없는 도전. 레벨업, gravity 가속. 점수+라인+레벨 기록.
+   sprint:   40줄 클리어 시간 도전. 레벨 고정 (sprint level), gravity 일정.
+             40 라인 도달 시 즉시 종료. 시간 (낮을수록 좋음) 이 score.
+   localStorage 에 personal best 저장. 온라인 ranking 은 marathon 만. */
+let gameMode = 'marathon';
+const SPRINT_TARGET = 40;
+const SPRINT_LEVEL = 1;   /* sprint 는 레벨 고정 — 누구나 같은 gravity 로 비교 */
+
+/* IRS/IHS 입력 상태 — 회전/홀드 키가 spawn 시점에 눌려 있는지 추적.
+   - cw/ccw/hold: 현재 키 down 상태
+   - cwConsumed/ccwConsumed/holdConsumed: 이번 press 가 IRS/IHS 발동
+     했는지. 한 keypress 당 1회만 (keyup 시 reset). 키를 계속 누르고
+     있어도 매 spawn 마다 자동 회전 안 됨 (의도 명확). */
+const inputState = {
+    cw: false, ccw: false, hold: false,
+    cwConsumed: false, ccwConsumed: false, holdConsumed: false
+};
+
 /* ---- Pause UI sync ---- */
 function syncPauseUI(){
     const gc=$('gameCtrl'), btn=$('pauseBtn');
@@ -1561,6 +1609,30 @@ function spawnPiece(){
     canHold = true;
     lastMoveRotated = false;   /* 새 piece — spin 후보 reset */
     lockResetCount = 0;        /* 새 piece — lock reset 카운트 reset */
+
+    /* ---- IHS (Initial Hold System) ----
+       Hold 키가 직전 piece lock 시점에도 눌려 있었으면, 새 piece spawn
+       즉시 hold swap. 한 keypress 당 1회만 (consumed flag 로 중복 방지).
+       IHS 가 IRS 보다 먼저 — 새 piece (hold 에서 나온) 가 이후 IRS 적용. */
+    if(inputState.hold && !inputState.holdConsumed){
+        inputState.holdConsumed = true;
+        holdCurrentPiece();
+        /* holdCurrentPiece 가 spawnFromType 호출 → current 가 새 piece 로
+           바뀜. 아래 IRS 는 새 piece 에 적용. */
+    }
+
+    /* ---- IRS (Initial Rotation System) ----
+       회전 키 (CW 또는 CCW) 가 spawn 시점에 눌려 있으면 즉시 rotate.
+       두 키 동시에 눌려 있으면 CW 우선 (modern Tetris 관례).
+       IRS 도 한 keypress 당 1회 — consumed flag. */
+    if(inputState.cw && !inputState.cwConsumed){
+        inputState.cwConsumed = true;
+        rotate(1);
+    } else if(inputState.ccw && !inputState.ccwConsumed){
+        inputState.ccwConsumed = true;
+        rotate(-1);
+    }
+
     syncHoldUI();
     drawNextQueuePreview();
     return true;
@@ -1712,7 +1784,10 @@ function softDrop(){
     if(dropOne()){
         score += 1;   /* +1 per cell soft-dropped */
         Sfx.soft();
-        $('scoreNow').textContent = score.toLocaleString();
+        /* Sprint 모드: scoreNow 는 시간 표시이므로 갱신 안 함 */
+        if(gameMode !== 'sprint'){
+            $('scoreNow').textContent = score.toLocaleString();
+        }
     }
 }
 function hardDrop(){
@@ -1754,7 +1829,9 @@ function hardDrop(){
         }
     }
     score += cells * 2;   /* +2 per cell hard-dropped */
-    $('scoreNow').textContent = score.toLocaleString();
+    if(gameMode !== 'sprint'){
+        $('scoreNow').textContent = score.toLocaleString();
+    }
     Sfx.hard();
     lock();
 }
@@ -1996,18 +2073,33 @@ function lock(){
                 };
                 Sfx.tetris();   /* 화려한 효과음 재사용 */
             }
-            $('scoreNow').textContent = score.toLocaleString();
-            $('linesNow').textContent = lines;
-            /* Level-up every LINES_PER_LEVEL (5) — 한게임 패턴.
-               캡 = MAX_LEVEL (20). gravity + lock delay 둘 다 갱신 —
-               L1~12 는 gravity 가, L13~20 은 lock delay 가 차별화. */
-            const newLevel = 1 + Math.floor(lines / LINES_PER_LEVEL);
-            if(newLevel > level){
-                level = Math.min(newLevel, MAX_LEVEL);
-                $('levelNow').textContent = level;
-                dropMs = gravityMsForLevel(level);
-                lockDelay = lockDelayForLevel(level);
-                Sfx.levelUp();
+            /* Sprint: scoreNow 는 loop 가 시간으로 갱신 → 여기서 안 건드림.
+               Marathon: 점수 표시. linesNow 는 모드별 다름. */
+            if(gameMode !== 'sprint'){
+                $('scoreNow').textContent = score.toLocaleString();
+            }
+            $('linesNow').textContent = (gameMode === 'sprint')
+                ? Math.min(lines, SPRINT_TARGET) + '/' + SPRINT_TARGET
+                : lines;
+            /* Marathon 만 level-up. Sprint 는 SPRINT_LEVEL 고정. */
+            if(gameMode !== 'sprint'){
+                /* Level-up every LINES_PER_LEVEL (5) — 한게임 패턴.
+                   캡 = MAX_LEVEL (20). gravity + lock delay 둘 다 갱신 —
+                   L1~12 는 gravity 가, L13~20 은 lock delay 가 차별화. */
+                const newLevel = 1 + Math.floor(lines / LINES_PER_LEVEL);
+                if(newLevel > level){
+                    level = Math.min(newLevel, MAX_LEVEL);
+                    $('levelNow').textContent = level;
+                    dropMs = gravityMsForLevel(level);
+                    lockDelay = lockDelayForLevel(level);
+                    Sfx.levelUp();
+                }
+            }
+            /* Sprint 완료 — 40 라인 도달 시 즉시 종료 (성공). */
+            if(gameMode === 'sprint' && lines >= SPRINT_TARGET){
+                /* spawnPiece 전에 sprint complete — 게임 끝. */
+                sprintComplete();
+                return;
             }
             /* 라인 클리어 후 보드 settle 됨 → BGM tier 재평가
                (라인 빠진 만큼 topRow 아래로 내려가서 음악이 차분해질
@@ -2023,7 +2115,9 @@ function lock(){
         if(spinResult && spinResult.type === 'T'){
             const noLineScore = (spinResult.isMini ? 100 : 400) * level;
             score += noLineScore;
-            $('scoreNow').textContent = score.toLocaleString();
+            if(gameMode !== 'sprint'){
+                $('scoreNow').textContent = score.toLocaleString();
+            }
         }
         try { TetrisBGM.update(board); } catch(_){}
         spawnPiece();
@@ -2568,8 +2662,21 @@ function drawNextQueuePreview(){
      Guideline gravity 곡선 적용 후 dropMs(L10) ≈ 64ms 라
      L10+ 에선 gravity 가 이미 더 빠름 → Math.min 으로 gravity 우선. */
 const SOFT_DROP_INTERVAL = 70;
+/* Sprint 시간 포맷 — m:ss.cs (centisecond). Marathon score 와 같은 폭 유지. */
+function formatSprintTime(ms){
+    const cs = Math.max(0, Math.floor(ms / 10));
+    const totalSec = Math.floor(cs / 100);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    const c = cs % 100;
+    return m + ':' + (s < 10 ? '0' : '') + s + '.' + (c < 10 ? '0' : '') + c;
+}
 function loop(now){
     if(!running) return;
+    /* Sprint 모드 — SCORE 칸에 라이브 elapsed 시간 표시 (매 프레임 갱신). */
+    if(gameMode === 'sprint' && !paused){
+        $('scoreNow').textContent = formatSprintTime(now - startedAt);
+    }
     if(!paused){
         const interval = softDropping ? Math.min(SOFT_DROP_INTERVAL, dropMs) : dropMs;
         while(now - lastDrop >= interval){
@@ -2635,16 +2742,21 @@ function startGame(){
         getCellSprite(PIECES[t].color);
     }
     /* 클래식 line clear flash 사용 — sprite 생성 안 함 (성능 안전) */
-    score = 0; lines = 0; level = 1;
-    dropMs = gravityMsForLevel(1);
-    lockDelay = lockDelayForLevel(1);
+    score = 0; lines = 0;
+    /* Sprint 모드: 레벨 고정 (1) — 누구나 같은 gravity 로 시간 비교.
+       Marathon: 레벨 1 시작, 5라인 마다 +1 (MAX_LEVEL = 20). */
+    level = (gameMode === 'sprint') ? SPRINT_LEVEL : 1;
+    dropMs = gravityMsForLevel(level);
+    lockDelay = lockDelayForLevel(level);
     softDropping = false;
     paused = false; gameOverFlag = false; running = true;
     landed = false; lockTimer = 0;
     startedAt = performance.now();
-    $('scoreNow').textContent = '0';
-    $('linesNow').textContent = '0';
-    $('levelNow').textContent = '1';
+    $('linesNow').textContent = (gameMode === 'sprint') ? '0/' + SPRINT_TARGET : '0';
+    $('levelNow').textContent = level;
+    /* Sprint 모드: SCORE 칸을 TIME 으로 표시 — 라이브 elapsed 갱신은 loop().
+       Marathon: 0 점수로 시작. */
+    $('scoreNow').textContent = (gameMode === 'sprint') ? '0:00.00' : '0';
     $('overlay').classList.add('hidden');
     syncPauseUI();
     spawnPiece();
@@ -2671,23 +2783,47 @@ function gameOver(){
     showGameOverOverlay();
 }
 
+/* Sprint 완료 — 40 라인 도달 시 호출. 성공 종료 (game over 와 다름).
+   localStorage 에 personal best 비교 저장. 화려한 효과음 + 완료 화면. */
+function sprintComplete(){
+    if(gameOverFlag) return;
+    gameOverFlag = true;
+    running = false;
+    Sfx.tetris();
+    try { TetrisBGM.stop(); } catch(_){}
+    syncPauseUI();
+    render();
+    showSprintCompleteOverlay();
+}
+
 async function showGameOverOverlay(){
     const duration = Math.max(0, Math.floor(performance.now() - startedAt));
     const ov = $('overlay');
+    /* Sprint 모드: top-out 으로 game over 됐을 때 — 미완료 sprint 표시.
+       Submit 안 함 (sprint 는 별도 ranking, 미구현). */
+    const isSprintFail = (gameMode === 'sprint');
     ov.innerHTML = ''
-        + '<h2 class="over">GAME OVER</h2>'
+        + '<h2 class="over">' + (isSprintFail ? 'SPRINT FAIL' : 'GAME OVER') + '</h2>'
         + '<div class="over-stats">'
-        + '<div class="row"><span>Score</span><b>' + score.toLocaleString() + '</b></div>'
-        + '<div class="row"><span>Lines</span><b>' + lines + '</b></div>'
-        + '<div class="row"><span>Level</span><b>' + level + '</b></div>'
-        + '<div class="row"><span>Time</span><b>' + Math.floor(duration/1000) + 's</b></div>'
+        + (isSprintFail
+            ? '<div class="row"><span>Lines</span><b>' + lines + '/' + SPRINT_TARGET + '</b></div>'
+              + '<div class="row"><span>Time</span><b>' + formatSprintTime(duration) + '</b></div>'
+            : '<div class="row"><span>Score</span><b>' + score.toLocaleString() + '</b></div>'
+              + '<div class="row"><span>Lines</span><b>' + lines + '</b></div>'
+              + '<div class="row"><span>Level</span><b>' + level + '</b></div>'
+              + '<div class="row"><span>Time</span><b>' + Math.floor(duration/1000) + 's</b></div>')
         + '</div>'
-        + '<div class="over-rank" id="ovRankNum">기록 등록 중…</div>'
-        + '<div class="over-pb" id="ovRankPb"></div>'
+        + (isSprintFail ? '' : '<div class="over-rank" id="ovRankNum">기록 등록 중…</div>')
+        + (isSprintFail ? '' : '<div class="over-pb" id="ovRankPb"></div>')
+        + buildModeTabsHTML()
         + '<button class="btn" id="ovBtnRetry">다시 도전</button>'
         + '<div class="kbd-hint" style="margin-top:6px"><kbd>Enter</kbd> 재시작</div>';
     ov.classList.remove('hidden');
     $('ovBtnRetry').addEventListener('click', startGame);
+    wireModeTabs();
+
+    /* Sprint top-out — ranking 제출 안 함, early return. */
+    if(isSprintFail) return;
 
     /* Submit the score (anon: skip) */
     let recordOk = false, recordErrKind = null;
@@ -2748,6 +2884,66 @@ async function showGameOverOverlay(){
 
     /* Refresh leaderboard */
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard(currentScope);
+}
+
+/* Sprint 완료 화면 — 시간 기반. localStorage 에 personal best 저장.
+   온라인 ranking 은 marathon 만 (sprint 는 별도 RPC 미구현). */
+function showSprintCompleteOverlay(){
+    const duration = Math.max(0, Math.floor(performance.now() - startedAt));
+    const timeStr = formatSprintTime(duration);
+
+    /* localStorage personal best (sprint 40L). */
+    let priorBest = null, isNewPB = false;
+    try {
+        const saved = localStorage.getItem('tetris-sprint-pb');
+        if(saved){
+            priorBest = parseInt(saved, 10);
+            if(isNaN(priorBest)) priorBest = null;
+        }
+        if(priorBest === null || duration < priorBest){
+            localStorage.setItem('tetris-sprint-pb', String(duration));
+            isNewPB = true;
+        }
+    } catch(_){}
+
+    const ov = $('overlay');
+    ov.innerHTML = ''
+        + '<h2 class="over" style="background:linear-gradient(135deg,#00D9FF,#FFE66D,#FF66E6);'
+            + '-webkit-background-clip:text;-webkit-text-fill-color:transparent">SPRINT CLEAR!</h2>'
+        + '<p>40 라인 클리어 완료 🎉</p>'
+        + '<div class="over-stats">'
+        + '<div class="row"><span>Time</span><b>' + timeStr + '</b></div>'
+        + '<div class="row"><span>Lines</span><b>' + lines + '</b></div>'
+        + (priorBest !== null
+            ? '<div class="row"><span>이전 베스트</span><b>' + formatSprintTime(priorBest) + '</b></div>'
+            : '')
+        + '</div>'
+        + (isNewPB ? '<div class="over-pb">🎉 자기 최고 기록!</div>' : '')
+        + buildModeTabsHTML()
+        + '<button class="btn" id="ovBtnRetry">다시 도전</button>'
+        + '<div class="kbd-hint" style="margin-top:6px"><kbd>Enter</kbd> 재시작</div>';
+    ov.classList.remove('hidden');
+    $('ovBtnRetry').addEventListener('click', startGame);
+    wireModeTabs();
+}
+
+/* 종료 화면에서도 모드 전환 가능하게 — 동일 mode tabs 빌드 + 와이어. */
+function buildModeTabsHTML(){
+    const isM = gameMode === 'marathon';
+    const isS = gameMode === 'sprint';
+    return '<div class="mode-tabs">'
+         + '<button class="mode-tab' + (isM?' active':'') + '" data-mode="marathon" type="button">마라톤</button>'
+         + '<button class="mode-tab' + (isS?' active':'') + '" data-mode="sprint" type="button">스프린트 40L</button>'
+         + '</div>'
+         + '<div class="mode-desc">' + MODE_DESCS[gameMode] + '</div>';
+}
+function wireModeTabs(){
+    document.querySelectorAll('.mode-tab').forEach(t => {
+        t.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectMode(t.dataset.mode);
+        });
+    });
 }
 
 /* ---- Input ---- */
@@ -2828,13 +3024,33 @@ function onKey(e){
     }
     /* Modern Tetris 표준 키매핑:
          ↑ / X = CW (시계방향)
-         Z     = CCW (반시계방향)  */
-    else if(k === 'ArrowUp' || k === 'x' || k === 'X'){ rotate(1); e.preventDefault(); }
-    else if(k === 'z' || k === 'Z'){ rotate(-1); e.preventDefault(); }
+         Z     = CCW (반시계방향)
+       e.repeat 무시 — OS auto-repeat 로 인한 회전 폭주 방지. inputState
+       업데이트는 첫 press 에서만, IRS/IHS 가 이를 기반으로 spawn 처리. */
+    else if(k === 'ArrowUp' || k === 'x' || k === 'X'){
+        if(!e.repeat){
+            rotate(1);
+            inputState.cw = true; inputState.cwConsumed = false;
+        }
+        e.preventDefault();
+    }
+    else if(k === 'z' || k === 'Z'){
+        if(!e.repeat){
+            rotate(-1);
+            inputState.ccw = true; inputState.ccwConsumed = false;
+        }
+        e.preventDefault();
+    }
     /* C / V / Shift 키 = HOLD (modern Tetris 표준 매핑 — 통합 swap 동작).
        V 와 Shift 는 손 위치 다양성 위해 alias. */
     else if(k === 'c' || k === 'C' || k === 'v' || k === 'V' ||
-            k === 'Shift'){ holdCurrentPiece(); e.preventDefault(); }
+            k === 'Shift'){
+        if(!e.repeat){
+            holdCurrentPiece();
+            inputState.hold = true; inputState.holdConsumed = false;
+        }
+        e.preventDefault();
+    }
     /* 화살표 ↓ — 더블탭 = hard, 홀드 = soft. S 키는 단순 soft (legacy). */
     else if(k === 'ArrowDown'){ onArrowDownPress(); e.preventDefault(); }
     else if(k === 's' || k === 'S'){ softDropping = true; e.preventDefault(); }
@@ -2851,6 +3067,16 @@ function onKeyUp(e){
     /* 좌우 키 release → DAS/ARR timer 정리 */
     else if(k === 'ArrowLeft' || k === 'a' || k === 'A'){ stopAutoShift(-1); }
     else if(k === 'ArrowRight' || k === 'd' || k === 'D'){ stopAutoShift(1); }
+    /* 회전/홀드 키 release → IRS/IHS state 해제 (다음 press 가 다시 arm). */
+    else if(k === 'ArrowUp' || k === 'x' || k === 'X'){
+        inputState.cw = false; inputState.cwConsumed = false;
+    }
+    else if(k === 'z' || k === 'Z'){
+        inputState.ccw = false; inputState.ccwConsumed = false;
+    }
+    else if(k === 'c' || k === 'C' || k === 'v' || k === 'V' || k === 'Shift'){
+        inputState.hold = false; inputState.holdConsumed = false;
+    }
 }
 document.addEventListener('keydown', onKey);
 document.addEventListener('keyup', onKeyUp);
@@ -2859,6 +3085,9 @@ document.addEventListener('keyup', onKeyUp);
 window.addEventListener('blur', () => {
     stopAutoShift(-1); stopAutoShift(1);
     softDropping = false;
+    /* IRS/IHS state 도 reset (stuck input 방지) */
+    inputState.cw = inputState.ccw = inputState.hold = false;
+    inputState.cwConsumed = inputState.ccwConsumed = inputState.holdConsumed = false;
 });
 
 /* Touch buttons.
@@ -3045,10 +3274,17 @@ document.querySelectorAll('.cbtn').forEach(b => {
            가 처리, 여기선 DAS 후 ARR setup 만. */
         if(act === 'left'){ startAutoShift(-1); }
         else if(act === 'right'){ startAutoShift(1); }
+        /* IRS/IHS state — 회전/홀드 버튼 누르고 있는 동안 spawn 시 적용. */
+        else if(act === 'cw'){ inputState.cw = true; inputState.cwConsumed = false; }
+        else if(act === 'ccw'){ inputState.ccw = true; inputState.ccwConsumed = false; }
+        else if(act === 'hold'){ inputState.hold = true; inputState.holdConsumed = false; }
     };
     const release = (e) => {
         if(act === 'left'){ stopAutoShift(-1); }
         else if(act === 'right'){ stopAutoShift(1); }
+        else if(act === 'cw'){ inputState.cw = false; inputState.cwConsumed = false; }
+        else if(act === 'ccw'){ inputState.ccw = false; inputState.ccwConsumed = false; }
+        else if(act === 'hold'){ inputState.hold = false; inputState.holdConsumed = false; }
         if(isDrop){
             onDropRelease();
         } else {
@@ -3188,6 +3424,34 @@ if(holdSlotEl){
     canvas.addEventListener('touchcancel', endTouch);
 })();
 
+/* ---- Mode tabs (Marathon vs Sprint) ----
+   start overlay 에 항상 보이는 토글. localStorage 에 직전 선택 기억. */
+const MODE_DESCS = {
+    marathon: '레벨업 + 무한 도전. 점수 + 라인 + 레벨 기록.',
+    sprint:   '40줄 클리어 시간 도전. 빠를수록 좋아요!'
+};
+function selectMode(mode){
+    if(mode !== 'marathon' && mode !== 'sprint') mode = 'marathon';
+    gameMode = mode;
+    document.querySelectorAll('.mode-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.mode === mode);
+    });
+    const desc = $('modeDesc');
+    if(desc) desc.textContent = MODE_DESCS[mode];
+    try { localStorage.setItem('tetris-mode', mode); } catch(_){}
+}
+/* 초기 모드 — 저장된 값 또는 marathon */
+try {
+    const saved = localStorage.getItem('tetris-mode');
+    if(saved === 'sprint' || saved === 'marathon') selectMode(saved);
+} catch(_){}
+document.querySelectorAll('.mode-tab').forEach(t => {
+    t.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectMode(t.dataset.mode);
+    });
+});
+
 /* Start button */
 $('ovBtn').addEventListener('click', startGame);
 
@@ -3260,6 +3524,6 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1777703432" defer></script>
+<script src="/js/siteFooter.js?v=1777703935" defer></script>
 </body>
 </html>
