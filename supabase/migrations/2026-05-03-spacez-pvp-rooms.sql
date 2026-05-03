@@ -95,6 +95,7 @@ create or replace function public._spacez_gen_code()
 returns text
 language plpgsql
 as $$
+#variable_conflict use_column
 declare
     v_code text;
     v_attempts int := 0;
@@ -135,6 +136,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id  uuid := auth.uid();
     v_nickname text;
@@ -210,6 +212,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id  uuid := auth.uid();
     v_nickname text;
@@ -291,6 +294,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_room_id uuid;
 begin
@@ -315,6 +319,7 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
     v_role    text;
@@ -391,6 +396,7 @@ security definer
 set search_path = public
 stable
 as $$
+#variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
 begin
@@ -429,6 +435,7 @@ create or replace function public.spacez_set_ready(p_room_id uuid, p_ready boole
 returns void
 language plpgsql security definer set search_path = public
 as $$
+#variable_conflict use_column
 declare v_user_id uuid := auth.uid();
 begin
     if v_user_id is null then raise exception 'auth_required'; end if;
@@ -445,6 +452,7 @@ create or replace function public.spacez_start_game(p_room_id uuid)
 returns void
 language plpgsql security definer set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
     v_ready_count int;
@@ -474,6 +482,7 @@ create or replace function public.spacez_finish_game(
 returns void
 language plpgsql security definer set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
     v_finished_count int;
@@ -509,6 +518,7 @@ create or replace function public.spacez_send_message(p_room_id uuid, p_msg text
 returns bigint
 language plpgsql security definer set search_path = public
 as $$
+#variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
     v_member  record;
@@ -538,6 +548,7 @@ returns table (
 )
 language plpgsql security definer set search_path = public stable
 as $$
+#variable_conflict use_column
 declare v_user_id uuid := auth.uid();
 begin
     if v_user_id is null then raise exception 'auth_required'; end if;
