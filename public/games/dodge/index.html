@@ -248,6 +248,31 @@ body{
 }
 .left-controls .grav-btn .grav-icon{font-size:1.45em;line-height:1;font-weight:900}
 .left-controls .grav-btn .grav-label{font-size:.85em;font-weight:900;letter-spacing:.08em}
+/* 쉴드 활성 중 — GRAV 잠금 (쉴드/GRAV 동시 사용 금지). 시각적으로 dim
+   처리 + 회색조 + pointer-events:none 으로 클릭 자체 막음. */
+.left-controls .grav-btn.disabled{
+    opacity:.32;
+    filter:grayscale(.8);
+    cursor:not-allowed;
+    pointer-events:none;
+    background:linear-gradient(165deg,#2a2d35 0%,#1a1c22 50%,#0e0f14 100%);
+    color:rgba(255,230,109,.45);
+    text-shadow:none;
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.08),
+        inset 0 -2px 4px rgba(0,0,0,.5),
+        0 1px 2px rgba(0,0,0,.4);
+}
+.left-controls .grav-btn.disabled:active,
+.left-controls .grav-btn.disabled.active{
+    transform:none;
+    background:linear-gradient(165deg,#2a2d35 0%,#1a1c22 50%,#0e0f14 100%);
+    color:rgba(255,230,109,.45);
+    box-shadow:
+        inset 0 1px 0 rgba(255,255,255,.08),
+        inset 0 -2px 4px rgba(0,0,0,.5),
+        0 1px 2px rgba(0,0,0,.4);
+}
 
 /* ---- Canvas ---- */
 /* max-height calc 의 deduction 값은:
@@ -595,10 +620,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777786543"></script>
-<script src="/js/lpI18n.js?v=1777786543"></script>
-<script src="/js/lpRankSheet.js?v=1777786543"></script>
-<script src="/js/lpAudio.js?v=1777786543"></script>
+<script src="/js/supabase-config.js?v=1777786959"></script>
+<script src="/js/lpI18n.js?v=1777786959"></script>
+<script src="/js/lpRankSheet.js?v=1777786959"></script>
+<script src="/js/lpAudio.js?v=1777786959"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2138,8 +2163,10 @@ document.addEventListener('keydown',(e)=>{
         if(e.key==='1'){ inventoryUseSlot(0); e.preventDefault(); }
         else if(e.key==='2'){ inventoryUseSlot(1); e.preventDefault(); }
         else if(e.key==='3'){ inventoryUseSlot(2); e.preventDefault(); }
-        /* F 또는 Shift 키 → 중력장 (누르고 있는 동안 활성) */
+        /* F 또는 Shift 키 → 중력장 (누르고 있는 동안 활성).
+           쉴드 활성 중에는 잠금 — 쉴드/GRAV 동시 활성 금지. */
         else if(e.key==='f' || e.key==='F' || e.key==='Shift'){
+            if(shieldBubbleActive(performance.now())){ e.preventDefault(); return; }
             gravityFieldActive = true;
             const gb = $('gravBtn'); if(gb) gb.classList.add('active');
             e.preventDefault();
@@ -2174,6 +2201,8 @@ function _wireItemBar(){
     const press = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(!running || paused) return;
+        /* 쉴드 활성 중에는 GRAV 잠금. */
+        if(shieldBubbleActive(performance.now())) return;
         gravityFieldActive = true;
         gb.classList.add('active');
     };
@@ -2577,25 +2606,33 @@ function onDepotCollected(d){
    ===================================================================== */
 const SHIELD_BUBBLE_MS = 20000;
 const SHIELD_BUBBLE_R  = 30;        /* px — 우주선 hit radius (5) 의 6 배 */
+const SHIELD_HIT_DRAIN_MS = 2000;   /* 메테오 1 발 막을 때마다 차감되는 시간 */
 let shieldBubbleUntil = 0;
+let shieldHitFlashUntil = 0;        /* 막은 직후 ring 빨강 깜빡 — 시각 피드백 */
 function triggerShieldBubble(){
     /* 사용 시점부터 20 초 — 이미 활성 중이면 연장 (중첩 적재 사용 시) */
     const now = performance.now();
     const base = Math.max(now, shieldBubbleUntil);
     shieldBubbleUntil = base + SHIELD_BUBBLE_MS;
+    /* 쉴드 발동 시 GRAV 강제 해제 — 두 시스템 동시 활성 금지 (사용자 정책). */
+    gravityFieldActive = false;
+    const gb = $('gravBtn'); if(gb) gb.classList.remove('active');
     sfxStart();
     if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
 }
 function shieldBubbleActive(now){ return now < shieldBubbleUntil; }
 function updateShieldBubble(now){
     /* bubble 활성 중이면 bubble 반경 안에 들어온 메테오 즉시 파괴 + 작은
-       fragment 폭발 — wipeFragments 재사용 (시각효과 동일 톤). */
+       fragment 폭발 — wipeFragments 재사용 (시각효과 동일 톤).
+       단, 막을 때마다 쉴드 시간 -2 초 차감 — 안 맞는 게 더 좋게. */
     if(!shieldBubbleActive(now)) return;
     const r2 = (SHIELD_BUBBLE_R + 4) * (SHIELD_BUBBLE_R + 4);
     const survivors = [];
+    let hitsThisFrame = 0;
     for(const b of bullets){
         const dx = b.x - player.x, dy = b.y - player.y;
         if(dx*dx + dy*dy <= r2){
+            hitsThisFrame++;
             for(let i = 0; i < 3; i++){
                 wipeFragments.push({
                     x: b.x, y: b.y,
@@ -2609,6 +2646,18 @@ function updateShieldBubble(now){
         survivors.push(b);
     }
     bullets = survivors;
+    if(hitsThisFrame > 0){
+        /* 한 발 막을 때마다 2 초 차감. 한 프레임에 N 개 막으면 N*2 초 차감. */
+        shieldBubbleUntil -= hitsThisFrame * SHIELD_HIT_DRAIN_MS;
+        shieldHitFlashUntil = now + 220;
+        if(navigator.vibrate) try{navigator.vibrate(15)}catch(_){}
+        /* 시간 다 빠지면 즉시 종료 (음수면 0 으로) */
+        if(shieldBubbleUntil <= now){
+            shieldBubbleUntil = 0;
+            /* 쉴드 종료 알림용 짧은 효과음 */
+            sfxOver();
+        }
+    }
 }
 function drawShieldBubble(now){
     if(!shieldBubbleActive(now)) return;
@@ -2626,8 +2675,9 @@ function drawShieldBubble(now){
     ctx.beginPath();
     ctx.arc(px, py, SHIELD_BUBBLE_R + 4, 0, Math.PI*2);
     ctx.fill();
-    /* 마지막 3 초 가까이면 빨강으로 깜빡 — 위험 신호 */
-    const danger = remain < 0.15;
+    /* 마지막 3 초 가까이면 빨강으로 깜빡 — 위험 신호.
+       또한 메테오 막은 직후 (shieldHitFlashUntil 이내) 도 빨강 — 시간 까였다는 피드백. */
+    const danger = remain < 0.15 || now < shieldHitFlashUntil;
     const ringColor = danger
         ? 'rgba(255, 80, 120, ' + (0.55 + Math.sin(t*4)*0.35) + ')'
         : 'rgba(0, 217, 255, ' + (0.65 + Math.sin(t*2)*0.2) + ')';
@@ -3187,6 +3237,7 @@ function resetGame(){
     miniShips = [];
     miniLasers = [];
     shieldBubbleUntil = 0;
+    shieldHitFlashUntil = 0;
     zoneEnteredAt = performance.now();
 }
 
@@ -3639,6 +3690,23 @@ function gameLoop(now){
     updateMiniShip(dt, now);
     updateWipeFragments(dt);
 
+    /* ---- GRAV 버튼 disabled 동기화 ----
+       쉴드 활성 중에는 GRAV 잠금 — 매 frame 의 cost 는 미미. */
+    {
+        const gb = $('gravBtn');
+        if(gb){
+            const blocked = shieldBubbleActive(now);
+            const wasBlocked = gb.classList.contains('disabled');
+            if(blocked !== wasBlocked) gb.classList.toggle('disabled', blocked);
+            /* 만약 사용자가 GRAV 누른 채로 쉴드 발동 (또는 키보드 holding) →
+               쉴드 활성 시 .active 도 강제 해제 + gravityFieldActive=false. */
+            if(blocked && (gravityFieldActive || gb.classList.contains('active'))){
+                gravityFieldActive = false;
+                gb.classList.remove('active');
+            }
+        }
+    }
+
     /* ---- Update HUD ----
        Score column is gone; only the TIME column shows mm:ss:cs at full
        100 fps precision so the player can see their personal-best chase
@@ -3934,6 +4002,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777786543"></script>
+<script src="/js/siteFooter.js?v=1777786959"></script>
 </body>
 </html>
