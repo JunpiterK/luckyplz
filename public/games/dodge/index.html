@@ -393,7 +393,7 @@ body{
 .pvp-overlay .pvp-actions .pvp-cancel{background:rgba(255,255,255,.08);color:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.12)}
 .pvp-overlay .pvp-actions .pvp-confirm{background:linear-gradient(135deg,#1E90FF,#7B5BFF);color:#fff;box-shadow:0 8px 22px -6px rgba(30,144,255,.55)}
 .pvp-overlay .pvp-actions button:active{transform:translateY(1px)}
-.pvp-overlay .pvp-err{color:#FF8888;font-size:.84em;margin-top:8px;min-height:1em}
+.pvp-overlay .pvp-err{color:#FF8888;font-size:.78em;margin-top:8px;min-height:1em;white-space:pre-line;text-align:left;max-width:300px;font-family:monospace;line-height:1.45}
 .pvp-overlay .pvp-rooms{
     width:100%;max-width:300px;max-height:180px;overflow-y:auto;
     border:1px solid rgba(0,217,255,.18);border-radius:10px;padding:6px;
@@ -813,10 +813,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777804816"></script>
-<script src="/js/lpI18n.js?v=1777804816"></script>
-<script src="/js/lpRankSheet.js?v=1777804816"></script>
-<script src="/js/lpAudio.js?v=1777804816"></script>
+<script src="/js/supabase-config.js?v=1777806433"></script>
+<script src="/js/lpI18n.js?v=1777806433"></script>
+<script src="/js/lpRankSheet.js?v=1777806433"></script>
+<script src="/js/lpAudio.js?v=1777806433"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5056,7 +5056,28 @@ async function _loadPvpMembers(){
         pvpState.members = row.members || [];
         _renderPvpMembers();
     } catch(e){
-        _setPvpErr('pvpRoomErr', '방 정보 가져오기 실패');
+        /* 진단용 — supabase RPC 의 정확한 에러 메시지/code 표시 */
+        const msg = (e && e.message) || String(e);
+        const code = (e && e.code) || '';
+        const hint = (e && e.hint) || '';
+        const det  = (e && e.details) || '';
+        const full = '방 정보 RPC 실패\n' +
+                     'msg: ' + msg + (code?' [code:'+code+']':'') + '\n' +
+                     (hint?'hint: '+hint+'\n':'') +
+                     (det?'detail: '+det:'');
+        console.error('[PvP] _loadPvpMembers fail', e);
+        _setPvpErr('pvpRoomErr', full);
+        /* 멤버 fetch 실패해도 host 본인 정보로 fallback rendering — UI 진행 가능. */
+        if(pvpState.me){
+            pvpState.members = [{
+                user_id: pvpState.me.id,
+                nickname: pvpState.me.nickname,
+                role: pvpState.role || 'host',
+                is_ready: false,
+                joined_at: new Date().toISOString()
+            }];
+            _renderPvpMembers();
+        }
     }
 }
 function _renderPvpMembers(){
@@ -5244,6 +5265,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777804816"></script>
+<script src="/js/siteFooter.js?v=1777806433"></script>
 </body>
 </html>
