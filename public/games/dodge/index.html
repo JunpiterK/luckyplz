@@ -254,6 +254,14 @@ body{
 }
 .left-controls .grav-btn .grav-icon{font-size:1.45em;line-height:1;font-weight:900}
 .left-controls .grav-btn .grav-label{font-size:.85em;font-weight:900;letter-spacing:.08em}
+/* GRAV cooldown — 사용한 시간만큼 재사용 잠김. 회색조 + 진행률 표시
+   (CSS conic-gradient 또는 단순 dim). 단순화: dim 처리. */
+.left-controls .grav-btn.cooldown{
+    opacity:.45;
+    filter:grayscale(.6);
+    cursor:not-allowed;
+    pointer-events:none;
+}
 /* 쉴드 활성 중 — GRAV 잠금 (쉴드/GRAV 동시 사용 금지). 시각적으로 dim
    처리 + 회색조 + pointer-events:none 으로 클릭 자체 막음. */
 .left-controls .grav-btn.disabled{
@@ -849,10 +857,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777810730"></script>
-<script src="/js/lpI18n.js?v=1777810730"></script>
-<script src="/js/lpRankSheet.js?v=1777810730"></script>
-<script src="/js/lpAudio.js?v=1777810730"></script>
+<script src="/js/supabase-config.js?v=1777811608"></script>
+<script src="/js/lpI18n.js?v=1777811608"></script>
+<script src="/js/lpRankSheet.js?v=1777811608"></script>
+<script src="/js/lpAudio.js?v=1777811608"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2777,11 +2785,12 @@ document.addEventListener('keydown',(e)=>{
         else if(e.key==='2'){ inventoryUseSlot(1); e.preventDefault(); }
         else if(e.key==='3'){ inventoryUseSlot(2); e.preventDefault(); }
         /* F 또는 Shift 키 → 중력장 (누르고 있는 동안 활성).
-           쉴드 활성 중에는 잠금 — 쉴드/GRAV 동시 활성 금지. */
+           쉴드 활성 중 또는 cooldown 중이면 잠금. */
         else if(e.key==='f' || e.key==='F' || e.key==='Shift'){
             if(shieldBubbleActive(performance.now())){ e.preventDefault(); return; }
-            gravityFieldActive = true;
-            const gb = $('gravBtn'); if(gb) gb.classList.add('active');
+            if(_gravTryActivate()){
+                const gb = $('gravBtn'); if(gb) gb.classList.add('active');
+            }
             e.preventDefault();
         }
     }
@@ -2789,7 +2798,7 @@ document.addEventListener('keydown',(e)=>{
 document.addEventListener('keyup',(e)=>{
     keys[e.key]=false;
     if(e.key==='f' || e.key==='F' || e.key==='Shift'){
-        gravityFieldActive = false;
+        _gravRelease();
         const gb = $('gravBtn'); if(gb) gb.classList.remove('active');
     }
 });
@@ -2814,13 +2823,14 @@ function _wireItemBar(){
     const press = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(!running || paused) return;
-        /* 쉴드 활성 중에는 GRAV 잠금. */
+        /* 쉴드 활성 중에는 GRAV 잠금. cooldown 중이면 _gravTryActivate 가 false. */
         if(shieldBubbleActive(performance.now())) return;
-        gravityFieldActive = true;
-        gb.classList.add('active');
+        if(_gravTryActivate()){
+            gb.classList.add('active');
+        }
     };
     const release = (e) => {
-        gravityFieldActive = false;
+        _gravRelease();
         gb.classList.remove('active');
     };
     gb.addEventListener('mousedown', press);
@@ -3146,6 +3156,27 @@ function drawDepot(d, now){
    바로 잡힐 수 있게.
    ===================================================================== */
 let gravityFieldActive = false;
+/* GRAV 쿨타임 — 사용 시간 = cooldown 시간. 1 초 사용하면 1 초 동안 재사용 X.
+   누른 시점 (gravPressedAt) 기록 → 떼는 시점에 사용 시간 계산 → cooldown 적용.
+   single + multi 동일. */
+let gravPressedAt = 0;
+let gravCooldownUntil = 0;
+function _gravOnCooldown(now){ return now < gravCooldownUntil; }
+function _gravTryActivate(){
+    const now = performance.now();
+    if(_gravOnCooldown(now)) return false;     /* 쿨타임 중 — 재활성 거부 */
+    gravityFieldActive = true;
+    gravPressedAt = now;
+    return true;
+}
+function _gravRelease(){
+    if(gravityFieldActive){
+        const now = performance.now();
+        const usedMs = now - gravPressedAt;
+        gravCooldownUntil = now + usedMs;     /* 사용한 만큼 cooldown */
+    }
+    gravityFieldActive = false;
+}
 const GRAV_FIELD_LEN = 180;
 
 /* =====================================================================
@@ -4448,6 +4479,21 @@ function gameLoop(now){
             player.y+=my/mag*PLAYER_SPEED*dt;
         }
     }
+    /* ---- PvP GRAV pull — 상대가 GRAV 누르면 본인 우주선이 상대 쪽으로 끌림.
+       inverse-square 비슷, max 250px 거리. force 너무 크지 않게 적당히. */
+    if(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.gravActive
+       && pvpState.opponent.x !== undefined){
+        const dx = pvpState.opponent.x - player.x;
+        const dy = pvpState.opponent.y - player.y;
+        const d2 = dx*dx + dy*dy;
+        const d  = Math.sqrt(d2);
+        if(d > 6 && d < 250){
+            const force = 1500 / Math.max(d2, 600);   /* 적당히 — 회피 가능한 강도 */
+            player.x += (dx/d) * force * dt;
+            player.y += (dy/d) * force * dt;
+        }
+    }
+
     player.x=Math.max(16, Math.min(CW-16, player.x));
     player.y=Math.max(18, Math.min(CH-18, player.y));
 
@@ -4562,18 +4608,22 @@ function gameLoop(now){
     updateMiniShip(dt, now);
     updateWipeFragments(dt);
 
-    /* ---- GRAV 버튼 disabled 동기화 ----
-       쉴드 활성 중에는 GRAV 잠금 — 매 frame 의 cost 는 미미. */
+    /* ---- GRAV 버튼 disabled / cooldown 동기화 ----
+       쉴드 활성 중에는 GRAV 잠금. cooldown 중에도 잠금 (시각 분리). */
     {
         const gb = $('gravBtn');
         if(gb){
             const blocked = shieldBubbleActive(now);
             const wasBlocked = gb.classList.contains('disabled');
             if(blocked !== wasBlocked) gb.classList.toggle('disabled', blocked);
-            /* 만약 사용자가 GRAV 누른 채로 쉴드 발동 (또는 키보드 holding) →
-               쉴드 활성 시 .active 도 강제 해제 + gravityFieldActive=false. */
+            const cooling = _gravOnCooldown(now);
+            const wasCooling = gb.classList.contains('cooldown');
+            if(cooling !== wasCooling) gb.classList.toggle('cooldown', cooling);
+            /* GRAV 누른 상태에서 cooldown 으로 진입 (사용 시간 다 됨) — release 자동 처리.
+               단, 사용자는 keyup 으로 release 하지만 cooldown 도달 시 강제 해제 없음.
+               대신 활성 중에는 release 시점에 cooldown 시작. */
             if(blocked && (gravityFieldActive || gb.classList.contains('active'))){
-                gravityFieldActive = false;
+                _gravRelease();
                 gb.classList.remove('active');
             }
         }
@@ -4652,6 +4702,12 @@ function drawFrame(now, dt){
         const px=player.x, py=player.y;
         ctx.save();
         ctx.translate(px, py);
+        /* PvP guest 면 ship 색을 gold 톤으로. ctx.filter 로 sepia+hue-rotate
+           조합. 모바일 Safari 13+/Chrome Android 50+ 지원 (대부분 OK). */
+        const _pvpGuestTint = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.role === 'guest');
+        if(_pvpGuestTint){
+            try { ctx.filter = 'sepia(0.6) hue-rotate(-25deg) saturate(1.4) brightness(1.05)'; } catch(_){}
+        }
 
         /* Raptor exhaust — blue-white core → orange → fade */
         const fl=9+Math.sin(flamePulse)*5;
@@ -4714,9 +4770,18 @@ function drawFrame(now, dt){
         ctx.beginPath(); ctx.ellipse(-1.5,-5,1.5,11,0,0,Math.PI*2); ctx.fill();
 
         ctx.restore();
+        /* PvP 모드 시 본인 닉네임 — 우주선 아래, 반투명. */
+        if(typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.me){
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.42)';
+            ctx.font = 'bold 8px Orbitron, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText((pvpState.me.nickname || '').substring(0, 10), px, py + 22);
+            ctx.restore();
+        }
     }
 
-    /* ---- PvP 상대 우주선 (빨강) ---- */
+    /* ---- PvP 상대 우주선 ---- */
     _drawOpponentShip();
 
     /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
@@ -5233,19 +5298,29 @@ async function _subscribePvpRoom(){
             _pushPingSample(rtt);
         }
     });
-    /* 상대 게임 종료 시 결과 알림 — finish broadcast (옵션) */
-    ch.on('broadcast', { event: 'finished' }, () => {
-        _maybeShowPvpResult();
+    /* 상대 게임 종료 시 결과 알림. */
+    ch.on('broadcast', { event: 'finished' }, (e) => {
+        /* 상대 죽음 — 본인 살아있으면 본인 = winner. 본인도 즉시 종료. */
+        const loserId = e.payload?.user_id;
+        if(running && loserId && loserId !== pvpState.me?.id){
+            pvpState.opponentDied = true;
+            pvpState.declaredWinner = pvpState.me?.id || null;
+            /* 자기 게임 강제 종료 — 자기 score 도 finish. */
+            triggerGameOver();
+        } else {
+            _maybeShowPvpResult();
+        }
     });
     /* 상대 우주선 위치 — 50ms 마다 받음. lerp 용 target 만 갱신, render 시 보간. */
     ch.on('broadcast', { event: 'pos' }, (e) => {
         if(!pvpState.opponent){
             const opName = pvpState.members.find(m => m.user_id !== pvpState.me?.id)?.nickname || '';
-            pvpState.opponent = { x: undefined, y: undefined, targetX: 0, targetY: 0, alive: true, nickname: opName };
+            pvpState.opponent = { x: undefined, y: undefined, targetX: 0, targetY: 0, alive: true, nickname: opName, gravActive: false };
         }
         pvpState.opponent.targetX = Number(e.payload?.x);
         pvpState.opponent.targetY = Number(e.payload?.y);
         pvpState.opponent.alive = e.payload?.alive !== false;
+        if(e.payload?.grav !== undefined) pvpState.opponent.gravActive = !!e.payload.grav;
     });
     await ch.subscribe();
     pvpState.channel = ch;
@@ -5380,51 +5455,94 @@ function _startOpponentSync(){
             pvpState.channel.send({
                 type: 'broadcast',
                 event: 'pos',
-                payload: { x: player.x, y: player.y, alive: lives > 0 }
+                payload: {
+                    x: player.x, y: player.y,
+                    alive: lives > 0,
+                    grav: gravityFieldActive   /* GRAV PvP — 본인 GRAV 상태 sync */
+                }
             });
         } catch(_){}
-    }, 50);   /* 20Hz — 모바일 모뎀에서도 부담 적음, sync 충분 */
+    }, 50);   /* 20Hz */
 }
 function _stopOpponentSync(){
     if(_opPosBcastTimer){ clearInterval(_opPosBcastTimer); _opPosBcastTimer = null; }
     pvpState.opponent = null;
 }
+/* PvP role 별 ship palette:
+   - host  = silver/cyan (single-player 와 동일 — original)
+   - guest = gold (희미한 금색 톤 — 본인 색과 비슷하지만 명확히 구분).
+   양쪽 client 동일 — host 는 누가 봐도 cyan, guest 는 gold. */
+const PVP_PALETTE = {
+    silver: { body0:'#32404c', body1:'#7c8c9a', body2:'#c2ced8', body3:'#cad4de', body4:'#94a2ae', body5:'#42505c',
+              fin0:'#1a2028', fin1:'#50606c', fin2:'#44545e', fin3:'#181e26',
+              shadow:'rgba(170,188,210,0.50)' },
+    gold:   { body0:'#3c3018', body1:'#a08858', body2:'#e8c890', body3:'#f0d098', body4:'#b89870', body5:'#4c3c20',
+              fin0:'#2a2010', fin1:'#705820', fin2:'#5c4818', fin3:'#1c1408',
+              shadow:'rgba(220,180,100,0.50)' }
+};
+function _opponentPalette(){
+    const opRole = pvpState.role === 'host' ? 'guest' : 'host';
+    return opRole === 'guest' ? PVP_PALETTE.gold : PVP_PALETTE.silver;
+}
+function _myPalette(){
+    return pvpState.role === 'guest' ? PVP_PALETTE.gold : PVP_PALETTE.silver;
+}
+
 function _drawOpponentShip(){
     if(!(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.alive)) return;
     const op = pvpState.opponent;
-    /* lerp 으로 부드럽게 — 50ms 마다 받는 위치 사이 보간. */
-    op.x = (op.x === undefined ? op.targetX : op.x + (op.targetX - op.x) * 0.25);
-    op.y = (op.y === undefined ? op.targetY : op.y + (op.targetY - op.y) * 0.25);
+    if(op.x === undefined && op.targetX !== undefined){ op.x = op.targetX; op.y = op.targetY; }
+    if(op.targetX !== undefined){
+        op.x += (op.targetX - op.x) * 0.30;
+        op.y += (op.targetY - op.y) * 0.30;
+    }
     if(op.x === undefined || isNaN(op.x)) return;
-    /* 빨강 우주선 — 본인 (cyan starship) 과 명확히 구분. 단순화된 fighter 모양. */
+    /* 같은 starship 모양 — palette 만 host/guest 따라 다름. */
+    _drawStarshipAt(op.x, op.y, _opponentPalette(), 0.92);
+    /* 닉네임 — 우주선 *아래* 에 투명. */
     ctx.save();
-    ctx.translate(op.x, op.y);
-    /* 본체 — 빨강 그라디언트 */
-    const bG = ctx.createLinearGradient(-5, 0, 5, 0);
-    bG.addColorStop(0, '#5c1010'); bG.addColorStop(0.5, '#FF3344'); bG.addColorStop(1, '#5c1010');
-    ctx.fillStyle = bG;
-    ctx.shadowColor = 'rgba(255,80,80,0.6)';
-    ctx.shadowBlur = 8;
-    ctx.beginPath();
-    ctx.moveTo(0, -16);
-    ctx.lineTo(5, -8);
-    ctx.lineTo(5, 7);
-    ctx.lineTo(-5, 7);
-    ctx.lineTo(-5, -8);
-    ctx.closePath();
-    ctx.fill();
-    /* 윙 */
-    ctx.fillStyle = '#902028';
-    ctx.beginPath();
-    ctx.moveTo(5, 2); ctx.lineTo(13, 13); ctx.lineTo(5, 8); ctx.closePath(); ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-5, 2); ctx.lineTo(-13, 13); ctx.lineTo(-5, 8); ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
-    /* 닉네임 라벨 */
-    ctx.fillStyle = 'rgba(255,150,150,0.85)';
-    ctx.font = 'bold 9px Orbitron, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.font = 'bold 8px Orbitron, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText((pvpState.opponent.nickname || '').substring(0, 8), 0, -22);
+    ctx.fillText((op.nickname || '').substring(0, 10), op.x, op.y + 22);
+    ctx.restore();
+}
+
+/* starship 본체 + fin + sheen (player.x, .y 위치 기준 상대 좌표 사용 안 함 — translate 후).
+   본인 player 의 인라인 draw 와 동일 시각, palette 만 변경. PvP 시 재사용 — 본인 ship
+   draw 도 이 함수 호출 가능 (다음 단계). 현재는 opponent 만. */
+function _drawStarshipAt(px, py, p, alpha){
+    ctx.save();
+    ctx.translate(px, py);
+    if(alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
+    /* Aft delta fins */
+    const finG = ctx.createLinearGradient(-16,5,16,5);
+    finG.addColorStop(0, p.fin0); finG.addColorStop(0.30, p.fin1);
+    finG.addColorStop(0.70, p.fin2); finG.addColorStop(1, p.fin3);
+    ctx.fillStyle = finG;
+    ctx.beginPath(); ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8); ctx.closePath(); ctx.fill();
+    /* Body — ogive nose + cylinder */
+    const bG = ctx.createLinearGradient(-5,0,5,0);
+    bG.addColorStop(0, p.body0); bG.addColorStop(0.18, p.body1);
+    bG.addColorStop(0.44, p.body2); bG.addColorStop(0.64, p.body3);
+    bG.addColorStop(0.82, p.body4); bG.addColorStop(1, p.body5);
+    ctx.shadowColor = p.shadow; ctx.shadowBlur = 8;
+    ctx.fillStyle = bG;
+    ctx.beginPath();
+    ctx.moveTo(0,-19);
+    ctx.quadraticCurveTo(4,-13,5,-9);
+    ctx.lineTo(5,8); ctx.lineTo(-5,8); ctx.lineTo(-5,-9);
+    ctx.quadraticCurveTo(-4,-13,0,-19);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    /* Specular sheen */
+    const spG = ctx.createLinearGradient(-2,-18,-2,8);
+    spG.addColorStop(0, 'rgba(255,255,255,0.32)');
+    spG.addColorStop(0.45, 'rgba(255,255,255,0.12)');
+    spG.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = spG;
+    ctx.beginPath(); ctx.ellipse(-1.5,-5,1.5,11,0,0,Math.PI*2); ctx.fill();
     ctx.restore();
 }
 
@@ -5496,8 +5614,17 @@ function _showPvpResult(){
 }
 
 async function _pollPvpResult(tries){
+    /* client-side 즉시 winner 결정 — opponentDied 면 본인 = winner, declaredWinner 가
+       있으면 그게 우선. server polling 결과는 보강 정보. */
+    const status = document.getElementById('pvpResultStatus');
+    if(!status) return;
+    if(pvpState.declaredWinner === pvpState.me?.id){
+        status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>'
+            + '<br><small style="color:rgba(255,255,255,.6)">상대 우주선 격추됨</small>';
+        return;   /* 더 polling 안 함 */
+    }
     if(tries > 20) return;   /* 30 초 timeout */
-    /* RPC 로 winner 결정됐는지 확인 — server 가 양쪽 보고 후 winner_id 채움. */
+    /* RPC polling — server 가 양쪽 보고 후 winner_id 채워지면 그 결과 따름. */
     try {
         const sb = getSupabase();
         const { data } = await sb.rpc('spacez_get_room', { p_room_id: pvpState.roomId });
@@ -5505,19 +5632,17 @@ async function _pollPvpResult(tries){
         if(row && row.status === 'finished'){
             const members = row.members || [];
             const opponent = members.find(m => m.user_id !== pvpState.me?.id);
-            const meRow = members.find(m => m.user_id === pvpState.me?.id);
             const winnerId = row.winner_id;
             const isWin = winnerId === pvpState.me?.id;
-            const status = document.getElementById('pvpResultStatus');
-            if(status){
-                if(isWin){
-                    status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>';
-                } else if(winnerId){
-                    status.innerHTML = '<span style="color:#FF8888">패배 — ' + escapeHtml(opponent?.nickname || '?') + ' 승리</span>' +
-                        (opponent?.final_time_ms ? '<br><small style="color:rgba(255,255,255,.6)">상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
-                } else {
-                    status.textContent = '무승부';
-                }
+            if(isWin){
+                status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>';
+            } else if(winnerId){
+                status.innerHTML = '<span style="color:#FF8888">패배 — ' + escapeHtml(opponent?.nickname || '?') + ' 승리</span>' +
+                    (opponent?.final_time_ms ? '<br><small style="color:rgba(255,255,255,.6)">상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
+            } else {
+                /* server winner 결정 못 함 — 양쪽 score 동률. 상대 정보 보여줌. */
+                status.innerHTML = '<span style="color:#FFE66D">동률</span>' +
+                    (opponent?.final_time_ms ? '<br><small>상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
             }
             return;
         }
@@ -5592,6 +5717,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777810730"></script>
+<script src="/js/siteFooter.js?v=1777811608"></script>
 </body>
 </html>
