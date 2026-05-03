@@ -889,10 +889,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777820737"></script>
-<script src="/js/lpI18n.js?v=1777820737"></script>
-<script src="/js/lpRankSheet.js?v=1777820737"></script>
-<script src="/js/lpAudio.js?v=1777820737"></script>
+<script src="/js/supabase-config.js?v=1777821538"></script>
+<script src="/js/lpI18n.js?v=1777821538"></script>
+<script src="/js/lpRankSheet.js?v=1777821538"></script>
+<script src="/js/lpAudio.js?v=1777821538"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3062,7 +3062,7 @@ function maybeSpawnDepot(zoneIdx, now){
         /* PvP host: spawn 즉시 broadcast — guest 가 받아서 같은 좌표에 push.
            P2P (낮은 latency) + supabase (안정 fallback) 둘 다 송신. 멱등 (중복은 무시). */
         if(isPvp && pvpState.channel){
-            const payload = { key, x, item, zoneIdx, slot };
+            const payload = { key, x, item, zoneIdx, slot, gameId: pvpState.seed || 0 };
             _rtcSend({ event: 'depot_spawn', payload });
             try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
         }
@@ -3072,6 +3072,7 @@ function maybeSpawnDepot(zoneIdx, now){
    key 가 이미 spawnedZones 에 있으면 (P2P + supabase 둘 다 도착) 무시 (멱등). */
 function _handleDepotSpawnPayload(p){
     if(!p || !p.key) return;
+    if(_isStaleGameBroadcast(p)) return;
     if(depotsSpawnedZones.has(p.key)) return;
     depotsSpawnedZones.add(p.key);
     depots.push({
@@ -3476,7 +3477,7 @@ function onDepotCollected(d, fromPeer){
        (P2P 가 빠르지만 미연결 시 supabase fallback). 둘다 도달해도 onDepotCollected
        의 위 d.collected 체크로 멱등. */
     if(pvpState && pvpState.gameMode === 'pvp' && pvpState.channel){
-        const payload = { key: d.key, by: pvpState.me?.id || null };
+        const payload = { key: d.key, by: pvpState.me?.id || null, gameId: pvpState.seed || 0 };
         _rtcSend({ event: 'depot_take', payload });
         try { pvpState.channel.send({ type:'broadcast', event:'depot_take', payload }); } catch(_){}
     }
@@ -3484,6 +3485,7 @@ function onDepotCollected(d, fromPeer){
 /* PvP — 상대 broadcast 받아서 local depot 도 collected 처리. buff 는 적용 안 됨. */
 function _handleDepotTakePayload(p){
     if(!p || !p.key) return;
+    if(_isStaleGameBroadcast(p)) return;
     if(p.by && pvpState.me && p.by === pvpState.me.id) return;   /* echo 방지 */
     const d = depots.find(x => x.key === p.key);
     if(!d || d.collected) return;
@@ -3984,7 +3986,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
        seq id 첨부 — guest 가 P2P + supabase 둘 다로 같은 broadcast 받아도 1 번만 push. */
     if(hostBroadcast && hostBroadcast.length > 0 && pvpState.channel){
         const seq = ++_bulletSpawnSeq;
-        const payload = { seq, bullets: hostBroadcast };
+        const payload = { seq, bullets: hostBroadcast, gameId: pvpState.seed || 0 };
         _rtcSend({ event: 'bullet_spawn', payload });
         try { pvpState.channel.send({ type:'broadcast', event:'bullet_spawn', payload }); } catch(_){}
     }
@@ -3993,6 +3995,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
    같은 seq 재도착 시 (P2P + supabase 양쪽 도착) 무시 (멱등). */
 function _handleBulletSpawnPayload(p){
     if(!p || !Array.isArray(p.bullets)) return;
+    if(_isStaleGameBroadcast(p)) return;
     if(p.seq != null){
         if(_seenBulletSpawns.has(p.seq)) return;
         _seenBulletSpawns.add(p.seq);
@@ -5490,9 +5493,24 @@ function _appendChat(nick, msg, sys){
 /* ===== Shared event handlers (Supabase broadcast + WebRTC DataChannel 둘다 사용) =====
    PvP 의 latency-sensitive 이벤트 (pos / ping / pong / finished) 는 Supabase 와 P2P 양쪽
    transport 에서 들어올 수 있어서 처리 로직을 함수로 추출. P2P 가 먼저 도착하면 그걸로
-   처리, 늦게 도착한 supabase 중복분은 같은 결과를 다시 적용 — 멱등이라 안전. */
+   처리, 늦게 도착한 supabase 중복분은 같은 결과를 다시 적용 — 멱등이라 안전.
+
+   GAME-INSTANCE GUARD: 모든 game-event broadcast (pos / finished / depot_take /
+   depot_spawn / bullet_spawn) 의 payload 에 gameId (= 현 pvpState.seed) 를 박음.
+   받는 쪽이 자기 seed 와 다르면 무시. 이전 게임의 잔여 broadcast 가 새 게임에
+   도착해서 잘못 처리되는 race ("아무도 안 죽었는데 게임 종료" 버그) 차단.
+   rematch 시 server 가 새 seed 발급 → 새 game_start broadcast 으로 양쪽 sync →
+   이전 seed 의 broadcast 는 자동 무시. */
+function _isStaleGameBroadcast(p){
+    if(!p) return true;
+    const expected = pvpState && pvpState.seed;
+    if(!expected) return false;   /* 자기 seed 도 없으면 검사 패스 */
+    if(p.gameId == null) return true;   /* 옛 client 의 broadcast (gameId 없음) — 무시 */
+    return Number(p.gameId) !== Number(expected);
+}
 function _handlePosPayload(p){
     if(!p) return;
+    if(_isStaleGameBroadcast(p)) return;
     if(!pvpState.opponent){
         const opName = pvpState.members.find(m => m.user_id !== pvpState.me?.id)?.nickname || '';
         pvpState.opponent = {
@@ -5534,6 +5552,7 @@ function _resolveWinnerByScore(senderId, senderScore, senderDur){
     /* 정확히 동일 — declaredWinner 안 set. server polling 의 winner_id 가 결정. */
 }
 function _handleFinishedPayload(p){
+    if(_isStaleGameBroadcast(p)) return;   /* 옛 게임의 'finished' 잔여 broadcast 차단 */
     const senderId    = p?.user_id;
     const senderScore = Number(p?.score || 0);
     const senderDur   = Number(p?.duration || 0);
@@ -5918,7 +5937,8 @@ function _startOpponentSync(){
             x: player.x, y: player.y,
             alive: lives > 0,
             grav: gravityFieldActive,
-            t: Date.now()        /* sender timestamp — receiver 가 latency 보정 */
+            t: Date.now(),       /* sender timestamp — receiver 가 latency 보정 */
+            gameId: pvpState.seed || 0   /* 옛 게임 broadcast leak 차단 */
         };
         /* P2P open 이면 DC 직접 전송 (~10–80ms vs supabase ~250ms).
            실패하면 supabase broadcast 로 fallback — 한쪽이라도 도달 보장. */
@@ -6103,7 +6123,11 @@ async function _handlePvpGameOver(duration, score){
     } catch(e){ console.error('[PvP] finish_game RPC fail', e); }
     /* finished 는 게임 끝 시점 1회 — P2P 에 더해서 supabase 도 같이 보냄 (이중 신뢰성).
        _handleFinishedPayload 가 멱등이라 양쪽 transport 중복 도달해도 안전. */
-    const finPayload = { score, duration, user_id: pvpState.me?.id || null };
+    const finPayload = {
+        score, duration,
+        user_id: pvpState.me?.id || null,
+        gameId: pvpState.seed || 0   /* 옛 게임의 'finished' 가 새 게임에 leak 차단 */
+    };
     _rtcSend({ event:'finished', payload: finPayload });
     await _broadcastPvp('finished', finPayload);
     _showPvpResult();
@@ -6292,6 +6316,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777820737"></script>
+<script src="/js/siteFooter.js?v=1777821538"></script>
 </body>
 </html>
