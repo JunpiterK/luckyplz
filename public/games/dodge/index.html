@@ -658,8 +658,13 @@ body{
                 <p id="ovDesc">테라포밍 탐사선을 조종해<br>소행성·운석을 피하며 우주를 개척하세요!</p>
                 <div class="ov-btn-row">
                     <button class="btn" id="ovBtn">출발하기</button>
-                    <button class="btn btn-vs" id="ovCreateBtn" type="button">⚔ 방 만들기</button>
-                    <button class="btn btn-vs" id="ovJoinBtn" type="button">🔗 참여하기</button>
+                    <!-- inline onclick fallback: addEventListener 가 어떤 이유로
+                         attach 안 되어도 (JS throw 또는 캐시 옛 버전) modal 은 무조건 열림.
+                         실제 manual click 핸들러는 아래 inline script 에서 추가로 등록. -->
+                    <button class="btn btn-vs" id="ovCreateBtn" type="button"
+                            onclick="(window.openPvpCreate||function(){var el=document.getElementById('pvpCreate'),ov=document.getElementById('overlay');if(el)el.classList.add('on');if(ov)ov.classList.add('hidden');})();return false;">⚔ 방 만들기</button>
+                    <button class="btn btn-vs" id="ovJoinBtn" type="button"
+                            onclick="(window.openPvpJoin||function(){var el=document.getElementById('pvpJoin'),ov=document.getElementById('overlay');if(el)el.classList.add('on');if(ov)ov.classList.add('hidden');})();return false;">🔗 참여하기</button>
                 </div>
                 <!-- 조향 (트랙패드) 위치 선택 — 기본 LEFT, 옵션 RIGHT.
                      의미: 우주선 조향 버튼(=트랙패드) 을 화면 어느 쪽에 둘 것인가.
@@ -808,10 +813,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777803763"></script>
-<script src="/js/lpI18n.js?v=1777803763"></script>
-<script src="/js/lpRankSheet.js?v=1777803763"></script>
-<script src="/js/lpAudio.js?v=1777803763"></script>
+<script src="/js/supabase-config.js?v=1777804816"></script>
+<script src="/js/lpI18n.js?v=1777804816"></script>
+<script src="/js/lpRankSheet.js?v=1777804816"></script>
+<script src="/js/lpAudio.js?v=1777804816"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4821,16 +4826,12 @@ window.addEventListener('error', (ev) => {
     } catch(_){}
 });
 
-/* ---- Create modal ---- */
+/* ---- Create modal ----
+   inline onclick 의 fallback function 으로도 호출 가능하게 window.openPvpCreate 노출.
+   addEventListener 가 어떤 이유로 attach 안 되어도 inline onclick 이 작동. */
 let pvpVisibility = 'public';
-const _ovCreateBtn = document.getElementById('ovCreateBtn');
-if(!_ovCreateBtn){
-    console.warn('[PvP] ovCreateBtn not found — HTML 캐시 옛 버전?');
-}
-(_ovCreateBtn || document.createElement('button')).addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation();
+window.openPvpCreate = function(){
     try {
-        /* 즉시 modal — _ensureMe await stuck 회피. */
         _setPvpErr('pvpCreateErr', '');
         pvpState.itemCount = 2;
         pvpVisibility = 'public';
@@ -4847,9 +4848,9 @@ if(!_ovCreateBtn){
         _showPvpOverlay('pvpCreate');
         _ensureMe().catch(()=>{});
     } catch(err){
-        alert('[PvP Create 클릭 에러] ' + (err && err.message || String(err)));
+        alert('[PvP Create 에러] ' + (err && err.message || String(err)));
     }
-});
+};
 document.querySelectorAll('#pvpItemCount button').forEach(b => {
     b.addEventListener('click', () => {
         document.querySelectorAll('#pvpItemCount button').forEach(x => x.classList.remove('active'));
@@ -4910,10 +4911,7 @@ $('pvpCreateConfirm').addEventListener('click', async () => {
 });
 
 /* ---- Join modal — 대기실 카드 직접 클릭 ---- */
-const _ovJoinBtn = document.getElementById('ovJoinBtn');
-if(!_ovJoinBtn){ console.warn('[PvP] ovJoinBtn not found — HTML 캐시 옛 버전?'); }
-(_ovJoinBtn || document.createElement('button')).addEventListener('click', (e) => {
-    e.preventDefault(); e.stopPropagation();
+window.openPvpJoin = function(){
     try {
         _ensureMe().catch(()=>{});
         _setPvpErr('pvpJoinErr', '');
@@ -4922,9 +4920,9 @@ if(!_ovJoinBtn){ console.warn('[PvP] ovJoinBtn not found — HTML 캐시 옛 버
         if(pvpState.listRefreshTimer) clearInterval(pvpState.listRefreshTimer);
         pvpState.listRefreshTimer = setInterval(_refreshPvpRooms, 5000);
     } catch(err){
-        alert('[PvP Join 클릭 에러] ' + (err && err.message || String(err)));
+        alert('[PvP Join 에러] ' + (err && err.message || String(err)));
     }
-});
+};
 $('pvpJoinCancel').addEventListener('click', () => {
     if(pvpState.listRefreshTimer){ clearInterval(pvpState.listRefreshTimer); pvpState.listRefreshTimer = null; }
     _showPvpOverlay(null);
@@ -5246,6 +5244,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777803763"></script>
+<script src="/js/siteFooter.js?v=1777804816"></script>
 </body>
 </html>
