@@ -104,6 +104,54 @@ body{
 .ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
 .ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
 
+/* ---- Item bar — 인벤토리 3 슬롯 + 중력장 버튼 ----
+   모바일 폰 우선 — 360px 화면에 가지런히. PC/태블릿은 비례 확대. */
+.item-bar{
+    display:none;align-items:center;justify-content:center;
+    width:100%;max-width:360px;gap:8px;margin:6px 0 0;
+    -webkit-user-select:none;user-select:none;
+}
+.item-bar.on{display:flex}
+.item-slot{
+    flex:1;height:46px;min-width:0;
+    border:1.5px solid rgba(255,255,255,.15);
+    border-radius:10px;
+    background:linear-gradient(165deg,rgba(22,22,42,.55),rgba(12,12,28,.8));
+    color:#fff;font-size:1.4em;font-weight:900;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;font-family:inherit;
+    transition:transform .12s,box-shadow .15s,border-color .2s;
+    line-height:1;
+    text-shadow:0 0 6px currentColor;
+}
+.item-slot.empty{
+    color:rgba(255,255,255,.18);
+    background:rgba(255,255,255,.025);
+    cursor:default;
+}
+.item-slot:not(.empty):hover{transform:translateY(-1px);box-shadow:0 4px 14px -2px currentColor}
+.item-slot:not(.empty):active{transform:translateY(1px)}
+.grav-btn{
+    flex:1.4;height:46px;min-width:0;
+    border:1.5px solid rgba(255,230,109,.45);
+    border-radius:10px;
+    background:linear-gradient(135deg,rgba(255,230,109,.16),rgba(255,154,60,.1));
+    color:#FFE66D;
+    cursor:pointer;font-family:inherit;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    transition:all .15s;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+}
+.grav-btn:active,.grav-btn.active{
+    background:linear-gradient(135deg,rgba(255,230,109,.45),rgba(255,154,60,.3));
+    border-color:#FFE66D;
+    box-shadow:0 0 16px -2px rgba(255,230,109,.6),inset 0 0 8px rgba(255,230,109,.3);
+    transform:translateY(1px);
+}
+.grav-btn .grav-icon{font-size:1.25em;line-height:1;font-weight:900}
+.grav-btn .grav-label{font-size:.7em;font-weight:800;letter-spacing:.08em}
+
 /* ---- Canvas ---- */
 .canvas-wrap{
     position:relative;
@@ -280,6 +328,8 @@ body{
     .canvas-wrap{max-width:440px;max-height:calc(100dvh - 360px)}
     .score-strip{max-width:440px}
     .game-ctrl{max-width:440px}
+    .item-bar{max-width:440px}
+    .item-slot,.grav-btn{height:52px}
     .hint{max-width:440px}
 }
 /* ================================================================
@@ -335,6 +385,16 @@ body{
             <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
+        <!-- 아이템 인벤토리 + 중력장 컨트롤 행 — 게임 진행 중에만 보임. -->
+        <div class="item-bar" id="itemBar">
+            <button class="item-slot empty" id="itemSlot0" type="button" aria-label="아이템 슬롯 1 (키 1)" disabled></button>
+            <button class="item-slot empty" id="itemSlot1" type="button" aria-label="아이템 슬롯 2 (키 2)" disabled></button>
+            <button class="item-slot empty" id="itemSlot2" type="button" aria-label="아이템 슬롯 3 (키 3)" disabled></button>
+            <button class="grav-btn" id="gravBtn" type="button" aria-label="중력장 (3초 유지하면 픽업)">
+                <span class="grav-icon">⊕</span><span class="grav-label">GRAV</span>
+            </button>
+        </div>
+
         <div class="canvas-wrap" id="canvasWrap">
             <canvas id="dodge-canvas"></canvas>
             <div class="overlay" id="overlay">
@@ -383,10 +443,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777771386"></script>
-<script src="/js/lpI18n.js?v=1777771386"></script>
-<script src="/js/lpRankSheet.js?v=1777771386"></script>
-<script src="/js/lpAudio.js?v=1777771386"></script>
+<script src="/js/supabase-config.js?v=1777780719"></script>
+<script src="/js/lpI18n.js?v=1777780719"></script>
+<script src="/js/lpRankSheet.js?v=1777780719"></script>
+<script src="/js/lpAudio.js?v=1777780719"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1828,7 +1888,9 @@ const INVINCIBLE_MS=2000;
 const FLASH_INTERVAL=120;
 
 let player={x:CW/2, y:CH*0.65};
-let lives=3;
+const STARTING_LIVES = 3;
+const MAX_LIVES = 5;
+let lives = STARTING_LIVES;
 let invincibleUntil=0;
 let flashVisible=true;
 let lastFlashToggle=0;
@@ -1919,13 +1981,500 @@ document.addEventListener('keydown',(e)=>{
     keys[e.key]=true;
     if(e.key===' '){ e.preventDefault(); if(running){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI(); } }
     if(e.key==='Enter'){ if(!running) startGame(); }
+    /* 1·2·3 키 → 인벤토리 슬롯 사용 */
+    if(running && !paused){
+        if(e.key==='1'){ inventoryUseSlot(0); e.preventDefault(); }
+        else if(e.key==='2'){ inventoryUseSlot(1); e.preventDefault(); }
+        else if(e.key==='3'){ inventoryUseSlot(2); e.preventDefault(); }
+        /* F 또는 Shift 키 → 중력장 (누르고 있는 동안 활성) */
+        else if(e.key==='f' || e.key==='F' || e.key==='Shift'){
+            gravityFieldActive = true;
+            const gb = $('gravBtn'); if(gb) gb.classList.add('active');
+            e.preventDefault();
+        }
+    }
 });
-document.addEventListener('keyup',(e)=>{ keys[e.key]=false; });
+document.addEventListener('keyup',(e)=>{
+    keys[e.key]=false;
+    if(e.key==='f' || e.key==='F' || e.key==='Shift'){
+        gravityFieldActive = false;
+        const gb = $('gravBtn'); if(gb) gb.classList.remove('active');
+    }
+});
+
+/* ---- Item bar interactions (slot click + gravity hold) ---- */
+function _wireItemBar(){
+    /* Slot buttons — 클릭 시 사용 */
+    for(let i=0; i<3; i++){
+        const el = document.getElementById('itemSlot' + i);
+        if(!el) continue;
+        const handler = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if(!running || paused) return;
+            inventoryUseSlot(i);
+        };
+        el.addEventListener('click', handler);
+        el.addEventListener('touchstart', handler, {passive:false});
+    }
+    /* Gravity button — touch/mouse hold 시 활성, release 시 비활성 */
+    const gb = document.getElementById('gravBtn');
+    if(!gb) return;
+    const press = (e) => {
+        e.preventDefault(); e.stopPropagation();
+        if(!running || paused) return;
+        gravityFieldActive = true;
+        gb.classList.add('active');
+    };
+    const release = (e) => {
+        gravityFieldActive = false;
+        gb.classList.remove('active');
+    };
+    gb.addEventListener('mousedown', press);
+    gb.addEventListener('touchstart', press, {passive:false});
+    gb.addEventListener('mouseup', release);
+    gb.addEventListener('mouseleave', release);
+    gb.addEventListener('touchend', release);
+    gb.addEventListener('touchcancel', release);
+    /* contextmenu 방지 (모바일 long-press 시 메뉴 뜨면 hold 끊김) */
+    gb.addEventListener('contextmenu', (e) => e.preventDefault());
+}
+if(document.readyState !== 'loading') _wireItemBar();
+else document.addEventListener('DOMContentLoaded', _wireItemBar);
 
 /* ---- Bullets ---- */
 let bullets=[];
 let lastSpawn=0;
 let elapsedMs=0;
+
+/* =====================================================================
+   ITEMS / RESUPPLY DEPOTS — narrative-fit pickup system
+   각 zone (행성/천체) 마다 보급 거점 1개 — 자동 보급선이 미리 발사돼서
+   놓아둔 캐시. 메테오와 시각적 구분 (네온 LED + 안테나 + 아이템 아이콘).
+   중력장 cone 안에서 3초 dwell 시 픽업.
+   ===================================================================== */
+
+const ITEM = {
+    SHIELD: 'shield',  // instant: 5s invincibility
+    HEART:  'heart',   // instant: lives++ (max 5)
+    WIPE:   'wipe',    // held: clear all bullets + flash
+    MINI:   'mini'     // held: 30s companion ship, 3 lasers/sec
+};
+const ITEM_VISUAL = {
+    shield: {emoji:'🛡', color:'#00D9FF', borderColor:'#7CE7FF'},
+    heart:  {emoji:'♥',  color:'#FF3366', borderColor:'#FF8FA0'},
+    wipe:   {emoji:'✦',  color:'#FFE66D', borderColor:'#FFF6B8'},
+    mini:   {emoji:'▲',  color:'#A855F7', borderColor:'#D5B0FF'}
+};
+/* Zone → 거점 아이템 매핑 (스토리 의미 고려해 배치) */
+const ZONE_DEPOT_MAP = [
+    {zoneIdx:0,  item:ITEM.SHIELD},   // 🌍 Earth — 보호막 (튜토리얼)
+    {zoneIdx:1,  item:ITEM.SHIELD},   // 🌙 Moon  — 보호막
+    {zoneIdx:2,  item:ITEM.MINI},     // 🔴 Mars  — 새끼 우주선 (mining helper)
+    {zoneIdx:3,  item:ITEM.WIPE},     // 🟠 Jupiter — wipe (방사선 환경)
+    {zoneIdx:4,  item:ITEM.WIPE},     // 🪐 Saturn — wipe
+    {zoneIdx:5,  item:ITEM.HEART},    // 🔵 Uranus — 하트 (생존 보상)
+    {zoneIdx:6,  item:ITEM.HEART},    // 💙 Neptune — 하트
+    {zoneIdx:7,  item:ITEM.MINI},     // ⚪ Pluto — 새끼 우주선
+    {zoneIdx:8,  item:ITEM.WIPE},     // 🌌 Helio — wipe (보너스)
+    {zoneIdx:9,  item:ITEM.SHIELD},   // ✨ Interstellar — 보호막 (귀한 영역)
+    {zoneIdx:10, item:ITEM.HEART}     // 🌠 Horsehead — 하트 (마지막 보상)
+];
+
+let depots = [];                /* active depots (floating downward) */
+let depotsSpawnedZones = new Set();  /* zoneIdx 들 중 이미 spawn 한 것 */
+let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
+
+function maybeSpawnDepot(zoneIdx, now){
+    if(depotsSpawnedZones.has(zoneIdx)) return;
+    /* zone 진입 후 2.5 초 뒤 spawn (zone 라벨 페이드 인 끝나고) */
+    const sinceZone = (now - zoneEnteredAt) / 1000;
+    if(sinceZone < 2.5) return;
+    const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
+    if(!def) return;
+    depotsSpawnedZones.add(zoneIdx);
+    depots.push({
+        x: 60 + Math.random() * (CW - 120),
+        y: -50,
+        speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
+        item: def.item,
+        zoneIdx,
+        chargeTime: 0,                 /* 0~3 sec, 중력장 cone 안 머문 시간 */
+        collected: false,
+        spawnedAt: now,
+        radius: 19
+    });
+}
+
+function updateDepots(dt, now){
+    const alive = [];
+    for(const d of depots){
+        d.y += d.speed * dt;
+        if(d.collected){
+            /* 1초간 fade out 후 제거 */
+            if(!d.collectedAt) d.collectedAt = now;
+            if(now - d.collectedAt > 800) continue;
+        }
+        if(d.y > CH + 60) continue;
+        alive.push(d);
+    }
+    depots = alive;
+}
+
+function drawDepot(d, now){
+    const v = ITEM_VISUAL[d.item];
+    const cx = d.x, cy = d.y;
+    const t = (now - d.spawnedAt) / 1000;
+
+    ctx.save();
+
+    /* Collected fade */
+    if(d.collected){
+        const fade = 1 - (now - (d.collectedAt||now)) / 800;
+        ctx.globalAlpha = Math.max(0, fade);
+    }
+
+    /* 인벤토리 가득 차서 못 줍는 held 아이템이면 dim */
+    const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI);
+    const blocked = isHeld && !inventoryHasSpace();
+    if(blocked) ctx.globalAlpha *= 0.45;
+
+    /* 외곽 펄스 ring — 픽업 가능 표시 */
+    const pulseAlpha = blocked ? 0.18 : (0.45 + Math.sin(t * 4) * 0.25);
+    ctx.strokeStyle = `rgba(124, 231, 255, ${pulseAlpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy, d.radius + 6, 0, Math.PI * 2);
+    ctx.stroke();
+
+    /* 본체 (원통형 보급 컨테이너) */
+    ctx.fillStyle = '#2a2e3a';
+    ctx.fillRect(cx - 14, cy - 10, 28, 20);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.fillRect(cx - 14, cy - 10, 28, 4);
+    ctx.strokeStyle = v.borderColor;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(cx - 14, cy - 10, 28, 20);
+
+    /* 안테나 + LED 점멸 */
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 10);
+    ctx.lineTo(cx, cy - 18);
+    ctx.stroke();
+    const blinkOn = Math.floor(t * 3) % 2 === 0;
+    if(blinkOn && !blocked){
+        ctx.fillStyle = '#FF3366';
+        ctx.beginPath();
+        ctx.arc(cx, cy - 18, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    /* 아이템 아이콘 (글자 / 기호) */
+    ctx.fillStyle = v.color;
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(v.emoji, cx, cy + 1);
+
+    /* 충전 progress ring */
+    if(d.chargeTime > 0 && !d.collected){
+        const pct = Math.min(1, d.chargeTime / 3);
+        ctx.strokeStyle = '#FFE66D';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, d.radius + 11, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * pct);
+        ctx.stroke();
+    }
+
+    ctx.restore();
+}
+
+/* =====================================================================
+   GRAVITY FIELD — hold button to project yellow cone from ship front
+   범위 = 우주선 길이의 2배 (~60px). 90° cone (±45°) 각도.
+   ===================================================================== */
+let gravityFieldActive = false;
+const GRAV_FIELD_LEN = 60;
+const GRAV_FIELD_HALF = Math.PI / 4;
+
+function isInGravField(px, py){
+    if(!gravityFieldActive) return false;
+    const dx = px - player.x;
+    const dy = py - player.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist > GRAV_FIELD_LEN || dist < 6) return false;
+    /* 각도 — 우주선 정면 (Y- 방향) 기준 */
+    const ang = Math.atan2(dx, -dy);
+    return Math.abs(ang) < GRAV_FIELD_HALF;
+}
+
+function updateGravFieldCharge(dt){
+    if(!gravityFieldActive){
+        /* 비활성 시 모든 depot 의 chargeTime 빠르게 감소 */
+        for(const d of depots){
+            if(!d.collected && d.chargeTime > 0){
+                d.chargeTime = Math.max(0, d.chargeTime - dt * 1.5);
+            }
+        }
+        return;
+    }
+    for(const d of depots){
+        if(d.collected) continue;
+        const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI);
+        if(isHeld && !inventoryHasSpace()) continue;  /* 슬롯 가득 → 못 챙김 */
+        if(isInGravField(d.x, d.y)){
+            d.chargeTime += dt;
+            if(d.chargeTime >= 3){
+                onDepotCollected(d);
+            }
+        } else {
+            d.chargeTime = Math.max(0, d.chargeTime - dt * 0.8);
+        }
+    }
+}
+
+function drawGravField(){
+    if(!gravityFieldActive) return;
+    ctx.save();
+    const t = performance.now() / 200;
+    const ox = player.x, oy = player.y - 4;
+    /* Cone fill (radial gradient) */
+    const grad = ctx.createRadialGradient(ox, oy, 4, ox, oy, GRAV_FIELD_LEN);
+    grad.addColorStop(0, 'rgba(255,230,109,0.6)');
+    grad.addColorStop(0.5, 'rgba(255,200,60,0.3)');
+    grad.addColorStop(1, 'rgba(255,154,60,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    const a1 = -Math.PI/2 - GRAV_FIELD_HALF;
+    const a2 = -Math.PI/2 + GRAV_FIELD_HALF;
+    ctx.arc(ox, oy, GRAV_FIELD_LEN, a1, a2);
+    ctx.closePath();
+    ctx.fill();
+    /* Pulsing inner arcs */
+    ctx.strokeStyle = `rgba(255,230,109,${0.5 + Math.sin(t)*0.3})`;
+    ctx.lineWidth = 1.2;
+    for(let i = 1; i <= 3; i++){
+        const r = ((GRAV_FIELD_LEN / 3) * i + (t * 8) % (GRAV_FIELD_LEN / 3));
+        if(r > GRAV_FIELD_LEN) continue;
+        ctx.beginPath();
+        ctx.arc(ox, oy, r, a1, a2);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+/* =====================================================================
+   INVENTORY — 3 slots for held items (wipe, mini-ship)
+   instant items (shield, heart) 는 즉시 사용 — 슬롯 안 차지.
+   ===================================================================== */
+const INVENTORY_SLOTS = 3;
+let inventory = [null, null, null];
+
+function inventoryHasSpace(){
+    return inventory.some(s => s === null);
+}
+function inventoryAdd(itemType){
+    for(let i=0; i<INVENTORY_SLOTS; i++){
+        if(inventory[i] === null){
+            inventory[i] = itemType;
+            syncInventoryUI();
+            return true;
+        }
+    }
+    return false;
+}
+function inventoryUseSlot(idx){
+    if(idx < 0 || idx >= INVENTORY_SLOTS) return;
+    const item = inventory[idx];
+    if(!item) return;
+    if(item === ITEM.WIPE) triggerWipe();
+    else if(item === ITEM.MINI) triggerMiniShip();
+    inventory[idx] = null;
+    syncInventoryUI();
+}
+function syncInventoryUI(){
+    for(let i=0; i<INVENTORY_SLOTS; i++){
+        const el = document.getElementById('itemSlot' + i);
+        if(!el) continue;
+        const item = inventory[i];
+        if(item){
+            const v = ITEM_VISUAL[item];
+            el.innerHTML = v.emoji;
+            el.classList.remove('empty');
+            el.style.color = v.color;
+            el.style.borderColor = v.borderColor;
+        } else {
+            el.innerHTML = '';
+            el.classList.add('empty');
+            el.style.color = '';
+            el.style.borderColor = '';
+        }
+    }
+}
+
+/* =====================================================================
+   ITEM EFFECTS
+   ===================================================================== */
+function onDepotCollected(d){
+    d.collected = true;
+    d.collectedAt = performance.now();
+    if(d.item === ITEM.SHIELD){
+        invincibleUntil = performance.now() + 5000;
+    } else if(d.item === ITEM.HEART){
+        lives = Math.min(MAX_LIVES, lives + 1);
+    } else {
+        inventoryAdd(d.item);
+    }
+    sfxStart();
+    if(navigator.vibrate) try{navigator.vibrate(30)}catch(_){}
+}
+
+let wipeFlashUntil = 0;
+let wipeFragments = [];
+function triggerWipe(){
+    wipeFlashUntil = performance.now() + 500;
+    /* 모든 메테오 → 짧은 fragment 폭발로 disintegrate */
+    for(const b of bullets){
+        for(let i = 0; i < 4; i++){
+            wipeFragments.push({
+                x: b.x, y: b.y,
+                vx: (Math.random()-0.5) * 280,
+                vy: (Math.random()-0.5) * 280,
+                life: 0.5, maxLife: 0.5
+            });
+        }
+    }
+    bullets = [];
+    sfxOver();  /* 짧고 강한 효과음 (실제 sfx 가 hit 톤이라 wipe 와 어울림) */
+    if(navigator.vibrate) try{navigator.vibrate([20,30,20])}catch(_){}
+}
+function updateWipeFragments(dt){
+    const alive = [];
+    for(const f of wipeFragments){
+        f.life -= dt;
+        if(f.life <= 0) continue;
+        f.x += f.vx * dt;
+        f.y += f.vy * dt;
+        f.vx *= 0.96; f.vy *= 0.96;
+        alive.push(f);
+    }
+    wipeFragments = alive;
+}
+function drawWipeFragments(){
+    for(const f of wipeFragments){
+        const a = f.life / f.maxLife;
+        ctx.fillStyle = `rgba(255,230,109,${a * 0.85})`;
+        const sz = 2 + a * 1.5;
+        ctx.fillRect(f.x - sz/2, f.y - sz/2, sz, sz);
+    }
+}
+function drawWipeFlash(){
+    const now = performance.now();
+    if(now > wipeFlashUntil) return;
+    const remain = (wipeFlashUntil - now) / 500;
+    ctx.save();
+    ctx.fillStyle = `rgba(255,255,255,${remain * 0.7})`;
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+}
+
+/* =====================================================================
+   MINI-SHIP — 30s companion, 3 lasers/sec, targets nearest threat
+   ===================================================================== */
+let miniShip = null;
+let miniLasers = [];
+const MINI_DUR = 30000;
+const MINI_SHOT_INTERVAL = 333;  /* ms — 3 shots/sec */
+
+function triggerMiniShip(){
+    miniShip = {
+        x: player.x + 32, y: player.y + 8,
+        spawnedAt: performance.now(),
+        lastShot: 0
+    };
+    miniLasers = [];
+    sfxStart();
+}
+function updateMiniShip(dt, now){
+    if(!miniShip) return;
+    if(now - miniShip.spawnedAt > MINI_DUR){
+        miniShip = null;
+        return;
+    }
+    /* 위치 — 우주선 우측 hover + 약간 sin 진동 */
+    const tx = player.x + 32 + Math.cos(now/400) * 4;
+    const ty = player.y + 8 + Math.sin(now/350) * 6;
+    miniShip.x += (tx - miniShip.x) * Math.min(1, dt * 6);
+    miniShip.y += (ty - miniShip.y) * Math.min(1, dt * 6);
+    /* 발사 — 가장 가까운 위쪽 메테오 */
+    if(now - miniShip.lastShot >= MINI_SHOT_INTERVAL && bullets.length > 0){
+        let target = null, best = Infinity;
+        for(const b of bullets){
+            if(b.y > miniShip.y) continue;  /* 미니쉽 위쪽 메테오만 */
+            const dx = b.x - miniShip.x, dy = b.y - miniShip.y;
+            const d = dx*dx + dy*dy;
+            if(d < best){ best = d; target = b; }
+        }
+        if(target){
+            miniLasers.push({
+                fromX: miniShip.x, fromY: miniShip.y,
+                target,
+                life: 0.18, maxLife: 0.18
+            });
+            miniShip.lastShot = now;
+        }
+    }
+    /* 레이저 — 즉시 hit, 시각만 short trail */
+    for(const l of miniLasers){
+        l.life -= dt;
+        const idx = bullets.indexOf(l.target);
+        if(idx >= 0){
+            bullets.splice(idx, 1);
+        }
+    }
+    miniLasers = miniLasers.filter(l => l.life > 0);
+}
+function drawMiniShip(){
+    if(!miniShip) return;
+    const now = performance.now();
+    const age = now - miniShip.spawnedAt;
+    /* 본체 — 보라색 작은 delta */
+    ctx.save();
+    ctx.fillStyle = '#A855F7';
+    ctx.beginPath();
+    ctx.moveTo(miniShip.x, miniShip.y - 7);
+    ctx.lineTo(miniShip.x - 6, miniShip.y + 5);
+    ctx.lineTo(miniShip.x + 6, miniShip.y + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(miniShip.x, miniShip.y - 4);
+    ctx.lineTo(miniShip.x - 2.5, miniShip.y + 1);
+    ctx.lineTo(miniShip.x + 2.5, miniShip.y + 1);
+    ctx.closePath();
+    ctx.fill();
+    /* 잔여 시간 ring */
+    const pct = (MINI_DUR - age) / MINI_DUR;
+    ctx.strokeStyle = 'rgba(213, 176, 255, 0.6)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(miniShip.x, miniShip.y, 11, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
+    ctx.stroke();
+    /* 레이저 */
+    for(const l of miniLasers){
+        const a = l.life / l.maxLife;
+        ctx.strokeStyle = `rgba(255,200,255,${a})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(l.fromX, l.fromY);
+        ctx.lineTo(l.target.x, l.target.y);
+        ctx.stroke();
+    }
+    ctx.restore();
+}
 
 function spawnBullet(now, speed, aimedRatio, multi){
     for(let m=0;m<multi;m++){
@@ -1994,32 +2543,31 @@ function spawnBullet(now, speed, aimedRatio, multi){
 function updateDifficulty(){
     const s=elapsedMs/1000;
 
-    /* Difficulty time-warp: start at the legacy 1:00 difficulty and
-       still hit the legacy 3:00 ceiling at the new t=3:00. Slope is
-       2/3 of the original — the climb from "feels like a minute in"
-       up to the legacy ceiling is spread across the full 180s instead
-       of 120s, so mid-game pressure builds visibly more gently while
-       the early seconds skip the old warm-up entirely. */
-    const sEff = 60 + s * (2/3);
+    /* Difficulty curve (v2): 사용자 피드백 반영 — 현재 t=2:00 이
+       사람이 도달 가능한 한계라, 그 난이도를 t=3:00 까지 stretch.
+       그 이후엔 cap (sEff 가 170 에서 frozen).
+         · sEff 시작 = 60 (워밍업 skip)
+         · sEff 종착 = 170 (legacy max difficulty)
+         · 도달 시점 = t=180s (3분)
+         · 기울기 = (170-60)/180 = 11/18 ≈ 0.611
+       모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot)
+       이 sEff 170 에서 max 도달하도록 통일. cap 후엔 모든 변수 stable. */
+    const sEff = Math.min(170, 60 + s * (11/18));
 
     // smoothstep: 0→1 부드러운 S커브 (양쪽 끝이 완만, 중간이 가파름)
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
 
-    // ── 스폰 간격 (ms): 1600 → 250 ───────────────────────────────
-    // (effective time 기준) 0:00=1600ms, 1:00=1280ms, 1:30=900ms, 2:00=550ms, 2:30=330ms, 3:00=250ms
+    // ── 스폰 간격 (ms): 1600 → 250 (sEff=170 에서 max) ────────────
     const spawnInterval = Math.round(1600 - ss(sEff/170) * 1350);
 
-    // ── 총알 속도 (px/s): 95 → 370 ───────────────────────────────
-    const bulletSpeed = Math.round(95 + ss(sEff/180) * 275);
+    // ── 총알 속도 (px/s): 95 → 370 (sEff=170 에서 max) ────────────
+    const bulletSpeed = Math.round(95 + ss(sEff/170) * 275);
 
-    // ── 조준 비율: 0 → 0.65 ──────────────────────────────────────
-    // 처음 20초(effective) 는 완전 랜덤, 이후 이차함수로 서서히 증가
-    const arT = Math.max(0, Math.min((sEff-20)/155, 1));
+    // ── 조준 비율: 0 → 0.65 (sEff=170 에서 max) ───────────────────
+    const arT = Math.max(0, Math.min((sEff-20)/150, 1));
     const aimedRatio = Math.min(0.65, arT*arT*0.70);
 
-    // ── 멀티샷: 1 → 3 (점프 없이 확률적으로) ──────────────────────
-    // 50초(effective) 이전: 1발 고정
-    // 50~170초(effective): 1발→3발 연속적으로 증가 — 소수점은 확률로 처리
+    // ── 멀티샷: 1 → 3 (sEff=170 에서 max) ─────────────────────────
     const msRaw   = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
     const msFloor = Math.floor(msRaw);
     const multiShot = Math.min(3, msFloor + (Math.random()<(msRaw-msFloor)?1:0));
@@ -2044,6 +2592,9 @@ function syncPauseUI(){
     } else {
         gc.classList.remove('on');
     }
+    /* Item bar (인벤토리 + 중력장) — 게임 진행 중에만 표시 */
+    const ib = $('itemBar');
+    if(ib) ib.classList.toggle('on', !!running);
 }
 let startedAt=0, pausedAt=0, totalPausedMs=0;
 let gameOverSent=false;
@@ -2186,7 +2737,7 @@ const BGM = (function(){
 function resetGame(){
     player={x:CW/2, y:CH*0.65};
     pointer={x:CW/2, y:CH*0.65, active:false};
-    lives=3;
+    lives=STARTING_LIVES;
     invincibleUntil=0;
     flashVisible=true;
     lastFlashToggle=0;
@@ -2207,6 +2758,17 @@ function resetGame(){
        TIME tile is reset, and to its full mm:ss:cs zero state. */
     $('timeNow').textContent='0:00:00';
     initStars();
+    /* 아이템/거점/중력장 시스템 리셋 */
+    depots = [];
+    depotsSpawnedZones.clear();
+    inventory = [null, null, null];
+    syncInventoryUI();
+    gravityFieldActive = false;
+    wipeFlashUntil = 0;
+    wipeFragments = [];
+    miniShip = null;
+    miniLasers = [];
+    zoneEnteredAt = performance.now();
 }
 
 async function startGame(){
@@ -2558,6 +3120,7 @@ function gameLoop(now){
         zoneLabel={nameEn:ZONES[newIdx].nameEn, nameKo:ZONES[newIdx].nameKo, timer:0};
         resetParticles(newIdx);
         sfxZone();
+        zoneEnteredAt = performance.now();   /* depot spawn 타이밍 기준 */
     }
     zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
 
@@ -2642,6 +3205,13 @@ function gameLoop(now){
     /* ---- Flame pulse ---- */
     flamePulse=(flamePulse+dt*12)%(Math.PI*2);
 
+    /* ---- Items / Depots / Gravity field / Mini-ship / Wipe ---- */
+    maybeSpawnDepot(currentZoneIdx, now);
+    updateDepots(dt, now);
+    updateGravFieldCharge(dt);
+    updateMiniShip(dt, now);
+    updateWipeFragments(dt);
+
     /* ---- Update HUD ----
        Score column is gone; only the TIME column shows mm:ss:cs at full
        100 fps precision so the player can see their personal-best chase
@@ -2710,6 +3280,15 @@ function drawFrame(now, dt){
         ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
+
+    /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
+    for(const d of depots) drawDepot(d, now);
+
+    /* ---- Wipe fragments (사용 후 잔재) ---- */
+    drawWipeFragments();
+
+    /* ---- Mini-ship (있을 때) ---- */
+    drawMiniShip();
 
     /* ---- Player: SpaceX Starship (ogive nose, SUS metallic) ---- */
     if(flashVisible){
@@ -2780,14 +3359,20 @@ function drawFrame(now, dt){
         ctx.restore();
     }
 
+    /* ---- Gravity field cone (player 위) ---- */
+    drawGravField();
+
+    /* ---- Wipe flash (모든 게 위 그림 위에 — 가장 위) ---- */
+    drawWipeFlash();
+
     /* ---- Zone label (above player, below HUD) ---- */
     drawZoneLabel(dt);
 
-    /* ---- HUD: lives ---- */
+    /* ---- HUD: lives (max MAX_LIVES, 현재 lives 만큼 채움) ---- */
     const heartSize=16;
-    const heartPad=4;
-    for(let i=0;i<3;i++){
-        ctx.globalAlpha=i<lives?1:0.18;
+    const heartPad=3;
+    for(let i=0;i<MAX_LIVES;i++){
+        ctx.globalAlpha=i<lives?1:0.16;
         ctx.fillStyle='#FF3366';
         ctx.font='bold '+heartSize+'px sans-serif';
         ctx.textBaseline='top';
@@ -2918,6 +3503,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777771386"></script>
+<script src="/js/siteFooter.js?v=1777780719"></script>
 </body>
 </html>
