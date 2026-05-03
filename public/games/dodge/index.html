@@ -889,10 +889,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777820046"></script>
-<script src="/js/lpI18n.js?v=1777820046"></script>
-<script src="/js/lpRankSheet.js?v=1777820046"></script>
-<script src="/js/lpAudio.js?v=1777820046"></script>
+<script src="/js/supabase-config.js?v=1777820737"></script>
+<script src="/js/lpI18n.js?v=1777820737"></script>
+<script src="/js/lpRankSheet.js?v=1777820737"></script>
+<script src="/js/lpAudio.js?v=1777820737"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -6162,36 +6162,62 @@ function _renderPvpResultStatus(){
     /* winnerId undefined — 상대 결과 아직 미수신, polling 계속. */
 }
 async function _pollPvpResult(tries){
-    /* 즉시 결정된 winner 가 있으면 즉시 표시 후 polling 중단. */
-    if(pvpState.declaredWinner !== undefined && pvpState.declaredWinner !== null
-       || (pvpState.declaredWinner === null && (pvpState.opponentDuration || pvpState.opponentScore))){
+    /* 이미 winner 결정됐으면 즉시 표시 + polling 중단. */
+    if(pvpState.declaredWinner){
         _renderPvpResultStatus();
-        if(pvpState.declaredWinner) return;   /* winner 결정됐으면 polling 중단 */
+        return;
     }
-    if(tries > 20) return;
-    /* RPC polling — server 의 winner_id 검증. broadcast 누락 시 fallback. */
+    if(tries > 30) return;
+    /* RPC polling — server 의 winner_id (옛 schema 면 null) + 양쪽 final_score/
+       final_time_ms 둘 다 가져옴. server-authoritative 결정. */
     try {
         const sb = getSupabase();
         const { data } = await sb.rpc('spacez_get_room', { p_room_id: pvpState.roomId });
         const row = Array.isArray(data) ? data[0] : data;
         if(row && row.status === 'finished'){
             const members = row.members || [];
+            const me = members.find(m => m.user_id === pvpState.me?.id);
             const opponent = members.find(m => m.user_id !== pvpState.me?.id);
             const winnerId = row.winner_id;
             if(winnerId){
+                /* server 가 winner 결정 (새 schema). 가장 신뢰. */
                 pvpState.declaredWinner = winnerId;
-                if(opponent && opponent.final_time_ms){
-                    pvpState.opponentDuration = opponent.final_time_ms;
+                if(opponent){
+                    if(opponent.final_time_ms != null) pvpState.opponentDuration = opponent.final_time_ms;
+                    if(opponent.final_score != null) pvpState.opponentScore = opponent.final_score;
                 }
                 _renderPvpResultStatus();
                 return;
             }
-            /* server 가 status='finished' 이지만 winner_id 미반환 (옛 schema 버그
-               또는 spacez_get_room 의 return 에 winner_id 누락된 경우). retry —
-               broadcast 가 늦게 도착하거나 마이그레이션 적용 후 winner_id 받을 때까지. */
+            /* 옛 schema — winner_id 누락. members 의 final_score/final_time_ms
+               로 client 가 직접 결정 (server 도 같은 데이터로 SQL 결정하니 일치).
+               members 에 final_* 필드 있으면 사용. 없으면 broadcast 만 신뢰 — retry. */
+            if(me && opponent
+                && me.final_score != null && me.final_time_ms != null
+                && opponent.final_score != null && opponent.final_time_ms != null){
+                pvpState.opponentScore = opponent.final_score;
+                pvpState.opponentDuration = opponent.final_time_ms;
+                /* longest survivor wins. 정확히 동일 시 host_id 가 winner (deterministic
+                   tiebreaker — server 의 implementation-defined order 보다 안전). */
+                if(opponent.final_time_ms > me.final_time_ms){
+                    pvpState.declaredWinner = opponent.user_id;
+                } else if(me.final_time_ms > opponent.final_time_ms){
+                    pvpState.declaredWinner = pvpState.me?.id || null;
+                } else if(opponent.final_score > me.final_score){
+                    pvpState.declaredWinner = opponent.user_id;
+                } else if(me.final_score > opponent.final_score){
+                    pvpState.declaredWinner = pvpState.me?.id || null;
+                } else {
+                    /* 정확히 동일 — host 가 tiebreak winner. */
+                    pvpState.declaredWinner = row.host_id || pvpState.me?.id || null;
+                }
+                _renderPvpResultStatus();
+                return;
+            }
+            /* members 에 final_* 필드 없음 (아주 옛 schema). broadcast 만 신뢰하고 retry. */
         }
     } catch(_){}
-    setTimeout(() => _pollPvpResult(tries + 1), 1500);
+    setTimeout(() => _pollPvpResult(tries + 1), 1000);
 }
 
 function _maybeShowPvpResult(){
@@ -6266,6 +6292,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777820046"></script>
+<script src="/js/siteFooter.js?v=1777820737"></script>
 </body>
 </html>
