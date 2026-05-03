@@ -409,11 +409,26 @@ body{
 .pvp-overlay .pvp-room .pvp-rh{font-size:.86em;font-weight:700;color:#fff;text-align:left;flex:1}
 .pvp-overlay .pvp-room .pvp-rh small{display:block;font-size:.78em;color:rgba(255,255,255,.5);font-weight:400;margin-top:2px}
 .pvp-overlay .pvp-room .pvp-rcode{font-family:'JetBrains Mono',monospace;font-size:.78em;color:#00D9FF;background:rgba(0,217,255,.08);padding:3px 8px;border-radius:6px;letter-spacing:.08em}
-.pvp-overlay .pvp-room .pvp-rjoin{font-size:.78em;font-weight:800;color:#00D9FF;background:rgba(0,217,255,.14);padding:5px 12px;border-radius:8px;letter-spacing:.04em;border:1px solid rgba(0,217,255,.28);transition:all .15s}
-.pvp-overlay .pvp-room:hover .pvp-rjoin{background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001828;border-color:transparent}
-.pvp-overlay .pvp-room.full{opacity:.45;cursor:default}
-.pvp-overlay .pvp-room.full:hover{background:rgba(0,217,255,.04);border-color:transparent}
-.pvp-overlay .pvp-room.full .pvp-rjoin{background:rgba(255,255,255,.05);color:rgba(255,255,255,.4);border-color:rgba(255,255,255,.08)}
+/* 카드 자체는 hover 효과만 (clickable 아님). 실제 click 은 .pvp-rjoin-btn 만. */
+.pvp-overlay .pvp-room{cursor:default}
+.pvp-overlay .pvp-room:hover{background:rgba(0,217,255,.10);border-color:rgba(0,217,255,.35)}
+/* 명시적 button — 모바일 100% click 보장. */
+.pvp-overlay .pvp-room .pvp-rjoin-btn{
+    font-size:.82em;font-weight:800;color:#001828;
+    background:linear-gradient(135deg,#00D9FF,#0099CC);
+    padding:8px 16px;border-radius:8px;letter-spacing:.04em;
+    border:0;cursor:pointer;font-family:inherit;
+    transition:all .12s;
+    -webkit-tap-highlight-color:rgba(0,217,255,.4);
+    touch-action:manipulation;
+    box-shadow:0 2px 8px -2px rgba(0,217,255,.45);
+}
+.pvp-overlay .pvp-room .pvp-rjoin-btn:active{transform:translateY(1px);box-shadow:0 1px 3px -1px rgba(0,217,255,.35)}
+.pvp-overlay .pvp-room .pvp-rjoin-btn:disabled{
+    background:rgba(255,255,255,.05);color:rgba(255,255,255,.4);
+    cursor:not-allowed;box-shadow:none;
+}
+.pvp-overlay .pvp-room.full{opacity:.55}
 .pvp-overlay .pvp-empty{color:rgba(255,255,255,.4);font-size:.85em;padding:20px;text-align:center}
 
 /* ==== PvP Lobby room view ==== */
@@ -813,10 +828,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777807654"></script>
-<script src="/js/lpI18n.js?v=1777807654"></script>
-<script src="/js/lpRankSheet.js?v=1777807654"></script>
-<script src="/js/lpAudio.js?v=1777807654"></script>
+<script src="/js/supabase-config.js?v=1777808036"></script>
+<script src="/js/lpI18n.js?v=1777808036"></script>
+<script src="/js/lpRankSheet.js?v=1777808036"></script>
+<script src="/js/lpAudio.js?v=1777808036"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4939,31 +4954,24 @@ async function _refreshPvpRooms(){
             list.innerHTML = '<div class="pvp-empty">대기 중인 방이 없어요<br><small style="opacity:.6">친구가 방을 만들면 여기 표시돼요</small></div>';
             return;
         }
+        /* 배틀넷 스타일 row + 명시적 [Join] button — 카드 div 가 모바일에서
+           click 안 받는 quirk 회피. button 은 모든 OS 에서 100% click 받음.
+           card 자체는 div, button 만 클릭 가능. 자식 pointer-events:none. */
         list.innerHTML = data.map(r => {
             const ago = Math.max(0, Math.floor((Date.now() - new Date(r.created_at).getTime())/1000));
             const agoTxt = ago < 60 ? ago+'초 전' : Math.floor(ago/60)+'분 전';
             const lock  = r.has_password ? '🔒 ' : '';
             const full  = r.member_count >= 2;
-            const click = full ? ''
-                : `onclick="window.spacezTryJoin('${r.room_id}', ${r.has_password?1:0}, '${escapeHtml(r.host_name).replace(/'/g, '&#39;')}')"`;
-            return `<div class="pvp-room ${full?'full':''}" data-room-id="${r.room_id}" data-private="${r.has_password ? '1':'0'}" data-host="${escapeHtml(r.host_name)}" ${click} role="button" tabindex="0">
+            const args  = `'${r.room_id}', ${r.has_password?1:0}, '${escapeHtml(r.host_name).replace(/'/g, '&#39;')}'`;
+            return `<div class="pvp-room ${full?'full':''}" data-room-id="${r.room_id}">
                 <div class="pvp-rh">${lock}${escapeHtml(r.host_name)}
                     <small>아이템 ${r.item_count}개 · ${agoTxt} · ${r.member_count}/2 · W:0 L:0</small>
                 </div>
-                <div class="pvp-rjoin">${full ? '만석' : '참여'}</div>
+                <button class="pvp-rjoin-btn" type="button"
+                        onclick="window.spacezTryJoin(${args})"
+                        ${full ? 'disabled' : ''}>${full ? '만석' : '참여'}</button>
             </div>`;
         }).join('');
-        /* addEventListener fallback — inline onclick 이 어떤 이유로 fail 하면. */
-        list.querySelectorAll('.pvp-room').forEach(el => {
-            if(el.classList.contains('full')) return;
-            el.addEventListener('click', () => {
-                window.spacezTryJoin(
-                    el.dataset.roomId,
-                    el.dataset.private === '1' ? 1 : 0,
-                    el.dataset.host || ''
-                );
-            });
-        });
     } catch(e){
         const msg = e?.message || String(e);
         if(msg.includes('does not exist') || msg.includes('PGRST') || msg.includes('function')){
@@ -5280,6 +5288,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777807654"></script>
+<script src="/js/siteFooter.js?v=1777808036"></script>
 </body>
 </html>
