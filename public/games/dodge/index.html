@@ -857,10 +857,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777811608"></script>
-<script src="/js/lpI18n.js?v=1777811608"></script>
-<script src="/js/lpRankSheet.js?v=1777811608"></script>
-<script src="/js/lpAudio.js?v=1777811608"></script>
+<script src="/js/supabase-config.js?v=1777812035"></script>
+<script src="/js/lpI18n.js?v=1777812035"></script>
+<script src="/js/lpRankSheet.js?v=1777812035"></script>
+<script src="/js/lpAudio.js?v=1777812035"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3279,15 +3279,24 @@ function updateGravFieldCharge(dt){
 }
 
 function drawGravField(){
-    if(!gravityFieldActive) return;
+    /* 본인 GRAV cone — 노랑 톤. */
+    if(gravityFieldActive){
+        _drawGravCone(player.x, player.y - 4, 'rgba(255,230,109,', 'rgba(255,200,60,', 'rgba(255,154,60,');
+    }
+    /* PvP 상대 GRAV cone — 위협을 인지할 수 있게 빨강 톤 + 강한 펄스. */
+    if(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.gravActive
+       && pvpState.opponent.x !== undefined){
+        _drawGravCone(pvpState.opponent.x, pvpState.opponent.y - 4,
+            'rgba(255,80,80,', 'rgba(255,40,40,', 'rgba(180,20,20,');
+    }
+}
+function _drawGravCone(ox, oy, c0, c1, c2){
     ctx.save();
     const t = performance.now() / 200;
-    const ox = player.x, oy = player.y - 4;
-    /* Cone fill (radial gradient) */
     const grad = ctx.createRadialGradient(ox, oy, 4, ox, oy, GRAV_FIELD_LEN);
-    grad.addColorStop(0, 'rgba(255,230,109,0.6)');
-    grad.addColorStop(0.5, 'rgba(255,200,60,0.3)');
-    grad.addColorStop(1, 'rgba(255,154,60,0)');
+    grad.addColorStop(0, c0 + '0.6)');
+    grad.addColorStop(0.5, c1 + '0.3)');
+    grad.addColorStop(1, c2 + '0)');
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.moveTo(ox, oy);
@@ -3296,8 +3305,7 @@ function drawGravField(){
     ctx.arc(ox, oy, GRAV_FIELD_LEN, a1, a2);
     ctx.closePath();
     ctx.fill();
-    /* Pulsing inner arcs */
-    ctx.strokeStyle = `rgba(255,230,109,${0.5 + Math.sin(t)*0.3})`;
+    ctx.strokeStyle = c0 + (0.5 + Math.sin(t)*0.3) + ')';
     ctx.lineWidth = 1.2;
     for(let i = 1; i <= 3; i++){
         const r = ((GRAV_FIELD_LEN / 3) * i + (t * 8) % (GRAV_FIELD_LEN / 3));
@@ -4479,18 +4487,26 @@ function gameLoop(now){
             player.y+=my/mag*PLAYER_SPEED*dt;
         }
     }
-    /* ---- PvP GRAV pull — 상대가 GRAV 누르면 본인 우주선이 상대 쪽으로 끌림.
-       inverse-square 비슷, max 250px 거리. force 너무 크지 않게 적당히. */
+    /* ---- PvP GRAV pull — 상대 우주선의 cone (forward -Y, ±45°, 180px) 안에
+       본인이 있으면 상대 쪽으로 끌림. force 는 visible 강도 + 거리에 따라 강해짐.
+       cone 검사 안 통하면 끌림 X (= 단순 거리만으론 효과 없음). */
     if(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.gravActive
        && pvpState.opponent.x !== undefined){
-        const dx = pvpState.opponent.x - player.x;
-        const dy = pvpState.opponent.y - player.y;
-        const d2 = dx*dx + dy*dy;
-        const d  = Math.sqrt(d2);
-        if(d > 6 && d < 250){
-            const force = 1500 / Math.max(d2, 600);   /* 적당히 — 회피 가능한 강도 */
-            player.x += (dx/d) * force * dt;
-            player.y += (dy/d) * force * dt;
+        const opx = pvpState.opponent.x, opy = pvpState.opponent.y;
+        const dx = player.x - opx;          /* 상대 → 본인 vector (cone source 기준) */
+        const dy = player.y - opy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist > 8 && dist < 180){
+            /* cone forward = -Y (위). 본인 위치의 angle from forward = atan2(dx, -dy).
+               본인이 상대 위쪽 (dy<0) + ±45° 안이면 cone 안. */
+            const ang = Math.atan2(dx, -dy);
+            if(Math.abs(ang) < Math.PI / 4){
+                /* 끌림 direction = 상대 쪽 (-dx, -dy normalized). 거리 가까울수록 더 세게. */
+                const PULL_BASE = 130;                  /* px/sec — visible 강도 */
+                const f = PULL_BASE * (1 - dist / 180);
+                player.x -= (dx / dist) * f * dt;
+                player.y -= (dy / dist) * f * dt;
+            }
         }
     }
 
@@ -5717,6 +5733,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777811608"></script>
+<script src="/js/siteFooter.js?v=1777812035"></script>
 </body>
 </html>
