@@ -508,6 +508,7 @@ declare
     v_user_id uuid := auth.uid();
     v_finished_count int;
     v_winner uuid;
+    v_host_id uuid;
 begin
     if v_user_id is null then raise exception 'auth_required'; end if;
     update public.spacez_room_members
@@ -517,18 +518,22 @@ begin
     from public.spacez_room_members
     where room_id = p_room_id and final_score is not null;
     if v_finished_count >= 2 then
-        /* tiebreaker: 동률 점수 시 더 오래 산 쪽 (final_time_ms desc) 우승.
-           이전 asc 는 짧게 산 쪽이 win 되는 버그였음. */
+        select host_id into v_host_id from public.spacez_rooms where id = p_room_id;
+        /* tiebreaker (3 단계, deterministic):
+           1. final_time_ms desc — 더 오래 산 쪽 우승.
+           2. final_score desc — score 도 같으면 더 오래 산 쪽 (already same).
+           3. host 가 우선 — implementation-defined order 대신 명시적 host 우대.
+           이렇게 하면 client 의 host-tiebreak 룰과 server 결정이 항상 일치. */
         select user_id into v_winner
         from public.spacez_room_members
         where room_id = p_room_id
-        order by final_score desc nulls last, final_time_ms desc nulls last
+        order by final_time_ms desc nulls last,
+                 final_score desc nulls last,
+                 case when user_id = v_host_id then 0 else 1 end
         limit 1;
         update public.spacez_rooms
            set status = 'finished', finished_at = now(), winner_id = v_winner
          where id = p_room_id;
-        /* rematch 위해 양쪽 is_ready 자동 reset — 다음 게임 시작 시 양쪽
-           [준비] 다시 눌러야 함. */
         update public.spacez_room_members
            set is_ready = false
          where room_id = p_room_id;
