@@ -857,10 +857,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777813380"></script>
-<script src="/js/lpI18n.js?v=1777813380"></script>
-<script src="/js/lpRankSheet.js?v=1777813380"></script>
-<script src="/js/lpAudio.js?v=1777813380"></script>
+<script src="/js/supabase-config.js?v=1777814188"></script>
+<script src="/js/lpI18n.js?v=1777814188"></script>
+<script src="/js/lpRankSheet.js?v=1777814188"></script>
+<script src="/js/lpAudio.js?v=1777814188"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3799,10 +3799,13 @@ function spawnBullet(now, speed, aimedRatio, multi){
         let aimed=rand()<aimedRatio;
         let spread=(m-Math.floor(multi/2))*14;
 
-        /* PvP 시 aimed target 을 player 가 아닌 화면 중앙 + jitter 로 — 양쪽 sync. */
+        /* PvP 시 aimed target 을 player 위치 대신 random fixed point 로 —
+           이전 fixed (CW/2, CH*0.65) 는 host 의 시작 위치라 host 만 노려졌음.
+           이제 player 가 활동하는 영역 (40~CW-40, CH*0.40~CH*0.85) 안에서
+           rand() 로 매번 다른 target 선택 — 양쪽 player 공평하게 위협. */
         const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
-        const aimX = isPvp ? CW/2 : player.x;
-        const aimY = isPvp ? CH*0.65 : player.y;
+        const aimX = isPvp ? (40 + rand() * (CW - 80)) : player.x;
+        const aimY = isPvp ? (CH * 0.40 + rand() * CH * 0.45) : player.y;
 
         if(edge===0){
             bx=rand()*CW; by=-8;
@@ -5314,17 +5317,32 @@ async function _subscribePvpRoom(){
             _pushPingSample(rtt);
         }
     });
-    /* 상대 게임 종료 시 결과 알림. */
+    /* 상대 게임 종료. broadcast payload 의 score/duration 으로 양쪽 client 즉시
+       winner 결정 — server polling 보강용. */
     ch.on('broadcast', { event: 'finished' }, (e) => {
-        /* 상대 죽음 — 본인 살아있으면 본인 = winner. 본인도 즉시 종료. */
-        const loserId = e.payload?.user_id;
-        if(running && loserId && loserId !== pvpState.me?.id){
-            pvpState.opponentDied = true;
+        const senderId    = e.payload?.user_id;
+        const senderScore = Number(e.payload?.score || 0);
+        const senderDur   = Number(e.payload?.duration || 0);
+        if(!senderId || senderId === pvpState.me?.id) return;
+        pvpState.opponentScore    = senderScore;
+        pvpState.opponentDuration = senderDur;
+        if(running){
+            /* 본인 살아있음 → 본인 = winner. 자기도 강제 종료. */
             pvpState.declaredWinner = pvpState.me?.id || null;
-            /* 자기 게임 강제 종료 — 자기 score 도 finish. */
+            pvpState.opponentDied   = true;
             triggerGameOver();
-        } else {
-            _maybeShowPvpResult();
+        } else if(pvpState.myFinished){
+            /* 본인 이미 죽음 — score 비교로 즉시 winner 결정 (양쪽 거의 동시 죽음). */
+            const myScore = pvpState.myFinalScore || 0;
+            const myDur   = pvpState.myFinalTime || 0;
+            if(senderScore > myScore || (senderScore === myScore && senderDur > myDur)){
+                pvpState.declaredWinner = senderId;
+            } else if(myScore > senderScore || (myScore === senderScore && myDur > senderDur)){
+                pvpState.declaredWinner = pvpState.me?.id || null;
+            } else {
+                pvpState.declaredWinner = null;
+            }
+            _renderPvpResultStatus();
         }
     });
     /* 상대 우주선 위치 — 50ms 마다 받음. lerp 용 target 만 갱신, render 시 보간. */
@@ -5620,6 +5638,11 @@ function _startPvpGame(){
     pvpState.myFinalScore = null;
     pvpState.myFinalTime = null;
     pvpState.opponent = null;
+    /* 결과 화면 state reset — rematch 시 이전 winner/score 정보 안 새어나오게. */
+    pvpState.declaredWinner = undefined;
+    pvpState.opponentDied = false;
+    pvpState.opponentScore = null;
+    pvpState.opponentDuration = null;
     /* deterministic seeded RNG — 양쪽 같은 메테오 패턴.
        모든 spawnBullet 안 random 호출은 rand() 사용 (Math.random 아님). */
     _setSeed(pvpState.seed || 1);
@@ -5677,18 +5700,42 @@ function _showPvpResult(){
     _pollPvpResult(0);
 }
 
-async function _pollPvpResult(tries){
-    /* client-side 즉시 winner 결정 — opponentDied 면 본인 = winner, declaredWinner 가
-       있으면 그게 우선. server polling 결과는 보강 정보. */
+/* 결과 화면의 winner/loser 메시지 렌더링 — broadcast 또는 polling 결과로 호출. */
+function _renderPvpResultStatus(){
     const status = document.getElementById('pvpResultStatus');
     if(!status) return;
-    if(pvpState.declaredWinner === pvpState.me?.id){
-        status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>'
-            + '<br><small style="color:rgba(255,255,255,.6)">상대 우주선 격추됨</small>';
-        return;   /* 더 polling 안 함 */
+    const myId = pvpState.me?.id;
+    const winnerId = pvpState.declaredWinner;
+    const opName = pvpState.opponent?.nickname
+                || pvpState.members?.find(m => m.user_id !== myId)?.nickname
+                || '상대';
+    if(winnerId && winnerId === myId){
+        const subtitle = pvpState.opponentDied
+            ? '<br><small style="color:rgba(255,255,255,.6)">상대 우주선 격추됨</small>'
+            : (pvpState.opponentDuration
+                ? '<br><small style="color:rgba(255,255,255,.6)">상대: ' + formatDuration(pvpState.opponentDuration) + '</small>'
+                : '');
+        status.innerHTML = '<span style="color:#00E676;font-size:1.5em;font-weight:900">🏆 승리!</span>' + subtitle;
+    } else if(winnerId){
+        const subtitle = pvpState.opponentDuration
+            ? '<br><small style="color:rgba(255,255,255,.6)">' + escapeHtml(opName) + ': ' + formatDuration(pvpState.opponentDuration) + '</small>'
+            : '';
+        status.innerHTML = '<span style="color:#FF6688;font-size:1.4em;font-weight:900">💀 패배</span>' + subtitle;
+    } else if(winnerId === null && (pvpState.opponentDuration || pvpState.opponentScore)){
+        /* 양쪽 score 정확히 동일 (broadcast payload 비교 결과) */
+        status.innerHTML = '<span style="color:#FFE66D">⚖ 동률</span>';
     }
-    if(tries > 20) return;   /* 30 초 timeout */
-    /* RPC polling — server 가 양쪽 보고 후 winner_id 채워지면 그 결과 따름. */
+    /* winnerId undefined — 상대 결과 아직 미수신, polling 계속. */
+}
+async function _pollPvpResult(tries){
+    /* 즉시 결정된 winner 가 있으면 즉시 표시 후 polling 중단. */
+    if(pvpState.declaredWinner !== undefined && pvpState.declaredWinner !== null
+       || (pvpState.declaredWinner === null && (pvpState.opponentDuration || pvpState.opponentScore))){
+        _renderPvpResultStatus();
+        if(pvpState.declaredWinner) return;   /* winner 결정됐으면 polling 중단 */
+    }
+    if(tries > 20) return;
+    /* RPC polling — server 의 winner_id 검증. broadcast 누락 시 fallback. */
     try {
         const sb = getSupabase();
         const { data } = await sb.rpc('spacez_get_room', { p_room_id: pvpState.roomId });
@@ -5697,16 +5744,16 @@ async function _pollPvpResult(tries){
             const members = row.members || [];
             const opponent = members.find(m => m.user_id !== pvpState.me?.id);
             const winnerId = row.winner_id;
-            const isWin = winnerId === pvpState.me?.id;
-            if(isWin){
-                status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>';
-            } else if(winnerId){
-                status.innerHTML = '<span style="color:#FF8888">패배 — ' + escapeHtml(opponent?.nickname || '?') + ' 승리</span>' +
-                    (opponent?.final_time_ms ? '<br><small style="color:rgba(255,255,255,.6)">상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
+            if(winnerId){
+                pvpState.declaredWinner = winnerId;
+                if(opponent && opponent.final_time_ms){
+                    pvpState.opponentDuration = opponent.final_time_ms;
+                }
+                _renderPvpResultStatus();
             } else {
-                /* server winner 결정 못 함 — 양쪽 score 동률. 상대 정보 보여줌. */
-                status.innerHTML = '<span style="color:#FFE66D">동률</span>' +
-                    (opponent?.final_time_ms ? '<br><small>상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
+                /* server 도 winner 결정 못 함 (양쪽 final score 똑같음) — 동률. */
+                pvpState.declaredWinner = null;
+                _renderPvpResultStatus();
             }
             return;
         }
@@ -5781,6 +5828,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777813380"></script>
+<script src="/js/siteFooter.js?v=1777814188"></script>
 </body>
 </html>
