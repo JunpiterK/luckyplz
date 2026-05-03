@@ -620,10 +620,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777787425"></script>
-<script src="/js/lpI18n.js?v=1777787425"></script>
-<script src="/js/lpRankSheet.js?v=1777787425"></script>
-<script src="/js/lpAudio.js?v=1777787425"></script>
+<script src="/js/supabase-config.js?v=1777787929"></script>
+<script src="/js/lpI18n.js?v=1777787929"></script>
+<script src="/js/lpRankSheet.js?v=1777787929"></script>
+<script src="/js/lpAudio.js?v=1777787929"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2785,12 +2785,22 @@ const MINI_MAX = 2;
 
 function triggerMiniShip(){
     if(miniShips.length >= MINI_MAX) return;
-    /* slot 은 들어오는 순서대로 0, 1. update 단계에서 활성 수에 따라
-       trail/좌·우 위치 재계산. */
+    const now = performance.now();
+    /* 발사 시차 (수학):
+       1 기 — lastShot=0 으로 초기화 → spawn 직후 즉시 첫 발사.
+       2 기 — 첫 미니쉽 (m0) 의 발사 사이클 한가운데에 끼워넣음:
+              m0.lastShot+I 시점이 m0 다음 발사 → 그 후 I/2 시점에 m1 첫 발사.
+              조건: m1.lastShot+I = m0.lastShot+I+I/2 → m1.lastShot = m0.lastShot+I/2.
+       이러면 두 미니쉽이 정확히 I/2 = 167ms 시차로 alternating, 합 6 shots/sec.
+       slot 은 들어오는 순서대로 0, 1. update 에서 활성 수 따라 위치 재계산. */
+    let lastShot = 0;
+    if(miniShips.length === 1){
+        lastShot = miniShips[0].lastShot + MINI_SHOT_INTERVAL / 2;
+    }
     miniShips.push({
         x: player.x, y: player.y + 28,
-        spawnedAt: performance.now(),
-        lastShot: 0,
+        spawnedAt: now,
+        lastShot: lastShot,
         slot: miniShips.length
     });
     sfxStart();
@@ -2803,6 +2813,12 @@ function updateMiniShip(dt, now){
     miniShips.forEach(function(m, i){ m.slot = i; });
 
     const count = miniShips.length;
+    /* 같은 frame 안에서 다른 미니쉽이 이미 잡으려는 메테오는 제외 — 시차가
+       I/2=167ms 라 같은 frame 에 둘 다 발사하는 일은 매우 드물지만, 안전장치.
+       또한 이미 미니쉽 레이저가 잡으려고 발사된 메테오 (miniLasers 에 target
+       으로 들어있는 것) 도 같은 이유로 제외 — 한 frame 의 race condition. */
+    const claimedThisFrame = new Set();
+    for(const l of miniLasers) claimedThisFrame.add(l.target);
     for(const m of miniShips){
         let tx, ty;
         if(count === 1){
@@ -2817,16 +2833,18 @@ function updateMiniShip(dt, now){
         }
         m.x += (tx - m.x) * Math.min(1, dt * 6);
         m.y += (ty - m.y) * Math.min(1, dt * 6);
-        /* 발사 — 가장 가까운 위쪽 메테오 */
+        /* 발사 — 가장 가까운 위쪽 메테오 (다른 미니쉽이 안 잡으려는 것). */
         if(now - m.lastShot >= MINI_SHOT_INTERVAL && bullets.length > 0){
             let target = null, best = Infinity;
             for(const b of bullets){
                 if(b.y > m.y) continue;
+                if(claimedThisFrame.has(b)) continue;
                 const dx = b.x - m.x, dy = b.y - m.y;
                 const d = dx*dx + dy*dy;
                 if(d < best){ best = d; target = b; }
             }
             if(target){
+                claimedThisFrame.add(target);
                 miniLasers.push({
                     fromX: m.x, fromY: m.y,
                     target: target,
@@ -2846,17 +2864,19 @@ function updateMiniShip(dt, now){
     }
     miniLasers = miniLasers.filter(function(l){ return l.life > 0; });
 }
-/* F-117 Nighthawk — 면 분할된 어둑한 스텔스기. 위쪽이 정면. 크기 ≈ 18×16 px. */
+/* F-117 Nighthawk — 면 분할 스텔스기. 위쪽이 정면. 크기 ≈ 18×16 px.
+   메인 우주선의 stainless steel 톤과 매칭 (#7c8c9a, #94a2ae 계열) +
+   cyan accent. 이전 검정 톤은 어두운 배경에 묻혀 안 보였음. */
 function drawF117(cx, cy){
     ctx.save();
     /* 그림자 */
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
     ctx.ellipse(cx, cy + 6, 8, 2.5, 0, 0, Math.PI*2);
     ctx.fill();
 
-    /* 좌측 윙 패널 */
-    ctx.fillStyle = '#1a1d24';
+    /* 좌측 윙 패널 — 메인 우주선의 darker steel. */
+    ctx.fillStyle = '#5e6c7a';
     ctx.beginPath();
     ctx.moveTo(cx,        cy - 8);
     ctx.lineTo(cx - 2,    cy - 4);
@@ -2865,8 +2885,8 @@ function drawF117(cx, cy){
     ctx.lineTo(cx,        cy + 5);
     ctx.closePath();
     ctx.fill();
-    /* 우측 윙 패널 */
-    ctx.fillStyle = '#23272f';
+    /* 우측 윙 패널 — 한 단계 더 밝게 (light direction) */
+    ctx.fillStyle = '#7c8c9a';
     ctx.beginPath();
     ctx.moveTo(cx,        cy - 8);
     ctx.lineTo(cx + 2,    cy - 4);
@@ -2875,8 +2895,8 @@ function drawF117(cx, cy){
     ctx.lineTo(cx,        cy + 5);
     ctx.closePath();
     ctx.fill();
-    /* 동체 facet — 중앙 능선 */
-    ctx.fillStyle = '#0e1014';
+    /* 동체 facet — 중앙 능선. 메인 노즈 색과 비슷한 짙은 강철. */
+    ctx.fillStyle = '#3a4654';
     ctx.beginPath();
     ctx.moveTo(cx,        cy - 8);
     ctx.lineTo(cx - 2.2,  cy - 2);
@@ -2885,8 +2905,8 @@ function drawF117(cx, cy){
     ctx.lineTo(cx + 2.2,  cy - 2);
     ctx.closePath();
     ctx.fill();
-    /* V-tail */
-    ctx.fillStyle = '#16191f';
+    /* V-tail — 짙은 강철 */
+    ctx.fillStyle = '#2c3642';
     ctx.beginPath();
     ctx.moveTo(cx - 1.5,  cy + 3);
     ctx.lineTo(cx - 3.2,  cy + 7);
@@ -2899,17 +2919,22 @@ function drawF117(cx, cy){
     ctx.lineTo(cx + 0.4,  cy + 6);
     ctx.closePath();
     ctx.fill();
-    /* 캐노피 highlight */
-    ctx.fillStyle = 'rgba(120, 150, 180, 0.55)';
+    /* 동체 specular highlight — 좌측 vertical strip (메인의 SUS sheen 미러) */
+    ctx.fillStyle = 'rgba(255,255,255,0.16)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 0.8, cy - 1, 0.7, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* 캐노피 — cyan glow (메인 우주선 cyan accent 와 통일) */
+    ctx.fillStyle = 'rgba(0, 217, 255, 0.7)';
     ctx.beginPath();
     ctx.moveTo(cx,        cy - 5);
     ctx.lineTo(cx - 1.2,  cy - 1.5);
     ctx.lineTo(cx + 1.2,  cy - 1.5);
     ctx.closePath();
     ctx.fill();
-    /* 가장자리 라인 */
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 0.6;
+    /* 가장자리 cyan accent line — 윤곽 강조 */
+    ctx.strokeStyle = 'rgba(0, 217, 255, 0.32)';
+    ctx.lineWidth = 0.7;
     ctx.beginPath();
     ctx.moveTo(cx - 9,    cy + 6);
     ctx.lineTo(cx,        cy - 8);
@@ -4016,6 +4041,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777787425"></script>
+<script src="/js/siteFooter.js?v=1777787929"></script>
 </body>
 </html>
