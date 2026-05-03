@@ -206,6 +206,12 @@ body{
         0 1px 0 rgba(255,255,255,.03);
     text-shadow:none;
 }
+/* 인벤토리 슬롯 안의 SVG (현재는 mini 아이템 = F-117) — 슬롯 크기에 맞게 비례.
+   filter: drop-shadow 로 emoji 의 text-shadow 와 동등한 글로우 효과. */
+.left-controls .item-slot svg{
+    width:74%;height:74%;display:block;
+    filter:drop-shadow(0 0 4px rgba(0,217,255,0.55));
+}
 .left-controls .item-slot:not(.empty):hover{
     transform:translateY(-1px);
     box-shadow:
@@ -620,10 +626,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777790123"></script>
-<script src="/js/lpI18n.js?v=1777790123"></script>
-<script src="/js/lpRankSheet.js?v=1777790123"></script>
-<script src="/js/lpAudio.js?v=1777790123"></script>
+<script src="/js/supabase-config.js?v=1777790887"></script>
+<script src="/js/lpI18n.js?v=1777790887"></script>
+<script src="/js/lpRankSheet.js?v=1777790887"></script>
+<script src="/js/lpAudio.js?v=1777790887"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2680,33 +2686,50 @@ const ITEM = {
     WIPE:   'wipe',    // held: clear all bullets + flash
     MINI:   'mini'     // held: 30s companion ship, 3 lasers/sec
 };
+/* MINI 아이콘 — 실제 drawF117(canvas) 의 path/색을 그대로 inline SVG 로 재현.
+   inventory slot 에 띄울 때 emoji 대신 이 SVG 를 innerHTML 로 삽입.
+   viewBox -10 -9 to 10 9 (대충 18×18) — drawF117 의 좌표계와 일치. */
+const F117_SVG = '<svg viewBox="-10 -9 20 18" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    + '<polygon points="0,-8 -2,-4 -9,6 -4,7 0,5" fill="#5e6c7a"/>'
+    + '<polygon points="0,-8 2,-4 9,6 4,7 0,5" fill="#7c8c9a"/>'
+    + '<polygon points="0,-8 -2.2,-2 -1.6,5 1.6,5 2.2,-2" fill="#3a4654"/>'
+    + '<polygon points="-1.5,3 -3.2,7 -0.4,6" fill="#2c3642"/>'
+    + '<polygon points="1.5,3 3.2,7 0.4,6" fill="#2c3642"/>'
+    + '<polygon points="0,-5 -1.2,-1.5 1.2,-1.5" fill="#00D9FF" opacity="0.85"/>'
+    + '<polyline points="-9,6 0,-8 9,6" fill="none" stroke="#00D9FF" stroke-opacity="0.45" stroke-width="0.6"/>'
+    + '</svg>';
+
 const ITEM_VISUAL = {
     shield: {emoji:'🛡', color:'#00D9FF', borderColor:'#7CE7FF'},
     heart:  {emoji:'♥',  color:'#FF3366', borderColor:'#FF8FA0'},
     wipe:   {emoji:'✦',  color:'#FFE66D', borderColor:'#FFF6B8'},
-    mini:   {emoji:'▲',  color:'#A855F7', borderColor:'#D5B0FF'}
+    /* mini: emoji 자리에 F-117 SVG. 색은 인벤 슬롯의 border/glow 톤
+       (실제 보조우주선 cyan canopy 와 통일). */
+    mini:   {emoji: F117_SVG, color:'#7c8c9a', borderColor:'#7CE7FF', isSvg:true}
 };
 /* Zone → 거점 아이템 매핑 (스토리 의미 고려해 배치)
    각 zone 마다 3 개의 보급선이 분산되어 떠밀려 옴. */
+/* zone 당 2 개 depot — 사용자 피드백: 3 개 너무 많음.
+   각 zone 의미에 맞게 가장 어울리는 2 개로 큐레이션. */
 const ZONE_DEPOT_MAP = [
-    {zoneIdx:0,  items:[ITEM.SHIELD, ITEM.HEART,  ITEM.MINI ]},   // 🌍 Earth — 튜토리얼
-    {zoneIdx:1,  items:[ITEM.SHIELD, ITEM.MINI,   ITEM.WIPE ]},   // 🌙 Moon
-    {zoneIdx:2,  items:[ITEM.MINI,   ITEM.SHIELD, ITEM.WIPE ]},   // 🔴 Mars
-    {zoneIdx:3,  items:[ITEM.WIPE,   ITEM.HEART,  ITEM.WIPE ]},   // 🟠 Jupiter
-    {zoneIdx:4,  items:[ITEM.WIPE,   ITEM.MINI,   ITEM.SHIELD]},  // 🪐 Saturn
-    {zoneIdx:5,  items:[ITEM.HEART,  ITEM.SHIELD, ITEM.WIPE ]},   // 🔵 Uranus
-    {zoneIdx:6,  items:[ITEM.HEART,  ITEM.MINI,   ITEM.WIPE ]},   // 💙 Neptune
-    {zoneIdx:7,  items:[ITEM.MINI,   ITEM.SHIELD, ITEM.HEART]},   // ⚪ Pluto
-    {zoneIdx:8,  items:[ITEM.WIPE,   ITEM.HEART,  ITEM.SHIELD]},  // 🌌 Heliosphere
-    {zoneIdx:9,  items:[ITEM.SHIELD, ITEM.MINI,   ITEM.WIPE ]},   // ❄ Oort Cloud
-    {zoneIdx:10, items:[ITEM.HEART,  ITEM.SHIELD, ITEM.WIPE ]},   // ⭐ Proxima Centauri
-    {zoneIdx:11, items:[ITEM.MINI,   ITEM.SHIELD, ITEM.HEART]},   // ✨ Sirius
-    {zoneIdx:12, items:[ITEM.WIPE,   ITEM.MINI,   ITEM.SHIELD]},  // 🟥 Betelgeuse
-    {zoneIdx:13, items:[ITEM.HEART,  ITEM.SHIELD, ITEM.WIPE ]},   // 🌠 Horsehead
-    {zoneIdx:14, items:[ITEM.MINI,   ITEM.HEART,  ITEM.SHIELD]},  // 🌫 Pillars of Creation
-    {zoneIdx:15, items:[ITEM.SHIELD, ITEM.WIPE,   ITEM.HEART]},   // ⚫ Sgr A* (블랙홀 — 보조 강화)
-    {zoneIdx:16, items:[ITEM.MINI,   ITEM.WIPE,   ITEM.SHIELD]},  // 🌌 Galactic Rim
-    {zoneIdx:17, items:[ITEM.HEART,  ITEM.SHIELD, ITEM.MINI ]}    // ∞ Intergalactic Void
+    {zoneIdx:0,  items:[ITEM.SHIELD, ITEM.MINI ]},   // 🌍 Earth — 튜토리얼 (보호 + 보조)
+    {zoneIdx:1,  items:[ITEM.SHIELD, ITEM.WIPE ]},   // 🌙 Moon
+    {zoneIdx:2,  items:[ITEM.MINI,   ITEM.SHIELD]},  // 🔴 Mars
+    {zoneIdx:3,  items:[ITEM.WIPE,   ITEM.HEART]},   // 🟠 Jupiter (방사선 wipe)
+    {zoneIdx:4,  items:[ITEM.MINI,   ITEM.SHIELD]},  // 🪐 Saturn
+    {zoneIdx:5,  items:[ITEM.HEART,  ITEM.WIPE ]},   // 🔵 Uranus
+    {zoneIdx:6,  items:[ITEM.HEART,  ITEM.MINI ]},   // 💙 Neptune
+    {zoneIdx:7,  items:[ITEM.SHIELD, ITEM.HEART]},   // ⚪ Pluto
+    {zoneIdx:8,  items:[ITEM.SHIELD, ITEM.WIPE ]},   // 🌌 Heliosphere
+    {zoneIdx:9,  items:[ITEM.SHIELD, ITEM.MINI ]},   // ❄ Oort Cloud
+    {zoneIdx:10, items:[ITEM.SHIELD, ITEM.HEART]},   // ⭐ Proxima Centauri
+    {zoneIdx:11, items:[ITEM.MINI,   ITEM.HEART]},   // ✨ Sirius
+    {zoneIdx:12, items:[ITEM.MINI,   ITEM.SHIELD]},  // 🟥 Betelgeuse (충격파 — 보조 + 보호)
+    {zoneIdx:13, items:[ITEM.HEART,  ITEM.WIPE ]},   // 🌠 Horsehead
+    {zoneIdx:14, items:[ITEM.SHIELD, ITEM.HEART]},   // 🌫 Pillars of Creation
+    {zoneIdx:15, items:[ITEM.SHIELD, ITEM.WIPE ]},   // ⚫ Sgr A* 블랙홀 — 위급 보호 + 폭격
+    {zoneIdx:16, items:[ITEM.MINI,   ITEM.SHIELD]},  // 🌌 Galactic Rim
+    {zoneIdx:17, items:[ITEM.HEART,  ITEM.SHIELD]}   // ∞ Intergalactic Void
 ];
 
 /* depot pickup hold 시간 (초). 3 초는 길어서 2 초로 완화. */
@@ -2720,20 +2743,21 @@ function maybeSpawnDepot(zoneIdx, now){
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
     /* zone duration 가져오기 — ZONES[zoneIdx].dur (sec).
-       마지막 zone (말머리 성운) 은 9999 로 설정돼있어 max 25 sec 으로 cap.
-       그래야 3 번째 depot 이 너무 늦게 안 떠서 못 받는 일이 없음. */
+       마지막 zone 은 9999 로 설정돼 있어 max 25 sec 으로 cap.
+       사용자 피드백: depot 3 개 → 2 개. ratios 도 더 spread 한 분포로.
+       2 개 spawn: ~25%, ~65% 시점. */
     const rawDur = (typeof ZONES !== 'undefined' && ZONES[zoneIdx] && ZONES[zoneIdx].dur > 0)
         ? ZONES[zoneIdx].dur : 25;
     const zd = Math.min(25, rawDur);
-    /* 3 개를 zone duration 의 ~10%, ~40%, ~75% 시점에 분산 spawn. */
-    const ratios = [0.10, 0.40, 0.75];
+    const ratios = [0.25, 0.65];
     const sinceZone = (now - zoneEnteredAt) / 1000;
     /* zone 라벨 페이드인 시간 보장 — 첫 spawn 은 최소 2.5 초 후. */
     const minFirst = 2.5;
-    for(let slot = 0; slot < 3; slot++){
+    const itemCount = Math.min(def.items.length, ratios.length);
+    for(let slot = 0; slot < itemCount; slot++){
         const key = zoneIdx + '-' + slot;
         if(depotsSpawnedZones.has(key)) continue;
-        const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 1.5, ratios[slot] * zd);
+        const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
         if(sinceZone < targetSec) continue;
         depotsSpawnedZones.add(key);
         depots.push({
@@ -2819,12 +2843,60 @@ function drawDepot(d, now){
         ctx.fill();
     }
 
-    /* 아이템 아이콘 (글자 / 기호) */
-    ctx.fillStyle = v.color;
-    ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(v.emoji, cx, cy + 1);
+    /* 아이템 아이콘 (글자 / 기호).
+       mini 는 ITEM_VISUAL.emoji 가 SVG 문자열이라 canvas fillText 로 못 그림.
+       대신 F-117 의 미니어처 silhouette 을 직접 path 로 그림 (drawF117 의
+       1/3 크기 정도). */
+    if(d.item === ITEM.MINI){
+        ctx.save();
+        ctx.translate(cx, cy + 1);
+        ctx.scale(0.55, 0.55);   /* depot 안에 들어갈 크기로 축소 */
+        /* 좌측 윙 */
+        ctx.fillStyle = '#7c8c9a';
+        ctx.beginPath();
+        ctx.moveTo(0,    -8);
+        ctx.lineTo(-2,   -4);
+        ctx.lineTo(-9,    6);
+        ctx.lineTo(-4,    7);
+        ctx.lineTo(0,     5);
+        ctx.closePath();
+        ctx.fill();
+        /* 우측 윙 (한 단계 밝게) */
+        ctx.fillStyle = '#9eb0c0';
+        ctx.beginPath();
+        ctx.moveTo(0,    -8);
+        ctx.lineTo(2,    -4);
+        ctx.lineTo(9,     6);
+        ctx.lineTo(4,     7);
+        ctx.lineTo(0,     5);
+        ctx.closePath();
+        ctx.fill();
+        /* 동체 */
+        ctx.fillStyle = '#3a4654';
+        ctx.beginPath();
+        ctx.moveTo(0,    -8);
+        ctx.lineTo(-2.2, -2);
+        ctx.lineTo(-1.6,  5);
+        ctx.lineTo(1.6,   5);
+        ctx.lineTo(2.2,  -2);
+        ctx.closePath();
+        ctx.fill();
+        /* 캐노피 cyan */
+        ctx.fillStyle = 'rgba(0,217,255,0.85)';
+        ctx.beginPath();
+        ctx.moveTo(0,    -5);
+        ctx.lineTo(-1.2, -1.5);
+        ctx.lineTo(1.2,  -1.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+    } else {
+        ctx.fillStyle = v.color;
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(v.emoji, cx, cy + 1);
+    }
 
     /* 충전 progress ring */
     if(d.chargeTime > 0 && !d.collected){
@@ -4551,6 +4623,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777790123"></script>
+<script src="/js/siteFooter.js?v=1777790887"></script>
 </body>
 </html>
