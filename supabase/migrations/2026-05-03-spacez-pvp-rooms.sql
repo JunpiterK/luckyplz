@@ -448,29 +448,46 @@ $$;
 revoke all on function public.spacez_set_ready(uuid, boolean) from public;
 grant execute on function public.spacez_set_ready(uuid, boolean) to authenticated;
 
+drop function if exists public.spacez_start_game(uuid);
 create or replace function public.spacez_start_game(p_room_id uuid)
-returns void
+returns bigint   /* return new seed — host 가 receive 후 broadcast 'game_start' payload 로 사용 */
 language plpgsql security definer set search_path = public
 as $$
 #variable_conflict use_column
 declare
     v_user_id uuid := auth.uid();
     v_ready_count int;
+    v_room record;
+    v_seed bigint;
 begin
     if v_user_id is null then raise exception 'auth_required'; end if;
-    if not exists (
-        select 1 from public.spacez_rooms
-        where id = p_room_id and host_id = v_user_id and status = 'waiting'
-    ) then
-        raise exception 'not_host_or_invalid_state';
+    select * into v_room from public.spacez_rooms
+    where id = p_room_id and host_id = v_user_id;
+    if not found then raise exception 'not_host_or_invalid_state'; end if;
+    /* 'waiting' (첫 게임) 또는 'finished' (rematch) 상태에서만 시작 가능. */
+    if v_room.status not in ('waiting', 'finished') then
+        raise exception 'invalid_state';
     end if;
     select count(*) into v_ready_count
     from public.spacez_room_members
     where room_id = p_room_id and is_ready = true;
     if v_ready_count < 2 then raise exception 'not_all_ready'; end if;
+    /* rematch — 멤버 final_score/time reset, 새 seed 생성. */
+    if v_room.status = 'finished' then
+        update public.spacez_room_members
+           set final_score = null, final_time_ms = null
+         where room_id = p_room_id;
+        v_seed := floor(random() * 1e15)::bigint;
+        update public.spacez_rooms
+           set seed = v_seed, winner_id = null, finished_at = null
+         where id = p_room_id;
+    else
+        v_seed := v_room.seed;
+    end if;
     update public.spacez_rooms
        set status = 'playing', started_at = now()
      where id = p_room_id;
+    return v_seed;
 end;
 $$;
 revoke all on function public.spacez_start_game(uuid) from public;
@@ -496,14 +513,21 @@ begin
     from public.spacez_room_members
     where room_id = p_room_id and final_score is not null;
     if v_finished_count >= 2 then
+        /* tiebreaker: 동률 점수 시 더 오래 산 쪽 (final_time_ms desc) 우승.
+           이전 asc 는 짧게 산 쪽이 win 되는 버그였음. */
         select user_id into v_winner
         from public.spacez_room_members
         where room_id = p_room_id
-        order by final_score desc nulls last, final_time_ms asc nulls last
+        order by final_score desc nulls last, final_time_ms desc nulls last
         limit 1;
         update public.spacez_rooms
            set status = 'finished', finished_at = now(), winner_id = v_winner
          where id = p_room_id;
+        /* rematch 위해 양쪽 is_ready 자동 reset — 다음 게임 시작 시 양쪽
+           [준비] 다시 눌러야 함. */
+        update public.spacez_room_members
+           set is_ready = false
+         where room_id = p_room_id;
     end if;
 end;
 $$;
