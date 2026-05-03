@@ -439,6 +439,21 @@ body{
 }
 .pvp-room-view .pvp-code-label{font-size:.7em;color:rgba(255,255,255,.55);letter-spacing:.12em;font-weight:800;text-transform:uppercase;margin-bottom:4px}
 .pvp-room-view .pvp-code-val{font-family:'JetBrains Mono','Roboto Mono',monospace;font-size:1.8em;font-weight:900;color:#00D9FF;letter-spacing:.18em;text-shadow:0 0 18px rgba(0,217,255,.5)}
+/* Ping 5칸 막대 — RTT 색상 매핑 (Battle.net 스타일).
+   < 60ms = 5칸 녹 / 60-110 = 4칸 녹 / 110-180 = 3칸 노랑 / 180-280 = 2칸 빨강 / > 280 = 1칸 빨강 */
+.pvp-room-view .pvp-ping-row{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:.78em;color:rgba(255,255,255,.55);letter-spacing:.05em}
+.pvp-room-view .pvp-ping-label{font-weight:800;font-size:.85em}
+.pvp-room-view .pvp-ping{display:inline-flex;gap:2px;align-items:flex-end;height:14px}
+.pvp-room-view .pvp-ping .bar{width:4px;background:rgba(255,255,255,.18);border-radius:1px;transition:background .2s}
+.pvp-room-view .pvp-ping .bar.b1{height:4px}
+.pvp-room-view .pvp-ping .bar.b2{height:6px}
+.pvp-room-view .pvp-ping .bar.b3{height:8px}
+.pvp-room-view .pvp-ping .bar.b4{height:11px}
+.pvp-room-view .pvp-ping .bar.b5{height:14px}
+.pvp-room-view .pvp-ping .bar.on.good{background:#00E676}
+.pvp-room-view .pvp-ping .bar.on.warn{background:#FFE66D}
+.pvp-room-view .pvp-ping .bar.on.bad{background:#FF3366}
+.pvp-room-view .pvp-ping-ms{margin-left:auto;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.7)}
 .pvp-room-view .pvp-players{display:flex;flex-direction:column;gap:8px;width:100%;max-width:300px;margin-bottom:14px}
 .pvp-room-view .pvp-player{
     display:flex;align-items:center;gap:10px;
@@ -765,6 +780,12 @@ body{
                         <span id="pvpRoomPw" style="font-family:'JetBrains Mono',monospace;font-weight:800"></span>
                     </div>
                 </div>
+                <!-- Ping 5칸 막대 — 방 진입 후 1초마다 RTT 측정. 색상: 5/4=녹, 3=노랑, 2/1=빨강. -->
+                <div class="pvp-ping-row">
+                    <span class="pvp-ping-label">PING</span>
+                    <div class="pvp-ping" id="pvpPingBar"></div>
+                    <span class="pvp-ping-ms" id="pvpPingMs">—</span>
+                </div>
                 <div class="pvp-players" id="pvpPlayers"></div>
                 <div class="pvp-chat" id="pvpChat"></div>
                 <div class="pvp-chat-row">
@@ -828,10 +849,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777809451"></script>
-<script src="/js/lpI18n.js?v=1777809451"></script>
-<script src="/js/lpRankSheet.js?v=1777809451"></script>
-<script src="/js/lpAudio.js?v=1777809451"></script>
+<script src="/js/supabase-config.js?v=1777810121"></script>
+<script src="/js/lpI18n.js?v=1777810121"></script>
+<script src="/js/lpRankSheet.js?v=1777810121"></script>
+<script src="/js/lpAudio.js?v=1777810121"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4067,14 +4088,17 @@ function triggerGameOver(){
     sfxOver();
     BGM.stop();
     syncPauseUI();
-    /* Round to integer — record_dodge_attempt's p_duration_ms column
-       is INT, and elapsedMs is a sub-millisecond float from
-       performance.now() math. Postgres rejects 9769.099… verbatim. */
     const duration=Math.round(elapsedMs);
     const score=Math.floor(duration/100);
     const wrap=$('canvasWrap');
     wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
     if(navigator.vibrate)try{navigator.vibrate([40,20,80])}catch(_){}
+
+    /* PvP 모드면 별도 처리 — finish RPC + 결과 화면 polling. single-player 흐름 skip. */
+    if(pvpState && pvpState.gameMode === 'pvp' && pvpState.roomId){
+        _handlePvpGameOver(duration, score);
+        return;
+    }
 
     const timeStr=formatDuration(duration);
     const zoneReached=ZONES[currentZoneIdx];
@@ -4791,6 +4815,12 @@ const pvpState = {
     channel: null,      // Supabase Realtime channel
     me: null,           // {id, nickname}
     listRefreshTimer: null,
+    gameMode: 'idle',   // 'idle' | 'pvp' (PvP 게임 진행 중이면 game-over 흐름 분기)
+    myFinished: false,
+    myFinalScore: null,
+    myFinalTime: null,
+    password: null,     // host 가 만들 때 메모리에 보관 (lobby room 에 표시)
+    pendingJoinRoomId: null,
 };
 function _showPvpOverlay(id){
     /* 다른 PvP overlay 다 닫고 지정한 거 열기. start overlay 도 동시에 hide. */
@@ -5169,13 +5199,79 @@ async function _subscribePvpRoom(){
     const ch = sb.channel('spacez:room:' + pvpState.roomId, { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'member' }, () => _loadPvpMembers());
     ch.on('broadcast', { event: 'chat' }, (e) => _appendChat(e.payload?.nickname || '?', e.payload?.msg || ''));
-    ch.on('broadcast', { event: 'start' }, () => {
-        /* 다음 phase: 둘 다 같은 seed 로 게임 시작. 일단 alert 으로 placeholder. */
-        alert('🚀 GAME START — (게임 동기화는 다음 phase 에 구현)');
-        _showPvpOverlay(null);
+    /* 호스트가 [시작] 누르면 broadcast 'game_start' { seed, item_count }.
+       게스트는 받자마자 본인도 _startPvpGame 으로 진입. */
+    ch.on('broadcast', { event: 'game_start' }, (e) => {
+        const seed = Number(e.payload?.seed || pvpState.seed || 0);
+        const itemCnt = Number(e.payload?.item_count || pvpState.itemCount || 2);
+        if(seed) pvpState.seed = seed;
+        if(itemCnt) pvpState.itemCount = itemCnt;
+        _startPvpGame();
+    });
+    /* 1초 ping/pong — 상대 ping 받으면 즉시 pong 응답. 자기 pong 받으면 RTT 계산. */
+    ch.on('broadcast', { event: 'ping' }, (e) => {
+        try { ch.send({ type:'broadcast', event:'pong', payload:{ ts: e.payload?.ts } }); } catch(_){}
+    });
+    ch.on('broadcast', { event: 'pong' }, (e) => {
+        const sentAt = Number(e.payload?.ts || 0);
+        if(sentAt > 0){
+            const rtt = Date.now() - sentAt;
+            _pushPingSample(rtt);
+        }
+    });
+    /* 상대 게임 종료 시 결과 알림 — finish broadcast (옵션) */
+    ch.on('broadcast', { event: 'finished' }, () => {
+        _maybeShowPvpResult();
     });
     await ch.subscribe();
     pvpState.channel = ch;
+    /* 채널 준비 후 ping loop 시작 */
+    _startPingLoop();
+}
+
+/* ===== Ping (RTT) 측정 + 5칸 막대 ===== */
+let _pingArr = [];     /* 최근 5 회 RTT (ms) */
+let _pingTimer = null;
+function _pushPingSample(rtt){
+    _pingArr.push(rtt);
+    if(_pingArr.length > 5) _pingArr.shift();
+    _renderPingBar();
+}
+function _renderPingBar(){
+    const el = document.getElementById('pvpPingBar');
+    const ms = document.getElementById('pvpPingMs');
+    if(!el) return;
+    const n = _pingArr.length;
+    const avg = n === 0 ? null : Math.round(_pingArr.reduce((a,b)=>a+b,0) / n);
+    /* RTT → 칸 수 + 색상 매핑 */
+    let bars = 0, color = 'good';
+    if(avg === null){ bars = 0; }
+    else if(avg < 60)  { bars = 5; color = 'good'; }
+    else if(avg < 110) { bars = 4; color = 'good'; }
+    else if(avg < 180) { bars = 3; color = 'warn'; }
+    else if(avg < 280) { bars = 2; color = 'bad';  }
+    else                { bars = 1; color = 'bad';  }
+    el.innerHTML = '';
+    for(let i = 0; i < 5; i++){
+        const b = document.createElement('div');
+        b.className = 'bar b' + (i+1) + (i < bars ? (' on ' + color) : '');
+        el.appendChild(b);
+    }
+    if(ms) ms.textContent = avg !== null ? (avg + 'ms') : '— ';
+}
+function _startPingLoop(){
+    _pingArr = [];
+    _renderPingBar();
+    if(_pingTimer) clearInterval(_pingTimer);
+    _pingTimer = setInterval(() => {
+        if(!pvpState.channel) return;
+        const ts = Date.now();
+        try { pvpState.channel.send({ type:'broadcast', event:'ping', payload:{ ts } }); } catch(_){}
+    }, 1000);
+}
+function _stopPingLoop(){
+    if(_pingTimer){ clearInterval(_pingTimer); _pingTimer = null; }
+    _pingArr = [];
 }
 async function _broadcastPvp(event, payload){
     if(!pvpState.channel) return;
@@ -5189,9 +5285,9 @@ $('pvpRoomReady').addEventListener('click', async () => {
             if(both){
                 const { error } = await sb.rpc('spacez_start_game', { p_room_id: pvpState.roomId });
                 if(error) throw error;
-                await _broadcastPvp('start');
-                alert('🚀 GAME START — (게임 동기화는 다음 phase 에 구현)');
-                _showPvpOverlay(null);
+                /* 게스트에게 game_start broadcast — seed/item_count 동기화. */
+                await _broadcastPvp('game_start', { seed: pvpState.seed, item_count: pvpState.itemCount });
+                _startPvpGame();
                 return;
             }
         }
@@ -5230,6 +5326,105 @@ async function _sendChat(){
         await _broadcastPvp('chat', { nickname: pvpState.me.nickname, msg });
     } catch(e){
         _appendChat('', '메시지 전송 실패: ' + (e?.message || ''), true);
+    }
+}
+
+/* ===== PvP game flow (Stage 1 — 단순 score 비교, state broadcast 없음) =====
+   호스트가 [시작] 누르면 _startPvpGame 진입. 양쪽 모두 dodge.startGame 호출 →
+   각자 dodge 게임 진행. 죽으면 _handlePvpGameOver — finish RPC + broadcast.
+   양쪽 모두 finish 보고하면 server 가 winner 결정. polling 으로 winner 확인. */
+function _startPvpGame(){
+    pvpState.gameMode = 'pvp';
+    pvpState.myFinished = false;
+    pvpState.myFinalScore = null;
+    pvpState.myFinalTime = null;
+    /* PvP modal 닫고 dodge 게임 시작 — overlay.hidden 도 내려서 canvas 표시. */
+    _showPvpOverlay(null);
+    $('overlay').classList.add('hidden');
+    /* 단일플레이 startGame 호출 — intro countdown 후 게임 진행. */
+    if(!running){
+        try { startGame(); } catch(e){ console.error('[PvP] startGame fail', e); }
+    }
+}
+
+async function _handlePvpGameOver(duration, score){
+    pvpState.myFinished = true;
+    pvpState.myFinalScore = score;
+    pvpState.myFinalTime = duration;
+    /* spacez_finish_game RPC — 양쪽 보고 후 server 가 winner 결정. */
+    try {
+        const sb = getSupabase();
+        await sb.rpc('spacez_finish_game', {
+            p_room_id: pvpState.roomId,
+            p_score: score,
+            p_duration_ms: duration
+        });
+    } catch(e){ console.error('[PvP] finish_game RPC fail', e); }
+    /* 상대에게 알림 — UI 즉각 update 위함. */
+    await _broadcastPvp('finished', { score, duration, user_id: pvpState.me?.id || null });
+    _showPvpResult();
+}
+
+function _showPvpResult(){
+    /* PvP 결과 overlay — 단일플레이의 다시하기 화면 대체. */
+    const ov = $('overlay');
+    const myDur = formatDuration(pvpState.myFinalTime || 0);
+    ov.innerHTML =
+        '<h2 class="play">⚔ 대결 종료</h2>' +
+        '<div class="score-big" style="font-size:1.6em">' + myDur + '</div>' +
+        '<p>나의 생존 시간</p>' +
+        '<div id="pvpResultStatus" style="margin:14px 0;font-size:.95em;color:#FFE66D;min-height:1.4em">상대 결과 대기 중...</div>' +
+        '<div class="ov-btn-row">' +
+            '<button class="btn" id="ovBtn" type="button">룸으로 돌아가기</button>' +
+        '</div>';
+    ov.classList.remove('hidden');
+    document.getElementById('ovBtn').addEventListener('click', () => {
+        /* 룸 view 로 복귀 — 결과 확인 후 다시 ready 가능. 또는 leave 가능. */
+        pvpState.gameMode = 'idle';
+        pvpState.myFinished = false;
+        ov.classList.add('hidden');
+        /* 멤버 ready 상태 reset (server side 도 finished 후엔 reset). */
+        pvpState.isReady = false;
+        _enterPvpRoom();
+    });
+    _pollPvpResult(0);
+}
+
+async function _pollPvpResult(tries){
+    if(tries > 20) return;   /* 30 초 timeout */
+    /* RPC 로 winner 결정됐는지 확인 — server 가 양쪽 보고 후 winner_id 채움. */
+    try {
+        const sb = getSupabase();
+        const { data } = await sb.rpc('spacez_get_room', { p_room_id: pvpState.roomId });
+        const row = Array.isArray(data) ? data[0] : data;
+        if(row && row.status === 'finished'){
+            const members = row.members || [];
+            const opponent = members.find(m => m.user_id !== pvpState.me?.id);
+            const meRow = members.find(m => m.user_id === pvpState.me?.id);
+            const winnerId = row.winner_id;
+            const isWin = winnerId === pvpState.me?.id;
+            const status = document.getElementById('pvpResultStatus');
+            if(status){
+                if(isWin){
+                    status.innerHTML = '<span style="color:#00E676;font-size:1.4em;font-weight:900">🏆 승리!</span>';
+                } else if(winnerId){
+                    status.innerHTML = '<span style="color:#FF8888">패배 — ' + escapeHtml(opponent?.nickname || '?') + ' 승리</span>' +
+                        (opponent?.final_time_ms ? '<br><small style="color:rgba(255,255,255,.6)">상대: ' + formatDuration(opponent.final_time_ms) + '</small>' : '');
+                } else {
+                    status.textContent = '무승부';
+                }
+            }
+            return;
+        }
+    } catch(_){}
+    setTimeout(() => _pollPvpResult(tries + 1), 1500);
+}
+
+function _maybeShowPvpResult(){
+    /* 상대가 finish broadcast 보냄 — 자기는 아직 게임 중이거나 끝났을 수 있음.
+       끝났으면 polling 트리거. 아직 게임 중이면 ignore (자기 끝나면 자동 처리). */
+    if(pvpState.myFinished){
+        _pollPvpResult(0);
     }
 }
 
@@ -5292,6 +5487,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777809451"></script>
+<script src="/js/siteFooter.js?v=1777810121"></script>
 </body>
 </html>
