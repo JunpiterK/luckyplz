@@ -198,6 +198,24 @@
         .game-name{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:1.08em;font-weight:700;margin-bottom:6px;color:var(--accent)}
         .game-desc{font-size:0.82em;color:rgba(255,255,255,0.45);line-height:1.4;min-height:2.2em}
         .game-badge{display:inline-block;font-size:0.7em;padding:4px 10px;border-radius:10px;margin-top:10px;font-weight:700;letter-spacing:0.5px}
+        /* HOT 배지 — Space-Z 카드 좌상단. 빨강·오렌지 그라디언트, glow.
+           game-badge 클래스 안 씀 — 모바일 hide rule 안 받음 + 별도 위치. */
+        .badge-hot{
+            position:absolute;top:6px;left:6px;
+            display:inline-flex;align-items:center;gap:3px;
+            padding:3px 8px;border-radius:999px;
+            background:linear-gradient(135deg,#FF3B3B 0%,#FF7B2A 100%);
+            color:#fff;font-size:.66em;font-weight:900;letter-spacing:.04em;
+            box-shadow:0 2px 8px -1px rgba(255,90,40,.55),
+                       inset 0 1px 0 rgba(255,255,255,.30);
+            text-shadow:0 1px 2px rgba(150,30,0,.4);
+            z-index:2;line-height:1;
+            animation:hotPulse 2.4s ease-in-out infinite;
+        }
+        @keyframes hotPulse{
+            0%,100%{transform:scale(1);box-shadow:0 2px 8px -1px rgba(255,90,40,.55),inset 0 1px 0 rgba(255,255,255,.30)}
+            50%{transform:scale(1.06);box-shadow:0 2px 14px -1px rgba(255,90,40,.85),inset 0 1px 0 rgba(255,255,255,.45)}
+        }
         /* Live badge removed — the card itself + chevron are now
            the click affordance. Only "coming soon" still shows a
            badge since that's an important disabled-state cue. */
@@ -748,13 +766,15 @@ const DODGE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-18 -22 36 4
 const GAMES_ACTION = [
     /* "실력의 게임" — Action/Skill games. Quiz 도 여기 포함 (실시간
        문제 풀이로 실력 기반). Anon 가능 — login 안 해도 플레이/랭킹
-       조회 가능, 기록 저장만 login 필요. */
-    { id: 'quiz',       icon: QUIZ_SVG,   nameKey: 'quiz',   descKey: 'quizDesc',   url: '/games/quiz/',   live: true, isNew: true },
+       조회 가능, 기록 저장만 login 필요.
+       사용자 큐레이션 순서: Space-Z → Tetris → Snake → Pacman → Burger → Quiz.
+       Space-Z 는 isHot 플래그 — 카드 좌상단에 'HOT' 배지. */
+    { id: 'dodge',      icon: DODGE_SVG,  nameKey: 'dodge',  descKey: 'dodgeDesc',  url: '/games/dodge/',  live: true, isHot: true },
     { id: 'tetris',     icon: TETRIS_SVG, nameKey: 'tetris', descKey: 'tetrisDesc', url: '/games/tetris/', live: true },
     { id: 'snake',      icon: '🐍',       nameKey: 'snake',  descKey: 'snakeDesc',  url: '/games/snake/',  live: true },
     { id: 'pacman',     icon: '👻',       nameKey: 'pacman', descKey: 'pacmanDesc', url: '/games/pacman/', live: true },
     { id: 'burger',     icon: '🍔',       nameKey: 'burger', descKey: 'burgerDesc', url: '/games/burger/', live: true },
-    { id: 'dodge',      icon: DODGE_SVG,  nameKey: 'dodge',  descKey: 'dodgeDesc',  url: '/games/dodge/',  live: true }
+    { id: 'quiz',       icon: QUIZ_SVG,   nameKey: 'quiz',   descKey: 'quizDesc',   url: '/games/quiz/',   live: true, isNew: true }
 ];
 
 let currentLang = 'en';
@@ -774,6 +794,16 @@ function detectBrowserLang() {
 function T(key) {
     return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.en[key] || key);
 }
+
+/* HOT 배지 라벨 (16 언어) — Space-Z 카드 좌상단에 표기.
+   I18N 안에 합치지 않고 별도 map 으로 둠 (단일 키, 추가 메인터넌스 단순). */
+const HOT_LABEL = {
+    en: 'HOT',     ko: '인기',    gb: 'HOT',     ja: '人気',
+    zh: '热门',    es: 'POPULAR', de: 'BELIEBT', fr: 'TENDANCE',
+    pt: 'POPULAR', ru: 'ХИТ',     ar: 'رائج',    hi: 'हिट',
+    th: 'ฮิต',     id: 'HITS',    vi: 'HOT',     tr: 'POPÜLER'
+};
+function THot(){ return HOT_LABEL[currentLang] || HOT_LABEL.en; }
 
 /* Daily Fortune — one-line reading tied to the betting brand + a game CTA.
    Seeded by local date so everyone sees the same thing today; refreshes at
@@ -882,6 +912,7 @@ function renderGames() {
         const badge = g.live
             ? `<span class="game-badge badge-live">${T('playNow')}</span>`
             : `<span class="game-badge badge-soon">${T('comingSoon')}</span>`;
+        const hotBadge = g.isHot ? `<span class="badge-hot">🔥 ${THot()}</span>` : '';
         const tag = g.live ? 'a' : 'div';
         const href = g.live ? ` href="${g.url}"` : '';
         /* data-game-id lets a single delegated click handler pop the
@@ -890,6 +921,7 @@ function renderGames() {
            via ctrl/middle-click. */
         const idAttr = g.live ? ` data-game-id="${g.id}"` : '';
         return `<${tag} class="${cls}"${href}${idAttr}>
+            ${hotBadge}
             <span class="game-icon">${g.icon}</span>
             <div class="game-name">${T(g.nameKey)}</div>
             <div class="game-desc">${T(g.descKey)}</div>
@@ -1051,7 +1083,7 @@ init();
 
 <script src="/js/langBar.js"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1777790887"></script>
+<script src="/js/supabase-config.js?v=1777791326"></script>
 <script>
 (async function(){
     try{
@@ -1501,6 +1533,6 @@ document.addEventListener('keydown', (e) => {
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777790887" defer></script>
+<script src="/js/siteFooter.js?v=1777791326" defer></script>
 </body>
 </html>
