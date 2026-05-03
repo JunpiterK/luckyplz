@@ -620,10 +620,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777787929"></script>
-<script src="/js/lpI18n.js?v=1777787929"></script>
-<script src="/js/lpRankSheet.js?v=1777787929"></script>
-<script src="/js/lpAudio.js?v=1777787929"></script>
+<script src="/js/supabase-config.js?v=1777788923"></script>
+<script src="/js/lpI18n.js?v=1777788923"></script>
+<script src="/js/lpRankSheet.js?v=1777788923"></script>
+<script src="/js/lpAudio.js?v=1777788923"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2094,10 +2094,21 @@ canvasWrap.addEventListener('touchstart',(e)=>{
 canvasWrap.addEventListener('mouseleave',()=>{ pointer.active=false; });
 canvasWrap.addEventListener('touchend',()=>{ pointer.active=false; });
 
-/* ---- 원형 트랙패드 ---- */
+/* ---- 원형 트랙패드 ----
+   PERF: 이전엔 매 touchmove 마다 player + DOM box-shadow 즉시 갱신 → iOS Safari
+   에서 큰 blur/spread 의 layer composite 가 multi-finger 시 main-thread jank 유발.
+   해결: pendingTp 버퍼에 누적 → gameLoop frame 마다 1 회만 적용 (DOM 업데이트
+   throttle to frame rate). 입력 latency 는 max 1 frame (~16ms) — 무시 가능. */
 const TPSENS=2.4;
 let tpLastX=0, tpLastY=0, tpCx=0, tpCy=0, tpR=0;
 const tpZone=$('tpZone'), tpRing=$('tpRing');
+const pendingTp = {
+    dx: 0, dy: 0,            /* 누적 player delta (TPSENS 곱한 값) */
+    ringX: 0, ringY: 0,      /* 마지막 touch 좌표 — ring 위치용 */
+    rawDx: 0, rawDy: 0,      /* 마지막 frame 의 raw delta — glow 방향/크기용 */
+    hasMove: false,
+    active: false
+};
 
 function tpSetRing(cx, cy){
     const dx=cx-tpCx, dy=cy-tpCy;
@@ -2122,17 +2133,43 @@ function tpSetGlow(dx, dy){
 }
 
 function tpApplyDelta(cx, cy){
-    const dx=cx-tpLastX, dy=cy-tpLastY;
-    player.x=Math.max(16,Math.min(CW-16, player.x+dx*TPSENS));
-    player.y=Math.max(18,Math.min(CH-18, player.y+dy*TPSENS));
-    tpLastX=cx; tpLastY=cy;
-    tpSetRing(cx, cy);
-    tpSetGlow(dx, dy);
+    /* 즉시 적용 X — pendingTp 에만 누적. flushTpInput() 이 frame 마다 한 번 적용. */
+    const rdx = cx - tpLastX;
+    const rdy = cy - tpLastY;
+    pendingTp.dx += rdx * TPSENS;
+    pendingTp.dy += rdy * TPSENS;
+    pendingTp.ringX = cx;
+    pendingTp.ringY = cy;
+    pendingTp.rawDx = rdx;
+    pendingTp.rawDy = rdy;
+    pendingTp.hasMove = true;
+    tpLastX = cx;
+    tpLastY = cy;
+}
+
+/* gameLoop 에서 매 frame 호출 — 누적된 pendingTp 한 번에 player + DOM 적용. */
+function flushTpInput(){
+    if(!pendingTp.hasMove) return;
+    player.x = Math.max(16, Math.min(CW-16, player.x + pendingTp.dx));
+    player.y = Math.max(18, Math.min(CH-18, player.y + pendingTp.dy));
+    tpSetRing(pendingTp.ringX, pendingTp.ringY);
+    tpSetGlow(pendingTp.rawDx, pendingTp.rawDy);
+    pendingTp.dx = 0;
+    pendingTp.dy = 0;
+    pendingTp.rawDx = 0;
+    pendingTp.rawDy = 0;
+    pendingTp.hasMove = false;
 }
 
 function tpEnd(){
     tpZone.classList.remove('on');
     tpZone.style.boxShadow='none';
+    pendingTp.active = false;
+    pendingTp.hasMove = false;
+    pendingTp.dx = 0;
+    pendingTp.dy = 0;
+    pendingTp.rawDx = 0;
+    pendingTp.rawDy = 0;
 }
 
 tpZone.addEventListener('touchstart',(e)=>{
@@ -2143,6 +2180,7 @@ tpZone.addEventListener('touchstart',(e)=>{
     tpLastX=e.touches[0].clientX; tpLastY=e.touches[0].clientY;
     tpSetRing(tpLastX, tpLastY);
     tpZone.classList.add('on');
+    pendingTp.active = true;
 },{passive:false});
 tpZone.addEventListener('touchmove',(e)=>{
     e.preventDefault();
@@ -2364,18 +2402,21 @@ function maybeSpawnDepot(zoneIdx, now){
 }
 
 function updateDepots(dt, now){
-    const alive = [];
-    for(const d of depots){
+    /* PERF: in-place compaction (depots 배열 새로 할당 대신 write index w 만 진전). */
+    let w = 0;
+    const len = depots.length;
+    for(let i = 0; i < len; i++){
+        const d = depots[i];
         d.y += d.speed * dt;
         if(d.collected){
-            /* 1초간 fade out 후 제거 */
             if(!d.collectedAt) d.collectedAt = now;
             if(now - d.collectedAt > 800) continue;
         }
         if(d.y > CH + 60) continue;
-        alive.push(d);
+        if(w !== i) depots[w] = d;
+        w++;
     }
-    depots = alive;
+    if(w < len) depots.length = w;
 }
 
 function drawDepot(d, now){
@@ -2627,13 +2668,16 @@ function updateShieldBubble(now){
        단, 막을 때마다 쉴드 시간 -2 초 차감 — 안 맞는 게 더 좋게. */
     if(!shieldBubbleActive(now)) return;
     const r2 = (SHIELD_BUBBLE_R + 4) * (SHIELD_BUBBLE_R + 4);
-    const survivors = [];
+    /* PERF: bullets in-place compaction (이전엔 매 frame 새 array). */
+    let w = 0;
+    const len = bullets.length;
     let hitsThisFrame = 0;
-    for(const b of bullets){
+    for(let i = 0; i < len; i++){
+        const b = bullets[i];
         const dx = b.x - player.x, dy = b.y - player.y;
         if(dx*dx + dy*dy <= r2){
             hitsThisFrame++;
-            for(let i = 0; i < 3; i++){
+            for(let k = 0; k < 3; k++){
                 wipeFragments.push({
                     x: b.x, y: b.y,
                     vx: (Math.random()-0.5) * 220,
@@ -2643,9 +2687,10 @@ function updateShieldBubble(now){
             }
             continue;
         }
-        survivors.push(b);
+        if(w !== i) bullets[w] = b;
+        w++;
     }
-    bullets = survivors;
+    if(w < len) bullets.length = w;
     if(hitsThisFrame > 0){
         /* 한 발 막을 때마다 2 초 차감. 한 프레임에 N 개 막으면 N*2 초 차감. */
         shieldBubbleUntil -= hitsThisFrame * SHIELD_HIT_DRAIN_MS;
@@ -2743,16 +2788,20 @@ function triggerWipe(){
     if(navigator.vibrate) try{navigator.vibrate([20,30,20])}catch(_){}
 }
 function updateWipeFragments(dt){
-    const alive = [];
-    for(const f of wipeFragments){
+    /* PERF: in-place compaction. */
+    let w = 0;
+    const len = wipeFragments.length;
+    for(let i = 0; i < len; i++){
+        const f = wipeFragments[i];
         f.life -= dt;
         if(f.life <= 0) continue;
         f.x += f.vx * dt;
         f.y += f.vy * dt;
         f.vx *= 0.96; f.vy *= 0.96;
-        alive.push(f);
+        if(w !== i) wipeFragments[w] = f;
+        w++;
     }
-    wipeFragments = alive;
+    if(w < len) wipeFragments.length = w;
 }
 function drawWipeFragments(){
     for(const f of wipeFragments){
@@ -2807,8 +2856,18 @@ function triggerMiniShip(){
 }
 function updateMiniShip(dt, now){
     if(miniShips.length === 0) return;
-    /* 만료된 것 제거 */
-    miniShips = miniShips.filter(function(m){ return now - m.spawnedAt <= MINI_DUR; });
+    /* 만료된 것 제거 — in-place. 보통 max 2 개라 비용 미미하지만 일관성 위해. */
+    {
+        let w = 0;
+        const len = miniShips.length;
+        for(let i = 0; i < len; i++){
+            const m = miniShips[i];
+            if(now - m.spawnedAt > MINI_DUR) continue;
+            if(w !== i) miniShips[w] = m;
+            w++;
+        }
+        if(w < len) miniShips.length = w;
+    }
     /* 활성 수에 맞춰 slot 재할당 */
     miniShips.forEach(function(m, i){ m.slot = i; });
 
@@ -2854,15 +2913,21 @@ function updateMiniShip(dt, now){
             }
         }
     }
-    /* 레이저 — 즉시 hit, 시각만 short trail */
-    for(const l of miniLasers){
-        l.life -= dt;
-        const idx = bullets.indexOf(l.target);
-        if(idx >= 0){
-            bullets.splice(idx, 1);
+    /* 레이저 — 즉시 hit, 시각만 short trail. PERF: in-place compaction. */
+    {
+        let w = 0;
+        const len = miniLasers.length;
+        for(let i = 0; i < len; i++){
+            const l = miniLasers[i];
+            l.life -= dt;
+            const idx = bullets.indexOf(l.target);
+            if(idx >= 0) bullets.splice(idx, 1);
+            if(l.life <= 0) continue;
+            if(w !== i) miniLasers[w] = l;
+            w++;
         }
+        if(w < len) miniLasers.length = w;
     }
-    miniLasers = miniLasers.filter(function(l){ return l.life > 0; });
 }
 /* F-117 Nighthawk — 면 분할 스텔스기. 위쪽이 정면. 크기 ≈ 18×16 px.
    메인 우주선의 stainless steel 톤과 매칭 (#7c8c9a, #94a2ae 계열) +
@@ -3041,16 +3106,15 @@ function spawnBullet(now, speed, aimedRatio, multi){
 function updateDifficulty(){
     const s=elapsedMs/1000;
 
-    /* Difficulty curve (v2): 사용자 피드백 반영 — 현재 t=2:00 이
-       사람이 도달 가능한 한계라, 그 난이도를 t=3:00 까지 stretch.
-       그 이후엔 cap (sEff 가 170 에서 frozen).
+    /* Difficulty curve (v3): 사용자 피드백 — 3분 도달 시점이 너무 어려움.
+       3분 난이도를 10분까지 늘려서 선형으로 천천히 어려워지게.
          · sEff 시작 = 60 (워밍업 skip)
          · sEff 종착 = 170 (legacy max difficulty)
-         · 도달 시점 = t=180s (3분)
-         · 기울기 = (170-60)/180 = 11/18 ≈ 0.611
+         · 도달 시점 = t=600s (10분)  ← 이전 v2: 180s (3분)
+         · 기울기 = (170-60)/600 = 11/60 ≈ 0.183  ← 이전 v2: 11/18 (3.3배 가팔랐음)
        모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot)
        이 sEff 170 에서 max 도달하도록 통일. cap 후엔 모든 변수 stable. */
-    const sEff = Math.min(170, 60 + s * (11/18));
+    const sEff = Math.min(170, 60 + s * (11/60));
 
     // smoothstep: 0→1 부드러운 S커브 (양쪽 끝이 완만, 중간이 가파름)
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
@@ -3630,7 +3694,11 @@ function gameLoop(now){
     }
     zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
 
-    /* ---- Move player ---- */
+    /* ---- Move player ----
+       모바일 트랙패드 입력 (pendingTp) 은 frame 마다 1회만 적용 — 직접
+       touchmove 에서 player 를 갱신하지 않음 (DOM/main-thread 부담 분산).
+       desktop pointer 와 키보드는 기존 즉시 follow 유지. */
+    flushTpInput();
     if(pointer.active){
         const dx=pointer.x-player.x, dy=pointer.y-player.y;
         const dist=Math.sqrt(dx*dx+dy*dy);
@@ -3639,7 +3707,8 @@ function gameLoop(now){
             player.x+=dx/dist*step;
             player.y+=dy/dist*step;
         }
-    } else {
+    } else if(!pendingTp.active){
+        /* 트랙패드 사용 중이면 키보드 입력은 무시 (의도치 않은 동시 입력 방지). */
         let mx=0,my=0;
         if(keys['ArrowLeft']||keys['a']||keys['A']) mx-=1;
         if(keys['ArrowRight']||keys['d']||keys['D']) mx+=1;
@@ -3668,35 +3737,63 @@ function gameLoop(now){
         }
     }
 
-    /* ---- Update bullets + trails ---- */
-    const alive=[];
-    for(const b of bullets){
-        b.trail.push({x:b.x, y:b.y});
-        if(b.trail.length>16) b.trail.shift();
-        b.x+=b.vx*dt;
-        b.y+=b.vy*dt;
-        if(b.x<-40||b.x>CW+40||b.y<-40||b.y>CH+40) continue;
-        alive.push(b);
+    /* ---- Update bullets + trails ----
+       PERF v3: trail 길이 16 → 8 (rendering cost 절반) + array 새로 할당
+       하지 않고 in-place compaction (write index 'w' 만 진전, 매 frame
+       array allocation + GC 부담 제거). trail 도 shift() 대신 ring buffer
+       index 사용해 O(1) — 이전 shift 는 16 element 순회 비용. */
+    {
+        let w = 0;
+        const len = bullets.length;
+        for(let i = 0; i < len; i++){
+            const b = bullets[i];
+            /* trail ring buffer (head index) — capacity 8. b.trailHead 는
+               다음 write index, b.trailLen 은 현재 채워진 개수. */
+            if(!b.trail) b.trail = [];
+            if(!b._trailInit){
+                b._trailInit = true;
+                b.trailHead = 0;
+                b.trailLen = 0;
+            }
+            const TRAIL_CAP = 8;
+            if(b.trail[b.trailHead]){
+                b.trail[b.trailHead].x = b.x;
+                b.trail[b.trailHead].y = b.y;
+            } else {
+                b.trail[b.trailHead] = { x: b.x, y: b.y };
+            }
+            b.trailHead = (b.trailHead + 1) % TRAIL_CAP;
+            if(b.trailLen < TRAIL_CAP) b.trailLen++;
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            if(b.x < -40 || b.x > CW + 40 || b.y < -40 || b.y > CH + 40) continue;
+            if(w !== i) bullets[w] = b;
+            w++;
+        }
+        if(w < len) bullets.length = w;  /* in-place truncate, no new array */
     }
-    bullets=alive;
 
     /* ---- Shield bubble destroy (collision 전) ----
        버블 활성 중이면 bubble 반경 안의 메테오 즉시 파괴 → 본 우주선
        충돌 체크 들어가기 전에 처리해야 무적 효과가 즉시 확인됨. */
     updateShieldBubble(now);
 
-    /* ---- Collision ---- */
+    /* ---- Collision ----
+       PERF: 충돌 시 bullets.filter 로 새 array 생성 대신 splice 한 번 — 어차피
+       break 하니 한 번만 발생, 새 array 할당 없음. */
     if(now>invincibleUntil){
-        for(const b of bullets){
-            const dx=b.x-player.x, dy=b.y-player.y;
-            if(dx*dx+dy*dy < (HIT_RADIUS+6)*(HIT_RADIUS+6)){
+        const HR2 = (HIT_RADIUS+6) * (HIT_RADIUS+6);
+        for(let i = 0; i < bullets.length; i++){
+            const b = bullets[i];
+            const dx = b.x - player.x, dy = b.y - player.y;
+            if(dx*dx + dy*dy < HR2){
                 lives--;
-                invincibleUntil=now+INVINCIBLE_MS;
-                flashVisible=true;
-                lastFlashToggle=now;
-                if(navigator.vibrate)try{navigator.vibrate(40)}catch(_){}
-                bullets=bullets.filter(x=>x!==b);
-                if(lives<=0){ triggerGameOver(); return; }
+                invincibleUntil = now + INVINCIBLE_MS;
+                flashVisible = true;
+                lastFlashToggle = now;
+                if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
+                bullets.splice(i, 1);
+                if(lives <= 0){ triggerGameOver(); return; }
                 sfxHit();
                 break;
             }
@@ -3770,37 +3867,27 @@ function drawFrame(now, dt){
     drawParticles();
 
     /* ---- Bullets — comet-style trail ----
-       Two-layer trail: an outer glow halo (secondary color) + a hot
-       inner core (head color). Both taper in radius AND alpha from
-       head toward the oldest trail sample, so the bullet reads like a
-       comet. The HEAD itself is unchanged — full opacity, original
-       color, original shadow glow. Collision still uses head x/y only,
-       so the airplane brushing the tail is harmless. */
+       PERF v3: trail 8-sample ring buffer + 단일 패스로 통합 (이전 2-layer
+       halo+core 는 30 bullets × 16 trail × 2 = 960 arc → 30 × 8 × 1 = 240).
+       halo 효과는 head 의 shadowBlur 로 대체 — 글로우 시각 유지. */
+    const TRAIL_CAP = 8;
     for(const b of bullets){
         const headColor = b.aimed ? '#FF8844' : '#ffffff';
         const haloColor = b.aimed ? '#FF5500' : '#aaaaff';
-        const N = b.trail.length;
-        /* Outer halo pass (soft glow following the bullet's path). */
-        ctx.fillStyle = haloColor;
-        for(let i=0; i<N; i++){
-            const t = b.trail[i];
-            const k = (i+1)/N;            /* 0 = oldest tail tip, 1 = head */
-            ctx.globalAlpha = k * 0.22;
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, 1.2 + 5.0*k, 0, Math.PI*2);
-            ctx.fill();
-        }
-        /* Inner core pass (head color preserved, tapered radius). */
-        ctx.fillStyle = headColor;
-        for(let i=0; i<N; i++){
-            const t = b.trail[i];
-            const k = (i+1)/N;
-            /* Quadratic alpha makes the head end of the trail visibly
-               brighter than the fading tail tip without going opaque. */
-            ctx.globalAlpha = k*k * 0.78;
-            ctx.beginPath();
-            ctx.arc(t.x, t.y, 0.6 + 3.0*k, 0, Math.PI*2);
-            ctx.fill();
+        const N = b.trailLen || 0;
+        if(N > 0){
+            /* ring buffer: 가장 오래된 = (head - N + CAP) % CAP, 가장 새 = (head - 1 + CAP) % CAP */
+            const start = (b.trailHead - N + TRAIL_CAP) % TRAIL_CAP;
+            ctx.fillStyle = headColor;
+            for(let i = 0; i < N; i++){
+                const idx = (start + i) % TRAIL_CAP;
+                const t = b.trail[idx];
+                const k = (i + 1) / N;       /* 0 = 꼬리 끝, 1 = head */
+                ctx.globalAlpha = k * k * 0.78;
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, 0.6 + 3.5 * k, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
         ctx.globalAlpha = 1;
 
@@ -4041,6 +4128,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777787929"></script>
+<script src="/js/siteFooter.js?v=1777788923"></script>
 </body>
 </html>
