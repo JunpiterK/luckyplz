@@ -703,7 +703,11 @@ body{
             <div class="ss"><div class="l">BEST</div><div class="v best" id="bestScore">—</div></div>
         </div>
 
-        <div class="game-ctrl" id="gameCtrl">
+        <!-- Pause 버튼 — HTML 인라인 display:none 으로 시작.
+             폰/터치 디바이스는 그대로 숨김. PC 만 boot 시점 JS 가 풀어줌.
+             이 방식 이유: CSS 미디어쿼리는 모바일 브라우저가 캐시 무시 한 번 안 해도
+             안 적용됨. 인라인 display:none 은 HTML 안에 박혀있어서 무조건 적용. -->
+        <div class="game-ctrl" id="gameCtrl" style="display:none" data-pc-only="1">
             <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
@@ -882,10 +886,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777817265"></script>
-<script src="/js/lpI18n.js?v=1777817265"></script>
-<script src="/js/lpRankSheet.js?v=1777817265"></script>
-<script src="/js/lpAudio.js?v=1777817265"></script>
+<script src="/js/supabase-config.js?v=1777817814"></script>
+<script src="/js/lpI18n.js?v=1777817814"></script>
+<script src="/js/lpRankSheet.js?v=1777817814"></script>
+<script src="/js/lpAudio.js?v=1777817814"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3013,9 +3017,16 @@ let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
 function maybeSpawnDepot(zoneIdx, now){
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
+    /* PvP guest 는 spawn 결정 안 함 — host 의 'depot_spawn' broadcast 만 신뢰.
+       이게 진짜 multiplayer 표준 (Slither.io / Agar.io / 스타크래프트 lockstep
+       제외 모든 RTS / Quake 류 FPS): 한 client (server 또는 host) 가 결정 →
+       broadcast → 다른 client 는 받음. client-side deterministic simulation 은
+       frame timing / GC / event loop 다 통제 못 해서 절대 정확히 sync 안 됨.
+       그래서 host-authoritative 로 가야 100% 같은 위치 보장. */
+    const isPvp = !!(pvpState && pvpState.gameMode === 'pvp');
+    if(isPvp && pvpState.role !== 'host') return;
     /* zone duration 가져오기 — ZONES[zoneIdx].dur (sec).
        마지막 zone 은 9999 로 설정돼 있어 max 25 sec 으로 cap.
-       사용자 피드백: depot 3 개 → 2 개. ratios 도 더 spread 한 분포로.
        2 개 spawn: ~25%, ~65% 시점. */
     const rawDur = (typeof ZONES !== 'undefined' && ZONES[zoneIdx] && ZONES[zoneIdx].dur > 0)
         ? ZONES[zoneIdx].dur : 25;
@@ -3031,11 +3042,12 @@ function maybeSpawnDepot(zoneIdx, now){
         const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
         if(sinceZone < targetSec) continue;
         depotsSpawnedZones.add(key);
+        const x = 60 + rand() * (CW - 120);
+        const item = def.items[slot];
         depots.push({
-            x: 60 + rand() * (CW - 120),
-            y: -50,
+            x, y: -50,
             speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
-            item: def.items[slot],
+            item,
             zoneIdx, slot,
             key,                            /* stable id — PvP depot_take 동기화 */
             chargeTime: 0,                 /* 0~GRAV_PICKUP_TIME sec */
@@ -3044,7 +3056,33 @@ function maybeSpawnDepot(zoneIdx, now){
             spawnedAt: now,
             radius: 19
         });
+        /* PvP host: spawn 즉시 broadcast — guest 가 받아서 같은 좌표에 push.
+           P2P (낮은 latency) + supabase (안정 fallback) 둘 다 송신. 멱등 (중복은 무시). */
+        if(isPvp && pvpState.channel){
+            const payload = { key, x, item, zoneIdx, slot };
+            _rtcSend({ event: 'depot_spawn', payload });
+            try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
+        }
     }
+}
+/* PvP guest — host 의 depot_spawn broadcast 받아 local depot push.
+   key 가 이미 spawnedZones 에 있으면 (P2P + supabase 둘 다 도착) 무시 (멱등). */
+function _handleDepotSpawnPayload(p){
+    if(!p || !p.key) return;
+    if(depotsSpawnedZones.has(p.key)) return;
+    depotsSpawnedZones.add(p.key);
+    depots.push({
+        x: Number(p.x), y: -50,
+        speed: 24,
+        item: p.item,
+        zoneIdx: Number(p.zoneIdx), slot: Number(p.slot),
+        key: p.key,
+        chargeTime: 0,
+        collected: false,
+        collectedByPeer: false,
+        spawnedAt: performance.now(),
+        radius: 19
+    });
 }
 
 function updateDepots(dt, now){
@@ -3968,14 +4006,32 @@ let running=false, paused=false;
    Mobile/tablet players had no on-screen pause button (Space-only),
    which felt unfair. The .game-ctrl bar shows during a live game
    only and toggles ⏸ ↔ ▶ to mirror the paused flag. */
+/* PC = 마우스 포인터 + 768px 이상 viewport. 폰/태블릿 (touch) 면 false.
+   HTML inline style 로 gameCtrl 이 처음부터 숨김 → PC 면 boot 시 풀고,
+   syncPauseUI 가 game state 따라 on/off 토글. */
+function _isPcViewport(){
+    try {
+        const fineMouse = window.matchMedia('(pointer: fine)').matches;
+        const wideEnough = window.innerWidth >= 768;
+        return fineMouse && wideEnough;
+    } catch(_){ return window.innerWidth >= 1024; }
+}
 function syncPauseUI(){
     const gc=$('gameCtrl'), btn=$('pauseBtn');
     if(!gc||!btn) return;
-    if(running){
+    /* 폰/터치 디바이스는 무조건 hidden (인라인 display:none 유지) — 게임 도중에도
+       절대 안 보임. PvP 모드도 마찬가지 (PvP 에선 pause 자체 차단). */
+    if(!_isPcViewport()){
+        gc.style.display = 'none';
+        return;
+    }
+    if(running && !(pvpState && pvpState.gameMode === 'pvp')){
+        gc.style.display = 'flex';
         gc.classList.add('on');
         btn.textContent = paused ? '▶ 재개' : '⏸ 일시정지';
         btn.setAttribute('aria-label', paused ? '재개' : '일시정지');
     } else {
+        gc.style.display = 'none';
         gc.classList.remove('on');
     }
     /* 콕핏 패널 (트랙패드 + 4 버튼 stack 통합 panel-board) — 게임 중에만 표시.
@@ -5483,6 +5539,8 @@ async function _subscribePvpRoom(){
     ch.on('broadcast', { event: 'pos' }, (e) => _handlePosPayload(e.payload));
     /* 상대가 depot 먹음 — local depot 의 collected 마킹해서 같은 거 못 먹게. */
     ch.on('broadcast', { event: 'depot_take' }, (e) => _handleDepotTakePayload(e.payload));
+    /* host 가 depot 새로 spawn — guest 가 받아서 같은 좌표에 push (host-authoritative). */
+    ch.on('broadcast', { event: 'depot_spawn' }, (e) => _handleDepotSpawnPayload(e.payload));
     await ch.subscribe();
     pvpState.channel = ch;
     /* 채널 준비 후 ping loop 시작 + 멤버 2명이면 RTC 핸드셰이크 시도 */
@@ -5648,6 +5706,8 @@ function _handleRtcMessage(data){
         _handleFinishedPayload(p);
     } else if(ev === 'depot_take'){
         _handleDepotTakePayload(p);
+    } else if(ev === 'depot_spawn'){
+        _handleDepotSpawnPayload(p);
     }
 }
 
@@ -6122,11 +6182,14 @@ $('pauseBtn').addEventListener('click', (e)=>{
     fitCanvas();
     initStars();
     resetParticles(0);
+    /* boot 시점 1회 호출 — 폰/터치면 gameCtrl 인라인 display:none 유지,
+       PC 면 풀어둠 (게임 시작 전엔 어차피 안 보이지만 init state 통일). */
+    syncPauseUI();
     requestAnimationFrame(idleLoop);
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777817265"></script>
+<script src="/js/siteFooter.js?v=1777817814"></script>
 </body>
 </html>
