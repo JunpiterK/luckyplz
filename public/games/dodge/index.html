@@ -849,10 +849,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777810121"></script>
-<script src="/js/lpI18n.js?v=1777810121"></script>
-<script src="/js/lpRankSheet.js?v=1777810121"></script>
-<script src="/js/lpAudio.js?v=1777810121"></script>
+<script src="/js/supabase-config.js?v=1777810730"></script>
+<script src="/js/lpI18n.js?v=1777810730"></script>
+<script src="/js/lpRankSheet.js?v=1777810730"></script>
+<script src="/js/lpAudio.js?v=1777810730"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2988,7 +2988,7 @@ function maybeSpawnDepot(zoneIdx, now){
         if(sinceZone < targetSec) continue;
         depotsSpawnedZones.add(key);
         depots.push({
-            x: 60 + Math.random() * (CW - 120),
+            x: 60 + rand() * (CW - 120),
             y: -50,
             speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
             item: def.items[slot],
@@ -3748,60 +3748,71 @@ function drawMiniShip(){
 }
 
 function spawnBullet(now, speed, aimedRatio, multi){
+    /* PvP 모드 시 rand() = seeded RNG → 양쪽 client 동일 메테오 패턴.
+       단, aimed bullet 은 player.x/y 기준이라 본인 위치에 따라 결과 다름.
+       PvP 의 경우 player 위치는 양쪽 다 다르므로 aimed 메테오는 약간 차이.
+       해결: PvP 일 때 aimed 의 target 을 화면 중앙 등 fixed 점으로 변경.
+       Stage 1: 단순화 — aimedRatio*1.0 그대로 두되 player 위치 차이는
+       무시 (메테오 spawn 위치/속도는 같음, target 만 살짝 다름). */
     for(let m=0;m<multi;m++){
-        const edge=Math.floor(Math.random()*4);
+        const edge=Math.floor(rand()*4);
         let bx,by,vx,vy;
-        let aimed=Math.random()<aimedRatio;
+        let aimed=rand()<aimedRatio;
         let spread=(m-Math.floor(multi/2))*14;
 
+        /* PvP 시 aimed target 을 player 가 아닌 화면 중앙 + jitter 로 — 양쪽 sync. */
+        const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
+        const aimX = isPvp ? CW/2 : player.x;
+        const aimY = isPvp ? CH*0.65 : player.y;
+
         if(edge===0){
-            bx=Math.random()*CW; by=-8;
+            bx=rand()*CW; by=-8;
             if(aimed){
-                const dx=player.x-bx, dy=player.y-by;
+                const dx=aimX-bx, dy=aimY-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             } else {
-                const tx=CW*0.2+Math.random()*CW*0.6+spread;
-                const ty=CH*0.3+Math.random()*CH*0.4;
+                const tx=CW*0.2+rand()*CW*0.6+spread;
+                const ty=CH*0.3+rand()*CH*0.4;
                 const dx=tx-bx, dy=ty-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
         } else if(edge===1){
-            bx=CW+8; by=Math.random()*CH;
+            bx=CW+8; by=rand()*CH;
             if(aimed){
-                const dx=player.x-bx, dy=player.y-by;
+                const dx=aimX-bx, dy=aimY-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             } else {
-                const tx=CW*0.2+Math.random()*CW*0.4;
-                const ty=CH*0.2+Math.random()*CH*0.6+spread;
+                const tx=CW*0.2+rand()*CW*0.4;
+                const ty=CH*0.2+rand()*CH*0.6+spread;
                 const dx=tx-bx, dy=ty-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
         } else if(edge===2){
-            bx=Math.random()*CW; by=CH+8;
+            bx=rand()*CW; by=CH+8;
             if(aimed){
-                const dx=player.x-bx, dy=player.y-by;
+                const dx=aimX-bx, dy=aimY-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             } else {
-                const tx=CW*0.2+Math.random()*CW*0.6+spread;
-                const ty=CH*0.3+Math.random()*CH*0.4;
+                const tx=CW*0.2+rand()*CW*0.6+spread;
+                const ty=CH*0.3+rand()*CH*0.4;
                 const dx=tx-bx, dy=ty-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             }
         } else {
-            bx=-8; by=Math.random()*CH;
+            bx=-8; by=rand()*CH;
             if(aimed){
-                const dx=player.x-bx, dy=player.y-by;
+                const dx=aimX-bx, dy=aimY-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
             } else {
-                const tx=CW*0.6+Math.random()*CW*0.4;
-                const ty=CH*0.2+Math.random()*CH*0.6+spread;
+                const tx=CW*0.6+rand()*CW*0.4;
+                const ty=CH*0.2+rand()*CH*0.6+spread;
                 const dx=tx-bx, dy=ty-by;
                 const d=Math.sqrt(dx*dx+dy*dy)||1;
                 vx=dx/d*speed; vy=dy/d*speed;
@@ -3846,7 +3857,7 @@ function updateDifficulty(){
     // ── 멀티샷: 1 → 3 (sEff=170 에서 max) ─────────────────────────
     const msRaw   = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
     const msFloor = Math.floor(msRaw);
-    const multiShot = Math.min(3, msFloor + (Math.random()<(msRaw-msFloor)?1:0));
+    const multiShot = Math.min(3, msFloor + (rand()<(msRaw-msFloor)?1:0));
 
     return { spawnInterval, bulletSpeed, aimedRatio, multiShot };
 }
@@ -4705,6 +4716,9 @@ function drawFrame(now, dt){
         ctx.restore();
     }
 
+    /* ---- PvP 상대 우주선 (빨강) ---- */
+    _drawOpponentShip();
+
     /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
        player 본체 위에 그려져야 우주선이 막 안에 든 듯이 보임. */
     drawShieldBubble(now);
@@ -5223,6 +5237,16 @@ async function _subscribePvpRoom(){
     ch.on('broadcast', { event: 'finished' }, () => {
         _maybeShowPvpResult();
     });
+    /* 상대 우주선 위치 — 50ms 마다 받음. lerp 용 target 만 갱신, render 시 보간. */
+    ch.on('broadcast', { event: 'pos' }, (e) => {
+        if(!pvpState.opponent){
+            const opName = pvpState.members.find(m => m.user_id !== pvpState.me?.id)?.nickname || '';
+            pvpState.opponent = { x: undefined, y: undefined, targetX: 0, targetY: 0, alive: true, nickname: opName };
+        }
+        pvpState.opponent.targetX = Number(e.payload?.x);
+        pvpState.opponent.targetY = Number(e.payload?.y);
+        pvpState.opponent.alive = e.payload?.alive !== false;
+    });
     await ch.subscribe();
     pvpState.channel = ch;
     /* 채널 준비 후 ping loop 시작 */
@@ -5329,6 +5353,81 @@ async function _sendChat(){
     }
 }
 
+/* ===== Seeded RNG (PvP 메테오 패턴 deterministic 동기화용) =====
+   mulberry32 — 32-bit PRNG. PvP 시 _setSeed(pvpState.seed) 로 양쪽 client
+   동일 sequence 생성. spawnBullet / 메테오 위치/속도 의 random 은 rand() 사용.
+   single-player 는 _resetRand() 로 Math.random 으로 복귀. */
+let _seededRng = Math.random;
+function _mulberry32(seed){
+    return function(){
+        let t = (seed += 0x6D2B79F5) | 0;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+function rand(){ return _seededRng(); }
+function _setSeed(s){ _seededRng = _mulberry32((s|0) || 1); }
+function _resetRand(){ _seededRng = Math.random; }
+
+/* ===== PvP shared playfield ===== */
+let _opPosBcastTimer = null;
+function _startOpponentSync(){
+    if(_opPosBcastTimer) clearInterval(_opPosBcastTimer);
+    _opPosBcastTimer = setInterval(() => {
+        if(!pvpState.channel || !running) return;
+        try {
+            pvpState.channel.send({
+                type: 'broadcast',
+                event: 'pos',
+                payload: { x: player.x, y: player.y, alive: lives > 0 }
+            });
+        } catch(_){}
+    }, 50);   /* 20Hz — 모바일 모뎀에서도 부담 적음, sync 충분 */
+}
+function _stopOpponentSync(){
+    if(_opPosBcastTimer){ clearInterval(_opPosBcastTimer); _opPosBcastTimer = null; }
+    pvpState.opponent = null;
+}
+function _drawOpponentShip(){
+    if(!(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.alive)) return;
+    const op = pvpState.opponent;
+    /* lerp 으로 부드럽게 — 50ms 마다 받는 위치 사이 보간. */
+    op.x = (op.x === undefined ? op.targetX : op.x + (op.targetX - op.x) * 0.25);
+    op.y = (op.y === undefined ? op.targetY : op.y + (op.targetY - op.y) * 0.25);
+    if(op.x === undefined || isNaN(op.x)) return;
+    /* 빨강 우주선 — 본인 (cyan starship) 과 명확히 구분. 단순화된 fighter 모양. */
+    ctx.save();
+    ctx.translate(op.x, op.y);
+    /* 본체 — 빨강 그라디언트 */
+    const bG = ctx.createLinearGradient(-5, 0, 5, 0);
+    bG.addColorStop(0, '#5c1010'); bG.addColorStop(0.5, '#FF3344'); bG.addColorStop(1, '#5c1010');
+    ctx.fillStyle = bG;
+    ctx.shadowColor = 'rgba(255,80,80,0.6)';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(0, -16);
+    ctx.lineTo(5, -8);
+    ctx.lineTo(5, 7);
+    ctx.lineTo(-5, 7);
+    ctx.lineTo(-5, -8);
+    ctx.closePath();
+    ctx.fill();
+    /* 윙 */
+    ctx.fillStyle = '#902028';
+    ctx.beginPath();
+    ctx.moveTo(5, 2); ctx.lineTo(13, 13); ctx.lineTo(5, 8); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-5, 2); ctx.lineTo(-13, 13); ctx.lineTo(-5, 8); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    /* 닉네임 라벨 */
+    ctx.fillStyle = 'rgba(255,150,150,0.85)';
+    ctx.font = 'bold 9px Orbitron, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText((pvpState.opponent.nickname || '').substring(0, 8), 0, -22);
+    ctx.restore();
+}
+
 /* ===== PvP game flow (Stage 1 — 단순 score 비교, state broadcast 없음) =====
    호스트가 [시작] 누르면 _startPvpGame 진입. 양쪽 모두 dodge.startGame 호출 →
    각자 dodge 게임 진행. 죽으면 _handlePvpGameOver — finish RPC + broadcast.
@@ -5338,19 +5437,26 @@ function _startPvpGame(){
     pvpState.myFinished = false;
     pvpState.myFinalScore = null;
     pvpState.myFinalTime = null;
-    /* PvP modal 닫고 dodge 게임 시작 — overlay.hidden 도 내려서 canvas 표시. */
+    pvpState.opponent = null;
+    /* deterministic seeded RNG — 양쪽 같은 메테오 패턴.
+       모든 spawnBullet 안 random 호출은 rand() 사용 (Math.random 아님). */
+    _setSeed(pvpState.seed || 1);
     _showPvpOverlay(null);
     $('overlay').classList.add('hidden');
-    /* 단일플레이 startGame 호출 — intro countdown 후 게임 진행. */
     if(!running){
         try { startGame(); } catch(e){ console.error('[PvP] startGame fail', e); }
     }
+    /* 우주선 위치 broadcast 시작 (20Hz). 게임 끝나면 _stopOpponentSync 호출. */
+    _startOpponentSync();
 }
 
 async function _handlePvpGameOver(duration, score){
     pvpState.myFinished = true;
     pvpState.myFinalScore = score;
     pvpState.myFinalTime = duration;
+    /* 위치 broadcast 정리 + RNG 복귀 (다음 single-player 게임 영향 X). */
+    _stopOpponentSync();
+    _resetRand();
     /* spacez_finish_game RPC — 양쪽 보고 후 server 가 winner 결정. */
     try {
         const sb = getSupabase();
@@ -5360,7 +5466,6 @@ async function _handlePvpGameOver(duration, score){
             p_duration_ms: duration
         });
     } catch(e){ console.error('[PvP] finish_game RPC fail', e); }
-    /* 상대에게 알림 — UI 즉각 update 위함. */
     await _broadcastPvp('finished', { score, duration, user_id: pvpState.me?.id || null });
     _showPvpResult();
 }
@@ -5487,6 +5592,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777810121"></script>
+<script src="/js/siteFooter.js?v=1777810730"></script>
 </body>
 </html>
