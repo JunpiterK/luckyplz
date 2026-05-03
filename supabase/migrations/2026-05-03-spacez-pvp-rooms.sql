@@ -380,6 +380,7 @@ grant execute on function public.spacez_list_rooms() to authenticated;
 -- =====================================================================
 -- spacez_get_room — 멤버만 호출 가능
 -- =====================================================================
+drop function if exists public.spacez_get_room(uuid);
 create or replace function public.spacez_get_room(p_room_id uuid)
 returns table (
     room_id     uuid,
@@ -389,7 +390,8 @@ returns table (
     seed        bigint,
     is_private  boolean,
     status      text,
-    members     jsonb
+    winner_id   uuid,    -- 게임 끝나면 winner. 안 끝났으면 null. 클라가 polling 으로 사용.
+    members     jsonb    -- final_score / final_time_ms 도 포함 (점수 비교용).
 )
 language plpgsql
 security definer
@@ -408,14 +410,16 @@ begin
         raise exception 'not_a_member';
     end if;
     return query
-    select r.id, r.code, r.host_id, r.item_count, r.seed, r.is_private, r.status,
+    select r.id, r.code, r.host_id, r.item_count, r.seed, r.is_private, r.status, r.winner_id,
            coalesce((
                select jsonb_agg(jsonb_build_object(
-                   'user_id',  m.user_id,
-                   'nickname', m.nickname,
-                   'role',     m.role,
-                   'is_ready', m.is_ready,
-                   'joined_at', m.joined_at
+                   'user_id',       m.user_id,
+                   'nickname',      m.nickname,
+                   'role',          m.role,
+                   'is_ready',      m.is_ready,
+                   'joined_at',     m.joined_at,
+                   'final_score',   m.final_score,
+                   'final_time_ms', m.final_time_ms
                ) order by m.joined_at)
                from public.spacez_room_members m
                where m.room_id = r.id
