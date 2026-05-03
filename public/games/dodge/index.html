@@ -857,10 +857,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777812932"></script>
-<script src="/js/lpI18n.js?v=1777812932"></script>
-<script src="/js/lpRankSheet.js?v=1777812932"></script>
-<script src="/js/lpAudio.js?v=1777812932"></script>
+<script src="/js/supabase-config.js?v=1777813380"></script>
+<script src="/js/lpI18n.js?v=1777813380"></script>
+<script src="/js/lpRankSheet.js?v=1777813380"></script>
+<script src="/js/lpAudio.js?v=1777813380"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5408,9 +5408,16 @@ $('pvpRoomReady').addEventListener('click', async () => {
         if(pvpState.role === 'host'){
             const both = pvpState.members.length === 2 && pvpState.members.every(m => m.is_ready);
             if(both){
-                const { error } = await sb.rpc('spacez_start_game', { p_room_id: pvpState.roomId });
+                /* spacez_start_game 이 새 seed 반환 (rematch 시) 또는 기존 seed (첫 게임).
+                   host 가 받아서 broadcast — 게스트는 그 seed 로 deterministic RNG 동기. */
+                const { data, error } = await sb.rpc('spacez_start_game', { p_room_id: pvpState.roomId });
                 if(error) throw error;
-                /* 게스트에게 game_start broadcast — seed/item_count 동기화. */
+                /* RPC return 이 single bigint 라 supabase-js 가 Array<{spacez_start_game: <int>}> 로
+                   감쌀 수도, 또는 직접 number 로 줄 수도 있음. 모든 형태 처리. */
+                let newSeed = null;
+                if(typeof data === 'number' || typeof data === 'string') newSeed = Number(data);
+                else if(data && typeof data === 'object') newSeed = Number(data.spacez_start_game || data.seed || data[0]?.seed || 0);
+                if(newSeed && newSeed > 0) pvpState.seed = newSeed;
                 await _broadcastPvp('game_start', { seed: pvpState.seed, item_count: pvpState.itemCount });
                 _startPvpGame();
                 return;
@@ -5774,6 +5781,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777812932"></script>
+<script src="/js/siteFooter.js?v=1777813380"></script>
 </body>
 </html>
