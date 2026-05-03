@@ -886,10 +886,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777818888"></script>
-<script src="/js/lpI18n.js?v=1777818888"></script>
-<script src="/js/lpRankSheet.js?v=1777818888"></script>
-<script src="/js/lpAudio.js?v=1777818888"></script>
+<script src="/js/supabase-config.js?v=1777819277"></script>
+<script src="/js/lpI18n.js?v=1777819277"></script>
+<script src="/js/lpRankSheet.js?v=1777819277"></script>
+<script src="/js/lpAudio.js?v=1777819277"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3887,13 +3887,19 @@ function drawMiniShip(){
     ctx.restore();
 }
 
+/* PvP bullet broadcast dedup —
+   P2P (DC) + supabase 양쪽으로 같은 spawn 을 broadcast 하니까 guest 가 같은
+   메테오를 두 번 push 하는 버그 ("유성우 두 개씩 붙어서 나옴"). host 가 spawn
+   마다 monotonic seq id 부여 → guest 는 본 id 무시 (멱등). depot 은 key
+   (zoneIdx-slot) 로 이미 dedup 됐지만 bullet 은 unique id 없어서 별도 처리. */
+let _bulletSpawnSeq = 0;
+const _seenBulletSpawns = new Set();
+
 function spawnBullet(now, speed, aimedRatio, multi){
     /* PvP host-authoritative 패턴 (depot 과 동일):
        - host 만 spawn 결정 + broadcast.
        - guest 는 spawn 호출 자체 안 됨 (spawn loop 에서 차단). 함수 실행 들어와도
-         보수적으로 한 번 더 차단.
-       이전엔 deterministic seeded RNG 로 양쪽 sync 시도했지만, frame timing /
-       GC / event loop 차이로 정확히 동기 불가능 → 메테오 위치 어긋남. */
+         보수적으로 한 번 더 차단. */
     const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
     if(isPvp && pvpState.role !== 'host') return;
     /* host 가 broadcast 할 spawn 정보 누적. */
@@ -3971,17 +3977,28 @@ function spawnBullet(now, speed, aimedRatio, multi){
         }
     }
     /* PvP host: 이번 spawnBullet 호출에서 push 한 모든 메테오를 한 번에 broadcast.
-       multi=3 이면 3 개 묶어서 1 broadcast — P2P 횟수 줄임. guest 는 받아서 push. */
+       multi=3 이면 3 개 묶어서 1 broadcast — P2P 횟수 줄임. guest 는 받아서 push.
+       seq id 첨부 — guest 가 P2P + supabase 둘 다로 같은 broadcast 받아도 1 번만 push. */
     if(hostBroadcast && hostBroadcast.length > 0 && pvpState.channel){
-        const payload = { bullets: hostBroadcast };
+        const seq = ++_bulletSpawnSeq;
+        const payload = { seq, bullets: hostBroadcast };
         _rtcSend({ event: 'bullet_spawn', payload });
         try { pvpState.channel.send({ type:'broadcast', event:'bullet_spawn', payload }); } catch(_){}
     }
 }
 /* PvP guest — host 의 bullet_spawn broadcast 받아 local bullets push.
-   각 broadcast 당 multi 개의 메테오 정보 (x,y,vx,vy,aimed). */
+   같은 seq 재도착 시 (P2P + supabase 양쪽 도착) 무시 (멱등). */
 function _handleBulletSpawnPayload(p){
     if(!p || !Array.isArray(p.bullets)) return;
+    if(p.seq != null){
+        if(_seenBulletSpawns.has(p.seq)) return;
+        _seenBulletSpawns.add(p.seq);
+        /* Set 무한 증가 방지 — 게임당 ~수백 entry 라 큰 부담 없지만 안전. */
+        if(_seenBulletSpawns.size > 2000){
+            const it = _seenBulletSpawns.values();
+            for(let i = 0; i < 1000; i++) _seenBulletSpawns.delete(it.next().value);
+        }
+    }
     for(const b of p.bullets){
         bullets.push({
             x: Number(b.x), y: Number(b.y),
@@ -6034,6 +6051,9 @@ function _startPvpGame(){
     pvpState.opponentFinished = false;
     /* PvP 진입 시 lastSpawn 도 reset — host 의 spawn cadence 가 새 게임부터 시작. */
     lastSpawn = 0;
+    /* bullet broadcast seq dedup state reset — rematch 시 이전 seq 영향 없게. */
+    _bulletSpawnSeq = 0;
+    _seenBulletSpawns.clear();
     /* deterministic seeded RNG — 양쪽 같은 메테오 패턴.
        모든 spawnBullet 안 random 호출은 rand() 사용 (Math.random 아님). */
     _setSeed(pvpState.seed || 1);
@@ -6240,6 +6260,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777818888"></script>
+<script src="/js/siteFooter.js?v=1777819277"></script>
 </body>
 </html>
