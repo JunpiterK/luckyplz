@@ -813,10 +813,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777806779"></script>
-<script src="/js/lpI18n.js?v=1777806779"></script>
-<script src="/js/lpRankSheet.js?v=1777806779"></script>
-<script src="/js/lpAudio.js?v=1777806779"></script>
+<script src="/js/supabase-config.js?v=1777807654"></script>
+<script src="/js/lpI18n.js?v=1777807654"></script>
+<script src="/js/lpRankSheet.js?v=1777807654"></script>
+<script src="/js/lpAudio.js?v=1777807654"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4944,30 +4944,24 @@ async function _refreshPvpRooms(){
             const agoTxt = ago < 60 ? ago+'초 전' : Math.floor(ago/60)+'분 전';
             const lock  = r.has_password ? '🔒 ' : '';
             const full  = r.member_count >= 2;
-            return `<div class="pvp-room ${full?'full':''}" data-room-id="${r.room_id}" data-private="${r.has_password ? '1':'0'}" data-host="${escapeHtml(r.host_name)}">
+            const click = full ? ''
+                : `onclick="window.spacezTryJoin('${r.room_id}', ${r.has_password?1:0}, '${escapeHtml(r.host_name).replace(/'/g, '&#39;')}')"`;
+            return `<div class="pvp-room ${full?'full':''}" data-room-id="${r.room_id}" data-private="${r.has_password ? '1':'0'}" data-host="${escapeHtml(r.host_name)}" ${click} role="button" tabindex="0">
                 <div class="pvp-rh">${lock}${escapeHtml(r.host_name)}
                     <small>아이템 ${r.item_count}개 · ${agoTxt} · ${r.member_count}/2 · W:0 L:0</small>
                 </div>
                 <div class="pvp-rjoin">${full ? '만석' : '참여'}</div>
             </div>`;
         }).join('');
+        /* addEventListener fallback — inline onclick 이 어떤 이유로 fail 하면. */
         list.querySelectorAll('.pvp-room').forEach(el => {
             if(el.classList.contains('full')) return;
             el.addEventListener('click', () => {
-                const roomId  = el.dataset.roomId;
-                const isPriv  = el.dataset.private === '1';
-                const host    = el.dataset.host || '';
-                if(isPriv){
-                    /* 비번 입력 popup */
-                    pvpState.pendingJoinRoomId = roomId;
-                    $('pvpPwPromptHost').textContent = '🔒 ' + host + ' 의 방';
-                    $('pvpPwPromptInput').value = '';
-                    _setPvpErr('pvpPwPromptErr', '');
-                    _showPvpOverlay('pvpPwPrompt');
-                    setTimeout(() => $('pvpPwPromptInput').focus(), 50);
-                } else {
-                    _doJoinRoom(roomId, null);
-                }
+                window.spacezTryJoin(
+                    el.dataset.roomId,
+                    el.dataset.private === '1' ? 1 : 0,
+                    el.dataset.host || ''
+                );
             });
         });
     } catch(e){
@@ -4981,6 +4975,27 @@ async function _refreshPvpRooms(){
         }
     }
 }
+
+/* inline onclick fallback — 카드 click 시 항상 호출되는 함수.
+   addEventListener 가 어떤 이유로 attach 안 되어도 onclick attribute 가
+   직접 호출. private 방이면 비번 popup, public 이면 즉시 join. */
+window.spacezTryJoin = function(roomId, isPrivateFlag, hostName){
+    try {
+        if(!roomId){ alert('방 ID 누락'); return; }
+        if(isPrivateFlag){
+            pvpState.pendingJoinRoomId = roomId;
+            const h = $('pvpPwPromptHost'); if(h) h.textContent = '🔒 ' + (hostName || '') + ' 의 방';
+            const i = $('pvpPwPromptInput'); if(i){ i.value = ''; }
+            _setPvpErr('pvpPwPromptErr', '');
+            _showPvpOverlay('pvpPwPrompt');
+            setTimeout(() => { try { $('pvpPwPromptInput').focus(); } catch(_){} }, 50);
+        } else {
+            _doJoinRoom(roomId, null);
+        }
+    } catch(err){
+        alert('[PvP join 클릭 에러] ' + (err && err.message || String(err)));
+    }
+};
 
 async function _doJoinRoom(roomId, password){
     _setPvpErr('pvpJoinErr', '');
@@ -5265,6 +5280,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777806779"></script>
+<script src="/js/siteFooter.js?v=1777807654"></script>
 </body>
 </html>
