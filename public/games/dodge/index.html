@@ -99,13 +99,19 @@ body{
 .ss .v.best{color:#00D9FF}
 .ss .l{font-size:.62em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:800;line-height:1;flex-shrink:0}
 
-/* ---- Game control bar (visible during play across all viewports) ----
-   Desktop already has Space/keyboard pause; phones + tablets did not
-   expose any pause UI, so the kbd-only hint felt unfair to mobile. The
-   bar mounts between score-strip and canvas, hidden until startGame()
+/* ---- Game control bar (tablet+ only) ----
+   Phone (≤767px) hides the bar entirely — saved vertical space goes to canvas
+   (max-height calc below uses 372px instead of 410px). Pause functionality
+   stays alive on phone via Space key only (rare on phone but supported via
+   external keyboards). Tablet/desktop keep the explicit ⏸ button.
+   The bar mounts between score-strip and canvas, hidden until startGame()
    activates it and hidden again on game over. */
 .game-ctrl{display:none;align-items:center;justify-content:center;width:100%;max-width:360px;gap:10px;margin:-2px 0 0}
 .game-ctrl.on{display:flex}
+@media(max-width:767px){
+    /* 폰: pause 버튼 완전 숨김 — playfield 가 ~38px 만큼 더 차지 */
+    .game-ctrl, .game-ctrl.on{display:none}
+}
 .ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
 .ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
 
@@ -293,8 +299,8 @@ body{
    topbar 56 + score-strip 44(인라인) + 콕핏 panel 180(트랙패드 148 +
    padding 14*2 + border 4) + gaps 30 + hint ~30 +
    safe-area-inset-bottom 34(iPhone notch) + padding 14
-   ≈ 388. 여유 22 두고 410 으로 설정 (3-슬롯 가로 + GRAV 1 줄 구조라
-   panel 이 트랙패드 높이 = 148 에 맞춰짐). */
+   ≈ 388. 폰은 pause 버튼 (~38px) 제거 → 372 로 축소해서 그만큼 canvas 가
+   세로로 더 큼. 태블릿+ 는 button 유지하니 410 그대로. */
 .canvas-wrap{
     position:relative;
     background:#050518;border:2px solid rgba(0,217,255,.22);border-radius:16px;
@@ -302,7 +308,7 @@ body{
     overflow:hidden;
     aspect-ratio:3/5;
     width:100%;max-width:360px;
-    max-height:calc(100dvh - 410px);
+    max-height:calc(100dvh - 372px);
     touch-action:none
 }
 #dodge-canvas{display:block;width:100%;height:100%}
@@ -576,6 +582,18 @@ body{
     80%{transform:translate(2px,3px)}
 }
 .canvas-wrap.shake{animation:shake .4s ease}
+/* PvP 디버그 오버레이 — sync 검증용. 기본 숨김, .pvp-on 시 표시.
+   canvas 좌상단 작은 monospace 글자 — 게임 진행에 거슬리지 않게 fade. */
+.pvp-debug{
+    display:none;position:absolute;top:6px;left:6px;
+    font-family:'Courier New',monospace;font-size:10px;
+    color:rgba(0,217,255,.85);
+    background:rgba(0,0,0,.55);
+    padding:2px 6px;border-radius:4px;
+    pointer-events:none;z-index:10;
+    letter-spacing:.02em;line-height:1.3;
+}
+.pvp-debug.pvp-on{display:block}
 
 /* Ad slot */
 #adSlot.ad-col{width:100%;max-width:440px;min-height:80px;display:none;margin-top:2px;align-self:center;order:99}
@@ -685,12 +703,23 @@ body{
             <div class="ss"><div class="l">BEST</div><div class="v best" id="bestScore">—</div></div>
         </div>
 
-        <div class="game-ctrl" id="gameCtrl">
+        <!-- Pause 버튼 — HTML 인라인 display:none 으로 시작.
+             폰/터치 디바이스는 그대로 숨김. PC 만 boot 시점 JS 가 풀어줌.
+             이 방식 이유: CSS 미디어쿼리는 모바일 브라우저가 캐시 무시 한 번 안 해도
+             안 적용됨. 인라인 display:none 은 HTML 안에 박혀있어서 무조건 적용. -->
+        <div class="game-ctrl" id="gameCtrl" style="display:none" data-pc-only="1">
             <button class="ctrl-btn" id="pauseBtn" type="button" aria-label="일시정지/재개">⏸ 일시정지</button>
         </div>
 
         <div class="canvas-wrap" id="canvasWrap">
             <canvas id="dodge-canvas"></canvas>
+            <!-- PvP 디버그 오버레이 — 양쪽 화면 비교용. host/guest 가 같은 logical 시점에
+                 같은 rngState/calls/bullets/depots 면 sync OK. 다르면 어디서 diverge 하는지
+                 즉시 시각 확인 가능. PvP 모드일 때만 보임 (.pvp-on 클래스). -->
+            <div class="pvp-debug" id="pvpDebug">
+                <span id="dbgT">t —</span> · <span id="dbgRng">rng —</span> · <span id="dbgC">c —</span>
+                · <span id="dbgB">b —</span> · <span id="dbgD">d —</span>
+            </div>
             <div class="overlay" id="overlay">
                 <h2 class="play" id="ovTitle">✈ SPACE-Z</h2>
                 <p id="ovDesc">테라포밍 탐사선을 조종해<br>소행성·운석을 피하며 우주를 개척하세요!</p>
@@ -857,10 +886,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777814188"></script>
-<script src="/js/lpI18n.js?v=1777814188"></script>
-<script src="/js/lpRankSheet.js?v=1777814188"></script>
-<script src="/js/lpAudio.js?v=1777814188"></script>
+<script src="/js/supabase-config.js?v=1777817814"></script>
+<script src="/js/lpI18n.js?v=1777817814"></script>
+<script src="/js/lpRankSheet.js?v=1777817814"></script>
+<script src="/js/lpAudio.js?v=1777817814"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2777,7 +2806,16 @@ tpZone.addEventListener('touchcancel',tpEnd);
 const keys={};
 document.addEventListener('keydown',(e)=>{
     keys[e.key]=true;
-    if(e.key===' '){ e.preventDefault(); if(running){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI(); } }
+    if(e.key===' '){
+        e.preventDefault();
+        /* PvP 모드면 pause 차단 — 한쪽만 paused 가 되면 elapsedMs 가 어긋나서
+           seeded RNG sequence 가 frame 마다 다르게 진행 → depot 위치/메테오 패턴
+           양쪽 desync. (totalPausedMs 가 실제로는 한 번도 업데이트 안 되는 dead
+           code 라 pause 시 elapsedMs 가 그냥 jump 함.) */
+        if(running && !(pvpState && pvpState.gameMode === 'pvp')){
+            paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI();
+        }
+    }
     if(e.key==='Enter'){ if(!running) startGame(); }
     /* 1·2·3 키 → 인벤토리 슬롯 사용 */
     if(running && !paused){
@@ -2979,9 +3017,16 @@ let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
 function maybeSpawnDepot(zoneIdx, now){
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
+    /* PvP guest 는 spawn 결정 안 함 — host 의 'depot_spawn' broadcast 만 신뢰.
+       이게 진짜 multiplayer 표준 (Slither.io / Agar.io / 스타크래프트 lockstep
+       제외 모든 RTS / Quake 류 FPS): 한 client (server 또는 host) 가 결정 →
+       broadcast → 다른 client 는 받음. client-side deterministic simulation 은
+       frame timing / GC / event loop 다 통제 못 해서 절대 정확히 sync 안 됨.
+       그래서 host-authoritative 로 가야 100% 같은 위치 보장. */
+    const isPvp = !!(pvpState && pvpState.gameMode === 'pvp');
+    if(isPvp && pvpState.role !== 'host') return;
     /* zone duration 가져오기 — ZONES[zoneIdx].dur (sec).
        마지막 zone 은 9999 로 설정돼 있어 max 25 sec 으로 cap.
-       사용자 피드백: depot 3 개 → 2 개. ratios 도 더 spread 한 분포로.
        2 개 spawn: ~25%, ~65% 시점. */
     const rawDur = (typeof ZONES !== 'undefined' && ZONES[zoneIdx] && ZONES[zoneIdx].dur > 0)
         ? ZONES[zoneIdx].dur : 25;
@@ -2997,18 +3042,47 @@ function maybeSpawnDepot(zoneIdx, now){
         const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
         if(sinceZone < targetSec) continue;
         depotsSpawnedZones.add(key);
+        const x = 60 + rand() * (CW - 120);
+        const item = def.items[slot];
         depots.push({
-            x: 60 + rand() * (CW - 120),
-            y: -50,
+            x, y: -50,
             speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
-            item: def.items[slot],
+            item,
             zoneIdx, slot,
+            key,                            /* stable id — PvP depot_take 동기화 */
             chargeTime: 0,                 /* 0~GRAV_PICKUP_TIME sec */
             collected: false,
+            collectedByPeer: false,         /* 상대가 먹은 거면 true — buff 안 줌, fade 만 */
             spawnedAt: now,
             radius: 19
         });
+        /* PvP host: spawn 즉시 broadcast — guest 가 받아서 같은 좌표에 push.
+           P2P (낮은 latency) + supabase (안정 fallback) 둘 다 송신. 멱등 (중복은 무시). */
+        if(isPvp && pvpState.channel){
+            const payload = { key, x, item, zoneIdx, slot };
+            _rtcSend({ event: 'depot_spawn', payload });
+            try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
+        }
     }
+}
+/* PvP guest — host 의 depot_spawn broadcast 받아 local depot push.
+   key 가 이미 spawnedZones 에 있으면 (P2P + supabase 둘 다 도착) 무시 (멱등). */
+function _handleDepotSpawnPayload(p){
+    if(!p || !p.key) return;
+    if(depotsSpawnedZones.has(p.key)) return;
+    depotsSpawnedZones.add(p.key);
+    depots.push({
+        x: Number(p.x), y: -50,
+        speed: 24,
+        item: p.item,
+        zoneIdx: Number(p.zoneIdx), slot: Number(p.slot),
+        key: p.key,
+        chargeTime: 0,
+        collected: false,
+        collectedByPeer: false,
+        spawnedAt: performance.now(),
+        radius: 19
+    });
 }
 
 function updateDepots(dt, now){
@@ -3372,9 +3446,20 @@ function syncInventoryUI(){
 /* =====================================================================
    ITEM EFFECTS
    ===================================================================== */
-function onDepotCollected(d){
+function onDepotCollected(d, fromPeer){
+    /* 이미 collected 면 중복 진입 방지 (race condition: 본인이 먹는 도중에
+       상대 broadcast 도착) — d.collected 가 true 이면 return. */
+    if(d.collected) return;
     d.collected = true;
     d.collectedAt = performance.now();
+    d.collectedByPeer = !!fromPeer;
+    if(fromPeer){
+        /* 상대가 먹은 거 — 시각적 fade 만 (collected=true 라 drawDepot 의 fade 발동).
+           buff 도 sfx 도 안 줌. depot 옆에 작은 텍스트로 "상대 획득" 마크할 수도 있지만,
+           일단은 사라지는 visual cue 로 충분. */
+        return;
+    }
+    /* 본인 픽업 — buff 적용 */
     if(d.item === ITEM.HEART){
         /* HEART 만 즉시 회복 — 슬롯 차지하지 않음 */
         lives = Math.min(MAX_LIVES, lives + 1);
@@ -3384,6 +3469,22 @@ function onDepotCollected(d){
     }
     sfxStart();
     if(navigator.vibrate) try{navigator.vibrate(30)}catch(_){}
+    /* PvP — 상대에게도 알려서 같은 depot 못 먹게. P2P + supabase 둘다 보냄
+       (P2P 가 빠르지만 미연결 시 supabase fallback). 둘다 도달해도 onDepotCollected
+       의 위 d.collected 체크로 멱등. */
+    if(pvpState && pvpState.gameMode === 'pvp' && pvpState.channel){
+        const payload = { key: d.key, by: pvpState.me?.id || null };
+        _rtcSend({ event: 'depot_take', payload });
+        try { pvpState.channel.send({ type:'broadcast', event:'depot_take', payload }); } catch(_){}
+    }
+}
+/* PvP — 상대 broadcast 받아서 local depot 도 collected 처리. buff 는 적용 안 됨. */
+function _handleDepotTakePayload(p){
+    if(!p || !p.key) return;
+    if(p.by && pvpState.me && p.by === pvpState.me.id) return;   /* echo 방지 */
+    const d = depots.find(x => x.key === p.key);
+    if(!d || d.collected) return;
+    onDepotCollected(d, true);   /* fromPeer=true — buff 없음 */
 }
 
 /* =====================================================================
@@ -3864,44 +3965,38 @@ function spawnBullet(now, speed, aimedRatio, multi){
     }
 }
 
-function updateDifficulty(){
-    const s=elapsedMs/1000;
-
-    /* Difficulty curve (v4): 5 분 도달 후 유지 — v3 의 10분은 너무 길어 지루.
-       5분이 max 도달 sweet spot.
-         · sEff 시작 = 60 (워밍업 skip)
-         · sEff 종착 = 170 (legacy max difficulty)
-         · 도달 시점 = t=300s (5분)  ← v3: 600s (10분, 너무 길었음)
-         · 기울기 = (170-60)/300 = 11/30 ≈ 0.367
-       경유 timing 검증:
-         · t=1:00 → sEff=82  (워밍업)
-         · t=2:00 → sEff=104
-         · t=3:00 → sEff=126 (이전 v2 의 max 도달 시점이었음)
-         · t=4:00 → sEff=148
-         · t=5:00 → sEff=170 (max, cap)
-       모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot)
-       이 sEff=170 에서 max 도달하도록 통일. cap 후엔 stable. */
+/* _computeDiffAt — pure function (no rand, no global state except input).
+   Difficulty curve (v4): 5 분 도달 후 유지.
+     · sEff 시작 = 60 (워밍업 skip)
+     · sEff 종착 = 170 (legacy max difficulty)
+     · 도달 시점 = t=300s (5분)
+     · 기울기 = (170-60)/300 = 11/30 ≈ 0.367
+   경유 timing: t=1:00→82, t=2:00→104, t=3:00→126, t=4:00→148, t=5:00→170 (cap).
+   모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot) 이
+   sEff=170 에서 max 도달. PvP determinism — 양쪽 client 가 같은 logical
+   elapsedMs 를 인자로 호출하면 무조건 같은 결과. */
+function _computeDiffAt(eMs){
+    const s = eMs / 1000;
     const sEff = Math.min(170, 60 + s * (11/30));
-
-    // smoothstep: 0→1 부드러운 S커브 (양쪽 끝이 완만, 중간이 가파름)
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
-
-    // ── 스폰 간격 (ms): 1600 → 250 (sEff=170 에서 max) ────────────
     const spawnInterval = Math.round(1600 - ss(sEff/170) * 1350);
-
-    // ── 총알 속도 (px/s): 95 → 370 (sEff=170 에서 max) ────────────
-    const bulletSpeed = Math.round(95 + ss(sEff/170) * 275);
-
-    // ── 조준 비율: 0 → 0.65 (sEff=170 에서 max) ───────────────────
+    const bulletSpeed   = Math.round(95 + ss(sEff/170) * 275);
     const arT = Math.max(0, Math.min((sEff-20)/150, 1));
-    const aimedRatio = Math.min(0.65, arT*arT*0.70);
-
-    // ── 멀티샷: 1 → 3 (sEff=170 에서 max) ─────────────────────────
-    const msRaw   = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
-    const msFloor = Math.floor(msRaw);
-    const multiShot = Math.min(3, msFloor + (rand()<(msRaw-msFloor)?1:0));
-
-    return { spawnInterval, bulletSpeed, aimedRatio, multiShot };
+    const aimedRatio    = Math.min(0.65, arT*arT*0.70);
+    const msRaw         = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
+    const msFloor       = Math.floor(msRaw);
+    return { spawnInterval, bulletSpeed, aimedRatio, msRaw, msFloor };
+}
+/* updateDifficulty — 현 frame 의 elapsedMs 로 diff 계산.
+   BUG WAS HERE: 이전에 이 함수가 rand() 를 매 frame 호출했음. updateDifficulty
+   는 매 frame 한 번씩 불리니 60fps host 와 50fps guest 가 1 분에 ~600 회
+   rand() 차이 누적 → seeded RNG 시퀀스 완전 어긋남 → 같은 seed 라도 depot.x
+   완전 다른 위치. 수정: rand() 는 _computeDiffAt 에서 빼고 spawn 시점에서만
+   1 회 소비. 추가로 spawn loop 도 logical-time elapsedMs 로 diff 재계산해서
+   frame 타이밍 미세 차이 (~10-20ms) 도 영향 못 미치게 — 양쪽 client 가
+   bit-exact 같은 spawnInterval/aimedRatio 사용. */
+function updateDifficulty(){
+    return _computeDiffAt(elapsedMs);
 }
 
 /* ---- Game state ---- */
@@ -3911,14 +4006,32 @@ let running=false, paused=false;
    Mobile/tablet players had no on-screen pause button (Space-only),
    which felt unfair. The .game-ctrl bar shows during a live game
    only and toggles ⏸ ↔ ▶ to mirror the paused flag. */
+/* PC = 마우스 포인터 + 768px 이상 viewport. 폰/태블릿 (touch) 면 false.
+   HTML inline style 로 gameCtrl 이 처음부터 숨김 → PC 면 boot 시 풀고,
+   syncPauseUI 가 game state 따라 on/off 토글. */
+function _isPcViewport(){
+    try {
+        const fineMouse = window.matchMedia('(pointer: fine)').matches;
+        const wideEnough = window.innerWidth >= 768;
+        return fineMouse && wideEnough;
+    } catch(_){ return window.innerWidth >= 1024; }
+}
 function syncPauseUI(){
     const gc=$('gameCtrl'), btn=$('pauseBtn');
     if(!gc||!btn) return;
-    if(running){
+    /* 폰/터치 디바이스는 무조건 hidden (인라인 display:none 유지) — 게임 도중에도
+       절대 안 보임. PvP 모드도 마찬가지 (PvP 에선 pause 자체 차단). */
+    if(!_isPcViewport()){
+        gc.style.display = 'none';
+        return;
+    }
+    if(running && !(pvpState && pvpState.gameMode === 'pvp')){
+        gc.style.display = 'flex';
         gc.classList.add('on');
         btn.textContent = paused ? '▶ 재개' : '⏸ 일시정지';
         btn.setAttribute('aria-label', paused ? '재개' : '일시정지');
     } else {
+        gc.style.display = 'none';
         gc.classList.remove('on');
     }
     /* 콕핏 패널 (트랙패드 + 4 버튼 stack 통합 panel-board) — 게임 중에만 표시.
@@ -4518,15 +4631,32 @@ function gameLoop(now){
 
     /* ---- Spawn bullets ----
        WIPE 직후 5 초간 spawn 차단 — lastSpawn 을 now 로 계속 끌어올려서
-       block 끝난 직후 catch-up 한 번에 5~8 발 폭격 안 일어나게 함. */
-    const diff=updateDifficulty();
-    if(lastSpawn===0) lastSpawn=now;
+       block 끝난 직후 catch-up 한 번에 5~8 발 폭격 안 일어나게 함.
+       PvP determinism: spawn 마다 _computeDiffAt(logicalElapsed) 로 diff 재계산.
+       양쪽 client 가 같은 logical 시점 (lastSpawn 기준) 에 같은 spawnInterval/
+       aimedRatio/msRaw 를 사용 → rand() 소비 패턴도 bit-exact 동일.
+       이전엔 frame-time elapsedMs 로 한 번 계산해서 catch-up 전체에 같은 diff
+       사용 → 1 frame 차이 (~16ms) 로 host/guest 의 aimedRatio 가 미세 차이 →
+       'aimed = rand() < aimedRatio' 가 일부 spawn 에서 boolean flip → 이후
+       branch 분기 → rand() count 어긋남. 이걸 차단. */
+    /* lastSpawn 초기값: startedAt (logical 0). 양쪽 client 모두 첫 spawn 의
+       logicalElapsed 가 정확히 0 → 동일 spawnInterval/aimedRatio 로 출발.
+       (이전엔 첫 frame 의 now 로 초기화해서 frame timing 만큼 미세하게 어긋남.) */
+    if(lastSpawn===0) lastSpawn = startedAt || now;
     if(now < wipeSpawnBlockUntil){
         lastSpawn = now;
     } else {
-        while(now-lastSpawn>=diff.spawnInterval){
-            lastSpawn+=diff.spawnInterval;
-            spawnBullet(now, diff.bulletSpeed, diff.aimedRatio, diff.multiShot);
+        /* while 종료 조건과 spawn advance 둘 다 같은 localDiff 로 — frame 의
+           elapsedMs 와 spawn 의 logical elapsedMs 가 다른 case 에서 어긋남 방지.
+           (이전엔 outer diff 가 frame elapsedMs 로 계산돼서 host/guest 의 조건
+           평가가 미세하게 달랐음.) */
+        while(true){
+            const logicalElapsed = lastSpawn - startedAt - totalPausedMs;
+            const localDiff = _computeDiffAt(logicalElapsed);
+            if(now - lastSpawn < localDiff.spawnInterval) break;
+            lastSpawn += localDiff.spawnInterval;
+            const multiShot = Math.min(3, localDiff.msFloor + (rand() < (localDiff.msRaw - localDiff.msFloor) ? 1 : 0));
+            spawnBullet(now, localDiff.bulletSpeed, localDiff.aimedRatio, multiShot);
         }
     }
 
@@ -4653,6 +4783,24 @@ function gameLoop(now){
        100 fps precision so the player can see their personal-best chase
        in real time. */
     $('timeNow').textContent=formatDuration(elapsedMs);
+
+    /* ---- PvP 디버그 — host/guest 양쪽 화면에 같은 값 보여야 sync OK ----
+       대표 sync 지표: logical 초 단위 t (정수), rngState (32-bit hex),
+       rngCalls 누적, bullets 수, depots 수.
+       host/guest 가 같은 t 에서 다른 rngState 를 보면 그 사이에 누가 더
+       많이 rand() 호출한 거 → desync 확정. */
+    if(pvpState && pvpState.gameMode === 'pvp'){
+        const dbg = $('pvpDebug');
+        if(dbg){
+            const tSec = Math.floor(elapsedMs / 1000);
+            const rngHex = ((_rngState >>> 0)).toString(16).padStart(8,'0');
+            $('dbgT').textContent  = 't ' + tSec;
+            $('dbgRng').textContent = 'rng ' + rngHex;
+            $('dbgC').textContent  = 'c ' + _rngCalls;
+            $('dbgB').textContent  = 'b ' + (typeof bullets !== 'undefined' ? bullets.length : '—');
+            $('dbgD').textContent  = 'd ' + (typeof depots !== 'undefined' ? depots.length : '—');
+        }
+    }
 
     drawFrame(now, dt);
     requestAnimationFrame(gameLoop);
@@ -4867,9 +5015,11 @@ function idleLoop(now){
     requestAnimationFrame(idleLoop);
 }
 
-/* Pause on canvas tap when running */
+/* Pause on canvas tap when running — PvP 에서는 비활성 (sync 깨짐 방지) */
 canvasWrap.addEventListener('click',()=>{
-    if(running&&!pointer.active){ paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI(); }
+    if(running && !pointer.active && !(pvpState && pvpState.gameMode === 'pvp')){
+        paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI();
+    }
 });
 
 /* ======== Bottom sheet ======== */
@@ -5254,6 +5404,9 @@ function _renderPvpMembers(){
     /* 내 ready 상태 sync */
     const myEntry = pvpState.members.find(m => m.user_id === me?.id);
     pvpState.isReady = !!(myEntry && myEntry.is_ready);
+    /* 멤버 2명 채워졌으면 P2P 핸드셰이크 시도 (host 만 offer 시작).
+       이미 initiated 면 no-op. */
+    _maybeStartRtc();
     const readyBtn = $('pvpRoomReady');
     if(pvpState.role === 'host'){
         const both = pvpState.members.length === 2 && pvpState.members.every(m => m.is_ready);
@@ -5288,11 +5441,71 @@ function _appendChat(nick, msg, sys){
     chat.appendChild(div);
     chat.scrollTop = chat.scrollHeight;
 }
+/* ===== Shared event handlers (Supabase broadcast + WebRTC DataChannel 둘다 사용) =====
+   PvP 의 latency-sensitive 이벤트 (pos / ping / pong / finished) 는 Supabase 와 P2P 양쪽
+   transport 에서 들어올 수 있어서 처리 로직을 함수로 추출. P2P 가 먼저 도착하면 그걸로
+   처리, 늦게 도착한 supabase 중복분은 같은 결과를 다시 적용 — 멱등이라 안전. */
+function _handlePosPayload(p){
+    if(!p) return;
+    if(!pvpState.opponent){
+        const opName = pvpState.members.find(m => m.user_id !== pvpState.me?.id)?.nickname || '';
+        pvpState.opponent = {
+            x: undefined, y: undefined, targetX: 0, targetY: 0,
+            prevX: 0, prevY: 0, prevT: 0,
+            lastT: 0, alive: true, nickname: opName, gravActive: false
+        };
+    }
+    const op = pvpState.opponent;
+    const newX = Number(p.x);
+    const newY = Number(p.y);
+    const senderT = Number(p.t || 0);
+    /* 같은 timestamp 의 중복 (supabase + p2p 둘다 도착) 무시 */
+    if(senderT > 0 && senderT <= op.lastT) return;
+    op.prevX = op.targetX; op.prevY = op.targetY; op.prevT = op.lastT;
+    op.targetX = newX; op.targetY = newY; op.lastT = senderT;
+    op.alive = p.alive !== false;
+    if(p.grav !== undefined) op.gravActive = !!p.grav;
+}
+function _handlePongPayload(p){
+    const sentAt = Number(p?.ts || 0);
+    if(sentAt > 0) _pushPingSample(Date.now() - sentAt);
+}
+function _handleFinishedPayload(p){
+    const senderId    = p?.user_id;
+    const senderScore = Number(p?.score || 0);
+    const senderDur   = Number(p?.duration || 0);
+    if(!senderId || senderId === pvpState.me?.id) return;
+    /* 중복 적용 방지 — 이미 winner 결정됐으면 무시 */
+    if(pvpState.declaredWinner !== undefined && pvpState.declaredWinner !== null && pvpState.opponentScore !== undefined){
+        /* 같은 senderId 의 같은 score 이면 이미 처리한 거 — skip */
+        if(pvpState.opponentScore === senderScore && pvpState.opponentDuration === senderDur) return;
+    }
+    pvpState.opponentScore    = senderScore;
+    pvpState.opponentDuration = senderDur;
+    if(running){
+        pvpState.declaredWinner = pvpState.me?.id || null;
+        pvpState.opponentDied   = true;
+        triggerGameOver();
+    } else if(pvpState.myFinished){
+        const myScore = pvpState.myFinalScore || 0;
+        const myDur   = pvpState.myFinalTime || 0;
+        if(senderScore > myScore || (senderScore === myScore && senderDur > myDur)){
+            pvpState.declaredWinner = senderId;
+        } else if(myScore > senderScore || (myScore === senderScore && myDur > senderDur)){
+            pvpState.declaredWinner = pvpState.me?.id || null;
+        } else {
+            pvpState.declaredWinner = null;
+        }
+        _renderPvpResultStatus();
+    }
+}
+
 async function _subscribePvpRoom(){
     if(pvpState.channel){
         try { await pvpState.channel.unsubscribe(); } catch(_){}
         pvpState.channel = null;
     }
+    _resetRtc();   /* 새 방이면 이전 RTC peer 정리 */
     const sb = getSupabase();
     const ch = sb.channel('spacez:room:' + pvpState.roomId, { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'member' }, () => _loadPvpMembers());
@@ -5306,70 +5519,196 @@ async function _subscribePvpRoom(){
         if(itemCnt) pvpState.itemCount = itemCnt;
         _startPvpGame();
     });
+    /* WebRTC P2P signaling — supabase 채널을 시그널링으로만 사용. 실제 게임 데이터는 DC 로. */
+    ch.on('broadcast', { event: 'rtc_offer' }, (e) => _onRtcOffer(e.payload));
+    ch.on('broadcast', { event: 'rtc_answer' }, (e) => _onRtcAnswer(e.payload));
+    ch.on('broadcast', { event: 'rtc_ice' }, (e) => _onRtcIce(e.payload));
     /* 1초 ping/pong — 상대 ping 받으면 즉시 pong 응답. 자기 pong 받으면 RTT 계산. */
     ch.on('broadcast', { event: 'ping' }, (e) => {
-        try { ch.send({ type:'broadcast', event:'pong', payload:{ ts: e.payload?.ts } }); } catch(_){}
-    });
-    ch.on('broadcast', { event: 'pong' }, (e) => {
-        const sentAt = Number(e.payload?.ts || 0);
-        if(sentAt > 0){
-            const rtt = Date.now() - sentAt;
-            _pushPingSample(rtt);
+        const ts = e.payload?.ts;
+        /* P2P 가 가능하면 P2P 로 응답 (pong 도 같은 transport 라야 측정 정확) */
+        if(!_rtcSend({ event:'pong', payload:{ ts } })){
+            try { ch.send({ type:'broadcast', event:'pong', payload:{ ts } }); } catch(_){}
         }
     });
-    /* 상대 게임 종료. broadcast payload 의 score/duration 으로 양쪽 client 즉시
-       winner 결정 — server polling 보강용. */
-    ch.on('broadcast', { event: 'finished' }, (e) => {
-        const senderId    = e.payload?.user_id;
-        const senderScore = Number(e.payload?.score || 0);
-        const senderDur   = Number(e.payload?.duration || 0);
-        if(!senderId || senderId === pvpState.me?.id) return;
-        pvpState.opponentScore    = senderScore;
-        pvpState.opponentDuration = senderDur;
-        if(running){
-            /* 본인 살아있음 → 본인 = winner. 자기도 강제 종료. */
-            pvpState.declaredWinner = pvpState.me?.id || null;
-            pvpState.opponentDied   = true;
-            triggerGameOver();
-        } else if(pvpState.myFinished){
-            /* 본인 이미 죽음 — score 비교로 즉시 winner 결정 (양쪽 거의 동시 죽음). */
-            const myScore = pvpState.myFinalScore || 0;
-            const myDur   = pvpState.myFinalTime || 0;
-            if(senderScore > myScore || (senderScore === myScore && senderDur > myDur)){
-                pvpState.declaredWinner = senderId;
-            } else if(myScore > senderScore || (myScore === senderScore && myDur > senderDur)){
-                pvpState.declaredWinner = pvpState.me?.id || null;
-            } else {
-                pvpState.declaredWinner = null;
-            }
-            _renderPvpResultStatus();
-        }
-    });
-    /* 상대 우주선 위치 — 50ms 마다 받음. lerp 용 target 만 갱신, render 시 보간. */
-    ch.on('broadcast', { event: 'pos' }, (e) => {
-        if(!pvpState.opponent){
-            const opName = pvpState.members.find(m => m.user_id !== pvpState.me?.id)?.nickname || '';
-            pvpState.opponent = {
-                x: undefined, y: undefined, targetX: 0, targetY: 0,
-                prevX: 0, prevY: 0, prevT: 0,         /* 이전 snapshot — velocity 계산 */
-                lastT: 0,                              /* 마지막 snapshot 의 sender timestamp */
-                alive: true, nickname: opName, gravActive: false
-            };
-        }
-        const op = pvpState.opponent;
-        const newX = Number(e.payload?.x);
-        const newY = Number(e.payload?.y);
-        const senderT = Number(e.payload?.t || 0);
-        /* 이전 snapshot 보관 (velocity 계산용) */
-        op.prevX = op.targetX; op.prevY = op.targetY; op.prevT = op.lastT;
-        op.targetX = newX; op.targetY = newY; op.lastT = senderT;
-        op.alive = e.payload?.alive !== false;
-        if(e.payload?.grav !== undefined) op.gravActive = !!e.payload.grav;
-    });
+    ch.on('broadcast', { event: 'pong' }, (e) => _handlePongPayload(e.payload));
+    /* 상대 게임 종료 — broadcast payload 의 score/duration 으로 양쪽 client 즉시
+       winner 결정. server polling 보강용. */
+    ch.on('broadcast', { event: 'finished' }, (e) => _handleFinishedPayload(e.payload));
+    /* 상대 우주선 위치 — 30Hz 로 받음. lerp 용 target 만 갱신, render 시 보간. */
+    ch.on('broadcast', { event: 'pos' }, (e) => _handlePosPayload(e.payload));
+    /* 상대가 depot 먹음 — local depot 의 collected 마킹해서 같은 거 못 먹게. */
+    ch.on('broadcast', { event: 'depot_take' }, (e) => _handleDepotTakePayload(e.payload));
+    /* host 가 depot 새로 spawn — guest 가 받아서 같은 좌표에 push (host-authoritative). */
+    ch.on('broadcast', { event: 'depot_spawn' }, (e) => _handleDepotSpawnPayload(e.payload));
     await ch.subscribe();
     pvpState.channel = ch;
-    /* 채널 준비 후 ping loop 시작 */
+    /* 채널 준비 후 ping loop 시작 + 멤버 2명이면 RTC 핸드셰이크 시도 */
     _startPingLoop();
+    _maybeStartRtc();
+}
+
+/* =====================================================================
+   WebRTC P2P DataChannel — STUN 으로 NAT traversal, 직접 peer-to-peer.
+   - 95% 의 경우 STUN 만으로 직결됨 (LTE↔Wi-Fi, Wi-Fi↔Wi-Fi 등).
+   - 시그널링은 위 supabase 채널의 rtc_offer / rtc_answer / rtc_ice broadcast.
+   - DC 는 unordered + maxRetransmits:0 (UDP-like). 실시간 게임은 늦은 packet 무가치.
+   - host 가 offerer, guest 가 answerer.
+   - DC 가 open 되면 _rtcSend() 가 직접 dispatch — supabase relay (왕복 ~250ms) 안 거침.
+   - DC 가 closed/실패 시 자동 fallback: _rtcSend() 가 false 반환 → 호출부가 supabase 로 재전송.
+   ===================================================================== */
+const _rtc = {
+    peer: null,
+    dc: null,
+    ready: false,
+    asOfferer: false,
+    initiated: false,
+    hasRemoteDesc: false,
+    pendingIce: [],     /* remoteDescription 도착 전 ICE 후보 보관 */
+};
+const RTC_ICE_SERVERS = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+];
+function _resetRtc(){
+    try { if(_rtc.dc) _rtc.dc.close(); } catch(_){}
+    try { if(_rtc.peer) _rtc.peer.close(); } catch(_){}
+    _rtc.peer = null; _rtc.dc = null; _rtc.ready = false;
+    _rtc.asOfferer = false; _rtc.initiated = false;
+    _rtc.hasRemoteDesc = false; _rtc.pendingIce = [];
+}
+function _maybeStartRtc(){
+    if(!pvpState.channel || _rtc.initiated) return;
+    if(typeof RTCPeerConnection === 'undefined') return;
+    if(pvpState.role !== 'host') return;       /* host 만 offer 시작 */
+    if(pvpState.members.length !== 2) return;  /* 2명일 때만 */
+    _setupRtc(true);
+}
+async function _setupRtc(asOfferer){
+    if(_rtc.initiated) return;
+    if(typeof RTCPeerConnection === 'undefined') return;
+    _rtc.initiated = true;
+    _rtc.asOfferer = !!asOfferer;
+    let pc;
+    try { pc = new RTCPeerConnection({ iceServers: RTC_ICE_SERVERS }); }
+    catch(_){ _rtc.initiated = false; return; }
+    _rtc.peer = pc;
+    pc.onicecandidate = (e) => {
+        if(e.candidate && pvpState.channel){
+            try {
+                pvpState.channel.send({
+                    type:'broadcast', event:'rtc_ice',
+                    payload:{ cand: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate }
+                });
+            } catch(_){}
+        }
+    };
+    pc.oniceconnectionstatechange = () => {
+        const s = pc.iceConnectionState;
+        if(s === 'failed' || s === 'closed' || s === 'disconnected') _rtc.ready = false;
+    };
+    pc.onconnectionstatechange = () => {
+        const s = pc.connectionState;
+        if(s === 'failed' || s === 'closed' || s === 'disconnected') _rtc.ready = false;
+    };
+    const _bindDc = (dc) => {
+        _rtc.dc = dc;
+        try { dc.binaryType = 'arraybuffer'; } catch(_){}
+        dc.onopen = () => { _rtc.ready = true; };
+        dc.onclose = () => { _rtc.ready = false; };
+        dc.onerror = () => { _rtc.ready = false; };
+        dc.onmessage = (ev) => _handleRtcMessage(ev.data);
+    };
+    if(asOfferer){
+        /* host: DC 직접 생성 + offer 보냄.
+           ordered:false + maxRetransmits:0 = UDP 류 — 늦은 packet 은 drop. */
+        let dc;
+        try { dc = pc.createDataChannel('spacez', { ordered: false, maxRetransmits: 0 }); }
+        catch(_){ _rtc.ready = false; return; }
+        _bindDc(dc);
+        try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            if(pvpState.channel){
+                pvpState.channel.send({
+                    type:'broadcast', event:'rtc_offer',
+                    payload:{ sdp: offer.sdp, type: offer.type }
+                });
+            }
+        } catch(_){ _rtc.ready = false; }
+    } else {
+        /* guest: DC 는 host 가 만든 걸 받음. */
+        pc.ondatachannel = (ev) => _bindDc(ev.channel);
+    }
+}
+async function _onRtcOffer(payload){
+    if(!payload?.sdp) return;
+    if(pvpState.role === 'host') return;     /* host 는 offer 안 받음 */
+    if(!_rtc.initiated) await _setupRtc(false);
+    if(!_rtc.peer) return;
+    try {
+        await _rtc.peer.setRemoteDescription({ type: payload.type || 'offer', sdp: payload.sdp });
+        _rtc.hasRemoteDesc = true;
+        await _flushPendingIce();
+        const answer = await _rtc.peer.createAnswer();
+        await _rtc.peer.setLocalDescription(answer);
+        if(pvpState.channel){
+            pvpState.channel.send({
+                type:'broadcast', event:'rtc_answer',
+                payload:{ sdp: answer.sdp, type: answer.type }
+            });
+        }
+    } catch(_){ _rtc.ready = false; }
+}
+async function _onRtcAnswer(payload){
+    if(!payload?.sdp) return;
+    if(pvpState.role !== 'host') return;     /* answer 는 host 만 받음 */
+    if(!_rtc.peer) return;
+    try {
+        await _rtc.peer.setRemoteDescription({ type: payload.type || 'answer', sdp: payload.sdp });
+        _rtc.hasRemoteDesc = true;
+        await _flushPendingIce();
+    } catch(_){ _rtc.ready = false; }
+}
+async function _onRtcIce(payload){
+    if(!payload?.cand) return;
+    if(!_rtc.peer || !_rtc.hasRemoteDesc){ _rtc.pendingIce.push(payload.cand); return; }
+    try { await _rtc.peer.addIceCandidate(payload.cand); } catch(_){}
+}
+async function _flushPendingIce(){
+    if(!_rtc.peer) return;
+    const list = _rtc.pendingIce.splice(0);
+    for(const cand of list){
+        try { await _rtc.peer.addIceCandidate(cand); } catch(_){}
+    }
+}
+function _rtcSend(obj){
+    const dc = _rtc.dc;
+    if(!_rtc.ready || !dc || dc.readyState !== 'open') return false;
+    try { dc.send(JSON.stringify(obj)); return true; } catch(_){ return false; }
+}
+function _handleRtcMessage(data){
+    let obj = null;
+    try { obj = JSON.parse(data); } catch(_){ return; }
+    if(!obj || !obj.event) return;
+    const ev = obj.event;
+    const p  = obj.payload || {};
+    if(ev === 'pos'){
+        _handlePosPayload(p);
+    } else if(ev === 'ping'){
+        /* 즉시 pong — DC 가 같은 transport. */
+        _rtcSend({ event:'pong', payload:{ ts: p.ts } });
+    } else if(ev === 'pong'){
+        _handlePongPayload(p);
+    } else if(ev === 'finished'){
+        _handleFinishedPayload(p);
+    } else if(ev === 'depot_take'){
+        _handleDepotTakePayload(p);
+    } else if(ev === 'depot_spawn'){
+        _handleDepotSpawnPayload(p);
+    }
 }
 
 /* ===== Ping (RTT) 측정 + 5칸 막대 ===== */
@@ -5409,7 +5748,11 @@ function _startPingLoop(){
     _pingTimer = setInterval(() => {
         if(!pvpState.channel) return;
         const ts = Date.now();
-        try { pvpState.channel.send({ type:'broadcast', event:'ping', payload:{ ts } }); } catch(_){}
+        /* P2P 가 open 이면 P2P 로 ping (round-trip 직결 측정).
+           아니면 supabase 로 — supabase relay 통한 RTT 측정. */
+        if(!_rtcSend({ event:'ping', payload:{ ts } })){
+            try { pvpState.channel.send({ type:'broadcast', event:'ping', payload:{ ts } }); } catch(_){}
+        }
     }, 1000);
 }
 function _stopPingLoop(){
@@ -5457,6 +5800,7 @@ $('pvpRoomLeave').addEventListener('click', async () => {
         await sb.rpc('spacez_leave_room', { p_room_id: pvpState.roomId });
         await _broadcastPvp('member');
     } catch(_){}
+    _resetRtc();   /* P2P peer + DC 정리 */
     if(pvpState.channel){ try { await pvpState.channel.unsubscribe(); } catch(_){} pvpState.channel = null; }
     pvpState.roomId = null; pvpState.code = ''; pvpState.role = ''; pvpState.members = [];
     _showPvpOverlay(null);
@@ -5484,17 +5828,23 @@ async function _sendChat(){
    동일 sequence 생성. spawnBullet / 메테오 위치/속도 의 random 은 rand() 사용.
    single-player 는 _resetRand() 로 Math.random 으로 복귀. */
 let _seededRng = Math.random;
+let _rngState = 0;     /* 디버그 — 현재 mulberry32 의 internal state. PvP 양쪽 client
+                          에서 같은 logical 시점에 같은 값이어야 함. */
+let _rngCalls = 0;     /* 디버그 — 게임 시작 후 rand() 호출 누적 횟수 */
 function _mulberry32(seed){
+    _rngState = seed | 0;
     return function(){
-        let t = (seed += 0x6D2B79F5) | 0;
+        _rngState = (_rngState + 0x6D2B79F5) | 0;
+        let t = _rngState;
         t = Math.imul(t ^ (t >>> 15), t | 1);
         t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        _rngCalls++;
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
 function rand(){ return _seededRng(); }
-function _setSeed(s){ _seededRng = _mulberry32((s|0) || 1); }
-function _resetRand(){ _seededRng = Math.random; }
+function _setSeed(s){ _rngCalls = 0; _seededRng = _mulberry32((s|0) || 1); }
+function _resetRand(){ _seededRng = Math.random; _rngState = 0; _rngCalls = 0; }
 
 /* ===== PvP shared playfield ===== */
 let _opPosBcastTimer = null;
@@ -5502,17 +5852,17 @@ function _startOpponentSync(){
     if(_opPosBcastTimer) clearInterval(_opPosBcastTimer);
     _opPosBcastTimer = setInterval(() => {
         if(!pvpState.channel || !running) return;
+        const payload = {
+            x: player.x, y: player.y,
+            alive: lives > 0,
+            grav: gravityFieldActive,
+            t: Date.now()        /* sender timestamp — receiver 가 latency 보정 */
+        };
+        /* P2P open 이면 DC 직접 전송 (~10–80ms vs supabase ~250ms).
+           실패하면 supabase broadcast 로 fallback — 한쪽이라도 도달 보장. */
+        if(_rtcSend({ event: 'pos', payload })) return;
         try {
-            pvpState.channel.send({
-                type: 'broadcast',
-                event: 'pos',
-                payload: {
-                    x: player.x, y: player.y,
-                    alive: lives > 0,
-                    grav: gravityFieldActive,
-                    t: Date.now()        /* sender timestamp — receiver 가 latency 보정 */
-                }
-            });
+            pvpState.channel.send({ type: 'broadcast', event: 'pos', payload });
         } catch(_){}
     }, 33);   /* 30Hz (50ms→33ms) — sync 정확도 개선 */
 }
@@ -5646,6 +5996,8 @@ function _startPvpGame(){
     /* deterministic seeded RNG — 양쪽 같은 메테오 패턴.
        모든 spawnBullet 안 random 호출은 rand() 사용 (Math.random 아님). */
     _setSeed(pvpState.seed || 1);
+    /* PvP 디버그 오버레이 켜기 — sync 검증용. */
+    { const d = $('pvpDebug'); if(d) d.classList.add('pvp-on'); }
     _showPvpOverlay(null);
     $('overlay').classList.add('hidden');
     if(!running){
@@ -5662,6 +6014,7 @@ async function _handlePvpGameOver(duration, score){
     /* 위치 broadcast 정리 + RNG 복귀 (다음 single-player 게임 영향 X). */
     _stopOpponentSync();
     _resetRand();
+    { const d = $('pvpDebug'); if(d) d.classList.remove('pvp-on'); }
     /* spacez_finish_game RPC — 양쪽 보고 후 server 가 winner 결정. */
     try {
         const sb = getSupabase();
@@ -5671,7 +6024,11 @@ async function _handlePvpGameOver(duration, score){
             p_duration_ms: duration
         });
     } catch(e){ console.error('[PvP] finish_game RPC fail', e); }
-    await _broadcastPvp('finished', { score, duration, user_id: pvpState.me?.id || null });
+    /* finished 는 게임 끝 시점 1회 — P2P 에 더해서 supabase 도 같이 보냄 (이중 신뢰성).
+       _handleFinishedPayload 가 멱등이라 양쪽 transport 중복 도달해도 안전. */
+    const finPayload = { score, duration, user_id: pvpState.me?.id || null };
+    _rtcSend({ event:'finished', payload: finPayload });
+    await _broadcastPvp('finished', finPayload);
     _showPvpResult();
 }
 
@@ -5814,6 +6171,8 @@ $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); })
 $('pauseBtn').addEventListener('click', (e)=>{
     e.stopPropagation();
     if(!running) return;
+    /* PvP 모드면 pause 무시 — sync 깨짐 방지 (위 keydown 분기와 동일 이유). */
+    if(pvpState && pvpState.gameMode === 'pvp') return;
     paused=!paused;
     if(paused) BGM.pause(); else BGM.resume();
     syncPauseUI();
@@ -5823,11 +6182,14 @@ $('pauseBtn').addEventListener('click', (e)=>{
     fitCanvas();
     initStars();
     resetParticles(0);
+    /* boot 시점 1회 호출 — 폰/터치면 gameCtrl 인라인 display:none 유지,
+       PC 면 풀어둠 (게임 시작 전엔 어차피 안 보이지만 init state 통일). */
+    syncPauseUI();
     requestAnimationFrame(idleLoop);
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777814188"></script>
+<script src="/js/siteFooter.js?v=1777817814"></script>
 </body>
 </html>
