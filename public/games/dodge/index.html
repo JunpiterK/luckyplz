@@ -886,10 +886,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777818229"></script>
-<script src="/js/lpI18n.js?v=1777818229"></script>
-<script src="/js/lpRankSheet.js?v=1777818229"></script>
-<script src="/js/lpAudio.js?v=1777818229"></script>
+<script src="/js/supabase-config.js?v=1777818888"></script>
+<script src="/js/lpI18n.js?v=1777818888"></script>
+<script src="/js/lpRankSheet.js?v=1777818888"></script>
+<script src="/js/lpAudio.js?v=1777818888"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3888,12 +3888,16 @@ function drawMiniShip(){
 }
 
 function spawnBullet(now, speed, aimedRatio, multi){
-    /* PvP 모드 시 rand() = seeded RNG → 양쪽 client 동일 메테오 패턴.
-       단, aimed bullet 은 player.x/y 기준이라 본인 위치에 따라 결과 다름.
-       PvP 의 경우 player 위치는 양쪽 다 다르므로 aimed 메테오는 약간 차이.
-       해결: PvP 일 때 aimed 의 target 을 화면 중앙 등 fixed 점으로 변경.
-       Stage 1: 단순화 — aimedRatio*1.0 그대로 두되 player 위치 차이는
-       무시 (메테오 spawn 위치/속도는 같음, target 만 살짝 다름). */
+    /* PvP host-authoritative 패턴 (depot 과 동일):
+       - host 만 spawn 결정 + broadcast.
+       - guest 는 spawn 호출 자체 안 됨 (spawn loop 에서 차단). 함수 실행 들어와도
+         보수적으로 한 번 더 차단.
+       이전엔 deterministic seeded RNG 로 양쪽 sync 시도했지만, frame timing /
+       GC / event loop 차이로 정확히 동기 불가능 → 메테오 위치 어긋남. */
+    const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
+    if(isPvp && pvpState.role !== 'host') return;
+    /* host 가 broadcast 할 spawn 정보 누적. */
+    const hostBroadcast = isPvp ? [] : null;
     for(let m=0;m<multi;m++){
         const edge=Math.floor(rand()*4);
         let bx,by,vx,vy;
@@ -3962,6 +3966,29 @@ function spawnBullet(now, speed, aimedRatio, multi){
             }
         }
         bullets.push({x:bx, y:by, vx, vy, aimed, trail:[]});
+        if(hostBroadcast){
+            hostBroadcast.push({x:bx, y:by, vx, vy, aimed});
+        }
+    }
+    /* PvP host: 이번 spawnBullet 호출에서 push 한 모든 메테오를 한 번에 broadcast.
+       multi=3 이면 3 개 묶어서 1 broadcast — P2P 횟수 줄임. guest 는 받아서 push. */
+    if(hostBroadcast && hostBroadcast.length > 0 && pvpState.channel){
+        const payload = { bullets: hostBroadcast };
+        _rtcSend({ event: 'bullet_spawn', payload });
+        try { pvpState.channel.send({ type:'broadcast', event:'bullet_spawn', payload }); } catch(_){}
+    }
+}
+/* PvP guest — host 의 bullet_spawn broadcast 받아 local bullets push.
+   각 broadcast 당 multi 개의 메테오 정보 (x,y,vx,vy,aimed). */
+function _handleBulletSpawnPayload(p){
+    if(!p || !Array.isArray(p.bullets)) return;
+    for(const b of p.bullets){
+        bullets.push({
+            x: Number(b.x), y: Number(b.y),
+            vx: Number(b.vx), vy: Number(b.vy),
+            aimed: !!b.aimed,
+            trail: []
+        });
     }
 }
 
@@ -4638,17 +4665,16 @@ function gameLoop(now){
        사용 → 1 frame 차이 (~16ms) 로 host/guest 의 aimedRatio 가 미세 차이 →
        'aimed = rand() < aimedRatio' 가 일부 spawn 에서 boolean flip → 이후
        branch 분기 → rand() count 어긋남. 이걸 차단. */
-    /* lastSpawn 초기값: startedAt (logical 0). 양쪽 client 모두 첫 spawn 의
-       logicalElapsed 가 정확히 0 → 동일 spawnInterval/aimedRatio 로 출발.
-       (이전엔 첫 frame 의 now 로 초기화해서 frame timing 만큼 미세하게 어긋남.) */
+    /* lastSpawn 초기값: startedAt (logical 0). */
     if(lastSpawn===0) lastSpawn = startedAt || now;
-    if(now < wipeSpawnBlockUntil){
+    /* PvP guest 는 spawn loop 자체 skip — host 의 'bullet_spawn' broadcast 만 신뢰.
+       host-authoritative multiplayer 표준 (Slither.io / Agar.io / RTS). */
+    const _isPvpGuest = (pvpState && pvpState.gameMode === 'pvp' && pvpState.role !== 'host');
+    if(_isPvpGuest){
+        /* nothing — bullets 는 _handleBulletSpawnPayload 가 push */
+    } else if(now < wipeSpawnBlockUntil){
         lastSpawn = now;
     } else {
-        /* while 종료 조건과 spawn advance 둘 다 같은 localDiff 로 — frame 의
-           elapsedMs 와 spawn 의 logical elapsedMs 가 다른 case 에서 어긋남 방지.
-           (이전엔 outer diff 가 frame elapsedMs 로 계산돼서 host/guest 의 조건
-           평가가 미세하게 달랐음.) */
         while(true){
             const logicalElapsed = lastSpawn - startedAt - totalPausedMs;
             const localDiff = _computeDiffAt(logicalElapsed);
@@ -5469,32 +5495,41 @@ function _handlePongPayload(p){
     const sentAt = Number(p?.ts || 0);
     if(sentAt > 0) _pushPingSample(Date.now() - sentAt);
 }
+/* 두 client 가 같은 (myDur, senderDur, myScore, senderScore) 4 값으로 score-compare
+   하면 항상 같은 결과 도출. 한쪽만 if(running) 분기로 declaredWinner=me 라고 박는
+   대신 항상 score-compare 거치게 — cross-broadcast race ("둘 다 승리") 차단. */
+function _resolveWinnerByScore(senderId, senderScore, senderDur){
+    const myScore = pvpState.myFinalScore || 0;
+    const myDur   = pvpState.myFinalTime || 0;
+    if(senderDur > myDur || (senderDur === myDur && senderScore > myScore)){
+        pvpState.declaredWinner = senderId;
+    } else if(myDur > senderDur || (myDur === senderDur && myScore > senderScore)){
+        pvpState.declaredWinner = pvpState.me?.id || null;
+    } else {
+        pvpState.declaredWinner = null;   /* 정확히 동일 → 동률 */
+    }
+}
 function _handleFinishedPayload(p){
     const senderId    = p?.user_id;
     const senderScore = Number(p?.score || 0);
     const senderDur   = Number(p?.duration || 0);
     if(!senderId || senderId === pvpState.me?.id) return;
-    /* 중복 적용 방지 — 이미 winner 결정됐으면 무시 */
-    if(pvpState.declaredWinner !== undefined && pvpState.declaredWinner !== null && pvpState.opponentScore !== undefined){
-        /* 같은 senderId 의 같은 score 이면 이미 처리한 거 — skip */
-        if(pvpState.opponentScore === senderScore && pvpState.opponentDuration === senderDur) return;
-    }
+    /* 중복 도착 (P2P + supabase 둘다) 의 같은 값이면 skip — 멱등. */
+    if(pvpState.opponentFinished
+        && pvpState.opponentScore === senderScore
+        && pvpState.opponentDuration === senderDur) return;
     pvpState.opponentScore    = senderScore;
     pvpState.opponentDuration = senderDur;
+    pvpState.opponentFinished = true;
     if(running){
-        pvpState.declaredWinner = pvpState.me?.id || null;
-        pvpState.opponentDied   = true;
+        /* 본인 살아있는데 상대 죽음 받음 → 본인도 게임 종료 (혼자 남은 게임 의미 없음).
+           declaredWinner 는 본인 _handlePvpGameOver 끝에서 score-compare 로 결정 —
+           여기서 즉시 me 라고 set 하면 cross-broadcast race 시 양쪽 다 me 로 set 되는 버그. */
+        pvpState.opponentDied = true;
         triggerGameOver();
     } else if(pvpState.myFinished){
-        const myScore = pvpState.myFinalScore || 0;
-        const myDur   = pvpState.myFinalTime || 0;
-        if(senderScore > myScore || (senderScore === myScore && senderDur > myDur)){
-            pvpState.declaredWinner = senderId;
-        } else if(myScore > senderScore || (myScore === senderScore && myDur > senderDur)){
-            pvpState.declaredWinner = pvpState.me?.id || null;
-        } else {
-            pvpState.declaredWinner = null;
-        }
+        /* 본인 이미 죽음 — score-compare 로 최종 결정 (양쪽 client 가 같은 결과 도출). */
+        _resolveWinnerByScore(senderId, senderScore, senderDur);
         _renderPvpResultStatus();
     }
 }
@@ -5540,6 +5575,8 @@ async function _subscribePvpRoom(){
     ch.on('broadcast', { event: 'depot_take' }, (e) => _handleDepotTakePayload(e.payload));
     /* host 가 depot 새로 spawn — guest 가 받아서 같은 좌표에 push (host-authoritative). */
     ch.on('broadcast', { event: 'depot_spawn' }, (e) => _handleDepotSpawnPayload(e.payload));
+    /* host 가 메테오 spawn — guest 가 받아서 같은 좌표/속도/aimed 로 push. */
+    ch.on('broadcast', { event: 'bullet_spawn' }, (e) => _handleBulletSpawnPayload(e.payload));
     await ch.subscribe();
     pvpState.channel = ch;
     /* 채널 준비 후 ping loop 시작 + 멤버 2명이면 RTC 핸드셰이크 시도 */
@@ -5707,6 +5744,8 @@ function _handleRtcMessage(data){
         _handleDepotTakePayload(p);
     } else if(ev === 'depot_spawn'){
         _handleDepotSpawnPayload(p);
+    } else if(ev === 'bullet_spawn'){
+        _handleBulletSpawnPayload(p);
     }
 }
 
@@ -5992,6 +6031,9 @@ function _startPvpGame(){
     pvpState.opponentDied = false;
     pvpState.opponentScore = null;
     pvpState.opponentDuration = null;
+    pvpState.opponentFinished = false;
+    /* PvP 진입 시 lastSpawn 도 reset — host 의 spawn cadence 가 새 게임부터 시작. */
+    lastSpawn = 0;
     /* deterministic seeded RNG — 양쪽 같은 메테오 패턴.
        모든 spawnBullet 안 random 호출은 rand() 사용 (Math.random 아님). */
     _setSeed(pvpState.seed || 1);
@@ -6010,6 +6052,15 @@ async function _handlePvpGameOver(duration, score){
     pvpState.myFinished = true;
     pvpState.myFinalScore = score;
     pvpState.myFinalTime = duration;
+    /* 본인 final score 확정. 상대 broadcast 가 이미 도착했다면 즉시 score-compare
+       로 winner 결정 — cross-broadcast race 시 양쪽 다 같은 결과 도출 보장.
+       (이전엔 _handleFinishedPayload 의 if(running) 분기에서 "내가 winner" 라고
+       즉시 박아서 양쪽이 다 본인 winner 라고 표시되는 버그.) */
+    if(pvpState.opponentFinished && pvpState.opponentScore != null){
+        const opMember = pvpState.members.find(m => m.user_id !== pvpState.me?.id);
+        const opId = opMember?.user_id || null;
+        _resolveWinnerByScore(opId, pvpState.opponentScore, pvpState.opponentDuration || 0);
+    }
     /* 위치 broadcast 정리 + RNG 복귀 (다음 single-player 게임 영향 X). */
     _stopOpponentSync();
     _resetRand();
@@ -6189,6 +6240,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777818229"></script>
+<script src="/js/siteFooter.js?v=1777818888"></script>
 </body>
 </html>
