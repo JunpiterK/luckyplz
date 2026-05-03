@@ -808,10 +808,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777802327"></script>
-<script src="/js/lpI18n.js?v=1777802327"></script>
-<script src="/js/lpRankSheet.js?v=1777802327"></script>
-<script src="/js/lpAudio.js?v=1777802327"></script>
+<script src="/js/supabase-config.js?v=1777803763"></script>
+<script src="/js/lpI18n.js?v=1777803763"></script>
+<script src="/js/lpRankSheet.js?v=1777803763"></script>
+<script src="/js/lpAudio.js?v=1777803763"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4802,24 +4802,53 @@ function escapeHtml(s){
     return String(s||'').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+/* ---- 디버그: PvP 진단용 시각 fb. inline script 어디선가 runtime throw 시
+   PvP 핸들러 attach 안 되어 클릭 무반응 → 사용자 진단 어려움.
+   global error listener 로 throw 잡아서 시작 화면 위에 빨간 메시지 표시. */
+window.addEventListener('error', (ev) => {
+    try {
+        const ovEl = document.getElementById('overlay');
+        if(!ovEl) return;
+        let dbg = document.getElementById('pvpDebugLine');
+        if(!dbg){
+            dbg = document.createElement('div');
+            dbg.id = 'pvpDebugLine';
+            dbg.style.cssText = 'position:absolute;top:4px;left:4px;right:4px;background:rgba(255,40,40,.92);color:#fff;font-size:.7em;padding:6px 8px;border-radius:6px;z-index:99;text-align:left;line-height:1.3;word-break:break-word;font-family:monospace';
+            ovEl.appendChild(dbg);
+        }
+        dbg.textContent = '⚠ JS 에러: ' + (ev.message || ev.error?.message || 'unknown') +
+                           ' @' + (ev.filename || '').split('/').pop() + ':' + (ev.lineno || '?');
+    } catch(_){}
+});
+
 /* ---- Create modal ---- */
 let pvpVisibility = 'public';
-$('ovCreateBtn').addEventListener('click', (e) => {
+const _ovCreateBtn = document.getElementById('ovCreateBtn');
+if(!_ovCreateBtn){
+    console.warn('[PvP] ovCreateBtn not found — HTML 캐시 옛 버전?');
+}
+(_ovCreateBtn || document.createElement('button')).addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    /* 즉시 modal — _ensureMe await stuck 회피. */
-    _setPvpErr('pvpCreateErr', '');
-    pvpState.itemCount = 2;
-    pvpVisibility = 'public';
-    document.querySelectorAll('#pvpItemCount button').forEach(b => {
-        b.classList.toggle('active', parseInt(b.dataset.cnt,10) === 2);
-    });
-    document.querySelectorAll('#pvpVisibility button').forEach(b => {
-        b.classList.toggle('active', b.dataset.vis === 'public');
-    });
-    $('pvpPwField').style.display = 'none';
-    $('pvpPwInput').value = '';
-    _showPvpOverlay('pvpCreate');
-    _ensureMe().catch(()=>{});
+    try {
+        /* 즉시 modal — _ensureMe await stuck 회피. */
+        _setPvpErr('pvpCreateErr', '');
+        pvpState.itemCount = 2;
+        pvpVisibility = 'public';
+        document.querySelectorAll('#pvpItemCount button').forEach(b => {
+            b.classList.toggle('active', parseInt(b.dataset.cnt,10) === 2);
+        });
+        document.querySelectorAll('#pvpVisibility button').forEach(b => {
+            b.classList.toggle('active', b.dataset.vis === 'public');
+        });
+        const pwField = document.getElementById('pvpPwField');
+        const pwInput = document.getElementById('pvpPwInput');
+        if(pwField) pwField.style.display = 'none';
+        if(pwInput) pwInput.value = '';
+        _showPvpOverlay('pvpCreate');
+        _ensureMe().catch(()=>{});
+    } catch(err){
+        alert('[PvP Create 클릭 에러] ' + (err && err.message || String(err)));
+    }
 });
 document.querySelectorAll('#pvpItemCount button').forEach(b => {
     b.addEventListener('click', () => {
@@ -4881,14 +4910,20 @@ $('pvpCreateConfirm').addEventListener('click', async () => {
 });
 
 /* ---- Join modal — 대기실 카드 직접 클릭 ---- */
-$('ovJoinBtn').addEventListener('click', (e) => {
+const _ovJoinBtn = document.getElementById('ovJoinBtn');
+if(!_ovJoinBtn){ console.warn('[PvP] ovJoinBtn not found — HTML 캐시 옛 버전?'); }
+(_ovJoinBtn || document.createElement('button')).addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    _ensureMe().catch(()=>{});
-    _setPvpErr('pvpJoinErr', '');
-    _showPvpOverlay('pvpJoin');
-    _refreshPvpRooms();
-    if(pvpState.listRefreshTimer) clearInterval(pvpState.listRefreshTimer);
-    pvpState.listRefreshTimer = setInterval(_refreshPvpRooms, 5000);
+    try {
+        _ensureMe().catch(()=>{});
+        _setPvpErr('pvpJoinErr', '');
+        _showPvpOverlay('pvpJoin');
+        _refreshPvpRooms();
+        if(pvpState.listRefreshTimer) clearInterval(pvpState.listRefreshTimer);
+        pvpState.listRefreshTimer = setInterval(_refreshPvpRooms, 5000);
+    } catch(err){
+        alert('[PvP Join 클릭 에러] ' + (err && err.message || String(err)));
+    }
 });
 $('pvpJoinCancel').addEventListener('click', () => {
     if(pvpState.listRefreshTimer){ clearInterval(pvpState.listRefreshTimer); pvpState.listRefreshTimer = null; }
@@ -5211,6 +5246,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777802327"></script>
+<script src="/js/siteFooter.js?v=1777803763"></script>
 </body>
 </html>
