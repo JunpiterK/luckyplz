@@ -99,13 +99,19 @@ body{
 .ss .v.best{color:#00D9FF}
 .ss .l{font-size:.62em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:800;line-height:1;flex-shrink:0}
 
-/* ---- Game control bar (visible during play across all viewports) ----
-   Desktop already has Space/keyboard pause; phones + tablets did not
-   expose any pause UI, so the kbd-only hint felt unfair to mobile. The
-   bar mounts between score-strip and canvas, hidden until startGame()
+/* ---- Game control bar (tablet+ only) ----
+   Phone (≤767px) hides the bar entirely — saved vertical space goes to canvas
+   (max-height calc below uses 372px instead of 410px). Pause functionality
+   stays alive on phone via Space key only (rare on phone but supported via
+   external keyboards). Tablet/desktop keep the explicit ⏸ button.
+   The bar mounts between score-strip and canvas, hidden until startGame()
    activates it and hidden again on game over. */
 .game-ctrl{display:none;align-items:center;justify-content:center;width:100%;max-width:360px;gap:10px;margin:-2px 0 0}
 .game-ctrl.on{display:flex}
+@media(max-width:767px){
+    /* 폰: pause 버튼 완전 숨김 — playfield 가 ~38px 만큼 더 차지 */
+    .game-ctrl, .game-ctrl.on{display:none}
+}
 .ctrl-btn{padding:8px 20px;border-radius:999px;background:rgba(0,217,255,.1);border:1px solid rgba(0,217,255,.42);color:#00D9FF;font-size:.85em;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.04em;display:inline-flex;align-items:center;gap:6px;line-height:1}
 .ctrl-btn:active{background:rgba(0,217,255,.22);transform:translateY(1px)}
 
@@ -293,8 +299,8 @@ body{
    topbar 56 + score-strip 44(인라인) + 콕핏 panel 180(트랙패드 148 +
    padding 14*2 + border 4) + gaps 30 + hint ~30 +
    safe-area-inset-bottom 34(iPhone notch) + padding 14
-   ≈ 388. 여유 22 두고 410 으로 설정 (3-슬롯 가로 + GRAV 1 줄 구조라
-   panel 이 트랙패드 높이 = 148 에 맞춰짐). */
+   ≈ 388. 폰은 pause 버튼 (~38px) 제거 → 372 로 축소해서 그만큼 canvas 가
+   세로로 더 큼. 태블릿+ 는 button 유지하니 410 그대로. */
 .canvas-wrap{
     position:relative;
     background:#050518;border:2px solid rgba(0,217,255,.22);border-radius:16px;
@@ -302,7 +308,7 @@ body{
     overflow:hidden;
     aspect-ratio:3/5;
     width:100%;max-width:360px;
-    max-height:calc(100dvh - 410px);
+    max-height:calc(100dvh - 372px);
     touch-action:none
 }
 #dodge-canvas{display:block;width:100%;height:100%}
@@ -857,10 +863,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777815777"></script>
-<script src="/js/lpI18n.js?v=1777815777"></script>
-<script src="/js/lpRankSheet.js?v=1777815777"></script>
-<script src="/js/lpAudio.js?v=1777815777"></script>
+<script src="/js/supabase-config.js?v=1777816605"></script>
+<script src="/js/lpI18n.js?v=1777816605"></script>
+<script src="/js/lpRankSheet.js?v=1777816605"></script>
+<script src="/js/lpAudio.js?v=1777816605"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3893,44 +3899,38 @@ function spawnBullet(now, speed, aimedRatio, multi){
     }
 }
 
-function updateDifficulty(){
-    const s=elapsedMs/1000;
-
-    /* Difficulty curve (v4): 5 분 도달 후 유지 — v3 의 10분은 너무 길어 지루.
-       5분이 max 도달 sweet spot.
-         · sEff 시작 = 60 (워밍업 skip)
-         · sEff 종착 = 170 (legacy max difficulty)
-         · 도달 시점 = t=300s (5분)  ← v3: 600s (10분, 너무 길었음)
-         · 기울기 = (170-60)/300 = 11/30 ≈ 0.367
-       경유 timing 검증:
-         · t=1:00 → sEff=82  (워밍업)
-         · t=2:00 → sEff=104
-         · t=3:00 → sEff=126 (이전 v2 의 max 도달 시점이었음)
-         · t=4:00 → sEff=148
-         · t=5:00 → sEff=170 (max, cap)
-       모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot)
-       이 sEff=170 에서 max 도달하도록 통일. cap 후엔 stable. */
+/* _computeDiffAt — pure function (no rand, no global state except input).
+   Difficulty curve (v4): 5 분 도달 후 유지.
+     · sEff 시작 = 60 (워밍업 skip)
+     · sEff 종착 = 170 (legacy max difficulty)
+     · 도달 시점 = t=300s (5분)
+     · 기울기 = (170-60)/300 = 11/30 ≈ 0.367
+   경유 timing: t=1:00→82, t=2:00→104, t=3:00→126, t=4:00→148, t=5:00→170 (cap).
+   모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot) 이
+   sEff=170 에서 max 도달. PvP determinism — 양쪽 client 가 같은 logical
+   elapsedMs 를 인자로 호출하면 무조건 같은 결과. */
+function _computeDiffAt(eMs){
+    const s = eMs / 1000;
     const sEff = Math.min(170, 60 + s * (11/30));
-
-    // smoothstep: 0→1 부드러운 S커브 (양쪽 끝이 완만, 중간이 가파름)
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
-
-    // ── 스폰 간격 (ms): 1600 → 250 (sEff=170 에서 max) ────────────
     const spawnInterval = Math.round(1600 - ss(sEff/170) * 1350);
-
-    // ── 총알 속도 (px/s): 95 → 370 (sEff=170 에서 max) ────────────
-    const bulletSpeed = Math.round(95 + ss(sEff/170) * 275);
-
-    // ── 조준 비율: 0 → 0.65 (sEff=170 에서 max) ───────────────────
+    const bulletSpeed   = Math.round(95 + ss(sEff/170) * 275);
     const arT = Math.max(0, Math.min((sEff-20)/150, 1));
-    const aimedRatio = Math.min(0.65, arT*arT*0.70);
-
-    // ── 멀티샷: 1 → 3 (sEff=170 에서 max) ─────────────────────────
-    const msRaw   = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
-    const msFloor = Math.floor(msRaw);
-    const multiShot = Math.min(3, msFloor + (rand()<(msRaw-msFloor)?1:0));
-
-    return { spawnInterval, bulletSpeed, aimedRatio, multiShot };
+    const aimedRatio    = Math.min(0.65, arT*arT*0.70);
+    const msRaw         = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
+    const msFloor       = Math.floor(msRaw);
+    return { spawnInterval, bulletSpeed, aimedRatio, msRaw, msFloor };
+}
+/* updateDifficulty — 현 frame 의 elapsedMs 로 diff 계산.
+   BUG WAS HERE: 이전에 이 함수가 rand() 를 매 frame 호출했음. updateDifficulty
+   는 매 frame 한 번씩 불리니 60fps host 와 50fps guest 가 1 분에 ~600 회
+   rand() 차이 누적 → seeded RNG 시퀀스 완전 어긋남 → 같은 seed 라도 depot.x
+   완전 다른 위치. 수정: rand() 는 _computeDiffAt 에서 빼고 spawn 시점에서만
+   1 회 소비. 추가로 spawn loop 도 logical-time elapsedMs 로 diff 재계산해서
+   frame 타이밍 미세 차이 (~10-20ms) 도 영향 못 미치게 — 양쪽 client 가
+   bit-exact 같은 spawnInterval/aimedRatio 사용. */
+function updateDifficulty(){
+    return _computeDiffAt(elapsedMs);
 }
 
 /* ---- Game state ---- */
@@ -4547,15 +4547,31 @@ function gameLoop(now){
 
     /* ---- Spawn bullets ----
        WIPE 직후 5 초간 spawn 차단 — lastSpawn 을 now 로 계속 끌어올려서
-       block 끝난 직후 catch-up 한 번에 5~8 발 폭격 안 일어나게 함. */
-    const diff=updateDifficulty();
-    if(lastSpawn===0) lastSpawn=now;
+       block 끝난 직후 catch-up 한 번에 5~8 발 폭격 안 일어나게 함.
+       PvP determinism: spawn 마다 _computeDiffAt(logicalElapsed) 로 diff 재계산.
+       양쪽 client 가 같은 logical 시점 (lastSpawn 기준) 에 같은 spawnInterval/
+       aimedRatio/msRaw 를 사용 → rand() 소비 패턴도 bit-exact 동일.
+       이전엔 frame-time elapsedMs 로 한 번 계산해서 catch-up 전체에 같은 diff
+       사용 → 1 frame 차이 (~16ms) 로 host/guest 의 aimedRatio 가 미세 차이 →
+       'aimed = rand() < aimedRatio' 가 일부 spawn 에서 boolean flip → 이후
+       branch 분기 → rand() count 어긋남. 이걸 차단. */
+    /* lastSpawn 초기값: startedAt (logical 0). 양쪽 client 모두 첫 spawn 의
+       logicalElapsed 가 정확히 0 → 동일 spawnInterval/aimedRatio 로 출발.
+       (이전엔 첫 frame 의 now 로 초기화해서 frame timing 만큼 미세하게 어긋남.) */
+    if(lastSpawn===0) lastSpawn = startedAt || now;
+    /* HUD/현 frame 통계용 diff (multiShot 은 raw 만 의미 있음) */
+    const diff = _computeDiffAt(elapsedMs);
     if(now < wipeSpawnBlockUntil){
         lastSpawn = now;
     } else {
         while(now-lastSpawn>=diff.spawnInterval){
-            lastSpawn+=diff.spawnInterval;
-            spawnBullet(now, diff.bulletSpeed, diff.aimedRatio, diff.multiShot);
+            /* 이 spawn 의 LOGICAL 시점에 해당하는 elapsedMs 로 diff 재계산.
+               양쪽 client 가 정확히 같은 elapsedMs → 같은 spawnInterval/aimedRatio. */
+            const logicalElapsed = lastSpawn - startedAt - totalPausedMs;
+            const localDiff = _computeDiffAt(logicalElapsed);
+            lastSpawn += localDiff.spawnInterval;
+            const multiShot = Math.min(3, localDiff.msFloor + (rand() < (localDiff.msRaw - localDiff.msFloor) ? 1 : 0));
+            spawnBullet(now, localDiff.bulletSpeed, localDiff.aimedRatio, multiShot);
         }
     }
 
@@ -6051,6 +6067,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777815777"></script>
+<script src="/js/siteFooter.js?v=1777816605"></script>
 </body>
 </html>
