@@ -458,10 +458,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777782901"></script>
-<script src="/js/lpI18n.js?v=1777782901"></script>
-<script src="/js/lpRankSheet.js?v=1777782901"></script>
-<script src="/js/lpAudio.js?v=1777782901"></script>
+<script src="/js/supabase-config.js?v=1777781902"></script>
+<script src="/js/lpI18n.js?v=1777781902"></script>
+<script src="/js/lpRankSheet.js?v=1777781902"></script>
+<script src="/js/lpAudio.js?v=1777781902"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2080,63 +2080,44 @@ const ITEM_VISUAL = {
     wipe:   {emoji:'✦',  color:'#FFE66D', borderColor:'#FFF6B8'},
     mini:   {emoji:'▲',  color:'#A855F7', borderColor:'#D5B0FF'}
 };
-/* Zone → 거점 아이템 매핑 (스토리 의미 고려해 배치)
-   각 zone 마다 3 개의 보급선이 분산되어 떠밀려 옴.
-   배치는 stage 별 의미를 살리되, 좋은 것/유지/돌발 섞기. */
+/* Zone → 거점 아이템 매핑 (스토리 의미 고려해 배치) */
 const ZONE_DEPOT_MAP = [
-    {zoneIdx:0,  items:[ITEM.SHIELD, ITEM.HEART,  ITEM.MINI ]},   // 🌍 Earth — 튜토리얼: 모든 종류 한 번씩 등장
-    {zoneIdx:1,  items:[ITEM.SHIELD, ITEM.MINI,   ITEM.WIPE ]},   // 🌙 Moon
-    {zoneIdx:2,  items:[ITEM.MINI,   ITEM.SHIELD, ITEM.WIPE ]},   // 🔴 Mars — mining helper
-    {zoneIdx:3,  items:[ITEM.WIPE,   ITEM.HEART,  ITEM.WIPE ]},   // 🟠 Jupiter — 방사선 wipe 강화
-    {zoneIdx:4,  items:[ITEM.WIPE,   ITEM.MINI,   ITEM.SHIELD]},  // 🪐 Saturn
-    {zoneIdx:5,  items:[ITEM.HEART,  ITEM.SHIELD, ITEM.WIPE ]},   // 🔵 Uranus — 생존 보상
-    {zoneIdx:6,  items:[ITEM.HEART,  ITEM.MINI,   ITEM.WIPE ]},   // 💙 Neptune
-    {zoneIdx:7,  items:[ITEM.MINI,   ITEM.SHIELD, ITEM.HEART]},   // ⚪ Pluto
-    {zoneIdx:8,  items:[ITEM.WIPE,   ITEM.HEART,  ITEM.SHIELD]},  // 🌌 Helio (외태양계)
-    {zoneIdx:9,  items:[ITEM.SHIELD, ITEM.MINI,   ITEM.WIPE ]},   // ✨ Interstellar
-    {zoneIdx:10, items:[ITEM.HEART,  ITEM.SHIELD, ITEM.WIPE ]}    // 🌠 Horsehead — 마지막 보상
+    {zoneIdx:0,  item:ITEM.SHIELD},   // 🌍 Earth — 보호막 (튜토리얼)
+    {zoneIdx:1,  item:ITEM.SHIELD},   // 🌙 Moon  — 보호막
+    {zoneIdx:2,  item:ITEM.MINI},     // 🔴 Mars  — 새끼 우주선 (mining helper)
+    {zoneIdx:3,  item:ITEM.WIPE},     // 🟠 Jupiter — wipe (방사선 환경)
+    {zoneIdx:4,  item:ITEM.WIPE},     // 🪐 Saturn — wipe
+    {zoneIdx:5,  item:ITEM.HEART},    // 🔵 Uranus — 하트 (생존 보상)
+    {zoneIdx:6,  item:ITEM.HEART},    // 💙 Neptune — 하트
+    {zoneIdx:7,  item:ITEM.MINI},     // ⚪ Pluto — 새끼 우주선
+    {zoneIdx:8,  item:ITEM.WIPE},     // 🌌 Helio — wipe (보너스)
+    {zoneIdx:9,  item:ITEM.SHIELD},   // ✨ Interstellar — 보호막 (귀한 영역)
+    {zoneIdx:10, item:ITEM.HEART}     // 🌠 Horsehead — 하트 (마지막 보상)
 ];
 
-/* depot pickup hold 시간 (초). 3 초는 길어서 2 초로 완화. */
-const GRAV_PICKUP_TIME = 2.0;
-
 let depots = [];                /* active depots (floating downward) */
-let depotsSpawnedZones = new Set();  /* "zoneIdx-slotIdx" 들 중 이미 spawn 한 것 */
+let depotsSpawnedZones = new Set();  /* zoneIdx 들 중 이미 spawn 한 것 */
 let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
 
 function maybeSpawnDepot(zoneIdx, now){
+    if(depotsSpawnedZones.has(zoneIdx)) return;
+    /* zone 진입 후 2.5 초 뒤 spawn (zone 라벨 페이드 인 끝나고) */
+    const sinceZone = (now - zoneEnteredAt) / 1000;
+    if(sinceZone < 2.5) return;
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
-    /* zone duration 가져오기 — ZONES[zoneIdx].dur (sec).
-       마지막 zone (말머리 성운) 은 9999 로 설정돼있어 max 25 sec 으로 cap.
-       그래야 3 번째 depot 이 너무 늦게 안 떠서 못 받는 일이 없음. */
-    const rawDur = (typeof ZONES !== 'undefined' && ZONES[zoneIdx] && ZONES[zoneIdx].dur > 0)
-        ? ZONES[zoneIdx].dur : 25;
-    const zd = Math.min(25, rawDur);
-    /* 3 개를 zone duration 의 ~10%, ~40%, ~75% 시점에 분산 spawn.
-       (마지막은 ~95% 가 아닌 75% — 너무 늦으면 못 받음) */
-    const ratios = [0.10, 0.40, 0.75];
-    const sinceZone = (now - zoneEnteredAt) / 1000;
-    /* zone 라벨 페이드인 시간 보장 — 첫 spawn 은 최소 2.5 초 후. */
-    const minFirst = 2.5;
-    for(let slot = 0; slot < 3; slot++){
-        const key = `${zoneIdx}-${slot}`;
-        if(depotsSpawnedZones.has(key)) continue;
-        const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 1.5, ratios[slot] * zd);
-        if(sinceZone < targetSec) continue;
-        depotsSpawnedZones.add(key);
-        depots.push({
-            x: 60 + Math.random() * (CW - 120),
-            y: -50,
-            speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
-            item: def.items[slot],
-            zoneIdx, slot,
-            chargeTime: 0,                 /* 0~GRAV_PICKUP_TIME sec, 중력장 cone 안 머문 시간 */
-            collected: false,
-            spawnedAt: now,
-            radius: 19
-        });
-    }
+    depotsSpawnedZones.add(zoneIdx);
+    depots.push({
+        x: 60 + Math.random() * (CW - 120),
+        y: -50,
+        speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
+        item: def.item,
+        zoneIdx,
+        chargeTime: 0,                 /* 0~3 sec, 중력장 cone 안 머문 시간 */
+        collected: false,
+        spawnedAt: now,
+        radius: 19
+    });
 }
 
 function updateDepots(dt, now){
@@ -2167,9 +2148,8 @@ function drawDepot(d, now){
         ctx.globalAlpha = Math.max(0, fade);
     }
 
-    /* 인벤토리 가득 차서 못 줍는 held 아이템이면 dim
-       (SHIELD 도 보유형으로 바뀌어 인벤 슬롯 차지) */
-    const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI || d.item === ITEM.SHIELD);
+    /* 인벤토리 가득 차서 못 줍는 held 아이템이면 dim */
+    const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI);
     const blocked = isHeld && !inventoryHasSpace();
     if(blocked) ctx.globalAlpha *= 0.45;
 
@@ -2214,7 +2194,7 @@ function drawDepot(d, now){
 
     /* 충전 progress ring */
     if(d.chargeTime > 0 && !d.collected){
-        const pct = Math.min(1, d.chargeTime / GRAV_PICKUP_TIME);
+        const pct = Math.min(1, d.chargeTime / 3);
         ctx.strokeStyle = '#FFE66D';
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -2256,13 +2236,11 @@ function updateGravFieldCharge(dt){
     }
     for(const d of depots){
         if(d.collected) continue;
-        /* held item — 인벤토리 슬롯 차지하는 종류 (WIPE, MINI, SHIELD).
-           HEART 만 즉시 회복으로 슬롯 안 차지. 슬롯 꽉 차면 픽업 못 함. */
-        const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI || d.item === ITEM.SHIELD);
+        const isHeld = (d.item === ITEM.WIPE || d.item === ITEM.MINI);
         if(isHeld && !inventoryHasSpace()) continue;  /* 슬롯 가득 → 못 챙김 */
         if(isInGravField(d.x, d.y)){
             d.chargeTime += dt;
-            if(d.chargeTime >= GRAV_PICKUP_TIME){
+            if(d.chargeTime >= 3){
                 onDepotCollected(d);
             }
         } else {
@@ -2326,11 +2304,8 @@ function inventoryUseSlot(idx){
     if(idx < 0 || idx >= INVENTORY_SLOTS) return;
     const item = inventory[idx];
     if(!item) return;
-    /* MINI 는 동시 2 기까지 — 이미 2 기 활성이면 사용 거부 (슬롯 그대로). */
-    if(item === ITEM.MINI && miniShips.length >= 2) return;
     if(item === ITEM.WIPE) triggerWipe();
     else if(item === ITEM.MINI) triggerMiniShip();
-    else if(item === ITEM.SHIELD) triggerShieldBubble();
     inventory[idx] = null;
     syncInventoryUI();
 }
@@ -2360,112 +2335,15 @@ function syncInventoryUI(){
 function onDepotCollected(d){
     d.collected = true;
     d.collectedAt = performance.now();
-    if(d.item === ITEM.HEART){
-        /* HEART 만 즉시 회복 — 슬롯 차지하지 않음 */
+    if(d.item === ITEM.SHIELD){
+        invincibleUntil = performance.now() + 5000;
+    } else if(d.item === ITEM.HEART){
         lives = Math.min(MAX_LIVES, lives + 1);
     } else {
-        /* SHIELD, WIPE, MINI 모두 보유형 — 슬롯에 적재. */
         inventoryAdd(d.item);
     }
     sfxStart();
     if(navigator.vibrate) try{navigator.vibrate(30)}catch(_){}
-}
-
-/* =====================================================================
-   SHIELD BUBBLE — 보유형. 사용 시 우주선을 둘러싼 강한 청록 방어막을
-   20 초간 펼침. 막에 닿은 메테오는 즉시 파괴 (fragment 폭발). 보유 중에는
-   사용 거부 — 인벤토리 슬롯에서 클릭해야 발동. invincibleUntil 의 짧은
-   2 초 깜빡임 무적과는 완전 별도 시스템.
-   ===================================================================== */
-const SHIELD_BUBBLE_MS = 20000;
-const SHIELD_BUBBLE_R  = 30;        /* px — 우주선 hit radius (5) 의 6 배 */
-let shieldBubbleUntil = 0;
-function triggerShieldBubble(){
-    /* 사용 시점부터 20 초 — 이미 활성 중이면 연장 (중첩 적재 사용 시) */
-    const now = performance.now();
-    const base = Math.max(now, shieldBubbleUntil);
-    shieldBubbleUntil = base + SHIELD_BUBBLE_MS;
-    sfxStart();
-    if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
-}
-function shieldBubbleActive(now){ return now < shieldBubbleUntil; }
-function updateShieldBubble(now){
-    /* bubble 활성 중이면 bubble 반경 안에 들어온 메테오 즉시 파괴 + 작은
-       fragment 폭발 — wipeFragments 재사용 (시각효과 동일 톤). */
-    if(!shieldBubbleActive(now)) return;
-    const r2 = (SHIELD_BUBBLE_R + 4) * (SHIELD_BUBBLE_R + 4);
-    const survivors = [];
-    for(const b of bullets){
-        const dx = b.x - player.x, dy = b.y - player.y;
-        if(dx*dx + dy*dy <= r2){
-            for(let i = 0; i < 3; i++){
-                wipeFragments.push({
-                    x: b.x, y: b.y,
-                    vx: (Math.random()-0.5) * 220,
-                    vy: (Math.random()-0.5) * 220,
-                    life: 0.35, maxLife: 0.35
-                });
-            }
-            continue;
-        }
-        survivors.push(b);
-    }
-    bullets = survivors;
-}
-function drawShieldBubble(now){
-    if(!shieldBubbleActive(now)) return;
-    const remain = (shieldBubbleUntil - now) / SHIELD_BUBBLE_MS;
-    const t = now / 200;
-    const px = player.x, py = player.y;
-    ctx.save();
-    /* 외곽 코어 — 청록 radial gradient */
-    const grad = ctx.createRadialGradient(px, py, SHIELD_BUBBLE_R * 0.4, px, py, SHIELD_BUBBLE_R + 4);
-    grad.addColorStop(0,    'rgba(0, 217, 255, 0)');
-    grad.addColorStop(0.65, 'rgba(0, 217, 255, 0.10)');
-    grad.addColorStop(0.92, 'rgba(124, 231, 255, 0.55)');
-    grad.addColorStop(1,    'rgba(255, 255, 255, 0.95)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(px, py, SHIELD_BUBBLE_R + 4, 0, Math.PI*2);
-    ctx.fill();
-    /* 쿨링이 가까우면 빨강으로 깜빡 — 마지막 3 초 */
-    const danger = remain < 0.15;
-    const ringColor = danger
-        ? `rgba(255, 80, 120, ${0.55 + Math.sin(t*4)*0.35})`
-        : `rgba(0, 217, 255, ${0.65 + Math.sin(t*2)*0.2})`;
-    /* 외곽 hex pattern — 6 각형 회전 */
-    ctx.strokeStyle = ringColor;
-    ctx.lineWidth = 1.6;
-    const rot = (now / 1800) % (Math.PI * 2);
-    ctx.beginPath();
-    for(let i = 0; i < 6; i++){
-        const a = rot + i * Math.PI / 3;
-        const rx = px + Math.cos(a) * SHIELD_BUBBLE_R;
-        const ry = py + Math.sin(a) * SHIELD_BUBBLE_R;
-        if(i === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    /* 내부 hex pattern — 반대 방향 */
-    ctx.strokeStyle = `rgba(124, 231, 255, ${0.3 + Math.sin(t*3)*0.15})`;
-    ctx.lineWidth = 1.0;
-    const rot2 = -(now / 1400) % (Math.PI * 2) + Math.PI/6;
-    ctx.beginPath();
-    for(let i = 0; i < 6; i++){
-        const a = rot2 + i * Math.PI / 3;
-        const rx = px + Math.cos(a) * (SHIELD_BUBBLE_R - 7);
-        const ry = py + Math.sin(a) * (SHIELD_BUBBLE_R - 7);
-        if(i === 0) ctx.moveTo(rx, ry); else ctx.lineTo(rx, ry);
-    }
-    ctx.closePath();
-    ctx.stroke();
-    /* 잔여 시간 ring (외곽) */
-    ctx.strokeStyle = danger ? 'rgba(255,80,120,0.85)' : 'rgba(0,217,255,0.85)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(px, py, SHIELD_BUBBLE_R + 8, -Math.PI/2, -Math.PI/2 + Math.PI*2 * remain);
-    ctx.stroke();
-    ctx.restore();
 }
 
 let wipeFlashUntil = 0;
@@ -2518,67 +2396,49 @@ function drawWipeFlash(){
 }
 
 /* =====================================================================
-   MINI-SHIP — F-117 Nighthawk 스텔스기 형태의 동행기. 30 초 지속, 3 lasers/sec,
-   가장 가까운 위쪽 메테오 자동 추적. 동시에 최대 2 기 운용 가능 —
-   1 기일 때는 본함 뒤에서 따라오고, 2 기일 때는 좌·우로 호위 비행.
+   MINI-SHIP — 30s companion, 3 lasers/sec, targets nearest threat
    ===================================================================== */
-let miniShips = [];
+let miniShip = null;
 let miniLasers = [];
 const MINI_DUR = 30000;
 const MINI_SHOT_INTERVAL = 333;  /* ms — 3 shots/sec */
-const MINI_MAX = 2;
 
 function triggerMiniShip(){
-    if(miniShips.length >= MINI_MAX) return;
-    /* side 는 활성 mini 들이 자리 잡는 슬롯 — 들어오는 순서대로 0, 1.
-       update 단계에서 현재 활성 수에 따라 trail/좌·우 위치 재계산. */
-    miniShips.push({
-        x: player.x, y: player.y + 28,
+    miniShip = {
+        x: player.x + 32, y: player.y + 8,
         spawnedAt: performance.now(),
-        lastShot: 0,
-        slot: miniShips.length        /* 0 = 첫째, 1 = 둘째 */
-    });
+        lastShot: 0
+    };
+    miniLasers = [];
     sfxStart();
 }
 function updateMiniShip(dt, now){
-    if(miniShips.length === 0) return;
-    /* 만료된 것 제거 */
-    miniShips = miniShips.filter(m => now - m.spawnedAt <= MINI_DUR);
-    /* 활성 수에 맞춰 slot 재할당 (만료로 한 기 빠지면 남은 기는 trail 모드) */
-    miniShips.forEach((m, i) => m.slot = i);
-
-    const count = miniShips.length;
-    for(const m of miniShips){
-        let tx, ty;
-        if(count === 1){
-            /* trail 모드 — 본함 뒤(아래)에서 따라옴, 약간 sin 좌우 진동 */
-            tx = player.x + Math.cos(now/600) * 4;
-            ty = player.y + 30 + Math.sin(now/500) * 3;
-        } else {
-            /* 호위 모드 — 슬롯 0 = 좌현, 슬롯 1 = 우현 */
-            const side = (m.slot === 0) ? -1 : 1;
-            tx = player.x + side * 26 + Math.cos(now/450 + m.slot) * 3;
-            ty = player.y + 6 + Math.sin(now/400 + m.slot) * 4;
+    if(!miniShip) return;
+    if(now - miniShip.spawnedAt > MINI_DUR){
+        miniShip = null;
+        return;
+    }
+    /* 위치 — 우주선 우측 hover + 약간 sin 진동 */
+    const tx = player.x + 32 + Math.cos(now/400) * 4;
+    const ty = player.y + 8 + Math.sin(now/350) * 6;
+    miniShip.x += (tx - miniShip.x) * Math.min(1, dt * 6);
+    miniShip.y += (ty - miniShip.y) * Math.min(1, dt * 6);
+    /* 발사 — 가장 가까운 위쪽 메테오 */
+    if(now - miniShip.lastShot >= MINI_SHOT_INTERVAL && bullets.length > 0){
+        let target = null, best = Infinity;
+        for(const b of bullets){
+            if(b.y > miniShip.y) continue;  /* 미니쉽 위쪽 메테오만 */
+            const dx = b.x - miniShip.x, dy = b.y - miniShip.y;
+            const d = dx*dx + dy*dy;
+            if(d < best){ best = d; target = b; }
         }
-        m.x += (tx - m.x) * Math.min(1, dt * 6);
-        m.y += (ty - m.y) * Math.min(1, dt * 6);
-        /* 발사 — 가장 가까운 위쪽 메테오 */
-        if(now - m.lastShot >= MINI_SHOT_INTERVAL && bullets.length > 0){
-            let target = null, best = Infinity;
-            for(const b of bullets){
-                if(b.y > m.y) continue;  /* 미니쉽 위쪽 메테오만 */
-                const dx = b.x - m.x, dy = b.y - m.y;
-                const d = dx*dx + dy*dy;
-                if(d < best){ best = d; target = b; }
-            }
-            if(target){
-                miniLasers.push({
-                    fromX: m.x, fromY: m.y,
-                    target,
-                    life: 0.18, maxLife: 0.18
-                });
-                m.lastShot = now;
-            }
+        if(target){
+            miniLasers.push({
+                fromX: miniShip.x, fromY: miniShip.y,
+                target,
+                life: 0.18, maxLife: 0.18
+            });
+            miniShip.lastShot = now;
         }
     }
     /* 레이저 — 즉시 hit, 시각만 short trail */
@@ -2591,101 +2451,37 @@ function updateMiniShip(dt, now){
     }
     miniLasers = miniLasers.filter(l => l.life > 0);
 }
-/* F-117 Nighthawk — 면 분할된 어둑한 스텔스기.
-   (cx, cy) 정중앙. 위쪽이 정면 (Y- 방향). 크기 ≈ 18×16 px. */
-function drawF117(cx, cy){
-    ctx.save();
-    /* 그림자 — 본체 아래 살짝 검은 halo */
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy + 6, 8, 2.5, 0, 0, Math.PI*2);
-    ctx.fill();
-
-    /* 좌측 윙 패널 (어둠) */
-    ctx.fillStyle = '#1a1d24';
-    ctx.beginPath();
-    ctx.moveTo(cx,        cy - 8);   /* 노즈 */
-    ctx.lineTo(cx - 2,    cy - 4);
-    ctx.lineTo(cx - 9,    cy + 6);   /* 좌측 윙팁 */
-    ctx.lineTo(cx - 4,    cy + 7);
-    ctx.lineTo(cx,        cy + 5);
-    ctx.closePath();
-    ctx.fill();
-    /* 우측 윙 패널 (조금 더 밝아서 면 분할 표현) */
-    ctx.fillStyle = '#23272f';
-    ctx.beginPath();
-    ctx.moveTo(cx,        cy - 8);
-    ctx.lineTo(cx + 2,    cy - 4);
-    ctx.lineTo(cx + 9,    cy + 6);   /* 우측 윙팁 */
-    ctx.lineTo(cx + 4,    cy + 7);
-    ctx.lineTo(cx,        cy + 5);
-    ctx.closePath();
-    ctx.fill();
-    /* 동체 facet — 가장 어두운 중앙 능선 */
-    ctx.fillStyle = '#0e1014';
-    ctx.beginPath();
-    ctx.moveTo(cx,        cy - 8);
-    ctx.lineTo(cx - 2.2,  cy - 2);
-    ctx.lineTo(cx - 1.6,  cy + 5);
-    ctx.lineTo(cx + 1.6,  cy + 5);
-    ctx.lineTo(cx + 2.2,  cy - 2);
-    ctx.closePath();
-    ctx.fill();
-    /* 수직 미익 — 외팔보 V-tail 한 쌍 (기수 뒤편) */
-    ctx.fillStyle = '#16191f';
-    ctx.beginPath();
-    ctx.moveTo(cx - 1.5,  cy + 3);
-    ctx.lineTo(cx - 3.2,  cy + 7);
-    ctx.lineTo(cx - 0.4,  cy + 6);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(cx + 1.5,  cy + 3);
-    ctx.lineTo(cx + 3.2,  cy + 7);
-    ctx.lineTo(cx + 0.4,  cy + 6);
-    ctx.closePath();
-    ctx.fill();
-    /* 캐노피 highlight — 좁고 어두운 청회색 */
-    ctx.fillStyle = 'rgba(120, 150, 180, 0.55)';
-    ctx.beginPath();
-    ctx.moveTo(cx,        cy - 5);
-    ctx.lineTo(cx - 1.2,  cy - 1.5);
-    ctx.lineTo(cx + 1.2,  cy - 1.5);
-    ctx.closePath();
-    ctx.fill();
-    /* 가장자리 레이더 흡수 라인 — 매우 옅음 */
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(cx - 9,    cy + 6);
-    ctx.lineTo(cx,        cy - 8);
-    ctx.lineTo(cx + 9,    cy + 6);
-    ctx.stroke();
-    ctx.restore();
-}
 function drawMiniShip(){
-    if(miniShips.length === 0) return;
+    if(!miniShip) return;
     const now = performance.now();
-    for(const m of miniShips){
-        const age = now - m.spawnedAt;
-        drawF117(m.x, m.y);
-        /* 잔여 시간 ring (붉은 톤 — 레이저 컬러와 통일) */
-        const pct = (MINI_DUR - age) / MINI_DUR;
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 80, 80, 0.55)';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, 11, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
-        ctx.stroke();
-        ctx.restore();
-    }
-    /* 레이저 — 빨강. shadowBlur 로 살짝 글로우. */
+    const age = now - miniShip.spawnedAt;
+    /* 본체 — 보라색 작은 delta */
     ctx.save();
-    ctx.shadowColor = 'rgba(255, 60, 60, 0.85)';
-    ctx.shadowBlur = 6;
+    ctx.fillStyle = '#A855F7';
+    ctx.beginPath();
+    ctx.moveTo(miniShip.x, miniShip.y - 7);
+    ctx.lineTo(miniShip.x - 6, miniShip.y + 5);
+    ctx.lineTo(miniShip.x + 6, miniShip.y + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(miniShip.x, miniShip.y - 4);
+    ctx.lineTo(miniShip.x - 2.5, miniShip.y + 1);
+    ctx.lineTo(miniShip.x + 2.5, miniShip.y + 1);
+    ctx.closePath();
+    ctx.fill();
+    /* 잔여 시간 ring */
+    const pct = (MINI_DUR - age) / MINI_DUR;
+    ctx.strokeStyle = 'rgba(213, 176, 255, 0.6)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(miniShip.x, miniShip.y, 11, -Math.PI/2, -Math.PI/2 + Math.PI*2*pct);
+    ctx.stroke();
+    /* 레이저 */
     for(const l of miniLasers){
         const a = l.life / l.maxLife;
-        ctx.strokeStyle = `rgba(255, 60, 60, ${a})`;
+        ctx.strokeStyle = `rgba(255,200,255,${a})`;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(l.fromX, l.fromY);
@@ -2986,9 +2782,8 @@ function resetGame(){
     gravityFieldActive = false;
     wipeFlashUntil = 0;
     wipeFragments = [];
-    miniShips = [];
+    miniShip = null;
     miniLasers = [];
-    shieldBubbleUntil = 0;
     zoneEnteredAt = performance.now();
 }
 
@@ -3389,11 +3184,6 @@ function gameLoop(now){
     }
     bullets=alive;
 
-    /* ---- Shield bubble destroy (collision 전) ----
-       버블 활성 중이면 bubble 반경 안의 메테오 즉시 파괴 → 본 우주선
-       충돌 체크 들어가기 전에 처리해야 무적 효과가 즉시 확인됨. */
-    updateShieldBubble(now);
-
     /* ---- Collision ---- */
     if(now>invincibleUntil){
         for(const b of bullets){
@@ -3585,10 +3375,6 @@ function drawFrame(now, dt){
         ctx.restore();
     }
 
-    /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
-       player 본체 위에 그려져야 우주선이 막 안에 든 듯이 보임. */
-    drawShieldBubble(now);
-
     /* ---- Gravity field cone (player 위) ---- */
     drawGravField();
 
@@ -3733,6 +3519,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777782901"></script>
+<script src="/js/siteFooter.js?v=1777781902"></script>
 </body>
 </html>
