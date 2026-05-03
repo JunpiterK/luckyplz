@@ -713,12 +713,15 @@ body{
 
         <div class="canvas-wrap" id="canvasWrap">
             <canvas id="dodge-canvas"></canvas>
-            <!-- PvP 디버그 오버레이 — 양쪽 화면 비교용. host/guest 가 같은 logical 시점에
-                 같은 rngState/calls/bullets/depots 면 sync OK. 다르면 어디서 diverge 하는지
-                 즉시 시각 확인 가능. PvP 모드일 때만 보임 (.pvp-on 클래스). -->
+            <!-- PvP 디버그 오버레이 — 양쪽 화면 비교용. PvP 모드일 때만 보임 (.pvp-on).
+                 - t: logical 초
+                 - p: player x,y (host 안 맞는 진단용 — 화면 안에 있는지)
+                 - L: 남은 lives (host 가 진짜 안 맞으면 변동 없음)
+                 - inv: 무적 잔여 ms (충돌 후 무적 상태인지)
+                 - b: bullets 갯수, d: depots 갯수 -->
             <div class="pvp-debug" id="pvpDebug">
-                <span id="dbgT">t —</span> · <span id="dbgRng">rng —</span> · <span id="dbgC">c —</span>
-                · <span id="dbgB">b —</span> · <span id="dbgD">d —</span>
+                <div><span id="dbgT">t —</span> · <span id="dbgB">b —</span> · <span id="dbgD">d —</span></div>
+                <div><span id="dbgP">p —</span> · <span id="dbgL">L —</span> · <span id="dbgInv">inv —</span></div>
             </div>
             <div class="overlay" id="overlay">
                 <h2 class="play" id="ovTitle">✈ SPACE-Z</h2>
@@ -886,10 +889,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777819277"></script>
-<script src="/js/lpI18n.js?v=1777819277"></script>
-<script src="/js/lpRankSheet.js?v=1777819277"></script>
-<script src="/js/lpAudio.js?v=1777819277"></script>
+<script src="/js/supabase-config.js?v=1777820046"></script>
+<script src="/js/lpI18n.js?v=1777820046"></script>
+<script src="/js/lpRankSheet.js?v=1777820046"></script>
+<script src="/js/lpAudio.js?v=1777820046"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4835,12 +4838,13 @@ function gameLoop(now){
         const dbg = $('pvpDebug');
         if(dbg){
             const tSec = Math.floor(elapsedMs / 1000);
-            const rngHex = ((_rngState >>> 0)).toString(16).padStart(8,'0');
             $('dbgT').textContent  = 't ' + tSec;
-            $('dbgRng').textContent = 'rng ' + rngHex;
-            $('dbgC').textContent  = 'c ' + _rngCalls;
             $('dbgB').textContent  = 'b ' + (typeof bullets !== 'undefined' ? bullets.length : '—');
             $('dbgD').textContent  = 'd ' + (typeof depots !== 'undefined' ? depots.length : '—');
+            $('dbgP').textContent  = 'p ' + Math.round(player.x) + ',' + Math.round(player.y);
+            $('dbgL').textContent  = 'L ' + lives;
+            const invRem = Math.max(0, Math.round(invincibleUntil - now));
+            $('dbgInv').textContent = 'inv ' + invRem;
         }
     }
 
@@ -5514,7 +5518,11 @@ function _handlePongPayload(p){
 }
 /* 두 client 가 같은 (myDur, senderDur, myScore, senderScore) 4 값으로 score-compare
    하면 항상 같은 결과 도출. 한쪽만 if(running) 분기로 declaredWinner=me 라고 박는
-   대신 항상 score-compare 거치게 — cross-broadcast race ("둘 다 승리") 차단. */
+   대신 항상 score-compare 거치게 — cross-broadcast race ("둘 다 승리") 차단.
+   주의: 정확히 동일할 때 declaredWinner=null 로 set 하지 말 것 — 그러면 한쪽이
+   먼저 score 받고 동률 판정해서 화면에 동률 띄우는데, 다른 쪽은 broadcast 늦게
+   도착하면서 이미 polling 결과를 따르거나 다른 결과 나오는 비대칭 발생.
+   → 동률은 server polling 의 winner_id 신뢰. */
 function _resolveWinnerByScore(senderId, senderScore, senderDur){
     const myScore = pvpState.myFinalScore || 0;
     const myDur   = pvpState.myFinalTime || 0;
@@ -5522,9 +5530,8 @@ function _resolveWinnerByScore(senderId, senderScore, senderDur){
         pvpState.declaredWinner = senderId;
     } else if(myDur > senderDur || (myDur === senderDur && myScore > senderScore)){
         pvpState.declaredWinner = pvpState.me?.id || null;
-    } else {
-        pvpState.declaredWinner = null;   /* 정확히 동일 → 동률 */
     }
+    /* 정확히 동일 — declaredWinner 안 set. server polling 의 winner_id 가 결정. */
 }
 function _handleFinishedPayload(p){
     const senderId    = p?.user_id;
@@ -6177,12 +6184,11 @@ async function _pollPvpResult(tries){
                     pvpState.opponentDuration = opponent.final_time_ms;
                 }
                 _renderPvpResultStatus();
-            } else {
-                /* server 도 winner 결정 못 함 (양쪽 final score 똑같음) — 동률. */
-                pvpState.declaredWinner = null;
-                _renderPvpResultStatus();
+                return;
             }
-            return;
+            /* server 가 status='finished' 이지만 winner_id 미반환 (옛 schema 버그
+               또는 spacez_get_room 의 return 에 winner_id 누락된 경우). retry —
+               broadcast 가 늦게 도착하거나 마이그레이션 적용 후 winner_id 받을 때까지. */
         }
     } catch(_){}
     setTimeout(() => _pollPvpResult(tries + 1), 1500);
@@ -6260,6 +6266,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777819277"></script>
+<script src="/js/siteFooter.js?v=1777820046"></script>
 </body>
 </html>
