@@ -123,6 +123,40 @@ body{
     padding:18px;text-align:center;transition:opacity .18s;z-index:2
 }
 .overlay.hidden{opacity:0;pointer-events:none}
+/* Intro countdown overlay — 게임 시작 시 3·2·1·GO 카운트다운 + 스토리.
+   매 시작마다 6개 후보 중 랜덤 1개. 16개 언어 자동 적용. */
+.intro-overlay{
+    position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,4,16,.95);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+    z-index:3;text-align:center;padding:18px;
+    font-family:'Noto Sans KR',sans-serif;
+    background-image:radial-gradient(ellipse at 50% 30%,rgba(0,217,255,.08) 0%,transparent 60%);
+}
+.intro-overlay.on{display:flex}
+.intro-count{
+    font-family:'Orbitron','Noto Sans KR',sans-serif;
+    font-size:5.2em;font-weight:900;line-height:1;color:#00D9FF;
+    text-shadow:0 0 20px rgba(0,217,255,.6),0 0 40px rgba(0,217,255,.3),0 0 70px rgba(0,217,255,.15);
+    letter-spacing:.04em;
+    animation:introPulse .9s cubic-bezier(.2,.7,.3,1) forwards
+}
+.intro-count.go{color:#FFE66D;font-size:4.5em;text-shadow:0 0 24px rgba(255,230,109,.7),0 0 56px rgba(255,154,60,.45)}
+@keyframes introPulse{0%{transform:scale(.4);opacity:0}38%{transform:scale(1.18);opacity:1}100%{transform:scale(1);opacity:.92}}
+.intro-story{
+    margin-top:28px;color:rgba(255,255,255,.82);
+    font-size:.92em;line-height:1.7;letter-spacing:.01em;
+    max-width:340px;font-weight:500;
+    animation:introFade .8s ease-out;
+    /* 텍스트가 너무 글로우 효과를 받지 않게 살짝만 발광 */
+    text-shadow:0 0 12px rgba(0,217,255,.18)
+}
+.intro-story em{font-style:normal;color:#FFE66D;font-weight:700}
+@keyframes introFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:500px){
+    .intro-count{font-size:4.2em}
+    .intro-count.go{font-size:3.6em}
+    .intro-story{font-size:.84em;max-width:300px;margin-top:22px}
+}
 .overlay h2{font-family:'Orbitron',sans-serif;font-size:1.7em;font-weight:900;margin-bottom:4px}
 .overlay h2.go{color:#FF3366}
 .overlay h2.play{background:linear-gradient(135deg,#00D9FF,#9C6FFF,#FF3366);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -309,6 +343,11 @@ body{
                 <button class="btn" id="ovBtn">출발하기</button>
                 <div class="kbd-hint"><kbd>WASD</kbd> · <kbd>↑↓←→</kbd> 이동 &nbsp;·&nbsp; <kbd>Space</kbd> 일시정지</div>
             </div>
+            <!-- Intro countdown overlay — startGame 시 일시 표시: 3·2·1·GO + 랜덤 스토리. -->
+            <div class="intro-overlay" id="introOverlay" aria-hidden="true">
+                <div class="intro-count" id="introCount">3</div>
+                <div class="intro-story" id="introStory"></div>
+            </div>
         </div>
 
         <!-- 모바일 원형 조종판: 드래그 → 비행기 델타 이동 + 방향 글로우 -->
@@ -344,10 +383,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777767625"></script>
-<script src="/js/lpI18n.js?v=1777767625"></script>
-<script src="/js/lpRankSheet.js?v=1777767625"></script>
-<script src="/js/lpAudio.js?v=1777767625"></script>
+<script src="/js/supabase-config.js?v=1777771386"></script>
+<script src="/js/lpI18n.js?v=1777771386"></script>
+<script src="/js/lpRankSheet.js?v=1777771386"></script>
+<script src="/js/lpAudio.js?v=1777771386"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -422,6 +461,386 @@ function openDodgeRankSheet(){
         formatScore:       formatTime
     });
 }
+/* =====================================================================
+   Intro storytelling — 게임 시작 시 매번 6개 후보 중 랜덤 1 스토리 +
+   3·2·1·GO 카운트다운. 16개 언어 자동 적용 (LpI18n.getLang).
+   각 스토리는 3 줄. {variant: [line1, line2, line3]}.
+   ===================================================================== */
+const INTRO_STORIES = {
+    en: [
+        ['Earth, once blue and beautiful, has reached the end of its days.',
+         'Humanity carves through the dark, seeking a second Earth.',
+         'Terraforming — our destiny. For the future of mankind…'],
+        ['Earth\'s clock has stopped.',
+         'In the boundless void, a single ship.',
+         'Your flight is humanity\'s last hope.'],
+        ['Stars have fallen, the blue planet sleeps.',
+         'You must cleave the dark to find a new home.',
+         'The final voyage — bearing humanity\'s fate. Space-Z.'],
+        ['Earth is gone.',
+         'Find a new star.',
+         'Humanity\'s fate is in your hands.'],
+        ['The star we loved is gone.',
+         'But humanity still lives.',
+         'On the planet you\'ll find — we begin again.'],
+        ['Beautiful blue Earth has reached the end of its days.',
+         'A second Earth, through terraforming.',
+         'It is our destiny. For humanity\'s future…']
+    ],
+    ko: [
+        ['한때 푸르렀던 행성 지구, 이제 그 수명을 다했다.',
+         '인류는 제 2의 지구를 찾아 어둠을 가른다.',
+         '<em>테라포밍</em> — 그것은 숙명. 인류의 미래를 위해…'],
+        ['지구의 시계가 멈췄다.',
+         '망망한 우주, 단 한 척의 우주선.',
+         '당신의 비행이 <em>인류의 마지막 희망</em>이다.'],
+        ['별이 무너지고, 푸른 행성은 잠에 들었다.',
+         '어둠을 가르며 새 보금자리를 찾아야 한다.',
+         '운명을 짊어진 마지막 항해 — <em>Space-Z</em>.'],
+        ['지구는 끝났다.',
+         '새 별을 찾아라.',
+         '<em>인류의 운명</em>, 당신의 손에.'],
+        ['우리가 사랑했던 그 별은 사라졌다.',
+         '그러나 인류는 아직 살아 있다.',
+         '당신이 찾아낼 새 행성에서 — 우리는 <em>다시 시작</em>할 것이다.'],
+        ['아름다웠던 푸른 별 지구, 이제 그 수명을 다했다.',
+         '새로운 제 2의 지구, <em>테라포밍</em>.',
+         '그것은 숙명. 인류의 미래를 위해…']
+    ],
+    ja: [
+        ['かつて青く美しかった地球、その命を終えた。',
+         '人類は闇を切り裂き、第二の地球を求めて旅立つ。',
+         '<em>テラフォーミング</em> — それは宿命。人類の未来のために…'],
+        ['地球の時計は止まった。',
+         '果てしない宇宙、ただ一隻の船。',
+         '君の飛行こそ、<em>人類最後の希望</em>だ。'],
+        ['星々は崩れ、青き星は眠りについた。',
+         '闇を切り裂き、新たな住処を見つけねばならぬ。',
+         '運命を背負う最後の航海 — <em>Space-Z</em>。'],
+        ['地球は終わった。',
+         '新たな星を探せ。',
+         '<em>人類の運命</em>は、君の手に。'],
+        ['私たちが愛したあの星は消えた。',
+         'だが人類はまだ生きている。',
+         '君が見つける新たな惑星で — <em>もう一度始める</em>。'],
+        ['美しき青き星 地球、その命を終えた。',
+         '新たな第二の地球、<em>テラフォーミング</em>。',
+         'それは宿命。人類の未来のために…']
+    ],
+    zh: [
+        ['曾经美丽的蓝色星球地球，已走到了尽头。',
+         '人类穿越黑暗，寻找第二个地球。',
+         '<em>地球化改造</em> — 这是宿命。为了人类的未来…'],
+        ['地球的时钟已停摆。',
+         '茫茫宇宙，唯有一艘飞船。',
+         '你的飞行，是<em>人类最后的希望</em>。'],
+        ['群星陨落，蓝色星球已沉睡。',
+         '你必须穿越黑暗，寻找新的家园。',
+         '肩负命运的最后航行 — <em>Space-Z</em>。'],
+        ['地球已亡。',
+         '寻找新星。',
+         '<em>人类的命运</em>，在你手中。'],
+        ['我们深爱的那颗星已消逝。',
+         '但人类仍然活着。',
+         '在你找到的新行星上 — 我们将<em>重新开始</em>。'],
+        ['美丽的蓝色地球，已走到了尽头。',
+         '第二个地球，<em>地球化改造</em>。',
+         '这是宿命。为了人类的未来…']
+    ],
+    es: [
+        ['La Tierra, otrora azul y hermosa, ha llegado a su fin.',
+         'La humanidad atraviesa la oscuridad en busca de una segunda Tierra.',
+         '<em>Terraformación</em> — nuestro destino. Por el futuro de la humanidad…'],
+        ['El reloj de la Tierra se ha detenido.',
+         'En el vacío infinito, una sola nave.',
+         'Tu vuelo es la <em>última esperanza</em> de la humanidad.'],
+        ['Las estrellas cayeron, el planeta azul duerme.',
+         'Debes hender la oscuridad para hallar un nuevo hogar.',
+         'El último viaje — cargando con el destino. <em>Space-Z</em>.'],
+        ['La Tierra ya no existe.',
+         'Halla una nueva estrella.',
+         'El <em>destino humano</em> está en tus manos.'],
+        ['La estrella que amábamos se ha ido.',
+         'Pero la humanidad aún vive.',
+         'En el planeta que encontrarás — <em>comenzaremos de nuevo</em>.'],
+        ['La hermosa Tierra azul ha llegado a su fin.',
+         'Una segunda Tierra, mediante <em>terraformación</em>.',
+         'Es nuestro destino. Por el futuro de la humanidad…']
+    ],
+    gb: [
+        ['Earth, once blue and beautiful, has reached the end of its days.',
+         'Humanity carves through the dark, seeking a second Earth.',
+         'Terraforming — our destiny. For the future of mankind…'],
+        ['Earth\'s clock has stopped.',
+         'In the boundless void, a single ship.',
+         'Your flight is humanity\'s last hope.'],
+        ['Stars have fallen, the blue planet sleeps.',
+         'You must cleave the dark to find a new home.',
+         'The final voyage — bearing humanity\'s fate. Space-Z.'],
+        ['Earth is gone.',
+         'Find a new star.',
+         'Humanity\'s fate is in your hands.'],
+        ['The star we loved is gone.',
+         'But humanity still lives.',
+         'On the planet you\'ll find — we begin again.'],
+        ['Beautiful blue Earth has reached the end of its days.',
+         'A second Earth, through terraforming.',
+         'It is our destiny. For humanity\'s future…']
+    ],
+    de: [
+        ['Die einst blaue und schöne Erde hat ihre Tage vollendet.',
+         'Die Menschheit durchschneidet die Dunkelheit, sucht eine zweite Erde.',
+         '<em>Terraforming</em> — unser Schicksal. Für die Zukunft der Menschheit…'],
+        ['Die Uhr der Erde steht still.',
+         'Im grenzenlosen All, ein einziges Schiff.',
+         'Dein Flug ist die <em>letzte Hoffnung</em> der Menschheit.'],
+        ['Die Sterne fielen, der blaue Planet schläft.',
+         'Du musst die Dunkelheit durchschneiden, um neues Zuhause zu finden.',
+         'Die letzte Reise — das Schicksal tragend. <em>Space-Z</em>.'],
+        ['Die Erde ist verloren.',
+         'Finde einen neuen Stern.',
+         'Das <em>Schicksal der Menschheit</em> liegt in deiner Hand.'],
+        ['Der Stern, den wir liebten, ist fort.',
+         'Doch die Menschheit lebt noch.',
+         'Auf dem Planeten, den du findest — <em>beginnen wir neu</em>.'],
+        ['Die schöne blaue Erde hat ihre Tage vollendet.',
+         'Eine zweite Erde, durch <em>Terraforming</em>.',
+         'Es ist unser Schicksal. Für die Zukunft der Menschheit…']
+    ],
+    fr: [
+        ['La Terre, jadis bleue et belle, a vu ses jours s\'achever.',
+         'L\'humanité traverse les ténèbres, en quête d\'une seconde Terre.',
+         '<em>Terraformation</em> — notre destin. Pour l\'avenir de l\'humanité…'],
+        ['L\'horloge de la Terre s\'est arrêtée.',
+         'Dans le vide infini, un seul vaisseau.',
+         'Ton vol est le <em>dernier espoir</em> de l\'humanité.'],
+        ['Les étoiles sont tombées, la planète bleue dort.',
+         'Tu dois fendre les ténèbres pour trouver un nouveau foyer.',
+         'Le dernier voyage — portant le destin. <em>Space-Z</em>.'],
+        ['La Terre n\'est plus.',
+         'Trouve une nouvelle étoile.',
+         'Le <em>destin de l\'humanité</em> est entre tes mains.'],
+        ['L\'étoile que nous aimions a disparu.',
+         'Mais l\'humanité vit encore.',
+         'Sur la planète que tu trouveras — <em>nous recommencerons</em>.'],
+        ['La belle Terre bleue a vu ses jours s\'achever.',
+         'Une seconde Terre, par la <em>terraformation</em>.',
+         'C\'est notre destin. Pour l\'avenir de l\'humanité…']
+    ],
+    pt: [
+        ['A Terra, outrora azul e bela, chegou ao fim de seus dias.',
+         'A humanidade atravessa a escuridão em busca de uma segunda Terra.',
+         '<em>Terraformação</em> — nosso destino. Pelo futuro da humanidade…'],
+        ['O relógio da Terra parou.',
+         'No vácuo infinito, uma única nave.',
+         'Seu voo é a <em>última esperança</em> da humanidade.'],
+        ['As estrelas caíram, o planeta azul dorme.',
+         'Você deve cortar a escuridão para achar um novo lar.',
+         'A última viagem — carregando o destino. <em>Space-Z</em>.'],
+        ['A Terra acabou.',
+         'Encontre uma nova estrela.',
+         'O <em>destino da humanidade</em> está em suas mãos.'],
+        ['A estrela que amávamos se foi.',
+         'Mas a humanidade ainda vive.',
+         'No planeta que você encontrar — <em>recomeçaremos</em>.'],
+        ['A bela Terra azul chegou ao fim.',
+         'Uma segunda Terra, pela <em>terraformação</em>.',
+         'É o nosso destino. Pelo futuro da humanidade…']
+    ],
+    ru: [
+        ['Земля, когда-то голубая и прекрасная, исчерпала свои дни.',
+         'Человечество прорывается сквозь тьму в поисках второй Земли.',
+         '<em>Терраформирование</em> — наша судьба. Ради будущего человечества…'],
+        ['Часы Земли остановились.',
+         'В бескрайней пустоте — единственный корабль.',
+         'Твой полёт — <em>последняя надежда</em> человечества.'],
+        ['Звёзды пали, голубая планета спит.',
+         'Ты должен рассечь тьму, чтобы найти новый дом.',
+         'Последний поход — неся судьбу. <em>Space-Z</em>.'],
+        ['Земля пала.',
+         'Найди новую звезду.',
+         '<em>Судьба человечества</em> — в твоих руках.'],
+        ['Звезда, которую мы любили, исчезла.',
+         'Но человечество ещё живо.',
+         'На планете, что ты найдёшь — мы <em>начнём заново</em>.'],
+        ['Прекрасная голубая Земля исчерпала свои дни.',
+         'Вторая Земля, через <em>терраформирование</em>.',
+         'Это наша судьба. Ради будущего человечества…']
+    ],
+    ar: [
+        ['الأرض، التي كانت زرقاء وجميلة، انتهت أيامها.',
+         'تشقّ البشرية الظلام بحثاً عن أرضٍ ثانية.',
+         '<em>التشكيل الكوكبي</em> — قدرنا. من أجل مستقبل البشرية…'],
+        ['ساعة الأرض توقفت.',
+         'في الفراغ اللامتناهي، سفينة واحدة.',
+         'رحلتك هي <em>آخر أمل</em> للبشرية.'],
+        ['سقطت النجوم، نام الكوكب الأزرق.',
+         'عليك أن تشقّ الظلام لتجد موطناً جديداً.',
+         'الرحلة الأخيرة — تحمل القدر. <em>Space-Z</em>.'],
+        ['انتهت الأرض.',
+         'ابحث عن نجمٍ جديد.',
+         '<em>قدر البشرية</em> بين يديك.'],
+        ['النجم الذي أحببناه قد رحل.',
+         'لكنّ البشرية ما زالت حية.',
+         'على الكوكب الذي ستجده — <em>سنبدأ من جديد</em>.'],
+        ['الأرض الزرقاء الجميلة انتهت أيامها.',
+         'أرضٌ ثانية، عبر <em>التشكيل الكوكبي</em>.',
+         'هذا قدرنا. من أجل مستقبل البشرية…']
+    ],
+    hi: [
+        ['नीली और सुंदर पृथ्वी का समय अब समाप्त हो गया।',
+         'मानवता अंधकार चीरकर दूसरी पृथ्वी की खोज में है।',
+         '<em>टेरापॉर्मिंग</em> — हमारी नियति। मानव जाति के भविष्य के लिए…'],
+        ['पृथ्वी की घड़ी रुक गई।',
+         'अनंत शून्य में केवल एक यान।',
+         'तुम्हारी उड़ान ही <em>मानवता की अंतिम आशा</em> है।'],
+        ['तारे गिर गए, नीला ग्रह सो गया।',
+         'नया घर पाने के लिए तुम्हें अंधेरे को चीरना होगा।',
+         'नियति को धारण करती अंतिम यात्रा — <em>Space-Z</em>।'],
+        ['पृथ्वी समाप्त हो चुकी है।',
+         'नया तारा खोजो।',
+         '<em>मानवता की नियति</em> तुम्हारे हाथ में।'],
+        ['हमने जिस तारे से प्रेम किया, वह जा चुका।',
+         'लेकिन मानवता अब भी जीवित है।',
+         'जो ग्रह तुम पाओगे, वहाँ — हम <em>फिर शुरू करेंगे</em>।'],
+        ['सुंदर नीली पृथ्वी अपने अंत तक पहुँच गई।',
+         'दूसरी पृथ्वी, <em>टेरापॉर्मिंग</em> द्वारा।',
+         'यह हमारी नियति है। मानवता के भविष्य के लिए…']
+    ],
+    th: [
+        ['โลกใบที่เคยงดงามและสีฟ้า ได้ถึงคราวสิ้นสุด',
+         'มนุษยชาติเจาะผ่านความมืดเพื่อตามหาโลกใบที่สอง',
+         '<em>การเปลี่ยนแปลงดาวเคราะห์</em> — โชคชะตาของเรา เพื่ออนาคตของมนุษยชาติ…'],
+        ['นาฬิกาของโลกได้หยุดเดิน',
+         'ในห้วงอวกาศไร้ขอบเขต มีเพียงยานเดียว',
+         'การบินของคุณคือ<em>ความหวังสุดท้าย</em>ของมนุษยชาติ'],
+        ['ดวงดาวพังทลาย ดาวเคราะห์สีฟ้าหลับใหล',
+         'คุณต้องเจาะผ่านความมืดเพื่อหาบ้านใหม่',
+         'การเดินทางสุดท้ายที่แบกรับโชคชะตา — <em>Space-Z</em>'],
+        ['โลกสิ้นสุดแล้ว',
+         'จงตามหาดาวดวงใหม่',
+         '<em>โชคชะตาของมนุษยชาติ</em>อยู่ในมือคุณ'],
+        ['ดาวที่เรารักได้จากไปแล้ว',
+         'แต่มนุษยชาติยังคงมีชีวิตอยู่',
+         'บนดาวที่คุณจะค้นพบ — เรา<em>จะเริ่มต้นใหม่</em>'],
+        ['โลกสีฟ้าอันงดงามได้สิ้นสุดลง',
+         'โลกใบที่สอง ผ่าน<em>การเปลี่ยนแปลงดาวเคราะห์</em>',
+         'นั่นคือโชคชะตา เพื่ออนาคตของมนุษยชาติ…']
+    ],
+    id: [
+        ['Bumi yang dahulu biru dan indah, kini telah mencapai akhirnya.',
+         'Umat manusia menembus kegelapan, mencari Bumi kedua.',
+         '<em>Terraforming</em> — takdir kita. Demi masa depan umat manusia…'],
+        ['Jam Bumi telah berhenti.',
+         'Di kekosongan tak terbatas, hanya satu kapal.',
+         'Penerbanganmu adalah <em>harapan terakhir</em> umat manusia.'],
+        ['Bintang-bintang berjatuhan, planet biru tertidur.',
+         'Kau harus menembus kegelapan untuk mencari rumah baru.',
+         'Perjalanan terakhir — memikul takdir. <em>Space-Z</em>.'],
+        ['Bumi telah berakhir.',
+         'Carilah bintang baru.',
+         '<em>Nasib umat manusia</em> ada di tanganmu.'],
+        ['Bintang yang kami cintai telah hilang.',
+         'Namun umat manusia masih hidup.',
+         'Di planet yang akan kau temukan — kita <em>memulai lagi</em>.'],
+        ['Bumi biru yang indah telah berakhir.',
+         'Bumi kedua, melalui <em>terraforming</em>.',
+         'Itu takdir kita. Demi masa depan umat manusia…']
+    ],
+    vi: [
+        ['Trái Đất xanh đẹp một thuở, nay đã đi đến tận cùng.',
+         'Nhân loại xé bóng tối, tìm Trái Đất thứ hai.',
+         '<em>Kiến tạo hành tinh</em> — định mệnh của chúng ta. Vì tương lai loài người…'],
+        ['Đồng hồ Trái Đất đã dừng lại.',
+         'Giữa khoảng không vô tận, chỉ một con tàu.',
+         'Chuyến bay của bạn là <em>hy vọng cuối cùng</em> của nhân loại.'],
+        ['Sao đã rụng, hành tinh xanh đã ngủ.',
+         'Bạn phải xé đêm để tìm mái nhà mới.',
+         'Chuyến đi cuối cùng — gánh vác định mệnh. <em>Space-Z</em>.'],
+        ['Trái Đất đã hết.',
+         'Hãy tìm một vì sao mới.',
+         '<em>Định mệnh nhân loại</em> trong tay bạn.'],
+        ['Vì sao chúng ta yêu quý đã không còn.',
+         'Nhưng nhân loại vẫn sống.',
+         'Trên hành tinh bạn sẽ tìm thấy — chúng ta <em>bắt đầu lại</em>.'],
+        ['Trái Đất xanh xinh đẹp đã đến hồi kết.',
+         'Trái Đất thứ hai, qua <em>kiến tạo hành tinh</em>.',
+         'Đó là định mệnh. Vì tương lai nhân loại…']
+    ],
+    tr: [
+        ['Bir zamanlar mavi ve güzel olan Dünya, ömrünü tamamladı.',
+         'İnsanlık ikinci bir Dünya arayışında karanlığı yarıyor.',
+         '<em>Terraforming</em> — kaderimiz. İnsanlığın geleceği için…'],
+        ['Dünya\'nın saati durdu.',
+         'Sonsuz boşlukta tek bir gemi.',
+         'Uçuşun insanlığın <em>son umududur</em>.'],
+        ['Yıldızlar düştü, mavi gezegen uykuya daldı.',
+         'Yeni bir yuva için karanlığı yarmalısın.',
+         'Kaderi taşıyan son yolculuk — <em>Space-Z</em>.'],
+        ['Dünya bitti.',
+         'Yeni bir yıldız bul.',
+         '<em>İnsanlığın kaderi</em> senin elinde.'],
+        ['Sevdiğimiz yıldız gitti.',
+         'Ama insanlık hâlâ yaşıyor.',
+         'Bulacağın gezegende — <em>yeniden başlayacağız</em>.'],
+        ['Güzel mavi Dünya ömrünü tamamladı.',
+         'İkinci bir Dünya, <em>terraforming</em> ile.',
+         'Bu kaderimiz. İnsanlığın geleceği için…']
+    ]
+};
+function pickIntroStory(){
+    const lang = (window.LpI18n && typeof window.LpI18n.getLang === 'function')
+        ? window.LpI18n.getLang() : 'en';
+    const stories = INTRO_STORIES[lang] || INTRO_STORIES.en;
+    return stories[Math.floor(Math.random() * stories.length)];
+}
+/* runIntroCountdown — 3·2·1·GO 카운트다운 + 랜덤 스토리. Promise resolve
+   시 카운트다운 끝 → caller 가 실제 게임플레이 시작.
+   각 숫자 0.9초, GO 0.6초 = 총 ~3.3초. */
+let _introRunning = false;
+function runIntroCountdown(){
+    if(_introRunning) return Promise.resolve();
+    _introRunning = true;
+    const overlay = $('introOverlay');
+    const countEl = $('introCount');
+    const storyEl = $('introStory');
+    const story = pickIntroStory();
+    storyEl.innerHTML = story.join('<br>');
+    countEl.textContent = '3';
+    countEl.classList.remove('go');
+    overlay.classList.add('on');
+    overlay.setAttribute('aria-hidden', 'false');
+    return new Promise(resolve => {
+        let n = 3;
+        const tick = () => {
+            countEl.classList.remove('go');
+            countEl.textContent = String(n);
+            /* 애니메이션 재트리거 — 클래스 제거→재추가 + reflow */
+            countEl.style.animation = 'none';
+            void countEl.offsetWidth;
+            countEl.style.animation = '';
+            n--;
+            if(n < 0){
+                /* GO! 페이즈 — 0.6초 후 닫힘 */
+                countEl.textContent = 'GO!';
+                countEl.classList.add('go');
+                countEl.style.animation = 'none';
+                void countEl.offsetWidth;
+                countEl.style.animation = '';
+                setTimeout(() => {
+                    overlay.classList.remove('on');
+                    overlay.setAttribute('aria-hidden', 'true');
+                    _introRunning = false;
+                    resolve();
+                }, 600);
+            } else {
+                setTimeout(tick, 900);
+            }
+        };
+        tick();
+    });
+}
+
 function formatTime(score){
     if (score == null || isNaN(score)) return '—';
     /* score = floor(duration_ms / 100) → score is already in cs */
@@ -1790,7 +2209,9 @@ function resetGame(){
     initStars();
 }
 
-function startGame(){
+async function startGame(){
+    /* 중복 호출 가드 — 카운트다운 중 또는 이미 진행 중이면 무시. */
+    if(running || _introRunning) return;
     try{
         const el=document.documentElement;
         if('ontouchstart' in window && el.requestFullscreen)
@@ -1799,6 +2220,10 @@ function startGame(){
     }catch(_){}
     resetGame();
     $('overlay').classList.add('hidden');
+    /* 인트로 스토리 + 3·2·1·GO 카운트다운 (~3.3초). 매번 6개 후보
+       중 랜덤 1개. lang 자동 적용. */
+    await runIntroCountdown();
+    /* 카운트다운 끝 → 실제 게임 시작 */
     sfxStart();
     BGM.start();
     running=true; paused=false;
@@ -2493,6 +2918,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777767625"></script>
+<script src="/js/siteFooter.js?v=1777771386"></script>
 </body>
 </html>
