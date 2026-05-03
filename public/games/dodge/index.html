@@ -409,6 +409,11 @@ body{
 .pvp-overlay .pvp-room .pvp-rh{font-size:.86em;font-weight:700;color:#fff;text-align:left;flex:1}
 .pvp-overlay .pvp-room .pvp-rh small{display:block;font-size:.78em;color:rgba(255,255,255,.5);font-weight:400;margin-top:2px}
 .pvp-overlay .pvp-room .pvp-rcode{font-family:'JetBrains Mono',monospace;font-size:.78em;color:#00D9FF;background:rgba(0,217,255,.08);padding:3px 8px;border-radius:6px;letter-spacing:.08em}
+.pvp-overlay .pvp-room .pvp-rjoin{font-size:.78em;font-weight:800;color:#00D9FF;background:rgba(0,217,255,.14);padding:5px 12px;border-radius:8px;letter-spacing:.04em;border:1px solid rgba(0,217,255,.28);transition:all .15s}
+.pvp-overlay .pvp-room:hover .pvp-rjoin{background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001828;border-color:transparent}
+.pvp-overlay .pvp-room.full{opacity:.45;cursor:default}
+.pvp-overlay .pvp-room.full:hover{background:rgba(0,217,255,.04);border-color:transparent}
+.pvp-overlay .pvp-room.full .pvp-rjoin{background:rgba(255,255,255,.05);color:rgba(255,255,255,.4);border-color:rgba(255,255,255,.08)}
 .pvp-overlay .pvp-empty{color:rgba(255,255,255,.4);font-size:.85em;padding:20px;text-align:center}
 
 /* ==== PvP Lobby room view ==== */
@@ -682,9 +687,17 @@ body{
                             <button data-cnt="3" type="button">3개</button>
                         </div>
                     </label>
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-                        <input type="checkbox" id="pvpPrivate"> 비공개 (코드로만 입장)
+                    <label>방 공개 설정
+                        <div class="item-count-row" id="pvpVisibility">
+                            <button data-vis="public"  type="button" class="active">🌐 공개</button>
+                            <button data-vis="private" type="button">🔒 비공개</button>
+                        </div>
                     </label>
+                    <div id="pvpPwField" style="display:none">
+                        <label>비밀번호 (4-30자)
+                            <input type="text" id="pvpPwInput" maxlength="30" placeholder="친구한테 알려줄 비번">
+                        </label>
+                    </div>
                 </div>
                 <div class="pvp-actions">
                     <button class="pvp-cancel" id="pvpCreateCancel" type="button">취소</button>
@@ -693,29 +706,44 @@ body{
                 <div class="pvp-err" id="pvpCreateErr"></div>
             </div>
 
-            <!-- PvP Join modal — 코드 입력 + 공개 방 목록 -->
+            <!-- PvP Join modal — 대기실 (랭킹 카드 스타일). 카드 직접 클릭 → join.
+                 private 방은 자물쇠 표시 + 클릭 시 비번 입력 popup. -->
             <div class="pvp-overlay" id="pvpJoin" aria-hidden="true">
-                <h3>🔗 방 참여하기</h3>
-                <div class="pvp-row">
-                    <label>방 코드 (6자)
-                        <input type="text" id="pvpJoinCode" maxlength="6" placeholder="ABC123">
-                    </label>
-                    <div style="font-size:.78em;color:rgba(255,255,255,.45);margin-top:-4px">또는 공개 대기실에서 선택</div>
+                <h3>🔗 대기실</h3>
+                <div class="pvp-row" style="max-width:340px">
                     <div class="pvp-rooms" id="pvpRooms"><div class="pvp-empty">불러오는 중…</div></div>
                 </div>
                 <div class="pvp-actions">
-                    <button class="pvp-cancel" id="pvpJoinCancel" type="button">취소</button>
-                    <button class="pvp-confirm" id="pvpJoinConfirm" type="button">참여</button>
+                    <button class="pvp-cancel" id="pvpJoinCancel" type="button">닫기</button>
+                    <button class="pvp-confirm" id="pvpJoinRefresh" type="button">↻ 새로고침</button>
                 </div>
                 <div class="pvp-err" id="pvpJoinErr"></div>
+            </div>
+
+            <!-- Private 비번 입력 popup (Join 위에 띄움) -->
+            <div class="pvp-overlay" id="pvpPwPrompt" aria-hidden="true" style="z-index:5">
+                <h3>🔒 비밀번호 입력</h3>
+                <div class="pvp-row">
+                    <div id="pvpPwPromptHost" style="font-size:.86em;color:rgba(255,255,255,.7);margin-bottom:6px"></div>
+                    <input type="text" id="pvpPwPromptInput" maxlength="30" placeholder="비밀번호" autocomplete="off">
+                </div>
+                <div class="pvp-actions">
+                    <button class="pvp-cancel" id="pvpPwPromptCancel" type="button">취소</button>
+                    <button class="pvp-confirm" id="pvpPwPromptConfirm" type="button">참여</button>
+                </div>
+                <div class="pvp-err" id="pvpPwPromptErr"></div>
             </div>
 
             <!-- PvP Lobby room — 방 만들거나 join 후 진입. 양 player + 채팅. -->
             <div class="pvp-overlay pvp-room-view" id="pvpRoom" aria-hidden="true">
                 <h3 id="pvpRoomTitle">⚔ 대결 룸</h3>
                 <div class="pvp-code-box">
-                    <div class="pvp-code-label">방 코드</div>
+                    <div class="pvp-code-label" id="pvpRoomCodeLabel">방 코드</div>
                     <div class="pvp-code-val" id="pvpRoomCode">------</div>
+                    <div id="pvpRoomPwLine" style="display:none;margin-top:6px;font-size:.86em;color:#FFE66D">
+                        <span style="opacity:.6;font-size:.78em">비밀번호:</span>
+                        <span id="pvpRoomPw" style="font-family:'JetBrains Mono',monospace;font-weight:800"></span>
+                    </div>
                 </div>
                 <div class="pvp-players" id="pvpPlayers"></div>
                 <div class="pvp-chat" id="pvpChat"></div>
@@ -780,10 +808,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1777799335"></script>
-<script src="/js/lpI18n.js?v=1777799335"></script>
-<script src="/js/lpRankSheet.js?v=1777799335"></script>
-<script src="/js/lpAudio.js?v=1777799335"></script>
+<script src="/js/supabase-config.js?v=1777802327"></script>
+<script src="/js/lpI18n.js?v=1777802327"></script>
+<script src="/js/lpRankSheet.js?v=1777802327"></script>
+<script src="/js/lpAudio.js?v=1777802327"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4770,20 +4798,28 @@ async function _ensureMe(){
     return pvpState.me;
 }
 
+function escapeHtml(s){
+    return String(s||'').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 /* ---- Create modal ---- */
+let pvpVisibility = 'public';
 $('ovCreateBtn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    /* 클릭 즉시 modal 표시 — _ensureMe() 의 await 가 mobile network 지연 시
-       stuck 되어 modal 도 alert 도 안 뜨는 문제 회피.
-       로그인 검증은 confirm 시점에. */
+    /* 즉시 modal — _ensureMe await stuck 회피. */
     _setPvpErr('pvpCreateErr', '');
     pvpState.itemCount = 2;
+    pvpVisibility = 'public';
     document.querySelectorAll('#pvpItemCount button').forEach(b => {
         b.classList.toggle('active', parseInt(b.dataset.cnt,10) === 2);
     });
-    $('pvpPrivate').checked = false;
+    document.querySelectorAll('#pvpVisibility button').forEach(b => {
+        b.classList.toggle('active', b.dataset.vis === 'public');
+    });
+    $('pvpPwField').style.display = 'none';
+    $('pvpPwInput').value = '';
     _showPvpOverlay('pvpCreate');
-    _ensureMe().catch(()=>{});  /* 미리 fetch 시도 — fail 해도 무시 */
+    _ensureMe().catch(()=>{});
 });
 document.querySelectorAll('#pvpItemCount button').forEach(b => {
     b.addEventListener('click', () => {
@@ -4792,15 +4828,32 @@ document.querySelectorAll('#pvpItemCount button').forEach(b => {
         pvpState.itemCount = parseInt(b.dataset.cnt, 10);
     });
 });
+document.querySelectorAll('#pvpVisibility button').forEach(b => {
+    b.addEventListener('click', () => {
+        document.querySelectorAll('#pvpVisibility button').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        pvpVisibility = b.dataset.vis;
+        $('pvpPwField').style.display = pvpVisibility === 'private' ? 'block' : 'none';
+    });
+});
 $('pvpCreateCancel').addEventListener('click', () => _showPvpOverlay(null));
 $('pvpCreateConfirm').addEventListener('click', async () => {
+    const isPrivate = pvpVisibility === 'private';
+    let pw = null;
+    if(isPrivate){
+        pw = ($('pvpPwInput').value || '').trim();
+        if(pw.length < 4 || pw.length > 30){
+            _setPvpErr('pvpCreateErr', '비밀번호는 4-30자');
+            return;
+        }
+    }
     _setPvpErr('pvpCreateErr', '...');
     try {
         const sb = getSupabase();
-        const isPrivate = $('pvpPrivate').checked;
         const { data, error } = await sb.rpc('spacez_create_room', {
             p_item_count: pvpState.itemCount,
-            p_is_private: isPrivate
+            p_is_private: isPrivate,
+            p_password: pw
         });
         if(error) throw error;
         const row = Array.isArray(data) ? data[0] : data;
@@ -4810,13 +4863,16 @@ $('pvpCreateConfirm').addEventListener('click', async () => {
         pvpState.seed = Number(row.seed);
         pvpState.role = 'host';
         pvpState.isReady = false;
+        pvpState.password = pw;  /* 호스트에게 비번 다시 보여주기 위해 메모리에만 */
         await _enterPvpRoom();
         _setPvpErr('pvpCreateErr', '');
     } catch(e){
         const msg = e?.message || String(e);
         if(msg.includes('auth_required') || msg.includes('JWT')){
             _setPvpErr('pvpCreateErr', '🔐 대결 모드는 로그인이 필요해요 (우상단 로그인)');
-        } else if(msg.includes('does not exist') || msg.includes('PGRST')){
+        } else if(msg.includes('invalid_password')){
+            _setPvpErr('pvpCreateErr', '비밀번호는 4-30자');
+        } else if(msg.includes('does not exist') || msg.includes('PGRST') || msg.includes('function')){
             _setPvpErr('pvpCreateErr', '⚠ 인프라 미적용 — Supabase 에서 spacez_pvp SQL 실행 필요');
         } else {
             _setPvpErr('pvpCreateErr', '오류: ' + msg);
@@ -4824,18 +4880,22 @@ $('pvpCreateConfirm').addEventListener('click', async () => {
     }
 });
 
-/* ---- Join modal ---- */
+/* ---- Join modal — 대기실 카드 직접 클릭 ---- */
 $('ovJoinBtn').addEventListener('click', (e) => {
     e.preventDefault(); e.stopPropagation();
-    /* 클릭 즉시 modal — Create 와 동일 이유. */
     _ensureMe().catch(()=>{});
     _setPvpErr('pvpJoinErr', '');
-    $('pvpJoinCode').value = '';
     _showPvpOverlay('pvpJoin');
     _refreshPvpRooms();
     if(pvpState.listRefreshTimer) clearInterval(pvpState.listRefreshTimer);
     pvpState.listRefreshTimer = setInterval(_refreshPvpRooms, 5000);
 });
+$('pvpJoinCancel').addEventListener('click', () => {
+    if(pvpState.listRefreshTimer){ clearInterval(pvpState.listRefreshTimer); pvpState.listRefreshTimer = null; }
+    _showPvpOverlay(null);
+});
+$('pvpJoinRefresh').addEventListener('click', () => _refreshPvpRooms());
+
 async function _refreshPvpRooms(){
     const list = $('pvpRooms');
     try {
@@ -4843,75 +4903,111 @@ async function _refreshPvpRooms(){
         const { data, error } = await sb.rpc('spacez_list_rooms');
         if(error) throw error;
         if(!data || data.length === 0){
-            list.innerHTML = '<div class="pvp-empty">대기 중인 방이 없어요</div>';
+            list.innerHTML = '<div class="pvp-empty">대기 중인 방이 없어요<br><small style="opacity:.6">친구가 방을 만들면 여기 표시돼요</small></div>';
             return;
         }
         list.innerHTML = data.map(r => {
             const ago = Math.max(0, Math.floor((Date.now() - new Date(r.created_at).getTime())/1000));
             const agoTxt = ago < 60 ? ago+'초 전' : Math.floor(ago/60)+'분 전';
-            return `<div class="pvp-room" data-code="${r.code}">
-                <div class="pvp-rh">${escapeHtml(r.host_name)}<small>아이템 ${r.item_count}개 · ${agoTxt} · ${r.member_count}/2</small></div>
-                <div class="pvp-rcode">${escapeHtml(r.code)}</div>
+            const lock  = r.has_password ? '🔒 ' : '';
+            const full  = r.member_count >= 2;
+            return `<div class="pvp-room ${full?'full':''}" data-room-id="${r.room_id}" data-private="${r.has_password ? '1':'0'}" data-host="${escapeHtml(r.host_name)}">
+                <div class="pvp-rh">${lock}${escapeHtml(r.host_name)}
+                    <small>아이템 ${r.item_count}개 · ${agoTxt} · ${r.member_count}/2 · W:0 L:0</small>
+                </div>
+                <div class="pvp-rjoin">${full ? '만석' : '참여'}</div>
             </div>`;
         }).join('');
         list.querySelectorAll('.pvp-room').forEach(el => {
+            if(el.classList.contains('full')) return;
             el.addEventListener('click', () => {
-                $('pvpJoinCode').value = el.dataset.code;
+                const roomId  = el.dataset.roomId;
+                const isPriv  = el.dataset.private === '1';
+                const host    = el.dataset.host || '';
+                if(isPriv){
+                    /* 비번 입력 popup */
+                    pvpState.pendingJoinRoomId = roomId;
+                    $('pvpPwPromptHost').textContent = '🔒 ' + host + ' 의 방';
+                    $('pvpPwPromptInput').value = '';
+                    _setPvpErr('pvpPwPromptErr', '');
+                    _showPvpOverlay('pvpPwPrompt');
+                    setTimeout(() => $('pvpPwPromptInput').focus(), 50);
+                } else {
+                    _doJoinRoom(roomId, null);
+                }
             });
         });
     } catch(e){
         const msg = e?.message || String(e);
-        if(msg.includes('does not exist') || msg.includes('PGRST')){
+        if(msg.includes('does not exist') || msg.includes('PGRST') || msg.includes('function')){
             list.innerHTML = '<div class="pvp-empty">⚠ 인프라 미적용 — SQL 실행 필요</div>';
+        } else if(msg.includes('auth_required') || msg.includes('JWT')){
+            list.innerHTML = '<div class="pvp-empty">🔐 로그인이 필요해요</div>';
         } else {
             list.innerHTML = '<div class="pvp-empty">불러오기 실패</div>';
         }
     }
 }
-function escapeHtml(s){
-    return String(s||'').replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
-}
-$('pvpJoinCancel').addEventListener('click', () => {
-    if(pvpState.listRefreshTimer){ clearInterval(pvpState.listRefreshTimer); pvpState.listRefreshTimer = null; }
-    _showPvpOverlay(null);
-});
-$('pvpJoinConfirm').addEventListener('click', async () => {
-    const code = ($('pvpJoinCode').value || '').toUpperCase().trim();
-    if(!/^[A-Z0-9]{6}$/.test(code)){
-        _setPvpErr('pvpJoinErr', '코드는 6자 영문/숫자');
-        return;
-    }
-    _setPvpErr('pvpJoinErr', '...');
+
+async function _doJoinRoom(roomId, password){
+    _setPvpErr('pvpJoinErr', '');
+    _setPvpErr('pvpPwPromptErr', '');
     try {
         const sb = getSupabase();
-        const { data, error } = await sb.rpc('spacez_join_room', { p_code: code });
+        const { data, error } = await sb.rpc('spacez_join_room_by_id', {
+            p_room_id: roomId, p_password: password
+        });
         if(error) throw error;
         const row = Array.isArray(data) ? data[0] : data;
         if(!row || !row.room_id) throw new Error('no_room_returned');
         pvpState.roomId = row.room_id;
-        pvpState.code = code;
+        pvpState.code = row.code;
         pvpState.seed = Number(row.seed);
         pvpState.itemCount = row.item_count;
         pvpState.role = 'guest';
         pvpState.isReady = false;
         if(pvpState.listRefreshTimer){ clearInterval(pvpState.listRefreshTimer); pvpState.listRefreshTimer = null; }
         await _enterPvpRoom();
-        _setPvpErr('pvpJoinErr', '');
     } catch(e){
         const msg = e?.message || String(e);
-        if(msg.includes('auth_required') || msg.includes('JWT')) _setPvpErr('pvpJoinErr', '🔐 대결 모드는 로그인이 필요해요 (우상단 로그인)');
-        else if(msg.includes('room_not_found')) _setPvpErr('pvpJoinErr', '방을 찾을 수 없어요');
-        else if(msg.includes('room_full')) _setPvpErr('pvpJoinErr', '방이 가득 찼어요');
-        else if(msg.includes('cannot_join_own_room')) _setPvpErr('pvpJoinErr', '자기 방에는 참여할 수 없어요');
-        else if(msg.includes('does not exist') || msg.includes('PGRST')) _setPvpErr('pvpJoinErr', '⚠ 인프라 미적용 — SQL 실행 필요');
-        else _setPvpErr('pvpJoinErr', '오류: ' + msg);
+        const target = $('pvpPwPrompt').classList.contains('on') ? 'pvpPwPromptErr' : 'pvpJoinErr';
+        if(msg.includes('auth_required') || msg.includes('JWT')) _setPvpErr(target, '🔐 로그인이 필요해요 (우상단 로그인)');
+        else if(msg.includes('invalid_password')) _setPvpErr(target, '❌ 비밀번호가 틀렸어요');
+        else if(msg.includes('room_not_found')) _setPvpErr(target, '방을 찾을 수 없어요 (만료됨)');
+        else if(msg.includes('room_full')) _setPvpErr(target, '방이 가득 찼어요');
+        else if(msg.includes('cannot_join_own_room')) _setPvpErr(target, '자기 방에는 참여할 수 없어요');
+        else if(msg.includes('does not exist') || msg.includes('PGRST') || msg.includes('function')) _setPvpErr(target, '⚠ 인프라 미적용 — SQL 실행 필요');
+        else _setPvpErr(target, '오류: ' + msg);
     }
+}
+
+$('pvpPwPromptCancel').addEventListener('click', () => {
+    pvpState.pendingJoinRoomId = null;
+    _showPvpOverlay('pvpJoin');
+});
+$('pvpPwPromptConfirm').addEventListener('click', async () => {
+    const pw = ($('pvpPwPromptInput').value || '').trim();
+    if(pw.length < 1){ _setPvpErr('pvpPwPromptErr', '비밀번호 입력'); return; }
+    const roomId = pvpState.pendingJoinRoomId;
+    if(!roomId) return;
+    await _doJoinRoom(roomId, pw);
+});
+$('pvpPwPromptInput').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); $('pvpPwPromptConfirm').click(); }
 });
 
 /* ---- Lobby room ---- */
 async function _enterPvpRoom(){
     $('pvpRoomCode').textContent = pvpState.code;
     $('pvpRoomTitle').textContent = pvpState.role === 'host' ? '⚔ 호스트 룸' : '⚔ 게스트 룸';
+    /* 호스트가 private 방 만들었으면 비번 표시 — 친구한테 알려줄 수 있게.
+       게스트는 비번 표시 안 함 (이미 입장 시 입력했음). */
+    if(pvpState.role === 'host' && pvpState.password){
+        $('pvpRoomPwLine').style.display = 'block';
+        $('pvpRoomPw').textContent = pvpState.password;
+    } else {
+        $('pvpRoomPwLine').style.display = 'none';
+    }
     _showPvpOverlay('pvpRoom');
     await _loadPvpMembers();
     await _loadPvpMessages();
@@ -4938,8 +5034,10 @@ function _renderPvpMembers(){
     ul.innerHTML = slots.map(m => {
         if(!m) return `<div class="pvp-player empty-slot">상대 대기 중…</div>`;
         const isMe = me && m.user_id === me.id;
+        /* W/L placeholder — 향후 spacez_user_winloss RPC 결과로 채울 자리. */
+        const wl = `<small style="display:block;font-size:.7em;color:rgba(255,255,255,.45);margin-top:2px">W:0 L:0 (—)</small>`;
         return `<div class="pvp-player ${m.role} ${m.is_ready ? 'ready' : ''}">
-            <div class="pvp-pname">${escapeHtml(m.nickname)}${isMe ? ' (나)' : ''}</div>
+            <div class="pvp-pname">${escapeHtml(m.nickname)}${isMe ? ' (나)' : ''}${wl}</div>
             <div class="pvp-prole">${m.role === 'host' ? 'HOST' : 'GUEST'}</div>
             <div class="pvp-pready">${m.is_ready ? '✓ READY' : '대기'}</div>
         </div>`;
@@ -5113,6 +5211,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1777799335"></script>
+<script src="/js/siteFooter.js?v=1777802327"></script>
 </body>
 </html>
