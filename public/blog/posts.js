@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'gpu-cpu-rebalance-2026',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-05',
+        readMinutes: 10,
+        coverEmoji: '⚖️',
+        tags: ['CPU', 'GPU', 'NVIDIA Vera', 'AMD EPYC', 'Agentic AI', 'AI 인프라', '2026'],
+        title: 'GPU 시대의 다음 — 왜 Agent에는 CPU가 다시 필요한가 (2026 데이터)',
+        excerpt: '2025-2026 1차 자료 기반 심층 분석. NVIDIA Vera CPU, Georgia Tech×Intel 논문 (tool 처리 50-90% latency), AWS-OpenAI $38B 계약의 "수천만 CPU" 조항. CPU:GPU 비율 1:8 → 1:1로 가는 진짜 이유.',
+    },
+    {
         slug: 'ai-evo-08-rag',
         lang: 'ko',
         category: 'ai-tech',
