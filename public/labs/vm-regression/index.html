@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>가상 계측(VM) 랩 — 센서값으로 두께 예측 | Lucky Please AI Labs</title>
+<meta name="description" content="반도체 fab의 가상 계측을 직접 해보기. 4개 센서(온도·압력·가스·RF) 슬라이더로 두께 예측. 50장 wafer 처리해서 예측 정확도 산점도 확인.">
+<meta name="keywords" content="가상계측 시뮬레이터, virtual metrology demo, VM 시각화, 반도체 AI, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/vm-regression/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="VM Lab — 가상 계측 회귀 데모">
+<meta property="og:description" content="센서로 두께 예측, 50장 wafer 산점도.">
+<meta property="og:url" content="https://luckyplz.com/labs/vm-regression/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777910352">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777910352">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{--bg:#FAF7F0;--bg-card:#FFFFFF;--bg-soft:#F5F1EA;--bg-code:#F0EDE5;--ink:#2C3E50;--ink-soft:#5A6C7D;--ink-mute:#8A9AA8;--gold:#C8924E;--sage:#6B8E7F;--slate:#4A6B7F;--rose:#B85462;--blue:#0b6dd4;--purple:#8b5cf6;--green:#10b981;--line:#E8E2D5;--shadow:0 2px 12px rgba(44,62,80,.06);--shadow-md:0 4px 24px rgba(44,62,80,.08);--f-mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.site-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:rgba(250,247,240,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.site-nav a{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);text-decoration:none;letter-spacing:1px;transition:color .2s}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+.lab-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--gold);letter-spacing:0.18em;font-weight:700;margin-bottom:12px;text-transform:uppercase}
+.lab-tag::before{content:"🧪";font-size:14px}
+h1{font-family:'Crimson Pro',serif;font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.22;color:var(--ink);letter-spacing:-0.02em;margin-bottom:14px}
+.subtitle{font-size:16px;color:var(--ink-soft);line-height:1.7;margin-bottom:32px;max-width:620px}
+.intro-card{background:var(--bg-card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:18px 20px;margin:0 0 28px;box-shadow:var(--shadow);font-size:14.5px;color:var(--ink-soft);line-height:1.75}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;text-transform:uppercase}
+.viz{background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:22px 20px;margin:24px 0;box-shadow:var(--shadow-md)}
+.viz-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;letter-spacing:0.01em;font-family:var(--f-mono)}
+.viz svg{display:block;margin:0 auto}
+.sensor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
+@media(max-width:600px){.sensor-grid{grid-template-columns:1fr}}
+.sensor{background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:14px}
+.sensor-label{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.sensor-name{font-family:var(--f-mono);font-size:11.5px;font-weight:700;color:var(--ink);letter-spacing:0.05em}
+.sensor-value{font-family:var(--f-mono);font-size:13px;font-weight:700;color:var(--gold)}
+.sensor input[type=range]{width:100%;height:6px;-webkit-appearance:none;appearance:none;background:var(--line);border-radius:3px;outline:none;margin-top:4px}
+.sensor input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--gold);cursor:pointer;border:2px solid var(--bg-card);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.sensor-range{display:flex;justify-content:space-between;margin-top:4px;font-size:10.5px;color:var(--ink-mute);font-family:var(--f-mono)}
+.predict-card{background:linear-gradient(135deg,#E8EFEA,#FBF5EA);border:1.5px solid var(--gold);border-radius:14px;padding:22px;margin:18px 0;text-align:center}
+.predict-label{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);letter-spacing:0.18em;text-transform:uppercase;font-weight:700;margin-bottom:8px}
+.predict-value{font-family:var(--f-mono);font-size:34px;font-weight:700;color:var(--ink);line-height:1.1;margin-bottom:6px}
+.predict-value .unit{font-size:18px;color:var(--ink-soft);margin-left:4px}
+.predict-meta{font-family:var(--f-mono);font-size:12px;color:var(--ink-soft)}
+.predict-meta .target{color:var(--sage);font-weight:700}
+.predict-meta .delta{color:var(--gold);font-weight:700}
+.predict-meta .out{color:var(--rose);font-weight:700}
+.ctrls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0 10px;align-items:center}
+.ctrls button{font-family:'Pretendard',sans-serif;font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--bg-card);color:var(--ink);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.ctrls button:hover{background:var(--bg-soft);border-color:var(--gold);transform:translateY(-1px)}
+.ctrls button.primary{background:linear-gradient(135deg,var(--blue),#0a55a8);color:#fff;border-color:var(--blue)}
+.ctrls button.primary:hover{background:linear-gradient(135deg,#0a55a8,#063a78)}
+.ctrls button.danger{color:var(--rose);border-color:rgba(184,84,98,.3)}
+.ctrls button.danger:hover{background:rgba(184,84,98,.07);border-color:var(--rose)}
+.status{font-size:13.5px;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:12px;line-height:1.6;font-family:var(--f-mono);font-size:12.5px}
+.status b{color:var(--ink)}
+.steps{background:var(--bg-soft);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:10px;padding:18px 22px;margin:28px 0}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:#fff;background:var(--blue);padding:3px 10px;border-radius:4px;letter-spacing:0.15em;margin-bottom:10px;text-transform:uppercase}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.steps li code{font-family:var(--f-mono);font-size:12.5px;background:var(--bg-code);padding:1px 6px;border-radius:4px;color:var(--ink)}
+h2{font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--ink);margin:40px 0 12px;letter-spacing:-0.01em}
+.accent-line{width:42px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--gold),#D4A574);margin:0 0 18px}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+.back-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:40px 0 0;box-shadow:var(--shadow);display:flex;align-items:center;gap:18px;text-decoration:none;color:var(--ink);transition:.2s}
+.back-card:hover{border-color:var(--gold);background:#FBF5EA;transform:translateY(-1px)}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px}
+.back-card-title{font-weight:700;font-size:15px;color:var(--ink);line-height:1.4}
+footer{text-align:center;padding:30px 20px 50px;border-top:1px solid var(--line);margin-top:40px;color:var(--ink-mute);font-size:13px;line-height:1.8}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+@media(max-width:600px){.page{padding:36px 16px 60px}.viz{padding:16px 12px}.predict-value{font-size:26px}.predict-value .unit{font-size:14px}}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #07 Virtual Metrology</div>
+<h1>4개 센서값으로<br>두께를 예측해보기</h1>
+<p class="subtitle">반도체 공정 한 step에서 — wafer를 직접 측정 안 하고도 <strong>온도·압력·가스 유량·RF 파워 4가지 센서값</strong>으로 두께를 추정합니다. 이게 SK하이닉스 Panoptes의 핵심. 슬라이더로 4개 센서를 조정해서 예측이 어떻게 변하는지 직접 보세요.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  <strong>가상 계측 (Virtual Metrology, VM)</strong>은 회귀 모델입니다. <code>예측 두께 = w₁·온도 + w₂·압력 + w₃·가스 + w₄·RF + b</code>의 단순한 형태부터 시작해서 — 실제 양산 시스템은 시계열 Transformer까지 갑니다. 이 랩은 <em>학습된 모델이 어떻게 예측하는지</em>의 가장 단순한 형태입니다. 목표 두께 100 nm. 슬라이더로 센서를 조정하면 예측값이 실시간으로 변합니다.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li>4개 슬라이더(온도·압력·가스·RF)를 조정 → <b>예측 두께</b>가 실시간으로 변합니다.</li>
+    <li>목표는 <b>100 nm ± 2 nm</b>. 안에 들어오면 초록(✓), 벗어나면 주황(⚠).</li>
+    <li><b>50장 wafer 처리</b> 버튼을 누르면 가상의 wafer 50장이 흘러갑니다 — 각 wafer마다 센서값에 약간의 noise. 산점도(예측 vs 실제)로 모델 정확도 확인.</li>
+    <li>실제 fab은 센서가 <b>수천 개</b>, 모델은 100개 이상의 시계열 Transformer 또는 GBT(XGBoost)입니다. 같은 메커니즘.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">🌡️ Sensor Inputs → 두께 예측</div>
+  <div class="sensor-grid">
+    <div class="sensor">
+      <div class="sensor-label"><span class="sensor-name">Temperature</span><span class="sensor-value" id="vm-t-v">950 °C</span></div>
+      <input type="range" id="vm-t" min="900" max="1000" step="1" value="950">
+      <div class="sensor-range"><span>900</span><span>1000 °C</span></div>
+    </div>
+    <div class="sensor">
+      <div class="sensor-label"><span class="sensor-name">Pressure</span><span class="sensor-value" id="vm-p-v">5.0 Torr</span></div>
+      <input type="range" id="vm-p" min="10" max="100" step="1" value="50">
+      <div class="sensor-range"><span>1.0</span><span>10.0 Torr</span></div>
+    </div>
+    <div class="sensor">
+      <div class="sensor-label"><span class="sensor-name">Gas Flow</span><span class="sensor-value" id="vm-g-v">55 sccm</span></div>
+      <input type="range" id="vm-g" min="10" max="100" step="1" value="55">
+      <div class="sensor-range"><span>10</span><span>100 sccm</span></div>
+    </div>
+    <div class="sensor">
+      <div class="sensor-label"><span class="sensor-name">RF Power</span><span class="sensor-value" id="vm-r-v">800 W</span></div>
+      <input type="range" id="vm-r" min="100" max="1500" step="10" value="800">
+      <div class="sensor-range"><span>100</span><span>1500 W</span></div>
+    </div>
+  </div>
+
+  <div class="predict-card">
+    <div class="predict-label">📐 예측 두께 (VM)</div>
+    <div class="predict-value"><span id="vm-pred">100.0</span><span class="unit">nm</span></div>
+    <div class="predict-meta" id="vm-meta">목표 <span class="target">100.0 ± 2.0 nm</span> · 차이 <span class="delta">0.0 nm</span></div>
+  </div>
+
+  <div class="ctrls">
+    <button id="vm-batch" class="primary">📊 50장 wafer 처리 (산점도)</button>
+    <button id="vm-reset" class="danger">초기화</button>
+  </div>
+  <div class="status" id="vm-status">슬라이더로 센서를 조정하거나, "50장 처리"로 산점도를 그려보세요.</div>
+
+  <svg id="vm-svg" viewBox="0 0 760 280" style="width:100%;max-width:760px;margin-top:14px;display:none"></svg>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>실제 SK하이닉스 fab은 한 챔버에서 wafer 한 장이 움직이는 동안 — <strong>약 5,000개의 센서가 1초당 10-100 샘플씩 데이터를 수집</strong>합니다. 그러니까 한 wafer당 ~20만 개의 시계열 데이터 포인트. 이걸 입력으로 받아서 두께·CD·저항 같은 측정값을 예측.</p>
+
+<p>모델이 발전하면서 — 처음엔 단순 선형 회귀(2010년대 초), 그 다음 GBT(XGBoost, 2014~), 그 후 LSTM(2017~), 지금은 <strong>Patch + Channel Independent Time-series Transformer</strong>(PatchTST 패턴, 2023~). 이 시리즈를 EP01부터 따라오신 분이라면 — 익숙한 흐름일 겁니다. <em>같은 알고리즘 진화가 학계에서 산업 양산까지 약 5년 시차로 따라옵니다</em>.</p>
+
+<p>가장 큰 난점은 <strong>신뢰도 보정 (calibration)</strong>입니다. 모델이 "100 nm ± 0.5 nm 자신함"이라고 하면 — 진짜 정확도가 0.5 nm여야 합니다. 과신(overconfidence)하면 outlier를 놓치고, 너무 보수적이면 모델 가치가 없어집니다. 양산 VM의 80%가 이 보정 단계에서 시간을 씁니다.</p>
+
+<a href="/blog/ai-evo-07-fab/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP07 — AI를 만드는 공장도 이미 AI로 굴러간다</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  4개 센서·선형 회귀의 단순화 데모입니다. 실제 양산 VM은 5,000+ 센서, 시계열 Transformer 기반.<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === Virtual Metrology — pedagogical linear regression demo === */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function fmt(x,d=1){return Number(x).toFixed(d);}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function randn(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+(function vmDemo(){
+  /* Synthetic ground-truth coefficients. Centered around (T=950, P=5, G=55, R=800)
+     producing thickness ≈ 100 nm. Each sensor has a different sensitivity. */
+  const TARGET=100.0;
+  const TOL=2.0;
+  const COEF={t:0.40,p:1.20,g:0.18,r:0.012};
+  const CENTER={t:950,p:50,g:55,r:800};  /* Note: pressure slider 10-100 represents 1.0-10.0 Torr */
+
+  function predict(t,p,g,r){
+    /* Linear regression around center. */
+    let y=TARGET;
+    y+=COEF.t*(t-CENTER.t);
+    y+=COEF.p*(p-CENTER.p)*0.10;  /* slider scaled */
+    y+=COEF.g*(g-CENTER.g)*0.05;
+    y+=COEF.r*(r-CENTER.r);
+    return y;
+  }
+
+  /* Simulated "true" measurement = ground truth + small process noise.
+     For pedagogical purposes the model perfectly matches the true coefficient. */
+  function measure(t,p,g,r){
+    return predict(t,p,g,r)+randn()*0.6;  /* σ ≈ 0.6 nm process noise */
+  }
+
+  const tEl=document.getElementById('vm-t'),pEl=document.getElementById('vm-p'),gEl=document.getElementById('vm-g'),rEl=document.getElementById('vm-r');
+  const tV=document.getElementById('vm-t-v'),pV=document.getElementById('vm-p-v'),gV=document.getElementById('vm-g-v'),rV=document.getElementById('vm-r-v');
+  const predEl=document.getElementById('vm-pred');
+  const metaEl=document.getElementById('vm-meta');
+  const statusEl=document.getElementById('vm-status');
+  const svg=document.getElementById('vm-svg');
+
+  function updateLive(){
+    const t=parseFloat(tEl.value),p=parseFloat(pEl.value),g=parseFloat(gEl.value),r=parseFloat(rEl.value);
+    tV.textContent=t+' °C';
+    pV.textContent=fmt(p/10,1)+' Torr';
+    gV.textContent=g+' sccm';
+    rV.textContent=r+' W';
+    const y=predict(t,p,g,r);
+    predEl.textContent=fmt(y,1);
+    const delta=y-TARGET;
+    const ok=Math.abs(delta)<=TOL;
+    if(ok){
+      metaEl.innerHTML=`목표 <span class="target">${TARGET.toFixed(1)} ± ${TOL.toFixed(1)} nm</span> · 차이 <span class="delta">${delta>=0?'+':''}${fmt(delta,2)} nm</span> · <span class="target">✓ 합격</span>`;
+    } else {
+      metaEl.innerHTML=`목표 <span class="target">${TARGET.toFixed(1)} ± ${TOL.toFixed(1)} nm</span> · 차이 <span class="out">${delta>=0?'+':''}${fmt(delta,2)} nm</span> · <span class="out">⚠ 범위 밖</span>`;
+    }
+  }
+
+  /* Run 50 simulated wafers. Each gets random sensor jitter; we plot predicted
+     vs measured to visualize VM accuracy (mostly on the diagonal — small noise). */
+  function runBatch(){
+    const N=50;
+    const wafers=[];
+    for(let i=0;i<N;i++){
+      /* Each wafer: sensor values jitter around the slider settings */
+      const t=parseFloat(tEl.value)+randn()*4;
+      const p=parseFloat(pEl.value)+randn()*3;
+      const g=parseFloat(gEl.value)+randn()*3;
+      const r=parseFloat(rEl.value)+randn()*40;
+      const yPred=predict(t,p,g,r);
+      const yTrue=measure(t,p,g,r);
+      wafers.push({i,yPred,yTrue});
+    }
+
+    /* Compute MAE + R² for status */
+    const meanTrue=wafers.reduce((a,w)=>a+w.yTrue,0)/N;
+    let sse=0,sst=0,mae=0,outliers=0;
+    wafers.forEach(w=>{
+      const e=w.yTrue-w.yPred;
+      sse+=e*e;
+      sst+=(w.yTrue-meanTrue)**2;
+      mae+=Math.abs(e);
+      if(Math.abs(w.yTrue-TARGET)>TOL)outliers++;
+    });
+    mae/=N;
+    const r2=1-sse/sst;
+
+    /* Render scatter */
+    svg.innerHTML='';
+    svg.style.display='block';
+    const W=760,H=280;
+    const padL=70,padR=30,padT=30,padB=50;
+    const plotW=W-padL-padR,plotH=H-padT-padB;
+
+    /* Determine plot range */
+    let lo=Infinity,hi=-Infinity;
+    wafers.forEach(w=>{lo=Math.min(lo,w.yPred,w.yTrue);hi=Math.max(hi,w.yPred,w.yTrue);});
+    const pad=(hi-lo)*0.1+0.5;
+    lo-=pad;hi+=pad;
+    function xs(v){return padL+(v-lo)/(hi-lo)*plotW;}
+    function ys(v){return padT+plotH-(v-lo)/(hi-lo)*plotH;}
+
+    /* Axes */
+    el('rect',{x:padL,y:padT,width:plotW,height:plotH,fill:'#FAFAF7',stroke:'#E8E2D5','stroke-width':1},svg);
+    /* Grid + axis labels at 95, 100, 105 */
+    [95,100,105].forEach(v=>{
+      if(v>=lo&&v<=hi){
+        el('line',{x1:padL,y1:ys(v),x2:padL+plotW,y2:ys(v),stroke:'#E8E2D5','stroke-width':.6,'stroke-dasharray':'2,3'},svg);
+        el('line',{x1:xs(v),y1:padT,x2:xs(v),y2:padT+plotH,stroke:'#E8E2D5','stroke-width':.6,'stroke-dasharray':'2,3'},svg);
+        el('text',{x:padL-8,y:ys(v)+3,'text-anchor':'end','font-size':10,fill:'#8A9AA8','font-family':'monospace'},svg).textContent=v;
+        el('text',{x:xs(v),y:padT+plotH+14,'text-anchor':'middle','font-size':10,fill:'#8A9AA8','font-family':'monospace'},svg).textContent=v;
+      }
+    });
+
+    /* Diagonal y=x */
+    const xLo=xs(Math.max(lo,lo)),yLo=ys(Math.max(lo,lo));
+    const xHi=xs(Math.min(hi,hi)),yHi=ys(Math.min(hi,hi));
+    el('line',{x1:padL,y1:padT+plotH,x2:padL+plotW,y2:padT,stroke:'#C8924E','stroke-width':1.5,'stroke-dasharray':'5,4',opacity:.7},svg);
+
+    /* Tolerance band ±2 around diagonal — drawn as two parallel lines */
+    /* For each x along diagonal, the band is at y=x±TOL */
+    const bandPath=[];
+    for(let v=lo;v<=hi;v+=0.5){
+      const yUp=v+TOL,yDn=v-TOL;
+      if(yUp>=lo&&yUp<=hi&&yDn>=lo&&yDn<=hi){
+        bandPath.push([xs(v),ys(yUp),ys(yDn)]);
+      }
+    }
+    if(bandPath.length>1){
+      let dUp='M ',dDn='M ';
+      bandPath.forEach((p,i)=>{
+        dUp+=(i===0?'':'L ')+p[0]+' '+p[1]+' ';
+        dDn+=(i===0?'':'L ')+p[0]+' '+p[2]+' ';
+      });
+      el('path',{d:dUp,fill:'none',stroke:'#10b981','stroke-width':.8,'stroke-dasharray':'3,3',opacity:.5},svg);
+      el('path',{d:dDn,fill:'none',stroke:'#10b981','stroke-width':.8,'stroke-dasharray':'3,3',opacity:.5},svg);
+    }
+
+    /* Points */
+    wafers.forEach(w=>{
+      const x=xs(w.yPred),y=ys(w.yTrue);
+      const inSpec=Math.abs(w.yTrue-TARGET)<=TOL;
+      el('circle',{cx:x,cy:y,r:4,fill:inSpec?'#10b981':'#B85462',stroke:'#fff','stroke-width':1,opacity:.85},svg);
+    });
+
+    /* Axis titles */
+    el('text',{x:padL+plotW/2,y:H-12,'text-anchor':'middle','font-size':11,fill:'#5A6C7D','font-weight':700,'font-family':'monospace'},svg).textContent='예측 두께 (nm)';
+    el('text',{x:18,y:padT+plotH/2,'text-anchor':'middle','font-size':11,fill:'#5A6C7D','font-weight':700,'font-family':'monospace',transform:`rotate(-90 18 ${padT+plotH/2})`},svg).textContent='실제 측정 (nm)';
+
+    /* Legend */
+    el('text',{x:padL+plotW-10,y:padT+12,'text-anchor':'end','font-size':10.5,fill:'#5A6C7D','font-family':'monospace'},svg).textContent=`MAE = ${fmt(mae,2)} nm · R² = ${fmt(r2,3)}`;
+
+    statusEl.innerHTML=`<b>50장 wafer 처리 완료</b> · MAE <b>${fmt(mae,2)} nm</b> · R² <b>${fmt(r2,3)}</b> · spec 밖 ${outliers}장 (${outliers*2}%). 점 색: 초록=spec 합격, 빨강=불합격.`;
+  }
+
+  function reset(){
+    tEl.value=950;pEl.value=50;gEl.value=55;rEl.value=800;
+    updateLive();
+    svg.style.display='none';
+    statusEl.innerHTML='슬라이더로 센서를 조정하거나, "50장 처리"로 산점도를 그려보세요.';
+  }
+
+  [tEl,pEl,gEl,rEl].forEach(e=>e.addEventListener('input',updateLive));
+  document.getElementById('vm-batch').onclick=runBatch;
+  document.getElementById('vm-reset').onclick=reset;
+  updateLive();
+})();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777911158"></script>
+<script src="/js/blogReactions.js?v=1777911158" defer></script>
+<script src="/js/siteFooter.js?v=1777911158" defer></script>
+</body>
+</html>
