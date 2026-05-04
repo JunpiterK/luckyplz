@@ -44,14 +44,25 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .header h1{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:2.2em;font-weight:900;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:10px;letter-spacing:.02em}
 .header p{font-size:.95em;color:rgba(255,255,255,.5);line-height:1.6}
 
-.cat-tabs{display:flex;gap:8px;margin:0 -4px 26px;padding:6px 4px 10px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
-.cat-tabs::-webkit-scrollbar{height:4px}
-.cat-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
-.cat-tab{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.65);font-size:.82em;font-weight:600;letter-spacing:.02em;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:'Noto Sans KR',sans-serif}
-.cat-tab:hover{background:rgba(255,230,109,.06);border-color:rgba(255,230,109,.25);color:#fff}
-.cat-tab.active{background:linear-gradient(135deg,rgba(255,230,109,.18),rgba(255,107,53,.12));border-color:rgba(255,230,109,.45);color:#FFE66D;font-weight:700;box-shadow:0 4px 14px rgba(255,154,60,.15)}
-.cat-tab .cat-count{font-size:.85em;opacity:.6;margin-left:2px}
-.cat-tab.active .cat-count{opacity:.85}
+/* Category grid — mobile-first.
+   3×2 grid on phones (all 6 visible without scroll), 1×6 single row on
+   tablet+. Replaces the previous horizontal-scroll pill row, which the
+   user flagged as having poor discoverability ("hidden tabs require
+   horizontal swipe to find"). Pinterest/Apple News/Naver mobile all use
+   grid-style category nav for the same reason — every option in field
+   of view at once. */
+.cat-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 0 24px;padding:0;font-family:'Noto Sans KR',sans-serif}
+.cat-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:13px 6px 11px;border-radius:14px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);color:rgba(255,255,255,.7);font-weight:600;letter-spacing:.01em;cursor:pointer;transition:transform .15s,background .25s,border-color .25s,color .25s,box-shadow .25s;min-height:74px;text-align:center;-webkit-tap-highlight-color:transparent}
+.cat-tab:hover{background:rgba(255,230,109,.06);border-color:rgba(255,230,109,.3);color:#fff}
+.cat-tab:active{transform:scale(.96)}
+.cat-tab.active{background:linear-gradient(135deg,rgba(255,230,109,.22),rgba(255,107,53,.14));border-color:rgba(255,230,109,.6);color:#FFE66D;font-weight:700;box-shadow:0 6px 18px rgba(255,154,60,.18),inset 0 0 0 1px rgba(255,230,109,.15)}
+.cat-tab.empty{opacity:.45}
+.cat-tab.empty:hover{opacity:.65}
+.cat-tab .cat-emoji{font-size:1.55em;line-height:1;display:block}
+.cat-tab .cat-label{font-size:.82em;line-height:1.2;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.cat-tab .cat-count{font-family:'JetBrains Mono','Orbitron',monospace;font-size:.7em;opacity:.55;font-weight:700;letter-spacing:.04em;line-height:1}
+.cat-tab.active .cat-count{opacity:.95}
+@media(min-width:600px){.cat-tabs{grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:30px}.cat-tab{min-height:80px;padding:14px 8px 12px}.cat-tab .cat-emoji{font-size:1.7em}.cat-tab .cat-label{font-size:.86em}}
 
 .posts{display:flex;flex-direction:column;gap:18px}
 .post-card-cat{display:inline-block;font-size:.7em;padding:2px 9px;border-radius:999px;background:rgba(0,217,255,.1);color:rgba(0,217,255,.85);border:1px solid rgba(0,217,255,.25);letter-spacing:.02em;margin-left:8px;font-weight:700}
@@ -110,7 +121,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         </div>
     </div>
 
-    <script src="/blog/posts.js?v=1777877408"></script>
+    <script src="/blog/posts.js?v=1777877982"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -169,10 +180,17 @@ function renderTabs(bucket, posts){
         const count = c.slug === 'all'
             ? posts.length
             : posts.filter(p => (p.category||'lifestyle') === c.slug).length;
-        const dim = count === 0 && c.slug !== 'all' ? 'opacity:.45' : '';
-        return `<button type="button" class="cat-tab ${c.slug === cur ? 'active' : ''}" data-cat="${c.slug}" style="${dim}">
-            <span>${c.emoji}</span>
-            <span>${escapeHtml(c[labelKey] || c.label_en)}</span>
+        /* `empty` class dims placeholder categories (count=0) so the user
+           sees they exist for future content but understands they're not
+           clickable-yet without disabling them outright. The "All" tab is
+           never marked empty even on a brand-new blog with zero posts. */
+        const isEmpty = count === 0 && c.slug !== 'all';
+        const cls = ['cat-tab'];
+        if (c.slug === cur) cls.push('active');
+        if (isEmpty) cls.push('empty');
+        return `<button type="button" class="${cls.join(' ')}" data-cat="${c.slug}" aria-label="${escapeHtml(c[labelKey] || c.label_en)} (${count})">
+            <span class="cat-emoji" aria-hidden="true">${c.emoji}</span>
+            <span class="cat-label">${escapeHtml(c[labelKey] || c.label_en)}</span>
             <span class="cat-count">${count}</span>
         </button>`;
     }).join('');
@@ -281,6 +299,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777877408" defer></script>
+<script src="/js/siteFooter.js?v=1777877982" defer></script>
 </body>
 </html>
