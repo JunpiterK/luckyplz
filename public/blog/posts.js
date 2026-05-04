@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-03-transformer',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-04',
+        readMinutes: 5,
+        coverEmoji: '⚡',
+        tags: ['AI 역사', 'Transformer', 'LSTM', 'Attention', 'Vaswani', 'AI 진화사'],
+        title: '한 편의 논문이 AI 전체를 통일한 날 — LSTM에서 2017 Transformer까지 (AI 진화사 EP03)',
+        excerpt: '2017년 6월 Google Brain 8명이 올린 한 편의 논문 "Attention is All You Need". 9년이 지난 지금 AI 연구의 99%가 이 위에서 굴러간다. LSTM·Seq2Seq·Transformer 20년사.',
+    },
+    {
         slug: 'ai-evo-02-cnn',
         lang: 'ko',
         category: 'ai-tech',
