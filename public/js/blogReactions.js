@@ -1,0 +1,184 @@
+/* Lucky Please — Blog Reactions
+   Anonymous 1-click reaction widget for blog posts. Mounts where the
+   page declares `<div data-blog-reactions data-slug="..."></div>`.
+
+   Backend is Supabase RPC (see supabase/migrations/2026-05-04-blog-reactions.sql).
+   If the migration hasn't been applied yet, the widget silently degrades
+   to a localStorage-only counter so we never block the page on backend
+   issues. Once the migration runs, real aggregated counts appear on
+   next page load — no client redeploy needed.
+
+   Per-device dedupe via localStorage keyed `lp_react_<slug>_<kind>`.
+   This is a vanity-engagement signal, not a vote — light enforcement
+   is fine and keeps the backend simple. */
+(function(){
+    'use strict';
+
+    const KINDS = [
+        { key: 'like',     emoji: '👍', label_ko: '좋아요',  label_en: 'Like' },
+        { key: 'fire',     emoji: '🔥', label_ko: '흥미로움', label_en: 'Hot' },
+        { key: 'idea',     emoji: '💡', label_ko: '도움됨',   label_en: 'Helpful' },
+        { key: 'question', emoji: '❓', label_ko: '의문',     label_en: 'Hmm' },
+    ];
+
+    function getLang(){
+        try { return (localStorage.getItem('luckyplz_lang') || 'ko').toLowerCase(); }
+        catch(_) { return 'ko'; }
+    }
+
+    function hasReacted(slug, kind){
+        try { return localStorage.getItem('lp_react_' + slug + '_' + kind) === '1'; }
+        catch(_) { return false; }
+    }
+    function markReacted(slug, kind){
+        try { localStorage.setItem('lp_react_' + slug + '_' + kind, '1'); }
+        catch(_) {}
+    }
+
+    /* Local fallback counter — used when Supabase isn't available or the
+       migration hasn't been applied yet. Per-device only, but lets the
+       widget feel responsive in dev/preview before the backend exists. */
+    function getLocalCounts(slug){
+        try {
+            const raw = localStorage.getItem('lp_react_local_' + slug);
+            if (!raw) return {};
+            return JSON.parse(raw);
+        } catch(_) { return {}; }
+    }
+    function bumpLocalCount(slug, kind){
+        try {
+            const cur = getLocalCounts(slug);
+            cur[kind] = (cur[kind] || 0) + 1;
+            localStorage.setItem('lp_react_local_' + slug, JSON.stringify(cur));
+        } catch(_) {}
+    }
+
+    function injectStyles(){
+        if (document.getElementById('lp-blog-reactions-style')) return;
+        const s = document.createElement('style');
+        s.id = 'lp-blog-reactions-style';
+        s.textContent =
+            '.lp-react{margin:36px 0 18px;padding:22px;border-radius:16px;background:linear-gradient(145deg,rgba(0,217,255,.04),rgba(255,230,109,.03));border:1px solid rgba(255,255,255,.06)}'
+          + '.lp-react-title{font-family:\'Orbitron\',\'Noto Sans KR\',sans-serif;font-size:.78em;letter-spacing:2.5px;color:rgba(255,255,255,.5);text-align:center;font-weight:700;margin-bottom:14px;text-transform:uppercase}'
+          + '.lp-react-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
+          + '.lp-react-btn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:14px 6px;border-radius:12px;background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);color:rgba(255,255,255,.85);cursor:pointer;font-family:\'Noto Sans KR\',sans-serif;font-size:.78em;font-weight:600;letter-spacing:.02em;transition:transform .15s,background .2s,border-color .2s,color .2s}'
+          + '.lp-react-btn:hover{background:rgba(255,230,109,.08);border-color:rgba(255,230,109,.3);color:#fff;transform:translateY(-1px)}'
+          + '.lp-react-btn:active{transform:scale(.96)}'
+          + '.lp-react-btn .lp-react-emoji{font-size:1.6em;line-height:1}'
+          + '.lp-react-btn .lp-react-count{font-family:\'Orbitron\',sans-serif;font-size:.95em;font-weight:800;color:rgba(255,230,109,.85);min-height:1em}'
+          + '.lp-react-btn[data-active="1"]{background:linear-gradient(135deg,rgba(255,230,109,.18),rgba(255,107,53,.1));border-color:rgba(255,230,109,.5);color:#FFE66D}'
+          + '.lp-react-btn[data-active="1"] .lp-react-count{color:#FFE66D}'
+          + '.lp-react-btn[data-active="1"]:hover{transform:none}'
+          + '.lp-react-disclaimer{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.32);text-align:center;letter-spacing:.02em}'
+          + '@media(max-width:500px){.lp-react{padding:16px;margin:28px 0 14px}.lp-react-btn{padding:11px 4px;font-size:.72em}.lp-react-btn .lp-react-emoji{font-size:1.35em}}';
+        document.head.appendChild(s);
+    }
+
+    /* Try Supabase RPC; resolve to {kind,cnt} array or null on any failure
+       (network, missing function, RLS, anything). Caller falls back to
+       local counts on null. */
+    async function fetchCounts(slug){
+        if (!window.getSupabase) return null;
+        try {
+            const sb = await window.getSupabase();
+            if (!sb) return null;
+            const { data, error } = await sb.rpc('get_blog_reactions', { p_slug: slug });
+            if (error || !Array.isArray(data)) return null;
+            return data;
+        } catch(_) { return null; }
+    }
+
+    async function postReaction(slug, kind){
+        if (!window.getSupabase) return false;
+        try {
+            const sb = await window.getSupabase();
+            if (!sb) return false;
+            const { error } = await sb.rpc('add_blog_reaction', { p_slug: slug, p_kind: kind });
+            return !error;
+        } catch(_) { return false; }
+    }
+
+    function render(host, slug, counts){
+        const lang = getLang();
+        const labelKey = lang === 'ko' ? 'label_ko' : 'label_en';
+        const titleText = lang === 'ko' ? '이 글 어땠나요?' : 'How was this post?';
+        const disclaimerText = lang === 'ko'
+            ? '클릭 한 번이면 충분합니다 · 익명 집계'
+            : 'One click is enough · anonymous';
+
+        host.innerHTML =
+            '<div class="lp-react">'
+          + '<div class="lp-react-title">' + titleText + '</div>'
+          + '<div class="lp-react-row">'
+          + KINDS.map(k => {
+                const cnt = counts[k.key] || 0;
+                const active = hasReacted(slug, k.key) ? '1' : '0';
+                return '<button type="button" class="lp-react-btn" data-kind="' + k.key + '" data-active="' + active + '" aria-label="' + k[labelKey] + '">'
+                     +   '<span class="lp-react-emoji">' + k.emoji + '</span>'
+                     +   '<span>' + k[labelKey] + '</span>'
+                     +   '<span class="lp-react-count">' + (cnt > 0 ? cnt : '') + '</span>'
+                     + '</button>';
+            }).join('')
+          + '</div>'
+          + '<div class="lp-react-disclaimer">' + disclaimerText + '</div>'
+          + '</div>';
+
+        host.querySelectorAll('.lp-react-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const kind = btn.dataset.kind;
+                if (hasReacted(slug, kind)) return;
+
+                /* Optimistic UI: bump display count + lock the button
+                   immediately. If the RPC silently fails we still keep
+                   the local lock so the user can't infinitely retry. */
+                const countEl = btn.querySelector('.lp-react-count');
+                const cur = parseInt(countEl.textContent || '0', 10) || 0;
+                countEl.textContent = (cur + 1);
+                btn.dataset.active = '1';
+                markReacted(slug, kind);
+                bumpLocalCount(slug, kind);
+
+                /* Fire and forget. We don't roll back the optimistic UI
+                   on backend error — the user already sees a successful
+                   reaction, and the local counter has it. Re-renders on
+                   the next visit will reconcile with real counts (or
+                   stay on local fallback if backend is still down). */
+                postReaction(slug, kind);
+            });
+        });
+    }
+
+    async function mount(host){
+        const slug = host.dataset.slug;
+        if (!slug) return;
+        injectStyles();
+
+        /* Render immediately with whatever local counts we have so the
+           widget appears even on slow connections. Then, if Supabase
+           resolves with real data, re-render to overlay the truth. */
+        const local = getLocalCounts(slug);
+        render(host, slug, local);
+
+        const remote = await fetchCounts(slug);
+        if (remote) {
+            const counts = {};
+            remote.forEach(r => { counts[r.kind] = r.cnt; });
+            /* If remote has a row at zero but local has something, prefer
+               local — covers the brief window between user's first click
+               and Supabase replication catching up. */
+            Object.keys(local).forEach(k => {
+                if ((counts[k] || 0) < (local[k] || 0)) counts[k] = local[k];
+            });
+            render(host, slug, counts);
+        }
+    }
+
+    function init(){
+        document.querySelectorAll('[data-blog-reactions]').forEach(mount);
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+})();

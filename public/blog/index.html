@@ -40,11 +40,21 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .top-nav a:hover{color:var(--accent)}
 .top-nav .brand{font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:1.2em;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 
-.header{text-align:center;margin-bottom:40px}
+.header{text-align:center;margin-bottom:24px}
 .header h1{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:2.2em;font-weight:900;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:10px;letter-spacing:.02em}
 .header p{font-size:.95em;color:rgba(255,255,255,.5);line-height:1.6}
 
+.cat-tabs{display:flex;gap:8px;margin:0 -4px 26px;padding:6px 4px 10px;overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.cat-tabs::-webkit-scrollbar{height:4px}
+.cat-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:2px}
+.cat-tab{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border-radius:999px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.65);font-size:.82em;font-weight:600;letter-spacing:.02em;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:'Noto Sans KR',sans-serif}
+.cat-tab:hover{background:rgba(255,230,109,.06);border-color:rgba(255,230,109,.25);color:#fff}
+.cat-tab.active{background:linear-gradient(135deg,rgba(255,230,109,.18),rgba(255,107,53,.12));border-color:rgba(255,230,109,.45);color:#FFE66D;font-weight:700;box-shadow:0 4px 14px rgba(255,154,60,.15)}
+.cat-tab .cat-count{font-size:.85em;opacity:.6;margin-left:2px}
+.cat-tab.active .cat-count{opacity:.85}
+
 .posts{display:flex;flex-direction:column;gap:18px}
+.post-card-cat{display:inline-block;font-size:.7em;padding:2px 9px;border-radius:999px;background:rgba(0,217,255,.1);color:rgba(0,217,255,.85);border:1px solid rgba(0,217,255,.25);letter-spacing:.02em;margin-left:8px;font-weight:700}
 .post-card{display:block;background:linear-gradient(145deg,rgba(22,22,42,.65),rgba(14,14,28,.85));border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:24px 26px;text-decoration:none;color:#fff;transition:transform .2s,border-color .25s,background .25s;position:relative}
 .post-card:hover{transform:translateY(-2px);border-color:rgba(255,230,109,.3);background:linear-gradient(145deg,rgba(28,28,48,.75),rgba(18,18,34,.9))}
 .post-head{display:flex;align-items:center;gap:14px;margin-bottom:10px;flex-wrap:wrap}
@@ -85,8 +95,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
         <header class="header">
             <h1 id="blogTitle">Lucky Please Blog</h1>
-            <p id="blogSub">커피·밥·팀·벌칙을 공평하게 정하는 실용 가이드</p>
+            <p id="blogSub">생활·확률·테크·산업 — 박사가 풀어주는 분석 노트</p>
         </header>
+
+        <nav class="cat-tabs" id="catTabs" aria-label="카테고리 필터"></nav>
 
         <div class="posts" id="postsList"></div>
 
@@ -118,24 +130,79 @@ function formatDate(dateStr, lang){
     }catch(e){return dateStr}
 }
 
-function renderPosts(){
-    const rawLang = (localStorage.getItem('luckyplz_lang') || 'ko').toLowerCase();
-    /* Posts are authored natively per-language. ko users see ko posts;
-       everyone else sees en posts. Primary locales only — other langs
-       fall through to en so visitors always see *some* content rather
-       than a blank page. */
-    const bucket = rawLang === 'ko' ? 'ko' : 'en';
-    const list = document.getElementById('postsList');
-    if (!window.BLOG_POSTS || !BLOG_POSTS.length){
-        list.innerHTML = `<div class="empty">첫 글을 준비 중입니다 ✨</div>`;
-        return;
-    }
-    const allPosts = [...BLOG_POSTS].sort((a,b) => (b.date||'').localeCompare(a.date||''));
-    const posts = allPosts.filter(p => (p.lang||'ko') === bucket);
+/* Read ?cat= query param, default to 'all'. Validates against BLOG_CATEGORIES
+   so a stale or hand-typed slug falls back to 'all' instead of showing zero
+   posts with no obvious recovery path. */
+function getCurrentCat(){
+    const url = new URL(location.href);
+    const cat = (url.searchParams.get('cat') || 'all').toLowerCase();
+    const valid = (window.BLOG_CATEGORIES || []).map(c => c.slug);
+    return valid.includes(cat) ? cat : 'all';
+}
 
-    if (!posts.length){
+function setCurrentCat(cat){
+    const url = new URL(location.href);
+    if (cat === 'all') url.searchParams.delete('cat');
+    else url.searchParams.set('cat', cat);
+    /* pushState so back button cycles through categories naturally. */
+    history.pushState({cat}, '', url.toString());
+    renderAll();
+}
+
+/* Look up category metadata for a post-card chip (small label visible
+   only on the "All" tab — when the user has already filtered to a single
+   category, the chip would be redundant clutter). */
+function catMetaFor(slug){
+    return (window.BLOG_CATEGORIES || []).find(c => c.slug === slug);
+}
+
+function renderTabs(bucket, posts){
+    const cats = window.BLOG_CATEGORIES || [];
+    const cur = getCurrentCat();
+    const nav = document.getElementById('catTabs');
+    if (!nav) return;
+    /* Per-category counts are computed against the language-filtered pool —
+       a Korean visitor seeing "Lifestyle (5)" should see five Korean posts
+       in that tab, not five total across all languages. */
+    const labelKey = bucket === 'ko' ? 'label_ko' : 'label_en';
+    nav.innerHTML = cats.map(c => {
+        const count = c.slug === 'all'
+            ? posts.length
+            : posts.filter(p => (p.category||'lifestyle') === c.slug).length;
+        const dim = count === 0 && c.slug !== 'all' ? 'opacity:.45' : '';
+        return `<button type="button" class="cat-tab ${c.slug === cur ? 'active' : ''}" data-cat="${c.slug}" style="${dim}">
+            <span>${c.emoji}</span>
+            <span>${escapeHtml(c[labelKey] || c.label_en)}</span>
+            <span class="cat-count">${count}</span>
+        </button>`;
+    }).join('');
+    nav.querySelectorAll('.cat-tab').forEach(btn => {
+        btn.addEventListener('click', () => setCurrentCat(btn.dataset.cat));
+    });
+}
+
+function renderPosts(bucket, langPosts){
+    const list = document.getElementById('postsList');
+    const cur = getCurrentCat();
+    /* Language filter happens upstream (langPosts). Here we only further
+       filter by category if the user picked a non-"all" tab. */
+    const filtered = cur === 'all'
+        ? langPosts
+        : langPosts.filter(p => (p.category||'lifestyle') === cur);
+
+    if (!filtered.length){
+        if (cur !== 'all'){
+            /* Empty category: don't push the user to switch languages —
+               just nudge them back to "All" where every post lives. */
+            const msg = bucket === 'ko' ? '이 카테고리는 곧 채워집니다 ✨' : 'Posts coming soon ✨';
+            const cta = bucket === 'ko' ? '전체 글 보기 →' : 'Browse all →';
+            list.innerHTML = `<div class="empty">${msg}<br><a class="empty-cta" href="#" data-reset-cat>${cta}</a></div>`;
+            const resetLink = list.querySelector('[data-reset-cat]');
+            if (resetLink) resetLink.addEventListener('click', e => { e.preventDefault(); setCurrentCat('all'); });
+            return;
+        }
         const otherBucket = bucket === 'ko' ? 'en' : 'ko';
-        const otherCount = allPosts.filter(p => (p.lang||'ko') === otherBucket).length;
+        const otherCount = (window.BLOG_POSTS||[]).filter(p => (p.lang||'ko') === otherBucket).length;
         const msgs = bucket === 'ko'
             ? {none:'한국어 글을 준비 중입니다 ✨', cta:`영어 글 ${otherCount}편 보기 →`}
             : {none:'English posts coming soon ✨', cta:`Read ${otherCount} Korean posts →`};
@@ -144,23 +211,32 @@ function renderPosts(){
         if (switchLink) switchLink.addEventListener('click', e => {
             e.preventDefault();
             localStorage.setItem('luckyplz_lang', otherBucket);
-            renderPosts();
+            renderAll();
         });
         return;
     }
 
-    list.innerHTML = posts.map(p => {
+    /* Category chip (small subtitle) is shown only on the "All" tab —
+       removes redundancy when user is already inside a category view. */
+    const showCatChip = cur === 'all';
+    list.innerHTML = filtered.map(p => {
         const title = pick(p.title, bucket);
         const excerpt = pick(p.excerpt, bucket);
         const tags = pick(p.tags, bucket) || [];
         const dateText = p.date ? formatDate(p.date, bucket) : '';
         const readText = p.readMinutes ? `· ${p.readMinutes} min` : '';
+        const catSlug = p.category || 'lifestyle';
+        const catMeta = catMetaFor(catSlug);
+        const labelKey = bucket === 'ko' ? 'label_ko' : 'label_en';
+        const catChipHtml = (showCatChip && catMeta)
+            ? `<span class="post-card-cat">${catMeta.emoji} ${escapeHtml(catMeta[labelKey] || catMeta.label_en)}</span>`
+            : '';
         return `
           <a class="post-card" href="/blog/${p.slug}/">
             <div class="post-head">
               ${p.coverEmoji ? `<div class="post-emoji">${p.coverEmoji}</div>` : ''}
               <div style="flex:1;min-width:0">
-                <div class="post-title">${escapeHtml(title)}</div>
+                <div class="post-title">${escapeHtml(title)}${catChipHtml}</div>
                 <div class="post-meta">
                   <span>${dateText}</span>
                   <span>${readText}</span>
@@ -174,14 +250,37 @@ function renderPosts(){
     }).join('');
 }
 
+function renderAll(){
+    const rawLang = (localStorage.getItem('luckyplz_lang') || 'ko').toLowerCase();
+    /* Posts are authored natively per-language. ko users see ko posts;
+       everyone else sees en posts. Primary locales only — other langs
+       fall through to en so visitors always see *some* content rather
+       than a blank page. */
+    const bucket = rawLang === 'ko' ? 'ko' : 'en';
+
+    if (!window.BLOG_POSTS || !BLOG_POSTS.length){
+        document.getElementById('postsList').innerHTML = `<div class="empty">첫 글을 준비 중입니다 ✨</div>`;
+        return;
+    }
+    const allPosts = [...BLOG_POSTS].sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const langPosts = allPosts.filter(p => (p.lang||'ko') === bucket);
+
+    renderTabs(bucket, langPosts);
+    renderPosts(bucket, langPosts);
+}
+
+/* Browser back/forward should cycle through category tabs without a
+   full reload — popstate fires when the user navigates the URL stack. */
+window.addEventListener('popstate', renderAll);
+
 createStars();
-renderPosts();
+renderAll();
     </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1777873148" defer></script>
+<script src="/js/siteFooter.js?v=1777874731" defer></script>
 </body>
 </html>

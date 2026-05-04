@@ -2,10 +2,12 @@
   Lucky Please Blog - post manifest.
   One source of truth. Adding a post = push an entry + create /blog/<slug>/index.html.
 
-  `lang` tells the blog index which language list this post belongs in —
-  each post's HTML is written natively in one language (ko or en). We
-  don't auto-translate; cross-language siblings (`alt`) are separately
-  authored in the target locale's search intent and linked manually.
+  Fields:
+  - lang:     ko | en — each post is written natively in one language; cross-lang
+              siblings are linked via `alt`.
+  - category: lifestyle | probability | tech-space | industry | build
+              Used by the blog index tab filter. Default tab "all" shows
+              every post sorted by date desc.
 
   Index renders only posts matching the user's current lang. Users whose
   lang has no posts see an empty-state CTA pointing to the primary pool.
@@ -14,6 +16,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ladder-fairness-simulation',
         lang: 'ko',
+        category: 'probability',
         date: '2026-05-04',
         readMinutes: 11,
         coverEmoji: '🪜',
@@ -24,6 +27,7 @@ window.BLOG_POSTS = [
     {
         slug: 'dinner-menu-fair',
         lang: 'ko',
+        category: 'lifestyle',
         date: '2026-05-04',
         readMinutes: 6,
         coverEmoji: '🍱',
@@ -34,6 +38,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-history-story',
         lang: 'ko',
+        category: 'probability',
         date: '2026-04-20',
         readMinutes: 7,
         coverEmoji: '🏛️',
@@ -44,6 +49,7 @@ window.BLOG_POSTS = [
     {
         slug: 'random-name-picker-guide',
         lang: 'en',
+        category: 'lifestyle',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '🎯',
@@ -54,6 +60,7 @@ window.BLOG_POSTS = [
     {
         slug: 'powerball-random-generator',
         lang: 'en',
+        category: 'probability',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎰',
@@ -65,6 +72,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-country-compare',
         lang: 'ko',
+        category: 'probability',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎱',
@@ -76,6 +84,7 @@ window.BLOG_POSTS = [
     {
         slug: 'team-split-fair',
         lang: 'ko',
+        category: 'lifestyle',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '👥',
@@ -86,6 +95,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-1-minute',
         lang: 'ko',
+        category: 'lifestyle',
         date: '2026-04-19',
         readMinutes: 5,
         coverEmoji: '☕️',
@@ -96,6 +106,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-who-pays',
         lang: 'ko',
+        category: 'lifestyle',
         date: '2026-04-17',
         readMinutes: 4,
         coverEmoji: '☕️',
@@ -103,4 +114,15 @@ window.BLOG_POSTS = [
         title: '커피 누가 쏠래? — "매번 저만 쏘는" 루프 끊는 5가지 방법',
         excerpt: '사무실·친구 모임에서 매번 같은 사람이 쏘는 상황. 10초로 끝내는 5가지 방식 + 단톡방 밈 만드는 법.',
     },
+];
+
+/* Category metadata for blog index tabs.
+   Order here = order in tab UI. First item is the default ("all"). */
+window.BLOG_CATEGORIES = [
+    { slug: 'all',         emoji: '🌐', label_ko: '전체',        label_en: 'All' },
+    { slug: 'lifestyle',   emoji: '🍽️', label_ko: '생활·결정',   label_en: 'Lifestyle' },
+    { slug: 'probability', emoji: '🎰', label_ko: '확률·통계',   label_en: 'Probability' },
+    { slug: 'tech-space',  emoji: '🚀', label_ko: '테크·우주',   label_en: 'Tech & Space' },
+    { slug: 'industry',    emoji: '💰', label_ko: '경제·산업',   label_en: 'Industry' },
+    { slug: 'build',       emoji: '🛠️', label_ko: '빌드인공개',  label_en: 'Build' },
 ];
