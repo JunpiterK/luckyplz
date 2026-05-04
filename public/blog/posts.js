@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-06-gpu',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-05',
+        readMinutes: 6,
+        coverEmoji: '⚡',
+        tags: ['AI 역사', 'NVIDIA', 'GPU', 'CUDA', 'TPU', 'Jensen Huang', 'AI 진화사'],
+        title: '패밀리 레스토랑에서 시작된 회사가 어떻게 AI 시대를 지배했나 (AI 진화사 EP06)',
+        excerpt: '1993년 새너제이의 한 Denny\'s에서 세 명이 회사를 세웠다. 게임 그래픽 카드를 만들었다. 30년 후 시가총액이 Apple과 Microsoft를 넘었다. NVIDIA · CUDA · TPU · NPU 30년사.',
+    },
+    {
         slug: 'ai-evo-05-diffusion',
         lang: 'ko',
         category: 'ai-tech',
