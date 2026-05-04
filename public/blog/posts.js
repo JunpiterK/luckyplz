@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-01-perceptron',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-04',
+        readMinutes: 5,
+        coverEmoji: '🧠',
+        tags: ['AI 역사', '퍼셉트론', 'Hinton', '역전파', '신경망', 'AI 진화사'],
+        title: 'AI는 두 번 죽었다 — 1958 퍼셉트론에서 1986 역전파까지 (AI 진화사 EP01)',
+        excerpt: '1958년 NYT 1면을 장식한 \'스스로 배우는 기계\' 퍼셉트론. 11년 후 한 권의 책으로 사망. 30년 후 한 편의 논문이 부활시킨 이야기.',
+    },
+    {
         slug: 'ai-datacenter-power-2026-2035-en',
         lang: 'en',
         category: 'industry',
@@ -218,6 +229,7 @@ window.BLOG_CATEGORIES = [
     { slug: 'lifestyle',   emoji: '🍽️', label_ko: '생활·결정',   label_en: 'Lifestyle' },
     { slug: 'probability', emoji: '🎰', label_ko: '확률·통계',   label_en: 'Probability' },
     { slug: 'tech-space',  emoji: '🚀', label_ko: '테크·우주',   label_en: 'Tech & Space' },
+    { slug: 'ai-tech',     emoji: '🤖', label_ko: 'AI·테크',     label_en: 'AI Tech' },
     { slug: 'industry',    emoji: '💰', label_ko: '경제·산업',   label_en: 'Industry' },
     { slug: 'build',       emoji: '🛠️', label_ko: '빌드인공개',  label_en: 'Build' },
 ];
