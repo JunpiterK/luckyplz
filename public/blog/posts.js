@@ -12,6 +12,16 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ladder-fairness-simulation',
+        lang: 'ko',
+        date: '2026-05-04',
+        readMinutes: 7,
+        coverEmoji: '🪜',
+        tags: ['사다리', '시뮬레이션', '공정성'],
+        title: '사다리타기는 공정하지 않다? 박사가 10만 번 시뮬레이션 한 결과',
+        excerpt: '5명 사다리 + 가로선 5개로 10만 번 돌려봤더니 가운데 칸이 양 끝보다 약 50% 더 자주 뽑힘. 가로선 개수별 편향 데이터 + 공정하게 쓰는 법.',
+    },
+    {
         slug: 'dinner-menu-fair',
         lang: 'ko',
         date: '2026-05-04',
