@@ -21,6 +21,14 @@
 # tags as a second line of defense — see any file under public/ for
 # reference. Together the two mechanisms mean an update CANNOT get
 # stuck behind a stale browser cache.
+#
+# COVERAGE
+# --------
+# Two regexes — one for `/js/<name>.js?v=…` (shared loaders) and one
+# for `/blog/<name>.js?v=…` (the post manifest). Kept separate so we
+# can use sed's basic delimiter `|` without colliding with regex
+# alternation, and so each path stays narrow enough to avoid matching
+# unrelated query strings (YouTube embeds, UTM tails, etc.).
 
 set -euo pipefail
 
@@ -28,23 +36,28 @@ cd "$(dirname "$0")/.."
 
 NEW_VERSION=$(date +%s)
 
-# Scope the regex tightly to avoid collateral matches:
-# - Only replaces ?v=... on .js files under /js/
-# - Character class + length cap prevents matching YouTube embed params,
-#   UTM tracking tails, etc.
-JS_QUERY_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
+JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
+BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 
 count=0
 while IFS= read -r -d '' f; do
-    if grep -qE "$JS_QUERY_RE" "$f" 2>/dev/null; then
-        sed -i -E "s|${JS_QUERY_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+    matched=0
+    if grep -qE "$JS_RE" "$f" 2>/dev/null; then
+        sed -i -E "s|${JS_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+        matched=1
+    fi
+    if grep -qE "$BLOG_RE" "$f" 2>/dev/null; then
+        sed -i -E "s|${BLOG_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+        matched=1
+    fi
+    if [ "$matched" = "1" ]; then
         count=$((count+1))
     fi
 done < <(find public -name '*.html' -print0)
 
 # siteFooter.js itself dynamically injects lpRoom.js with a ?v= query.
-if grep -qE "$JS_QUERY_RE" public/js/siteFooter.js 2>/dev/null; then
-    sed -i -E "s|${JS_QUERY_RE}|\\1?v=${NEW_VERSION}|g" public/js/siteFooter.js
+if grep -qE "$JS_RE" public/js/siteFooter.js 2>/dev/null; then
+    sed -i -E "s|${JS_RE}|\\1?v=${NEW_VERSION}|g" public/js/siteFooter.js
     count=$((count+1))
 fi
 
