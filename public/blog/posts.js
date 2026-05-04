@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'space-evo-02-sputnik',
+        lang: 'ko',
+        category: 'tech-space',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '🛰️',
+        tags: ['우주 진화사', '스푸트니크', '코롤료프', 'R-7', '라이카', 'NASA 창설', '냉전'],
+        title: '83.6kg 알루미늄 공이 미국을 90분간 패닉에 빠뜨린 밤 — 스푸트니크 쇼크 (우주 진화사 EP02)',
+        excerpt: '1957년 10월 4일, 굴라크에서 6년 살아남은 한 남자가 인류 최초의 인공위성을 올렸다. 그의 이름은 1966년 죽을 때까지 KGB 1급 비밀이었다. 코롤료프, 스푸트니크, 그리고 NASA가 태어난 9개월.',
+    },
+    {
         slug: 'space-evo-01-paperclip',
         lang: 'ko',
         category: 'tech-space',
