@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-07-fab',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-05',
+        readMinutes: 6,
+        coverEmoji: '🏭',
+        tags: ['AI 역사', '반도체', 'SK hynix', 'NVIDIA cuLitho', 'Samsung Omniverse', 'Panoptes', 'AI 진화사'],
+        title: 'AI를 만드는 공장도 이미 AI로 굴러간다 — 반도체 팹의 AI (AI 진화사 EP07)',
+        excerpt: 'GPT-4를 학습시키는 GPU는 TSMC·Samsung 공장에서 만들어진다. 그 공장은 AI로 굴러간다. SK하이닉스 Panoptes, NVIDIA cuLitho, Samsung Omniverse Twin. 반도체 팹 안의 AI 현장.',
+    },
+    {
         slug: 'ai-evo-06-gpu',
         lang: 'ko',
         category: 'ai-tech',
