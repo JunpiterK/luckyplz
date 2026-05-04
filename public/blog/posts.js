@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'space-evo-03-gagarin',
+        lang: 'ko',
+        category: 'tech-space',
+        date: '2026-05-05',
+        readMinutes: 9,
+        coverEmoji: '🚀',
+        tags: ['우주 진화사', '유리 가가린', '보스토크', 'Поехали', '케네디', '문샷 연설', '우주 경쟁'],
+        title: '"Поехали!" 27살 농부 아들의 108분, 그리고 케네디의 도박 — 가가린 (우주 진화사 EP03)',
+        excerpt: '1961년 4월 12일, 27살의 유리 가가린이 인류 최초로 지구 궤도에 올랐다. 108분 후 그는 농가 마당에 낙하산으로 떨어졌고 — 소련은 그 사실을 30년 동안 숨겼다. 그리고 5주 뒤 케네디는 의회에서 도박을 걸었다.',
+    },
+    {
         slug: 'space-evo-02-sputnik',
         lang: 'ko',
         category: 'tech-space',
