@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-08-rag',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-05',
+        readMinutes: 7,
+        coverEmoji: '📚',
+        tags: ['AI 역사', 'RAG', 'Patrick Lewis', 'Vector DB', 'Copilot', '사내 코파일럿', 'AI 진화사'],
+        title: '한 논문이 모든 회사의 AI 시대를 열었다 — RAG와 코파일럿 (AI 진화사 EP08·完)',
+        excerpt: '2020년 5월, Patrick Lewis가 Meta AI에서 발표했다. 묻혔다. 2년 후 ChatGPT가 등장한 뒤 그 논문이 모든 회사의 사내 AI 표준이 됐다. 시리즈 마지막 편.',
+    },
+    {
         slug: 'ai-evo-07-fab',
         lang: 'ko',
         category: 'ai-tech',
