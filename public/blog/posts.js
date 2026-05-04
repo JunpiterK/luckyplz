@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'space-evo-04-tragedies',
+        lang: 'ko',
+        category: 'tech-space',
+        date: '2026-05-05',
+        readMinutes: 10,
+        coverEmoji: '🕯️',
+        tags: ['우주 진화사', '코롤료프', '아폴로 1호', '그리섬', '코마로프', '소유즈 1호', '우주 비극'],
+        title: '1년 4개월 동안 두 강대국이 동시에 무너졌다 — 코롤료프·아폴로 1호·코마로프 (우주 진화사 EP04)',
+        excerpt: '1966년 1월 코롤료프가 굴라크의 후유증으로 죽었다. 1967년 1월 그리섬·화이트·채피가 발사대에서 17초 만에 산 채로 불에 탔다. 1967년 4월 코마로프는 결함 200개 캡슐로 죽었다. 가장 다크한 우주 시대의 16개월.',
+    },
+    {
         slug: 'space-evo-03-gagarin',
         lang: 'ko',
         category: 'tech-space',
