@@ -12,6 +12,16 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'dinner-menu-fair',
+        lang: 'ko',
+        date: '2026-05-04',
+        readMinutes: 6,
+        coverEmoji: '🍱',
+        tags: ['회식', '메뉴 정하기', '룰렛'],
+        title: '회식 메뉴 또 누가 정해? 1분 안에 공평하게 끝내는 5가지 방법',
+        excerpt: '회식 메뉴 정하느라 1년에 5시간. 사다리·룰렛·가위바위보·투표·번호뽑기 직접 비교 + 사다리가 사실 공정하지 않은 이유.',
+    },
+    {
         slug: 'lotto-history-story',
         lang: 'ko',
         date: '2026-04-20',
