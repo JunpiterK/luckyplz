@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'solar-panel-market-2026',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 18,
+        coverEmoji: '☀️',
+        tags: ['태양광', '재생에너지', 'First Solar', '한화 Qcells', '전력', 'AI 데이터센터'],
+        title: '태양광 패널 글로벌 마켓 — 비중국 기업 + AI 전력 대폭발 시대 투자 전략',
+        excerpt: '중국 보조금 축소·미중 패권 경쟁 속 비중국 태양광 기업 4사 심층 비교 + AI·EV·로봇이 촉발할 전력 수요 폭증과 발전 믹스 2050 전망.',
+    },
+    {
         slug: 'humanoid-robotics-2026',
         lang: 'ko',
         category: 'industry',
