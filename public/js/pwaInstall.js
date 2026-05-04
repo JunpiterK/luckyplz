@@ -41,10 +41,14 @@
         if(document.getElementById('lp-pwa-styles'))return;
         const s=document.createElement('style');
         s.id='lp-pwa-styles';
+        /* Color tone v2: teal + cyan (calm, trust-oriented) — 이전 yellow/orange
+           gradient 가 모바일 하단에서 너무 튀어 사용자가 "방해받는 느낌" 으로
+           인지. 차분한 청록 → 하늘색 그라데이션 + softer shadow 로 재설정.
+           App install 권유는 즉각 액션이 아니라 "선택지 제시" 톤이 적합. */
         s.textContent=
-            '.lp-pwa-btn{position:fixed;bottom:16px;right:16px;z-index:900;display:none;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:linear-gradient(135deg,#FFE66D,#FF9A3C);color:#0A0A1A;font-family:"Noto Sans KR",sans-serif;font-weight:800;font-size:.82em;letter-spacing:.02em;border:0;cursor:pointer;box-shadow:0 8px 24px rgba(255,154,60,.35);transition:transform .15s,box-shadow .2s}'
-           +'.lp-pwa-btn:hover{transform:translateY(-1px);box-shadow:0 12px 32px rgba(255,154,60,.45)}'
-           +'.lp-pwa-btn .lp-pwa-x{opacity:.55;margin-left:4px;font-size:1.05em;line-height:1}'
+            '.lp-pwa-btn{position:fixed;bottom:16px;right:16px;z-index:900;display:none;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;background:linear-gradient(135deg,#14B8A6,#0EA5E9);color:#fff;font-family:"Noto Sans KR",sans-serif;font-weight:700;font-size:.82em;letter-spacing:.02em;border:0;cursor:pointer;box-shadow:0 6px 18px rgba(14,165,233,.28);transition:transform .15s,box-shadow .2s,opacity .2s;opacity:.94}'
+           +'.lp-pwa-btn:hover{opacity:1;transform:translateY(-1px);box-shadow:0 10px 26px rgba(14,165,233,.38)}'
+           +'.lp-pwa-btn .lp-pwa-x{opacity:.65;margin-left:4px;font-size:1.05em;line-height:1}'
            +'.lp-pwa-btn .lp-pwa-x:hover{opacity:1}'
            +'.lp-pwa-btn.show{display:inline-flex}'
            +'@media(max-width:500px){.lp-pwa-btn{bottom:12px;right:12px;padding:9px 14px;font-size:.78em}}';
