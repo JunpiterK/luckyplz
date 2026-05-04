@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-02-cnn',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-04',
+        readMinutes: 5,
+        coverEmoji: '📷',
+        tags: ['AI 역사', 'CNN', 'LeCun', 'AlexNet', 'ResNet', 'AI 진화사'],
+        title: '컴퓨터가 눈을 가지게 된 30년 이야기 — LeNet에서 AlexNet, ResNet까지 (AI 진화사 EP02)',
+        excerpt: '1989년 Bell Labs에서 손글씨 우편번호를 읽기 시작한 LeNet. 23년의 침묵 끝에 2012년 AlexNet이 ImageNet에서 일으킨 충격. 그리고 ResNet과 ViT까지.',
+    },
+    {
         slug: 'ai-evo-01-perceptron',
         lang: 'ko',
         category: 'ai-tech',

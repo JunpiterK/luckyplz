@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>CNN 필터 랩 — 8×8 입력 ⊛ 3×3 커널 슬라이딩 | Lucky Please AI Labs</title>
+<meta name="description" content="8×8 입력 이미지에 3×3 커널을 슬라이딩시켜 feature map이 어떻게 만들어지는지 시각화. 수평/수직 에지, Sobel, blur, sharp 등 6가지 커널 비교.">
+<meta name="keywords" content="CNN simulator, 합성곱 시각화, convolution demo, 커널 슬라이딩, feature map 데모, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/cnn-filter/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CNN Filter Lab — 8×8 ⊛ 3×3 커널 슬라이딩">
+<meta property="og:description" content="합성곱 연산을 한 스텝씩 직접 보기. 6가지 커널 비교.">
+<meta property="og:url" content="https://luckyplz.com/labs/cnn-filter/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777896960">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777896960">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{--bg:#FAF7F0;--bg-card:#FFFFFF;--bg-soft:#F5F1EA;--bg-code:#F0EDE5;--ink:#2C3E50;--ink-soft:#5A6C7D;--ink-mute:#8A9AA8;--gold:#C8924E;--sage:#6B8E7F;--slate:#4A6B7F;--rose:#B85462;--blue:#0b6dd4;--purple:#8b5cf6;--green:#10b981;--line:#E8E2D5;--shadow:0 2px 12px rgba(44,62,80,.06);--shadow-md:0 4px 24px rgba(44,62,80,.08);--f-mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.site-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:rgba(250,247,240,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.site-nav a{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);text-decoration:none;letter-spacing:1px;transition:color .2s}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+.lab-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--gold);letter-spacing:0.18em;font-weight:700;margin-bottom:12px;text-transform:uppercase}
+.lab-tag::before{content:"🧪";font-size:14px}
+h1{font-family:'Crimson Pro',serif;font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.22;color:var(--ink);letter-spacing:-0.02em;margin-bottom:14px}
+.subtitle{font-size:16px;color:var(--ink-soft);line-height:1.7;margin-bottom:32px;max-width:620px}
+.intro-card{background:var(--bg-card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:18px 20px;margin:0 0 28px;box-shadow:var(--shadow);font-size:14.5px;color:var(--ink-soft);line-height:1.75}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;text-transform:uppercase}
+.viz{background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:22px 18px 18px;margin:24px 0;box-shadow:var(--shadow-md)}
+.viz-title{font-size:13px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:6px;letter-spacing:0.01em;font-family:var(--f-mono)}
+.viz svg{display:block;margin:0 auto}
+.ctrls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0 10px;align-items:center}
+.ctrls button{font-family:'Pretendard',sans-serif;font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--bg-card);color:var(--ink);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.ctrls button:hover{background:var(--bg-soft);border-color:var(--gold);transform:translateY(-1px)}
+.ctrls button:active{transform:translateY(0)}
+.ctrls button.primary{background:linear-gradient(135deg,var(--green),#0a8b66);color:#fff;border-color:var(--green)}
+.ctrls button.primary:hover{background:linear-gradient(135deg,#0a8b66,#066847)}
+.ctrls button.danger{color:var(--rose);border-color:rgba(184,84,98,.3)}
+.ctrls button.danger:hover{background:rgba(184,84,98,.07);border-color:var(--rose)}
+.slider{display:inline-flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px}
+.slider .lbl{font-family:var(--f-mono);font-size:11px;color:var(--ink-soft);letter-spacing:0.05em;font-weight:600}
+.slider input[type=range]{width:90px;height:4px;-webkit-appearance:none;appearance:none;background:var(--line);border-radius:2px;outline:none}
+.slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold);cursor:pointer;border:2px solid var(--bg-card);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.slider select{font-family:'Pretendard',sans-serif;font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg-card);color:var(--ink);cursor:pointer;outline:none}
+.slider select:focus{border-color:var(--gold)}
+.status{font-size:13.5px;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:12px;line-height:1.6;font-family:var(--f-mono);font-size:12.5px}
+.status b{color:var(--ink)}
+.cap{font-size:12px;color:var(--ink-mute);text-align:center;margin-top:10px;line-height:1.6;font-style:italic}
+.steps{background:var(--bg-soft);border:1px solid var(--line);border-left:3px solid var(--green);border-radius:10px;padding:18px 22px;margin:28px 0}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:#fff;background:var(--green);padding:3px 10px;border-radius:4px;letter-spacing:0.15em;margin-bottom:10px;text-transform:uppercase}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.steps li code{font-family:var(--f-mono);font-size:12.5px;background:var(--bg-code);padding:1px 6px;border-radius:4px;color:var(--ink)}
+h2{font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--ink);margin:40px 0 12px;letter-spacing:-0.01em}
+.accent-line{width:42px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--gold),#D4A574);margin:0 0 18px}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+.back-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:40px 0 0;box-shadow:var(--shadow);display:flex;align-items:center;gap:18px;text-decoration:none;color:var(--ink);transition:.2s}
+.back-card:hover{border-color:var(--gold);background:#FBF5EA;transform:translateY(-1px)}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px}
+.back-card-title{font-weight:700;font-size:15px;color:var(--ink);line-height:1.4}
+footer{text-align:center;padding:30px 20px 50px;border-top:1px solid var(--line);margin-top:40px;color:var(--ink-mute);font-size:13px;line-height:1.8}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+@media(max-width:600px){.page{padding:36px 16px 60px}.viz{padding:16px 8px 12px}.ctrls{gap:6px}.ctrls button{font-size:12px;padding:7px 12px}.slider{padding:6px 10px}.slider input[type=range]{width:70px}.status{font-size:11.5px}}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #02 CNN Filter</div>
+<h1>3×3 커널이 이미지를<br>어떻게 훑는지 직접 보기</h1>
+<p class="subtitle">1989년 Yann LeCun이 만든 LeNet의 핵심 — <strong>같은 작은 필터를 이미지 전체에 슬라이딩하며 패턴을 찾는다</strong>. 8×8 입력에 3×3 커널을 한 칸씩 옮기며 feature map이 채워지는 과정을 직접 확인합니다.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  왼쪽 8×8 입력 이미지에 십자(+) 패턴이 있습니다. 가운데 3×3 필터가 한 칸씩 슬라이딩하며 곱한 후 합한 값이 우측 6×6 <strong>feature map</strong>을 채웁니다. 커널을 바꿔보면 — 수평 에지, 수직 에지, Sobel(대각), blur(흐림), sharp(선명화), identity(그대로) — 같은 입력이지만 출력 패턴이 완전히 달라집니다. <em>이게 CNN이 다양한 패턴을 학습하는 원리</em>입니다.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li>왼쪽 8×8 입력에는 십자 모양 패턴(0.9 값)이 있고, 가운데 작은 3×3이 학습된 필터입니다.</li>
+    <li><b>커널 선택</b>에서 "수평 에지", "수직 에지", "Sobel" 등으로 다른 패턴 검출기를 골라보세요. 필터 값이 −1/0/+1로 변하며 각각 다른 종류의 에지를 검출합니다.</li>
+    <li><b>한 스텝 슬라이딩</b>을 누르면 노란색 테두리(현재 보고 있는 3×3 영역)가 한 칸 이동하며, 우측 6×6 feature map의 해당 칸이 채워집니다.</li>
+    <li>각 칸의 값은 "이 위치에서 필터의 패턴이 얼마나 강하게 발견됐는가"를 의미. <b>큰 값 = 패턴 강한 검출</b>.</li>
+    <li>같은 필터(가중치 9개)가 모든 36개 위치에 동일하게 적용 — 이게 <b>가중치 공유(weight sharing)</b>의 의미입니다.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">8×8 입력 ⊛ 3×3 필터 = 6×6 Feature Map</div>
+  <svg id="cnn-svg" viewBox="0 0 760 380" style="width:100%;max-width:760px"></svg>
+  <div class="ctrls">
+    <button id="cnn-step" class="primary">한 스텝 슬라이딩 →</button>
+    <button id="cnn-play">▶ 자동 재생</button>
+    <button id="cnn-reset" class="danger">처음부터</button>
+    <div class="slider"><span class="lbl">커널</span>
+      <select id="cnn-kernel">
+        <option value="edgeH">수평 에지 검출</option>
+        <option value="edgeV">수직 에지 검출</option>
+        <option value="sobel">Sobel(대각)</option>
+        <option value="blur">평균 흐림</option>
+        <option value="sharp">선명화</option>
+        <option value="identity">항등</option>
+      </select>
+    </div>
+    <div class="slider"><span class="lbl">속도</span>
+      <input type="range" id="cnn-speed" min="100" max="900" step="100" value="500">
+    </div>
+  </div>
+  <div class="status" id="cnn-status">"한 스텝 슬라이딩" 버튼을 눌러 시작하세요.</div>
+  <div class="cap">노란 테두리 = 현재 보고 있는 3×3 영역. 초록 테두리 = 방금 채워진 feature map 칸. 하단 진행바로 진도 확인.</div>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>실제 CNN은 수십~수백 개의 필터를 동시에 슬라이딩합니다. 첫 층은 단순한 에지·코너 검출기로 학습되고, 깊어질수록 <strong>눈·코·입(얼굴 검출), 바퀴·창문(자동차 검출), 결함 패턴(반도체 검사)</strong> 같은 복잡한 패턴을 자동으로 학습합니다.</p>
+
+<p>위 시뮬레이션은 필터 1개·9개 가중치지만, ResNet-50은 약 <strong>2,500만 개</strong> 가중치를 갖고, 모두 backprop(EP01에서 본)으로 자동 학습됩니다. 같은 메커니즘이 폰 카메라의 인물 모드, Tesla의 보행자 감지, Samsung 디스플레이 결함 검사까지 모두 굴러갑니다.</p>
+
+<p>커널을 바꿔보세요. <strong>같은 입력 이미지인데 출력 feature map이 완전히 달라집니다</strong> — "어떤 패턴을 찾을지"가 바로 그 9개 가중치에 인코딩되어 있는 것입니다.</p>
+
+<a href="/blog/ai-evo-02-cnn/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP02 — 컴퓨터가 눈을 가지게 된 30년 이야기</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  교육 목적의 단순화된 시뮬레이터입니다. 실제 CNN은 수백 개 필터를 동시 학습합니다.<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === CNN Filter Sliding Demo (adapted from 04_시각화_1차.html) === */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmt(x,d=2){return Number(x).toFixed(d);}
+function colorPos(v){v=clamp(v,-1,1);if(v>=0){const t=v;return`rgb(${Math.round(255-t*200)},${Math.round(255-t*100)},${Math.round(255-t*40)})`;}const t=-v;return`rgb(${Math.round(255-t*40)},${Math.round(255-t*120)},${Math.round(255-t*200)})`;}
+
+(function cnnDemo(){
+  const svg=document.getElementById("cnn-svg");
+  const status=document.getElementById("cnn-status");
+  const N=8,K=3,M=N-K+1;
+
+  function makeImage(){
+    const img=Array.from({length:N},()=>new Array(N).fill(0));
+    for(let i=0;i<N;i++){img[3][i]=0.9;img[4][i]=0.9;img[i][3]=0.9;img[i][4]=0.9;}
+    img[1][1]=0.4;img[1][6]=0.4;img[6][1]=0.4;img[6][6]=0.4;
+    return img;
+  }
+
+  const KERNELS={
+    edgeH:[[-1,-1,-1],[0,0,0],[1,1,1]],
+    edgeV:[[-1,0,1],[-1,0,1],[-1,0,1]],
+    sobel:[[-2,-1,0],[-1,0,1],[0,1,2]],
+    blur:[[1/9,1/9,1/9],[1/9,1/9,1/9],[1/9,1/9,1/9]],
+    sharp:[[0,-1,0],[-1,5,-1],[0,-1,0]],
+    identity:[[0,0,0],[0,1,0],[0,0,0]]
+  };
+
+  const state={img:makeImage(),kernel:KERNELS.edgeH,kname:"edgeH",pos:0,fmap:Array.from({length:M},()=>new Array(M).fill(null)),playing:false,speed:500};
+  const cs=28,xImg=20,yImg=60,xKer=300,yKer=110,xMap=480,yMap=60;
+
+  function reset(){
+    state.pos=0;
+    state.fmap=Array.from({length:M},()=>new Array(M).fill(null));
+    state.playing=false;
+    render();
+    status.innerHTML="\"한 스텝 슬라이딩\" 버튼을 눌러 시작하세요.";
+  }
+
+  function step(){
+    if(state.pos>=M*M){
+      status.innerHTML=`<b>완료</b> · feature map 모두 계산됨. 새 커널을 선택하거나 초기화하세요.`;
+      return false;
+    }
+    const r=Math.floor(state.pos/M),c=state.pos%M;
+    let s=0,calc=[];
+    for(let i=0;i<K;i++)for(let j=0;j<K;j++){
+      const v=state.img[r+i][c+j],w=state.kernel[i][j];
+      s+=v*w;
+      if(Math.abs(w)>1e-3)calc.push(`${fmt(v,1)}·${fmt(w,1)}`);
+    }
+    state.fmap[r][c]=s;
+    state.pos++;
+    render();
+    status.innerHTML=`위치 (row ${r}, col ${c}) · ${calc.slice(0,4).join(" + ")}${calc.length>4?" ...":""} = <b>${fmt(s,2)}</b>`;
+    return true;
+  }
+
+  async function play(){
+    if(state.playing){state.playing=false;return;}
+    state.playing=true;
+    document.getElementById("cnn-play").textContent="■ 정지";
+    while(state.playing&&step())await new Promise(r=>setTimeout(r,state.speed));
+    state.playing=false;
+    document.getElementById("cnn-play").textContent="▶ 자동 재생";
+  }
+
+  function render(){
+    svg.innerHTML="";
+    const r=state.pos<M*M?Math.floor(state.pos/M):-1;
+    const c=state.pos<M*M?state.pos%M:-1;
+
+    /* Input image label */
+    el("text",{x:xImg+N*cs/2,y:yImg-22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#0a4e99"},svg).textContent="입력 이미지 (8×8)";
+
+    /* Input image cells */
+    for(let i=0;i<N;i++)for(let j=0;j<N;j++){
+      const v=state.img[i][j];
+      const fill=`rgb(${Math.round(255-v*220)},${Math.round(255-v*200)},${Math.round(255-v*150)})`;
+      el("rect",{x:xImg+j*cs,y:yImg+i*cs,width:cs,height:cs,fill,stroke:"#cbd5e1","stroke-width":.7},svg);
+      el("text",{x:xImg+j*cs+cs/2,y:yImg+i*cs+cs/2+3,"text-anchor":"middle","font-size":9,fill:v>.5?"#fff":"#475569","font-family":"monospace"},svg).textContent=fmt(v,1);
+    }
+
+    /* Sliding window */
+    if(r>=0)el("rect",{x:xImg+c*cs-1,y:yImg+r*cs-1,width:K*cs+2,height:K*cs+2,fill:"none",stroke:"#f59e0b","stroke-width":3},svg);
+
+    /* Kernel label */
+    el("text",{x:xKer+K*cs/2,y:yKer-22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#7c3aed"},svg).textContent=`커널 K (3×3)`;
+    el("text",{x:xKer+K*cs/2,y:yKer-7,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent=({edgeH:"수평 에지",edgeV:"수직 에지",sobel:"Sobel",blur:"평균 흐림",sharp:"선명화",identity:"항등"})[state.kname];
+
+    /* Kernel cells */
+    for(let i=0;i<K;i++)for(let j=0;j<K;j++){
+      const w=state.kernel[i][j];
+      const fill=colorPos(clamp(w/2,-1,1));
+      el("rect",{x:xKer+j*cs,y:yKer+i*cs,width:cs,height:cs,fill,stroke:"#7c3aed","stroke-width":1.2},svg);
+      el("text",{x:xKer+j*cs+cs/2,y:yKer+i*cs+cs/2+3.5,"text-anchor":"middle","font-size":10,"font-weight":700,fill:"#1e293b","font-family":"monospace"},svg).textContent=fmt(w,1);
+    }
+
+    /* Operator symbols */
+    el("text",{x:xKer-22,y:yKer+K*cs/2+5,"text-anchor":"middle","font-size":18,"font-weight":700,fill:"#64748b"},svg).textContent="⊛";
+    el("text",{x:xKer+K*cs+30,y:yKer+K*cs/2+5,"text-anchor":"middle","font-size":18,"font-weight":700,fill:"#64748b"},svg).textContent="=";
+
+    /* Feature map label */
+    el("text",{x:xMap+M*cs/2,y:yImg-22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#10b981"},svg).textContent="Feature Map (6×6)";
+
+    /* Feature map cells */
+    for(let i=0;i<M;i++)for(let j=0;j<M;j++){
+      const v=state.fmap[i][j];
+      let fill="#f1f5f9";
+      if(v!==null){const t=clamp(v/2,-1,1);fill=colorPos(t);}
+      el("rect",{x:xMap+j*cs,y:yImg+i*cs,width:cs,height:cs,fill,stroke:"#cbd5e1","stroke-width":.7},svg);
+      if(v!==null)el("text",{x:xMap+j*cs+cs/2,y:yImg+i*cs+cs/2+3,"text-anchor":"middle","font-size":9,"font-weight":600,fill:"#1e293b","font-family":"monospace"},svg).textContent=fmt(v,1);
+    }
+
+    /* Highlight current feature map cell */
+    if(r>=0)el("rect",{x:xMap+c*cs-1,y:yImg+r*cs-1,width:cs+2,height:cs+2,fill:"none",stroke:"#10b981","stroke-width":3},svg);
+
+    /* Progress bar */
+    const pct=state.pos/(M*M);
+    el("rect",{x:20,y:340,width:720,height:6,rx:3,fill:"#e2e8f0"},svg);
+    el("rect",{x:20,y:340,width:720*pct,height:6,rx:3,fill:"#10b981"},svg);
+    el("text",{x:380,y:362,"text-anchor":"middle","font-size":11,fill:"#64748b","font-family":"monospace"},svg).textContent=`진행 ${state.pos}/${M*M}`;
+  }
+
+  document.getElementById("cnn-step").onclick=()=>step();
+  document.getElementById("cnn-play").onclick=play;
+  document.getElementById("cnn-reset").onclick=reset;
+  document.getElementById("cnn-kernel").onchange=e=>{state.kname=e.target.value;state.kernel=KERNELS[state.kname];reset();};
+  document.getElementById("cnn-speed").oninput=e=>{state.speed=1000-parseInt(e.target.value)+100;};
+  reset();
+})();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777897356"></script>
+<script src="/js/blogReactions.js?v=1777897356" defer></script>
+<script src="/js/siteFooter.js?v=1777897356" defer></script>
+</body>
+</html>
