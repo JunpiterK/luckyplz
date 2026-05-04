@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'space-evo-05-apollo11',
+        lang: 'ko',
+        category: 'tech-space',
+        date: '2026-05-05',
+        readMinutes: 11,
+        coverEmoji: '🌖',
+        tags: ['우주 진화사', '아폴로 11호', '닐 암스트롱', '마가렛 해밀턴', '1202 알람', '새턴 V', 'Luna 15'],
+        title: '12초의 연료, 22살의 0.5초, 그리고 한 발자국 — 아폴로 11호 (우주 진화사 EP05)',
+        excerpt: '1969년 7월 20일, 인류가 다른 천체에 첫 발자국을 남겼다. 그러나 착륙 60초 전 컴퓨터가 1202 알람을 띄웠고, 32살의 마가렛 해밀턴이 만든 우선순위 스케줄링이 임무를 살렸다. 12초의 연료, 충돌한 Luna 15, 그리고 닉슨의 봉인된 두 번째 연설.',
+    },
+    {
         slug: 'space-evo-04-tragedies',
         lang: 'ko',
         category: 'tech-space',
