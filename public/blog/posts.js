@@ -37,6 +37,18 @@ window.BLOG_POSTS = [
         excerpt: '향후 10년(2026~2035) 미·중·한 AI 데이터센터 전력 수요/공급 정밀 분석. 5대 병목(전력·HBM·GPU·SSD·자금) 비교 + 두괄식 투자 아이디어 Top 10.',
     },
     {
+        slug: 'solar-panel-market-2026-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 18,
+        coverEmoji: '☀️',
+        tags: ['Solar', 'Renewable Energy', 'First Solar', 'Hanwha Qcells', 'Power', 'AI Data Center'],
+        title: 'Global Solar Panel Market — Non-China Players + AI Power Explosion Investment Strategy',
+        excerpt: 'Deep-dive comparison of 4 non-Chinese solar players amid China subsidy cuts and US-CN trade war + AI/EV/Robot-driven electricity demand surge and 2050 generation mix outlook.',
+        alt: 'solar-panel-market-2026',
+    },
+    {
         slug: 'solar-panel-market-2026',
         lang: 'ko',
         category: 'industry',
@@ -46,6 +58,7 @@ window.BLOG_POSTS = [
         tags: ['태양광', '재생에너지', 'First Solar', '한화 Qcells', '전력', 'AI 데이터센터'],
         title: '태양광 패널 글로벌 마켓 — 비중국 기업 + AI 전력 대폭발 시대 투자 전략',
         excerpt: '중국 보조금 축소·미중 패권 경쟁 속 비중국 태양광 기업 4사 심층 비교 + AI·EV·로봇이 촉발할 전력 수요 폭증과 발전 믹스 2050 전망.',
+        alt: 'solar-panel-market-2026-en',
     },
     {
         slug: 'humanoid-robotics-2026',
