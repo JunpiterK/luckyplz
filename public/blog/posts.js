@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-semiconductor-correlation-2026',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 8,
+        coverEmoji: '📊',
+        tags: ['반도체', 'HBM', 'AI 메모리', '슈퍼사이클'],
+        title: 'AI 반도체 상관관계 — 한국 메모리주는 미국 어디를 봐야 하나',
+        excerpt: 'NVDA·MU·AVGO·AMD·SNDK 5종이 한국 메모리주에 미치는 영향. HBM·DRAM·NAND 슈퍼사이클 2026 데이터 + 새벽 프리마켓 활용 가이드.',
+    },
+    {
         slug: 'ladder-fairness-simulation',
         lang: 'ko',
         category: 'probability',
