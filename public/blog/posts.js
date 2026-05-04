@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-05-diffusion',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-04',
+        readMinutes: 5,
+        coverEmoji: '🎨',
+        tags: ['AI 역사', 'GAN', 'Diffusion', 'Stable Diffusion', 'Sora', 'AI 진화사'],
+        title: '술집에서 떠올린 아이디어가 그림 그리는 AI를 만들었다 (AI 진화사 EP05)',
+        excerpt: '2014년 어느 밤, 박사과정 학생이 친구와 술 마시다가 GAN을 떠올렸다. 6년 후 학계는 GAN을 버리고 Diffusion으로 옮겨갔다. Stable Diffusion·Sora 시대 12년사.',
+    },
+    {
         slug: 'ai-evo-04-chatgpt',
         lang: 'ko',
         category: 'ai-tech',
