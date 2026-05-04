@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'space-evo-01-paperclip',
+        lang: 'ko',
+        category: 'tech-space',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '🚀',
+        tags: ['우주 진화사', '폰 브라운', 'V-2', '페이퍼클립 작전', '미텔베르크', 'NASA 역사'],
+        title: '런던에 폭탄을 떨구던 사람이, 인류를 달에 보냈다 — V-2와 페이퍼클립 작전 (우주 진화사 EP01)',
+        excerpt: '1944년 9월 8일, 런던 치즈윅. V-2 한 발이 사이렌도 없이 떨어졌다. 그 로켓을 만든 32살 SS 장교는 25년 후 인류를 달에 보낸 새턴 V를 설계한다. 폰 브라운, 페이퍼클립 작전, 미텔베르크의 진실.',
+    },
+    {
         slug: 'gpu-cpu-rebalance-2026-en',
         lang: 'en',
         category: 'ai-tech',
