@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>RAG 랩 — 사내 문서 검색 + LLM 답변 시각화 | Lucky Please AI Labs</title>
+<meta name="description" content="질문 → 벡터 검색 → 관련 문서 추출 → LLM 답변. RAG의 4단계를 가상의 사내 문서 6개에서 직접 시각화. 이게 사내 코파일럿의 작동 원리.">
+<meta name="keywords" content="RAG demo, 벡터 검색 시뮬레이터, 사내 코파일럿 데모, retrieval augmented generation, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/rag/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="RAG Lab — 사내 문서 검색 → 답변 생성">
+<meta property="og:description" content="RAG 4단계 직접 시뮬레이션.">
+<meta property="og:url" content="https://luckyplz.com/labs/rag/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777911158">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777911158">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{--bg:#FAF7F0;--bg-card:#FFFFFF;--bg-soft:#F5F1EA;--bg-code:#F0EDE5;--ink:#2C3E50;--ink-soft:#5A6C7D;--ink-mute:#8A9AA8;--gold:#C8924E;--sage:#6B8E7F;--slate:#4A6B7F;--rose:#B85462;--blue:#0b6dd4;--purple:#8b5cf6;--green:#10b981;--line:#E8E2D5;--shadow:0 2px 12px rgba(44,62,80,.06);--shadow-md:0 4px 24px rgba(44,62,80,.08);--f-mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.site-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:rgba(250,247,240,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.site-nav a{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);text-decoration:none;letter-spacing:1px;transition:color .2s}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+.lab-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--gold);letter-spacing:0.18em;font-weight:700;margin-bottom:12px;text-transform:uppercase}
+.lab-tag::before{content:"🧪";font-size:14px}
+h1{font-family:'Crimson Pro',serif;font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.22;color:var(--ink);letter-spacing:-0.02em;margin-bottom:14px}
+.subtitle{font-size:16px;color:var(--ink-soft);line-height:1.7;margin-bottom:32px;max-width:620px}
+.intro-card{background:var(--bg-card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:18px 20px;margin:0 0 28px;box-shadow:var(--shadow);font-size:14.5px;color:var(--ink-soft);line-height:1.75}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;text-transform:uppercase}
+.viz{background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:22px 20px;margin:24px 0;box-shadow:var(--shadow-md)}
+.viz-title{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:12px;letter-spacing:0.01em;font-family:var(--f-mono)}
+.steps{background:var(--bg-soft);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:10px;padding:18px 22px;margin:28px 0}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:#fff;background:var(--blue);padding:3px 10px;border-radius:4px;letter-spacing:0.15em;margin-bottom:10px;text-transform:uppercase}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.q-input-row{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 18px}
+.q-input{flex:1;min-width:200px;padding:13px 16px;border:1.5px solid var(--line);border-radius:10px;font-family:'Pretendard',sans-serif;font-size:15px;background:var(--bg-soft);color:var(--ink);outline:none;transition:border-color .2s}
+.q-input:focus{border-color:var(--gold);background:#FFFFFF}
+.q-btn{font-family:'Pretendard',sans-serif;font-size:14px;font-weight:600;padding:13px 22px;border-radius:10px;border:none;background:linear-gradient(135deg,var(--gold),#D4A574);color:#fff;cursor:pointer;transition:.2s;box-shadow:0 2px 6px rgba(200,146,78,.25)}
+.q-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(200,146,78,.35)}
+.q-btn:active{transform:translateY(0)}
+.q-presets{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 18px}
+.q-preset{font-size:12px;padding:6px 11px;border-radius:6px;border:1px solid var(--line);background:var(--bg-card);color:var(--ink-soft);cursor:pointer;font-family:'Pretendard',sans-serif;transition:.2s}
+.q-preset:hover{background:#FBF5EA;border-color:var(--gold);color:var(--ink)}
+.stage-label{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;padding:4px 10px;border-radius:5px;margin:18px 0 10px;color:#fff}
+.stage-label.s1{background:var(--slate)}
+.stage-label.s2{background:var(--gold)}
+.stage-label.s3{background:var(--sage)}
+.docs{display:grid;gap:8px;margin:10px 0 18px}
+.doc{background:var(--bg-card);border:1px solid var(--line);border-radius:10px;padding:13px 16px;display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;transition:.2s}
+.doc.matched{border-color:var(--gold);background:#FFFEF9;box-shadow:0 2px 8px rgba(200,146,78,.1)}
+.doc.top{border-color:var(--green);background:linear-gradient(135deg,#F0FDF4,#FFFEF9)}
+.doc-rank{font-family:var(--f-mono);font-size:13px;font-weight:700;color:var(--ink-mute);min-width:24px;text-align:center}
+.doc.top .doc-rank{color:var(--green)}
+.doc-title{font-size:13.5px;font-weight:700;color:var(--ink);line-height:1.4}
+.doc-snippet{font-size:12.5px;color:var(--ink-soft);line-height:1.5;margin-top:3px}
+.doc-snippet mark{background:#FBF1E1;color:var(--ink);padding:0 2px;border-radius:3px}
+.doc-score{font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--gold);text-align:right;min-width:60px}
+.doc.top .doc-score{color:var(--green)}
+.answer-card{background:linear-gradient(135deg,#E8EFEA,#FBF5EA);border:1.5px solid var(--sage);border-radius:14px;padding:22px;margin:18px 0}
+.answer-label{font-family:var(--f-mono);font-size:11px;color:var(--sage);letter-spacing:0.18em;text-transform:uppercase;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.answer-text{font-size:15px;color:var(--ink);line-height:1.75;margin-bottom:12px}
+.answer-text mark{background:rgba(107,142,127,.18);color:var(--ink);padding:1px 4px;border-radius:3px;font-weight:600}
+.answer-citations{font-size:12px;color:var(--ink-soft);font-family:var(--f-mono);padding-top:10px;border-top:1px dashed rgba(107,142,127,.3)}
+.answer-citations b{color:var(--sage)}
+h2{font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--ink);margin:40px 0 12px;letter-spacing:-0.01em}
+.accent-line{width:42px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--gold),#D4A574);margin:0 0 18px}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+.back-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:40px 0 0;box-shadow:var(--shadow);display:flex;align-items:center;gap:18px;text-decoration:none;color:var(--ink);transition:.2s}
+.back-card:hover{border-color:var(--gold);background:#FBF5EA;transform:translateY(-1px)}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px}
+.back-card-title{font-weight:700;font-size:15px;color:var(--ink);line-height:1.4}
+footer{text-align:center;padding:30px 20px 50px;border-top:1px solid var(--line);margin-top:40px;color:var(--ink-mute);font-size:13px;line-height:1.8}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+@media(max-width:600px){.page{padding:36px 16px 60px}.viz{padding:16px 14px}.doc{grid-template-columns:auto 1fr;gap:10px}.doc-score{grid-column:1/-1;text-align:left;padding-left:36px}}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #08 RAG</div>
+<h1>질문 → 검색 → 답변,<br>사내 코파일럿의 4단계</h1>
+<p class="subtitle">2020년 Patrick Lewis의 RAG 논문이 만든 메커니즘을 직접 시뮬레이션합니다. 가상의 사내 문서 6개에서 — 질문을 입력하면 ① 가장 관련 있는 문서 검색 → ② 상위 3개 추출 → ③ 그것을 컨텍스트로 LLM이 답변 생성. 이게 Microsoft 365 Copilot, GitHub Copilot, 삼성 GAUSS의 작동 원리입니다.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  6개의 가상 사내 문서(<strong>출장비 규정·휴가 정책·보안 가이드·복리후생·재택근무·교육비 지원</strong>)가 미리 준비돼 있습니다. 질문을 입력하면 — 의미적 유사도(simulated embedding similarity)로 가장 관련 있는 문서들을 찾고, 상위 3개를 LLM 컨텍스트로 사용해서 답변을 생성. 실제 RAG는 OpenAI text-embedding-3 같은 임베딩 모델을 쓰지만, 이 데모는 키워드 + 의미적 가중치의 단순 매칭으로 그 흐름을 보여줍니다.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li>아래 질문창에 질문을 입력 (또는 예시 버튼 클릭).</li>
+    <li><b>RAG 실행</b> 버튼 → ① 6개 문서 모두 점수 매김 → ② 상위 3개 표시 → ③ 답변 생성.</li>
+    <li>매칭된 키워드는 <mark>노란 강조</mark>, 답변에서 인용된 부분은 <mark style="background:rgba(107,142,127,.18)">초록 강조</mark>.</li>
+    <li>예시 질문들을 차례로 눌러보고 — 같은 단어라도 어떤 문서가 매칭되는지 확인.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">📂 가상 사내 문서 데이터베이스 (6 docs)</div>
+  <div class="q-input-row">
+    <input type="text" id="rag-q" class="q-input" placeholder="질문을 입력하세요 (예: 출장비 한도가 얼마인가요?)" value="출장비 한도가 얼마인가요?">
+    <button class="q-btn" id="rag-go">🔍 RAG 실행</button>
+  </div>
+  <div class="q-presets">
+    <button class="q-preset" data-q="출장비 한도가 얼마인가요?">예시: 출장비 한도</button>
+    <button class="q-preset" data-q="연차 며칠 쓸 수 있어?">예시: 연차 일수</button>
+    <button class="q-preset" data-q="외부망에서 사내 자료 접근 가능?">예시: 외부망 접근</button>
+    <button class="q-preset" data-q="자녀 학자금 지원 받으려면?">예시: 자녀 학자금</button>
+    <button class="q-preset" data-q="재택근무 신청은 어떻게?">예시: 재택근무 신청</button>
+    <button class="q-preset" data-q="대학원 학비 회사가 내주나?">예시: 대학원 학비</button>
+  </div>
+
+  <div class="stage-label s1">① Stage 1 · 의미 유사도 검색 (모든 문서 점수)</div>
+  <div class="docs" id="rag-docs"></div>
+
+  <div class="stage-label s3">③ Stage 3 · LLM 답변 생성 (상위 3개 문서를 컨텍스트로)</div>
+  <div class="answer-card" id="rag-answer-card" style="display:none">
+    <div class="answer-label">🤖 사내 코파일럿 답변</div>
+    <div class="answer-text" id="rag-answer-text"></div>
+    <div class="answer-citations" id="rag-answer-cite"></div>
+  </div>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>실제 회사의 RAG 시스템은 — 문서가 6개가 아니라 <strong>수십만~수백만 개</strong>입니다. 임베딩도 단순 키워드 매칭이 아니라 OpenAI <code>text-embedding-3-large</code> 같은 1024차원 벡터. 검색은 Pinecone·Weaviate 같은 vector DB에서 ms 단위로 처리. 답변 생성은 GPT-4 또는 Claude 3.5 Sonnet으로.</p>
+
+<p>그러나 메커니즘은 — <strong>이 4단계 그대로</strong>입니다. ① 질문 임베딩 → ② 벡터 DB 검색 → ③ 상위 k개 추출 → ④ LLM에 컨텍스트 주입 후 답변 생성. 이게 2026년 거의 모든 사내 코파일럿의 표준 아키텍처. 한 번 이 흐름을 이해하면 — Microsoft 365 Copilot도, GitHub Copilot도, 삼성 GAUSS도, LG GenAI도 같은 골격으로 돌아간다는 것이 보입니다.</p>
+
+<a href="/blog/ai-evo-08-rag/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP08 (마지막 편) — 한 논문이 모든 회사의 AI 시대를 열었다</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  교육용 단순화 시뮬레이터입니다. 실제 RAG는 1024차원 벡터 임베딩 + vector DB(Pinecone 등) + LLM(GPT-4/Claude).<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === Pedagogical RAG Demo ===
+   Real RAG pipelines use dense embeddings (e.g., OpenAI text-embedding-3) +
+   a vector database. We approximate the *flow* with keyword matching + a
+   small per-document semantic alias map, then have the "LLM" return a
+   templated answer pulled from the top-1 doc.
+
+   The point is to convey the 4-stage architecture, not to be a real
+   tokenizer/embedder/LLM. */
+
+const DOCS = [
+  {
+    id: 1,
+    title: '출장비 규정 §2.3',
+    snippet: '국내 출장은 1인 1일 식비 3만원, 숙박비 10만원, 합계 한도 15만원. 해외 출장은 별도 표 참조. 영수증 7일 내 제출.',
+    keywords: ['출장','출장비','한도','국내','해외','식비','숙박비','15만원','출장경비','여행경비','reimbursement'],
+    answer: '회사 규정 §2.3에 따르면 <mark>국내 출장은 1인 1일 한도 15만원</mark>(식비 3만원 + 숙박비 10만원)입니다. 해외 출장은 별도 표를 참조하시고, 영수증은 출장 후 <mark>7일 이내에 제출</mark>해야 합니다.',
+    cite: '출장비 규정 §2.3'
+  },
+  {
+    id: 2,
+    title: '연차 휴가 정책 v3.1',
+    snippet: '입사 1년차 15일, 2년차 16일 (이후 연 1일씩 증가, 최대 25일). 사용 안 한 잔여는 다음 해 6월까지 사용 가능. 5일 이상 연속 휴가 시 부서장 사전 승인.',
+    keywords: ['연차','휴가','며칠','일수','15일','16일','25일','잔여','연속휴가','vacation','holiday'],
+    answer: '연차 휴가 정책 v3.1에 따르면 <mark>입사 1년차는 15일, 2년차는 16일</mark>이며 이후 연 1일씩 증가해 <mark>최대 25일까지</mark> 부여됩니다. 사용하지 않은 잔여는 다음 해 6월까지 사용 가능하고, <mark>5일 이상 연속 휴가는 부서장 사전 승인</mark>이 필요합니다.',
+    cite: '연차 휴가 정책 v3.1'
+  },
+  {
+    id: 3,
+    title: '정보보안 가이드 §4',
+    snippet: '사내 자료는 회사 VPN 또는 사내 IP에서만 접근. 외부망에서는 IT팀 승인 후 임시 토큰 발급. 노트북 분실 시 30분 내 IT팀 신고. 이메일 첨부 시 비밀번호 별도 송부.',
+    keywords: ['보안','외부망','VPN','사내자료','접근','IT팀','토큰','노트북','분실','이메일','첨부','비밀번호','security'],
+    answer: '정보보안 가이드 §4에 따르면 사내 자료는 <mark>회사 VPN 또는 사내 IP에서만 접근</mark>이 가능합니다. 외부망에서 접근하려면 <mark>IT팀의 승인 후 임시 토큰을 발급</mark>받아야 합니다. 노트북 분실 시에는 30분 이내에 IT팀에 신고하시기 바랍니다.',
+    cite: '정보보안 가이드 §4'
+  },
+  {
+    id: 4,
+    title: '복리후생 안내 2026년판',
+    snippet: '자녀 학자금 지원: 초등 연 100만원, 중등 200만원, 고등 300만원, 대학 500만원. 본인 결혼 축의금 50만원, 직계가족 경조금 별도. 건강검진 연 1회 회사 부담.',
+    keywords: ['복리후생','자녀','학자금','지원','초등','중등','고등','대학','100만원','500만원','결혼','축의금','경조금','건강검진','benefits'],
+    answer: '복리후생 안내 2026년판에 따르면 <mark>자녀 학자금 지원</mark>은 초등 연 100만원, 중등 200만원, 고등 300만원, <mark>대학은 연 500만원</mark>입니다. 신청은 학기 시작 전 인사팀에 등록증 사본 제출하시면 됩니다.',
+    cite: '복리후생 안내 2026년판'
+  },
+  {
+    id: 5,
+    title: '재택근무 운영 지침',
+    snippet: '주 2일까지 재택근무 가능 (월·금 권장). 신청은 매주 금요일 오후 6시까지 직속 상사에게 메신저로. 회의 참석 의무 시간 10:00-16:00. 보안 가이드 §4 준수.',
+    keywords: ['재택근무','재택','신청','월','금','상사','메신저','주2일','회의','참석','remote','work from home','wfh'],
+    answer: '재택근무 운영 지침에 따르면 <mark>주 2일까지 재택근무가 가능</mark>합니다 (월·금 권장). <mark>신청은 매주 금요일 오후 6시까지 직속 상사에게 메신저로</mark> 보내시면 됩니다. 회의 참석 의무 시간은 10:00-16:00이고, 보안 가이드 §4를 준수해야 합니다.',
+    cite: '재택근무 운영 지침'
+  },
+  {
+    id: 6,
+    title: '교육비 지원 프로그램',
+    snippet: '본인 대학원 학비: 회사 50% 부담 (연 1000만원 한도). 어학원 등록비 연 100만원 한도. 외부 컨퍼런스 1년 1건 회사 부담. 자격증 합격 시 응시료 환급.',
+    keywords: ['교육비','대학원','학비','회사부담','50%','1000만원','어학원','컨퍼런스','자격증','응시료','환급','education','tuition'],
+    answer: '교육비 지원 프로그램에 따르면 <mark>본인 대학원 학비는 회사가 50% 부담</mark>합니다 (연 1000만원 한도). 어학원 등록비는 연 100만원 한도, 외부 컨퍼런스는 1년 1건 회사 부담, 자격증 합격 시 응시료를 환급해드립니다.',
+    cite: '교육비 지원 프로그램'
+  }
+];
+
+function tokenize(s){
+  /* Simple tokenization for matching: lowercase, split on non-word boundaries.
+     Keeps Korean syllables together (Hangul codepoints), splits English words. */
+  return s.toLowerCase().match(/[\w가-힣]+/g) || [];
+}
+
+function score(query, doc){
+  const qTokens = tokenize(query);
+  let s = 0;
+  qTokens.forEach(qt => {
+    /* Exact keyword hit */
+    doc.keywords.forEach(kw => {
+      if (qt === kw) s += 3;
+      else if (kw.length > 1 && (kw.includes(qt) || qt.includes(kw))) s += 1.5;
+    });
+    /* Partial title/snippet hit */
+    if (doc.title.toLowerCase().includes(qt)) s += 1;
+    if (doc.snippet.toLowerCase().includes(qt)) s += 0.4;
+  });
+  return s;
+}
+
+function highlightSnippet(snippet, query){
+  /* Wrap each query token's match in <mark>. */
+  const qTokens = [...new Set(tokenize(query))];
+  let result = snippet;
+  qTokens.forEach(qt => {
+    if (qt.length < 1) return;
+    const re = new RegExp('(' + qt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+    result = result.replace(re, '<mark>$1</mark>');
+  });
+  return result;
+}
+
+function runRAG(){
+  const q = document.getElementById('rag-q').value.trim();
+  if (!q) return;
+
+  /* Stage 1+2: score all docs and rank */
+  const ranked = DOCS.map(d => ({...d, score: score(q, d)}))
+                     .sort((a,b) => b.score - a.score);
+  const maxScore = Math.max(...ranked.map(r => r.score));
+  const topK = ranked.slice(0, 3).filter(r => r.score > 0);
+
+  /* Render docs */
+  const container = document.getElementById('rag-docs');
+  container.innerHTML = '';
+  ranked.forEach((doc, idx) => {
+    const isMatched = doc.score > 0;
+    const isTop = topK.includes(doc) && doc.score > 0;
+    const cls = isTop ? 'doc top' : (isMatched ? 'doc matched' : 'doc');
+    const rankLabel = isTop ? '🥇'.replace('🥇', idx === 0 ? '🥇' : (idx === 1 ? '🥈' : '🥉')) : `#${idx+1}`;
+    const normalized = maxScore > 0 ? (doc.score / maxScore) : 0;
+    const scoreText = doc.score > 0 ? `${(normalized * 100).toFixed(0)}%` : '—';
+
+    const div = document.createElement('div');
+    div.className = cls;
+    div.innerHTML =
+      `<div class="doc-rank">${rankLabel}</div>` +
+      `<div><div class="doc-title">${doc.title}</div>` +
+      `<div class="doc-snippet">${highlightSnippet(doc.snippet, q)}</div></div>` +
+      `<div class="doc-score">${scoreText}</div>`;
+    container.appendChild(div);
+  });
+
+  /* Stage 3: generate answer from top-1 (or no doc found) */
+  const answerCard = document.getElementById('rag-answer-card');
+  const answerText = document.getElementById('rag-answer-text');
+  const answerCite = document.getElementById('rag-answer-cite');
+
+  if (topK.length === 0) {
+    answerCard.style.display = 'block';
+    answerText.innerHTML = '관련 사내 문서를 찾지 못했습니다. 질문을 다시 작성해 보시거나, 인사팀에 직접 문의하시기 바랍니다.';
+    answerCite.innerHTML = '<b>인용 문서:</b> 없음 (no match)';
+  } else {
+    const top = topK[0];
+    answerCard.style.display = 'block';
+    answerText.innerHTML = top.answer;
+    const citeText = topK.map(d => `<b>${d.cite}</b>`).join(' · ');
+    answerCite.innerHTML = `<b>참고 문서 (top ${topK.length}):</b> ${citeText}`;
+  }
+
+  /* Smooth scroll to result */
+  setTimeout(() => answerCard.scrollIntoView({behavior:'smooth', block:'nearest'}), 50);
+}
+
+document.getElementById('rag-go').addEventListener('click', runRAG);
+document.getElementById('rag-q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runRAG();
+});
+document.querySelectorAll('.q-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('rag-q').value = btn.dataset.q;
+    runRAG();
+  });
+});
+
+/* Initial render */
+runRAG();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777911920"></script>
+<script src="/js/blogReactions.js?v=1777911920" defer></script>
+<script src="/js/siteFooter.js?v=1777911920" defer></script>
+</body>
+</html>
