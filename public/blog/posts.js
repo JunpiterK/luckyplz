@@ -14,6 +14,18 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-datacenter-power-2026-2035-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 22,
+        coverEmoji: '⚡',
+        tags: ['AI Data Center', 'Power', 'HBM', 'SK Hynix', 'Constellation', 'Investment Ideas'],
+        title: 'AI Data Center Power Showdown — US/CN/KR 10-Year Supply Gap + Real Bottleneck + Investment Ideas',
+        excerpt: 'Precise 10-year (2026~2035) analysis of AI data center electricity supply/demand across US, China, Korea. 5-bottleneck comparison (power · HBM · GPU · SSD · capital) + Top 10 investment ideas executive summary.',
+        alt: 'ai-datacenter-power-2026-2035',
+    },
+    {
         slug: 'ai-datacenter-power-2026-2035',
         lang: 'ko',
         category: 'industry',
