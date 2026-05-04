@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'humanoid-robotics-2026',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 15,
+        coverEmoji: '🤖',
+        tags: ['휴머노이드 로봇', '보스턴다이내믹스', '테슬라', '현대차', '산업분석'],
+        title: '휴머노이드 로봇 산업 경쟁 분석 — 현대차·BD vs 테슬라 vs 중국',
+        excerpt: 'Atlas / Optimus / Unitree 비교, 현대차·보스턴다이내믹스 기업가치, 사회 변화와 부의 분배 정책까지. 2026년 휴머노이드 로봇 시장 심층 분석.',
+    },
+    {
         slug: 'ai-semiconductor-correlation-2026',
         lang: 'ko',
         category: 'industry',
