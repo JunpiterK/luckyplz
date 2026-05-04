@@ -53,11 +53,17 @@
         } catch(_) {}
     }
 
+    /* Inject the widget's CSS once per page. The default palette targets
+       the site's dark theme; the `--paper` modifier overrides every
+       affected property for cream/journal pages (e.g. AI 진화사 series).
+       Pages opt into paper by setting `data-theme="paper"` on the host
+       <div data-blog-reactions>. */
     function injectStyles(){
         if (document.getElementById('lp-blog-reactions-style')) return;
         const s = document.createElement('style');
         s.id = 'lp-blog-reactions-style';
         s.textContent =
+            /* === DARK / DEFAULT === */
             '.lp-react{margin:36px 0 18px;padding:22px;border-radius:16px;background:linear-gradient(145deg,rgba(0,217,255,.04),rgba(255,230,109,.03));border:1px solid rgba(255,255,255,.06)}'
           + '.lp-react-title{font-family:\'Orbitron\',\'Noto Sans KR\',sans-serif;font-size:.78em;letter-spacing:2.5px;color:rgba(255,255,255,.5);text-align:center;font-weight:700;margin-bottom:14px;text-transform:uppercase}'
           + '.lp-react-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}'
@@ -70,7 +76,21 @@
           + '.lp-react-btn[data-active="1"] .lp-react-count{color:#FFE66D}'
           + '.lp-react-btn[data-active="1"]:hover{transform:none}'
           + '.lp-react-disclaimer{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.32);text-align:center;letter-spacing:.02em}'
-          + '@media(max-width:500px){.lp-react{padding:16px;margin:28px 0 14px}.lp-react-btn{padding:11px 4px;font-size:.72em}.lp-react-btn .lp-react-emoji{font-size:1.35em}}';
+          + '@media(max-width:500px){.lp-react{padding:16px;margin:28px 0 14px}.lp-react-btn{padding:11px 4px;font-size:.72em}.lp-react-btn .lp-react-emoji{font-size:1.35em}}'
+            /* === PAPER VARIANT (cream/journal pages) ===
+               Overrides every dark-theme color so the widget reads on
+               #FAF7F0 backgrounds without losing the engagement-card feel.
+               Gold (#C8924E) is the primary accent; rose (#B85462) shows
+               up only as a faint gradient seasoning so the card has
+               warmth instead of looking like a clinical inset.            */
+          + '.lp-react.lp-react--paper{background:linear-gradient(145deg,rgba(200,146,78,.07) 0%,rgba(184,84,98,.04) 100%);border:1px solid rgba(200,146,78,.22);box-shadow:0 2px 12px rgba(44,62,80,.05)}'
+          + '.lp-react--paper .lp-react-title{font-family:\'JetBrains Mono\',monospace;color:#5A6C7D;letter-spacing:.18em}'
+          + '.lp-react--paper .lp-react-btn{background:#FFFFFF;border:1.5px solid #E8E2D5;color:#2C3E50;font-family:\'Pretendard\',-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 1px 2px rgba(44,62,80,.04)}'
+          + '.lp-react--paper .lp-react-btn:hover{background:#FBF5EA;border-color:#C8924E;color:#2C3E50;transform:translateY(-1px);box-shadow:0 3px 10px rgba(200,146,78,.15)}'
+          + '.lp-react--paper .lp-react-btn .lp-react-count{font-family:\'JetBrains Mono\',monospace;color:#C8924E;font-weight:700}'
+          + '.lp-react--paper .lp-react-btn[data-active="1"]{background:linear-gradient(135deg,#FBF1E1,#F5E5C8);border-color:#C8924E;color:#854D0E;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 6px rgba(200,146,78,.18)}'
+          + '.lp-react--paper .lp-react-btn[data-active="1"] .lp-react-count{color:#854D0E}'
+          + '.lp-react--paper .lp-react-disclaimer{color:#8A9AA8}';
         document.head.appendChild(s);
     }
 
@@ -106,8 +126,15 @@
             ? '클릭 한 번이면 충분합니다 · 익명 집계'
             : 'One click is enough · anonymous';
 
+        /* Theme is opt-in via host's `data-theme` attribute. Default
+           palette stays dark; pages with cream backgrounds (AI 진화사
+           series, future paper/journal posts) pass `data-theme="paper"`
+           and get the warm cream-friendly variant. */
+        const theme = (host.dataset.theme || '').toLowerCase();
+        const themeClass = theme === 'paper' ? ' lp-react--paper' : '';
+
         host.innerHTML =
-            '<div class="lp-react">'
+            '<div class="lp-react' + themeClass + '">'
           + '<div class="lp-react-title">' + titleText + '</div>'
           + '<div class="lp-react-row">'
           + KINDS.map(k => {

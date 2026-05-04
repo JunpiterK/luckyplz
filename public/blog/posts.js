@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-evo-04-chatgpt',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-04',
+        readMinutes: 6,
+        coverEmoji: '🚀',
+        tags: ['AI 역사', 'ChatGPT', 'GPT-4', 'OpenAI', 'Sam Altman', 'Claude', 'AI 진화사'],
+        title: '5일 만에 100만 명 — ChatGPT 시대는 어떻게 시작됐나 (AI 진화사 EP04)',
+        excerpt: '2022.11.30 OpenAI가 한 챗봇을 공개했다. 5일 만에 100만 명, 2개월 만에 1억 명. GPT-1에서 GPT-4, Claude, DeepSeek-R1까지 LLM 시대 8년사.',
+    },
+    {
         slug: 'ai-evo-03-transformer',
         lang: 'ko',
         category: 'ai-tech',
