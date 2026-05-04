@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Attention 랩 — Transformer Q·K·V 시각화 | Lucky Please AI Labs</title>
+<meta name="description" content="Transformer의 attention 메커니즘을 직접 클릭하며 보기. 토큰을 클릭하면 그 토큰이 다른 토큰을 얼마나 보는지 화살표와 heatmap으로 표시. 3가지 head 비교.">
+<meta name="keywords" content="attention 시각화, transformer demo, self-attention, Q K V, multi-head attention, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/attention/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Attention Lab — Transformer Q·K·V 시각화">
+<meta property="og:description" content="토큰 클릭으로 attention 분포 직접 보기. Multi-head 비교.">
+<meta property="og:url" content="https://luckyplz.com/labs/attention/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777897356">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777897356">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{--bg:#FAF7F0;--bg-card:#FFFFFF;--bg-soft:#F5F1EA;--bg-code:#F0EDE5;--ink:#2C3E50;--ink-soft:#5A6C7D;--ink-mute:#8A9AA8;--gold:#C8924E;--sage:#6B8E7F;--slate:#4A6B7F;--rose:#B85462;--blue:#0b6dd4;--purple:#8b5cf6;--green:#10b981;--line:#E8E2D5;--shadow:0 2px 12px rgba(44,62,80,.06);--shadow-md:0 4px 24px rgba(44,62,80,.08);--f-mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.site-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:rgba(250,247,240,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.site-nav a{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);text-decoration:none;letter-spacing:1px;transition:color .2s}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+.lab-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--gold);letter-spacing:0.18em;font-weight:700;margin-bottom:12px;text-transform:uppercase}
+.lab-tag::before{content:"🧪";font-size:14px}
+h1{font-family:'Crimson Pro',serif;font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.22;color:var(--ink);letter-spacing:-0.02em;margin-bottom:14px}
+.subtitle{font-size:16px;color:var(--ink-soft);line-height:1.7;margin-bottom:32px;max-width:620px}
+.intro-card{background:var(--bg-card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:18px 20px;margin:0 0 28px;box-shadow:var(--shadow);font-size:14.5px;color:var(--ink-soft);line-height:1.75}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;text-transform:uppercase}
+.viz{background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:22px 18px 18px;margin:24px 0;box-shadow:var(--shadow-md)}
+.viz-title{font-size:13px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:6px;letter-spacing:0.01em;font-family:var(--f-mono)}
+.viz svg{display:block;margin:0 auto}
+.ctrls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0 10px;align-items:center}
+.ctrls button{font-family:'Pretendard',sans-serif;font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--bg-card);color:var(--ink);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.ctrls button:hover{background:var(--bg-soft);border-color:var(--gold);transform:translateY(-1px)}
+.slider{display:inline-flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px}
+.slider .lbl{font-family:var(--f-mono);font-size:11px;color:var(--ink-soft);letter-spacing:0.05em;font-weight:600}
+.slider select{font-family:'Pretendard',sans-serif;font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg-card);color:var(--ink);cursor:pointer;outline:none}
+.slider select:focus{border-color:var(--gold)}
+.status{font-size:13.5px;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:12px;line-height:1.6;font-family:var(--f-mono);font-size:12.5px}
+.status b{color:var(--ink)}
+.cap{font-size:12px;color:var(--ink-mute);text-align:center;margin-top:10px;line-height:1.6;font-style:italic}
+.steps{background:var(--bg-soft);border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:10px;padding:18px 22px;margin:28px 0}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:#fff;background:var(--blue);padding:3px 10px;border-radius:4px;letter-spacing:0.15em;margin-bottom:10px;text-transform:uppercase}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.steps li code{font-family:var(--f-mono);font-size:12.5px;background:var(--bg-code);padding:1px 6px;border-radius:4px;color:var(--ink)}
+h2{font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--ink);margin:40px 0 12px;letter-spacing:-0.01em}
+.accent-line{width:42px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--gold),#D4A574);margin:0 0 18px}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+.back-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:40px 0 0;box-shadow:var(--shadow);display:flex;align-items:center;gap:18px;text-decoration:none;color:var(--ink);transition:.2s}
+.back-card:hover{border-color:var(--gold);background:#FBF5EA;transform:translateY(-1px)}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px}
+.back-card-title{font-weight:700;font-size:15px;color:var(--ink);line-height:1.4}
+footer{text-align:center;padding:30px 20px 50px;border-top:1px solid var(--line);margin-top:40px;color:var(--ink-mute);font-size:13px;line-height:1.8}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+@media(max-width:600px){.page{padding:36px 16px 60px}.viz{padding:16px 8px 12px}.status{font-size:11.5px}}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #03 Attention</div>
+<h1>한 단어가 다른 단어를<br>얼마나 보는지 직접 클릭</h1>
+<p class="subtitle">2017년 Google의 <em>"Attention is All You Need"</em>의 핵심 — Transformer의 self-attention. 문장의 한 토큰을 클릭하면, 그 토큰이 다른 토큰들을 얼마나 보는지 화살표 굵기와 막대 높이로 표시됩니다.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  Transformer의 attention이 <strong>"한 토큰이 다른 토큰을 얼마나 본다"</strong>는 의미인지 직접 확인합니다. 토큰을 클릭하면 ① 화살표 굵기 = attention 가중치, ② 그 토큰의 attention 분포(막대), ③ 우측 전체 attention 행렬(heatmap). Head 1·2·3이 각자 다른 패턴(구문 관계 / 장거리 의존 / 인접 관계)을 학습한 것을 비교해 보세요.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li>위 토큰 중 하나를 <b>클릭</b>하면 그 토큰이 어디를 보는지 화살표로 표시됩니다.</li>
+    <li>각 토큰 아래의 막대 = attention 분포 (모든 막대 합 = 1, softmax 결과).</li>
+    <li>우측 6×6 heatmap = 전체 attention 행렬 (행=Query, 열=Key). 각 행의 합 = 1.</li>
+    <li><b>Head 변경</b>으로 같은 문장의 3가지 head를 비교 — 각 head가 다른 관계를 학습했음을 확인.</li>
+    <li><b>문장 변경</b>으로 한국어/영어 시퀀스도 시도해 보세요.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">Self-Attention — 토큰 클릭 → 어디를 보나</div>
+  <svg id="attn-svg" viewBox="0 0 760 460" style="width:100%;max-width:760px"></svg>
+  <div class="ctrls">
+    <div class="slider"><span class="lbl">문장</span>
+      <select id="attn-sentence">
+        <option value="0">the cat sat on the mat</option>
+        <option value="1">she opened the box quickly</option>
+        <option value="2">기판 위에 박막 이 증착 된다</option>
+      </select>
+    </div>
+    <div class="slider"><span class="lbl">Head</span>
+      <select id="attn-head">
+        <option value="0">Head 1 (구문 관계)</option>
+        <option value="1">Head 2 (장거리 의존)</option>
+        <option value="2">Head 3 (인접 관계)</option>
+      </select>
+    </div>
+    <button id="attn-reset">선택 해제</button>
+  </div>
+  <div class="status" id="attn-status">위 토큰을 <b>클릭</b>하면 그 토큰이 어디를 보는지 화살표로 표시됩니다.</div>
+  <div class="cap">화살표 굵기 = attention 가중치. 우측 행렬 = 전체 attention. 막대 합 = 1 (softmax).</div>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>실제 ChatGPT(GPT-4)는 <strong>96개 layer × 96 heads = 9,216개의 attention 패턴</strong>을 동시에 학습합니다. 위 시뮬레이션은 단 3개 head를 보여주는 단순화 버전이지만, 메커니즘은 같습니다.</p>
+
+<p>그리고 — Transformer의 가장 큰 강점은 <strong>완전 병렬 처리</strong>입니다. LSTM은 단어를 한 개씩 순서대로 처리해야 하지만, Transformer는 모든 단어가 모든 단어를 <strong>동시에</strong> 본다. GPU에 완벽히 맞는 구조 → 학습이 100배 빨라짐 → 모델 크기를 1000배 늘릴 수 있게 됨 → 결과가 GPT-3, GPT-4, ChatGPT.</p>
+
+<p>다음 EP04에서 이 Transformer가 어떻게 GPT 시리즈로 발전해서 2022년 11월 30일 ChatGPT의 폭발로 이어졌는지 다룹니다.</p>
+
+<a href="/blog/ai-evo-03-transformer/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP03 — 한 편의 논문이 AI 전체를 통일한 날</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  교육용 단순화 시뮬레이터입니다. 실제 GPT-4는 96 layer × 96 heads로 작동합니다.<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === Attention Demo (adapted from 04_시각화_1차.html) === */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function fmt(x,d=2){return Number(x).toFixed(d);}
+
+(function attnDemo(){
+  const svg=document.getElementById("attn-svg");
+  const status=document.getElementById("attn-status");
+  const sentences=[
+    ["the","cat","sat","on","the","mat"],
+    ["she","opened","the","box","quickly"],
+    ["기판","위에","박막","이","증착","된다"]
+  ];
+
+  function buildPatterns(s){
+    const n=s.length;
+    function norm(M){return M.map(row=>{const sum=row.reduce((a,b)=>a+b,0);return row.map(v=>v/sum);});}
+    const H1=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>{const d=Math.abs(i-j);return Math.exp(-d*1.2)+0.05;}));
+    const H2=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>{let v=0.1;if(j===1)v+=1.2;if(j===2||j===4)v+=0.8;if(i===j)v+=0.3;return v;}));
+    const H3=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>{if(j===i-1)return 1.5;if(j===i)return 0.5;return 0.05;}));
+    return [norm(H1),norm(H2),norm(H3)];
+  }
+
+  const state={sIdx:0,head:0,selected:-1,sentence:sentences[0],patterns:buildPatterns(sentences[0])};
+  const tokY=70;
+
+  function render(){
+    svg.innerHTML="";
+    const n=state.sentence.length;
+    const xStart=80,xGap=Math.min(100,640/n);
+    const tokW=Math.min(90,xGap-8);
+
+    el("text",{x:380,y:24,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent="① 토큰 클릭 → ② 그 토큰의 어텐션 → ③ 우측 6×6 어텐션 행렬";
+
+    /* Tokens */
+    for(let i=0;i<n;i++){
+      const x=xStart+i*xGap+xGap/2;
+      const isSel=i===state.selected;
+      const fill=isSel?"#0a4e99":"#fff";
+      const stroke=isSel?"#0a4e99":"#cbd5e1";
+      const txtFill=isSel?"#fff":"#0b1220";
+      el("rect",{x:x-tokW/2,y:tokY-22,width:tokW,height:34,rx:8,fill,stroke,"stroke-width":isSel?2.5:1,style:"cursor:pointer",id:`tok-${i}`},svg);
+      el("text",{x,y:tokY,"text-anchor":"middle","font-size":13.5,"font-weight":isSel?700:500,fill:txtFill,style:"pointer-events:none"},svg).textContent=state.sentence[i];
+      el("text",{x,y:tokY+27,"text-anchor":"middle","font-size":10,fill:"#94a3b8","font-family":"monospace",style:"pointer-events:none"},svg).textContent=`pos ${i}`;
+    }
+
+    /* If a token is selected, draw attention bars + arcs */
+    if(state.selected>=0){
+      const i=state.selected;
+      const xi=xStart+i*xGap+xGap/2;
+      const A=state.patterns[state.head][i];
+      for(let j=0;j<n;j++){
+        const xj=xStart+j*xGap+xGap/2;
+        const w=A[j];
+        const barH=w*45;
+        el("rect",{x:xj-15,y:tokY+38,width:30,height:50,fill:"#e0e7ef",rx:3},svg);
+        el("rect",{x:xj-15,y:tokY+38+(50-barH),width:30,height:barH,fill:"#0b6dd4",rx:3,opacity:0.85},svg);
+        el("text",{x:xj,y:tokY+102,"text-anchor":"middle","font-size":9.5,"font-family":"monospace",fill:"#1e293b","font-weight":600},svg).textContent=fmt(w,2);
+      }
+      /* Arcs */
+      for(let j=0;j<n;j++){
+        if(i===j)continue;
+        const xj=xStart+j*xGap+xGap/2;
+        const w=A[j];
+        if(w<0.04)continue;
+        const arcH=Math.min(45,Math.abs(j-i)*9+18);
+        const path=`M ${xi} ${tokY-22} Q ${(xi+xj)/2} ${tokY-22-arcH} ${xj} ${tokY-22}`;
+        el("path",{d:path,fill:"none",stroke:"#0a4e99","stroke-width":1+w*8,opacity:0.3+w*0.7},svg);
+      }
+      /* Self-attention indicator */
+      const selfW=A[i];
+      el("circle",{cx:xi,cy:tokY+13,r:6+selfW*8,fill:"none",stroke:"#0a4e99","stroke-width":1.5,opacity:.4+selfW*.5},svg);
+    }
+
+    /* Heatmap (right) */
+    const hmX=540,hmY0=160;
+    const cell=Math.min(28,200/n);
+    el("text",{x:hmX+n*cell/2,y:hmY0-8,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#475569"},svg).textContent="전체 어텐션 행렬";
+    el("text",{x:hmX-22,y:hmY0+n*cell/2,"text-anchor":"middle","font-size":10,fill:"#64748b",transform:`rotate(-90 ${hmX-22} ${hmY0+n*cell/2})`},svg).textContent="from (Q)";
+    el("text",{x:hmX+n*cell/2,y:hmY0+n*cell+22,"text-anchor":"middle","font-size":10,fill:"#64748b"},svg).textContent="to (K)";
+
+    for(let i=0;i<n;i++)for(let j=0;j<n;j++){
+      const w=state.patterns[state.head][i][j];
+      const fill=`rgb(${Math.round(255-w*220)},${Math.round(255-w*180)},${Math.round(255-w*80)})`;
+      const isHighlight=(i===state.selected||j===state.selected);
+      el("rect",{x:hmX+j*cell,y:hmY0+i*cell,width:cell,height:cell,fill,stroke:isHighlight?"#0a4e99":"#e2e8f0","stroke-width":isHighlight?1.5:.5,style:"cursor:pointer",id:`hm-${i}-${j}`},svg);
+      if(cell>=20)el("text",{x:hmX+j*cell+cell/2,y:hmY0+i*cell+cell/2+3,"text-anchor":"middle","font-size":8.5,"font-family":"monospace",fill:w>.5?"#fff":"#475569",style:"pointer-events:none"},svg).textContent=fmt(w,2);
+    }
+
+    /* Formula label */
+    el("text",{x:200,y:380,"text-anchor":"start","font-size":12,fill:"#64748b","font-family":"monospace"},svg).textContent=`Attention(Q,K,V) = softmax(QKᵀ/√d) · V    →    각 행 = 한 토큰의 분포`;
+
+    /* Click handlers */
+    for(let i=0;i<n;i++){
+      const r=document.getElementById(`tok-${i}`);
+      if(r)r.addEventListener("click",()=>select(i));
+    }
+  }
+
+  function select(i){
+    state.selected=(state.selected===i?-1:i);
+    if(state.selected>=0){
+      const A=state.patterns[state.head][i];
+      let top=A.map((v,j)=>({v,j})).sort((a,b)=>b.v-a.v).slice(0,3);
+      const top3=top.map(t=>`<b>${state.sentence[t.j]}</b>(${fmt(t.v,2)})`).join(", ");
+      status.innerHTML=`<b>${state.sentence[i]}</b> 가 가장 많이 보는 토큰: ${top3}`;
+    }else{
+      status.innerHTML=`위 토큰을 <b>클릭</b>하면 그 토큰이 어디를 보는지 화살표로 표시됩니다.`;
+    }
+    render();
+  }
+
+  document.getElementById("attn-sentence").onchange=e=>{
+    state.sIdx=parseInt(e.target.value);
+    state.sentence=sentences[state.sIdx];
+    state.patterns=buildPatterns(state.sentence);
+    state.selected=-1;
+    render();
+    status.innerHTML="문장 변경됨. 토큰을 클릭해 보세요.";
+  };
+  document.getElementById("attn-head").onchange=e=>{
+    state.head=parseInt(e.target.value);
+    render();
+    if(state.selected>=0)select(state.selected);
+  };
+  document.getElementById("attn-reset").onclick=()=>{
+    state.selected=-1;
+    render();
+    status.innerHTML="선택 해제됨.";
+  };
+  render();
+})();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777897708"></script>
+<script src="/js/blogReactions.js?v=1777897708" defer></script>
+<script src="/js/siteFooter.js?v=1777897708" defer></script>
+</body>
+</html>
