@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>퍼셉트론 랩 — 신경망 학습 한 사이클 직접 보기 | Lucky Please AI Labs</title>
+<meta name="description" content="2→3→1 신경망의 Forward · Backward · Update 한 사이클을 버튼으로 직접 실행. 가중치가 학습되며 손실이 줄어드는 과정을 시각적으로 확인.">
+<meta name="keywords" content="perceptron simulator, 퍼셉트론 시뮬레이터, backpropagation 데모, 역전파 시각화, 신경망 학습 시뮬레이션, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/perceptron/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Perceptron Lab — 신경망 학습 한 사이클 직접 보기">
+<meta property="og:description" content="Forward·Backward·Update를 버튼으로 직접 실행. 가중치 학습 과정 시각화.">
+<meta property="og:url" content="https://luckyplz.com/labs/perceptron/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777896404">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Perceptron Lab — Lucky Please AI Labs">
+<meta name="twitter:description" content="신경망 학습 한 사이클 인터랙티브 시뮬레이터.">
+<meta name="twitter:image" content="https://luckyplz.com/assets/og-image.png?v=1777896404">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777896404">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{
+  --bg:#FAF7F0;
+  --bg-card:#FFFFFF;
+  --bg-soft:#F5F1EA;
+  --bg-code:#F0EDE5;
+  --ink:#2C3E50;
+  --ink-soft:#5A6C7D;
+  --ink-mute:#8A9AA8;
+  --gold:#C8924E;
+  --sage:#6B8E7F;
+  --slate:#4A6B7F;
+  --rose:#B85462;
+  --blue:#0b6dd4;
+  --purple:#8b5cf6;
+  --line:#E8E2D5;
+  --shadow:0 2px 12px rgba(44,62,80,.06);
+  --shadow-md:0 4px 24px rgba(44,62,80,.08);
+  --f-mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  line-height:1.7;
+  font-size:15.5px;
+  -webkit-font-smoothing:antialiased;
+}
+
+.site-nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--line);
+  background:rgba(250,247,240,.92);backdrop-filter:blur(8px);
+  position:sticky;top:0;z-index:50;
+}
+.site-nav a{
+  font-family:var(--f-mono);font-size:11px;
+  color:var(--ink-mute);text-decoration:none;letter-spacing:1px;
+  transition:color .2s;
+}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{
+  font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;
+  color:var(--ink);letter-spacing:0.02em;
+}
+
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+
+.lab-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--f-mono);font-size:11px;
+  color:var(--gold);letter-spacing:0.18em;font-weight:700;
+  margin-bottom:12px;text-transform:uppercase;
+}
+.lab-tag::before{content:"🧪";font-size:14px}
+
+h1{
+  font-family:'Crimson Pro',serif;
+  font-size:clamp(26px,4.5vw,36px);
+  font-weight:700;line-height:1.22;color:var(--ink);
+  letter-spacing:-0.02em;margin-bottom:14px;
+}
+.subtitle{
+  font-size:16px;color:var(--ink-soft);line-height:1.7;
+  margin-bottom:32px;max-width:620px;
+}
+
+.intro-card{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-left:3px solid var(--gold);
+  border-radius:10px;
+  padding:18px 20px;
+  margin:0 0 28px;
+  box-shadow:var(--shadow);
+  font-size:14.5px;
+  color:var(--ink-soft);
+  line-height:1.75;
+}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{
+  display:inline-block;
+  font-family:var(--f-mono);font-size:10px;font-weight:700;
+  color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;
+  text-transform:uppercase;
+}
+
+/* === SIMULATION CONTAINER === */
+.viz{
+  background:var(--bg-card);border:1px solid var(--line);
+  border-radius:14px;padding:22px 18px 18px;margin:24px 0;
+  box-shadow:var(--shadow-md);
+}
+.viz-title{
+  font-size:13px;font-weight:700;color:var(--ink);
+  text-align:center;margin-bottom:6px;letter-spacing:0.01em;
+  font-family:var(--f-mono);
+}
+.viz svg{display:block;margin:0 auto}
+
+.ctrls{
+  display:flex;flex-wrap:wrap;justify-content:center;
+  gap:8px;margin:16px 0 10px;align-items:center;
+}
+.ctrls button{
+  font-family:'Pretendard',sans-serif;
+  font-size:13px;font-weight:600;
+  padding:9px 16px;border-radius:9px;
+  border:1px solid var(--line);background:var(--bg-card);
+  color:var(--ink);cursor:pointer;
+  transition:all .2s;display:inline-flex;align-items:center;gap:6px;
+}
+.ctrls button:hover{
+  background:var(--bg-soft);border-color:var(--gold);
+  transform:translateY(-1px);
+}
+.ctrls button:active{transform:translateY(0)}
+.ctrls button.primary{
+  background:linear-gradient(135deg,var(--blue),#0a55a8);
+  color:#fff;border-color:var(--blue);
+}
+.ctrls button.primary:hover{
+  background:linear-gradient(135deg,#0a55a8,#063a78);
+}
+.ctrls button.danger{
+  color:var(--rose);border-color:rgba(184,84,98,.3);
+}
+.ctrls button.danger:hover{
+  background:rgba(184,84,98,.07);border-color:var(--rose);
+}
+.chip{
+  font-family:var(--f-mono);font-size:10px;font-weight:700;
+  padding:2px 6px;border-radius:4px;letter-spacing:0.05em;
+}
+.chip.fwd{background:rgba(11,109,212,.15);color:var(--blue)}
+.chip.bwd{background:rgba(220,38,38,.15);color:#dc2626}
+.chip.up{background:rgba(139,92,246,.15);color:var(--purple)}
+
+.slider{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:8px;padding:7px 12px;
+  font-size:12.5px;
+}
+.slider .lbl{
+  font-family:var(--f-mono);font-size:11px;color:var(--ink-soft);
+  letter-spacing:0.05em;font-weight:600;
+}
+.slider input[type=range]{
+  width:90px;height:4px;-webkit-appearance:none;appearance:none;
+  background:var(--line);border-radius:2px;outline:none;
+}
+.slider input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:14px;height:14px;border-radius:50%;
+  background:var(--gold);cursor:pointer;border:2px solid var(--bg-card);
+  box-shadow:0 1px 3px rgba(0,0,0,.2);
+}
+.slider input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;
+  background:var(--gold);cursor:pointer;border:2px solid var(--bg-card);
+}
+
+.status{
+  font-size:13.5px;color:var(--ink-soft);
+  background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:8px;padding:11px 14px;margin-top:12px;
+  line-height:1.6;font-family:var(--f-mono);font-size:12.5px;
+}
+.status b{color:var(--ink)}
+.status .neg{color:var(--rose)}
+
+.cap{
+  font-size:12px;color:var(--ink-mute);
+  text-align:center;margin-top:10px;line-height:1.6;font-style:italic;
+}
+
+/* === STEPS GUIDE === */
+.steps{
+  background:var(--bg-soft);
+  border:1px solid var(--line);
+  border-left:3px solid var(--blue);
+  border-radius:10px;
+  padding:18px 22px;margin:28px 0;
+}
+.steps .lbl{
+  display:inline-block;
+  font-family:var(--f-mono);font-size:10px;font-weight:700;
+  color:#fff;background:var(--blue);
+  padding:3px 10px;border-radius:4px;letter-spacing:0.15em;
+  margin-bottom:10px;text-transform:uppercase;
+}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.steps li code{
+  font-family:var(--f-mono);font-size:12.5px;
+  background:var(--bg-code);padding:1px 6px;border-radius:4px;
+  color:var(--ink);
+}
+
+/* === EXPLANATION SECTION === */
+h2{
+  font-family:'Crimson Pro',serif;
+  font-size:22px;font-weight:700;color:var(--ink);
+  margin:40px 0 12px;letter-spacing:-0.01em;
+}
+.accent-line{
+  width:42px;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,var(--gold),#D4A574);
+  margin:0 0 18px;
+}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+
+/* === BACK TO ARTICLE === */
+.back-card{
+  background:var(--bg-card);
+  border:1px solid var(--line);
+  border-radius:12px;padding:22px;
+  margin:40px 0 0;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:18px;
+  text-decoration:none;color:var(--ink);
+  transition:.2s;
+}
+.back-card:hover{
+  border-color:var(--gold);background:#FBF5EA;
+  transform:translateY(-1px);
+}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{
+  font-family:var(--f-mono);font-size:10px;font-weight:700;
+  color:var(--gold);letter-spacing:0.18em;
+  text-transform:uppercase;margin-bottom:4px;
+}
+.back-card-title{
+  font-weight:700;font-size:15px;color:var(--ink);
+  line-height:1.4;
+}
+
+footer{
+  text-align:center;padding:30px 20px 50px;
+  border-top:1px solid var(--line);margin-top:40px;
+  color:var(--ink-mute);font-size:13px;line-height:1.8;
+}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+
+@media(max-width:600px){
+  .page{padding:36px 16px 60px}
+  .viz{padding:16px 10px 12px}
+  .ctrls{gap:6px}
+  .ctrls button{font-size:12px;padding:7px 12px}
+  .slider{padding:6px 10px}
+  .slider input[type=range]{width:70px}
+  .status{font-size:11.5px}
+}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #01 Perceptron</div>
+<h1>신경망 학습 한 사이클을<br>직접 눌러보기</h1>
+<p class="subtitle">2개의 입력 → 3개의 은닉 노드 → 1개의 출력. 1986년 Rumelhart·Hinton·Williams가 정리한 <strong>역전파(backpropagation) 알고리즘</strong>으로 가중치가 학습되는 과정을 한 단계씩 직접 실행해 봅니다.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  입력값 [0.6, 0.3]을 넣고 목표값 0.8을 만들도록 가중치를 조정하는 작은 신경망입니다. <strong>FORWARD</strong> 버튼으로 예측값을 계산하고, <strong>BACKWARD</strong>로 각 가중치의 기울기(기여도)를 거꾸로 추적하고, <strong>UPDATE</strong>로 가중치를 조정. 이 사이클을 반복하면 손실 L이 점점 줄어듭니다 — 이게 <em>모든 딥러닝의 학습 메커니즘</em>입니다.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li><b>FORWARD</b>를 누르면 입력 x가 가중치를 곱해 가며 출력 ŷ까지 흘러갑니다 — 노드 색이 진해질수록 활성값이 높음.</li>
+    <li><b>BACKWARD</b>를 누르면 손실 L의 기울기가 출력 → 입력 방향으로 거꾸로 흘러, 각 가중치 옆에 빨간 <code>Δ</code>값(이게 ∂L/∂w)이 표시됩니다.</li>
+    <li><b>UPDATE</b>를 누르면 모든 가중치가 <code>w ← w − η·Δ</code> 만큼 조정됩니다.</li>
+    <li>다시 FORWARD를 누르면 새 가중치로 손실이 더 작아진 것을 확인 — 이게 <b>학습 한 사이클</b>.</li>
+    <li><b>자동학습 10회</b>로 사이클이 자동 반복되며 손실이 점진적으로 줄어드는 것을 확인하세요.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">2 → 3 → 1 신경망 — Forward / Backward / Update 한 사이클</div>
+  <svg id="bp-svg" viewBox="0 0 720 360" style="width:100%;max-width:720px"></svg>
+  <div class="ctrls">
+    <button id="bp-fwd" class="primary"><span class="chip fwd">FWD</span>Forward</button>
+    <button id="bp-bwd"><span class="chip bwd">BWD</span>Backward</button>
+    <button id="bp-upd"><span class="chip up">UPD</span>Update</button>
+    <button id="bp-auto">자동학습 10회</button>
+    <button id="bp-reset" class="danger">초기화</button>
+    <div class="slider"><span class="lbl">목표 y</span>
+      <input type="range" id="bp-target" min="0" max="1" step="0.05" value="0.8">
+      <span id="bp-target-v" style="font-family:var(--f-mono);font-size:12px;color:var(--gold);width:32px">0.80</span>
+    </div>
+    <div class="slider"><span class="lbl">학습률 η</span>
+      <input type="range" id="bp-lr" min="0.1" max="3" step="0.1" value="1.0">
+      <span id="bp-lr-v" style="font-family:var(--f-mono);font-size:12px;color:var(--gold);width:32px">1.0</span>
+    </div>
+  </div>
+  <div class="status" id="bp-status">FORWARD 버튼을 눌러 한 단계씩 진행하세요.</div>
+  <div class="cap">노드 색 = 현재 활성값(진할수록 큼). 연결선 굵기 = |w|, 색 = 부호(파랑+/빨강−). BACKWARD 후 각 w 옆 빨간 Δ값이 기울기.</div>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>지금 우리가 쓰는 <strong>ChatGPT, Claude, Stable Diffusion, 자율주행, 사진 자동 분류</strong> — 이 모든 것이 똑같은 학습 사이클로 만들어졌습니다. 위 시뮬레이션은 가중치가 <code>2×3 + 3×1 = 9개</code>지만, GPT-4는 약 <strong>1.8조 개</strong>입니다. 단 사이클 자체는 정확히 동일합니다.</p>
+
+<p>PyTorch로 옮기면 <code>loss.backward()</code> 한 줄이 BACKWARD 단계 전체를, <code>optimizer.step()</code>이 UPDATE 단계를 처리합니다. 모델 크기가 수억 배 커져도 1986년의 알고리즘 골격은 그대로입니다.</p>
+
+<p>슬라이더로 <strong>학습률 η</strong>를 바꿔보세요. 너무 크면(η=3) 손실이 발산하고, 너무 작으면(η=0.1) 학습이 거의 안 됩니다. 실제 GPT-4도 학습률을 어떻게 잡느냐가 성공의 절반입니다.</p>
+
+<!-- BACK TO ARTICLE -->
+<a href="/blog/ai-evo-01-perceptron/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP01 — AI는 두 번 죽었다 (1958→1986)</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  코드/시각화는 정보 제공 목적이며, 실제 산업 모델은 수억~수조 개 가중치로 작동합니다.<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+/* Nuke any legacy service worker */
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === Perceptron / Backprop Demo (adapted from 04_시각화_1차.html) === */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmt(x,d=2){return Number(x).toFixed(d);}
+function lerp(a,b,t){return a+(b-a)*t;}
+function colorPos(v){v=clamp(v,-1,1);if(v>=0){const t=v;return`rgb(${Math.round(255-t*200)},${Math.round(255-t*100)},${Math.round(255-t*40)})`;}const t=-v;return`rgb(${Math.round(255-t*40)},${Math.round(255-t*120)},${Math.round(255-t*200)})`;}
+function colorAct(v){v=clamp(v,0,1);return`rgb(${Math.round(245-v*180)},${Math.round(247-v*120)},${Math.round(252-v*40)})`;}
+function sigmoid(x){return 1/(1+Math.exp(-x));}
+function dsigmoid(y){return y*(1-y);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+(function bpDemo(){
+  const svg=document.getElementById("bp-svg");
+  const status=document.getElementById("bp-status");
+  const xIn=80,xH=350,xO=620,yIn=[110,250],yH=[60,180,300],yO=[180];
+  const state={x:[0.6,0.3],W1:[[0.5,-0.4,0.3],[0.2,0.7,-0.5]],W2:[0.6,-0.3,0.5],h:[0,0,0],y:0,target:0.8,lr:1.0,gradW1:[[0,0,0],[0,0,0]],gradW2:[0,0,0],gradH:[0,0,0],lossVal:0,phase:"idle"};
+
+  function init(){
+    state.W1=[[0.5,-0.4,0.3],[0.2,0.7,-0.5]];
+    state.W2=[0.6,-0.3,0.5];
+    state.gradW1=[[0,0,0],[0,0,0]];
+    state.gradW2=[0,0,0];
+    state.gradH=[0,0,0];
+    state.h=[0,0,0];state.y=0;state.lossVal=0;
+    state.phase="idle";
+    render();
+    status.innerHTML="FORWARD 버튼을 눌러 한 단계씩 진행하세요.";
+  }
+
+  function forward(){
+    for(let j=0;j<3;j++){let s=0;for(let i=0;i<2;i++)s+=state.x[i]*state.W1[i][j];state.h[j]=sigmoid(s);}
+    let s=0;for(let j=0;j<3;j++)s+=state.h[j]*state.W2[j];
+    state.y=sigmoid(s);
+    state.lossVal=0.5*(state.y-state.target)**2;
+    state.phase="fwd";
+    render();
+    status.innerHTML=`<b>FORWARD</b> · h=[${state.h.map(v=>fmt(v)).join(", ")}] · ŷ=<b>${fmt(state.y)}</b> · 목표=${fmt(state.target)} · L=<b class="neg">${fmt(state.lossVal,4)}</b>`;
+  }
+
+  function backward(){
+    const dy=(state.y-state.target)*dsigmoid(state.y);
+    for(let j=0;j<3;j++){state.gradW2[j]=dy*state.h[j];state.gradH[j]=dy*state.W2[j]*dsigmoid(state.h[j]);}
+    for(let i=0;i<2;i++)for(let j=0;j<3;j++)state.gradW1[i][j]=state.gradH[j]*state.x[i];
+    state.phase="bwd";
+    render();
+    status.innerHTML=`<b class="neg">BACKWARD</b> · ∂L/∂ŷ=${fmt(dy,3)} · 각 가중치의 기울기 계산 완료. UPDATE 누르면 W ← W − η·∇W 적용.`;
+  }
+
+  function update(){
+    for(let j=0;j<3;j++)state.W2[j]-=state.lr*state.gradW2[j];
+    for(let i=0;i<2;i++)for(let j=0;j<3;j++)state.W1[i][j]-=state.lr*state.gradW1[i][j];
+    state.gradW1=[[0,0,0],[0,0,0]];state.gradW2=[0,0,0];state.gradH=[0,0,0];
+    state.phase="upd";
+    render();
+    status.innerHTML=`<b style="color:#8b5cf6">UPDATE</b> · W ← W − ${fmt(state.lr,1)}·∇W 적용. 다시 FORWARD를 눌러 새 손실 확인.`;
+  }
+
+  async function autoLearn(){
+    for(let k=0;k<10;k++){forward();await sleep(180);backward();await sleep(180);update();await sleep(180);}
+    forward();
+    status.innerHTML+=" · <b>자동학습 10회 완료</b>. 손실이 줄었는지 확인하세요.";
+  }
+
+  function render(){
+    svg.innerHTML="";
+    const defs=el("defs",{},svg);
+    const mkMarker=(id,color)=>{const m=el("marker",{id,viewBox:"0 0 10 10",refX:"9",refY:"5",markerWidth:"6",markerHeight:"6",orient:"auto-start-reverse"},defs);el("path",{d:"M0,0 L10,5 L0,10 z",fill:color},m);};
+    mkMarker("bpFwd","#0b6dd4");mkMarker("bpBwd","#dc2626");
+
+    el("text",{x:360,y:24,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`Input → Hidden(σ) → Output(σ)    Loss = ½(ŷ − target)²`;
+    el("text",{x:xIn,y:340,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent="입력층";
+    el("text",{x:xH,y:340,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent="은닉층 (3 노드)";
+    el("text",{x:xO,y:340,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent="출력층";
+
+    /* W1 connections */
+    for(let i=0;i<2;i++)for(let j=0;j<3;j++){
+      const w=state.W1[i][j],g=state.gradW1[i][j];
+      const stroke=colorPos(clamp(w,-1.5,1.5)/1.5);
+      const lw=clamp(Math.abs(w)*3+1,1,6);
+      const lineAttr={x1:xIn+22,y1:yIn[i],x2:xH-22,y2:yH[j],stroke,"stroke-width":lw,opacity:.85};
+      if(state.phase==="fwd")lineAttr["marker-end"]="url(#bpFwd)";
+      else if(state.phase==="bwd")lineAttr["marker-start"]="url(#bpBwd)";
+      el("line",lineAttr,svg);
+      const mx=(xIn+xH)/2-4+(j-1)*8,my=lerp(yIn[i],yH[j],.5)-4;
+      el("text",{x:mx,y:my,"font-size":9.5,"text-anchor":"middle",fill:"#334155","font-family":"monospace"},svg).textContent=fmt(w,2);
+      if(state.phase==="bwd"&&Math.abs(g)>1e-4)el("text",{x:mx,y:my+11,"font-size":9,"text-anchor":"middle",fill:"#dc2626","font-family":"monospace"},svg).textContent=`Δ${fmt(g,2)}`;
+    }
+
+    /* W2 connections */
+    for(let j=0;j<3;j++){
+      const w=state.W2[j],g=state.gradW2[j];
+      const stroke=colorPos(clamp(w,-1.5,1.5)/1.5);
+      const lw=clamp(Math.abs(w)*3+1,1,6);
+      const lineAttr2={x1:xH+22,y1:yH[j],x2:xO-22,y2:yO[0],stroke,"stroke-width":lw,opacity:.85};
+      if(state.phase==="fwd")lineAttr2["marker-end"]="url(#bpFwd)";
+      else if(state.phase==="bwd")lineAttr2["marker-start"]="url(#bpBwd)";
+      el("line",lineAttr2,svg);
+      const mx=(xH+xO)/2-4,my=lerp(yH[j],yO[0],.5)-4+(j-1)*8;
+      el("text",{x:mx,y:my,"font-size":9.5,"text-anchor":"middle",fill:"#334155","font-family":"monospace"},svg).textContent=fmt(w,2);
+      if(state.phase==="bwd"&&Math.abs(g)>1e-4)el("text",{x:mx,y:my+11,"font-size":9,"text-anchor":"middle",fill:"#dc2626","font-family":"monospace"},svg).textContent=`Δ${fmt(g,2)}`;
+    }
+
+    /* Input nodes */
+    for(let i=0;i<2;i++){
+      const v=state.x[i];
+      el("circle",{cx:xIn,cy:yIn[i],r:22,fill:colorAct(v),stroke:"#475569","stroke-width":1.5},svg);
+      el("text",{x:xIn,y:yIn[i]+4,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#0b1220"},svg).textContent=fmt(v);
+      el("text",{x:xIn-32,y:yIn[i]+4,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent=`x${i+1}`;
+    }
+
+    /* Hidden nodes */
+    for(let j=0;j<3;j++){
+      const v=state.phase==="idle"?0:state.h[j];
+      el("circle",{cx:xH,cy:yH[j],r:22,fill:colorAct(v),stroke:"#475569","stroke-width":1.5},svg);
+      el("text",{x:xH,y:yH[j]+4,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#0b1220"},svg).textContent=state.phase==="idle"?"?":fmt(v);
+      el("text",{x:xH,y:yH[j]-30,"text-anchor":"middle","font-size":10,fill:"#64748b"},svg).textContent=`h${j+1}`;
+    }
+
+    /* Output node */
+    const yv=state.phase==="idle"?0:state.y;
+    el("circle",{cx:xO,cy:yO[0],r:24,fill:colorAct(yv),stroke:"#0a4e99","stroke-width":2},svg);
+    el("text",{x:xO,y:yO[0]+4,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#0b1220"},svg).textContent=state.phase==="idle"?"?":fmt(yv);
+    el("text",{x:xO+38,y:yO[0]-12,"text-anchor":"start","font-size":11,fill:"#64748b"},svg).textContent="ŷ";
+
+    /* Target marker */
+    el("circle",{cx:xO,cy:yO[0]-58,r:9,fill:"#fef3c7",stroke:"#f59e0b","stroke-width":1.5},svg);
+    el("text",{x:xO,y:yO[0]-55,"text-anchor":"middle","font-size":10,"font-weight":700,fill:"#854d0e"},svg).textContent=fmt(state.target);
+    el("text",{x:xO+24,y:yO[0]-55,"text-anchor":"start","font-size":10,fill:"#92400e"},svg).textContent="target";
+
+    if(state.phase!=="idle"){
+      el("line",{x1:xO,y1:yO[0]-48,x2:xO,y2:yO[0]-22,stroke:"#dc2626","stroke-width":1.5,"stroke-dasharray":"3,3"},svg);
+      el("text",{x:xO+44,y:yO[0]+12,"text-anchor":"start","font-size":11,"font-family":"monospace",fill:"#dc2626"},svg).textContent=`L=${fmt(state.lossVal,3)}`;
+    }
+
+    const phaseTxt={idle:"idle",fwd:"FORWARD →",bwd:"← BACKWARD",upd:"UPDATE ✓"}[state.phase];
+    const phaseFill={idle:"#94a3b8",fwd:"#0b6dd4",bwd:"#dc2626",upd:"#8b5cf6"}[state.phase];
+    el("text",{x:30,y:24,"font-size":12,"font-weight":700,fill:phaseFill,"font-family":"monospace"},svg).textContent=phaseTxt;
+  }
+
+  document.getElementById("bp-fwd").onclick=forward;
+  document.getElementById("bp-bwd").onclick=()=>{if(state.phase==="fwd"||state.phase==="upd")backward();else status.innerHTML="<b>FORWARD</b>를 먼저 실행하세요.";};
+  document.getElementById("bp-upd").onclick=()=>{if(state.phase==="bwd")update();else status.innerHTML="<b>BACKWARD</b>를 먼저 실행하세요.";};
+  document.getElementById("bp-auto").onclick=autoLearn;
+  document.getElementById("bp-reset").onclick=init;
+  document.getElementById("bp-target").oninput=e=>{state.target=parseFloat(e.target.value);document.getElementById("bp-target-v").textContent=fmt(state.target);if(state.phase==="fwd"){state.lossVal=0.5*(state.y-state.target)**2;render();}};
+  document.getElementById("bp-lr").oninput=e=>{state.lr=parseFloat(e.target.value);document.getElementById("bp-lr-v").textContent=fmt(state.lr,1);};
+  init();
+})();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777896960"></script>
+<script src="/js/blogReactions.js?v=1777896960" defer></script>
+<script src="/js/siteFooter.js?v=1777896960" defer></script>
+</body>
+</html>
