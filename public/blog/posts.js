@@ -14,6 +14,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-datacenter-power-2026-2035',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 22,
+        coverEmoji: '⚡',
+        tags: ['AI 데이터센터', '전력', 'HBM', 'SK하이닉스', 'Constellation', '투자 아이디어'],
+        title: 'AI 데이터센터 전력 대전 — 미·중·한 10년 수급 갭 + 진짜 병목 + 투자 아이디어',
+        excerpt: '향후 10년(2026~2035) 미·중·한 AI 데이터센터 전력 수요/공급 정밀 분석. 5대 병목(전력·HBM·GPU·SSD·자금) 비교 + 두괄식 투자 아이디어 Top 10.',
+    },
+    {
         slug: 'solar-panel-market-2026',
         lang: 'ko',
         category: 'industry',
