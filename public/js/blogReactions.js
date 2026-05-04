@@ -34,6 +34,10 @@
         try { localStorage.setItem('lp_react_' + slug + '_' + kind, '1'); }
         catch(_) {}
     }
+    function unmarkReacted(slug, kind){
+        try { localStorage.removeItem('lp_react_' + slug + '_' + kind); }
+        catch(_) {}
+    }
 
     /* Local fallback counter — used when Supabase isn't available or the
        migration hasn't been applied yet. Per-device only, but lets the
@@ -49,6 +53,13 @@
         try {
             const cur = getLocalCounts(slug);
             cur[kind] = (cur[kind] || 0) + 1;
+            localStorage.setItem('lp_react_local_' + slug, JSON.stringify(cur));
+        } catch(_) {}
+    }
+    function bumpLocalCountDown(slug, kind){
+        try {
+            const cur = getLocalCounts(slug);
+            cur[kind] = Math.max(0, (cur[kind] || 0) - 1);
             localStorage.setItem('lp_react_local_' + slug, JSON.stringify(cur));
         } catch(_) {}
     }
@@ -74,7 +85,10 @@
           + '.lp-react-btn .lp-react-count{font-family:\'Orbitron\',sans-serif;font-size:.95em;font-weight:800;color:rgba(255,230,109,.85);min-height:1em}'
           + '.lp-react-btn[data-active="1"]{background:linear-gradient(135deg,rgba(255,230,109,.18),rgba(255,107,53,.1));border-color:rgba(255,230,109,.5);color:#FFE66D}'
           + '.lp-react-btn[data-active="1"] .lp-react-count{color:#FFE66D}'
-          + '.lp-react-btn[data-active="1"]:hover{transform:none}'
+            /* On hover of an already-reacted button, hint at undo with
+               a warm orange shift + a tiny ✕ glyph below the label. */
+          + '.lp-react-btn[data-active="1"]:hover{background:linear-gradient(135deg,rgba(255,107,53,.18),rgba(220,38,38,.08));border-color:rgba(255,107,53,.55);color:#FFB57A;transform:none}'
+          + '.lp-react-btn[data-active="1"]:hover::after{content:"✕";display:block;font-size:.85em;font-weight:700;color:#FFB57A;margin-top:1px;opacity:.85;line-height:1}'
           + '.lp-react-disclaimer{margin-top:12px;font-size:.72em;color:rgba(255,255,255,.32);text-align:center;letter-spacing:.02em}'
           + '@media(max-width:500px){.lp-react{padding:16px;margin:28px 0 14px}.lp-react-btn{padding:11px 4px;font-size:.72em}.lp-react-btn .lp-react-emoji{font-size:1.35em}}'
             /* === PAPER VARIANT (cream/journal pages) ===
@@ -90,6 +104,10 @@
           + '.lp-react--paper .lp-react-btn .lp-react-count{font-family:\'JetBrains Mono\',monospace;color:#C8924E;font-weight:700}'
           + '.lp-react--paper .lp-react-btn[data-active="1"]{background:linear-gradient(135deg,#FBF1E1,#F5E5C8);border-color:#C8924E;color:#854D0E;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 2px 6px rgba(200,146,78,.18)}'
           + '.lp-react--paper .lp-react-btn[data-active="1"] .lp-react-count{color:#854D0E}'
+            /* Paper variant: hovering an active button hints at cancel
+               with a rose shift + the same ✕ glyph hint. */
+          + '.lp-react--paper .lp-react-btn[data-active="1"]:hover{background:linear-gradient(135deg,#FCE7F3,#F8E8E8);border-color:#B85462;color:#831843;transform:none}'
+          + '.lp-react--paper .lp-react-btn[data-active="1"]:hover::after{color:#B85462}'
           + '.lp-react--paper .lp-react-disclaimer{color:#8A9AA8}';
         document.head.appendChild(s);
     }
@@ -118,13 +136,29 @@
         } catch(_) { return false; }
     }
 
+    /* Toggle-off path: undo a click. Backend deletes the most recent
+       row for (slug, kind); the local count decrements; localStorage
+       flag is cleared so the user can re-react later. Same trust
+       model as add — vanity counter, not a vote. */
+    async function removeReaction(slug, kind){
+        if (!window.getSupabase) return false;
+        try {
+            const sb = await window.getSupabase();
+            if (!sb) return false;
+            const { error } = await sb.rpc('remove_blog_reaction', { p_slug: slug, p_kind: kind });
+            return !error;
+        } catch(_) { return false; }
+    }
+
     function render(host, slug, counts){
         const lang = getLang();
         const labelKey = lang === 'ko' ? 'label_ko' : 'label_en';
         const titleText = lang === 'ko' ? '이 글 어땠나요?' : 'How was this post?';
         const disclaimerText = lang === 'ko'
-            ? '클릭 한 번이면 충분합니다 · 익명 집계'
-            : 'One click is enough · anonymous';
+            ? '클릭으로 토글 · 다시 누르면 취소 · 익명 집계'
+            : 'Click to toggle · click again to cancel · anonymous';
+        const tipReact = lang === 'ko' ? '클릭하여 반응' : 'Click to react';
+        const tipCancel = lang === 'ko' ? '다시 클릭하면 취소' : 'Click again to cancel';
 
         /* Theme is opt-in via host's `data-theme` attribute. Default
            palette stays dark; pages with cream backgrounds (AI 진화사
@@ -140,7 +174,8 @@
           + KINDS.map(k => {
                 const cnt = counts[k.key] || 0;
                 const active = hasReacted(slug, k.key) ? '1' : '0';
-                return '<button type="button" class="lp-react-btn" data-kind="' + k.key + '" data-active="' + active + '" aria-label="' + k[labelKey] + '">'
+                const tip = active === '1' ? tipCancel : tipReact;
+                return '<button type="button" class="lp-react-btn" data-kind="' + k.key + '" data-active="' + active + '" aria-label="' + k[labelKey] + '" title="' + tip + '">'
                      +   '<span class="lp-react-emoji">' + k.emoji + '</span>'
                      +   '<span>' + k[labelKey] + '</span>'
                      +   '<span class="lp-react-count">' + (cnt > 0 ? cnt : '') + '</span>'
@@ -153,24 +188,30 @@
         host.querySelectorAll('.lp-react-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
                 const kind = btn.dataset.kind;
-                if (hasReacted(slug, kind)) return;
-
-                /* Optimistic UI: bump display count + lock the button
-                   immediately. If the RPC silently fails we still keep
-                   the local lock so the user can't infinitely retry. */
+                const wasReacted = hasReacted(slug, kind);
                 const countEl = btn.querySelector('.lp-react-count');
                 const cur = parseInt(countEl.textContent || '0', 10) || 0;
-                countEl.textContent = (cur + 1);
-                btn.dataset.active = '1';
-                markReacted(slug, kind);
-                bumpLocalCount(slug, kind);
 
-                /* Fire and forget. We don't roll back the optimistic UI
-                   on backend error — the user already sees a successful
-                   reaction, and the local counter has it. Re-renders on
-                   the next visit will reconcile with real counts (or
-                   stay on local fallback if backend is still down). */
-                postReaction(slug, kind);
+                if (wasReacted) {
+                    /* Toggle OFF — user cancels their reaction. Optimistic
+                       decrement + unlock + clear local counter. Backend
+                       deletes the most recent matching row. */
+                    const next = Math.max(0, cur - 1);
+                    countEl.textContent = next > 0 ? next : '';
+                    btn.dataset.active = '0';
+                    btn.setAttribute('title', tipReact);
+                    unmarkReacted(slug, kind);
+                    bumpLocalCountDown(slug, kind);
+                    removeReaction(slug, kind); /* fire and forget */
+                } else {
+                    /* Toggle ON — first reaction. Optimistic +1 + lock. */
+                    countEl.textContent = (cur + 1);
+                    btn.dataset.active = '1';
+                    btn.setAttribute('title', tipCancel);
+                    markReacted(slug, kind);
+                    bumpLocalCount(slug, kind);
+                    postReaction(slug, kind); /* fire and forget */
+                }
             });
         });
     }

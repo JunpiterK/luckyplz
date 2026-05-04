@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Diffusion 랩 — 노이즈 ↔ 이미지 시각화 | Lucky Please AI Labs</title>
+<meta name="description" content="Stable Diffusion의 핵심 메커니즘을 슬라이더로 직접 조작. Forward(노이즈 추가)와 Reverse(노이즈 제거)가 거울상이라는 것을 단계별로 확인.">
+<meta name="keywords" content="diffusion 시각화, DDPM 시뮬레이터, stable diffusion 데모, denoising 시각화, lucky please labs">
+<link rel="canonical" href="https://luckyplz.com/labs/diffusion/">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Diffusion Lab — 노이즈 ↔ 이미지 시각화">
+<meta property="og:description" content="Forward/Reverse 단계별 시뮬레이션.">
+<meta property="og:url" content="https://luckyplz.com/labs/diffusion/">
+<meta property="og:image" content="https://luckyplz.com/assets/og-image.png?v=1777898437">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#FAF7F0">
+<link rel="apple-touch-icon" href="/assets/icon-192.png?v=1777898437">
+<link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5370817769801923" crossorigin="anonymous"></script>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
+<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
+<style>
+:root{--bg:#FAF7F0;--bg-card:#FFFFFF;--bg-soft:#F5F1EA;--bg-code:#F0EDE5;--ink:#2C3E50;--ink-soft:#5A6C7D;--ink-mute:#8A9AA8;--gold:#C8924E;--sage:#6B8E7F;--slate:#4A6B7F;--rose:#B85462;--blue:#0b6dd4;--purple:#8b5cf6;--green:#10b981;--line:#E8E2D5;--shadow:0 2px 12px rgba(44,62,80,.06);--shadow-md:0 4px 24px rgba(44,62,80,.08);--f-mono:'JetBrains Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;font-size:15.5px;-webkit-font-smoothing:antialiased}
+.site-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:rgba(250,247,240,.92);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50}
+.site-nav a{font-family:var(--f-mono);font-size:11px;color:var(--ink-mute);text-decoration:none;letter-spacing:1px;transition:color .2s}
+.site-nav a:hover{color:var(--gold)}
+.site-nav .brand{font-family:'Crimson Pro',serif;font-size:17px;font-weight:700;color:var(--ink);letter-spacing:0.02em}
+.page{max-width:840px;margin:0 auto;padding:50px 20px 80px}
+.lab-tag{display:inline-flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:11px;color:var(--gold);letter-spacing:0.18em;font-weight:700;margin-bottom:12px;text-transform:uppercase}
+.lab-tag::before{content:"🧪";font-size:14px}
+h1{font-family:'Crimson Pro',serif;font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.22;color:var(--ink);letter-spacing:-0.02em;margin-bottom:14px}
+.subtitle{font-size:16px;color:var(--ink-soft);line-height:1.7;margin-bottom:32px;max-width:620px}
+.intro-card{background:var(--bg-card);border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:10px;padding:18px 20px;margin:0 0 28px;box-shadow:var(--shadow);font-size:14.5px;color:var(--ink-soft);line-height:1.75}
+.intro-card strong{color:var(--ink)}
+.intro-card .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.2em;margin-bottom:6px;text-transform:uppercase}
+.viz{background:var(--bg-card);border:1px solid var(--line);border-radius:14px;padding:22px 18px 18px;margin:24px 0;box-shadow:var(--shadow-md)}
+.viz-title{font-size:13px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:6px;letter-spacing:0.01em;font-family:var(--f-mono)}
+.viz svg{display:block;margin:0 auto}
+.ctrls{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:16px 0 10px;align-items:center}
+.ctrls button{font-family:'Pretendard',sans-serif;font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:var(--bg-card);color:var(--ink);cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.ctrls button:hover{background:var(--bg-soft);border-color:var(--gold);transform:translateY(-1px)}
+.ctrls button.primary{background:linear-gradient(135deg,var(--purple),#7042d8);color:#fff;border-color:var(--purple)}
+.ctrls button.primary:hover{background:linear-gradient(135deg,#7042d8,#5a2db8)}
+.ctrls button.danger{color:var(--rose);border-color:rgba(184,84,98,.3)}
+.ctrls button.danger:hover{background:rgba(184,84,98,.07);border-color:var(--rose)}
+.slider{display:inline-flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12.5px}
+.slider .lbl{font-family:var(--f-mono);font-size:11px;color:var(--ink-soft);letter-spacing:0.05em;font-weight:600}
+.slider input[type=range]{width:160px;height:4px;-webkit-appearance:none;appearance:none;background:var(--line);border-radius:2px;outline:none}
+.slider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;border-radius:50%;background:var(--gold);cursor:pointer;border:2px solid var(--bg-card);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.slider select{font-family:'Pretendard',sans-serif;font-size:12.5px;padding:5px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg-card);color:var(--ink);cursor:pointer;outline:none}
+.slider select:focus{border-color:var(--gold)}
+.status{font-size:13.5px;color:var(--ink-soft);background:var(--bg-soft);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:12px;line-height:1.6;font-family:var(--f-mono);font-size:12.5px}
+.status b{color:var(--ink)}
+.cap{font-size:12px;color:var(--ink-mute);text-align:center;margin-top:10px;line-height:1.6;font-style:italic}
+.steps{background:var(--bg-soft);border:1px solid var(--line);border-left:3px solid var(--purple);border-radius:10px;padding:18px 22px;margin:28px 0}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:10px;font-weight:700;color:#fff;background:var(--purple);padding:3px 10px;border-radius:4px;letter-spacing:0.15em;margin-bottom:10px;text-transform:uppercase}
+.steps ol{margin-left:18px;font-size:14px;color:var(--ink-soft)}
+.steps li{padding:5px 0;line-height:1.7}
+.steps li b{color:var(--ink)}
+.steps li code{font-family:var(--f-mono);font-size:12.5px;background:var(--bg-code);padding:1px 6px;border-radius:4px;color:var(--ink)}
+h2{font-family:'Crimson Pro',serif;font-size:22px;font-weight:700;color:var(--ink);margin:40px 0 12px;letter-spacing:-0.01em}
+.accent-line{width:42px;height:3px;border-radius:2px;background:linear-gradient(90deg,var(--gold),#D4A574);margin:0 0 18px}
+p{margin-bottom:14px;color:var(--ink-soft)}
+strong{color:var(--ink);font-weight:700}
+.back-card{background:var(--bg-card);border:1px solid var(--line);border-radius:12px;padding:22px;margin:40px 0 0;box-shadow:var(--shadow);display:flex;align-items:center;gap:18px;text-decoration:none;color:var(--ink);transition:.2s}
+.back-card:hover{border-color:var(--gold);background:#FBF5EA;transform:translateY(-1px)}
+.back-card-emoji{font-size:28px;flex-shrink:0}
+.back-card-content{flex:1}
+.back-card-label{font-family:var(--f-mono);font-size:10px;font-weight:700;color:var(--gold);letter-spacing:0.18em;text-transform:uppercase;margin-bottom:4px}
+.back-card-title{font-weight:700;font-size:15px;color:var(--ink);line-height:1.4}
+footer{text-align:center;padding:30px 20px 50px;border-top:1px solid var(--line);margin-top:40px;color:var(--ink-mute);font-size:13px;line-height:1.8}
+footer a{color:var(--gold);text-decoration:none;margin:0 8px}
+@media(max-width:600px){.page{padding:36px 16px 60px}.viz{padding:16px 8px 12px}.slider input[type=range]{width:100px}}
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <a href="/blog/?cat=ai-tech" class="brand">← Lucky Please</a>
+  <a href="/labs/">🧪 LABS</a>
+</nav>
+
+<div class="page">
+
+<div class="lab-tag">AI Lab · #05 Diffusion</div>
+<h1>노이즈에서 이미지로,<br>1000단계의 거꾸로</h1>
+<p class="subtitle">2020년 Jonathan Ho의 DDPM이 제안한 핵심 — <strong>"이미지에 노이즈를 점점 추가하는 과정"을 학습한 신경망은, 거꾸로 노이즈에서 이미지를 만들 수 있다</strong>. 슬라이더 하나로 t=0(깨끗)→t=100(노이즈)의 forward와 그 거울상인 reverse를 동시에 확인합니다.</p>
+
+<div class="intro-card">
+  <span class="lbl">📌 이게 뭐 하는 랩인가</span>
+  왼쪽은 <strong>Forward</strong>(학습): 깨끗한 이미지에 점점 noise를 더해 t=100에서 거의 순수 잡음으로. 오른쪽은 <strong>Reverse</strong>(생성): 잡음에서 시작해 점점 노이즈를 제거. 두 과정이 <em>거울상</em>이라는 것이 Diffusion의 핵심 통찰입니다. Stable Diffusion·DALL-E 2·Sora 모두 이 메커니즘 위에서 작동합니다.
+</div>
+
+<div class="steps">
+  <span class="lbl">📋 사용법</span>
+  <ol>
+    <li><b>Timestep t</b> 슬라이더(0→100)를 움직이면 양쪽 이미지가 동시에 변합니다.</li>
+    <li>왼쪽 (파랑): t=0 깨끗한 이미지 → t=100 거의 순수 노이즈. <code>x_t = √α̅·x_0 + √(1−α̅)·ε</code></li>
+    <li>오른쪽 (초록): reverse step. t=0일 때 reverse가 가장 많이 진행된 상태(깨끗), t=100일 때 가장 시작 단계(노이즈).</li>
+    <li><b>대상</b>으로 원·십자·Mura 패턴·S 글자를 골라 다른 이미지에서 확인.</li>
+    <li><b>자동 재생</b>으로 0→100→0 반복 애니메이션을 볼 수 있습니다.</li>
+  </ol>
+</div>
+
+<div class="viz">
+  <div class="viz-title">Diffusion — Forward(노이즈 추가) ↔ Reverse(노이즈 제거)</div>
+  <svg id="diff-svg" viewBox="0 0 760 440" style="width:100%;max-width:760px"></svg>
+  <div class="ctrls">
+    <button id="diff-play" class="primary">▶ 자동 재생</button>
+    <button id="diff-reset" class="danger">t=0 으로</button>
+    <div class="slider"><span class="lbl">Timestep t</span>
+      <input type="range" id="diff-t" min="0" max="100" step="1" value="0">
+      <span id="diff-t-v" style="font-family:var(--f-mono);font-size:12px;color:var(--gold);width:36px">0</span>
+    </div>
+    <div class="slider"><span class="lbl">대상</span>
+      <select id="diff-target">
+        <option value="circle" selected>원</option>
+        <option value="cross">십자</option>
+        <option value="mura">Mura 패턴</option>
+        <option value="S">S 글자</option>
+      </select>
+    </div>
+  </div>
+  <div class="status" id="diff-status">슬라이더로 t=0(깨끗) → t=100(노이즈) 변화를 확인하세요.</div>
+  <div class="cap">왼쪽 forward (학습 시 노이즈 추가). 오른쪽 reverse (생성 시 노이즈 제거). 두 흐름은 거울상.</div>
+</div>
+
+<!-- AD SLOT -->
+<div data-lp-ad="blog" style="margin: 24px 0;"></div>
+
+<h2>이게 왜 중요한가</h2>
+<div class="accent-line"></div>
+
+<p>실제 Stable Diffusion이나 Sora는 픽셀 공간이 아니라 <strong>latent 공간</strong>에서 같은 메커니즘으로 작동합니다. VAE가 512×512 픽셀을 64×64×4 latent로 압축하고, 거기서 1000단계 diffusion 학습. 출력 latent를 VAE decoder로 다시 픽셀로 펴면 — 우리가 보는 그 멋진 이미지가 나옵니다.</p>
+
+<p>왜 1000단계나 나누나? <strong>한 번에 노이즈→이미지로 가는 건 너무 어렵기</strong> 때문입니다. 작은 step으로 나누면, 각 step은 "약간 더 깨끗하게 만드는" 단순한 task가 됩니다. 그게 학습 안정성·품질을 보장한 핵심.</p>
+
+<p>그리고 응용은 이미지를 넘어섭니다. <strong>반도체 결함 데이터 합성</strong>(Intel GFA), <strong>의료 영상 부족 보강</strong>, <strong>약물 분자 설계</strong>(생물학적 구조 생성), <strong>음악 생성</strong>(Suno, Udio) — Diffusion은 "잡음에서 의미 있는 패턴으로" 가는 모든 task에 쓰입니다.</p>
+
+<a href="/blog/ai-evo-05-diffusion/" class="back-card">
+  <div class="back-card-emoji">📖</div>
+  <div class="back-card-content">
+    <div class="back-card-label">관련 글로 돌아가기</div>
+    <div class="back-card-title">AI 진화사 EP05 — 술집에서 떠올린 아이디어가 그림 그리는 AI를 만들었다</div>
+  </div>
+</a>
+
+</div>
+
+<footer>
+  🧪 Lucky Please AI Labs · 인터랙티브 AI 학습 도구<br>
+  20×20 픽셀 단순화 시뮬레이터입니다. 실제 Stable Diffusion은 64×64×4 latent + UNet 학습.<br>
+  <a href="/labs/">← 전체 랩 목록</a> · <a href="/blog/?cat=ai-tech">AI·테크 블로그</a> · <a href="/">🏠 홈</a>
+</footer>
+
+<script>
+if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
+if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+</script>
+
+<script>
+/* === Diffusion Forward/Reverse Demo (adapted from 05_시각화_2차.html) === */
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmt(x,d=2){return Number(x).toFixed(d);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function randn(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+(function diffDemo(){
+  const svg=document.getElementById("diff-svg");
+  const status=document.getElementById("diff-status");
+  const SIZE=20,T_MAX=100;
+
+  function makeTarget(name){
+    const G=Array.from({length:SIZE},()=>new Array(SIZE).fill(0));
+    const cx=SIZE/2-0.5,cy=SIZE/2-0.5;
+    if(name==="circle"){
+      for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){
+        const d=Math.sqrt((i-cy)**2+(j-cx)**2);
+        if(d<=6)G[i][j]=1;
+        else if(d<=7)G[i][j]=0.3;
+      }
+    }
+    else if(name==="cross"){
+      for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++)
+        if(Math.abs(i-cy)<2||Math.abs(j-cx)<2)G[i][j]=1;
+    }
+    else if(name==="mura"){
+      for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){
+        const v=0.5+0.4*Math.sin(i*0.8)*Math.cos(j*0.6)+0.2*Math.sin(i*0.3+j*0.2);
+        G[i][j]=clamp(v,0,1);
+      }
+    }
+    else if(name==="S"){
+      const pat=["....11111111....","...111111111...","..111.....111..","..111.........","..111.........","...11111111...","....11111111..",".........111..",".........111..","..111.....111.","...111111111..","....1111111..."];
+      for(let i=0;i<pat.length;i++)for(let j=0;j<pat[i].length;j++)
+        if(pat[i][j]==="1"&&i+4<SIZE&&j+2<SIZE)G[i+2][j+2]=1;
+    }
+    return G;
+  }
+
+  const NOISE=Array.from({length:SIZE},()=>new Array(SIZE).fill(0).map(()=>randn()));
+  const state={target:"circle",t:0,playing:false,G0:null};
+  state.G0=makeTarget(state.target);
+
+  /* Cosine noise schedule (DDPM standard). α̅(t) = cumulative product of α_i. */
+  function alphaBar(t){
+    const s=0.008;
+    const f=Math.cos((t/T_MAX+s)/(1+s)*Math.PI/2)**2;
+    const f0=Math.cos(s/(1+s)*Math.PI/2)**2;
+    return clamp(f/f0,0.001,1);
+  }
+
+  function noisy(t){
+    const ab=alphaBar(t);
+    const sa=Math.sqrt(ab),sb=Math.sqrt(1-ab);
+    const G=Array.from({length:SIZE},()=>new Array(SIZE).fill(0));
+    for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){
+      G[i][j]=sa*state.G0[i][j]+sb*NOISE[i][j]*0.5+0.5*(1-sa);
+      G[i][j]=clamp(G[i][j],0,1);
+    }
+    return G;
+  }
+
+  function reset(){
+    state.t=0;
+    document.getElementById("diff-t").value=0;
+    document.getElementById("diff-t-v").textContent=0;
+    state.playing=false;
+    document.getElementById("diff-play").textContent="▶ 자동 재생";
+    render();
+  }
+
+  async function play(){
+    if(state.playing){
+      state.playing=false;
+      document.getElementById("diff-play").textContent="▶ 자동 재생";
+      return;
+    }
+    state.playing=true;
+    document.getElementById("diff-play").textContent="■ 정지";
+    while(state.playing){
+      state.t=(state.t+2)%(T_MAX+1);
+      document.getElementById("diff-t").value=state.t;
+      document.getElementById("diff-t-v").textContent=state.t;
+      render();
+      await sleep(60);
+    }
+  }
+
+  function render(){
+    svg.innerHTML="";
+    const cellSize=14,x0=80,y0=80;
+
+    el("text",{x:380,y:24,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`학습=forward(왼) · 생성=reverse(오) · timestep t=${state.t}/${T_MAX}`;
+
+    /* Forward (left) */
+    el("text",{x:x0+SIZE*cellSize/2,y:y0-26,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#0a4e99"},svg).textContent="① Forward (학습 시 노이즈 추가)";
+    el("text",{x:x0+SIZE*cellSize/2,y:y0-10,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent=`x_${state.t} = √α̅ · x_0 + √(1−α̅) · ε`;
+    const Gf=noisy(state.t);
+    for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){
+      const v=Gf[i][j];
+      const fill=`rgb(${Math.round(255-v*200)},${Math.round(255-v*180)},${Math.round(255-v*150)})`;
+      el("rect",{x:x0+j*cellSize,y:y0+i*cellSize,width:cellSize,height:cellSize,fill,stroke:"#e2e8f0","stroke-width":.4},svg);
+    }
+    el("rect",{x:x0,y:y0,width:SIZE*cellSize,height:SIZE*cellSize,fill:"none",stroke:"#0a4e99","stroke-width":2},svg);
+    el("text",{x:x0+SIZE*cellSize/2,y:y0+SIZE*cellSize+22,"text-anchor":"middle","font-size":11,"font-family":"monospace",fill:"#0a4e99"},svg).textContent=`α̅ = ${fmt(alphaBar(state.t),3)}, t=${state.t}`;
+
+    /* Reverse (right) */
+    const xR=x0+SIZE*cellSize+80;
+    el("text",{x:xR+SIZE*cellSize/2,y:y0-26,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#10b981"},svg).textContent="② Reverse (생성 시 노이즈 제거)";
+    el("text",{x:xR+SIZE*cellSize/2,y:y0-10,"text-anchor":"middle","font-size":11,fill:"#64748b"},svg).textContent=`x_${T_MAX-state.t} = denoise(x_${T_MAX-state.t+1}, ε̂)`;
+    const Gr=noisy(T_MAX-state.t);
+    for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){
+      const v=Gr[i][j];
+      const fill=`rgb(${Math.round(255-v*200)},${Math.round(255-v*180)},${Math.round(255-v*150)})`;
+      el("rect",{x:xR+j*cellSize,y:y0+i*cellSize,width:cellSize,height:cellSize,fill,stroke:"#e2e8f0","stroke-width":.4},svg);
+    }
+    el("rect",{x:xR,y:y0,width:SIZE*cellSize,height:SIZE*cellSize,fill:"none",stroke:"#10b981","stroke-width":2},svg);
+    el("text",{x:xR+SIZE*cellSize/2,y:y0+SIZE*cellSize+22,"text-anchor":"middle","font-size":11,"font-family":"monospace",fill:"#10b981"},svg).textContent=`reverse step ${state.t}/${T_MAX} (T → 0)`;
+
+    /* Direction arrows */
+    el("text",{x:x0-30,y:y0+SIZE*cellSize/2+5,"text-anchor":"middle","font-size":24,fill:"#0a4e99"},svg).textContent="→";
+    el("text",{x:x0-30,y:y0+SIZE*cellSize/2+30,"text-anchor":"middle","font-size":10,fill:"#0a4e99"},svg).textContent="t↑";
+    el("text",{x:xR-32,y:y0+SIZE*cellSize/2+5,"text-anchor":"middle","font-size":24,fill:"#10b981"},svg).textContent="→";
+    el("text",{x:xR-32,y:y0+SIZE*cellSize/2+30,"text-anchor":"middle","font-size":10,fill:"#10b981"},svg).textContent="t↓";
+
+    /* Progress bar */
+    const py=400,pw=600,px=80;
+    el("rect",{x:px,y:py,width:pw,height:8,rx:4,fill:"#e2e8f0"},svg);
+    el("rect",{x:px,y:py,width:pw*state.t/T_MAX,height:8,rx:4,fill:"#0a4e99",opacity:.6},svg);
+    el("circle",{cx:px+pw*state.t/T_MAX,cy:py+4,r:7,fill:"#0a4e99",stroke:"#fff","stroke-width":2},svg);
+    el("text",{x:px,y:py-6,"font-size":10,fill:"#0a4e99","font-weight":700},svg).textContent="t=0 (clean)";
+    el("text",{x:px+pw,y:py-6,"text-anchor":"end","font-size":10,fill:"#0a4e99","font-weight":700},svg).textContent="t=T (pure noise)";
+
+    if(state.t===0)status.innerHTML=`<b>t=0</b> · 깨끗한 원본. forward 시작점.`;
+    else if(state.t===T_MAX)status.innerHTML=`<b>t=T</b> · 거의 완전 노이즈. reverse 시작점.`;
+    else status.innerHTML=`<b>t=${state.t}</b> · forward ${Math.round(state.t/T_MAX*100)}% 진행 · reverse는 ${T_MAX-state.t} step 남음.`;
+  }
+
+  document.getElementById("diff-play").onclick=play;
+  document.getElementById("diff-reset").onclick=reset;
+  document.getElementById("diff-t").oninput=e=>{state.t=parseInt(e.target.value);document.getElementById("diff-t-v").textContent=state.t;render();};
+  document.getElementById("diff-target").onchange=e=>{state.target=e.target.value;state.G0=makeTarget(state.target);render();};
+  render();
+})();
+</script>
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1777899121"></script>
+<script src="/js/blogReactions.js?v=1777899121" defer></script>
+<script src="/js/siteFooter.js?v=1777899121" defer></script>
+</body>
+</html>
