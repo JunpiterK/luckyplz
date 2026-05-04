@@ -85,6 +85,18 @@ window.BLOG_POSTS = [
         alt: 'humanoid-robotics-2026-en',
     },
     {
+        slug: 'ai-semiconductor-correlation-2026-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-04',
+        readMinutes: 8,
+        coverEmoji: '📊',
+        tags: ['Semiconductor', 'HBM', 'AI Memory', 'Supercycle'],
+        title: 'AI Semiconductor Correlation — Where Should KR Memory Stocks Look in the US?',
+        excerpt: 'How NVDA · MU · AVGO · AMD · SNDK move Korean memory names. HBM · DRAM · NAND supercycle 2026 data + early-morning premarket guide.',
+        alt: 'ai-semiconductor-correlation-2026',
+    },
+    {
         slug: 'ai-semiconductor-correlation-2026',
         lang: 'ko',
         category: 'industry',
@@ -94,6 +106,7 @@ window.BLOG_POSTS = [
         tags: ['반도체', 'HBM', 'AI 메모리', '슈퍼사이클'],
         title: 'AI 반도체 상관관계 — 한국 메모리주는 미국 어디를 봐야 하나',
         excerpt: 'NVDA·MU·AVGO·AMD·SNDK 5종이 한국 메모리주에 미치는 영향. HBM·DRAM·NAND 슈퍼사이클 2026 데이터 + 새벽 프리마켓 활용 가이드.',
+        alt: 'ai-semiconductor-correlation-2026-en',
     },
     {
         slug: 'ladder-fairness-simulation',
