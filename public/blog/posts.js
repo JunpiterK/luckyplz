@@ -5,9 +5,14 @@
   Fields:
   - lang:     ko | en — each post is written natively in one language; cross-lang
               siblings are linked via `alt`.
-  - category: lifestyle | probability | tech-space | industry | build
-              Used by the blog index tab filter. Default tab "all" shows
-              every post sorted by date desc.
+  - category: lifestyle | probability | space-tech | ai-tech | industry | build
+              `space-tech` covers the entire space-industry corpus (SpaceX IPO,
+              Starlink, Falcon, the 우주 진화사 series). General industry posts
+              (datacenters, semiconductors, robotics, solar) stay in `industry`
+              so the SpaceX-IPO traffic doesn't drown them out.
+              The legacy `tech-space` slug was renamed to `space-tech` on
+              2026-05-06; old `?cat=tech-space` links fall back to "all" via
+              the index.html validation.
 
   Index renders only posts matching the user's current lang. Users whose
   lang has no posts see an empty-state CTA pointing to the primary pool.
@@ -16,7 +21,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-vs-tesla-en',
         lang: 'en',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '⚖️',
@@ -28,7 +33,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-vs-tesla',
         lang: 'ko',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '⚖️',
@@ -40,7 +45,7 @@ window.BLOG_POSTS = [
     {
         slug: 'musk-net-worth-after-spacex-ipo-en',
         lang: 'en',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 7,
         coverEmoji: '💰',
@@ -52,7 +57,7 @@ window.BLOG_POSTS = [
     {
         slug: 'musk-net-worth-after-spacex-ipo',
         lang: 'ko',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 7,
         coverEmoji: '💰',
@@ -64,7 +69,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-ipo-risks-en',
         lang: 'en',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '⚠️',
@@ -76,7 +81,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-ipo-risks',
         lang: 'ko',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '⚠️',
@@ -88,7 +93,7 @@ window.BLOG_POSTS = [
     {
         slug: 'how-to-buy-spacex-stock-en',
         lang: 'en',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '💰',
@@ -100,7 +105,7 @@ window.BLOG_POSTS = [
     {
         slug: 'how-to-buy-spacex-stock',
         lang: 'ko',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '💰',
@@ -112,7 +117,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-ipo-2026-en',
         lang: 'en',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 14,
         coverEmoji: '🚀',
@@ -124,7 +129,7 @@ window.BLOG_POSTS = [
     {
         slug: 'spacex-ipo-2026',
         lang: 'ko',
-        category: 'industry',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 14,
         coverEmoji: '🚀',
@@ -136,7 +141,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-10-reusable',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 10,
         coverEmoji: '🚀',
@@ -147,7 +152,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-09-falcon1',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '🛸',
@@ -158,7 +163,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-08-voyager',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 10,
         coverEmoji: '🌌',
@@ -169,7 +174,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-07-shuttle-tragedies',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '🛰️',
@@ -180,7 +185,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-06-soviet-loss',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '🌑',
@@ -191,7 +196,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-05-apollo11',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 11,
         coverEmoji: '🌖',
@@ -202,7 +207,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-04-tragedies',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 10,
         coverEmoji: '🕯️',
@@ -213,7 +218,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-03-gagarin',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 9,
         coverEmoji: '🚀',
@@ -224,7 +229,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-02-sputnik',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '🛰️',
@@ -235,7 +240,7 @@ window.BLOG_POSTS = [
     {
         slug: 'space-evo-01-paperclip',
         lang: 'ko',
-        category: 'tech-space',
+        category: 'space-tech',
         date: '2026-05-05',
         readMinutes: 8,
         coverEmoji: '🚀',
@@ -663,7 +668,10 @@ window.BLOG_CATEGORIES = [
     { slug: 'all',         emoji: '🌐', label_ko: '전체',        label_en: 'All' },
     { slug: 'lifestyle',   emoji: '🍽️', label_ko: '생활·결정',   label_en: 'Lifestyle' },
     { slug: 'probability', emoji: '🎰', label_ko: '확률·통계',   label_en: 'Probability' },
-    { slug: 'tech-space',  emoji: '🚀', label_ko: '테크·우주',   label_en: 'Tech & Space' },
+    /* `space-tech` (renamed from `tech-space` on 2026-05-06) holds the
+       entire space-industry corpus — SpaceX IPO, Starlink, Falcon, the
+       우주 진화사 series. Industry stays for non-space industry posts. */
+    { slug: 'space-tech',  emoji: '🚀', label_ko: '우주 Tech',   label_en: 'Space Tech' },
     { slug: 'ai-tech',     emoji: '🤖', label_ko: 'AI·테크',     label_en: 'AI Tech' },
     { slug: 'industry',    emoji: '💰', label_ko: '경제·산업',   label_en: 'Industry' },
     { slug: 'build',       emoji: '🛠️', label_ko: '빌드인공개',  label_en: 'Build' },
