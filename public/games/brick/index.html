@@ -127,14 +127,66 @@ canvas#g{
   color:var(--accent);letter-spacing:0.05em;
 }
 .pwr-chip .t{font-variant-numeric:tabular-nums;opacity:0.7}
-.hint{
-  text-align:center;font-size:10.5px;
-  color:var(--txt-mute);
-  font-family:'JetBrains Mono',monospace;
-  letter-spacing:0.06em;
-  padding:4px 12px 6px;flex-shrink:0;
+.ctrl-pad{
+  position:relative;
+  margin:6px 8px 0;
+  height:64px;
+  background:linear-gradient(180deg,#13143a 0%,#0a0a1e 100%);
+  border:1px solid rgba(0,217,255,0.32);
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px;
+  user-select:none;-webkit-user-select:none;
+  touch-action:none;cursor:grab;
+  box-shadow:inset 0 0 30px rgba(0,217,255,0.06),0 4px 14px rgba(0,0,0,0.5);
+  flex-shrink:0;overflow:hidden;
+  transition:border-color .12s,box-shadow .12s;
 }
-.hint b{color:var(--accent);font-weight:700}
+.ctrl-pad::before{
+  /* subtle grid texture for "control surface" feel */
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg,transparent 0 24px,rgba(0,217,255,0.04) 24px 25px),
+    repeating-linear-gradient(0deg,transparent 0 24px,rgba(0,217,255,0.03) 24px 25px);
+  opacity:.5;
+}
+.ctrl-pad.active{
+  cursor:grabbing;
+  border-color:rgba(0,217,255,0.7);
+  box-shadow:inset 0 0 40px rgba(0,217,255,0.18),0 4px 14px rgba(0,0,0,0.5),0 0 18px rgba(0,217,255,0.32);
+}
+.ctrl-pad .ctrl-arrow{
+  font-size:18px;font-weight:900;line-height:1;
+  color:rgba(0,217,255,0.45);
+  pointer-events:none;
+  text-shadow:0 0 8px rgba(0,217,255,0.2);
+}
+.ctrl-pad.active .ctrl-arrow{color:rgba(0,217,255,0.85);text-shadow:0 0 10px rgba(0,217,255,0.6)}
+.ctrl-pad .ctrl-label{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-family:'JetBrains Mono',monospace;
+  font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;
+  color:rgba(255,255,255,0.32);pointer-events:none;white-space:nowrap;
+  transition:color .12s;
+}
+.ctrl-pad.active .ctrl-label{color:rgba(0,217,255,0.7)}
+.ctrl-pad .ctrl-thumb{
+  position:absolute;left:0;bottom:6px;
+  height:4px;width:28%;
+  background:var(--accent);border-radius:2px;
+  box-shadow:0 0 10px rgba(0,217,255,0.7);
+  pointer-events:none;
+  transition:left .04s linear,box-shadow .12s;
+}
+.ctrl-pad.active .ctrl-thumb{
+  height:5px;
+  box-shadow:0 0 14px rgba(0,217,255,0.95);
+}
+.ctrl-pad .ctrl-track{
+  position:absolute;left:14px;right:14px;bottom:7px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,217,255,0.25),transparent);
+  pointer-events:none;
+}
 .btns{
   display:flex;gap:8px;
   padding:6px 12px calc(8px + var(--sb-bottom));
@@ -236,8 +288,12 @@ canvas#g{
 
 <div class="pwr-bar" id="pwrBar"></div>
 
-<div class="hint" id="hint">
-  <b>아무 곳이나 터치 후 좌우 드래그</b>로 패들 이동 · <b>탭</b>으로 발사
+<div class="ctrl-pad" id="ctrlPad" role="slider" aria-label="Paddle control pad">
+  <span class="ctrl-arrow" aria-hidden="true">◀</span>
+  <span class="ctrl-label">SLIDE · TAP TO LAUNCH</span>
+  <span class="ctrl-arrow" aria-hidden="true">▶</span>
+  <div class="ctrl-track"></div>
+  <div class="ctrl-thumb" id="ctrlThumb"></div>
 </div>
 
 <div class="btns">
@@ -360,6 +416,8 @@ const introOv = document.getElementById('introOv');
 const gameOv = document.getElementById('gameOv');
 const levelOv = document.getElementById('levelOv');
 const btnMute = document.getElementById('btnMute');
+const ctrlPad = document.getElementById('ctrlPad');
+const ctrlThumb = document.getElementById('ctrlThumb');
 
 // ======== STORAGE ========
 function loadStorage(){
@@ -784,6 +842,32 @@ function recalcScale(){
   _scaleX = C.W / r.width;
   _scaleY = C.H / r.height;
 }
+// Visual indicator: thumb mirrors paddle's relative position inside the play area.
+function updateCtrlThumb(){
+  if(!ctrlThumb || !ctrlPad) return;
+  const padW = ctrlPad.clientWidth;
+  if(!padW) return;
+  const thumbW = ctrlThumb.offsetWidth;
+  const usable = Math.max(0, padW - thumbW - 16); // 8px L/R padding
+  const minX = C.PADDLE_W/2;
+  const maxX = C.W - C.PADDLE_W/2;
+  const ratio = (S.paddleX - minX) / Math.max(1, (maxX - minX));
+  const r = Math.max(0, Math.min(1, ratio));
+  const x = 8 + r * usable;
+  ctrlThumb.style.left = x + 'px';
+}
+// Fullscreen request — invoked from start-button gesture (required by browsers).
+function tryFullscreen(){
+  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if(!isMobile) return;
+  try{
+    const el = document.documentElement;
+    const rfs = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if(rfs) rfs.call(el).catch(()=>{});
+  }catch(_){}
+  // iOS Safari fallback — nudge scroll so the URL bar collapses.
+  setTimeout(()=>{ try{ window.scrollTo(0, 1); }catch(_){} }, 80);
+}
 function getCanvasPos(e){
   const r = cv.getBoundingClientRect();
   let cx, cy;
@@ -791,51 +875,65 @@ function getCanvasPos(e){
   else { cx = e.clientX; cy = e.clientY; }
   return { x: (cx - r.left) * _scaleX, y: (cy - r.top) * _scaleY };
 }
-// Relative drag: touch anywhere on the playfield, then slide left/right.
-// Records (touch start X, paddle X at touch start), then updates paddle by the
-// delta — never teleports paddle to finger position. Works from any spot.
-let _drag = null; // {sx, px, kind:'touch'|'mouse'}
+// Control pad — restricted to dedicated zone below the playfield.
+// Tap = launch / fire. Slide left/right = relative paddle drag.
+// Pad px → canvas px scaled by C.W / pad.clientWidth so pad-to-paddle feels 1:1.
+let _drag = null; // {sx, px, t, moved, kind}
+const TAP_MAX_DT = 280;   // ms
+const TAP_MAX_MOVE = 8;   // pad px
+
+function setActivePad(active){
+  if(active) ctrlPad.classList.add('active');
+  else ctrlPad.classList.remove('active');
+}
+function getEventX(e){
+  if(e.touches && e.touches[0]) return e.touches[0].clientX;
+  if(e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientX;
+  return e.clientX;
+}
+function onPadStart(e, kind){
+  e.preventDefault();
+  resumeAudio();
+  if(!S.running || S.paused) return;
+  _drag = { sx: getEventX(e), px: S.paddleX, t: performance.now(), moved: 0, kind };
+  S.inputX = S.paddleX; // paddle holds until finger moves
+  setActivePad(true);
+}
+function onPadMove(e){
+  e.preventDefault();
+  if(!_drag) return;
+  const cx = getEventX(e);
+  const dxPad = cx - _drag.sx;
+  _drag.moved = Math.max(_drag.moved, Math.abs(dxPad));
+  const padW = ctrlPad.clientWidth || 1;
+  const scale = C.W / padW; // 1:1 visual mapping (pad spans canvas width)
+  S.inputX = _drag.px + dxPad * scale;
+}
+function onPadEnd(e){
+  if(e && e.preventDefault) e.preventDefault();
+  if(!_drag){ setActivePad(false); return; }
+  const dt = performance.now() - _drag.t;
+  const moved = _drag.moved || 0;
+  const wasTap = dt < TAP_MAX_DT && moved < TAP_MAX_MOVE;
+  if(wasTap) handleAction(); // launch / fire laser
+  _drag = null;
+  S.inputX = null;
+  setActivePad(false);
+}
+
 function setupInput(){
-  cv.addEventListener('touchstart', (e)=>{
-    e.preventDefault();
-    resumeAudio();
-    if(!S.running || S.paused) return;
-    const p = getCanvasPos(e);
-    _drag = { sx: p.x, px: S.paddleX, kind: 'touch' };
-    S.inputX = S.paddleX; // paddle stays put until finger moves
-    if(p.y > C.H * 0.5){ handleAction(); } // tap lower half = launch / fire laser
-  }, {passive:false});
-  cv.addEventListener('touchmove', (e)=>{
-    e.preventDefault();
-    if(!S.running || S.paused) return;
-    if(!_drag || _drag.kind !== 'touch') return;
-    const p = getCanvasPos(e);
-    S.inputX = _drag.px + (p.x - _drag.sx);
-  }, {passive:false});
-  cv.addEventListener('touchend', (e)=>{
-    e.preventDefault();
-    if(_drag && _drag.kind === 'touch'){ _drag = null; S.inputX = null; }
-  }, {passive:false});
-  cv.addEventListener('touchcancel', (e)=>{
-    if(_drag && _drag.kind === 'touch'){ _drag = null; S.inputX = null; }
+  // Touch (mobile)
+  ctrlPad.addEventListener('touchstart', (e)=>onPadStart(e, 'touch'), {passive:false});
+  ctrlPad.addEventListener('touchmove', onPadMove, {passive:false});
+  ctrlPad.addEventListener('touchend', onPadEnd, {passive:false});
+  ctrlPad.addEventListener('touchcancel', onPadEnd, {passive:false});
+  // Mouse (desktop)
+  ctrlPad.addEventListener('mousedown', (e)=>onPadStart(e, 'mouse'));
+  window.addEventListener('mousemove', (e)=>{
+    if(_drag && _drag.kind === 'mouse') onPadMove(e);
   });
-  cv.addEventListener('mousedown', (e)=>{
-    e.preventDefault();
-    resumeAudio();
-    if(!S.running || S.paused) return;
-    const p = getCanvasPos(e);
-    _drag = { sx: p.x, px: S.paddleX, kind: 'mouse' };
-    S.inputX = S.paddleX;
-    if(p.y > C.H*0.5) handleAction();
-  });
-  cv.addEventListener('mousemove', (e)=>{
-    if(!S.running || S.paused) return;
-    if(!_drag || _drag.kind !== 'mouse') return;
-    const p = getCanvasPos(e);
-    S.inputX = _drag.px + (p.x - _drag.sx);
-  });
-  document.addEventListener('mouseup', ()=>{
-    if(_drag && _drag.kind === 'mouse'){ _drag = null; S.inputX = null; }
+  window.addEventListener('mouseup', (e)=>{
+    if(_drag && _drag.kind === 'mouse') onPadEnd(e);
   });
   document.addEventListener('keydown', (e)=>{
     if(e.code==='Space' || e.code==='ArrowUp'){
@@ -1617,6 +1715,7 @@ function loop(t){
     physAccum = 0;
   }
   render();
+  updateCtrlThumb();
   requestAnimationFrame(loop);
 }
 
@@ -1665,9 +1764,13 @@ btnMute.addEventListener('click', toggleMute);
 
 document.getElementById('btnStart').addEventListener('click', ()=>{
   resumeAudio();
+  tryFullscreen(); // hide mobile address bar from gesture handler
   startGame(true);
 });
-document.getElementById('btnAgain').addEventListener('click', ()=>startGame(false));
+document.getElementById('btnAgain').addEventListener('click', ()=>{
+  tryFullscreen();
+  startGame(false);
+});
 document.getElementById('btnNext').addEventListener('click', nextLevel);
 document.getElementById('btnPause').addEventListener('click', togglePause);
 document.getElementById('btnRestart').addEventListener('click', ()=>{
