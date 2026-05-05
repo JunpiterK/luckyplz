@@ -14,6 +14,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'musk-net-worth-after-spacex-ipo-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 7,
+        coverEmoji: '💰',
+        tags: ['Elon Musk Net Worth', 'Trillionaire', 'SpaceX IPO', 'Forbes', 'Bloomberg', 'Tesla', 'Musk Wealth'],
+        title: "Musk's Net Worth After SpaceX IPO — First Trillionaire Ever?",
+        excerpt: "How much will Musk be worth post-IPO? Stakes across 6 companies (SpaceX 42%, Tesla 13%, X 80%, xAI absorbed, Boring, Neuralink) under Bull/Base/Bear. Forbes vs Bloomberg accuracy.",
+        alt: 'musk-net-worth-after-spacex-ipo',
+    },
+    {
+        slug: 'musk-net-worth-after-spacex-ipo',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 7,
+        coverEmoji: '💰',
+        tags: ['머스크 자산', '트릴리오네어', 'SpaceX IPO', 'Forbes', 'Bloomberg', 'Tesla', '머스크 지분'],
+        title: 'SpaceX 상장 후 머스크 자산 — 인류 첫 트릴리오네어?',
+        excerpt: 'SpaceX IPO ($1.75T) 가 성공하면 머스크 자산은? 6개 회사 (SpaceX 42% · Tesla 13% · X 80% · xAI 합병 · Boring · Neuralink) 지분 합산 + Bull/Base/Bear 시나리오. Forbes·Bloomberg 추정 정확성 검증.',
+        alt: 'musk-net-worth-after-spacex-ipo-en',
+    },
+    {
         slug: 'spacex-ipo-risks-en',
         lang: 'en',
         category: 'industry',
