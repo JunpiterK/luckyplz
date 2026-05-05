@@ -254,7 +254,8 @@ canvas#g{
       <li><b>7종</b> 벽돌 — 1~5 hits + ★ Gold + ▓ Indestruct</li>
       <li><b>금 가는</b> 효과 — 데미지 따라 균열 진행</li>
       <li><b>8종</b> 파워업 — 멀티볼·와이드·슬로우·레이저·스티키·라이프·폭탄·관통</li>
-      <li><b>물리</b> 기반 — 일정 속도 + 노멀 반사 + 서브스텝</li>
+      <li><b>물리</b> 기반 — 60Hz fixed-step + Swept CCD</li>
+      <li><b>속도 티어</b> — 4·12개 벽돌 격파, 천장 터치마다 가속 (Breakout/Arkanoid 룰)</li>
       <li><b>사운드</b> — Web Audio 절차 생성 (🔊 토글)</li>
     </ul>
     <button class="btn primary" id="btnStart" style="width:100%;max-width:none">START</button>
@@ -299,9 +300,19 @@ const C = {
   W: 360, H: 520,
   PADDLE_W: 70, PADDLE_H: 10, PADDLE_Y: 480,
   BALL_R: 6,
-  BALL_SPD_BASE: 6.0, // base speed (px/frame at 60fps) — level 1 (was 4.0, +50%)
-  BALL_SPD_LEVEL: 0.24, // per-stage increment (scaled with BASE)
-  BALL_SPD_MAX: 10.0, // cap
+  // Speed system (benchmarked against Breakout 1976 / Arkanoid 1986):
+  //  - Tier 0 (start): base speed for the stage
+  //  - Tier 1: after 4 ball-hit bricks → base × 1.10
+  //  - Tier 2: after 12 ball-hit bricks → base × 1.20
+  //  - Tier 3: first time the ball touches the top wall → base × 1.32
+  // Tier resets to 0 on life lost or stage clear. Slow power-up = ×0.6 multiplicative.
+  BALL_SPD_BASE: 6.0, // base speed at stage 1 (px per 60Hz physics step)
+  BALL_SPD_LEVEL: 0.18, // per-stage base increment (capped at LEVEL_CAP)
+  BALL_SPD_LEVEL_CAP: 14, // increments cap at this many stages above 1
+  BALL_SPD_MAX: 10.0, // hard cap (after all multipliers)
+  SPEED_TIERS: [1.00, 1.10, 1.20, 1.32], // tier 0/1/2/3 multipliers
+  TIER1_HITS: 4,
+  TIER2_HITS: 12,
   BRICK_COLS: 8,
   BRICK_W: 40, BRICK_H: 16, BRICK_GAP: 2,
   BRICK_TOP: 50,
@@ -330,6 +341,10 @@ const S = {
   lastFrame:0, inputX:null, shake:0,
   muted:false, audio:null, audioFailed:false,
   lastComboMilestone:1, // for sfx trigger
+  // Speed tier (within-stage acceleration)
+  speedTier:0,         // 0..3
+  brickHitCount:0,     // resets on life lost / stage clear
+  touchedTopWall:false,// resets on life lost / stage clear (used to gate tier 3)
 };
 
 // ======== DOM ========
@@ -540,8 +555,47 @@ const LEVELS = [
   ["5XXXXXX5","55GGGG55","5GG44GG5","5G4334G5","5G4554G5","5G4334G5","5GG44GG5","55GGGG55","5XXXXXX5"]
 ];
 
-function targetSpeedFor(level){
-  return Math.min(C.BALL_SPD_MAX, C.BALL_SPD_BASE + Math.min(level-1, 14)*C.BALL_SPD_LEVEL);
+// Base speed for a given stage (Tier 0). Subsequent tiers are multipliers on top.
+function baseSpeedFor(level){
+  const inc = Math.min(level-1, C.BALL_SPD_LEVEL_CAP) * C.BALL_SPD_LEVEL;
+  return C.BALL_SPD_BASE + inc;
+}
+// Effective target speed at current state (level + tier + slow).
+function currentTargetSpeed(){
+  const base = baseSpeedFor(S.level);
+  const mult = C.SPEED_TIERS[Math.min(S.speedTier, C.SPEED_TIERS.length-1)];
+  const slow = S.pwrEffects.slow ? 0.6 : 1.0;
+  return Math.min(C.BALL_SPD_MAX, base * mult) * slow;
+}
+// Re-tune all in-play balls to currentTargetSpeed (preserves direction).
+function retuneBalls(){
+  const sp = currentTargetSpeed();
+  for(const b of S.balls){
+    if(b.attached){ b.speed = sp; continue; }
+    const cur = Math.hypot(b.vx, b.vy) || 1;
+    b.vx = b.vx/cur * sp;
+    b.vy = b.vy/cur * sp;
+    b.speed = sp;
+  }
+}
+// Check if a tier upgrade should fire based on hit count + top-wall flag.
+function checkSpeedTier(){
+  let newTier = S.speedTier;
+  if(S.brickHitCount >= C.TIER1_HITS && newTier < 1) newTier = 1;
+  if(S.brickHitCount >= C.TIER2_HITS && newTier < 2) newTier = 2;
+  if(S.touchedTopWall && newTier < 3) newTier = 3;
+  if(newTier !== S.speedTier){
+    S.speedTier = newTier;
+    retuneBalls();
+    sfxCombo(Math.min(newTier+1, 5)); // reuse combo cue for tier-up audio
+    spawnFloatText('SPEED UP!', C.W/2, 110, '#FFE66D');
+  }
+}
+// Reset speed-tier accumulators (called on life lost / stage start).
+function resetSpeedTier(){
+  S.speedTier = 0;
+  S.brickHitCount = 0;
+  S.touchedTopWall = false;
 }
 
 // ======== BUILD LEVEL ========
@@ -577,12 +631,10 @@ function brickActiveCount(){
 
 // ======== BALL ========
 function spawnBall(attached){
-  let sp = targetSpeedFor(S.level);
-  if(S.pwrEffects.slow) sp *= 0.6; // inherit slow if active
   return {
     x: S.paddleX, y: C.PADDLE_Y - 12,
     vx: 0, vy: 0,
-    speed: sp,
+    speed: currentTargetSpeed(),
     attached: !!attached
   };
 }
@@ -590,9 +642,7 @@ function launchBall(b){
   if(!b.attached) return;
   b.attached = false;
   const ang = (-Math.PI/2) + (Math.random()-0.5)*0.6;
-  // Always use up-to-date target speed at launch time
-  let sp = targetSpeedFor(S.level);
-  if(S.pwrEffects.slow) sp *= 0.6;
+  const sp = currentTargetSpeed();
   b.speed = sp;
   b.vx = Math.cos(ang) * sp;
   b.vy = Math.sin(ang) * sp;
@@ -671,18 +721,11 @@ function applyPowerUp(t){
     S.pwrEffects.wide = 15000;
     S.paddleW = C.PADDLE_W * 1.5;
   } else if(t==='slow'){
-    // Only apply slow factor on first activation. Subsequent pickups just refresh timer.
-    if(!S.pwrEffects.slow){
-      for(const b of S.balls){
-        if(b.attached) continue;
-        const cur = Math.hypot(b.vx, b.vy) || 1;
-        const newSp = b.speed * 0.6;
-        b.vx = b.vx/cur * newSp;
-        b.vy = b.vy/cur * newSp;
-        b.speed = newSp;
-      }
-    }
+    // Slow is a flag-based ×0.6 multiplier resolved through currentTargetSpeed().
+    // Repeated pickups just refresh the timer (no compounding).
+    const wasSlow = !!S.pwrEffects.slow;
     S.pwrEffects.slow = 12000;
+    if(!wasSlow) retuneBalls();
   } else if(t==='laser'){
     S.pwrEffects.laser = 15000;
     S.paddleLaser = true;
@@ -938,7 +981,14 @@ function updateBall(b){
       const k = hitData.kind;
       if(k === 'left' && b.vx < 0) b.vx = -b.vx;
       else if(k === 'right' && b.vx > 0) b.vx = -b.vx;
-      else if(k === 'top' && b.vy < 0) b.vy = -b.vy;
+      else if(k === 'top' && b.vy < 0){
+        b.vy = -b.vy;
+        // Top-wall ("back wall") touch → tier 3 trigger (Arkanoid-style)
+        if(!S.touchedTopWall){
+          S.touchedTopWall = true;
+          checkSpeedTier();
+        }
+      }
       else if(k === 'bottom'){ b._dead = true; return; }
       sfxWall();
       spawnExplosion(b.x, b.y, '#7FECFF', 3);
@@ -971,6 +1021,12 @@ function updateBall(b){
         bombExplosion(br.x + br.w/2, br.y + br.h/2);
       }
       hitBrick(br, b.x, b.y);
+      // Tier progression (Breakout-style): direct ball-hit only.
+      // Bomb AOE / laser hits do NOT count toward tier.
+      if(!t.indestruct){
+        S.brickHitCount++;
+        checkSpeedTier();
+      }
     }
     remaining *= (1 - firstT);
   }
@@ -1038,15 +1094,16 @@ function hitBrick(br, hx, hy, fromAOE){
 function loseLife(){
   S.lives--;
   S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
+  resetSpeedTier(); // ball death → speed back to base for the comeback
   sfxLifeLost();
   if(S.lives <= 0){ onGameOver(); return; }
-  S.balls = [spawnBall(true)];
   S.paddleSticky = false;
   S.paddleLaser = false;
   S.paddleW = C.PADDLE_W;
   S.bombCharges = 0;
   S.pierceMode = false;
   S.pwrEffects = {};
+  S.balls = [spawnBall(true)];
   S.powerups = [];
   S.lasers = [];
   spawnExplosion(C.W/2, C.PADDLE_Y, '#FF3366', 30);
@@ -1115,14 +1172,8 @@ function update(dt){
       if(k==='laser'){ S.paddleLaser = false; S.laserAmmo = 0; }
       if(k==='pierce') S.pierceMode = false;
       if(k==='slow'){
-        const targetSp = targetSpeedFor(S.level);
-        for(const b of S.balls){
-          if(b.attached) continue;
-          const cur = Math.hypot(b.vx, b.vy) || 1;
-          b.vx = b.vx/cur*targetSp;
-          b.vy = b.vy/cur*targetSp;
-          b.speed = targetSp;
-        }
+        // Slow flag now off → retune to current tier speed
+        retuneBalls();
       }
     }
   }
@@ -1570,6 +1621,7 @@ function startGame(fromIntro){
   S.pwrEffects = {};
   S.powerups = []; S.lasers = []; S.particles = [];
   S._levelCleared = false;
+  resetSpeedTier();
   buildLevel(S.level);
   S.balls = [spawnBall(true)];
   S.running = true; S.paused = false;
@@ -1586,6 +1638,7 @@ function nextLevel(){
   S.pwrEffects = {};
   S.powerups = []; S.lasers = []; S.particles = [];
   S._levelCleared = false;
+  resetSpeedTier(); // each new stage starts at the new base, tier 0
   buildLevel(S.level);
   S.balls = [spawnBall(true)];
   S.running = true; S.paused = false;
