@@ -14,6 +14,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'how-to-buy-spacex-stock-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 9,
+        coverEmoji: '💰',
+        tags: ['SpaceX IPO', 'How to buy SpaceX', 'XOVR', 'DXYZ', 'EchoStar SATS', 'Fidelity', 'Schwab', 'IBKR'],
+        title: 'How to Buy SpaceX Stock — IPO Allocation, ETFs, EchoStar Complete Guide',
+        excerpt: 'Four practical paths for retail investors: direct IPO allocation, pre-IPO ETFs (XOVR/DXYZ/RONB), EchoStar (SATS) proxy, post-IPO entry. US broker comparison + tax handling.',
+        alt: 'how-to-buy-spacex-stock',
+    },
+    {
+        slug: 'how-to-buy-spacex-stock',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 9,
+        coverEmoji: '💰',
+        tags: ['SpaceX 주식', '한국에서 사는 법', 'XOVR ETF', 'DXYZ', 'EchoStar SATS', '키움 영웅문Global', '미래에셋', '양도세 22%'],
+        title: '한국에서 SpaceX 주식 사는 법 — IPO 청약·우회 ETF·SATS 완전 가이드',
+        excerpt: 'IPO 청약·우회 ETF·EchoStar(SATS)·IPO 후 매수 — 한국 개인투자자 4가지 경로 정밀 비교. 증권사 6곳 (키움/미래에셋/토스/삼성/NH/하나) + 환전·세금 22%.',
+        alt: 'how-to-buy-spacex-stock-en',
+    },
+    {
         slug: 'spacex-ipo-2026-en',
         lang: 'en',
         category: 'industry',
