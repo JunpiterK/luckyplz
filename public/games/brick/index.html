@@ -312,10 +312,8 @@ const C = {
   MAX_LEVEL: 18,
   STORAGE_KEY: 'lp_brick_v3',
   // Physics
-  MAX_SUBSTEP: 4, // ball update divides movement into N substeps when needed
-  SUBSTEP_DIST: 4.5, // max distance per substep (px) — keeps from tunneling
   MIN_VY_RATIO: 0.20, // min vertical velocity = speed * this (prevents shallow stuck)
-  PADDLE_FOLLOW: 12, // max paddle move per frame (smoothing)
+  PADDLE_FOLLOW: 12, // max paddle move per physics step (60Hz, smoothing)
 };
 
 // ======== STATE ========
@@ -579,10 +577,12 @@ function brickActiveCount(){
 
 // ======== BALL ========
 function spawnBall(attached){
+  let sp = targetSpeedFor(S.level);
+  if(S.pwrEffects.slow) sp *= 0.6; // inherit slow if active
   return {
     x: S.paddleX, y: C.PADDLE_Y - 12,
     vx: 0, vy: 0,
-    speed: targetSpeedFor(S.level),
+    speed: sp,
     attached: !!attached
   };
 }
@@ -590,8 +590,12 @@ function launchBall(b){
   if(!b.attached) return;
   b.attached = false;
   const ang = (-Math.PI/2) + (Math.random()-0.5)*0.6;
-  b.vx = Math.cos(ang) * b.speed;
-  b.vy = Math.sin(ang) * b.speed;
+  // Always use up-to-date target speed at launch time
+  let sp = targetSpeedFor(S.level);
+  if(S.pwrEffects.slow) sp *= 0.6;
+  b.speed = sp;
+  b.vx = Math.cos(ang) * sp;
+  b.vy = Math.sin(ang) * sp;
   sfxLaunch();
 }
 
@@ -667,11 +671,18 @@ function applyPowerUp(t){
     S.pwrEffects.wide = 15000;
     S.paddleW = C.PADDLE_W * 1.5;
   } else if(t==='slow'){
-    S.pwrEffects.slow = 12000;
-    for(const b of S.balls){
-      if(b.attached) continue;
-      b.vx *= 0.6; b.vy *= 0.6; b.speed *= 0.6;
+    // Only apply slow factor on first activation. Subsequent pickups just refresh timer.
+    if(!S.pwrEffects.slow){
+      for(const b of S.balls){
+        if(b.attached) continue;
+        const cur = Math.hypot(b.vx, b.vy) || 1;
+        const newSp = b.speed * 0.6;
+        b.vx = b.vx/cur * newSp;
+        b.vy = b.vy/cur * newSp;
+        b.speed = newSp;
+      }
     }
+    S.pwrEffects.slow = 12000;
   } else if(t==='laser'){
     S.pwrEffects.laser = 15000;
     S.paddleLaser = true;
@@ -802,136 +813,170 @@ function handleAction(){
   }
 }
 
-// ======== PHYSICS — BALL UPDATE WITH SUBSTEPS ========
+// ======== PHYSICS — SWEPT CCD (CONTINUOUS COLLISION DETECTION) ========
+// Slab method: expand each rect by BALL_R (Minkowski sum, square-corner approximation),
+// then ray-test ball center along (rx, ry). This produces exact contact times for face hits
+// and very close approximations for corners — no penetration, no push-out teleport.
+
+// Returns {t: hit fraction in [0,1], nx, ny: outward normal} for ray (b.x,b.y)→(b.x+rx,b.y+ry)
+// against rect (rectX, rectY, rectW, rectH) expanded by BALL_R. Null if no hit.
+function sweptCircleVsRect(px, py, rx, ry, rectX, rectY, rectW, rectH){
+  const ex = rectX - C.BALL_R;
+  const ey = rectY - C.BALL_R;
+  const exr = rectX + rectW + C.BALL_R;
+  const eyb = rectY + rectH + C.BALL_R;
+  let tEnter = -Infinity;
+  let tExit = Infinity;
+  let nx = 0, ny = 0;
+  // X slab
+  if(rx === 0 || Math.abs(rx) < 1e-9){
+    if(px < ex || px > exr) return null;
+  } else {
+    let t1 = (ex - px) / rx;
+    let t2 = (exr - px) / rx;
+    let nxx;
+    if(t1 < t2){ nxx = -1; }
+    else { const tmp=t1; t1=t2; t2=tmp; nxx=1; }
+    if(t1 > tEnter){ tEnter = t1; nx = nxx; ny = 0; }
+    if(t2 < tExit) tExit = t2;
+    if(tEnter > tExit) return null;
+  }
+  // Y slab
+  if(ry === 0 || Math.abs(ry) < 1e-9){
+    if(py < ey || py > eyb) return null;
+  } else {
+    let t1 = (ey - py) / ry;
+    let t2 = (eyb - py) / ry;
+    let nyy;
+    if(t1 < t2){ nyy = -1; }
+    else { const tmp=t1; t1=t2; t2=tmp; nyy=1; }
+    if(t1 > tEnter){ tEnter = t1; nx = 0; ny = nyy; }
+    if(t2 < tExit) tExit = t2;
+    if(tEnter > tExit) return null;
+  }
+  if(tEnter < 0 || tEnter > 1) return null;
+  return {t: tEnter, nx, ny};
+}
+
+function sweptBrickHit(b, rx, ry){
+  let best = null;
+  for(const br of S.bricks){
+    if(br.hp <= 0) continue;
+    const h = sweptCircleVsRect(b.x, b.y, rx, ry, br.x, br.y, br.w, br.h);
+    if(!h) continue;
+    if(!best || h.t < best.t){ best = {br, t: h.t, nx: h.nx, ny: h.ny}; }
+  }
+  return best;
+}
+
+function sweptPaddleHit(b, rx, ry){
+  if(ry <= 0) return null; // moving up = no top-face paddle hit
+  const h = sweptCircleVsRect(b.x, b.y, rx, ry,
+    S.paddleX - S.paddleW/2, C.PADDLE_Y, S.paddleW, C.PADDLE_H);
+  if(!h) return null;
+  if(h.ny !== -1) return null; // only top face counts
+  return h;
+}
+
+// Walls: ball must stay inside [BALL_R, W-BALL_R] × [BALL_R, H+20].
+// Find first time ball center crosses any boundary.
+function sweptWallHit(b, rx, ry){
+  let bestT = Infinity;
+  let bestKind = null;
+  if(rx < 0){
+    const t = (C.BALL_R - b.x) / rx;
+    if(t >= 0 && t <= 1 && t < bestT){ bestT = t; bestKind = 'left'; }
+  } else if(rx > 0){
+    const t = (C.W - C.BALL_R - b.x) / rx;
+    if(t >= 0 && t <= 1 && t < bestT){ bestT = t; bestKind = 'right'; }
+  }
+  if(ry < 0){
+    const t = (C.BALL_R - b.y) / ry;
+    if(t >= 0 && t <= 1 && t < bestT){ bestT = t; bestKind = 'top'; }
+  } else if(ry > 0){
+    const t = (C.H + 20 - b.y) / ry;
+    if(t >= 0 && t <= 1 && t < bestT){ bestT = t; bestKind = 'bottom'; }
+  }
+  if(!bestKind) return null;
+  return {t: bestT, kind: bestKind};
+}
+
 function updateBall(b){
   if(b.attached){
     b.x = S.paddleX;
     b.y = C.PADDLE_Y - 12;
     return;
   }
-  // Sub-step movement: divide by SUBSTEP_DIST so we never tunnel through bricks
-  const dist = Math.hypot(b.vx, b.vy);
-  const steps = Math.max(1, Math.min(C.MAX_SUBSTEP, Math.ceil(dist / C.SUBSTEP_DIST)));
-  const dvx = b.vx / steps;
-  const dvy = b.vy / steps;
-  for(let i=0; i<steps; i++){
-    b.x += dvx;
-    b.y += dvy;
-    handleWalls(b);
-    if(b._dead) return;
-    handlePaddle(b);
-    handleBricks(b);
+  let remaining = 1.0;
+  let safety = 0;
+  while(safety++ < 8 && remaining > 1e-4){
+    const rx = b.vx * remaining;
+    const ry = b.vy * remaining;
+    let firstT = 1.0;
+    let kind = null;
+    let hitData = null;
+    const wall = sweptWallHit(b, rx, ry);
+    if(wall && wall.t < firstT){ firstT = wall.t; kind = 'wall'; hitData = wall; }
+    const paddle = sweptPaddleHit(b, rx, ry);
+    if(paddle && paddle.t < firstT){ firstT = paddle.t; kind = 'paddle'; hitData = paddle; }
+    const brick = sweptBrickHit(b, rx, ry);
+    if(brick && brick.t < firstT){ firstT = brick.t; kind = 'brick'; hitData = brick; }
+    if(kind === null){
+      // No collision in this segment — advance fully and exit
+      b.x += rx;
+      b.y += ry;
+      remaining = 0;
+      break;
+    }
+    // Advance to contact (with tiny back-off so next CCD doesn't re-trigger)
+    const segLen = Math.max(1e-6, Math.hypot(rx, ry));
+    const epsT = Math.min(0.05, 0.05 / segLen); // ~0.05 px back off
+    const advT = Math.max(0, firstT - epsT);
+    b.x += rx * advT;
+    b.y += ry * advT;
+    if(kind === 'wall'){
+      const k = hitData.kind;
+      if(k === 'left' && b.vx < 0) b.vx = -b.vx;
+      else if(k === 'right' && b.vx > 0) b.vx = -b.vx;
+      else if(k === 'top' && b.vy < 0) b.vy = -b.vy;
+      else if(k === 'bottom'){ b._dead = true; return; }
+      sfxWall();
+      spawnExplosion(b.x, b.y, '#7FECFF', 3);
+    } else if(kind === 'paddle'){
+      const hit = (b.x - S.paddleX) / (S.paddleW/2);
+      const clamped = Math.max(-1, Math.min(1, hit));
+      const ang = (-Math.PI/2) + (clamped * Math.PI/3); // ±60deg
+      const sp = b.speed;
+      b.vx = Math.cos(ang) * sp;
+      b.vy = Math.sin(ang) * sp;
+      if(S.combo > 1){
+        S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
+        updateUI();
+      }
+      sfxPaddle();
+      if(S.paddleSticky){ b.attached = true; return; }
+    } else if(kind === 'brick'){
+      const {br, nx, ny} = hitData;
+      const t = BRICK_TYPES[br.type];
+      const canPierce = S.pierceMode && t.hp === 1 && !t.indestruct;
+      if(!canPierce){
+        const dot = b.vx * nx + b.vy * ny;
+        if(dot < 0){
+          b.vx -= 2 * dot * nx;
+          b.vy -= 2 * dot * ny;
+        }
+      }
+      if(S.bombCharges > 0 && !t.indestruct){
+        S.bombCharges--;
+        bombExplosion(br.x + br.w/2, br.y + br.h/2);
+      }
+      hitBrick(br, b.x, b.y);
+    }
+    remaining *= (1 - firstT);
   }
-  // After all substeps: enforce constant speed + min vertical angle
+  // Drift correction & angle floor (post-step safety)
   normalizeSpeed(b);
   clampMinAngle(b);
-}
-
-function handleWalls(b){
-  if(b.x < C.BALL_R){
-    b.x = C.BALL_R;
-    if(b.vx < 0){ b.vx = -b.vx; sfxWall(); spawnExplosion(b.x, b.y, '#7FECFF', 3); }
-  }
-  if(b.x > C.W - C.BALL_R){
-    b.x = C.W - C.BALL_R;
-    if(b.vx > 0){ b.vx = -b.vx; sfxWall(); spawnExplosion(b.x, b.y, '#7FECFF', 3); }
-  }
-  if(b.y < C.BALL_R){
-    b.y = C.BALL_R;
-    if(b.vy < 0){ b.vy = -b.vy; sfxWall(); spawnExplosion(b.x, b.y, '#7FECFF', 3); }
-  }
-  if(b.y > C.H + 20){ b._dead = true; }
-}
-
-function handlePaddle(b){
-  const py = C.PADDLE_Y;
-  if(b.vy <= 0) return; // moving up — can't hit paddle top
-  if(b.y + C.BALL_R < py) return;
-  if(b.y - C.BALL_R > py + C.PADDLE_H) return;
-  const px1 = S.paddleX - S.paddleW/2;
-  const px2 = S.paddleX + S.paddleW/2;
-  if(b.x < px1 - C.BALL_R || b.x > px2 + C.BALL_R) return;
-  // Hit. Compute angle from hit position
-  const hit = (b.x - S.paddleX) / (S.paddleW/2); // -1..1
-  const clamped = Math.max(-1, Math.min(1, hit));
-  const ang = (-Math.PI/2) + (clamped * Math.PI/3); // ±60deg
-  const sp = b.speed;
-  b.vx = Math.cos(ang) * sp;
-  b.vy = Math.sin(ang) * sp;
-  b.y = py - C.BALL_R - 0.5;
-  if(S.combo > 1){
-    S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
-    updateUI();
-  }
-  if(S.paddleSticky) b.attached = true;
-  sfxPaddle();
-}
-
-// Find deepest-penetrating brick (so corner/edge hits resolve toward most-overlapping one)
-function findBrickHit(b){
-  let best = null;
-  let bestPen = -1;
-  for(const br of S.bricks){
-    if(br.hp <= 0) continue;
-    const cx = Math.max(br.x, Math.min(b.x, br.x + br.w));
-    const cy = Math.max(br.y, Math.min(b.y, br.y + br.h));
-    const dx = b.x - cx;
-    const dy = b.y - cy;
-    const d2 = dx*dx + dy*dy;
-    if(d2 < C.BALL_R * C.BALL_R){
-      const dist = Math.sqrt(d2);
-      const pen = C.BALL_R - dist;
-      if(pen > bestPen){
-        bestPen = pen;
-        best = {br, dx, dy, dist};
-      }
-    }
-  }
-  return best;
-}
-
-function handleBricks(b){
-  const hit = findBrickHit(b);
-  if(!hit) return;
-  const {br, dx, dy, dist} = hit;
-  const t = BRICK_TYPES[br.type];
-  // Compute outward normal
-  let nx, ny;
-  if(dist > 0.001){
-    nx = dx / dist;
-    ny = dy / dist;
-  } else {
-    // ball center inside brick — pick closest edge
-    const dl = b.x - br.x;
-    const dr = (br.x + br.w) - b.x;
-    const dtp = b.y - br.y;
-    const dbo = (br.y + br.h) - b.y;
-    const md = Math.min(dl, dr, dtp, dbo);
-    if(md === dl){ nx = -1; ny = 0; }
-    else if(md === dr){ nx = 1; ny = 0; }
-    else if(md === dtp){ nx = 0; ny = -1; }
-    else { nx = 0; ny = 1; }
-  }
-  // Pierce mode: 1-hit non-indestruct = pass through (no bounce, no push-out)
-  const canPierce = S.pierceMode && t.hp === 1 && !t.indestruct;
-  if(!canPierce){
-    // Reflect velocity along normal (only if heading into brick)
-    const dot = b.vx * nx + b.vy * ny;
-    if(dot < 0){
-      b.vx -= 2 * dot * nx;
-      b.vy -= 2 * dot * ny;
-    }
-    // Push ball out along normal
-    const overlap = (C.BALL_R - dist) + 0.5;
-    b.x += nx * overlap;
-    b.y += ny * overlap;
-  }
-  // Bomb: use one charge per brick hit
-  if(S.bombCharges > 0 && !t.indestruct){
-    S.bombCharges--;
-    bombExplosion(br.x + br.w/2, br.y + br.h/2);
-  }
-  hitBrick(br, b.x, b.y);
 }
 
 function bombExplosion(cx, cy){
@@ -1485,12 +1530,29 @@ function toggleMute(){
   }
 }
 
-// ======== LOOP ========
+// ======== LOOP — FIXED TIMESTEP ACCUMULATOR ========
+// Physics runs at fixed 60Hz regardless of monitor refresh rate or frame drops.
+// On 144Hz screens we render 144 fps but step physics ~60×/sec — ball moves at design speed.
+// On heavy frames (particle bursts) we catch up by running multiple steps per render.
+const PHYSICS_DT = 1000 / 60; // 16.667ms = one design frame
+let physAccum = 0;
 function loop(t){
   if(S.lastFrame === 0) S.lastFrame = t;
-  const dt = Math.min(50, t - S.lastFrame);
+  const realDt = Math.min(100, t - S.lastFrame); // cap big jumps
   S.lastFrame = t;
-  if(S.running && !S.paused){ update(dt); }
+  if(S.running && !S.paused){
+    physAccum += realDt;
+    let steps = 0;
+    while(physAccum >= PHYSICS_DT && steps < 6){
+      update(PHYSICS_DT);
+      physAccum -= PHYSICS_DT;
+      steps++;
+    }
+    // If lag spike pushed us further behind, drop the backlog instead of fast-forwarding.
+    if(physAccum > PHYSICS_DT * 3) physAccum = 0;
+  } else {
+    physAccum = 0;
+  }
   render();
   requestAnimationFrame(loop);
 }
