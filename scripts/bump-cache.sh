@@ -1,34 +1,39 @@
 #!/bin/bash
-# Auto-bump cache version across all HTML + shared JS loader files.
+# Auto-bump cache version across HTML, shared JS loaders, and the live
+# `/build.json` lighthouse — and refresh the inline build-check block
+# in every HTML page.
 #
-# WHY THIS EXISTS
-# ---------------
-# Cloudflare Pages sends `Cache-Control: no-cache, must-revalidate` on
-# /*.html and /js/* (see public/_headers). That SHOULD be enough, but
-# mobile browsers (Chrome Android, Samsung Internet, older iOS Safari)
-# have been observed to ignore those headers for dynamically-injected
-# <script> tags. The only 100% reliable way to force a fresh fetch is
-# to change the URL itself, so every shared JS reference in HTML/
-# siteFooter.js carries a `?v=<stamp>` query parameter.
+# WHY THREE LAYERS
+# ----------------
+# Cloudflare Pages serves every HTML and JS path with `Cache-Control:
+# no-store, no-cache, must-revalidate, max-age=0` (see public/_headers).
+# That SHOULD be enough, but mobile browsers (Chrome Android, Samsung
+# Internet, older iOS Safari) have repeatedly been observed serving
+# stale copies anyway. After half a dozen "내 폰에서는 그대로야" reports
+# the policy is now belt-AND-suspenders-AND-airbag:
 #
-# This script rewrites that stamp to the current UNIX epoch on every
-# run, guaranteeing a fresh URL per deploy. Run before every commit
-# that touches user-visible code or content:
+#   1. `?v=<stamp>` query on every shared JS reference. Forces the URL
+#      itself to change so even cache layers that ignore headers see a
+#      different resource and refetch.
+#
+#   2. `/build.json` lighthouse. A tiny JSON file fetched with
+#      cache:no-store on every pageload. Its `v` field is the current
+#      live build stamp, controlled by THIS script.
+#
+#   3. Inline build-check `<script>` baked into the <head> of every
+#      HTML page. It compares the version in the HTML it shipped with
+#      against /build.json — on mismatch it hard-reloads with a
+#      `_b=<live>` query so the browser MUST go back to the network.
+#      sessionStorage caps it to one reload per stale-HTML version,
+#      so the user never loops.
+#
+# Run before every commit that touches user-visible code or content:
 #
 #     bash scripts/bump-cache.sh && git add -u
 #
-# HTML files also carry <meta http-equiv="Cache-Control" no-cache />
-# tags as a second line of defense — see any file under public/ for
-# reference. Together the two mechanisms mean an update CANNOT get
-# stuck behind a stale browser cache.
-#
-# COVERAGE
-# --------
-# Two regexes — one for `/js/<name>.js?v=…` (shared loaders) and one
-# for `/blog/<name>.js?v=…` (the post manifest). Kept separate so we
-# can use sed's basic delimiter `|` without colliding with regex
-# alternation, and so each path stays narrow enough to avoid matching
-# unrelated query strings (YouTube embeds, UTM tails, etc.).
+# All three layers carry the same stamp so a deploy moves them in
+# lockstep — there is no window where the lighthouse says "new build"
+# but the HTML is missing the new check.
 
 set -euo pipefail
 
@@ -36,6 +41,7 @@ cd "$(dirname "$0")/.."
 
 NEW_VERSION=$(date +%s)
 
+# ---- LAYER 1: ?v= query rewrites in shared JS references ---------------
 JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 
@@ -62,3 +68,9 @@ if grep -qE "$JS_RE" public/js/siteFooter.js 2>/dev/null; then
 fi
 
 echo "✓ Cache version bumped to ${NEW_VERSION} across ${count} file(s)."
+
+# ---- LAYERS 2 & 3: build.json + inline build-check ---------------------
+# Done in Python because regex-injecting an HTML block reliably across
+# 100+ files is grim in pure Bash on Windows (sed handling of multi-line
+# patterns differs by version, and CRLF normalization bites).
+python scripts/bump-cache-helper.py "${NEW_VERSION}"
