@@ -237,7 +237,7 @@ canvas#g{
 <div class="pwr-bar" id="pwrBar"></div>
 
 <div class="hint" id="hint">
-  <b>드래그</b>로 패들 이동 · <b>탭</b>으로 발사
+  <b>아무 곳이나 터치 후 좌우 드래그</b>로 패들 이동 · <b>탭</b>으로 발사
 </div>
 
 <div class="btns">
@@ -791,40 +791,52 @@ function getCanvasPos(e){
   else { cx = e.clientX; cy = e.clientY; }
   return { x: (cx - r.left) * _scaleX, y: (cy - r.top) * _scaleY };
 }
+// Relative drag: touch anywhere on the playfield, then slide left/right.
+// Records (touch start X, paddle X at touch start), then updates paddle by the
+// delta — never teleports paddle to finger position. Works from any spot.
+let _drag = null; // {sx, px, kind:'touch'|'mouse'}
 function setupInput(){
   cv.addEventListener('touchstart', (e)=>{
     e.preventDefault();
     resumeAudio();
     if(!S.running || S.paused) return;
     const p = getCanvasPos(e);
-    S.inputX = p.x;
-    if(p.y > C.H * 0.5){ handleAction(); }
+    _drag = { sx: p.x, px: S.paddleX, kind: 'touch' };
+    S.inputX = S.paddleX; // paddle stays put until finger moves
+    if(p.y > C.H * 0.5){ handleAction(); } // tap lower half = launch / fire laser
   }, {passive:false});
   cv.addEventListener('touchmove', (e)=>{
     e.preventDefault();
     if(!S.running || S.paused) return;
-    S.inputX = getCanvasPos(e).x;
+    if(!_drag || _drag.kind !== 'touch') return;
+    const p = getCanvasPos(e);
+    S.inputX = _drag.px + (p.x - _drag.sx);
   }, {passive:false});
   cv.addEventListener('touchend', (e)=>{
     e.preventDefault();
-    S.inputX = null;
+    if(_drag && _drag.kind === 'touch'){ _drag = null; S.inputX = null; }
   }, {passive:false});
+  cv.addEventListener('touchcancel', (e)=>{
+    if(_drag && _drag.kind === 'touch'){ _drag = null; S.inputX = null; }
+  });
   cv.addEventListener('mousedown', (e)=>{
     e.preventDefault();
     resumeAudio();
     if(!S.running || S.paused) return;
     const p = getCanvasPos(e);
-    S.inputX = p.x;
+    _drag = { sx: p.x, px: S.paddleX, kind: 'mouse' };
+    S.inputX = S.paddleX;
     if(p.y > C.H*0.5) handleAction();
-    cv._mouseDown = true;
   });
   cv.addEventListener('mousemove', (e)=>{
     if(!S.running || S.paused) return;
-    if(cv._mouseDown || e.buttons === 0){
-      S.inputX = getCanvasPos(e).x;
-    }
+    if(!_drag || _drag.kind !== 'mouse') return;
+    const p = getCanvasPos(e);
+    S.inputX = _drag.px + (p.x - _drag.sx);
   });
-  document.addEventListener('mouseup', ()=>{cv._mouseDown = false;});
+  document.addEventListener('mouseup', ()=>{
+    if(_drag && _drag.kind === 'mouse'){ _drag = null; S.inputX = null; }
+  });
   document.addEventListener('keydown', (e)=>{
     if(e.code==='Space' || e.code==='ArrowUp'){
       e.preventDefault();
