@@ -11,8 +11,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778019184">
-<script>(function(){var B="1778019184";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778019625">
+<script>(function(){var B="1778019625";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -269,7 +269,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretend
         </div>
     </div>
 
-    <script src="/blog/posts.js?v=1778019184"></script>
+    <script src="/blog/posts.js?v=1778019625"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -443,28 +443,63 @@ window.addEventListener('popstate', renderAll);
 createStars();
 renderAll();
 
-/* Mobile address-bar collapse — most mobile browsers (iOS Safari,
-   Chrome Android, Samsung Internet) hide the address bar automatically
-   when the page scrolls. A 1px scroll on load is enough to nudge them
-   into hiding it without making the user scroll first, so the title
-   sits right under the status bar instead of squashed below the URL.
-   Wrapped in matchMedia so we don't disturb desktop where there's no
-   address bar to hide and the scroll would just feel weird. */
+/* Mobile address-bar collapse — fixed timing.
+   Symptoms before this fix: page would briefly go fullscreen then the
+   address bar snapped back. Two root causes:
+
+   1. We had a `requestAnimationFrame(scrollTo(0,0))` "silent fallback"
+      directly after the nudge. On iOS Safari 17+ / Chrome Android 122+
+      that exact `scrollTo(0,0)` call is treated as a "user wants to
+      see the chrome again" signal and re-expands the bar — undoing the
+      nudge we just made the previous frame.
+   2. 50ms was too early. Mobile browsers run an address-bar layout
+      pass *after* first paint (~200–400ms). A scroll fired before
+      that pass gets overwritten by the browser's own default.
+
+   Fix: drop the fallback entirely (no scrollTo(0,0)) and re-fire the
+   nudge across the layout-settling window so we land at least one
+   nudge after the browser has finished its own dance. The retries are
+   idempotent — once pageYOffset > 0 the browser keeps the bar hidden,
+   so subsequent calls are no-ops. matchMedia gates desktop. */
 (function(){
   if (typeof window === 'undefined') return;
   if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
-  function nudge(){
-    if (window.pageYOffset === 0) {
-      window.scrollTo(0, 1);
-      // If the browser refused (e.g. content shorter than viewport),
-      // fall back silently — there's nothing to collapse anyway.
-      requestAnimationFrame(function(){ if (window.pageYOffset === 0) window.scrollTo(0, 0); });
-    }
+
+  function canNudge(){
+    /* Only nudge when content is actually scrollable. If the page is
+       shorter than the viewport, scrollTo(0,1) silently no-ops and the
+       address bar won't collapse anyway, so don't waste cycles. */
+    if (window.pageYOffset > 0) return false;
+    var doc = document.documentElement;
+    return doc.scrollHeight > window.innerHeight + 4;
   }
+
+  function nudge(){
+    if (!canNudge()) return;
+    /* Belt-and-suspenders: window.scrollTo is the primary API but some
+       mobile WebViews (older Samsung Internet, in-app browsers) ignore
+       it. documentElement.scrollTop is the modern path; body.scrollTop
+       is the iOS Safari-quirk fallback. Set all three; whichever sticks
+       triggers the address-bar collapse. */
+    try { window.scrollTo(0, 1); } catch(e) {}
+    try { if (document.documentElement) document.documentElement.scrollTop = 1; } catch(e) {}
+    try { if (document.body) document.body.scrollTop = 1; } catch(e) {}
+  }
+
+  function schedule(){
+    /* Three retries cover: first paint (100ms), post-layout (350ms),
+       and the slowest case where iOS Safari re-runs its bar layout
+       after web-fonts load (700ms). Once the nudge "takes" the later
+       calls are harmless. */
+    setTimeout(nudge, 100);
+    setTimeout(nudge, 350);
+    setTimeout(nudge, 700);
+  }
+
   if (document.readyState === 'complete') {
-    setTimeout(nudge, 50);
+    schedule();
   } else {
-    window.addEventListener('load', function(){ setTimeout(nudge, 50); }, { once: true });
+    window.addEventListener('load', schedule, { once: true });
   }
 })();
     </script>
@@ -473,6 +508,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1778019184" defer></script>
+<script src="/js/siteFooter.js?v=1778019625" defer></script>
 </body>
 </html>
