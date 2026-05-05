@@ -11,8 +11,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778019625">
-<script>(function(){var B="1778019625";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778020252">
+<script>(function(){var B="1778020252";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -71,32 +71,56 @@
     <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--danger:#FF3366;--success:#00FF88;--dark:#0A0A1A}
-/* Min-height uses 100dvh (dynamic viewport, address bar collapsed) with
-   100vh fallback for older browsers. The body background extends behind
-   the address bar area so even before the bar collapses there's no
-   white seam. */
-body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);min-height:100vh;min-height:100dvh;color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+/* === ADDRESS-BAR LOCK PATTERN ============================================
+   Why this is here: every previous attempt (scrollTo(0,1) nudges, retries,
+   fallbacks) leaked the same symptom — page entry briefly showed fullscreen
+   then snapped back to expanded address bar. Root cause is that the mobile
+   browser's address-bar collapse is driven by *native page scroll events*.
+   No matter how we nudged window scrollTop, the browser eventually ran its
+   own layout pass and reset the bar.
+
+   Real fix: take the native page scroll AWAY from the browser by pinning
+   `<html>` with `position:fixed` and moving the actual scroll into `<body>`.
+   Now there is no page scroll for the browser to react to — it can't
+   collapse OR expand the bar based on user behavior because the document
+   isn't scrolling, the inner element is. The address bar stays in whatever
+   state it landed in on entry (which on iOS Safari and Chrome Android with
+   `viewport-fit=cover` is usually the collapsed state).
+
+   This is the standard pattern PWAs use to lock fullscreen — see e.g. Apple
+   Maps web, Twitter mobile, Notion mobile. The trade-off is pull-to-refresh
+   no longer works (the browser reads body-level scroll, not html-level), but
+   we've never relied on it. Momentum scrolling needs `-webkit-overflow-
+   scrolling:touch` on the body to feel native. */
+html{position:fixed;inset:0;width:100%;height:100%;height:100dvh;overflow:hidden}
+body{position:relative;width:100%;height:100%;height:100dvh;margin:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 
 #dynamicBg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.06) 0%,transparent 55%),radial-gradient(ellipse at 20% 85%,rgba(255,107,53,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)}
 .stars{position:fixed;inset:0;pointer-events:none;z-index:-1}
 .star{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--dur) ease-in-out infinite}
 @keyframes twinkle{0%,100%{opacity:.15;transform:scale(.8)}50%{opacity:.7;transform:scale(1.1)}}
 
-/* Wrap top padding tightened from 36px → 14px so the title sits right
-   below the floating home button (no awkward whitespace gap on mobile).
-   Bottom 60px untouched. */
-.wrap{max-width:780px;margin:0 auto;padding:14px 20px 60px;position:relative;z-index:1}
+/* Wrap top padding includes safe-area-inset-top so on devices with a
+   notch/Dynamic Island the title clears the cutout. Bottom adds
+   safe-area-inset-bottom for the iOS home indicator. The 14/60 base
+   values are the visible whitespace beyond the system chrome. */
+.wrap{max-width:780px;margin:0 auto;padding:calc(14px + env(safe-area-inset-top,0px)) 20px calc(60px + env(safe-area-inset-bottom,0px));position:relative;z-index:1}
 
 /* Floating home button — same muted-glass style used across every game
    page (see /games/roulette/, /games/dice/, etc.). Replaces the older
-   wide top-nav to free up vertical space and stay consistent. */
-.floating-home{position:fixed;top:12px;left:12px;z-index:1000;padding:7px 11px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.8);font-size:.78em;font-weight:700;font-family:'Noto Sans KR',sans-serif;text-decoration:none;letter-spacing:.02em;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .2s,border-color .2s,color .2s;width:auto;height:auto;display:inline-block;line-height:1.2;box-shadow:0 4px 12px rgba(0,0,0,.25)}
+   wide top-nav to free up vertical space and stay consistent.
+   `env(safe-area-inset-*)` slots the button below the iOS notch/Dynamic
+   Island and to the right of the rounded screen corner so it never
+   collides with system chrome on devices with cutouts. */
+.floating-home{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:calc(12px + env(safe-area-inset-left,0px));z-index:1000;padding:7px 11px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.8);font-size:.78em;font-weight:700;font-family:'Noto Sans KR',sans-serif;text-decoration:none;letter-spacing:.02em;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:background .2s,border-color .2s,color .2s;width:auto;height:auto;display:inline-block;line-height:1.2;box-shadow:0 4px 12px rgba(0,0,0,.25)}
 .floating-home:hover{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;transform:none}
 
-/* Header margin-bottom tightened (24 → 16). Top padding now lives on .wrap
-   only; no extra header margin-top so the H1 sits as high as the floating
-   home button allows. */
-.header{text-align:center;margin-bottom:16px;margin-top:36px}
+/* Header margin tightened end-to-end (was 36/24). The H1 is centered so
+   it never collides with the floating-home button on the left — we can
+   pull it as high as visual breathing room allows. The 22px top is what
+   keeps "Lucky Blog" from feeling crammed against the status bar. */
+.header{text-align:center;margin-bottom:14px;margin-top:22px}
 .header h1{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:2.2em;font-weight:900;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:8px;letter-spacing:.02em}
 .header p{font-size:.95em;color:rgba(255,255,255,.5);line-height:1.6}
 
@@ -170,11 +194,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretend
 .footer-nav a:hover{color:var(--accent)}
 
 @media(max-width:500px){
-    /* Top padding minimal — floating-home is fixed at top:10px, the
-       title centers and skips that left margin so they don't collide. */
-    .wrap{padding:8px 14px 40px}
-    .floating-home{top:10px;left:10px;padding:6px 9px;font-size:.72em}
-    .header{margin-top:30px}
+    /* Top padding minimal — floating-home is fixed at top:10px (plus
+       safe-area for notch), the title centers and skips that left
+       margin so they don't collide. */
+    .wrap{padding:calc(8px + env(safe-area-inset-top,0px)) 14px calc(40px + env(safe-area-inset-bottom,0px))}
+    .floating-home{top:calc(10px + env(safe-area-inset-top,0px));left:calc(10px + env(safe-area-inset-left,0px));padding:6px 9px;font-size:.72em}
+    .header{margin-top:18px;margin-bottom:12px}
     .header h1{font-size:1.5em}
     .header p{font-size:.82em}
     .post-card{padding:14px 14px 14px 18px;border-radius:12px}
@@ -269,7 +294,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretend
         </div>
     </div>
 
-    <script src="/blog/posts.js?v=1778019625"></script>
+    <script src="/blog/posts.js?v=1778020252"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -443,64 +468,24 @@ window.addEventListener('popstate', renderAll);
 createStars();
 renderAll();
 
-/* Mobile address-bar collapse — fixed timing.
-   Symptoms before this fix: page would briefly go fullscreen then the
-   address bar snapped back. Two root causes:
+/* Bar-flicker mitigation, history-scroll-restore edition.
+   With the html { position:fixed } + body-scroll pattern in CSS the
+   address bar cannot be expand/collapsed by user scrolling at all,
+   because the browser sees zero scroll on the document itself. But
+   one source of unwanted bar-expand remains: the browser auto-restoring
+   scroll position on back/forward navigation. Disabling that keeps our
+   body-level scroll intact while denying the browser a reason to
+   re-paint chrome. No timeouts, no nudges, no retries — those were
+   never the right mental model.
 
-   1. We had a `requestAnimationFrame(scrollTo(0,0))` "silent fallback"
-      directly after the nudge. On iOS Safari 17+ / Chrome Android 122+
-      that exact `scrollTo(0,0)` call is treated as a "user wants to
-      see the chrome again" signal and re-expands the bar — undoing the
-      nudge we just made the previous frame.
-   2. 50ms was too early. Mobile browsers run an address-bar layout
-      pass *after* first paint (~200–400ms). A scroll fired before
-      that pass gets overwritten by the browser's own default.
-
-   Fix: drop the fallback entirely (no scrollTo(0,0)) and re-fire the
-   nudge across the layout-settling window so we land at least one
-   nudge after the browser has finished its own dance. The retries are
-   idempotent — once pageYOffset > 0 the browser keeps the bar hidden,
-   so subsequent calls are no-ops. matchMedia gates desktop. */
+   We also still nudge body.scrollTop=1 once on entry so cards under
+   the spotlight are immediately within the user's eye-line on tall
+   phones; this is purely a content-positioning concern, not a chrome
+   one (no native page scroll happens). */
 (function(){
-  if (typeof window === 'undefined') return;
-  if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
-
-  function canNudge(){
-    /* Only nudge when content is actually scrollable. If the page is
-       shorter than the viewport, scrollTo(0,1) silently no-ops and the
-       address bar won't collapse anyway, so don't waste cycles. */
-    if (window.pageYOffset > 0) return false;
-    var doc = document.documentElement;
-    return doc.scrollHeight > window.innerHeight + 4;
-  }
-
-  function nudge(){
-    if (!canNudge()) return;
-    /* Belt-and-suspenders: window.scrollTo is the primary API but some
-       mobile WebViews (older Samsung Internet, in-app browsers) ignore
-       it. documentElement.scrollTop is the modern path; body.scrollTop
-       is the iOS Safari-quirk fallback. Set all three; whichever sticks
-       triggers the address-bar collapse. */
-    try { window.scrollTo(0, 1); } catch(e) {}
-    try { if (document.documentElement) document.documentElement.scrollTop = 1; } catch(e) {}
-    try { if (document.body) document.body.scrollTop = 1; } catch(e) {}
-  }
-
-  function schedule(){
-    /* Three retries cover: first paint (100ms), post-layout (350ms),
-       and the slowest case where iOS Safari re-runs its bar layout
-       after web-fonts load (700ms). Once the nudge "takes" the later
-       calls are harmless. */
-    setTimeout(nudge, 100);
-    setTimeout(nudge, 350);
-    setTimeout(nudge, 700);
-  }
-
-  if (document.readyState === 'complete') {
-    schedule();
-  } else {
-    window.addEventListener('load', schedule, { once: true });
-  }
+  try {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+  } catch(e) {}
 })();
     </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -508,6 +493,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1778019625" defer></script>
+<script src="/js/siteFooter.js?v=1778020252" defer></script>
 </body>
 </html>
