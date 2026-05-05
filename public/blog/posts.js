@@ -14,6 +14,18 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'spacex-ipo-2026-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 14,
+        coverEmoji: '🚀',
+        tags: ['SpaceX IPO', 'Project Apex', 'Starlink', 'Starship', 'xAI Grok', 'Elon Musk', 'Space Investing', '2026 IPO'],
+        title: "SpaceX IPO Deep Dive — Musk's $1.75T Empire on the Launchpad",
+        excerpt: "Comprehensive analysis of the $1.75T SpaceX IPO. Three pillars rearming Musk's empire: xAI merger, Starship V3, Orbital AI. Five business units, bull/bear scenarios, risk matrix, 2030 roadmap.",
+        alt: 'spacex-ipo-2026',
+    },
+    {
         slug: 'spacex-ipo-2026',
         lang: 'ko',
         category: 'industry',
@@ -23,6 +35,7 @@ window.BLOG_POSTS = [
         tags: ['SpaceX IPO', 'Project Apex', 'Starlink', 'Starship', 'xAI Grok', '머스크', '우주산업 투자', '2026 IPO'],
         title: 'SpaceX IPO 심층분석 — $1.75T 발사대에 오른 머스크 제국',
         excerpt: '$1.75T 목표의 SpaceX IPO 종합 분석. xAI 합병 · Starship V3 · Orbital AI 세 축으로 재무장한 머스크 제국. 5대 사업부문, 강세·약세 시나리오, 리스크 매트릭스, 2030 로드맵.',
+        alt: 'spacex-ipo-2026-en',
     },
     {
         slug: 'space-evo-10-reusable',
