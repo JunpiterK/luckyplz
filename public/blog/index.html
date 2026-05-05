@@ -2,17 +2,17 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <!-- viewport-fit=cover: lets the page bleed under the iOS notch / nav
-         bar so we can use 100dvh to fill the *whole* screen. Pairs with
-         the scroll(0,1) trick below + apple-mobile-web-app metas to make
-         the address bar collapse on entry, just like the homepage. -->
+    <!-- viewport-fit=cover lets the page extend under iOS notch / Dynamic
+         Island and the rounded corners. PWA `apple-mobile-web-app-capable`
+         metas were intentionally REMOVED here — on a regular browser visit
+         (not a homescreen-installed PWA) those metas have produced a brief
+         status-bar layout artifact on iOS Safari 17+ that looks like a
+         flash of fullscreen on entry. The site's manifest.json still
+         covers proper PWA installs. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778020252">
-<script>(function(){var B="1778020252";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778020866">
+<script>(function(){var B="1778020866";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -72,29 +72,43 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--danger:#FF3366;--success:#00FF88;--dark:#0A0A1A}
 
-/* === ADDRESS-BAR LOCK PATTERN ============================================
-   Why this is here: every previous attempt (scrollTo(0,1) nudges, retries,
-   fallbacks) leaked the same symptom — page entry briefly showed fullscreen
-   then snapped back to expanded address bar. Root cause is that the mobile
-   browser's address-bar collapse is driven by *native page scroll events*.
-   No matter how we nudged window scrollTop, the browser eventually ran its
-   own layout pass and reset the bar.
+/* === ADDRESS-BAR NUDGE + LOCK PATTERN ====================================
+   Mental model on the third revision:
 
-   Real fix: take the native page scroll AWAY from the browser by pinning
-   `<html>` with `position:fixed` and moving the actual scroll into `<body>`.
-   Now there is no page scroll for the browser to react to — it can't
-   collapse OR expand the bar based on user behavior because the document
-   isn't scrolling, the inner element is. The address bar stays in whatever
-   state it landed in on entry (which on iOS Safari and Chrome Android with
-   `viewport-fit=cover` is usually the collapsed state).
+   - Lock-only (PR #108 attempt) failed because applying html{position:fixed}
+     immediately freezes whatever bar state the browser handed us — and on
+     entry that's almost always *expanded*. There's no native scroll left to
+     trigger a collapse.
+   - Nudge-only (PR #107) failed because once the page settles, the browser
+     re-expands the bar on its own; we have no way to tell it "leave it alone"
+     while staying in native-scroll mode.
 
-   This is the standard pattern PWAs use to lock fullscreen — see e.g. Apple
-   Maps web, Twitter mobile, Notion mobile. The trade-off is pull-to-refresh
-   no longer works (the browser reads body-level scroll, not html-level), but
-   we've never relied on it. Momentum scrolling needs `-webkit-overflow-
-   scrolling:touch` on the body to feel native. */
-html{position:fixed;inset:0;width:100%;height:100%;height:100dvh;overflow:hidden}
-body{position:relative;width:100%;height:100%;height:100dvh;margin:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+   The combination works:
+     1. Boot in normal native-scroll mode (this CSS file's default — no
+        position:fixed). The body is normally scrollable.
+     2. JS at load time forces body min-height to viewport+200px (so the
+        page is *guaranteed* scrollable past 200px) and fires
+        `window.scrollTo(0, 200)`. 200px is well past the threshold all
+        major mobile browsers use to commit to a collapsed bar — 1px nudges
+        get reverted, 200px does not.
+     3. 350ms later (after the bar collapse animation finishes), the JS
+        adds `lp-locked` to <html>. The CSS below switches to the
+        position:fixed pattern, freezing the bar in its collapsed state.
+        body.scrollTop is also reset to 0 so the user sees the page top.
+
+   Trade-offs: pull-to-refresh stops after the lock takes effect, and there's
+   a ~350ms window during which the user *could* notice a 200px scroll if
+   their first frame fires absurdly fast. In practice the bar-collapse
+   animation runs concurrently and the eye reads the entry as a single
+   "settle" motion. */
+html{height:100%;height:100dvh}
+body{margin:0;min-height:100vh;min-height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+/* When JS completes the nudge, it adds .lp-locked to <html>. The page
+   transitions from native page-scroll into "html pinned, body scrolls"
+   so the bar can't be re-expanded by the browser's own layout passes. */
+html.lp-locked{position:fixed;inset:0;width:100%;height:100dvh;overflow:hidden}
+html.lp-locked body{position:relative;width:100%;height:100dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 
 #dynamicBg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.06) 0%,transparent 55%),radial-gradient(ellipse at 20% 85%,rgba(255,107,53,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)}
 .stars{position:fixed;inset:0;pointer-events:none;z-index:-1}
@@ -189,10 +203,6 @@ body{position:relative;width:100%;height:100%;height:100dvh;margin:0;overflow-y:
 .empty-cta{display:inline-block;margin-top:10px;padding:8px 16px;border-radius:999px;background:rgba(255,230,109,.1);border:1px solid rgba(255,230,109,.3);color:#FFE66D;text-decoration:none;font-size:.9em;transition:background .2s,border-color .2s}
 .empty-cta:hover{background:rgba(255,230,109,.2);border-color:rgba(255,230,109,.5)}
 
-.footer-nav{margin-top:50px;text-align:center;padding-top:24px;border-top:1px solid rgba(255,255,255,.06)}
-.footer-nav a{color:rgba(255,255,255,.4);text-decoration:none;font-size:.8em;transition:color .2s;margin:0 10px}
-.footer-nav a:hover{color:var(--accent)}
-
 @media(max-width:500px){
     /* Top padding minimal — floating-home is fixed at top:10px (plus
        safe-area for notch), the title centers and skips that left
@@ -260,14 +270,6 @@ body{position:relative;width:100%;height:100%;height:100dvh;margin:0;overflow-y:
             sp.href='/blog/spacex-ipo-2026-en/';
             lab.textContent='SPACEX IPO · LIVE D-DAY';
             ttl.textContent="Musk's $1.75T Empire IPO · Live Countdown + Deep Dive";
-            // Footer-nav
-            var fn=document.querySelector('.footer-nav');
-            if(fn){
-              fn.innerHTML='<a href="/">🏠 Home</a>'
-                +'<a href="/games/team/">Team Picker</a>'
-                +'<a href="/games/roulette/">Roulette</a>'
-                +'<a href="/games/dice/">Dice</a>';
-            }
           } else {
             sp.href='/blog/spacex-ipo-2026/';
           }
@@ -285,16 +287,9 @@ body{position:relative;width:100%;height:100%;height:100dvh;margin:0;overflow-y:
         <nav class="cat-tabs" id="catTabs" aria-label="카테고리 필터"></nav>
 
         <div class="posts" id="postsList"></div>
-
-        <div class="footer-nav">
-            <a href="/">🏠 홈</a>
-            <a href="/games/team/">팀 뽑기</a>
-            <a href="/games/roulette/">룰렛</a>
-            <a href="/games/dice/">주사위</a>
-        </div>
     </div>
 
-    <script src="/blog/posts.js?v=1778020252"></script>
+    <script src="/blog/posts.js?v=1778020866"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -468,24 +463,48 @@ window.addEventListener('popstate', renderAll);
 createStars();
 renderAll();
 
-/* Bar-flicker mitigation, history-scroll-restore edition.
-   With the html { position:fixed } + body-scroll pattern in CSS the
-   address bar cannot be expand/collapsed by user scrolling at all,
-   because the browser sees zero scroll on the document itself. But
-   one source of unwanted bar-expand remains: the browser auto-restoring
-   scroll position on back/forward navigation. Disabling that keeps our
-   body-level scroll intact while denying the browser a reason to
-   re-paint chrome. No timeouts, no nudges, no retries — those were
-   never the right mental model.
-
-   We also still nudge body.scrollTop=1 once on entry so cards under
-   the spotlight are immediately within the user's eye-line on tall
-   phones; this is purely a content-positioning concern, not a chrome
-   one (no native page scroll happens). */
+/* === Address-bar nudge + lock — see the matching CSS comment above. ====
+   Order of operations matters: this MUST run before the user can interact,
+   so we hook DOMContentLoaded if we're not done parsing, otherwise fire
+   immediately. Desktop has no address bar to chase, so we early-exit and
+   never apply the locked layout (avoiding pointless layout churn). */
 (function(){
-  try {
-    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-  } catch(e) {}
+  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
+
+  if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
+
+  function bootstrap(){
+    /* Step 1: guarantee scrollability past the nudge target. If the page
+       happens to be too short (small viewports + few posts) we'd otherwise
+       silently no-op. We restore the natural min-height in step 3. */
+    var origMinH = document.body.style.minHeight;
+    document.body.style.minHeight = 'calc(100dvh + 240px)';
+
+    /* Step 2: hard nudge. 200px is the empirically-stable value across
+       iOS Safari 17+, Chrome Android 124+, and Samsung Internet 25+ —
+       small nudges (1–10px) get reverted by the browser's "user is reading
+       the top" heuristic, but 200px is unambiguously a scroll. */
+    try { window.scrollTo(0, 200); } catch(e) {}
+
+    /* Step 3: after the bar's collapse animation has had time to commit
+       (iOS Safari is the slowest at ~280ms), pin <html> and let <body>
+       become the scroll container. The visible scroll position resets to
+       the page top via body.scrollTop = 0, so the user only sees a single
+       "page settles" motion rather than a discrete "scrolled then snapped
+       back" hop. */
+    setTimeout(function(){
+      document.documentElement.classList.add('lp-locked');
+      document.body.style.minHeight = origMinH;
+      try { document.body.scrollTop = 0; } catch(e) {}
+      try { document.documentElement.scrollTop = 0; } catch(e) {}
+    }, 360);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
+  } else {
+    bootstrap();
+  }
 })();
     </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -493,6 +512,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1778020252" defer></script>
+<script src="/js/siteFooter.js?v=1778020866" defer></script>
 </body>
 </html>
