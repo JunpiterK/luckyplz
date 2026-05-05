@@ -78,10 +78,30 @@ def update_or_inject(html: str, version: str) -> str:
     return html  # no <head>? skip silently — nothing to inject into.
 
 
+def latest_blog_date() -> str:
+    """Scan public/blog/posts.js for `date: 'YYYY-MM-DD'` literals and
+    return the most recent one. siteFooter.js reads this from build.json
+    to decide whether to render the "NEW" badge next to the Blog link
+    in the global footer (today === latest → render badge).
+
+    Returns '' if posts.js is missing or unreadable, in which case
+    siteFooter just skips the badge — never crashes."""
+    posts = ROOT / 'blog' / 'posts.js'
+    if not posts.exists():
+        return ''
+    try:
+        text = posts.read_text(encoding='utf-8')
+    except Exception:
+        return ''
+    dates = re.findall(r"date:\s*['\"](\d{4}-\d{2}-\d{2})['\"]", text)
+    return max(dates) if dates else ''
+
+
 def main(version: str) -> None:
     sys.stdout.reconfigure(encoding='utf-8')
 
-    # 1. build.json
+    # 1. build.json (carries the live build version + the latest blog date
+    #    so the global footer can highlight a same-day post)
     bj = ROOT / 'build.json'
     if bj.exists():
         try:
@@ -91,6 +111,9 @@ def main(version: str) -> None:
     else:
         data = {}
     data['v'] = version
+    blog_d = latest_blog_date()
+    if blog_d:
+        data['latest_blog_date'] = blog_d
     bj.write_text(
         json.dumps(data, ensure_ascii=False, separators=(',', ':')) + '\n',
         encoding='utf-8',
