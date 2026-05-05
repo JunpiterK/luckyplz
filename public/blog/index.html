@@ -11,8 +11,8 @@
          covers proper PWA installs. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778020866">
-<script>(function(){var B="1778020866";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778021377">
+<script>(function(){var B="1778021377";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -72,43 +72,47 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--danger:#FF3366;--success:#00FF88;--dark:#0A0A1A}
 
-/* === ADDRESS-BAR NUDGE + LOCK PATTERN ====================================
-   Mental model on the third revision:
+/* === ADDRESS-BAR NUDGE+LOCK — REVISION 4 (visualViewport-driven) =========
+   Earlier revisions (200/350/700ms scrollTo retries; html-fixed lock-only;
+   nudge+lock with 200px) all leaked the same flicker on stricter mobile
+   browsers — Samsung Internet and recent iOS Safari builds enforce a
+   "user is reading the top" heuristic that reverts small nudges and
+   re-expands the address bar even after our nudge committed.
 
-   - Lock-only (PR #108 attempt) failed because applying html{position:fixed}
-     immediately freezes whatever bar state the browser handed us — and on
-     entry that's almost always *expanded*. There's no native scroll left to
-     trigger a collapse.
-   - Nudge-only (PR #107) failed because once the page settles, the browser
-     re-expands the bar on its own; we have no way to tell it "leave it alone"
-     while staying in native-scroll mode.
+   New approach combines four reinforcements:
 
-   The combination works:
-     1. Boot in normal native-scroll mode (this CSS file's default — no
-        position:fixed). The body is normally scrollable.
-     2. JS at load time forces body min-height to viewport+200px (so the
-        page is *guaranteed* scrollable past 200px) and fires
-        `window.scrollTo(0, 200)`. 200px is well past the threshold all
-        major mobile browsers use to commit to a collapsed bar — 1px nudges
-        get reverted, 200px does not.
-     3. 350ms later (after the bar collapse animation finishes), the JS
-        adds `lp-locked` to <html>. The CSS below switches to the
-        position:fixed pattern, freezing the bar in its collapsed state.
-        body.scrollTop is also reset to 0 so the user sees the page top.
+   1. **600px+ nudge** — stricter heuristics revert anything under ~300px;
+      600 is unambiguously "the user is reading further down" so the bar
+      stays collapsed.
+   2. **Body min-height boosted to 100dvh+800** — the nudge always lands;
+      no silent no-op on short pages.
+   3. **visualViewport API state-driven lock** — instead of guessing when
+      the bar has settled (timeout-based), we directly listen to
+      `window.visualViewport.resize` and read `.height` to detect that the
+      bar collapsed (height grew). Lock fires the moment we *know* the bar
+      committed, which beats fixed-timing every time.
+   4. **Polling fallback + 3s ceiling** — if visualViewport is unavailable
+      (older browsers) or the resize event never fires, we poll every
+      100ms and lock anyway after 3s so the user is never stuck in
+      "expanded forever, can't scroll" mode.
 
-   Trade-offs: pull-to-refresh stops after the lock takes effect, and there's
-   a ~350ms window during which the user *could* notice a 200px scroll if
-   their first frame fires absurdly fast. In practice the bar-collapse
-   animation runs concurrently and the eye reads the entry as a single
-   "settle" motion. */
+   The lock itself is the same pattern as before: html.lp-locked switches
+   <html> to position:fixed and <body> becomes the scroll container.
+   Once locked, the browser's bar-management heuristics can't fire because
+   there's no document-level scroll to inspect. */
 html{height:100%;height:100dvh}
-body{margin:0;min-height:100vh;min-height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+/* Default body min-height is intentionally tall — the bootstrap nudge of
+   600px MUST land. The extra dark space below content is invisible
+   (background:var(--dark) matches the rest of the page) and gets reset
+   by .lp-locked anyway, so the user never sees it. */
+body{margin:0;min-height:calc(100vh + 800px);min-height:calc(100dvh + 800px);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 
-/* When JS completes the nudge, it adds .lp-locked to <html>. The page
-   transitions from native page-scroll into "html pinned, body scrolls"
-   so the bar can't be re-expanded by the browser's own layout passes. */
+/* Locked layout — html pinned, body becomes the scroll container, bar
+   can't be re-expanded by the browser since document-level scroll is 0
+   forever. min-height drops back to viewport so we don't carry the
+   bootstrap-only 800px buffer. */
 html.lp-locked{position:fixed;inset:0;width:100%;height:100dvh;overflow:hidden}
-html.lp-locked body{position:relative;width:100%;height:100dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+html.lp-locked body{position:relative;width:100%;height:100dvh;min-height:100dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
 
 #dynamicBg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.06) 0%,transparent 55%),radial-gradient(ellipse at 20% 85%,rgba(255,107,53,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)}
 .stars{position:fixed;inset:0;pointer-events:none;z-index:-1}
@@ -289,7 +293,7 @@ html.lp-locked body{position:relative;width:100%;height:100dvh;overflow-y:auto;o
         <div class="posts" id="postsList"></div>
     </div>
 
-    <script src="/blog/posts.js?v=1778020866"></script>
+    <script src="/blog/posts.js?v=1778021377"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -463,41 +467,88 @@ window.addEventListener('popstate', renderAll);
 createStars();
 renderAll();
 
-/* === Address-bar nudge + lock — see the matching CSS comment above. ====
-   Order of operations matters: this MUST run before the user can interact,
-   so we hook DOMContentLoaded if we're not done parsing, otherwise fire
-   immediately. Desktop has no address bar to chase, so we early-exit and
-   never apply the locked layout (avoiding pointless layout churn). */
+/* === Address-bar nudge+lock — revision 4, visualViewport-driven. =========
+   See the CSS comment above for the four-part strategy. The key
+   mechanical change here is that we no longer fixed-timeout the lock —
+   we listen for the visualViewport.height change that *proves* the bar
+   collapsed, and lock the moment we see it. Polling fallback covers
+   browsers without the API or that swallow the resize event.
+
+   Every nudge call is wrapped in try/catch and uses three different
+   APIs (window.scrollTo, documentElement.scrollTop, body.scrollTop) so a
+   single API being silently no-op'd doesn't kill the trick. */
 (function(){
   try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
 
   if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
 
+  var locked = false;
+  /* Capture the initial visualViewport height immediately. If the bar
+     collapses, this number grows. We declare success on +30px so a
+     single px of jitter doesn't false-trigger. */
+  var vv = window.visualViewport || null;
+  var initialH = vv ? vv.height : window.innerHeight;
+
+  function barLooksCollapsed(){
+    var h = vv ? vv.height : window.innerHeight;
+    return h > initialH + 30;
+  }
+
+  function nudge(amount){
+    /* Three APIs because mobile WebViews disagree on which one drives
+       page scroll. Whichever lands first triggers the bar-collapse. */
+    try { window.scrollTo(0, amount); } catch(e) {}
+    try { document.documentElement.scrollTop = amount; } catch(e) {}
+    try { document.body.scrollTop = amount; } catch(e) {}
+  }
+
+  function lockNow(){
+    if (locked) return;
+    locked = true;
+    document.documentElement.classList.add('lp-locked');
+    /* Reset every scroll target to 0 so the user sees the page top
+       (not the 600px-down position we nudged to). */
+    try { document.body.scrollTop = 0; } catch(e) {}
+    try { document.documentElement.scrollTop = 0; } catch(e) {}
+    try { window.scrollTo(0, 0); } catch(e) {}
+  }
+
   function bootstrap(){
-    /* Step 1: guarantee scrollability past the nudge target. If the page
-       happens to be too short (small viewports + few posts) we'd otherwise
-       silently no-op. We restore the natural min-height in step 3. */
-    var origMinH = document.body.style.minHeight;
-    document.body.style.minHeight = 'calc(100dvh + 240px)';
+    /* Phase 1: aggressive nudges. 600px clears the strictest "reading
+       top" heuristic; if the first one is somehow short-circuited, the
+       follow-ups at 800/1000 escalate. */
+    nudge(600);
+    setTimeout(function(){ if (!locked) nudge(700); }, 80);
+    setTimeout(function(){ if (!locked) nudge(900); }, 200);
+    setTimeout(function(){ if (!locked) nudge(1100); }, 400);
 
-    /* Step 2: hard nudge. 200px is the empirically-stable value across
-       iOS Safari 17+, Chrome Android 124+, and Samsung Internet 25+ —
-       small nudges (1–10px) get reverted by the browser's "user is reading
-       the top" heuristic, but 200px is unambiguously a scroll. */
-    try { window.scrollTo(0, 200); } catch(e) {}
+    /* Phase 2: visualViewport-driven lock. As soon as the height grows
+       we know the bar committed to collapsing, so we lock immediately.
+       This beats fixed-timing because some devices commit in 80ms and
+       others take 600ms — listening is more accurate than guessing. */
+    if (vv && typeof vv.addEventListener === 'function') {
+      var onResize = function(){
+        if (!locked && barLooksCollapsed()) {
+          lockNow();
+          try { vv.removeEventListener('resize', onResize); } catch(e) {}
+        }
+      };
+      try { vv.addEventListener('resize', onResize); } catch(e) {}
+    }
 
-    /* Step 3: after the bar's collapse animation has had time to commit
-       (iOS Safari is the slowest at ~280ms), pin <html> and let <body>
-       become the scroll container. The visible scroll position resets to
-       the page top via body.scrollTop = 0, so the user only sees a single
-       "page settles" motion rather than a discrete "scrolled then snapped
-       back" hop. */
-    setTimeout(function(){
-      document.documentElement.classList.add('lp-locked');
-      document.body.style.minHeight = origMinH;
-      try { document.body.scrollTop = 0; } catch(e) {}
-      try { document.documentElement.scrollTop = 0; } catch(e) {}
-    }, 360);
+    /* Phase 3: polling fallback. Every 100ms check whether the bar
+       collapsed; lock when it did. Hard ceiling of 3s so even on
+       browsers where neither the resize event nor the height check
+       ever signals success, the user isn't stuck in expanded forever. */
+    var attempts = 0;
+    function poll(){
+      if (locked) return;
+      if (barLooksCollapsed()) { lockNow(); return; }
+      attempts += 1;
+      if (attempts >= 30) { lockNow(); return; }
+      setTimeout(poll, 100);
+    }
+    setTimeout(poll, 150);
   }
 
   if (document.readyState === 'loading') {
@@ -512,6 +563,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1778020866" defer></script>
+<script src="/js/siteFooter.js?v=1778021377" defer></script>
 </body>
 </html>
