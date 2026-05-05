@@ -11,8 +11,8 @@
          covers proper PWA installs. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778021377">
-<script>(function(){var B="1778021377";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778021859">
+<script>(function(){var B="1778021859";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -72,47 +72,18 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--danger:#FF3366;--success:#00FF88;--dark:#0A0A1A}
 
-/* === ADDRESS-BAR NUDGE+LOCK — REVISION 4 (visualViewport-driven) =========
-   Earlier revisions (200/350/700ms scrollTo retries; html-fixed lock-only;
-   nudge+lock with 200px) all leaked the same flicker on stricter mobile
-   browsers — Samsung Internet and recent iOS Safari builds enforce a
-   "user is reading the top" heuristic that reverts small nudges and
-   re-expands the address bar even after our nudge committed.
+/* === Address-bar handling: a year-long battle, retired ===================
+   Four PRs (#107 nudge, #108 lock, #109 nudge+lock, #110 visualViewport)
+   tried to suppress the brief "fullscreen flash → bar re-expands" that
+   iOS/Android show during page navigation. None worked: the flash is
+   the BROWSER's own transition animation between document loads, not
+   something the new page's JS can control. The new page hasn't even
+   parsed by the time the chrome decides to re-show.
 
-   New approach combines four reinforcements:
-
-   1. **600px+ nudge** — stricter heuristics revert anything under ~300px;
-      600 is unambiguously "the user is reading further down" so the bar
-      stays collapsed.
-   2. **Body min-height boosted to 100dvh+800** — the nudge always lands;
-      no silent no-op on short pages.
-   3. **visualViewport API state-driven lock** — instead of guessing when
-      the bar has settled (timeout-based), we directly listen to
-      `window.visualViewport.resize` and read `.height` to detect that the
-      bar collapsed (height grew). Lock fires the moment we *know* the bar
-      committed, which beats fixed-timing every time.
-   4. **Polling fallback + 3s ceiling** — if visualViewport is unavailable
-      (older browsers) or the resize event never fires, we poll every
-      100ms and lock anyway after 3s so the user is never stuck in
-      "expanded forever, can't scroll" mode.
-
-   The lock itself is the same pattern as before: html.lp-locked switches
-   <html> to position:fixed and <body> becomes the scroll container.
-   Once locked, the browser's bar-management heuristics can't fire because
-   there's no document-level scroll to inspect. */
+   The only reliable way to be rid of mobile chrome on this site is
+   PWA standalone mode — see the install banner below + manifest.json. */
 html{height:100%;height:100dvh}
-/* Default body min-height is intentionally tall — the bootstrap nudge of
-   600px MUST land. The extra dark space below content is invisible
-   (background:var(--dark) matches the rest of the page) and gets reset
-   by .lp-locked anyway, so the user never sees it. */
-body{margin:0;min-height:calc(100vh + 800px);min-height:calc(100dvh + 800px);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
-
-/* Locked layout — html pinned, body becomes the scroll container, bar
-   can't be re-expanded by the browser since document-level scroll is 0
-   forever. min-height drops back to viewport so we don't carry the
-   bootstrap-only 800px buffer. */
-html.lp-locked{position:fixed;inset:0;width:100%;height:100dvh;overflow:hidden}
-html.lp-locked body{position:relative;width:100%;height:100dvh;min-height:100dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+body{margin:0;min-height:100vh;min-height:100dvh;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;background:var(--dark);color:#fff;overflow-x:hidden;letter-spacing:.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
 
 #dynamicBg{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 20%,rgba(255,230,109,.06) 0%,transparent 55%),radial-gradient(ellipse at 20% 85%,rgba(255,107,53,.04) 0%,transparent 55%),linear-gradient(180deg,#0A0A1A 0%,#10101F 50%,#0A0A1A 100%)}
 .stars{position:fixed;inset:0;pointer-events:none;z-index:-1}
@@ -207,6 +178,28 @@ html.lp-locked body{position:relative;width:100%;height:100dvh;min-height:100dvh
 .empty-cta{display:inline-block;margin-top:10px;padding:8px 16px;border-radius:999px;background:rgba(255,230,109,.1);border:1px solid rgba(255,230,109,.3);color:#FFE66D;text-decoration:none;font-size:.9em;transition:background .2s,border-color .2s}
 .empty-cta:hover{background:rgba(255,230,109,.2);border-color:rgba(255,230,109,.5)}
 
+/* === PWA INSTALL BANNER ===================================================
+   The honest answer to "주소창이 안 보이게": PWA standalone mode. A regular
+   browser visit will always have chrome — that's an OS-level guarantee
+   we can't override.
+
+   Tone: deliberately understated. No yellow accents (the homepage uses
+   yellow/orange for play CTAs; this should feel like a quiet system
+   suggestion, not a sales pitch). Slate-blue muted glass over dark, thin
+   border, news-finance typography. Slides up from the bottom 4s after
+   page settle so it doesn't fight the initial paint. Dismissed copies
+   never reappear within 14 days (localStorage timestamp). */
+.lp-install-banner{position:fixed;left:12px;right:12px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:440px;margin:0 auto;z-index:9999;display:flex;align-items:center;gap:10px;padding:12px 12px 12px 14px;background:linear-gradient(180deg,rgba(20,28,46,0.94),rgba(15,21,37,0.94));border:1px solid rgba(255,255,255,0.07);border-radius:14px;backdrop-filter:blur(14px) saturate(1.05);-webkit-backdrop-filter:blur(14px) saturate(1.05);box-shadow:0 10px 30px rgba(0,0,0,0.45),inset 0 1px 0 rgba(255,255,255,0.04);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard','Inter','Noto Sans KR',sans-serif;color:rgba(232,238,247,0.92);transform:translateY(calc(120% + 20px));opacity:0;transition:transform .42s cubic-bezier(.2,.85,.4,1),opacity .42s;pointer-events:none}
+.lp-install-banner.show{transform:translateY(0);opacity:1;pointer-events:auto}
+.lp-install-banner .lp-ib-mark{flex:0 0 auto;width:32px;height:32px;border-radius:8px;background:linear-gradient(140deg,rgba(140,162,196,0.18),rgba(140,162,196,0.06));border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;color:rgba(180,200,230,0.85);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:14px;font-weight:700;letter-spacing:0}
+.lp-install-banner .lp-ib-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;line-height:1.35}
+.lp-install-banner .lp-ib-title{font-size:12.5px;font-weight:700;letter-spacing:.005em;color:rgba(255,255,255,0.96)}
+.lp-install-banner .lp-ib-desc{font-size:11px;color:rgba(180,200,230,0.62);font-weight:400;letter-spacing:.005em}
+.lp-install-banner .lp-ib-action{flex:0 0 auto;background:rgba(140,162,196,0.12);border:1px solid rgba(140,162,196,0.32);color:rgba(200,218,240,0.95);padding:7px 12px;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:7px;cursor:pointer;font-family:'JetBrains Mono',ui-monospace,monospace;white-space:nowrap;transition:background .2s,border-color .2s,color .2s}
+.lp-install-banner .lp-ib-action:hover{background:rgba(140,162,196,0.2);border-color:rgba(180,200,230,0.5);color:#fff}
+.lp-install-banner .lp-ib-close{flex:0 0 auto;background:transparent;border:none;color:rgba(180,200,230,0.4);font-size:18px;line-height:1;padding:4px 6px;cursor:pointer;font-family:-apple-system,sans-serif;transition:color .2s}
+.lp-install-banner .lp-ib-close:hover{color:rgba(255,255,255,0.85)}
+
 @media(max-width:500px){
     /* Top padding minimal — floating-home is fixed at top:10px (plus
        safe-area for notch), the title centers and skips that left
@@ -214,6 +207,12 @@ html.lp-locked body{position:relative;width:100%;height:100dvh;min-height:100dvh
     .wrap{padding:calc(8px + env(safe-area-inset-top,0px)) 14px calc(40px + env(safe-area-inset-bottom,0px))}
     .floating-home{top:calc(10px + env(safe-area-inset-top,0px));left:calc(10px + env(safe-area-inset-left,0px));padding:6px 9px;font-size:.72em}
     .header{margin-top:18px;margin-bottom:12px}
+    /* Tighter banner on small phones */
+    .lp-install-banner{padding:10px 10px 10px 12px;gap:8px}
+    .lp-install-banner .lp-ib-mark{width:28px;height:28px;font-size:12.5px}
+    .lp-install-banner .lp-ib-title{font-size:11.5px}
+    .lp-install-banner .lp-ib-desc{font-size:10.5px}
+    .lp-install-banner .lp-ib-action{padding:6px 10px;font-size:9.5px}
     .header h1{font-size:1.5em}
     .header p{font-size:.82em}
     .post-card{padding:14px 14px 14px 18px;border-radius:12px}
@@ -293,7 +292,20 @@ html.lp-locked body{position:relative;width:100%;height:100dvh;min-height:100dvh
         <div class="posts" id="postsList"></div>
     </div>
 
-    <script src="/blog/posts.js?v=1778021377"></script>
+    <!-- PWA install banner — appears 4s after page settle on mobile, when
+         not already running standalone, and not dismissed in last 14 days.
+         JS at bottom of file populates copy + wires the install flow. -->
+    <div class="lp-install-banner" id="lpInstallBanner" role="dialog" aria-hidden="true" aria-labelledby="lpInstallTitle">
+      <div class="lp-ib-mark" aria-hidden="true">⌂</div>
+      <div class="lp-ib-text">
+        <span class="lp-ib-title" id="lpInstallTitle">전체 화면으로 보기</span>
+        <span class="lp-ib-desc" id="lpInstallDesc">홈 화면에 추가하면 주소창 없이 깔끔하게 사용할 수 있어요.</span>
+      </div>
+      <button type="button" class="lp-ib-action" id="lpInstallAction">추가</button>
+      <button type="button" class="lp-ib-close" id="lpInstallClose" aria-label="닫기">×</button>
+    </div>
+
+    <script src="/blog/posts.js?v=1778021859"></script>
     <script>
 function createStars(){const c=document.getElementById('starsContainer');for(let i=0;i<50;i++){const s=document.createElement('div');s.className='star';const z=Math.random()*2+.5;s.style.cssText=`width:${z}px;height:${z}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s`;c.appendChild(s)}}
 
@@ -467,95 +479,129 @@ window.addEventListener('popstate', renderAll);
 createStars();
 renderAll();
 
-/* === Address-bar nudge+lock — revision 4, visualViewport-driven. =========
-   See the CSS comment above for the four-part strategy. The key
-   mechanical change here is that we no longer fixed-timeout the lock —
-   we listen for the visualViewport.height change that *proves* the bar
-   collapsed, and lock the moment we see it. Polling fallback covers
-   browsers without the API or that swallow the resize event.
+/* === PWA install banner — see CSS + HTML markup above. ====================
+   Browser regulations make a regular-visit fullscreen impossible. The
+   only standards-compliant route is `display: standalone` on a homescreen
+   install. This banner offers that — quietly. Branching:
 
-   Every nudge call is wrapped in try/catch and uses three different
-   APIs (window.scrollTo, documentElement.scrollTop, body.scrollTop) so a
-   single API being silently no-op'd doesn't kill the trick. */
+   - iOS Safari: no install API, so we explain the manual steps (Share →
+     Add to Home Screen). One tap dismisses the banner.
+   - Chrome / Edge / Samsung Internet: BeforeInstallPromptEvent fires
+     before paint; we capture it and call .prompt() on user click.
+   - Already-installed (display-mode: standalone, or navigator.standalone):
+     skip entirely — they're already in the fullscreen experience.
+   - Recently dismissed: 14-day cooldown via localStorage so we don't
+     pester the same visitor every page load. */
 (function(){
-  try { if ('scrollRestoration' in history) history.scrollRestoration = 'manual'; } catch(e) {}
+  if (typeof window === 'undefined' || !document) return;
 
+  /* === Skip if running standalone (banner is for non-installed users) === */
+  var inStandalone =
+    (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+    window.navigator.standalone === true;
+  if (inStandalone) return;
+
+  /* === Mobile only — desktop has no notion of "add to home screen" === */
   if (!window.matchMedia || !window.matchMedia('(max-width: 900px)').matches) return;
 
-  var locked = false;
-  /* Capture the initial visualViewport height immediately. If the bar
-     collapses, this number grows. We declare success on +30px so a
-     single px of jitter doesn't false-trigger. */
-  var vv = window.visualViewport || null;
-  var initialH = vv ? vv.height : window.innerHeight;
+  /* === 14-day cooldown after dismiss === */
+  var DISMISS_KEY = 'lp_install_dismissed';
+  var COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
+  try {
+    var ts = parseInt(localStorage.getItem(DISMISS_KEY) || '0', 10);
+    if (ts && (Date.now() - ts) < COOLDOWN_MS) return;
+  } catch(e) {}
 
-  function barLooksCollapsed(){
-    var h = vv ? vv.height : window.innerHeight;
-    return h > initialH + 30;
+  var banner = document.getElementById('lpInstallBanner');
+  var titleEl = document.getElementById('lpInstallTitle');
+  var descEl = document.getElementById('lpInstallDesc');
+  var actionEl = document.getElementById('lpInstallAction');
+  var closeEl = document.getElementById('lpInstallClose');
+  if (!banner || !titleEl || !descEl || !actionEl || !closeEl) return;
+
+  var ua = navigator.userAgent || '';
+  var isIOS = /iP(hone|ad|od)/.test(ua) && !window.MSStream;
+  var isEN = (window.LP_LANG === 'en');
+
+  /* === Copy table — kept terse and unsalesy. The Korean is 존댓말 but
+        avoids exclamation marks and hype words. Mark glyph (⌂) carries
+        the icon load instead of an emoji. */
+  var copy = isEN ? {
+    title: 'View in fullscreen',
+    desc_install: 'Add to Home Screen for a chrome-free reading experience.',
+    desc_ios: 'Tap Share → "Add to Home Screen" for chrome-free reading.',
+    desc_other: 'Open browser menu → "Add to Home Screen".',
+    action_install: 'Install',
+    action_ok: 'Got it',
+  } : {
+    title: '전체 화면으로 보기',
+    desc_install: '홈 화면에 추가하면 주소창 없이 깔끔하게 읽을 수 있어요.',
+    desc_ios: '공유 버튼 → "홈 화면에 추가" 를 누르면 주소창 없이 사용할 수 있어요.',
+    desc_other: '브라우저 메뉴 → "홈 화면에 추가" 를 선택하세요.',
+    action_install: '추가',
+    action_ok: '확인',
+  };
+
+  titleEl.textContent = copy.title;
+
+  /* === Captured BeforeInstallPromptEvent (Chromium browsers) === */
+  var deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e) {
+    /* Don't let the browser show its own mini-prompt — we'll fire
+       it ourselves when the user taps the action button. */
+    e.preventDefault();
+    deferredPrompt = e;
+    /* If banner is already showing with the "no API available" copy,
+       upgrade it to the install-button flow. */
+    if (banner.classList.contains('show')) wireForInstall();
+  });
+
+  function dismiss(){
+    banner.classList.remove('show');
+    banner.setAttribute('aria-hidden', 'true');
+    try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch(e) {}
   }
 
-  function nudge(amount){
-    /* Three APIs because mobile WebViews disagree on which one drives
-       page scroll. Whichever lands first triggers the bar-collapse. */
-    try { window.scrollTo(0, amount); } catch(e) {}
-    try { document.documentElement.scrollTop = amount; } catch(e) {}
-    try { document.body.scrollTop = amount; } catch(e) {}
+  function wireForInstall(){
+    descEl.textContent = copy.desc_install;
+    actionEl.textContent = copy.action_install;
+    actionEl.onclick = function(){
+      if (!deferredPrompt) {
+        descEl.textContent = copy.desc_other;
+        actionEl.textContent = copy.action_ok;
+        actionEl.onclick = dismiss;
+        return;
+      }
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(){
+        deferredPrompt = null;
+        dismiss();
+      });
+    };
   }
 
-  function lockNow(){
-    if (locked) return;
-    locked = true;
-    document.documentElement.classList.add('lp-locked');
-    /* Reset every scroll target to 0 so the user sees the page top
-       (not the 600px-down position we nudged to). */
-    try { document.body.scrollTop = 0; } catch(e) {}
-    try { document.documentElement.scrollTop = 0; } catch(e) {}
-    try { window.scrollTo(0, 0); } catch(e) {}
+  function wireForIOS(){
+    /* iOS has no install API. The action button just acknowledges the
+       instructions. Step-by-step copy is in the description. */
+    descEl.textContent = copy.desc_ios;
+    actionEl.textContent = copy.action_ok;
+    actionEl.onclick = dismiss;
   }
 
-  function bootstrap(){
-    /* Phase 1: aggressive nudges. 600px clears the strictest "reading
-       top" heuristic; if the first one is somehow short-circuited, the
-       follow-ups at 800/1000 escalate. */
-    nudge(600);
-    setTimeout(function(){ if (!locked) nudge(700); }, 80);
-    setTimeout(function(){ if (!locked) nudge(900); }, 200);
-    setTimeout(function(){ if (!locked) nudge(1100); }, 400);
-
-    /* Phase 2: visualViewport-driven lock. As soon as the height grows
-       we know the bar committed to collapsing, so we lock immediately.
-       This beats fixed-timing because some devices commit in 80ms and
-       others take 600ms — listening is more accurate than guessing. */
-    if (vv && typeof vv.addEventListener === 'function') {
-      var onResize = function(){
-        if (!locked && barLooksCollapsed()) {
-          lockNow();
-          try { vv.removeEventListener('resize', onResize); } catch(e) {}
-        }
-      };
-      try { vv.addEventListener('resize', onResize); } catch(e) {}
-    }
-
-    /* Phase 3: polling fallback. Every 100ms check whether the bar
-       collapsed; lock when it did. Hard ceiling of 3s so even on
-       browsers where neither the resize event nor the height check
-       ever signals success, the user isn't stuck in expanded forever. */
-    var attempts = 0;
-    function poll(){
-      if (locked) return;
-      if (barLooksCollapsed()) { lockNow(); return; }
-      attempts += 1;
-      if (attempts >= 30) { lockNow(); return; }
-      setTimeout(poll, 100);
-    }
-    setTimeout(poll, 150);
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootstrap, { once: true });
+  if (isIOS) {
+    wireForIOS();
   } else {
-    bootstrap();
+    wireForInstall();
   }
+  closeEl.onclick = dismiss;
+
+  /* === Show after a 4s breath so the page paints + the user sees a
+        working blog index *first*. The banner reads as a quiet
+        suggestion, not an interstitial. */
+  setTimeout(function(){
+    banner.classList.add('show');
+    banner.setAttribute('aria-hidden', 'false');
+  }, 4000);
 })();
     </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -563,6 +609,6 @@ renderAll();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1778021377" defer></script>
+<script src="/js/siteFooter.js?v=1778021859" defer></script>
 </body>
 </html>
