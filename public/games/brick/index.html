@@ -875,65 +875,153 @@ function getCanvasPos(e){
   else { cx = e.clientX; cy = e.clientY; }
   return { x: (cx - r.left) * _scaleX, y: (cy - r.top) * _scaleY };
 }
-// Control pad — restricted to dedicated zone below the playfield.
-// Tap = launch / fire. Slide left/right = relative paddle drag.
-// Pad px → canvas px scaled by C.W / pad.clientWidth so pad-to-paddle feels 1:1.
-let _drag = null; // {sx, px, t, moved, kind}
+// Control pad — multi-touch aware.
+// Each finger is tracked independently by Touch.identifier (MDN best practice).
+// Rules:
+//  • First finger to land becomes the paddle "controller" (slides paddle by delta).
+//  • Additional fingers are tap candidates only — they fire (launch/laser) on lift
+//    if they were short and didn't move much. They never fight for paddle control.
+//  • If the controller lifts while another finger is still down, promote that
+//    next finger to controller (re-anchored at its current position).
+//  • Tap detection runs PER finger on its own touchend, so dragging with one
+//    finger and tapping with another fires correctly without interference.
 const TAP_MAX_DT = 280;   // ms
-const TAP_MAX_MOVE = 8;   // pad px
+const TAP_MAX_MOVE = 8;   // px in pad space
+
+// Per-touch state: identifier → { sx, sy, t, moved, paddleStartX, isController }
+const _tps = new Map();
+let _ctrlId = null;        // active controller touch identifier
+let _mouseDrag = null;     // separate single-pointer mouse path
 
 function setActivePad(active){
   if(active) ctrlPad.classList.add('active');
   else ctrlPad.classList.remove('active');
 }
-function getEventX(e){
-  if(e.touches && e.touches[0]) return e.touches[0].clientX;
-  if(e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientX;
-  return e.clientX;
+function findTouchInList(list, id){
+  for(let i=0; i<list.length; i++){
+    if(list[i].identifier === id) return list[i];
+  }
+  return null;
 }
-function onPadStart(e, kind){
+
+function onPadTouchStart(e){
   e.preventDefault();
   resumeAudio();
   if(!S.running || S.paused) return;
-  _drag = { sx: getEventX(e), px: S.paddleX, t: performance.now(), moved: 0, kind };
-  S.inputX = S.paddleX; // paddle holds until finger moves
-  setActivePad(true);
+  for(let i=0; i<e.changedTouches.length; i++){
+    const t = e.changedTouches[i];
+    const info = {
+      sx: t.clientX, sy: t.clientY,
+      t: performance.now(),
+      moved: 0,
+      paddleStartX: S.paddleX,
+      isController: false,
+    };
+    _tps.set(t.identifier, info);
+    if(_ctrlId === null){
+      _ctrlId = t.identifier;
+      info.isController = true;
+      S.inputX = S.paddleX;
+    }
+  }
+  setActivePad(_tps.size > 0);
 }
-function onPadMove(e){
+function onPadTouchMove(e){
   e.preventDefault();
-  if(!_drag) return;
-  const cx = getEventX(e);
-  const dxPad = cx - _drag.sx;
-  _drag.moved = Math.max(_drag.moved, Math.abs(dxPad));
+  if(!S.running || S.paused) return;
   const padW = ctrlPad.clientWidth || 1;
-  const scale = C.W / padW; // 1:1 visual mapping (pad spans canvas width)
-  S.inputX = _drag.px + dxPad * scale;
+  const scale = C.W / padW;
+  for(let i=0; i<e.changedTouches.length; i++){
+    const t = e.changedTouches[i];
+    const info = _tps.get(t.identifier);
+    if(!info) continue;
+    const dx = t.clientX - info.sx;
+    info.moved = Math.max(info.moved, Math.abs(dx));
+    if(info.isController){
+      S.inputX = info.paddleStartX + dx * scale;
+    }
+  }
 }
-function onPadEnd(e){
-  if(e && e.preventDefault) e.preventDefault();
-  if(!_drag){ setActivePad(false); return; }
-  const dt = performance.now() - _drag.t;
-  const moved = _drag.moved || 0;
-  const wasTap = dt < TAP_MAX_DT && moved < TAP_MAX_MOVE;
-  if(wasTap) handleAction(); // launch / fire laser
-  _drag = null;
-  S.inputX = null;
-  setActivePad(false);
+function onPadTouchEnd(e){
+  e.preventDefault();
+  for(let i=0; i<e.changedTouches.length; i++){
+    const t = e.changedTouches[i];
+    const info = _tps.get(t.identifier);
+    if(!info) continue;
+    const dt = performance.now() - info.t;
+    const wasTap = dt < TAP_MAX_DT && info.moved < TAP_MAX_MOVE;
+    if(wasTap) handleAction();
+    _tps.delete(t.identifier);
+    if(t.identifier === _ctrlId){
+      _ctrlId = null;
+      // Promote next still-active touch to controller, re-anchored at its
+      // current position so the paddle doesn't jump.
+      const nextEntry = _tps.entries().next();
+      if(!nextEntry.done){
+        const [nextId, nextInfo] = nextEntry.value;
+        const liveTouch = findTouchInList(e.touches, nextId);
+        if(liveTouch){
+          nextInfo.sx = liveTouch.clientX;
+          nextInfo.sy = liveTouch.clientY;
+          nextInfo.paddleStartX = S.paddleX;
+          nextInfo.isController = true;
+          _ctrlId = nextId;
+          S.inputX = S.paddleX;
+        }
+      }
+    }
+  }
+  if(_tps.size === 0){
+    _ctrlId = null;
+    S.inputX = null;
+    setActivePad(false);
+  }
+}
+function onPadTouchCancel(e){
+  for(let i=0; i<e.changedTouches.length; i++){
+    _tps.delete(e.changedTouches[i].identifier);
+  }
+  if(_tps.size === 0){
+    _ctrlId = null;
+    S.inputX = null;
+    setActivePad(false);
+  }
 }
 
 function setupInput(){
-  // Touch (mobile)
-  ctrlPad.addEventListener('touchstart', (e)=>onPadStart(e, 'touch'), {passive:false});
-  ctrlPad.addEventListener('touchmove', onPadMove, {passive:false});
-  ctrlPad.addEventListener('touchend', onPadEnd, {passive:false});
-  ctrlPad.addEventListener('touchcancel', onPadEnd, {passive:false});
-  // Mouse (desktop)
-  ctrlPad.addEventListener('mousedown', (e)=>onPadStart(e, 'mouse'));
-  window.addEventListener('mousemove', (e)=>{
-    if(_drag && _drag.kind === 'mouse') onPadMove(e);
+  // Touch (mobile) — multi-touch aware
+  ctrlPad.addEventListener('touchstart', onPadTouchStart, {passive:false});
+  ctrlPad.addEventListener('touchmove',  onPadTouchMove,  {passive:false});
+  ctrlPad.addEventListener('touchend',   onPadTouchEnd,   {passive:false});
+  ctrlPad.addEventListener('touchcancel', onPadTouchCancel, {passive:false});
+  // Mouse (desktop) — single pointer
+  ctrlPad.addEventListener('mousedown', (e)=>{
+    e.preventDefault();
+    resumeAudio();
+    if(!S.running || S.paused) return;
+    _mouseDrag = { sx: e.clientX, paddleStartX: S.paddleX, t: performance.now(), moved: 0 };
+    S.inputX = S.paddleX;
+    setActivePad(true);
   });
-  window.addEventListener('mouseup', (e)=>{
-    if(_drag && _drag.kind === 'mouse') onPadEnd(e);
+  window.addEventListener('mousemove', (e)=>{
+    if(!_mouseDrag) return;
+    if(!S.running || S.paused) return;
+    const padW = ctrlPad.clientWidth || 1;
+    const scale = C.W / padW;
+    const dx = e.clientX - _mouseDrag.sx;
+    _mouseDrag.moved = Math.max(_mouseDrag.moved, Math.abs(dx));
+    S.inputX = _mouseDrag.paddleStartX + dx * scale;
+  });
+  window.addEventListener('mouseup', ()=>{
+    if(!_mouseDrag) return;
+    const dt = performance.now() - _mouseDrag.t;
+    const wasTap = dt < TAP_MAX_DT && _mouseDrag.moved < TAP_MAX_MOVE;
+    if(wasTap) handleAction();
+    _mouseDrag = null;
+    if(_tps.size === 0){
+      S.inputX = null;
+      setActivePad(false);
+    }
   });
   document.addEventListener('keydown', (e)=>{
     if(e.code==='Space' || e.code==='ArrowUp'){
