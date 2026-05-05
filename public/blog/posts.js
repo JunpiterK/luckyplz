@@ -14,6 +14,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'spacex-vs-tesla-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '⚖️',
+        tags: ['SpaceX vs Tesla', 'Elon Musk', 'Comparison', 'Stock Analysis', 'Robotaxi', 'Starship'],
+        title: "SpaceX vs Tesla — Musk's Two Empires Side-by-Side",
+        excerpt: '$1.75T space + $1.2T cars. Same CEO. 5-axis comparison: market cap, profitability, tech moat, future potential, risk. Portfolio allocation framework included.',
+        alt: 'spacex-vs-tesla',
+    },
+    {
+        slug: 'spacex-vs-tesla',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '⚖️',
+        tags: ['SpaceX vs Tesla', '머스크', '비교 분석', '주식 분석', 'Robotaxi', 'Starship'],
+        title: 'SpaceX vs Tesla — 머스크 두 제국 정밀 비교',
+        excerpt: '$1.75T 우주 + $1.2T 자동차. 동일한 머스크. 시총·수익성·기술 moat·미래·리스크 5축으로 정밀 비교. 포트폴리오 배분 프레임워크 포함.',
+        alt: 'spacex-vs-tesla-en',
+    },
+    {
         slug: 'musk-net-worth-after-spacex-ipo-en',
         lang: 'en',
         category: 'industry',
