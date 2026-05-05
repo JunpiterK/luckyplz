@@ -14,6 +14,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'spacex-ipo-risks-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '⚠️',
+        tags: ['SpaceX IPO', 'Risks', 'Starship Delay', 'xAI Losses', 'Musk Governance', 'FCC', 'Antitrust', 'Sell Signals'],
+        title: '7 SpaceX IPO Risks Most Investors Ignore',
+        excerpt: 'Seven quantified risks behind the $1.75T headline. Starship 5× behind, xAI burns $1B/month, ARPU down 18%, Musk governance, FCC pushback, antitrust exposure, accounting ambiguity. Sell signals included.',
+        alt: 'spacex-ipo-risks',
+    },
+    {
+        slug: 'spacex-ipo-risks',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-05',
+        readMinutes: 8,
+        coverEmoji: '⚠️',
+        tags: ['SpaceX IPO 위험', 'Starship 지연', 'xAI 적자', '머스크 거버넌스', 'FCC', '반독점', '매도 시그널'],
+        title: 'SpaceX IPO 위험 7가지 — 개인투자자가 모르는 함정',
+        excerpt: 'PitchBook·Reuters·Bloomberg 1차 자료 기준 7가지 정량적 리스크. Starship 5배 미달, xAI 월 $1B 적자, ARPU 18% 하락, 머스크 거버넌스, FCC 제동, SEC·반독점, 회계 모호성. 매도 시그널 + 회피 전략까지.',
+        alt: 'spacex-ipo-risks-en',
+    },
+    {
         slug: 'how-to-buy-spacex-stock-en',
         lang: 'en',
         category: 'industry',
