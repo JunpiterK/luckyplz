@@ -41,9 +41,10 @@ cd "$(dirname "$0")/.."
 
 NEW_VERSION=$(date +%s)
 
-# ---- LAYER 1: ?v= query rewrites in shared JS references ---------------
+# ---- LAYER 1: ?v= query rewrites in shared JS + CSS references --------
 JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
+CSS_RE='(/css/[a-zA-Z0-9_-]+\.css)\?v=[0-9a-zA-Z]{4,20}'
 
 count=0
 while IFS= read -r -d '' f; do
@@ -54,6 +55,10 @@ while IFS= read -r -d '' f; do
     fi
     if grep -qE "$BLOG_RE" "$f" 2>/dev/null; then
         sed -i -E "s|${BLOG_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+        matched=1
+    fi
+    if grep -qE "$CSS_RE" "$f" 2>/dev/null; then
+        sed -i -E "s|${CSS_RE}|\\1?v=${NEW_VERSION}|g" "$f"
         matched=1
     fi
     if [ "$matched" = "1" ]; then
