@@ -6,12 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Run local dev server: `python server.py` (or double-click `start.bat` on Windows). Serves `public/` on `http://localhost:8080`; `HOST`/`PORT` env vars override. The LAN IP is printed so same-Wi-Fi devices can test mobile.
 - Install deps: `pip install -r requirements.txt` (only Flask).
-- **Bump cache version before every commit that touches HTML or shared JS:** `bash scripts/bump-cache.sh`. Rewrites every `?v=<stamp>` query on `/js/*.js` references to the current epoch so browsers ignoring `no-cache` still fetch fresh bundles. See the "Cache policy" section.
+- **Bump cache version before every commit that touches HTML or shared JS/CSS:** `bash scripts/bump-cache.sh`. Rewrites every `?v=<stamp>` query on `/js/*.js`, `/blog/*.js`, and `/css/*.css` references to the current epoch so browsers ignoring `no-cache` still fetch fresh bundles. See the "Cache policy" section.
+- **Re-inject blog-desktop.css link after creating new blog posts:** `python scripts/inject-blog-desktop-css.py`. Idempotent — adds the `<link rel="stylesheet" href="/css/blog-desktop.css?v=…">` tag right before `</head>` in every `public/blog/*/index.html` (including the blog index). Run after `bump-cache.sh` so it picks up the latest version stamp.
 - There is no build step, bundler, lint, or test suite. Production is served as static files by Cloudflare Pages — `server.py` exists only for local preview and must mirror Pages' routing (directory → `index.html`).
 
 ## Architecture
 
 **Static multi-page site, no framework.** Every game lives at `public/games/<name>/index.html` as a standalone, self-contained HTML file (inline CSS + JS, own `<head>` SEO block). Keep games independent — do not introduce shared bundlers or cross-game imports; copy-paste is the intended pattern so a game can be edited without regression risk to others. Games currently shipped: `car-racing`, `dice`, `ladder`, `lotto`, `roulette`, `team`.
+
+**Blog has shared cross-cutting concerns** (related-posts injection via `blogRelated.js`, subscribe form via `blogSubscribe.js`, history-based recommendations) that don't fit the games' "fully self-contained" rule. Blog posts also share a single desktop layout override at `public/css/blog-desktop.css` — the inline mobile-first CSS in each blog HTML caps body at 480px (handcrafted for phones), and the desktop stylesheet kicks in at ≥768px to widen the column to 760–820px without touching the inline rules. The link tag is auto-injected into every `public/blog/*/index.html` by `scripts/inject-blog-desktop-css.py` (idempotent, marker-fenced). Run that script after creating a new blog post or it will look 480px-narrow on desktop.
 
 **Hosting & deploy.** Repo is `JunpiterK/luckyplz`; Cloudflare Pages project `luckyplz` auto-deploys `main` with build output dir `public`. `public/_headers` controls Cloudflare cache rules — HTML, `/games/*`, and `/js/*` are `no-cache` so edits go live immediately; `/assets/*` and `*.mp3` are cached 1 week.
 
