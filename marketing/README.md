@@ -1,15 +1,18 @@
 # SpaceX IPO 외부 채널 화력 패키지
 
-수술 회복 중 모바일에서 그대로 복사 → 붙여넣기 → 게시. 8주 작전 W2~W7 화력 분배.
+수술 회복 중 모바일에서 그대로 복사 → 붙여넣기 → 게시. 8주 작전 W2~W8 화력 분배.
+
+> **OG 인프라 (2026-05-06 추가)**: 모든 글이 글별 unique 1200×630 OG image 자동 생성 완료 (Tier 2 ④). Reddit / X / Facebook share 시 thumbnail 가 글 제목 + 카테고리 컬러 stripe 로 표시되어 click-through 3-5× 향상 기대. URL 만 paste 하면 platform 이 자동으로 OG fetch.
 
 ## 주요 자산 URL (자주 쓰임)
 
 | | 한국어 | 영어 |
 |---|---|---|
+| **SpaceX vs Tesla** ★ NEW | https://luckyplz.com/blog/spacex-vs-tesla/ | https://luckyplz.com/blog/spacex-vs-tesla-en/ |
+| **머스크 자산 / Trillionaire** ★ NEW | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo/ | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo-en/ |
 | 메인 분석 | https://luckyplz.com/blog/spacex-ipo-2026/ | https://luckyplz.com/blog/spacex-ipo-2026-en/ |
 | 사는 법 | https://luckyplz.com/blog/how-to-buy-spacex-stock/ | https://luckyplz.com/blog/how-to-buy-spacex-stock-en/ |
 | 위험 7가지 | https://luckyplz.com/blog/spacex-ipo-risks/ | https://luckyplz.com/blog/spacex-ipo-risks-en/ |
-| 머스크 자산 | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo/ | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo-en/ |
 | 카운트다운 | https://luckyplz.com/tools/spacex-countdown/ | https://luckyplz.com/tools/spacex-countdown-en/ |
 | 가치 계산기 | https://luckyplz.com/tools/spacex-valuation/ | https://luckyplz.com/tools/spacex-valuation-en/ |
 | 투자 시뮬 | https://luckyplz.com/tools/spacex-invest-sim/ | https://luckyplz.com/tools/spacex-invest-sim-en/ |
@@ -25,8 +28,10 @@
 | W3 (5/19~) | Reddit r/SpaceXMasterrace 1편 | `reddit-spacexmasterrace.md` |
 | W3~W4 | HN Show HN — calculator | `hackernews-show-hn.md` |
 | W4 (5/26~) | Reddit r/investing | `reddit-investing.md` |
-| W4~W5 | X/Twitter thread | `x-thread-1.md` |
+| W4 | Reddit r/teslainvestorsclub (Tesla 비교) ★ NEW | `reddit-tesla-vs-spacex.md` |
+| W4~W5 | X/Twitter thread (IPO mechanics) | `x-thread-1.md` |
 | W5 (6/2~) | Reddit r/stocks + r/SecurityAnalysis | `reddit-stocks.md` `reddit-securityanalysis.md` |
+| W5 | X/Twitter thread (Trillionaire) ★ NEW | `x-thread-musk-trillionaire.md` |
 | W6 (6/9~) | Reddit r/wallstreetbets (밈톤) | `reddit-wsb.md` |
 | W6 | 클리앙 새뉴스 | `clien-news.md` |
 | W7 (6/16~) | LinkedIn 게시 | `linkedin-post.md` |
