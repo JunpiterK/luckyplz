@@ -47,6 +47,44 @@
     var lang = current.lang || 'ko';
     var category = current.category || 'lifestyle';
 
+    /* === User reading history ==========================================
+       Stored in localStorage as a recency-ordered list of {slug, category,
+       tags, ts}. Each visit dedups (touch-update) so re-reading a post
+       moves it to the head without padding the list. Cap at 20 entries
+       — plenty of signal for tag/category preference scoring without
+       blowing the localStorage quota.
+
+       The visit is recorded *before* we render anything else so the
+       "당신을 위한 추천" picker below sees the freshest data on a quick
+       second visit (user just bounced back from a series's next EP). */
+    var HIST_KEY = 'lp_blog_history';
+    var HIST_MAX = 20;
+
+    function loadHistory() {
+        try {
+            var raw = localStorage.getItem(HIST_KEY);
+            return raw ? JSON.parse(raw) : [];
+        } catch (_) { return []; }
+    }
+
+    function saveHistory(h) {
+        try { localStorage.setItem(HIST_KEY, JSON.stringify(h)); } catch (_) {}
+    }
+
+    function recordVisit(post) {
+        var h = loadHistory();
+        h = h.filter(function (e) { return e && e.slug !== post.slug; });
+        h.unshift({
+            slug: post.slug,
+            category: post.category || '',
+            tags: Array.isArray(post.tags) ? post.tags.slice(0, 8) : [],
+            ts: Date.now(),
+        });
+        if (h.length > HIST_MAX) h = h.slice(0, HIST_MAX);
+        saveHistory(h);
+    }
+    recordVisit(current);
+
     /* === Series detection (e.g. space-evo-04-tragedies) =================
        Most "evo" series ship 8–10 EPs with a numeric prefix. We use the
        prefix to find the immediate next/previous episode and pin them
@@ -238,9 +276,140 @@
         document.head.appendChild(style);
     }
 
+    /* === HISTORY-BASED RECOMMENDATIONS =================================
+       Surfaces 3 unread posts most aligned with the reader's actual
+       browsing pattern. Distinct from the categorical "관련 글" block
+       above — that one's deterministic (same-cat / next-EP), this one
+       reflects *individual* preference signal.
+
+       Scoring:
+         score(p) = Σ tag_weight(t) for t in p.tags
+                  + 1.5 × cat_weight(p.category)
+       Weights: each visit contributes 1/(rank+1), so the 5th-most-recent
+       post counts ~⅕ of the very last one. Caps the list at 20 elsewhere.
+
+       Filters:
+         - same language as the current post (a Korean reader doesn't
+           want English recs even if categories match).
+         - excludes the current post and anything already in the user's
+           history (i.e. not "recommend what you've read").
+         - excludes posts already shown in the categorical block above
+           (avoid 4+3 = same 7 posts visible at once).
+         - hidden entirely if the user has fewer than 3 history entries
+           — too little signal to recommend reliably.
+
+       Skips silently in any failure case so the page never breaks. */
+    function buildRecsSection() {
+        var hist = loadHistory().filter(function (e) {
+            return e && e.slug !== current.slug;
+        });
+        if (hist.length < 3) return null;
+
+        var catW = {};
+        var tagW = {};
+        hist.forEach(function (h, i) {
+            var w = 1 / (i + 1);
+            if (h.category) catW[h.category] = (catW[h.category] || 0) + w;
+            (h.tags || []).forEach(function (t) {
+                tagW[t] = (tagW[t] || 0) + w;
+            });
+        });
+
+        var pickSlugs = {};
+        picks.forEach(function (p) { pickSlugs[p.slug] = 1; });
+        var visitedSlugs = {};
+        hist.forEach(function (h) { visitedSlugs[h.slug] = 1; });
+        visitedSlugs[current.slug] = 1;
+
+        var eligible = posts.filter(function (p) {
+            if ((p.lang || 'ko') !== lang) return false;
+            if (pickSlugs[p.slug]) return false;
+            if (visitedSlugs[p.slug]) return false;
+            return true;
+        });
+        if (!eligible.length) return null;
+
+        var scored = eligible.map(function (p) {
+            var s = 0;
+            if (p.category && catW[p.category]) s += catW[p.category] * 1.5;
+            var tags = Array.isArray(p.tags) ? p.tags : [];
+            tags.forEach(function (t) {
+                if (tagW[t]) s += tagW[t];
+            });
+            return { p: p, s: s };
+        });
+        scored.sort(function (a, b) { return b.s - a.s; });
+        var top = scored.slice(0, 3).filter(function (x) { return x.s > 0; });
+        if (!top.length) return null;
+
+        var sec = document.createElement('section');
+        sec.className = 'lp-recs';
+
+        var head = document.createElement('div');
+        head.className = 'lp-rec-head';
+        var h3 = document.createElement('h3');
+        h3.className = 'lp-rec-heading';
+        h3.textContent = lang === 'ko' ? '당신을 위한 추천' : 'Recommended for you';
+        head.appendChild(h3);
+        var sub = document.createElement('span');
+        sub.className = 'lp-rec-sub';
+        sub.textContent = lang === 'ko'
+            ? '최근 읽은 글 패턴 기반'
+            : 'Based on your reading';
+        head.appendChild(sub);
+        sec.appendChild(head);
+
+        var grid = document.createElement('div');
+        grid.className = 'lp-rec-grid';
+        sec.appendChild(grid);
+
+        grid.innerHTML = top.map(function (x) {
+            var p = x.p;
+            var catMeta = cats.find(function (c) { return c.slug === p.category; });
+            var catLabel = catMeta
+                ? (lang === 'ko' ? catMeta.label_ko : catMeta.label_en)
+                : (p.category || '');
+            var readText = p.readMinutes
+                ? (lang === 'ko' ? p.readMinutes + '분' : p.readMinutes + ' min')
+                : '';
+            var meta = [formatDate(p.date), readText].filter(Boolean).join(' · ');
+            return '<a class="lp-rel-card cat-' + escapeHtml(p.category || '') + '" ' +
+                'href="/blog/' + encodeURIComponent(p.slug) + '/">' +
+                '<span class="lp-rel-tag">' + escapeHtml((catLabel || '').toUpperCase()) + '</span>' +
+                '<h4 class="lp-rel-title">' + escapeHtml(p.title || '') + '</h4>' +
+                (meta ? '<p class="lp-rel-meta">' + escapeHtml(meta) + '</p>' : '') +
+                '</a>';
+        }).join('');
+
+        return sec;
+    }
+
+    /* Build the recs section once we know the categorical picks (so dedup
+       has the right input). Style additions piggy-back on the existing
+       lp-rel-card rules — see the style block above. */
+    var recsSection = buildRecsSection();
+    if (recsSection && !document.getElementById('lpRecsStyle')) {
+        var rs = document.createElement('style');
+        rs.id = 'lpRecsStyle';
+        rs.textContent = ''
+            + '.lp-recs{margin:24px 16px 0;padding:22px 0 0;border-top:1px dashed rgba(255,255,255,.08)}'
+            + '.lp-recs .lp-rec-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:0 0 14px}'
+            + '.lp-recs .lp-rec-heading{font-family:"Pretendard Variable","Pretendard","Inter",-apple-system,sans-serif;'
+            + 'font-size:15px;font-weight:800;color:#e2e8f0;letter-spacing:-.015em;margin:0}'
+            + '.lp-recs .lp-rec-sub{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;'
+            + 'font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(180,200,230,.45)}'
+            + '.lp-recs .lp-rec-grid{display:grid;grid-template-columns:1fr;gap:10px}'
+            + '@media(min-width:680px){.lp-recs .lp-rec-grid{grid-template-columns:1fr 1fr 1fr}}'
+            + '@media(max-width:480px){.lp-recs{margin:20px 12px 0;padding:18px 0 0}'
+            + '.lp-recs .lp-rec-heading{font-size:14px}.lp-recs .lp-rec-sub{font-size:9px}}';
+        document.head.appendChild(rs);
+    }
+
     if (mount) {
         mount.appendChild(section);
+        if (recsSection) mount.appendChild(recsSection);
     } else {
         anchor.parentNode.insertBefore(section, anchor);
+        if (recsSection) anchor.parentNode.insertBefore(recsSection, anchor);
     }
 })();
