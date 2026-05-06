@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'spacex-etf-comparison-en',
+        lang: 'en',
+        category: 'space-tech',
+        date: '2026-05-06',
+        readMinutes: 11,
+        coverEmoji: '📊',
+        tags: ['SpaceX ETF', 'XOVR', 'DXYZ', 'RONB', 'NAV Premium', 'Closed-end Fund', 'Portfolio Allocation', 'Pre-IPO ETF'],
+        title: 'SpaceX ETF Showdown — XOVR vs DXYZ vs RONB: Which Gives the Most SpaceX per Dollar',
+        excerpt: 'Three US ETFs compared head-to-head. Expense ratios, weights, NAV premium traps, IPO event scenarios, $1-of-SpaceX efficiency, plus 3 portfolio templates.',
+        alt: 'spacex-etf-comparison',
+    },
+    {
+        slug: 'spacex-etf-comparison',
+        lang: 'ko',
+        category: 'space-tech',
+        date: '2026-05-06',
+        readMinutes: 11,
+        coverEmoji: '📊',
+        tags: ['SpaceX ETF', 'XOVR', 'DXYZ', 'RONB', 'NAV 프리미엄', 'closed-end fund', '포트폴리오', 'Pre-IPO ETF'],
+        title: 'SpaceX ETF 정밀 비교 — XOVR vs DXYZ vs RONB 어디가 효율적인가',
+        excerpt: 'SpaceX 노출 가능한 미국 ETF 3종 정밀 비교. 운용보수·SpaceX 비중·NAV 프리미엄·IPO 이벤트 시나리오 + $1당 SpaceX 노출 효율 + 3가지 포트폴리오 템플릿.',
+        alt: 'spacex-etf-comparison-en',
+    },
+    {
         slug: 'spacex-vs-tesla-en',
         lang: 'en',
         category: 'space-tech',
