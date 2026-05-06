@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'echostar-sats-spacex-backdoor-en',
+        lang: 'en',
+        category: 'space-tech',
+        date: '2026-05-06',
+        readMinutes: 10,
+        coverEmoji: '📡',
+        tags: ['EchoStar SATS', 'SpaceX backdoor', 'AWS-4 Spectrum', 'H-block', 'Direct to Cell', 'Boost Mobile', 'Charlie Ergen'],
+        title: "EchoStar (SATS) — The SpaceX Backdoor That's Already Up 700%",
+        excerpt: 'SATS sold AWS-4 + H-block + AWS-3 to SpaceX for ~$19.6B and took $11B in private SpaceX stock. Stock ran 9× from $14 to $137. Honest balance sheet, bull/bear, ETF comparison, and position framework.',
+        alt: 'echostar-sats-spacex-backdoor',
+    },
+    {
+        slug: 'echostar-sats-spacex-backdoor',
+        lang: 'ko',
+        category: 'space-tech',
+        date: '2026-05-06',
+        readMinutes: 10,
+        coverEmoji: '📡',
+        tags: ['EchoStar SATS', 'SpaceX 백도어', 'AWS-4 주파수', 'H-block', 'Direct to Cell', 'Boost Mobile', 'Charlie Ergen'],
+        title: 'EchoStar (SATS) — 이미 +700% 오른 SpaceX 백도어 트레이드 정밀 분석',
+        excerpt: 'SATS가 AWS-4·H-block·AWS-3 주파수를 SpaceX에 약 $19.6B에 매각하고 $11B의 SpaceX 비공개주식을 받았다. 주가는 $14→$137로 9배. 정직한 차대변, 강세/약세, ETF 대비 비교, 포지셔닝 프레임워크.',
+        alt: 'echostar-sats-spacex-backdoor-en',
+    },
+    {
         slug: 'spacex-etf-comparison-en',
         lang: 'en',
         category: 'space-tech',
