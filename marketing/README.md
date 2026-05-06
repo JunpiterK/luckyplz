@@ -2,12 +2,25 @@
 
 수술 회복 중 모바일에서 그대로 복사 → 붙여넣기 → 게시. 8주 작전 W2~W8 화력 분배.
 
+> 🚀 **여기부터 읽으세요**: [`00-START-HERE.md`](./00-START-HERE.md) — 외부 시딩 시작 가이드 + 발사 자료 색인
+
 > **OG 인프라 (2026-05-06 추가)**: 모든 글이 글별 unique 1200×630 OG image 자동 생성 완료 (Tier 2 ④). Reddit / X / Facebook share 시 thumbnail 가 글 제목 + 카테고리 컬러 stripe 로 표시되어 click-through 3-5× 향상 기대. URL 만 paste 하면 platform 이 자동으로 OG fetch.
+
+> **외부 시딩 자료 (2026-05-06 추가)**:
+> - [`search-console-setup.md`](./search-console-setup.md) — Google·Bing·Naver·Daum 검색엔진 등록 (가장 먼저)
+> - [`launch-checklist.md`](./launch-checklist.md) — 이번 주 W19 발사 체크리스트
+> - [`community-rules.md`](./community-rules.md) — 각 커뮤니티 ban 안 당하는 룰
+> - [`quora-batch-answers.md`](./quora-batch-answers.md) — Quora 8개 답변 batch (영구 검색 자산)
+> - [`naver-jisikin-batch.md`](./naver-jisikin-batch.md) — 네이버 지식iN 8개 답변 batch
+> - [`naver-cafe-jaeteck.md`](./naver-cafe-jaeteck.md) — 네이버 재테크 카페 본문 3개
+> - [`bbomppu-stock.md`](./bbomppu-stock.md) — 뽐뿌 자유게시판2/주식 게시판 본문 2개
 
 ## 주요 자산 URL (자주 쓰임)
 
 | | 한국어 | 영어 |
 |---|---|---|
+| **EchoStar SATS 백도어** ★★ NEW (5/6) | https://luckyplz.com/blog/echostar-sats-spacex-backdoor/ | https://luckyplz.com/blog/echostar-sats-spacex-backdoor-en/ |
+| **ETF 정밀 비교** ★★ NEW (5/6) | https://luckyplz.com/blog/spacex-etf-comparison/ | https://luckyplz.com/blog/spacex-etf-comparison-en/ |
 | **SpaceX vs Tesla** ★ NEW | https://luckyplz.com/blog/spacex-vs-tesla/ | https://luckyplz.com/blog/spacex-vs-tesla-en/ |
 | **머스크 자산 / Trillionaire** ★ NEW | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo/ | https://luckyplz.com/blog/musk-net-worth-after-spacex-ipo-en/ |
 | 메인 분석 | https://luckyplz.com/blog/spacex-ipo-2026/ | https://luckyplz.com/blog/spacex-ipo-2026-en/ |
@@ -19,6 +32,8 @@
 | 일본어 | https://luckyplz.com/blog/spacex-ipo-2026-jp/ | |
 | 중국어 | https://luckyplz.com/blog/spacex-ipo-2026-zh/ | |
 | 스페인어 | https://luckyplz.com/blog/spacex-ipo-2026-es/ | |
+| 독일어 (5/6) | https://luckyplz.com/blog/spacex-ipo-2026-de/ | |
+| 힌디어 (5/6) | https://luckyplz.com/blog/spacex-ipo-2026-hi/ | |
 
 ## 게시 시기 (8주 작전 매핑)
 
