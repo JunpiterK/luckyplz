@@ -264,8 +264,10 @@ body{
 }
 .left-controls .grav-btn .grav-icon{font-size:1.45em;line-height:1;font-weight:900}
 .left-controls .grav-btn .grav-label{font-size:.85em;font-weight:900;letter-spacing:.08em}
-/* GRAV cooldown — 사용한 시간만큼 재사용 잠김.
-   왼쪽부터 에너지가 차오르듯 progress bar (--grav-progress 0→1).
+/* GRAV 게이지 시스템 — fuel 0~MAX(3s).
+   --grav-progress = current/MAX (0=empty, 1=full).
+   . cooldown : 안 눌렸지만 풀 아님 → 0 → 1 채움 (왼→오)
+   . draining : 누르고 있음 → 1 → 0 빠짐 (오→왼 으로 줄어듦, 같은 transform 패턴)
    다 차면 .ready-flash 가 한 번 깜빡 → 사용 가능 알림. */
 .left-controls .grav-btn.cooldown{
     cursor:not-allowed;
@@ -296,6 +298,27 @@ body{
     opacity:.92;
 }
 .left-controls .grav-btn.cooldown > *{position:relative;z-index:1}
+
+/* draining — 누르고 있는 동안 fuel 게이지가 오른쪽부터 줄어듦.
+   기존 .active 글로우는 그대로 두고 그 위에 fuel bar 오버레이만 얹음. */
+.left-controls .grav-btn.draining{position:relative;overflow:hidden}
+.left-controls .grav-btn.draining::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(90deg,
+        rgba(255,230,109,.45) 0%,
+        rgba(255,154,60,.5) 60%,
+        rgba(255,107,53,.55) 100%);
+    transform:scaleX(var(--grav-progress,1));
+    transform-origin:left center;
+    transition:transform .08s linear;
+    pointer-events:none;
+    z-index:0;
+    opacity:.7;
+    mix-blend-mode:screen;
+}
+.left-controls .grav-btn.draining > *{position:relative;z-index:1}
 
 /* Ready flash — cooldown 종료 직후 한 번만 부드럽게 빛남 (사용 가능 신호) */
 .left-controls .grav-btn.ready-flash{animation:gravReadyFlash .55s ease-out 1}
@@ -4265,28 +4288,49 @@ function drawDepot(d, now){
    바로 잡힐 수 있게.
    ===================================================================== */
 let gravityFieldActive = false;
-/* GRAV 쿨타임 — 사용 시간 = cooldown 시간. 1 초 사용하면 1 초 동안 재사용 X.
-   누른 시점 (gravPressedAt) 기록 → 떼는 시점에 사용 시간 계산 → cooldown 적용.
+/* GRAV 에너지 게이지 모델 ─ 0~MAX(3000ms) 의 fuel.
+   - 누르면 1ms 당 1 단위씩 빠짐 (최대 3 초까지 연속 사용)
+   - 0 도달 시 강제 해제
+   - 떼면 같은 속도로 다시 채워짐
+   - 다시 누르려면 MAX 까지 풀 충전 필요 (단, 0.5초만 썼으면 0.5초만 충전하면 됨)
    single + multi 동일. */
+const GRAV_GAUGE_MAX = 3000;
+let gravGauge = GRAV_GAUGE_MAX;
+let gravLastTick = 0;
 let gravPressedAt = 0;
-let gravCooldownUntil = 0;
-let gravCooldownStart = 0;   /* cooldown 시작 시각 (progress UI 용) */
-let gravCooldownTotal = 0;   /* 이번 cooldown 총 길이 ms */
-function _gravOnCooldown(now){ return now < gravCooldownUntil; }
+function _gravUpdateGauge(now){
+    if(gravLastTick === 0){ gravLastTick = now; return; }
+    let dt = now - gravLastTick;
+    gravLastTick = now;
+    if(dt > 100) dt = 100;          /* pause·tab-switch 점프 클램프 */
+    if(dt < 0) dt = 0;
+    if(gravityFieldActive){
+        gravGauge = Math.max(0, gravGauge - dt);
+        if(gravGauge <= 0){
+            /* fuel 소진 → 강제 해제 */
+            gravityFieldActive = false;
+            const gb = document.getElementById('gravBtn');
+            if(gb) gb.classList.remove('active');
+        }
+    } else {
+        gravGauge = Math.min(GRAV_GAUGE_MAX, gravGauge + dt);
+    }
+}
+function _gravOnCooldown(now){
+    _gravUpdateGauge(now);
+    return gravGauge < GRAV_GAUGE_MAX;     /* 풀 충전 전까진 사용 불가 */
+}
 function _gravTryActivate(){
     const now = performance.now();
-    if(_gravOnCooldown(now)) return false;     /* 쿨타임 중 — 재활성 거부 */
+    _gravUpdateGauge(now);
+    if(gravGauge < GRAV_GAUGE_MAX) return false;
     gravityFieldActive = true;
     gravPressedAt = now;
     return true;
 }
 function _gravRelease(){
     if(gravityFieldActive){
-        const now = performance.now();
-        const usedMs = now - gravPressedAt;
-        gravCooldownStart = now;
-        gravCooldownTotal = usedMs;
-        gravCooldownUntil = now + usedMs;     /* 사용한 만큼 cooldown */
+        _gravUpdateGauge(performance.now());
     }
     gravityFieldActive = false;
 }
@@ -5290,6 +5334,8 @@ function resetGame(){
     inventory = [null, null, null];
     syncInventoryUI();
     gravityFieldActive = false;
+    gravGauge = GRAV_GAUGE_MAX;
+    gravLastTick = 0;
     wipeFlashUntil = 0;
     wipeSpawnBlockUntil = 0;
     wipeFragments = [];
@@ -5827,32 +5873,34 @@ function gameLoop(now){
     updateMiniShip(dt, now);
     updateWipeFragments(dt);
 
-    /* ---- GRAV 버튼 cooldown 동기화 ----
-       쉴드와 GRAV 동시 사용 허용 (제한 없음). cooldown 중에만 잠금.
-       cooldown 동안 --grav-progress 변수로 왼→오 채움 (0→1).
-       cooldown 막 끝나면 .ready-flash 한 번 트리거 → 사용 가능 신호. */
+    /* ---- GRAV 버튼 게이지·상태 동기화 ----
+       --grav-progress = gravGauge / MAX (0=empty, 1=full).
+       . draining (눌려있음): 1 → 0 으로 줄어들며 bar 가 오른쪽에서 깎임
+       . cooldown (안 눌렸지만 풀 아님): 0 → 1 로 다시 차오름
+       . ready (full): 두 클래스 다 없음 + 직전이 cooldown 이었으면 ready-flash */
     {
         const gb = $('gravBtn');
         if(gb){
-            /* 이전에 쉴드 활성 시 붙던 .disabled 가 남아있을 수 있어 안전 제거 */
             if(gb.classList.contains('disabled')) gb.classList.remove('disabled');
-            const cooling = _gravOnCooldown(now);
+            _gravUpdateGauge(now);
+            const ratio = gravGauge / GRAV_GAUGE_MAX;
+            gb.style.setProperty('--grav-progress', ratio.toFixed(3));
+
+            const draining = gravityFieldActive;
+            const wasDraining = gb.classList.contains('draining');
+            if(draining !== wasDraining) gb.classList.toggle('draining', draining);
+
+            const cooling = !gravityFieldActive && gravGauge < GRAV_GAUGE_MAX;
             const wasCooling = gb.classList.contains('cooldown');
             if(cooling !== wasCooling){
                 gb.classList.toggle('cooldown', cooling);
                 if(!cooling && wasCooling){
-                    /* cooldown 직후 — 진행률 0으로 리셋 + 깜빡 1회 */
-                    gb.style.setProperty('--grav-progress','0');
+                    /* gauge 가 MAX 에 도달 — 사용 가능 신호 1회 */
                     gb.classList.remove('ready-flash');
-                    void gb.offsetWidth;          /* reflow → 애니메이션 재시작 */
+                    void gb.offsetWidth;
                     gb.classList.add('ready-flash');
                     setTimeout(()=>gb.classList.remove('ready-flash'),600);
                 }
-            }
-            if(cooling && gravCooldownTotal > 0){
-                const elapsed = now - gravCooldownStart;
-                const p = Math.min(1, Math.max(0, elapsed / gravCooldownTotal));
-                gb.style.setProperty('--grav-progress', p.toFixed(3));
             }
         }
     }
