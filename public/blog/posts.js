@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'starlink-ipo-when-en',
+        lang: 'en',
+        category: 'space-tech',
+        date: '2026-05-07',
+        readMinutes: 11,
+        coverEmoji: '📡',
+        tags: ['Starlink IPO', 'Starlink valuation', 'SpaceX spin-off', 'Direct to Cell', 'Satellite Internet', 'Comcast comparison'],
+        title: 'When Will Starlink IPO? — Separate Listing Probability + Standalone Valuation',
+        excerpt: 'Will Starlink IPO separately from SpaceX? With 7M subscribers, $15B revenue, 60%+ EBITDA, the financial bar is met. Two scenarios + standalone valuation $200-400B + 5-year scenarios + investor implications.',
+        alt: 'starlink-ipo-when',
+    },
+    {
+        slug: 'starlink-ipo-when',
+        lang: 'ko',
+        category: 'space-tech',
+        date: '2026-05-07',
+        readMinutes: 11,
+        coverEmoji: '📡',
+        tags: ['Starlink IPO', '스타링크 상장', 'Starlink 가치 평가', 'Direct to Cell', '위성 인터넷', '머스크 IPO 약속'],
+        title: 'Starlink IPO 언제? — 별도 상장 가능성 + 가치 평가 + 5년 시나리오',
+        excerpt: '머스크가 2022년 약속한 Starlink 별도 IPO 의 그 기준은 충족됐다 — 가입자 700만, 매출 $15B, EBITDA 60%+. 그런데 왜 안 합니까? 두 시나리오 + 단독 가치 $200~400B + 한국 투자자 시사점.',
+        alt: 'starlink-ipo-when-en',
+    },
+    {
         slug: 'spacex-ipo-faq-en',
         lang: 'en',
         category: 'space-tech',
