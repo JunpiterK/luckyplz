@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'spacex-ipo-faq-en',
+        lang: 'en',
+        category: 'space-tech',
+        date: '2026-05-07',
+        readMinutes: 12,
+        coverEmoji: '❓',
+        tags: ['SpaceX IPO FAQ', 'How to buy SpaceX', 'XOVR', 'EchoStar SATS', 'Starlink', 'IPO 2026', 'Investor Guide'],
+        title: 'SpaceX IPO FAQ — 18 Questions Investors Actually Ask',
+        excerpt: 'When? How much? How to buy? ETF vs SATS? Musk net worth? 18 most-searched SpaceX IPO questions answered with hard data. Schema-marked for Google rich snippets.',
+        alt: 'spacex-ipo-faq',
+    },
+    {
+        slug: 'spacex-ipo-faq',
+        lang: 'ko',
+        category: 'space-tech',
+        date: '2026-05-07',
+        readMinutes: 12,
+        coverEmoji: '❓',
+        tags: ['SpaceX IPO FAQ', 'SpaceX 사는법', 'XOVR ETF', 'EchoStar SATS', 'Starlink 상장', '머스크 자산', '한국 투자자'],
+        title: 'SpaceX IPO 자주 묻는 질문 18가지 — 한국 투자자용 완전 정리',
+        excerpt: '언제 / 얼마 / 어떻게 사 / 양도세 / 청약 / 위험 / lockup — 한국 투자자가 가장 많이 검색하는 18가지 핵심 질문에 대한 정확한 데이터 기반 답변. Google 검색 결과에 답변 박스로 노출되도록 schema 마크업.',
+        alt: 'spacex-ipo-faq-en',
+    },
+    {
         slug: 'echostar-sats-spacex-backdoor-en',
         lang: 'en',
         category: 'space-tech',
