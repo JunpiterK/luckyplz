@@ -3861,7 +3861,7 @@ document.addEventListener('keydown',(e)=>{
         else if(e.key==='2' || e.key==='w' || e.key==='W'){ inventoryUseSlot(1); e.preventDefault(); }
         else if(e.key==='3' || e.key==='e' || e.key==='E'){ inventoryUseSlot(2); e.preventDefault(); }
         else if(e.key==='f' || e.key==='F' || e.key==='s' || e.key==='S' || e.key==='Shift'){
-            if(shieldBubbleActive(performance.now())){ e.preventDefault(); return; }
+            /* 쉴드와 GRAV 동시 사용 허용 — 별개 시스템이라 게임플레이 제약 없음 */
             if(_gravTryActivate()){
                 const gb = $('gravBtn'); if(gb) gb.classList.add('active');
             }
@@ -3897,8 +3897,7 @@ function _wireItemBar(){
     const press = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(!running || paused) return;
-        /* 쉴드 활성 중에는 GRAV 잠금. cooldown 중이면 _gravTryActivate 가 false. */
-        if(shieldBubbleActive(performance.now())) return;
+        /* 쉴드와 GRAV 동시 사용 허용 — cooldown 중이면 _gravTryActivate 가 false. */
         if(_gravTryActivate()){
             gb.classList.add('active');
         }
@@ -4544,9 +4543,7 @@ function triggerShieldBubble(){
     const now = performance.now();
     const base = Math.max(now, shieldBubbleUntil);
     shieldBubbleUntil = base + SHIELD_BUBBLE_MS;
-    /* 쉴드 발동 시 GRAV 강제 해제 — 두 시스템 동시 활성 금지 (사용자 정책). */
-    gravityFieldActive = false;
-    const gb = $('gravBtn'); if(gb) gb.classList.remove('active');
+    /* 쉴드와 GRAV 동시 활성 허용 — GRAV 강제 해제 안 함 */
     sfxStart();
     if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
 }
@@ -5830,16 +5827,15 @@ function gameLoop(now){
     updateMiniShip(dt, now);
     updateWipeFragments(dt);
 
-    /* ---- GRAV 버튼 disabled / cooldown 동기화 ----
-       쉴드 활성 중에는 GRAV 잠금. cooldown 중에도 잠금 (시각 분리).
+    /* ---- GRAV 버튼 cooldown 동기화 ----
+       쉴드와 GRAV 동시 사용 허용 (제한 없음). cooldown 중에만 잠금.
        cooldown 동안 --grav-progress 변수로 왼→오 채움 (0→1).
        cooldown 막 끝나면 .ready-flash 한 번 트리거 → 사용 가능 신호. */
     {
         const gb = $('gravBtn');
         if(gb){
-            const blocked = shieldBubbleActive(now);
-            const wasBlocked = gb.classList.contains('disabled');
-            if(blocked !== wasBlocked) gb.classList.toggle('disabled', blocked);
+            /* 이전에 쉴드 활성 시 붙던 .disabled 가 남아있을 수 있어 안전 제거 */
+            if(gb.classList.contains('disabled')) gb.classList.remove('disabled');
             const cooling = _gravOnCooldown(now);
             const wasCooling = gb.classList.contains('cooldown');
             if(cooling !== wasCooling){
@@ -5857,13 +5853,6 @@ function gameLoop(now){
                 const elapsed = now - gravCooldownStart;
                 const p = Math.min(1, Math.max(0, elapsed / gravCooldownTotal));
                 gb.style.setProperty('--grav-progress', p.toFixed(3));
-            }
-            /* GRAV 누른 상태에서 cooldown 으로 진입 (사용 시간 다 됨) — release 자동 처리.
-               단, 사용자는 keyup 으로 release 하지만 cooldown 도달 시 강제 해제 없음.
-               대신 활성 중에는 release 시점에 cooldown 시작. */
-            if(blocked && (gravityFieldActive || gb.classList.contains('active'))){
-                _gravRelease();
-                gb.classList.remove('active');
             }
         }
     }
