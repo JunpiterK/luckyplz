@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778276978">
-<script>(function(){var B="1778276978";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778277944">
+<script>(function(){var B="1778277944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1336,10 +1336,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778276978"></script>
-<script src="/js/lpI18n.js?v=1778276978"></script>
-<script src="/js/lpRankSheet.js?v=1778276978"></script>
-<script src="/js/lpAudio.js?v=1778276978"></script>
+<script src="/js/supabase-config.js?v=1778277944"></script>
+<script src="/js/lpI18n.js?v=1778277944"></script>
+<script src="/js/lpRankSheet.js?v=1778277944"></script>
+<script src="/js/lpAudio.js?v=1778277944"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3577,40 +3577,214 @@ function drawHelioEdge(zoneT){
 /* drawInterstellar (이전 zoneIdx 9) 는 신 zone 시퀀스로 대체됨 (Oort/Proxima 등).
    함수 자체 제거 — 호출처 없음. */
 
+/* 2026-05-09: 말머리성운 전면 리메이크 — 사용자 피드백 "그래픽이 너무 구려".
+   이전: 단색 dark red overlay + 4 줄 vertical streak + 작은 horsehead.
+   신: Hubble 사진(IC 434 / Barnard 33) 참고:
+     1. 따뜻한 Hα 배경 그라데이션 (peach 위 → 진한 crimson 아래)
+     2. 4개 nebulosity haze 패치 (밝은 핑크/오렌지 점광 + 좌측 어두운 dust shadow)
+     3. 13개 별필드 — 4개는 큰 회절 spike (Hubble 톱니 별 같은)
+     4. 하단 dust band — 유기적 wave 가장자리
+     5. 큰 말머리 실루엣 — 위쪽 mane wisp 2개 + 둥근 머리 + 우측 muzzle 곡선,
+        외곽에 자홍색 fringe glow 로 dust 가장자리 빛 받는 느낌
+   상수 좌표 — zone 진입 후 화면 따라 안 움직여 OK (배경 광원이라). */
 function drawHorseheadNebula(){
-    // Rich crimson nebula overlay
     ctx.save();
-    ctx.fillStyle='rgba(80,5,25,0.6)';
-    ctx.fillRect(0,0,CW,CH);
-    // Nebula pillar streaks
-    ctx.strokeStyle='rgba(180,40,80,0.12)';
-    ctx.lineWidth=18;
-    for(let i=0;i<4;i++){
-        ctx.beginPath();
-        ctx.moveTo(CW*0.3+i*25, 0);
-        ctx.lineTo(CW*0.28+i*22, CH);
-        ctx.stroke();
+
+    /* 1. Hα 배경 그라데이션 — 위쪽 따뜻한 peach, 아래쪽 dust 진한 crimson */
+    const bg = ctx.createLinearGradient(0, 0, 0, CH);
+    bg.addColorStop(0,    'rgba(225, 130, 105, 0.78)');
+    bg.addColorStop(0.30, 'rgba(195, 80,  85, 0.78)');
+    bg.addColorStop(0.55, 'rgba(140, 45,  60, 0.82)');
+    bg.addColorStop(0.80, 'rgba(70,  20,  35, 0.92)');
+    bg.addColorStop(1,    'rgba(20,  6,   16, 1)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, CW, CH);
+
+    /* 2. Nebulosity haze 패치 — 4개 radial gradient, 자연스러운 변동 */
+    const hazes = [
+        {x: CW*0.18, y: CH*0.22, r: Math.max(CW,CH)*0.50, c: 'rgba(255, 195, 150, 0.28)'},
+        {x: CW*0.78, y: CH*0.12, r: Math.max(CW,CH)*0.45, c: 'rgba(255, 165, 175, 0.24)'},
+        {x: CW*0.55, y: CH*0.32, r: Math.max(CW,CH)*0.40, c: 'rgba(220, 100, 110, 0.22)'},
+        {x: CW*0.10, y: CH*0.70, r: Math.max(CW,CH)*0.55, c: 'rgba(40,  10,  25, 0.55)'},
+    ];
+    for(const h of hazes){
+        const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+        g.addColorStop(0, h.c);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
     }
-    // Alnitak star (brilliant blue-white)
-    ctx.shadowColor='rgba(150,180,255,0.9)';
-    ctx.shadowBlur=32;
-    ctx.fillStyle='#d0e0ff';
-    ctx.beginPath(); ctx.arc(CW*0.75,CH*0.15,8,0,Math.PI*2); ctx.fill();
-    ctx.shadowBlur=0;
-    // Horsehead silhouette
-    const hx=CW*0.5, hy=CH*0.4;
-    ctx.fillStyle='rgba(12,2,8,0.88)';
+
+    /* 3. Star field — 위치, 크기, 알파, 회절 spike 여부 */
+    const stars = [
+        /* small ambient */
+        [CW*0.08, CH*0.06, 0.8, 0.65, 0],
+        [CW*0.22, CH*0.10, 0.7, 0.55, 0],
+        [CW*0.42, CH*0.06, 1.0, 0.75, 0],
+        [CW*0.62, CH*0.20, 0.8, 0.65, 0],
+        [CW*0.84, CH*0.25, 1.0, 0.70, 0],
+        [CW*0.92, CH*0.05, 0.7, 0.55, 0],
+        [CW*0.16, CH*0.30, 0.8, 0.55, 0],
+        [CW*0.50, CH*0.40, 0.6, 0.5,  0],
+        [CW*0.30, CH*0.50, 0.7, 0.55, 0],
+        /* prominent — diffraction spike */
+        [CW*0.34, CH*0.13, 1.6, 0.95, 1],
+        [CW*0.74, CH*0.08, 2.0, 1.0,  1],
+        [CW*0.52, CH*0.55, 1.4, 0.9,  1],
+        [CW*0.86, CH*0.45, 1.5, 0.92, 1],
+    ];
+    for(const [sx, sy, sz, sa, spike] of stars){
+        /* 외곽 glow (radial gradient) */
+        const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sz * 8);
+        sg.addColorStop(0,    `rgba(255, 250, 235, ${sa})`);
+        sg.addColorStop(0.35, `rgba(255, 230, 210, ${sa * 0.5})`);
+        sg.addColorStop(1,    'rgba(255, 200, 170, 0)');
+        ctx.fillStyle = sg;
+        ctx.fillRect(sx - sz*8, sy - sz*8, sz*16, sz*16);
+        /* core dot */
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, sa + 0.05)})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sz, 0, Math.PI*2);
+        ctx.fill();
+        /* diffraction spikes — Hubble 톱니 */
+        if(spike){
+            ctx.strokeStyle = `rgba(255, 250, 230, ${sa * 0.85})`;
+            ctx.lineWidth = 0.7;
+            const sp = sz * 9;
+            ctx.beginPath();
+            ctx.moveTo(sx - sp, sy); ctx.lineTo(sx + sp, sy);
+            ctx.moveTo(sx, sy - sp); ctx.lineTo(sx, sy + sp);
+            ctx.stroke();
+            /* 짧은 대각 */
+            ctx.lineWidth = 0.4;
+            ctx.strokeStyle = `rgba(255, 250, 230, ${sa * 0.5})`;
+            const sd = sz * 5.5;
+            ctx.beginPath();
+            ctx.moveTo(sx - sd, sy - sd); ctx.lineTo(sx + sd, sy + sd);
+            ctx.moveTo(sx - sd, sy + sd); ctx.lineTo(sx + sd, sy - sd);
+            ctx.stroke();
+        }
+    }
+
+    /* 4. 하단 dust band — 유기적 wave 가장자리 (성운 본체가 솟아나오는 dust) */
+    const dustG = ctx.createLinearGradient(0, CH*0.55, 0, CH);
+    dustG.addColorStop(0,    'rgba(15, 4, 12, 0)');
+    dustG.addColorStop(0.30, 'rgba(15, 4, 12, 0.35)');
+    dustG.addColorStop(0.65, 'rgba(10, 2, 10, 0.85)');
+    dustG.addColorStop(1,    'rgba(5,  1, 8,  1)');
+    ctx.fillStyle = dustG;
+    ctx.fillRect(0, CH*0.55, CW, CH*0.45);
+    /* wave 모양 dust 윗가장자리 */
+    ctx.fillStyle = 'rgba(8, 2, 10, 0.9)';
     ctx.beginPath();
-    // rough horsehead shape
-    ctx.moveTo(hx-18,hy+40);
-    ctx.lineTo(hx-22,hy-10);
-    ctx.quadraticCurveTo(hx-30,hy-35,hx-15,hy-55);
-    ctx.quadraticCurveTo(hx+5,hy-70,hx+20,hy-50);
-    ctx.quadraticCurveTo(hx+32,hy-30,hx+25,hy-5);
-    ctx.quadraticCurveTo(hx+30,hy+10,hx+18,hy+20);
-    ctx.quadraticCurveTo(hx+10,hy+25,hx+12,hy+40);
+    ctx.moveTo(0, CH*0.78);
+    for(let xw = 0; xw <= CW; xw += 18){
+        const yw = CH*0.78 + Math.sin(xw * 0.022) * 16 + Math.cos(xw * 0.06) * 7;
+        ctx.lineTo(xw, yw);
+    }
+    ctx.lineTo(CW, CH);
+    ctx.lineTo(0, CH);
     ctx.closePath();
     ctx.fill();
+
+    /* 5. 말머리 실루엣 — 큰 사이즈, iconic profile.
+       크기 W (== 절반 폭) 와 H (== 전체 높이) 기준.
+       baseY = 하단 dust 안쪽 (Trail 처럼 dust 와 자연스럽게 연결).
+       실루엣은 우측 향하는 horse profile — 위쪽 mane wisp + 둥근 forehead +
+       우측으로 살짝 튀어나온 muzzle + 하단으로 갈수록 굵어지는 neck. */
+    const cx = CW * 0.50;
+    const baseY = CH * 0.92;
+    const W = Math.min(CW, CH) * 0.18;
+    const H = Math.min(CW, CH) * 0.55;
+
+    /* fringe glow — 외곽 자홍색 빛, dust 가장자리 illuminated 표현 */
+    ctx.shadowColor = 'rgba(180, 60, 80, 0.85)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = 'rgba(6, 2, 8, 0.97)';
+    ctx.beginPath();
+    /* 좌측 neck 하단 (dust 안에서 솟아나옴) */
+    ctx.moveTo(cx - W*0.55, baseY);
+    /* 좌측 neck 상승 — 살짝 안쪽으로 빨려들어가다 */
+    ctx.bezierCurveTo(
+        cx - W*0.62, baseY - H*0.30,
+        cx - W*0.55, baseY - H*0.50,
+        cx - W*0.50, baseY - H*0.62
+    );
+    /* 좌측 jowl (턱 아래 살) */
+    ctx.bezierCurveTo(
+        cx - W*0.65, baseY - H*0.70,
+        cx - W*0.72, baseY - H*0.80,
+        cx - W*0.50, baseY - H*0.88
+    );
+    /* 좌측 forehead 상승 */
+    ctx.bezierCurveTo(
+        cx - W*0.42, baseY - H*0.95,
+        cx - W*0.20, baseY - H*0.99,
+        cx - W*0.05, baseY - H*0.97
+    );
+    /* 좌측 ear/mane wisp peak */
+    ctx.bezierCurveTo(
+        cx + W*0.0,  baseY - H*1.05,
+        cx + W*0.10, baseY - H*1.03,
+        cx + W*0.12, baseY - H*0.92
+    );
+    /* ear 사이 작은 dip */
+    ctx.bezierCurveTo(
+        cx + W*0.18, baseY - H*0.88,
+        cx + W*0.22, baseY - H*0.88,
+        cx + W*0.28, baseY - H*0.93
+    );
+    /* 우측 mane wisp peak (조금 더 우측·약간 낮음) */
+    ctx.bezierCurveTo(
+        cx + W*0.42, baseY - H*0.98,
+        cx + W*0.55, baseY - H*0.92,
+        cx + W*0.55, baseY - H*0.78
+    );
+    /* mane 흐르는 곡선 — 우측 뒷머리 → 옆머리 */
+    ctx.bezierCurveTo(
+        cx + W*0.65, baseY - H*0.68,
+        cx + W*0.62, baseY - H*0.55,
+        cx + W*0.55, baseY - H*0.45
+    );
+    /* 우측 head/muzzle 상부 */
+    ctx.bezierCurveTo(
+        cx + W*0.65, baseY - H*0.38,
+        cx + W*0.62, baseY - H*0.28,
+        cx + W*0.50, baseY - H*0.22
+    );
+    /* muzzle 끝 (살짝 우측 돌출) — 콧등 */
+    ctx.bezierCurveTo(
+        cx + W*0.45, baseY - H*0.18,
+        cx + W*0.42, baseY - H*0.10,
+        cx + W*0.45, baseY - H*0.05
+    );
+    /* 우측 throat → neck */
+    ctx.bezierCurveTo(
+        cx + W*0.50, baseY - H*0.02,
+        cx + W*0.50, baseY - H*0.0,
+        cx + W*0.55, baseY
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    /* 가장자리 dust illumination — 살짝 자홍색 outline 으로 빛 받는 가장자리 */
+    ctx.strokeStyle = 'rgba(255, 110, 100, 0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    /* 살짝 어두운 wisp lines — 머리 표면 dust streak (depth 표현) */
+    ctx.strokeStyle = 'rgba(50, 18, 30, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx - W*0.30, baseY - H*0.55);
+    ctx.quadraticCurveTo(cx - W*0.10, baseY - H*0.70, cx + W*0.20, baseY - H*0.80);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + W*0.10, baseY - H*0.50);
+    ctx.quadraticCurveTo(cx + W*0.30, baseY - H*0.62, cx + W*0.45, baseY - H*0.65);
+    ctx.stroke();
+
     ctx.restore();
 }
 
@@ -9716,6 +9890,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778276978"></script>
+<script src="/js/siteFooter.js?v=1778277944"></script>
 </body>
 </html>
