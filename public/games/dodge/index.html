@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778225954">
-<script>(function(){var B="1778225954";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778226229">
+<script>(function(){var B="1778226229";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1290,10 +1290,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778225954"></script>
-<script src="/js/lpI18n.js?v=1778225954"></script>
-<script src="/js/lpRankSheet.js?v=1778225954"></script>
-<script src="/js/lpAudio.js?v=1778225954"></script>
+<script src="/js/supabase-config.js?v=1778226229"></script>
+<script src="/js/lpI18n.js?v=1778226229"></script>
+<script src="/js/lpRankSheet.js?v=1778226229"></script>
+<script src="/js/lpAudio.js?v=1778226229"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5046,19 +5046,125 @@ function drawMissionOrbit(now){
     ctx.restore();
 }
 
-/* Phase D stub — Phase D 에서 본격 구현. 호출만 해 두면 안전. */
-function grantMissionReward(kind){
-    /* TODO Phase D: reward slot increment + click-to-activate logic.
-       Currently just visually mark a slot. */
-    const map = {anchor:'rewardSlot0', storm:'rewardSlot1', fuel:'rewardSlot2'};
-    const id = map[kind];
-    if(!id) return;
-    const el = document.getElementById(id);
+/* =====================================================================
+   MISSION REWARD ITEMS (Phase D) — 3 effects.
+
+   ⏳ Time Anchor  : 다음 1회 사망 시 자동 부활 (lives=1 + 2초 무적).
+                    timeAnchorArmed=true 로 활성화하면 슬롯 비워짐. 죽으면
+                    소비. 블랙홀 즉사 (triggerGameOver) 도 가로챔.
+   💥 Plasma Storm : 화면 모든 적 즉시 제거 (bullets·cluster·mines·
+                    supernova·solarFlare). 4초 spawn block 추가. Wipe
+                    보다 강함 (cluster·mine·supernova 도 청소).
+   🚀 Orbital Fuel : 6초간 GRAV 게이지 무한 — gravGauge 가 매 frame
+                    MAX 로 강제 충전. 평소 3초 한계 사라져 능동적 사용.
+   ===================================================================== */
+const REWARD_KINDS = ['anchor','storm','fuel'];
+const REWARD_ICONS = {anchor:'⏳', storm:'💥', fuel:'🚀'};
+const REWARD_SLOT_IDS = {anchor:'rewardSlot0', storm:'rewardSlot1', fuel:'rewardSlot2'};
+let rewardCounts = {anchor: 0, storm: 0, fuel: 0};
+let timeAnchorArmed = false;
+let orbitalFuelUntil = 0;
+let plasmaStormFlashUntil = 0;
+
+function _refreshRewardSlot(kind){
+    const el = document.getElementById(REWARD_SLOT_IDS[kind]);
     if(!el) return;
-    el.classList.remove('empty');
-    el.classList.add('has-' + kind);
-    const ICON = {anchor:'⏳', storm:'💥', fuel:'🚀'};
-    el.textContent = ICON[kind] || '✦';
+    const count = rewardCounts[kind];
+    el.classList.remove('has-anchor','has-storm','has-fuel','empty');
+    if(count > 0){
+        el.classList.add('has-' + kind);
+        el.textContent = count > 1 ? (REWARD_ICONS[kind] + count) : REWARD_ICONS[kind];
+    } else {
+        el.classList.add('empty');
+        el.textContent = '';
+    }
+}
+
+function grantMissionReward(kind){
+    if(!rewardCounts.hasOwnProperty(kind)) return;
+    rewardCounts[kind]++;
+    _refreshRewardSlot(kind);
+}
+
+function _activatePlasmaStorm(now){
+    /* same vibe as wipe but covers ALL obstacle types + 4s block */
+    for(const b of bullets){
+        wipeFragments.push({x:b.x, y:b.y, vx:(Math.random()-0.5)*360, vy:(Math.random()-0.5)*360, life:0.55, maxLife:0.55});
+    }
+    bullets = [];
+    for(const cluster of asteroidClusters){
+        for(const r of cluster.rocks){
+            wipeFragments.push({x:r.x, y:r.y, vx:(Math.random()-0.5)*380, vy:(Math.random()-0.5)*380, life:0.55, maxLife:0.55});
+        }
+    }
+    asteroidClusters = [];
+    for(const m of magneticMines){
+        for(let k = 0; k < 5; k++){
+            wipeFragments.push({x:m.x, y:m.y, vx:(Math.random()-0.5)*420, vy:(Math.random()-0.5)*420, life:0.6, maxLife:0.6});
+        }
+    }
+    magneticMines = [];
+    solarFlares = [];
+    supernovaRings = [];
+    wipeSpawnBlockUntil = now + 4000;
+    plasmaStormFlashUntil = now + 700;
+    sfxOver();
+    if(navigator.vibrate) try{navigator.vibrate([20,20,20,20,40])}catch(_){}
+}
+
+function _activateOrbitalFuel(now){
+    orbitalFuelUntil = now + 6000;
+    gravGauge = GRAV_GAUGE_MAX;
+    sfxStart();
+}
+
+function _activateTimeAnchor(){
+    timeAnchorArmed = true;
+    sfxStart();
+}
+
+function activateRewardSlot(kind){
+    if(rewardCounts[kind] <= 0) return;
+    if(!running || paused) return;
+    const now = performance.now();
+    if(kind === 'anchor'){
+        if(timeAnchorArmed) return;
+        _activateTimeAnchor();
+    } else if(kind === 'storm'){
+        _activatePlasmaStorm(now);
+    } else if(kind === 'fuel'){
+        _activateOrbitalFuel(now);
+    } else return;
+    rewardCounts[kind]--;
+    _refreshRewardSlot(kind);
+}
+
+function _wireRewardSlots(){
+    for(const kind of REWARD_KINDS){
+        const el = document.getElementById(REWARD_SLOT_IDS[kind]);
+        if(!el) continue;
+        const handler = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            activateRewardSlot(kind);
+        };
+        el.addEventListener('click', handler);
+        el.addEventListener('touchstart', handler, {passive:false});
+    }
+}
+if(document.readyState !== 'loading') _wireRewardSlots();
+else document.addEventListener('DOMContentLoaded', _wireRewardSlots);
+
+/* Time Anchor consumption — called from any death path. Returns true if
+   the anchor saved the player (caller should NOT trigger game over). */
+function _consumeTimeAnchorIfArmed(now){
+    if(!timeAnchorArmed) return false;
+    timeAnchorArmed = false;
+    lives = Math.max(1, lives);
+    invincibleUntil = now + 2000;
+    flashVisible = true;
+    plasmaStormFlashUntil = now + 350;     /* visual ping (re-use channel) */
+    if(navigator.vibrate) try{navigator.vibrate([10,40,10])}catch(_){}
+    return true;
 }
 
 /* =====================================================================
@@ -5543,6 +5649,12 @@ function _gravUpdateGauge(now){
     gravLastTick = now;
     if(dt > 100) dt = 100;          /* pause·tab-switch 점프 클램프 */
     if(dt < 0) dt = 0;
+    /* Phase D: Orbital Fuel 활성 중엔 gauge 항상 MAX. 누르고 있어도
+       전혀 안 닳음 → 6초 무한 GRAV. */
+    if(orbitalFuelUntil > now){
+        gravGauge = GRAV_GAUGE_MAX;
+        return;
+    }
     if(gravityFieldActive){
         gravGauge = Math.max(0, gravGauge - dt);
         if(gravGauge <= 0){
@@ -5600,7 +5712,16 @@ function updateBlackHolePull(dt){
     const phx = player.x - cx, phy = player.y - cy;
     const phd = Math.sqrt(phx*phx + phy*phy);
     if(phd < blackHole.r + BH_EVENT_HORIZON_BUFFER){
-        /* spaghettification — 즉사. lives=0 으로 game over. */
+        /* spaghettification — 즉사. Phase D: Time Anchor 가 가로채서
+           lives=1 로 부활시키고 player 를 BH 영향 반경 밖으로 밀어냄. */
+        const _now = performance.now();
+        if(_consumeTimeAnchorIfArmed(_now)){
+            /* push player away from BH (just outside pull radius) */
+            const ang = Math.atan2(player.y - cy, player.x - cx);
+            player.x = cx + Math.cos(ang) * (BH_PULL_RADIUS + 12);
+            player.y = cy + Math.sin(ang) * (BH_PULL_RADIUS + 12);
+            return;
+        }
         lives = 0;
         triggerGameOver();
         return;
@@ -6609,6 +6730,11 @@ function resetGame(){
     missionBannerHideAt=0;
     satellite=null;
     satelliteOrbiting=[];
+    /* Phase D reward state reset */
+    rewardCounts={anchor:0, storm:0, fuel:0};
+    timeAnchorArmed=false;
+    orbitalFuelUntil=0;
+    plasmaStormFlashUntil=0;
     {
         const banner=document.getElementById('missionBanner');
         if(banner){ banner.hidden=true; banner.classList.remove('show','success','failed'); }
@@ -7266,7 +7392,15 @@ function gameLoop(now){
             comboCount = 0;            /* Stage 7: hit breaks the chain */
             comboFlashUntil = 0;
             if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
-            if(lives <= 0){ triggerGameOver(); return; }
+            if(lives <= 0){
+                /* Phase D: Time Anchor saves player from death once */
+                if(_consumeTimeAnchorIfArmed(now)){
+                    /* anchor consumed → revive, skip game over */
+                } else {
+                    triggerGameOver();
+                    return;
+                }
+            }
             sfxHit();
         }
     }
@@ -8840,6 +8974,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778225954"></script>
+<script src="/js/siteFooter.js?v=1778226229"></script>
 </body>
 </html>
