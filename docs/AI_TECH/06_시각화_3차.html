@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI 알고리즘 시각화 3차 — GBT/SHAP · GNN · PatchCore · LLM+RAG (전면 개편판)</title>
+<style>
+:root{
+  --c-bg:#fbfbfd; --c-surface:#fff;
+  --c-ink:#0b1220; --c-ink2:#1e293b; --c-ink3:#334155;
+  --c-mute:#64748b; --c-mute2:#94a3b8;
+  --c-line:#e2e8f0; --c-line2:#cbd5e1;
+  --c-acc:#0a4e99; --c-acc2:#0b6dd4; --c-accbg:#eff5fb;
+  --c-pos:#10b981; --c-neg:#ef4444; --c-warn:#f59e0b; --c-purple:#8b5cf6;
+  --c-gold:#b8860b; --c-gold-bg:#fef3c7;
+  --c-ok:#15803d; --c-ok-bg:#f0fdf4;
+  --c-rose:#e11d48; --c-rose-bg:#fff1f2;
+  --f-sans:"Pretendard","Apple SD Gothic Neo","Noto Sans KR","Inter","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono","SF Mono","D2Coding",Consolas,monospace;
+  --f-serif:"Pretendard","Apple SD Gothic Neo","Noto Serif KR","Source Serif Pro",Georgia,serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--c-bg);color:var(--c-ink);font-family:var(--f-sans);font-size:15.5px;line-height:1.7;letter-spacing:-0.005em;word-break:keep-all}
+abbr{text-decoration:none;border-bottom:1px dotted #94a3b8;cursor:help;font-weight:inherit}
+abbr.full{display:inline;color:#64748b;font-weight:400;font-size:.9em;border:none;margin-left:2px;font-family:var(--f-sans)}
+abbr.full::before{content:"("}
+abbr.full::after{content:")"}
+
+.container{max-width:1180px;margin:0 auto;padding:32px 28px 80px 28px}
+
+.aifab-nav{position:relative;background:linear-gradient(180deg,#eff5fb 0%,#fff 100%);border-bottom:1px solid #cbd5e1;padding:11px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-family:var(--f-sans);font-size:13px;z-index:100}
+.aifab-nav .aifab-l,.aifab-nav .aifab-c,.aifab-nav .aifab-r{display:flex;align-items:center;gap:8px}
+.aifab-nav a{color:#0a4e99;text-decoration:none;font-weight:600;padding:5px 11px;border-radius:6px;transition:all .15s;font-size:12.5px;border:none}
+.aifab-nav a:hover{background:#0a4e99;color:#fff}
+.aifab-nav .aifab-pos{font-family:var(--f-mono);background:#7c3aed;color:#fff;padding:3px 10px;border-radius:6px;font-size:11.5px;font-weight:700;letter-spacing:.04em}
+.aifab-nav .aifab-title{color:#334155;font-weight:600;font-size:13px}
+@media print{.aifab-nav{display:none}}
+
+header.top{padding:36px 36px 32px 36px;border:1px solid var(--c-line);border-radius:18px;background:radial-gradient(ellipse 600px 300px at 80% 20%,#dde9fb 0%,transparent 60%),radial-gradient(ellipse 500px 280px at 10% 90%,#fde5e2 0%,transparent 60%),linear-gradient(180deg,#fff,#f7fafd);margin-bottom:32px}
+header.top .eb{display:inline-block;padding:5px 12px;border-radius:999px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;background:var(--c-accbg);color:var(--c-acc);font-weight:700;margin-bottom:14px;border:1px solid #c7dcf2}
+header.top h1{font-family:var(--f-serif);font-size:38px;font-weight:800;margin:0 0 12px 0;line-height:1.15;letter-spacing:-0.02em}
+header.top h1 small{display:block;font-size:18px;color:var(--c-acc);font-weight:700;margin-top:6px}
+header.top p{font-size:16px;color:var(--c-ink2);max-width:78ch;margin:6px 0 0 0;line-height:1.65}
+header.top .nav-toc{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px;padding-top:18px;border-top:1px dashed var(--c-line2)}
+header.top .nav-toc a{padding:10px 14px;background:rgba(255,255,255,.7);border:1px solid var(--c-line);border-radius:10px;text-decoration:none;color:inherit;display:block;transition:all .15s}
+header.top .nav-toc a:hover{transform:translateY(-2px);box-shadow:0 2px 8px rgba(0,0,0,.06);border-color:#7c3aed}
+header.top .nav-toc .num{font-family:var(--f-mono);font-size:11px;color:#7c3aed;font-weight:700;letter-spacing:.05em}
+header.top .nav-toc .ttl{font-size:14px;font-weight:700;color:var(--c-ink);margin-top:2px}
+header.top .nav-toc .desc{font-size:11.5px;color:var(--c-mute);margin-top:2px}
+
+.demo{background:var(--c-surface);border:1px solid var(--c-line);border-radius:18px;padding:0;margin:32px 0;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.02)}
+.demo .demo-head{padding:24px 32px;border-bottom:1px solid var(--c-line);background:linear-gradient(180deg,#fafcff,#fff)}
+.demo .demo-head .demo-num-row{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.demo .num-circle{width:44px;height:44px;border-radius:12px;background:var(--c-acc);color:#fff;font-family:var(--f-mono);font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.demo .head-meta{font-family:var(--f-mono);font-size:11.5px;color:var(--c-mute);font-weight:600;letter-spacing:.04em}
+.demo h2{font-family:var(--f-serif);font-size:26px;font-weight:800;margin:0 0 6px 0;line-height:1.2}
+.demo .head-sub{font-size:14.5px;color:var(--c-ink2);margin:6px 0 0 0;line-height:1.55}
+.demo .demo-body{padding:24px 32px}
+
+.why-box{background:#fef3c7;border-left:4px solid var(--c-gold);border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0}
+.why-box .lbl{display:inline-block;font-family:var(--f-mono);font-size:11px;font-weight:700;color:#92400e;background:#fde68a;padding:3px 9px;border-radius:5px;letter-spacing:.05em;margin-bottom:6px}
+.why-box h4{margin:6px 0 6px 0;font-size:15.5px;color:#78350f;font-weight:700}
+.why-box p{margin:0 0 8px 0;font-size:14px;color:#7c2d12;line-height:1.65}
+.why-box .citation{font-size:11.5px;color:#92400e;font-style:italic;margin-top:8px;font-family:var(--f-mono)}
+
+.term-box{background:var(--c-surface);border:1px solid var(--c-line);border-radius:10px;padding:12px 16px;border-left:4px solid var(--c-acc);margin:10px 0}
+.term-box .term{display:inline-block;font-family:var(--f-mono);font-size:12px;font-weight:700;color:var(--c-acc);background:var(--c-accbg);padding:3px 9px;border-radius:5px;margin-right:8px}
+.term-box .ko{font-weight:700;font-size:14.5px;color:var(--c-ink);margin-right:6px}
+.term-box .def{font-size:13.5px;color:var(--c-ink2);line-height:1.55;margin:6px 0 0 0}
+.term-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+
+.industry-box{background:var(--c-ok-bg);border-left:4px solid var(--c-ok);border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0}
+.industry-box .lbl{display:inline-block;font-family:var(--f-mono);font-size:11px;font-weight:700;color:#166534;background:#bbf7d0;padding:3px 9px;border-radius:5px;letter-spacing:.05em;margin-bottom:6px}
+.industry-box h4{margin:6px 0 6px 0;font-size:15.5px;color:#14532d;font-weight:700}
+.industry-box p{margin:0;font-size:14px;color:#14532d;line-height:1.65}
+.industry-box ul{margin:6px 0 0 0;padding-left:20px}
+.industry-box li{font-size:13.5px;color:#14532d;margin:3px 0}
+
+.steps{margin:14px 0;padding:14px 18px;background:#f5f3ff;border-radius:10px;border-left:4px solid var(--c-purple)}
+.steps .lbl{display:inline-block;font-family:var(--f-mono);font-size:11px;font-weight:700;color:#5b21b6;background:#ddd6fe;padding:3px 9px;border-radius:5px;margin-bottom:8px}
+.steps ol{margin:6px 0 0 0;padding-left:24px}
+.steps li{font-size:14px;color:#3b0764;line-height:1.6;margin:4px 0}
+.steps li b{color:var(--c-purple)}
+
+.viz{background:#f8fafc;border:1px solid var(--c-line);border-radius:12px;padding:22px;margin:18px 0;display:flex;flex-direction:column;align-items:center}
+.viz svg{max-width:100%;height:auto;display:block}
+.viz .viz-title{font-size:14px;font-weight:700;color:var(--c-acc);margin-bottom:12px;text-align:center}
+
+.ctrls{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:center;margin:14px 0 4px 0}
+.ctrls button{font-family:var(--f-sans);font-size:13.5px;font-weight:600;padding:8px 16px;border-radius:8px;border:1px solid var(--c-line2);background:#fff;color:var(--c-ink);cursor:pointer;transition:all .15s}
+.ctrls button:hover{background:var(--c-accbg);border-color:var(--c-acc2);color:var(--c-acc)}
+.ctrls button.primary{background:var(--c-acc);color:#fff;border-color:var(--c-acc)}
+.ctrls button.primary:hover{background:var(--c-acc2)}
+.ctrls button.danger{background:#fee;border-color:#fcc;color:#991b1b}
+.ctrls .slider{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--c-ink2)}
+.ctrls input[type=range]{width:120px;accent-color:var(--c-acc2)}
+.ctrls select{padding:6px 10px;border-radius:8px;border:1px solid var(--c-line2);font-family:var(--f-sans);font-size:13px;background:#fff;color:var(--c-ink);cursor:pointer}
+.ctrls .lbl{font-size:12px;font-weight:600;color:var(--c-mute);letter-spacing:.04em;text-transform:uppercase}
+
+.status{font-family:var(--f-mono);font-size:13px;color:var(--c-ink2);background:#f1f5f9;padding:10px 16px;border-radius:8px;margin-top:12px;text-align:center;min-height:42px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px 14px}
+.status b{color:var(--c-acc)}
+.status .pos{color:var(--c-pos)} .status .neg{color:var(--c-neg)}
+
+.cap{font-size:12.5px;color:var(--c-mute);margin-top:10px;text-align:center;max-width:78ch}
+.eq{font-family:var(--f-mono);background:#eef2f7;padding:1px 6px;border-radius:4px;font-size:13px}
+
+.math{background:#fafcff;border:1px solid var(--c-line);border-radius:10px;padding:14px 18px;margin:14px 0;font-family:var(--f-mono);font-size:13.5px;line-height:1.7;color:#1e293b;overflow-x:auto;white-space:pre}
+.math .math-lbl{display:inline-block;font-family:var(--f-sans);font-size:11px;font-weight:700;color:var(--c-acc);background:var(--c-accbg);padding:3px 9px;border-radius:5px;margin-bottom:8px;letter-spacing:.05em}
+
+footer{margin-top:50px;padding:20px 0;border-top:2px solid var(--c-line2);text-align:center;font-size:13px;color:var(--c-mute)}
+
+@media(max-width:760px){
+  header.top .nav-toc{grid-template-columns:repeat(2,1fr)}
+  .demo .demo-body{padding:20px 18px}
+  .term-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<nav class="aifab-nav">
+  <div class="aifab-l"><a href="00_시작하기.html">⌂ 시작하기</a></div>
+  <div class="aifab-c"><span class="aifab-pos">6 / 11</span><span class="aifab-title">시각화 3차 — GBT/SHAP · GNN · PatchCore · LLM+RAG (전면 개편판)</span></div>
+  <div class="aifab-r">
+    <a href="05_시각화_2차.html">← 이전</a>
+    <a href="07_신경망_심화.html">다음: 신경망 심화 →</a>
+  </div>
+</nav>
+
+<div class="container">
+
+<header class="top">
+<span class="eb">AI × FAB · 시각화 학습 — 3차 (전면 개편판 · 완결)</span>
+<h1>해석 · 검색 · 라벨없는 검출 — 원조 알고리즘 deep dive<small>GBT/SHAP · GNN · PatchCore · LLM+RAG</small></h1>
+<p>
+3차 배치는 양산 적용의 신뢰성·운영을 책임지는 4가지입니다 — <b>GBT/SHAP</b>은 수율 예측과 RCA의 표준,
+<b>GNN</b>은 그래프 구조 데이터(chamber-lot)에서 학습하는 표준,
+<b>PatchCore</b>는 라벨 없이 결함을 검출하는 SOTA,
+<b>LLM+RAG</b>는 사내 코파일럿의 골격입니다.
+각 데모마다 (1) <b>왜 만들어졌는지</b>의 역사적 배경, (2) <b>핵심 용어 4개</b>, (3) <b>수식</b>, (4) <b>시뮬레이션 사용법</b>, (5) <b>인터랙티브 데모</b>, (6) <b>실제 fab 적용 사례</b>까지 정리합니다.
+</p>
+
+<div class="nav-toc">
+  <a href="#demo-gbt"><div class="num">DEMO ⑨</div><div class="ttl">GBT + SHAP</div><div class="desc">Friedman 2001 / Lundberg 2017</div></a>
+  <a href="#demo-gnn"><div class="num">DEMO ⑩</div><div class="ttl">GNN — 메시지 패싱</div><div class="desc">Kipf 2017 GCN</div></a>
+  <a href="#demo-pc"><div class="num">DEMO ⑪</div><div class="ttl">PatchCore</div><div class="desc">Roth 2022 · 라벨없는 anomaly</div></a>
+  <a href="#demo-rag"><div class="num">DEMO ⑫</div><div class="ttl">LLM + RAG</div><div class="desc">Lewis 2020 · 검색 증강 생성</div></a>
+</div>
+</header>
+
+<!-- ===================================================================
+     비전문가 가이드 — 운영·해석 4종 일상 비유
+=================================================================== -->
+<section style="background:linear-gradient(180deg,#fffbeb,#fff);border:2px solid #f59e0b;border-radius:18px;padding:32px 36px;margin:28px 0">
+  <div style="display:inline-block;font-family:JetBrains Mono,monospace;font-size:11.5px;font-weight:700;color:#92400e;background:#fde68a;padding:4px 12px;border-radius:6px;letter-spacing:.06em;margin-bottom:14px">🎯 비전문가를 위한 가이드 — 양산 운영의 4가지 어려운 질문</div>
+  <h2 style="margin:0 0 16px 0;font-size:24px;font-weight:800;color:#0f172a">"양산 운영자가 매일 부딪히는 4가지 진짜 어려운 질문"</h2>
+
+  <p style="font-size:15px;color:#1e293b;line-height:1.75;margin:0 0 20px 0">
+    1·2차가 "예측"과 "제어"였다면, 3차는 <b>"왜?", "관계가 뭔가?", "본 적 없는 것을 어떻게 잡나?", "사내 자료로 어떻게 답하나?"</b>를 푸는 도구입니다.
+    이 4가지는 모두 <b>인간 엔지니어가 매일 풀려고 애쓰는 질문</b>이고, AI가 이걸 도와주는 모습을 보면 가치가 즉시 보입니다.
+  </p>
+
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:14px">
+
+    <!-- DEMO 9: GBT/SHAP -->
+    <div style="background:#fff;border:1px solid #86efac;border-radius:12px;padding:18px 22px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#15803d;color:#fff;border-radius:50%;font-weight:800">⑨</span>
+        <div>
+          <div style="font-weight:700;color:#0f172a;font-size:16px">GBT + SHAP</div>
+          <div style="font-size:11.5px;color:#64748b;font-family:JetBrains Mono,monospace">"왜 수율이 떨어졌나"</div>
+        </div>
+      </div>
+      <div style="background:#dcfce7;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">💡 일상 비유</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>학생 시험 점수 분석</b>: 5과목 점수 합계가 평균보다 낮았다 → "어느 과목이 평균을 끌어내렸는지" 과목별 기여도 분석. 영어 −15점, 수학 +5점, 과학 −8점 ... 식으로 <b>+/−를 모두 보여줌</b>.</div>
+      </div>
+      <div style="background:#eff5fb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#0a4e99;margin-bottom:4px">🏭 fab 매핑</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>한 lot의 yield가 평균보다 −2%p 떨어졌을 때</b>: chamber A의 RF 변동 −0.8%p, chamber B의 압력 +0.1%p, recipe step 3 시간 −0.5%p... 어느 변수가 주범인지 즉시 추적. <b>엔지니어 RCA 시간 1일 → 5분</b>.</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:8px;padding:10px 14px">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">🎯 시뮬레이션에서 볼 것</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6">SHAP 막대그래프에서 <b>"빨간 막대(+) = 결과를 끌어올린 변수, 파란 막대(−) = 끌어내린 변수"</b>. 막대 길이가 영향력 크기. <b>한눈에 RCA 결과를 볼 수 있는 게 이 도구의 가치</b>.</div>
+      </div>
+    </div>
+
+    <!-- DEMO 10: GNN -->
+    <div style="background:#fff;border:1px solid #93c5fd;border-radius:12px;padding:18px 22px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#0a4e99;color:#fff;border-radius:50%;font-weight:800">⑩</span>
+        <div>
+          <div style="font-weight:700;color:#0f172a;font-size:16px">GNN (그래프 신경망)</div>
+          <div style="font-size:11.5px;color:#64748b;font-family:JetBrains Mono,monospace">"관계가 뭔가"</div>
+        </div>
+      </div>
+      <div style="background:#eff5fb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#0a4e99;margin-bottom:4px">💡 일상 비유</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>회사 조직도에서 영향 추적</b>: 한 부서가 늦어지면 어느 부서까지 영향을 주나? 직접 연결된 부서뿐 아니라 <b>2단계 · 3단계 떨어진 부서</b>까지 메시지를 전달해 영향도 계산. SNS의 친구 추천도 같은 원리.</div>
+      </div>
+      <div style="background:#eff5fb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#0a4e99;margin-bottom:4px">🏭 fab 매핑</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>chamber → tool → lot 그래프</b>: 한 lot이 통과한 chamber 12대 + tool 5대 + recipe 3개의 관계망. <b>한 lot의 yield 저하 원인이 어느 chamber에 있는지</b>를 그래프 전체 패턴에서 추론. TSMC HGT가 대표 사례.</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:8px;padding:10px 14px">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">🎯 시뮬레이션에서 볼 것</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6">메시지 패싱 라운드가 진행되며 <b>"색깔이 비슷한 노드는 비슷한 영향을 받는다"</b>는 그룹화가 자동으로 나타남. <b>학습 없이 그래프 구조만으로 그룹이 보이는</b> 게 GNN의 가치.</div>
+      </div>
+    </div>
+
+    <!-- DEMO 11: PatchCore -->
+    <div style="background:#fff;border:1px solid #fdba74;border-radius:12px;padding:18px 22px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#ea580c;color:#fff;border-radius:50%;font-weight:800">⑪</span>
+        <div>
+          <div style="font-weight:700;color:#0f172a;font-size:16px">PatchCore (anomaly)</div>
+          <div style="font-size:11.5px;color:#64748b;font-family:JetBrains Mono,monospace">"본 적 없는 결함도 잡기"</div>
+        </div>
+      </div>
+      <div style="background:#fff7ed;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#ea580c;margin-bottom:4px">💡 일상 비유</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>옷 가게 점원이 정상 옷 패턴을 외움</b>: 결함 옷은 본 적 없어도, 정상 옷의 박음질·패턴을 충분히 외워두면 <b>이상한 옷이 들어왔을 때 즉시 알아챔</b>. "이건 우리 매장 옷이 아닌 것 같다"는 직감.</div>
+      </div>
+      <div style="background:#eff5fb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#0a4e99;margin-bottom:4px">🏭 fab 매핑</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>OLED Mura 검출</b>: Mura 종류는 수십 가지 + 새 종류가 계속 나타남 → 결함 라벨로 학습 불가능. <b>양품 panel 1만 장만 학습</b>해 두고 "정상에서 떨어진 모든 것"을 anomaly로 잡음. <b>본 적 없는 새 결함도 즉시 검출</b>.</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:8px;padding:10px 14px">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">🎯 시뮬레이션에서 볼 것</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6">정상 영역에서 멀어질수록 <b>"anomaly score" 빨간 점</b>이 진해짐. <b>결함 클래스를 모르고도 "이상하다"를 정량화</b>. 양산 라인의 surprise 결함 대응의 핵심.</div>
+      </div>
+    </div>
+
+    <!-- DEMO 12: LLM + RAG -->
+    <div style="background:#fff;border:1px solid #c4b5fd;border-radius:12px;padding:18px 22px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;background:#7c3aed;color:#fff;border-radius:50%;font-weight:800">⑫</span>
+        <div>
+          <div style="font-weight:700;color:#0f172a;font-size:16px">LLM + RAG</div>
+          <div style="font-size:11.5px;color:#64748b;font-family:JetBrains Mono,monospace">"사내 자료로 답하기"</div>
+        </div>
+      </div>
+      <div style="background:#f5f3ff;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#7c3aed;margin-bottom:4px">💡 일상 비유</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>도서관 사서</b>: 손님 질문에 사서가 "잠시만요" → 관련 책 3권 가져와서 → 그 책들을 토대로 답변. <b>사서가 책을 다 외우는 게 아니라 그때그때 찾아서 답함</b>. 거짓말(환각)이 줄고 출처가 명확.</div>
+      </div>
+      <div style="background:#eff5fb;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:#0a4e99;margin-bottom:4px">🏭 fab 매핑</div>
+        <div style="font-size:13.5px;color:#1e293b;line-height:1.6"><b>사내 EDM 코파일럿</b>: 신입이 "ECN-1129 사유?" 물으면 → 사내 EDM에서 ECN 문서 + 8D + SOP 검색 → IBM Watson이 종합 답변 + 출처 표시. <b>10년차 엔지니어 한 명이 옆에 앉아 도와주는 효과</b>.</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:8px;padding:10px 14px">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">🎯 시뮬레이션에서 볼 것</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6">질문 → 검색(top-K chunk) → 증강(프롬프트 조립) → 생성(답변+출처) <b>3초 안에 일어나는 4단계</b>. <b>출처 인용이 함께 나오는 게 핵심</b> — 답변을 검증할 수 있어야 신뢰가 생김.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:20px;padding:16px 20px;background:#1e293b;color:#e2e8f0;border-radius:12px">
+    <div style="font-family:JetBrains Mono,monospace;font-size:11px;color:#fbbf24;font-weight:700;letter-spacing:.06em;margin-bottom:8px">🔗 이 4가지가 양산 운영에서 어떻게 함께 작동하나 — 한 lot 분석 시나리오</div>
+    <div style="font-size:14px;line-height:1.75">
+      <b style="color:#fbbf24">상황</b>: 어제 lot #2024-1234의 yield가 평균보다 −2%p 떨어짐. 엔지니어가 답을 찾기 위해:<br/><br/>
+      <b style="color:#fbbf24">①</b> <b>GBT/SHAP(⑨)</b>이 즉시 RCA — "<b>chamber B의 RF 변동이 60% 기여, recipe step 3 시간이 25% 기여</b>"<br/>
+      <b style="color:#fbbf24">②</b> <b>GNN(⑩)</b>이 chamber 그래프 분석 — "<b>chamber B와 같은 tool 그룹의 다른 chamber 3대도 영향 받았을 가능성</b>"<br/>
+      <b style="color:#fbbf24">③</b> <b>PatchCore(⑪)</b>가 panel 검사 — "<b>3대 chamber 출력에서 새로운 형태의 미세 mura 검출</b>" (라벨 없이)<br/>
+      <b style="color:#fbbf24">④</b> 엔지니어가 <b>LLM+RAG(⑫)</b>에 "이번 mura 종류 과거에 본 적 있나?" 질문 → "<b>2023.07 ECN-0814가 유사 사례, 워밍업 시간 +6시간으로 해결됨</b>" 답변 + 출처<br/><br/>
+      <span style="color:#fbbf24">→</span> 4가지가 <b>1시간 안에 RCA → 진단 → 처방까지</b> 완성. 인간 엔지니어 혼자 했다면 1~3일 걸렸을 작업.
+    </div>
+  </div>
+
+  <!-- 큰 줄기 vs 현재 필드 인기 -->
+  <div style="margin-top:20px;padding:20px 24px;background:#fff;border:2px solid #15803d;border-radius:14px">
+    <div style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;color:#14532d;background:#bbf7d0;padding:3px 10px;border-radius:5px;letter-spacing:.05em;margin-bottom:10px">📊 큰 줄기 vs 현재 필드 인기 — 정직 매핑</div>
+    <h3 style="margin:0 0 12px 0;font-size:18px;font-weight:700;color:#0f172a">"이 4종은 진짜 산업 표준 / 일부는 후속 SOTA가 있음"</h3>
+    <p style="margin:0 0 14px 0;font-size:13.5px;color:#334155;line-height:1.65">
+      3차 4종은 <b>다른 두 차수보다 산업 deployment에 더 가까운 알고리즘들</b>입니다. 그래도 일부는 후속 SOTA가 나왔으니 매핑하면:
+    </p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#f0fdf4">
+        <th style="padding:10px 12px;text-align:left;font-size:11.5px;color:#475569;border-bottom:2px solid #86efac">문제 영역</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11.5px;color:#475569;border-bottom:2px solid #86efac">이 자료 (큰 줄기)</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11.5px;color:#475569;border-bottom:2px solid #86efac">현재 학술·산업 인기 (2024~2026)</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#15803d">수율·RCA<br/>(tabular)</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">⑨ <b>XGBoost + SHAP</b> (Friedman 2001 · Lundberg 2017)</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;color:#15803d">
+            <b>이 자료의 4종 중 가장 안정적인 산업 표준 — 변하지 않음</b><br/>
+            • <b>LightGBM</b> (Microsoft, XGBoost 후속)<br/>
+            • <b>CatBoost</b> (Yandex, 카테고리 데이터 강점)<br/>
+            • <b>SHAP은 여전히 표준 해석 도구</b><br/>
+            • TabNet · TabTransformer 같은 DL 시도 있으나 GBT를 넘지 못함
+          </td>
+        </tr>
+        <tr style="background:#fafdfb">
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#15803d">그래프 학습</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">⑩ <b>GCN</b> (Kipf 2017, 토대)</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">
+            • <b>GAT</b> (Graph Attention Network, Veličković 2018)<br/>
+            • <b>GraphSAGE</b> (Hamilton 2017, 산업 표준)<br/>
+            • <b>HGT</b> (Heterogeneous Graph Transformer, TSMC 사용)<br/>
+            • <b>Graph Transformer · GPS</b> (2023~)<br/>
+            • <b>※ 산업 deployment 자체가 제한적</b> (TSMC 외 적용 적음)
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0;font-weight:700;color:#15803d">라벨없는<br/>이상감지</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">⑪ <b>PatchCore</b> (Roth 2022)</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e2e8f0">
+            • <b>EfficientAD</b> (Heckler 2024, latency 1ms)<br/>
+            • <b>FastFlow</b> (Yu 2021, normalizing flow)<br/>
+            • <b>ReConPatch</b> (2024, robust patch)<br/>
+            • <b>WinCLIP / AnomalyCLIP</b> (2023~, zero-shot CLIP 기반)<br/>
+            • PatchCore는 여전히 <b>산업 anomaly 표준</b>
+          </td>
+        </tr>
+        <tr style="background:#fafdfb">
+          <td style="padding:10px 12px;font-weight:700;color:#15803d">검색 증강 LLM</td>
+          <td style="padding:10px 12px">⑫ <b>RAG</b> (Lewis 2020, 토대)</td>
+          <td style="padding:10px 12px">
+            • <b>Hybrid RAG</b> (BM25 + dense, 산업 표준)<br/>
+            • <b>Self-RAG</b> (Asai 2023)<br/>
+            • <b>GraphRAG</b> (Microsoft 2024)<br/>
+            • <b>ColBERT v2 · ColPali</b> (late interaction 검색)<br/>
+            • <b>Agentic RAG</b> (LangChain · LlamaIndex 표준 패턴)<br/>
+            • <b>Long-context LLM</b> (1M token, RAG 일부 대체)<br/>
+            • LLM 자체: <b>GPT-4o · Claude 3.5 · Llama 3.1 405B · DeepSeek-R1</b>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin:14px 0 0 0;font-size:12.5px;color:#64748b;font-style:italic">
+      ※ <b>3차의 정직한 위치</b>: 4가지 중 <b>GBT·SHAP·PatchCore·Hybrid RAG</b>는 <b>실제 양산 라인 deploy 표준</b>(2024년 기준). GNN은 학술적으로 발전했지만 산업 deployment는 여전히 제한적입니다.
+      양산용 실제 표준을 더 깊이 보시려면 <b>03번 8 패밀리 계보 + 16건 사례</b>를 함께 참조하시기 바랍니다.
+    </p>
+  </div>
+
+  <!-- 실제 fab 적용 사례 -->
+  <div style="margin-top:20px;padding:22px 26px;background:#fff;border:2px solid #ea580c;border-radius:14px">
+    <div style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:700;color:#7c2d12;background:#fed7aa;padding:3px 10px;border-radius:5px;letter-spacing:.05em;margin-bottom:10px">🏭 실제 fab/산업 적용 사례 — 구체적으로 어떻게 쓰이나</div>
+    <h3 style="margin:0 0 14px 0;font-size:18px;font-weight:700;color:#0f172a">"3차 4종은 deploy 표준에 가장 가깝다 — 구체 사례"</h3>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px">
+
+      <!-- ⑨ GBT/SHAP -->
+      <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px 18px">
+        <div style="font-weight:700;color:#14532d;margin-bottom:6px">⑨ GBT + SHAP — 양산 fab의 압도적 표준 (변하지 않음)</div>
+        <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12.5px;color:#1e293b;line-height:1.6">
+          <li><b>Intel n-i to n APC</b> <span style="color:#15803d">(Tier B)</span> — XGBoost + SHAP RCA로 lot 변동성 20-40% 감소 (Fab 42, 2021 ASMC)</li>
+          <li><b>Bosch Reutlingen Connected Industry</b> <span style="color:#15803d">(Tier B)</span> — 다품종 자동차 반도체에 GBT 2-tier 구조 표준</li>
+          <li><b>Samsung 메모리 Hyper-Auto Fab</b> <span style="color:#15803d">(Tier B)</span> — yield prediction · 계측 sampling 의사결정에 GBT</li>
+          <li><b>Micron Smart Sight 보조</b> <span style="color:#15803d">(Tier B)</span> — defect classification 후처리에 GBT, Pareto 자동 갱신</li>
+          <li><b>KLA Klarity Defect AI-RCA</b> <span style="color:#15803d">(Tier B)</span> — yield database + GBT + 자체 explainability</li>
+          <li><b>대부분의 fab 데이터팀 사내 RCA 도구</b> — 표 형태 데이터에서 GBT는 사실상 default 선택</li>
+          <li><b>Kaggle 산업 ML 대회 대부분</b> — XGBoost/LightGBM/CatBoost가 우승 솔루션의 70%+</li>
+        </ul>
+      </div>
+
+      <!-- ⑩ GNN -->
+      <div style="background:#eff5fb;border:1px solid #93c5fd;border-radius:10px;padding:14px 18px">
+        <div style="font-weight:700;color:#0a4e99;margin-bottom:6px">⑩ GNN/HGT — 학술 발달, 산업 deploy 제한적</div>
+        <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12.5px;color:#1e293b;line-height:1.6">
+          <li><b>TSMC HGT 수율 RCA</b> <span style="color:#15803d">(Tier B)</span> — Heterogeneous Graph Transformer로 chamber-tool-lot 그래프 학습 (IEDM 2022/2023, Hsinchu Fab 18 적용)</li>
+          <li><b>imec 웨이퍼 패턴 그래프</b> <span style="color:#15803d">(Tier B)</span> — wafer map 결함 클러스터링에 GCN 응용</li>
+          <li><b>Bosch sensor network</b> — 센서 간 관계를 GNN으로 학습 (장비 이상 전파 예측)</li>
+          <li><b>약물 설계 (DeepMind AlphaFold 후속)</b> <span style="color:#15803d">(Tier A)</span> — 단백질 구조 예측에 GNN 활용</li>
+          <li><b>구글·페이스북 추천 시스템</b> — 대규모 GraphSAGE deploy</li>
+          <li><b>금융 사기 탐지</b> — 거래 그래프에 GNN 적용 (PayPal, Stripe)</li>
+          <li>※ <b>fab 양산 deployment는 TSMC 외 매우 제한적</b> (학술 논문 → 양산 적용까지의 격차 큼)</li>
+        </ul>
+      </div>
+
+      <!-- ⑪ PatchCore -->
+      <div style="background:#fff7ed;border:1px solid #fdba74;border-radius:10px;padding:14px 18px">
+        <div style="font-weight:700;color:#7c2d12;margin-bottom:6px">⑪ PatchCore — 라벨없는 anomaly의 산업 표준</div>
+        <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12.5px;color:#1e293b;line-height:1.6">
+          <li><b>LG Display Mura 검출</b> <span style="color:#92400e">(Tier C)</span> — OLED panel module 단계 미지 결함 검출 (양품 학습 + 거리 비교)</li>
+          <li><b>Samsung Display 미세 Mura</b> — 라벨 없는 양품 학습 표준 패턴</li>
+          <li><b>Bosch automotive 센서 검사</b> <span style="color:#15803d">(Tier B)</span> — 정상 sensor 패턴 학습 → anomaly 탐지</li>
+          <li><b>MVTec AD 벤치마크</b> <span style="color:#15803d">(Tier A)</span> — PatchCore가 2022년 MVTec AD에서 SOTA 달성, 이후 산업 표준</li>
+          <li><b>Applied Materials anomaly module</b> — PatchCore 패턴 (DINOv2 임베딩 + memory bank)</li>
+          <li><b>Foxconn 휴대폰 외관 검사</b> — 라벨 없는 결함 검출에 PatchCore 변형</li>
+          <li><b>식품·의약 외관 검사</b> — Tetra Pak · Pfizer 등 다른 산업도 도입</li>
+        </ul>
+      </div>
+
+      <!-- ⑫ LLM + RAG -->
+      <div style="background:#f5f3ff;border:1px solid #c4b5fd;border-radius:10px;padding:14px 18px">
+        <div style="font-weight:700;color:#5b21b6;margin-bottom:6px">⑫ LLM + RAG — 사내 코파일럿의 표준 골격</div>
+        <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12.5px;color:#1e293b;line-height:1.6">
+          <li><b>Samsung Display IBM Watson + EDM</b> <span style="color:#854d0e">(★ 사내)</span> — 사내 EDM 자료 자동 PDF 변환 + 프로젝트별 RAG + 멀티-소스 오케스트레이터</li>
+          <li><b>NVIDIA ChipNeMo</b> <span style="color:#15803d">(Tier A)</span> — 칩 설계 도메인 LLM (Llama 2 fine-tune + RAG, 2023 발표)</li>
+          <li><b>Synopsys.ai Copilot</b> <span style="color:#15803d">(Tier A)</span> — EDA 도구 사용 가이드 RAG (2024 출시)</li>
+          <li><b>Cadence JedAI / Allegro X AI</b> <span style="color:#15803d">(Tier A)</span> — PCB·반도체 설계 코파일럿</li>
+          <li><b>Micron Engineer Co-pilot</b> <span style="color:#15803d">(Tier B)</span> — Llama 3.x 추정 사내 LLM, FDC chart 해석 + 8D 초안 작성 (SEMICON West 2024)</li>
+          <li><b>BOE Blue Whale Display LLM</b> <span style="color:#92400e">(Tier C/D)</span> — Qwen 기반 추정 도메인 LLM (자사 발표)</li>
+          <li><b>TCL CSOT X-Intelligence 3.0</b> <span style="color:#dc2626">(검증 권장)</span> — Tsinghua + Zhipu 협업 (자사 발표 위주)</li>
+          <li><b>ASML Internal AI Assistant</b> — 사내 SOP·troubleshooting RAG (자체 운영)</li>
+          <li><b>Bloomberg GPT, JPMC LLM</b> — 금융 도메인 RAG 사례 (산업 일반 참고)</li>
+        </ul>
+      </div>
+
+    </div>
+    <p style="margin:14px 0 0 0;font-size:12px;color:#64748b;font-style:italic">
+      ※ Tier A = 공식 발표·학회 직접 / Tier B = 회사 백서·SEMICON·IEDM / Tier C = 제3자 보도+회사 발언 교차 / 검증 권장 = 외부 검증 어려움 / ★ = 사내 진행. 16건 deep dive → <a href="03_심화_12강.html" style="color:#0a4e99;font-weight:600">03번 사례 + audit panel</a>
+    </p>
+  </div>
+</section>
+
+<!-- ===================================================================
+     DEMO 9 · GBT + SHAP
+=================================================================== -->
+<section class="demo" id="demo-gbt">
+<div class="demo-head">
+  <div class="demo-num-row">
+    <div class="num-circle">9</div>
+    <div>
+      <div class="head-meta">FOUNDATIONAL · 2001 · Friedman (Gradient Boosting) / 2016 · Chen (XGBoost) / 2017 · Lundberg (SHAP)</div>
+      <h2>GBT + SHAP — 표 데이터의 왕 + "왜 그렇게 예측했나" 설명</h2>
+    </div>
+  </div>
+  <p class="head-sub">
+    Tabular(표 형태) 데이터의 분류·회귀에서는 신경망보다 <b>Gradient Boosted Trees</b>가 여전히 강합니다. 수율 예측·RCA의 사실상 표준. SHAP은 "왜 이 예측이 나왔나"를 게임이론으로 분해.
+  </p>
+</div>
+<div class="demo-body">
+
+<div class="why-box">
+  <span class="lbl">WHY · 왜 만들어졌나</span>
+  <h4>"이미지·텍스트가 아닌 표 데이터"에서는 신경망보다 트리가 강하다</h4>
+  <p>
+  딥러닝이 이미지·NLP를 평정한 후에도 <b>표 형태(tabular) 데이터</b>는 여전히 트리 기반 모델이 우세합니다. 이유는 — ① 표 데이터는 변수마다 의미·스케일이 달라 normalization 효과가 약하고, ② 변수 간 비선형 상호작용이 복잡하고, ③ 신경망은 이런 데이터에서 과적합하기 쉽습니다.
+  </p>
+  <p>
+  2001년 Friedman의 Gradient Boosting Machines가 핵심 아이디어를 제시했습니다 — <b>"한 트리의 오차를 다음 트리가 예측하도록 학습"</b>. 이 잔차를 줄여가는 가산 모델이 점차 강력한 앙상블을 만듭니다. 2016년 Tianqi Chen의 XGBoost가 이를 산업 수준 성능으로 구현해 Kaggle 대회를 평정했고, 오늘날 fab의 수율 예측·RCA의 사실상 표준이 됐습니다.
+  </p>
+  <p>
+  하지만 트리 앙상블은 "예측은 잘 하지만 왜 그런지 설명이 어렵다"는 black-box 문제가 있었습니다. 2017년 Lundberg & Lee의 <b>SHAP</b>이 게임이론의 Shapley value를 ML 해석에 적용해 이 문제를 해결 — <b>"각 feature가 이 예측에 얼마나 기여했는가를 수학적으로 정직하게 분해"</b>.
+  </p>
+  <div class="citation">Friedman (2001). "Greedy Function Approximation", Annals of Statistics. / Chen &amp; Guestrin (2016). "XGBoost", KDD 2016. / Lundberg &amp; Lee (2017). "A Unified Approach to Interpreting Model Predictions", NeurIPS 2017.</div>
+</div>
+
+<h3 style="margin-top:24px;font-size:18px">핵심 용어 4개</h3>
+<div class="term-grid">
+  <div class="term-box">
+    <span class="term">decision tree</span><span class="ko">결정 트리</span>
+    <p class="def">"feature가 임계값을 넘는가?"의 yes/no 분기로 데이터를 분할. 한 트리는 약하지만 여러 개를 앙상블하면 강함.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-warn)">
+    <span class="term">gain (information gain)</span><span class="ko">정보 이득</span>
+    <p class="def">"이 분기가 얼마나 좋은가?"의 척도. 분기 전후의 불순도(Gini, entropy) 차이. 트리는 매번 gain 최대 분기 선택.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-purple)">
+    <span class="term">Shapley value (φ_i)</span><span class="ko">샤플리 값</span>
+    <p class="def">"feature i가 이 예측에 기여한 정도". 게임이론에서 협력 게임의 공정한 분배. 모든 feature 조합을 평균해 계산.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-ok)">
+    <span class="term">baseline</span><span class="ko">기준값</span>
+    <p class="def">"feature를 모를 때의 예측값" — 보통 학습 데이터의 평균. SHAP 분해는 baseline에서 시작해 feature 기여도를 더해 prediction에 도달.</p>
+  </div>
+</div>
+
+<div class="math"><span class="math-lbl">Shapley value 한 줄 정의</span>
+φ_i = Σ_{S ⊆ N\{i}}  [|S|! · (|N|−|S|−1)! / |N|!]  ·  [v(S∪{i}) − v(S)]
+
+직관: "feature i를 추가했을 때 예측값이 얼마나 변하나"를 모든 feature 부분집합 S에 대해 가중평균
+→ 만족 성질: <b>φ_baseline + Σ φ_i = prediction</b> (정직한 분해)
+</div>
+
+<div class="steps">
+<span class="lbl">SIMULATION · 데모 사용법</span>
+<ol>
+  <li>2D 산점도 — RF Power(x축) × Gas Flow(y축)에 60개 lot이 있고, 색깔이 yield (초록=양품, 빨강=불량)입니다.</li>
+  <li><b>+ Split 추가</b>를 누르면 트리가 가장 정보 이득(gain)이 큰 분기를 자동 선택해 <b>축에 평행한 선</b>으로 표시합니다.</li>
+  <li>오른쪽 위에 분기 순서가 누적됩니다 — gain 값과 함께. 6개까지 추가 가능.</li>
+  <li>분할이 늘어날수록 배경 색이 학습된 결정 영역을 보여줍니다 (분홍=불량 영역, 청록=양품 영역).</li>
+  <li><b>테스트 점 선택</b>으로 Lot A~D 중 하나를 골라 노란 점으로 표시. 오른쪽 아래에 그 lot의 SHAP waterfall이 나타납니다.</li>
+  <li>SHAP 분해: <b>baseline + φ_RF + φ_Gas = prediction</b>의 막대 그래프. 각 feature가 양수 기여인지 음수 기여인지 색으로 표시.</li>
+</ol>
+</div>
+
+<div class="viz">
+<div class="viz-title">GBT 트리 분기 학습 + SHAP 분해</div>
+<svg id="gbt-svg" viewBox="0 0 760 460" width="760" style="width:100%;max-width:760px"></svg>
+<div class="ctrls">
+  <button id="gbt-add" class="primary">+ Split 추가</button>
+  <button id="gbt-auto">Auto 6 splits</button>
+  <button id="gbt-reset" class="danger">초기화</button>
+  <div class="slider"><span class="lbl">테스트 점</span>
+    <select id="gbt-pt">
+      <option value="0">Lot A — RF↑ Gas↑ (수율 ↑ 추정)</option>
+      <option value="1">Lot B — RF↓ Gas↑ (애매)</option>
+      <option value="2">Lot C — RF↑ Gas↓ (애매)</option>
+      <option value="3">Lot D — RF↓ Gas↓ (수율 ↓ 추정)</option>
+    </select>
+  </div>
+</div>
+<div class="status" id="gbt-status">"+ Split 추가"를 눌러 트리 학습을 시작하세요.</div>
+<div class="cap">왼쪽 = 2D 산점도 + 학습된 split 선. 오른쪽 위 = 분기 순서. 오른쪽 아래 = SHAP waterfall.</div>
+</div>
+
+<div class="industry-box">
+  <span class="lbl">INDUSTRY · 산업 적용</span>
+  <h4>fab 수율 예측·RCA의 사실상 표준</h4>
+  <ul>
+    <li><b>Intel · Samsung 메모리 RCA</b> — XGBoost + SHAP. 수율 저하 lot의 SHAP 값이 일관되게 음의 기여를 보이는 chamber/recipe 조합을 자동 alert.</li>
+    <li><b>LG Display AIPS</b> — 라인 anomaly + RCA에 SHAP 기반 root cause 보고 자동 생성.</li>
+    <li><b>KLA Klarity Defect</b> — yield database + AI-assisted RCA에 SHAP 외 자체 explainability 도구 결합.</li>
+    <li><b>TabPFN (2023)</b> — Transformer 기반 zero-shot tabular. 1만 행 미만에서 XGBoost를 추월하는 새 표준 후보.</li>
+  </ul>
+  <p style="margin-top:8px"><b>도구</b> — <code>XGBoost</code> · <code>LightGBM</code> · <code>CatBoost</code> + <code>shap</code> 라이브러리. SHAP은 트리 기반 모델 외에 신경망에도 적용 가능.</p>
+</div>
+
+</div>
+</section>
+
+<!-- ===================================================================
+     DEMO 10 · GNN
+=================================================================== -->
+<section class="demo" id="demo-gnn">
+<div class="demo-head">
+  <div class="demo-num-row">
+    <div class="num-circle" style="background:var(--c-purple)">10</div>
+    <div>
+      <div class="head-meta">FOUNDATIONAL · 2017 · Kipf &amp; Welling (GCN) / 2020 · Hu (HGT)</div>
+      <h2>GNN — 그래프 구조 자체에서 학습한다</h2>
+    </div>
+  </div>
+  <p class="head-sub">
+    fab은 본질적으로 그래프입니다 — chamber와 chamber가 lot 흐름으로 연결되고, recipe가 chamber를 잇고. 이런 <b>관계 구조 자체</b>를 모델에 직접 입력하는 알고리즘이 GNN. TSMC HGT 수율 RCA가 대표 사례.
+</p>
+</div>
+<div class="demo-body">
+
+<div class="why-box" style="border-left-color:var(--c-purple);background:#f5f3ff">
+  <span class="lbl" style="background:#ddd6fe;color:#5b21b6">WHY · 왜 만들어졌나</span>
+  <h4 style="color:#3b0764">2017년 이전: 그래프 데이터를 신경망에 넣을 표준이 없었다</h4>
+  <p style="color:#3b0764">
+  소셜 네트워크(친구 관계), 지식 그래프, 분자 구조, fab의 chamber-lot 연결 — 이런 데이터는 본질적으로 <b>노드(node) + 엣지(edge)</b>의 그래프 구조입니다. 기존 신경망(CNN, RNN)은 격자나 시퀀스를 가정하기 때문에 그래프에 직접 적용하기 어려웠습니다.
+  </p>
+  <p style="color:#3b0764">
+  2017년 Kipf &amp; Welling의 GCN<abbr class="full">Graph Convolutional Network</abbr> 논문이 결정적 돌파구를 만들었습니다. 핵심 아이디어 — <b>"각 노드는 이웃 노드들의 평균을 받아 자신을 갱신"</b>. 이 단순한 메시지 패싱(message passing)을 여러 layer 쌓으면 멀리 있는 노드 정보까지 통합 가능. 한 layer면 1-hop 이웃, L layer면 L-hop 이웃까지.
+  </p>
+  <p style="color:#3b0764">
+  이후 GAT(2018, attention 기반), HGT(2020, 이질적 노드/엣지 타입 분리), GraphTransformer(2021) 등으로 발전. fab에서는 chamber/tool/recipe/lot이 모두 다른 종류 노드라서 <b>이질 그래프(heterogeneous graph)</b>가 자연스럽고, 그래서 HGT가 TSMC의 수율 RCA에 채택됐습니다.
+  </p>
+  <div class="citation" style="color:#5b21b6">Kipf &amp; Welling (2017). "Semi-Supervised Classification with Graph Convolutional Networks", ICLR 2017. / Hu et al. (2020). "Heterogeneous Graph Transformer", WWW 2020.</div>
+</div>
+
+<h3 style="margin-top:24px;font-size:18px">핵심 용어 4개</h3>
+<div class="term-grid">
+  <div class="term-box" style="border-left-color:var(--c-purple)">
+    <span class="term">node (vertex)</span><span class="ko">노드</span>
+    <p class="def">그래프의 기본 단위. fab에서는 chamber, tool, recipe, lot 등. 각 노드는 feature 벡터를 가짐.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-acc)">
+    <span class="term">edge</span><span class="ko">엣지</span>
+    <p class="def">두 노드의 연결. fab에서는 "lot이 chamber를 통과", "chamber가 같은 tool 그룹". 방향성/시간/타입이 있을 수 있음.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-warn)">
+    <span class="term">message passing</span><span class="ko">메시지 패싱</span>
+    <p class="def">"각 노드가 이웃 노드들의 정보를 모아 자신을 갱신"하는 한 step. 여러 layer 쌓으면 멀리 있는 노드 정보까지 통합.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-ok)">
+    <span class="term">heterogeneous graph</span><span class="ko">이질 그래프</span>
+    <p class="def">노드 타입이 여러 종류 (chamber/tool/recipe/lot). HGT는 타입별로 attention parameter를 분리해 학습.</p>
+  </div>
+</div>
+
+<div class="math"><span class="math-lbl">GCN 한 layer의 메시지 패싱</span>
+h_v^{l+1} = σ( W · MEAN({h_u^l : u ∈ N(v)}) + b )
+
+   ↓ 풀이
+1. 각 노드 v의 이웃 N(v)을 모음
+2. 이웃들의 hidden state h_u의 평균(또는 가중합)
+3. 학습 가능한 W, b로 변환 + 비선형 σ
+4. = 다음 layer의 v의 hidden state h_v
+</div>
+
+<div class="steps" style="background:#f5f3ff;border-left-color:var(--c-purple)">
+<span class="lbl" style="background:#ddd6fe;color:#5b21b6">SIMULATION · 데모 사용법</span>
+<ol>
+  <li>7개 chamber(A~G)와 11개 엣지로 이루어진 그래프입니다. 어느 한 chamber에 이상값(+1.0)이 주입된 상태로 시작.</li>
+  <li><b>+ 1 round 메시지 패싱</b>을 누르면 모든 노드가 동시에 <span class="eq">tanh(0.5·자신 + mean(이웃))</span> 으로 갱신됩니다.</li>
+  <li>노드 색이 변합니다 — 빨강(+값), 파랑(−값), 회색(0). 이상값이 그래프 따라 전파되는 모습이 시각화됩니다.</li>
+  <li>오른쪽 패널은 <b>각 노드의 round별 추적표</b>. 각 round에서 각 노드의 값이 색상 사각형 + 숫자로 표시됩니다.</li>
+  <li>3-4 round 후에는 정보가 충분히 퍼져서 <b>최종 분류</b>(이상 전파 / 주의 / 정상)가 나옵니다.</li>
+  <li><b>소스 노드</b>를 변경하면 다른 위치에서 시작했을 때 전파 패턴이 어떻게 다른지 비교할 수 있습니다.</li>
+</ol>
+</div>
+
+<div class="viz">
+<div class="viz-title">Chamber 그래프 메시지 패싱 — 이상값이 그래프를 따라 전파</div>
+<svg id="gnn-svg" viewBox="0 0 760 440" width="760" style="width:100%;max-width:760px"></svg>
+<div class="ctrls">
+  <button id="gnn-step" class="primary">+ 1 round 메시지 패싱</button>
+  <button id="gnn-auto">Auto 3 rounds</button>
+  <button id="gnn-reset" class="danger">초기화</button>
+  <div class="slider"><span class="lbl">소스 노드</span>
+    <select id="gnn-src">
+      <option value="0">Chamber A (이상값 주입)</option>
+      <option value="1">Chamber D (이상값 주입)</option>
+      <option value="2">정상 (모두 0)</option>
+    </select>
+  </div>
+</div>
+<div class="status" id="gnn-status">"+ 1 round" 버튼으로 메시지 패싱을 시작하세요.</div>
+<div class="cap">노드=chamber. 엣지=lot 흐름. 색=feature 값(빨강+/회색0/파랑−). 우측=round별 추적.</div>
+</div>
+
+<div class="industry-box">
+  <span class="lbl">INDUSTRY · 산업 적용</span>
+  <h4>TSMC HGT 수율 RCA — 양산 적용 대표 사례</h4>
+  <ul>
+    <li><b>TSMC HGT</b> (IEDM 2022, 2023) — chamber/tool/recipe/lot 4가지 노드 타입을 별도 attention head로 학습. 3nm 양산 첫 분기 yield ramp 30%+ 가속.</li>
+    <li><b>Time-aware edge</b> — lot이 통과한 시간 정보를 edge timestamp로 추가. "2024년 5월 chamber A를 거친 lot"과 "2024년 6월의 같은 chamber"가 다른 분포일 수 있음을 학습.</li>
+    <li><b>Samsung 메모리 시도</b> — chamber 그래프 RCA에 GNN 적용 검토 중 (구체 양산 발표는 미공개).</li>
+  </ul>
+  <p style="margin-top:8px"><b>도구</b> — <code>PyTorch Geometric</code> · <code>DGL</code>(Deep Graph Library). 산업 적용 시 라벨이 적은 환경에서는 GraphSAGE의 sampling 방식이 효과적.</p>
+</div>
+
+</div>
+</section>
+
+<!-- ===================================================================
+     DEMO 11 · PatchCore
+=================================================================== -->
+<section class="demo" id="demo-pc">
+<div class="demo-head">
+  <div class="demo-num-row">
+    <div class="num-circle" style="background:var(--c-warn)">11</div>
+    <div>
+      <div class="head-meta">FOUNDATIONAL · 2022 · Roth, Pemula, Zepeda, Schölkopf, Brox, Gehler (Amazon &amp; MPI)</div>
+      <h2>PatchCore — "정상 이미지만으로" 결함을 검출한다</h2>
+    </div>
+  </div>
+  <p class="head-sub">
+    fab의 결함은 long-tail이라 라벨이 부족합니다. PatchCore는 <b>"라벨 0장으로 시작 가능"</b>한 anomaly detection의 SOTA. MVTec AD 벤치마크에서 99.6% AUROC 달성.
+  </p>
+</div>
+<div class="demo-body">
+
+<div class="why-box" style="border-left-color:var(--c-warn);background:#fff7ed">
+  <span class="lbl" style="background:#fed7aa;color:#9a3412">WHY · 왜 만들어졌나</span>
+  <h4 style="color:#7c2d12">2022년 이전: 이상감지 모델은 학습이 까다로웠다</h4>
+  <p style="color:#7c2d12">
+  fab의 결함 데이터는 long-tail 분포 — 정상 이미지는 무한대지만 결함은 1년에 수십 건만 발생하는 경우도 있습니다. 그래서 supervised learning은 작동하지 않습니다. <b>"정상만으로 학습"</b>하는 unsupervised anomaly detection이 필요한데, 기존 방법들(autoencoder reconstruction error, GAN-based 등)은 학습이 까다롭고 false alarm이 많았습니다.
+  </p>
+  <p style="color:#7c2d12">
+  2022년 Amazon과 Max Planck Institute의 Roth 등이 발표한 PatchCore는 <b>충격적으로 단순한</b> 접근으로 SOTA를 달성했습니다. 핵심 아이디어 — <b>"학습 없이! 사전학습된 CNN(WideResNet 등)으로 정상 이미지 patch들의 임베딩을 메모리뱅크에 저장만 하고, 새 이미지는 가장 가까운 정상 patch와의 거리로 판정"</b>.
+  </p>
+  <p style="color:#7c2d12">
+  이 단순한 방법이 MVTec AD 벤치마크에서 <b>99.6% AUROC</b>로 당시 모든 복잡한 학습 기반 방법을 추월했습니다. 산업 검사 vision의 사실상 표준이 됐고, 후속 EfficientAD(2023)는 <b>1ms 추론</b>까지 줄여 인라인 검사 라인에 직접 투입 가능. Applied Materials ExtractAI의 백본이기도 합니다.
+  </p>
+  <div class="citation" style="color:#9a3412">Roth et al. (2022). "Towards Total Recall in Industrial Anomaly Detection", CVPR 2022. arXiv:2106.08265.</div>
+</div>
+
+<h3 style="margin-top:24px;font-size:18px">핵심 용어 4개</h3>
+<div class="term-grid">
+  <div class="term-box" style="border-left-color:var(--c-warn)">
+    <span class="term">memory bank</span><span class="ko">메모리뱅크</span>
+    <p class="def">"정상 이미지들의 임베딩을 모두 저장한 데이터베이스". 학습 X — 그냥 모은 것. 새 이미지는 이 안에서 nearest를 찾아 거리로 판정.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-acc)">
+    <span class="term">embedding</span><span class="ko">임베딩</span>
+    <p class="def">사전학습된 CNN(ResNet/DINOv2)으로 이미지를 고차원 벡터로 변환. "비슷한 이미지는 비슷한 벡터"의 성질이 핵심.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-purple)">
+    <span class="term">nearest neighbor</span><span class="ko">최근접 이웃</span>
+    <p class="def">새 이미지의 임베딩이 메모리뱅크 안에서 가장 가까운 정상의 임베딩과 얼마나 떨어져 있는가. 이 거리가 anomaly score.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-ok)">
+    <span class="term">threshold (τ)</span><span class="ko">임계값</span>
+    <p class="def">거리 > τ면 ANOMALY, 이하면 NORMAL. 양산 적용 시 false alarm rate와 detection rate를 trade-off해 결정.</p>
+  </div>
+</div>
+
+<div class="math"><span class="math-lbl">PatchCore 추론 — 매우 단순</span>
+1. 학습 단계 (학습 없음):
+   memory_bank = { embed(panel) : panel ∈ 정상 이미지 N장 }
+
+2. 추론 단계:
+   z_test = embed(test_image)
+   d = min_{z ∈ memory_bank} ‖z_test − z‖    ← 최근접 거리
+   if d > τ:  return "ANOMALY"
+   else:      return "NORMAL"
+
+핵심: 학습 없이도 99% AUROC. 라벨 0장으로 시작 가능.
+</div>
+
+<div class="steps" style="background:#fff7ed;border-left-color:var(--c-warn)">
+<span class="lbl" style="background:#fed7aa;color:#9a3412">SIMULATION · 데모 사용법</span>
+<ol>
+  <li>왼쪽 위 큰 사각형은 <b>테스트 입력 panel</b> (그라디언트 + Mura 패턴). 왼쪽 아래 8개 작은 사각형은 <b>정상 메모리뱅크</b>.</li>
+  <li>중앙 위는 <b>2D 임베딩 공간</b> — 정상 8장(파란 점)이 클러스터를 이루고, 테스트(빨간 점)가 가장 가까운 정상과 점선으로 연결.</li>
+  <li><b>Mura 강도 슬라이더</b>를 0 → 100으로 올려보세요. 임베딩 공간에서 빨간 점이 정상 클러스터에서 멀어지는 모습을 확인.</li>
+  <li>중앙 아래는 <b>거리 막대 + 임계값 τ</b>. 거리가 τ를 넘으면 막대가 빨강으로, 아래면 초록으로.</li>
+  <li>오른쪽은 <b>anomaly heatmap</b> — 각 픽셀에서 정상 평균과의 차이를 표시. Mura 영역이 빨갛게 강조.</li>
+  <li><b>Mura 위치</b> 변경으로 중앙/좌상/우하에 결함이 있을 때 검출 패턴 비교.</li>
+  <li><b>임계값 τ</b>를 조절해 sensitivity 변화를 관찰. 너무 낮으면 false alarm, 너무 높으면 miss.</li>
+</ol>
+</div>
+
+<div class="viz">
+<div class="viz-title">PatchCore 시뮬레이션 — 정상 메모리뱅크 + 거리 기반 anomaly 검출</div>
+<svg id="pc-svg" viewBox="0 0 760 460" width="760" style="width:100%;max-width:760px"></svg>
+<div class="ctrls">
+  <div class="slider"><span class="lbl">Mura 강도</span>
+    <input type="range" id="pc-mura" min="0" max="100" step="5" value="0">
+    <span id="pc-mura-v" style="font-family:var(--f-mono);font-size:12px;color:var(--c-acc);width:32px">0</span>
+  </div>
+  <div class="slider"><span class="lbl">Mura 위치</span>
+    <select id="pc-pos">
+      <option value="0">중앙</option>
+      <option value="1">좌측 상단</option>
+      <option value="2">우측 하단</option>
+    </select>
+  </div>
+  <div class="slider"><span class="lbl">임계값 τ</span>
+    <input type="range" id="pc-thr" min="10" max="80" step="2" value="35">
+    <span id="pc-thr-v" style="font-family:var(--f-mono);font-size:12px;color:var(--c-acc);width:32px">35</span>
+  </div>
+  <button id="pc-shuffle">정상 메모리뱅크 새로</button>
+</div>
+<div class="status" id="pc-status">슬라이더로 Mura 강도를 늘리면 거리가 증가합니다.</div>
+<div class="cap">왼쪽 = 테스트 + 메모리뱅크. 중앙 위 = 임베딩 공간. 중앙 아래 = 거리 + 임계값. 오른쪽 = anomaly heatmap.</div>
+</div>
+
+<div class="industry-box">
+  <span class="lbl">INDUSTRY · 산업 적용</span>
+  <h4>fab vision의 가장 빠른 진입점</h4>
+  <ul>
+    <li><b>Applied Materials ExtractAI</b> — DINOv2 임베딩 + PatchCore 메모리뱅크 패턴. 결함 영역을 임베딩 공간으로 매핑 → active learning과 결합.</li>
+    <li><b>EfficientAD (2023)</b> — PatchCore 후속. Teacher-Student distillation으로 <b>1ms 추론</b>. 인라인 검사 라인에 직접 투입.</li>
+    <li><b>MVTec AD 벤치마크</b> — 99.6% AUROC. 이전 SOTA(약 96-97%)를 큰 격차로 추월.</li>
+    <li><b>fab의 첫 vision PoC 1순위</b> — 라벨 없이 며칠 안에 시작 가능. Mura·particle·short 같은 long-tail 결함 검출.</li>
+  </ul>
+  <p style="margin-top:8px"><b>도구</b> — Intel의 <code>Anomalib</code> 라이브러리에 PatchCore + EfficientAD + 다른 SOTA가 모두 통합돼 있어 빠른 PoC 가능.</p>
+</div>
+
+</div>
+</section>
+
+<!-- ===================================================================
+     DEMO 12 · LLM + RAG
+=================================================================== -->
+<section class="demo" id="demo-rag">
+<div class="demo-head">
+  <div class="demo-num-row">
+    <div class="num-circle" style="background:var(--c-rose)">12</div>
+    <div>
+      <div class="head-meta">FOUNDATIONAL · 2020 · Lewis et al. (Facebook AI Research)</div>
+      <h2>LLM + RAG — "사내 자료 검색 → 컨텍스트 주입 → 답변 생성"</h2>
+    </div>
+  </div>
+  <p class="head-sub">
+    LLM의 환각(hallucination) 문제를 푸는 표준 패턴. 답변하기 전에 사내 SOP·ECN·8D를 벡터 DB에서 검색해 컨텍스트로 주입.
+    Samsung Display Watson + EDM, Micron Co-pilot, BOE Blue Whale, CSOT X-Intelligence 모두 이 골격.
+  </p>
+</div>
+<div class="demo-body">
+
+<div class="why-box" style="border-left-color:var(--c-rose);background:#fff1f2">
+  <span class="lbl" style="background:#fecdd3;color:#9f1239">WHY · 왜 만들어졌나</span>
+  <h4 style="color:#881337">2020년 이전: LLM은 "그럴듯한 거짓"을 만들어내는 문제가 있었다</h4>
+  <p style="color:#881337">
+  GPT-3 같은 대규모 언어 모델은 인터넷 수조 token으로 사전학습되지만, 두 가지 한계가 있었습니다 —
+  ① <b>최신 정보 부재</b>: 학습 시점 이후 정보를 모름. ② <b>환각(hallucination)</b>: 모르는 것을 그럴듯하게 지어냄. 사내 SOP를 묻는다고 학습 시 본 적 없는 회사 자료를 정확히 답할 수 없습니다.
+  </p>
+  <p style="color:#881337">
+  2020년 Facebook AI Research의 Lewis 등이 발표한 RAG<abbr class="full">Retrieval-Augmented Generation</abbr>가 표준 해법을 제시했습니다. 핵심 아이디어 — <b>"답변하기 전에 외부 지식 베이스(벡터 DB)에서 관련 문서를 검색해서 LLM의 입력에 포함시킨다"</b>.
+  </p>
+  <p style="color:#881337">
+  결과: ① 사내 자료를 정확히 인용 가능, ② 자료가 업데이트되면 즉시 반영, ③ 답변에 출처(citation)을 함께 표시 가능. 오늘날 산업 LLM 코파일럿의 사실상 표준. Samsung Display의 Watson + EDM 통합 LLM도 이 패턴이며, 차별점은 <b>EDM의 PPT/Excel을 자동 변환·벡터화 + 프로젝트별 인덱스</b>입니다.
+  </p>
+  <div class="citation" style="color:#9f1239">Lewis et al. (2020). "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", NeurIPS 2020. arXiv:2005.11401.</div>
+</div>
+
+<h3 style="margin-top:24px;font-size:18px">핵심 용어 4개</h3>
+<div class="term-grid">
+  <div class="term-box" style="border-left-color:var(--c-rose)">
+    <span class="term">embedding model</span><span class="ko">임베딩 모델</span>
+    <p class="def">"텍스트를 768-dim 같은 고차원 벡터로 변환"하는 모델 (예: BGE-M3, E5). 비슷한 의미의 텍스트는 비슷한 벡터로.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-acc)">
+    <span class="term">vector DB</span><span class="ko">벡터 데이터베이스</span>
+    <p class="def">사내 문서들의 임베딩 벡터를 저장. 코사인 유사도 기반 검색이 빠름. Pinecone · Weaviate · Milvus · pgvector 등.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-purple)">
+    <span class="term">cosine similarity</span><span class="ko">코사인 유사도</span>
+    <p class="def">두 벡터 사이의 각도. -1 ~ 1 범위. 1에 가까울수록 비슷. 검색은 "질문 임베딩과 가장 유사한 top-K 문서" 반환.</p>
+  </div>
+  <div class="term-box" style="border-left-color:var(--c-ok)">
+    <span class="term">context injection</span><span class="ko">컨텍스트 주입</span>
+    <p class="def">검색된 top-K 문서를 LLM의 입력 prompt에 포함시키는 것. <span class="eq">"[문서들] 위 정보를 바탕으로 답하시오: [질문]"</span></p>
+  </div>
+</div>
+
+<div class="math"><span class="math-lbl">RAG 4단계 흐름</span>
+1. Embed query:        q_emb = embed("FMM 정렬 오차 원인은?")     ← 768-dim 벡터
+2. Vector DB search:   top_K = argmax_d  cosine(q_emb, d_emb)     ← 유사도 top-3
+3. Context injection:  prompt = top_K 문서 + 질문                  ← LLM 입력
+4. LLM generation:     answer = LLM(prompt)                        ← token 스트리밍
+
+핵심 효과: 환각 방지 + 출처 인용 가능 + 자료 업데이트 즉시 반영
+</div>
+
+<div class="steps" style="background:#fff1f2;border-left-color:var(--c-rose)">
+<span class="lbl" style="background:#fecdd3;color:#9f1239">SIMULATION · 데모 사용법</span>
+<ol>
+  <li><b>질문 선택</b>에서 fab 관련 3가지 질문 중 하나 선택 (예: "FMM 정렬 오차 원인은?").</li>
+  <li>맨 위에 노란 박스로 질문이 표시되고, 오른쪽에 <b>768-dim 임베딩 벡터</b>가 24개 막대로 시각화됩니다.</li>
+  <li><b>① Retrieve</b> 버튼 — 8개 사내 문서(SOP/ECN/8D)에 대해 코사인 유사도 계산. <b>Top-3 문서</b>가 초록으로 강조되고 유사도 점수가 막대로 표시됩니다.</li>
+  <li>중앙 보라색 박스에 <b>컨텍스트 주입 prompt</b>가 표시 — "[Context] top-3 IDs · [Question] 질문..." 형식.</li>
+  <li><b>② Generate</b> 버튼 — LLM이 토큰을 한 개씩 스트리밍으로 생성. 답변 끝에 <b>출처 인용</b>(SOP-EV-021 등)이 자동 포함.</li>
+  <li>토큰 생성 중간에는 빨간 커서가 깜빡이며 "지금 어디까지 생성됐는지" 표시.</li>
+</ol>
+</div>
+
+<div class="viz">
+<div class="viz-title">RAG 4단계 시뮬레이션 — Query → Retrieve → Inject → Generate</div>
+<svg id="rag-svg" viewBox="0 0 760 540" width="760" style="width:100%;max-width:760px"></svg>
+<div class="ctrls">
+  <div class="slider"><span class="lbl">질문</span>
+    <select id="rag-q">
+      <option value="0">FMM 정렬 오차의 가장 흔한 원인은?</option>
+      <option value="1">도가니 온도 drift 발생 시 첫 점검 항목은?</option>
+      <option value="2">증착 두께 불균일 8D 작성법</option>
+    </select>
+  </div>
+  <button id="rag-retrieve">① Retrieve</button>
+  <button id="rag-generate" class="primary">② Generate (스트리밍)</button>
+  <button id="rag-reset" class="danger">초기화</button>
+</div>
+<div class="status" id="rag-status">질문 선택 → ① Retrieve → ② Generate.</div>
+<div class="cap">상단=질문+임베딩. 중단=벡터 DB 검색 결과. 하단=컨텍스트 + 토큰 스트리밍 답변.</div>
+</div>
+
+<div class="industry-box">
+  <span class="lbl">INDUSTRY · 산업 적용</span>
+  <h4>산업 LLM 코파일럿의 사실상 표준 골격</h4>
+  <ul>
+    <li><b>Samsung Display Watson + EDM</b> (사내 진행) — IBM Watson 기반 + 사내 EDM 자료 자동 PDF 변환·벡터화 + 프로젝트별 RAG 인덱스 + 멀티-소스 오케스트레이터.</li>
+    <li><b>Micron Engineer Co-pilot</b> — Llama 3.x 기반 추정 사내 LLM. FDC chart 해석, recipe diff 요약, 8D 초안 작성. 온프렘 vLLM + AWQ 4bit 양자화.</li>
+    <li><b>BOE Blue Whale Display LLM</b> (2024) — 디스플레이 도메인 LLM (Qwen 기반 추정). ADM/AYM 에이전트 오케스트레이션.</li>
+    <li><b>TCL CSOT X-Intelligence 3.0</b> (2024) — Tsinghua + Zhipu AI 협업. FMEA · 소재 screening 코파일럿. LoRA 도메인 fine-tune.</li>
+  </ul>
+  <p style="margin-top:8px"><b>⚠ 운영 원칙</b> — 레시피·안전 임계값 자동 변경은 절대 LLM에 위임 금지. 모든 작업 출력은 엔지니어 사인오프 필수. 답변 시 출처 문서·페이지 표시 (citation grounding).</p>
+</div>
+
+</div>
+</section>
+
+<!-- Summary -->
+<section class="demo" style="background:linear-gradient(180deg,#fff,#f7fafd)">
+<div class="demo-head" style="background:transparent;border-bottom:none">
+  <h2 style="font-size:22px"><span class="num-circle" style="background:var(--c-rose);width:36px;height:36px;font-size:14px;display:inline-flex;margin-right:10px;vertical-align:middle">∑</span>3차 4종 — 한 줄씩 정리</h2>
+</div>
+<div class="demo-body">
+<table style="width:100%;border-collapse:collapse;margin-top:8px;font-size:14.5px">
+<thead><tr style="background:#f1f5fb">
+<th style="padding:12px;text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#475569">알고리즘 · 원조</th>
+<th style="padding:12px;text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#475569">한 줄 본질</th>
+<th style="padding:12px;text-align:left;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:#475569">실제 fab 적용</th>
+</tr></thead>
+<tbody>
+<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:12px;vertical-align:top"><b>GBT + SHAP</b><br/><small style="color:#64748b">Friedman 2001 / Chen 2016 / Lundberg 2017</small></td><td style="padding:12px;color:#334155">트리 분할 학습 + Shapley value로 예측 분해</td><td style="padding:12px;color:#334155">Intel · Samsung 메모리 RCA · LG Display AIPS · KLA Klarity</td></tr>
+<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:12px;vertical-align:top"><b>GNN (GCN/HGT)</b><br/><small style="color:#64748b">Kipf 2017 / Hu 2020</small></td><td style="padding:12px;color:#334155">노드가 이웃 메시지를 받아 임베딩 갱신</td><td style="padding:12px;color:#334155">TSMC HGT 수율 RCA (3nm ramp 30%+)</td></tr>
+<tr style="border-bottom:1px solid #e2e8f0"><td style="padding:12px;vertical-align:top"><b>PatchCore</b><br/><small style="color:#64748b">Roth 2022</small></td><td style="padding:12px;color:#334155">정상 임베딩 메모리뱅크 + 거리 기반 anomaly</td><td style="padding:12px;color:#334155">Applied Materials ExtractAI · EfficientAD 후속</td></tr>
+<tr><td style="padding:12px;vertical-align:top"><b>LLM + RAG</b><br/><small style="color:#64748b">Lewis 2020</small></td><td style="padding:12px;color:#334155">검색 → 컨텍스트 주입 → 토큰 스트리밍 생성</td><td style="padding:12px;color:#334155">Samsung Display Watson · Micron Co-pilot · BOE · CSOT</td></tr>
+</tbody></table>
+</div>
+</section>
+
+<!-- 12종 통합 정리 -->
+<section class="demo" style="background:linear-gradient(180deg,#fff,#eff5fb);border:2px solid var(--c-acc)">
+<div class="demo-head" style="background:transparent;border-bottom:none">
+  <h2 style="font-size:22px;color:var(--c-acc)">★ 12종 통합 — 시각화 학습 완결</h2>
+</div>
+<div class="demo-body">
+<p style="font-size:15px;color:var(--c-ink2);margin-bottom:16px">
+3개 배치 12종 모두를 같은 5섹션 구조 (WHY → 핵심 용어 → 수식 → SIMULATION → INDUSTRY) 로 학습하셨습니다. 각 알고리즘의 <b>원조 논문 · 핵심 직관 · 실제 fab 적용</b>까지 한 번에 정리됐습니다.
+</p>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px">
+  <div style="padding:14px 18px;background:#fff;border-radius:10px;border-left:4px solid var(--c-acc)">
+    <div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--c-acc);letter-spacing:.06em">1차 · 기초 (04)</div>
+    <div style="font-size:13.5px;color:var(--c-ink);font-weight:700;margin-top:6px">신경망·역전파 · CNN · Transformer · LSTM</div>
+    <div style="font-size:12px;color:var(--c-mute);margin-top:4px">Rumelhart 1986 / LeCun 1998 / Vaswani 2017 / Hochreiter 1997</div>
+  </div>
+  <div style="padding:14px 18px;background:#fff;border-radius:10px;border-left:4px solid var(--c-purple)">
+    <div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--c-purple);letter-spacing:.06em">2차 · 신흥 SOTA (05)</div>
+    <div style="font-size:13.5px;color:var(--c-ink);font-weight:700;margin-top:6px">PatchTST · 강화학습 · BO · Diffusion</div>
+    <div style="font-size:12px;color:var(--c-mute);margin-top:4px">Nie 2023 / Watkins 1989 / Mockus 1978 / Ho 2020</div>
+  </div>
+  <div style="padding:14px 18px;background:#fff;border-radius:10px;border-left:4px solid var(--c-rose)">
+    <div style="font-family:var(--f-mono);font-size:11px;font-weight:700;color:var(--c-rose);letter-spacing:.06em">3차 · 해석·검색 (06)</div>
+    <div style="font-size:13.5px;color:var(--c-ink);font-weight:700;margin-top:6px">GBT/SHAP · GNN · PatchCore · LLM+RAG</div>
+    <div style="font-size:12px;color:var(--c-mute);margin-top:4px">Friedman 2001 / Kipf 2017 / Roth 2022 / Lewis 2020</div>
+  </div>
+</div>
+<p style="font-size:14px;color:var(--c-ink2);margin-top:18px">
+함께 보기 → <a href="03_심화_12강.html" style="color:var(--c-acc);font-weight:700"><code>03_심화_12강.html</code></a> Part I (각 알고리즘 가족의 원본 → 진화 → 산업 변형) +
+<a href="00_시작하기.html" style="color:var(--c-acc);font-weight:700"><code>00_시작하기.html</code></a> (전체 학습 경로 안내).
+</p>
+</div>
+</section>
+
+<footer>
+AI 시각화 놀이터 · 3/3차 (전면 개편판 · 완결) · 2026.04<br/>
+<b>다음 단계</b>: <a href="07_신경망_심화.html" style="color:#dc2626;font-weight:600"><code>07_신경망_심화.html</code></a> 신경망 deep dive ·
+<a href="08_GPU_TPU_NPU.html" style="color:#6d28d9;font-weight:600"><code>08_GPU_TPU_NPU.html</code></a> 하드웨어 ·
+<a href="10_LLM_RAG_벡터화.html" style="color:#7c3aed;font-weight:600"><code>10_LLM_RAG_벡터화.html</code></a> LLM/RAG/벡터화<br/>
+<b>함께 보기</b>: <a href="00_시작하기.html"><code>00_시작하기.html</code></a> · <a href="03_심화_12강.html"><code>03_심화_12강.html</code></a><br/><br/>
+<span style="display:inline-block;padding:6px 14px;background:#f1f5f9;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#334155;border:1px solid #e2e8f0">📝 자료 작성자 · <b style="color:#0a4e99">SAMSUNG DISPLAY EV/MASK 기술팀 강세준</b></span>
+</footer>
+
+</div>
+
+<script>
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs={},parent=null){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmt(x,d=2){return Number(x).toFixed(d);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function colorPN(v){v=clamp(v,-1,1);if(v>=0){const t=v;return`rgb(${Math.round(255-t*200)},${Math.round(255-t*100)},${Math.round(255-t*40)})`;}const t=-v;return`rgb(${Math.round(255-t*40)},${Math.round(255-t*120)},${Math.round(255-t*200)})`;}
+
+/* ===== DEMO 9 · GBT + SHAP ===== */
+(function gbtDemo(){
+  const svg=document.getElementById("gbt-svg");const status=document.getElementById("gbt-status");
+  const dataset=[];
+  function genData(){dataset.length=0;for(let i=0;i<60;i++){const rf=Math.random(),gs=Math.random();let y=0;if(rf>0.45&&rf<0.85&&gs>0.3&&gs<0.7)y=1;if(Math.random()<0.1)y=1-y;dataset.push({rf,gs,y});}}
+  genData();
+  const TESTS=[{rf:0.65,gs:0.5,name:"Lot A"},{rf:0.25,gs:0.55,name:"Lot B"},{rf:0.7,gs:0.18,name:"Lot C"},{rf:0.2,gs:0.18,name:"Lot D"}];
+  const state={splits:[],testIdx:0};
+  function gini(items){if(items.length===0)return 0;const p=items.filter(d=>d.y===1).length/items.length;return 2*p*(1-p);}
+  function findBestSplit(){let best={gain:-1};const candidates=[];for(let v=0.1;v<=0.9;v+=0.05){candidates.push({feat:"rf",val:v});candidates.push({feat:"gs",val:v});}for(const c of candidates){let tooClose=false;for(const s of state.splits)if(s.feat===c.feat&&Math.abs(s.val-c.val)<0.08){tooClose=true;break;}if(tooClose)continue;const left=dataset.filter(d=>d[c.feat]<c.val);const right=dataset.filter(d=>d[c.feat]>=c.val);if(left.length<3||right.length<3)continue;const g=gini(dataset)-(left.length/dataset.length)*gini(left)-(right.length/dataset.length)*gini(right);if(g>best.gain)best={...c,gain:g,nL:left.length,nR:right.length};}return best;}
+  function reset(){state.splits=[];render();status.innerHTML=`초기화. \"+ Split 추가\"로 트리 학습 시작.`;}
+  function addSplit(){if(state.splits.length>=6){status.innerHTML="최대 6 splits 도달.";return;}const s=findBestSplit();if(!s||s.gain<=0){status.innerHTML="더 이상 의미 있는 split 없음.";return;}state.splits.push(s);render();status.innerHTML=`Split #${state.splits.length}: <b>${s.feat==='rf'?'RF Power':'Gas Flow'} ≷ ${fmt(s.val,2)}</b> (gain=${fmt(s.gain,3)}, 분할 ${s.nL}|${s.nR})`;}
+  async function autoSplit(){for(let i=0;i<6;i++){addSplit();await sleep(400);}}
+  function predict(rf,gs){let region=dataset.slice();for(const s of state.splits){if(s.feat==="rf"){if(rf<s.val)region=region.filter(d=>d.rf<s.val);else region=region.filter(d=>d.rf>=s.val);}else{if(gs<s.val)region=region.filter(d=>d.gs<s.val);else region=region.filter(d=>d.gs>=s.val);}}if(region.length===0)return 0.5;return region.filter(d=>d.y===1).length/region.length;}
+  function shapValues(rf,gs){const baseline=dataset.filter(d=>d.y===1).length/dataset.length;function marginalize(useFeat){let region=dataset.slice();for(const s of state.splits){if(!useFeat.includes(s.feat))continue;if(s.feat==="rf"){if(rf<s.val)region=region.filter(d=>d.rf<s.val);else region=region.filter(d=>d.rf>=s.val);}else{if(gs<s.val)region=region.filter(d=>d.gs<s.val);else region=region.filter(d=>d.gs>=s.val);}}if(region.length===0)return baseline;return region.filter(d=>d.y===1).length/region.length;}const v_empty=baseline;const v_rf=marginalize(["rf"]);const v_gs=marginalize(["gs"]);const v_both=marginalize(["rf","gs"]);const phi_rf=0.5*((v_rf-v_empty)+(v_both-v_gs));const phi_gs=0.5*((v_gs-v_empty)+(v_both-v_rf));return {phi_rf,phi_gs,baseline,prediction:v_both};}
+  function render(){
+    svg.innerHTML="";
+    const px=40,py=60,pw=320,ph=320;
+    el("text",{x:380,y:24,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`2D 산점도 (RF Power × Gas Flow) → 트리 ${state.splits.length} splits`;
+    el("rect",{x:px,y:py,width:pw,height:ph,fill:"#fff",stroke:"#cbd5e1"},svg);
+    el("text",{x:px+pw/2,y:py+ph+22,"text-anchor":"middle","font-size":11,fill:"#475569"},svg).textContent="RF Power";
+    el("text",{x:px-22,y:py+ph/2,"text-anchor":"middle","font-size":11,fill:"#475569",transform:`rotate(-90 ${px-22} ${py+ph/2})`},svg).textContent="Gas Flow";
+    const grid=22;for(let i=0;i<grid;i++)for(let j=0;j<grid;j++){const rf=(i+0.5)/grid,gs=1-(j+0.5)/grid;const p=predict(rf,gs);const fill=`rgb(${Math.round(255-p*100)},${Math.round(255-(1-p)*30)},${Math.round(255-(1-p)*120)})`;el("rect",{x:px+i*(pw/grid),y:py+j*(ph/grid),width:pw/grid,height:ph/grid,fill,opacity:.4},svg);}
+    state.splits.forEach((s,i)=>{const isRF=s.feat==="rf";const stroke=isRF?"#dc2626":"#0a4e99";if(isRF){const x=px+s.val*pw;el("line",{x1:x,y1:py,x2:x,y2:py+ph,stroke,"stroke-width":2,opacity:.7},svg);el("text",{x:x+3,y:py+12+i*12,"font-size":9,fill:stroke,"font-family":"monospace","font-weight":700},svg).textContent=`#${i+1} RF<${fmt(s.val,2)}`;}else{const y=py+(1-s.val)*ph;el("line",{x1:px,y1:y,x2:px+pw,y2:y,stroke,"stroke-width":2,opacity:.7},svg);el("text",{x:px+3,y:y-3,"font-size":9,fill:stroke,"font-family":"monospace","font-weight":700},svg).textContent=`#${i+1} Gas<${fmt(s.val,2)}`;}});
+    dataset.forEach(d=>{const x=px+d.rf*pw,y=py+(1-d.gs)*ph;el("circle",{cx:x,cy:y,r:3.5,fill:d.y===1?"#10b981":"#ef4444",opacity:.85,stroke:"#fff","stroke-width":.8},svg);});
+    const t=TESTS[state.testIdx];const tx=px+t.rf*pw,ty=py+(1-t.gs)*ph;el("circle",{cx:tx,cy:ty,r:9,fill:"#fbbf24",stroke:"#92400e","stroke-width":2.5},svg);el("text",{x:tx,y:ty-13,"text-anchor":"middle","font-size":11,"font-weight":700,fill:"#92400e"},svg).textContent=t.name;
+    const rx=400,ry=60;el("text",{x:rx+170,y:ry-2,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#0a4e99"},svg).textContent="결정트리 구조 (단순화)";
+    const treeY=ry+30;
+    if(state.splits.length===0){el("circle",{cx:rx+170,cy:treeY+30,r:18,fill:"#fef3c7",stroke:"#f59e0b","stroke-width":2},svg);el("text",{x:rx+170,y:treeY+34,"text-anchor":"middle","font-size":11,fill:"#854d0e"},svg).textContent="root";el("text",{x:rx+170,y:treeY+58,"text-anchor":"middle","font-size":10,fill:"#94a3b8"},svg).textContent="(no splits yet)";}
+    else{const cellH=22;state.splits.forEach((s,i)=>{const y=treeY+i*cellH;el("rect",{x:rx+30,y,width:280,height:cellH-3,fill:"#fff",stroke:s.feat==="rf"?"#dc2626":"#0a4e99","stroke-width":1.5,rx:4},svg);el("text",{x:rx+40,y:y+13,"font-size":11,"font-weight":700,fill:"#1e293b","font-family":"monospace"},svg).textContent=`#${i+1}`;el("text",{x:rx+70,y:y+13,"font-size":11,fill:"#475569","font-family":"monospace"},svg).textContent=`${s.feat==='rf'?'RF':'Gas'} ≷ ${fmt(s.val,2)}`;el("text",{x:rx+200,y:y+13,"font-size":10,fill:"#10b981","font-family":"monospace"},svg).textContent=`gain=${fmt(s.gain,3)}`;});}
+    const sx=400,sy=240,sw=320;el("text",{x:sx+sw/2,y:sy-2,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#7c3aed"},svg).textContent=`SHAP — ${t.name}의 예측 분해`;
+    if(state.splits.length===0)el("text",{x:sx+sw/2,y:sy+50,"text-anchor":"middle","font-size":11,fill:"#94a3b8","font-style":"italic"},svg).textContent="(트리 학습 후 SHAP 계산 가능)";
+    else{const sh=shapValues(t.rf,t.gs);el("text",{x:sx,y:sy+18,"font-size":11,fill:"#475569","font-family":"monospace"},svg).textContent=`baseline (평균 yield): ${fmt(sh.baseline,3)}`;
+      const wf=[{label:"baseline",val:sh.baseline,color:"#94a3b8"},{label:"+ RF Power",val:sh.phi_rf,color:"#dc2626",delta:true},{label:"+ Gas Flow",val:sh.phi_gs,color:"#0a4e99",delta:true},{label:"prediction",val:sh.prediction,color:"#10b981"}];
+      const barY=sy+34,barH=22,barGap=4,xMid=sx+sw/2,scale=120;let cum=0;
+      wf.forEach((w,i)=>{const y=barY+i*(barH+barGap);if(w.delta){const x0=xMid+cum*scale,x1=xMid+(cum+w.val)*scale;el("rect",{x:Math.min(x0,x1),y,width:Math.abs(x1-x0),height:barH,fill:w.color,opacity:.8,rx:3},svg);el("line",{x1:x0,y1:y-2,x2:x0,y2:y+barH+2,stroke:"#475569","stroke-width":1,"stroke-dasharray":"2,2"},svg);cum+=w.val;}else{const xVal=xMid+(w.val-sh.baseline)*scale;el("circle",{cx:xVal,cy:y+barH/2,r:5,fill:w.color,stroke:"#fff","stroke-width":2},svg);}el("text",{x:sx+5,y:y+barH/2+4,"font-size":10.5,fill:"#1e293b","font-family":"monospace"},svg).textContent=w.label;el("text",{x:sx+sw-5,y:y+barH/2+4,"text-anchor":"end","font-size":10.5,"font-weight":700,fill:w.color,"font-family":"monospace"},svg).textContent=w.delta?`${w.val>=0?'+':''}${fmt(w.val,3)}`:fmt(w.val,3);});}
+  }
+  document.getElementById("gbt-add").onclick=addSplit;document.getElementById("gbt-auto").onclick=autoSplit;document.getElementById("gbt-reset").onclick=reset;document.getElementById("gbt-pt").onchange=e=>{state.testIdx=parseInt(e.target.value);render();};
+  reset();
+})();
+
+/* ===== DEMO 10 · GNN ===== */
+(function gnnDemo(){
+  const svg=document.getElementById("gnn-svg");const status=document.getElementById("gnn-status");
+  const NODES=[{id:0,name:"A",x:130,y:130},{id:1,name:"B",x:280,y:80},{id:2,name:"C",x:430,y:130},{id:3,name:"D",x:130,y:290},{id:4,name:"E",x:280,y:240},{id:5,name:"F",x:430,y:290},{id:6,name:"G",x:560,y:200}];
+  const EDGES=[[0,1],[0,3],[0,4],[1,2],[1,4],[2,4],[2,5],[2,6],[3,4],[4,5],[5,6]];
+  function neighbors(v){const n=[];for(const e of EDGES){if(e[0]===v)n.push(e[1]);if(e[1]===v)n.push(e[0]);}return n;}
+  const state={features:null,history:[],round:0,sourceIdx:0};
+  function reset(){state.features=NODES.map(()=>0);if(state.sourceIdx===0)state.features[0]=1.0;else if(state.sourceIdx===1)state.features[3]=1.0;state.history=[state.features.slice()];state.round=0;render();status.innerHTML=`초기 상태: ${state.sourceIdx<2?`Chamber ${["A","D"][state.sourceIdx]}에 이상값 +1.0 주입`:"모든 노드 0"}. \"+ 1 round\"로 시작.`;}
+  function step(){if(state.round>=4){status.innerHTML="더 이상 의미 있는 변화 없음 (수렴).";return;}const newF=NODES.map((n,v)=>{const ngh=neighbors(v);if(ngh.length===0)return state.features[v];let s=state.features[v]*0.5;for(const u of ngh)s+=state.features[u]/ngh.length;return Math.tanh(s*0.6);});state.features=newF;state.history.push(newF.slice());state.round++;render();status.innerHTML=`Round <b>${state.round}</b> · 각 노드 = tanh(0.5·자신 + mean(이웃)). 이상값 전파 확인.`;}
+  async function auto(){for(let i=0;i<3;i++){step();await sleep(700);}}
+  function lerp(a,b,t){return a+(b-a)*t;}
+  function render(){
+    svg.innerHTML="";
+    el("text",{x:380,y:22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`Chamber 그래프 (7 노드, 11 엣지) · Round ${state.round} · h_v ← tanh(0.5·h_v + mean(h_u : u∈N(v)))`;
+    EDGES.forEach(e=>{const a=NODES[e[0]],b=NODES[e[1]];el("line",{x1:a.x,y1:a.y,x2:b.x,y2:b.y,stroke:"#cbd5e1","stroke-width":1.5},svg);if(state.round>0&&state.history.length>=2){const fa=state.history[state.history.length-2][e[0]],fb=state.history[state.history.length-2][e[1]];if(Math.abs(fa)>0.05)el("circle",{cx:lerp(a.x,b.x,0.7),cy:lerp(a.y,b.y,0.7),r:3,fill:colorPN(fa),opacity:.6},svg);if(Math.abs(fb)>0.05)el("circle",{cx:lerp(a.x,b.x,0.3),cy:lerp(a.y,b.y,0.3),r:3,fill:colorPN(fb),opacity:.6},svg);}});
+    NODES.forEach(n=>{const v=state.features[n.id];el("circle",{cx:n.x,cy:n.y,r:30,fill:colorPN(v),stroke:"#0a4e99","stroke-width":2},svg);el("text",{x:n.x,y:n.y-2,"text-anchor":"middle","font-size":15,"font-weight":700,fill:"#0b1220"},svg).textContent=n.name;el("text",{x:n.x,y:n.y+14,"text-anchor":"middle","font-size":10,"font-family":"monospace",fill:"#1e293b"},svg).textContent=fmt(v,2);});
+    const px=620,py=50;el("text",{x:px+50,y:py-5,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#7c3aed"},svg).textContent="Round 별 추적";
+    el("text",{x:px,y:py+12,"font-size":10,fill:"#64748b","font-family":"monospace"},svg).textContent="node";
+    for(let r=0;r<=state.round;r++)el("text",{x:px+30+r*22,y:py+12,"text-anchor":"middle","font-size":10,fill:"#64748b","font-family":"monospace"},svg).textContent=`r${r}`;
+    NODES.forEach((n,i)=>{el("text",{x:px,y:py+30+i*22,"font-size":10,"font-weight":700,fill:"#0a4e99","font-family":"monospace"},svg).textContent=n.name;for(let r=0;r<=state.round&&r<state.history.length;r++){const v=state.history[r][n.id];el("rect",{x:px+22+r*22,y:py+22+i*22,width:18,height:14,fill:colorPN(v),stroke:"#cbd5e1","stroke-width":.6,rx:2},svg);el("text",{x:px+22+r*22+9,y:py+33+i*22,"text-anchor":"middle","font-size":8,"font-family":"monospace",fill:Math.abs(v)>.5?"#fff":"#1e293b"},svg).textContent=fmt(v,1);}});
+    const py2=py+220;el("text",{x:px+50,y:py2,"text-anchor":"middle","font-size":11,"font-weight":700,fill:"#10b981"},svg).textContent="최종 분류";
+    if(state.round>0){const G=Math.max(...state.features.map(Math.abs));const verdict=G>0.5?"⚠ 이상 전파":(G>0.2?"주의":"정상");const fill=G>0.5?"#fee":(G>0.2?"#fef3c7":"#dcfce7");el("rect",{x:px,y:py2+8,width:100,height:34,rx:6,fill,stroke:"#cbd5e1"},svg);el("text",{x:px+50,y:py2+30,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#1e293b"},svg).textContent=verdict;}
+    else el("text",{x:px+50,y:py2+25,"text-anchor":"middle","font-size":10,fill:"#94a3b8"},svg).textContent="(round 진행 후)";
+  }
+  document.getElementById("gnn-step").onclick=step;document.getElementById("gnn-auto").onclick=auto;document.getElementById("gnn-reset").onclick=reset;document.getElementById("gnn-src").onchange=e=>{state.sourceIdx=parseInt(e.target.value);reset();};
+  reset();
+})();
+
+/* ===== DEMO 11 · PatchCore ===== */
+(function pcDemo(){
+  const svg=document.getElementById("pc-svg");const status=document.getElementById("pc-status");
+  const SIZE=14;
+  function makeNormal(seed){const G=Array.from({length:SIZE},()=>new Array(SIZE).fill(0));const r=()=>(Math.sin(seed*=1.31+0.7)+1)*0.5;const gx=0.4+r()*0.2,gy=0.4+r()*0.2;for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++)G[i][j]=clamp(0.5+gx*(j/SIZE-0.5)+gy*(i/SIZE-0.5)+0.05*Math.sin(i*0.7+j*0.5+seed),0,1);return G;}
+  function makeTest(muraIntensity,pos){const seed=Math.random()*100;const G=makeNormal(seed);if(muraIntensity>0){const mi=muraIntensity/100;let cx,cy;if(pos===0){cx=SIZE/2;cy=SIZE/2;}else if(pos===1){cx=SIZE*0.25;cy=SIZE*0.25;}else{cx=SIZE*0.75;cy=SIZE*0.75;}for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){const d=Math.sqrt((i-cy)**2+(j-cx)**2);const blob=Math.exp(-d*d/(2*3*3));G[i][j]=clamp(G[i][j]+mi*0.4*blob+mi*0.1*Math.sin(i*1.5)*Math.cos(j*1.3),0,1);}}return G;}
+  let projW=null;function makeProj(){projW=[[],[]];for(let k=0;k<SIZE*SIZE;k++){projW[0].push((Math.random()-0.5)*0.3);projW[1].push((Math.random()-0.5)*0.3);}}
+  function embed(G){let e0=0,e1=0;for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){const idx=i*SIZE+j;e0+=G[i][j]*projW[0][idx];e1+=G[i][j]*projW[1][idx];}return [e0,e1];}
+  let memBank=null,memEmb=null;function buildBank(){memBank=[];memEmb=[];for(let s=0;s<8;s++){const G=makeNormal(s*7.3+11);memBank.push(G);memEmb.push(embed(G));}}
+  makeProj();buildBank();
+  const state={mura:0,pos:0,thr:35,test:null,testEmb:null};
+  function refresh(){state.test=makeTest(state.mura,state.pos);state.testEmb=embed(state.test);render();}
+  function distance(){let mn=Infinity;memEmb.forEach(e=>{const d=Math.sqrt((e[0]-state.testEmb[0])**2+(e[1]-state.testEmb[1])**2);if(d<mn)mn=d;});return mn*100;}
+  function render(){
+    svg.innerHTML="";
+    el("text",{x:380,y:22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`정상 메모리뱅크 8장 · 테스트 입력 · "최근접 거리" = anomaly score`;
+    const tx=40,ty=60,cs=14;
+    el("text",{x:tx+SIZE*cs/2,y:ty-8,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#dc2626"},svg).textContent="테스트 입력";
+    for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){const v=state.test[i][j];const fill=`rgb(${Math.round(255-v*200)},${Math.round(255-v*180)},${Math.round(255-v*150)})`;el("rect",{x:tx+j*cs,y:ty+i*cs,width:cs,height:cs,fill,stroke:"#e2e8f0","stroke-width":.4},svg);}
+    el("rect",{x:tx,y:ty,width:SIZE*cs,height:SIZE*cs,fill:"none",stroke:"#dc2626","stroke-width":2},svg);
+    const bx=tx,by=ty+SIZE*cs+30,mcs=4;el("text",{x:bx,y:by-8,"font-size":11,"font-weight":700,fill:"#0a4e99"},svg).textContent="정상 메모리뱅크 (8장)";
+    memBank.forEach((G,k)=>{const cx=bx+(k%4)*(SIZE*mcs+6),cy=by+Math.floor(k/4)*(SIZE*mcs+6);for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){const v=G[i][j];const fill=`rgb(${Math.round(255-v*200)},${Math.round(255-v*180)},${Math.round(255-v*150)})`;el("rect",{x:cx+j*mcs,y:cy+i*mcs,width:mcs,height:mcs,fill},svg);}el("rect",{x:cx,y:cy,width:SIZE*mcs,height:SIZE*mcs,fill:"none",stroke:"#0a4e99","stroke-width":1},svg);});
+    const ex=300,ey=60,ew=240,eh=200;
+    el("text",{x:ex+ew/2,y:ey-8,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#0a4e99"},svg).textContent="2D 임베딩 공간 (DINOv2-like)";
+    el("rect",{x:ex,y:ey,width:ew,height:eh,fill:"#fff",stroke:"#cbd5e1"},svg);
+    const allE=[...memEmb,state.testEmb];let mn0=Math.min(...allE.map(e=>e[0])),mx0=Math.max(...allE.map(e=>e[0]));let mn1=Math.min(...allE.map(e=>e[1])),mx1=Math.max(...allE.map(e=>e[1]));const pad=(mx0-mn0)*0.15;mn0-=pad;mx0+=pad;const pad1=(mx1-mn1)*0.15;mn1-=pad1;mx1+=pad1;
+    function eX(v){return ex+10+((v-mn0)/(mx0-mn0))*(ew-20);}function eY(v){return ey+eh-10-((v-mn1)/(mx1-mn1))*(eh-20);}
+    let nearestIdx=0,nearD=Infinity;memEmb.forEach((e,k)=>{const d=Math.sqrt((e[0]-state.testEmb[0])**2+(e[1]-state.testEmb[1])**2);if(d<nearD){nearD=d;nearestIdx=k;}});
+    el("line",{x1:eX(state.testEmb[0]),y1:eY(state.testEmb[1]),x2:eX(memEmb[nearestIdx][0]),y2:eY(memEmb[nearestIdx][1]),stroke:"#dc2626","stroke-width":2,"stroke-dasharray":"4,3"},svg);
+    memEmb.forEach((e,k)=>{el("circle",{cx:eX(e[0]),cy:eY(e[1]),r:6,fill:"#0b6dd4",opacity:.7,stroke:"#fff","stroke-width":1.5},svg);el("text",{x:eX(e[0]),y:eY(e[1])-9,"text-anchor":"middle","font-size":9,fill:"#0a4e99","font-family":"monospace"},svg).textContent=`m${k+1}`;});
+    el("circle",{cx:eX(state.testEmb[0]),cy:eY(state.testEmb[1]),r:8,fill:"#dc2626",stroke:"#fff","stroke-width":2},svg);el("text",{x:eX(state.testEmb[0]),y:eY(state.testEmb[1])-12,"text-anchor":"middle","font-size":10,"font-weight":700,fill:"#dc2626"},svg).textContent="test";
+    const dist=distance();const dx=300,dy=300,dw=240,dh=24;
+    el("text",{x:dx,y:dy-8,"font-size":12,"font-weight":700,fill:"#7c3aed"},svg).textContent=`Anomaly score (거리)`;
+    el("rect",{x:dx,y:dy,width:dw,height:dh,fill:"#e2e8f0",rx:4},svg);
+    const distNorm=clamp(dist/100,0,1);const barFill=dist>state.thr?"#dc2626":"#10b981";
+    el("rect",{x:dx,y:dy,width:dw*distNorm,height:dh,fill:barFill,opacity:.85,rx:4},svg);el("text",{x:dx+10,y:dy+16,"font-size":12,"font-weight":700,fill:"#fff","font-family":"monospace"},svg).textContent=`d = ${fmt(dist,1)}`;
+    el("line",{x1:dx+dw*state.thr/100,y1:dy-4,x2:dx+dw*state.thr/100,y2:dy+dh+4,stroke:"#0b1220","stroke-width":2},svg);el("text",{x:dx+dw*state.thr/100,y:dy-7,"text-anchor":"middle","font-size":10,"font-family":"monospace",fill:"#0b1220","font-weight":700},svg).textContent=`τ=${state.thr}`;
+    const vy=dy+45;const verdict=dist>state.thr?"⚠ ANOMALY":"✓ NORMAL";const vFill=dist>state.thr?"#fee":"#dcfce7";const vColor=dist>state.thr?"#991b1b":"#166534";el("rect",{x:dx,y:vy,width:dw,height:34,rx:6,fill:vFill,stroke:vColor},svg);el("text",{x:dx+dw/2,y:vy+22,"text-anchor":"middle","font-size":15,"font-weight":700,fill:vColor},svg).textContent=verdict;
+    const hx=580,hy=60,hcs=12;el("text",{x:hx+SIZE*hcs/2,y:hy-8,"text-anchor":"middle","font-size":12,"font-weight":700,fill:"#7c3aed"},svg).textContent="Anomaly Map";
+    for(let i=0;i<SIZE;i++)for(let j=0;j<SIZE;j++){let avg=0;memBank.forEach(G=>avg+=G[i][j]);avg/=memBank.length;const a=Math.abs(state.test[i][j]-avg);const fill=`rgb(${Math.round(255-a*400)},${Math.round(255-a*100)},${Math.round(255-a*100)})`;el("rect",{x:hx+j*hcs,y:hy+i*hcs,width:hcs,height:hcs,fill},svg);}
+    el("rect",{x:hx,y:hy,width:SIZE*hcs,height:SIZE*hcs,fill:"none",stroke:"#7c3aed","stroke-width":2},svg);
+    if(dist>state.thr)status.innerHTML=`<b class="neg">ANOMALY</b> · 최근접 정상(m${nearestIdx+1})까지 거리 = <b>${fmt(dist,1)}</b> > τ <b>${state.thr}</b>`;
+    else status.innerHTML=`<b class="pos">NORMAL</b> · 최근접 정상(m${nearestIdx+1}) 거리 = ${fmt(dist,1)} ≤ τ ${state.thr}`;
+  }
+  document.getElementById("pc-mura").oninput=e=>{state.mura=parseInt(e.target.value);document.getElementById("pc-mura-v").textContent=state.mura;refresh();};
+  document.getElementById("pc-pos").onchange=e=>{state.pos=parseInt(e.target.value);refresh();};
+  document.getElementById("pc-thr").oninput=e=>{state.thr=parseInt(e.target.value);document.getElementById("pc-thr-v").textContent=state.thr;render();};
+  document.getElementById("pc-shuffle").onclick=()=>{makeProj();buildBank();refresh();};
+  refresh();
+})();
+
+/* ===== DEMO 12 · LLM + RAG ===== */
+(function ragDemo(){
+  const svg=document.getElementById("rag-svg");const status=document.getElementById("rag-status");
+  const DOCS=[
+    {id:"SOP-EV-021",title:"FMM 정렬 SOP — 열팽창 보정"},
+    {id:"ECN-EV-2024-13",title:"ECN: FMM frame 재질 변경 (Invar 36)"},
+    {id:"8D-2024-117",title:"8D: FMM offset drift (3개월)"},
+    {id:"SOP-EV-008",title:"도가니 온도 제어 절차"},
+    {id:"SOP-EV-014",title:"증착 두께 측정 ellipsometry SOP"},
+    {id:"ECN-EV-2025-02",title:"ECN: source 가열 ramp profile 변경"},
+    {id:"8D-2025-031",title:"8D: 두께 불균일 (chamber 3 회복)"},
+    {id:"SOP-QA-005",title:"8D 보고서 작성 가이드"}
+  ];
+  const QUERIES=[
+    {q:"FMM 정렬 오차의 가장 흔한 원인은?",sims:[0.92,0.88,0.81,0.31,0.42,0.28,0.35,0.18],tokens:["FMM"," 정렬"," 오차의"," 가장"," 흔한"," 원인은"," ①"," frame"," 열팽창"," (Invar"," 외"," 재질에서"," 0.5"," ppm/K"," 수준"," 변형"," 발생),"," ②"," substrate"," gripper"," 마모,"," ③"," 온도"," 보정"," lookup"," table"," staleness."," SOP-EV-021에"," 따라"," 매"," cycle"," thermal"," map"," 갱신"," 필수."]},
+    {q:"도가니 온도 drift 발생 시 첫 점검 항목은?",sims:[0.22,0.18,0.25,0.94,0.72,0.85,0.68,0.31],tokens:["도가니"," 온도"," drift"," 발생"," 시"," 첫"," 점검:"," ①"," thermocouple"," junction"," 접점,"," ②"," heater"," coil"," 저항"," (베이스라인"," 대비"," ±5%),"," ③"," shield"," 오염도,"," ④"," cooling"," water"," flow"," rate."," SOP-EV-008"," step"," 4-7"," 참조."]},
+    {q:"증착 두께 불균일 8D 작성법은?",sims:[0.21,0.15,0.32,0.45,0.91,0.55,0.93,0.88],tokens:["8D"," 작성"," 절차:"," D1"," 팀"," 구성"," →"," D2"," 문제"," 정의"," (chamber"," ID,"," lot"," #,"," 두께"," delta),"," D3"," 즉시"," 격리,"," D4"," RCA"," (5why"," +"," fishbone),"," D5"," 영구"," 대책"," 후보,"," D6"," 검증"," (3"," lot"," 연속),"," D7"," 재발"," 방지"," (SOP/ECN),"," D8"," 인정."," 참조:"," 8D-2025-031,"," SOP-QA-005."]}
+  ];
+  const state={qIdx:0,phase:0,topK:[],genIdx:0,genTimer:null};
+  function reset(){state.phase=0;state.topK=[];state.genIdx=0;if(state.genTimer){clearInterval(state.genTimer);state.genTimer=null;}render();status.innerHTML=`질문: "${QUERIES[state.qIdx].q}" · ① Retrieve → ② Generate`;}
+  function retrieve(){state.phase=1;const sims=QUERIES[state.qIdx].sims;state.topK=DOCS.map((d,i)=>({...d,sim:sims[i]})).sort((a,b)=>b.sim-a.sim).slice(0,3);render();status.innerHTML=`Retrieve 완료. Top-3: <b>${state.topK.map(d=>d.id).join(", ")}</b>`;}
+  function generate(){if(state.phase<1)retrieve();state.phase=2;state.genIdx=0;render();if(state.genTimer)clearInterval(state.genTimer);state.genTimer=setInterval(()=>{state.genIdx++;if(state.genIdx>=QUERIES[state.qIdx].tokens.length){clearInterval(state.genTimer);state.genTimer=null;status.innerHTML=`<b class="pos">생성 완료</b> · ${QUERIES[state.qIdx].tokens.length} tokens. 사인오프 필수.`;}else status.innerHTML=`Token ${state.genIdx}/${QUERIES[state.qIdx].tokens.length} · 다음: "<b>${QUERIES[state.qIdx].tokens[state.genIdx]}</b>"`;render();},120);}
+  function render(){
+    svg.innerHTML="";
+    const Q=QUERIES[state.qIdx];const px=30,py=50;
+    el("text",{x:380,y:22,"text-anchor":"middle","font-size":13,"font-weight":700,fill:"#475569"},svg).textContent=`① 질문 임베딩 → ② 벡터 DB 검색 → ③ 컨텍스트 주입 → ④ 토큰 스트리밍 생성`;
+    el("rect",{x:px,y:py,width:700,height:48,rx:8,fill:"#fef3c7",stroke:"#f59e0b","stroke-width":1.5},svg);
+    el("text",{x:px+10,y:py+18,"font-size":11,"font-weight":700,fill:"#854d0e"},svg).textContent="Step ①  Question";
+    el("text",{x:px+10,y:py+38,"font-size":13,fill:"#1e293b"},svg).textContent=`Q: "${Q.q}"`;
+    el("text",{x:px+560,y:py+18,"font-size":10,fill:"#854d0e","font-family":"monospace"},svg).textContent="embedding ∈ ℝ^768";
+    for(let i=0;i<24;i++){const v=Math.sin(i*0.6+state.qIdx*1.7)*0.5+0.5;const fill=`rgb(${Math.round(255-v*180)},${Math.round(245-v*100)},${Math.round(255-v*40)})`;el("rect",{x:px+560+i*5,y:py+25,width:4.5,height:18,fill,stroke:"#fff","stroke-width":.3},svg);}
+    const sx=30,sy=120;el("text",{x:sx,y:sy-2,"font-size":12,"font-weight":700,fill:"#0a4e99"},svg).textContent="Step ②  Vector DB 검색 (cosine similarity)";
+    DOCS.forEach((d,i)=>{const yi=sy+12+i*22;const sim=Q.sims[i];const isTopK=state.phase>=1&&state.topK.some(t=>t.id===d.id);const fill=isTopK?"#dcfce7":"#f8fafc";const stroke=isTopK?"#10b981":"#cbd5e1";el("rect",{x:sx,y:yi,width:480,height:18,rx:3,fill,stroke,"stroke-width":isTopK?1.5:.6},svg);el("text",{x:sx+8,y:yi+13,"font-size":10.5,"font-family":"monospace",fill:"#0a4e99","font-weight":700},svg).textContent=d.id;el("text",{x:sx+105,y:yi+13,"font-size":10.5,fill:"#1e293b"},svg).textContent=d.title;el("rect",{x:sx+490,y:yi+3,width:120,height:12,fill:"#e2e8f0",rx:2},svg);el("rect",{x:sx+490,y:yi+3,width:120*sim,height:12,fill:isTopK?"#10b981":"#94a3b8",rx:2,opacity:.85},svg);el("text",{x:sx+615,y:yi+13,"font-size":10,"font-family":"monospace",fill:"#1e293b","font-weight":700},svg).textContent=fmt(sim,2);if(isTopK)el("text",{x:sx+665,y:yi+13,"font-size":11,"font-weight":700,fill:"#10b981"},svg).textContent="✓";});
+    const cx=30,cy=320;
+    if(state.phase>=1){el("text",{x:cx,y:cy-2,"font-size":12,"font-weight":700,fill:"#7c3aed"},svg).textContent="Step ③  컨텍스트 주입";el("rect",{x:cx,y:cy+8,width:700,height:40,rx:6,fill:"#f5f3ff",stroke:"#a78bfa","stroke-width":1},svg);const ctx=`[Context] ${state.topK.map(t=>t.id).join(", ")} · [Question] ${Q.q.slice(0,40)}...`;el("text",{x:cx+10,y:cy+25,"font-size":11,"font-family":"monospace",fill:"#581c87"},svg).textContent=`prompt = """`;el("text",{x:cx+10,y:cy+40,"font-size":11,"font-family":"monospace",fill:"#1e293b"},svg).textContent=ctx;}
+    if(state.phase>=2){const tx=30,ty=380;el("text",{x:tx,y:ty-2,"font-size":12,"font-weight":700,fill:"#dc2626"},svg).textContent=`Step ④  LLM 토큰 스트리밍 (${state.genIdx}/${Q.tokens.length})`;el("rect",{x:tx,y:ty+8,width:700,height:120,rx:8,fill:"#fff",stroke:"#cbd5e1"},svg);let line="A: ";for(let i=0;i<Math.min(state.genIdx,Q.tokens.length);i++)line+=Q.tokens[i];const maxW=86;const words=line.split(" ");const lines=[];let cur="";for(const w of words){if((cur+" "+w).length>maxW){lines.push(cur);cur=w;}else cur=(cur?cur+" ":"")+w;}if(cur)lines.push(cur);lines.slice(0,5).forEach((ln,i)=>{el("text",{x:tx+12,y:ty+30+i*18,"font-size":12.5,"font-family":"monospace",fill:"#1e293b"},svg).textContent=ln;});if(state.genIdx<Q.tokens.length){const lastLn=lines[Math.min(lines.length-1,4)]||"";el("rect",{x:tx+12+lastLn.length*7.5,y:ty+18+(Math.min(lines.length,5)-1)*18,width:8,height:14,fill:"#dc2626",opacity:.7},svg);}}
+  }
+  document.getElementById("rag-q").onchange=e=>{state.qIdx=parseInt(e.target.value);reset();};
+  document.getElementById("rag-retrieve").onclick=retrieve;
+  document.getElementById("rag-generate").onclick=generate;
+  document.getElementById("rag-reset").onclick=reset;
+  reset();
+})();
+</script>
+</body>
+</html>
