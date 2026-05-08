@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778158250">
-<script>(function(){var B="1778158250";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778216139">
+<script>(function(){var B="1778216139";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1069,10 +1069,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778158250"></script>
-<script src="/js/lpI18n.js?v=1778158250"></script>
-<script src="/js/lpRankSheet.js?v=1778158250"></script>
-<script src="/js/lpAudio.js?v=1778158250"></script>
+<script src="/js/supabase-config.js?v=1778216139"></script>
+<script src="/js/lpI18n.js?v=1778216139"></script>
+<script src="/js/lpRankSheet.js?v=1778216139"></script>
+<script src="/js/lpAudio.js?v=1778216139"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3773,9 +3773,17 @@ canvasWrap.addEventListener('touchend',()=>{ pointer.active=false; });
    PERF: 이전엔 매 touchmove 마다 player + DOM box-shadow 즉시 갱신 → iOS Safari
    에서 큰 blur/spread 의 layer composite 가 multi-finger 시 main-thread jank 유발.
    해결: pendingTp 버퍼에 누적 → gameLoop frame 마다 1 회만 적용 (DOM 업데이트
-   throttle to frame rate). 입력 latency 는 max 1 frame (~16ms) — 무시 가능. */
+   throttle to frame rate). 입력 latency 는 max 1 frame (~16ms) — 무시 가능.
+
+   MULTI-TOUCH (2026-05-07 fix): GRAV 버튼을 먼저 누르고 있을 때 트랙패드를
+   만지면 e.touches[0] 가 GRAV 손가락(정지) 을 가리켜 트랙패드 입력이 멈춰
+   보이던 버그. e.touches 는 페이지 전체의 활성 터치 목록이고 인덱스 순서는
+   브라우저별·터치 추가·해제 시점에 따라 바뀜. 따라서 touchstart 에서 우리
+   touch identifier 를 따로 저장해두고, touchmove/touchend 에선 그 id 의
+   touch 만 골라 처리해야 GRAV+조향 동시 사용이 매끄러움. */
 const TPSENS=2.4;
 let tpLastX=0, tpLastY=0, tpCx=0, tpCy=0, tpR=0;
+let tpTouchId=null;     /* 우리가 추적 중인 트랙패드 touch.identifier (멀티터치 분리) */
 const tpZone=$('tpZone'), tpRing=$('tpRing');
 const pendingTp = {
     dx: 0, dy: 0,            /* 누적 player delta (TPSENS 곱한 값) */
@@ -3784,6 +3792,16 @@ const pendingTp = {
     hasMove: false,
     active: false
 };
+
+/* TouchList 에서 특정 identifier 의 Touch 객체 찾기. 없으면 null.
+   touchmove 의 e.changedTouches / e.touches 양쪽에서 사용. */
+function _findTouchById(touchList, id){
+    if(id == null || !touchList) return null;
+    for(let i=0; i<touchList.length; i++){
+        if(touchList[i].identifier === id) return touchList[i];
+    }
+    return null;
+}
 
 function tpSetRing(cx, cy){
     const dx=cx-tpCx, dy=cy-tpCy;
@@ -3836,7 +3854,17 @@ function flushTpInput(){
     pendingTp.hasMove = false;
 }
 
-function tpEnd(){
+/* tpEnd 는 두 가지 호출 경로:
+   1. touchend / touchcancel 이벤트로부터 — e 에 changedTouches 있음
+   2. 게임 종료/리셋 등 force-close 경로 — e 없이 바로 호출
+   1번 경우엔 우리 추적 touch 가 끝났을 때만 처리 (다른 손가락 떼는
+   걸로 트랙패드가 같이 종료되면 안 됨). */
+function tpEnd(e){
+    if(e && e.changedTouches){
+        const ours = _findTouchById(e.changedTouches, tpTouchId);
+        if(!ours) return;       /* 다른 손가락 (GRAV 등) 떼는 이벤트 — 무시 */
+    }
+    tpTouchId = null;
     tpZone.classList.remove('on');
     tpZone.style.boxShadow='none';
     pendingTp.active = false;
@@ -3850,9 +3878,15 @@ function tpEnd(){
 tpZone.addEventListener('touchstart',(e)=>{
     e.preventDefault();
     if(!running||paused) return;
+    /* 이미 다른 손가락이 트랙패드 추적 중이면 새 손가락은 무시.
+       e.changedTouches[0] = 방금 새로 들어온 손가락. */
+    if(tpTouchId !== null) return;
+    const t = e.changedTouches[0] || e.touches[0];
+    if(!t) return;
+    tpTouchId = t.identifier;
     const r=tpZone.getBoundingClientRect();
     tpCx=r.left+r.width/2; tpCy=r.top+r.height/2; tpR=r.width/2;
-    tpLastX=e.touches[0].clientX; tpLastY=e.touches[0].clientY;
+    tpLastX=t.clientX; tpLastY=t.clientY;
     tpSetRing(tpLastX, tpLastY);
     tpZone.classList.add('on');
     pendingTp.active = true;
@@ -3860,7 +3894,13 @@ tpZone.addEventListener('touchstart',(e)=>{
 tpZone.addEventListener('touchmove',(e)=>{
     e.preventDefault();
     if(!running||paused) return;
-    tpApplyDelta(e.touches[0].clientX, e.touches[0].clientY);
+    if(tpTouchId === null) return;
+    /* 우리 손가락의 움직임만 처리. changedTouches 에 우리 id 가 없으면
+       다른 손가락(GRAV 등)이 움직인 거라 무시 — 이게 GRAV 와 조향이
+       서로 간섭하지 않게 하는 핵심. */
+    const t = _findTouchById(e.changedTouches, tpTouchId);
+    if(!t) return;
+    tpApplyDelta(t.clientX, t.clientY);
 },{passive:false});
 tpZone.addEventListener('touchend',   tpEnd);
 tpZone.addEventListener('touchcancel',tpEnd);
@@ -3920,18 +3960,35 @@ function _wireItemBar(){
         el.addEventListener('click', handler);
         el.addEventListener('touchstart', handler, {passive:false});
     }
-    /* Gravity button — touch/mouse hold 시 활성, release 시 비활성 */
+    /* Gravity button — touch/mouse hold 시 활성, release 시 비활성.
+       MULTI-TOUCH (2026-05-07): tpZone(조향) 와 같은 페이지에서 멀티터치
+       동시 사용 시 e.touches[] 인덱스 의존이 위험. 우리 추적 touch
+       identifier 만 따로 보관해서 다른 손가락(트랙패드 등)이 떼졌을 때
+       grav 가 잘못 풀리는 race 방지. mouse 경로는 id 추적 불필요. */
     const gb = document.getElementById('gravBtn');
     if(!gb) return;
+    let gravTouchId = null;
     const press = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(!running || paused) return;
+        if(e.changedTouches && e.changedTouches.length){
+            /* 이미 추적 중이면 두 번째 손가락은 무시 */
+            if(gravTouchId !== null) return;
+            gravTouchId = e.changedTouches[0].identifier;
+        }
         /* 쉴드와 GRAV 동시 사용 허용 — cooldown 중이면 _gravTryActivate 가 false. */
         if(_gravTryActivate()){
             gb.classList.add('active');
         }
     };
     const release = (e) => {
+        if(e && e.changedTouches){
+            /* 우리 추적 손가락이 떼진 게 맞는 경우만 release.
+               다른 손가락이 떼진 거면 무시 (트랙패드 손가락 등). */
+            const ours = _findTouchById(e.changedTouches, gravTouchId);
+            if(!ours) return;
+            gravTouchId = null;
+        }
         _gravRelease();
         gb.classList.remove('active');
     };
@@ -7398,6 +7455,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778158250"></script>
+<script src="/js/siteFooter.js?v=1778216139"></script>
 </body>
 </html>
