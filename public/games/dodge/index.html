@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778255431">
-<script>(function(){var B="1778255431";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778276641">
+<script>(function(){var B="1778276641";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1326,10 +1326,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778255431"></script>
-<script src="/js/lpI18n.js?v=1778255431"></script>
-<script src="/js/lpRankSheet.js?v=1778255431"></script>
-<script src="/js/lpAudio.js?v=1778255431"></script>
+<script src="/js/supabase-config.js?v=1778276641"></script>
+<script src="/js/lpI18n.js?v=1778276641"></script>
+<script src="/js/lpRankSheet.js?v=1778276641"></script>
+<script src="/js/lpAudio.js?v=1778276641"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -7182,23 +7182,25 @@ function _handleBulletSpawnPayload(p){
 }
 
 /* _computeDiffAt — pure function (no rand, no global state except input).
-   Difficulty curve (v4): 5 분 도달 후 유지.
+   Difficulty curve (v5): 4 분 도달 후 평형. 2026-05-09.
+   사용자 피드백 v3: "지금의 2분30초 수치를 새 cap 으로, 그 cap 을 4분에
+   도달하게". 즉 cap 자체를 다시 한 번 절반 가까이 낮추는 추가 완화.
      · sEff 시작 = 60 (워밍업 skip)
-     · sEff 종착 = 133 (이전 170 → 22% 감소) — 2026-05-08 v3.
-       사용자 피드백: "지금 너무 어려워. 2분 조건을 4분까지 천천히".
-       즉 (a) 최대 난이도 자체를 현재 2분 시점 수준으로 낮추고,
-            (b) 그 새 max 에 도달하는 시간을 4분으로 늘림 (이전 3분).
-       메테오 양은 4분 이후 평형, 그 전후 zone 다양성 + 미션으로 도전 유지.
-     · 기울기 = (133-60)/240 = 73/240 ≈ 0.304 (이전 11/18 의 절반)
-   경유 timing: t=1:00→78, t=2:00→97, t=3:00→115, t=4:00→133 (cap).
+     · sEff 종착 = 106  (이전 v4: 133 → 추가 22% 감소)
+       v4 에서 240s 일 때 sEff=133 이었는데, 그 시점의 절반 직전인 150s
+       (=2:30) sEff=105.6 가 새 cap 의 기준점. 정수 반올림 → 106.
+     · 기울기 = (106-60)/240 = 46/240 ≈ 0.1917 (v4 의 약 63%)
+   경유 timing: t=1:00→71.5, t=2:00→83, t=3:00→94.5, t=4:00→106 (cap).
    모든 metric (spawnInterval, bulletSpeed, aimedRatio, multiShot) 이
-   ratio sEff/170 기반 — cap 133 에서 sEff/170 = 0.78 비율로 멈춤.
-   결과적으로 spawnInterval ~332ms (이전 250ms), bulletSpeed ~354 (이전 370),
-   aimedRatio ~40% (이전 65%), multiShot floor 2 (이전 3) — 전체적으로
-   훨씬 살아남기 쉬워짐. PvP determinism 유지. */
+   ratio sEff/170 기반 — cap 106 에서 sEff/170 = 0.624 → smoothstep 0.681.
+   결과적으로 cap 시점:
+     spawnInterval ~680ms, bulletSpeed ~282, aimedRatio ~23%, multiShot
+     평균 1.93 (msFloor 1, msRaw 1.933).
+   v4 cap (5.76 bullets/sec) → v5 cap (2.84 bullets/sec) 로 50% 가까이 감소.
+   PvP determinism 유지 (rand() 안 씀). */
 function _computeDiffAt(eMs){
     const s = eMs / 1000;
-    const sEff = Math.min(133, 60 + s * (73/240));
+    const sEff = Math.min(106, 60 + s * (46/240));
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
     const spawnInterval = Math.round(1600 - ss(sEff/170) * 1350);
     const bulletSpeed   = Math.round(95 + ss(sEff/170) * 275);
@@ -9698,6 +9700,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778255431"></script>
+<script src="/js/siteFooter.js?v=1778276641"></script>
 </body>
 </html>
