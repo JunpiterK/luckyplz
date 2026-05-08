@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778247365">
-<script>(function(){var B="1778247365";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778252589">
+<script>(function(){var B="1778252589";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1325,10 +1325,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778247365"></script>
-<script src="/js/lpI18n.js?v=1778247365"></script>
-<script src="/js/lpRankSheet.js?v=1778247365"></script>
-<script src="/js/lpAudio.js?v=1778247365"></script>
+<script src="/js/supabase-config.js?v=1778252589"></script>
+<script src="/js/lpI18n.js?v=1778252589"></script>
+<script src="/js/lpRankSheet.js?v=1778252589"></script>
+<script src="/js/lpAudio.js?v=1778252589"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4782,25 +4782,26 @@ const PULSAR_PERIOD_MS = 3600;
 const PULSAR_BEAM_W = 22;
 const PULSAR_LEN = Math.max(CW, CH) * 1.2;
 const PULSAR_ZONES = new Set([11]);
-/* 2026-05-08 — Sirius pulsar 데미지 버스트 스케줄.
-   1차 시도(active/rest 사이클)도 여전히 어렵다는 피드백 → "지나가는동안
-   딱 2번만 돈다" 정도로 데미지 노출 대폭 축소.
+/* 2026-05-09 — Sirius pulsar 더 가벼운 위협 + 명확 시각 구분.
+   2차 시도(2 버스트, 7.2s 데미지)도 모호하다는 피드백 →
+   - 데미지 시간 추가 단축: 7.2s → 3.6s (zone 의 11%)
+   - 버스트당 1.8s = 정확히 절반 회전 = 화면의 모든 픽셀이
+     트윈 빔에 정확히 1번 휩쓸리는 분량
+   - 시각을 4단계 모드로 명확 구분 (애매함 제거):
+     · IDLE     가는 시안 가이드 라인 (폭 4px, alpha 0.18, glow 없음)
+     · WARN     0.6s 동안 빨강으로 변색 + 폭 4→22px 성장 (lock-on 경고)
+     · DAMAGE   풀 22px 빨강 빔 + 흰색 hot core + 강한 빨강 glow
+     · AFTERGLOW 0.3s 동안 빨강→시안 빠른 복귀 + 폭 축소
 
-   32초 zone 동안 데미지 활성 윈도우는 단 2개:
-   - 1차 버스트  4.0s ~ 7.6s  (3.6s = 정확히 1 회전 분량)
-   - 2차 버스트 19.0s ~ 22.6s (또 한 바퀴)
-   → 도합 7.2s 데미지 = zone 의 22%. 두 버스트 사이엔 11.4s 의
-     긴 휴식 — 아이템 픽업·위성 미션·GRAV 게이지 회복 충분.
-
-   버스트 외엔 빔이 dim 펄스로 계속 회전 (시각적 등대 리듬은 유지) — 그러나
-   _pulsarPhase().damaging=false 라 충돌 무시. 버스트 진입 직전 0.5s 는
-   alpha 가 급상승 → "곧 위험" 시각 경고. */
-const PULSAR_FADE_MS = 500;
-/* {start, end} 둘 다 ms (zone 진입 시점 0 기준).
-   damaging 진정 활성 구간 = [start, end] — fade buffer 양옆은 무피해 visual fade. */
+   IDLE 의 가는 시안 라인 = "여기 빔이 있다" 가이드 (다음 발사 위치 예측용).
+   DAMAGE 의 굵은 빨강 + 흰 코어 + 빨강 glow = 명백한 "위험".
+   둘이 색상·굵기·glow 모두 달라 한눈에 구분 가능. */
+const PULSAR_WARN_MS  = 600;   /* warn fade-in (무피해, 시각 변화) */
+const PULSAR_AFTER_MS = 300;   /* afterglow fade-out (무피해) */
+/* {start, end} 둘 다 ms (zone 진입 시점 0 기준). damage 활성 = [start, end]. */
 const PULSAR_BURSTS = [
-    {start: 4000,  end: 7600},
-    {start: 19000, end: 22600}
+    {start:  5000, end:  6800},   /* 1차 — 5.0~6.8s, 1.8s 데미지 */
+    {start: 19000, end: 20800}    /* 2차 — 19.0~20.8s, 1.8s 데미지 */
 ];
 function _isPulsarZone(idx){ return PULSAR_ZONES.has(idx); }
 function ensurePulsarBeam(now){
@@ -4810,37 +4811,39 @@ function clearPulsarBeam(){ pulsarBeam = null; }
 function _pulsarCurrentAngle(now){
     return ((now - pulsarStartedAt) / PULSAR_PERIOD_MS) * Math.PI * 2;
 }
-/* 현재 phase 정보 — alpha (시각 강도) + damaging (충돌 판정 활성).
-   시각 alpha 와 데미지 활성을 분리해서 "보이지만 안 맞는" 구간(idle 펄스·
-   fade buffer)을 명확히 표현 — 플레이어가 다음 데미지 시점을 미리 읽을
-   수 있게 한다. PULSAR_BURSTS 에 정의된 윈도우 내부일 때만 damaging=true. */
+/* 현재 phase 정보 —
+   { mode: 'idle'|'warn'|'damage'|'afterglow', danger: 0..1, alpha: 0..1 }
+   - mode='damage' 일 때만 충돌 판정. 나머지는 모두 무피해.
+   - danger 0..1 은 색·폭·glow 보간용 (idle=0, warn=0~1 ramp, damage=1, afterglow=1~0). */
 function _pulsarPhase(now){
-    if(!pulsarBeam) return {damaging:false, alpha:0};
+    if(!pulsarBeam) return {mode:'idle', danger:0, alpha:0};
     const t = now - pulsarStartedAt;
     for(const burst of PULSAR_BURSTS){
-        if(t >= burst.start - PULSAR_FADE_MS && t < burst.end + PULSAR_FADE_MS){
+        if(t >= burst.start - PULSAR_WARN_MS && t < burst.end + PULSAR_AFTER_MS){
             if(t < burst.start){
-                /* fade-in (위험 임박 경고 — alpha 급상승, 무피해) */
-                const k = (t - (burst.start - PULSAR_FADE_MS)) / PULSAR_FADE_MS;
-                return {damaging:false, alpha: 0.35 + k * 0.65};
+                /* WARN — 시안→빨강 lock-on. 폭·glow·색 모두 점진 상승.
+                   easeIn 곡선으로 마지막 100ms 에 급상승하는 느낌. */
+                const k = (t - (burst.start - PULSAR_WARN_MS)) / PULSAR_WARN_MS;
+                const eased = k * k;     /* easeIn quad */
+                return {mode:'warn', danger: eased, alpha: 0.25 + k * 0.7};
             }
             if(t > burst.end){
-                /* fade-out (잔광 — 무피해) */
-                const k = 1 - (t - burst.end) / PULSAR_FADE_MS;
-                return {damaging:false, alpha: 0.25 + k * 0.55};
+                /* AFTERGLOW — 빨강→시안 빠른 복귀 */
+                const k = 1 - (t - burst.end) / PULSAR_AFTER_MS;
+                return {mode:'afterglow', danger: k * 0.7, alpha: 0.2 + 0.6 * k};
             }
-            /* 데미지 활성 — full alpha */
-            return {damaging:true, alpha:1};
+            /* DAMAGE — 풀 강도 */
+            return {mode:'damage', danger:1, alpha:1};
         }
     }
-    /* idle — 두 버스트 사이의 긴 휴식. dim 펄스로 빔이 살아있다는 표현만 */
-    const pulse = 0.18 + Math.sin(t * 0.0028) * 0.06;
-    return {damaging:false, alpha: pulse};
+    /* IDLE — 가는 시안 가이드 라인 */
+    const pulse = 0.16 + Math.sin(t * 0.0025) * 0.04;
+    return {mode:'idle', danger:0, alpha: pulse};
 }
 function checkPulsarBeamCollision(now){
     if(!pulsarBeam) return false;
     const phase = _pulsarPhase(now);
-    if(!phase.damaging) return false;
+    if(phase.mode !== 'damage') return false;     /* DAMAGE 모드에서만 피해 */
     const px = player.x - pulsarBeam.cx;
     const py = player.y - pulsarBeam.cy;
     const dist = Math.sqrt(px*px + py*py);
@@ -4855,39 +4858,85 @@ function checkPulsarBeamCollision(now){
     }
     return false;
 }
+
+/* 색·폭·glow 모두 phase.danger (0..1) 로 보간.
+   - SAFE 색  : 시안 (#80E0FF 계열) — 차분한 가이드 라인
+   - DANGER 색 : 빨강 (#FF4030 계열) — 명백한 위협
+   덕분에 IDLE = 시안, DAMAGE = 빨강 으로 한눈에 구분.
+   WARN 동안 색이 시안→빨강 보간 + 폭 4→22px 성장 → "곧 위험" 신호.
+   AFTERGLOW 도 빠르게 시안으로 복귀 → "이제 안전" 신호. */
 function drawPulsarBeam(now){
     if(!pulsarBeam) return;
     const phase = _pulsarPhase(now);
     if(phase.alpha <= 0.01) return;
     const a = _pulsarCurrentAngle(now);
+    const d = phase.danger;       /* 0..1 */
+
+    /* 폭 보간 — 가는 가이드 라인(4px) → 풀 데미지 빔(22px) */
+    const w = 4 + (PULSAR_BEAM_W - 4) * d;
+
+    /* 색 보간 — RGB 각 채널 시안→빨강 lerp.
+       core (가운데): 시안 #80E0FF (128,224,255) → 빨강 #FF7050 (255,112,80)
+       mid  (30%)  : 시안 #6CC8FF (108,200,255) → 빨강 #FF4030 (255,64,48)
+       far  (끝)   : 페이드아웃 (alpha 0) */
+    const lerp = (a0, a1) => Math.round(a0 + (a1 - a0) * d);
+    const cR0=lerp(128,255), cG0=lerp(224,112), cB0=lerp(255,80);
+    const cR1=lerp(108,255), cG1=lerp(200,64),  cB1=lerp(255,48);
+    const cR2=lerp(80,180),  cG2=lerp(140,40),  cB2=lerp(240,40);
+
+    /* glow color/blur — DAMAGE 일수록 빨강·강함 */
+    const glowR=lerp(128,255), glowG=lerp(170,90), glowB=lerp(255,60);
+    const glowBlur = 6 + d * 24;
+
     ctx.save();
     ctx.globalAlpha = phase.alpha;
     ctx.translate(pulsarBeam.cx, pulsarBeam.cy);
     ctx.rotate(a);
     for(const dir of [1, -1]){
         const grad = ctx.createLinearGradient(0, 0, dir * PULSAR_LEN, 0);
-        grad.addColorStop(0,    'rgba(220, 240, 255, 0.95)');
-        grad.addColorStop(0.30, 'rgba(140, 200, 255, 0.55)');
-        grad.addColorStop(1,    'rgba(80, 140, 240, 0)');
+        grad.addColorStop(0,    `rgba(${cR0}, ${cG0}, ${cB0}, 0.95)`);
+        grad.addColorStop(0.30, `rgba(${cR1}, ${cG1}, ${cB1}, 0.55)`);
+        grad.addColorStop(1,    `rgba(${cR2}, ${cG2}, ${cB2}, 0)`);
         ctx.fillStyle = grad;
-        ctx.shadowColor = '#80aaff';
-        ctx.shadowBlur = 20;
+        ctx.shadowColor = `rgba(${glowR}, ${glowG}, ${glowB}, 1)`;
+        ctx.shadowBlur = glowBlur;
         ctx.beginPath();
-        ctx.moveTo(0, -PULSAR_BEAM_W/2);
-        ctx.lineTo(dir * PULSAR_LEN, -PULSAR_BEAM_W/2);
-        ctx.lineTo(dir * PULSAR_LEN,  PULSAR_BEAM_W/2);
-        ctx.lineTo(0,  PULSAR_BEAM_W/2);
+        ctx.moveTo(0, -w/2);
+        ctx.lineTo(dir * PULSAR_LEN, -w/2);
+        ctx.lineTo(dir * PULSAR_LEN,  w/2);
+        ctx.lineTo(0,  w/2);
         ctx.closePath(); ctx.fill();
     }
     ctx.shadowBlur = 0;
+
+    /* DAMAGE 전용 hot core — 흰색 가운데 줄. 굵은 빨강 빔 위에 얇은 흰 줄을
+       얹어 "코어가 백열로 달궈진" 느낌. 데미지 모드에서만 보여 가장 강한
+       시각 cue. */
+    if(phase.mode === 'damage'){
+        ctx.shadowColor = '#FFEEB0';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = 'rgba(255, 245, 220, 0.9)';
+        const coreW = 5;
+        for(const dir of [1, -1]){
+            ctx.fillRect(0, -coreW/2, dir * PULSAR_LEN, coreW);
+        }
+        ctx.shadowBlur = 0;
+    }
     ctx.restore();
-    /* 중심별 — 항상 풀 alpha (Sirius A 자체 그림자 표현) */
+
+    /* 중심별 — 항상 풀 alpha. DAMAGE 일 땐 빨강 glow + 살짝 부풂. */
     ctx.save();
-    ctx.shadowColor = '#dde8ff';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = 'rgba(230, 240, 255, 1)';
+    if(phase.mode === 'damage'){
+        ctx.shadowColor = '#FF8050';
+        ctx.shadowBlur = 28;
+        ctx.fillStyle = 'rgba(255, 200, 130, 1)';
+    } else {
+        ctx.shadowColor = '#dde8ff';
+        ctx.shadowBlur = 18;
+        ctx.fillStyle = 'rgba(230, 240, 255, 1)';
+    }
     ctx.beginPath();
-    ctx.arc(pulsarBeam.cx, pulsarBeam.cy, 6, 0, Math.PI * 2);
+    ctx.arc(pulsarBeam.cx, pulsarBeam.cy, 6 + d * 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 }
@@ -9475,6 +9524,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778247365"></script>
+<script src="/js/siteFooter.js?v=1778252589"></script>
 </body>
 </html>
