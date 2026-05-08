@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778243363">
-<script>(function(){var B="1778243363";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778243979">
+<script>(function(){var B="1778243979";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1324,10 +1324,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778243363"></script>
-<script src="/js/lpI18n.js?v=1778243363"></script>
-<script src="/js/lpRankSheet.js?v=1778243363"></script>
-<script src="/js/lpAudio.js?v=1778243363"></script>
+<script src="/js/supabase-config.js?v=1778243979"></script>
+<script src="/js/lpI18n.js?v=1778243979"></script>
+<script src="/js/lpRankSheet.js?v=1778243979"></script>
+<script src="/js/lpAudio.js?v=1778243979"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5696,16 +5696,47 @@ function maybeSpawnDepot(zoneIdx, now){
     /* zone 라벨 페이드인 시간 보장 — 첫 spawn 은 최소 2.5 초 후. */
     const minFirst = 2.5;
     const itemCount = Math.min(def.items.length, ratios.length);
+    /* 위성 미션 게이트 (2026-05-08): mission-eligible zone 에서 아직 미션
+       완료 안 했으면 slot 1+ depot 건너뜀. 즉 위성 안 놓으면 통신망 X →
+       보급선 X = 추가 아이템 X. 더 강한 미션 인센티브. */
+    const isMissionZone = (typeof MISSION_ZONES !== 'undefined' && MISSION_ZONES.has(zoneIdx));
+    const missionDone = (typeof missionsCompletedZones !== 'undefined' && missionsCompletedZones.has(zoneIdx));
     for(let slot = 0; slot < itemCount; slot++){
         const key = zoneIdx + '-' + slot;
         if(depotsSpawnedZones.has(key)) continue;
         const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
         if(sinceZone < targetSec) continue;
+        /* slot 1 이상이면서 미션 가능 zone 인데 아직 위성 설치 안 됐으면
+           이번 spawn skip. 차단 표시는 안 남김 — 나중 미션 완료하면
+           바로 spawn 가능하게. */
+        if(slot >= 1 && isMissionZone && !missionsCompletedZones.has(zoneIdx)){
+            continue;
+        }
         depotsSpawnedZones.add(key);
-        const x = 60 + rand() * (CW - 120);
+        /* 위치 — mission zone 이면 행성 주변 (궤도 ring 위 임의 각도, 상부
+           hemisphere 위주). 기타 zone 은 기존처럼 화면 위에서 떨어짐. */
+        let x, y;
+        if(isMissionZone && typeof _missionResolveOrbit === 'function'){
+            const orbit = _missionResolveOrbit(zoneIdx);
+            if(orbit){
+                /* 상부 hemisphere — 각도 -π~0 (위쪽 호) 안 임의 */
+                const ang = -Math.PI + rand() * Math.PI;
+                let ox = orbit.cx + Math.cos(ang) * orbit.r;
+                let oy = orbit.cy + Math.sin(ang) * orbit.r;
+                /* 화면 안으로 clamp — 너무 위로 가면 안 보임 */
+                x = Math.max(40, Math.min(CW - 40, ox));
+                y = Math.max(40, Math.min(CH * 0.55, oy));
+            } else {
+                x = 60 + rand() * (CW - 120);
+                y = -50;
+            }
+        } else {
+            x = 60 + rand() * (CW - 120);
+            y = -50;
+        }
         const item = def.items[slot];
         depots.push({
-            x, y: -50,
+            x, y,
             speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
             item,
             zoneIdx, slot,
@@ -9243,6 +9274,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778243363"></script>
+<script src="/js/siteFooter.js?v=1778243979"></script>
 </body>
 </html>
