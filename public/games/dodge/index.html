@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778228323">
-<script>(function(){var B="1778228323";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778230508">
+<script>(function(){var B="1778230508";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1324,10 +1324,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778228323"></script>
-<script src="/js/lpI18n.js?v=1778228323"></script>
-<script src="/js/lpRankSheet.js?v=1778228323"></script>
-<script src="/js/lpAudio.js?v=1778228323"></script>
+<script src="/js/supabase-config.js?v=1778230508"></script>
+<script src="/js/lpI18n.js?v=1778230508"></script>
+<script src="/js/lpRankSheet.js?v=1778230508"></script>
+<script src="/js/lpAudio.js?v=1778230508"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5164,15 +5164,30 @@ function grantMissionReward(kind){
     _refreshRewardSlot(kind);
 }
 
+/* 보상 토스트 — 중앙 큰 글자. 발동 확실하게 보여줘서 "동작했는지" 의심
+   원천 차단. */
+let rewardToastUntil = 0;
+let rewardToastText = '';
+let rewardToastColor = '#FFE66D';
+
+function _showRewardToast(text, color, durMs){
+    rewardToastText = text;
+    rewardToastColor = color || '#FFE66D';
+    rewardToastUntil = performance.now() + (durMs || 1400);
+}
+
 function _activatePlasmaStorm(now){
     /* same vibe as wipe but covers ALL obstacle types + 4s block */
+    let cleared = 0;
     for(const b of bullets){
         wipeFragments.push({x:b.x, y:b.y, vx:(Math.random()-0.5)*360, vy:(Math.random()-0.5)*360, life:0.55, maxLife:0.55});
+        cleared++;
     }
     bullets = [];
     for(const cluster of asteroidClusters){
         for(const r of cluster.rocks){
             wipeFragments.push({x:r.x, y:r.y, vx:(Math.random()-0.5)*380, vy:(Math.random()-0.5)*380, life:0.55, maxLife:0.55});
+            cleared++;
         }
     }
     asteroidClusters = [];
@@ -5180,12 +5195,18 @@ function _activatePlasmaStorm(now){
         for(let k = 0; k < 5; k++){
             wipeFragments.push({x:m.x, y:m.y, vx:(Math.random()-0.5)*420, vy:(Math.random()-0.5)*420, life:0.6, maxLife:0.6});
         }
+        cleared++;
     }
     magneticMines = [];
+    cleared += solarFlares.length;
     solarFlares = [];
+    cleared += supernovaRings.length;
     supernovaRings = [];
     wipeSpawnBlockUntil = now + 4000;
-    plasmaStormFlashUntil = now + 700;
+    plasmaStormFlashUntil = now + 1100;       /* 늘림: 700→1100ms */
+    /* 비어있어도 발동했다는 걸 알 수 있게 무조건 토스트 */
+    const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
+    _showRewardToast(lang === 'ko' ? '💥 플라즈마 폭풍 — ' + cleared + ' 청소' : '💥 PLASMA STORM — ' + cleared + ' cleared', '#FF8FB0', 1500);
     sfxOver();
     if(navigator.vibrate) try{navigator.vibrate([20,20,20,20,40])}catch(_){}
 }
@@ -5193,28 +5214,49 @@ function _activatePlasmaStorm(now){
 function _activateOrbitalFuel(now){
     orbitalFuelUntil = now + 6000;
     gravGauge = GRAV_GAUGE_MAX;
+    const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
+    _showRewardToast(lang === 'ko' ? '🚀 궤도 연료 — 6초 GRAV 무한' : '🚀 ORBITAL FUEL — 6s unlimited GRAV', '#FFE680', 1500);
     sfxStart();
 }
 
 function _activateTimeAnchor(){
     timeAnchorArmed = true;
+    const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
+    _showRewardToast(lang === 'ko' ? '⏳ 시간 닻 ARMED — 다음 1회 부활' : '⏳ TIME ANCHOR ARMED — auto-revive once', '#9CDFFF', 1700);
     sfxStart();
 }
 
 function activateRewardSlot(kind){
-    if(rewardCounts[kind] <= 0) return;
-    if(!running || paused) return;
-    const now = performance.now();
-    if(kind === 'anchor'){
-        if(timeAnchorArmed) return;
-        _activateTimeAnchor();
-    } else if(kind === 'storm'){
-        _activatePlasmaStorm(now);
-    } else if(kind === 'fuel'){
-        _activateOrbitalFuel(now);
-    } else return;
-    rewardCounts[kind]--;
-    _refreshRewardSlot(kind);
+    /* 디버그 친화적 — try/catch 로 어떤 예외라도 잡고 toast 표시. */
+    try {
+        if(!rewardCounts.hasOwnProperty(kind)){ console.warn('[reward] unknown kind:', kind); return; }
+        if(rewardCounts[kind] <= 0){
+            /* 빈 슬롯 클릭 — 무음 (의도된 동작) */
+            return;
+        }
+        if(!running || paused){
+            /* 게임 일시정지 등 — 토스트로 알려주기 */
+            _showRewardToast('일시정지 중에는 사용 불가', '#FF8888', 900);
+            return;
+        }
+        const now = performance.now();
+        if(kind === 'anchor'){
+            if(timeAnchorArmed){
+                _showRewardToast('⏳ 이미 ARMED', '#9CDFFF', 900);
+                return;
+            }
+            _activateTimeAnchor();
+        } else if(kind === 'storm'){
+            _activatePlasmaStorm(now);
+        } else if(kind === 'fuel'){
+            _activateOrbitalFuel(now);
+        } else return;
+        rewardCounts[kind]--;
+        _refreshRewardSlot(kind);
+    } catch(err){
+        console.error('[activateRewardSlot] failed:', kind, err);
+        _showRewardToast('ERR: ' + (err && err.message ? err.message : 'unknown'), '#FF6060', 2000);
+    }
 }
 
 function _wireRewardSlots(){
@@ -5392,53 +5434,106 @@ function drawSatelliteInstall(now){
    ===================================================================== */
 
 function drawPlasmaStormFlash(now){
-    /* 화면 전체에 흰색~사이안 플래시 — 700ms 페이드 아웃 */
+    /* 화면 전체 플래시 — 1100ms 강하게. 0.85→0 페이드. 비어있어도 확실히 보임. */
     if(now >= plasmaStormFlashUntil) return;
     const remain = plasmaStormFlashUntil - now;
-    const k = Math.min(1, remain / 700);     /* 0~1 (1이 발동 순간) */
-    const alpha = k * 0.55;
+    const k = Math.min(1, remain / 1100);
+    /* 첫 200ms 는 0.85 alpha 강한 흰색 → 점차 fade */
+    const burst = remain > 900 ? 1 : (remain - 100) / 800;
+    const alpha = Math.max(0, burst) * 0.85;
     ctx.save();
-    ctx.fillStyle = `rgba(255, 230, 240, ${alpha})`;
+    ctx.fillStyle = `rgba(255, 240, 245, ${alpha})`;
     ctx.fillRect(0, 0, CW, CH);
-    /* 외곽 magenta vignette */
-    const grad = ctx.createRadialGradient(CW/2, CH/2, Math.min(CW,CH)*0.3,
+    /* 외곽 magenta vignette — 강한 색감 */
+    const grad = ctx.createRadialGradient(CW/2, CH/2, Math.min(CW,CH)*0.2,
                                           CW/2, CH/2, Math.max(CW,CH));
     grad.addColorStop(0, 'rgba(255,80,140,0)');
-    grad.addColorStop(1, `rgba(255,60,120,${k * 0.55})`);
+    grad.addColorStop(0.7, `rgba(255,60,120,${k * 0.5})`);
+    grad.addColorStop(1, `rgba(200,40,90,${k * 0.7})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CW, CH);
+    /* 외곽 spike rays — 폭발 느낌 */
+    ctx.strokeStyle = `rgba(255, 200, 230, ${k * 0.7})`;
+    ctx.lineWidth = 3;
+    const rays = 8;
+    for(let i = 0; i < rays; i++){
+        const ang = (i / rays) * Math.PI * 2 + (now / 200);
+        const r1 = Math.min(CW,CH) * 0.15;
+        const r2 = Math.max(CW,CH);
+        ctx.beginPath();
+        ctx.moveTo(CW/2 + Math.cos(ang) * r1, CH/2 + Math.sin(ang) * r1);
+        ctx.lineTo(CW/2 + Math.cos(ang) * r2, CH/2 + Math.sin(ang) * r2);
+        ctx.stroke();
+    }
     ctx.restore();
 }
 
 function drawTimeAnchorAura(now){
-    /* Time Anchor armed 상태 — 본체 주위 cyan 보호막 ring (+회전) */
+    /* Time Anchor armed — 본체 주위 강한 cyan ring (회전 + 더블). */
     if(!timeAnchorArmed) return;
     const t = now / 600;
     ctx.save();
     ctx.translate(player.x, player.y);
-    /* 외곽 ring (회전) */
-    ctx.strokeStyle = `rgba(140, 220, 255, ${0.45 + Math.sin(t * 2) * 0.18})`;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = 'rgba(140,220,255,.85)';
-    ctx.shadowBlur = 14;
-    ctx.beginPath();
-    /* 점선 형태로 회전 */
+    /* 외곽 큰 ring — 점선 회전 */
+    ctx.strokeStyle = `rgba(140, 220, 255, ${0.7 + Math.sin(t * 2) * 0.25})`;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = 'rgba(140,220,255,1)';
+    ctx.shadowBlur = 18;
     const segCount = 8;
     const segArc = (Math.PI * 2) / segCount;
     for(let i = 0; i < segCount; i++){
-        const a1 = i * segArc + t * 0.6;
-        const a2 = a1 + segArc * 0.55;
+        const a1 = i * segArc + t * 0.7;
+        const a2 = a1 + segArc * 0.6;
         ctx.beginPath();
-        ctx.arc(0, 0, 22, a1, a2);
+        ctx.arc(0, 0, 28, a1, a2);
+        ctx.stroke();
+    }
+    /* 내부 작은 ring — 반대방향 회전 */
+    ctx.strokeStyle = `rgba(180, 240, 255, ${0.55 + Math.cos(t * 2.5) * 0.2})`;
+    ctx.lineWidth = 1.5;
+    ctx.shadowBlur = 12;
+    for(let i = 0; i < 6; i++){
+        const a1 = i * (Math.PI * 2 / 6) - t * 1.1;
+        const a2 = a1 + (Math.PI * 2 / 6) * 0.65;
+        ctx.beginPath();
+        ctx.arc(0, 0, 18, a1, a2);
         ctx.stroke();
     }
     /* 내부 dim glow */
     ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(140, 220, 255, ${0.06 + Math.sin(t) * 0.04})`;
+    ctx.fillStyle = `rgba(140, 220, 255, ${0.10 + Math.sin(t) * 0.05})`;
     ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+    ctx.arc(0, 0, 14, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+}
+
+function drawRewardToast(now){
+    /* 보상 발동 시 화면 중앙 큰 텍스트 토스트 — 발동 확실히 알리기 */
+    if(now >= rewardToastUntil) return;
+    const remain = rewardToastUntil - now;
+    const total = 1500;
+    const k = Math.min(1, remain / total);
+    /* 첫 100ms 는 빠른 페이드인 */
+    const fadeIn = (rewardToastUntil - now) > (total - 100) ? (total - (rewardToastUntil - now)) / 100 : 1;
+    const alpha = Math.min(fadeIn, k);
+    const yOff = (1 - k) * 18;     /* 위로 살짝 올라가며 사라짐 */
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    /* 외곽 strong 그림자 */
+    ctx.shadowColor = 'rgba(0,0,0,.85)';
+    ctx.shadowBlur = 14;
+    ctx.font = 'bold 22px "Orbitron","Noto Sans KR",sans-serif';
+    ctx.fillStyle = `rgba(0,0,0,${alpha * 0.55})`;
+    ctx.fillRect(CW * 0.05, CH * 0.42 - 28 - yOff, CW * 0.9, 56);
+    ctx.shadowBlur = 0;
+    /* main text */
+    ctx.fillStyle = rewardToastColor + ((rewardToastColor.length === 7) ? '' : '');
+    ctx.globalAlpha = alpha;
+    ctx.fillText(rewardToastText, CW/2, CH * 0.42 - yOff);
+    ctx.restore();
+    ctx.globalAlpha = 1;
 }
 
 function drawSatelliteOrbiting(now){
@@ -6899,6 +6994,8 @@ function resetGame(){
     timeAnchorArmed=false;
     orbitalFuelUntil=0;
     plasmaStormFlashUntil=0;
+    rewardToastUntil=0;
+    rewardToastText='';
     {
         const banner=document.getElementById('missionBanner');
         if(banner){ banner.hidden=true; banner.classList.remove('show','success','failed'); }
@@ -7880,6 +7977,8 @@ function drawFrame(now, dt){
     }
     /* Plasma Storm flash — 가장 마지막에 그려서 모든 것 위에 덮어씀 */
     drawPlasmaStormFlash(now);
+    /* Reward toast — 절대적으로 가장 위 (모든 효과 + UI 위) */
+    drawRewardToast(now);
 }
 
 /* ---- RAF kick-off for idle star animation ---- */
@@ -9142,6 +9241,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778228323"></script>
+<script src="/js/siteFooter.js?v=1778230508"></script>
 </body>
 </html>
