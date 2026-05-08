@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778220516">
-<script>(function(){var B="1778220516";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778220807">
+<script>(function(){var B="1778220807";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -101,6 +101,11 @@ body{
     white-space:nowrap;
 }
 .ss .v.best{color:#00D9FF}
+.ss .v.combo{color:#FFE66D;transition:transform .12s,color .12s,text-shadow .12s}
+.ss .v.combo.flash{transform:scale(1.18);color:#FFFFE0;text-shadow:0 0 10px rgba(255,230,109,.85)}
+.ss .v.combo.tier-2{color:#FF9A3C}
+.ss .v.combo.tier-3{color:#FF6B35;text-shadow:0 0 6px rgba(255,107,53,.6)}
+.ss .v.combo.tier-4{color:#FF3366;text-shadow:0 0 8px rgba(255,51,102,.7)}
 .ss .l{font-size:.62em;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:800;line-height:1;flex-shrink:0}
 
 /* ---- Game control bar (tablet+ only) ----
@@ -873,6 +878,7 @@ body{
              (TIME, BEST) both display as mm:ss:cs. -->
         <div class="score-strip">
             <div class="ss"><div class="l">TIME</div><div class="v" id="timeNow">0:00:00</div></div>
+            <div class="ss"><div class="l">COMBO</div><div class="v combo" id="comboNow">0</div></div>
             <div class="ss"><div class="l">BEST</div><div class="v best" id="bestScore">—</div></div>
         </div>
 
@@ -1069,10 +1075,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778220516"></script>
-<script src="/js/lpI18n.js?v=1778220516"></script>
-<script src="/js/lpRankSheet.js?v=1778220516"></script>
-<script src="/js/lpAudio.js?v=1778220516"></script>
+<script src="/js/supabase-config.js?v=1778220807"></script>
+<script src="/js/lpI18n.js?v=1778220807"></script>
+<script src="/js/lpRankSheet.js?v=1778220807"></script>
+<script src="/js/lpAudio.js?v=1778220807"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4096,6 +4102,22 @@ let lastSpawn=0;
 let elapsedMs=0;
 
 /* =====================================================================
+   COMBO COUNTER (Stage 7) — Near-miss bonus.
+   Each bullet that passes within 32px of the player (outside the
+   HIT_RADIUS+8 inner ring) credits +1 combo, exactly once per bullet
+   via b.creditedNearMiss flag. Hit resets the chain to 0. The HUD
+   slot turns yellow → orange → red as the combo climbs through
+   tier thresholds, giving the player visual feedback that "you're
+   in the zone right now". Max-this-run is tracked for the game-
+   over recap screen.
+   2026-05-08 Stage 7. */
+let comboCount = 0;
+let comboMaxThisRun = 0;
+let comboFlashUntil = 0;        /* ms timestamp — HUD flash window */
+const COMBO_NEAR_OUTER = 32;    /* outer near-miss radius */
+const COMBO_NEAR_INNER_PAD = 4; /* HIT_RADIUS + this = inner edge */
+
+/* =====================================================================
    ASTEROID CLUSTERS — slow-moving rock waves with a natural gap.
    GRAV cone accelerates rocks downward (push them past the player) so
    the player can carve a passage through dense formations. Adds a
@@ -5919,6 +5941,9 @@ function resetGame(){
     flashVisible=true;
     lastFlashToggle=0;
     bullets=[];
+    comboCount=0;                      /* Stage 7 reset */
+    comboMaxThisRun=0;
+    comboFlashUntil=0;
     asteroidClusters=[];               /* Stage 2 reset */
     lastClusterSpawnAt=0;
     solarFlares=[];                    /* Stage 3 reset */
@@ -5944,6 +5969,14 @@ function resetGame(){
        startGame() and stopped the game from launching. Now: only the
        TIME tile is reset, and to its full mm:ss:cs zero state. */
     $('timeNow').textContent='0:00:00';
+    {
+        /* Stage 7: reset combo HUD on game (re)start. */
+        const cn = $('comboNow');
+        if(cn){
+            cn.textContent = '0';
+            cn.classList.remove('flash','tier-2','tier-3','tier-4');
+        }
+    }
     initStars();
     /* 아이템/거점/중력장 시스템 리셋 */
     depots = [];
@@ -6429,6 +6462,23 @@ function gameLoop(now){
             if(b.trailLen < TRAIL_CAP) b.trailLen++;
             b.x += b.vx * dt;
             b.y += b.vy * dt;
+            /* Near-miss combo credit (Stage 7). Once per bullet via the
+               creditedNearMiss flag. Outer = 32px, inner = HIT_RADIUS+4
+               (just outside the lethal ring). Bullets that hit get
+               spliced before this check ever runs (collision is later
+               in the frame), so this only fires for bullets that
+               grazed past. */
+            if(!b.creditedNearMiss && now > invincibleUntil){
+                const dxh = b.x - player.x, dyh = b.y - player.y;
+                const d2 = dxh*dxh + dyh*dyh;
+                const inner = HIT_RADIUS + COMBO_NEAR_INNER_PAD;
+                if(d2 < COMBO_NEAR_OUTER*COMBO_NEAR_OUTER && d2 > inner*inner){
+                    b.creditedNearMiss = true;
+                    comboCount++;
+                    if(comboCount > comboMaxThisRun) comboMaxThisRun = comboCount;
+                    comboFlashUntil = now + 180;
+                }
+            }
             if(b.x < -40 || b.x > CW + 40 || b.y < -40 || b.y > CH + 40) continue;
             if(w !== i) bullets[w] = b;
             w++;
@@ -6521,6 +6571,8 @@ function gameLoop(now){
             invincibleUntil = now + INVINCIBLE_MS;
             flashVisible = true;
             lastFlashToggle = now;
+            comboCount = 0;            /* Stage 7: hit breaks the chain */
+            comboFlashUntil = 0;
             if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
             if(lives <= 0){ triggerGameOver(); return; }
             sfxHit();
@@ -6586,10 +6638,22 @@ function gameLoop(now){
     }
 
     /* ---- Update HUD ----
-       Score column is gone; only the TIME column shows mm:ss:cs at full
-       100 fps precision so the player can see their personal-best chase
-       in real time. */
+       TIME shows mm:ss:cs at full 100 fps precision. COMBO is the
+       Stage 7 near-miss counter — recolors via tier classes as it
+       climbs (10/25/50). flash class triggered briefly on each
+       increment for tactile feedback. */
     $('timeNow').textContent=formatDuration(elapsedMs);
+    {
+        const cn = $('comboNow');
+        if(cn){
+            cn.textContent = comboCount > 0 ? String(comboCount) : '0';
+            const flashing = now < comboFlashUntil;
+            cn.classList.toggle('flash', flashing);
+            cn.classList.toggle('tier-2', comboCount >= 10 && comboCount < 25);
+            cn.classList.toggle('tier-3', comboCount >= 25 && comboCount < 50);
+            cn.classList.toggle('tier-4', comboCount >= 50);
+        }
+    }
 
     /* ---- PvP 디버그 — host/guest 양쪽 화면에 같은 값 보여야 sync OK ----
        대표 sync 지표: logical 초 단위 t (정수), rngState (32-bit hex),
@@ -8082,6 +8146,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778220516"></script>
+<script src="/js/siteFooter.js?v=1778220807"></script>
 </body>
 </html>
