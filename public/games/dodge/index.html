@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778219611">
-<script>(function(){var B="1778219611";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778220516">
+<script>(function(){var B="1778220516";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1069,10 +1069,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778219611"></script>
-<script src="/js/lpI18n.js?v=1778219611"></script>
-<script src="/js/lpRankSheet.js?v=1778219611"></script>
-<script src="/js/lpAudio.js?v=1778219611"></script>
+<script src="/js/supabase-config.js?v=1778220516"></script>
+<script src="/js/lpI18n.js?v=1778220516"></script>
+<script src="/js/lpRankSheet.js?v=1778220516"></script>
+<script src="/js/lpAudio.js?v=1778220516"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4267,6 +4267,307 @@ function drawAsteroidClusters(){
 }
 
 /* =====================================================================
+   SOLAR FLARES (코로나 분출) — Earth/Moon/Mars/Jupiter zones.
+   1.2s warning line → 0.45s lethal beam → gone. Read the warning,
+   step off. Beam crosses screen edge-to-edge at random angle.
+   2026-05-08 Stage 3.
+   ===================================================================== */
+let solarFlares = [];
+let lastFlareSpawnAt = 0;
+const FLARE_SPAWN_INTERVAL = 8500;
+const FLARE_WARN_MS = 1200;
+const FLARE_FIRE_MS = 450;
+const FLARE_BEAM_W = 14;
+const FLARE_ZONES = new Set([0, 1, 2, 3]);
+function _isFlareZone(idx){ return FLARE_ZONES.has(idx); }
+function spawnSolarFlare(){
+    const side = Math.floor(rand() * 4);
+    let x1, y1, x2, y2;
+    if(side === 0){      x1=rand()*CW; y1=-10;    x2=rand()*CW; y2=CH+10; }
+    else if(side === 1){ x1=-10; y1=rand()*CH;    x2=CW+10; y2=rand()*CH; }
+    else if(side === 2){ x1=rand()*CW; y1=CH+10;  x2=rand()*CW; y2=-10; }
+    else {               x1=CW+10; y1=rand()*CH;  x2=-10; y2=rand()*CH; }
+    solarFlares.push({x1, y1, x2, y2, phase:'warn', t:0});
+}
+function updateSolarFlares(dt){
+    for(let i = solarFlares.length - 1; i >= 0; i--){
+        const f = solarFlares[i];
+        f.t += dt * 1000;
+        if(f.phase === 'warn' && f.t >= FLARE_WARN_MS){ f.phase='fire'; f.t=0; }
+        else if(f.phase === 'fire' && f.t >= FLARE_FIRE_MS) solarFlares.splice(i, 1);
+    }
+}
+function checkSolarFlareCollision(){
+    const px = player.x, py = player.y;
+    for(const f of solarFlares){
+        if(f.phase !== 'fire') continue;
+        const dx = f.x2 - f.x1, dy = f.y2 - f.y1;
+        const len2 = dx*dx + dy*dy;
+        if(len2 < 1) continue;
+        const t = Math.max(0, Math.min(1, ((px - f.x1)*dx + (py - f.y1)*dy) / len2));
+        const cx = f.x1 + t*dx, cy = f.y1 + t*dy;
+        const ddx = px - cx, ddy = py - cy;
+        const hr = FLARE_BEAM_W/2 + HIT_RADIUS;
+        if(ddx*ddx + ddy*ddy < hr*hr) return true;
+    }
+    return false;
+}
+function drawSolarFlares(){
+    for(const f of solarFlares){
+        ctx.save();
+        if(f.phase === 'warn'){
+            const pulse = 0.35 + Math.abs(Math.sin(f.t * 0.013)) * 0.45;
+            ctx.strokeStyle = `rgba(255, 100, 70, ${pulse})`;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([10, 7]);
+            ctx.lineDashOffset = -f.t * 0.08;
+            ctx.beginPath();
+            ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        } else {
+            const k = 1 - (f.t / FLARE_FIRE_MS);
+            ctx.shadowColor = '#FFAA40';
+            ctx.shadowBlur = 30;
+            ctx.strokeStyle = `rgba(255, 200, 90, ${0.55 * k + 0.2})`;
+            ctx.lineWidth = FLARE_BEAM_W * 2.2;
+            ctx.beginPath();
+            ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 245, 215, ${k})`;
+            ctx.lineWidth = FLARE_BEAM_W;
+            ctx.beginPath();
+            ctx.moveTo(f.x1, f.y1); ctx.lineTo(f.x2, f.y2); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+    }
+}
+
+/* =====================================================================
+   MAGNETIC MINES (자기 기뢰) — Cosmic Filament / Galactic Rim.
+   Slow-homing red mines. GRAV cone REVERSES attraction → push away.
+   GRAV becomes a defensive tool here, complementing its cluster/depot
+   roles in other zones.
+   2026-05-08 Stage 4.
+   ===================================================================== */
+let magneticMines = [];
+let lastMineSpawnAt = 0;
+const MINE_SPAWN_INTERVAL = 14000;
+const MINE_HOMING_ACCEL = 50;
+const MINE_GRAV_REPEL_ACCEL = 360;
+const MINE_DAMP = 0.93;
+const MINE_LIFETIME_MS = 28000;
+const MINE_R = 13;
+const MINE_ZONES = new Set([16, 19]);
+function _isMineZone(idx){ return MINE_ZONES.has(idx); }
+function spawnMagneticMine(){
+    const side = Math.floor(rand() * 4);
+    let x, y;
+    if(side === 0){ x=rand()*CW; y=-25; }
+    else if(side === 1){ x=CW+25; y=rand()*CH*0.7; }
+    else if(side === 2){ x=rand()*CW; y=CH+25; }
+    else { x=-25; y=rand()*CH*0.7; }
+    magneticMines.push({x, y, vx:0, vy:0, bornAt:performance.now(), pulse:rand()*Math.PI*2});
+}
+function updateMagneticMines(dt, now){
+    for(let i = magneticMines.length - 1; i >= 0; i--){
+        const m = magneticMines[i];
+        const age = now - m.bornAt;
+        if(age > MINE_LIFETIME_MS){ magneticMines.splice(i, 1); continue; }
+        const dx = player.x - m.x, dy = player.y - m.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist > 0.5){
+            const nx = dx/dist, ny = dy/dist;
+            if(gravityFieldActive && _inGravCone(m.x, m.y)){
+                m.vx -= nx * MINE_GRAV_REPEL_ACCEL * dt;
+                m.vy -= ny * MINE_GRAV_REPEL_ACCEL * dt;
+            } else {
+                m.vx += nx * MINE_HOMING_ACCEL * dt;
+                m.vy += ny * MINE_HOMING_ACCEL * dt;
+            }
+        }
+        m.vx *= MINE_DAMP; m.vy *= MINE_DAMP;
+        m.x += m.vx * dt; m.y += m.vy * dt;
+        m.pulse += dt * 4;
+        if((m.x < -60 || m.x > CW+60 || m.y < -60 || m.y > CH+60) && age > 4000){
+            magneticMines.splice(i, 1);
+        }
+    }
+}
+function checkMagneticMineCollision(){
+    const px = player.x, py = player.y;
+    for(let i = 0; i < magneticMines.length; i++){
+        const m = magneticMines[i];
+        const dx = m.x - px, dy = m.y - py;
+        const hr = MINE_R + HIT_RADIUS;
+        if(dx*dx + dy*dy < hr*hr){ magneticMines.splice(i, 1); return true; }
+    }
+    return false;
+}
+function drawMagneticMines(){
+    for(const m of magneticMines){
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        const pulseR = MINE_R + 4 + Math.sin(m.pulse) * 2;
+        ctx.strokeStyle = `rgba(255, 80, 80, ${0.4 + Math.sin(m.pulse) * 0.3})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(0, 0, pulseR, 0, Math.PI*2); ctx.stroke();
+        ctx.shadowColor = 'rgba(255,80,80,0.85)';
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = '#3a1418';
+        ctx.beginPath(); ctx.arc(0, 0, MINE_R, 0, Math.PI*2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#cc4040';
+        ctx.lineWidth = 2;
+        for(let i = 0; i < 6; i++){
+            const a = (i/6) * Math.PI*2 + m.pulse * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(a)*MINE_R, Math.sin(a)*MINE_R);
+            ctx.lineTo(Math.cos(a)*(MINE_R+6), Math.sin(a)*(MINE_R+6));
+            ctx.stroke();
+        }
+        ctx.fillStyle = '#FF6868';
+        ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+        ctx.restore();
+    }
+}
+
+/* =====================================================================
+   SUPERNOVA RINGS (초신성 잔해환) — Betelgeuse zone (12).
+   Expanding circle from random center; lethal at the leading edge band.
+   Player escapes outward OR steps inside the calm interior before the
+   ring sweeps past.
+   2026-05-08 Stage 5.
+   ===================================================================== */
+let supernovaRings = [];
+let lastSupernovaAt = 0;
+const SUPERNOVA_INTERVAL = 11500;
+const SUPERNOVA_EXPAND_MS = 1900;
+const SUPERNOVA_FINAL_R = Math.max(CW, CH) * 0.95;
+const SUPERNOVA_BAND_W = 14;
+const SUPERNOVA_TELEGRAPH_MS = 280;
+const SUPERNOVA_ZONES = new Set([12]);
+function _isSupernovaZone(idx){ return SUPERNOVA_ZONES.has(idx); }
+function spawnSupernovaRing(){
+    const cx = 70 + rand() * (CW - 140);
+    const cy = 90 + rand() * (CH - 180);
+    supernovaRings.push({cx, cy, r:0, t:0});
+}
+function updateSupernovaRings(dt){
+    for(let i = supernovaRings.length - 1; i >= 0; i--){
+        const s = supernovaRings[i];
+        s.t += dt * 1000;
+        s.r = (s.t / SUPERNOVA_EXPAND_MS) * SUPERNOVA_FINAL_R;
+        if(s.t >= SUPERNOVA_EXPAND_MS + 500) supernovaRings.splice(i, 1);
+    }
+}
+function checkSupernovaRingCollision(){
+    const px = player.x, py = player.y;
+    for(const s of supernovaRings){
+        if(s.t < SUPERNOVA_TELEGRAPH_MS) continue;
+        if(s.t > SUPERNOVA_EXPAND_MS) continue;
+        const dx = px - s.cx, dy = py - s.cy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist > s.r - SUPERNOVA_BAND_W && dist < s.r + SUPERNOVA_BAND_W) return true;
+    }
+    return false;
+}
+function drawSupernovaRings(){
+    for(const s of supernovaRings){
+        const fade = s.t < SUPERNOVA_TELEGRAPH_MS
+            ? s.t / SUPERNOVA_TELEGRAPH_MS
+            : 1 - Math.max(0, s.t - SUPERNOVA_EXPAND_MS) / 500;
+        ctx.save();
+        if(s.t < SUPERNOVA_TELEGRAPH_MS){
+            ctx.fillStyle = `rgba(255, 80, 60, ${fade * 0.7})`;
+            ctx.beginPath();
+            ctx.arc(s.cx, s.cy, 14 + Math.sin(s.t * 0.04) * 4, 0, Math.PI*2);
+            ctx.fill();
+        } else {
+            ctx.shadowColor = '#FF6644';
+            ctx.shadowBlur = 22;
+            ctx.strokeStyle = `rgba(255, 90, 60, ${0.7 * fade})`;
+            ctx.lineWidth = SUPERNOVA_BAND_W * 2.2;
+            ctx.beginPath(); ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2); ctx.stroke();
+            ctx.strokeStyle = `rgba(255, 230, 190, ${fade})`;
+            ctx.lineWidth = SUPERNOVA_BAND_W;
+            ctx.beginPath(); ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+        ctx.restore();
+    }
+}
+
+/* =====================================================================
+   PULSAR BEAM (펄사 회전 빔) — Sirius zone (11).
+   Twin lighthouse beams from a fixed center near top. 3.6s/rotation.
+   Player times their movement to slip between rotations.
+   2026-05-08 Stage 6.
+   ===================================================================== */
+let pulsarBeam = null;
+let pulsarStartedAt = 0;
+const PULSAR_PERIOD_MS = 3600;
+const PULSAR_BEAM_W = 22;
+const PULSAR_LEN = Math.max(CW, CH) * 1.2;
+const PULSAR_ZONES = new Set([11]);
+function _isPulsarZone(idx){ return PULSAR_ZONES.has(idx); }
+function ensurePulsarBeam(now){
+    if(!pulsarBeam){ pulsarBeam = {cx: CW * 0.5, cy: 80}; pulsarStartedAt = now; }
+}
+function clearPulsarBeam(){ pulsarBeam = null; }
+function _pulsarCurrentAngle(now){
+    return ((now - pulsarStartedAt) / PULSAR_PERIOD_MS) * Math.PI * 2;
+}
+function checkPulsarBeamCollision(now){
+    if(!pulsarBeam) return false;
+    const px = player.x - pulsarBeam.cx;
+    const py = player.y - pulsarBeam.cy;
+    const dist = Math.sqrt(px*px + py*py);
+    if(dist < 28) return false;
+    const playerAng = Math.atan2(py, px);
+    const beamAng = _pulsarCurrentAngle(now);
+    for(const offset of [0, Math.PI]){
+        let diff = playerAng - (beamAng + offset);
+        diff = Math.atan2(Math.sin(diff), Math.cos(diff));
+        const tolerance = (PULSAR_BEAM_W / 2) / dist;
+        if(Math.abs(diff) < tolerance) return true;
+    }
+    return false;
+}
+function drawPulsarBeam(now){
+    if(!pulsarBeam) return;
+    const a = _pulsarCurrentAngle(now);
+    ctx.save();
+    ctx.translate(pulsarBeam.cx, pulsarBeam.cy);
+    ctx.rotate(a);
+    for(const dir of [1, -1]){
+        const grad = ctx.createLinearGradient(0, 0, dir * PULSAR_LEN, 0);
+        grad.addColorStop(0,    'rgba(220, 240, 255, 0.95)');
+        grad.addColorStop(0.30, 'rgba(140, 200, 255, 0.55)');
+        grad.addColorStop(1,    'rgba(80, 140, 240, 0)');
+        ctx.fillStyle = grad;
+        ctx.shadowColor = '#80aaff';
+        ctx.shadowBlur = 20;
+        ctx.beginPath();
+        ctx.moveTo(0, -PULSAR_BEAM_W/2);
+        ctx.lineTo(dir * PULSAR_LEN, -PULSAR_BEAM_W/2);
+        ctx.lineTo(dir * PULSAR_LEN,  PULSAR_BEAM_W/2);
+        ctx.lineTo(0,  PULSAR_BEAM_W/2);
+        ctx.closePath(); ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.save();
+    ctx.shadowColor = '#dde8ff';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = 'rgba(230, 240, 255, 1)';
+    ctx.beginPath();
+    ctx.arc(pulsarBeam.cx, pulsarBeam.cy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+}
+
+/* =====================================================================
    ITEMS / RESUPPLY DEPOTS — narrative-fit pickup system
    각 zone (행성/천체) 마다 보급 거점 1개 — 자동 보급선이 미리 발사돼서
    놓아둔 캐시. 메테오와 시각적 구분 (네온 LED + 안테나 + 아이템 아이콘).
@@ -4986,9 +5287,9 @@ function triggerWipe(){
         }
     }
     bullets = [];
-    /* Wipe also clears asteroid clusters — keeps the panic-button consistent
-       (otherwise wipe feels weak when a cluster is on screen). Spawn the same
-       glittering fragment debris so the visual cue covers both rocks and bullets. */
+    /* Wipe clears the instant-threat obstacles (bullets, rocks, mines,
+       active supernova rings, lethal flares). Pulsar beam stays —
+       it's a persistent zone feature, not a discrete projectile. */
     for(const cluster of asteroidClusters){
         for(const r of cluster.rocks){
             wipeFragments.push({
@@ -5000,6 +5301,23 @@ function triggerWipe(){
         }
     }
     asteroidClusters = [];
+    /* Magnetic mines — fragment burst per mine */
+    for(const m of magneticMines){
+        for(let k = 0; k < 4; k++){
+            wipeFragments.push({
+                x: m.x, y: m.y,
+                vx: (Math.random()-0.5) * 360,
+                vy: (Math.random()-0.5) * 360,
+                life: 0.5, maxLife: 0.5
+            });
+        }
+    }
+    magneticMines = [];
+    /* Solar flares — only clear the active (firing) phase; warnings
+       still tick down (they're not yet lethal). */
+    solarFlares = solarFlares.filter(f => f.phase === 'warn');
+    /* Supernova rings — clear all so wipe genuinely opens up space. */
+    supernovaRings = [];
     sfxOver();  /* 짧고 강한 효과음 (실제 sfx 가 hit 톤이라 wipe 와 어울림) */
     if(navigator.vibrate) try{navigator.vibrate([20,30,20])}catch(_){}
 }
@@ -5601,8 +5919,16 @@ function resetGame(){
     flashVisible=true;
     lastFlashToggle=0;
     bullets=[];
-    asteroidClusters=[];               /* reset cluster state on (re)start */
+    asteroidClusters=[];               /* Stage 2 reset */
     lastClusterSpawnAt=0;
+    solarFlares=[];                    /* Stage 3 reset */
+    lastFlareSpawnAt=0;
+    magneticMines=[];                  /* Stage 4 reset */
+    lastMineSpawnAt=0;
+    supernovaRings=[];                 /* Stage 5 reset */
+    lastSupernovaAt=0;
+    pulsarBeam=null;                   /* Stage 6 reset */
+    pulsarStartedAt=0;
     lastSpawn=0;
     elapsedMs=0;
     flamePulse=0;
@@ -6110,24 +6436,49 @@ function gameLoop(now){
         if(w < len) bullets.length = w;  /* in-place truncate, no new array */
     }
 
-    /* ---- Asteroid clusters (Pluto / Andromeda / Galactic Rim) ----
-       Slow rock waves; GRAV cone accelerates rocks past the player to
-       carve a passage. Spawn timing checked here, before update so a
-       just-spawned cluster moves one frame this tick.
-       PvP: clusters disabled in pvp mode for v1 — sync would require
-       host→guest broadcast of cluster shape, deferred to a follow-up.
-       (rocks differ from bullets in that they're a multi-rock formation,
-       not a single position; guest re-rolling rand() locally would
-       produce visually different cluster shapes even with same seed
-       once depot rand() consumption diverges between modes.) */
+    /* ---- New zone-specific obstacles (Stage 2-6).
+       All spawn & update together here, after bullets and before
+       black-hole pull (so BH still pulls bullets/rocks toward Sgr A*).
+       PvP: all of these disabled in pvp mode for v1 — sync would
+       require host→guest broadcast packets; deferred. */
     const _isPvpAny = pvpState && pvpState.gameMode === 'pvp';
-    if(_isClusterZone(currentZoneIdx) && !_isPvpAny){
-        if(now - lastClusterSpawnAt > CLUSTER_SPAWN_INTERVAL){
-            spawnAsteroidCluster();
-            lastClusterSpawnAt = now;
+    if(!_isPvpAny){
+        /* Asteroid cluster (Stage 2) */
+        if(_isClusterZone(currentZoneIdx)){
+            if(now - lastClusterSpawnAt > CLUSTER_SPAWN_INTERVAL){
+                spawnAsteroidCluster();
+                lastClusterSpawnAt = now;
+            }
         }
+        /* Solar flare (Stage 3) */
+        if(_isFlareZone(currentZoneIdx)){
+            if(now - lastFlareSpawnAt > FLARE_SPAWN_INTERVAL){
+                spawnSolarFlare();
+                lastFlareSpawnAt = now;
+            }
+        }
+        /* Magnetic mine (Stage 4) */
+        if(_isMineZone(currentZoneIdx)){
+            if(now - lastMineSpawnAt > MINE_SPAWN_INTERVAL){
+                spawnMagneticMine();
+                lastMineSpawnAt = now;
+            }
+        }
+        /* Supernova ring (Stage 5) */
+        if(_isSupernovaZone(currentZoneIdx)){
+            if(now - lastSupernovaAt > SUPERNOVA_INTERVAL){
+                spawnSupernovaRing();
+                lastSupernovaAt = now;
+            }
+        }
+        /* Pulsar beam (Stage 6) — single persistent beam, ensure exists in zone */
+        if(_isPulsarZone(currentZoneIdx)) ensurePulsarBeam(now);
+        else if(pulsarBeam) clearPulsarBeam();
     }
     updateAsteroidClusters(dt);
+    updateSolarFlares(dt);
+    updateMagneticMines(dt, now);
+    updateSupernovaRings(dt);
 
     /* ---- Black hole gravitational pull ----
        Sgr A* zone 진입 시 player + bullets 모두 중심으로 끌어당김.
@@ -6157,12 +6508,14 @@ function gameLoop(now){
                 break;
             }
         }
-        /* Asteroid cluster rocks — same hit treatment, separate radius so
-           larger rocks register correctly. Only check if no bullet hit
-           this frame (one damage event per frame). */
-        if(!hit && asteroidClusters.length){
-            hit = checkAsteroidClusterCollision();
-        }
+        /* Asteroid cluster rocks — separate hit radius (rocks are larger).
+           Only check if no bullet hit this frame (one damage event/frame). */
+        if(!hit && asteroidClusters.length) hit = checkAsteroidClusterCollision();
+        /* Stage 3-6 obstacle collisions — same one-event-per-frame rule. */
+        if(!hit && solarFlares.length)     hit = checkSolarFlareCollision();
+        if(!hit && magneticMines.length)   hit = checkMagneticMineCollision();
+        if(!hit && supernovaRings.length)  hit = checkSupernovaRingCollision();
+        if(!hit && pulsarBeam)             hit = checkPulsarBeamCollision(now);
         if(hit){
             lives--;
             invincibleUntil = now + INVINCIBLE_MS;
@@ -6310,10 +6663,15 @@ function drawFrame(now, dt){
     }
     ctx.globalAlpha = 1;
 
-    /* ---- Asteroid clusters — drawn between bullets and depots so depots
-       (with their LED + outline) stay visually crisp on top of the rock layer.
-       Rocks with active GRAV glow render with extra shadow blur. ---- */
-    drawAsteroidClusters();
+    /* ---- Stage 2-6 zone obstacles — order matters for layering.
+       Background-feeling things (rings, flares) below mid-layer (rocks,
+       mines), then beams on top because they're the most visually
+       attention-grabbing. ---- */
+    drawSupernovaRings();      /* Stage 5 — expanding rings (under everything) */
+    drawAsteroidClusters();    /* Stage 2 — rock formations */
+    drawMagneticMines();       /* Stage 4 — homing mines */
+    drawSolarFlares();         /* Stage 3 — beam warnings + lethal beam */
+    drawPulsarBeam(now);       /* Stage 6 — rotating lighthouse, on top */
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
@@ -7724,6 +8082,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778219611"></script>
+<script src="/js/siteFooter.js?v=1778220516"></script>
 </body>
 </html>
