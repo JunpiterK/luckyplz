@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778227791">
-<script>(function(){var B="1778227791";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778228323">
+<script>(function(){var B="1778228323";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1324,10 +1324,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778227791"></script>
-<script src="/js/lpI18n.js?v=1778227791"></script>
-<script src="/js/lpRankSheet.js?v=1778227791"></script>
-<script src="/js/lpAudio.js?v=1778227791"></script>
+<script src="/js/supabase-config.js?v=1778228323"></script>
+<script src="/js/lpI18n.js?v=1778228323"></script>
+<script src="/js/lpRankSheet.js?v=1778228323"></script>
+<script src="/js/lpAudio.js?v=1778228323"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -5266,12 +5266,30 @@ const SAT_DRAIN_RATE = 1.4;
 const SAT_ORBIT_TOL = 50;          /* ±tolerance px from orbit ring (관대하게) */
 
 function _isPlayerOnOrbit(){
+    /* 위성 deployment 가 GRAV cone 과 똑같은 형태 (forward, ±45°, 180px).
+       cone 내 임의 점이 궤도 ring tolerance 안에 있으면 'overlap' = true.
+       7×8 = 56 점 sampling 으로 cone-orbit 교차 판정. 매 frame 호출되지만
+       sample 갯수 작아서 부담 없음. */
     const orbit = _missionCurrentOrbit();
     if(!orbit) return false;
-    const dx = player.x - orbit.cx;
-    const dy = player.y - orbit.cy;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    return Math.abs(dist - orbit.r) < SAT_ORBIT_TOL;
+    const STEPS_R = 8;
+    const STEPS_A = 7;
+    const px = player.x, py = player.y - 4;       /* 본체 위 4px (드로우와 동일) */
+    for(let ai = 0; ai < STEPS_A; ai++){
+        const angOff = ((ai / (STEPS_A - 1)) - 0.5) * (Math.PI / 2);   /* -π/4 ~ +π/4 */
+        const ang = -Math.PI/2 + angOff;            /* forward = -Y, ±45° */
+        const cosA = Math.cos(ang), sinA = Math.sin(ang);
+        for(let ri = 1; ri <= STEPS_R; ri++){
+            const r = (ri / STEPS_R) * GRAV_FIELD_LEN;
+            const sx = px + cosA * r;
+            const sy = py + sinA * r;
+            const dx = sx - orbit.cx;
+            const dy = sy - orbit.cy;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if(Math.abs(dist - orbit.r) < SAT_ORBIT_TOL) return true;
+        }
+    }
+    return false;
 }
 
 function updateSatelliteInstall(dt, now){
@@ -5320,43 +5338,106 @@ function _updateSatProgressBar(){
 }
 
 function drawSatelliteInstall(now){
-    /* 미션 active + 플레이어 on orbit 일 때 deployment beam + progress 미리보기 */
+    /* 미션 active 중 SAT 누른 채일 때 항상 cone 표시 (= 위성 방출파).
+       GRAV 와 동일 형태 (forward -Y, ±45°, 180px), 색만 cyan/blue 톤.
+       cone 이 궤도 ring 과 교차하면 progress 채워지는 mechanic. */
     if(missionState !== 'active') return;
-    const orbit = _missionCurrentOrbit();
-    if(!orbit) return;
-    if(!_isPlayerOnOrbit()) return;
+    if(!satHeld) return;
+    /* GRAV cone 과 같은 helper 재사용 — 색만 다른 톤. */
+    _drawGravCone(player.x, player.y - 4,
+        'rgba(93,193,255,',     /* main cyan */
+        'rgba(140,200,255,',    /* mid blue-cyan */
+        'rgba(80,140,240,');    /* deep blue fade */
+    /* progress 비례 ring around 플레이어 — 추가 시각 피드백 */
     const ratio = satInstallProgress / SAT_INSTALL_MS;
-    /* 플레이어 → 궤도 위 점 (player 의 angle 기준) */
-    const dx = player.x - orbit.cx;
-    const dy = player.y - orbit.cy;
-    const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
-    const tx = orbit.cx + (dx/d) * orbit.r;
-    const ty = orbit.cy + (dy/d) * orbit.r;
-    ctx.save();
-    /* deployment beam — progress 비례 강도 */
-    ctx.strokeStyle = `rgba(93, 193, 255, ${0.35 + ratio * 0.5})`;
-    ctx.lineWidth = 2 + ratio * 4;
-    ctx.shadowColor = '#80aaff';
-    ctx.shadowBlur = 8 + ratio * 14;
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y - 12);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    /* 위성 미리보기 — 점점 커지는 본체 */
-    const previewSize = 2 + ratio * 5;
-    ctx.fillStyle = `rgba(220, 240, 255, ${0.6 + ratio * 0.4})`;
-    ctx.beginPath();
-    ctx.arc(tx, ty, previewSize, 0, Math.PI * 2);
-    ctx.fill();
-    /* progress 호 — 위성 미리보기 주변 */
-    if(ratio > 0.05){
+    if(ratio > 0.02){
+        ctx.save();
         ctx.strokeStyle = '#FFE66D';
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = 'rgba(255,230,109,.85)';
+        ctx.shadowBlur = 10;
         ctx.beginPath();
-        ctx.arc(tx, ty, previewSize + 5, -Math.PI/2, -Math.PI/2 + ratio * Math.PI * 2);
+        ctx.arc(player.x, player.y, 14,
+            -Math.PI/2,
+            -Math.PI/2 + ratio * Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
+    /* 궤도 교차 점에 위성 미리보기 — 가장 가까운 cone-orbit 교차 위치 */
+    const orbit = _missionCurrentOrbit();
+    if(orbit && _isPlayerOnOrbit()){
+        const dx = player.x - orbit.cx;
+        const dy = player.y - orbit.cy;
+        const d = Math.sqrt(dx*dx + dy*dy) || 0.01;
+        const tx = orbit.cx + (dx/d) * orbit.r;
+        const ty = orbit.cy + (dy/d) * orbit.r;
+        const previewSize = 3 + ratio * 4;
+        ctx.save();
+        ctx.shadowColor = '#9CDFFF';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = `rgba(220, 240, 255, ${0.7 + ratio * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(tx, ty, previewSize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
+
+/* =====================================================================
+   REWARD ITEM VISUAL FEEDBACK (Phase D 2026-05-08 추가)
+   사용자 피드백: "미사일 모양하고 모래시계는 동작을 해도 아무 효과도없어".
+   원인: Plasma Storm 은 화면 비어있을 때 활성하면 청소할 게 없어 시각적
+   변화 0. Time Anchor 는 죽기 전엔 본체에 아무 변화 없음. 둘 다 발동
+   순간을 명확히 보여줘야 함.
+   ===================================================================== */
+
+function drawPlasmaStormFlash(now){
+    /* 화면 전체에 흰색~사이안 플래시 — 700ms 페이드 아웃 */
+    if(now >= plasmaStormFlashUntil) return;
+    const remain = plasmaStormFlashUntil - now;
+    const k = Math.min(1, remain / 700);     /* 0~1 (1이 발동 순간) */
+    const alpha = k * 0.55;
+    ctx.save();
+    ctx.fillStyle = `rgba(255, 230, 240, ${alpha})`;
+    ctx.fillRect(0, 0, CW, CH);
+    /* 외곽 magenta vignette */
+    const grad = ctx.createRadialGradient(CW/2, CH/2, Math.min(CW,CH)*0.3,
+                                          CW/2, CH/2, Math.max(CW,CH));
+    grad.addColorStop(0, 'rgba(255,80,140,0)');
+    grad.addColorStop(1, `rgba(255,60,120,${k * 0.55})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+}
+
+function drawTimeAnchorAura(now){
+    /* Time Anchor armed 상태 — 본체 주위 cyan 보호막 ring (+회전) */
+    if(!timeAnchorArmed) return;
+    const t = now / 600;
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    /* 외곽 ring (회전) */
+    ctx.strokeStyle = `rgba(140, 220, 255, ${0.45 + Math.sin(t * 2) * 0.18})`;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(140,220,255,.85)';
+    ctx.shadowBlur = 14;
+    ctx.beginPath();
+    /* 점선 형태로 회전 */
+    const segCount = 8;
+    const segArc = (Math.PI * 2) / segCount;
+    for(let i = 0; i < segCount; i++){
+        const a1 = i * segArc + t * 0.6;
+        const a2 = a1 + segArc * 0.55;
+        ctx.beginPath();
+        ctx.arc(0, 0, 22, a1, a2);
         ctx.stroke();
     }
+    /* 내부 dim glow */
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = `rgba(140, 220, 255, ${0.06 + Math.sin(t) * 0.04})`;
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 }
 
@@ -7647,7 +7728,8 @@ function drawFrame(now, dt){
     drawPulsarBeam(now);       /* Stage 6 — rotating lighthouse, on top */
     drawMissionOrbit(now);          /* Phase B — orbital ring during active mission */
     drawSatelliteOrbiting(now);     /* Phase C — successful satellites in their home zone */
-    drawSatelliteInstall(now);      /* Phase C v2 — deployment beam + install preview */
+    drawSatelliteInstall(now);      /* Phase C v2 — deployment cone + install preview */
+    drawTimeAnchorAura(now);        /* Phase D — armed Time Anchor visible ring */
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
@@ -7796,6 +7878,8 @@ function drawFrame(now, dt){
         ctx.fillText('▶ 재개 버튼 / Space / 화면 탭',CW/2,CH/2+36);
         ctx.textAlign='left';
     }
+    /* Plasma Storm flash — 가장 마지막에 그려서 모든 것 위에 덮어씀 */
+    drawPlasmaStormFlash(now);
 }
 
 /* ---- RAF kick-off for idle star animation ---- */
@@ -9058,6 +9142,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778227791"></script>
+<script src="/js/siteFooter.js?v=1778228323"></script>
 </body>
 </html>
