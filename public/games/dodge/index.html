@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778280503">
-<script>(function(){var B="1778280503";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778283014">
+<script>(function(){var B="1778283014";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1336,10 +1336,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778280503"></script>
-<script src="/js/lpI18n.js?v=1778280503"></script>
-<script src="/js/lpRankSheet.js?v=1778280503"></script>
-<script src="/js/lpAudio.js?v=1778280503"></script>
+<script src="/js/supabase-config.js?v=1778283014"></script>
+<script src="/js/lpI18n.js?v=1778283014"></script>
+<script src="/js/lpRankSheet.js?v=1778283014"></script>
+<script src="/js/lpAudio.js?v=1778283014"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3819,10 +3819,13 @@ function drawHorseheadNebula(){
 }
 
 /* ---- Oort Cloud — 어두운 cometary nuclei + 점점이 흩어진 얼음 입자 ---- */
-function drawOortCloud(){
+function drawOortCloud(zoneT){
     ctx.save();
+    /* 2026-05-09: zoneT 받아 nuclei 가 화면을 따라 흘러내려 옴 (planet 식
+       cy = CH*(zoneT*2-0.4) 의 0.4 baseline 을 dy 로 변환). */
+    const dy = CH * ((zoneT||0.35) * 2.0 - 0.7);     /* baseline 0.35 기준 offset */
     /* 옅은 spherical shell 표현: 화면 가장자리에 옅은 dust band */
-    const cx = CW/2, cy = CH*0.35;
+    const cx = CW/2, cy = CH*0.35 + dy*0.4;          /* 본체 천천히 (배경 느낌) */
     const ringG = ctx.createRadialGradient(cx, cy, 80, cx, cy, 260);
     ringG.addColorStop(0, 'rgba(0,0,0,0)');
     ringG.addColorStop(0.6, 'rgba(180,200,230,0.04)');
@@ -3840,21 +3843,22 @@ function drawOortCloud(){
         [CW*0.85, CH*0.40, 1.3, 0.5],
     ];
     for(const n of nuclei){
+        const ny = n[1] + dy;     /* nuclei 는 빠르게 (foreground) 흘러내려 옴 */
         ctx.fillStyle = 'rgba(220,235,255,'+n[3]+')';
-        ctx.beginPath(); ctx.arc(n[0], n[1], n[2], 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(n[0], ny, n[2], 0, Math.PI*2); ctx.fill();
         /* 짧은 꼬리 */
         ctx.strokeStyle = 'rgba(220,235,255,'+(n[3]*0.25)+')';
         ctx.lineWidth = 0.7;
         ctx.beginPath();
-        ctx.moveTo(n[0], n[1]);
-        ctx.lineTo(n[0]+8, n[1]-6);
+        ctx.moveTo(n[0], ny);
+        ctx.lineTo(n[0]+8, ny-6);
         ctx.stroke();
     }
-    /* "100,000 AU" 라벨 (옅게) */
+    /* "100,000 AU" 라벨 (옅게) — 같이 흘러내림 */
     ctx.font = '9px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(180,200,230,0.22)';
     ctx.textAlign = 'center';
-    ctx.fillText('100,000 AU', CW/2, CH*0.18);
+    ctx.fillText('100,000 AU', CW/2, CH*0.18 + dy);
     ctx.textAlign = 'left';
     ctx.restore();
 }
@@ -4027,74 +4031,223 @@ function drawPillarsOfCreation(){
 /* ---- Sagittarius A* — 은하 중심 초거대 블랙홀.
    accretion disk (회전하는 뜨거운 ring) + 중앙 event horizon (검정 sphere) +
    photon ring (Einstein ring 단순화). 끄는 효과는 update_blackhole() 에서 처리. */
-function drawSagittariusA(){
+/* 2026-05-09: Sgr A* 전면 리메이크.
+   사용자 피드백: 이미지 첨부 — 강력한 양극 제트 + 거대 부착원반.
+   이전 버전은 작은 disk(78x16) + 작은 event horizon(22) + 제트 없음.
+   신:
+     1. zoneT 받아 살짝 화면 따라 내려옴 (zone 50초간 천천히 — 항상 visible)
+     2. 외곽 spacetime distortion (반경 240px 까지 휘어짐 효과)
+     3. 거대 양극 제트 (top + bottom) — helical plasma + 데미지 영역
+        제트 = 감마선 + 상대론적 입자 → 닿으면 1 hit (event horizon 은 즉사)
+     4. 거대 부착원반 (140x32 ellipse) — multi-band orange/yellow + doppler hot spot
+     5. 강한 photon ring (Einstein ring) — cyan + bright orange
+     6. event horizon 32px (이전 22 → 강화)
+     7. 외곽 cyan halo + magnetic field line hint */
+function drawSagittariusA(zoneT){
     const now = performance.now();
     const cx = CW * 0.5;
-    const cy = CH * 0.30;
-    blackHole.cx = cx;          /* update 단계에서 끜당김 위치 참조 */
+    /* zone 50초 동안 천천히 흘러내려옴 — 항상 visible 하면서 ship 이동감 표현 */
+    const cy = CH * (0.22 + (zoneT||0.4) * 0.40);
+    const eventR = 32;
+    blackHole.cx = cx;
     blackHole.cy = cy;
-    blackHole.r = 22;            /* event horizon 반경 */
+    blackHole.r = eventR;
+    blackHole.zoneT = zoneT||0.4;     /* 충돌 체크에서 사용 */
     ctx.save();
-    /* 1. 외곽 spacetime 휘어짐 — radial dim gradient (별이 휘어 보이는 듯한 톤) */
-    const distortG = ctx.createRadialGradient(cx, cy, 26, cx, cy, 160);
-    distortG.addColorStop(0,   'rgba(0,0,0,0.0)');
-    distortG.addColorStop(0.3, 'rgba(0,0,0,0.55)');
-    distortG.addColorStop(0.7, 'rgba(0,0,0,0.20)');
-    distortG.addColorStop(1,   'rgba(0,0,0,0)');
-    ctx.fillStyle = distortG;
-    ctx.fillRect(cx - 160, cy - 160, 320, 320);
 
-    /* 2. accretion disk — 회전하는 뜨거운 디스크 (orange/yellow, 타원 perspective) */
+    /* 1. 외곽 spacetime distortion — radial dark gradient + 옅은 magnetic field
+          line ring (회전하는 자기력선 hint, 큰 반경) */
+    const distortG = ctx.createRadialGradient(cx, cy, eventR, cx, cy, 260);
+    distortG.addColorStop(0,    'rgba(0,0,0,0)');
+    distortG.addColorStop(0.20, 'rgba(0,0,0,0.65)');
+    distortG.addColorStop(0.55, 'rgba(0,0,0,0.30)');
+    distortG.addColorStop(1,    'rgba(0,0,0,0)');
+    ctx.fillStyle = distortG;
+    ctx.fillRect(cx - 260, cy - 260, 520, 520);
+
+    /* 2. 양극 제트 — 위쪽 + 아래쪽, BH 중심 perpendicular to disk plane.
+          plasma 코어 (밝은 cyan/white) + 외곽 halo (purple/blue) + helical
+          knot 들이 spiral 그리며 위로 이동.
+          데미지 영역 : 화면 cone. 그림은 먼저 halo, 나중에 core 순서로. */
+    const JET_REACH = Math.max(CW, CH) * 1.1;     /* 제트 도달 거리 (충돌 cap 과 일치) */
+    const JET_HALF_WIDTH_BASE = 4;                /* BH 근처 좁음 */
+    const JET_HALF_WIDTH_TIP = 26;                /* 멀어지며 flare out */
+    const JET_HALF_ANGLE = 0.14;                  /* 충돌 cone — ~8° */
+    blackHole.jetReach = JET_REACH;
+    blackHole.jetHalfAngle = JET_HALF_ANGLE;
+    function drawJet(dir){      /* dir = -1 (up) or +1 (down) */
+        const baseY = cy + dir * (eventR * 0.4);
+        const tipY  = cy + dir * JET_REACH;
+        /* halo (외곽 보라/파랑) — quadrilateral with linear gradient */
+        ctx.save();
+        const haloG = ctx.createLinearGradient(cx, baseY, cx, tipY);
+        haloG.addColorStop(0,   'rgba(160, 110, 255, 0.85)');
+        haloG.addColorStop(0.25,'rgba(120, 180, 255, 0.55)');
+        haloG.addColorStop(0.65,'rgba(80, 140, 255, 0.30)');
+        haloG.addColorStop(1,   'rgba(40, 60, 180, 0)');
+        ctx.fillStyle = haloG;
+        ctx.beginPath();
+        ctx.moveTo(cx - JET_HALF_WIDTH_BASE * 1.3, baseY);
+        ctx.lineTo(cx + JET_HALF_WIDTH_BASE * 1.3, baseY);
+        ctx.lineTo(cx + JET_HALF_WIDTH_TIP * 2.0, tipY);
+        ctx.lineTo(cx - JET_HALF_WIDTH_TIP * 2.0, tipY);
+        ctx.closePath();
+        ctx.fill();
+        /* core (안쪽 밝은 cyan/white) — 좁은 quadrilateral */
+        const coreG = ctx.createLinearGradient(cx, baseY, cx, tipY);
+        coreG.addColorStop(0,   'rgba(255, 255, 255, 0.95)');
+        coreG.addColorStop(0.20,'rgba(220, 240, 255, 0.85)');
+        coreG.addColorStop(0.60,'rgba(140, 200, 255, 0.45)');
+        coreG.addColorStop(1,   'rgba(80, 130, 255, 0)');
+        ctx.fillStyle = coreG;
+        ctx.beginPath();
+        ctx.moveTo(cx - JET_HALF_WIDTH_BASE, baseY);
+        ctx.lineTo(cx + JET_HALF_WIDTH_BASE, baseY);
+        ctx.lineTo(cx + JET_HALF_WIDTH_TIP * 0.85, tipY);
+        ctx.lineTo(cx - JET_HALF_WIDTH_TIP * 0.85, tipY);
+        ctx.closePath();
+        ctx.fill();
+        /* helical knots — spiral 따라 도는 밝은 plasma 매듭 */
+        const knotCount = 7;
+        const helixPhase = now * 0.0018 * (dir === -1 ? 1 : -1);
+        for(let i = 1; i <= knotCount; i++){
+            const t = i / knotCount;
+            const ky = baseY + (tipY - baseY) * t;
+            /* spiral x offset — sin wave, 진폭은 t 에 비례 (위로 갈수록 커짐) */
+            const amp = JET_HALF_WIDTH_BASE + (JET_HALF_WIDTH_TIP - JET_HALF_WIDTH_BASE) * t * 0.85;
+            const kx = cx + Math.sin(t * Math.PI * 2.8 + helixPhase) * amp;
+            const kr = 5 - t * 2.2;
+            ctx.shadowColor = 'rgba(180, 220, 255, 0.95)';
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = `rgba(255, 250, 240, ${0.85 - t * 0.45})`;
+            ctx.beginPath();
+            ctx.arc(kx, ky, kr, 0, Math.PI * 2);
+            ctx.fill();
+            /* counter-spiral knot (반대 방향) — 두 가닥 helix 표현 */
+            const kx2 = cx - Math.sin(t * Math.PI * 2.8 + helixPhase) * amp * 0.85;
+            ctx.fillStyle = `rgba(180, 220, 255, ${0.65 - t * 0.40})`;
+            ctx.beginPath();
+            ctx.arc(kx2, ky, kr * 0.75, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.shadowBlur = 0;
+        ctx.restore();
+    }
+    drawJet(-1);     /* 위쪽 제트 */
+    drawJet(+1);     /* 아래쪽 제트 */
+
+    /* 3. 부착원반 (accretion disk) — 거대 ellipse, 회전, 다층 색.
+          제트 *위* 에 그려서 disk 앞쪽이 제트를 가림 (perspective). */
     const rot = now * 0.0006;
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rot);
-    /* 외곽 disk */
-    const diskG = ctx.createRadialGradient(0, 0, 24, 0, 0, 78);
-    diskG.addColorStop(0,    'rgba(255,255,200,0.0)');
-    diskG.addColorStop(0.25, 'rgba(255,200,80,0.85)');
-    diskG.addColorStop(0.55, 'rgba(255,140,40,0.55)');
-    diskG.addColorStop(0.85, 'rgba(180,60,30,0.25)');
-    diskG.addColorStop(1,    'rgba(80,20,10,0)');
+    /* 외곽 dust ring (어두운 brown-red) */
+    const dustG = ctx.createRadialGradient(0, 0, 30, 0, 0, 145);
+    dustG.addColorStop(0,    'rgba(0,0,0,0)');
+    dustG.addColorStop(0.65, 'rgba(140,40,20,0.55)');
+    dustG.addColorStop(1,    'rgba(50,15,8,0)');
+    ctx.fillStyle = dustG;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 145, 38, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* 메인 disk band — bright orange/yellow */
+    const diskG = ctx.createRadialGradient(0, 0, 36, 0, 0, 110);
+    diskG.addColorStop(0,    'rgba(255,255,220,0.0)');
+    diskG.addColorStop(0.10, 'rgba(255,255,230,0.95)');
+    diskG.addColorStop(0.35, 'rgba(255,200,80,0.92)');
+    diskG.addColorStop(0.70, 'rgba(255,130,50,0.75)');
+    diskG.addColorStop(1,    'rgba(180,55,25,0)');
     ctx.fillStyle = diskG;
     ctx.beginPath();
-    ctx.ellipse(0, 0, 78, 16, 0, 0, Math.PI*2);
+    ctx.ellipse(0, 0, 110, 26, 0, 0, Math.PI*2);
     ctx.fill();
-    /* 내부 hot spot — 도플러 brightening (한쪽이 더 밝게, 회전 방향 표시) */
-    ctx.fillStyle = 'rgba(255,255,220,0.6)';
+    /* doppler hot spot — 한쪽이 훨씬 밝음 (회전 방향으로 다가오는 쪽) */
+    ctx.fillStyle = 'rgba(255,255,235,0.85)';
+    ctx.shadowColor = 'rgba(255,240,200,0.95)';
+    ctx.shadowBlur = 18;
     ctx.beginPath();
-    ctx.ellipse(50, 0, 28, 8, 0, 0, Math.PI*2);
+    ctx.ellipse(60, 0, 38, 12, 0, 0, Math.PI*2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    /* 미세한 ring banding — 동심 원호 (disk texture) */
+    ctx.strokeStyle = 'rgba(255,180,80,0.30)';
+    ctx.lineWidth = 0.6;
+    for(let i = 0; i < 4; i++){
+        const r = 50 + i * 15;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r, r * 0.24, 0, 0, Math.PI*2);
+        ctx.stroke();
+    }
     ctx.restore();
 
-    /* 3. photon ring — disk 가장자리 따라 도는 빛의 링 (Einstein ring 시각). */
-    ctx.strokeStyle = 'rgba(255,200,80,0.55)';
-    ctx.lineWidth = 1.6;
+    /* 4. photon ring (Einstein ring) — disk 안쪽, 강한 노랑+cyan dual ring. */
+    ctx.strokeStyle = 'rgba(255,220,140,0.85)';
+    ctx.lineWidth = 2.2;
+    ctx.shadowColor = 'rgba(255,200,100,0.9)';
+    ctx.shadowBlur = 14;
     ctx.beginPath();
-    ctx.arc(cx, cy, 30, 0, Math.PI*2);
+    ctx.arc(cx, cy, eventR + 6, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,200,255,0.50)';
+    ctx.lineWidth = 0.8;
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, eventR + 9, 0, Math.PI*2);
     ctx.stroke();
 
-    /* 4. event horizon — 완전 검은 sphere */
+    /* 5. event horizon — 완전 검은 sphere (눈에 띄게 강조) */
     ctx.fillStyle = '#000';
     ctx.beginPath();
-    ctx.arc(cx, cy, 22, 0, Math.PI*2);
+    ctx.arc(cx, cy, eventR, 0, Math.PI*2);
     ctx.fill();
-
-    /* 5. 가장자리 미세 cyan halo — 정보 손실 한계의 미세한 발광 */
-    ctx.strokeStyle = 'rgba(120,180,255,0.18)';
-    ctx.lineWidth = 0.8;
+    /* event horizon 가장자리 — 미세 자홍 outline */
+    ctx.strokeStyle = 'rgba(255,80,90,0.45)';
+    ctx.lineWidth = 0.9;
     ctx.beginPath();
-    ctx.arc(cx, cy, 23, 0, Math.PI*2);
+    ctx.arc(cx, cy, eventR + 1, 0, Math.PI*2);
     ctx.stroke();
+
+    /* 6. 외곽 cyan halo — 정보 손실 한계의 미세 발광 */
+    ctx.strokeStyle = 'rgba(120,180,255,0.22)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, eventR + 14, 0, Math.PI*2);
+    ctx.stroke();
+
     ctx.restore();
 }
 
-/* ---- Galactic Rim — 은하 가장자리, dust lane + 멀리 보이는 별 cluster ---- */
-function drawGalacticRim(){
+/* 양극 제트 충돌 — Sgr A* zone 에서만 활성. 닿으면 1 hit (event horizon 의
+   즉사와 별개). cone 모양 (수직 axis 기준 ±halfAngle radian). */
+function checkBlackHoleJetCollision(){
+    if(!isBlackHoleZone()) return false;
+    if(!blackHole.jetReach) return false;
+    const dx = player.x - blackHole.cx;
+    const dy = player.y - blackHole.cy;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    /* event horizon 안은 별도 즉사 체크에서 처리 — 제트 체크는 그 밖만 */
+    if(dist <= blackHole.r + BH_EVENT_HORIZON_BUFFER) return false;
+    /* 도달 거리 밖 → 제트 영향 없음 */
+    if(dist > blackHole.jetReach) return false;
+    /* 수직 거리가 작으면(거의 수평) 제트 안 — 비교는 수직 vs 수평 거리 비율로 */
+    const verticalDist = Math.abs(dy);
+    if(verticalDist < 1) return false;
+    const horizontalDist = Math.abs(dx);
+    /* tan(halfAngle) 보다 horizontal/vertical 비율이 작으면 cone 안 */
+    const tanHA = Math.tan(blackHole.jetHalfAngle);
+    return horizontalDist / verticalDist < tanHA;
+}
+
+/* ---- Galactic Rim — 은하 가장자리, dust lane + 멀리 보이는 별 cluster ----
+   2026-05-09: zoneT 받아 dust lane + 별 cluster 가 화면 따라 내려옴 (느린
+   배경 스크롤 — 멀리 있는 천체라 행성보다 느린 parallax). */
+function drawGalacticRim(zoneT){
+    const dy = CH * ((zoneT||0.4) - 0.4) * 1.2;     /* slower parallax */
     ctx.save();
     /* dust lane 가로 띠 — 약간 기울어짐 */
     ctx.save();
-    ctx.translate(CW/2, CH*0.30);
+    ctx.translate(CW/2, CH*0.30 + dy);
     ctx.rotate(-0.15);
     const dG = ctx.createLinearGradient(0, -16, 0, 16);
     dG.addColorStop(0,   'rgba(80,100,140,0)');
@@ -4113,21 +4266,23 @@ function drawGalacticRim(){
     ctx.shadowBlur = 6;
     for(const s of stars){
         ctx.fillStyle = 'rgba(220,230,255,0.85)';
-        ctx.beginPath(); ctx.arc(s[0], s[1], 1.4, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s[0], s[1] + dy, 1.4, 0, Math.PI*2); ctx.fill();
     }
     ctx.shadowBlur = 0;
     /* 미세한 globular cluster 한 개 (큰 별 모임) */
-    const gx = CW*0.72, gy = CH*0.12;
+    const gx = CW*0.72, gy = CH*0.12 + dy;
     ctx.fillStyle = 'rgba(255,240,200,0.20)';
     ctx.beginPath(); ctx.arc(gx, gy, 14, 0, Math.PI*2); ctx.fill();
     ctx.restore();
 }
 
-/* ---- Intergalactic Void — 거의 비어있고, 멀리 보이는 안드로메다 은하 ---- */
-function drawIntergalacticVoid(){
+/* ---- Intergalactic Void — 거의 비어있고, 멀리 보이는 안드로메다 은하 ----
+   2026-05-09: zoneT 받아 멀리 있는 은하들 천천히 흘러내려옴 (가장 느린 parallax). */
+function drawIntergalacticVoid(zoneT){
+    const dy = CH * ((zoneT||0.4) - 0.4) * 0.9;     /* slowest parallax */
     ctx.save();
     /* 멀리 보이는 안드로메다 — 옅은 spiral disk */
-    const ax = CW*0.30, ay = CH*0.22;
+    const ax = CW*0.30, ay = CH*0.22 + dy;
     /* halo */
     const hG = ctx.createRadialGradient(ax, ay, 0, ax, ay, 30);
     hG.addColorStop(0, 'rgba(220,200,180,0.28)');
@@ -4163,7 +4318,7 @@ function drawIntergalacticVoid(){
     ];
     for(const g of distantGalaxies){
         ctx.fillStyle = 'rgba(200,220,255,0.40)';
-        ctx.beginPath(); ctx.arc(g[0], g[1], g[2], 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(g[0], g[1] + dy, g[2], 0, Math.PI*2); ctx.fill();
     }
     ctx.restore();
 }
@@ -4181,15 +4336,15 @@ function drawZonePlanet(zIdx, dt){
         case 6:  drawNeptune(zoneT); break;
         case 7:  drawPluto(zoneT); break;
         case 8:  drawHelioEdge(zoneT); break;
-        case 9:  drawOortCloud(); break;
+        case 9:  drawOortCloud(zoneT); break;
         case 10: drawProximaCentauri(zoneT); break;
         case 11: drawSirius(zoneT); break;
         case 12: drawBetelgeuse(zoneT); break;
         case 13: drawHorseheadNebula(); break;
         case 14: drawPillarsOfCreation(); break;
-        case 15: drawSagittariusA(); break;
-        case 16: drawGalacticRim(); break;
-        case 17: drawIntergalacticVoid(); break;
+        case 15: drawSagittariusA(zoneT); break;
+        case 16: drawGalacticRim(zoneT); break;
+        case 17: drawIntergalacticVoid(zoneT); break;
     }
 }
 
@@ -5280,7 +5435,11 @@ function _missionResolveOrbit(zIdx){
         case 10: return {cx: CW * 0.30, cy: py, r: 14 + ALT + 16}; /* Proxima */
         case 11: return {cx: CW * 0.32, cy: py, r: 12 + ALT + 22}; /* Sirius */
         case 12: return {cx: CW * 0.50, cy: py, r: 60 + ALT + 18}; /* Betelgeuse */
-        case 15: return {cx: CW * 0.50, cy: CH * 0.30, r: 22 + ALT + 22}; /* Sgr A* */
+        case 15: {
+            /* Sgr A* — drawSagittariusA 의 cy 식과 동일: 0.22 + zoneT*0.40 */
+            const bhY = CH * (0.22 + zoneT * 0.40);
+            return {cx: CW * 0.50, cy: bhY, r: 32 + ALT + 22};
+        }
     }
     return null;
 }
@@ -6611,7 +6770,7 @@ const GRAV_FIELD_LEN = 180;
    inverse-square 끌어당김 적용.
    ===================================================================== */
 const BLACK_HOLE_ZONE_IDX = 15;
-const blackHole = { cx: 0, cy: 0, r: 22 };
+const blackHole = { cx: 0, cy: 0, r: 32, jetReach: 0, jetHalfAngle: 0.14, zoneT: 0 };
 /* 끜당김 강도 — bullets 가 strong, player 는 mild (게임 진행 가능). */
 const BH_PULL_STRENGTH_BULLET = 7000;   /* 메테오: 시각적으로 잘 보일 만큼 강하게 */
 const BH_PULL_STRENGTH_PLAYER = 1400;   /* 플레이어: 트랙패드 조작으로 충분히 회피 가능 */
@@ -8322,6 +8481,7 @@ function gameLoop(now){
         if(!hit && magneticMines.length)   hit = checkMagneticMineCollision();
         if(!hit && supernovaRings.length)  hit = checkSupernovaRingCollision();
         if(!hit && pulsarBeam)             hit = checkPulsarBeamCollision(now);
+        if(!hit && isBlackHoleZone())      hit = checkBlackHoleJetCollision();
         if(hit){
             lives--;
             invincibleUntil = now + INVINCIBLE_MS;
@@ -9920,6 +10080,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778280503"></script>
+<script src="/js/siteFooter.js?v=1778283014"></script>
 </body>
 </html>
