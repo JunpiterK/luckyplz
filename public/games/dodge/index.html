@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778219242">
-<script>(function(){var B="1778219242";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778219611">
+<script>(function(){var B="1778219611";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1069,10 +1069,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778219242"></script>
-<script src="/js/lpI18n.js?v=1778219242"></script>
-<script src="/js/lpRankSheet.js?v=1778219242"></script>
-<script src="/js/lpAudio.js?v=1778219242"></script>
+<script src="/js/supabase-config.js?v=1778219611"></script>
+<script src="/js/lpI18n.js?v=1778219611"></script>
+<script src="/js/lpRankSheet.js?v=1778219611"></script>
+<script src="/js/lpAudio.js?v=1778219611"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4096,6 +4096,177 @@ let lastSpawn=0;
 let elapsedMs=0;
 
 /* =====================================================================
+   ASTEROID CLUSTERS — slow-moving rock waves with a natural gap.
+   GRAV cone accelerates rocks downward (push them past the player) so
+   the player can carve a passage through dense formations. Adds a
+   tactical use for GRAV beyond depot pickups, and gives certain zones
+   (Pluto Kuiper Belt, Andromeda Approach, Galactic Rim) a distinct
+   feel from the meteor-only baseline.
+   2026-05-08 — User idea: "GRAV 로 일부 구간을 잡아당겨서 공간을
+   만드는 개념".
+   ===================================================================== */
+let asteroidClusters = [];           /* active clusters (each = {rocks: [...]} ) */
+let lastClusterSpawnAt = 0;          /* ms timestamp of last spawn */
+const CLUSTER_SPAWN_INTERVAL = 26000;     /* spawn every ~26s in applicable zones */
+const CLUSTER_ROCK_VY = 62;          /* base downward speed (px/s) — much slower than meteors */
+const CLUSTER_ROCK_VY_VAR = 22;      /* per-rock variation */
+const CLUSTER_GRAV_ACCEL = 820;      /* px/s² downward when rock in GRAV cone */
+const CLUSTER_HIT_BUFFER = 6;        /* extra hit radius vs rock.r */
+/* Zones that get clusters. Pluto = real Kuiper belt. Andromeda Approach
+   = galactic-collision debris flux. Galactic Rim = outer-galaxy bric-a-brac.
+   Each gives the cluster a distinct feel via its zone palette. */
+const CLUSTER_ZONES = new Set([7, 16, 18]);
+
+function _isClusterZone(idx){ return CLUSTER_ZONES.has(idx); }
+
+function spawnAsteroidCluster(){
+    /* Cluster = horizontal band of rocks, total ~CW wide, with one
+       narrow gap player can aim for naturally. GRAV lets the player
+       widen any spot they want, so the natural gap is just a fallback. */
+    const N = 8 + Math.floor(rand() * 6);          /* 8-13 rocks */
+    const gapCx = 80 + rand() * (CW - 160);        /* gap center X */
+    const gapW  = 70 + rand() * 28;                /* gap width 70-98px */
+    const yStart = -40;                            /* enter from top */
+    const rocks = [];
+    let attempts = 0;
+    while(rocks.length < N && attempts < 80){
+        attempts++;
+        const rx = 24 + rand() * (CW - 48);
+        if(Math.abs(rx - gapCx) < gapW/2 + 18) continue;     /* skip natural gap */
+        const r = 12 + rand() * 18;                          /* size 12-30 */
+        /* small overlap rejection so rocks don't visually merge into a wall */
+        let overlap = false;
+        for(const o of rocks){
+            const ddx = o.x - rx, ddy = o.y - yStart;
+            if(ddx*ddx + ddy*ddy < (o.r + r) * (o.r + r) * 0.7){ overlap = true; break; }
+        }
+        if(overlap) continue;
+        rocks.push({
+            x: rx,
+            y: yStart - rand() * 90,                          /* stagger entry timing */
+            r,
+            vy: CLUSTER_ROCK_VY + rand() * CLUSTER_ROCK_VY_VAR,
+            spin: (rand() - 0.5) * 1.4,                       /* slow tumble */
+            ang: rand() * Math.PI * 2,
+            gravBoosted: false,
+            gravGlowT: 0,
+            seed: Math.floor(rand() * 1e6)                    /* for deterministic crater pattern */
+        });
+    }
+    asteroidClusters.push({rocks});
+}
+
+function _inGravCone(rx, ry){
+    /* same cone as gravity field: forward = -Y from player, ±45°, max GRAV_FIELD_LEN */
+    const dx = rx - player.x;
+    const dy = ry - player.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if(dist < 6 || dist > GRAV_FIELD_LEN) return false;
+    /* angle from forward (-Y). atan2(dx, -dy) — 0 = directly above, ±π/2 = sides */
+    const ang = Math.atan2(dx, -dy);
+    return Math.abs(ang) < Math.PI / 4;
+}
+
+function updateAsteroidClusters(dt){
+    if(!asteroidClusters.length) return;
+    for(const cluster of asteroidClusters){
+        const rocks = cluster.rocks;
+        let w = 0;
+        for(let i = 0; i < rocks.length; i++){
+            const rock = rocks[i];
+            /* GRAV interaction — only if active AND rock is in cone. Add downward
+               accel; rock zooms past player creating a passage. Once accelerated
+               it stays gravBoosted so even when leaving cone it keeps falling fast. */
+            if(gravityFieldActive && _inGravCone(rock.x, rock.y)){
+                rock.vy += CLUSTER_GRAV_ACCEL * dt;
+                rock.gravBoosted = true;
+                rock.gravGlowT = 0.45;
+            }
+            rock.gravGlowT = Math.max(0, rock.gravGlowT - dt);
+            rock.y += rock.vy * dt;
+            rock.ang += rock.spin * dt;
+            /* keep rocks that haven't passed bottom yet (with small buffer) */
+            if(rock.y < CH + 50){
+                if(w !== i) rocks[w] = rock;
+                w++;
+            }
+        }
+        if(w < rocks.length) rocks.length = w;
+    }
+    /* Drop empty clusters */
+    let cw = 0;
+    for(let i = 0; i < asteroidClusters.length; i++){
+        if(asteroidClusters[i].rocks.length){
+            if(cw !== i) asteroidClusters[cw] = asteroidClusters[i];
+            cw++;
+        }
+    }
+    if(cw < asteroidClusters.length) asteroidClusters.length = cw;
+}
+
+function checkAsteroidClusterCollision(){
+    /* same hit radius as bullets — player center vs rock circle. */
+    const px = player.x, py = player.y;
+    for(const cluster of asteroidClusters){
+        for(let i = 0; i < cluster.rocks.length; i++){
+            const r = cluster.rocks[i];
+            const dx = r.x - px, dy = r.y - py;
+            const hitR = r.r + HIT_RADIUS - 2;
+            if(dx*dx + dy*dy < hitR * hitR){
+                /* remove the rock that hit (so player only loses 1 life per impact) */
+                cluster.rocks.splice(i, 1);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function drawAsteroidClusters(){
+    if(!asteroidClusters.length) return;
+    for(const cluster of asteroidClusters){
+        for(const r of cluster.rocks){
+            ctx.save();
+            ctx.translate(r.x, r.y);
+            ctx.rotate(r.ang);
+            /* Rock body — gray gradient + offset shadow */
+            const grad = ctx.createRadialGradient(-r.r*0.25, -r.r*0.25, r.r*0.15, 0, 0, r.r);
+            grad.addColorStop(0, '#a89c8c');
+            grad.addColorStop(0.55, '#766859');
+            grad.addColorStop(1, '#3a3026');
+            if(r.gravGlowT > 0){
+                ctx.shadowColor = 'rgba(255,200,80,0.95)';
+                ctx.shadowBlur = 16 + r.gravGlowT * 18;
+            }
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            /* Slightly irregular polygon — 7 points pseudo-random by seed */
+            const pts = 7;
+            for(let i = 0; i < pts; i++){
+                const a = (i / pts) * Math.PI * 2;
+                /* deterministic per-rock jitter from seed (no rand() per frame). */
+                const jit = 0.78 + 0.22 * Math.sin(r.seed * 0.0123 + i * 1.91);
+                const rr = r.r * jit;
+                const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+                if(i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            /* Crater dot — dark mark to give 3D feel */
+            ctx.fillStyle = 'rgba(40,28,18,0.55)';
+            const cx = Math.cos(r.seed * 0.031) * r.r * 0.35;
+            const cy = Math.sin(r.seed * 0.057) * r.r * 0.35;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r.r * 0.18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+    }
+}
+
+/* =====================================================================
    ITEMS / RESUPPLY DEPOTS — narrative-fit pickup system
    각 zone (행성/천체) 마다 보급 거점 1개 — 자동 보급선이 미리 발사돼서
    놓아둔 캐시. 메테오와 시각적 구분 (네온 LED + 안테나 + 아이템 아이콘).
@@ -4815,6 +4986,20 @@ function triggerWipe(){
         }
     }
     bullets = [];
+    /* Wipe also clears asteroid clusters — keeps the panic-button consistent
+       (otherwise wipe feels weak when a cluster is on screen). Spawn the same
+       glittering fragment debris so the visual cue covers both rocks and bullets. */
+    for(const cluster of asteroidClusters){
+        for(const r of cluster.rocks){
+            wipeFragments.push({
+                x: r.x, y: r.y,
+                vx: (Math.random()-0.5) * 320,
+                vy: (Math.random()-0.5) * 320,
+                life: 0.55, maxLife: 0.55
+            });
+        }
+    }
+    asteroidClusters = [];
     sfxOver();  /* 짧고 강한 효과음 (실제 sfx 가 hit 톤이라 wipe 와 어울림) */
     if(navigator.vibrate) try{navigator.vibrate([20,30,20])}catch(_){}
 }
@@ -5416,6 +5601,8 @@ function resetGame(){
     flashVisible=true;
     lastFlashToggle=0;
     bullets=[];
+    asteroidClusters=[];               /* reset cluster state on (re)start */
+    lastClusterSpawnAt=0;
     lastSpawn=0;
     elapsedMs=0;
     flamePulse=0;
@@ -5793,6 +5980,13 @@ function gameLoop(now){
         resetParticles(newIdx);
         sfxZone();
         zoneEnteredAt = performance.now();   /* depot spawn 타이밍 기준 */
+        /* Asteroid cluster onset — when entering a cluster zone, time the
+           first cluster ~5s after entry (instead of waiting full INTERVAL).
+           For short zones (Pluto dur=14s) this still gives one cluster
+           before the zone ends. */
+        if(_isClusterZone(newIdx)){
+            lastClusterSpawnAt = now - (CLUSTER_SPAWN_INTERVAL - 5000);
+        }
     }
     zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
 
@@ -5916,6 +6110,25 @@ function gameLoop(now){
         if(w < len) bullets.length = w;  /* in-place truncate, no new array */
     }
 
+    /* ---- Asteroid clusters (Pluto / Andromeda / Galactic Rim) ----
+       Slow rock waves; GRAV cone accelerates rocks past the player to
+       carve a passage. Spawn timing checked here, before update so a
+       just-spawned cluster moves one frame this tick.
+       PvP: clusters disabled in pvp mode for v1 — sync would require
+       host→guest broadcast of cluster shape, deferred to a follow-up.
+       (rocks differ from bullets in that they're a multi-rock formation,
+       not a single position; guest re-rolling rand() locally would
+       produce visually different cluster shapes even with same seed
+       once depot rand() consumption diverges between modes.) */
+    const _isPvpAny = pvpState && pvpState.gameMode === 'pvp';
+    if(_isClusterZone(currentZoneIdx) && !_isPvpAny){
+        if(now - lastClusterSpawnAt > CLUSTER_SPAWN_INTERVAL){
+            spawnAsteroidCluster();
+            lastClusterSpawnAt = now;
+        }
+    }
+    updateAsteroidClusters(dt);
+
     /* ---- Black hole gravitational pull ----
        Sgr A* zone 진입 시 player + bullets 모두 중심으로 끌어당김.
        collision/shield 검사 *전* 에 호출 — 끜당김으로 메테오 위치 바뀐 뒤
@@ -5934,20 +6147,30 @@ function gameLoop(now){
        break 하니 한 번만 발생, 새 array 할당 없음. */
     if(now>invincibleUntil){
         const HR2 = (HIT_RADIUS+6) * (HIT_RADIUS+6);
+        let hit = false;
         for(let i = 0; i < bullets.length; i++){
             const b = bullets[i];
             const dx = b.x - player.x, dy = b.y - player.y;
             if(dx*dx + dy*dy < HR2){
-                lives--;
-                invincibleUntil = now + INVINCIBLE_MS;
-                flashVisible = true;
-                lastFlashToggle = now;
-                if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
                 bullets.splice(i, 1);
-                if(lives <= 0){ triggerGameOver(); return; }
-                sfxHit();
+                hit = true;
                 break;
             }
+        }
+        /* Asteroid cluster rocks — same hit treatment, separate radius so
+           larger rocks register correctly. Only check if no bullet hit
+           this frame (one damage event per frame). */
+        if(!hit && asteroidClusters.length){
+            hit = checkAsteroidClusterCollision();
+        }
+        if(hit){
+            lives--;
+            invincibleUntil = now + INVINCIBLE_MS;
+            flashVisible = true;
+            lastFlashToggle = now;
+            if(navigator.vibrate) try{navigator.vibrate(40)}catch(_){}
+            if(lives <= 0){ triggerGameOver(); return; }
+            sfxHit();
         }
     }
 
@@ -6086,6 +6309,11 @@ function drawFrame(now, dt){
         ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
+
+    /* ---- Asteroid clusters — drawn between bullets and depots so depots
+       (with their LED + outline) stay visually crisp on top of the rock layer.
+       Rocks with active GRAV glow render with extra shadow blur. ---- */
+    drawAsteroidClusters();
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
@@ -7496,6 +7724,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778219242"></script>
+<script src="/js/siteFooter.js?v=1778219611"></script>
 </body>
 </html>
