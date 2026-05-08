@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778226229">
-<script>(function(){var B="1778226229";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778226911">
+<script>(function(){var B="1778226911";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1290,10 +1290,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778226229"></script>
-<script src="/js/lpI18n.js?v=1778226229"></script>
-<script src="/js/lpRankSheet.js?v=1778226229"></script>
-<script src="/js/lpAudio.js?v=1778226229"></script>
+<script src="/js/supabase-config.js?v=1778226911"></script>
+<script src="/js/lpI18n.js?v=1778226911"></script>
+<script src="/js/lpRankSheet.js?v=1778226911"></script>
+<script src="/js/lpAudio.js?v=1778226911"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4823,21 +4823,21 @@ const MISSION_DELAY_MS = 8000;       /* zone 진입 후 미션 발생까지 대�
 const MISSION_DURATION_MS = 25000;   /* 미션 시작 후 timeout */
 const MISSION_BLACKHOLE_ZONE = 15;   /* 블랙홀 = 레어 미션 (3개 보상) */
 
-/* zone idx → 궤도 ring 위치 (canvas 좌표). cy 작을수록 위쪽 (행성 근처).
-   r 은 행성 크기에 비례 — 목성·토성 큰 r, 위성·달 작은 r. */
-const ZONE_ORBITS = {
-    0:  {cx: 0.50, cy: 0.18, r: 70 },   // Earth
-    1:  {cx: 0.50, cy: 0.20, r: 58 },   // Moon
-    2:  {cx: 0.50, cy: 0.20, r: 65 },   // Mars
-    3:  {cx: 0.50, cy: 0.22, r: 95 },   // Jupiter
-    4:  {cx: 0.50, cy: 0.22, r: 92 },   // Saturn
-    5:  {cx: 0.50, cy: 0.20, r: 72 },   // Uranus
-    6:  {cx: 0.50, cy: 0.20, r: 70 },   // Neptune
-    10: {cx: 0.55, cy: 0.30, r: 78 },   // Proxima Centauri
-    11: {cx: 0.50, cy: 0.20, r: 88 },   // Sirius
-    12: {cx: 0.50, cy: 0.18, r: 110},   // Betelgeuse (supergiant)
-    15: {cx: 0.50, cy: 0.30, r: 95 },   // Sgr A* (event horizon orbit)
-};
+/* 궤도 위치 LIVE 추적 (2026-05-08 수정) — 이전엔 zone 시작 시점에
+   {cx,cy,r} 스냅샷을 잡아두고 그걸 끝까지 사용했는데, drawMoon /
+   drawMars / drawJupiter 등이 모두 py = CH*(zoneT*2.0-0.4) 식으로
+   행성 자체가 화면 안에서 움직임 → 미션 시작 후 시간 지나면 행성은
+   이동했는데 궤도 ring 은 제자리 → "행성에 안 묶이고 따로 노는" 시각.
+
+   해결: _missionResolveOrbit 가 매 frame 호출되어 행성의 현재 중심
+   좌표 + 본체 반지름 + 마진(orbit altitude) 을 그때그때 계산. drawMoon
+   등의 cx/r 상수와 동일 값 사용 — 한 곳만 동기화하면 항상 일치. */
+function _missionZoneT(zIdx){
+    if(typeof ZONES === 'undefined' || !ZONES[zIdx]) return 0.5;
+    const z = ZONES[zIdx];
+    if(!z.dur || z.dur <= 0) return 0.5;
+    return Math.max(0, Math.min(1, (elapsedMs/1000 - z.s) / z.dur));
+}
 
 /* zone idx → 미션 표시 이름 (KO + EN). 영어는 단일 줄 — fallback 도 항상 영어. */
 const MISSION_TITLES_KO = {
@@ -4879,9 +4879,31 @@ function _missionLang(){
 }
 
 function _missionResolveOrbit(zIdx){
-    const def = ZONE_ORBITS[zIdx];
-    if(!def) return null;
-    return {cx: CW * def.cx, cy: CH * def.cy, r: def.r};
+    /* 각 zone 의 행성/항성 본체 좌표 + 본체 반지름 → 그 위로 ALT(고도)
+       만큼 더한 ring 반지름. drawXxx() 의 cx,py,r 정의와 동일. */
+    if(!MISSION_ZONES.has(zIdx)) return null;
+    const zoneT = _missionZoneT(zIdx);
+    const py = CH * (zoneT * 2.0 - 0.4);    /* 행성류 공통 y */
+    const ALT = 38;                         /* orbit 고도 (본체 위) */
+    switch(zIdx){
+        case 0: {
+            /* Earth — 거대한 호(arc). 중심이 화면 아래쪽 깊숙히. */
+            const arcR = 1800 + (400 - 1800) * zoneT;     /* lerp(1800,400,zoneT) */
+            const cy = CH + arcR * 0.82;
+            return {cx: CW * 0.5, cy, r: arcR + ALT + 10};
+        }
+        case 1: return {cx: CW * 0.38, cy: py, r: 88 + ALT};   /* Moon */
+        case 2: return {cx: CW * 0.65, cy: py, r: 72 + ALT};   /* Mars */
+        case 3: return {cx: CW * 0.50, cy: py, r: 130 + ALT};  /* Jupiter */
+        case 4: return {cx: CW * 0.50, cy: py, r: 65 + ALT + 18}; /* Saturn (rings) */
+        case 5: return {cx: CW * 0.40, cy: py, r: 55 + ALT};   /* Uranus */
+        case 6: return {cx: CW * 0.60, cy: py, r: 55 + ALT};   /* Neptune */
+        case 10: return {cx: CW * 0.30, cy: CH * 0.22, r: 14 + ALT + 16}; /* Proxima */
+        case 11: return {cx: CW * 0.32, cy: CH * 0.20, r: 12 + ALT + 22}; /* Sirius */
+        case 12: return {cx: CW * 0.50, cy: CH * 0.25, r: 60 + ALT + 18}; /* Betelgeuse */
+        case 15: return {cx: CW * 0.50, cy: CH * 0.30, r: 22 + ALT + 22}; /* Sgr A* */
+    }
+    return null;
 }
 
 function _showMissionBanner(zIdx, kind){
@@ -4943,9 +4965,16 @@ function startMissionForZone(zIdx, now){
     if(missionsCompletedZones.has(zIdx)) return;
     if(missionState !== 'idle') return;
     missionZoneIdx = zIdx;
-    missionOrbit = _missionResolveOrbit(zIdx);
+    missionOrbit = _missionResolveOrbit(zIdx);   /* 초기 lookup, 매 frame re-resolve */
     missionState = 'pending';
     missionPendingUntil = now + MISSION_DELAY_MS;
+}
+
+/* Live 좌표 lookup helper — orbit 좌표·반지름이 매 frame 행성과 함께
+   움직임. 모든 코드가 이 함수를 통해서만 missionOrbit 을 읽도록. */
+function _missionCurrentOrbit(){
+    if(missionState !== 'active' && missionState !== 'pending') return null;
+    return _missionResolveOrbit(missionZoneIdx);
 }
 
 function _activateMission(now){
@@ -5015,10 +5044,18 @@ function updateMissionState(now){
 }
 
 function drawMissionOrbit(now){
-    if(missionState !== 'active' || !missionOrbit) return;
-    const o = missionOrbit;
-    /* dashed orbital ring + faint pulse + tiny target marker on top
-       (where player should aim if they're in line). */
+    if(missionState !== 'active') return;
+    const o = _missionCurrentOrbit();    /* live re-lookup */
+    if(!o) return;
+    /* Target marker = orbit ring 위 점 중 player 와 가장 가까운 곳.
+       이러면 player 가 어디에 있든 가까운 entry point 가 보여서
+       궤도가 행성과 묶여있다는 느낌이 살아남. */
+    const dxp = player.x - o.cx;
+    const dyp = player.y - o.cy;
+    const dToC = Math.sqrt(dxp*dxp + dyp*dyp) || 0.01;
+    const tx = o.cx + (dxp / dToC) * o.r;
+    const ty = o.cy + (dyp / dToC) * o.r;
+
     const phase = (now / 700) % 1;
     ctx.save();
     /* outer pulse ring */
@@ -5036,13 +5073,20 @@ function drawMissionOrbit(now){
     ctx.arc(o.cx, o.cy, o.r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
-    /* target marker — bottom of ring (where satellite enters from below).
-       Positioned so player aiming up from middle hits it tangentially. */
-    const tx = o.cx, ty = o.cy + o.r;
-    ctx.fillStyle = `rgba(255, 230, 109, ${0.45 + Math.sin(now * 0.008) * 0.4})`;
+    /* target marker — pulsing yellow dot at nearest orbit point to player */
+    ctx.fillStyle = `rgba(255, 230, 109, ${0.5 + Math.sin(now * 0.008) * 0.4})`;
     ctx.beginPath();
     ctx.arc(tx, ty, 5 + Math.sin(now * 0.008) * 1.5, 0, Math.PI * 2);
     ctx.fill();
+    /* aim guide line — player → target (subtle, dim) */
+    ctx.strokeStyle = `rgba(255, 230, 109, ${0.18 + Math.sin(now * 0.008) * 0.08})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y - 14);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.setLineDash([]);
     ctx.restore();
 }
 
@@ -5210,31 +5254,45 @@ function updateSatellite(dt, now){
     /* trail (last 6 positions) */
     satellite.trail.push({x:satellite.x, y:satellite.y});
     if(satellite.trail.length > 6) satellite.trail.shift();
-    /* gentle gravity pull toward orbit center if mission active —
-       makes mid-flight satellites curve toward the target. */
-    if(missionOrbit){
-        const dx = missionOrbit.cx - satellite.x;
-        const dy = (missionOrbit.cy + missionOrbit.r) - satellite.y;
-        const dd = Math.sqrt(dx*dx + dy*dy);
-        if(dd > 8){
-            const pullStrength = 220;
-            satellite.vx += (dx/dd) * pullStrength * dt;
-            satellite.vy += (dy/dd) * pullStrength * dt;
+    /* gentle gravity pull toward orbit's nearest visible point — makes
+       mid-flight satellites curve toward the target. Orbit is live-
+       resolved per frame so satellite chases the moving planet. */
+    const orbit = _missionCurrentOrbit();
+    if(orbit){
+        /* target = orbit's nearest point to current satellite position
+           (so the satellite curves toward the closest entry tangent,
+           not always the bottom). */
+        const dx = orbit.cx - satellite.x;
+        const dy = orbit.cy - satellite.y;
+        const dToCenter = Math.sqrt(dx*dx + dy*dy) || 0.01;
+        /* nearest orbit point along the line from sat to center */
+        const tgtX = orbit.cx - (dx / dToCenter) * orbit.r;
+        const tgtY = orbit.cy - (dy / dToCenter) * orbit.r;
+        const tdx = tgtX - satellite.x;
+        const tdy = tgtY - satellite.y;
+        const tdist = Math.sqrt(tdx*tdx + tdy*tdy);
+        if(tdist > 8){
+            const pullStrength = 240;
+            satellite.vx += (tdx/tdist) * pullStrength * dt;
+            satellite.vy += (tdy/tdist) * pullStrength * dt;
         }
     }
     satellite.vx *= SAT_DAMP;
     satellite.vy *= SAT_DAMP;
     satellite.x += satellite.vx * dt;
     satellite.y += satellite.vy * dt;
-    /* check orbit insertion */
-    if(missionOrbit){
-        const dx = satellite.x - missionOrbit.cx;
-        const dy = satellite.y - (missionOrbit.cy + missionOrbit.r);
-        if(Math.abs(dx) < SAT_HIT_X && Math.abs(dy) < SAT_HIT_Y){
-            /* settle into orbit at the angle satellite arrived from */
-            const ang = Math.atan2(satellite.y - missionOrbit.cy, satellite.x - missionOrbit.cx);
+    /* check orbit insertion — satellite within band of orbit ring */
+    if(orbit){
+        const ddx = satellite.x - orbit.cx;
+        const ddy = satellite.y - orbit.cy;
+        const distFromCenter = Math.sqrt(ddx*ddx + ddy*ddy);
+        const offRing = Math.abs(distFromCenter - orbit.r);
+        if(offRing < SAT_HIT_Y && distFromCenter < orbit.r + 80){
+            /* settle into orbit — store zIdx so the orbiting satellite
+               tracks the moving planet later. */
+            const ang = Math.atan2(ddy, ddx);
             satelliteOrbiting.push({
-                cx: missionOrbit.cx, cy: missionOrbit.cy, r: missionOrbit.r,
+                zIdx: missionZoneIdx,
                 ang, angVel: 0.6 + rand() * 0.3
             });
             satellite = null;
@@ -5285,11 +5343,19 @@ function drawSatellite(now){
         ctx.shadowBlur = 0;
         ctx.restore();
     }
-    /* orbiting satellites — perpetual circle around their target */
+    /* orbiting satellites — perpetual circle around their planet.
+       Only render those whose home zone is currently on screen, and
+       re-resolve the orbit live so the satellite tracks the moving
+       planet body (the moon, mars, etc all move during their zone). */
     for(const s of satelliteOrbiting){
-        s.ang += s.angVel * (1/60);   /* fixed rate, ~60fps approx */
-        const sx = s.cx + Math.cos(s.ang) * s.r;
-        const sy = s.cy + Math.sin(s.ang) * s.r;
+        if(s.zIdx !== currentZoneIdx) continue;     /* visible only in home zone */
+        const orbit = _missionResolveOrbit(s.zIdx);
+        if(!orbit) continue;
+        s.ang += s.angVel * (1/60);
+        const sx = orbit.cx + Math.cos(s.ang) * orbit.r;
+        const sy = orbit.cy + Math.sin(s.ang) * orbit.r;
+        /* skip if completely off-screen (common for Earth's huge below-canvas orbit) */
+        if(sx < -20 || sx > CW + 20 || sy < -20 || sy > CH + 20) continue;
         ctx.save();
         ctx.translate(sx, sy);
         ctx.rotate(s.ang + Math.PI/2);
@@ -8974,6 +9040,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778226229"></script>
+<script src="/js/siteFooter.js?v=1778226911"></script>
 </body>
 </html>
