@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778253459">
-<script>(function(){var B="1778253459";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778255431">
+<script>(function(){var B="1778255431";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -223,6 +223,7 @@ body{
     text-shadow:none;
 }
 .left-controls .reward-slot.has-anchor{ color:#9CDFFF; text-shadow:0 0 8px rgba(0,217,255,.85); }
+.left-controls .reward-slot.has-warp{   color:#80C8FF; text-shadow:0 0 10px rgba(80,180,255,.95); }
 .left-controls .reward-slot.has-storm{  color:#FF8FB0; text-shadow:0 0 8px rgba(255,80,140,.85); }
 .left-controls .reward-slot.has-fuel{   color:#FFE680; text-shadow:0 0 8px rgba(255,180,40,.85); }
 .left-controls .reward-slot.has-drone{  color:#9CDFFF; text-shadow:0 0 8px rgba(120,200,255,.85); }
@@ -1325,10 +1326,10 @@ body{
 
 </main>
 
-<script src="/js/supabase-config.js?v=1778253459"></script>
-<script src="/js/lpI18n.js?v=1778253459"></script>
-<script src="/js/lpRankSheet.js?v=1778253459"></script>
-<script src="/js/lpAudio.js?v=1778253459"></script>
+<script src="/js/supabase-config.js?v=1778255431"></script>
+<script src="/js/lpI18n.js?v=1778255431"></script>
+<script src="/js/lpRankSheet.js?v=1778255431"></script>
+<script src="/js/lpAudio.js?v=1778255431"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4782,7 +4783,10 @@ function drawSupernovaRings(){
    2026-05-08 Stage 6.
    ===================================================================== */
 let pulsarBeam = null;
-let pulsarStartedAt = 0;
+/* 2026-05-09: pulsarStartedAt → pulsarElapsed accumulator.
+   Time Warp 활성 시 _worldDt 로 누적 dt 가 줄어들어 빔 회전·burst 타이밍
+   모두 자동 슬로우. 전체 시간 (now) 기반이면 슬로우 못 시켜서 아예 새 변수. */
+let pulsarElapsed = 0;
 const PULSAR_PERIOD_MS = 3600;
 const PULSAR_BEAM_W = 22;
 const PULSAR_LEN = Math.max(CW, CH) * 1.2;
@@ -4821,14 +4825,19 @@ function _siriusBodyPos(){
     return {x: CW * 0.32, y: CH * (zoneT * 2.0 - 0.4)};
 }
 function ensurePulsarBeam(now){
-    if(!pulsarBeam){ pulsarBeam = {}; pulsarStartedAt = now; }
+    if(!pulsarBeam){ pulsarBeam = {}; pulsarElapsed = 0; }
     const p = _siriusBodyPos();
     pulsarBeam.cx = p.x;
     pulsarBeam.cy = p.y;
 }
 function clearPulsarBeam(){ pulsarBeam = null; }
-function _pulsarCurrentAngle(now){
-    return ((now - pulsarStartedAt) / PULSAR_PERIOD_MS) * Math.PI * 2;
+/* 매 frame 호출 — world dt 만큼 elapsed 누적 (Time Warp 시 35% 만 진행). */
+function updatePulsarTime(dt, now){
+    if(!pulsarBeam) return;
+    pulsarElapsed += _worldDt(dt, now);
+}
+function _pulsarCurrentAngle(){
+    return (pulsarElapsed / PULSAR_PERIOD_MS) * Math.PI * 2;
 }
 /* 현재 phase 정보 —
    { mode: 'idle'|'warn'|'damage'|'afterglow', danger: 0..1, alpha: 0..1 }
@@ -4836,7 +4845,7 @@ function _pulsarCurrentAngle(now){
    - danger 0..1 은 색·폭·glow 보간용 (idle=0, warn=0~1 ramp, damage=1, afterglow=1~0). */
 function _pulsarPhase(now){
     if(!pulsarBeam) return {mode:'idle', danger:0, alpha:0};
-    const t = now - pulsarStartedAt;
+    const t = pulsarElapsed;     /* world-time 기반, Time Warp 시 자동 슬로우 */
     for(const burst of PULSAR_BURSTS){
         if(t >= burst.start - PULSAR_WARN_MS && t < burst.end + PULSAR_AFTER_MS){
             if(t < burst.start){
@@ -4868,7 +4877,7 @@ function checkPulsarBeamCollision(now){
     const dist = Math.sqrt(px*px + py*py);
     if(dist < 28) return false;
     const playerAng = Math.atan2(py, px);
-    const beamAng = _pulsarCurrentAngle(now);
+    const beamAng = _pulsarCurrentAngle();
     for(const offset of [0, Math.PI]){
         let diff = playerAng - (beamAng + offset);
         diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -4888,7 +4897,7 @@ function drawPulsarBeam(now){
     if(!pulsarBeam) return;
     const phase = _pulsarPhase(now);
     if(phase.alpha <= 0.01) return;
-    const a = _pulsarCurrentAngle(now);
+    const a = _pulsarCurrentAngle();
     const d = phase.danger;       /* 0..1 */
 
     /* 폭 보간 — 가는 가이드 라인(4px) → 풀 데미지 빔(22px) */
@@ -5162,12 +5171,12 @@ function completeMission(now){
        reward-slot increment + item logic. */
     if(typeof grantMissionReward === 'function'){
         if(z === MISSION_BLACKHOLE_ZONE){
-            grantMissionReward('anchor');
+            grantMissionReward('warp');
             grantMissionReward('storm');
             grantMissionReward('drone');
         } else {
             /* random pick of 3 rewards. Phase D may bias toward zone-specific. */
-            const pool = ['anchor','storm','drone'];
+            const pool = ['warp','storm','drone'];
             grantMissionReward(pool[Math.floor(rand() * pool.length)]);
         }
     }
@@ -5249,9 +5258,15 @@ function drawMissionOrbit(now){
 /* =====================================================================
    MISSION REWARD ITEMS (Phase D) — 3 effects.
 
-   ⏳ Time Anchor  : 다음 1회 사망 시 자동 부활 (lives=1 + 2초 무적).
-                    timeAnchorArmed=true 로 활성화하면 슬롯 비워짐. 죽으면
-                    소비. 블랙홀 즉사 (triggerGameOver) 도 가로챔.
+   ⏱ Time Warp   : 5초간 적·총알·기뢰·펄사 회전을 모두 35% 속도로 슬로우.
+                    플레이어 우주선만 정상 속도 → 사실상 갓모드.
+                    구현: timeWarpUntil 까지 _worldDt(dt) 가 0.35 곱한 값
+                    반환. bullet 이동·cluster·flare·mine·supernova·pulsar
+                    모두 이 dt 사용. 시각적으론 청색 틴트 + 발동 시 임팩트
+                    플래시 + 화면 가장자리 chromatic shimmer.
+                    이전 Time Anchor (사망 시 자동 부활) 대체 — "사후
+                    안전망" 보다 "능동적으로 슬로우 모션 즐기는 와우 모먼트"
+                    가 게임 재미에 훨씬 큼.
    💥 Plasma Storm : 화면 모든 적 즉시 제거 (bullets·cluster·mines·
                     supernova·solarFlare). 4초 spawn block 추가. Wipe
                     보다 강함 (cluster·mine·supernova 도 청소).
@@ -5261,17 +5276,29 @@ function drawMissionOrbit(now){
                       mines · solar flare). 드론은 살아남음 (proximity shield).
                     - 110px 반경 안의 itemPickups 를 player 쪽으로 끌어당김
                       (auto-magnet). GRAV 안 써도 아이템 회수 됨.
-                    이전 Orbital Fuel (6s 무한 GRAV) 대체 — "버튼 안 눌러도
-                    돕는 동료" 컨셉으로 더 fun + 시각적으로 명확.
+                    2026-05-09: 비주얼 강화 — 헥사 외곽 + 진행방향 삼각
+                    코어 + 모션 트레일 + 주기 에너지 아크 → "전술 드론".
    ===================================================================== */
-const REWARD_KINDS = ['anchor','storm','drone'];
-const REWARD_ICONS = {anchor:'⏳', storm:'💥', drone:'🛰'};
-const REWARD_SLOT_IDS = {anchor:'rewardSlot0', storm:'rewardSlot1', drone:'rewardSlot2'};
-let rewardCounts = {anchor: 0, storm: 0, drone: 0};
-let timeAnchorArmed = false;
+const REWARD_KINDS = ['warp','storm','drone'];
+const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'🛰'};
+const REWARD_SLOT_IDS = {warp:'rewardSlot0', storm:'rewardSlot1', drone:'rewardSlot2'};
+let rewardCounts = {warp: 0, storm: 0, drone: 0};
+/* Time Warp 상태 */
+let timeWarpUntil = 0;
+let timeWarpStartedAt = 0;          /* 발동 임팩트 플래시 (300ms) 용 */
+const TIME_WARP_MS = 5000;
+const TIME_WARP_FACTOR = 0.35;      /* world 속도 = 35% */
+function _isTimeWarpActive(now){ return now < timeWarpUntil; }
+/* 적/총알/펄사 회전 dt 에 적용. player 이동·zone 진행은 그대로.
+   _worldDt(dt, now) 는 warp 활성 시 dt × 0.35, 평소엔 dt 그대로. */
+function _worldDt(dt, now){
+    return (now < timeWarpUntil) ? dt * TIME_WARP_FACTOR : dt;
+}
+/* Aegis Drone 상태 */
 let aegisDroneActive = false;
 let aegisDroneExpiresAt = 0;
 let aegisDroneAngle = 0;
+let aegisDroneTrail = [];           /* 최근 8 frame 위치 (모션 트레일) */
 const AEGIS_DURATION_MS = 12000;
 const AEGIS_ORBIT_RADIUS = 75;
 const AEGIS_ANGULAR_VEL = 3.0;       /* rad/s — 약 0.48 회전/sec */
@@ -5283,7 +5310,7 @@ function _refreshRewardSlot(kind){
     const el = document.getElementById(REWARD_SLOT_IDS[kind]);
     if(!el) return;
     const count = rewardCounts[kind];
-    el.classList.remove('has-anchor','has-storm','has-fuel','has-drone','empty');
+    el.classList.remove('has-anchor','has-warp','has-storm','has-fuel','has-drone','empty');
     if(count > 0){
         el.classList.add('has-' + kind);
         el.textContent = count > 1 ? (REWARD_ICONS[kind] + count) : REWARD_ICONS[kind];
@@ -5364,10 +5391,20 @@ function _aegisDronePos(){
 }
 
 function updateAegisDrone(dt, now){
-    if(!aegisDroneActive) return;
-    if(now >= aegisDroneExpiresAt){ aegisDroneActive = false; return; }
+    if(!aegisDroneActive){
+        if(aegisDroneTrail.length) aegisDroneTrail.length = 0;
+        return;
+    }
+    if(now >= aegisDroneExpiresAt){
+        aegisDroneActive = false;
+        aegisDroneTrail.length = 0;
+        return;
+    }
     aegisDroneAngle += (dt/1000) * AEGIS_ANGULAR_VEL;
     const pos = _aegisDronePos();
+    /* 모션 트레일 — 매 프레임 현재 위치 push, 최대 8 entry. */
+    aegisDroneTrail.push({x: pos.x, y: pos.y});
+    if(aegisDroneTrail.length > 8) aegisDroneTrail.shift();
     /* destroy bullets touching drone */
     const HR2 = (AEGIS_HIT_RADIUS + 6) * (AEGIS_HIT_RADIUS + 6);
     for(let i = bullets.length - 1; i >= 0; i--){
@@ -5440,56 +5477,157 @@ function updateAegisDrone(dt, now){
     }
 }
 
+/* 2026-05-09 비주얼 강화 — "diamond + glow" 너무 단조롭다는 피드백 →
+   "전술 드론" 다운 디테일 추가:
+   - 헥사 외곽 (6각형, 드론 진행과 반대로 회전 — 메카닉 느낌)
+   - 진행 방향 삼각 코어 (orbit tangent 향함 — "어디로 가는지" 표시)
+   - 6개 디오드 (헥사 꼭지점, 짝수/홀수 색 다름 — 디테일)
+   - 모션 트레일 (최근 8 frame 위치, 페이드)
+   - 펄스 코어 (sin 호흡)
+   - 0.5s 주기 에너지 아크 player 와 연결 (zigzag — "동력 공급" 느낌) */
 function drawAegisDrone(now){
     if(!aegisDroneActive) return;
     const pos = _aegisDronePos();
     const remain = aegisDroneExpiresAt - now;
     /* 마지막 1.5초는 깜빡 — 곧 사라짐 경고 */
-    let alpha = 1;
+    let baseAlpha = 1;
     if(remain < 1500){
-        alpha = 0.55 + Math.abs(Math.sin(now * 0.018)) * 0.45;
+        baseAlpha = 0.55 + Math.abs(Math.sin(now * 0.018)) * 0.45;
     }
+    /* 모션 방향 = 궤도 접선 (각도 + π/2). orbit CCW 라 +π/2. */
+    const motionHeading = aegisDroneAngle + Math.PI/2;
+    const t = now / 1000;
+
     ctx.save();
-    ctx.globalAlpha = alpha;
-    /* 연결 line — player 와의 결속 표현 */
-    ctx.globalAlpha = alpha * 0.22;
-    ctx.strokeStyle = '#9CDFFF';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y - 4);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.globalAlpha = alpha;
-    /* drone 본체 — 작은 다이아몬드 + glow */
+
+    /* 1. 모션 트레일 — 최근 위치들이 페이드되며 따라옴 */
+    if(aegisDroneTrail && aegisDroneTrail.length){
+        for(let i = 0; i < aegisDroneTrail.length; i++){
+            const tp = aegisDroneTrail[i];
+            const k = i / aegisDroneTrail.length;
+            const a = baseAlpha * k * 0.45;
+            ctx.fillStyle = `rgba(140, 220, 255, ${a})`;
+            ctx.beginPath();
+            ctx.arc(tp.x, tp.y, 1.5 + k * 2.5, 0, Math.PI*2);
+            ctx.fill();
+        }
+    }
+
+    /* 2. 에너지 아크 — 0.5s 주기, 앞 200ms 만 visible (40% duty).
+       player 까지 zigzag 한 번개. "드론이 player 에게 동력 공급" 시각화. */
+    {
+        const cyc = (now % 500) / 500;
+        if(cyc < 0.40){
+            const arcAlpha = baseAlpha * (1 - cyc / 0.40) * 0.7;
+            const dx = player.x - pos.x;
+            const dy = (player.y - 4) - pos.y;
+            const len = Math.sqrt(dx*dx + dy*dy);
+            const nx = -dy / Math.max(1, len);  /* 수직 단위벡터 */
+            const ny = dx / Math.max(1, len);
+            const segs = 5;
+            ctx.shadowColor = '#9CDFFF';
+            ctx.shadowBlur = 6;
+            ctx.strokeStyle = `rgba(180, 230, 255, ${arcAlpha})`;
+            ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            for(let i = 1; i <= segs; i++){
+                const fk = i / segs;
+                /* 중간이 커지는 zigzag — 양 끝은 정확히 player·drone 위치로. */
+                const wobble = Math.sin(fk * Math.PI) * 5 * ((i % 2) ? 1 : -1);
+                const x = pos.x + dx * fk + nx * wobble;
+                const y = pos.y + dy * fk + ny * wobble;
+                ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+    }
+
+    /* 3. 헥사 외곽 — 드론 진행과 반대로 회전 (속도 0.5×). */
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(-aegisDroneAngle * 0.6 + t * 0.4);
+    ctx.globalAlpha = baseAlpha;
     ctx.shadowColor = '#9CDFFF';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = 'rgba(180, 230, 255, 0.92)';
+    ctx.shadowBlur = 16;
+    ctx.strokeStyle = `rgba(180, 230, 255, 0.9)`;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
-    ctx.moveTo(pos.x, pos.y - 11);
-    ctx.lineTo(pos.x + 8, pos.y);
-    ctx.lineTo(pos.x, pos.y + 11);
-    ctx.lineTo(pos.x - 8, pos.y);
+    for(let i = 0; i < 6; i++){
+        const a = (i / 6) * Math.PI * 2;
+        const x = Math.cos(a) * 13;
+        const y = Math.sin(a) * 13;
+        if(i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    /* 디오드 — 6 꼭지점, 짝수=흰색, 홀수=청록 (전기 회로 느낌) */
+    ctx.shadowBlur = 8;
+    for(let i = 0; i < 6; i++){
+        const a = (i / 6) * Math.PI * 2;
+        const x = Math.cos(a) * 13;
+        const y = Math.sin(a) * 13;
+        const isEven = (i % 2 === 0);
+        ctx.fillStyle = isEven ? '#FFFFFF' : '#9CDFFF';
+        ctx.shadowColor = isEven ? '#FFFFFF' : '#9CDFFF';
+        ctx.beginPath();
+        ctx.arc(x, y, 1.6, 0, Math.PI*2);
+        ctx.fill();
+    }
+    ctx.restore();
+
+    /* 4. 진행 방향 삼각 코어 — 드론이 향하는 방향 표시. */
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(motionHeading);
+    ctx.globalAlpha = baseAlpha;
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 12;
+    /* 삼각 본체 (앞쪽 길게, 뒤쪽 짧게) */
+    ctx.fillStyle = 'rgba(220, 240, 255, 0.95)';
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-5, -4.5);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-5, 4.5);
     ctx.closePath();
     ctx.fill();
+    /* 미세 outline */
     ctx.shadowBlur = 0;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.lineWidth = 0.8;
     ctx.stroke();
-    /* 미세 코어 점 */
+    /* 뒤쪽 엔진 글로우 — 살짝 후방 분사 */
+    const enginePulse = 0.6 + Math.sin(t * 12) * 0.4;
+    ctx.shadowColor = '#9CDFFF';
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = `rgba(140, 220, 255, ${0.55 * enginePulse * baseAlpha})`;
+    ctx.beginPath();
+    ctx.arc(-7, 0, 2.5 * enginePulse, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    /* 5. 펄스 코어 — 작은 흰 점, sin 호흡 */
+    ctx.globalAlpha = baseAlpha;
+    ctx.shadowColor = '#FFFFFF';
+    ctx.shadowBlur = 10 + Math.sin(t * 6) * 4;
     ctx.fillStyle = '#FFFFFF';
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, 2.2, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, 2 + Math.sin(t * 6) * 0.6, 0, Math.PI*2);
     ctx.fill();
+
     ctx.restore();
 }
 
-function _activateTimeAnchor(){
-    timeAnchorArmed = true;
+function _activateTimeWarp(now){
+    timeWarpUntil = now + TIME_WARP_MS;
+    timeWarpStartedAt = now;
     const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
-    _showRewardToast(lang === 'ko' ? '⏳ 시간 닻 ARMED — 다음 1회 부활' : '⏳ TIME ANCHOR ARMED — auto-revive once', '#9CDFFF', 1700);
+    _showRewardToast(lang === 'ko' ? '⏱ 시간 왜곡 — 5초간 슬로우' : '⏱ TIME WARP — 5s slow motion', '#80C8FF', 1800);
     sfxStart();
+    if(navigator.vibrate) try{navigator.vibrate([15, 30, 50])}catch(_){}
 }
 
 function activateRewardSlot(kind){
@@ -5506,12 +5644,12 @@ function activateRewardSlot(kind){
             return;
         }
         const now = performance.now();
-        if(kind === 'anchor'){
-            if(timeAnchorArmed){
-                _showRewardToast('⏳ 이미 ARMED', '#9CDFFF', 900);
+        if(kind === 'warp'){
+            if(_isTimeWarpActive(now)){
+                _showRewardToast('⏱ 이미 활성화됨', '#80C8FF', 900);
                 return;
             }
-            _activateTimeAnchor();
+            _activateTimeWarp(now);
         } else if(kind === 'storm'){
             _activatePlasmaStorm(now);
         } else if(kind === 'drone'){
@@ -5540,17 +5678,11 @@ function _wireRewardSlots(){
 if(document.readyState !== 'loading') _wireRewardSlots();
 else document.addEventListener('DOMContentLoaded', _wireRewardSlots);
 
-/* Time Anchor consumption — called from any death path. Returns true if
-   the anchor saved the player (caller should NOT trigger game over). */
+/* 2026-05-09: Time Anchor (사망 시 자동 부활) → Time Warp 로 컨셉 변경됨.
+   _consumeTimeAnchorIfArmed 는 이제 항상 false 반환 — 호출 측에서 그대로
+   유지되도록 stub 만 남겨둠 (전체 callsite 정리 후 다음 commit 에서 제거). */
 function _consumeTimeAnchorIfArmed(now){
-    if(!timeAnchorArmed) return false;
-    timeAnchorArmed = false;
-    lives = Math.max(1, lives);
-    invincibleUntil = now + 2000;
-    flashVisible = true;
-    plasmaStormFlashUntil = now + 350;     /* visual ping (re-use channel) */
-    if(navigator.vibrate) try{navigator.vibrate([10,40,10])}catch(_){}
-    return true;
+    return false;
 }
 
 /* =====================================================================
@@ -5734,44 +5866,58 @@ function drawPlasmaStormFlash(now){
     ctx.restore();
 }
 
-function drawTimeAnchorAura(now){
-    /* Time Anchor armed — 본체 주위 강한 cyan ring (회전 + 더블). */
-    if(!timeAnchorArmed) return;
-    const t = now / 600;
+/* 2026-05-09: Time Warp 시각 — 청색 틴트 풀스크린 + 발동 임팩트 플래시.
+   warp 활성 동안 화면 전체가 청색으로 살짝 물들어 "다른 시간대" 느낌.
+   발동 직후 300ms 는 강한 임팩트 플래시 (세로 슬릿 패턴 + 중앙 링).
+   constellation: 화면 가장자리에 chromatic shimmer 추가해 영화 슬로우모션 룩.
+   */
+function drawTimeWarpOverlay(now){
+    if(now >= timeWarpUntil) return;
+    const remain = timeWarpUntil - now;
+    const elapsed = now - timeWarpStartedAt;
+    /* 활성 중 청색 틴트 — 종료 마지막 600ms 동안 페이드 아웃. */
+    let tintAlpha = 0.10;
+    if(remain < 600) tintAlpha *= remain / 600;
+    if(elapsed < 200) tintAlpha *= (elapsed / 200);     /* 페이드인 */
     ctx.save();
-    ctx.translate(player.x, player.y);
-    /* 외곽 큰 ring — 점선 회전 */
-    ctx.strokeStyle = `rgba(140, 220, 255, ${0.7 + Math.sin(t * 2) * 0.25})`;
-    ctx.lineWidth = 3;
-    ctx.shadowColor = 'rgba(140,220,255,1)';
-    ctx.shadowBlur = 18;
-    const segCount = 8;
-    const segArc = (Math.PI * 2) / segCount;
-    for(let i = 0; i < segCount; i++){
-        const a1 = i * segArc + t * 0.7;
-        const a2 = a1 + segArc * 0.6;
-        ctx.beginPath();
-        ctx.arc(0, 0, 28, a1, a2);
-        ctx.stroke();
-    }
-    /* 내부 작은 ring — 반대방향 회전 */
-    ctx.strokeStyle = `rgba(180, 240, 255, ${0.55 + Math.cos(t * 2.5) * 0.2})`;
-    ctx.lineWidth = 1.5;
-    ctx.shadowBlur = 12;
-    for(let i = 0; i < 6; i++){
-        const a1 = i * (Math.PI * 2 / 6) - t * 1.1;
-        const a2 = a1 + (Math.PI * 2 / 6) * 0.65;
-        ctx.beginPath();
-        ctx.arc(0, 0, 18, a1, a2);
-        ctx.stroke();
-    }
-    /* 내부 dim glow */
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = `rgba(140, 220, 255, ${0.10 + Math.sin(t) * 0.05})`;
-    ctx.beginPath();
-    ctx.arc(0, 0, 14, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.fillStyle = `rgba(80, 160, 255, ${tintAlpha})`;
+    ctx.fillRect(0, 0, CW, CH);
+    /* Chromatic edge bands — 위/아래 가장자리 청록 글로우.
+       슬로우모션 영상에서 흔히 보는 vignette. */
+    const bandH = 70;
+    const grad1 = ctx.createLinearGradient(0, 0, 0, bandH);
+    grad1.addColorStop(0, `rgba(120, 200, 255, ${tintAlpha * 2.5})`);
+    grad1.addColorStop(1, 'rgba(120, 200, 255, 0)');
+    ctx.fillStyle = grad1;
+    ctx.fillRect(0, 0, CW, bandH);
+    const grad2 = ctx.createLinearGradient(0, CH - bandH, 0, CH);
+    grad2.addColorStop(0, 'rgba(120, 200, 255, 0)');
+    grad2.addColorStop(1, `rgba(120, 200, 255, ${tintAlpha * 2.5})`);
+    ctx.fillStyle = grad2;
+    ctx.fillRect(0, CH - bandH, CW, bandH);
     ctx.restore();
+    /* 발동 임팩트 (300ms) — 중앙에서 퍼지는 링 + 빠르게 페이드. */
+    if(elapsed < 380){
+        const k = elapsed / 380;
+        const r = 60 + k * 380;
+        const a = (1 - k) * 0.55;
+        ctx.save();
+        ctx.strokeStyle = `rgba(160, 220, 255, ${a})`;
+        ctx.lineWidth = 4 - k * 3;
+        ctx.shadowColor = '#80C8FF';
+        ctx.shadowBlur = 24;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y - 4, r, 0, Math.PI * 2);
+        ctx.stroke();
+        /* 두 번째 더 빠른 링 */
+        const r2 = 30 + k * 220;
+        ctx.strokeStyle = `rgba(220, 240, 255, ${a * 0.7})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(player.x, player.y - 4, r2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+    }
 }
 
 function drawRewardToast(now){
@@ -7272,7 +7418,7 @@ function resetGame(){
     supernovaRings=[];                 /* Stage 5 reset */
     lastSupernovaAt=0;
     pulsarBeam=null;                   /* Stage 6 reset */
-    pulsarStartedAt=0;
+    pulsarElapsed=0;
     /* Satellite mission state reset (Phase B+C) — also clear reward slots
        so a new run starts with empty reward bar. */
     missionState='idle';
@@ -7286,9 +7432,11 @@ function resetGame(){
     satHeld=false;                     /* Phase C v2 reset */
     satInstallProgress=0;
     /* Phase D reward state reset */
-    rewardCounts={anchor:0, storm:0, drone:0};
-    timeAnchorArmed=false;
+    rewardCounts={warp:0, storm:0, drone:0};
+    timeWarpUntil=0;
+    timeWarpStartedAt=0;
     aegisDroneActive=false;
+    aegisDroneTrail=[];
     aegisDroneExpiresAt=0;
     aegisDroneAngle=0;
     plasmaStormFlashUntil=0;
@@ -7300,7 +7448,7 @@ function resetGame(){
         for(let i=0;i<3;i++){
             const el=document.getElementById('rewardSlot'+i);
             if(el){
-                el.classList.remove('has-anchor','has-storm','has-fuel','has-drone');
+                el.classList.remove('has-anchor','has-warp','has-storm','has-fuel','has-drone');
                 el.classList.add('empty');
                 el.textContent='';
             }
@@ -7833,8 +7981,10 @@ function gameLoop(now){
             }
             b.trailHead = (b.trailHead + 1) % TRAIL_CAP;
             if(b.trailLen < TRAIL_CAP) b.trailLen++;
-            b.x += b.vx * dt;
-            b.y += b.vy * dt;
+            /* Time Warp 시 dt × 0.35 — bullet 만 슬로우, player 는 정상. */
+            const wdt = _worldDt(dt, now);
+            b.x += b.vx * wdt;
+            b.y += b.vy * wdt;
             /* Near-miss combo credit (Stage 7). Once per bullet via the
                creditedNearMiss flag. Outer = 32px, inner = HIT_RADIUS+4
                (just outside the lethal ring). Bullets that hit get
@@ -7898,16 +8048,20 @@ function gameLoop(now){
         if(_isPulsarZone(currentZoneIdx)) ensurePulsarBeam(now);
         else if(pulsarBeam) clearPulsarBeam();
     }
-    updateAsteroidClusters(dt);
-    updateSolarFlares(dt);
-    updateMagneticMines(dt, now);
-    updateSupernovaRings(dt);
+    /* Time Warp 적용 — 적/위협 dt 만 슬로우, player·zone·미션은 그대로. */
+    const wDt = _worldDt(dt, now);
+    updateAsteroidClusters(wDt);
+    updateSolarFlares(wDt);
+    updateMagneticMines(wDt, now);
+    updateSupernovaRings(wDt);
+    updatePulsarTime(dt, now);          /* 내부에서 _worldDt 적용 */
     /* Satellite mission state machine (Phase B) — pending → active → success/failed → idle */
     updateMissionState(now);
-    /* Satellite installation (Phase C v2) — hold-to-deploy progress */
+    /* Satellite installation (Phase C v2) — hold-to-deploy progress (player 행동) */
     updateSatelliteInstall(dt, now);
     /* Aegis Drone — 자율 호위 드론. bullets/cluster/mines/flare 청소 + item magnet.
-       collision check 전에 호출해야 드론에 닿은 위협이 player 충돌에 안 들어감. */
+       collision check 전에 호출해야 드론에 닿은 위협이 player 충돌에 안 들어감.
+       드론 자체는 player 동행이라 정상 dt — Time Warp 영향 X. */
     updateAegisDrone(dt, now);
 
     /* ---- Black hole gravitational pull ----
@@ -8127,8 +8281,7 @@ function drawFrame(now, dt){
     drawMissionOrbit(now);          /* Phase B — orbital ring during active mission */
     drawSatelliteOrbiting(now);     /* Phase C — successful satellites in their home zone */
     drawSatelliteInstall(now);      /* Phase C v2 — deployment cone + install preview */
-    drawTimeAnchorAura(now);        /* Phase D — armed Time Anchor visible ring */
-    drawAegisDrone(now);            /* Phase D — Aegis escort drone (구 Orbital Fuel) */
+    drawAegisDrone(now);            /* Phase D — Aegis escort drone */
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
@@ -8277,6 +8430,8 @@ function drawFrame(now, dt){
         ctx.fillText('▶ 재개 버튼 / Space / 화면 탭',CW/2,CH/2+36);
         ctx.textAlign='left';
     }
+    /* Time Warp overlay — UI 보다는 아래, gameplay 보다는 위 (분위기 변경) */
+    drawTimeWarpOverlay(now);
     /* Plasma Storm flash — 가장 마지막에 그려서 모든 것 위에 덮어씀 */
     drawPlasmaStormFlash(now);
     /* Reward toast — 절대적으로 가장 위 (모든 효과 + UI 위) */
@@ -9543,6 +9698,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778253459"></script>
+<script src="/js/siteFooter.js?v=1778255431"></script>
 </body>
 </html>
