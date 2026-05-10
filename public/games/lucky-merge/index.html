@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778454985">
-<script>(function(){var B="1778454985";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778456135">
+<script>(function(){var B="1778456135";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -342,6 +342,23 @@ canvas#g{
 
 const cv = document.getElementById('g');
 const ctx = cv.getContext('2d');
+
+/* 2026-05-11 v4 — HiDPI rendering + bloom post-processing.
+   캔버스 internal 해상도를 device pixel ratio 만큼 곱해서 retina 디스플레이에서
+   sharp 한 디테일 표현. 모든 draw 함수는 logical 좌표 (C.W × C.H) 그대로 사용. */
+const CANVAS_DPR = Math.min(window.devicePixelRatio || 1, 2);
+cv.width  = 360 * CANVAS_DPR;
+cv.height = 560 * CANVAS_DPR;
+ctx.scale(CANVAS_DPR, CANVAS_DPR);
+
+/* Bloom offscreen canvas — 매 frame 메인 캔버스를 절반 해상도로 복사 →
+   browser canvas filter 로 blur → 다시 메인에 screen blend 합성.
+   "luminous photographic" feel. */
+const _bloomCv = document.createElement('canvas');
+_bloomCv.width  = Math.max(64, Math.round(180 * CANVAS_DPR));
+_bloomCv.height = Math.max(64, Math.round(280 * CANVAS_DPR));
+const _bloomCtx = _bloomCv.getContext('2d');
+
 const C = {
   W: 360, H: 560,
   WALL_LEFT: 8, WALL_RIGHT: 352, FLOOR: 552,
@@ -2006,6 +2023,31 @@ function drawTierProgress(){
   }
 }
 
+/* 2026-05-11 v4 — Bloom post-processing.
+   현 frame 의 canvas 내용을 절반 해상도 offscreen 에 복사 → blur 필터 →
+   screen blend 로 다시 합성. 모든 밝은 영역이 부드러운 glow 가 됨.
+   비용: 800k pixels blur + 2 drawImage = 모바일에서도 5-8ms.
+   text 렌더 전 호출 — 텍스트는 sharp 유지. */
+function applyBloom(){
+    /* 1. 현 canvas → bloom canvas 복사 (다운샘플) */
+    _bloomCtx.globalCompositeOperation = 'source-over';
+    _bloomCtx.filter = 'none';
+    _bloomCtx.clearRect(0, 0, _bloomCv.width, _bloomCv.height);
+    _bloomCtx.drawImage(cv, 0, 0, _bloomCv.width, _bloomCv.height);
+    /* 2. blurred + brightened 버전을 메인에 screen blend.
+       brightness 1.4 + saturate 1.3 + blur 4-8px 가 사진 같은 glow.
+       Canvas filter 는 GPU 가속됨 (Chrome / Safari / Firefox 모두). */
+    ctx.save();
+    ctx.filter = 'blur(5px) brightness(1.45) saturate(1.25)';
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(_bloomCv, 0, 0, C.W, C.H);
+    ctx.filter = 'none';
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.restore();
+}
+
 function render(){
   /* clear with bg gradient (canvas style does this) */
   ctx.save();
@@ -2025,6 +2067,9 @@ function render(){
   for(const b of S.bodies){ drawBody(b); }
   drawDropIndicator();
   drawParticles();
+  /* 2026-05-11 v4 — bloom 합성 (천체/파티클 위에, 텍스트 아래).
+     모든 밝은 영역이 luminous photographic glow 를 얻음. */
+  applyBloom();
   drawFloatTexts();
   drawFlash();
   if(S.flashAlpha > 0){
@@ -2370,6 +2415,6 @@ if(navigator.serviceWorker){
   }).catch(()=>{});
 }
 </script>
-<script src="/js/siteFooter.js?v=1778454985"></script>
+<script src="/js/siteFooter.js?v=1778456135"></script>
 </body>
 </html>
