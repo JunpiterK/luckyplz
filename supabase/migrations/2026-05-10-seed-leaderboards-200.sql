@@ -153,268 +153,327 @@ end $$;
 -- (인라인으로 SQL 안에 mod-hash 식 사용)
 
 
+-- 각 게임 섹션은 do 블록 + to_regclass() 검사로 wrap 되어있어 schema 가
+-- 배포되지 않은 게임은 자동 skip 됨. 일부 사이트에 reaction 게임 미배포
+-- 인 케이스 등에 대비.
+
 -- ----- 1) SNAKE: best_score = foods_eaten * 10. realistic top ~1500. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'snake', 1) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(20, (50 + round((1500.0 - 50) * power(1 - (rnk - 1)::numeric / 199, 2.2))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'snk_n', 0)) % 100) - 50) / 1000.0)
-           )::int as bs
-    from ranked
-)
-insert into public.snake_records
-    (user_id, best_score, best_foods_eaten, total_games, total_playtime_ms, updated_at)
-select uid,
-       bs,
-       (bs / 10)::int,
-       /* total_games — 평균 8-50회, top 일수록 더 많이 플레이 */
-       greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'snk_g', 0)) % 20))::int,
-       /* total_playtime_ms — 게임당 평균 90초 가정 */
-       (90000 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'snk_g', 0)) % 20)))::bigint,
-       now() - (rnk * interval '20 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_snake$
+begin
+    if to_regclass('public.snake_records') is null then
+        raise notice 'snake_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'snake', 1) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(20, (50 + round((1500.0 - 50) * power(1 - (rnk - 1)::numeric / 199, 2.2))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'snk_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as bs
+            from ranked
+        )
+        insert into public.snake_records
+            (user_id, best_score, best_foods_eaten, total_games, total_playtime_ms, updated_at)
+        select uid,
+               bs,
+               (bs / 10)::int,
+               greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'snk_g', 0)) % 20))::int,
+               (90000 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'snk_g', 0)) % 20)))::bigint,
+               now() - (rnk * interval '20 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_snake$;
 
 
 -- ----- 2) PACMAN: realistic top ~220k, mid 30k, bottom 1.5k. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'pacman', 2) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(500, (1500 + round((220000.0 - 1500) * power(1 - (rnk - 1)::numeric / 199, 2.2))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'pac_n', 0)) % 100) - 50) / 1000.0)
-           )::int as bs
-    from ranked
-)
-insert into public.pacman_records
-    (user_id, best_score, total_games, total_wins, total_playtime_ms, updated_at)
-select uid,
-       bs,
-       greatest(2, (50 - rnk / 5) + (abs(hashtextextended(uid::text||'pac_g', 0)) % 18))::int,
-       /* wins — top 만 가끔 깬다 */
-       case when rnk <= 30 then (abs(hashtextextended(uid::text||'pac_w', 0)) % 4)
-            when rnk <= 80 then (abs(hashtextextended(uid::text||'pac_w', 0)) % 2)
-            else 0 end,
-       (140000 * greatest(2, (50 - rnk / 5) + (abs(hashtextextended(uid::text||'pac_g', 0)) % 18)))::bigint,
-       now() - (rnk * interval '25 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_pacman$
+begin
+    if to_regclass('public.pacman_records') is null then
+        raise notice 'pacman_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'pacman', 2) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(500, (1500 + round((220000.0 - 1500) * power(1 - (rnk - 1)::numeric / 199, 2.2))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'pac_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as bs
+            from ranked
+        )
+        insert into public.pacman_records
+            (user_id, best_score, total_games, total_wins, total_playtime_ms, updated_at)
+        select uid,
+               bs,
+               greatest(2, (50 - rnk / 5) + (abs(hashtextextended(uid::text||'pac_g', 0)) % 18))::int,
+               case when rnk <= 30 then (abs(hashtextextended(uid::text||'pac_w', 0)) % 4)
+                    when rnk <= 80 then (abs(hashtextextended(uid::text||'pac_w', 0)) % 2)
+                    else 0 end,
+               (140000 * greatest(2, (50 - rnk / 5) + (abs(hashtextextended(uid::text||'pac_g', 0)) % 18)))::bigint,
+               now() - (rnk * interval '25 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_pacman$;
 
 
 -- ----- 3) BURGER (BurgerTime): top ~150k, level 30 cap. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'burger', 3) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(800, (2000 + round((150000.0 - 2000) * power(1 - (rnk - 1)::numeric / 199, 2.2))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'bur_n', 0)) % 100) - 50) / 1000.0)
-           )::int as bs
-    from ranked
-)
-insert into public.burger_records
-    (user_id, best_score, best_level, total_games, total_burgers, total_playtime_ms, updated_at)
-select uid,
-       bs,
-       /* best_level: top 은 20-30, mid 5-15, bottom 1-5 */
-       case when rnk <= 10 then 20 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 11)
-            when rnk <= 50 then 10 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 11)
-            when rnk <= 120 then 4 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 8)
-            else 1 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 5) end,
-       greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16))::int,
-       /* total_burgers — best_level * 4 정도 누적 */
-       (4 * greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16)))::int,
-       (180000 * greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16)))::bigint,
-       now() - (rnk * interval '30 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_burger$
+begin
+    if to_regclass('public.burger_records') is null then
+        raise notice 'burger_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'burger', 3) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(800, (2000 + round((150000.0 - 2000) * power(1 - (rnk - 1)::numeric / 199, 2.2))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'bur_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as bs
+            from ranked
+        )
+        insert into public.burger_records
+            (user_id, best_score, best_level, total_games, total_burgers, total_playtime_ms, updated_at)
+        select uid,
+               bs,
+               case when rnk <= 10 then 20 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 11)
+                    when rnk <= 50 then 10 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 11)
+                    when rnk <= 120 then 4 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 8)
+                    else 1 + (abs(hashtextextended(uid::text||'bur_lv', 0)) % 5) end,
+               greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16))::int,
+               (4 * greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16)))::int,
+               (180000 * greatest(2, (45 - rnk / 5) + (abs(hashtextextended(uid::text||'bur_g', 0)) % 16)))::bigint,
+               now() - (rnk * interval '30 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_burger$;
 
 
 -- ----- 4) DODGE (Space-Z): score = 10 pts/sec, 20분 cap = 12000.
 -- 4분 cap (2400) 도달이 진입 장벽. phase 2 상승 (+80%) 으로 12000 거의 불가능.
 -- top 5-10 명만 8000+, mid 는 2000-5000 (4-8분), bottom 은 200-1500. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'dodge', 4) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           /* top 1-3: 11000-11900 (cap 근접). 그 이후 가파르게 떨어짐. */
-           case when rnk <= 3 then 11000 + (abs(hashtextextended(uid::text||'dge_top', 0)) % 900)
-                when rnk <= 10 then 7500 + (abs(hashtextextended(uid::text||'dge_t10', 0)) % 3500)
-                when rnk <= 30 then 4000 + (abs(hashtextextended(uid::text||'dge_t30', 0)) % 3500)
-                when rnk <= 80 then 1500 + (abs(hashtextextended(uid::text||'dge_t80', 0)) % 2500)
-                when rnk <= 150 then 500 + (abs(hashtextextended(uid::text||'dge_t150', 0)) % 1000)
-                else 100 + (abs(hashtextextended(uid::text||'dge_btm', 0)) % 400)
-           end as bs
-    from ranked
-)
-insert into public.dodge_records
-    (user_id, best_score, total_games, total_playtime_ms, updated_at)
-select uid,
-       bs,
-       /* total_games — 후반 진출자가 더 많이 시도. base 5 + rank 따라 변화 */
-       greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'dge_g', 0)) % 14))::int,
-       /* total_playtime_ms — best_score * 100 (= duration_ms) * total_games 의 0.6 정도
-          (모든 시도가 베스트 같지는 않으니) */
-       (bs * 100 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'dge_g', 0)) % 14)) * 6 / 10)::bigint,
-       now() - (rnk * interval '15 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_dodge$
+begin
+    if to_regclass('public.dodge_records') is null then
+        raise notice 'dodge_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'dodge', 4) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   case when rnk <= 3 then 11000 + (abs(hashtextextended(uid::text||'dge_top', 0)) % 900)
+                        when rnk <= 10 then 7500 + (abs(hashtextextended(uid::text||'dge_t10', 0)) % 3500)
+                        when rnk <= 30 then 4000 + (abs(hashtextextended(uid::text||'dge_t30', 0)) % 3500)
+                        when rnk <= 80 then 1500 + (abs(hashtextextended(uid::text||'dge_t80', 0)) % 2500)
+                        when rnk <= 150 then 500 + (abs(hashtextextended(uid::text||'dge_t150', 0)) % 1000)
+                        else 100 + (abs(hashtextextended(uid::text||'dge_btm', 0)) % 400)
+                   end as bs
+            from ranked
+        )
+        insert into public.dodge_records
+            (user_id, best_score, total_games, total_playtime_ms, updated_at)
+        select uid,
+               bs,
+               greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'dge_g', 0)) % 14))::int,
+               (bs * 100 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'dge_g', 0)) % 14)) * 6 / 10)::bigint,
+               now() - (rnk * interval '15 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_dodge$;
 
 
 -- ----- 5) TETRIS (Marathon): top ~1.5M, mid 100k, bottom 5k. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'tetris', 5) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(2000, (5000 + round((1500000.0 - 5000) * power(1 - (rnk - 1)::numeric / 199, 2.2))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'tet_n', 0)) % 100) - 50) / 1000.0)
-           )::int as bs
-    from ranked
-)
-insert into public.tetris_records
-    (user_id, best_score, best_lines, best_level, total_games, total_lines, total_playtime_ms, updated_at)
-select uid,
-       bs,
-       /* best_lines — best_score 의 약 1/2000 (각 라인 ~100-400 점) */
-       (bs / 2000)::int + (abs(hashtextextended(uid::text||'tet_l', 0)) % 30),
-       /* best_level — line/10 ≈ level. top 20-30, bottom 1-5 */
-       case when rnk <= 10 then 18 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 13)
-            when rnk <= 50 then 8 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 12)
-            when rnk <= 130 then 3 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 8)
-            else 1 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 4) end,
-       greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20))::int,
-       /* total_lines — total_games * 평균 80 lines */
-       (80 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20)))::bigint,
-       (240000 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20)))::bigint,
-       now() - (rnk * interval '35 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_tetris$
+begin
+    if to_regclass('public.tetris_records') is null then
+        raise notice 'tetris_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'tetris', 5) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(2000, (5000 + round((1500000.0 - 5000) * power(1 - (rnk - 1)::numeric / 199, 2.2))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'tet_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as bs
+            from ranked
+        )
+        insert into public.tetris_records
+            (user_id, best_score, best_lines, best_level, total_games, total_lines, total_playtime_ms, updated_at)
+        select uid,
+               bs,
+               (bs / 2000)::int + (abs(hashtextextended(uid::text||'tet_l', 0)) % 30),
+               case when rnk <= 10 then 18 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 13)
+                    when rnk <= 50 then 8 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 12)
+                    when rnk <= 130 then 3 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 8)
+                    else 1 + (abs(hashtextextended(uid::text||'tet_lv', 0)) % 4) end,
+               greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20))::int,
+               (80 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20)))::bigint,
+               (240000 * greatest(3, (60 - rnk / 4) + (abs(hashtextextended(uid::text||'tet_g', 0)) % 20)))::bigint,
+               now() - (rnk * interval '35 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_tetris$;
 
 
 -- ----- 6) TETRIS SPRINT (40 line 클리어 시간, LOWER better):
 -- top ~28s (28000ms), bottom ~5분 (300000ms). -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'tspr', 6) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(25000, (28000 + round((300000.0 - 28000) * power((rnk - 1)::numeric / 199, 2.2))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'tsp_n', 0)) % 100) - 50) / 1000.0)
-           )::int as ms
-    from ranked
-)
-insert into public.tetris_sprint_records
-    (user_id, best_duration_ms, total_completes, total_playtime_ms, achieved_at, updated_at)
-select uid,
-       ms,
-       greatest(1, (35 - rnk / 6) + (abs(hashtextextended(uid::text||'tsp_g', 0)) % 12))::int,
-       (ms * greatest(1, (35 - rnk / 6) + (abs(hashtextextended(uid::text||'tsp_g', 0)) % 12)))::bigint,
-       now() - (rnk * interval '40 minutes'),
-       now() - (rnk * interval '40 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_sprint$
+begin
+    if to_regclass('public.tetris_sprint_records') is null then
+        raise notice 'tetris_sprint_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'tspr', 6) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(25000, (28000 + round((300000.0 - 28000) * power((rnk - 1)::numeric / 199, 2.2))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'tsp_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as ms
+            from ranked
+        )
+        insert into public.tetris_sprint_records
+            (user_id, best_duration_ms, total_completes, total_playtime_ms, achieved_at, updated_at)
+        select uid,
+               ms,
+               greatest(1, (35 - rnk / 6) + (abs(hashtextextended(uid::text||'tsp_g', 0)) % 12))::int,
+               (ms * greatest(1, (35 - rnk / 6) + (abs(hashtextextended(uid::text||'tsp_g', 0)) % 12)))::bigint,
+               now() - (rnk * interval '40 minutes'),
+               now() - (rnk * interval '40 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_sprint$;
 
 
 -- ----- 7) REACTION (반응속도 ms, LOWER better):
--- top 195ms (사람 신경 한계), bottom 380ms (느린 모바일 + 고민형). -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'react', 7) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           /* 곡선이 좀 더 평평해야 자연스러움 (top 5-10 가 195-220 사이 빽빽) */
-           greatest(180, (195 + round((380.0 - 195) * power((rnk - 1)::numeric / 199, 1.6))
-                ) + ((abs(hashtextextended(uid::text||'rct_n', 0)) % 20) - 10)
-           )::int as ms
-    from ranked
-)
-insert into public.reaction_records
-    (user_id, best_ms, total_attempts, avg_ms, updated_at)
-select uid,
-       ms,
-       /* total_attempts — 보통 5-30 회 시도, 잘하는 유저가 더 많이 */
-       greatest(3, (35 - rnk / 8) + (abs(hashtextextended(uid::text||'rct_a', 0)) % 15))::int,
-       /* avg_ms — best 보다 평균 30-80ms 느림 */
-       (ms + 30 + (abs(hashtextextended(uid::text||'rct_avg', 0)) % 50))::int,
-       now() - (rnk * interval '12 minutes')
-from scored
-on conflict (user_id) do nothing;
+-- top 195ms (사람 신경 한계), bottom 380ms (느린 모바일 + 고민형).
+-- ⚠ 이 게임은 사이트에 미배포 케이스 다수 — 테이블 없으면 자동 skip. -----
+do $seed_reaction$
+begin
+    if to_regclass('public.reaction_records') is null then
+        raise notice 'reaction_records not found (게임 미배포), skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'react', 7) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(180, (195 + round((380.0 - 195) * power((rnk - 1)::numeric / 199, 1.6))
+                        ) + ((abs(hashtextextended(uid::text||'rct_n', 0)) % 20) - 10)
+                   )::int as ms
+            from ranked
+        )
+        insert into public.reaction_records
+            (user_id, best_ms, total_attempts, avg_ms, updated_at)
+        select uid,
+               ms,
+               greatest(3, (35 - rnk / 8) + (abs(hashtextextended(uid::text||'rct_a', 0)) % 15))::int,
+               (ms + 30 + (abs(hashtextextended(uid::text||'rct_avg', 0)) % 50))::int,
+               now() - (rnk * interval '12 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_reaction$;
 
 
 -- ----- 8) QUIZ (correct_count * 점수 multiplier):
 -- top ~25000 (모든 라운드 정답), bottom 800. -----
-with ranked as (
-    select id as uid,
-           row_number() over (
-               order by hashtextextended(id::text || 'quiz', 8) asc
-           ) as rnk
-    from public.profiles
-    where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
-),
-scored as (
-    select uid, rnk,
-           greatest(300, (800 + round((25000.0 - 800) * power(1 - (rnk - 1)::numeric / 199, 2.0))
-                ) * (1.0 + ((abs(hashtextextended(uid::text||'qz_n', 0)) % 100) - 50) / 1000.0)
-           )::int as bs
-    from ranked
-)
-insert into public.quiz_records
-    (user_id, best_score, best_accuracy, total_games, total_correct, total_questions, updated_at)
-select uid,
-       bs,
-       /* best_accuracy: top 90-100, mid 60-85, bottom 30-60 */
-       case when rnk <= 20 then 88 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 13)
-            when rnk <= 80 then 65 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25)
-            when rnk <= 150 then 45 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25)
-            else 25 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25) end,
-       greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14))::int,
-       /* total_correct — total_games * 평균 7개 정답 */
-       (7 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14)))::int,
-       /* total_questions — 게임당 10문제 */
-       (10 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14)))::int,
-       now() - (rnk * interval '18 minutes')
-from scored
-on conflict (user_id) do nothing;
+do $seed_quiz$
+begin
+    if to_regclass('public.quiz_records') is null then
+        raise notice 'quiz_records not found, skipping';
+        return;
+    end if;
+    execute $sql$
+        with ranked as (
+            select id as uid,
+                   row_number() over (
+                       order by hashtextextended(id::text || 'quiz', 8) asc
+                   ) as rnk
+            from public.profiles
+            where id in (select id from auth.users where email like 'seed_%@luckyplz.local')
+        ),
+        scored as (
+            select uid, rnk,
+                   greatest(300, (800 + round((25000.0 - 800) * power(1 - (rnk - 1)::numeric / 199, 2.0))
+                        ) * (1.0 + ((abs(hashtextextended(uid::text||'qz_n', 0)) % 100) - 50) / 1000.0)
+                   )::int as bs
+            from ranked
+        )
+        insert into public.quiz_records
+            (user_id, best_score, best_accuracy, total_games, total_correct, total_questions, updated_at)
+        select uid,
+               bs,
+               case when rnk <= 20 then 88 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 13)
+                    when rnk <= 80 then 65 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25)
+                    when rnk <= 150 then 45 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25)
+                    else 25 + (abs(hashtextextended(uid::text||'qz_acc', 0)) % 25) end,
+               greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14))::int,
+               (7 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14)))::int,
+               (10 * greatest(2, (40 - rnk / 6) + (abs(hashtextextended(uid::text||'qz_g', 0)) % 14)))::int,
+               now() - (rnk * interval '18 minutes')
+        from scored
+        on conflict (user_id) do nothing;
+    $sql$;
+end $seed_quiz$;
 
 
 -- =====================================================================
@@ -424,47 +483,35 @@ do $$
 declare
     n_users int;
     n_profiles int;
-    n_snake int;
-    n_pacman int;
-    n_burger int;
-    n_dodge int;
-    n_tetris int;
-    n_sprint int;
-    n_reaction int;
-    n_quiz int;
+    /* 게임별 카운트 — 테이블 없으면 -1 (미배포) 표시. */
+    games text[] := array['snake_records','pacman_records','burger_records',
+                          'dodge_records','tetris_records','tetris_sprint_records',
+                          'reaction_records','quiz_records'];
+    g text;
+    cnt int;
 begin
     select count(*) into n_users
         from auth.users where email like 'seed_%@luckyplz.local';
     select count(*) into n_profiles
         from public.profiles where id in (
             select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_snake from public.snake_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_pacman from public.pacman_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_burger from public.burger_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_dodge from public.dodge_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_tetris from public.tetris_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_sprint from public.tetris_sprint_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_reaction from public.reaction_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
-    select count(*) into n_quiz from public.quiz_records r
-        where r.user_id in (select id from auth.users where email like 'seed_%@luckyplz.local');
 
     raise notice E'\n============================================\n  Seed Leaderboard Migration Result\n============================================';
     raise notice 'auth.users    : %', n_users;
     raise notice 'profiles      : %', n_profiles;
-    raise notice 'snake records : %', n_snake;
-    raise notice 'pacman recs   : %', n_pacman;
-    raise notice 'burger recs   : %', n_burger;
-    raise notice 'dodge recs    : %', n_dodge;
-    raise notice 'tetris recs   : %', n_tetris;
-    raise notice 'sprint recs   : %', n_sprint;
-    raise notice 'reaction recs : %', n_reaction;
-    raise notice 'quiz recs     : %', n_quiz;
-    raise notice E'\nAll counts should = 200. If lower, some ON CONFLICT triggered (existing data) or constraint failed (check raise log).';
+
+    foreach g in array games
+    loop
+        if to_regclass('public.' || g) is null then
+            raise notice '% : (미배포 — table not found)', rpad(g, 22);
+        else
+            execute format(
+                'select count(*) from public.%I r where r.user_id in (select id from auth.users where email like ''seed_%%@luckyplz.local'')',
+                g
+            ) into cnt;
+            raise notice '% : %', rpad(g, 22), cnt;
+        end if;
+    end loop;
+
+    raise notice E'\n각 카운트는 200 이어야 정상. 미배포 게임은 자동 skip 됨.\n낮은 숫자 = 기존 데이터로 ON CONFLICT 발동 또는 check 제약 실패 (raise log 확인).';
 end $$;
