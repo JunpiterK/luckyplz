@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778386239">
-<script>(function(){var B="1778386239";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778386462">
+<script>(function(){var B="1778386462";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1348,10 +1348,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1778386239"></script>
-<script src="/js/lpI18n.js?v=1778386239"></script>
-<script src="/js/lpRankSheet.js?v=1778386239"></script>
-<script src="/js/lpAudio.js?v=1778386239"></script>
+<script src="/js/supabase-config.js?v=1778386462"></script>
+<script src="/js/lpI18n.js?v=1778386462"></script>
+<script src="/js/lpRankSheet.js?v=1778386462"></script>
+<script src="/js/lpAudio.js?v=1778386462"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4643,6 +4643,129 @@ function drawOortCloud(zoneT){
     ctx.textAlign = 'center';
     ctx.fillText('100,000 AU', CW/2, CH*0.18 + dy);
     ctx.textAlign = 'left';
+
+    /* ---- Halley's Comet (1P/Halley) ----
+       76년 주기. 마지막 회귀 1986, 다음 2061. 길고 화려한 이중 꼬리:
+       (1) Ion tail — 청백 직선 (태양풍 따라 정렬, 좁고 sharp)
+       (2) Dust tail — 황금/베이지 곡선 (관성 + 복사 압력, 넓고 약간 curve)
+       두 꼬리 모두 "태양 반대 방향" 으로 — 우리 zone 에선 상우 → 하좌 향함
+       (이 시점 우주선 진행 방향 = 위, 태양 = 화면 우하단 가정).
+       zoneT 0~1 동안 화면 우하 → 좌상 traverse. */
+    const halleyT = (zoneT || 0);
+    /* 우주에서 천천히 traverse */
+    const hx = CW * (1.05 - halleyT * 0.85);    /* 우측 진입 → 좌측 퇴장 */
+    const hy = CH * (0.25 + halleyT * 0.25) + dy * 0.6;
+    /* 꼬리 방향 — 우하 (태양 가정 위치) 반대 → 좌상 */
+    /* 두 꼬리 각각 다른 base angle */
+    const ionAng = Math.atan2(0.45, 0.85);     /* 우하 → 핵 방향 */
+    const dustAng = Math.atan2(0.55, 0.75);    /* 약간 더 처짐 (관성) */
+    const tailLen = Math.max(CW, CH) * 0.55;
+
+    ctx.save();
+    /* (1) Dust tail — 황금/베이지 넓고 약간 curve.
+       원뿔 모양 fan: 핵에서 시작해 후방으로 펼쳐짐. */
+    {
+        const dx = Math.cos(dustAng) * tailLen;
+        const dy2 = Math.sin(dustAng) * tailLen;
+        const dustG = ctx.createLinearGradient(hx, hy, hx + dx, hy + dy2);
+        dustG.addColorStop(0,    'rgba(255, 230, 175, 0.85)');
+        dustG.addColorStop(0.15, 'rgba(255, 215, 145, 0.65)');
+        dustG.addColorStop(0.5,  'rgba(240, 195, 130, 0.35)');
+        dustG.addColorStop(1,    'rgba(220, 180, 120, 0)');
+        ctx.fillStyle = dustG;
+        /* curved fan via bezier */
+        const widthNear = 8;     /* 핵 근처 좁음 */
+        const widthFar  = 60;    /* 끝으로 갈수록 넓음 */
+        /* 양 옆 perpendicular 방향 */
+        const px = -Math.sin(dustAng);
+        const py =  Math.cos(dustAng);
+        ctx.beginPath();
+        ctx.moveTo(hx + px * widthNear, hy + py * widthNear);
+        ctx.bezierCurveTo(
+            hx + dx * 0.40 + px * widthNear * 0.7,
+            hy + dy2 * 0.40 + py * widthNear * 0.7,
+            hx + dx * 0.75 + px * widthFar * 0.5,
+            hy + dy2 * 0.75 + py * widthFar * 0.5,
+            hx + dx + px * widthFar,
+            hy + dy2 + py * widthFar
+        );
+        ctx.lineTo(hx + dx - px * widthFar, hy + dy2 - py * widthFar);
+        ctx.bezierCurveTo(
+            hx + dx * 0.75 - px * widthFar * 0.5,
+            hy + dy2 * 0.75 - py * widthFar * 0.5,
+            hx + dx * 0.40 - px * widthNear * 0.7,
+            hy + dy2 * 0.40 - py * widthNear * 0.7,
+            hx - px * widthNear,
+            hy - py * widthNear
+        );
+        ctx.closePath();
+        ctx.fill();
+    }
+    /* (2) Ion tail — 청백 직선 (얇음, sharp) */
+    {
+        const dx = Math.cos(ionAng) * tailLen * 1.05;
+        const dy2 = Math.sin(ionAng) * tailLen * 1.05;
+        const ionG = ctx.createLinearGradient(hx, hy, hx + dx, hy + dy2);
+        ionG.addColorStop(0,    'rgba(180, 220, 255, 0.95)');
+        ionG.addColorStop(0.15, 'rgba(140, 200, 255, 0.75)');
+        ionG.addColorStop(0.5,  'rgba(100, 170, 240, 0.40)');
+        ionG.addColorStop(1,    'rgba(80,  140, 220, 0)');
+        ctx.fillStyle = ionG;
+        const widthNear = 4;
+        const widthFar = 18;
+        const px = -Math.sin(ionAng);
+        const py =  Math.cos(ionAng);
+        ctx.beginPath();
+        ctx.moveTo(hx + px * widthNear, hy + py * widthNear);
+        ctx.lineTo(hx + dx + px * widthFar, hy + dy2 + py * widthFar);
+        ctx.lineTo(hx + dx - px * widthFar, hy + dy2 - py * widthFar);
+        ctx.lineTo(hx - px * widthNear, hy - py * widthNear);
+        ctx.closePath();
+        ctx.fill();
+        /* Ion tail 내부 줄무늬 (고에너지 입자 burst) */
+        ctx.strokeStyle = 'rgba(220, 245, 255, 0.45)';
+        ctx.lineWidth = 0.7;
+        for(let i = 0; i < 4; i++){
+            const off = (i - 1.5) * 2.5;
+            ctx.beginPath();
+            ctx.moveTo(hx + px * off, hy + py * off);
+            ctx.lineTo(hx + dx * 0.92 + px * off * 2, hy + dy2 * 0.92 + py * off * 2);
+            ctx.stroke();
+        }
+    }
+    /* (3) Coma — 핵 주위 가스 envelope (밝은 무지개 halo) */
+    const comaG = ctx.createRadialGradient(hx, hy, 2, hx, hy, 28);
+    comaG.addColorStop(0,    'rgba(255, 250, 220, 0.95)');
+    comaG.addColorStop(0.25, 'rgba(255, 230, 180, 0.50)');
+    comaG.addColorStop(0.6,  'rgba(220, 200, 175, 0.20)');
+    comaG.addColorStop(1,    'rgba(180, 170, 150, 0)');
+    ctx.fillStyle = comaG;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 28, 0, Math.PI*2);
+    ctx.fill();
+    /* (4) Nucleus — 작은 빛나는 점 */
+    ctx.shadowColor = '#ffeec0';
+    ctx.shadowBlur = 14;
+    const nucG = ctx.createRadialGradient(hx-1, hy-1, 0, hx, hy, 6);
+    nucG.addColorStop(0, '#ffffff');
+    nucG.addColorStop(0.5, '#fff0bb');
+    nucG.addColorStop(1, '#cc9c40');
+    ctx.fillStyle = nucG;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    /* (5) 라벨 — 핵 살짝 좌상단 */
+    ctx.font = '7px Orbitron,sans-serif';
+    ctx.fillStyle = 'rgba(255, 240, 180, 0.85)';
+    ctx.textAlign = 'right';
+    ctx.fillText("Halley's Comet", hx - 8, hy - 18);
+    ctx.font = '5px Orbitron,sans-serif';
+    ctx.fillStyle = 'rgba(255, 240, 180, 0.55)';
+    ctx.fillText('1P · 76 yr orbit · last 1986', hx - 8, hy - 12);
+    ctx.textAlign = 'left';
+    ctx.restore();
+
     ctx.restore();
 }
 
@@ -10998,6 +11121,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778386239"></script>
+<script src="/js/siteFooter.js?v=1778386462"></script>
 </body>
 </html>
