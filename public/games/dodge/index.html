@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778413656">
-<script>(function(){var B="1778413656";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778413978">
+<script>(function(){var B="1778413978";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1348,10 +1348,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1778413656"></script>
-<script src="/js/lpI18n.js?v=1778413656"></script>
-<script src="/js/lpRankSheet.js?v=1778413656"></script>
-<script src="/js/lpAudio.js?v=1778413656"></script>
+<script src="/js/supabase-config.js?v=1778413978"></script>
+<script src="/js/lpI18n.js?v=1778413978"></script>
+<script src="/js/lpRankSheet.js?v=1778413978"></script>
+<script src="/js/lpAudio.js?v=1778413978"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -7537,7 +7537,8 @@ function drawMissionOrbit(now){
                     코어 + 모션 트레일 + 주기 에너지 아크 → "전술 드론".
    ===================================================================== */
 const REWARD_KINDS = ['warp','storm','drone'];
-const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'🛰'};
+/* 2026-05-10: drone 아이콘 🛰 (위성) → 🛸 (UFO/드론) — 실제 비행체처럼 보이게. */
+const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'🛸'};
 const REWARD_SLOT_IDS = {warp:'rewardSlot0', storm:'rewardSlot1', drone:'rewardSlot2'};
 let rewardCounts = {warp: 0, storm: 0, drone: 0};
 /* Time Warp 상태 */
@@ -7551,16 +7552,27 @@ function _isTimeWarpActive(now){ return now < timeWarpUntil; }
 function _worldDt(dt, now){
     return (now < timeWarpUntil) ? dt * TIME_WARP_FACTOR : dt;
 }
-/* Aegis Drone 상태 */
+/* Aegis Drone 상태.
+   2026-05-10 v2 활약 강화:
+   - 지속 12s → 18s
+   - 접촉 hit radius 14 → 22 (근접 파괴 영역 확대)
+   - pickup 반경 110 → 150 (더 멀리서 보급품 흡수)
+   - 능동 레이저 발사 4 Hz, 220px 범위 자동 추적 (가장 가까운 위협을 지속 격추)
+*/
 let aegisDroneActive = false;
 let aegisDroneExpiresAt = 0;
 let aegisDroneAngle = 0;
 let aegisDroneTrail = [];           /* 최근 8 frame 위치 (모션 트레일) */
-const AEGIS_DURATION_MS = 12000;
+let aegisLastFireAt = 0;            /* 능동 레이저 발사 cooldown */
+let aegisLasers = [];               /* 발사된 레이저 시각 효과 {x1,y1,x2,y2,life,maxLife} */
+const AEGIS_DURATION_MS = 18000;
 const AEGIS_ORBIT_RADIUS = 75;
 const AEGIS_ANGULAR_VEL = 3.0;       /* rad/s — 약 0.48 회전/sec */
-const AEGIS_HIT_RADIUS = 14;
-const AEGIS_PICKUP_RADIUS = 110;
+const AEGIS_HIT_RADIUS = 22;
+const AEGIS_PICKUP_RADIUS = 150;
+const AEGIS_LASER_RANGE = 220;       /* 능동 레이저 자동 추적 사거리 */
+const AEGIS_LASER_INTERVAL_MS = 250; /* 4 Hz */
+const AEGIS_LASER_FLASH_MS = 110;    /* 레이저 시각 효과 지속 */
 let plasmaStormFlashUntil = 0;
 
 function _refreshRewardSlot(kind){
@@ -7641,7 +7653,7 @@ function _activateAegisDrone(now){
     aegisDroneExpiresAt = now + AEGIS_DURATION_MS;
     aegisDroneAngle = -Math.PI / 2;     /* 위쪽에서 시작 — 즉시 보임 */
     const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
-    _showRewardToast(lang === 'ko' ? '🛰 호위 드론 — 12초 자동 호위' : '🛰 AEGIS DRONE — 12s autonomous escort', '#9CDFFF', 1700);
+    _showRewardToast(lang === 'ko' ? '🛸 호위 드론 — 18초 자동 레이저 격추' : '🛸 AEGIS DRONE — 18s auto laser intercept', '#9CDFFF', 1700);
     sfxStart();
 }
 
@@ -7654,6 +7666,11 @@ function _aegisDronePos(){
 }
 
 function updateAegisDrone(dt, now){
+    /* 2026-05-10 v2: 레이저 시각효과는 드론 비활성 후에도 짧게 잔존 (life decay) */
+    if(aegisLasers.length){
+        for(const l of aegisLasers) l.life -= dt;
+        aegisLasers = aegisLasers.filter(l => l.life > 0);
+    }
     if(!aegisDroneActive){
         if(aegisDroneTrail.length) aegisDroneTrail.length = 0;
         return;
@@ -7668,6 +7685,70 @@ function updateAegisDrone(dt, now){
     /* 모션 트레일 — 매 프레임 현재 위치 push, 최대 8 entry. */
     aegisDroneTrail.push({x: pos.x, y: pos.y});
     if(aegisDroneTrail.length > 8) aegisDroneTrail.shift();
+    /* 2026-05-10 v2: 능동 레이저 발사 — 4 Hz, 220px 범위 가장 가까운 위협 자동 추적.
+       총알 / cluster rock / mine 모두 대상. 발사 시 레이저 시각효과 + 즉시 격추. */
+    if(now - aegisLastFireAt >= AEGIS_LASER_INTERVAL_MS){
+        let target = null;
+        let targetKind = null;
+        let targetCluster = null;
+        let bestD2 = AEGIS_LASER_RANGE * AEGIS_LASER_RANGE;
+        /* bullets */
+        for(const b of bullets){
+            const dx = b.x - pos.x, dy = b.y - pos.y;
+            const d2 = dx*dx + dy*dy;
+            if(d2 < bestD2){ bestD2 = d2; target = b; targetKind = 'bullet'; }
+        }
+        /* asteroid cluster rocks */
+        if(typeof asteroidClusters !== 'undefined' && asteroidClusters){
+            for(const cluster of asteroidClusters){
+                if(!cluster || !cluster.rocks) continue;
+                for(const rk of cluster.rocks){
+                    const dx = rk.x - pos.x, dy = rk.y - pos.y;
+                    const d2 = dx*dx + dy*dy;
+                    if(d2 < bestD2){ bestD2 = d2; target = rk; targetKind = 'rock'; targetCluster = cluster; }
+                }
+            }
+        }
+        /* magnetic mines */
+        if(typeof magneticMines !== 'undefined' && magneticMines){
+            for(const m of magneticMines){
+                const dx = m.x - pos.x, dy = m.y - pos.y;
+                const d2 = dx*dx + dy*dy;
+                if(d2 < bestD2){ bestD2 = d2; target = m; targetKind = 'mine'; }
+            }
+        }
+        if(target){
+            aegisLastFireAt = now;
+            /* 레이저 시각효과 push */
+            aegisLasers.push({
+                x1: pos.x, y1: pos.y,
+                x2: target.x, y2: target.y,
+                life: AEGIS_LASER_FLASH_MS, maxLife: AEGIS_LASER_FLASH_MS
+            });
+            /* 격추 — kind 별 처리 */
+            if(targetKind === 'bullet'){
+                const idx = bullets.indexOf(target);
+                if(idx >= 0){
+                    wipeFragments.push({x:target.x, y:target.y, vx:(Math.random()-0.5)*240, vy:(Math.random()-0.5)*240, life:0.35, maxLife:0.35});
+                    bullets.splice(idx, 1);
+                }
+            } else if(targetKind === 'rock' && targetCluster){
+                const idx = targetCluster.rocks.indexOf(target);
+                if(idx >= 0){
+                    wipeFragments.push({x:target.x, y:target.y, vx:(Math.random()-0.5)*280, vy:(Math.random()-0.5)*280, life:0.45, maxLife:0.45});
+                    targetCluster.rocks.splice(idx, 1);
+                }
+            } else if(targetKind === 'mine'){
+                const idx = magneticMines.indexOf(target);
+                if(idx >= 0){
+                    for(let k = 0; k < 6; k++){
+                        wipeFragments.push({x:target.x, y:target.y, vx:(Math.random()-0.5)*340, vy:(Math.random()-0.5)*340, life:0.55, maxLife:0.55});
+                    }
+                    magneticMines.splice(idx, 1);
+                }
+            }
+        }
+    }
     /* destroy bullets touching drone */
     const HR2 = (AEGIS_HIT_RADIUS + 6) * (AEGIS_HIT_RADIUS + 6);
     for(let i = bullets.length - 1; i >= 0; i--){
@@ -7881,6 +7962,42 @@ function drawAegisDrone(now){
     ctx.arc(pos.x, pos.y, 2 + Math.sin(t * 6) * 0.6, 0, Math.PI*2);
     ctx.fill();
 
+    ctx.restore();
+}
+
+/* 2026-05-10 v2 — 드론 능동 레이저 발사 시각 효과.
+   each laser: drone 위치에서 target 위치로 짧은 cyan 빔 (110ms) +
+   양 끝 작은 글로우 + 랜덤 잔상 spark. */
+function drawAegisLasers(){
+    if(!aegisLasers.length) return;
+    ctx.save();
+    for(const l of aegisLasers){
+        const a = Math.max(0, l.life / l.maxLife);
+        /* 메인 빔 — 두꺼운 cyan + 글로우 */
+        ctx.shadowColor = '#9CDFFF';
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = `rgba(180, 230, 255, ${a})`;
+        ctx.lineWidth = 2.4 * a + 0.5;
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+        /* 내부 흰색 코어 — 더 얇게 */
+        ctx.shadowBlur = 6;
+        ctx.strokeStyle = `rgba(255, 255, 255, ${a * 0.95})`;
+        ctx.lineWidth = 1.0 * a + 0.3;
+        ctx.beginPath();
+        ctx.moveTo(l.x1, l.y1);
+        ctx.lineTo(l.x2, l.y2);
+        ctx.stroke();
+        /* 끝점 폭발 글로우 */
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = `rgba(220, 240, 255, ${a})`;
+        ctx.beginPath();
+        ctx.arc(l.x2, l.y2, 4 * a + 1, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.shadowBlur = 0;
     ctx.restore();
 }
 
@@ -9779,6 +9896,9 @@ function resetGame(){
     wipeFragments = [];
     miniShips = [];
     miniLasers = [];
+    /* 2026-05-10 v2: drone 능동 레이저 state reset */
+    aegisLastFireAt = 0;
+    aegisLasers = [];
     shieldBubbleUntil = 0;
     shieldHitFlashUntil = 0;
     zoneEnteredAt = performance.now();
@@ -10575,6 +10695,7 @@ function drawFrame(now, dt){
     drawSatelliteOrbiting(now);     /* Phase C — successful satellites in their home zone */
     drawSatelliteInstall(now);      /* Phase C v2 — deployment cone + install preview */
     drawAegisDrone(now);            /* Phase D — Aegis escort drone */
+    drawAegisLasers();              /* 2026-05-10 v2 — 능동 레이저 발사 시각 효과 */
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
@@ -11998,6 +12119,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778413656"></script>
+<script src="/js/siteFooter.js?v=1778413978"></script>
 </body>
 </html>
