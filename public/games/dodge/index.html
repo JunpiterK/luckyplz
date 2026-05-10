@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778384662">
-<script>(function(){var B="1778384662";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778385517">
+<script>(function(){var B="1778385517";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1348,10 +1348,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1778384662"></script>
-<script src="/js/lpI18n.js?v=1778384662"></script>
-<script src="/js/lpRankSheet.js?v=1778384662"></script>
-<script src="/js/lpAudio.js?v=1778384662"></script>
+<script src="/js/supabase-config.js?v=1778385517"></script>
+<script src="/js/lpI18n.js?v=1778385517"></script>
+<script src="/js/lpRankSheet.js?v=1778385517"></script>
+<script src="/js/lpAudio.js?v=1778385517"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -4634,49 +4634,177 @@ function drawBetelgeuse(zoneT){
 }
 
 /* ---- Pillars of Creation — 3 개 dark gas pillar + 별빛 ---- */
-function drawPillarsOfCreation(){
+/* 2026-05-10: Pillars of Creation 전면 리메이크.
+   사용자 피드백: 그래픽 너무 단순 + 우주선 진행해도 위치 고정.
+   이전: 청회색 단색 직선 사다리꼴 3개. zoneT 미수신.
+   신:
+     1. zoneT 받아 화면 따라 위→아래 흘러내려옴 (다른 zone 과 동일 패턴)
+     2. Hα 배경 그라데이션 (warm pink/peach 위 → 청록/검정 dust 아래)
+     3. 4개 nebulosity haze patch (Hubble JWST 2022 사진 톤)
+     4. 별빛 + 회절 spike 2개 (배경 중간)
+     5. 3개 elephant-trunk pillars — 유기적 bezier 윤곽, 측면 protrusion,
+        rim lighting (오른쪽 위에서 빛 받는 illuminated edge),
+        끝부분 evaporating gas 꼭지
+     6. 외곽 dust streamer wisps (각 기둥 끝에서 가스 분출) */
+function drawPillarsOfCreation(zoneT){
+    /* zoneT 기반 vertical drift — 0~1 동안 약 0.9 CH 만큼 아래로. */
+    const dy = CH * ((zoneT||0.5) - 0.5) * 1.4;
     ctx.save();
-    /* 옅은 gas overlay */
-    ctx.fillStyle = 'rgba(60,80,110,0.35)';
+
+    /* 1. Hα 배경 그라데이션 (warm pink/peach → 청록 dust) */
+    const bg = ctx.createLinearGradient(0, 0, 0, CH);
+    bg.addColorStop(0,    'rgba(220, 170, 140, 0.55)');
+    bg.addColorStop(0.30, 'rgba(190, 120, 130, 0.55)');
+    bg.addColorStop(0.55, 'rgba(120, 90,  130, 0.60)');
+    bg.addColorStop(0.80, 'rgba(45,  60,  90, 0.78)');
+    bg.addColorStop(1,    'rgba(15,  20,  35, 0.92)');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, CW, CH);
-    /* 별빛 (먼 cluster) */
-    ctx.shadowColor = 'rgba(255,240,200,0.7)';
-    ctx.shadowBlur = 12;
-    const stars = [[CW*0.20, CH*0.10], [CW*0.85, CH*0.08], [CW*0.70, CH*0.30]];
-    for(const s of stars){
-        ctx.fillStyle = 'rgba(255,250,220,0.85)';
-        ctx.beginPath(); ctx.arc(s[0], s[1], 2.5, 0, Math.PI*2); ctx.fill();
-    }
-    ctx.shadowBlur = 0;
-    /* 3 개 dark pillars — 위에서 아래로 자라는 gas 기둥 */
-    const pillars = [
-        { x: CW*0.22, w: 38, top: 0,    bot: CH*0.55, lean: -4 },
-        { x: CW*0.50, w: 46, top: CH*0.05, bot: CH*0.50, lean: 0 },
-        { x: CW*0.78, w: 30, top: CH*0.10, bot: CH*0.45, lean: 6 },
+
+    /* 2. Nebulosity haze patches — JWST 2022 톤 (warm + cyan glow) */
+    const hazes = [
+        {x: CW*0.20, y: CH*0.15 + dy*0.4, r: Math.max(CW,CH)*0.50, c: 'rgba(255, 200, 165, 0.30)'},
+        {x: CW*0.78, y: CH*0.10 + dy*0.4, r: Math.max(CW,CH)*0.45, c: 'rgba(255, 165, 175, 0.25)'},
+        {x: CW*0.50, y: CH*0.40 + dy*0.6, r: Math.max(CW,CH)*0.40, c: 'rgba(170, 140, 200, 0.25)'},
+        {x: CW*0.10, y: CH*0.65 + dy*0.5, r: Math.max(CW,CH)*0.55, c: 'rgba(40,  60,  100, 0.55)'},
     ];
-    for(const p of pillars){
-        const grad = ctx.createLinearGradient(p.x, p.top, p.x, p.bot);
-        grad.addColorStop(0,    'rgba(40,60,80,0.25)');
-        grad.addColorStop(0.4,  'rgba(30,50,70,0.65)');
-        grad.addColorStop(0.85, 'rgba(20,30,42,0.85)');
-        grad.addColorStop(1,    'rgba(20,30,42,0.45)');
-        ctx.fillStyle = grad;
+    for(const h of hazes){
+        const g = ctx.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
+        g.addColorStop(0, h.c);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
+    }
+
+    /* 3. Star field (소수, 회절 spike 2개) */
+    const stars = [
+        [CW*0.10, CH*0.05, 0.9, 0.7,  0],
+        [CW*0.32, CH*0.08, 1.4, 0.95, 1],
+        [CW*0.55, CH*0.04, 0.7, 0.55, 0],
+        [CW*0.78, CH*0.06, 1.2, 0.85, 0],
+        [CW*0.92, CH*0.18, 1.5, 1.0,  1],
+        [CW*0.16, CH*0.30, 0.8, 0.6,  0],
+        [CW*0.65, CH*0.25, 0.7, 0.55, 0],
+    ];
+    for(const [sx, sy, sz, sa, spike] of stars){
+        const yy = sy + dy * 0.3;     /* 별은 가장 느린 parallax (멀리) */
+        const sg = ctx.createRadialGradient(sx, yy, 0, sx, yy, sz * 7);
+        sg.addColorStop(0,    `rgba(255, 250, 235, ${sa})`);
+        sg.addColorStop(0.4,  `rgba(255, 230, 200, ${sa * 0.5})`);
+        sg.addColorStop(1,    'rgba(255, 200, 170, 0)');
+        ctx.fillStyle = sg;
+        ctx.fillRect(sx - sz*7, yy - sz*7, sz*14, sz*14);
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, sa + 0.05)})`;
         ctx.beginPath();
-        ctx.moveTo(p.x - p.w/2, p.top);
-        ctx.bezierCurveTo(p.x - p.w/2 + p.lean*0.3, (p.top+p.bot)/2,
-                          p.x - p.w/3 + p.lean*0.6, p.bot - 8,
-                          p.x - p.w/4 + p.lean, p.bot);
-        ctx.lineTo(p.x + p.w/4 + p.lean, p.bot);
-        ctx.bezierCurveTo(p.x + p.w/3 + p.lean*0.6, p.bot - 8,
-                          p.x + p.w/2 + p.lean*0.3, (p.top+p.bot)/2,
-                          p.x + p.w/2, p.top);
+        ctx.arc(sx, yy, sz, 0, Math.PI*2);
+        ctx.fill();
+        if(spike){
+            ctx.strokeStyle = `rgba(255, 250, 230, ${sa * 0.85})`;
+            ctx.lineWidth = 0.6;
+            const sp = sz * 8;
+            ctx.beginPath();
+            ctx.moveTo(sx - sp, yy); ctx.lineTo(sx + sp, yy);
+            ctx.moveTo(sx, yy - sp); ctx.lineTo(sx, yy + sp);
+            ctx.stroke();
+        }
+    }
+
+    /* 4. 3 elephant-trunk pillars — 유기적 bezier outline + 측면 protrusion +
+          끝부분 evaporating gas globule. zoneT 따라 vertical drift. */
+    /* 기둥 base position (dy 적용) */
+    const pillarSpec = [
+        { cx: CW*0.22, w: 44, top: dy + 0,         bot: dy + CH*0.62, lean: -6, sub: 0.85 },
+        { cx: CW*0.52, w: 56, top: dy + CH*0.04,   bot: dy + CH*0.58, lean:  3, sub: 1.0  },
+        { cx: CW*0.80, w: 36, top: dy + CH*0.12,   bot: dy + CH*0.50, lean:  8, sub: 0.75 },
+    ];
+    for(const p of pillarSpec){
+        /* fringe glow — 외곽 자홍색 빛 (rim lighting from upper-right) */
+        ctx.shadowColor = 'rgba(220, 130, 110, 0.6)';
+        ctx.shadowBlur = 14;
+        /* 본체 dust silhouette — 검정에 가까운 짙은 dust */
+        ctx.fillStyle = 'rgba(20, 18, 30, 0.92)';
+        ctx.beginPath();
+        const halfW = p.w / 2;
+        const midY = (p.top + p.bot) / 2;
+        /* 좌측 윤곽 (위 → 아래) — 곡선 + 측면 돌출 */
+        ctx.moveTo(p.cx - halfW * 0.6, p.top);
+        ctx.bezierCurveTo(
+            p.cx - halfW * 1.3 + p.lean * 0.2, p.top + (p.bot - p.top) * 0.20,
+            p.cx - halfW * 0.7 + p.lean * 0.5, p.top + (p.bot - p.top) * 0.45,
+            p.cx - halfW * 1.4 + p.lean * 0.7, p.top + (p.bot - p.top) * 0.65
+        );
+        ctx.bezierCurveTo(
+            p.cx - halfW * 0.9 + p.lean * 0.8, p.top + (p.bot - p.top) * 0.85,
+            p.cx - halfW * 0.5 + p.lean,       p.bot - 10,
+            p.cx - halfW * 0.3 + p.lean,       p.bot
+        );
+        /* 하단 (살짝 넓어짐) */
+        ctx.lineTo(p.cx + halfW * 0.5 + p.lean, p.bot);
+        /* 우측 윤곽 (아래 → 위) — 다른 패턴, 측면 protrusion 다름 */
+        ctx.bezierCurveTo(
+            p.cx + halfW * 0.7 + p.lean * 0.8, p.bot - 12,
+            p.cx + halfW * 1.2 + p.lean * 0.5, p.top + (p.bot - p.top) * 0.55,
+            p.cx + halfW * 0.6 + p.lean * 0.3, p.top + (p.bot - p.top) * 0.35
+        );
+        ctx.bezierCurveTo(
+            p.cx + halfW * 0.9 + p.lean * 0.2, p.top + (p.bot - p.top) * 0.20,
+            p.cx + halfW * 0.5,                 p.top + (p.bot - p.top) * 0.08,
+            p.cx + halfW * 0.6 * p.sub,         p.top
+        );
         ctx.closePath();
         ctx.fill();
-        /* edge lighting (top) */
-        ctx.strokeStyle = 'rgba(160,180,210,0.18)';
+        ctx.shadowBlur = 0;
+
+        /* 우측 위 illuminated edge — rim lighting (밝은 핑크/주황) */
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        const rimG = ctx.createLinearGradient(
+            p.cx + halfW * 0.3, p.top,
+            p.cx + halfW * 1.0, p.top + (p.bot - p.top) * 0.5
+        );
+        rimG.addColorStop(0,   'rgba(255, 180, 140, 0.55)');
+        rimG.addColorStop(0.5, 'rgba(255, 130, 130, 0.30)');
+        rimG.addColorStop(1,   'rgba(200, 100, 130, 0)');
+        ctx.fillStyle = rimG;
+        ctx.beginPath();
+        ctx.moveTo(p.cx + halfW * 0.3, p.top);
+        ctx.lineTo(p.cx + halfW * 0.9, p.top + (p.bot - p.top) * 0.10);
+        ctx.lineTo(p.cx + halfW * 1.1 + p.lean * 0.4, p.top + (p.bot - p.top) * 0.40);
+        ctx.lineTo(p.cx + halfW * 0.7 + p.lean * 0.3, p.top + (p.bot - p.top) * 0.40);
+        ctx.lineTo(p.cx + halfW * 0.5, p.top + (p.bot - p.top) * 0.10);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        /* 끝부분 (top) — evaporating gas globule (작은 떠도는 dust 덩어리) */
+        const gx = p.cx - halfW * 0.2;
+        const gy = p.top - 6;
+        ctx.fillStyle = 'rgba(40, 35, 50, 0.7)';
+        ctx.beginPath();
+        ctx.ellipse(gx, gy, halfW * 0.35, 5, 0, 0, Math.PI*2);
+        ctx.fill();
+        /* 가스 wisp 위로 (사진의 끝부분 streamers) */
+        ctx.strokeStyle = 'rgba(180, 140, 150, 0.4)';
         ctx.lineWidth = 1;
-        ctx.stroke();
+        for(let w = 0; w < 3; w++){
+            const wx = gx + (w - 1) * 8;
+            ctx.beginPath();
+            ctx.moveTo(wx, gy - 2);
+            ctx.bezierCurveTo(
+                wx + 3, gy - 8,
+                wx - 2, gy - 14,
+                wx + 4, gy - 22
+            );
+            ctx.stroke();
+        }
+
+        /* 내부 약간 더 진한 spot (밀도 변화) */
+        ctx.fillStyle = 'rgba(5, 3, 8, 0.55)';
+        ctx.beginPath();
+        ctx.ellipse(p.cx + p.lean * 0.5, midY, halfW * 0.45, (p.bot - p.top) * 0.20, 0, 0, Math.PI*2);
+        ctx.fill();
     }
+
     ctx.restore();
 }
 
@@ -4993,7 +5121,7 @@ function drawZonePlanet(zIdx, dt){
         case 11: drawSirius(zoneT); break;
         case 12: drawBetelgeuse(zoneT); break;
         case 13: drawHorseheadNebula(); break;
-        case 14: drawPillarsOfCreation(); break;
+        case 14: drawPillarsOfCreation(zoneT); break;
         case 15: drawSagittariusA(zoneT); break;
         case 16: drawGalacticRim(zoneT); break;
         case 17: drawIntergalacticVoid(zoneT); break;
@@ -10737,6 +10865,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778384662"></script>
+<script src="/js/siteFooter.js?v=1778385517"></script>
 </body>
 </html>
