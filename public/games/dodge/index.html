@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778453170">
-<script>(function(){var B="1778453170";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778454032">
+<script>(function(){var B="1778454032";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1348,10 +1348,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1778453170"></script>
-<script src="/js/lpI18n.js?v=1778453170"></script>
-<script src="/js/lpRankSheet.js?v=1778453170"></script>
-<script src="/js/lpAudio.js?v=1778453170"></script>
+<script src="/js/supabase-config.js?v=1778454032"></script>
+<script src="/js/lpI18n.js?v=1778454032"></script>
+<script src="/js/lpRankSheet.js?v=1778454032"></script>
+<script src="/js/lpAudio.js?v=1778454032"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1441,7 +1441,11 @@ const DODGE_I18N = {
         kbdLeftRight: 'Left / Right',
         kbdItems: 'Items',
         kbdGravity: 'Gravity',
-        kbdStartRestart: 'Start / Restart'
+        kbdStartRestart: 'Start / Restart',
+        /* 2026-05-11 */
+        toastPauseBlocked: 'Cannot use while paused',
+        toastWarpAlreadyActive: '⏱ Already active',
+        pauseHint: '▶ Resume button / Space / Tap screen'
     },
     ko: {
         gameTitle: '🚀 SPACE-Z',
@@ -1523,7 +1527,11 @@ const DODGE_I18N = {
         kbdLeftRight: '좌 / 우',
         kbdItems: '아이템',
         kbdGravity: '중력',
-        kbdStartRestart: '시작 / 재시작'
+        kbdStartRestart: '시작 / 재시작',
+        /* 2026-05-11 — 누락된 user-facing 문자열들 */
+        toastPauseBlocked: '일시정지 중에는 사용 불가',
+        toastWarpAlreadyActive: '⏱ 이미 활성화됨',
+        pauseHint: '▶ 재개 버튼 / Space / 화면 탭'
     },
     ja: {
         gameTitle: '🚀 SPACE-Z',
@@ -2900,7 +2908,7 @@ async function initAuth(){
             me=null;
             meIdAtBoot=null;
             meNickAtBoot='';
-            $('authSlot').innerHTML='<a class="auth-chip" href="/auth/?next='+encodeURIComponent(location.pathname)+'">로그인</a>';
+            $('authSlot').innerHTML='<a class="auth-chip" href="/auth/?next='+encodeURIComponent(location.pathname)+'">'+esc(tT('login'))+'</a>';
             return;
         }
         me=u;
@@ -2910,7 +2918,7 @@ async function initAuth(){
                         ' email=' + (u.email||'(none)'));
         }catch(_){}
         const prof=await getSupabase().from('profiles').select('nickname,avatar_url').eq('id',u.id).maybeSingle();
-        const nick=prof.data?.nickname||'나';
+        const nick=prof.data?.nickname||tT('you');   /* 2026-05-11 — i18n fallback */
         meNickAtBoot=nick;
         $('authSlot').innerHTML='<a class="auth-chip" href="/me/">'+esc(nick)+'</a>';
         try {
@@ -5042,12 +5050,18 @@ function drawVegaAltair(zoneT){
         ctx.restore();
     }
 
-    /* 6) 라벨 */
+    /* 6) 라벨 — 2026-05-11 lang-aware */
     ctx.font = '7px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(200,220,255,0.55)';
     ctx.textAlign = 'left';
-    ctx.fillText('VEGA · 직녀', vx + 14, vy - 14);
-    ctx.fillText('ALTAIR · 견우', ax + 12, ay - 12);
+    const _vaLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    if(_vaLang === 'ko'){
+        ctx.fillText('VEGA · 직녀', vx + 14, vy - 14);
+        ctx.fillText('ALTAIR · 견우', ax + 12, ay - 12);
+    } else {
+        ctx.fillText('VEGA · Weaver', vx + 14, vy - 14);
+        ctx.fillText('ALTAIR · Cowherd', ax + 12, ay - 12);
+    }
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -5164,14 +5178,16 @@ function drawPleiades(zoneT){
         ctx.stroke();
     }
 
-    /* 5) 라벨 — 'PLEIADES · 昴 · 좀생이별' 한 줄로 위쪽에 작게 */
+    /* 5) 라벨 — 2026-05-11 lang-aware */
     ctx.font = '7px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(200,220,255,0.55)';
     ctx.textAlign = 'center';
     ctx.fillText('PLEIADES · M45', cx, baseY - 56);
     ctx.font = '6px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(180,210,255,0.42)';
-    ctx.fillText('昴 · 좀생이별 · Seven Sisters', cx, baseY - 46);
+    const _plLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    ctx.fillText(_plLang === 'ko' ? '昴 · 좀생이별 · Seven Sisters' : 'Seven Sisters · 昴 · Krittika',
+                 cx, baseY - 46);
 
     /* Alcyone 작게 라벨 */
     ctx.font = '6px Orbitron,sans-serif';
@@ -5332,14 +5348,18 @@ function drawOrionNebula(zoneT){
         ctx.shadowBlur = 0;
     }
 
-    /* 8) 라벨 — 'ORION NEBULA · M42' 위, '오리온의 검' 아래 */
+    /* 8) 라벨 — 2026-05-11 lang-aware */
     ctx.font = '7px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(255,210,225,0.62)';
     ctx.textAlign = 'center';
     ctx.fillText('ORION NEBULA · M42', cx, baseY - 70);
     ctx.font = '6px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(240,190,210,0.46)';
-    ctx.fillText('오리온의 검 · the heart of Orion\'s sword · 1,344 ly', cx, baseY - 60);
+    const _onLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    ctx.fillText(_onLang === 'ko'
+        ? '오리온의 검 · 사냥꾼의 칼날 · 1,344 ly'
+        : 'Heart of Orion\'s sword · 1,344 ly',
+        cx, baseY - 60);
 
     /* Trapezium 작게 라벨 */
     ctx.font = '6px Orbitron,sans-serif';
@@ -6113,14 +6133,21 @@ function drawTON618(zoneT){
     ctx.fillStyle = 'rgba(240,200,225,0.62)';
     ctx.fillText('ULTRAMASSIVE QUASAR · 66 BILLION M☉ · z=2.219', cx, labelTopY + 14);
 
-    ctx.font = '8px Noto Sans KR,sans-serif';
-    ctx.fillStyle = 'rgba(230,190,225,0.55)';
-    ctx.fillText('66억 태양질량 · 우주 최대급 블랙홀', cx, labelTopY + 26);
+    /* 2026-05-11 lang-aware sub label */
+    const _tonLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    if(_tonLang === 'ko'){
+        ctx.font = '8px Noto Sans KR,sans-serif';
+        ctx.fillStyle = 'rgba(230,190,225,0.55)';
+        ctx.fillText('66억 태양질량 · 우주 최대급 블랙홀', cx, labelTopY + 26);
+    }
 
     /* 9) 거리 hint — 작게 라벨 아래 */
     ctx.font = '6px Orbitron,sans-serif';
     ctx.fillStyle = 'rgba(220,180,210,0.45)';
-    ctx.fillText('10.4 billion light-years from Earth · 지구로부터 104억 광년', cx, labelTopY + 38);
+    ctx.fillText(_tonLang === 'ko'
+        ? '10.4 billion light-years from Earth · 지구로부터 104억 광년'
+        : '10.4 billion light-years from Earth',
+        cx, labelTopY + 38);
 
     /* 10) Scale comparison label — disk 옆에 작게 (사상의 지평선 거대함) */
     ctx.textAlign = 'left';
@@ -6131,8 +6158,13 @@ function drawTON618(zoneT){
     if(scaleLabelX < CW - 40 && scaleLabelY < CH - 6){
         ctx.fillText('∅ ~1300 AU', scaleLabelX, scaleLabelY);
         ctx.fillText('= entire solar system', scaleLabelX, scaleLabelY + 8);
-        ctx.font = '6px Noto Sans KR,sans-serif';
-        ctx.fillText('태양계 전체보다 큰 사상의 지평선', scaleLabelX, scaleLabelY + 18);
+        if(_tonLang === 'ko'){
+            ctx.font = '6px Noto Sans KR,sans-serif';
+            ctx.fillText('태양계 전체보다 큰 사상의 지평선', scaleLabelX, scaleLabelY + 18);
+        } else {
+            ctx.font = '6px Orbitron,sans-serif';
+            ctx.fillText('Event horizon larger than solar system', scaleLabelX, scaleLabelY + 18);
+        }
     }
 
     ctx.textAlign = 'left';
@@ -8064,13 +8096,13 @@ function activateRewardSlot(kind){
         }
         if(!running || paused){
             /* 게임 일시정지 등 — 토스트로 알려주기 */
-            _showRewardToast('일시정지 중에는 사용 불가', '#FF8888', 900);
+            _showRewardToast(tT('toastPauseBlocked'), '#FF8888', 900);
             return;
         }
         const now = performance.now();
         if(kind === 'warp'){
             if(_isTimeWarpActive(now)){
-                _showRewardToast('⏱ 이미 활성화됨', '#80C8FF', 900);
+                _showRewardToast(tT('toastWarpAlreadyActive'), '#80C8FF', 900);
                 return;
             }
             _activateTimeWarp(now);
@@ -10885,7 +10917,7 @@ function drawFrame(now, dt){
         ctx.fillText('PAUSED',CW/2,CH/2);
         ctx.font='13px Noto Sans KR,sans-serif';
         ctx.fillStyle='rgba(255,255,255,.55)';
-        ctx.fillText('▶ 재개 버튼 / Space / 화면 탭',CW/2,CH/2+36);
+        ctx.fillText(tT('pauseHint'),CW/2,CH/2+36);
         ctx.textAlign='left';
     }
     /* Time Warp overlay — UI 보다는 아래, gameplay 보다는 위 (분위기 변경) */
@@ -12218,6 +12250,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778453170"></script>
+<script src="/js/siteFooter.js?v=1778454032"></script>
 </body>
 </html>
