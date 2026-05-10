@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778395853">
-<script>(function(){var B="1778395853";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778399018">
+<script>(function(){var B="1778399018";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -320,13 +320,19 @@ const C = {
   //  - Tier 2: after 12 ball-hit bricks → base × 1.20
   //  - Tier 3: first time the ball touches the top wall → base × 1.32
   // Tier resets to 0 on life lost or stage clear. Slow power-up = ×0.6 multiplicative.
-  BALL_SPD_BASE: 6.0, // base speed at stage 1 (px per 60Hz physics step)
+  // 2026-05-10: BALL_SPD_BASE 6.0 → 7.8 (+30% 시작 속도). PADDLE_HIT_PCT
+  // 추가 — paddle 10타 누적당 +2% 속도 추가. BALL_SPD_MAX 10.0 → 12.5 로
+  // 새 누적 시스템 여유.
+  BALL_SPD_BASE: 7.8, // base speed at stage 1 (px per 60Hz physics step). +30% from 6.0
   BALL_SPD_LEVEL: 0.18, // per-stage base increment (capped at LEVEL_CAP)
   BALL_SPD_LEVEL_CAP: 14, // increments cap at this many stages above 1
-  BALL_SPD_MAX: 10.0, // hard cap (after all multipliers)
+  BALL_SPD_MAX: 12.5, // hard cap (after all multipliers)
   SPEED_TIERS: [1.00, 1.10, 1.20, 1.32], // tier 0/1/2/3 multipliers
   TIER1_HITS: 4,
   TIER2_HITS: 12,
+  // 2026-05-10: paddle hit accumulator — 10타당 +2% 속도. stage 안에서만
+  // 누적, life lost / stage clear 시 0 으로 리셋.
+  PADDLE_HIT_PCT_PER10: 0.02,
   BRICK_COLS: 8,
   BRICK_W: 40, BRICK_H: 16, BRICK_GAP: 2,
   BRICK_TOP: 50,
@@ -366,6 +372,17 @@ const S = {
   speedTier:0,         // 0..3
   brickHitCount:0,     // resets on life lost / stage clear
   touchedTopWall:false,// resets on life lost / stage clear (used to gate tier 3)
+  // 2026-05-10: paddle hit accumulator (10타당 +2% 속도). stage 안에서만 누적.
+  paddleHitCount:0,
+  // 2026-05-10: stage time limit. T(n) = 50 + 9*(n-1). 시간 초과 시 game over.
+  stageStartedAt:0,    // performance.now() when stage started
+  stageTimeLimit:0,    // ms. computed at buildLevel (= T(n) * 1000)
+  stagePausedTotalMs:0,// pause-aware: total paused time during this stage
+  stagePauseStartedAt:0,
+  // 2026-05-10: stage 내 block points 누적 (concave power-law time bonus 계산용).
+  // S.score 와 별도로 추적, level clear 시 timeBonus 추가.
+  stageBlockScore:0,
+  stageMaxBlockScore:0,// theoretical maximum if every brick broken with max combo
 };
 
 // ======== DOM ========
@@ -558,25 +575,65 @@ const BRICK_TYPES = {
 };
 
 // ======== LEVEL DEFINITIONS (18 stages) ========
+// 2026-05-10 재설계 — 기하학적 패턴 다양화 + 평균 hp 진행 곡선 (1.5 → 3.5).
+// 스테이지가 증가할수록 (a) 블록 갯수 (b) 멀티-hit 블록 비율이 동시에 우상향.
+// 모양은 사각 블록 유지, 배치만 다양 (rows / alternating / diagonal / diamond /
+// frame / plus / pyramid / pillars / chevron / ring / X / quadrants / staircase /
+// starburst / castle / hourglass / mandala / final boss).
 const LEVELS = [
-  ["11111111","11111111","11111111"],
+  /* 1 — Rows (warmup). avg hp 1.33, ~32 hits */
+  ["11111111","11111111","22222222"],
+
+  /* 2 — Alternating bands. avg 1.5, ~48 hits */
   ["22222222","11111111","22222222","11111111"],
-  ["1.1.1.1.",".2.2.2.2","1.1.1.1.","22222222","11111111"],
-  ["11111111",".G.G.G.G","G.G.G.G.","22222222","11111111"],
-  ["X......X","X.2222.X","X.3333.X","X.2222.X","X.1111.X","X......X"],
-  ["...11...","..1221..",".122321.","12233221","12333321","12222221"],
-  ["...GG...","..2222..",".333333.","33444433",".333333.","..2222..","...GG..."],
-  ["X......X",".3....3.","..2..2..","...44...","..2..2..",".3....3.","X......X"],
-  ["...GG...","..3GG3..",".3GGGG3.","33GGGG33",".3GGGG3.","..3GG3..","...GG..."],
-  ["33333333","1......3","1.2222.3","1.2GG2.3","1.2222.3","1......3","11111113"],
-  ["...44...","...44...","3344GG44","3344GG44","...44...","...44...","22222222","11111111"],
-  ["X.X.X.X.",".3.3.3.3","G.4.G.4.",".3.3.3.3","X.X.X.X.","22222222","11111111"],
-  ["X......X","55555555","5GG33GG5","5G3..3G5","5G3..3G5","5GG33GG5","55555555","X......X"],
-  ["1.......","22......","333.....","4444....","55555...",".4444...","..333...","...22...","....1..."],
-  ["...55...","..5445..",".544445.","54433445","43322334","33222233","22111122","11111111"],
-  ["GGGGGGGG","4......4","4.GGGG.4","4.G44G.4","4.G44G.4","4.GGGG.4","4......4","33333333"],
-  ["55..55..","55..55..","..55..55","..55..55","55..55..","55..55..","..55..55","..55..55"],
-  ["5XXXXXX5","55GGGG55","5GG44GG5","5G4334G5","5G4554G5","5G4334G5","5GG44GG5","55GGGG55","5XXXXXX5"]
+
+  /* 3 — Diagonal stripes. avg 1.6, ~52 hits */
+  ["1.1.1.1.",".2.2.2.2","1.1.1.1.",".2.2.2.2","22222222"],
+
+  /* 4 — Diamond. avg 1.7, ~52 hits */
+  ["...22...","..2112..",".221122.","22111122",".221122.","..2112..","...22..."],
+
+  /* 5 — Frame + center grid. avg 2.0, ~70 hits */
+  ["33333333","3......3","3.2222.3","3.2..2.3","3.2222.3","3......3","33333333"],
+
+  /* 6 — Plus / cross. avg 2.1, ~78 hits */
+  ["...33...","...33...","33222233","33222233","33222233","...33...","...33..."],
+
+  /* 7 — Pyramid. avg 2.3, ~85 hits */
+  ["....3...","...333..","..33333.",".3333333","33333333","32222223","21111112"],
+
+  /* 8 — Twin pillars + gold core. avg 2.4, ~92 hits */
+  ["33....33","33....33","33.GG.33","33.GG.33","33....33","33....33","33333333"],
+
+  /* 9 — Chevron / zigzag. avg 2.6, ~105 hits */
+  ["3......3","33....33","333..333","33333333","333..333","33....33","3......3","22222222"],
+
+  /* 10 — Ring / donut. avg 2.7, ~115 hits */
+  [".333333.","3......3","3.4444.3","3.4..4.3","3.4444.3","3......3",".333333.","22222222"],
+
+  /* 11 — X cross. avg 2.9, ~118 hits */
+  ["4......4",".4....4.","..4..4..","...44...","..4..4..",".4....4.","4......4","33333333"],
+
+  /* 12 — Quadrants + gold corners. avg 3.0, ~125 hits */
+  ["44.GG.44","44.GG.44","........","..3333..","..3333..","........","44.GG.44","44.GG.44"],
+
+  /* 13 — Cascade staircase. avg 3.1, ~130 hits */
+  ["44......","444.....","4444....","44444...",".44444..","..44444.","...44444","....4444"],
+
+  /* 14 — Starburst (radial X). avg 3.2, ~135 hits */
+  ["X..44..X","4..44..4","4444444X","X4444444","44444444","X4444444","4444444X","4..44..4","X..44..X"],
+
+  /* 15 — Castle (frame + gold tower). avg 3.3, ~145 hits */
+  ["55555555","5......5","5.GGGG.5","5.G44G.5","5.G44G.5","5.GGGG.5","5......5","55555555"],
+
+  /* 16 — Hourglass. avg 3.4, ~155 hits */
+  ["55555555","X4444444","X.4444.X","X..44..X","X..44..X","X.4444.X","X4444444","55555555"],
+
+  /* 17 — Mandala. avg 3.5, ~165 hits */
+  [".G4444G.","45XXXX54","4X4444X4","X4G44G4X","X4G44G4X","4X4444X4","45XXXX54",".G4444G."],
+
+  /* 18 — Final Boss. avg 3.6, ~180 hits */
+  ["55GGGG55","5XX44XX5","5G4554G5","5X4554X5","X455554X","5X4554X5","5G4554G5","5XX44XX5","55GGGG55"]
 ];
 
 // Base speed for a given stage (Tier 0). Subsequent tiers are multipliers on top.
@@ -584,12 +641,18 @@ function baseSpeedFor(level){
   const inc = Math.min(level-1, C.BALL_SPD_LEVEL_CAP) * C.BALL_SPD_LEVEL;
   return C.BALL_SPD_BASE + inc;
 }
-// Effective target speed at current state (level + tier + slow).
+// Paddle hit accumulator multiplier. 10타당 +2% (선형). 50타 → +10%, 100타 → +20%.
+// 2026-05-10 신규.
+function paddleHitMult(){
+  return 1 + C.PADDLE_HIT_PCT_PER10 * Math.floor(S.paddleHitCount / 10);
+}
+// Effective target speed at current state (level + tier + paddle accum + slow).
 function currentTargetSpeed(){
   const base = baseSpeedFor(S.level);
   const mult = C.SPEED_TIERS[Math.min(S.speedTier, C.SPEED_TIERS.length-1)];
+  const padd = paddleHitMult();
   const slow = S.pwrEffects.slow ? 0.6 : 1.0;
-  return Math.min(C.BALL_SPD_MAX, base * mult) * slow;
+  return Math.min(C.BALL_SPD_MAX, base * mult * padd) * slow;
 }
 // Re-tune all in-play balls to currentTargetSpeed (preserves direction).
 function retuneBalls(){
@@ -616,10 +679,32 @@ function checkSpeedTier(){
   }
 }
 // Reset speed-tier accumulators (called on life lost / stage start).
+// 2026-05-10: paddleHitCount 도 함께 reset — paddle 누적 속도 시스템도
+// stage 별로만 작동.
 function resetSpeedTier(){
   S.speedTier = 0;
   S.brickHitCount = 0;
   S.touchedTopWall = false;
+  S.paddleHitCount = 0;
+}
+
+// 2026-05-10: stage time limit T(n) = 50 + 9*(n-1) seconds.
+// stage 1 = 50s, stage 18 = 203s. 시간 초과 시 게임 오버.
+function stageTimeLimitSec(lv){
+  return 50 + 9 * (lv - 1);
+}
+// 2026-05-10: stage 의 max possible block-score (concave power-law cap 계산용).
+// 모든 destructible 블록을 max combo (×5) 로 깬 경우 — 실전엔 도달 어려움.
+function computeStageMaxBlockScore(){
+  let total = 0;
+  for(const br of S.bricks){
+    const t = BRICK_TYPES[br.type];
+    if(!t || t.indestruct) continue;
+    /* per-hit score = t.score × combo. hp 를 다 깎으려면 hp 번 hit.
+       max combo 5 가정. 보수적으로 계산. */
+    total += t.score * t.hp * 5;
+  }
+  return total;
 }
 
 // ======== BUILD LEVEL ========
@@ -644,6 +729,25 @@ function buildLevel(lv){
       });
     }
   }
+  /* 2026-05-10: stage time limit + score 추적 초기화 */
+  S.stageStartedAt = performance.now();
+  S.stageTimeLimit = stageTimeLimitSec(lv) * 1000;
+  S.stagePausedTotalMs = 0;
+  S.stagePauseStartedAt = 0;
+  S.stageBlockScore = 0;
+  S.stageMaxBlockScore = computeStageMaxBlockScore();
+}
+/* 2026-05-10: stage elapsed/remaining helpers — pause-aware. */
+function stageElapsedMs(){
+  if(!S.stageStartedAt) return 0;
+  let raw = performance.now() - S.stageStartedAt - S.stagePausedTotalMs;
+  if(S.paused && S.stagePauseStartedAt > 0){
+    raw -= (performance.now() - S.stagePauseStartedAt);
+  }
+  return Math.max(0, raw);
+}
+function stageRemainingMs(){
+  return Math.max(0, S.stageTimeLimit - stageElapsedMs());
 }
 function brickActiveCount(){
   let n = 0;
@@ -1157,6 +1261,15 @@ function updateBall(b){
         updateUI();
       }
       sfxPaddle();
+      // 2026-05-10: paddle hit accumulator. 10타 단위 boundary 를 넘으면
+      // retuneBalls 으로 모든 ball 의 speed 을 새 multiplier 적용.
+      const prevTens = Math.floor(S.paddleHitCount / 10);
+      S.paddleHitCount++;
+      const newTens = Math.floor(S.paddleHitCount / 10);
+      if(newTens > prevTens){
+        retuneBalls();
+        spawnFloatText('+' + (C.PADDLE_HIT_PCT_PER10*100*newTens).toFixed(0) + '% SPD', C.W/2, 130, '#7FECFF');
+      }
       if(S.paddleSticky){ b.attached = true; return; }
     } else if(kind === 'brick'){
       const {br, nx, ny} = hitData;
@@ -1228,6 +1341,7 @@ function hitBrick(br, hx, hy, fromAOE){
   }
   const pts = t.score * S.combo;
   S.score += pts;
+  S.stageBlockScore += pts;   /* 2026-05-10: stage 별 누적 (time bonus 계산 base) */
   if(br.hp <= 0){
     spawnExplosion(hx, hy, t.color, 14);
     if(t.gold){ sfxGold(); }
@@ -1263,11 +1377,29 @@ function loseLife(){
   S.shake = 12;
   updateUI();
 }
+/* 2026-05-10: Concave Power-Law time bonus.
+   τ = t_left / T(n)  ∈ [0, 1]
+   timeBonus = stageBlockScore × γ × τ^β   (γ=0.5, β=0.7)
+   per-stage cap = 1.5 × stageBlockScore (max 50% time bonus on top)
+   stageMaxBlockScore 는 이론 max block score (실전엔 도달 불가) → cap 의 cap. */
+const TIME_BONUS_GAMMA = 0.5;
+const TIME_BONUS_BETA  = 0.7;
+function computeTimeBonus(){
+  const T = S.stageTimeLimit;
+  if(T <= 0) return 0;
+  const tLeft = stageRemainingMs();
+  const tau = Math.max(0, Math.min(1, tLeft / T));
+  return Math.round(S.stageBlockScore * TIME_BONUS_GAMMA * Math.pow(tau, TIME_BONUS_BETA));
+}
 function onLevelClear(){
   if(!S.running) return;
   S.running = false;
-  const bonus = 1000 * S.level;
-  S.score += bonus;
+  /* 2026-05-10: stage clear 시 base bonus + concave time bonus 합산.
+     base bonus 는 stage 진출 보너스 (1000 × level), time bonus 는 별도. */
+  const baseBonus = 1000 * S.level;
+  const timeBonus = computeTimeBonus();
+  const totalBonus = baseBonus + timeBonus;
+  S.score += totalBonus;
   sfxLevelClear();
   if(S.level >= C.MAX_LEVEL){
     if(S.score > S.best){ S.best = S.score; }
@@ -1283,14 +1415,19 @@ function onLevelClear(){
     gameOv.classList.add('show');
     return;
   }
+  /* level overlay 에 time bonus 도 표시 */
+  const tLeftSec = (stageRemainingMs() / 1000).toFixed(1);
   document.getElementById('lvTitle').textContent = 'STAGE ' + S.level + ' CLEAR!';
-  document.getElementById('lvSub').textContent = '+' + bonus.toLocaleString() + ' 보너스';
+  document.getElementById('lvSub').innerHTML =
+    '+' + baseBonus.toLocaleString() + ' base · ' +
+    '+<span style="color:#FFE66D">' + timeBonus.toLocaleString() + '</span> time bonus<br>' +
+    '<span style="font-size:10px;opacity:0.7">' + tLeftSec + 's remaining of ' + (S.stageTimeLimit/1000) + 's</span>';
   document.getElementById('lvScore').textContent = S.score.toLocaleString();
   document.getElementById('lvNext').textContent = (S.level+1);
   levelOv.classList.add('show');
   updateUI();
 }
-function onGameOver(){
+function onGameOver(reason){
   S.running = false;
   if(S.score > S.best){ S.best = S.score; }
   if(S.level > S.bestLevel){ S.bestLevel = S.level; }
@@ -1298,16 +1435,33 @@ function onGameOver(){
   sfxGameOver();
   document.getElementById('goTitle').textContent = 'GAME OVER';
   document.getElementById('goTitle').className = 'lose';
-  document.getElementById('goSub').textContent = '다시 시작해서 더 멀리 가보자.';
+  /* 2026-05-10: time-out vs life-loss 구분 */
+  const subText = (reason === 'timeout')
+    ? '⏱ 시간 초과 — Stage ' + S.level + ' 제한시간 ' + (S.stageTimeLimit/1000) + 's'
+    : '다시 시작해서 더 멀리 가보자.';
+  document.getElementById('goSub').textContent = subText;
   document.getElementById('goScore').textContent = S.score.toLocaleString();
   document.getElementById('goLevel').textContent = S.level;
   document.getElementById('goBest').textContent = S.best.toLocaleString();
   document.getElementById('goBestLv').textContent = S.bestLevel;
   gameOv.classList.add('show');
 }
+/* 2026-05-10: 시간 초과 = 즉시 game over (lives 와 무관). */
+function onTimeOut(){
+  if(!S.running) return;
+  onGameOver('timeout');
+}
 
 // ======== UPDATE LOOP ========
 function update(dt){
+  /* 2026-05-10: stage time limit 검사. 잔여 시간 0 → 즉시 게임오버.
+     S.running 이 끝나면 update 호출 자체 중단되니 한 번만 fire.
+     _levelCleared 체크 — 마지막 블록 깨고 onLevelClear 의 350ms setTimeout
+     동안 race condition 으로 onTimeOut 이 같이 발동하는 것 방지. */
+  if(S.running && !S._levelCleared && stageRemainingMs() <= 0){
+    onTimeOut();
+    return;
+  }
   // Paddle smoothing
   if(S.inputX != null){
     const target = Math.max(S.paddleW/2, Math.min(C.W - S.paddleW/2, S.inputX));
@@ -1386,6 +1540,18 @@ function update(dt){
 }
 
 // ======== RENDER: BRICK TEXTURES ========
+/* 2026-05-10 v2 — 블록 시각 강화:
+   tier 1 (HP 1) : 플랫, 가벼움 — 단일 highlight + shadow
+   tier 2 (HP 2) : 사선 hatching 패턴 — 약한 armor
+   tier 3 (HP 3) : 4 모서리 stud + 중앙 crosshair — riveted plate
+   tier 4 (HP 4) : gradient + 3 수직 band + 4 모서리 큰 stud + 깊은 shadow — 산업 강철
+   tier 5 (HP 5) : 두꺼운 외곽 border + cross-grid + 4 큰 rivet + 중앙 medallion +
+                   강한 top highlight — 보스 armor
+   Gold ★      : 풍부한 gradient + 펄스 glow + 별 마크
+   Indestruct  : 화강암/콘크리트 + X 마크 (변경 없음)
+
+   damageRatio 가 높을수록 어두워지는 overlay 가 마지막에 깔리고, 그 위에 crack
+   라인 (drawCracks) → 색상 + crack + hp 숫자 3중 시그널. */
 function drawBrick(br){
   const t = BRICK_TYPES[br.type];
   const x = br.x, y = br.y, w = br.w, h = br.h;
@@ -1460,46 +1626,89 @@ function drawBrick(br){
       ctx.fillRect(x + 2, y + 3, 1, 1); ctx.fillRect(x + w - 4, y + 3, 1, 1);
       ctx.fillRect(x + 2, y + h - 5, 1, 1); ctx.fillRect(x + w - 4, y + h - 5, 1, 1);
     } else if(tier === 4){
+      /* tier 4 — 산업 강철: gradient + 3 수직 band + 4 큰 모서리 stud + 깊은 shadow */
       const grad = ctx.createLinearGradient(x, y, x, y+h);
       grad.addColorStop(0, t.accent);
-      grad.addColorStop(0.4, t.color);
+      grad.addColorStop(0.35, t.color);
       grad.addColorStop(1, t.dark);
       ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      /* 3 수직 metal band — bevel 효과 */
+      ctx.fillStyle = 'rgba(0,0,0,0.32)';
       ctx.fillRect(x + w*0.25, y + 2, 1, h - 4);
-      ctx.fillRect(x + w*0.5, y + 2, 1, h - 4);
+      ctx.fillRect(x + w*0.5,  y + 2, 1, h - 4);
       ctx.fillRect(x + w*0.75, y + 2, 1, h - 4);
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
       ctx.fillRect(x + w*0.25 + 1, y + 2, 1, h - 4);
-      ctx.fillRect(x + w*0.5 + 1, y + 2, 1, h - 4);
+      ctx.fillRect(x + w*0.5  + 1, y + 2, 1, h - 4);
       ctx.fillRect(x + w*0.75 + 1, y + 2, 1, h - 4);
+      /* 4 큰 모서리 stud (3×3 dark + 1×1 light highlight) */
+      const studs4 = [[1,1],[w-4,1],[1,h-4],[w-4,h-4]];
       ctx.fillStyle = t.dark;
-      ctx.fillRect(x + 1, y + 1, 3, 3); ctx.fillRect(x + w - 4, y + 1, 3, 3);
-      ctx.fillRect(x + 1, y + h - 4, 3, 3); ctx.fillRect(x + w - 4, y + h - 4, 3, 3);
-    } else { // tier 5
-      ctx.fillStyle = t.color; ctx.fillRect(x, y, w, h);
-      const grad2 = ctx.createLinearGradient(x, y, x, y+3);
-      grad2.addColorStop(0, t.accent); grad2.addColorStop(1, t.color);
-      ctx.fillStyle = grad2; ctx.fillRect(x, y, w, 3);
-      ctx.fillStyle = t.dark; ctx.fillRect(x, y + h - 2, w, 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(x + w/2 - 0.5, y + 2, 1, h - 4);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      for(let i = 0; i < 5; i++){
-        const px = x + 3 + ((br.seed * (i+2) * 11) % (w-6));
-        const py = y + 3 + ((br.seed * (i+2) * 17) % (h-6));
-        ctx.fillRect(px, py, 1, 1);
-      }
+      for(const s of studs4) ctx.fillRect(x+s[0], y+s[1], 3, 3);
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      for(const s of studs4) ctx.fillRect(x+s[0]+1, y+s[1]+1, 1, 1);
+      /* 외곽 thin border — 두께감 */
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    } else { // tier 5 — 보스 armor
+      /* base fill + 강한 vertical gradient */
+      const grad5 = ctx.createLinearGradient(x, y, x, y+h);
+      grad5.addColorStop(0, t.accent);
+      grad5.addColorStop(0.20, t.color);
+      grad5.addColorStop(0.85, t.color);
+      grad5.addColorStop(1, t.dark);
+      ctx.fillStyle = grad5; ctx.fillRect(x, y, w, h);
+      /* 두꺼운 outer border (2px) — 무겁다는 시각 신호 */
+      ctx.strokeStyle = t.dark;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      /* cross-grid pattern — 내부 면적 분할 */
+      ctx.fillStyle = 'rgba(0,0,0,0.38)';
+      ctx.fillRect(x + w/2 - 0.5, y + 3, 1, h - 6);
+      ctx.fillRect(x + 3, y + h/2 - 0.5, w - 6, 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(x + w/2 + 0.5, y + 3, 1, h - 6);
+      ctx.fillRect(x + 3, y + h/2 + 0.5, w - 6, 1);
+      /* 4 큰 rivet (3×3 inset + bright highlight) */
+      const rivets = [[3,3],[w-6,3],[3,h-6],[w-6,h-6]];
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      for(const r of rivets) ctx.fillRect(x+r[0], y+r[1], 3, 3);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for(const r of rivets) ctx.fillRect(x+r[0]+1, y+r[1]+1, 1, 1);
+      /* 중앙 medallion — 8각형 느낌의 작은 dot cluster */
+      const cx = x + w/2, cy = y + h/2;
+      ctx.fillStyle = 'rgba(0,0,0,0.42)';
+      ctx.fillRect(cx - 2, cy - 2, 4, 4);
       ctx.fillStyle = t.accent;
-      ctx.fillRect(x + 3, y + h/2 - 1, 2, 2);
-      ctx.fillRect(x + w - 5, y + h/2 - 1, 2, 2);
+      ctx.fillRect(cx - 1, cy - 1, 2, 2);
+      /* top highlight strip — strong */
+      const grad5t = ctx.createLinearGradient(x, y, x, y+3);
+      grad5t.addColorStop(0, 'rgba(255,255,255,0.55)');
+      grad5t.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = grad5t;
+      ctx.fillRect(x + 3, y + 1, w - 6, 2);
     }
+  }
+  /* 2026-05-10 — damage 진행 시각화: 어두운 overlay + crack.
+     damageRatio 0.15 부터 살짝 어두워지고, 0.85+ 에서는 살짝 빨갛게 (위험). */
+  if(damageRatio > 0.15 && br.hp > 0 && !t.indestruct){
+    if(damageRatio < 0.7){
+      ctx.fillStyle = 'rgba(0,0,0,' + (damageRatio * 0.35).toFixed(3) + ')';
+    } else {
+      /* 위험 단계 — 빨간 tint 살짝 가미 */
+      const dangerAlpha = (damageRatio - 0.5) * 0.45;
+      ctx.fillStyle = 'rgba(80,0,0,' + dangerAlpha.toFixed(3) + ')';
+    }
+    ctx.fillRect(x, y, w, h);
   }
   if(damageRatio > 0 && br.hp > 0 && br.maxHp > 1 && !t.indestruct){
     drawCracks(br, damageRatio);
   }
   if(br.maxHp > 1 && br.hp > 0 && !t.gold){
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    /* hp 숫자 — 데미지 진행에 따라 더 진해짐 */
+    const numAlpha = 0.55 + damageRatio * 0.30;
+    ctx.fillStyle = 'rgba(0,0,0,' + numAlpha.toFixed(3) + ')';
     ctx.font = '700 8px JetBrains Mono';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
@@ -1513,8 +1722,9 @@ function drawCracks(br, ratio){
   const r2 = ((seed * 7) % 100) / 100;
   const r3 = ((seed * 13) % 100) / 100;
   const r4 = ((seed * 19) % 100) / 100;
-  ctx.strokeStyle = 'rgba(0,0,0,' + (0.5 + ratio*0.3) + ')';
-  ctx.lineWidth = 1;
+  /* 메인 crack: 검정. 데미지 진행 따라 짙어짐. */
+  ctx.strokeStyle = 'rgba(0,0,0,' + (0.5 + ratio*0.35) + ')';
+  ctx.lineWidth = 1 + (ratio > 0.7 ? 0.5 : 0);
   ctx.lineCap = 'round';
   ctx.beginPath();
   if(ratio >= 0.2){
@@ -1548,6 +1758,19 @@ function drawCracks(br, ratio){
     }
   }
   ctx.stroke();
+  /* 2026-05-10: 위험 단계 (ratio >= 0.85) — crack 안에 흰색 발광 라인 추가
+     로 "곧 깨질 것" 신호. 시각적으로 dramatic. */
+  if(ratio >= 0.85){
+    ctx.strokeStyle = 'rgba(255,230,150,0.55)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    /* 다이아곤 cross 한가운데 */
+    ctx.moveTo(x + w*0.2, y + h*0.3);
+    ctx.lineTo(x + w*0.8, y + h*0.7);
+    ctx.moveTo(x + w*0.8, y + h*0.3);
+    ctx.lineTo(x + w*0.2, y + h*0.7);
+    ctx.stroke();
+  }
 }
 
 // ======== RENDER ========
@@ -1567,6 +1790,42 @@ function render(){
   }
   for(let y=0; y<C.H; y+=24){
     ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(C.W,y); ctx.stroke();
+  }
+  /* 2026-05-10: Stage time bar — canvas 상단 (BRICK_TOP=50 위 여백 활용).
+     초록 → 노랑 → 빨강 으로 색상 전환. 잔여 < 25% 면 깜빡임. */
+  if(S.running && S.stageTimeLimit > 0){
+    const tLeft = stageRemainingMs();
+    const ratio = Math.max(0, Math.min(1, tLeft / S.stageTimeLimit));
+    const barW = C.W - 16;
+    const barX = 8;
+    const barY = 36;
+    const barH = 6;
+    /* 배경 */
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(barX, barY, barW, barH);
+    /* 채움 — 색상 전환 (>50% 초록, 25-50% 노랑, <25% 빨강) */
+    let fillCol;
+    if(ratio > 0.5)       fillCol = '#00E676';
+    else if(ratio > 0.25) fillCol = '#FFE66D';
+    else {
+      /* 위험 — 깜빡임 */
+      const blink = (Math.floor(performance.now()/180) % 2) === 0;
+      fillCol = blink ? '#FF3366' : '#FF99B0';
+    }
+    ctx.fillStyle = fillCol;
+    ctx.fillRect(barX + 1, barY + 1, (barW - 2) * ratio, barH - 2);
+    /* 외곽 테두리 */
+    ctx.strokeStyle = 'rgba(0,217,255,0.35)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
+    /* 잔여 시간 텍스트 (작게, 좌상단) */
+    const tSec = (tLeft / 1000);
+    ctx.fillStyle = ratio < 0.25 ? '#FF99B0' : 'rgba(255,255,255,0.85)';
+    ctx.font = '700 9px JetBrains Mono';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('⏱ ' + tSec.toFixed(1) + 's / ' + (S.stageTimeLimit/1000) + 's',
+                 barX, barY - 8);
   }
   for(const br of S.bricks){
     if(br.hp <= 0) continue;
@@ -1720,6 +1979,16 @@ function flashBorder(){
 function togglePause(){
   if(!S.running) return;
   S.paused = !S.paused;
+  /* 2026-05-10: pause-aware timer. pause 진입 시 현재 시각 기록,
+     resume 시 누적 paused 시간에 합산 (stageRemainingMs 가 정확히 계산됨). */
+  if(S.paused){
+    S.stagePauseStartedAt = performance.now();
+  } else {
+    if(S.stagePauseStartedAt > 0){
+      S.stagePausedTotalMs += (performance.now() - S.stagePauseStartedAt);
+      S.stagePauseStartedAt = 0;
+    }
+  }
   document.getElementById('btnPause').textContent = S.paused ? 'RESUME' : 'PAUSE';
 }
 function toggleMute(){
