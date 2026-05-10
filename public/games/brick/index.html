@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778395201">
-<script>(function(){var B="1778395201";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778395853">
+<script>(function(){var B="1778395853";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -105,16 +105,30 @@ header .title .sub{
   padding:6px 8px 4px;min-height:0;position:relative;
 }
 .canvas-holder{
+  /* 2026-05-10 redesign: 캔버스 자체가 paddle 입력 surface.
+     별도 ctrl-pad 바 제거, 캔버스 안에서 직접 드래그하여 paddle 조작.
+     touch-action:none 으로 브라우저 스크롤·확대 차단. */
   position:relative;flex:1;display:flex;
   align-items:center;justify-content:center;
   width:100%;min-height:0;
+  touch-action:none;
+  -webkit-user-select:none;user-select:none;
+  cursor:grab;
 }
+.canvas-holder.active{cursor:grabbing}
 canvas#g{
   display:block;background:#06061a;
   border:2px solid rgba(0,217,255,0.25);
   border-radius:8px;
   box-shadow:0 0 30px rgba(0,217,255,0.12),inset 0 0 40px rgba(0,0,0,0.5);
   max-width:100%;max-height:100%;
+  transition:border-color .14s,box-shadow .14s;
+  pointer-events:none;  /* 이벤트는 .canvas-holder 가 받음 */
+}
+.canvas-holder.active canvas#g{
+  /* 터치 중일 때 살짝 글로우 — 사용자에게 입력 받고 있다는 신호 */
+  border-color:rgba(0,217,255,0.65);
+  box-shadow:0 0 38px rgba(0,217,255,0.28),inset 0 0 40px rgba(0,0,0,0.45);
 }
 .pwr-bar{
   display:flex;gap:6px;padding:6px 8px;
@@ -131,66 +145,6 @@ canvas#g{
   color:var(--accent);letter-spacing:0.05em;
 }
 .pwr-chip .t{font-variant-numeric:tabular-nums;opacity:0.7}
-.ctrl-pad{
-  position:relative;
-  margin:6px 8px 0;
-  height:64px;
-  background:linear-gradient(180deg,#13143a 0%,#0a0a1e 100%);
-  border:1px solid rgba(0,217,255,0.32);
-  border-radius:12px;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 18px;
-  user-select:none;-webkit-user-select:none;
-  touch-action:none;cursor:grab;
-  box-shadow:inset 0 0 30px rgba(0,217,255,0.06),0 4px 14px rgba(0,0,0,0.5);
-  flex-shrink:0;overflow:hidden;
-  transition:border-color .12s,box-shadow .12s;
-}
-.ctrl-pad::before{
-  /* subtle grid texture for "control surface" feel */
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:
-    repeating-linear-gradient(90deg,transparent 0 24px,rgba(0,217,255,0.04) 24px 25px),
-    repeating-linear-gradient(0deg,transparent 0 24px,rgba(0,217,255,0.03) 24px 25px);
-  opacity:.5;
-}
-.ctrl-pad.active{
-  cursor:grabbing;
-  border-color:rgba(0,217,255,0.7);
-  box-shadow:inset 0 0 40px rgba(0,217,255,0.18),0 4px 14px rgba(0,0,0,0.5),0 0 18px rgba(0,217,255,0.32);
-}
-.ctrl-pad .ctrl-arrow{
-  font-size:18px;font-weight:900;line-height:1;
-  color:rgba(0,217,255,0.45);
-  pointer-events:none;
-  text-shadow:0 0 8px rgba(0,217,255,0.2);
-}
-.ctrl-pad.active .ctrl-arrow{color:rgba(0,217,255,0.85);text-shadow:0 0 10px rgba(0,217,255,0.6)}
-.ctrl-pad .ctrl-label{
-  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-  font-family:'JetBrains Mono',monospace;
-  font-size:9.5px;letter-spacing:0.22em;text-transform:uppercase;
-  color:rgba(255,255,255,0.32);pointer-events:none;white-space:nowrap;
-  transition:color .12s;
-}
-.ctrl-pad.active .ctrl-label{color:rgba(0,217,255,0.7)}
-.ctrl-pad .ctrl-thumb{
-  position:absolute;left:0;bottom:6px;
-  height:4px;width:28%;
-  background:var(--accent);border-radius:2px;
-  box-shadow:0 0 10px rgba(0,217,255,0.7);
-  pointer-events:none;
-  transition:left .04s linear,box-shadow .12s;
-}
-.ctrl-pad.active .ctrl-thumb{
-  height:5px;
-  box-shadow:0 0 14px rgba(0,217,255,0.95);
-}
-.ctrl-pad .ctrl-track{
-  position:absolute;left:14px;right:14px;bottom:7px;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(0,217,255,0.25),transparent);
-  pointer-events:none;
-}
 .btns{
   display:flex;gap:8px;
   padding:6px 12px calc(8px + var(--sb-bottom));
@@ -301,14 +255,6 @@ canvas#g{
 
 <div class="pwr-bar" id="pwrBar"></div>
 
-<div class="ctrl-pad" id="ctrlPad" role="slider" aria-label="Paddle control pad">
-  <span class="ctrl-arrow" aria-hidden="true">◀</span>
-  <span class="ctrl-label">SLIDE · TAP TO LAUNCH</span>
-  <span class="ctrl-arrow" aria-hidden="true">▶</span>
-  <div class="ctrl-track"></div>
-  <div class="ctrl-thumb" id="ctrlThumb"></div>
-</div>
-
 <div class="btns">
   <button class="btn" id="btnPause">PAUSE</button>
   <button class="btn" id="btnRestart">RESTART</button>
@@ -397,8 +343,8 @@ const C = {
                      // 가 실제로 따라잡도록. INPUT_SENS 와 함께 동작.
   // Input sensitivity — finger/mouse displacement → paddle target.
   // 2026-05-10: 사용자 피드백 "감도 2배" 반영. 2.0 이면 손가락 100px →
-  // paddle target 200px. 작은 swipe 만으로 paddle 풀 traversal 가능 →
-  // ctrl-pad 의 좁은 영역만 써도 충분히 좌우 커버.
+  // paddle target 200px. 캔버스 자체가 입력 surface (별도 ctrl-pad 제거)
+  // 라 작은 swipe 만으로 paddle 풀 traversal 가능.
   INPUT_SENS: 2.0,
 };
 
@@ -435,8 +381,9 @@ const introOv = document.getElementById('introOv');
 const gameOv = document.getElementById('gameOv');
 const levelOv = document.getElementById('levelOv');
 const btnMute = document.getElementById('btnMute');
-const ctrlPad = document.getElementById('ctrlPad');
-const ctrlThumb = document.getElementById('ctrlThumb');
+/* 2026-05-10 redesign: ctrlPad/ctrlThumb 제거, .canvas-holder 가 직접
+   touch surface. paddle 위치 표시는 canvas 안의 paddle 자체로 충분. */
+const canvasHolder = document.querySelector('.canvas-holder');
 
 // ======== STORAGE ========
 function loadStorage(){
@@ -861,20 +808,6 @@ function recalcScale(){
   _scaleX = C.W / r.width;
   _scaleY = C.H / r.height;
 }
-// Visual indicator: thumb mirrors paddle's relative position inside the play area.
-function updateCtrlThumb(){
-  if(!ctrlThumb || !ctrlPad) return;
-  const padW = ctrlPad.clientWidth;
-  if(!padW) return;
-  const thumbW = ctrlThumb.offsetWidth;
-  const usable = Math.max(0, padW - thumbW - 16); // 8px L/R padding
-  const minX = C.PADDLE_W/2;
-  const maxX = C.W - C.PADDLE_W/2;
-  const ratio = (S.paddleX - minX) / Math.max(1, (maxX - minX));
-  const r = Math.max(0, Math.min(1, ratio));
-  const x = 8 + r * usable;
-  ctrlThumb.style.left = x + 'px';
-}
 // Fullscreen request — invoked from start-button gesture (required by browsers).
 function tryFullscreen(){
   const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -913,8 +846,8 @@ let _ctrlId = null;        // active controller touch identifier
 let _mouseDrag = null;     // separate single-pointer mouse path
 
 function setActivePad(active){
-  if(active) ctrlPad.classList.add('active');
-  else ctrlPad.classList.remove('active');
+  if(active) canvasHolder.classList.add('active');
+  else canvasHolder.classList.remove('active');
 }
 function findTouchInList(list, id){
   for(let i=0; i<list.length; i++){
@@ -948,8 +881,9 @@ function onPadTouchStart(e){
 function onPadTouchMove(e){
   e.preventDefault();
   if(!S.running || S.paused) return;
-  const padW = ctrlPad.clientWidth || 1;
-  const scale = (C.W / padW) * C.INPUT_SENS;
+  /* _scaleX = C.W / canvas display CSS width (recalcScale 가 유지).
+     INPUT_SENS 로 손가락 dx 를 paddle 좌표로 변환 시 2배 부스트. */
+  const scale = _scaleX * C.INPUT_SENS;
   for(let i=0; i<e.changedTouches.length; i++){
     const t = e.changedTouches[i];
     const info = _tps.get(t.identifier);
@@ -1008,13 +942,16 @@ function onPadTouchCancel(e){
 }
 
 function setupInput(){
+  /* 2026-05-10 redesign: 모든 입력 이벤트는 .canvas-holder 가 받음.
+     별도 ctrl-pad 바 없이 캔버스 영역 자체에서 직접 드래그 → paddle 조작.
+     모바일 게임 표준 (BlackBerry Brick Breaker, iOS Block Buster 류) 패턴. */
   // Touch (mobile) — multi-touch aware
-  ctrlPad.addEventListener('touchstart', onPadTouchStart, {passive:false});
-  ctrlPad.addEventListener('touchmove',  onPadTouchMove,  {passive:false});
-  ctrlPad.addEventListener('touchend',   onPadTouchEnd,   {passive:false});
-  ctrlPad.addEventListener('touchcancel', onPadTouchCancel, {passive:false});
+  canvasHolder.addEventListener('touchstart', onPadTouchStart, {passive:false});
+  canvasHolder.addEventListener('touchmove',  onPadTouchMove,  {passive:false});
+  canvasHolder.addEventListener('touchend',   onPadTouchEnd,   {passive:false});
+  canvasHolder.addEventListener('touchcancel', onPadTouchCancel, {passive:false});
   // Mouse (desktop) — single pointer
-  ctrlPad.addEventListener('mousedown', (e)=>{
+  canvasHolder.addEventListener('mousedown', (e)=>{
     e.preventDefault();
     resumeAudio();
     if(!S.running || S.paused) return;
@@ -1025,8 +962,7 @@ function setupInput(){
   window.addEventListener('mousemove', (e)=>{
     if(!_mouseDrag) return;
     if(!S.running || S.paused) return;
-    const padW = ctrlPad.clientWidth || 1;
-    const scale = (C.W / padW) * C.INPUT_SENS;
+    const scale = _scaleX * C.INPUT_SENS;
     const dx = e.clientX - _mouseDrag.sx;
     _mouseDrag.moved = Math.max(_mouseDrag.moved, Math.abs(dx));
     S.inputX = _mouseDrag.paddleStartX + dx * scale;
@@ -1822,7 +1758,6 @@ function loop(t){
     physAccum = 0;
   }
   render();
-  updateCtrlThumb();
   requestAnimationFrame(loop);
 }
 
