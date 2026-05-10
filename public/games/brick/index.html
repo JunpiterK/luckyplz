@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778391434">
-<script>(function(){var B="1778391434";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778395201">
+<script>(function(){var B="1778395201";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -392,7 +392,14 @@ const C = {
   STORAGE_KEY: 'lp_brick_v3',
   // Physics
   MIN_VY_RATIO: 0.20, // min vertical velocity = speed * this (prevents shallow stuck)
-  PADDLE_FOLLOW: 12, // max paddle move per physics step (60Hz, smoothing)
+  PADDLE_FOLLOW: 24, // max paddle move per physics step (60Hz, smoothing).
+                     // 2026-05-10: 12→24 (2x). 손가락 swipe 빠를 때 paddle
+                     // 가 실제로 따라잡도록. INPUT_SENS 와 함께 동작.
+  // Input sensitivity — finger/mouse displacement → paddle target.
+  // 2026-05-10: 사용자 피드백 "감도 2배" 반영. 2.0 이면 손가락 100px →
+  // paddle target 200px. 작은 swipe 만으로 paddle 풀 traversal 가능 →
+  // ctrl-pad 의 좁은 영역만 써도 충분히 좌우 커버.
+  INPUT_SENS: 2.0,
 };
 
 // ======== STATE ========
@@ -942,7 +949,7 @@ function onPadTouchMove(e){
   e.preventDefault();
   if(!S.running || S.paused) return;
   const padW = ctrlPad.clientWidth || 1;
-  const scale = C.W / padW;
+  const scale = (C.W / padW) * C.INPUT_SENS;
   for(let i=0; i<e.changedTouches.length; i++){
     const t = e.changedTouches[i];
     const info = _tps.get(t.identifier);
@@ -1019,7 +1026,7 @@ function setupInput(){
     if(!_mouseDrag) return;
     if(!S.running || S.paused) return;
     const padW = ctrlPad.clientWidth || 1;
-    const scale = C.W / padW;
+    const scale = (C.W / padW) * C.INPUT_SENS;
     const dx = e.clientX - _mouseDrag.sx;
     _mouseDrag.moved = Math.max(_mouseDrag.moved, Math.abs(dx));
     S.inputX = _mouseDrag.paddleStartX + dx * scale;
@@ -1040,8 +1047,8 @@ function setupInput(){
       e.preventDefault();
       handleAction();
     }
-    if(e.code==='ArrowLeft'){ S.inputX = (S.inputX==null?S.paddleX:S.inputX) - 18; }
-    if(e.code==='ArrowRight'){ S.inputX = (S.inputX==null?S.paddleX:S.inputX) + 18; }
+    if(e.code==='ArrowLeft'){ S.inputX = (S.inputX==null?S.paddleX:S.inputX) - 28; }
+    if(e.code==='ArrowRight'){ S.inputX = (S.inputX==null?S.paddleX:S.inputX) + 28; }
     if(e.code==='KeyP') togglePause();
     if(e.code==='KeyM') toggleMute();
   });
