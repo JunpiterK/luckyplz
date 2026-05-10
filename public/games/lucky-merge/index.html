@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778402378">
-<script>(function(){var B="1778402378";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778407002">
+<script>(function(){var B="1778407002";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -131,6 +131,40 @@ canvas#g{
   box-shadow:0 0 38px rgba(255,230,109,0.25),inset 0 0 40px rgba(0,0,0,0.45);
 }
 
+/* 2026-05-10 v2: tier 진화 strip — stats 바 아래, canvas 위.
+   11개 작은 dot — 도달한 tier 는 색상 + glow, 미도달은 회색 outline.
+   사용자가 자신의 진화 진행을 한 눈에 보도록. */
+.tier-strip{
+  display:flex;justify-content:center;align-items:center;
+  gap:6px;padding:6px 12px;
+  background:rgba(0,0,0,0.25);
+  border-bottom:1px solid var(--line);
+  flex-shrink:0;
+  flex-wrap:nowrap;overflow-x:auto;
+  scrollbar-width:none;
+}
+.tier-strip::-webkit-scrollbar{display:none}
+.tier-dot{
+  display:inline-block;
+  width:14px;height:14px;border-radius:50%;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.15);
+  flex-shrink:0;
+  position:relative;
+  transition:all .25s;
+}
+.tier-dot.achieved{
+  border-color:transparent;
+  box-shadow:0 0 6px currentColor, inset 0 0 4px rgba(255,255,255,0.3);
+}
+.tier-dot[data-tier="11"].achieved{
+  background:radial-gradient(circle,#FFC53D 0%,#000 50%);
+  box-shadow:0 0 12px #FF66CC, 0 0 4px #FFC53D inset;
+}
+.tier-arrow{
+  color:rgba(255,255,255,0.18);
+  font-size:8px;flex-shrink:0;
+}
 .btns{
   display:flex;gap:8px;
   padding:6px 12px calc(8px + var(--sb-bottom));
@@ -248,6 +282,8 @@ canvas#g{
   <div class="stat best"><div class="l">BEST</div><div class="v" id="vBest">0</div></div>
 </div>
 
+<div class="tier-strip" id="tierStrip"></div>
+
 <div class="wrap">
   <div class="canvas-holder">
     <canvas id="g" width="360" height="560"></canvas>
@@ -311,9 +347,16 @@ const C = {
   WALL_LEFT: 8, WALL_RIGHT: 352, FLOOR: 552,
   /* drop indicator y */
   DROP_Y: 40,
-  /* danger line — bodies above this for too long → game over */
-  DANGER_Y: 70,
-  DANGER_SETTLE_MS: 2200,
+  /* danger line — bodies above this accumulate "danger time".
+     Total danger time >= DANGER_LIMIT_MS → 즉시 game over.
+     2026-05-10 fix: 이전 dangerSince 가 매 frame reset 되어 game over 가
+     fire 되지 않는 버그. 누적 방식으로 변경 + 단계별 가속. */
+  DANGER_Y: 80,
+  DANGER_LIMIT_MS: 1400,
+  /* per-frame accumulation rates */
+  DANGER_RATE_TOUCHING: 1.0,   // body 의 위쪽이 line 을 넘었을 때
+  DANGER_RATE_CROSSING: 1.6,   // body 중심이 line 위로 올라갔을 때 (확실히 위험)
+  DANGER_DRAIN_RATE: 0.55,     // 안전 시 drain 속도 (느리게 빠짐)
   /* physics */
   GRAVITY: 0.32,           // px/frame²
   AIR_DRAG: 0.998,
@@ -399,8 +442,10 @@ const S = {
   dropTier: 1,
   nextTier: 1,
   lastDropAt: 0,
-  /* danger tracking */
-  dangerSince: 0,
+  /* danger tracking — 누적 방식 (ms). 0 = safe, DANGER_LIMIT_MS = game over */
+  dangerTime: 0,
+  /* tier achievement set — 각 tier 첫 도달 마다 banner 표시용 */
+  achievedTiers: {},     // {tier: true} 처음 만든 tier 만 저장
   /* settings */
   muted: false,
   /* misc */
@@ -627,11 +672,28 @@ function resolveBodyCollisions(){
     const t = TIERS[newTier];
     S.score += t.score;
     S.totalMerges++;
+    /* 2026-05-10 v2: 첫 도달한 tier 마다 큰 banner + milestone tracking.
+       이미 만든 tier 는 small popup 만, 처음 만든 tier 는 화면 중앙 큰 배너 +
+       achievedTiers 에 기록 (HUD progression strip 표시용). */
+    if(!S.achievedTiers[newTier]){
+      S.achievedTiers[newTier] = true;
+      sfxNewTier();
+      /* 큰 중앙 배너 */
+      spawnFloatText('★ ' + t.nameKo.toUpperCase() + ' ★', C.W/2, C.H/2 - 30, '#FFE66D', 2200);
+      spawnFloatText('NEW TIER ' + newTier, C.W/2, C.H/2, t.accent, 2000);
+      S.flashAlpha = 0.55;
+      S.shake = Math.max(S.shake, 5 + newTier * 0.5);
+      /* 첫 블랙홀 도달 — 특별 효과 */
+      if(newTier === MAX_TIER){
+        S.flashAlpha = 0.85;
+        spawnFloatText('☆ COSMOS COMPLETE ☆', C.W/2, C.H/2 + 36, '#FF66CC', 3000);
+      }
+    } else {
+      /* 이미 도달한 tier 다시 만들어도 small popup */
+      spawnFloatText('+' + t.score, cx, cy - t.r - 8, '#FFE66D', 900);
+    }
     if(newTier > S.highestTier){
       S.highestTier = newTier;
-      sfxNewTier();
-      spawnFloatText('NEW: ' + t.nameKo + '!', cx, cy - t.r - 10, '#FFE66D', 1500);
-      S.flashAlpha = 0.35;
     }
     /* Particles + ring */
     spawnMergeParticles(cx, cy, newTier);
@@ -1172,40 +1234,57 @@ function drawWalls(){
 }
 
 function drawDangerLine(){
-  /* danger line — when bodies cross above this for 2.5s = game over.
-     Color shifts based on dangerSince timer. */
-  const danger = S.dangerSince > 0;
-  const dangerProgress = danger ? Math.min(1, (performance.now() - S.dangerSince) / C.DANGER_SETTLE_MS) : 0;
-  let color, alpha;
-  if(!danger){
-    color = '255,230,109';
-    alpha = 0.20 + Math.sin(performance.now()*0.003) * 0.05;
-  } else {
-    color = '255,51,102';
-    alpha = 0.4 + dangerProgress * 0.5 + Math.sin(performance.now()*0.012) * 0.15;
-  }
-  ctx.strokeStyle = 'rgba(' + color + ',' + alpha.toFixed(3) + ')';
-  ctx.lineWidth = danger ? 1.5 : 1;
-  ctx.setLineDash([6, 4]);
+  /* 2026-05-10 v2 — danger meter 누적 시각화.
+     dangerTime ratio 따라 line color + 위쪽 progress bar 표시.
+     ratio 0 = 노란 점선 (안전), 1 = 빨간 굵은 선 + 풀 progress bar (즉시 game over). */
+  const ratio = Math.min(1, S.dangerTime / C.DANGER_LIMIT_MS);
+  /* line color blends yellow → orange → red based on ratio */
+  const r = Math.round(255);
+  const g = Math.round(230 - ratio * 180);     // 230 → 50
+  const b = Math.round(109 - ratio * 109);     // 109 → 0
+  const baseAlpha = 0.22 + ratio * 0.55;
+  const blink = ratio > 0.5 ? Math.sin(performance.now() * (0.005 + ratio*0.012)) * (ratio * 0.25) : 0;
+  const alpha = Math.min(1, baseAlpha + blink);
+  ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + alpha.toFixed(3) + ')';
+  ctx.lineWidth = 1 + ratio * 1.6;
+  ctx.setLineDash(ratio > 0.7 ? [10, 3] : [6, 4]);
   ctx.beginPath();
   ctx.moveTo(C.WALL_LEFT, C.DANGER_Y);
   ctx.lineTo(C.WALL_RIGHT, C.DANGER_Y);
   ctx.stroke();
   ctx.setLineDash([]);
-  /* label */
-  ctx.fillStyle = 'rgba(' + color + ',' + (alpha + 0.2).toFixed(3) + ')';
+  /* label — 위치는 우측 (NEXT 영역과 안 겹침) */
+  ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (alpha + 0.15).toFixed(3) + ')';
   ctx.font = '700 9px JetBrains Mono';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(danger ? '⚠ DANGER' : '경고선', C.WALL_RIGHT - 4, C.DANGER_Y - 7);
-  /* if danger active, show countdown progress bar above the line */
-  if(danger){
-    const barW = 80;
-    const bx = (C.W - barW) / 2;
+  const labelText = ratio < 0.05 ? '경고선'
+                  : ratio < 0.5  ? '⚠ WARNING'
+                  : ratio < 0.85 ? '⚠⚠ DANGER'
+                  : '☠ CRITICAL';
+  ctx.fillText(labelText, C.WALL_RIGHT - 4, C.DANGER_Y - 8);
+  /* progress bar — line 위에 가로 bar, 채워질수록 위험 */
+  if(ratio > 0.02){
+    const barW = C.WALL_RIGHT - C.WALL_LEFT;
+    const bx = C.WALL_LEFT;
+    const by = C.DANGER_Y - 4;
+    /* bg */
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(bx, C.DANGER_Y - 18, barW, 4);
-    ctx.fillStyle = 'rgba(255,51,102,0.85)';
-    ctx.fillRect(bx + 1, C.DANGER_Y - 17, (barW - 2) * dangerProgress, 2);
+    ctx.fillRect(bx, by, barW, 3);
+    /* fill */
+    let fillCol;
+    if(ratio < 0.4)      fillCol = '#FFE66D';
+    else if(ratio < 0.75) fillCol = '#FF9A3C';
+    else                  fillCol = '#FF3366';
+    ctx.fillStyle = fillCol;
+    ctx.fillRect(bx, by, barW * ratio, 3);
+    /* glow at end of fill if > 70% */
+    if(ratio > 0.7){
+      ctx.shadowColor = fillCol;
+      ctx.shadowBlur = 8;
+      ctx.fillRect(bx + barW * ratio - 2, by, 2, 3);
+      ctx.shadowBlur = 0;
+    }
   }
 }
 
@@ -1283,6 +1362,51 @@ function drawFlash(){
   if(S.flashAlpha > 0){
     ctx.fillStyle = 'rgba(255,255,255,' + S.flashAlpha.toFixed(3) + ')';
     ctx.fillRect(0, 0, C.W, C.H);
+  }
+}
+
+/* 2026-05-10 v2 — Tier progression strip (canvas 우측 상단).
+   11개 작은 원 — 도달한 tier 는 색상 + glow, 미도달은 회색 outline.
+   사용자가 "내가 어디까지 진화시켰는지" 한눈에 보기. */
+function drawTierProgress(){
+  const dotR = 5;
+  const gap = 10;
+  const totalH = MAX_TIER * gap + dotR * 2;
+  const startX = C.WALL_RIGHT - 2;
+  const startY = C.DROP_Y + 30;
+  /* 배경 패널 */
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(startX - dotR - 4, startY - dotR - 4, dotR*2 + 8, totalH + 8);
+  ctx.strokeStyle = 'rgba(255,230,109,0.18)';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(startX - dotR - 4, startY - dotR - 4, dotR*2 + 8, totalH + 8);
+  for(let i = 1; i <= MAX_TIER; i++){
+    const t = TIERS[i];
+    const cx = startX;
+    const cy = startY + (i - 1) * gap;
+    const achieved = !!S.achievedTiers[i];
+    if(achieved){
+      /* 색상 + 약한 glow */
+      ctx.shadowColor = t.color === '#000000' ? t.accent : t.color;
+      ctx.shadowBlur = 4;
+      ctx.fillStyle = t.color === '#000000' ? '#000' : t.color;
+      ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2); ctx.fill();
+      ctx.shadowBlur = 0;
+      /* 블랙홀은 ring 으로 emphasis */
+      if(t.color === '#000000'){
+        ctx.strokeStyle = t.accent;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2); ctx.stroke();
+      }
+    } else {
+      /* 빈 outline */
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(cx, cy, dotR, 0, Math.PI*2); ctx.stroke();
+      /* 미도달 dim dot */
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.beginPath(); ctx.arc(cx, cy, dotR - 1.5, 0, Math.PI*2); ctx.fill();
+    }
   }
 }
 
@@ -1420,27 +1544,38 @@ window.addEventListener('mouseup', (e)=>{
 
 window.addEventListener('resize', recalcScale);
 
-/* ======== GAME OVER CHECK ======== */
-function checkDanger(){
+/* ======== GAME OVER CHECK ========
+   2026-05-10 v2 — 누적 방식 + 단계별 위험도.
+     dangerLevel 0 = 안전, 1 = body 위쪽 only line crossing, 2 = body 중심까지 위
+   매 frame 대응 rate 만큼 dangerTime 누적, 안전 시 drain.
+   누적이 DANGER_LIMIT_MS 도달하면 즉시 game over.
+   짧게 흔들려서 dangerLevel 이 잠깐 0 이 되어도 timer 가 reset 되지 않음. */
+function checkDanger(dtMs){
   if(!S.running || S.gameOver) return;
-  /* any settled-ish body whose top is above DANGER_Y → start danger timer */
-  let inDanger = false;
+  let dangerLevel = 0;
   for(const b of S.bodies){
-    if(b.age < 600) continue;     // newly spawned grace period
+    if(b.age < 250) continue;            // 200-250ms grace 후 카운트
     const speed = Math.hypot(b.vx, b.vy);
-    if(speed > 0.6) continue;     // still moving fast, don't count
-    if(b.y - b.r * 0.5 < C.DANGER_Y){
-      inDanger = true;
+    if(speed > 1.4) continue;            // 빠르게 튕기는 body 는 제외 (튀어 오르는 중)
+    if(b.y < C.DANGER_Y){
+      /* 중심이 line 위 = 명백히 위험 */
+      dangerLevel = 2;
       break;
+    } else if(b.y - b.r < C.DANGER_Y){
+      /* 위쪽 portion 이 line 넘음 — 약한 위험 */
+      if(dangerLevel < 1) dangerLevel = 1;
     }
   }
-  if(inDanger){
-    if(S.dangerSince === 0) S.dangerSince = performance.now();
-    if(performance.now() - S.dangerSince > C.DANGER_SETTLE_MS){
-      onGameOver();
-    }
+  if(dangerLevel === 2){
+    S.dangerTime += dtMs * C.DANGER_RATE_CROSSING;
+  } else if(dangerLevel === 1){
+    S.dangerTime += dtMs * C.DANGER_RATE_TOUCHING;
   } else {
-    S.dangerSince = 0;
+    S.dangerTime = Math.max(0, S.dangerTime - dtMs * C.DANGER_DRAIN_RATE);
+  }
+  S.dangerTime = Math.min(C.DANGER_LIMIT_MS, S.dangerTime);
+  if(S.dangerTime >= C.DANGER_LIMIT_MS){
+    onGameOver();
   }
 }
 
@@ -1488,7 +1623,7 @@ function loop(t){
   /* particles + checks even during paused for smooth render? no, skip */
   if(!S.paused && !S.gameOver){
     updateParticles(dt);
-    checkDanger();
+    checkDanger(dt);
   }
   render();
   updateUI();
@@ -1500,6 +1635,42 @@ function updateUI(){
   document.getElementById('vScore').textContent = S.score.toLocaleString();
   document.getElementById('vTier').textContent = S.highestTier > 0 ? TIERS[S.highestTier].nameKo : '—';
   document.getElementById('vBest').textContent = S.best.toLocaleString();
+  /* tier strip — achieved class 토글 */
+  const strip = document.getElementById('tierStrip');
+  if(strip && strip.children.length){
+    for(let i = 1; i <= MAX_TIER; i++){
+      const dot = strip.querySelector('.tier-dot[data-tier="' + i + '"]');
+      if(dot){
+        if(S.achievedTiers[i]) dot.classList.add('achieved');
+        else dot.classList.remove('achieved');
+      }
+    }
+  }
+}
+
+/* tier strip 빌드 — DOM 한 번만 생성, updateUI 가 class 만 토글 */
+function buildTierStrip(){
+  const strip = document.getElementById('tierStrip');
+  if(!strip) return;
+  strip.innerHTML = '';
+  for(let i = 1; i <= MAX_TIER; i++){
+    const t = TIERS[i];
+    const dot = document.createElement('span');
+    dot.className = 'tier-dot';
+    dot.setAttribute('data-tier', i);
+    dot.title = i + '. ' + t.nameKo + ' (' + t.score + ')';
+    dot.style.color = t.color;
+    if(t.color !== '#000000'){
+      dot.style.background = t.color;
+    }
+    strip.appendChild(dot);
+    if(i < MAX_TIER){
+      const arr = document.createElement('span');
+      arr.className = 'tier-arrow';
+      arr.textContent = '›';
+      strip.appendChild(arr);
+    }
+  }
 }
 
 /* ======== START / RESET ======== */
@@ -1517,7 +1688,8 @@ function startGame(){
   S.dropTier = pickRandomDropTier();
   S.nextTier = pickRandomDropTier();
   S.lastDropAt = 0;
-  S.dangerSince = 0;
+  S.dangerTime = 0;
+  S.achievedTiers = {};
   S.shake = 0;
   S.flashAlpha = 0;
   S.gameOver = false;
@@ -1556,6 +1728,7 @@ function buildTierLegend(){
 /* ======== INIT ======== */
 loadStorage();
 buildTierLegend();
+buildTierStrip();
 const btnMute = document.getElementById('btnMute');
 btnMute.textContent = S.muted ? '🔇' : '🔊';
 btnMute.classList.toggle('muted', S.muted);
@@ -1595,6 +1768,6 @@ if(navigator.serviceWorker){
   }).catch(()=>{});
 }
 </script>
-<script src="/js/siteFooter.js?v=1778402378"></script>
+<script src="/js/siteFooter.js?v=1778407002"></script>
 </body>
 </html>
