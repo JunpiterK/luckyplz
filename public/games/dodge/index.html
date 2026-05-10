@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1778389805">
-<script>(function(){var B="1778389805";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778390025">
+<script>(function(){var B="1778390025";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1348,10 +1348,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1778389805"></script>
-<script src="/js/lpI18n.js?v=1778389805"></script>
-<script src="/js/lpRankSheet.js?v=1778389805"></script>
-<script src="/js/lpAudio.js?v=1778389805"></script>
+<script src="/js/supabase-config.js?v=1778390025"></script>
+<script src="/js/lpI18n.js?v=1778390025"></script>
+<script src="/js/lpRankSheet.js?v=1778390025"></script>
+<script src="/js/lpAudio.js?v=1778390025"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -3220,6 +3220,23 @@ let zoneTransitionT=1; // 0→1 over 1.5s after zone change
 /* zoneLabel: idx === -1 이면 표시 X. zone 진입 시 idx set + timer reset.
    render 시 ZONES[idx].nameEn (universal) + _zoneName(idx) (current lang) 표시. */
 let zoneLabel={ idx:-1, timer:0 };
+
+/* Sprint H — BOUNDARY INFO 마커. 우주 영역 경계를 통과할 때 큰 사이즈
+   배너로 통보. 일반 zone label 보다 위쪽 (CH*0.30) 에 별도 표시되며
+   FADE 0.8s + HOLD 4.0s + FADE 0.8s = 5.6s 동안 노출. zoneLabel 와는
+   독립적으로 동작 (둘 다 표시될 수 있음).
+     idx 9  HELIOSPHERE EDGE  → 태양계 이탈 (interstellar 진입)
+     idx 19 SAGITTARIUS A*    → 은하 중심부 (supermassive BH 영역)
+     idx 20 GALACTIC RIM      → 우리 은하 이탈 (intergalactic 진입)
+     idx 29 OBSERVABLE EDGE   → 관측 가능 우주 끝 (cosmic horizon)
+   사용자가 "어디까지 왔는지" 큰 흐름을 인식하도록 돕는 신호. */
+const BOUNDARY_INFO = {
+    9:  { ko:'☀ 태양계 이탈 — 항성간 공간 시작',           en:'☀ EXITING SOLAR SYSTEM — Interstellar space begins' },
+    19: { ko:'🌌 은하 중심부 진입 — 초거대 BH 영역',         en:'🌌 ENTERING GALACTIC CORE — Supermassive BH territory' },
+    20: { ko:'✨ 우리 은하 이탈 — 은하간 공간 진입',         en:'✨ EXITING MILKY WAY — Intergalactic space ahead' },
+    29: { ko:'👁 관측 가능 우주의 끝 — 그 너머는 미지',      en:'👁 COSMIC HORIZON — Beyond lies the unknown' },
+};
+let boundaryLabel = { idx:-1, timer:0 };
 
 /* ---- Stars ---- */
 const STAR_COUNT=70;
@@ -6185,6 +6202,58 @@ function drawZoneLabel(dt){
         ctx.font='11px Noto Sans KR,sans-serif';
         ctx.fillText(localName, CW/2, y+10);
     }
+    ctx.restore();
+}
+
+/* Sprint H — BOUNDARY INFO 배너. zoneLabel 와 별도로 화면 위쪽 (CH*0.30)
+   에 더 크고 노란 테두리로 표시. zone idx 가 BOUNDARY_INFO key 일 때만
+   render 됨. 사용자가 어떤 영역을 막 벗어났거나 진입했는지 한눈에 인식
+   하도록. 자동 fade-in/hold/fade-out 순서. */
+function drawBoundaryLabel(dt){
+    if(boundaryLabel.idx == null || boundaryLabel.idx < 0) return;
+    const info = BOUNDARY_INFO[boundaryLabel.idx];
+    if(!info){ boundaryLabel.idx = -1; return; }
+    boundaryLabel.timer += dt;
+    const FADE = 0.8, HOLD = 4.0;
+    const t = boundaryLabel.timer;
+    let a;
+    if(t < FADE)               a = t/FADE;
+    else if(t < FADE+HOLD)     a = 1;
+    else if(t < FADE+HOLD+FADE)a = 1 - (t - FADE - HOLD)/FADE;
+    else { boundaryLabel.idx = -1; return; }
+
+    const lang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    const useKo = (lang === 'ko');
+    const text = useKo ? info.ko : info.en;
+    const headTitle = useKo ? '⚠ 경계 통과' : '⚠ BOUNDARY CROSSED';
+
+    const cx = CW/2, cy = CH*0.30;
+    const W = 280, H = 70;
+    ctx.save();
+    ctx.globalAlpha = a;
+    /* 외곽 글로우 */
+    ctx.fillStyle = 'rgba(255,180,40,0.12)';
+    drawRR(cx-W/2-8, cy-H/2-8, W+16, H+16, 16);
+    ctx.fill();
+    /* 본 배경 */
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    drawRR(cx-W/2, cy-H/2, W, H, 12);
+    ctx.fill();
+    /* 노란 테두리 */
+    ctx.strokeStyle = 'rgba(255,200,80,0.90)';
+    ctx.lineWidth = 1.6;
+    drawRR(cx-W/2, cy-H/2, W, H, 12);
+    ctx.stroke();
+    /* 헤더 */
+    ctx.fillStyle = 'rgba(255,200,80,0.95)';
+    ctx.font = 'bold 11px Orbitron,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(headTitle, cx, cy - 16);
+    /* 본문 */
+    ctx.fillStyle = '#fff';
+    ctx.font = useKo ? 'bold 13px "Noto Sans KR",sans-serif' : 'bold 11px Orbitron,sans-serif';
+    ctx.fillText(text, cx, cy + 8);
     ctx.restore();
 }
 
@@ -9655,6 +9724,7 @@ function resetGame(){
     prevZoneIdx=0;
     zoneTransitionT=1;
     zoneLabel={idx:-1, timer:0};
+    boundaryLabel={idx:-1, timer:0};   /* Sprint H — boundary 배너 reset */
     particles=[];
     resetParticles(0);
     /* The strip's SCORE column was removed when Space-Z switched to a
@@ -10036,6 +10106,11 @@ function gameLoop(now){
         currentZoneIdx=newIdx;
         zoneTransitionT=0;
         zoneLabel={idx:newIdx, timer:0};
+        /* Sprint H — 새 zone 이 boundary 인 경우 별도 큰 사이즈 배너도
+           트리거. zoneLabel 과 동시 노출 가능 (위치 다름). */
+        if(BOUNDARY_INFO[newIdx]){
+            boundaryLabel = { idx:newIdx, timer:0 };
+        }
         resetParticles(newIdx);
         sfxZone();
         zoneEnteredAt = performance.now();   /* depot spawn 타이밍 기준 */
@@ -10585,6 +10660,8 @@ function drawFrame(now, dt){
 
     /* ---- Zone label (above player, below HUD) ---- */
     drawZoneLabel(dt);
+    /* Sprint H — boundary info 배너 (zoneLabel 과 별도 위치, 더 큼) */
+    drawBoundaryLabel(dt);
 
     /* ---- HUD: lives (max MAX_LIVES, 현재 lives 만큼 채움) ---- */
     const heartSize=16;
@@ -11897,6 +11974,6 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1778389805"></script>
+<script src="/js/siteFooter.js?v=1778390025"></script>
 </body>
 </html>
