@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1778454032">
-<script>(function(){var B="1778454032";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1778454646">
+<script>(function(){var B="1778454646";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -935,388 +935,752 @@ function popScale(b){
   }
 }
 
+/* ==========================================================================
+   2026-05-11 v4 — Photorealistic tier drawers.
+   Reference photos 매칭 — 솔라 시스템 + 천체 시각효과 강화:
+   · 다층 radial gradient (atmosphere → surface → dark side)
+   · Limb darkening (가장자리로 어두워지는 대기 효과)
+   · Terminator (낮/밤 경계) 부드러운 shadow
+   · 표면 디테일 (크레이터/대륙/구름/링)
+   · Atmospheric outer glow (해당 천체 색)
+   ========================================================================== */
+
+/* helper — clip to circle for surface details */
+function _clipSphere(x, y, r){
+    ctx.beginPath();
+    ctx.arc(x, y, r - 0.5, 0, Math.PI*2);
+    ctx.clip();
+}
+
+/* helper — apply terminator (낮/밤 경계) over a sphere.
+   light direction from upper-left. terminator fades from clear to dark. */
+function _applyTerminator(x, y, r, strength){
+    strength = strength || 0.45;
+    const tg = ctx.createRadialGradient(
+        x - r*0.55, y - r*0.55, r*0.2,
+        x + r*0.25, y + r*0.25, r*1.05
+    );
+    tg.addColorStop(0, 'rgba(0,0,0,0)');
+    tg.addColorStop(0.55, 'rgba(0,0,0,0)');
+    tg.addColorStop(1, 'rgba(0,0,0,' + strength + ')');
+    ctx.fillStyle = tg;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+}
+
+/* helper — atmospheric limb glow (대기 가장자리 빛). */
+function _drawAtmosphereRim(x, y, r, rgba, thickness){
+    thickness = thickness || 0.18;
+    const rim = ctx.createRadialGradient(x, y, r*(1 - thickness), x, y, r*1.05);
+    rim.addColorStop(0, 'rgba(255,255,255,0)');
+    rim.addColorStop(0.7, rgba);
+    rim.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = rim;
+    ctx.beginPath(); ctx.arc(x, y, r*1.05, 0, Math.PI*2); ctx.fill();
+}
+
 function drawTier1(x, y, r, b){
-  /* Meteor — gray-brown rocky with crater dots */
-  const t = TIERS[1];
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.15, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.6, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  /* small craters */
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  const seed = b.id * 7;
-  for(let i = 0; i < 4; i++){
-    const ang = (seed + i*131) * 0.1;
-    const dist = r * 0.55;
-    const cx = x + Math.cos(ang) * dist;
-    const cy = y + Math.sin(ang) * dist;
-    ctx.beginPath(); ctx.arc(cx, cy, r*0.12, 0, Math.PI*2); ctx.fill();
-  }
+    /* Meteor — 거친 회갈색 암석. 다양한 크기 크레이터 + 표면 noise + terminator. */
+    const t = TIERS[1];
+    const grad = ctx.createRadialGradient(x - r*0.4, y - r*0.45, r*0.1, x, y, r*1.05);
+    grad.addColorStop(0, '#b8a08c');
+    grad.addColorStop(0.45, t.color);
+    grad.addColorStop(1, t.dark);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    /* clip + surface 디테일 */
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 색상 patch 들 — 표면 다양성 */
+    const seed = b.id * 7;
+    ctx.fillStyle = 'rgba(50,35,25,0.35)';
+    for(let i = 0; i < 5; i++){
+        const ang = (seed + i*131) * 0.1;
+        const d = r * (0.2 + (i%3)*0.22);
+        ctx.beginPath();
+        ctx.ellipse(x + Math.cos(ang)*d, y + Math.sin(ang)*d, r*0.18, r*0.14, ang, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* 크레이터 — 어두운 중심 + 밝은 림 */
+    for(let i = 0; i < 6; i++){
+        const ang = (seed + i*97) * 0.13;
+        const d = r * (0.25 + (i%4)*0.16);
+        const cr = r * (0.07 + (i%3)*0.04);
+        const cx = x + Math.cos(ang)*d, cy = y + Math.sin(ang)*d;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(220,200,180,0.30)';
+        ctx.beginPath(); ctx.arc(cx - cr*0.3, cy - cr*0.3, cr*0.65, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.4);
 }
 
 function drawTier2(x, y, r, b){
-  /* Asteroid — brown with more craters + asymmetric highlight */
-  const t = TIERS[2];
-  const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.35, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.5, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = 'rgba(0,0,0,0.4)';
-  const seed = b.id * 11;
-  for(let i = 0; i < 6; i++){
-    const ang = (seed + i*97) * 0.13;
-    const dist = r * (0.3 + (i%3)*0.2);
-    const cx = x + Math.cos(ang) * dist;
-    const cy = y + Math.sin(ang) * dist;
-    const cr = r*0.13 + ((seed+i)%3)*1;
-    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI*2); ctx.fill();
-  }
+    /* Asteroid — 더 큰 암석, 더 많은 크레이터 + 표면 균열. */
+    const t = TIERS[2];
+    const grad = ctx.createRadialGradient(x - r*0.4, y - r*0.45, r*0.15, x, y, r*1.05);
+    grad.addColorStop(0, '#c9b599');
+    grad.addColorStop(0.5, t.color);
+    grad.addColorStop(1, t.dark);
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 어두운 patch */
+    const seed = b.id * 11;
+    ctx.fillStyle = 'rgba(40,25,15,0.40)';
+    for(let i = 0; i < 6; i++){
+        const ang = (seed + i*73) * 0.11;
+        const d = r * (0.15 + (i%4)*0.20);
+        ctx.beginPath();
+        ctx.ellipse(x + Math.cos(ang)*d, y + Math.sin(ang)*d, r*0.20, r*0.15, ang*1.3, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* 크레이터 다수 */
+    for(let i = 0; i < 9; i++){
+        const ang = (seed + i*97) * 0.13;
+        const d = r * (0.2 + (i%4)*0.18);
+        const cr = r * (0.06 + (i%3)*0.05);
+        const cx = x + Math.cos(ang)*d, cy = y + Math.sin(ang)*d;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(230,210,190,0.35)';
+        ctx.beginPath(); ctx.arc(cx - cr*0.35, cy - cr*0.35, cr*0.6, 0, Math.PI*2); ctx.fill();
+    }
+    /* 균열 line */
+    ctx.strokeStyle = 'rgba(40,25,15,0.45)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.75, y - r*0.1);
+    ctx.bezierCurveTo(x - r*0.3, y + r*0.2, x + r*0.2, y - r*0.1, x + r*0.7, y + r*0.4);
+    ctx.stroke();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.42);
 }
 
 function drawTier3(x, y, r, b){
-  /* Moon — pale gray with mare patches */
-  const t = TIERS[3];
-  const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.15, x, y, r);
-  grad.addColorStop(0, '#ffffff');
-  grad.addColorStop(0.45, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  /* mare patches */
-  ctx.fillStyle = 'rgba(70,60,55,0.35)';
-  const positions = [[-0.3, -0.1, 0.25], [0.2, 0.3, 0.22], [-0.15, 0.4, 0.18], [0.4, -0.25, 0.15]];
-  for(const p of positions){
-    ctx.beginPath();
-    ctx.ellipse(x + r*p[0], y + r*p[1], r*p[2], r*p[2]*0.85, 0, 0, Math.PI*2);
-    ctx.fill();
-  }
-  /* terminator / shadow */
-  ctx.fillStyle = 'rgba(0,0,0,0.18)';
-  ctx.beginPath();
-  ctx.arc(x + r*0.1, y, r, 0, Math.PI*2);
-  ctx.fill();
+    /* Moon — photorealistic 회색 표면. 정확한 마리아 위치 + 다수 크레이터.
+       reference: 우리 달 사진 (남쪽 highland + Mare Imbrium / Tranquillitatis). */
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.1, x, y, r*1.02);
+    grad.addColorStop(0, '#f0ece5');
+    grad.addColorStop(0.5, '#c5bfb5');
+    grad.addColorStop(0.85, '#8a8580');
+    grad.addColorStop(1, '#4a4642');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* Maria (어두운 평원) — 실제 달 표면 패턴 */
+    const maria = [
+        [-0.30, -0.20, 0.28, 0.20, 'Imbrium'],    // 상좌
+        [0.15,  -0.05, 0.22, 0.18, 'Tranquil'],    // 중우
+        [0.30,  -0.30, 0.18, 0.14, 'Serenit'],     // 우상
+        [-0.10,  0.25, 0.20, 0.16, 'Nubium'],      // 중하
+        [-0.40,  0.10, 0.14, 0.12, 'OcProc'],      // 좌중
+        [0.40,   0.20, 0.16, 0.13, 'Crisium']      // 우중
+    ];
+    for(const m of maria){
+        const g = ctx.createRadialGradient(x + r*m[0], y + r*m[1], r*m[2]*0.3, x + r*m[0], y + r*m[1], r*m[2]);
+        g.addColorStop(0, 'rgba(55,52,50,0.65)');
+        g.addColorStop(1, 'rgba(55,52,50,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(x + r*m[0], y + r*m[1], r*m[2], r*m[3], 0, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* 작은 크레이터 */
+    const seed = b.id * 13;
+    for(let i = 0; i < 14; i++){
+        const ang = (seed + i*73) * 0.11;
+        const d = r * (0.15 + (i%5)*0.16);
+        const cr = r * (0.025 + (i%4)*0.018);
+        const cx = x + Math.cos(ang)*d, cy = y + Math.sin(ang)*d;
+        ctx.fillStyle = 'rgba(70,65,60,0.55)';
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(240,235,225,0.5)';
+        ctx.beginPath(); ctx.arc(cx - cr*0.3, cy - cr*0.3, cr*0.7, 0, Math.PI*2); ctx.fill();
+    }
+    /* Tycho-style ray crater (남극 부근 밝은 점) */
+    ctx.fillStyle = 'rgba(255,250,240,0.85)';
+    ctx.beginPath(); ctx.arc(x - r*0.15, y + r*0.55, r*0.05, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,250,240,0.18)';
+    for(let i = 0; i < 6; i++){
+        const a = i * Math.PI/3;
+        ctx.fillRect(x - r*0.15 + Math.cos(a)*r*0.05, y + r*0.55 + Math.sin(a)*r*0.05,
+                     r*0.15*Math.cos(a)*0.6, r*0.15*Math.sin(a)*0.6 || 0.6);
+    }
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.40);
 }
 
 function drawTier4(x, y, r, b){
-  /* Mercury — orange-gray cratered */
-  const t = TIERS[4];
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.15, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.55, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  /* many craters + cracks */
-  ctx.fillStyle = 'rgba(40,18,8,0.45)';
-  const seed = b.id * 13;
-  for(let i = 0; i < 9; i++){
-    const ang = (seed + i*101) * 0.17;
-    const dist = r * (0.2 + (i%4)*0.18);
-    const cx = x + Math.cos(ang) * dist;
-    const cy = y + Math.sin(ang) * dist;
-    ctx.beginPath(); ctx.arc(cx, cy, r*0.08 + (i%3)*1, 0, Math.PI*2); ctx.fill();
-  }
-  /* faint cracks */
-  ctx.strokeStyle = 'rgba(60,30,15,0.3)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(x - r*0.7, y - r*0.2);
-  ctx.lineTo(x + r*0.3, y + r*0.6);
-  ctx.stroke();
+    /* Mercury — 따뜻한 갈회색 표면, 거대 크레이터 (Caloris Basin) + 다수 작은 크레이터. */
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.1, x, y, r*1.02);
+    grad.addColorStop(0, '#e8c8a8');
+    grad.addColorStop(0.5, '#a08068');
+    grad.addColorStop(0.85, '#604838');
+    grad.addColorStop(1, '#382418');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* Caloris Basin — 거대 충돌구 */
+    const cgX = x + r*0.2, cgY = y - r*0.15;
+    const cg = ctx.createRadialGradient(cgX, cgY, 0, cgX, cgY, r*0.4);
+    cg.addColorStop(0, 'rgba(160,120,80,0.5)');
+    cg.addColorStop(0.6, 'rgba(80,50,30,0.3)');
+    cg.addColorStop(1, 'rgba(80,50,30,0)');
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(cgX, cgY, r*0.4, 0, Math.PI*2); ctx.fill();
+    /* 크레이터 다수 — Mercury 는 가장 크레이터 많은 천체 */
+    const seed = b.id * 13;
+    for(let i = 0; i < 18; i++){
+        const ang = (seed + i*87) * 0.13;
+        const d = r * (0.1 + (i%5)*0.17);
+        const cr = r * (0.025 + (i%4)*0.022);
+        const cx = x + Math.cos(ang)*d, cy = y + Math.sin(ang)*d;
+        ctx.fillStyle = 'rgba(40,22,10,0.55)';
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(240,200,160,0.45)';
+        ctx.beginPath(); ctx.arc(cx - cr*0.3, cy - cr*0.3, cr*0.65, 0, Math.PI*2); ctx.fill();
+    }
+    /* scarp (절벽) line */
+    ctx.strokeStyle = 'rgba(40,20,8,0.45)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.7, y - r*0.05);
+    ctx.bezierCurveTo(x - r*0.2, y + r*0.2, x + r*0.3, y, x + r*0.65, y + r*0.4);
+    ctx.stroke();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.45);
 }
 
 function drawTier5(x, y, r, b){
-  /* Venus — yellow with cloud bands + soft glow */
-  const t = TIERS[5];
-  /* outer glow */
-  ctx.shadowColor = 'rgba(255,200,80,0.35)';
-  ctx.shadowBlur = r * 0.4;
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.6, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-  /* cloud bands */
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  ctx.fillStyle = 'rgba(255,240,200,0.18)';
-  for(let i = 0; i < 4; i++){
-    const yy = y - r*0.7 + i * (r*0.45);
-    ctx.fillRect(x - r, yy, r*2, r*0.12);
-  }
-  ctx.restore();
+    /* Venus — 두꺼운 황금색 대기. 부드러운 cloud bands + 강한 외곽 glow. */
+    /* 강한 외곽 glow */
+    ctx.shadowColor = 'rgba(255,200,90,0.55)';
+    ctx.shadowBlur = r * 0.55;
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.1, x, y, r*1.02);
+    grad.addColorStop(0, '#fff0c8');
+    grad.addColorStop(0.4, '#f0c870');
+    grad.addColorStop(0.85, '#a06820');
+    grad.addColorStop(1, '#583510');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 구름 bands — 황산 구름 swirl 패턴 */
+    ctx.fillStyle = 'rgba(255,240,200,0.30)';
+    for(let i = 0; i < 5; i++){
+        const yy = y - r*0.85 + i * (r*0.45);
+        const w = r * (1.6 + Math.sin(i*1.7)*0.2);
+        ctx.beginPath();
+        ctx.ellipse(x, yy, w/2, r*0.08, Math.sin(i)*0.15, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* swirl — 큰 V 모양 (Venus 실제 관측) */
+    ctx.strokeStyle = 'rgba(200,150,80,0.35)';
+    ctx.lineWidth = r * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.7, y - r*0.3);
+    ctx.bezierCurveTo(x - r*0.2, y, x + r*0.1, y + r*0.1, x + r*0.7, y + r*0.2);
+    ctx.stroke();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.35);
+    _drawAtmosphereRim(x, y, r, 'rgba(255,220,140,0.45)', 0.12);
 }
 
 function drawTier6(x, y, r, b){
-  /* Earth — blue with green continents + clouds */
-  const t = TIERS[6];
-  /* atmosphere glow */
-  ctx.shadowColor = 'rgba(80,160,255,0.4)';
-  ctx.shadowBlur = r * 0.35;
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.55, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-  /* continents — clip to circle */
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  /* "americas" - left side */
-  ctx.fillStyle = '#3a8c3a';
-  ctx.beginPath();
-  ctx.ellipse(x - r*0.4, y - r*0.1, r*0.3, r*0.5, 0.3, 0, Math.PI*2);
-  ctx.fill();
-  /* "africa/europe" - right */
-  ctx.fillStyle = '#5ca850';
-  ctx.beginPath();
-  ctx.ellipse(x + r*0.25, y, r*0.35, r*0.5, -0.2, 0, Math.PI*2);
-  ctx.fill();
-  /* "asia" small */
-  ctx.fillStyle = '#4a8e3a';
-  ctx.beginPath();
-  ctx.ellipse(x + r*0.55, y - r*0.3, r*0.18, r*0.25, 0, 0, Math.PI*2);
-  ctx.fill();
-  /* clouds — white whisps */
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.beginPath();
-  ctx.ellipse(x - r*0.2, y + r*0.4, r*0.5, r*0.12, -0.1, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(x + r*0.1, y - r*0.5, r*0.4, r*0.10, 0.15, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
+    /* Earth — 깊은 청색 바다 + 녹/갈색 대륙 + 흰색 구름 wisp + 강한 atmospheric rim glow.
+       reference: NASA Blue Marble. */
+    /* atmospheric glow */
+    ctx.shadowColor = 'rgba(80,160,255,0.55)';
+    ctx.shadowBlur = r * 0.5;
+    /* 바다 — multi-stop blue gradient */
+    const grad = ctx.createRadialGradient(x - r*0.4, y - r*0.45, r*0.15, x, y, r*1.02);
+    grad.addColorStop(0, '#a8d8ff');
+    grad.addColorStop(0.35, '#4080d8');
+    grad.addColorStop(0.75, '#1850a0');
+    grad.addColorStop(1, '#0a2858');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 대륙 — Africa/Europe shape (오른쪽) */
+    ctx.fillStyle = '#4a8830';
+    ctx.beginPath();
+    ctx.moveTo(x + r*0.05, y - r*0.5);
+    ctx.bezierCurveTo(x + r*0.4, y - r*0.55, x + r*0.55, y - r*0.2, x + r*0.45, y + r*0.1);
+    ctx.bezierCurveTo(x + r*0.25, y + r*0.45, x + r*0.15, y + r*0.55, x + r*0.05, y + r*0.35);
+    ctx.bezierCurveTo(x - r*0.05, y + r*0.1, x - r*0.15, y - r*0.15, x - r*0.05, y - r*0.4);
+    ctx.closePath(); ctx.fill();
+    /* 사하라 — 갈색 patch */
+    ctx.fillStyle = 'rgba(200,160,80,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.18, y - r*0.32, r*0.18, r*0.12, 0.15, 0, Math.PI*2);
+    ctx.fill();
+    /* Americas — 왼쪽 (가늘고 긴 형태) */
+    ctx.fillStyle = '#3e8030';
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.5, y - r*0.5);
+    ctx.bezierCurveTo(x - r*0.65, y - r*0.2, x - r*0.55, y + r*0.1, x - r*0.65, y + r*0.5);
+    ctx.bezierCurveTo(x - r*0.4, y + r*0.55, x - r*0.4, y + r*0.2, x - r*0.35, y - r*0.1);
+    ctx.bezierCurveTo(x - r*0.3, y - r*0.4, x - r*0.35, y - r*0.55, x - r*0.5, y - r*0.5);
+    ctx.fill();
+    /* 아시아 — 우상단 */
+    ctx.fillStyle = '#4d8835';
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.5, y - r*0.35, r*0.2, r*0.16, 0.1, 0, Math.PI*2);
+    ctx.fill();
+    /* 호주 — 우하 */
+    ctx.fillStyle = '#9c8038';
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.55, y + r*0.45, r*0.13, r*0.09, 0.2, 0, Math.PI*2);
+    ctx.fill();
+    /* 극지 ice */
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(x, y - r*0.92, r*0.55, r*0.12, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x, y + r*0.92, r*0.50, r*0.10, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* 구름 wisp 들 — 반투명 swirl */
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(x - r*0.15, y + r*0.30, r*0.55, r*0.10, -0.15, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.20, y - r*0.45, r*0.40, r*0.08, 0.20, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.30, y + r*0.55, r*0.30, r*0.07, 0.05, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.45);
+    /* atmosphere rim — 푸른 빛 띠 */
+    _drawAtmosphereRim(x, y, r, 'rgba(140,200,255,0.55)', 0.10);
 }
 
 function drawTier7(x, y, r, b){
-  /* Mars — red with polar caps + dark valleys */
-  const t = TIERS[7];
-  ctx.shadowColor = 'rgba(255,90,40,0.35)';
-  ctx.shadowBlur = r * 0.3;
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.55, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  /* polar caps */
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.beginPath();
-  ctx.ellipse(x, y - r*0.85, r*0.45, r*0.18, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.beginPath();
-  ctx.ellipse(x, y + r*0.85, r*0.42, r*0.16, 0, 0, Math.PI*2);
-  ctx.fill();
-  /* valley/canyon dark line */
-  ctx.strokeStyle = 'rgba(80,20,5,0.5)';
-  ctx.lineWidth = r * 0.06;
-  ctx.beginPath();
-  ctx.moveTo(x - r*0.7, y - r*0.05);
-  ctx.bezierCurveTo(x - r*0.2, y + r*0.1, x + r*0.3, y - r*0.1, x + r*0.7, y + r*0.05);
-  ctx.stroke();
-  /* darker patch (Hellas) */
-  ctx.fillStyle = 'rgba(60,15,5,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(x - r*0.2, y + r*0.3, r*0.25, r*0.18, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
+    /* Mars — rust 적색 표면. 극관 (양극) + Valles Marineris (협곡) + Hellas (어두운 분지)
+       + Olympus Mons hint. */
+    ctx.shadowColor = 'rgba(220,90,40,0.45)';
+    ctx.shadowBlur = r * 0.4;
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.1, x, y, r*1.02);
+    grad.addColorStop(0, '#ffb088');
+    grad.addColorStop(0.45, '#d05828');
+    grad.addColorStop(0.85, '#8a3010');
+    grad.addColorStop(1, '#4a1808');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 극관 — 강한 흰색 */
+    const polarN = ctx.createRadialGradient(x, y - r*0.88, 0, x, y - r*0.88, r*0.5);
+    polarN.addColorStop(0, 'rgba(255,255,255,1.0)');
+    polarN.addColorStop(0.7, 'rgba(255,255,255,0.7)');
+    polarN.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = polarN;
+    ctx.beginPath();
+    ctx.ellipse(x, y - r*0.88, r*0.50, r*0.18, 0, 0, Math.PI*2);
+    ctx.fill();
+    const polarS = ctx.createRadialGradient(x - r*0.05, y + r*0.88, 0, x - r*0.05, y + r*0.88, r*0.4);
+    polarS.addColorStop(0, 'rgba(255,255,255,0.95)');
+    polarS.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = polarS;
+    ctx.beginPath();
+    ctx.ellipse(x - r*0.05, y + r*0.88, r*0.42, r*0.15, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* Hellas basin — 큰 어두운 patch */
+    const hellas = ctx.createRadialGradient(x - r*0.2, y + r*0.3, 0, x - r*0.2, y + r*0.3, r*0.32);
+    hellas.addColorStop(0, 'rgba(60,15,5,0.65)');
+    hellas.addColorStop(1, 'rgba(60,15,5,0)');
+    ctx.fillStyle = hellas;
+    ctx.beginPath();
+    ctx.ellipse(x - r*0.2, y + r*0.3, r*0.32, r*0.22, 0, 0, Math.PI*2);
+    ctx.fill();
+    /* Syrtis Major — 어두운 V 모양 */
+    ctx.fillStyle = 'rgba(80,30,15,0.5)';
+    ctx.beginPath();
+    ctx.moveTo(x + r*0.1, y - r*0.05);
+    ctx.bezierCurveTo(x + r*0.35, y - r*0.05, x + r*0.45, y + r*0.05, x + r*0.4, y + r*0.25);
+    ctx.bezierCurveTo(x + r*0.2, y + r*0.15, x + r*0.05, y + r*0.05, x + r*0.1, y - r*0.05);
+    ctx.fill();
+    /* Valles Marineris — 가로지르는 협곡 */
+    ctx.strokeStyle = 'rgba(70,20,8,0.65)';
+    ctx.lineWidth = r * 0.07;
+    ctx.beginPath();
+    ctx.moveTo(x - r*0.7, y - r*0.05);
+    ctx.bezierCurveTo(x - r*0.2, y + r*0.1, x + r*0.3, y - r*0.1, x + r*0.7, y + r*0.05);
+    ctx.stroke();
+    /* Olympus Mons hint — 좌상단 작은 밝은 점 */
+    ctx.fillStyle = 'rgba(255,180,130,0.6)';
+    ctx.beginPath(); ctx.arc(x - r*0.5, y - r*0.3, r*0.08, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = 'rgba(40,10,5,0.5)';
+    ctx.beginPath(); ctx.arc(x - r*0.5, y - r*0.3, r*0.03, 0, Math.PI*2); ctx.fill();
+    /* 표면 dust storm hint */
+    ctx.fillStyle = 'rgba(255,210,160,0.20)';
+    for(let i = 0; i < 3; i++){
+        ctx.beginPath();
+        ctx.ellipse(x - r*0.3 + i*r*0.4, y + r*0.5 - i*r*0.1, r*0.25, r*0.05, 0.1, 0, Math.PI*2);
+        ctx.fill();
+    }
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.42);
+    _drawAtmosphereRim(x, y, r, 'rgba(255,150,90,0.35)', 0.08);
 }
 
 function drawTier8(x, y, r, b){
-  /* Jupiter — orange/cream bands + Great Red Spot */
-  const t = TIERS[8];
-  ctx.shadowColor = 'rgba(255,170,80,0.35)';
-  ctx.shadowBlur = r * 0.3;
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.6, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-  /* horizontal bands */
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  const bandColors = [
-    'rgba(180,120,70,0.4)',
-    'rgba(255,225,180,0.45)',
-    'rgba(160,100,60,0.5)',
-    'rgba(255,210,160,0.4)',
-    'rgba(180,120,70,0.45)',
-    'rgba(255,225,180,0.4)',
-    'rgba(140,90,55,0.55)',
-  ];
-  for(let i = 0; i < bandColors.length; i++){
-    ctx.fillStyle = bandColors[i];
-    const yy = y - r + (i / bandColors.length) * r*2;
-    ctx.fillRect(x - r, yy, r*2, r*2 / bandColors.length + 1);
-  }
-  /* Great Red Spot */
-  ctx.fillStyle = 'rgba(180,40,30,0.65)';
-  ctx.beginPath();
-  ctx.ellipse(x + r*0.2, y + r*0.25, r*0.22, r*0.13, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,80,60,0.4)';
-  ctx.beginPath();
-  ctx.ellipse(x + r*0.2, y + r*0.25, r*0.15, r*0.08, 0, 0, Math.PI*2);
-  ctx.fill();
-  ctx.restore();
+    /* Jupiter — 진한 cream/orange 횡대 + Great Red Spot + 작은 cyclone + 극지 darkening */
+    ctx.shadowColor = 'rgba(255,170,80,0.45)';
+    ctx.shadowBlur = r * 0.4;
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.15, x, y, r*1.02);
+    grad.addColorStop(0, '#fff0d0');
+    grad.addColorStop(0.4, '#e8b078');
+    grad.addColorStop(0.85, '#a86838');
+    grad.addColorStop(1, '#603810');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 횡대 cloud bands — 더 정밀하게 (alternating cream/brown). Jupiter 실제 색조. */
+    const bandSpec = [
+        ['rgba(60,32,16,0.55)',  0.08],   // 북극 dark
+        ['rgba(255,235,200,0.55)', 0.08],   // bright zone
+        ['rgba(140,80,40,0.60)',  0.10],   // 북반구 dark band
+        ['rgba(255,225,180,0.50)', 0.10],   // bright zone
+        ['rgba(180,120,70,0.55)',  0.07],   // narrow dark
+        ['rgba(255,230,190,0.45)', 0.08],   // 적도 zone (bright)
+        ['rgba(160,100,60,0.60)',  0.10],   // 남반구 dark band
+        ['rgba(255,220,170,0.45)', 0.09],   // bright zone
+        ['rgba(130,80,40,0.55)',  0.08],   // dark band
+        ['rgba(70,38,20,0.55)',   0.08]    // 남극 dark
+    ];
+    let yOff = -r;
+    for(const [col, h] of bandSpec){
+        ctx.fillStyle = col;
+        const bh = r*2 * h;
+        ctx.fillRect(x - r, y + yOff, r*2, bh + 0.5);
+        yOff += bh;
+    }
+    /* swirl in equatorial band — wave 형태 */
+    ctx.strokeStyle = 'rgba(140,80,40,0.45)';
+    ctx.lineWidth = r * 0.025;
+    ctx.beginPath();
+    for(let i = 0; i <= 30; i++){
+        const px = x - r + (i/30)*r*2;
+        const py = y - r*0.05 + Math.sin(i*0.6) * r*0.03;
+        if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    /* Great Red Spot — 더 정밀, 안쪽 그라데이션 */
+    const gsX = x + r*0.25, gsY = y + r*0.22;
+    const gs = ctx.createRadialGradient(gsX, gsY, 0, gsX, gsY, r*0.22);
+    gs.addColorStop(0, 'rgba(220,80,50,0.9)');
+    gs.addColorStop(0.5, 'rgba(170,40,25,0.85)');
+    gs.addColorStop(1, 'rgba(100,20,10,0.7)');
+    ctx.fillStyle = gs;
+    ctx.beginPath();
+    ctx.ellipse(gsX, gsY, r*0.22, r*0.13, 0.1, 0, Math.PI*2);
+    ctx.fill();
+    /* GRS inner whirl */
+    ctx.strokeStyle = 'rgba(255,180,150,0.4)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(gsX, gsY, r*0.15, r*0.08, 0.1, 0, Math.PI*2);
+    ctx.stroke();
+    /* 작은 cyclone (북쪽) */
+    ctx.fillStyle = 'rgba(255,235,200,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(x - r*0.3, y - r*0.4, r*0.09, r*0.05, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.40);
 }
 
 function drawTier9(x, y, r, b){
-  /* Saturn — yellow + visible ring */
-  const t = TIERS[9];
-  /* draw back of ring (behind body) */
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-0.18);     // slight tilt
-  ctx.scale(1, 0.18);    // squish vertically into ellipse
-  ctx.strokeStyle = 'rgba(220,200,140,0.55)';
-  ctx.lineWidth = r * 0.32;
-  ctx.beginPath();
-  /* back half */
-  ctx.arc(0, 0, r * 1.55, Math.PI, Math.PI*2);
-  ctx.stroke();
-  /* darker gap */
-  ctx.strokeStyle = 'rgba(120,90,50,0.5)';
-  ctx.lineWidth = r * 0.06;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 1.65, Math.PI, Math.PI*2);
-  ctx.stroke();
-  ctx.restore();
-  /* body */
-  ctx.shadowColor = 'rgba(255,200,80,0.3)';
-  ctx.shadowBlur = r * 0.25;
-  const grad = ctx.createRadialGradient(x - r*0.3, y - r*0.3, r*0.2, x, y, r);
-  grad.addColorStop(0, t.accent);
-  grad.addColorStop(0.6, t.color);
-  grad.addColorStop(1, t.dark);
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  ctx.shadowBlur = 0;
-  /* bands */
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  ctx.fillStyle = 'rgba(180,140,80,0.3)';
-  for(let i = 0; i < 5; i++){
-    const yy = y - r*0.7 + i * (r*0.3);
-    ctx.fillRect(x - r, yy, r*2, r*0.08);
-  }
-  ctx.restore();
-  /* draw FRONT of ring (in front of body lower half) */
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(-0.18);
-  ctx.scale(1, 0.18);
-  ctx.strokeStyle = 'rgba(220,200,140,0.65)';
-  ctx.lineWidth = r * 0.32;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 1.55, 0, Math.PI);
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(120,90,50,0.55)';
-  ctx.lineWidth = r * 0.06;
-  ctx.beginPath();
-  ctx.arc(0, 0, r * 1.65, 0, Math.PI);
-  ctx.stroke();
-  ctx.restore();
+    /* Saturn — 부드러운 황금색 + 강한 ring (Cassini Division 포함) + ring shadow on planet. */
+    /* === Back half of rings (behind planet) === */
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.20);
+    ctx.scale(1, 0.20);
+    /* 가장 바깥 ring */
+    ctx.strokeStyle = 'rgba(180,150,90,0.45)';
+    ctx.lineWidth = r * 0.10;
+    ctx.beginPath(); ctx.arc(0, 0, r * 2.0, Math.PI, Math.PI*2); ctx.stroke();
+    /* A ring (밝은 메인) */
+    ctx.strokeStyle = 'rgba(245,230,180,0.85)';
+    ctx.lineWidth = r * 0.28;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.65, Math.PI, Math.PI*2); ctx.stroke();
+    /* Cassini Division (어두운 gap) */
+    ctx.strokeStyle = 'rgba(60,40,20,0.65)';
+    ctx.lineWidth = r * 0.05;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.78, Math.PI, Math.PI*2); ctx.stroke();
+    /* B ring (안쪽 가장 밝은) */
+    ctx.strokeStyle = 'rgba(255,240,200,0.85)';
+    ctx.lineWidth = r * 0.18;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.42, Math.PI, Math.PI*2); ctx.stroke();
+    /* C ring (희미한 안쪽) */
+    ctx.strokeStyle = 'rgba(180,150,100,0.4)';
+    ctx.lineWidth = r * 0.10;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.25, Math.PI, Math.PI*2); ctx.stroke();
+    ctx.restore();
+    /* === Body === */
+    ctx.shadowColor = 'rgba(255,200,100,0.4)';
+    ctx.shadowBlur = r * 0.35;
+    const grad = ctx.createRadialGradient(x - r*0.35, y - r*0.4, r*0.15, x, y, r*1.02);
+    grad.addColorStop(0, '#fff2c8');
+    grad.addColorStop(0.45, '#e0c078');
+    grad.addColorStop(0.85, '#9c7838');
+    grad.addColorStop(1, '#503818');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* 부드러운 cloud bands */
+    const bands = [
+        ['rgba(170,135,75,0.45)', 0.08],
+        ['rgba(255,235,195,0.45)', 0.08],
+        ['rgba(200,160,95,0.50)', 0.09],
+        ['rgba(255,225,180,0.40)', 0.10],
+        ['rgba(180,140,80,0.50)', 0.08],
+        ['rgba(255,230,185,0.40)', 0.10],
+        ['rgba(170,130,75,0.50)', 0.08]
+    ];
+    let yOff = -r*0.95;
+    for(const [col, h] of bands){
+        ctx.fillStyle = col;
+        ctx.fillRect(x - r, y + yOff, r*2, r*2*h + 0.5);
+        yOff += r*2*h;
+    }
+    /* Ring shadow on planet — 어두운 ellipse band */
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.20);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, r*0.95, r*0.08, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    _applyTerminator(x, y, r, 0.35);
+    /* === Front half of rings (over planet's lower portion) === */
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(-0.20);
+    ctx.scale(1, 0.20);
+    ctx.strokeStyle = 'rgba(180,150,90,0.55)';
+    ctx.lineWidth = r * 0.10;
+    ctx.beginPath(); ctx.arc(0, 0, r * 2.0, 0, Math.PI); ctx.stroke();
+    ctx.strokeStyle = 'rgba(245,230,180,0.95)';
+    ctx.lineWidth = r * 0.28;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.65, 0, Math.PI); ctx.stroke();
+    ctx.strokeStyle = 'rgba(60,40,20,0.75)';
+    ctx.lineWidth = r * 0.05;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.78, 0, Math.PI); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,240,200,0.95)';
+    ctx.lineWidth = r * 0.18;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.42, 0, Math.PI); ctx.stroke();
+    ctx.strokeStyle = 'rgba(180,150,100,0.5)';
+    ctx.lineWidth = r * 0.10;
+    ctx.beginPath(); ctx.arc(0, 0, r * 1.25, 0, Math.PI); ctx.stroke();
+    ctx.restore();
 }
 
 function drawTier10(x, y, r, b){
-  /* Star — bright yellow/white with corona + plasma flicker */
-  const flicker = 1 + Math.sin(performance.now() / 80) * 0.08;
-  const coronaR = r * 1.6 * flicker;
-  /* corona — radial gradient extending beyond body radius */
-  const coronaGrad = ctx.createRadialGradient(x, y, r*0.7, x, y, coronaR);
-  coronaGrad.addColorStop(0, 'rgba(255,240,160,0.7)');
-  coronaGrad.addColorStop(0.4, 'rgba(255,200,80,0.4)');
-  coronaGrad.addColorStop(0.7, 'rgba(255,160,60,0.18)');
-  coronaGrad.addColorStop(1, 'rgba(255,140,40,0)');
-  ctx.fillStyle = coronaGrad;
-  ctx.beginPath(); ctx.arc(x, y, coronaR, 0, Math.PI*2); ctx.fill();
-  /* core */
-  const coreGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
-  coreGrad.addColorStop(0, '#ffffff');
-  coreGrad.addColorStop(0.4, '#fff5b0');
-  coreGrad.addColorStop(0.85, '#ffd060');
-  coreGrad.addColorStop(1, '#ffa030');
-  ctx.fillStyle = coreGrad;
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  /* surface plasma flicker — small bright dots */
-  ctx.save();
-  ctx.beginPath(); ctx.arc(x, y, r-1, 0, Math.PI*2); ctx.clip();
-  ctx.fillStyle = 'rgba(255,255,220,0.45)';
-  for(let i = 0; i < 6; i++){
-    const ang = ((b.id + i*97) * 0.1 + performance.now()*0.0007) % (Math.PI*2);
-    const dist = r * 0.6;
-    const cx = x + Math.cos(ang) * dist;
-    const cy = y + Math.sin(ang) * dist;
-    ctx.beginPath(); ctx.arc(cx, cy, r*0.10, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
-  /* diffraction spikes — subtle */
-  ctx.strokeStyle = 'rgba(255,240,180,0.6)';
-  ctx.lineWidth = 1.2;
-  const spikeR = r * 1.4;
-  ctx.beginPath();
-  ctx.moveTo(x - spikeR, y); ctx.lineTo(x + spikeR, y);
-  ctx.moveTo(x, y - spikeR); ctx.lineTo(x, y + spikeR);
-  ctx.stroke();
+    /* Star (Sun) — 강한 corona + flame surface + prominences + sunspots + diffraction spikes.
+       reference: NASA Sun close-up. */
+    const tnow = performance.now();
+    const flicker = 1 + Math.sin(tnow / 80) * 0.10;
+    const coronaR = r * 1.8 * flicker;
+    /* 외곽 corona — 3 layer 그라데이션 */
+    const coronaOut = ctx.createRadialGradient(x, y, r*1.1, x, y, coronaR*1.3);
+    coronaOut.addColorStop(0, 'rgba(255,180,60,0.45)');
+    coronaOut.addColorStop(0.5, 'rgba(255,140,40,0.20)');
+    coronaOut.addColorStop(1, 'rgba(255,100,30,0)');
+    ctx.fillStyle = coronaOut;
+    ctx.beginPath(); ctx.arc(x, y, coronaR*1.3, 0, Math.PI*2); ctx.fill();
+    const coronaMid = ctx.createRadialGradient(x, y, r*0.85, x, y, coronaR);
+    coronaMid.addColorStop(0, 'rgba(255,230,140,0.75)');
+    coronaMid.addColorStop(0.5, 'rgba(255,180,70,0.40)');
+    coronaMid.addColorStop(1, 'rgba(255,140,50,0)');
+    ctx.fillStyle = coronaMid;
+    ctx.beginPath(); ctx.arc(x, y, coronaR, 0, Math.PI*2); ctx.fill();
+    /* 표면 core — 흰색 중심, 노랑→오렌지 가장자리 */
+    const coreGrad = ctx.createRadialGradient(x - r*0.1, y - r*0.1, 0, x, y, r*1.02);
+    coreGrad.addColorStop(0, '#ffffff');
+    coreGrad.addColorStop(0.3, '#fff8d0');
+    coreGrad.addColorStop(0.65, '#ffd060');
+    coreGrad.addColorStop(0.92, '#ff8030');
+    coreGrad.addColorStop(1, '#c84810');
+    ctx.fillStyle = coreGrad;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    /* 표면 granulation + flares */
+    ctx.save();
+    _clipSphere(x, y, r);
+    /* granulation patches — 어두운 그물망 */
+    ctx.fillStyle = 'rgba(200,80,20,0.30)';
+    for(let i = 0; i < 12; i++){
+        const ang = ((b.id + i*97) * 0.1 + tnow*0.0003) % (Math.PI*2);
+        const d = r * (0.2 + (i%4)*0.18);
+        const cr = r * 0.10;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(ang)*d, y + Math.sin(ang)*d, cr, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* 밝은 flare patches */
+    ctx.fillStyle = 'rgba(255,255,220,0.55)';
+    for(let i = 0; i < 6; i++){
+        const ang = ((b.id + i*131) * 0.1 + tnow*0.0006) % (Math.PI*2);
+        const d = r * 0.55;
+        ctx.beginPath();
+        ctx.arc(x + Math.cos(ang)*d, y + Math.sin(ang)*d, r*0.08, 0, Math.PI*2);
+        ctx.fill();
+    }
+    /* sunspot — 어두운 점 */
+    ctx.fillStyle = 'rgba(80,30,10,0.6)';
+    ctx.beginPath();
+    ctx.ellipse(x + r*0.3, y - r*0.1, r*0.06, r*0.04, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    /* prominence — 가장자리 솟구치는 불꽃 */
+    const pa = (tnow * 0.0005) % (Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,120,30,0.7)';
+    ctx.lineWidth = r * 0.04;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.08, pa - 0.3, pa + 0.3);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,80,20,0.5)';
+    ctx.beginPath();
+    ctx.arc(x, y, r * 1.12, pa + 2 - 0.2, pa + 2 + 0.2);
+    ctx.stroke();
+    /* diffraction spikes — 4 방향 */
+    ctx.strokeStyle = 'rgba(255,240,180,0.65)';
+    ctx.lineWidth = 1.4;
+    const spikeR = r * 1.55;
+    ctx.beginPath();
+    ctx.moveTo(x - spikeR, y); ctx.lineTo(x + spikeR, y);
+    ctx.moveTo(x, y - spikeR); ctx.lineTo(x, y + spikeR);
+    ctx.stroke();
+    /* 작은 대각 spike */
+    ctx.strokeStyle = 'rgba(255,200,120,0.40)';
+    ctx.lineWidth = 0.8;
+    const sR2 = r * 1.25;
+    ctx.beginPath();
+    ctx.moveTo(x - sR2*0.7, y - sR2*0.7); ctx.lineTo(x + sR2*0.7, y + sR2*0.7);
+    ctx.moveTo(x + sR2*0.7, y - sR2*0.7); ctx.lineTo(x - sR2*0.7, y + sR2*0.7);
+    ctx.stroke();
 }
 
 function drawTier11(x, y, r, b){
-  /* Black Hole — pure black + accretion disk + photon ring + jets */
-  const tnow = performance.now();
-  /* outer halo */
-  const haloGrad = ctx.createRadialGradient(x, y, r*0.9, x, y, r*2.0);
-  haloGrad.addColorStop(0, 'rgba(120,40,200,0.4)');
-  haloGrad.addColorStop(0.6, 'rgba(80,20,140,0.15)');
-  haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = haloGrad;
-  ctx.beginPath(); ctx.arc(x, y, r*2.0, 0, Math.PI*2); ctx.fill();
-  /* accretion disk — tilted ellipse, multiple rings */
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(0.35 + tnow*0.0003);     // slow rotation
-  ctx.scale(1, 0.35);
-  /* outer disk - orange */
-  const diskGrad1 = ctx.createRadialGradient(0, 0, r*0.95, 0, 0, r*1.7);
-  diskGrad1.addColorStop(0, 'rgba(255,150,50,0)');
-  diskGrad1.addColorStop(0.3, 'rgba(255,180,80,0.85)');
-  diskGrad1.addColorStop(0.65, 'rgba(255,80,140,0.7)');
-  diskGrad1.addColorStop(1, 'rgba(140,40,180,0)');
-  ctx.fillStyle = diskGrad1;
-  ctx.beginPath(); ctx.arc(0, 0, r*1.7, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-  /* event horizon — pure black */
-  ctx.fillStyle = '#000000';
-  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
-  /* photon ring — sharp white */
-  ctx.strokeStyle = 'rgba(255,240,200,0.85)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(x, y, r*0.97, 0, Math.PI*2); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,200,80,0.45)';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.arc(x, y, r*1.05, 0, Math.PI*2); ctx.stroke();
-  /* relativistic jets - vertical (up + down) */
-  const jetH = r * 1.8;
-  const jetGrad = ctx.createLinearGradient(x, y - jetH, x, y + jetH);
-  jetGrad.addColorStop(0, 'rgba(180,220,255,0)');
-  jetGrad.addColorStop(0.45, 'rgba(120,180,255,0.8)');
-  jetGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
-  jetGrad.addColorStop(0.55, 'rgba(120,180,255,0.8)');
-  jetGrad.addColorStop(1, 'rgba(180,220,255,0)');
-  ctx.fillStyle = jetGrad;
-  ctx.fillRect(x - r*0.18, y - jetH, r*0.36, jetH*2);
+    /* Black Hole — Interstellar 영화풍 accretion disk + 강한 photon ring + 양극 jets.
+       reference: 이미지의 거대 골든 disk. */
+    const tnow = performance.now();
+    /* 외곽 거대 halo */
+    const haloGrad = ctx.createRadialGradient(x, y, r*0.85, x, y, r*2.4);
+    haloGrad.addColorStop(0, 'rgba(180,80,200,0.35)');
+    haloGrad.addColorStop(0.4, 'rgba(140,40,160,0.20)');
+    haloGrad.addColorStop(0.8, 'rgba(60,20,100,0.10)');
+    haloGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = haloGrad;
+    ctx.beginPath(); ctx.arc(x, y, r*2.4, 0, Math.PI*2); ctx.fill();
+    /* === Back of accretion disk (gravitational lensing 표현 — disk top above horizon) === */
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(0.32 + tnow*0.00015);
+    /* 위쪽 호 — disk 뒷부분이 중력렌즈로 위로 올라옴 */
+    ctx.scale(1.05, 0.55);
+    const backDisk = ctx.createRadialGradient(0, 0, r*0.95, 0, 0, r*2.0);
+    backDisk.addColorStop(0, 'rgba(255,200,80,0)');
+    backDisk.addColorStop(0.3, 'rgba(255,240,160,0.95)');
+    backDisk.addColorStop(0.55, 'rgba(255,170,60,0.85)');
+    backDisk.addColorStop(0.85, 'rgba(255,90,30,0.55)');
+    backDisk.addColorStop(1, 'rgba(140,40,80,0)');
+    ctx.fillStyle = backDisk;
+    /* 위 호 (lensing 으로 위로 굽음) */
+    ctx.beginPath();
+    ctx.arc(0, 0, r*2.0, Math.PI*1.05, Math.PI*1.95);
+    ctx.lineTo(r*0.95, 0);
+    ctx.arc(0, 0, r*0.95, 0, Math.PI, true);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    /* === Front accretion disk — tilted ellipse === */
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(0.32 + tnow*0.00015);
+    ctx.scale(1, 0.30);
+    /* 안쪽 hottest (white-yellow) */
+    const diskHot = ctx.createRadialGradient(0, 0, r*1.0, 0, 0, r*1.45);
+    diskHot.addColorStop(0, 'rgba(255,255,220,0)');
+    diskHot.addColorStop(0.4, 'rgba(255,250,200,0.95)');
+    diskHot.addColorStop(1, 'rgba(255,180,80,0)');
+    ctx.fillStyle = diskHot;
+    ctx.beginPath(); ctx.arc(0, 0, r*1.45, 0, Math.PI*2); ctx.fill();
+    /* 중간 orange */
+    const diskMid = ctx.createRadialGradient(0, 0, r*1.2, 0, 0, r*1.9);
+    diskMid.addColorStop(0, 'rgba(255,160,50,0)');
+    diskMid.addColorStop(0.3, 'rgba(255,180,80,0.85)');
+    diskMid.addColorStop(0.7, 'rgba(255,90,30,0.65)');
+    diskMid.addColorStop(1, 'rgba(140,40,80,0)');
+    ctx.fillStyle = diskMid;
+    ctx.beginPath(); ctx.arc(0, 0, r*1.9, 0, Math.PI*2); ctx.fill();
+    /* 외곽 magenta hint */
+    const diskOut = ctx.createRadialGradient(0, 0, r*1.7, 0, 0, r*2.3);
+    diskOut.addColorStop(0, 'rgba(180,60,140,0.45)');
+    diskOut.addColorStop(1, 'rgba(80,20,80,0)');
+    ctx.fillStyle = diskOut;
+    ctx.beginPath(); ctx.arc(0, 0, r*2.3, 0, Math.PI*2); ctx.fill();
+    /* Doppler 효과 — 한쪽 더 밝게 (회전 방향) */
+    const dop = ctx.createLinearGradient(-r*1.9, 0, r*1.9, 0);
+    dop.addColorStop(0, 'rgba(255,255,180,0.25)');
+    dop.addColorStop(0.5, 'rgba(255,255,180,0)');
+    dop.addColorStop(1, 'rgba(80,40,80,0.2)');
+    ctx.fillStyle = dop;
+    ctx.beginPath(); ctx.arc(0, 0, r*1.9, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    /* === Event horizon (pure black) === */
+    ctx.fillStyle = '#000000';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+    /* === Photon ring — sharp, multi-layer === */
+    ctx.strokeStyle = 'rgba(255,250,220,0.95)';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(x, y, r*1.02, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,210,100,0.75)';
+    ctx.lineWidth = 1.0;
+    ctx.beginPath(); ctx.arc(x, y, r*1.08, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,160,80,0.40)';
+    ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.arc(x, y, r*1.14, 0, Math.PI*2); ctx.stroke();
+    /* === Relativistic jets — 두 극으로 솟는 빛기둥 === */
+    const jetH = r * 2.2;
+    const jetGrad = ctx.createLinearGradient(x, y - jetH, x, y + jetH);
+    jetGrad.addColorStop(0, 'rgba(180,220,255,0)');
+    jetGrad.addColorStop(0.25, 'rgba(120,200,255,0.7)');
+    jetGrad.addColorStop(0.42, 'rgba(255,255,255,0.9)');
+    jetGrad.addColorStop(0.5, 'rgba(0,0,0,0)');
+    jetGrad.addColorStop(0.58, 'rgba(255,255,255,0.9)');
+    jetGrad.addColorStop(0.75, 'rgba(120,200,255,0.7)');
+    jetGrad.addColorStop(1, 'rgba(180,220,255,0)');
+    ctx.fillStyle = jetGrad;
+    ctx.fillRect(x - r*0.16, y - jetH, r*0.32, jetH*2);
+    /* jet outer halo */
+    const jetHalo = ctx.createLinearGradient(x, y - jetH, x, y + jetH);
+    jetHalo.addColorStop(0, 'rgba(180,220,255,0)');
+    jetHalo.addColorStop(0.45, 'rgba(120,200,255,0.25)');
+    jetHalo.addColorStop(0.5, 'rgba(0,0,0,0)');
+    jetHalo.addColorStop(0.55, 'rgba(120,200,255,0.25)');
+    jetHalo.addColorStop(1, 'rgba(180,220,255,0)');
+    ctx.fillStyle = jetHalo;
+    ctx.fillRect(x - r*0.5, y - jetH, r*1.0, jetH*2);
 }
 
 const TIER_DRAWERS = [null,
@@ -2006,6 +2370,6 @@ if(navigator.serviceWorker){
   }).catch(()=>{});
 }
 </script>
-<script src="/js/siteFooter.js?v=1778454032"></script>
+<script src="/js/siteFooter.js?v=1778454646"></script>
 </body>
 </html>
