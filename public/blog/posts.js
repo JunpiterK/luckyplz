@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'semiconductor-rally-2026',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-11',
+        readMinutes: 10,
+        coverEmoji: '📈',
+        tags: ['반도체', 'HBM', 'AI 칩', 'NVIDIA', '삼성전자', 'SK하이닉스'],
+        title: '반도체 슈퍼랠리 2026 — 한미 반도체주는 어디까지 오를까?',
+        excerpt: 'AI 자본지출·HBM·소버린 AI·커스텀 ASIC 5대 동력 + 종목별 베어/베이스/불 시나리오 목표주가 (삼성·SK하이닉스·NVDA·AVGO·AMD·MU·TSM).',
+        alt: 'semiconductor-rally-2026-en',
+    },
+    {
+        slug: 'semiconductor-rally-2026-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-11',
+        readMinutes: 10,
+        coverEmoji: '📈',
+        tags: ['Semiconductor', 'HBM', 'AI Chip', 'NVIDIA', 'Samsung', 'SK hynix'],
+        title: 'Semiconductor Super-Rally 2026 — How High Can KR & US Chip Stocks Go?',
+        excerpt: '5 structural drivers + per-stock bear/base/bull price targets for Samsung, SK hynix, NVDA, AVGO, AMD, MU, TSM.',
+        alt: 'semiconductor-rally-2026',
+    },
+    {
         slug: 'snake-history-nokia',
         lang: 'ko',
         category: 'gaming-history',
