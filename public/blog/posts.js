@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'us-tech-recap-2026-05-11',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-12',
+        readMinutes: 8,
+        coverEmoji: '🇺🇸',
+        tags: ['미국 증시', '데일리 리캡', 'Nasdaq', 'Mag 7', '섹터 히트맵', 'Lumentum', 'Intel Apple'],
+        title: '미국 테크 마감 리캡 — 2026년 5월 11일 종가',
+        excerpt: 'S&P·Nasdaq 사상 최고 마감. AI 옵틱스 폭주 (LITE +16, AAOI +24), MNDY +26, INTC +5.7. 섹터 히트맵·Mag 7·내일 워치리스트 (Cisco·AMAT) 포함.',
+        alt: 'us-tech-recap-2026-05-11-en',
+    },
+    {
+        slug: 'us-tech-recap-2026-05-11-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-12',
+        readMinutes: 8,
+        coverEmoji: '🇺🇸',
+        tags: ['US Markets', 'Daily Recap', 'Nasdaq', 'Mag 7', 'Sector Heatmap', 'Lumentum', 'Intel Apple'],
+        title: 'US Tech Daily Recap — May 11, 2026 Close',
+        excerpt: 'S&P/Nasdaq fresh ATH. AI optics frenzy (LITE +16, AAOI +24), MNDY +26, INTC +5.7. Sector heatmap · Mag 7 · tomorrow watchlist (Cisco, AMAT).',
+        alt: 'us-tech-recap-2026-05-11',
+    },
+    {
         slug: 'semiconductor-rally-2026',
         lang: 'ko',
         category: 'industry',
