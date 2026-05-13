@@ -19,6 +19,18 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ai-power-supply-5year-2030',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-13',
+        readMinutes: 22,
+        coverEmoji: '⚡',
+        tags: ['AI 전력', '데이터센터', '가스터빈', '선박엔진 발전', 'Wärtsilä', 'HD현대중공업 힘센엔진', '한화엔진', 'GE Vernova', 'Constellation', 'Vistra', '두산에너빌리티', 'HD현대일렉트릭', '효성중공업', 'LS ELECTRIC', '변압기', '송전망', 'SMR', '지열', 'Tesla Megapack', 'Eaton', 'Quanta Services', 'lucky please'],
+        title: 'AI 전력 5년 공급 전쟁 — 발전·송전·선박엔진 + 美·韓 수혜주 랭킹',
+        excerpt: '2026~2030 5년 안에 메울 AI 전력 공급 솔루션. 에너지원 5순위 + 변압기·송전 병목 + 가스터빈 부족이 부른 선박엔진 데이터센터 상륙(Wärtsilä 1.6 GW·HD현대중공업 684 MW·한화엔진) + 美·韓 30개 티어.',
+        alt: null,
+    },
+    {
         slug: 'kr-open-brief-2026-05-13',
         lang: 'ko',
         category: 'industry',
