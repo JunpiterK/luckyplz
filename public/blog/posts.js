@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'us-recap-2026-05-13',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-14',
+        readMinutes: 10,
+        coverEmoji: '🇺🇸',
+        tags: ['미국증시', '마감 리캡', 'PPI', 'S&P 500 신고가', 'Nasdaq 신고가', 'Cisco 어닝', 'Ford 모건스탠리', 'Wix 폭락', '데일리 리캡', 'lucky please'],
+        title: '미국장 5/13 마감 — PPI +6.0% 쇼크에도 S&P·Nasdaq 신고가, CSCO AH +15%',
+        excerpt: '4월 PPI +1.4% MoM·+6.0% YoY (2022.3 이후 최대) 쇼크에도 S&P 500 +0.58% 7,444 / Nasdaq +1.20% 26,402 신고가. 다우 -0.14% 분화. Cisco 시간외 +15% (AI 인프라 주문 $5B→$9B). Ford +13% (모건스탠리). Wix -30% (어닝 미스). 섹터·특징주·5/14 소매판매+WMT+AMAT 워치리스트.',
+        alt: 'us-recap-2026-05-13-en',
+    },
+    {
+        slug: 'us-recap-2026-05-13-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-14',
+        readMinutes: 10,
+        coverEmoji: '🇺🇸',
+        tags: ['US stocks', 'market close', 'PPI', 'S&P 500 ATH', 'Nasdaq ATH', 'Cisco earnings', 'Ford Morgan Stanley', 'Wix plunge', 'daily debrief', 'lucky please'],
+        title: 'US Market Close May 13, 2026 — S&P/Nasdaq Set New Highs Despite PPI +6.0% Shock, CSCO AH +15%',
+        excerpt: 'April PPI +1.4% MoM / +6.0% YoY (biggest since Mar 2022) yet S&P 500 +0.58% to 7,444 and Nasdaq +1.20% to 26,402 set new all-time highs. Dow -0.14% diverged. Cisco AH +15% (AI infra order target $5B→$9B). Ford +13% (Morgan Stanley). Wix -30% (earnings miss). Sectors, movers, 5/14 retail sales + WMT + AMAT watchlist.',
+        alt: 'us-recap-2026-05-13',
+    },
+    {
         slug: 'ppi-10-prints-2026-may-analysis',
         lang: 'ko',
         category: 'industry',
