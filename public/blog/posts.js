@@ -19,6 +19,18 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'ppi-10-prints-2026-may-analysis',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-13',
+        readMinutes: 15,
+        coverEmoji: '📊',
+        tags: ['미국 PPI', '인플레이션', '관세', 'Fed 금리', '거시경제', '10Y 국채', '환율', '한국 영향', '시계열 분석', 'lucky please'],
+        title: '美 PPI 최근 10번 — 4월 +6.0% YoY 충격 + 거시 함의 5가지',
+        excerpt: '2025.7 ~ 2026.4 PPI 시계열 그래프·테이블. 4월 +6.0% YoY / +1.4% MoM은 컨센 +4.9%·+0.5%를 큰 폭 상회. 8개월 만에 저점 +2.6% → +6.0%로 +3.4%p 가속. 4/2 관세 발효 첫 풀반영. Fed·채권·주식·환율·한국 5채널 함의 + 3시나리오.',
+        alt: null,
+    },
+    {
         slug: 'us-open-brief-2026-05-13',
         lang: 'ko',
         category: 'industry',
