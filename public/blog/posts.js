@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'us-open-brief-2026-05-13',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-13',
+        readMinutes: 9,
+        coverEmoji: '🇺🇸',
+        tags: ['미국증시', '개장 브리핑', 'PPI', 'NVIDIA', 'H200', 'Jensen Huang', '데일리 리캡', 'lucky please'],
+        title: '미국장 5/13 개장 — PPI +4.9% 컨센·잭슨 황 中 동행·반도체 반등 시도',
+        excerpt: '다우 -0.2% / S&P +0.2% / 나스닥100 +0.7% 선물 혼조. 4월 PPI 컨센 +4.9% YoY(2023.1 이후 최고). 잭슨 황 트럼프 中 막판 동행 → H200 협상 기대. INTC -10%·AMD -5%·QCOM -12% 폭락 다음날의 반등 시도. 시나리오 트리·한국 연결까지.',
+        alt: null,
+    },
+    {
+        slug: 'kr-close-brief-2026-05-13',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-13',
+        readMinutes: 8,
+        coverEmoji: '🇰🇷',
+        tags: ['한국증시', '코스피 마감', 'KOSPI 7844', 'SK하이닉스', '삼성전자 노조', '외국인 매도', '데일리 리캡', 'lucky please'],
+        title: '한국장 5/13 마감 — KOSPI 7,844 사상최고 + SK하이닉스 +7.68%',
+        excerpt: '외국인 -3.7조 매도·美 CPI 쇼크·삼성전자 노조 총파업 임박이라는 3중 악재를 SK하이닉스 단독 +7.68% 폭등(시총 +100조, 197.6만원)이 뚫었다. KOSPI 7,844.01 (+2.63%) 종가 사상 최고치 갱신. 모건스탠리 "1만피" 코멘트.',
+        alt: null,
+    },
+    {
         slug: 'ai-power-supply-5year-2030',
         lang: 'ko',
         category: 'industry',
