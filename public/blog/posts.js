@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'kr-open-brief-2026-05-14',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-14',
+        readMinutes: 9,
+        coverEmoji: '🇰🇷',
+        tags: ['한국증시', 'KOSPI', '개장 브리핑', 'Cisco AI', 'SK하이닉스', '옵션 만기일', 'NVDA 사상최고', '잭슨 황 H200', '데일리 리캡', 'lucky please'],
+        title: '한국장 5/14 개장 — Cisco AI 폭발·美 사상최고·옵션만기일 3박자',
+        excerpt: '美 5/13 마감 S&P·Nasdaq 사상최고(+0.58%/+1.20%) PPI +6.0% 충격 무시. Cisco AH +15%, AI 인프라 주문 $5B→$9B 두 배 상향. 잭슨 황 트럼프 中 동행 1일차. 한국 5/14는 선물옵션 만기일·환율 1,488원 변수.',
+        alt: 'kr-open-brief-2026-05-14-en',
+    },
+    {
+        slug: 'kr-open-brief-2026-05-14-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-14',
+        readMinutes: 9,
+        coverEmoji: '🇰🇷',
+        tags: ['Korea Open Brief', 'KOSPI', 'Cisco AI orders', 'SK Hynix', 'Options expiry', 'NVDA record', 'Huang H200', 'Daily Recap', 'lucky please'],
+        title: 'Korea Open Brief May 14 — Cisco AI Blowout · US Record High · Options Expiry',
+        excerpt: 'US 5/13 close at record highs (S&P +0.58% / Nasdaq +1.20%) despite April PPI shock at +6.0% YoY. Cisco AH +15% as AI infrastructure order outlook doubled from $5B to $9B. Jensen Huang joins Trump China visit Day 1. KR May 14 is options expiry + KRW 1,488.',
+        alt: 'kr-open-brief-2026-05-14',
+    },
+    {
         slug: 'us-recap-2026-05-13',
         lang: 'ko',
         category: 'industry',
