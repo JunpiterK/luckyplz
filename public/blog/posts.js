@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'kr-open-brief-2026-05-15',
+        lang: 'ko',
+        category: 'industry',
+        date: '2026-05-15',
+        readMinutes: 9,
+        coverEmoji: '🇰🇷',
+        tags: ['한국증시', 'KOSPI', '개장 브리핑', '삼성전자', 'SK하이닉스', '외국인 수급', '옵션만기일', '데일리 리캡'],
+        title: '한국장 5/15 개장 브리핑 — 美 사상최고 마감, KOSPI 8천 코앞',
+        excerpt: '美 5/14 마감 S&P·나스닥 사상최고·다우 5만 회복(NVDA +3.9%, Cisco +13~14%). KOSPI 7,981 마감 후 8천 돌파 시도. 핵심 균열: 외국인은 반도체 대형주 대규모 순매도 중. 종목·섹터 갭 예측 + 5/15 옵션만기일.',
+        alt: 'kr-open-brief-2026-05-15-en',
+    },
+    {
+        slug: 'kr-open-brief-2026-05-15-en',
+        lang: 'en',
+        category: 'industry',
+        date: '2026-05-15',
+        readMinutes: 9,
+        coverEmoji: '🇰🇷',
+        tags: ['Korea Markets', 'KOSPI', 'Open Brief', 'Samsung', 'SK hynix', 'Foreign Flows', 'Options Expiration', 'Daily Recap'],
+        title: 'Korea Market Open Brief — May 15, 2026: US Record Close, KOSPI Eyes 8,000',
+        excerpt: 'US May 14 close: S&P/Nasdaq record highs, Dow back over 50,000 (NVDA +3.9%, Cisco +13-14%). KOSPI closed 7,981, eyeing 8,000. The crack: foreign investors are heavy net sellers of large-cap chips. Stock/sector gap outlook + May 15 OPEX.',
+        alt: 'kr-open-brief-2026-05-15',
+    },
+    {
         slug: 'kr-open-brief-2026-05-14',
         lang: 'ko',
         category: 'industry',
