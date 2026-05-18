@@ -157,8 +157,16 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
             try:
                 return json.loads(cleaned)
             except json.JSONDecodeError:
-                # Defensive cleanup #2: try json-repair-style fallback
-                # (collapse unescaped newlines inside strings, lenient parse)
+                # Defensive cleanup #2: json-repair — robust library that fixes
+                # mismatched brackets, missing commas, unescaped quotes inside
+                # strings, etc. Catches the cases ast.literal_eval can't.
+                try:
+                    from json_repair import repair_json
+                    repaired = repair_json(cleaned, return_objects=False)
+                    return json.loads(repaired)
+                except Exception:
+                    pass
+                # Defensive cleanup #3: ast.literal_eval as final fallback
                 try:
                     import ast
                     return ast.literal_eval(cleaned)
