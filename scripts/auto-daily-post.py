@@ -568,16 +568,21 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     sources = data.get("sources", []) or []
     src_lines = []
     for s in sources[:8]:
+        # IMPORTANT: do not use 'title' as the loop variable here — the
+        # outer scope already has `title = data.get("headline_{lang}")`
+        # at line 488, and Python's for loop does not create its own scope.
+        # Variable shadowing here would overwrite the headline title and
+        # corrupt the h1 rendering downstream.
         if isinstance(s, str):
-            url, title = s, s
+            src_url, src_title = s, s
         elif isinstance(s, dict):
-            url = s.get("url", "") or ""
-            title = s.get("title", "") or url
+            src_url = s.get("url", "") or ""
+            src_title = s.get("title", "") or src_url
         else:
             continue
-        if not url:
+        if not src_url:
             continue
-        src_lines.append(f'<a href="{html_escape(url)}" target="_blank" rel="noopener">{html_escape(title)}</a>')
+        src_lines.append(f'<a href="{html_escape(src_url)}" target="_blank" rel="noopener">{html_escape(src_title)}</a>')
     src_html = " · ".join(src_lines)
 
     footer_ko = ("<strong>📢 출처 & 면책 조항</strong><br>"
