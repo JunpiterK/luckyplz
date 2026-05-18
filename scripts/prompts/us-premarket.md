@@ -41,7 +41,7 @@ World-class financial analyst writing for **luckyplz.com**. Reader checks this a
 **Holiday check:** If {trading_date} is a US market holiday → return `{"skip": true, "reason": "..."}`.
 
 ## Required narrative_html_* Structure (Head-Heavy)
-Rich HTML body (~1500-2500 words):
+Rich HTML body (~1200-1800 words):
 
 1. `<h3>⚡ 30초 요약 — 美 정규장 결정 요인</h3>` — 4-6 bullets with color spans.
 2. `<h3>오늘의 결론 (Head-Heavy)</h3>` — pre-market consensus + 핵심 catalyst 1 paragraph.
@@ -89,8 +89,8 @@ Rich HTML body (~1500-2500 words):
   "global_overnight": [
     {"name":"KOSPI","value":"2,815","change_pct":-1.82,"tag":"외인 매도"}
   ],
-  "narrative_html_ko": "<h3>⚡ 30초 요약 — 美 정규장 결정 요인</h3>\n<ul>...</ul>\n<h3>오늘의 결론</h3>\n<p>...</p>\n... (1500-2500 words, sections 1-9) ...",
-  "narrative_html_en": "<h3>⚡ 30-Second Brief</h3>\n... (1500-2500 words) ...",
+  "narrative_html_ko": "<h3>⚡ 30초 요약 — 美 정규장 결정 요인</h3>\n<ul>...</ul>\n<h3>오늘의 결론</h3>\n<p>...</p>\n... (1200-1800 words, sections 1-9) ...",
+  "narrative_html_en": "<h3>⚡ 30-Second Brief</h3>\n... (1200-1800 words) ...",
   "forward_calendar_html_ko": "<table>... 10 trading days ...</table>",
   "forward_calendar_html_en": "<table>... 10 trading days ...</table>",
   "bottom_line_ko": "포지셔닝·전략 — 5-8 문장.",

@@ -47,7 +47,7 @@ Apply consistently across all summaries, sector analysis, and asset tracking.
 **Holiday check:** If {trading_date} was a US market holiday (or weekend), return `{"skip": true, "reason": "..."}` immediately. Do not fabricate data.
 
 ## Required Structure for narrative_html_* fields (Head-Heavy / 두괄식)
-The `narrative_html_ko` and `narrative_html_en` fields must be **rich HTML body (~1500-2500 words)** containing these sections **in this order**:
+The `narrative_html_ko` and `narrative_html_en` fields must be **rich HTML body (~1200-1800 words)** containing these sections **in this order**:
 
 1. **`<h3>⚡ 30초 요약 — 핵심만</h3>`** — 4-6 `<li>` bullets with `<strong>` and inline color spans.
 2. **`<h3>오늘의 결론 (Head-Heavy)</h3>`** — conclusion before evidence, 3-5 sentences.
@@ -96,8 +96,8 @@ Use `<strong>` for keywords, `<table>` for comparisons, `<ul><li>` for lists, `<
   "losers": [],
   "news": [],
   "watch": {},
-  "narrative_html_ko": "<h3>⚡ 30초 요약 — 핵심만</h3>\n<ul><li>...</li></ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (rich HTML body, 1500-2500 words, sections 1-10 above) ...",
-  "narrative_html_en": "<h3>⚡ 30-Second Brief — Just the Core</h3>\n... (rich HTML body, 1500-2500 words, sections 1-10) ...",
+  "narrative_html_ko": "<h3>⚡ 30초 요약 — 핵심만</h3>\n<ul><li>...</li></ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (rich HTML body, 1200-1800 words, sections 1-10 above) ...",
+  "narrative_html_en": "<h3>⚡ 30-Second Brief — Just the Core</h3>\n... (rich HTML body, 1200-1800 words, sections 1-10) ...",
   "forward_calendar_html_ko": "<table><thead><tr><th>날짜</th><th>이벤트</th><th>중요도</th></tr></thead><tbody>...10 trading days for both US & KR...</tbody></table>",
   "forward_calendar_html_en": "<table>...10 trading days for both US & KR...</table>",
   "bottom_line_ko": "포지셔닝·전략 — 5-8 문장. 인라인 HTML markup 사용 가능.",

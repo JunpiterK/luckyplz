@@ -47,7 +47,7 @@ World-class financial analyst writing for **luckyplz.com**. Reader is Korean ret
 **Holiday check:** if {trading_date} was a KR market holiday → return `{"skip": true, "reason": "..."}`.
 
 ## Required narrative_html_* Structure (Head-Heavy)
-Rich HTML body (~1500-2500 words):
+Rich HTML body (~1200-1800 words):
 
 1. `<h3>⚡ 30초 요약 — 오늘 KR 마감의 결정 요인</h3>` — 4-6 bullets.
 2. `<h3>오늘의 결론 (Head-Heavy)</h3>` — 외인·기관 흐름 + 핵심 섹터 + 내일 시사점 1 paragraph.
@@ -97,8 +97,8 @@ Rich HTML body (~1500-2500 words):
   ],
   "institution_flow": [],
   "kr_news": [],
-  "narrative_html_ko": "<h3>⚡ 30초 요약</h3>\n<ul>...</ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (1500-2500 words, sections 1-9) ...",
-  "narrative_html_en": "<h3>⚡ 30-Second Brief</h3>\n... (1500-2500 words) ...",
+  "narrative_html_ko": "<h3>⚡ 30초 요약</h3>\n<ul>...</ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (1200-1800 words, sections 1-9) ...",
+  "narrative_html_en": "<h3>⚡ 30-Second Brief</h3>\n... (1200-1800 words) ...",
   "forward_calendar_html_ko": "<table>... 10 trading days, KR+US ...</table>",
   "forward_calendar_html_en": "<table>... 10 trading days ...</table>",
   "bottom_line_ko": "포지셔닝·전략 — 5-8 문장.",

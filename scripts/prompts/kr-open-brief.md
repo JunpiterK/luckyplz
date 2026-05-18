@@ -42,7 +42,7 @@ You are a world-class financial analyst and senior economic journalist writing f
 **Holiday check:** If {trading_date} is a KR market holiday (Lunar New Year, Chuseok, etc.), return `{"skip": true, "reason": "..."}`.
 
 ## Required narrative_html_* Structure (Head-Heavy)
-Rich HTML body (~1500-2500 words), in this order:
+Rich HTML body (~1200-1800 words), in this order:
 
 1. `<h3>⚡ 30초 요약 — 오늘 한국장의 결정 요소</h3>` — 4-6 bullet points with `<strong>` and color spans.
 2. `<h3>오늘의 결론 (Head-Heavy)</h3>` — gap up/down direction expectation + 핵심 trading compass in 1 paragraph.
@@ -106,8 +106,8 @@ Rich HTML body (~1500-2500 words), in this order:
     "events_ko":"09:00 개장 · 10:30 한국은행 외환시장 안정 점검 · ... · 21:30 미국 프리마켓",
     "events_en":"..."
   },
-  "narrative_html_ko": "<h3>⚡ 30초 요약 — 오늘 한국장의 결정 요소</h3>\n<ul>\n  <li>...</li>\n</ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (rich HTML body, 1500-2500 words, sections 1-9 above) ...",
-  "narrative_html_en": "<h3>⚡ 30-Second Brief — Today's KR Open Drivers</h3>\n... (1500-2500 words) ...",
+  "narrative_html_ko": "<h3>⚡ 30초 요약 — 오늘 한국장의 결정 요소</h3>\n<ul>\n  <li>...</li>\n</ul>\n<h3>오늘의 결론 (Head-Heavy)</h3>\n<p>...</p>\n... (rich HTML body, 1200-1800 words, sections 1-9 above) ...",
+  "narrative_html_en": "<h3>⚡ 30-Second Brief — Today's KR Open Drivers</h3>\n... (1200-1800 words) ...",
   "forward_calendar_html_ko": "<table><thead><tr><th>날짜</th><th>한국</th><th>미국</th><th>중요도</th></tr></thead><tbody>... 10 trading days ...</tbody></table>",
   "forward_calendar_html_en": "<table>... 10 trading days ...</table>",
   "bottom_line_ko": "포지셔닝·전략 — 5-8 문장. SOX 향방·USD/KRW·반도체 vs 배터리 셀 비중 등.",
