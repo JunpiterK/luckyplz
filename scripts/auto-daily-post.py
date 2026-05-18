@@ -111,14 +111,21 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
         }
     ]
 
-    print(f"[claude] calling {model} with {max_tokens=}, web_search enabled (max_uses=12)")
+    print(f"[claude] calling {model} with {max_tokens=}, web_search enabled (max_uses=12) [streaming]")
     t0 = time.time()
-    resp = client.messages.create(
+    # Use streaming because SDK requires it for any call where max_tokens
+    # could plausibly take >10 min (which our 32K limit can hit when Claude
+    # generates KO+EN narratives + web_search 12 uses).
+    with client.messages.stream(
         model=model,
         max_tokens=max_tokens,
         tools=tools,
         messages=messages,
-    )
+    ) as stream:
+        # Drain the stream — we don't need per-token progress, just the final assembled message.
+        for _event in stream:
+            pass
+        resp = stream.get_final_message()
     dt = time.time() - t0
     print(f"[claude] response in {dt:.1f}s — stop_reason={resp.stop_reason}")
 
