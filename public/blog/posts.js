@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "美 증시 혼조 출발 예고 — 엔비디아 실적 호재 vs 중동 긴장 완화로 유가 급락",
+    excerpt: "미국 선물은 혼조세. <span style=\"color:#dc2626\">S&P 선물 +0.12%</span>, <span style=\"color:#dc2626\">나스닥 선물 +0.28%</span> 반면 <span style=\"color:#2563eb\">다우 -0.15%</span>. 엔비디아가 어닝 비트 후 프리마켓 <",
+    alt: 'us-premarket-2026-05-18-en',
+},
+{
+    slug: 'us-premarket-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "US equities set for mixed open — NVDA earnings strength offset by oil plunge on Mideast détente",
+    excerpt: "US equity futures mixed ahead of cash open. <span style=\"color:#dc2626\">S&P +0.12%</span>, <span style=\"color:#dc2626\">Nasdaq +0.28%</span>, but <span style=\"color:#2563eb\">Dow -0.",
+    alt: 'us-premarket-2026-05-18',
+},
+    {
     slug: 'kr-open-brief-2026-05-18',
     lang: 'ko',
     category: 'industry',
