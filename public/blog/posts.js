@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KR 5/18 개장 — 美 혼조 속 반도체 약세, 원화 강세로 수출주 부담 가중",
+    excerpt: "미국 증시는 금요일 혼조 마감했으나 <strong>필라델피아 반도체 지수(SOX)가 -0.8% 하락</strong>하며 삼성전자·SK하이닉스에 부담 요인으로 작용. <strong>USD/KRW는 1,365원으로 -0.18% 하락</strong>하며 원화 강세가 수출주 밸류에이션을 압박. NVDA는 -1.2% 하락했으나 A",
+    alt: 'kr-open-brief-2026-05-18-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KR 5/18 Open — US Mixed, Semis Weak, KRW Strength Pressures Exporters",
+    excerpt: "US equities closed mixed Friday, but the <strong>Philadelphia Semiconductor Index (SOX) fell -0.8%</strong>, weighing on Samsung Electronics and SK Hynix. <strong>USD/KRW dropped -",
+    alt: 'kr-open-brief-2026-05-18',
+},
+    {
     slug: 'kr-tech-recap-2026-05-18',
     lang: 'ko',
     category: 'industry',
