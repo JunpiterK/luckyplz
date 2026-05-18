@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSPI -1.82% 마감, 외인 8천억 순매도에 2,815선 후퇴 — 반도체·2차전지 동반 약세",
+    excerpt: "한국 증시는 5월 18일 외국인 대규모 순매도에 KOSPI -1.82%, KOSDAQ -2.41% 급락 마감했다. <strong>외국인은 KOSPI에서 8,124억원 순매도</strong>하며 삼성전자(-3.2%)와 SK하이닉스(-4.1%)를 집중 매도했고, 기관도 3,540억원 순매도로 동참했다. <strong>개인만 ",
+    alt: 'kr-tech-recap-2026-05-18-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSPI closes -1.82% at 2,815 as foreigners dump ₩800bn — semiconductors and battery stocks lead decline",
+    excerpt: "Korean equities plunged May 18 on heavy foreign selling: KOSPI -1.82%, KOSDAQ -2.41%. <strong>Foreigners net sold ₩812.4bn on KOSPI</strong>, dumping Samsung Electronics (-3.2%) an",
+    alt: 'kr-tech-recap-2026-05-18',
+},
+    {
     slug: 'us-premarket-2026-05-18',
     lang: 'ko',
     category: 'industry',
