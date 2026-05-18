@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KR 5/19 개장 — 美 증시 소폭 상승·SOX 혼조 속 반도체 갭 관찰, 원화 강세에 수출주 주목",
+    excerpt: "5월 19일 한국장은 미 증시의 소폭 상승(<span style=\"color:#dc2626\">S&P +0.3%</span>, <span style=\"color:#dc2626\">나스닥 +0.4%</span>)과 반도체 지수의 혼조 흐름 속에 열립니다. NVDA는 <span style=\"color:#dc2626\">+1.2%<",
+    alt: 'kr-open-brief-2026-05-19-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KR 5/19 Open — US markets edge up, SOX mixed; watch semi gap amid KRW strength, focus on exporters",
+    excerpt: "Korean markets open May 19 following modest US gains (<span style=\"color:#dc2626\">S&P +0.3%</span>, <span style=\"color:#dc2626\">Nasdaq +0.4%</span>) amid mixed semiconductor signal",
+    alt: 'kr-open-brief-2026-05-19',
+},
+    {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
     category: 'industry',
