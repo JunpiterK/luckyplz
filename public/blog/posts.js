@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSPI, 7,516 마감 반등 — 삼성전자 3.9%↑ 외인 9일 연속 3.6조 순매도",
+    excerpt: "KOSPI가 장중 7,140까지 급락하며 사이드카가 발동됐지만, 삼성전자(+3.88%)와 SK하이닉스(+1.15%)가 오후 반등하며 0.31% 상승 마감했다. 외국인은 9거래일 연속 3.65조원 순매도로 5월 누적 29.67조원을 팔았으며, 개인과 기관은 각각 2.21조원, 1.39조원 순매수했다. 원·달러 환율은 1,5",
+    alt: 'kr-tech-recap-2026-05-18-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSPI rebounds to 7,516 — Samsung +3.9% as foreigners dump ₩3.6T on 9th straight day",
+    excerpt: "KOSPI plunged to 7,140 intraday, triggering a sidecar, before Samsung Electronics (+3.88%) and SK hynix (+1.15%) led an afternoon recovery to close up 0.31% at 7,516.04. Foreigners",
+    alt: 'kr-tech-recap-2026-05-18',
+},
+    {
         slug: 'us-open-brief-2026-05-18',
         lang: 'ko',
         category: 'industry',
