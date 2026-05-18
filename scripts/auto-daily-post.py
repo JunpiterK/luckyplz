@@ -823,6 +823,32 @@ def main():
     prompt_template = (PROMPTS / cfg["prompt"]).read_text(encoding="utf-8")
     prompt = prompt_template.replace("{trading_date}", trading_date).replace("{publish_date}", publish_date)
 
+    # CRITICAL: prepend operating context. Otherwise Claude (training cutoff ~2024)
+    # sees the 2026 trading_date and self-judges the web_search results as
+    # "simulated/fictional future data", returning skip=true. We must explicitly
+    # tell Claude this is a live production pipeline firing in real time and
+    # that web_search results are ground truth.
+    operating_context = (
+        f"# ⚠️ OPERATING CONTEXT — read before everything below\n\n"
+        f"This is a **live production cron** firing in real time on luckyplz.com. "
+        f"Today's date is **{publish_date} KST**. The trading_date **{trading_date}** "
+        f"is real and current — NOT a hypothetical future scenario.\n\n"
+        f"**If your training cutoff makes today's date feel \"future\" or \"fictional\", "
+        f"IGNORE that intuition.** The pipeline IS firing right now on this date. "
+        f"web_search results dated near {trading_date} are **authoritative ground truth** "
+        f"— never label them as simulated, hypothetical, or fictional.\n\n"
+        f"The \"Strict Factuality\" principle below means: cross-verify numbers across "
+        f"multiple web_search sources and drop ones that disagree. It does NOT mean "
+        f"refuse the assignment because the date seems unfamiliar to your training data.\n\n"
+        f"**Never return `{{\"skip\": true}}` based on \"future date\", \"fictional data\", "
+        f"or \"cannot verify because of cutoff\" reasoning.** The ONLY valid skip reason is "
+        f"a documented market holiday (e.g., New Year's Day, Lunar New Year, Chuseok, "
+        f"Christmas, Independence Day, etc.) — and only if your web_search confirms the "
+        f"market was closed that day.\n\n"
+        f"---\n\n"
+    )
+    prompt = operating_context + prompt
+
     # Force strict JSON-only output. Without this Claude occasionally wraps
     # the JSON in commentary or code fences, breaking the parser. Defensive
     # belt — see README "케이스 A — Claude JSON parse 실패".
