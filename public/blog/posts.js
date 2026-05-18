@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 선물 7,418, VIX 하락 — 오늘 밤 주택 지표와 소매 실적 주목",
+    excerpt: "S&P 선물은 7,418로 0.08% 소폭 상승, 나스닥 선물도 0.14% 오르며 안정적 출발 예고. VIX는 17.9로 1.2% 하락하며 변동성 우려 완화. 오늘 밤 22:30(KST) 주택착공 및 건축허가 지표 발표 예정이며, 장 마감 후 Target 등 주요 소매 실적 집중. 기술적으로 S&P 7,450 저항선 돌파",
+    alt: 'us-premarket-2026-05-18-en',
+},
+{
+    slug: 'us-premarket-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P futures 7,418, VIX falling — housing data and retail earnings in focus tonight",
+    excerpt: "S&P futures at 7,418 up 0.08%, Nasdaq futures +0.14% signal steady open. VIX drops 1.2% to 17.9, easing volatility concerns. Tonight at 22:30 KST (09:30 ET) housing starts and buil",
+    alt: 'us-premarket-2026-05-18',
+},
+    {
     slug: 'kr-open-brief-2026-05-18',
     lang: 'ko',
     category: 'industry',
