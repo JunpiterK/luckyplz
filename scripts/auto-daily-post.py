@@ -359,6 +359,76 @@ def render_watch(watch: dict, lang: str) -> str:
 """
 
 
+def render_key_metrics_strip(km: dict, lang: str) -> str:
+    """Render the 7-asset fixed top component (USD/KRW, Gold, Silver, WTI, BTC, ETH, XRP).
+    This is required on EVERY post per the system prompt master spec."""
+    if not km or not isinstance(km, dict):
+        return ""
+    meta_ko = [("usdkrw","USD/KRW"),("gold","금"),("silver","은"),("wti","WTI"),
+               ("btc","BTC"),("eth","ETH"),("xrp","XRP")]
+    meta_en = [("usdkrw","USD/KRW"),("gold","Gold"),("silver","Silver"),("wti","WTI"),
+               ("btc","BTC"),("eth","ETH"),("xrp","XRP")]
+    meta = meta_ko if lang == "ko" else meta_en
+    cells = []
+    for key, label in meta:
+        entry = km.get(key)
+        if not isinstance(entry, dict):
+            continue
+        value = entry.get("value", "—")
+        chg = entry.get("change_pct", 0)
+        try:
+            chg_f = float(chg)
+        except Exception:
+            chg_f = 0.0
+        color = "#dc2626" if chg_f > 0 else ("#2563eb" if chg_f < 0 else "#6b7280")
+        arrow = "🔺" if chg_f > 0 else ("🔻" if chg_f < 0 else "·")
+        cells.append(f"""
+    <div style="flex:1 1 90px;min-width:90px;padding:10px 8px;background:#0f1419;border-radius:6px;text-align:center;">
+      <div style="font-size:10px;color:#8b9098;letter-spacing:0.5px;font-weight:600;">{html_escape(label)}</div>
+      <div style="font-size:14px;color:#e6e7e9;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;">{html_escape(str(value))}</div>
+      <div style="font-size:11px;color:{color};font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;">{arrow} {chg_f:+.2f}%</div>
+    </div>""")
+    if not cells:
+        return ""
+    title = "▸ 핵심 시장 지표 · 24h" if lang == "ko" else "▸ Key Market Indicators · 24h"
+    return f"""<div class="section-title">{title}</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 14px;">{''.join(cells)}</div>
+"""
+
+
+def render_narrative(html: str, lang: str) -> str:
+    """Wrap the deep narrative HTML body. Claude returns rich HTML inside this
+    field — h3/h4/p/table/strong/inline color spans — and we pass it through."""
+    if not html or not isinstance(html, str) or len(html.strip()) < 50:
+        return ""
+    title = "▸ 심층 분석" if lang == "ko" else "▸ Deep Analysis"
+    # The narrative body has its own h3 sections, so we just need a container
+    # with line-height & padding inherited from the daily-base.html article style.
+    return f"""<div class="section-title">{title}</div>
+<div style="padding:0 16px 18px;line-height:1.65;font-size:14px;">{html}</div>
+"""
+
+
+def render_forward_calendar(html: str, lang: str) -> str:
+    """Wrap the forward 10-trading-day calendar HTML table."""
+    if not html or not isinstance(html, str) or len(html.strip()) < 20:
+        return ""
+    title = "▸ 향후 10거래일 캘린더" if lang == "ko" else "▸ Next 10 Trading Days"
+    return f"""<div class="section-title">{title}</div>
+<div style="padding:0 16px 18px;overflow-x:auto;font-size:13px;">{html}</div>
+"""
+
+
+def render_fact_check(text: str, lang: str) -> str:
+    """Closing fact-check declaration."""
+    if not text or not isinstance(text, str) or len(text.strip()) < 10:
+        return ""
+    return f"""<div style="margin:18px 16px 8px;padding:12px 14px;background:#0a1a14;border-left:3px solid #14b87a;border-radius:4px;font-size:12px;color:#a8d8c0;line-height:1.5;">
+  <strong style="color:#14b87a;">✓ </strong>{html_escape(text)}
+</div>
+"""
+
+
 def render_sections(slot: str, data: dict, lang: str) -> str:
     """Stitch the body sections based on slot type."""
     parts = []
@@ -517,8 +587,16 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
             f'<a href="/blog/semiconductor-rally-2026-en/">Semiconductor Super-Rally 2026 — How High Can KR & US Chip Stocks Go?</a>'
         )
 
-    # Body sections
-    sections_html = render_sections(slot, data, lang)
+    # Body sections — combine v2 fields (key_metrics strip, deep narrative,
+    # forward calendar, fact-check) with legacy card sections for backwards compat.
+    key_strip = render_key_metrics_strip(data.get("key_metrics", {}), lang)
+    narrative = render_narrative(data.get(f"narrative_html_{lang}", ""), lang)
+    cards = render_sections(slot, data, lang)
+    forward_cal = render_forward_calendar(data.get(f"forward_calendar_html_{lang}", ""), lang)
+    fact_check_box = render_fact_check(data.get(f"fact_check_{lang}", ""), lang)
+    # Order: 7-asset strip (fixed top) → deep narrative (main) → visual cards
+    # (supplementary) → forward calendar → fact-check (closing).
+    sections_html = "\n".join(p for p in [key_strip, narrative, cards, forward_cal, fact_check_box] if p)
 
     # Substitutions
     if lang == "ko":
