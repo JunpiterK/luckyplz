@@ -95,7 +95,7 @@ SLOTS = {
 # ---------------------------------------------------------------------------
 # Anthropic call
 # ---------------------------------------------------------------------------
-def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 12000) -> dict:
+def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 20000) -> dict:
     """Call Claude API with web_search tool. Returns parsed JSON dict."""
     import anthropic
 
