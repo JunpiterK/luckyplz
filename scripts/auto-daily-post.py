@@ -141,7 +141,26 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
         m = re.search(r"\{.*\}", full, re.DOTALL)
         if not m:
             raise SystemExit(f"Could not parse Claude output as JSON.\n---\n{full[:2000]}")
-        return json.loads(m.group(0))
+        candidate = m.group(0)
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            # Defensive cleanup #1: drop trailing commas before } or ]
+            cleaned = re.sub(r",(\s*[}\]])", r"\1", candidate)
+            try:
+                return json.loads(cleaned)
+            except json.JSONDecodeError:
+                # Defensive cleanup #2: try json-repair-style fallback
+                # (collapse unescaped newlines inside strings, lenient parse)
+                try:
+                    import ast
+                    return ast.literal_eval(cleaned)
+                except Exception as e:
+                    raise SystemExit(
+                        f"Could not parse Claude output as JSON even after cleanup: {e}\n"
+                        f"--- first 2000 chars of candidate ---\n{candidate[:2000]}\n"
+                        f"--- last 500 chars of candidate ---\n{candidate[-500:]}"
+                    )
 
 
 # ---------------------------------------------------------------------------
@@ -714,6 +733,19 @@ def main():
     # Load + fill prompt
     prompt_template = (PROMPTS / cfg["prompt"]).read_text(encoding="utf-8")
     prompt = prompt_template.replace("{trading_date}", trading_date).replace("{publish_date}", publish_date)
+
+    # Force strict JSON-only output. Without this Claude occasionally wraps
+    # the JSON in commentary or code fences, breaking the parser. Defensive
+    # belt — see README "케이스 A — Claude JSON parse 실패".
+    prompt += (
+        "\n\n---\n"
+        "CRITICAL OUTPUT FORMAT: Reply with ONLY the JSON object specified above. "
+        "Start your response with `{` and end with `}`. "
+        "No prose before. No prose after. No markdown code fences (no ```json). "
+        "No commentary on what you did. No 'Here is the JSON:' preamble. "
+        "Make sure all strings are properly escaped and there are no trailing commas. "
+        "The entire response must be a single valid JSON object that can be parsed by Python's json.loads()."
+    )
 
     # Call Claude
     data = call_claude(prompt, model=args.model)
