@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "반도체 랠리 이어질까 — NVDA/MU 강세 속 SK하이닉스·삼성 갭상승 예상",
+    excerpt: "미국 시장 반도체주 강세 지속. NVDA는 0.5% 상승하며 AI 수요 모멘텀 유지했고, MU는 HBM 기대감에 14% 급등. SK하이닉스와 삼성전자는 오버나이트 모멘텀 타고 갭상승 개장 예상. KOSPI200 선물은 +0.32% 마감, 원/달러 1,338원대로 소폭 강세.",
+    alt: 'kr-open-brief-2026-05-18-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-18',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "Semiconductor rally continues — SKH, Samsung gap-up expected on NVDA/MU strength",
+    excerpt: "US semiconductor stocks extended gains overnight. NVDA rose 0.5% maintaining AI demand momentum, while MU surged 14% on HBM expectations. SK hynix and Samsung Electronics expected ",
+    alt: 'kr-open-brief-2026-05-18',
+},
+    {
     slug: 'kr-tech-recap-2026-05-18',
     lang: 'ko',
     category: 'industry',
