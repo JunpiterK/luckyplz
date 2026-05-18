@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 사상 최고가 경신 후 차익 실현 — 빅테크 동반 하락, 반도체 약세 주도",
+    excerpt: "미국 증시는 <span style=\"color:#2563eb\">전반적 약세</span>로 마감했다. S&P 500은 사상 최고가 경신 후 차익 실현에 <span style=\"color:#2563eb\">-1.24%</span> 하락했고, 나스닥 종합지수는 <span style=\"color:#2563eb\">-1.54%</sp",
+    alt: 'us-tech-recap-2026-05-18-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 Pulls Back from Record High on Tech Profit-Taking, Semiconductor Weakness Leads Decline",
+    excerpt: "US equities closed <span style=\"color:#2563eb\">broadly lower</span> on Monday, May 18, 2026. The S&P 500 pulled back <span style=\"color:#2563eb\">-1.24%</span> after hitting a fresh",
+    alt: 'us-tech-recap-2026-05-18',
+},
+    {
     slug: 'us-premarket-2026-05-18',
     lang: 'ko',
     category: 'industry',
