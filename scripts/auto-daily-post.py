@@ -213,10 +213,12 @@ def render_indices_block(indices: list[dict], lang: str) -> str:
         else:
             sp = "0,12 14,12 28,11 42,12 56,12 70,11 84,12 100,12"
             color = "#5a6a85"
+        idx_name = idx.get('name') or idx.get('ticker') or ''
+        idx_value = idx.get('value') or idx.get('price') or '—'
         cards.append(f"""
   <div class="idx-card">
-    <div class="idx-name">{html_escape(idx['name'])}</div>
-    <div class="idx-val">{html_escape(str(idx['value']))}</div>
+    <div class="idx-name">{html_escape(idx_name)}</div>
+    <div class="idx-val">{html_escape(str(idx_value))}</div>
     <div class="idx-chg {chg_cls}">{html_escape(chg_str)}</div>
     <svg viewBox="0 0 100 24" preserveAspectRatio="none"><polyline points="{sp}" fill="none" stroke="{color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/></svg>
     <div class="idx-tag">{html_escape(tag)}</div>
@@ -232,11 +234,14 @@ def render_mag7(mag7: list[dict], lang: str) -> str:
         return ""
     tiles = []
     for m in mag7[:8]:
+        if not isinstance(m, dict):
+            continue
         cls = pct_class(m.get("change_pct", 0))
-        chg = fmt_pct(m.get("change_pct", 0)) if isinstance(m.get("change_pct"), (int, float)) else str(m.get("change_pct"))
+        chg = fmt_pct(m.get("change_pct", 0)) if isinstance(m.get("change_pct"), (int, float)) else str(m.get("change_pct", ""))
+        ticker = m.get('ticker') or m.get('name') or ''
         tiles.append(f"""
   <div class="mag-tile {cls}">
-    <div class="mag-tick">{html_escape(m['ticker'])}</div>
+    <div class="mag-tick">{html_escape(ticker)}</div>
     <div class="mag-px">{html_escape(str(m.get('price','—')))}</div>
     <div class="mag-pct {cls}">{html_escape(chg)}</div>
   </div>""")
@@ -271,15 +276,18 @@ def render_movers(items: list[dict], lang: str, kind: str) -> str:
         return ""
     rows = []
     for it in items[:10]:
+        if not isinstance(it, dict):
+            continue
         cls = "up" if kind == "winners" else "down"
         arrow = "⬆" if kind == "winners" else "⬇"
         head_cls = "w" if kind == "winners" else "l"
         name = it.get(f"name_{lang}") or it.get("name_en") or it.get("name_ko") or ""
         trig = it.get(f"trigger_{lang}") or it.get("trigger_en") or it.get("trigger_ko") or ""
         chg = it.get("change_pct", 0)
+        ticker = it.get('ticker') or it.get('name') or ''
         rows.append(f"""
   <div class="mov-row">
-    <div class="mov-tick">{html_escape(it['ticker'])}<span class="nm">{html_escape(name)}</span></div>
+    <div class="mov-tick">{html_escape(ticker)}<span class="nm">{html_escape(name)}</span></div>
     <div class="mov-px">{html_escape(str(it.get('price','—')))}</div>
     <div class="mov-pct {cls}">{html_escape(fmt_pct(chg))}</div>
     <div class="mov-trig">{html_escape(trig)}</div>
@@ -454,8 +462,11 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     indices = (data.get("indices") or data.get("kr_indices") or data.get("futures") or data.get("overnight_us") or [])
     badges = []
     for idx in indices[:5]:
+        if not isinstance(idx, dict):
+            continue
         cls = "badge-green" if (idx.get("change_pct", 0) > 0) else ("badge-orange" if idx.get("change_pct", 0) < 0 else "badge-blue")
-        badges.append(f'<span class="badge {cls}">{html_escape(idx["name"])} {fmt_pct(idx.get("change_pct", 0))}</span>')
+        label = idx.get("name") or idx.get("ticker") or ""
+        badges.append(f'<span class="badge {cls}">{html_escape(label)} {fmt_pct(idx.get("change_pct", 0))}</span>')
     header_badges = "\n    ".join(badges)
 
     disclaimer_ko = ("<strong>📌 데일리 리캡 · {ts}</strong><br>"
