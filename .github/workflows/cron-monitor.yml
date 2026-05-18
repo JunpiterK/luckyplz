@@ -1,0 +1,93 @@
+name: Daily Cron Monitor (auto-rescue missing slots)
+
+# 각 슬롯 cron 시점 + 30분에 발화 → 그 슬롯의 오늘 글이 main에 있는지 확인.
+# 누락이면 daily-cron 워크플로 강제 발화. GitHub Actions schedule cron이
+# 트래픽으로 지연되거나 누락되는 케이스 (실제로 5/18 12:30 us-premarket이
+# 3.5시간 지연됐고, 5/18 21:00 us-close도 18분+ 지연) 자동 복구.
+#
+# Cron는 UTC 기준.
+#   KST 06:30 = UTC 21:30  ← check us-close (cron이 KST 06:00 발화 예정)
+#   KST 08:00 = UTC 23:00  ← check kr-open    (cron이 KST 07:30 발화 예정)
+#   KST 16:15 = UTC 07:15  ← check kr-close   (cron이 KST 15:45 발화 예정)
+#   KST 22:00 = UTC 13:00  ← check us-premarket (cron이 KST 21:30 발화 예정)
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 21 * * *"   # check us-close
+    - cron: "0 23 * * *"    # check kr-open
+    - cron: "15 7 * * *"    # check kr-close
+    - cron: "0 13 * * *"    # check us-premarket
+
+permissions:
+  contents: read
+  actions: write   # to trigger daily-cron.yml via gh
+
+jobs:
+  monitor:
+    name: Check & rescue missing slot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: resolve
+        name: Resolve which slot to check
+        run: |
+          # Manual dispatch uses default = us-close. Cron dispatch maps by schedule.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            slot="us-close"
+          else
+            case "${{ github.event.schedule }}" in
+              "30 21 * * *") slot=us-close ;;
+              "0 23 * * *")  slot=kr-open ;;
+              "15 7 * * *")  slot=kr-close ;;
+              "0 13 * * *")  slot=us-premarket ;;
+              *)             slot=us-close ;;
+            esac
+          fi
+
+          # Compute the slug we expect for today's run.
+          # All slots use publish_date = today KST except us-close which uses
+          # trading_date = yesterday KST.
+          publish_date=$(TZ=Asia/Seoul date +%Y-%m-%d)
+          case "$slot" in
+            us-close)
+              trading_date=$(TZ=Asia/Seoul date -d "yesterday" +%Y-%m-%d)
+              prefix=us-tech-recap
+              ;;
+            kr-open)
+              trading_date=$publish_date
+              prefix=kr-open-brief
+              ;;
+            kr-close)
+              trading_date=$publish_date
+              prefix=kr-tech-recap
+              ;;
+            us-premarket)
+              trading_date=$publish_date
+              prefix=us-premarket
+              ;;
+          esac
+          slug="${prefix}-${trading_date}"
+          echo "slot=$slot" >> "$GITHUB_OUTPUT"
+          echo "slug=$slug" >> "$GITHUB_OUTPUT"
+          echo "Checking slot=$slot, expected slug=$slug"
+
+      - id: check
+        name: Check if slug exists on main
+        run: |
+          if [ -d "public/blog/${{ steps.resolve.outputs.slug }}" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::✅ ${{ steps.resolve.outputs.slug }} already published — no rescue needed"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::⚠️ ${{ steps.resolve.outputs.slug }} missing — triggering rescue"
+          fi
+
+      - name: Trigger missing slot (rescue)
+        if: steps.check.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run daily-cron.yml -f slot="${{ steps.resolve.outputs.slot }}"
+          echo "::notice::🔁 Triggered daily-cron.yml for slot=${{ steps.resolve.outputs.slot }}"

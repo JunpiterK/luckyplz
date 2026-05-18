@@ -812,6 +812,11 @@ def main():
     p.add_argument("--slot", required=True, choices=list(SLOTS.keys()))
     p.add_argument("--date", help="YYYY-MM-DD (KST publish date). Default: today KST.")
     p.add_argument("--dry-run", action="store_true", help="Skip git push and bump-cache.")
+    p.add_argument("--force", action="store_true",
+                   help="Re-publish even if the slug directory already exists. "
+                        "Without this flag, an existing slug is treated as already-published "
+                        "and the run exits cleanly (prevents duplicate posts when both the "
+                        "main cron and the monitor cron fire on the same day).")
     p.add_argument("--model", default="claude-sonnet-4-5")
     args = p.parse_args()
 
@@ -833,6 +838,18 @@ def main():
 
     slug = f"{cfg['slug_prefix']}-{trading_date}"
     print(f"[run] slot={args.slot} trading={trading_date} publish={publish_date} slug={slug}")
+
+    # Duplicate-publish guard: if a directory for this slug already exists with
+    # an index.html, treat as already-published and skip cleanly. Use --force
+    # to override (e.g., manual re-run to fix a broken post). Prevents the
+    # exact scenario seen on 2026-05-19: monitor cron rescues a missing slot,
+    # the original schedule cron fires late, both push to the same slug, the
+    # second push wins and may contain a worse Claude response.
+    if not args.force:
+        existing = BLOG_DIR / slug / "index.html"
+        if existing.exists() and existing.stat().st_size > 1000:
+            print(f"[skip] {slug} already published (use --force to overwrite). Exiting.")
+            return
 
     # Load + fill prompt
     prompt_template = (PROMPTS / cfg["prompt"]).read_text(encoding="utf-8")
