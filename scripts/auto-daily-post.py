@@ -448,10 +448,21 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     disclaimer = disclaimer_ko if lang == "ko" else disclaimer_en
 
     # Sources block (appended to footer)
+    # Claude may return sources as either [{"url": "...", "title": "..."}]
+    # or [url_string, ...]. Defensive: handle both shapes + skip empties.
     sources = data.get("sources", []) or []
     src_lines = []
     for s in sources[:8]:
-        src_lines.append(f'<a href="{html_escape(s.get("url",""))}" target="_blank" rel="noopener">{html_escape(s.get("title",""))}</a>')
+        if isinstance(s, str):
+            url, title = s, s
+        elif isinstance(s, dict):
+            url = s.get("url", "") or ""
+            title = s.get("title", "") or url
+        else:
+            continue
+        if not url:
+            continue
+        src_lines.append(f'<a href="{html_escape(url)}" target="_blank" rel="noopener">{html_escape(title)}</a>')
     src_html = " · ".join(src_lines)
 
     footer_ko = ("<strong>📢 출처 & 면책 조항</strong><br>"
