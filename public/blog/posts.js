@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSPI 2,635.77 -0.79% 마감, 외국인 6거래일 연속 순매도",
+    excerpt: "KOSPI는 전 거래일 대비 0.79% 하락한 2,635.77로 마감했습니다. KOSDAQ은 0.52% 내린 752.89를 기록했습니다. 외국인은 KOSPI에서 6거래일 연속 순매도를 이어가며 2,847억원을 순매도했고, 기관은 1,523억원을 순매수했습니다. 반도체와 2차전지 업종이 약세를 주도했으며, 방산과 조선 테마",
+    alt: 'kr-tech-recap-2026-05-19-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSPI closes -0.79% at 2,635.77, foreigners sell for 6th straight session",
+    excerpt: "KOSPI closed down 0.79% at 2,635.77, while KOSDAQ fell 0.52% to 752.89. Foreign investors net sold 284.7 billion won in KOSPI for the sixth consecutive session, while institutions ",
+    alt: 'kr-tech-recap-2026-05-19',
+},
+    {
     slug: 'us-premarket-2026-05-20',
     lang: 'ko',
     category: 'industry',
