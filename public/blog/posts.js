@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 -1.24% 급락 — 매파 Fed 전망과 중동 긴장에 Mag 7 동반 하락",
+    excerpt: "미국 증시는 5월 18일 전 지수 급락으로 마감했다. <strong>S&P 500</strong>은 <span style=\"color:#2563eb\">-1.24%</span>, <strong>Nasdaq</strong>은 <span style=\"color:#2563eb\">-1.54%</span>, <strong>Dow</",
+    alt: 'us-tech-recap-2026-05-18-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 Tumbles -1.24% — Hawkish Fed Outlook and Mideast Tensions Sink Mag 7",
+    excerpt: "US equities plunged across the board on May 18, erasing the prior session's record highs. The <strong>S&P 500</strong> dropped <span style=\"color:#2563eb\">-1.24%</span>, the <stron",
+    alt: 'us-tech-recap-2026-05-18',
+},
+    {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
     category: 'industry',
