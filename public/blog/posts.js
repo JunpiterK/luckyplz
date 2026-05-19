@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KR 5/19 개장 — 美 반도체株 急落에 삼성전자·SK하이닉스 갭다운 불가피, 배터리 셀은 테슬라 반등에 방어",
+    excerpt: "미국 필라델피아 반도체지수(SOX)가 전일 1.42% 급락하며 엔비디아(-2.84%), 브로드컴(-3.12%) 등 주요 칩 종목이 동반 하락했다. 이에 따라 삼성전자(005930)와 SK하이닉스(000660)는 오늘 아침 갭다운 개장이 예상되며, HBM 모멘텀 둔화 우려가 단기 변동성을 키울 전망이다. 반면 테슬라가 +1",
+    alt: 'kr-open-brief-2026-05-19-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KR 5/19 Open — US Semi Selloff Forces Samsung/SKH Gap-Down; Battery Names Shielded by TSLA Rebound",
+    excerpt: "The Philadelphia Semiconductor Index (SOX) plunged 1.42% overnight, dragging NVIDIA (-2.84%) and Broadcom (-3.12%) sharply lower. Samsung Electronics (005930) and SK Hynix (000660)",
+    alt: 'kr-open-brief-2026-05-19',
+},
+    {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
     category: 'industry',
