@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-20',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "美 선물 혼조 — 주택·실업 양호 속 인플레 우려 재부상, 엔비디아 실적 대기",
+    excerpt: "5월 20일 화요일 미국 프리마켓은 혼조세. S&P 500 선물 -0.2%, 나스닥 선물 -0.3%, 다우 선물 +0.1%로 반도체와 테크 약세 지속. 10년물 4.58% 유지, DXY 103.8로 안정. 08:30 ET 발표된 4월 주택착공 154만 건(예상 145만), 신규실업수당 22.2만 건(예상 23만)으로 경기",
+    alt: 'us-premarket-2026-05-20-en',
+},
+{
+    slug: 'us-premarket-2026-05-20-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "US Futures Mixed — Housing & Jobless Strong, Inflation Concerns Linger, NVDA Earnings Await",
+    excerpt: "US pre-market Tuesday May 20 shows mixed sentiment. S&P 500 futures -0.2%, Nasdaq futures -0.3%, Dow futures +0.1% as semis and tech lag. 10-year yield steady at 4.58%, DXY 103.8. ",
+    alt: 'us-premarket-2026-05-20',
+},
+    {
     slug: 'kr-tech-recap-2026-05-19',
     lang: 'ko',
     category: 'industry',
