@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KR 5/19 개장 — 美 S&P +0.8% 반등 속 반도체 혼조, 갭 소폭 상승 예상",
+    excerpt: "미국 증시가 월요일 낙폭 과대론에 힘입어 <strong>S&P 500 <span class=\"upx\">+0.84%</span></strong>, <strong>나스닥 <span class=\"upx\">+1.12%</span></strong> 반등 마감했으나 <strong>SOX <span class=\"dn\">-0.38%</",
+    alt: 'kr-open-brief-2026-05-19-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KR 5/19 Open — US S&P +0.8% Bounce, Semi Mixed, Modest Gap-Up Expected",
+    excerpt: "US equities rebounded on oversold sentiment with <strong>S&P 500 <span class=\"upx\">+0.84%</span></strong> and <strong>Nasdaq <span class=\"upx\">+1.12%</span></strong>, but <strong>S",
+    alt: 'kr-open-brief-2026-05-19',
+},
+    {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
     category: 'industry',
