@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-18',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P -1.2% 신고가 다음날 급락 — 매파 Warsh·이란 긴장·NVDA 매물 삼중타",
+    excerpt: "5월 18일 미국 증시는 신고가 다음날 전면 급락했다. S&P 500 -1.24%, Nasdaq -1.54%, Dow -1.07% 마감. Kevin Warsh의 매파적 Fed 의장 인준 청문회로 10년물 4.59%(+5bp) 1년 최고치 경신, 이란-이스라엘 긴장 재점화로 WTI $101.11(+2.1%) 급등, NVDA",
+    alt: 'us-tech-recap-2026-05-18-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-18-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P -1.2% Post-Record Selloff — Hawkish Warsh, Iran Tensions, NVDA Drag Triple Hit",
+    excerpt: "US equities suffered broad-based losses on May 18, the day after record highs. S&P 500 -1.24%, Nasdaq -1.54%, Dow -1.07%. Triple catalysts converged: hawkish Fed Chair nominee Kevi",
+    alt: 'us-tech-recap-2026-05-18',
+},
+    {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
     category: 'industry',
