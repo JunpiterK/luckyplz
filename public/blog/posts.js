@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-20',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 선물 보합 — 파월 매파 경계 속 소매 대기",
+    excerpt: "S&P 500 선물이 08:30 ET 현재 전일 종가 대비 보합권에서 등락하며 오전 주요 이벤트를 대기 중입니다. 파월 의장의 10:00 ET 연설과 4월 소매판매 지표가 오늘 방향을 결정할 전망입니다. 나스닥 선물은 반도체 약세 부담으로 소폭 하락, 다우 선물은 0.1% 상승했습니다. 아시아 증시는 혼조 마감 — 한국 ",
+    alt: 'us-premarket-2026-05-20-en',
+},
+{
+    slug: 'us-premarket-2026-05-20-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P futures flat as Powell speech, retail data loom",
+    excerpt: "S&P 500 futures hover near flat as of 08:30 ET, ahead of twin catalysts: Powell's 10:00 ET speech and April retail sales. Nasdaq futures dip 0.2% on semiconductor weakness; Dow fut",
+    alt: 'us-premarket-2026-05-20',
+},
+    {
     slug: 'kr-tech-recap-2026-05-19',
     lang: 'ko',
     category: 'industry',
