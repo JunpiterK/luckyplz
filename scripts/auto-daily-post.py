@@ -487,7 +487,15 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
 
     title = data.get(f"headline_{lang}", "")
     title_full = f"{title} | Lucky Please"
-    summary = data.get(f"summary_{lang}", "")
+    # Strip any inline HTML tags from summary — it's used in plain-text
+    # contexts (meta description, og:description, twitter:description,
+    # header sub-text) where html_escape() would render them as visible
+    # &lt;strong&gt; etc. Claude sometimes includes <strong>/<span> in
+    # summary despite the prompt rule; strip defensively.
+    raw_summary = data.get(f"summary_{lang}", "")
+    summary = re.sub(r"<[^>]+>", "", raw_summary).strip()
+    # Also collapse multiple spaces from tag removal
+    summary = re.sub(r"\s+", " ", summary)
     bottom_body = data.get(f"bottom_line_{lang}", "")
     bottom_title = "BOTTOM LINE" if lang == "en" else "BOTTOM LINE · 포지셔닝"
 
@@ -955,12 +963,19 @@ def main():
         "```html\n"
         "<div class=\"section-note\">아래는 5/15 마감 + 주말 매크로에 근거한 <strong>시나리오 추정</strong>이며 확정된 사실이 아닙니다.</div>\n"
         "```\n\n"
-        "## Structural rules\n"
+        "## Structural rules — RAW <table> IS FORBIDDEN\n"
+        "- **Do NOT emit `<table>` tags in narrative_html_ko/en under any circumstances.** Raw tables look unpolished and break the visual rhythm. Convert every tabular concept to one of the dedicated components.\n"
+        "- For ANY list of indices/sectors/movers/data points, use one of:\n"
+        "  - `.cal-card` + `.cal-row` (1-column label + value pairs)\n"
+        "  - `.km-grid` + `.km-cell` (numeric strip, see render_key_metrics_strip example)\n"
+        "  - Stacked `<div>` rows with inline grid styles\n"
         "- Section dividers: keep using `<h3>` for major sections (already styled by template).\n"
         "- Sub-headings within sections: `<h4>` (not h5/h6).\n"
-        "- For multi-column comparisons (e.g., 외인 vs 기관 수급), prefer 2 stacked `.cal-card`-like divs over `<table>`.\n"
-        "- For dense numeric tables (e.g., 11 GICS 섹터 일간 %), `<table>` is OK but wrap rows tightly.\n"
-        "- Never use `<table>` for the 30-second brief or forward calendar — use the dedicated components above.\n"
+        "- For multi-column comparisons (e.g., 외인 vs 기관 수급), use 2 stacked `.cal-card`s.\n"
+        "- For 11 GICS sectors heatmap: use the existing `themes` JSON field which already renders as a heatmap grid via render_themes(). Do NOT redo it inside narrative_html.\n"
+        "- For 30-second brief: use `.tldr-box`, never `<table>` or plain `<ul>`.\n"
+        "- For forward calendar: use `.cal-card`, never `<table>`.\n"
+        "- For scenario tree: use `.scen-grid` + `.scen-card`, never `<table>`.\n"
     )
     prompt = prompt + visual_guide
 

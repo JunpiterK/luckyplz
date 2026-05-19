@@ -71,7 +71,7 @@ Use `<strong>` for keywords, `<table>` for comparisons, `<ul><li>` for lists, `<
   "publish_date": "{publish_date}",
   "headline_ko": "한 줄 — 시장 결정적 테마를 압축",
   "headline_en": "Single decisive line",
-  "summary_ko": "6-8 문장 executive summary. 인라인 HTML markup 사용 가능.",
+  "summary_ko": "6-8 문장 executive summary. PLAIN TEXT ONLY — no HTML tags (used in meta description and page header sub-text where tags would render as visible text).",
   "summary_en": "6-8 sentences executive summary, inline HTML allowed.",
   "key_metrics": {
     "usdkrw": {"value": "1,365.20", "change_pct": -0.18},
@@ -100,7 +100,7 @@ Use `<strong>` for keywords, `<table>` for comparisons, `<ul><li>` for lists, `<
   "narrative_html_en": "<h3>⚡ 30-Second Brief — Just the Core</h3>\n... (rich HTML body, 1200-1800 words, sections 1-10) ...",
   "forward_calendar_html_ko": "<table><thead><tr><th>날짜</th><th>이벤트</th><th>중요도</th></tr></thead><tbody>...10 trading days for both US & KR...</tbody></table>",
   "forward_calendar_html_en": "<table>...10 trading days for both US & KR...</table>",
-  "bottom_line_ko": "포지셔닝·전략 — 5-8 문장. 인라인 HTML markup 사용 가능.",
+  "bottom_line_ko": "포지셔닝·전략 — 5-8 문장. PLAIN TEXT ONLY — no HTML tags (used in meta description and page header sub-text where tags would render as visible text).",
   "bottom_line_en": "Positioning & strategy in 5-8 sentences with inline HTML markup.",
   "fact_check_ko": "Fact-Check: 모든 수치는 WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com, SEC EDGAR 등 공개 데이터 출처와 교차 검증됨. 검증 불가 항목은 본문에서 삭제.",
   "fact_check_en": "Fact-Check: All numbers cross-verified against WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com, SEC EDGAR. Unverified items dropped.",

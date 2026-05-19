@@ -69,7 +69,7 @@ Rich HTML body (~1200-1800 words), in this order:
   "publish_date": "{publish_date}",
   "headline_ko": "한 줄 hook (예: 'KR 5/19 개장 — 美 -1.2% 폭락 후폭풍, 반도체 갭다운 예상')",
   "headline_en": "Single decisive line",
-  "summary_ko": "6-8 문장 executive summary. 인라인 HTML markup 사용 가능.",
+  "summary_ko": "6-8 문장 executive summary. PLAIN TEXT ONLY — no HTML tags (used in meta description and page header sub-text where tags would render as visible text).",
   "summary_en": "6-8 sentences executive summary with inline HTML.",
   "key_metrics": {
     "usdkrw": {"value":"1,365","change_pct":-0.18},

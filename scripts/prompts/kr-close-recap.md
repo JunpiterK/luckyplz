@@ -72,7 +72,7 @@ Rich HTML body (~1200-1800 words):
   "publish_date": "{publish_date}",
   "headline_ko": "한 줄",
   "headline_en": "Single decisive line",
-  "summary_ko": "6-8 문장 executive summary. 인라인 HTML markup 가능.",
+  "summary_ko": "6-8 문장 executive summary. PLAIN TEXT ONLY — no HTML tags (used in meta description and page header sub-text).",
   "summary_en": "6-8 sentences",
   "key_metrics": {
     "usdkrw": {"value":"1,365","change_pct":-0.18},
