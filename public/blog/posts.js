@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 -1.1% 급락, 국채 금리 급등에 기술주 매물",
+    excerpt: "미 증시는 5월 19일 급락 마감했다. S&P 500 -1.09%, 나스닥 -1.45%, 다우 -0.68%로 마감했으며 10년물 국채 금리가 4.58%로 급등하며 기술주와 성장주에 매물이 집중됐다. 반도체 ETF SMH -2.3%, 엔비디아 -2.8% 하락하며 AI 밸류에이션 우려가 재점화됐다. 유가는 WTI $79.12",
+    alt: 'us-tech-recap-2026-05-19-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-20',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 drops 1.1% as Treasury yields surge, tech sells off",
+    excerpt: "US equities tumbled on May 19 as Treasury yields surged and tech stocks faced heavy selling. The S&P 500 fell 1.09%, Nasdaq dropped 1.45%, and Dow declined 0.68%, with the 10-year ",
+    alt: 'us-tech-recap-2026-05-19',
+},
+    {
     slug: 'us-premarket-2026-05-20',
     lang: 'ko',
     category: 'industry',
