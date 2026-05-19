@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-19',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSPI 2,660선 붕괴 — 외인 1.2조 이탈에 반도체·배터리 동반 급락",
+    excerpt: "KOSPI는 오늘 2,659.42에 마감하며 -2.14% 급락, 2,660선을 하회했다. 외국인은 KOSPI에서 1조 2,380억원 순매도를 기록하며 6거래일 연속 이탈했고, 기관도 4,120억원 순매도로 동참했다. 개인은 1조 6,500억원 순매수로 매수세를 유지했으나 낙폭을 제어하지 못했다. 삼성전자는 -3.82%로 ",
+    alt: 'kr-tech-recap-2026-05-19-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-19-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-19',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSPI Breaks 2,660 — Foreigners Pull ₩1.2tn as Chips, Battery Stocks Collapse",
+    excerpt: "KOSPI closed at 2,659.42, down -2.14%, breaking below the 2,660 support level. Foreigners net sold ₩1.238tn on KOSPI, marking the sixth consecutive session of outflows, while insti",
+    alt: 'kr-tech-recap-2026-05-19',
+},
+    {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
     category: 'industry',
