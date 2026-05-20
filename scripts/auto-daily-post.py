@@ -102,16 +102,18 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
     client = anthropic.Anthropic()
 
     messages = [{"role": "user", "content": prompt}]
-    # Web search tool (Anthropic native, model server-side fetches)
+    # Web search tool (Anthropic native, model server-side fetches).
+    # max_uses=25 — bumped from 12 to support the v4 fact-check protocol
+    # (every numeric data point must be cross-verified against 2-3 sources).
     tools = [
         {
             "type": "web_search_20250305",
             "name": "web_search",
-            "max_uses": 12,
+            "max_uses": 25,
         }
     ]
 
-    print(f"[claude] calling {model} with {max_tokens=}, web_search enabled (max_uses=12) [streaming]")
+    print(f"[claude] calling {model} with {max_tokens=}, web_search enabled (max_uses=25) [streaming]")
     t0 = time.time()
     # Use streaming because SDK requires it for any call where max_tokens
     # could plausibly take >10 min (which our 32K limit can hit when Claude
@@ -978,6 +980,73 @@ def main():
         "- For scenario tree: use `.scen-grid` + `.scen-card`, never `<table>`.\n"
     )
     prompt = prompt + visual_guide
+
+    # V4 FACT-CHECK PROTOCOL — mandatory 2-3 source cross-verification for
+    # every numeric data point. Without this Claude takes one web_search
+    # result at face value and publishes wrong index closes / stock prices
+    # / sector %s, which has destroyed reader trust on previous runs.
+    fact_check_protocol = (
+        "\n\n---\n"
+        "# 🔒 FACT-CHECK PROTOCOL — MANDATORY MULTI-SOURCE VERIFICATION\n\n"
+        "**THIS IS A FINANCIAL BLOG. Wrong numbers destroy reader trust. "
+        "Spend more web_search calls and take longer — that is required, not optional.**\n\n"
+        "## Source tier list (use ONLY these — never blog posts or aggregators)\n\n"
+        "**For Korean market data (KOSPI, KOSDAQ, KOSPI200, VKOSPI, sector ETFs, "
+        "individual KR stocks, 외인/기관 수급, USD/KRW):**\n"
+        "- TIER 1 (primary, authoritative): KRX official (krx.co.kr, marketdata.krx.co.kr), "
+        "KIND (kind.krx.co.kr) for disclosures\n"
+        "- TIER 2 (verify against TIER 1): Naver Finance (finance.naver.com), "
+        "한국경제 (hankyung.com), 매일경제 (mk.co.kr), Reuters Korea, Bloomberg Korea\n"
+        "- TIER 3 (only if TIER 1+2 unavailable): Investing.com KR section, Yahoo Finance KR\n\n"
+        "**For US market data (Dow/SPX/Nasdaq/Russell 2000, 11 GICS sectors, "
+        "Mag 7 stocks, US Treasury yields, DXY, VIX, US futures, WTI):**\n"
+        "- TIER 1: WSJ (wsj.com), CNBC (cnbc.com), Reuters (reuters.com), "
+        "Bloomberg (bloomberg.com), Briefing.com, NYSE/Nasdaq official\n"
+        "- TIER 2: Yahoo Finance, MarketWatch, Investing.com US\n"
+        "- TIER 3 (macro only): FRED (fred.stlouisfed.org), BLS (bls.gov), BEA (bea.gov) — these are PRIMARY for CPI/PPI/Jobs/GDP releases\n\n"
+        "**For crypto (BTC, ETH, XRP):**\n"
+        "- TIER 1: CoinMarketCap, CoinGecko\n"
+        "- TIER 2: Binance, Coinbase, Kraken official tickers\n\n"
+        "**For commodities (Gold, Silver, WTI, Brent):**\n"
+        "- TIER 1: CME/COMEX official, Kitco (gold/silver), EIA (oil)\n"
+        "- TIER 2: Investing.com commodities, Yahoo Finance futures\n\n"
+        "## Verification procedure (apply to EVERY numeric data point in your output)\n\n"
+        "For each number you plan to publish (index close, sector %, stock price, "
+        "yield, currency rate, volume, 수급 net buy/sell):\n\n"
+        "1. **Fetch from 2 independent sources.** One MUST be Tier 1 if possible. "
+        "Spend separate web_search calls for each source — never assume one search "
+        "result covers multiple data points authoritatively.\n"
+        "2. **Compare the values.**\n"
+        "   - If they agree (within ±0.05% for indices, ±0.5% for individual stocks, "
+        "exact match for discrete values like 종목코드): ✅ accept the consensus value.\n"
+        "   - If they disagree: fetch a **3rd Tier 1 or Tier 2 source as tiebreaker**.\n"
+        "3. **If 2-of-3 still disagree, DROP that data point.** Never hedge with "
+        "\"approximately\" or \"around\" — just remove it from the JSON. The post "
+        "is better one number short than wrong.\n"
+        "4. **For dated data** (closing prices, daily volumes), confirm the source's "
+        "date matches trading_date. Some sites lag by 1 day or show stale cache. "
+        "If the source's reported date doesn't match trading_date, do NOT use it.\n"
+        "5. **For Korean market data specifically**: always verify against KRX (Tier 1) "
+        "when possible. KRX is the authoritative source. Naver/한경/매경 should agree "
+        "with KRX; if they don't, KRX wins. Foreign English sites (Yahoo/Investing.com) "
+        "are sometimes lagged or slightly off on KR data — use as Tier 2/3 only.\n\n"
+        "## What to put in the `sources` JSON field\n\n"
+        "List **only the URLs you actually verified data against**. Don't pad with "
+        "generic landing pages. Each source should be the specific page that provides "
+        "the data (e.g., a KRX index page, a Yahoo Finance stock quote page, a Reuters "
+        "earnings report URL — not just `wsj.com`).\n\n"
+        "## What to put in the `fact_check_ko` / `fact_check_en` field\n\n"
+        "Be specific. Don't just say \"verified against sources.\" Say:\n"
+        "예: \"Fact-Check: KOSPI 종가는 KRX 공식 (2,847.32) + Naver Finance + "
+        "Reuters Korea 3개 출처 일치 확인. 외국인 순매도 -8,452억원은 KRX 투자자별 "
+        "매매동향 + 한경 보도 일치. NVDA -2.8%는 WSJ + CNBC + Yahoo Finance 3중 확인. "
+        "검증 실패한 항목: [있으면 명시, 없으면 '없음'].\"\n\n"
+        "## Trade-offs explicitly acknowledged\n\n"
+        "- This protocol will use 15-25 web_search calls per post (max_uses=25).\n"
+        "- Response time will increase to 5-8 minutes per slot.\n"
+        "- This is intentional and required. **Speed is not the goal — accuracy is.**\n"
+    )
+    prompt = prompt + fact_check_protocol
 
     # Force strict JSON-only output. Without this Claude occasionally wraps
     # the JSON in commentary or code fences, breaking the parser. Defensive
