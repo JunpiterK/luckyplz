@@ -397,19 +397,22 @@ def render_key_metrics_strip(km: dict, lang: str) -> str:
             chg_f = float(chg)
         except Exception:
             chg_f = 0.0
-        color = "#dc2626" if chg_f > 0 else ("#2563eb" if chg_f < 0 else "#6b7280")
+        # Semantic class — color resolved at runtime via CSS variables.
+        # body.convention-kr → red up / blue down (KR style).
+        # body (default global) → green up / red down (Bloomberg style).
+        chg_class = "up" if chg_f > 0 else ("down" if chg_f < 0 else "flat")
         arrow = "🔺" if chg_f > 0 else ("🔻" if chg_f < 0 else "·")
         cells.append(f"""
-    <div style="flex:1 1 90px;min-width:90px;padding:10px 8px;background:#0f1419;border-radius:6px;text-align:center;">
-      <div style="font-size:10px;color:#8b9098;letter-spacing:0.5px;font-weight:600;">{html_escape(label)}</div>
-      <div style="font-size:14px;color:#e6e7e9;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;">{html_escape(str(value))}</div>
-      <div style="font-size:11px;color:{color};font-weight:600;margin-top:2px;font-variant-numeric:tabular-nums;">{arrow} {chg_f:+.2f}%</div>
+    <div class="km-cell">
+      <div class="km-label">{html_escape(label)}</div>
+      <div class="km-value">{html_escape(str(value))}</div>
+      <div class="km-chg {chg_class}">{arrow} {chg_f:+.2f}%</div>
     </div>""")
     if not cells:
         return ""
     title = "▸ 핵심 시장 지표 · 24h" if lang == "ko" else "▸ Key Market Indicators · 24h"
     return f"""<div class="section-title">{title}</div>
-<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 16px 14px;">{''.join(cells)}</div>
+<div class="km-grid">{''.join(cells)}</div>
 """
 
 
@@ -642,6 +645,11 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
 
     repl = {
         "{{LANG}}": lang,
+        # Color convention: KR slots use Korean convention (red up / blue down,
+        # Naver/한국증권사 style). US slots use global convention (green up /
+        # red down, Bloomberg/TradingView/WSJ style). Body class toggles
+        # CSS --up/--down variables in daily-base.html.
+        "{{CONVENTION}}": "kr" if slot in ("kr-open", "kr-close") else "global",
         "{{BUILD}}": build,
         "{{TITLE}}": html_escape(title_full),
         "{{TITLE_SHORT}}": html_escape(title),
@@ -955,12 +963,16 @@ def main():
         "  </div>\n"
         "</div>\n"
         "```\n\n"
-        "## 4. 📊 지수/섹터 스냅샷 → 인라인 `<span>` color spans\n"
-        "Inside paragraphs and lists, use:\n"
-        "- `<span class=\"upx\">+1.24%</span>` for positive moves (RED — KR convention)\n"
-        "- `<span class=\"dn\">-1.54%</span>` for negative moves (BLUE)\n"
-        "- `<span class=\"hl\">중립</span>` for highlight/attention\n"
-        "Do NOT use inline `style=\"color:#dc2626\"` — use the classes above for consistency.\n\n"
+        "## 4. 📊 지수/섹터 스냅샷 → semantic class spans only\n"
+        "Inside paragraphs and lists, use **semantic classes** (color is automatic from CSS):\n"
+        "- `<span class=\"upx\">+1.24%</span>` for positive moves (semantically 'up')\n"
+        "- `<span class=\"dn\">-1.54%</span>` for negative moves (semantically 'down')\n"
+        "- `<span class=\"hl\">중립</span>` for highlight/attention (gold)\n\n"
+        "⚠️ **NEVER use inline color styles** like `style=\"color:#dc2626\"` or `style=\"color:red\"`. "
+        "The site auto-selects the correct color convention based on the slot:\n"
+        "- KR slots (kr-open, kr-close) → red up / blue down (한국 컨벤션, Naver Finance style)\n"
+        "- US slots (us-close, us-premarket) → green up / red down (글로벌 컨벤션, Bloomberg/TradingView style)\n"
+        "Hardcoded colors break this convention split. Use `class=\"upx\"`/`class=\"dn\"` and let the CSS handle it.\n\n"
         "## 5. ⚠️ 면책 / 가정 안내 → use `.section-note`\n"
         "```html\n"
         "<div class=\"section-note\">아래는 5/15 마감 + 주말 매크로에 근거한 <strong>시나리오 추정</strong>이며 확정된 사실이 아닙니다.</div>\n"
