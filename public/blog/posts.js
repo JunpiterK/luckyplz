@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-21',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 선물 +0.3%, 엔비디아 실적 기대감 속 기술주 회복",
+    excerpt: "S&P 500 선물이 프리마켓에서 0.3% 상승하며 전날 매도 압력에서 회복 중입니다. 엔비디아를 중심으로 한 반도체 섹터가 강세를 보이고 있으며, 나스닥 선물은 0.5% 상승했습니다. 10년물 국채 수익률은 4.42%로 안정세를 유지하고 있으며, VIX는 16대로 하락했습니다. 오늘 08:30 ET 주요 경제지표 발표는",
+    alt: 'us-premarket-2026-05-21-en',
+},
+{
+    slug: 'us-premarket-2026-05-21-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P futures +0.3% as tech rebounds on NVDA earnings optimism",
+    excerpt: "S&P 500 futures are up 0.3% in premarket trading, recovering from yesterday's selloff. Semiconductor stocks led by Nvidia are showing strength, with Nasdaq futures up 0.5%. The 10-",
+    alt: 'us-premarket-2026-05-21',
+},
+    {
     slug: 'kr-tech-recap-2026-05-20',
     lang: 'ko',
     category: 'industry',
