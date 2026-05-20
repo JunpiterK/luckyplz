@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-21',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P -1.24% 급락, SOX -2.6% 반도체 갭다운 예상",
+    excerpt: "S&P 500이 -1.24%, 나스닥 -1.58% 급락하며 신고가 다음날 차익실현 매물이 쏟아졌습니다. 필라델피아 반도체지수 SOX는 -2.6% 폭락, NVDA -2.8%, AVGO -3.1% 하락으로 삼성전자와 SK하이닉스의 갭다운 개장이 예상됩니다. 미 10년물 4.59%, 2년물 4.12%로 상승하며 매파 우려가 부",
+    alt: 'kr-open-brief-2026-05-21-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-21-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P Falls 1.24%, SOX Down 2.6% - Chip Stocks Set for Gap Down",
+    excerpt: "S&P 500 dropped 1.24% and Nasdaq fell 1.58% in a sharp profit-taking session after recent highs. The Philadelphia Semiconductor Index SOX plunged 2.6%, with NVDA down 2.8% and AVGO",
+    alt: 'kr-open-brief-2026-05-21',
+},
+    {
     slug: 'us-tech-recap-2026-05-20',
     lang: 'ko',
     category: 'industry',
