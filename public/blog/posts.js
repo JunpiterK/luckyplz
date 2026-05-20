@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-20',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P -0.81% 약보합 마감, 매파 연준+반도체 약세",
+    excerpt: "S&P 500이 0.81% 하락하며 6,047.15에 마감했다. 파월 의장의 인플레이션 경계 발언과 국채 10년물 금리 4.42% 상승이 압박했고, 반도체 섹터가 2% 이상 하락하며 시장을 끌어내렸다. 에너지와 금융 섹터는 상승세를 보였고, 달러지수는 101.28로 강세를 유지했다. 한국 시간 새벽 기술주 낙폭에 삼성전자",
+    alt: 'us-tech-recap-2026-05-20-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-20-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 slips 0.81% on hawkish Fed signals, chip stocks drag",
+    excerpt: "The S&P 500 closed down 0.81% at 6,047.15 as hawkish Fed commentary from Chair Powell pushed 10-year Treasury yields to 4.42% and weighed on sentiment. Semiconductor stocks fell ov",
+    alt: 'us-tech-recap-2026-05-20',
+},
+    {
     slug: 'us-premarket-2026-05-21',
     lang: 'ko',
     category: 'industry',
