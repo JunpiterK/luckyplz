@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-21',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 7445선 마감, 러셀 0.93% 강세 속 반도체 1.28% 급등",
+    excerpt: "미국 증시는 21일 혼조 마감했다. S&P 500은 0.17% 상승한 7445.72에, 나스닥은 0.09% 오른 26293.1에 거래를 마쳤다. 다우는 0.55% 올랐고 러셀 2000이 0.93% 급등하며 소형주 강세를 이끌었다. 필라델피아 반도체 지수는 1.28% 급등했으나 엔비디아는 1.77% 하락했다. VIX는 3.",
+    alt: 'us-tech-recap-2026-05-21-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-21-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 rises 0.17% as semiconductors surge 1.28%, Russell 2000 leads",
+    excerpt: "U.S. stocks closed mixed on May 21. The S&P 500 gained 0.17% to 7445.72, while the Nasdaq edged up 0.09% to 26293.1. The Dow rose 0.55%, and the Russell 2000 surged 0.93%, leading ",
+    alt: 'us-tech-recap-2026-05-21',
+},
+    {
         slug: 'anthropic-story-01-founding',
         lang: 'ko',
         category: 'ai-tech',
