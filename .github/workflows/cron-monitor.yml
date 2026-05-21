@@ -1,93 +1,115 @@
 name: Daily Cron Monitor (auto-rescue missing slots)
 
-# 각 슬롯 cron 시점 + 30분에 발화 → 그 슬롯의 오늘 글이 main에 있는지 확인.
-# 누락이면 daily-cron 워크플로 강제 발화. GitHub Actions schedule cron이
-# 트래픽으로 지연되거나 누락되는 케이스 (실제로 5/18 12:30 us-premarket이
-# 3.5시간 지연됐고, 5/18 21:00 us-close도 18분+ 지연) 자동 복구.
+# 매시간 30분에 발화 → 4개 슬롯 전부 검사 → 발행 시각이 지났는데
+# 아직 main에 없는 슬롯은 즉시 rescue 발화.
 #
-# Cron는 UTC 기준.
-#   KST 06:30 = UTC 21:30  ← check us-close (cron이 KST 06:00 발화 예정)
-#   KST 08:00 = UTC 23:00  ← check kr-open    (cron이 KST 07:30 발화 예정)
-#   KST 16:15 = UTC 07:15  ← check kr-close   (cron이 KST 15:45 발화 예정)
-#   KST 22:00 = UTC 13:00  ← check us-premarket (cron이 KST 21:30 발화 예정)
+# 이전 버전은 각 슬롯별 정확한 시각 +30분에 1번만 발화했음. 그 발화
+# 자체가 GitHub Actions 트래픽으로 누락되면 보충 메커니즘 없음 →
+# 5/21 kr-close 누락 사건처럼 1시간+ 지연돼도 자동 복구 불가.
+#
+# 새 설계: 24시간 매시간 발화. 각 슬롯의 "발행 마감 시각"이 지났는데
+# 글이 없으면 발화. 이미 있으면 skip. 한 슬롯의 monitor cron이 누락
+# 돼도 다음 시간 monitor가 catch.
+#
+# 슬롯별 발행 마감 시각 (KST):
+#   us-close:     07:00 (06:00 발화 + 60min 유예)
+#   kr-open:      08:30 (07:30 + 60min)
+#   kr-close:     17:00 (15:45 + 75min)
+#   us-premarket: 22:30 (21:30 + 60min)
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 21 * * *"   # check us-close
-    - cron: "0 23 * * *"    # check kr-open
-    - cron: "15 7 * * *"    # check kr-close
-    - cron: "0 13 * * *"    # check us-premarket
+    - cron: "30 * * * *"   # 매시간 30분에 발화
 
 permissions:
   contents: read
-  actions: write   # to trigger daily-cron.yml via gh
+  actions: write
 
 jobs:
   monitor:
-    name: Check & rescue missing slot
+    name: Check all 4 slots, rescue missing
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - id: resolve
-        name: Resolve which slot to check
+      - name: Compute today's expected slugs (KST)
+        id: dates
         run: |
-          # Manual dispatch uses default = us-close. Cron dispatch maps by schedule.
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            slot="us-close"
-          else
-            case "${{ github.event.schedule }}" in
-              "30 21 * * *") slot=us-close ;;
-              "0 23 * * *")  slot=kr-open ;;
-              "15 7 * * *")  slot=kr-close ;;
-              "0 13 * * *")  slot=us-premarket ;;
-              *)             slot=us-close ;;
-            esac
-          fi
-
-          # Compute the slug we expect for today's run.
-          # All slots use publish_date = today KST except us-close which uses
-          # trading_date = yesterday KST.
           publish_date=$(TZ=Asia/Seoul date +%Y-%m-%d)
-          case "$slot" in
-            us-close)
-              trading_date=$(TZ=Asia/Seoul date -d "yesterday" +%Y-%m-%d)
-              prefix=us-tech-recap
-              ;;
-            kr-open)
-              trading_date=$publish_date
-              prefix=kr-open-brief
-              ;;
-            kr-close)
-              trading_date=$publish_date
-              prefix=kr-tech-recap
-              ;;
-            us-premarket)
-              trading_date=$publish_date
-              prefix=us-premarket
-              ;;
-          esac
-          slug="${prefix}-${trading_date}"
-          echo "slot=$slot" >> "$GITHUB_OUTPUT"
-          echo "slug=$slug" >> "$GITHUB_OUTPUT"
-          echo "Checking slot=$slot, expected slug=$slug"
+          trading_date_us_close=$(TZ=Asia/Seoul date -d "yesterday" +%Y-%m-%d)
+          hour_kst=$(TZ=Asia/Seoul date +%H)
+          echo "publish_date=$publish_date" >> "$GITHUB_OUTPUT"
+          echo "trading_date_us_close=$trading_date_us_close" >> "$GITHUB_OUTPUT"
+          echo "hour_kst=$hour_kst" >> "$GITHUB_OUTPUT"
+          echo "now KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M %Z')"
+          echo "publish_date=$publish_date, us-close trading_date=$trading_date_us_close, hour_kst=$hour_kst"
 
-      - id: check
-        name: Check if slug exists on main
-        run: |
-          if [ -d "public/blog/${{ steps.resolve.outputs.slug }}" ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::✅ ${{ steps.resolve.outputs.slug }} already published — no rescue needed"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::⚠️ ${{ steps.resolve.outputs.slug }} missing — triggering rescue"
-          fi
-
-      - name: Trigger missing slot (rescue)
-        if: steps.check.outputs.exists != 'true'
+      - name: Check & rescue us-close (deadline KST 07:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh workflow run daily-cron.yml -f slot="${{ steps.resolve.outputs.slot }}"
-          echo "::notice::🔁 Triggered daily-cron.yml for slot=${{ steps.resolve.outputs.slot }}"
+          slug="us-tech-recap-${{ steps.dates.outputs.trading_date_us_close }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          if [ "$hour" -lt 7 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 07) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=us-close
+
+      - name: Check & rescue kr-open (deadline KST 08:30)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          slug="kr-open-brief-${{ steps.dates.outputs.publish_date }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          if [ "$hour" -lt 8 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 08) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=kr-open
+
+      - name: Check & rescue kr-close (deadline KST 17:00)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          slug="kr-tech-recap-${{ steps.dates.outputs.publish_date }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          if [ "$hour" -lt 17 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 17) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=kr-close
+
+      - name: Check & rescue us-premarket (deadline KST 22:30)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          slug="us-premarket-${{ steps.dates.outputs.publish_date }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          # us-premarket deadline 22:30 — only check at hour >= 23
+          if [ "$hour" -lt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 23) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=us-premarket
