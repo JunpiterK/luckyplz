@@ -1002,8 +1002,39 @@ def git_push(slug: str, slot: str) -> None:
            f"- Slot: {slot}\n"
            f"- Data via Claude + web_search tool\n")
     subprocess.run(["git", "commit", "-m", msg], cwd=ROOT, check=True)
-    subprocess.run(["git", "push"], cwd=ROOT, check=True)
-    print(f"[git] pushed {slug}")
+
+    # Push with auto-rebase retry. Race condition is common: two slots
+    # finish their Claude call within seconds of each other, or a config
+    # commit lands in between. Pure `git push` fails with non-fast-forward.
+    # Retry up to 3 times with `git pull --rebase` in between.
+    for attempt in range(1, 4):
+        push_result = subprocess.run(["git", "push"], cwd=ROOT,
+                                     capture_output=True, text=True)
+        if push_result.returncode == 0:
+            print(f"[git] pushed {slug} (attempt {attempt})")
+            return
+        print(f"[git] push attempt {attempt} rejected: {push_result.stderr.strip()[:200]}")
+        if attempt == 3:
+            # Final attempt failed — surface as a hard error.
+            print(f"[git] all 3 push attempts failed for {slug}")
+            raise subprocess.CalledProcessError(push_result.returncode,
+                                                ["git", "push"],
+                                                output=push_result.stdout,
+                                                stderr=push_result.stderr)
+        # Pull --rebase to fast-forward, then loop and retry push.
+        print(f"[git] running 'git pull --rebase' before retry...")
+        rebase = subprocess.run(["git", "pull", "--rebase", "origin", "main"],
+                                cwd=ROOT, capture_output=True, text=True)
+        if rebase.returncode != 0:
+            # Rebase itself failed (conflict). Abort and surface error.
+            print(f"[git] pull --rebase failed: {rebase.stderr.strip()[:300]}")
+            subprocess.run(["git", "rebase", "--abort"], cwd=ROOT,
+                           capture_output=True)
+            raise subprocess.CalledProcessError(rebase.returncode,
+                                                ["git", "pull", "--rebase"],
+                                                output=rebase.stdout,
+                                                stderr=rebase.stderr)
+        print(f"[git] rebase ok, retrying push...")
 
 
 # ---------------------------------------------------------------------------
