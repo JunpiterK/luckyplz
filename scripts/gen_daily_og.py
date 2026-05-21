@@ -12,18 +12,48 @@ FONT_REG = "C:/Windows/Fonts/arial.ttf"
 FONT_KR_BOLD = "C:/Windows/Fonts/malgunbd.ttf"
 FONT_KR = "C:/Windows/Fonts/malgun.ttf"
 
-# Linux fallback paths (GitHub Actions ubuntu-latest)
-FONT_FALLBACKS = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+# Linux fallback paths (GitHub Actions ubuntu-latest).
+# CRITICAL: Korean-capable fonts MUST come first because OG image text mixes
+# Korean + Latin (e.g., 'S&P 500 7445선 마감'). DejaVu/Liberation only render
+# Latin and would silently render Korean as .notdef boxes (□□□).
+#
+# fonts-nanum package installs single-language TTF files which Pillow loads
+# reliably. fonts-noto-cjk installs a TTC collection (multi-language), which
+# Pillow opens but may pick the wrong face (SC/TC/JP/KR all bundled).
+# So order: Nanum (Korean+Latin) → Noto CJK TTC → DejaVu (Latin only).
+FONT_FALLBACKS_BOLD = [
+    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",            # Korean + Latin, single face
+    "/usr/share/fonts/truetype/nanum/NanumBarunGothicBold.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",            # fonts-noto-cjk standard path
+    "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Bold.otf",          # fonts-noto-cjk-extra
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",            # 일부 배포판
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",            # Latin-only last
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",
+]
+
+FONT_FALLBACKS_REG = [
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Regular.otf",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
 ]
 
 W, H = 1200, 630
 
 
 def load_font(primary: str, size: int):
-    for p in [primary, *FONT_FALLBACKS]:
+    """Load font with Korean-aware fallback chain.
+
+    On Linux (cron runner) the Windows primary path will fail; we then try
+    Korean-capable fonts FIRST so mixed KR+Latin text renders correctly.
+    Without this fallback order, Korean characters silently render as boxes.
+    """
+    is_bold = any(kw in primary.lower() for kw in ("bold", "bd", "black"))
+    fallbacks = FONT_FALLBACKS_BOLD if is_bold else FONT_FALLBACKS_REG
+    for p in [primary, *fallbacks]:
         try:
             return ImageFont.truetype(p, size)
         except Exception:
