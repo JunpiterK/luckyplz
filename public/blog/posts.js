@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-20',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 +1.08%, 반도체株 급등에 나스닥 1.54%↑",
+    excerpt: "미 증시는 필라델피아 반도체 지수(SOX) 4.49% 급등에 힘입어 전면 강세. S&P 500은 1.08%, 나스닥은 1.54%, 러셀 2000은 2.56% 상승. WTI 유가는 7.66% 급락, 10년물 국채 수익률은 4.57%로 하락. 기술주·소비재 섹터 강세, 에너지 섹터는 유가 급락에 2.43% 하락.",
+    alt: 'us-tech-recap-2026-05-20-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-20-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 +1.08%, Nasdaq surges 1.54% on semiconductor rally",
+    excerpt: "US equities rallied broadly with the Philadelphia Semiconductor Index (SOX) surging 4.49%, lifting Nasdaq 1.54% and S&P 500 1.08%. Russell 2000 jumped 2.56%. WTI crude plunged 7.66",
+    alt: 'us-tech-recap-2026-05-20',
+},
+    {
     slug: 'kr-open-brief-2026-05-21',
     lang: 'ko',
     category: 'industry',
