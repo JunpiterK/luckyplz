@@ -1335,6 +1335,45 @@ def main():
     # Call Claude
     data = call_claude(prompt, model=args.model)
 
+    # Normalize numeric fields. Claude occasionally returns strings like
+    # '+1.08%' / '1,234.56' / '-2.8%' instead of numbers for change_pct
+    # and similar fields, which breaks numeric comparison downstream
+    # (TypeError: '>' not supported between str and int). After the OG
+    # guide was added (with explicit '+1.08%' string examples), Claude
+    # started copying that format into all percentage fields.
+    def _normalize_pct(item):
+        if not isinstance(item, dict):
+            return
+        for k in ("change_pct", "expected_gap_pct", "pct", "gap_pct"):
+            v = item.get(k)
+            if isinstance(v, str):
+                try:
+                    item[k] = float(v.strip().replace('%', '').replace('+', '').replace(',', ''))
+                except (ValueError, AttributeError):
+                    item[k] = 0.0
+    _list_fields = ("indices", "mag7", "themes", "winners", "losers",
+                    "overnight_us", "gap_watch", "kr_indices", "kr_themes",
+                    "futures", "global_overnight", "macro_data", "news",
+                    "kr_news", "foreign_flow", "institution_flow")
+    for fld in _list_fields:
+        items = data.get(fld)
+        if isinstance(items, list):
+            for it in items:
+                _normalize_pct(it)
+    # nested: premarket_movers.{winners,losers}
+    pm = data.get("premarket_movers")
+    if isinstance(pm, dict):
+        for sub in ("winners", "losers"):
+            sub_list = pm.get(sub)
+            if isinstance(sub_list, list):
+                for it in sub_list:
+                    _normalize_pct(it)
+    # nested: key_metrics.{usdkrw,gold,...} each is {value, change_pct}
+    km = data.get("key_metrics")
+    if isinstance(km, dict):
+        for asset_key, asset_data in km.items():
+            _normalize_pct(asset_data)
+
     if data.get("skip"):
         print(f"[skip] {data.get('reason','holiday or no session')}. Exiting.")
         return
