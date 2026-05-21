@@ -19,6 +19,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'anthropic-story-01-founding',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-22',
+        readMinutes: 12,
+        coverEmoji: '📖',
+        tags: ['Anthropic', 'Dario Amodei', 'Daniela Amodei', '창립 스토리', 'OpenAI 이탈', 'Constitutional AI', 'Claude', '시리즈 1', 'lucky please'],
+        title: "Anthropic 창립 스토리 — OpenAI를 떠난 7명, 그리고 '안전이 먼저인 AI'를 짓다",
+        excerpt: '2020년 12월, OpenAI 부사장이던 Dario Amodei와 그의 누이 Daniela가 사임했다. 그들과 함께 GPT-3 논문 핵심 저자 7명이 동반 사임했다. 1,700억 시드, Constitutional AI 철학, Claude의 등장 — Anthropic이 어떻게 시작되었는지에 대한 이야기.',
+    },
+    {
     slug: 'us-premarket-2026-05-22',
     lang: 'ko',
     category: 'industry',
