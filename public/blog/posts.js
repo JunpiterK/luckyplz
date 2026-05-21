@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-21',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSPI +8.4% 급등 7,815pt 마감—미·중 관세협상 타결 기대감 폭발",
+    excerpt: "KOSPI가 8.42% 급등하며 7,815.59로 마감해 역대 최대폭 상승을 기록했다. 미·중 관세협상 타결 임박 보도가 촉발한 글로벌 반도체·자동차 랠리가 국내 시장을 이끌었고, SK하이닉스는 11.2% 급등했다. 외국인은 KOSPI에서 1조 2천억원 순매수로 6거래일 만에 매수 전환했으며, KOSDAQ도 4.7% 상승",
+    alt: 'kr-tech-recap-2026-05-21-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-21-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-21',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSPI surges +8.4% to 7,815 on US-China trade deal optimism",
+    excerpt: "KOSPI surged 8.42% to close at 7,815.59, marking one of the largest single-day gains on record, driven by reports of an imminent US-China tariff deal. Global semiconductor and auto",
+    alt: 'kr-tech-recap-2026-05-21',
+},
+    {
     slug: 'us-tech-recap-2026-05-20',
     lang: 'ko',
     category: 'industry',
