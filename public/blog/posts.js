@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-22',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "선물 혼조 WTI +3.2% 급등, 08:30 데이터 공백 속 유가 주목",
+    excerpt: "S&P 선물 -0.26%, 나스닥 -0.34%로 약세 출발. WTI가 $101.38로 +3.18% 급등하며 에너지 부문 주목. 오늘 08:30 주요 경제지표 발표 없음. NVDA -1.6% 약세가 반도체 그룹 압박. 달러지수 +0.35%, 10Y 수익률 4.61%로 상승하며 매크로 부담 지속.",
+    alt: 'us-premarket-2026-05-22-en',
+},
+{
+    slug: 'us-premarket-2026-05-22-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "Futures mixed as WTI surges +3.2%, no major data today",
+    excerpt: "S&P futures down -0.26%, Nasdaq -0.34% in pre-market. WTI crude surges +3.18% to $101.38, lifting energy names. No major 08:30 data release today. NVDA's -1.6% decline weighs on se",
+    alt: 'us-premarket-2026-05-22',
+},
+    {
     slug: 'kr-tech-recap-2026-05-21',
     lang: 'ko',
     category: 'industry',
