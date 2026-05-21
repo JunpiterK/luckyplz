@@ -93,6 +93,185 @@ SLOTS = {
 
 
 # ---------------------------------------------------------------------------
+# Hard market data fetch (replaces Claude hallucination with verified API data)
+# ---------------------------------------------------------------------------
+# Claude's training data caps around late 2024. When asked for "today's" S&P
+# close it sometimes returns 2024 numbers verbatim — and the fact-check field
+# may still claim '3-source verification' because the prompt biased it to.
+# Solution: fetch the numbers ourselves via yfinance (Yahoo Finance) and
+# inject them into the prompt as MANDATORY ground truth. Claude then writes
+# narrative around the fixed numbers — cannot fabricate.
+
+# Ticker maps per slot. Names are KO/EN-friendly labels.
+_COMMON_TOP7 = {
+    "USD/KRW": "KRW=X", "Gold": "GC=F", "Silver": "SI=F", "WTI": "CL=F",
+    "BTC": "BTC-USD", "ETH": "ETH-USD", "XRP": "XRP-USD",
+}
+_US_INDICES = {
+    "S&P 500": "^GSPC", "Nasdaq Composite": "^IXIC", "Dow Jones": "^DJI",
+    "Russell 2000": "^RUT", "Philadelphia Semi (SOX)": "^SOX",
+    "VIX": "^VIX", "DXY (Dollar Index)": "DX-Y.NYB",
+    "10Y Treasury Yield": "^TNX", "2Y Treasury Yield": "^IRX",
+    "30Y Treasury Yield": "^TYX",
+}
+_MAG7 = {
+    "AAPL": "AAPL", "MSFT": "MSFT", "GOOGL": "GOOGL", "AMZN": "AMZN",
+    "META": "META", "NVDA": "NVDA", "TSLA": "TSLA", "AVGO": "AVGO",
+}
+_US_SECTOR_ETFS = {
+    "XLK (Technology)": "XLK", "XLF (Financials)": "XLF",
+    "XLV (Health Care)": "XLV", "XLY (Cons Disc)": "XLY",
+    "XLP (Cons Staples)": "XLP", "XLE (Energy)": "XLE",
+    "XLI (Industrials)": "XLI", "XLB (Materials)": "XLB",
+    "XLU (Utilities)": "XLU", "XLRE (Real Estate)": "XLRE",
+    "XLC (Comm Services)": "XLC",
+}
+_KR_INDICES = {
+    "KOSPI": "^KS11", "KOSDAQ": "^KQ11", "KOSPI 200": "^KS200",
+}
+_KR_STOCKS = {
+    "삼성전자 (005930)": "005930.KS",
+    "SK하이닉스 (000660)": "000660.KS",
+    "NAVER (035420)": "035420.KS",
+    "Kakao (035720)": "035720.KS",
+    "LG에너지솔루션 (373220)": "373220.KS",
+    "삼성SDI (006400)": "006400.KS",
+    "현대차 (005380)": "005380.KS",
+    "POSCO Future M (003670)": "003670.KS",
+    "에코프로비엠 (247540)": "247540.KQ",
+    "셀트리온 (068270)": "068270.KS",
+    "한화에어로스페이스 (012450)": "012450.KS",
+    "HD현대중공업 (329180)": "329180.KS",
+}
+
+
+def fetch_market_data(slot: str, trading_date: str) -> dict:
+    """Fetch verified market data via yfinance. Returns dict keyed by label,
+    each value: {close, prev_close, change_pct, ticker}. Empty dict if all fail.
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("[fetch] yfinance not installed — skipping hard fetch")
+        return {}
+
+    # Resolve slot-specific ticker set
+    tickers = dict(_COMMON_TOP7)
+    if slot == "us-close":
+        tickers.update(_US_INDICES)
+        tickers.update(_MAG7)
+        tickers.update(_US_SECTOR_ETFS)
+    elif slot == "us-premarket":
+        tickers.update(_US_INDICES)
+        tickers.update(_MAG7)
+        # Sector ETFs less critical pre-open
+    elif slot == "kr-open":
+        # Overnight US for spillover + KR baseline (prev close)
+        tickers.update({k: v for k, v in _US_INDICES.items() if k in (
+            "S&P 500", "Nasdaq Composite", "Philadelphia Semi (SOX)",
+            "10Y Treasury Yield", "DXY (Dollar Index)", "VIX")})
+        tickers.update(_MAG7)
+        tickers.update(_KR_INDICES)
+        tickers.update(_KR_STOCKS)
+    elif slot == "kr-close":
+        tickers.update(_KR_INDICES)
+        tickers.update(_KR_STOCKS)
+
+    # Date window: fetch ~7 trading days back to safely compute change vs prior close
+    target = datetime.strptime(trading_date, "%Y-%m-%d")
+    start = (target - timedelta(days=10)).strftime("%Y-%m-%d")
+    end = (target + timedelta(days=2)).strftime("%Y-%m-%d")
+
+    result = {}
+    print(f"[fetch] yfinance: {len(tickers)} tickers for {slot} on {trading_date}")
+    t0 = time.time()
+    for name, ticker in tickers.items():
+        try:
+            t = yf.Ticker(ticker)
+            hist = t.history(start=start, end=end, auto_adjust=False)
+            if hist.empty or len(hist) < 2:
+                continue
+            # Match the bar dated <= trading_date. If trading_date itself is
+            # in hist, use it; otherwise the most recent bar before.
+            hist_dates = hist.index.strftime("%Y-%m-%d")
+            target_idx = None
+            for i in range(len(hist) - 1, -1, -1):
+                if hist_dates[i] <= trading_date:
+                    target_idx = i
+                    break
+            if target_idx is None or target_idx == 0:
+                continue
+            close = float(hist["Close"].iloc[target_idx])
+            prev = float(hist["Close"].iloc[target_idx - 1])
+            change_pct = (close - prev) / prev * 100 if prev else 0.0
+            actual_date = hist_dates[target_idx]
+            result[name] = {
+                "close": round(close, 2),
+                "prev_close": round(prev, 2),
+                "change_pct": round(change_pct, 2),
+                "ticker": ticker,
+                "as_of": actual_date,
+            }
+        except Exception as e:
+            print(f"[fetch] {name} ({ticker}) failed: {type(e).__name__}: {e}")
+            continue
+    dt = time.time() - t0
+    print(f"[fetch] complete: {len(result)}/{len(tickers)} tickers in {dt:.1f}s")
+    return result
+
+
+def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
+    """Format hard-fetched market data as a MANDATORY prompt section.
+    Claude is required to use these exact numbers; deviation = bug."""
+    if not data:
+        return ""
+    lines = [
+        "# 🔒 VERIFIED MARKET DATA (hard-fetched from Yahoo Finance API)",
+        "",
+        f"**The numbers below are direct API fetches for trading_date {trading_date}.**",
+        "**You MUST use these EXACT values in your output JSON** (indices, mag7,",
+        "key_metrics, kr_indices, futures, gap_watch, foreign_flow, themes, etc.).",
+        "",
+        "Rules:",
+        "- Do NOT round differently. Use the exact close and change_pct as given.",
+        "- Do NOT substitute with values from your training data — those are wrong (stale).",
+        "- Do NOT 'estimate' — every number below is verified at the source.",
+        "- For numbers not listed here (e.g., individual KR small-caps, 외인/기관 net flow,",
+        "  ETF flows, after-hours moves), THEN use web_search with the fact-check protocol",
+        "  and cross-verify against KRX official / WSJ / Bloomberg / Reuters as before.",
+        "- In the `fact_check_ko` / `fact_check_en` field, explicitly say:",
+        "  '주요 지수·종목·환율·원자재·암호화폐 가격은 Yahoo Finance API 직접 fetch 기반'",
+        "",
+        "## Verified values (close, change %)",
+        "",
+    ]
+    # Group by category for readability
+    groups = [
+        ("Top 7 fixed assets", list(_COMMON_TOP7.keys())),
+        ("US indices & macro", list(_US_INDICES.keys())),
+        ("Mag 7 stocks", list(_MAG7.keys())),
+        ("US sector ETFs (11 GICS)", list(_US_SECTOR_ETFS.keys())),
+        ("KR indices", list(_KR_INDICES.keys())),
+        ("KR stocks", list(_KR_STOCKS.keys())),
+    ]
+    for group_name, keys in groups:
+        group_data = [(k, data[k]) for k in keys if k in data]
+        if not group_data:
+            continue
+        lines.append(f"### {group_name}")
+        for name, v in group_data:
+            close = v["close"]
+            chg = v["change_pct"]
+            as_of = v.get("as_of", trading_date)
+            stale = " ⚠️ (note: as_of differs from trading_date)" if as_of != trading_date else ""
+            lines.append(f"- **{name}**: close `{close}` · change `{chg:+.2f}%` · ticker `{v['ticker']}` · as_of `{as_of}`{stale}")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Anthropic call
 # ---------------------------------------------------------------------------
 def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 32000) -> dict:
@@ -874,9 +1053,22 @@ def main():
             print(f"[skip] {slug} already published (use --force to overwrite). Exiting.")
             return
 
+    # === HARD FETCH MARKET DATA (yfinance) ===
+    # Replaces Claude hallucination of training-data numbers. Indices, stocks,
+    # FX, commodities, crypto are fetched directly from Yahoo Finance API
+    # and injected into the prompt as MANDATORY ground truth. Claude writes
+    # narrative around the fixed numbers.
+    market_data = fetch_market_data(args.slot, trading_date)
+    verified_block = format_market_data_for_prompt(market_data, trading_date)
+
     # Load + fill prompt
     prompt_template = (PROMPTS / cfg["prompt"]).read_text(encoding="utf-8")
     prompt = prompt_template.replace("{trading_date}", trading_date).replace("{publish_date}", publish_date)
+
+    # Prepend verified data block AT THE TOP (above everything else) so
+    # Claude sees authoritative numbers before its own training-data biases.
+    if verified_block:
+        prompt = verified_block + "\n" + prompt
 
     # CRITICAL: prepend operating context. Otherwise Claude (training cutoff ~2024)
     # sees the 2026 trading_date and self-judges the web_search results as
