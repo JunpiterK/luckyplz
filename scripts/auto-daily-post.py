@@ -56,8 +56,8 @@ SLOTS = {
         "category": "industry",
         "read_min": 8,
         "cover_emoji": "🇺🇸",
-        "header_label_ko": "🇺🇸 미국 테크 마감 리캡",
-        "header_label_en": "🇺🇸 US TECH DAILY RECAP",
+        "header_label_ko": "미국 테크 마감 리캡",
+        "header_label_en": "US TECH DAILY RECAP",
     },
     "kr-open": {
         "prompt": "kr-open-brief.md",
@@ -66,8 +66,8 @@ SLOTS = {
         "category": "industry",
         "read_min": 6,
         "cover_emoji": "🇰🇷",
-        "header_label_ko": "🇰🇷 한국장 개장 브리핑",
-        "header_label_en": "🇰🇷 KOREA OPEN BRIEF",
+        "header_label_ko": "한국장 개장 브리핑",
+        "header_label_en": "KOREA OPEN BRIEF",
     },
     "kr-close": {
         "prompt": "kr-close-recap.md",
@@ -76,8 +76,8 @@ SLOTS = {
         "category": "industry",
         "read_min": 7,
         "cover_emoji": "🇰🇷",
-        "header_label_ko": "🇰🇷 한국 테크 마감 리캡",
-        "header_label_en": "🇰🇷 KOREA TECH DAILY RECAP",
+        "header_label_ko": "한국 테크 마감 리캡",
+        "header_label_en": "KOREA TECH DAILY RECAP",
     },
     "us-premarket": {
         "prompt": "us-premarket.md",
@@ -86,8 +86,8 @@ SLOTS = {
         "category": "industry",
         "read_min": 6,
         "cover_emoji": "🇺🇸",
-        "header_label_ko": "🇺🇸 미국 프리마켓 브리핑",
-        "header_label_en": "🇺🇸 US PRE-MARKET BRIEF",
+        "header_label_ko": "미국 프리마켓 브리핑",
+        "header_label_en": "US PRE-MARKET BRIEF",
     },
 }
 
@@ -1282,6 +1282,42 @@ def main():
         "- This is intentional and required. **Speed is not the goal — accuracy is.**\n"
     )
     prompt = prompt + fact_check_protocol
+
+    # OG IMAGE DATA — explicit schema for the 4-card SNS preview image.
+    # Without this, V4's compressed prompt left og_data as {...} placeholder
+    # and Claude returned empty cards, leaving the OG image blank.
+    og_data_guide = (
+        "\n\n---\n"
+        "# 🖼 OG IMAGE DATA — 4-card highlight schema (MANDATORY)\n\n"
+        "The OG image (shown when this post is shared to KakaoTalk / Twitter / "
+        "Facebook etc.) displays 4 highlight cards. You MUST fill all 4 cards "
+        "with the data shape below. Empty objects (`{}`) will produce a blank "
+        "card and ruin the first impression of the post on social platforms.\n\n"
+        "```json\n"
+        "\"og_data\": {\n"
+        "  \"card1\": {\"tick\":\"S&P 500\",\"val\":\"7,432\",\"sub\":\"+1.08%\",\"color\":\"up\"},\n"
+        "  \"card2\": {\"tick\":\"NVDA\",\"val\":\"$143\",\"sub\":\"-2.8%\",\"color\":\"down\"},\n"
+        "  \"card3\": {\"tick\":\"WTI\",\"val\":\"$99.5\",\"sub\":\"-7.66%\",\"color\":\"down\"},\n"
+        "  \"card4\": {\"tick\":\"10Y\",\"val\":\"4.57%\",\"sub\":\"-2.04%\",\"color\":\"down\"}\n"
+        "}\n"
+        "```\n\n"
+        "## Each card requires ALL 4 keys\n"
+        "- `tick` — ticker or 지표명 (max 12 chars). e.g. `S&P 500`, `KOSPI`, `NVDA`, `WTI`, `10Y`, `USD/KRW`, `BTC`, `005930`(종목코드 가능)\n"
+        "- `val`  — main value (max 10 chars). e.g. `7,432`, `$143.22`, `4.57%`, `1,365.20`, `+8.42%`\n"
+        "- `sub`  — sub label / change (max 14 chars). e.g. `+1.08%`, `-2.8% AH`, `신고가`, `외인 -8천억`, `매물 출회`\n"
+        "- `color` — one of: `up` (상승), `down` (하락), `gold` (강조/특별), `flat` (보합)\n\n"
+        "## Per-slot card selection guide\n"
+        "- **us-close**: card1=핵심 지수 (S&P 또는 Nasdaq), card2=가장 큰 Mag 7 무브, card3=매크로 (10Y/WTI/DXY 중 가장 movement큰 것), card4=after-hours 어닝 빅 무버\n"
+        "- **kr-open**: card1=KOSPI 200 야간선물 추정, card2=美 야간 핵심 종목 (NVDA/SOX 등), card3=USD/KRW, card4=갭 예상 KR 종목\n"
+        "- **kr-close**: card1=KOSPI, card2=외인 net (`외인 -8천억` 같이), card3=주도 종목 또는 섹터, card4=USD/KRW 또는 KOSDAQ\n"
+        "- **us-premarket**: card1=핵심 futures (ES/NQ), card2=방금 발표된 경제 데이터 (있으면) 또는 Mag 7, card3=10Y, card4=프리마켓 빅 무버\n\n"
+        "## Hard rules\n"
+        "- 모든 4 card 채워라. 절대 `{}` 빈 객체 금지.\n"
+        "- 숫자는 VERIFIED MARKET DATA (Yahoo Finance API fetch) 의 값 그대로 사용.\n"
+        "- 한국어 sub 가능 (예: `신고가`, `매물 출회`). NanumGothic font로 정상 렌더링.\n"
+        "- emoji 사용 금지 (OG 이미지 폰트에 emoji 없음 — □□로 표시됨).\n"
+    )
+    prompt = prompt + og_data_guide
 
     # Force strict JSON-only output. Without this Claude occasionally wraps
     # the JSON in commentary or code fences, breaking the parser. Defensive
