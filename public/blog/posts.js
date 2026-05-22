@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-23',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "美 반도체株 강세·배터리주 급등, 한국 개장 긍정 모멘텀",
+    excerpt: "미국 필라델피아 반도체 지수가 1.99% 급등하며 SOX 신고가 경신. 삼성전자는 전날 -2.34% 하락했으나 야간 지표는 반등 시그널. 에코프로비엠 10.77%, 삼성SDI 5.03% 강세로 배터리 셀 섹터 모멘텀. USD/KRW 1,520원 돌파로 수출주 수혜 기대. 오전 9시 개장 시 반도체·배터리 중심 갭상승 가능",
+    alt: 'kr-open-brief-2026-05-23-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-23-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "US chip rally, battery stocks surge fuel Korea open optimism",
+    excerpt: "Philadelphia Semiconductor Index surged 1.99% to new highs overnight. Samsung Electronics down 2.34% prior day but night signals suggest rebound. EcoPro BM +10.77%, Samsung SDI +5.",
+    alt: 'kr-open-brief-2026-05-23',
+},
+    {
     slug: 'us-tech-recap-2026-05-22',
     lang: 'ko',
     category: 'industry',
