@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-22',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "삼성전자 +8.5% 급등 속 반전 개장 예상",
+    excerpt: "삼성전자(+8.51%), SK하이닉스(+11.17%) 급등으로 어제 급락(-0.86%↓) 반전 예상. 현대차 +12.5% 폭등 추가 상승 기대. 미국 SOX +1.28% 호조로 반도체 모멘텀 지원. 외국인/기관 수급 추이 주목.",
+    alt: 'kr-open-brief-2026-05-22-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-22-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "Samsung, SK Hynix surge +8-11%, reversal open expected",
+    excerpt: "Samsung Electronics (+8.51%) and SK Hynix (+11.17%) surge signals reversal from yesterday's -0.86% drop. Hyundai Motor's +12.5% explosion draws attention. US SOX +1.28% supports se",
+    alt: 'kr-open-brief-2026-05-22',
+},
+    {
         slug: 'anthropic-story-02-amodei-siblings',
         lang: 'ko',
         category: 'ai-tech',
