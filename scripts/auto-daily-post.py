@@ -1003,38 +1003,84 @@ def git_push(slug: str, slot: str) -> None:
            f"- Data via Claude + web_search tool\n")
     subprocess.run(["git", "commit", "-m", msg], cwd=ROOT, check=True)
 
-    # Push with auto-rebase retry. Race condition is common: two slots
-    # finish their Claude call within seconds of each other, or a config
-    # commit lands in between. Pure `git push` fails with non-fast-forward.
-    # Retry up to 3 times with `git pull --rebase` in between.
-    for attempt in range(1, 4):
+    # Push with robust race-recovery. The workflow generates a single new
+    # blog post (no overlap with other slots' files), so any rebase
+    # conflict is almost certainly mechanical (config edits, line endings)
+    # and recoverable. Strategy: up to 6 attempts with progressive recovery.
+    #
+    # Attempt fails (non-fast-forward) → fetch + try fast-forward rebase.
+    # Rebase conflict → resolve by KEEPING OUR new files (--theirs in rebase
+    # semantics keeps the upstream version of conflicting non-new files,
+    # ours/our-new-post files survive). Then retry push.
+    # Final fallback: if all rebase paths fail, do a soft reset to remote
+    # main, replay our staged changes on top, and push. Aggressive but
+    # safe because our changes are well-defined (one slug directory + posts.js
+    # one-line addition + sitemap one-block addition + bump-cache results).
+    import random
+    for attempt in range(1, 7):
         push_result = subprocess.run(["git", "push"], cwd=ROOT,
                                      capture_output=True, text=True)
         if push_result.returncode == 0:
             print(f"[git] pushed {slug} (attempt {attempt})")
             return
         print(f"[git] push attempt {attempt} rejected: {push_result.stderr.strip()[:200]}")
-        if attempt == 3:
-            # Final attempt failed — surface as a hard error.
-            print(f"[git] all 3 push attempts failed for {slug}")
+        if attempt == 6:
+            print(f"[git] all 6 push attempts failed for {slug}")
             raise subprocess.CalledProcessError(push_result.returncode,
                                                 ["git", "push"],
                                                 output=push_result.stdout,
                                                 stderr=push_result.stderr)
-        # Pull --rebase to fast-forward, then loop and retry push.
-        print(f"[git] running 'git pull --rebase' before retry...")
-        rebase = subprocess.run(["git", "pull", "--rebase", "origin", "main"],
-                                cwd=ROOT, capture_output=True, text=True)
-        if rebase.returncode != 0:
-            # Rebase itself failed (conflict). Abort and surface error.
-            print(f"[git] pull --rebase failed: {rebase.stderr.strip()[:300]}")
-            subprocess.run(["git", "rebase", "--abort"], cwd=ROOT,
+        # Random jitter 1-5s before rebase to desync from concurrent workflows.
+        time.sleep(1 + random.random() * 4)
+        # Pull --rebase. Use -X theirs to auto-resolve conflicts by taking
+        # upstream version for ANY file (our new-post files don't exist
+        # upstream so they survive untouched).
+        print(f"[git] running 'git pull --rebase -X theirs' before retry...")
+        rebase = subprocess.run(
+            ["git", "pull", "--rebase", "-X", "theirs", "origin", "main"],
+            cwd=ROOT, capture_output=True, text=True)
+        if rebase.returncode == 0:
+            print(f"[git] rebase ok, retrying push...")
+            continue
+        # Rebase failed even with -X theirs. Abort and try harder recovery.
+        print(f"[git] rebase -X theirs failed: {rebase.stderr.strip()[:200]}")
+        subprocess.run(["git", "rebase", "--abort"], cwd=ROOT, capture_output=True)
+        if attempt >= 4:
+            # Aggressive recovery: stash our commit's changes, reset to
+            # remote main, re-apply, recommit, retry push. This always
+            # produces a fast-forwardable state.
+            print(f"[git] attempt {attempt} hard recovery: reset to origin/main + replay")
+            # Save commit message
+            try:
+                last_msg = subprocess.run(
+                    ["git", "log", "-1", "--pretty=%B"], cwd=ROOT,
+                    capture_output=True, text=True, check=True).stdout.strip()
+            except Exception:
+                last_msg = msg  # fall back to original msg variable
+            # Soft reset to undo our commit but keep changes staged
+            subprocess.run(["git", "reset", "--soft", "HEAD~1"], cwd=ROOT,
                            capture_output=True)
-            raise subprocess.CalledProcessError(rebase.returncode,
-                                                ["git", "pull", "--rebase"],
-                                                output=rebase.stdout,
-                                                stderr=rebase.stderr)
-        print(f"[git] rebase ok, retrying push...")
+            # Fetch latest origin/main
+            subprocess.run(["git", "fetch", "origin", "main"], cwd=ROOT,
+                           capture_output=True)
+            # Reset working dir to match origin/main but keep our staged changes
+            # via stash → reset → pop pattern
+            subprocess.run(["git", "stash", "push", "-u", "-m", "lp-push-recovery"],
+                           cwd=ROOT, capture_output=True)
+            subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=ROOT,
+                           capture_output=True)
+            pop = subprocess.run(["git", "stash", "pop"], cwd=ROOT,
+                                 capture_output=True, text=True)
+            if pop.returncode != 0:
+                # Stash pop conflict — checkout our version for any conflicted file
+                # (our changes are the new content we want to publish).
+                print(f"[git] stash pop conflict, resolving with ours")
+                subprocess.run(["git", "checkout", "--theirs", "."], cwd=ROOT,
+                               capture_output=True)
+            subprocess.run(["git", "add", "-A"], cwd=ROOT, capture_output=True)
+            subprocess.run(["git", "commit", "-m", last_msg], cwd=ROOT,
+                           capture_output=True)
+            print(f"[git] hard recovery complete, retrying push...")
 
 
 # ---------------------------------------------------------------------------
