@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-premarket-2026-05-23',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "ES +0.3%, SOX +2.5% 여파 — 반도체 강세 지속",
+    excerpt: "S&P 500 선물(ES)은 +0.3% 상승 출발. 필라델피아 반도체지수(SOX)가 전날 +2.47% 급등한 여파로 반도체 섹터 강세 지속 중. 10년물 국채 수익률 4.58%로 소폭 하락, VIX 16.61로 안정세. 오늘 미국 주요 경제지표 발표 없음. 아시아증시는 혼조 — 코스피 -0.24%, 닛케이 +0.41%. ",
+    alt: 'us-premarket-2026-05-23-en',
+},
+{
+    slug: 'us-premarket-2026-05-23-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 6,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "ES +0.3% pre-market, SOX rally extends into Friday",
+    excerpt: "S&P 500 futures (ES) open +0.3%. Philadelphia Semiconductor Index (SOX) surged +2.47% yesterday, extending semiconductor strength into pre-market. 10Y Treasury yield eased to 4.58%",
+    alt: 'us-premarket-2026-05-23',
+},
+    {
     slug: 'kr-tech-recap-2026-05-22',
     lang: 'ko',
     category: 'industry',
