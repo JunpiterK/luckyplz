@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-22',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 0.37%↑ 안정 랠리, 반도체 SOX 1.99%↑ 급등",
+    excerpt: "S&P 500은 0.37% 상승 마감하며 안정적인 상승세를 이어갔고, 필라델피아 반도체 지수(SOX)는 1.99% 급등하며 기술주 강세를 주도했다. 러셀 2000은 0.91% 상승하며 중소형주 강세가 두드러졌고, 10년물 국채 수익률은 4.56%로 하락하며 채권 매수세가 유입됐다. 원/달러는 1,520.53원으로 1.38",
+    alt: 'us-tech-recap-2026-05-22-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-22-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 +0.37% steady climb as SOX surges +1.99%",
+    excerpt: "S&P 500 closed +0.37% in a steady rally, while the Philadelphia Semiconductor Index (SOX) surged +1.99%, leading tech strength. Russell 2000 gained +0.91%, highlighting small-cap m",
+    alt: 'us-tech-recap-2026-05-22',
+},
+    {
     slug: 'us-premarket-2026-05-23',
     lang: 'ko',
     category: 'industry',
