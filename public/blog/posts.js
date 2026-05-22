@@ -19,6 +19,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'anthropic-story-02-amodei-siblings',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-22',
+        readMinutes: 14,
+        coverEmoji: '📖',
+        tags: ['Anthropic', 'Dario Amodei', 'Daniela Amodei', '두 형제', 'Stanford', 'UCSF', 'OpenAI', 'Google Brain', 'Stripe', '시리즈 2', 'lucky please'],
+        title: "두 형제의 여정 — Dario와 Daniela Amodei, 다른 길에서 같은 결심으로",
+        excerpt: '이탈리아계 미국인 가정에서 자란 두 남매. 한 사람은 물리학과 신경과학을 거쳐 AI 연구의 최전선으로, 다른 한 사람은 글로벌 보건과 운영의 길에서 자랐다. 두 사람이 다시 같은 방에 앉기까지 약 15년이 걸렸다.',
+    },
+    {
     slug: 'us-tech-recap-2026-05-21',
     lang: 'ko',
     category: 'industry',
