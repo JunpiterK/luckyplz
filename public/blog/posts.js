@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-22',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "KOSDAQ 4.99% 급등에 코스피 0.41% 상승 — 2차전지주 쌍끌이",
+    excerpt: "22일 KOSDAQ이 4.99% 급등하며 1,161.13에 마감했고 KOSPI는 0.41% 상승한 7,847.71을 기록했다. 에코프로비엠 10.77%, 삼성SDI 5.03% 상승 등 2차전지 업종이 강세를 주도했으며, KOSPI200은 0.07% 소폭 상승에 그쳤다. 외국인과 기관의 수급 방향이 양 시장 간 차별화를 만",
+    alt: 'kr-tech-recap-2026-05-22-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-22-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-22',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSDAQ Surges 4.99% as Battery Stocks Rally, KOSPI Gains 0.41%",
+    excerpt: "The KOSDAQ surged 4.99% to close at 1,161.13 on May 22, while the KOSPI advanced 0.41% to 7,847.71. Battery stocks led the rally with EcoPro BM soaring 10.77% and Samsung SDI climb",
+    alt: 'kr-tech-recap-2026-05-22',
+},
+    {
     slug: 'kr-open-brief-2026-05-22',
     lang: 'ko',
     category: 'industry',
