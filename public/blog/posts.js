@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-tech-recap-2026-05-23',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "코스닥 +4.99% 급등, 2차전지 쌍끌이·美 반도체 정책 기대감",
+    excerpt: "코스닥이 5% 가까이 급등하며 1,161.13으로 마감했다. 에코프로비엠 +10.77%, 삼성SDI +5.03% 등 2차전지 업종이 쌍끌이했고, 美 상무부의 반도체 투자 인센티브 확대 소식에 투자심리가 개선됐다. 코스피는 +0.41% 소폭 상승에 그쳤으나 외국인은 KOSPI에서 2천억원 순매수로 6거래일 만에 방향을 전환",
+    alt: 'kr-tech-recap-2026-05-23-en',
+},
+{
+    slug: 'kr-tech-recap-2026-05-23-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-23',
+    readMinutes: 7,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "KOSDAQ Surges +4.99% on Battery Rally and US Chip Policy Hopes",
+    excerpt: "KOSDAQ surged nearly 5% to close at 1,161.13, driven by a battery sector rally led by EcoPro BM +10.77% and Samsung SDI +5.03%. US Commerce Department's expanded semiconductor inve",
+    alt: 'kr-tech-recap-2026-05-23',
+},
+    {
     slug: 'kr-open-brief-2026-05-23',
     lang: 'ko',
     category: 'industry',
