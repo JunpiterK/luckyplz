@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'kr-open-brief-2026-05-24',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-24',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "SOX +1.99% 강세에도 삼성전자 -2.34% 갭하락 경계",
+    excerpt: "미국 증시는 S&P 500 +0.37%, SOX +1.99% 반등 마감했으나 NVDA -1.90% 약세가 삼성전자(-2.34%)에 부담. 반면 에코프로비엠 +10.77%, 삼성SDI +5.03% 등 배터리 강세로 KOSDAQ +4.99% 급등. USD/KRW 1,520원 돌파로 수출주 수혜 기대되나 외국인 매물 출회 리스",
+    alt: 'kr-open-brief-2026-05-24-en',
+},
+{
+    slug: 'kr-open-brief-2026-05-24-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-24',
+    readMinutes: 6,
+    coverEmoji: '🇰🇷',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "Samsung slides despite SOX rally, battery stocks surge on KOSDAQ",
+    excerpt: "US markets closed mixed with S&P 500 +0.37% and SOX +1.99%, but NVDA -1.90% weakness pressures Samsung Electronics (-2.34%). Battery stocks led KOSDAQ +4.99% surge with EcoPro BM +",
+    alt: 'kr-open-brief-2026-05-24',
+},
+    {
     slug: 'us-tech-recap-2026-05-23',
     lang: 'ko',
     category: 'industry',
