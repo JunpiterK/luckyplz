@@ -26,8 +26,8 @@ window.BLOG_POSTS = [
     readMinutes: 6,
     coverEmoji: '🇰🇷',
     tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
-    title: "SOX +1.99% 강세에도 삼성전자 -2.34% 갭하락 경계",
-    excerpt: "미국 증시는 S&P 500 +0.37%, SOX +1.99% 반등 마감했으나 NVDA -1.90% 약세가 삼성전자(-2.34%)에 부담. 반면 에코프로비엠 +10.77%, 삼성SDI +5.03% 등 배터리 강세로 KOSDAQ +4.99% 급등. USD/KRW 1,520원 돌파로 수출주 수혜 기대되나 외국인 매물 출회 리스",
+    title: "美 소폭 상승에도 원·달러 1520원대 유지, 전기차 배터리주 급등 주목",
+    excerpt: "미국 증시는 S&P 500 +0.37%, 필라델피아 반도체 +1.99% 상승하며 안정된 흐름을 보였으나 엔비디아는 -1.90% 하락했습니다. 원·달러 환율은 1520.53원으로 전일 대비 +1.07% 상승하며 수출주 수혜가 예상됩니다. 국내 증시는 에코프로비엠 +10.77%, 삼성SDI +5.03% 등 배터리 섹터가 급등",
     alt: 'kr-open-brief-2026-05-24-en',
 },
 {
@@ -38,8 +38,8 @@ window.BLOG_POSTS = [
     readMinutes: 6,
     coverEmoji: '🇰🇷',
     tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
-    title: "Samsung slides despite SOX rally, battery stocks surge on KOSDAQ",
-    excerpt: "US markets closed mixed with S&P 500 +0.37% and SOX +1.99%, but NVDA -1.90% weakness pressures Samsung Electronics (-2.34%). Battery stocks led KOSDAQ +4.99% surge with EcoPro BM +",
+    title: "S&P +0.37%, won holds 1520 per dollar, battery stocks surge focus",
+    excerpt: "US markets closed modestly higher with S&P 500 +0.37% and Philadelphia Semiconductor Index +1.99%, though NVDA fell -1.90%. USD/KRW rose +1.07% to 1520.53, supporting export stocks",
     alt: 'kr-open-brief-2026-05-24',
 },
     {
