@@ -19,6 +19,30 @@
 */
 window.BLOG_POSTS = [
     {
+    slug: 'us-tech-recap-2026-05-23',
+    lang: 'ko',
+    category: 'industry',
+    date: '2026-05-24',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["데일리 리캡", "미국증시", "한국증시", "테크"],
+    title: "S&P 500 +0.37% 반등, 반도체 +1.99% 급등 견인",
+    excerpt: "미국 증시는 반도체 업종 강세에 힘입어 상승 마감했다. S&P 500은 +0.37%, Nasdaq +0.19%, Dow +0.58% 기록했으며 필라델피아 반도체지수(SOX)는 +1.99% 급등했다. 러셀 2000은 +0.91%로 대형주를 상회했다. 기술주(XLK) +1.00%, 헬스케어(XLV) +1.17%가 상승을 주도",
+    alt: 'us-tech-recap-2026-05-23-en',
+},
+{
+    slug: 'us-tech-recap-2026-05-23-en',
+    lang: 'en',
+    category: 'industry',
+    date: '2026-05-24',
+    readMinutes: 8,
+    coverEmoji: '🇺🇸',
+    tags: ["Daily Recap", "US Markets", "KR Markets", "Tech"],
+    title: "S&P 500 rises 0.37% as chip stocks surge 1.99%",
+    excerpt: "U.S. equities closed higher driven by semiconductor strength. The S&P 500 gained +0.37%, Nasdaq +0.19%, and Dow +0.58%, while the Philadelphia Semiconductor Index (SOX) surged +1.9",
+    alt: 'us-tech-recap-2026-05-23',
+},
+    {
         slug: 'spacex-starship-flight-12-v3-debut',
         lang: 'ko',
         category: 'space-tech',
