@@ -19,6 +19,17 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'anthropic-story-03-claude-evolution',
+        lang: 'ko',
+        category: 'ai-tech',
+        date: '2026-05-25',
+        readMinutes: 16,
+        coverEmoji: '📖',
+        tags: ['Anthropic', 'Claude', 'Claude 1.0', 'Claude 2', 'Claude 3', 'Claude 3.5 Sonnet', 'Claude 3.7', 'Claude 4', 'Opus 4.7', 'Computer Use', 'Extended Thinking', 'Claude Code', 'Artifacts', '시리즈 3', 'lucky please'],
+        title: "Claude의 진화 — 1.0에서 4.7까지, 3년의 기록",
+        excerpt: '2023년 봄 조용히 데뷔한 Claude 1.0부터 2026년의 Opus 4.7까지. 9K에서 1M으로 약 110배 늘어난 컨텍스트, 멀티모달, Artifacts, Computer Use, Extended Thinking, Claude Code, 그리고 그 변화를 만든 결정들에 대한 이야기.',
+    },
+    {
         slug: 'spacex-starship-flight-12-v3-debut',
         lang: 'ko',
         category: 'space-tech',
