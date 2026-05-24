@@ -93,6 +93,69 @@ SLOTS = {
 
 
 # ---------------------------------------------------------------------------
+# Trading-day / holiday guard (short-circuits the pipeline before any
+# Claude or yfinance call when the relevant exchange is closed)
+# ---------------------------------------------------------------------------
+# Without this guard, holidays generated content from training-data
+# hallucination because Claude's prompt-based holiday detection was not
+# reliable. Now the pipeline short-circuits BEFORE any API call: if the
+# exchange is closed, we log a clean skip and exit 0.
+#
+# Two-tier check:
+#   1. Weekend (Sat/Sun) — handled inline by Python's datetime, no library
+#      dependency. Covers ~28% of days.
+#   2. Exchange holiday — handled by `exchange_calendars` library which
+#      ships authoritative NYSE and XKRX (Korea Exchange) calendars.
+#      Covers the remaining ~3% of non-trading weekdays.
+# Total: ~31% of calendar days short-circuit at near-zero cost.
+
+# slot → exchange map. Each slot's trading_date is judged against the
+# exchange that produces its data.
+SLOT_TO_MARKET = {
+    "us-close":     "XNYS",   # NYSE; us-close uses yesterday US ET
+    "us-premarket": "XNYS",   # NYSE; us-premarket uses today US ET
+    "kr-open":      "XKRX",   # KRX; kr-open uses today KR (opening today)
+    "kr-close":     "XKRX",   # KRX; kr-close uses today KR (closing today)
+}
+
+
+def is_trading_day(date_str: str, market: str) -> tuple[bool, str]:
+    """Check if `date_str` is a trading day on the given market.
+
+    Returns (is_open, reason). On any library failure, falls back to True
+    (graceful — better to publish a post we can later delete than to skip
+    a real trading day because of a library issue).
+
+    market: 'XNYS' (NYSE) or 'XKRX' (Korea Exchange) — ISO MIC codes.
+    """
+    from datetime import datetime
+    try:
+        target = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        return True, f"invalid date format: {date_str}"
+
+    # Tier 1 — weekend (cheap, no library)
+    if target.weekday() >= 5:   # 5=Sat, 6=Sun
+        day_name = ("Mon","Tue","Wed","Thu","Fri","Sat","Sun")[target.weekday()]
+        return False, f"weekend ({day_name})"
+
+    # Tier 2 — exchange holiday calendar
+    try:
+        import exchange_calendars as ec
+        cal = ec.get_calendar(market)
+        if cal.is_session(date_str):
+            return True, f"{market} regular trading session"
+        # Weekday but not a session = holiday
+        return False, f"{market} holiday (closed weekday)"
+    except ImportError:
+        print(f"[holiday] exchange_calendars not installed — assuming {market} open on {date_str}")
+        return True, "library unavailable, defaulting open"
+    except Exception as e:
+        print(f"[holiday] {market} calendar lookup failed: {type(e).__name__}: {e} — assuming open")
+        return True, f"calendar lookup error: {e}"
+
+
+# ---------------------------------------------------------------------------
 # Hard market data fetch (replaces Claude hallucination with verified API data)
 # ---------------------------------------------------------------------------
 # Claude's training data caps around late 2024. When asked for "today's" S&P
@@ -1117,6 +1180,22 @@ def main():
 
     slug = f"{cfg['slug_prefix']}-{trading_date}"
     print(f"[run] slot={args.slot} trading={trading_date} publish={publish_date} slug={slug}")
+
+    # === HOLIDAY / WEEKEND GUARD (short-circuit before any API call) ===
+    # User report 2026-05-23: holiday posts were being generated from
+    # hallucinated data because Claude's prompt-based holiday detection
+    # is unreliable. Now we check the authoritative exchange calendar
+    # BEFORE spending any Anthropic / yfinance / web_search budget.
+    # Force flag bypasses this for manual backfill scenarios.
+    if not args.force:
+        market = SLOT_TO_MARKET.get(args.slot)
+        if market:
+            is_open, reason = is_trading_day(trading_date, market)
+            if not is_open:
+                print(f"[holiday] {market} closed on {trading_date} ({reason}). Exiting cleanly — no post generated.")
+                return
+            else:
+                print(f"[holiday] {market} open on {trading_date} ({reason}). Proceeding with pipeline.")
 
     # Duplicate-publish guard: if a directory for this slug already exists with
     # an index.html, treat as already-published and skip cleanly. Use --force
