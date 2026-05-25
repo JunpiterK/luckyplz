@@ -11,21 +11,24 @@
 
 ---
 
-## 1. 슬롯 한눈 비교표
+## 1. 슬롯 한눈 비교표 (6 슬롯)
 
-| | ① us-close | ② kr-open | ③ kr-close | ④ us-premarket |
-|---|---|---|---|---|
-| **파일** | `us-close-recap.md` | `kr-open-brief.md` | `kr-close-recap.md` | `us-premarket.md` |
-| **cron (UTC)** | `0 21 * * *` | `30 22 * * *` | `45 6 * * *` | `30 12 * * *` |
-| **발행 (KST)** | 06:00 | 07:30 | 15:45 | 21:30 |
-| **독자 컨텍스트** | 출근 전 미국장 리캡 | 지하철, KOSPI 개장 90분 전 | KOSPI 마감 15분 후 | 미국장 개장 직전 (= 08:30 ET) |
-| **시장** | XNYS | XKRX | XKRX | XNYS |
-| **trading_date offset** | -1 일 (어제 미국장) | 0 일 (오늘) | 0 일 (오늘) | 0 일 (오늘) |
-| **slug 접두사** | `us-tech-recap-` | `kr-open-brief-` | `kr-tech-recap-` | `us-premarket-` |
-| **헤더 라벨 KO** | 미국 테크 마감 리캡 | 한국장 개장 브리핑 | 한국 테크 마감 리캡 | 미국 프리마켓 브리핑 |
-| **헤더 라벨 EN** | US TECH DAILY RECAP | KOREA OPEN BRIEF | KOREA TECH DAILY RECAP | US PRE-MARKET BRIEF |
-| **이모지** | 🇺🇸 | 🇰🇷 | 🇰🇷 | 🇺🇸 |
-| **읽기 시간** | 8 분 | 6 분 | 7 분 | 6 분 |
+| | ① us-close | ② kr-open | ③ kr-close | ④ us-premarket | ⑤ cn-open | ⑥ cn-close |
+|---|---|---|---|---|---|---|
+| **파일** | `us-close-recap.md` | `kr-open-brief.md` | `kr-close-recap.md` | `us-premarket.md` | `cn-open-brief.md` | `cn-close-recap.md` |
+| **cron (UTC)** | `0 21 * * *` | `30 22 * * *` | `45 6 * * *` | `30 12 * * *` | `30 1 * * *` | `30 7 * * *` |
+| **발행 (KST)** | 06:00 | 07:30 | 15:45 | 21:30 | 10:30 | 16:30 |
+| **발행 (현지)** | 어제 NYSE 마감+1h | KOSPI 개장 -1.5h | KOSPI 마감 +45min | NYSE 개장 -1h | SSE/SZSE 개장 | SSE/SZSE 마감 +30min |
+| **독자 컨텍스트** | 출근 전 미국장 리캡 | 지하철, KOSPI 개장 90분 전 | KOSPI 마감 15분 후 | 미국장 개장 직전 | 중국장 개장 시점 | 중국장 마감 후 |
+| **시장** | XNYS | XKRX | XKRX | XNYS | XSHG | XSHG |
+| **trading_date offset** | -1 일 (어제 미국장) | 0 일 (오늘) | 0 일 (오늘) | 0 일 (오늘) | 0 일 (오늘) | 0 일 (오늘) |
+| **slug 접두사** | `us-tech-recap-` | `kr-open-brief-` | `kr-tech-recap-` | `us-premarket-` | `cn-open-brief-` | `cn-tech-recap-` |
+| **헤더 라벨 KO** | 미국 테크 마감 리캡 | 한국장 개장 브리핑 | 한국 테크 마감 리캡 | 미국 프리마켓 브리핑 | 중국장 개장 브리핑 | 중국 테크 마감 리캡 |
+| **헤더 라벨 EN** | US TECH DAILY RECAP | KOREA OPEN BRIEF | KOREA TECH DAILY RECAP | US PRE-MARKET BRIEF | CHINA OPEN BRIEF | CHINA TECH DAILY RECAP |
+| **이모지** | 🇺🇸 | 🇰🇷 | 🇰🇷 | 🇺🇸 | 🇨🇳 | 🇨🇳 |
+| **읽기 시간** | 8 분 | 6 분 | 7 분 | 6 분 | 6 분 | 7 분 |
+
+**매일 발화 합계**: 6 슬롯 × 4 언어 (ko/en/ja/zh) = **24 개 글** (모든 시장이 평일·휴장 아닌 경우).
 
 ---
 

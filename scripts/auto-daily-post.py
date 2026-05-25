@@ -164,6 +164,32 @@ SLOTS = {
         "header_label_ja": "米国プレマーケット・ブリーフ",
         "header_label_zh": "美股盘前简报",
     },
+    "cn-open": {
+        "prompt": "cn-open-brief.md",
+        "slug_prefix": "cn-open-brief",
+        # KST 10:30 = CST 09:30 = exact CN opening. Same-day trading_date.
+        "trading_date_offset_days": 0,
+        "category": "industry",
+        "read_min": 6,
+        "cover_emoji": "🇨🇳",
+        "header_label_ko": "중국장 개장 브리핑",
+        "header_label_en": "CHINA OPEN BRIEF",
+        "header_label_ja": "中国市場・寄り前ブリーフ",
+        "header_label_zh": "中国股市开盘前简报",
+    },
+    "cn-close": {
+        "prompt": "cn-close-recap.md",
+        "slug_prefix": "cn-tech-recap",
+        # KST 16:30 = CST 15:30 = 30 min after CN close (data settled).
+        "trading_date_offset_days": 0,
+        "category": "industry",
+        "read_min": 7,
+        "cover_emoji": "🇨🇳",
+        "header_label_ko": "중국 테크 마감 리캡",
+        "header_label_en": "CHINA TECH DAILY RECAP",
+        "header_label_ja": "中国テック市場マーケット引け",
+        "header_label_zh": "中国科技市场收盘速览",
+    },
 }
 
 
@@ -180,8 +206,11 @@ SLOTS = {
 #   1. Weekend (Sat/Sun) — handled inline by Python's datetime, no library
 #      dependency. Covers ~28% of days.
 #   2. Exchange holiday — handled by `exchange_calendars` library which
-#      ships authoritative NYSE and XKRX (Korea Exchange) calendars.
-#      Covers the remaining ~3% of non-trading weekdays.
+#      ships authoritative NYSE, XKRX (Korea Exchange), XSHG (Shanghai SE)
+#      calendars. Covers the remaining ~3% of non-trading weekdays. China
+#      has additional non-trading windows (Lunar New Year ~1 week, National
+#      Day ~1 week, Qingming, Dragon Boat, Mid-Autumn) so this guard
+#      becomes especially important once cn-* slots are active.
 # Total: ~31% of calendar days short-circuit at near-zero cost.
 
 # slot → exchange map. Each slot's trading_date is judged against the
@@ -191,6 +220,8 @@ SLOT_TO_MARKET = {
     "us-premarket": "XNYS",   # NYSE; us-premarket uses today US ET
     "kr-open":      "XKRX",   # KRX; kr-open uses today KR (opening today)
     "kr-close":     "XKRX",   # KRX; kr-close uses today KR (closing today)
+    "cn-open":      "XSHG",   # Shanghai SE; cn-open uses today CN (opening today)
+    "cn-close":     "XSHG",   # Shanghai SE; cn-close uses today CN (closing today)
 }
 
 
@@ -201,7 +232,9 @@ def is_trading_day(date_str: str, market: str) -> tuple[bool, str]:
     (graceful — better to publish a post we can later delete than to skip
     a real trading day because of a library issue).
 
-    market: 'XNYS' (NYSE) or 'XKRX' (Korea Exchange) — ISO MIC codes.
+    market: 'XNYS' (NYSE), 'XKRX' (Korea Exchange), or 'XSHG' (Shanghai
+            Stock Exchange) — ISO MIC codes. exchange_calendars ships
+            all three out of the box.
     """
     from datetime import datetime
     try:
@@ -281,6 +314,44 @@ _KR_STOCKS = {
     "한화에어로스페이스 (012450)": "012450.KS",
     "HD현대중공업 (329180)": "329180.KS",
 }
+# China indices. Yahoo Finance tickers:
+#   ^GSPC  family symbols → SSE Composite (000001.SS), Shenzhen Component
+#   (399001.SZ), CSI 300 (000300.SS), ChiNext (399006.SZ),
+#   STAR 50 (^STAR50 not always reliable; use 000688.SS as fallback if needed),
+#   Hang Seng (^HSI), Hang Seng China Enterprises (^HSCE), Hang Seng Tech (^HSTECH).
+# Decision: include both Mainland (SSE/SZSE/CSI300/ChiNext) and Hong Kong
+# (HSI/HSCE/HSTECH) because Chinese tech investing is dominated by ADRs and
+# H-shares on the HK exchange even when "Chinese market" is mentioned.
+_CN_INDICES = {
+    "SSE Composite (上证综指)":        "000001.SS",
+    "Shenzhen Component (深证成指)":   "399001.SZ",
+    "CSI 300 (沪深300)":               "000300.SS",
+    "ChiNext (创业板指)":              "399006.SZ",
+    "Hang Seng (恒生指数)":            "^HSI",
+    "Hang Seng China Enterprises (国企指数)": "^HSCE",
+    "Hang Seng Tech (恒生科技)":       "^HSTECH",
+}
+# China tech & consumer leaders. ADRs (BABA/JD/PDD/BIDU/NIO/XPEV/LI) trade
+# on NYSE/Nasdaq during US hours and reflect overnight sentiment. The
+# .HK pairs are the primary listing for Tencent/Meituan/BYD/SMIC and price
+# Chinese on-shore demand directly.
+_CN_STOCKS = {
+    # US-listed Chinese ADRs (overnight sentiment)
+    "Alibaba ADR (BABA)":      "BABA",
+    "JD.com ADR (JD)":         "JD",
+    "PDD (Pinduoduo) ADR":     "PDD",
+    "Baidu ADR (BIDU)":        "BIDU",
+    "NIO ADR":                 "NIO",
+    "XPeng ADR":               "XPEV",
+    "Li Auto ADR":             "LI",
+    # HK-listed primaries
+    "Tencent (00700.HK)":      "0700.HK",
+    "Meituan (03690.HK)":      "3690.HK",
+    "BYD (01211.HK)":          "1211.HK",
+    "SMIC (00981.HK)":         "0981.HK",
+    "Xiaomi (01810.HK)":       "1810.HK",
+    "AIA Group (01299.HK)":    "1299.HK",
+}
 
 
 def fetch_market_data(slot: str, trading_date: str) -> dict:
@@ -314,6 +385,20 @@ def fetch_market_data(slot: str, trading_date: str) -> dict:
     elif slot == "kr-close":
         tickers.update(_KR_INDICES)
         tickers.update(_KR_STOCKS)
+    elif slot == "cn-open":
+        # Overnight US for spillover (Chinese tech tracks Nasdaq) + ADRs +
+        # CN indices for prior-close anchor. Run before CN market opens
+        # at 09:30 CST (10:30 KST), so yesterday's CN close is the
+        # latest data available.
+        tickers.update({k: v for k, v in _US_INDICES.items() if k in (
+            "S&P 500", "Nasdaq Composite", "Philadelphia Semi (SOX)",
+            "10Y Treasury Yield", "DXY (Dollar Index)", "VIX")})
+        tickers.update(_CN_INDICES)
+        tickers.update(_CN_STOCKS)
+    elif slot == "cn-close":
+        # After 15:00 CST (16:00 KST + 30min margin) data window settled.
+        tickers.update(_CN_INDICES)
+        tickers.update(_CN_STOCKS)
 
     # Date window: fetch ~7 trading days back to safely compute change vs prior close
     target = datetime.strptime(trading_date, "%Y-%m-%d")
@@ -798,6 +883,21 @@ def render_sections(slot: str, data: dict, lang: str) -> str:
         pm = data.get("premarket_movers", {}) or {}
         parts.append(render_movers(pm.get("winners", []), lang, "winners"))
         parts.append(render_movers(pm.get("losers", []), lang, "losers"))
+    elif slot == "cn-open":
+        # cn-open mirrors kr-open: overnight US spillover (Chinese tech tracks
+        # Nasdaq + US-listed ADRs trade BABA/JD/PDD/BIDU/etc through US hours)
+        # plus any CN news headlines the prompt produced.
+        parts.append(render_indices_block(data.get("overnight_us", []), lang))
+        parts.append(render_news(data.get("cn_news", []), lang))
+    elif slot == "cn-close":
+        # cn-close mirrors kr-close: domestic indices, themes, top movers,
+        # session headlines. Indices key is `cn_indices` (parallel to
+        # `kr_indices`); themes is `cn_themes`.
+        parts.append(render_indices_block(data.get("cn_indices", []), lang))
+        parts.append(render_themes(data.get("cn_themes", []), lang))
+        parts.append(render_movers(data.get("winners", []), lang, "winners"))
+        parts.append(render_movers(data.get("losers", []), lang, "losers"))
+        parts.append(render_news(data.get("cn_news", []), lang))
     return "\n".join(p for p in parts if p)
 
 
@@ -866,6 +966,18 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
             "ja": "米国プレマーケット, ナイトセッション, 決算カレンダー, マクロイベント, デイリーブリーフ",
             "zh": "美股盘前, 隔夜行情, 财报日历, 宏观事件, 每日简报",
         },
+        "cn-open": {
+            "ko": "중국증시 개장, 상해종합, CSI 300, 항생지수, 텐센트, 알리바바, 데일리 브리프",
+            "en": "China market open brief, SSE Composite, CSI 300, Hang Seng, Tencent, Alibaba, daily brief",
+            "ja": "中国市場 寄り付き, 上海総合, CSI 300, ハンセン指数, テンセント, アリババ, デイリーブリーフ",
+            "zh": "中国股市开盘, 上证综指, 沪深300, 恒生指数, 腾讯, 阿里巴巴, 每日简报",
+        },
+        "cn-close": {
+            "ko": "중국증시 마감, 상해 마감, 외인 북향자금, 중국 테크, 항생, 데일리 리캡",
+            "en": "China market close, SSE close, northbound flow, China tech, Hang Seng, daily recap",
+            "ja": "中国市場引け, 上海 終値, ノースバウンド資金, 中国テック, ハンセン, デイリーリキャップ",
+            "zh": "中国股市收盘, 上证收盘, 北向资金, 中国科技, 恒生, 每日复盘",
+        },
     }
     keywords = keywords_map[slot].get(lang, keywords_map[slot]["en"])
 
@@ -905,8 +1017,12 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
         ],
     }
 
-    # Badges from indices (top 5 by absolute change)
-    indices = (data.get("indices") or data.get("kr_indices") or data.get("futures") or data.get("overnight_us") or [])
+    # Badges from indices (top 5 by absolute change). The data key varies
+    # per slot — Claude emits `indices` for us-close, `kr_indices` for
+    # kr-close, `cn_indices` for cn-close, `futures` for us-premarket,
+    # `overnight_us` for kr-open / cn-open.
+    indices = (data.get("indices") or data.get("kr_indices") or data.get("cn_indices")
+               or data.get("futures") or data.get("overnight_us") or [])
     badges = []
     for idx in indices[:5]:
         if not isinstance(idx, dict):
