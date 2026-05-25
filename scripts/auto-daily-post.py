@@ -412,8 +412,15 @@ def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
 # ---------------------------------------------------------------------------
 # Anthropic call
 # ---------------------------------------------------------------------------
-def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 32000) -> dict:
-    """Call Claude API with web_search tool. Returns parsed JSON dict."""
+def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 48000) -> dict:
+    """Call Claude API with web_search tool. Returns parsed JSON dict.
+
+    max_tokens raised from 32000 to 48000 (Sub-step 2a-2 deploy) to accommodate
+    the 4-language narrative output. Sonnet 4.5's hard cap is 64000 output
+    tokens — 48000 keeps a safety margin while fitting 4 × ~700-word narratives
+    (~10-12K tokens) plus all _ja/_zh sibling fields (headline/summary/
+    bottom_line/fact_check/forward_calendar) and web_search overhead.
+    """
     import anthropic
 
     client = anthropic.Anthropic()

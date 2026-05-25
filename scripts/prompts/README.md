@@ -151,8 +151,10 @@ USD/KRW · Gold · Silver · WTI · BTC · ETH · XRP
 - 모든 수치 verified — 모르면 omit (절대 추정·반올림 금지)
 - 발행시 휴장이면 `{"skip": true, "reason": "..."}` 반환 (실제로는 코드의 `is_trading_day()` 가드가 먼저 차단해서 여기까지 안 옴)
 
-### 양 언어 동시 생성
-모든 JSON 필드가 `_ko` / `_en` 쌍으로 정의되어 **Claude 1회 호출 → 한·영 JSON 동시 생산**. 그 뒤 `render_html(slot, "ko", data)` + `render_html(slot, "en", data)` 가 같은 data dict 으로 2개 HTML 을 뽑는다. 결과: 한·영 본문의 숫자가 100% 일치.
+### 4 언어 동시 생성 (ko + en + ja + zh)
+모든 JSON 필드가 `_ko` / `_en` / `_ja` / `_zh` 4종으로 정의되어 **Claude 1회 호출 → 4 언어 JSON 동시 생산**. 영어가 source-of-truth (영어 먼저 작성 → ko/ja/zh 자연 번역). 그 뒤 `render_html(slot, lang, data)` 가 4 번 호출되어 4 HTML 을 뽑는다. 결과: 4 언어 본문의 숫자·날짜·티커가 100% 일치.
+
+**Graceful fallback**: 만일 프롬프트가 일시적으로 `_ja` / `_zh` 필드를 못 만들면, `has_lang_content()` 가 False 를 반환해서 그 언어판은 안 만들어진다. `pick_localized()` 가 `_en` 으로 폴백하므로 코드는 안 깨짐. 즉 ja/zh 가 누락된 상태도 ko+en 2 언어로 정상 발행.
 
 ---
 
@@ -217,4 +219,4 @@ because of cutoff" reasoning. The ONLY valid skip is a documented holiday.
 
 ---
 
-마지막 업데이트: 2026-05-24 — Master V4 (4 sections, ~700 words KO+EN, strict factuality)
+마지막 업데이트: 2026-05-25 — Master V4 + 4 languages. 4 sections, ~700 words each in KO/EN/JA/ZH. English source-of-truth, 자연스러운 번역으로 ko/ja/zh 동시 출력. max_tokens 32K → 48K. Graceful fallback: ja/zh 필드가 없으면 해당 언어판 안 만들어짐 (ko+en 만 발행).
