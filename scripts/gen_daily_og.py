@@ -11,35 +11,102 @@ FONT_BOLD = "C:/Windows/Fonts/arialbd.ttf"
 FONT_REG = "C:/Windows/Fonts/arial.ttf"
 FONT_KR_BOLD = "C:/Windows/Fonts/malgunbd.ttf"
 FONT_KR = "C:/Windows/Fonts/malgun.ttf"
+# Per-language Windows-side primary paths (used during local dev). Linux
+# fallbacks below cover the GitHub Actions runner — the actual production
+# environment. On Linux these Windows paths simply fail and the loop
+# advances to the per-language fallback chain.
+FONT_JP_BOLD = "C:/Windows/Fonts/yugothb.ttc"        # Yu Gothic UI Bold
+FONT_JP = "C:/Windows/Fonts/yugothic.ttc"
+FONT_ZH_BOLD = "C:/Windows/Fonts/msyhbd.ttc"         # Microsoft YaHei Bold
+FONT_ZH = "C:/Windows/Fonts/msyh.ttc"
 
 # Linux fallback paths (GitHub Actions ubuntu-latest).
-# CRITICAL: Korean-capable fonts MUST come first because OG image text mixes
-# Korean + Latin (e.g., 'S&P 500 7445선 마감'). DejaVu/Liberation only render
-# Latin and would silently render Korean as .notdef boxes (□□□).
+# CRITICAL: language-appropriate fonts MUST come first because OG image text
+# mixes the post's language with Latin (e.g., 'S&P 500 7445선 마감' or
+# 'CSI 300 收盘 -0.82%' or 'ナスダック 高値更新'). DejaVu/Liberation only
+# render Latin and would silently render CJK as .notdef boxes (□□□).
 #
-# fonts-nanum package installs single-language TTF files which Pillow loads
-# reliably. fonts-noto-cjk installs a TTC collection (multi-language), which
-# Pillow opens but may pick the wrong face (SC/TC/JP/KR all bundled).
-# So order: Nanum (Korean+Latin) → Noto CJK TTC → DejaVu (Latin only).
-FONT_FALLBACKS_BOLD = [
-    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",            # Korean + Latin, single face
+# fonts-nanum (Korean), fonts-noto-cjk-extra (JP/SC/TC single-face OTFs),
+# and fonts-noto-cjk (TTC collection) all need to be installed on the
+# runner. fonts-noto-cjk-extra is the only package that provides single
+# OTFs per language, which Pillow can load reliably without TTC face
+# selection ambiguity.
+FONT_FALLBACKS_KO_BOLD = [
+    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",
     "/usr/share/fonts/truetype/nanum/NanumBarunGothicBold.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",            # fonts-noto-cjk standard path
-    "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Bold.otf",          # fonts-noto-cjk-extra
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Bold.ttc",            # 일부 배포판
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",            # Latin-only last
+    "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Bold.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+]
+FONT_FALLBACKS_JA_BOLD = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Bold.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",   # Korean is fine for shared CJK Han glyphs
+]
+FONT_FALLBACKS_ZH_BOLD = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Bold.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",   # ditto
+]
+FONT_FALLBACKS_EN_BOLD = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/nanum/NanumGothicBold.ttf",   # CJK fallback in case Claude leaves CJK chars in EN
 ]
 
-FONT_FALLBACKS_REG = [
+FONT_FALLBACKS_KO_REG = [
     "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
     "/usr/share/fonts/truetype/nanum/NanumBarunGothic.ttf",
-    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
     "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Regular.otf",
-    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+]
+FONT_FALLBACKS_JA_REG = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+]
+FONT_FALLBACKS_ZH_REG = [
+    "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+]
+FONT_FALLBACKS_EN_REG = [
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
 ]
+
+# Legacy aliases used by load_font's autodetect branch (when caller
+# doesn't pass `lang`). KR-first ordering preserves the previous default
+# behavior so the old code path keeps producing the same output.
+FONT_FALLBACKS_BOLD = (
+    FONT_FALLBACKS_KO_BOLD
+    + FONT_FALLBACKS_JA_BOLD[:2]
+    + FONT_FALLBACKS_ZH_BOLD[:2]
+    + FONT_FALLBACKS_EN_BOLD[:2]
+)
+FONT_FALLBACKS_REG = (
+    FONT_FALLBACKS_KO_REG
+    + FONT_FALLBACKS_JA_REG[:2]
+    + FONT_FALLBACKS_ZH_REG[:2]
+    + FONT_FALLBACKS_EN_REG[:2]
+)
+
+
+def fallbacks_for(lang: str, bold: bool):
+    """Return the language-appropriate fallback chain.
+
+    ko → Nanum first, then CJK TTC. ja → Noto JP OTF first.
+    zh → Noto SC OTF first. en/other → DejaVu first.
+    Each chain ends with a CJK fallback so mixed-content lines still
+    render even when a label leaks an out-of-language character.
+    """
+    if lang == "ko":
+        return FONT_FALLBACKS_KO_BOLD if bold else FONT_FALLBACKS_KO_REG
+    if lang == "ja":
+        return FONT_FALLBACKS_JA_BOLD if bold else FONT_FALLBACKS_JA_REG
+    if lang == "zh":
+        return FONT_FALLBACKS_ZH_BOLD if bold else FONT_FALLBACKS_ZH_REG
+    return FONT_FALLBACKS_EN_BOLD if bold else FONT_FALLBACKS_EN_REG
 
 W, H = 1200, 630
 
@@ -54,6 +121,34 @@ def load_font(primary: str, size: int):
     is_bold = any(kw in primary.lower() for kw in ("bold", "bd", "black"))
     fallbacks = FONT_FALLBACKS_BOLD if is_bold else FONT_FALLBACKS_REG
     for p in [primary, *fallbacks]:
+        try:
+            return ImageFont.truetype(p, size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
+
+
+def load_font_for_lang(lang: str, size: int, bold: bool = True):
+    """Load a font appropriate for the given language.
+
+    ja/zh on Linux: Noto Sans JP / SC OTF first. ko: Nanum. en: Arial/DejaVu.
+    The Windows-side primary path lets local devs preview OG images
+    accurately without installing the Noto fonts; on Linux runners the
+    primary path simply fails and the language-specific fallback chain
+    takes over. Falls back to the default font as last resort.
+    """
+    # Pick a per-language Windows primary so local previews render
+    # correctly for ja/zh as well.
+    if lang == "ja":
+        primary = FONT_JP_BOLD if bold else FONT_JP
+    elif lang == "zh":
+        primary = FONT_ZH_BOLD if bold else FONT_ZH
+    elif lang == "ko":
+        primary = FONT_KR_BOLD if bold else FONT_KR
+    else:
+        primary = FONT_BOLD if bold else FONT_REG
+
+    for p in [primary, *fallbacks_for(lang, bold)]:
         try:
             return ImageFont.truetype(p, size)
         except Exception:
@@ -104,8 +199,10 @@ def make_og(out_path: Path, *, lang: str, label: str, headline: str, og_data: di
     img = make_bg()
     draw = ImageDraw.Draw(img)
 
-    # Top label
-    label_font = load_font(FONT_KR_BOLD if lang == "ko" else FONT_BOLD, 22)
+    # Top label (label text and headline are in the page's language, so
+    # pick fonts that can render that language without falling back to
+    # tofu boxes for non-Latin characters).
+    label_font = load_font_for_lang(lang, 22, bold=True)
     draw_centered(draw, label, 50, label_font, (255, 209, 102))
 
     # Big headline (auto-split into 2 lines if long)
@@ -117,7 +214,7 @@ def make_og(out_path: Path, *, lang: str, label: str, headline: str, og_data: di
     else:
         lines = [headline]
 
-    head_font = load_font(FONT_KR_BOLD if lang == "ko" else FONT_BOLD, 60 if len(lines) > 1 else 70)
+    head_font = load_font_for_lang(lang, 60 if len(lines) > 1 else 70, bold=True)
     y = 110
     for i, line in enumerate(lines):
         color = (255, 255, 255) if i == 0 else (0, 229, 255)
