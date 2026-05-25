@@ -47,6 +47,73 @@ ET = pytz.timezone("US/Eastern")
 # ---------------------------------------------------------------------------
 # Slot definitions — single source of truth
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Language configuration
+# ---------------------------------------------------------------------------
+# Tier A languages (mandatory). The pipeline always produces ko + en;
+# ja and zh are added when the prompt JSON includes the corresponding
+# fields. This list is the iteration order used by main() — anywhere the
+# code needs "every language we might publish", import this constant.
+LANGS = ["ko", "en", "ja", "zh"]
+
+# Per-language metadata used in HTML rendering. Each tuple is (og_locale,
+# canonical_suffix). suffix "" means base slug (ko owns the bare slug);
+# everything else gets `-<lang>` appended.
+LANG_META = {
+    "ko": {"og_locale": "ko_KR", "slug_suffix": ""},
+    "en": {"og_locale": "en_US", "slug_suffix": "-en"},
+    "ja": {"og_locale": "ja_JP", "slug_suffix": "-ja"},
+    "zh": {"og_locale": "zh_CN", "slug_suffix": "-zh"},
+}
+
+
+def L(lang: str, ko: str, en: str, ja: str | None = None, zh: str | None = None) -> str:
+    """4-way locale picker for UI labels.
+
+    Returns the label for `lang`. ja/zh fall back to en if not provided;
+    this keeps the call sites short for the (common) case where ko and en
+    are the only really different strings. Existing two-arg patterns like
+    "X" if lang == "en" else "Y" become L(lang, "Y", "X").
+    """
+    if lang == "ko":
+        return ko
+    if lang == "ja":
+        return ja if ja is not None else en
+    if lang == "zh":
+        return zh if zh is not None else en
+    return en  # 'en' or any unknown
+
+
+def pick_localized(data: dict, key: str, lang: str, fallback: str = "en") -> str:
+    """Read `data[f"{key}_{lang}"]` with graceful fallback to en.
+
+    Returns "" if neither lang nor fallback has the field. Used everywhere
+    we read Claude-produced multilingual fields (headline_ko/_en/_ja/_zh,
+    summary_*, narrative_html_*, etc.). When the prompt has not yet been
+    extended to emit _ja/_zh fields, ja/zh callers automatically receive
+    the en version — keeps the pipeline running while content catches up.
+    """
+    val = data.get(f"{key}_{lang}")
+    if val:
+        return val
+    return data.get(f"{key}_{fallback}", "") or ""
+
+
+def has_lang_content(data: dict, lang: str) -> bool:
+    """Decide whether to publish a directory for `lang`.
+
+    ko and en are always published (legacy contract — existing prompts
+    always emit them). ja/zh are published only when the prompt actually
+    produced a non-empty `headline_<lang>`. This means scripts/prompts/*.md
+    files can be extended one at a time; languages with no content yet
+    simply don't get a directory, an entry, or a sitemap URL.
+    """
+    if lang in ("ko", "en"):
+        return True
+    head = (data.get(f"headline_{lang}") or "").strip()
+    return bool(head)
+
+
 SLOTS = {
     "us-close": {
         "prompt": "us-close-recap.md",
@@ -58,6 +125,8 @@ SLOTS = {
         "cover_emoji": "🇺🇸",
         "header_label_ko": "미국 테크 마감 리캡",
         "header_label_en": "US TECH DAILY RECAP",
+        "header_label_ja": "米国テック市場マーケット引け",
+        "header_label_zh": "美股科技市场收盘速览",
     },
     "kr-open": {
         "prompt": "kr-open-brief.md",
@@ -68,6 +137,8 @@ SLOTS = {
         "cover_emoji": "🇰🇷",
         "header_label_ko": "한국장 개장 브리핑",
         "header_label_en": "KOREA OPEN BRIEF",
+        "header_label_ja": "韓国市場・寄り前ブリーフ",
+        "header_label_zh": "韩国股市开盘前简报",
     },
     "kr-close": {
         "prompt": "kr-close-recap.md",
@@ -78,6 +149,8 @@ SLOTS = {
         "cover_emoji": "🇰🇷",
         "header_label_ko": "한국 테크 마감 리캡",
         "header_label_en": "KOREA TECH DAILY RECAP",
+        "header_label_ja": "韓国テック市場マーケット引け",
+        "header_label_zh": "韩国科技市场收盘速览",
     },
     "us-premarket": {
         "prompt": "us-premarket.md",
@@ -88,6 +161,8 @@ SLOTS = {
         "cover_emoji": "🇺🇸",
         "header_label_ko": "미국 프리마켓 브리핑",
         "header_label_en": "US PRE-MARKET BRIEF",
+        "header_label_ja": "米国プレマーケット・ブリーフ",
+        "header_label_zh": "美股盘前简报",
     },
 }
 
@@ -728,40 +803,68 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     template = (TEMPLATES / "daily-base.html").read_text(encoding="utf-8")
 
     base_url = "https://luckyplz.com"
-    canonical = f"{base_url}/blog/{slug}-{lang}/" if lang == "en" else f"{base_url}/blog/{slug}/"
+    # Canonical URL per-language. ko owns the bare slug; en/ja/zh use suffix.
+    suffix = LANG_META[lang]["slug_suffix"]
+    canonical = f"{base_url}/blog/{slug}{suffix}/"
+    # hreflang URLs for all 4 languages. The template's placeholders are
+    # ko/en today; ja/zh are emitted as additional <link> tags inside the
+    # template via the {{HREFLANG_EXTRA}} substitution below.
     href_ko = f"{base_url}/blog/{slug}/"
     href_en = f"{base_url}/blog/{slug}-en/"
+    href_ja = f"{base_url}/blog/{slug}-ja/"
+    href_zh = f"{base_url}/blog/{slug}-zh/"
 
-    title = data.get(f"headline_{lang}", "")
+    # Read multilingual content with graceful en fallback (ja/zh may be
+    # missing if the prompt has not been extended yet).
+    title = pick_localized(data, "headline", lang)
     title_full = f"{title} | Lucky Please"
     # Strip any inline HTML tags from summary — it's used in plain-text
     # contexts (meta description, og:description, twitter:description,
     # header sub-text) where html_escape() would render them as visible
     # &lt;strong&gt; etc. Claude sometimes includes <strong>/<span> in
     # summary despite the prompt rule; strip defensively.
-    raw_summary = data.get(f"summary_{lang}", "")
+    raw_summary = pick_localized(data, "summary", lang)
     summary = re.sub(r"<[^>]+>", "", raw_summary).strip()
     # Also collapse multiple spaces from tag removal
     summary = re.sub(r"\s+", " ", summary)
-    bottom_body = data.get(f"bottom_line_{lang}", "")
-    bottom_title = "BOTTOM LINE" if lang == "en" else "BOTTOM LINE · 포지셔닝"
+    bottom_body = pick_localized(data, "bottom_line", lang)
+    bottom_title = L(lang,
+                     ko="BOTTOM LINE · 포지셔닝",
+                     en="BOTTOM LINE",
+                     ja="ボトムライン · ポジショニング",
+                     zh="底线 · 持仓策略")
 
     keywords_map = {
-        "us-close": ("미국 증시 마감, 테크 리캡, S&P Nasdaq, Mag 7, 데일리 리뷰, lucky please",
-                     "US tech recap, S&P Nasdaq close, Magnificent 7, daily debrief, lucky please"),
-        "kr-open": ("한국증시 개장, 코스피 개장, 외인 매수 예상, ADR, 매그니피센트 7, 데일리 브리프",
-                    "Korea market open brief, KOSPI futures, ADR overnight, KR semis"),
-        "kr-close": ("한국증시 마감, 코스피 마감, 외인 수급, 한국 섹터, 데일리 리캡",
-                     "Korea market close, KOSPI, foreign flow, KR tech sectors"),
-        "us-premarket": ("미국 프리마켓, 야간 시황, 어닝 캘린더, 매크로 이벤트, 데일리 브리프",
-                         "US premarket, earnings calendar, macro events, daily brief"),
+        "us-close": {
+            "ko": "미국 증시 마감, 테크 리캡, S&P Nasdaq, Mag 7, 데일리 리뷰, lucky please",
+            "en": "US tech recap, S&P Nasdaq close, Magnificent 7, daily debrief, lucky please",
+            "ja": "米国株 引け, テックリキャップ, S&P ナスダック, マグニフィセント7, デイリーレビュー",
+            "zh": "美股收盘, 科技复盘, 标普纳指, 七巨头, 每日回顾",
+        },
+        "kr-open": {
+            "ko": "한국증시 개장, 코스피 개장, 외인 매수 예상, ADR, 매그니피센트 7, 데일리 브리프",
+            "en": "Korea market open brief, KOSPI futures, ADR overnight, KR semis",
+            "ja": "韓国市場 寄り付き, コスピ 開始, ADR, KR 半導体, デイリーブリーフ",
+            "zh": "韩国股市开盘, KOSPI 期货, ADR, 韩国半导体, 每日简报",
+        },
+        "kr-close": {
+            "ko": "한국증시 마감, 코스피 마감, 외인 수급, 한국 섹터, 데일리 리캡",
+            "en": "Korea market close, KOSPI, foreign flow, KR tech sectors",
+            "ja": "韓国市場引け, コスピ 終値, 外国人 需給, 韓国 セクター, デイリーリキャップ",
+            "zh": "韩国股市收盘, KOSPI 收盘, 外资动向, 韩国板块, 每日复盘",
+        },
+        "us-premarket": {
+            "ko": "미국 프리마켓, 야간 시황, 어닝 캘린더, 매크로 이벤트, 데일리 브리프",
+            "en": "US premarket, earnings calendar, macro events, daily brief",
+            "ja": "米国プレマーケット, ナイトセッション, 決算カレンダー, マクロイベント, デイリーブリーフ",
+            "zh": "美股盘前, 隔夜行情, 财报日历, 宏观事件, 每日简报",
+        },
     }
-    kw_ko, kw_en = keywords_map[slot]
-    keywords = kw_ko if lang == "ko" else kw_en
+    keywords = keywords_map[slot].get(lang, keywords_map[slot]["en"])
 
     # OG meta
-    og_locale = "ko_KR" if lang == "ko" else "en_US"
-    og_locale_alt = "en_US" if lang == "ko" else "ko_KR"
+    og_locale = LANG_META[lang]["og_locale"]
+    og_locale_alt = "en_US" if lang != "en" else "ko_KR"
     og_image_url = f"{base_url}/assets/blog/{og_image_filename}?v={build}"
     og_image_alt = f"{title} — {summary[:80]}"
 
@@ -778,22 +881,19 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
                       "logo": {"@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png"}},
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
     }
-    breadcrumb_label = ("미국 테크 마감 리캡" if (slot == "us-close" and lang == "ko") else
-                        "US Tech Recap" if (slot == "us-close" and lang == "en") else
-                        "한국장 개장 브리핑" if (slot == "kr-open" and lang == "ko") else
-                        "Korea Open Brief" if (slot == "kr-open" and lang == "en") else
-                        "한국 테크 마감 리캡" if (slot == "kr-close" and lang == "ko") else
-                        "Korea Tech Recap" if (slot == "kr-close" and lang == "en") else
-                        "미국 프리마켓 브리핑" if (slot == "us-premarket" and lang == "ko") else
-                        "US Pre-Market Brief")
+    # Breadcrumb label per (slot × lang). SLOTS dict already carries the
+    # per-language header label, so reuse it instead of duplicating here.
+    breadcrumb_label = cfg.get(f"header_label_{lang}") or cfg["header_label_en"]
+    home_label = L(lang, ko="홈", en="Home", ja="ホーム", zh="首页")
+    blog_label = L(lang, ko="블로그", en="Blog", ja="ブログ", zh="博客")
     jsonld_crumb = {
         "@context": "https://schema.org",
         "@type": "BreadcrumbList",
         "itemListElement": [
             {"@type": "ListItem", "position": 1,
-             "name": "홈" if lang == "ko" else "Home", "item": f"{base_url}/"},
+             "name": home_label, "item": f"{base_url}/"},
             {"@type": "ListItem", "position": 2,
-             "name": "블로그" if lang == "ko" else "Blog", "item": f"{base_url}/blog/"},
+             "name": blog_label, "item": f"{base_url}/blog/"},
             {"@type": "ListItem", "position": 3, "name": breadcrumb_label, "item": canonical},
         ],
     }
@@ -815,7 +915,13 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     disclaimer_en = ("<strong>📌 Daily debrief · {ts}</strong><br>"
                      "Auto-curated from public market data: Yahoo Finance · Investing.com · KRX · CNBC · TheStreet.<br>"
                      "Not a recommendation. All investment decisions are your responsibility.").format(ts=publish_date)
-    disclaimer = disclaimer_ko if lang == "ko" else disclaimer_en
+    disclaimer_ja = ("<strong>📌 デイリーリキャップ · {ts}</strong><br>"
+                     "公開市場データに基づく自動キュレーション。Yahoo Finance · Investing.com · KRX · CNBC · TheStreet など。<br>"
+                     "売買推奨ではありません。投資判断はご自身の責任で。").format(ts=publish_date)
+    disclaimer_zh = ("<strong>📌 每日复盘 · {ts}</strong><br>"
+                     "基于公开市场数据的自动整理。来源：Yahoo Finance · Investing.com · KRX · CNBC · TheStreet 等。<br>"
+                     "本文不构成买卖建议，投资决策由读者自行承担。").format(ts=publish_date)
+    disclaimer = L(lang, ko=disclaimer_ko, en=disclaimer_en, ja=disclaimer_ja, zh=disclaimer_zh)
 
     # Sources block (appended to footer)
     # Claude may return sources as either [{"url": "...", "title": "..."}]
@@ -846,9 +952,19 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     footer_en = ("<strong>📢 Sources & disclaimer</strong><br>"
                  f"Published {publish_date} · Sources: {src_html}<br>"
                  "Not a recommendation. All investment decisions are your responsibility.")
-    footer_disclaimer = footer_ko if lang == "ko" else footer_en
+    footer_ja = ("<strong>📢 出典 & 免責事項</strong><br>"
+                 f"{publish_date} 公開 · 出典: {src_html}<br>"
+                 "売買推奨ではなく、投資判断はご自身の責任でお願いします。")
+    footer_zh = ("<strong>📢 来源 & 免责声明</strong><br>"
+                 f"发布于 {publish_date} · 来源: {src_html}<br>"
+                 "本文不构成买卖建议，投资决策由读者自行承担。")
+    footer_disclaimer = L(lang, ko=footer_ko, en=footer_en, ja=footer_ja, zh=footer_zh)
 
-    # Related links — link to sibling slots of same trading_date if exist
+    # Related links — link to sibling slots of same trading_date if exist.
+    # Korean-language related box stays Korean-only (links to /blog/daily/ + the
+    # semiconductor-rally-2026 ko version). Everyone else (en/ja/zh) gets the
+    # English related set — same fallback policy as the rest of the templating
+    # while ja/zh content backlogs are being filled in.
     if lang == "ko":
         related_title = "관련 글 RELATED"
         related_links = (
@@ -856,7 +972,8 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
             f'<a href="/blog/semiconductor-rally-2026/">반도체 슈퍼랠리 2026 — 한미 반도체주는 어디까지 오를까?</a>'
         )
     else:
-        related_title = "RELATED"
+        related_title = L(lang, ko="관련 글 RELATED", en="RELATED",
+                          ja="関連記事 RELATED", zh="相关文章 RELATED")
         related_links = (
             f'<a href="/blog/daily/">See full daily series index →</a>\n'
             f'<a href="/blog/semiconductor-rally-2026-en/">Semiconductor Super-Rally 2026 — How High Can KR & US Chip Stocks Go?</a>'
@@ -864,26 +981,40 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
 
     # Body sections — combine v2 fields (key_metrics strip, deep narrative,
     # forward calendar, fact-check) with legacy card sections for backwards compat.
+    # Multilingual fields use pick_localized() so ja/zh fall back to en if the
+    # prompt has not been extended yet — keeps the pipeline running while
+    # content catches up.
     key_strip = render_key_metrics_strip(data.get("key_metrics", {}), lang)
-    narrative = render_narrative(data.get(f"narrative_html_{lang}", ""), lang)
+    narrative = render_narrative(pick_localized(data, "narrative_html", lang), lang)
     cards = render_sections(slot, data, lang)
-    forward_cal = render_forward_calendar(data.get(f"forward_calendar_html_{lang}", ""), lang)
-    fact_check_box = render_fact_check(data.get(f"fact_check_{lang}", ""), lang)
+    forward_cal = render_forward_calendar(pick_localized(data, "forward_calendar_html", lang), lang)
+    fact_check_box = render_fact_check(pick_localized(data, "fact_check", lang), lang)
     # Order: 7-asset strip (fixed top) → deep narrative (main) → visual cards
     # (supplementary) → forward calendar → fact-check (closing).
     sections_html = "\n".join(p for p in [key_strip, narrative, cards, forward_cal, fact_check_box] if p)
 
     # Substitutions
+    # Font selection by language family:
+    #   ko → Noto Sans KR  ja → Noto Sans JP  zh → Noto Sans SC
+    #   en/everything else → Inter
+    # CJK fallback chain is sufficient inside each — browsers will pick the
+    # closest available glyphs if the primary face fails to load.
+    nav_back = "← BLOG"
     if lang == "ko":
         body_font = "'Noto Sans KR', sans-serif"
         font_url = "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap"
-        nav_back = "← BLOG"
-        header_label = cfg["header_label_ko"] + f" · {publish_date}"
+    elif lang == "ja":
+        body_font = "'Noto Sans JP', 'Noto Sans KR', sans-serif"
+        font_url = "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap"
+    elif lang == "zh":
+        body_font = "'Noto Sans SC', 'Noto Sans KR', sans-serif"
+        font_url = "https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap"
     else:
         body_font = "'Inter', sans-serif"
         font_url = "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&family=Bebas+Neue&display=swap"
-        nav_back = "← BLOG"
-        header_label = cfg["header_label_en"] + f" · {publish_date}"
+
+    header_label_text = cfg.get(f"header_label_{lang}") or cfg["header_label_en"]
+    header_label = f"{header_label_text} · {publish_date}"
 
     repl = {
         "{{LANG}}": lang,
@@ -900,6 +1031,8 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
         "{{CANONICAL_URL}}": canonical,
         "{{HREFLANG_KO}}": href_ko,
         "{{HREFLANG_EN}}": href_en,
+        "{{HREFLANG_JA}}": href_ja,
+        "{{HREFLANG_ZH}}": href_zh,
         "{{HREFLANG_DEFAULT}}": href_en if lang == "en" else href_ko,
         "{{OG_LOCALE}}": og_locale,
         "{{OG_LOCALE_ALT}}": og_locale_alt,
@@ -961,20 +1094,48 @@ def gen_og_image(slot: str, data: dict, lang: str, out_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Site integration
 # ---------------------------------------------------------------------------
-def write_post_files(slug: str, html_ko: str, html_en: str, og_ko_path: Path, og_en_path: Path) -> None:
-    dir_ko = BLOG_DIR / slug
-    dir_en = BLOG_DIR / f"{slug}-en"
-    dir_ko.mkdir(parents=True, exist_ok=True)
-    dir_en.mkdir(parents=True, exist_ok=True)
-    (dir_ko / "index.html").write_text(html_ko, encoding="utf-8")
-    (dir_en / "index.html").write_text(html_en, encoding="utf-8")
-    print(f"[write] {dir_ko}/index.html ({len(html_ko)} bytes)")
-    print(f"[write] {dir_en}/index.html ({len(html_en)} bytes)")
-    print(f"[write] OG ko: {og_ko_path}")
-    print(f"[write] OG en: {og_en_path}")
+def write_post_files(slug: str, htmls: dict, og_paths: dict) -> None:
+    """Write per-language index.html files. Empty languages are skipped.
+
+    htmls    — dict of {lang: html_string}. Languages absent or empty
+               are simply not written (graceful skip).
+    og_paths — dict of {lang: Path} for OG images. Logged but not written
+               here (gen_og_image already wrote them to disk).
+
+    Slug convention: ko → bare slug, en/ja/zh → `{slug}-{lang}`.
+    """
+    for lang in LANGS:
+        html = htmls.get(lang) or ""
+        if not html.strip():
+            continue
+        suffix = LANG_META[lang]["slug_suffix"]
+        directory = BLOG_DIR / f"{slug}{suffix}"
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "index.html").write_text(html, encoding="utf-8")
+        print(f"[write] {directory}/index.html ({len(html)} bytes)")
+        og_path = og_paths.get(lang)
+        if og_path:
+            print(f"[write] OG {lang}: {og_path}")
 
 
-def update_posts_js(slug: str, slot: str, data: dict, publish_date: str) -> None:
+def update_posts_js(slug: str, slot: str, data: dict, publish_date: str,
+                    langs: list[str] | None = None) -> None:
+    """Prepend one entry per language to window.BLOG_POSTS.
+
+    langs — list of languages to publish. Defaults to ko+en (legacy) when
+            not provided, so callers that haven't been updated keep their
+            existing behavior. Pass ["ko","en","ja","zh"] (or the subset
+            with actual data) to publish 4-language entries.
+
+    Each entry carries:
+      - the legacy `alt` field (single sibling slug, ko↔en relationship
+        preserved) for backward compat with old site code
+      - the new `alts` object (forward-link to every sibling that exists)
+        consumed by the multi-language router added in Step 3
+    """
+    if langs is None:
+        langs = ["ko", "en"]
+
     cfg = SLOTS[slot]
     posts_path = PUBLIC / "blog" / "posts.js"
     raw = posts_path.read_text(encoding="utf-8")
@@ -983,69 +1144,106 @@ def update_posts_js(slug: str, slot: str, data: dict, publish_date: str) -> None
     if idx == -1:
         raise SystemExit("Could not find BLOG_POSTS array in posts.js")
 
-    entry_ko = textwrap.dedent(f"""\
-        {{
-            slug: '{slug}',
-            lang: 'ko',
-            category: '{cfg["category"]}',
-            date: '{publish_date}',
-            readMinutes: {cfg["read_min"]},
-            coverEmoji: '{cfg["cover_emoji"]}',
-            tags: {json.dumps((data.get("og_tags_ko") or ['데일리 리캡', '미국증시', '한국증시', '테크']), ensure_ascii=False)},
-            title: {json.dumps(data.get("headline_ko",""), ensure_ascii=False)},
-            excerpt: {json.dumps(data.get("summary_ko","")[:180], ensure_ascii=False)},
-            alt: '{slug}-en',
-        }},
-        {{
-            slug: '{slug}-en',
-            lang: 'en',
-            category: '{cfg["category"]}',
-            date: '{publish_date}',
-            readMinutes: {cfg["read_min"]},
-            coverEmoji: '{cfg["cover_emoji"]}',
-            tags: {json.dumps((data.get("og_tags_en") or ['Daily Recap', 'US Markets', 'KR Markets', 'Tech']), ensure_ascii=False)},
-            title: {json.dumps(data.get("headline_en",""), ensure_ascii=False)},
-            excerpt: {json.dumps(data.get("summary_en","")[:180], ensure_ascii=False)},
-            alt: '{slug}',
-        }},""")
-    # Indent each line by 4 spaces (already are by textwrap), then inject right after the marker
-    new_raw = raw[: idx + len(insert_marker)] + "\n    " + entry_ko + raw[idx + len(insert_marker):]
+    # Default tags per language (used when prompt doesn't supply og_tags_<lang>)
+    default_tags = {
+        "ko": ['데일리 리캡', '미국증시', '한국증시', '테크'],
+        "en": ['Daily Recap', 'US Markets', 'KR Markets', 'Tech'],
+        "ja": ['デイリーリキャップ', '米国株', '韓国株', 'テック'],
+        "zh": ['每日复盘', '美股', '韩股', '科技'],
+    }
+
+    # Build a (lang → published_slug) mapping for alts cross-linking
+    slug_map = {l: f"{slug}{LANG_META[l]['slug_suffix']}" for l in langs}
+
+    entries = []
+    for lang in langs:
+        # Graceful skip if Claude didn't produce ja/zh headline.
+        # ko/en always pass through has_lang_content (legacy contract).
+        if not has_lang_content(data, lang):
+            continue
+        entry_slug = slug_map[lang]
+        # Legacy `alt` field — points to opposite primary (ko↔en).
+        # Keeps the older site code that reads `alt` working unchanged.
+        alt_legacy = slug_map.get("en", entry_slug) if lang == "ko" else slug_map.get("ko", entry_slug)
+        # New `alts` object — forward-links to every OTHER published lang.
+        alts_obj = {l: s for l, s in slug_map.items() if l != lang}
+        alts_js = "{ " + ", ".join(f"{k}: '{v}'" for k, v in alts_obj.items()) + " }"
+
+        tags = data.get(f"og_tags_{lang}") or default_tags.get(lang) or default_tags["en"]
+        title = pick_localized(data, "headline", lang)
+        excerpt = pick_localized(data, "summary", lang)[:180]
+
+        entries.append(textwrap.dedent(f"""\
+            {{
+                slug: '{entry_slug}',
+                lang: '{lang}',
+                category: '{cfg["category"]}',
+                date: '{publish_date}',
+                readMinutes: {cfg["read_min"]},
+                coverEmoji: '{cfg["cover_emoji"]}',
+                tags: {json.dumps(tags, ensure_ascii=False)},
+                title: {json.dumps(title, ensure_ascii=False)},
+                excerpt: {json.dumps(excerpt, ensure_ascii=False)},
+                alt: '{alt_legacy}',
+                alts: {alts_js},
+            }},"""))
+
+    if not entries:
+        print(f"[posts.js] no entries to prepend for slug={slug} (no language content)")
+        return
+
+    combined = "\n    ".join(entries)
+    new_raw = raw[: idx + len(insert_marker)] + "\n    " + combined + raw[idx + len(insert_marker):]
     posts_path.write_text(new_raw, encoding="utf-8")
-    print(f"[posts.js] prepended slug={slug}")
+    print(f"[posts.js] prepended slug={slug} for langs={','.join(langs)}")
 
 
-def update_sitemap(slug: str, publish_date: str) -> None:
+def update_sitemap(slug: str, publish_date: str,
+                   langs: list[str] | None = None) -> None:
+    """Append one <url> block per published language to sitemap.xml.
+
+    Each block carries hreflang alternates for every Tier A language so
+    Google Search Console understands the full cluster, even when only a
+    subset is published (ja/zh fall through to en for search indexing
+    until the prompt is extended to emit them).
+    """
+    if langs is None:
+        langs = ["ko", "en"]
+
     sm_path = PUBLIC / "sitemap.xml"
     raw = sm_path.read_text(encoding="utf-8")
-    new_block = textwrap.dedent(f"""\
-        <url>
-            <loc>https://luckyplz.com/blog/{slug}/</loc>
-            <lastmod>{publish_date}</lastmod>
-            <changefreq>daily</changefreq>
-            <priority>0.85</priority>
-            <xhtml:link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug}/"/>
-            <xhtml:link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug}-en/"/>
-            <xhtml:link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug}-en/"/>
-        </url>
 
-        <url>
-            <loc>https://luckyplz.com/blog/{slug}-en/</loc>
-            <lastmod>{publish_date}</lastmod>
-            <changefreq>daily</changefreq>
-            <priority>0.85</priority>
-            <xhtml:link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug}/"/>
-            <xhtml:link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug}-en/"/>
-            <xhtml:link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug}-en/"/>
-        </url>
+    # Build the cluster of <url> blocks for this slug × langs combination.
+    # Each block reuses the same hreflang alternates so the search engine
+    # sees the language cluster consistently from every entry point.
+    blocks = []
+    for lang in langs:
+        suffix = LANG_META[lang]["slug_suffix"]
+        url_slug = f"{slug}{suffix}"
+        block = textwrap.dedent(f"""\
+            <url>
+                <loc>https://luckyplz.com/blog/{url_slug}/</loc>
+                <lastmod>{publish_date}</lastmod>
+                <changefreq>daily</changefreq>
+                <priority>0.85</priority>
+                <xhtml:link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug}/"/>
+                <xhtml:link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug}-en/"/>
+                <xhtml:link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/{slug}-ja/"/>
+                <xhtml:link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/{slug}-zh/"/>
+                <xhtml:link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug}-en/"/>
+            </url>
+            """)
+        blocks.append(block)
 
-    """)
+    new_block = "\n".join(blocks) + "\n"
+
     anchor = "<url>\n        <loc>https://luckyplz.com/blog/us-tech-recap-2026-05-11/</loc>"
     if anchor in raw:
         raw = raw.replace(anchor, new_block + "    " + anchor.lstrip())
     else:
         raw = raw.replace("</urlset>", new_block + "</urlset>")
     sm_path.write_text(raw, encoding="utf-8")
-    print(f"[sitemap] added {slug} / {slug}-en")
+    print(f"[sitemap] added {slug} for langs={','.join(langs)}")
 
 
 def bump_cache() -> None:
@@ -1509,27 +1707,62 @@ def main():
     except Exception:
         build = str(int(time.time()))
 
-    # OG images (one per lang)
+    # Decide which languages get published this run. ko + en are always
+    # published (legacy contract — every prompt has emitted these since v1).
+    # ja + zh are published only when Claude actually produced non-empty
+    # `headline_<lang>`, so prompts that haven't been extended yet still
+    # complete cleanly and the daily cron keeps running.
+    publish_langs = [l for l in LANGS if has_lang_content(data, l)]
+    print(f"[langs] publishing for {publish_langs}")
+
+    # OG images (one per published language)
     ASSETS_BLOG.mkdir(parents=True, exist_ok=True)
-    og_ko_filename = f"og-{slug}.png"
-    og_en_filename = f"og-{slug}-en.png"
     sys.path.insert(0, str(SCRIPTS))
-    gen_og_image(args.slot, data, "ko", ASSETS_BLOG / og_ko_filename)
-    gen_og_image(args.slot, data, "en", ASSETS_BLOG / og_en_filename)
+    og_filenames = {}    # lang → filename (relative)
+    og_paths = {}        # lang → absolute Path
+    for lang in publish_langs:
+        suffix = LANG_META[lang]["slug_suffix"]
+        og_fn = f"og-{slug}{suffix}.png"
+        og_filenames[lang] = og_fn
+        og_paths[lang] = ASSETS_BLOG / og_fn
+        try:
+            gen_og_image(args.slot, data, lang, og_paths[lang])
+        except Exception as e:
+            print(f"[og] {lang} generation failed: {type(e).__name__}: {e} — continuing without OG image for this lang")
+            # Don't abort the whole publish on OG failure — page still renders,
+            # just without a per-lang OG (Twitter/KakaoTalk preview falls back
+            # to default).
 
-    # Render HTML
-    html_ko = render_html(args.slot, "ko", data, slug=slug, build=build,
-                          og_image_filename=og_ko_filename,
-                          trading_date=trading_date, publish_date=publish_date)
-    html_en = render_html(args.slot, "en", data, slug=slug, build=build,
-                          og_image_filename=og_en_filename,
-                          trading_date=trading_date, publish_date=publish_date)
-    write_post_files(slug, html_ko, html_en,
-                     ASSETS_BLOG / og_ko_filename, ASSETS_BLOG / og_en_filename)
+    # Render HTML per language
+    htmls = {}
+    for lang in publish_langs:
+        try:
+            htmls[lang] = render_html(args.slot, lang, data, slug=slug, build=build,
+                                       og_image_filename=og_filenames[lang],
+                                       trading_date=trading_date, publish_date=publish_date)
+        except Exception as e:
+            print(f"[render] {lang} failed: {type(e).__name__}: {e} — skipping this language only")
+            # If a non-primary language render fails, drop that language but
+            # still publish the rest. ko and en failures will propagate up
+            # because they're load-bearing for the legacy cron contract.
+            if lang in ("ko", "en"):
+                raise
 
-    # Site integration
-    update_posts_js(slug, args.slot, data, publish_date)
-    update_sitemap(slug, publish_date)
+    # Make sure ko + en survived render (legacy contract — must always exist).
+    if not htmls.get("ko") or not htmls.get("en"):
+        raise SystemExit(f"[fatal] missing primary language(s): "
+                         f"ko={'OK' if htmls.get('ko') else 'MISSING'} "
+                         f"en={'OK' if htmls.get('en') else 'MISSING'}")
+
+    # Trim publish_langs to those that actually rendered (a ja/zh failure
+    # may have dropped them).
+    publish_langs = [l for l in publish_langs if htmls.get(l)]
+
+    write_post_files(slug, htmls, og_paths)
+
+    # Site integration — only register languages we actually published.
+    update_posts_js(slug, args.slot, data, publish_date, langs=publish_langs)
+    update_sitemap(slug, publish_date, langs=publish_langs)
 
     # Cache + git
     bump_cache()
