@@ -19,6 +19,18 @@
 */
 window.BLOG_POSTS = [
     {
+        slug: 'anthropic-story-01-founding-en',
+        lang: 'en',
+        category: 'ai-tech',
+        date: '2026-05-22',
+        readMinutes: 12,
+        coverEmoji: '📖',
+        tags: ['Anthropic', 'Dario Amodei', 'Daniela Amodei', 'OpenAI', 'GPT-3', 'Constitutional AI', 'Claude', 'AI safety', 'founding story', 'series 1', 'lucky please'],
+        title: "The Seven Who Left OpenAI, and Built a Safety-First AI",
+        excerpt: 'December 2020. Dario Amodei walked out of OpenAI after five years. His sister Daniela did the same. Within days, the lead authors of the GPT-3 paper followed them. This is the story of how Anthropic began.',
+        alt: 'anthropic-story-01-founding',
+    },
+    {
         slug: 'anthropic-story-03-claude-evolution',
         lang: 'ko',
         category: 'ai-tech',
@@ -170,6 +182,7 @@ window.BLOG_POSTS = [
         tags: ['Anthropic', 'Dario Amodei', 'Daniela Amodei', '창립 스토리', 'OpenAI 이탈', 'Constitutional AI', 'Claude', '시리즈 1', 'lucky please'],
         title: "Anthropic 창립 스토리 — OpenAI를 떠난 7명, 그리고 '안전이 먼저인 AI'를 짓다",
         excerpt: '2020년 12월, OpenAI 부사장이던 Dario Amodei와 그의 누이 Daniela가 사임했다. 그들과 함께 GPT-3 논문 핵심 저자 7명이 동반 사임했다. 1,700억 시드, Constitutional AI 철학, Claude의 등장 — Anthropic이 어떻게 시작되었는지에 대한 이야기.',
+        alt: 'anthropic-story-01-founding-en',
     },
     {
     slug: 'us-premarket-2026-05-22',
