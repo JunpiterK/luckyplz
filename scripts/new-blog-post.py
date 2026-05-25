@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-new-blog-post.py — scaffold a new blog post in ko + en + ja (mandatory).
+new-blog-post.py — scaffold a new blog post in ko + en + ja + zh (mandatory).
 
-This script enforces the bilingual+ja default established in
+This script enforces the 4-language default established in
 CLAUDE.md "Blog Authoring (MANDATORY)" section. Run it whenever
 you start a new manual blog post. Auto-generated daily market
 posts have their own pipeline (scripts/auto-daily-post.py) and
@@ -15,7 +15,8 @@ Usage:
     --title-ko "Claude vs GPT-5 — 차이의 본질" \\
     --title-en "Claude vs GPT-5: The Real Difference" \\
     --title-ja "Claude vs GPT-5 — 違いの本質" \\
-    --excerpt-ko "..." --excerpt-en "..." --excerpt-ja "..." \\
+    --title-zh "Claude vs GPT-5：差异的本质" \\
+    --excerpt-ko "..." --excerpt-en "..." --excerpt-ja "..." --excerpt-zh "..." \\
     --read-min 12 --cover-emoji "🤖" \\
     --tags "Claude,GPT-5,AI,model,benchmark"
 
@@ -29,14 +30,15 @@ Creates:
   public/blog/<slug>/index.html         (ko, lang="ko")
   public/blog/<slug>-en/index.html      (en, lang="en")
   public/blog/<slug>-ja/index.html      (ja, lang="ja")
-  Updates public/blog/posts.js          (3 entries at top, alt-linked)
-  Updates public/sitemap.xml            (3 url blocks with hreflang)
+  public/blog/<slug>-zh/index.html      (zh, lang="zh")
+  Updates public/blog/posts.js          (4 entries at top, alts-linked)
+  Updates public/sitemap.xml            (4 url blocks with hreflang)
 
 After running:
   1. Fill in body content (search for "<!-- BODY START -->" in each file)
   2. python scripts/inject-blog-desktop-css.py
   3. bash scripts/bump-cache.sh
-  4. git add . && git commit -m "feat(blog): publish <slug> (ko+en+ja)"
+  4. git add . && git commit -m "feat(blog): publish <slug> (ko+en+ja+zh)"
   5. git pull --rebase -X theirs origin main && git push origin HEAD:main
 """
 import argparse
@@ -102,6 +104,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
 <link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug_ko}/">
 <link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug_en}/">
 <link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/{slug_ja}/">
+<link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/{slug_zh}/">
 <link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug_en}/">
 
 <script type="application/ld+json">
@@ -218,6 +221,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 <link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug_ko}/">
 <link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug_en}/">
 <link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/{slug_ja}/">
+<link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/{slug_zh}/">
 <link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug_en}/">
 
 <script type="application/ld+json">
@@ -237,7 +241,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;700;900&family=Noto+Serif+JP:wght@400;500;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;700;900&family=Noto+Serif+JP:wght@400;500;700;900&family=Noto+Serif+SC:wght@400;500;700;900&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
   /* === Anthropic Series — Beige Book Theme === */
@@ -250,7 +254,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{
     background: var(--paper); color: var(--ink);
-    font-family: 'Noto Serif KR', 'Noto Serif JP', 'Source Serif Pro', Georgia, serif;
+    font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', 'Source Serif Pro', Georgia, serif;
     font-size: 17px; line-height: 1.85;
   }}
   .book {{ max-width: 720px; margin: 0 auto; padding: 0 24px 80px; background: var(--paper); }}
@@ -261,13 +265,13 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   .hero {{ text-align: center; padding: 60px 0 80px; border-bottom: 1px solid var(--line); margin-bottom: 60px; }}
   .hero .series {{ font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 16px; color: var(--brown); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; }}
   .hero .episode {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 28px; color: var(--auburn); margin-bottom: 28px; letter-spacing: 1px; }}
-  .hero h1 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', Georgia, serif; font-weight: 700; font-size: 34px; line-height: 1.35; color: var(--ink); margin-bottom: 24px; word-break: keep-all; }}
-  .hero .subtitle {{ font-family: 'Cormorant Garamond', 'Noto Serif KR', 'Noto Serif JP', Georgia, serif; font-style: italic; font-size: 19px; color: var(--ink-soft); line-height: 1.6; max-width: 580px; margin: 0 auto; word-break: keep-all; }}
+  .hero h1 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 34px; line-height: 1.35; color: var(--ink); margin-bottom: 24px; word-break: keep-all; }}
+  .hero .subtitle {{ font-family: 'Cormorant Garamond', 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-style: italic; font-size: 19px; color: var(--ink-soft); line-height: 1.6; max-width: 580px; margin: 0 auto; word-break: keep-all; }}
   .hero .meta {{ margin-top: 36px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-dim); letter-spacing: 2px; }}
   .hero .meta .dot {{ color: var(--brown); margin: 0 8px; }}
   .chapter {{ margin: 72px 0 0; }}
   .chapter-num {{ font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 15px; color: var(--gold); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }}
-  .chapter h2 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1.3; color: var(--ink); margin-bottom: 36px; word-break: keep-all; }}
+  .chapter h2 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1.3; color: var(--ink); margin-bottom: 36px; word-break: keep-all; }}
   .chapter h2 .ornament {{ display: block; width: 60px; height: 2px; background: var(--auburn); margin-top: 14px; }}
   .book p {{ margin-bottom: 22px; color: var(--ink); word-break: keep-all; }}
   .book p strong {{ color: var(--ink); font-weight: 700; }}
@@ -277,7 +281,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   .pullquote .attr {{ display: block; margin-top: 14px; font-family: 'Cormorant Garamond', Georgia, serif; font-style: normal; font-size: 14px; color: var(--brown); letter-spacing: 1px; }}
   figure {{ margin: 40px -24px; text-align: center; }}
   figure img {{ width: 100%; height: auto; display: block; box-shadow: 0 8px 24px rgba(60, 40, 20, 0.12); }}
-  figcaption {{ margin: 14px 24px 0; font-family: 'Cormorant Garamond', 'Noto Serif KR', 'Noto Serif JP', Georgia, serif; font-style: italic; font-size: 14px; color: var(--ink-soft); line-height: 1.6; text-align: center; }}
+  figcaption {{ margin: 14px 24px 0; font-family: 'Cormorant Garamond', 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-style: italic; font-size: 14px; color: var(--ink-soft); line-height: 1.6; text-align: center; }}
   .sidebar {{ margin: 36px 0; padding: 20px 24px; background: var(--paper-light); border-left: 3px solid var(--gold); border-radius: 0 6px 6px 0; font-size: 15px; line-height: 1.7; color: var(--ink-soft); }}
   .sidebar h4 {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: 13px; color: var(--brown); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 10px; }}
   .sidebar p {{ margin-bottom: 10px; font-size: 15px; }}
@@ -389,27 +393,38 @@ LABELS = {
         "disclaimer_label": "📌 免責",
         "disclaimer_body": "本記事は公開資料に基づいて作成されました。すべての事実は出典とともに検証されていますが、解釈と編集トーンは執筆者によるものです。",
     },
+    "zh": {
+        "nav_back": "← 博客",
+        "category_label": "分类",
+        "footnotes_label": "参考资料 · Sources",
+        "footnotes_placeholder": "请在此处填写出处。",
+        "placeholder_h2": "开篇",
+        "placeholder_body_short": "从这里",
+        "placeholder_body": "正文开始。此占位文本应替换为实际文章。",
+        "disclaimer_label": "📌 免责声明",
+        "disclaimer_body": "本文基于公开资料撰写。所有事实均已与出处核实，但解读与编辑语气由作者负责。",
+    },
 }
 
-OG_LOCALES = {"ko": "ko_KR", "en": "en_US", "ja": "ja_JP"}
+OG_LOCALES = {"ko": "ko_KR", "en": "en_US", "ja": "ja_JP", "zh": "zh_CN"}
 
 CATEGORY_LABELS = {
-    "ai-tech":        {"ko": "AI", "en": "AI", "ja": "AI"},
-    "space-tech":     {"ko": "우주", "en": "Space", "ja": "宇宙"},
-    "industry":       {"ko": "산업", "en": "Industry", "ja": "産業"},
-    "gaming-history": {"ko": "게임 역사", "en": "Gaming History", "ja": "ゲーム史"},
-    "lifestyle":      {"ko": "라이프", "en": "Lifestyle", "ja": "ライフ"},
-    "probability":    {"ko": "확률", "en": "Probability", "ja": "確率"},
+    "ai-tech":        {"ko": "AI", "en": "AI", "ja": "AI", "zh": "AI"},
+    "space-tech":     {"ko": "우주", "en": "Space", "ja": "宇宙", "zh": "太空"},
+    "industry":       {"ko": "산업", "en": "Industry", "ja": "産業", "zh": "产业"},
+    "gaming-history": {"ko": "게임 역사", "en": "Gaming History", "ja": "ゲーム史", "zh": "游戏史"},
+    "lifestyle":      {"ko": "라이프", "en": "Lifestyle", "ja": "ライフ", "zh": "生活"},
+    "probability":    {"ko": "확률", "en": "Probability", "ja": "確率", "zh": "概率"},
 }
 
 
 # ---------------------------------------------------------------------------
 # File generation
 # ---------------------------------------------------------------------------
-def render_html(lang: str, args, slug_ko: str, slug_en: str, slug_ja: str,
+def render_html(lang: str, args, slug_ko: str, slug_en: str, slug_ja: str, slug_zh: str,
                 title: str, excerpt: str, theme: str) -> str:
     """Render the HTML for a single language version."""
-    slug_for_lang = {"ko": slug_ko, "en": slug_en, "ja": slug_ja}[lang]
+    slug_for_lang = {"ko": slug_ko, "en": slug_en, "ja": slug_ja, "zh": slug_zh}[lang]
     labels = LABELS[lang].copy()
     labels["category_label"] = CATEGORY_LABELS.get(args.category, {}).get(lang, args.category)
 
@@ -428,7 +443,7 @@ def render_html(lang: str, args, slug_ko: str, slug_en: str, slug_ja: str,
         "excerpt": excerpt,
         "tags_csv": args.tags or "",
         "slug_for_lang": slug_for_lang,
-        "slug_ko": slug_ko, "slug_en": slug_en, "slug_ja": slug_ja,
+        "slug_ko": slug_ko, "slug_en": slug_en, "slug_ja": slug_ja, "slug_zh": slug_zh,
         "og_locale": OG_LOCALES[lang],
         "date": date_iso,
         "date_iso_dot": date_iso_dot,
@@ -442,23 +457,24 @@ def render_html(lang: str, args, slug_ko: str, slug_en: str, slug_ja: str,
 
 
 def make_posts_js_entry(slug: str, lang: str, args, title: str, excerpt: str,
-                        slug_ko: str, slug_en: str, slug_ja: str) -> str:
-    """Return a single posts.js entry (JS object literal) for one language."""
+                        slug_ko: str, slug_en: str, slug_ja: str, slug_zh: str) -> str:
+    """Return a single posts.js entry (JS object literal) for one language.
+
+    Uses the new `alts` object convention (forward-linking to all 3 sibling
+    languages). Also writes a backward-compat single `alt` field pointing
+    to the ko (or en if entry IS ko) slug so older site code keeps working.
+    """
     tags_arr = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
     tags_arr.append("lucky please")
     tags_js = "[" + ", ".join(f"'{escape_js(t)}'" for t in tags_arr) + "]"
 
-    # alt = the ko slug if I'm en/ja, else the en slug (matches existing convention).
-    # We also include altEn / altJa to forward-link to the third language.
-    if lang == "ko":
-        alt = slug_en
-        alt_extra = f"altJa: '{slug_ja}',"
-    elif lang == "en":
-        alt = slug_ko
-        alt_extra = f"altJa: '{slug_ja}',"
-    else:  # ja
-        alt = slug_ko
-        alt_extra = f"altEn: '{slug_en}',"
+    # Build the alts object: all sibling languages except this entry's lang
+    all_slugs = {"ko": slug_ko, "en": slug_en, "ja": slug_ja, "zh": slug_zh}
+    alts_obj = {k: v for k, v in all_slugs.items() if k != lang}
+    alts_js = "{ " + ", ".join(f"{k}: '{v}'" for k, v in alts_obj.items()) + " }"
+
+    # Backward-compat single `alt` field: en if entry is ko, else ko
+    alt_legacy = slug_en if lang == "ko" else slug_ko
 
     return f"""    {{
         slug: '{slug}',
@@ -470,13 +486,14 @@ def make_posts_js_entry(slug: str, lang: str, args, title: str, excerpt: str,
         tags: {tags_js},
         title: "{escape_js(title)}",
         excerpt: '{escape_js(excerpt)}',
-        alt: '{alt}',
-        {alt_extra}
+        alt: '{alt_legacy}',
+        alts: {alts_js},
     }},
 """
 
 
-def make_sitemap_url(slug: str, args, slug_ko: str, slug_en: str, slug_ja: str) -> str:
+def make_sitemap_url(slug: str, args, slug_ko: str, slug_en: str,
+                     slug_ja: str, slug_zh: str) -> str:
     return f"""    <url>
         <loc>https://luckyplz.com/blog/{slug}/</loc>
         <lastmod>{args.date}</lastmod>
@@ -485,6 +502,7 @@ def make_sitemap_url(slug: str, args, slug_ko: str, slug_en: str, slug_ja: str) 
         <xhtml:link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug_ko}/"/>
         <xhtml:link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug_en}/"/>
         <xhtml:link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/{slug_ja}/"/>
+        <xhtml:link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/{slug_zh}/"/>
         <xhtml:link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug_en}/"/>
     </url>
 """
@@ -526,7 +544,7 @@ def insert_sitemap_urls(url_blocks: list[str]) -> None:
 # ---------------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser(
-        description="Scaffold a new blog post in ko + en + ja (mandatory).",
+        description="Scaffold a new blog post in ko + en + ja + zh (mandatory).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -535,9 +553,11 @@ def main():
     p.add_argument("--title-ko", required=True, dest="title_ko")
     p.add_argument("--title-en", required=True, dest="title_en")
     p.add_argument("--title-ja", required=True, dest="title_ja")
+    p.add_argument("--title-zh", required=True, dest="title_zh")
     p.add_argument("--excerpt-ko", default="", dest="excerpt_ko")
     p.add_argument("--excerpt-en", default="", dest="excerpt_en")
     p.add_argument("--excerpt-ja", default="", dest="excerpt_ja")
+    p.add_argument("--excerpt-zh", default="", dest="excerpt_zh")
     p.add_argument("--read-min", type=int, default=8, dest="read_min")
     p.add_argument("--cover-emoji", default="📖", dest="cover_emoji")
     p.add_argument("--tags", default="", help="Comma-separated tags.")
@@ -572,59 +592,65 @@ def main():
         args.excerpt_en = args.title_en
     if not args.excerpt_ja:
         args.excerpt_ja = args.title_ja
+    if not args.excerpt_zh:
+        args.excerpt_zh = args.title_zh
 
     slug_ko = args.slug
     slug_en = f"{args.slug}-en"
     slug_ja = f"{args.slug}-ja"
+    slug_zh = f"{args.slug}-zh"
 
     # Check for existing
-    for s in (slug_ko, slug_en, slug_ja):
+    for s in (slug_ko, slug_en, slug_ja, slug_zh):
         d = BLOG / s
         if d.exists() and not args.force:
             print(f"[error] {d} already exists. Use --force to overwrite.", file=sys.stderr)
             sys.exit(1)
 
     # Create directories
-    for s in (slug_ko, slug_en, slug_ja):
+    for s in (slug_ko, slug_en, slug_ja, slug_zh):
         (BLOG / s).mkdir(parents=True, exist_ok=True)
 
-    # Render and write 3 HTMLs
+    # Render and write 4 HTMLs
     payload = [
         ("ko", slug_ko, args.title_ko, args.excerpt_ko),
         ("en", slug_en, args.title_en, args.excerpt_en),
         ("ja", slug_ja, args.title_ja, args.excerpt_ja),
+        ("zh", slug_zh, args.title_zh, args.excerpt_zh),
     ]
     for lang, slug, title, excerpt in payload:
-        html = render_html(lang, args, slug_ko, slug_en, slug_ja, title, excerpt, args.theme)
+        html = render_html(lang, args, slug_ko, slug_en, slug_ja, slug_zh, title, excerpt, args.theme)
         (BLOG / slug / "index.html").write_text(html, encoding="utf-8")
         print(f"[create] public/blog/{slug}/index.html ({len(html)} bytes)")
 
-    # Update posts.js (3 entries at top)
+    # Update posts.js (4 entries at top)
     entries = []
     for lang, slug, title, excerpt in payload:
-        entries.append(make_posts_js_entry(slug, lang, args, title, excerpt, slug_ko, slug_en, slug_ja))
+        entries.append(make_posts_js_entry(slug, lang, args, title, excerpt,
+                                           slug_ko, slug_en, slug_ja, slug_zh))
     insert_posts_js_entries(entries)
-    print(f"[update] public/blog/posts.js (3 entries inserted at top)")
+    print(f"[update] public/blog/posts.js (4 entries inserted at top)")
 
-    # Update sitemap.xml (3 url blocks)
+    # Update sitemap.xml (4 url blocks)
     urls = []
     for _, slug, _, _ in payload:
-        urls.append(make_sitemap_url(slug, args, slug_ko, slug_en, slug_ja))
+        urls.append(make_sitemap_url(slug, args, slug_ko, slug_en, slug_ja, slug_zh))
     insert_sitemap_urls(urls)
-    print(f"[update] public/sitemap.xml (3 url blocks added)")
+    print(f"[update] public/sitemap.xml (4 url blocks added)")
 
     print()
     print("✓ Scaffold complete. Next steps:")
-    print(f"  1. Fill body in 3 files (search for '<!-- BODY START -->')")
+    print(f"  1. Fill body in 4 files (search for '<!-- BODY START -->')")
     print(f"  2. python scripts/inject-blog-desktop-css.py")
     print(f"  3. bash scripts/bump-cache.sh")
-    print(f"  4. git add . && git commit -m 'feat(blog): publish {args.slug} (ko+en+ja)'")
+    print(f"  4. git add . && git commit -m 'feat(blog): publish {args.slug} (ko+en+ja+zh)'")
     print(f"  5. git pull --rebase -X theirs origin main && git push origin HEAD:main")
     print()
     print(f"Preview URLs after deploy:")
     print(f"  KO: https://luckyplz.com/blog/{slug_ko}/")
     print(f"  EN: https://luckyplz.com/blog/{slug_en}/")
     print(f"  JA: https://luckyplz.com/blog/{slug_ja}/")
+    print(f"  ZH: https://luckyplz.com/blog/{slug_zh}/")
 
 
 if __name__ == "__main__":

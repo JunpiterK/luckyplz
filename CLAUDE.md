@@ -25,29 +25,44 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **카테고리 (6종)**: `ai-tech`, `space-tech`, `industry`, `gaming-history`, `lifestyle`, `probability`. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
 
 ### 운영자의 압축 메시지
-> 게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 한국어·영어·일본어 3종 동시 운영.
+> 게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 **한국어·영어·일본어·중국어(간체) 4종 동시 운영**.
+
+### 4개국어 운영 — 청중 매핑
+| 언어 | ISO 639-1 | 메인페이지 라우팅 | 청중 |
+|---|---|---|---|
+| **한국어** | `ko` | 한국어 선택 시 | 국내 본진 |
+| **영어** | `en` | 영어 또는 기타 라우팅 미지정 시 (default) | 글로벌 / SEO 표준 |
+| **일본어** | `ja` | 일본어 선택 시 | 일본 AI·테크 시장 |
+| **중국어(간체)** | `zh` | 중국어 선택 시 | 중국 본토·홍콩 (중국 증시 자동발행과 연계) |
+
+자동발행 증시 글은 **3개 시장 × 2 슬롯 = 6 슬롯**, 각 슬롯이 4 언어로 출력되어 하루 **24개 글**이 생성된다. 한국·미국 외에 **중국 증시 (cn-open / cn-close)** 도 자동발행 대상. 자세한 시스템은 [scripts/prompts/README.md](scripts/prompts/README.md).
 
 ---
 
-## Blog Authoring (MANDATORY — bilingual + ja by default)
+## Blog Authoring (MANDATORY — 4 languages by default)
 
-**모든 새 블로그 글은 한국어 + 영어 + 일본어 3종 동시 작성한다. 이건 default 다. 영문판·일본어판은 절대 별도 요청을 기다리지 않는다.**
+**모든 새 블로그 글은 한국어 + 영어 + 일본어 + 중국어(간체) 4종 동시 작성한다. 이건 default 다. 다른 언어판은 절대 별도 요청을 기다리지 않는다.**
 
 ### Why mandatory
-사이트의 언어 선택은 메인 페이지에서 결정된다: **한국어 선택 → `ko` 판, 영어 선택 → `en` 판, 일본어 선택 → `ja` 판**. 한쪽 언어만 올리면 다른 언어 사용자에게는 그 글이 존재하지 않는 것과 같다. 자동 발행 시스템(증시 4편)은 이미 ko+en 동시 작성하고 있다 — 수동 작성 글이 그 룰을 따르지 않아 누적 부채(34개 글 영문판 누락, 2026-05-25 기준)가 쌓였다. 이 부채는 백로그로 청산 중이며, 새 글부터는 처음부터 3종으로 만든다.
+사이트의 언어 선택은 메인 페이지에서 결정된다: **한국어 → `ko`, 일본어 → `ja`, 중국어 → `zh`, 그 외 모두 → `en`**. 한 언어만 올리면 다른 언어 사용자에게는 그 글이 존재하지 않는 것과 같다. 자동 발행 시스템도 같은 정책을 따르며, **3개 시장 (us/kr/cn) × 2 슬롯 × 4 언어 = 하루 24개 글**을 생성한다.
+
+### Source-of-truth 언어
+- **자동발행 증시 글**: 원천은 **영어**로 작성된다. 영어를 기준으로 ko·ja·zh 로 자연스럽게 번역. (Claude 단일 호출에서 4 언어 JSON 필드 모두 출력 → 비용 절약 + 일관성)
+- **수동 작성 일반 블로그**: 원천은 **한국어**로 작성된다. 한국어를 기준으로 en·ja·zh 로 자연스럽게 번역.
 
 ### Slug 규칙
-- **ko**: `<slug>` (예: `anthropic-story-03-claude-evolution`)
+- **ko**: `<slug>` (예: `anthropic-story-03-claude-evolution`) — 한국어가 base slug
 - **en**: `<slug>-en`
 - **ja**: `<slug>-ja`
-- 각 언어판 디렉토리는 `public/blog/<slug>[/-en/-ja]/index.html`
+- **zh**: `<slug>-zh`
+- 각 언어판 디렉토리는 `public/blog/<slug>[/-en/-ja/-zh]/index.html`
 
 ### 작업 흐름 (사용자가 따로 요청하지 않아도 자동 적용)
-1. `scripts/new-blog-post.py --slug <s> --category <c>` 로 3개 디렉토리·posts.js 엔트리·sitemap 자동 비계 (Tier 2 스크립트 도입 후).
-2. 또는 수동 작성 시 3개 디렉토리·HTML·posts.js 엔트리 모두 만든다.
+1. `scripts/new-blog-post.py --slug <s> --category <c>` 로 4개 디렉토리·posts.js 엔트리·sitemap 자동 비계.
+2. 또는 수동 작성 시 4개 디렉토리·HTML·posts.js 엔트리 모두 만든다.
 3. 각 HTML 의 `<html lang="…">` 와 `hreflang` 메타 정확히 설정.
-4. posts.js 의 `alt` 필드로 ko↔en↔ja 상호 연결.
-5. sitemap.xml 의 `<xhtml:link rel="alternate" hreflang="…">` 블록 3개 등록.
+4. posts.js 의 `alt` 필드로 ko↔en↔ja↔zh 상호 연결.
+5. sitemap.xml 의 `<xhtml:link rel="alternate" hreflang="…">` 블록 4개 등록.
 
 ### 시리즈물 (Anthropic Story 등) 규칙
 - 시리즈는 일관된 시각 테마를 가진다. 새 시리즈 시작 시 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 에 등록.
@@ -76,26 +91,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Bump cache version before every commit that touches HTML or shared JS/CSS:** `bash scripts/bump-cache.sh`. Rewrites every `?v=<stamp>` query on `/js/*.js`, `/blog/*.js`, and `/css/*.css` references to the current epoch so browsers ignoring `no-cache` still fetch fresh bundles. See the "Cache policy" section.
 - **Re-inject blog-desktop.css link after creating new blog posts:** `python scripts/inject-blog-desktop-css.py`. Idempotent — adds the `<link rel="stylesheet" href="/css/blog-desktop.css?v=…">` tag right before `</head>` in every `public/blog/*/index.html` (including the blog index). Run after `bump-cache.sh` so it picks up the latest version stamp.
 - There is no build step, bundler, lint, or test suite. Production is served as static files by Cloudflare Pages — `server.py` exists only for local preview and must mirror Pages' routing (directory → `index.html`).
-- **Scaffold a new blog post (ko + en + ja 동시):** `python scripts/new-blog-post.py --slug <slug> --category <cat> --title-ko "…" --title-en "…" --title-ja "…"`. 3개 디렉토리 + posts.js 엔트리 + sitemap hreflang 블록을 한 번에 만든다. 시리즈물은 `--series anthropic-story` 등으로 테마 자동 적용. 자세한 옵션은 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md).
+- **Scaffold a new blog post (ko + en + ja + zh 동시):** `python scripts/new-blog-post.py --slug <slug> --category <cat> --title-ko "…" --title-en "…" --title-ja "…" --title-zh "…"`. 4개 디렉토리 + posts.js 엔트리 + sitemap hreflang 블록을 한 번에 만든다. 시리즈물은 `--series anthropic-story` 등으로 테마 자동 적용. 자세한 옵션은 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md).
 
 ## Blog Publishing Checklist (every new post)
 
 새 블로그 글 발행 시 아래 순서를 모두 거친다. 자동화된 부분은 `new-blog-post.py` 가 처리하지만, 본문 작성은 사람·AI 가 직접.
 
-1. **3개 디렉토리 생성** — `public/blog/<slug>/`, `<slug>-en/`, `<slug>-ja/` 각각에 `index.html`.
-2. **본문 작성** — ko 먼저, 그 다음 같은 데이터로 en·ja 번역(자연스러운 번역, 기계번역체 금지).
+1. **4개 디렉토리 생성** — `public/blog/<slug>/`, `<slug>-en/`, `<slug>-ja/`, `<slug>-zh/` 각각에 `index.html`.
+2. **본문 작성** — 원천 언어 먼저 (자동발행=en, 수동=ko), 그 다음 같은 데이터로 나머지 3 언어 자연스러운 번역(기계번역체 금지).
 3. **메타데이터 일치** — 각 HTML 의 `<html lang>`, `<title>`, `<meta description>`, `og:locale`, `canonical` 모두 해당 언어판 URL/언어로 정확히.
-4. **hreflang 상호 링크** — 각 HTML `<head>` 에 ko/en/ja 3개 `hreflang` 등록.
-5. **posts.js 엔트리 3개** — 각 lang 별 entry, `alt` 필드로 상호 연결 (`alt` 는 다른 두 언어 슬러그를 배열로 — 또는 기존 단일 `alt` 컨벤션 따름).
-6. **sitemap.xml 등록** — 3개 `<url>` 블록, 각각 `<xhtml:link rel="alternate" hreflang="…">` 3 줄씩.
+4. **hreflang 상호 링크** — 각 HTML `<head>` 에 ko/en/ja/zh 4개 `hreflang` 등록.
+5. **posts.js 엔트리 4개** — 각 lang 별 entry, `alt` 필드로 상호 연결 (다른 3 언어 슬러그 모두 forward-link).
+6. **sitemap.xml 등록** — 4개 `<url>` 블록, 각각 `<xhtml:link rel="alternate" hreflang="…">` 4 줄씩.
 7. **이미지 자산** — `public/assets/<series>/<ep>/fig-NN.{jpg,png}` 위치 확인.
 8. **blog-desktop.css inject** — `python scripts/inject-blog-desktop-css.py` (멱등, 새 파일에만 추가).
 9. **cache bump** — `bash scripts/bump-cache.sh`.
-10. **로컬 미리보기** — `python server.py` 로 ko/en/ja 3판 모두 열어 본문·이미지·hreflang 확인.
-11. **commit** — 메시지에 ko/en/ja 모두 포함됨을 명시.
+10. **로컬 미리보기** — `python server.py` 로 ko/en/ja/zh 4판 모두 열어 본문·이미지·hreflang 확인.
+11. **commit** — 메시지에 ko/en/ja/zh 모두 포함됨을 명시.
 12. **git pull --rebase + push** — race 안전 패턴 (cron 자동발행과 충돌 회피).
 
-**3개 언어 중 하나라도 빠진 채 commit 하지 말 것.** 부족한 언어판이 있으면 commit 전에 task 로 등록하고 다음 세션 우선 처리.
+**4개 언어 중 하나라도 빠진 채 commit 하지 말 것.** 부족한 언어판이 있으면 commit 전에 task 로 등록하고 다음 세션 우선 처리.
 
 ## Architecture
 
@@ -122,9 +137,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **i18n & SEO.** The site targets 16 languages via `?lang=` query param with full `hreflang` alternates and JSON-LD `ItemList` in [public/index.html](public/index.html). Canonical domain is `https://luckyplz.com/`. When adding pages, replicate the hreflang/canonical/OG block and register the route in `public/sitemap.xml`.
 
 **Blog content language tiers (다국어 운영 기준).** 메인 페이지의 언어 선택이 블로그에도 그대로 라우팅된다:
-- **Tier A (mandatory, 모든 블로그 글)**: `ko` (한국어), `en` (영어), `ja` (일본어). 새 글은 처음부터 3종으로 만든다. 자세한 룰은 위 "Blog Authoring (MANDATORY)" 섹션 참조.
-- **Tier B (optional, 특정 트래픽 타깃 글)**: 추가 12언어 (de, es, fr, hi, id, it, pt, ru, th, tr, vi, zh). 현재 `spacex-ipo-2026` 시리즈가 7언어로 운영 중. 새 글이 Tier B 로 갈 필요가 있으면 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 "Tier B 승격 절차" 참조.
+- **Tier A (mandatory, 모든 블로그 글)**: `ko` (한국어), `en` (영어), `ja` (일본어), `zh` (중국어 간체). 새 글은 처음부터 4종으로 만든다. 자세한 룰은 위 "Blog Authoring (MANDATORY)" 섹션 참조.
+- **Tier B (optional, 특정 트래픽 타깃 글)**: 추가 11언어 (de, es, fr, hi, id, it, pt, ru, th, tr, vi). 현재 `spacex-ipo-2026` 시리즈가 7언어로 운영 중. 새 글이 Tier B 로 갈 필요가 있으면 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 "Tier B 승격 절차" 참조.
 - 메인 페이지의 언어 선택은 게임에도 적용되지만, 게임은 UI 가 가벼워 자동 i18n (브라우저 lang 또는 `?lang=`) 으로 처리. 블로그는 본문 자체가 다른 언어로 작성되어야 하므로 디렉토리 분리.
+- **라우팅 규칙 (메인페이지 언어 선택 → 블로그)**: `ko` → `<slug>/`, `ja` → `<slug>-ja/`, `zh` → `<slug>-zh/`, 그 외 (en 포함 fallback) → `<slug>-en/`.
 
 **Analytics.** GA4 measurement ID is `G-NZDPE3H3DQ` (property: LuckyPlz). The prior `notmeplz.com` ID `G-W91WWVNLD6` should not appear anywhere — grep before committing.
 

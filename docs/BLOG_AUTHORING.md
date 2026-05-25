@@ -2,7 +2,7 @@
 
 이 문서는 [CLAUDE.md](../CLAUDE.md) 의 **Blog Authoring (MANDATORY)** 섹션을 상세화한다. 새 글 작성 전·중·후에 참조한다.
 
-> **TL;DR** — 모든 새 블로그 글은 **한국어 + 영어 + 일본어 3종** 동시 작성. `scripts/new-blog-post.py` 로 비계 만들고, 본문 채우고, `bump-cache.sh` 돌리고, push. 끝.
+> **TL;DR** — 모든 새 블로그 글은 **한국어 + 영어 + 일본어 + 중국어(간체) 4종** 동시 작성. `scripts/new-blog-post.py` 로 비계 만들고, 본문 채우고, `bump-cache.sh` 돌리고, push. 끝.
 
 ---
 
@@ -10,9 +10,12 @@
 
 luckyplz.com 의 블로그는 **테크 위주 깊이 있는 글** 이 중심이다. 사이트 운영자의 말 그대로 옮기면:
 
-> "게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 한국어·영어·일본어 3종 동시 운영."
+> "게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 한국어·영어·일본어·중국어 4종 동시 운영."
 
 이 정체성을 벗어나는 글 (예: 잡담식 일기, 가십, 정치 의견) 은 만들지 않는다.
+
+### 자동발행 글 = 영어 원천 + 3 언어 번역
+자동발행 증시 글은 **영어로 원천 작성** 한 뒤 같은 Claude 호출에서 ko·ja·zh 로 자연스러운 번역을 함께 출력한다. 영어가 source-of-truth. 6 슬롯 (us·kr·cn 각 개장/마감) × 4 언어 = 매일 24개 글.
 
 ---
 
@@ -101,12 +104,13 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 4. **숫자에 구체성** — "많은 사용자" 대신 "약 천만 명", "큰 점프" 대신 "약 두 배의 점프". 단, 검증되지 않은 숫자는 절대 쓰지 말 것 (자동발행 글의 Iron Rule 그대로).
 5. **시간·장소·인물의 좌표** — "그날", "거기서" 대신 "2023년 3월 14일", "Princeton", "Dario Amodei". 좌표가 있으면 신뢰가 생긴다.
 
-### 4.2 한국어 ↔ 영어 ↔ 일본어 번역 원칙
+### 4.2 한국어 ↔ 영어 ↔ 일본어 ↔ 중국어(간체) 번역 원칙
 
-- **한국어 먼저 작성, 그 뒤 자연스러운 영문·일본어판으로 다시 쓴다.** 기계번역체 절대 금지.
-- 영문판은 **same data, different voice** — 한국어판의 표현을 그대로 옮기면 어색해진다. 영문 독자에게 자연스러운 구성·관용 표현으로.
+- **원천 언어 먼저** (수동 작성=ko, 자동발행=en), 그 뒤 자연스러운 나머지 언어판으로 다시 쓴다. 기계번역체 절대 금지.
+- 모든 언어판은 **same data, different voice** — 원천 언어의 표현을 그대로 옮기면 어색해진다. 각 독자에게 자연스러운 구성·관용 표현으로.
 - 일본어판은 **존경어/정중체 (です·ます調) 기본** — 사이트 톤이 진지하므로. 캐주얼체 (だ·である) 는 시리즈물에서 제한적 사용.
-- 숫자·날짜·인용문·고유명사는 3 판 모두 일치. 다른 톤은 표현, 같은 톤은 사실.
+- 중국어판은 **간체자 (Simplified) 사용** — `zh-CN` 표준. 정중하지만 딱딱하지 않은 톤. 본토·홍콩·싱가포르·해외 화교 독자 모두 자연스럽게 읽도록.
+- 숫자·날짜·인용문·고유명사는 4 판 모두 일치. 다른 톤은 표현, 같은 톤은 사실.
 - 길이는 ±15% 안에서 맞춘다. 한쪽이 두 배 길면 다른 쪽이 부실하다는 신호.
 
 ### 4.3 면책·출처 표기 표준
@@ -131,19 +135,20 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 ```
 
 ### 5.2 언어별로 다른 부분
-| 항목 | ko | en | ja |
-|---|---|---|---|
-| `<html lang="…">` | `ko` | `en` | `ja` |
-| `<title>` | 한국어 제목 | English title | 日本語タイトル |
-| `<meta name="description">` | 한국어 | English | 日本語 |
-| `<meta property="og:locale">` | `ko_KR` | `en_US` | `ja_JP` |
-| `<link rel="canonical">` | `https://luckyplz.com/blog/<slug>/` | `…/<slug>-en/` | `…/<slug>-ja/` |
+| 항목 | ko | en | ja | zh |
+|---|---|---|---|---|
+| `<html lang="…">` | `ko` | `en` | `ja` | `zh` |
+| `<title>` | 한국어 제목 | English title | 日本語タイトル | 中文标题 |
+| `<meta name="description">` | 한국어 | English | 日本語 | 简体中文 |
+| `<meta property="og:locale">` | `ko_KR` | `en_US` | `ja_JP` | `zh_CN` |
+| `<link rel="canonical">` | `…/<slug>/` | `…/<slug>-en/` | `…/<slug>-ja/` | `…/<slug>-zh/` |
 
-### 5.3 hreflang 상호 링크 (3개 — 모든 언어판 동일하게 박힘)
+### 5.3 hreflang 상호 링크 (4개 — 모든 언어판 동일하게 박힘)
 ```html
 <link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/<slug>/">
 <link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/<slug>-en/">
 <link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/<slug>-ja/">
+<link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/<slug>-zh/">
 <link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/<slug>-en/">
 ```
 
@@ -153,7 +158,7 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
   "@context": "https://schema.org",
   "@type": "BlogPosting",
   "headline": "…",
-  "inLanguage": "ko" | "en" | "ja",
+  "inLanguage": "ko" | "en" | "ja" | "zh",
   "datePublished": "YYYY-MM-DD",
   "mainEntityOfPage": { "@id": "<canonical url>" }
 }
@@ -161,9 +166,9 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 
 ---
 
-## 6. posts.js 엔트리 — 3 언어판 등록
+## 6. posts.js 엔트리 — 4 언어판 등록
 
-새 글 발행 시 [public/blog/posts.js](../public/blog/posts.js) 에 **3 개 엔트리** 추가. 각 엔트리는 `alt` 필드로 다른 두 언어판 슬러그를 가리킨다.
+새 글 발행 시 [public/blog/posts.js](../public/blog/posts.js) 에 **4 개 엔트리** 추가. 각 엔트리는 `alts` 필드 (객체) 로 다른 3 언어판 슬러그를 모두 가리킨다.
 
 ```js
 {
@@ -176,34 +181,53 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
     tags: ['Anthropic', 'Claude', ...],
     title: "Claude의 진화 — 1.0에서 4.7까지",
     excerpt: '2023년 봄...',
-    alt: 'anthropic-story-03-claude-evolution-en',  // ← 영문판 슬러그
-    altJa: 'anthropic-story-03-claude-evolution-ja', // ← 일본어판 슬러그 (새 필드)
+    alts: {
+        en: 'anthropic-story-03-claude-evolution-en',
+        ja: 'anthropic-story-03-claude-evolution-ja',
+        zh: 'anthropic-story-03-claude-evolution-zh',
+    },
 },
 {
     slug: 'anthropic-story-03-claude-evolution-en',
     lang: 'en',
     // ... 영문판 메타
-    alt: 'anthropic-story-03-claude-evolution',     // ← ko 슬러그
-    altJa: 'anthropic-story-03-claude-evolution-ja',
+    alts: {
+        ko: 'anthropic-story-03-claude-evolution',
+        ja: 'anthropic-story-03-claude-evolution-ja',
+        zh: 'anthropic-story-03-claude-evolution-zh',
+    },
 },
 {
     slug: 'anthropic-story-03-claude-evolution-ja',
     lang: 'ja',
     // ... 일본어판 메타
-    alt: 'anthropic-story-03-claude-evolution',     // ← ko 슬러그
-    altEn: 'anthropic-story-03-claude-evolution-en',
+    alts: {
+        ko: 'anthropic-story-03-claude-evolution',
+        en: 'anthropic-story-03-claude-evolution-en',
+        zh: 'anthropic-story-03-claude-evolution-zh',
+    },
+},
+{
+    slug: 'anthropic-story-03-claude-evolution-zh',
+    lang: 'zh',
+    // ... 중국어판 메타
+    alts: {
+        ko: 'anthropic-story-03-claude-evolution',
+        en: 'anthropic-story-03-claude-evolution-en',
+        ja: 'anthropic-story-03-claude-evolution-ja',
+    },
 },
 ```
 
-> 기존 글은 `alt` 한 필드만 사용 (ko↔en 만 운영했던 시대). 신규 글은 `altJa` (또는 더 확장 가능한 `alts: { en, ja }` 객체) 컨벤션을 따른다. **블로그 메인의 언어 라우팅 코드도 이 새 필드를 읽도록 수정 필요** — 자세한 절차는 새 글 처음 만들 때 한 번 정비.
+> 기존 글은 `alt` 한 필드 (단일 문자열) 만 사용. 신규 글부터 `alts` 객체 컨벤션 적용. **블로그 메인의 언어 라우팅 코드도 이 새 필드를 읽도록 수정 필요** (Task #26 Step 3 에서 처리). 기존 `alt` 는 backward compat 으로 유지.
 
 ---
 
-## 7. Tier B (12언어 추가) 승격 절차
+## 7. Tier B (11언어 추가) 승격 절차
 
-기본 모든 글은 **Tier A (ko/en/ja)** 만 만든다. 특정 글이 **글로벌 검색 트래픽** 을 노릴 가치가 있으면 Tier B 로 승격:
+기본 모든 글은 **Tier A (ko/en/ja/zh)** 만 만든다. 특정 글이 **글로벌 검색 트래픽** 을 노릴 가치가 있으면 Tier B 로 승격:
 
-- 추가 12언어: `de`, `es`, `fr`, `hi`, `id`, `it`, `pt`, `ru`, `th`, `tr`, `vi`, `zh`
+- 추가 11언어: `de`, `es`, `fr`, `hi`, `id`, `it`, `pt`, `ru`, `th`, `tr`, `vi`
 - 슬러그 컨벤션: `<slug>-de`, `<slug>-es` 등 (현재 `spacex-ipo-2026` 시리즈가 이 패턴)
 - 승격 기준 (다음 중 둘 이상 충족):
   1. 글로벌 단일 키워드 검색량 월 100 K 이상
@@ -217,15 +241,17 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 
 자동 발행 글은 `scripts/auto-daily-post.py` + GitHub Actions cron 으로 작동. 본 문서는 **수동 작성 글**에 적용. 두 흐름의 차이:
 
-| | 자동 발행 (증시 4편) | 수동 작성 |
+| | 자동 발행 (증시 6편) | 수동 작성 |
 |---|---|---|
 | 트리거 | GitHub Actions cron | Claude Code 세션 또는 사용자 직접 |
-| 언어 | ko + en (ja 추가 작업 진행 중, Task #18) | ko + en + ja (default) |
+| 시장 | us, kr, **cn** (3개 시장 × 개장/마감 2 슬롯 = 6 슬롯) | — |
+| 언어 | ko + en + ja + zh (4종, **영어 원천 → 3언어 번역**) | ko + en + ja + zh (4종, **한국어 원천 → 3언어 번역**) |
 | 카테고리 | `industry` 고정 | 6종 중 선택 |
 | 데이터 | yfinance 하드 페치 → 프롬프트 주입 | 수동 리서치 |
 | 길이 | 600~900 단어 narrative | 자유 (보통 6~20분 읽기) |
 | 톤 | 분석 보고서 | 스토리텔링·에세이 |
 | 검증 | Iron Rule (≥2 소스 cross-verify) | 본 문서 §4.3 (footnotes + 면책) |
+| 출력 | 매일 24개 글 (6 슬롯 × 4 언어) | 글당 4개 (1 글 × 4 언어) |
 
 자동 발행 시스템 상세는 [scripts/prompts/README.md](../scripts/prompts/README.md) 참조.
 
@@ -236,11 +262,12 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 1. 한국어판 직접 열어 보기: `https://luckyplz.com/blog/<slug>/`
 2. 영어판 동일하게.
 3. 일본어판 동일하게.
-4. 블로그 메인 (`/blog/`) 에서 카테고리 필터로 새 글 보이는지.
-5. 메인 페이지 (`/`) 의 최근 글 카드에 보이는지 (자동 갱신).
-6. 카카오톡·트위터·페이스북 링크 미리보기 (OG 이미지·한국어 폰트 깨짐 없는지).
-7. 모바일 (실기기 또는 Chrome devtools 모바일 모드) 에서 가로 480px 캡 잘 걸리는지.
-8. 데스크탑 (>768px) 에서 column 760~820px 로 넓혀지는지.
+4. **중국어판 동일하게**: `https://luckyplz.com/blog/<slug>-zh/`
+5. 블로그 메인 (`/blog/`) 에서 카테고리 필터로 새 글 보이는지.
+6. 메인 페이지 (`/`) 의 최근 글 카드에 보이는지 (자동 갱신).
+7. 카카오톡·트위터·페이스북·웨이보 링크 미리보기 (OG 이미지·CJK 폰트 깨짐 없는지).
+8. 모바일 (실기기 또는 Chrome devtools 모바일 모드) 에서 가로 480px 캡 잘 걸리는지.
+9. 데스크탑 (>768px) 에서 column 760~820px 로 넓혀지는지.
 
 ---
 
@@ -248,7 +275,7 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 
 | 작업 | 명령 / 위치 |
 |---|---|
-| 새 글 비계 | `python scripts/new-blog-post.py --slug … --category … --title-ko … --title-en … --title-ja …` |
+| 새 글 비계 | `python scripts/new-blog-post.py --slug … --category … --title-ko … --title-en … --title-ja … --title-zh …` |
 | 시리즈 글 비계 | 위 + `--series anthropic-story` |
 | 발행 후 cache bump | `bash scripts/bump-cache.sh` |
 | desktop CSS 주입 | `python scripts/inject-blog-desktop-css.py` |
@@ -260,4 +287,4 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 
 ---
 
-마지막 업데이트: 2026-05-25 — 다국어 운영 기준을 ko + en 에서 **ko + en + ja** 로 확장. 누적 백로그 청산 진행 중 (task #19~23).
+마지막 업데이트: 2026-05-25 — 다국어 운영 기준을 **ko + en + ja + zh 4종** 으로 확장. 자동발행 증시는 영어 원천 → 3 언어 번역, 일반 블로그는 한국어 원천 → 3 언어 번역. 자동발행 시장도 us + kr + **cn** 3개로 확장 (별도 작업, Task #25).
