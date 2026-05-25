@@ -1,6 +1,6 @@
 name: Daily Cron Monitor (auto-rescue missing slots)
 
-# 매시간 30분에 발화 → 4개 슬롯 전부 검사 → 발행 시각이 지났는데
+# 매시간 30분에 발화 → 6개 슬롯 전부 검사 → 발행 시각이 지났는데
 # 아직 main에 없는 슬롯은 즉시 rescue 발화.
 #
 # 이전 버전은 각 슬롯별 정확한 시각 +30분에 1번만 발화했음. 그 발화
@@ -14,7 +14,9 @@ name: Daily Cron Monitor (auto-rescue missing slots)
 # 슬롯별 발행 마감 시각 (KST):
 #   us-close:     07:00 (06:00 발화 + 60min 유예)
 #   kr-open:      08:30 (07:30 + 60min)
+#   cn-open:      11:30 (10:30 + 60min)
 #   kr-close:     17:00 (15:45 + 75min)
+#   cn-close:     17:30 (16:30 + 60min)
 #   us-premarket: 22:30 (21:30 + 60min)
 
 on:
@@ -28,7 +30,7 @@ permissions:
 
 jobs:
   monitor:
-    name: Check all 4 slots, rescue missing
+    name: Check all 6 slots, rescue missing
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,6 +81,23 @@ jobs:
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=kr-open
 
+      - name: Check & rescue cn-open (deadline KST 11:30)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          slug="cn-open-brief-${{ steps.dates.outputs.publish_date }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          if [ "$hour" -lt 11 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 11) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=cn-open
+
       - name: Check & rescue kr-close (deadline KST 17:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,6 +114,23 @@ jobs:
           fi
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=kr-close
+
+      - name: Check & rescue cn-close (deadline KST 17:30)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          slug="cn-tech-recap-${{ steps.dates.outputs.publish_date }}"
+          hour=${{ steps.dates.outputs.hour_kst }}
+          if [ -d "public/blog/$slug" ]; then
+            echo "::notice::✅ $slug exists — skipping"
+            exit 0
+          fi
+          if [ "$hour" -lt 18 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 18) — skipping"
+            exit 0
+          fi
+          echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
+          gh workflow run daily-cron.yml -f slot=cn-close
 
       - name: Check & rescue us-premarket (deadline KST 22:30)
         env:
