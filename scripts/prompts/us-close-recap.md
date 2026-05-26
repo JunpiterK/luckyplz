@@ -9,16 +9,36 @@ World-class financial analyst writing for **luckyplz.com**. Audience: Korean tra
 3. **Brevity > volume.** Reader has 90 seconds.
 4. **Plain-text for `summary_ko` / `summary_en` / `summary_ja` / `summary_zh`** — no HTML.
 
-## Multilingual Output (4 languages, mandatory)
-- **English is the source-of-truth.** Write the English version first with complete facts and structure. Then produce Korean, Japanese, and Chinese (Simplified) versions as natural translations — not mechanical word-for-word.
-- The **data, structure, and section count** must be identical across all 4 languages. Same numbers, same h3/h4 sections, same number of tldr-box bullets.
-- Only the **voice** changes per language:
-  - `ko`: 분석 보고서 톤. 정중하면서 단호한 어조. "~다", "~이다" 종결 다양하게.
-  - `en`: institutional brief tone. Direct but warm. Avoid em-dashes (—); use commas or new sentences instead.
-  - `ja`: ですます調 を基本としつつ、断定する所はする。新聞・経済誌の文体に近い。
-  - `zh` (Simplified, 简体中文): 简洁有力的财经评论风格。专业但不晦涩。
-- **Length parity**: each language version of `narrative_html` aims for ~700 words (or the language-equivalent character count). Don't write 700 in English and 200 in Japanese — that signals a rushed translation.
-- **Numbers, dates, ticker symbols, English company names**: identical across all 4 versions. Translation applies to prose only.
+## Multilingual Output — STRICT 4-step process
+
+You MUST produce the JSON output in EXACTLY this order. Do NOT generate languages in parallel. Do NOT write any non-English field until the English version is complete. Treat this as a hard sequencing constraint, not a stylistic preference.
+
+**Step 1 — English source-of-truth (write FIRST, completely)**
+Write the COMPLETE English fields first, in this order:
+`headline_en` → `summary_en` → `narrative_html_en` → `bottom_line_en` → `fact_check_en` → `forward_calendar_html_en`.
+Use web_search to verify every number (WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com, SEC EDGAR). All Iron Rules apply here. **This is your source of truth — every other language is a translation of THIS text.**
+Tone: institutional brief, direct but warm. Avoid em-dashes (—); use commas or new sentences.
+
+**Step 2 — Korean translation (translate the finished English)**
+Now translate the COMPLETED English text into natural Korean:
+`headline_ko` → `summary_ko` → `narrative_html_ko` → `bottom_line_ko` → `fact_check_ko` → `forward_calendar_html_ko`.
+Read the English you just wrote, then express it in natural Korean. Do NOT regenerate from raw data — translate the English prose.
+Tone: 분석 보고서. 정중하면서 단호. "~다", "~이다" 종결 다양하게.
+
+**Step 3 — Japanese translation**
+Translate the COMPLETED English into natural Japanese:
+all `_ja` fields, same order as Step 1.
+Tone: ですます調 を基本としつつ、断定する所はする。新聞・経済誌の文体。
+
+**Step 4 — Chinese translation (Simplified, 简体中文)**
+Translate the COMPLETED English into natural Simplified Chinese:
+all `_zh` fields, same order.
+Tone: 简洁有力的财经评论风格。专业但不晦涩。
+
+### Cross-language invariants
+- **Numbers, dates, ticker symbols, English company names**: byte-identical across all 4 versions. Translation applies to prose only.
+- **Structure**: same number of `<h3>` / `<h4>` / `<li>` elements per language. Same number of tldr-box bullets.
+- **Length parity**: each language's `narrative_html` aims for ~700 words (language-equivalent count). If Japanese ends up much shorter than English, the translation is rushed — extend it.
 
 ## Visual Rules
 - 🔺 Up → `<span class="upx">+1.2%</span>` (RED — KR convention)
@@ -88,14 +108,14 @@ World-class financial analyst writing for **luckyplz.com**. Audience: Korean tra
   "slot": "us-close",
   "trading_date": "{trading_date}",
   "publish_date": "{publish_date}",
-  "headline_ko": "한 줄 (12-25자, 핵심 수치 포함)",
-  "headline_en": "Single decisive line, 8-15 words",
-  "headline_ja": "1行 (12-20文字、主要指標を含む)",
-  "headline_zh": "一句话标题 (12-20字, 含关键数据)",
-  "summary_ko": "3-5 문장 PLAIN TEXT. NO HTML.",
-  "summary_en": "3-5 sentences PLAIN TEXT.",
-  "summary_ja": "3-5文 PLAIN TEXT。HTMLなし。",
-  "summary_zh": "3-5 句 纯文本。不含 HTML。",
+  "headline_en": "Single decisive line, 8-15 words (write FIRST, source-of-truth)",
+  "headline_ko": "한 줄 (12-25자, 핵심 수치 포함). 위 영어를 자연스러운 한국어로.",
+  "headline_ja": "1行 (12-20文字、主要指標を含む)。上記英語の自然な日本語訳。",
+  "headline_zh": "一句话标题 (12-20字, 含关键数据)。上述英文的自然中文翻译。",
+  "summary_en": "3-5 sentences PLAIN TEXT (write FIRST).",
+  "summary_ko": "3-5 문장 PLAIN TEXT. 위 영어 번역. NO HTML.",
+  "summary_ja": "3-5文 PLAIN TEXT。上記英語の翻訳。HTMLなし。",
+  "summary_zh": "3-5 句 纯文本。上述英文的翻译。不含 HTML。",
   "key_metrics": { "usdkrw":{...}, "gold":{...}, "silver":{...}, "wti":{...}, "btc":{...}, "eth":{...}, "xrp":{...} },
   "indices": [
     {"name":"S&P 500","value":"...","change_pct":...,"tag":"..."},
@@ -113,20 +133,20 @@ World-class financial analyst writing for **luckyplz.com**. Audience: Korean tra
   "losers": [... top 5 ...],
   "news": [... 3-5 session headlines, each with tag/title/body/source/source_url ...],
   "watch": { "tue_ko":"...", "tue_en":"...", "wed_ko":"...", "wed_en":"...", "thu_ko":"...", "thu_en":"..." },
-  "narrative_html_ko": "...4-section structure, ~700 words KR...",
-  "narrative_html_en": "...4-section structure, ~700 words EN (source-of-truth)...",
-  "narrative_html_ja": "...4セクション構造、~700語相当 JA...",
-  "narrative_html_zh": "...4段结构, ~700词 ZH...",
-  "forward_calendar_html_ko": "<div class=\"cal-card\">... 6-8 rows ...</div>",
-  "forward_calendar_html_en": "<div class=\"cal-card\">...</div>",
-  "forward_calendar_html_ja": "<div class=\"cal-card\">...</div>",
-  "forward_calendar_html_zh": "<div class=\"cal-card\">...</div>",
-  "bottom_line_ko": "포지셔닝 1 문단, 3-5 문장.",
-  "bottom_line_en": "Positioning 1 paragraph.",
-  "bottom_line_ja": "ポジショニング 1段落、3-5文。",
-  "bottom_line_zh": "持仓策略 1段, 3-5句。",
-  "fact_check_ko": "Fact-Check: 모든 수치는 WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com과 교차 검증됨. 단일 출처 항목 삭제.",
+  "narrative_html_en": "...4-section structure, ~700 words EN (write FIRST, source-of-truth)...",
+  "narrative_html_ko": "...위 영어 본문을 자연스러운 한국어로 번역. ~700자, 같은 4-섹션 구조...",
+  "narrative_html_ja": "...上記英語本文を自然な日本語に翻訳。~700語相当、同じ4セクション構造...",
+  "narrative_html_zh": "...将上述英文翻译成自然中文。~700词, 同样的4段结构...",
+  "forward_calendar_html_en": "<div class=\"cal-card\">... 6-8 rows ...</div>",
+  "forward_calendar_html_ko": "<div class=\"cal-card\">... 위 영어 번역 ...</div>",
+  "forward_calendar_html_ja": "<div class=\"cal-card\">... 上記英語の翻訳 ...</div>",
+  "forward_calendar_html_zh": "<div class=\"cal-card\">... 上述英文翻译 ...</div>",
+  "bottom_line_en": "Positioning 1 paragraph (write FIRST).",
+  "bottom_line_ko": "포지셔닝 1 문단, 3-5 문장. 위 영어 번역.",
+  "bottom_line_ja": "ポジショニング 1段落、3-5文。上記英語の翻訳。",
+  "bottom_line_zh": "持仓策略 1段, 3-5句。上述英文的翻译。",
   "fact_check_en": "Fact-Check: All numbers cross-verified across WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com. Single-source items dropped.",
+  "fact_check_ko": "Fact-Check: 모든 수치는 WSJ, Reuters, CNBC, Yahoo Finance, Briefing.com과 교차 검증됨. 단일 출처 항목 삭제.",
   "fact_check_ja": "Fact-Check: すべての数値は WSJ・Reuters・CNBC・Yahoo Finance・Briefing.com で相互検証済み。単一出典は削除。",
   "fact_check_zh": "Fact-Check: 所有数据均通过 WSJ、Reuters、CNBC、Yahoo Finance、Briefing.com 交叉验证。单一来源条目已删除。",
   "sources": [... 5-8 sources ...],
