@@ -517,42 +517,84 @@ def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
 # A loose presence-check is enough to catch the "S&P 500 +0.37% but
 # narrative says +3.7%" type of catastrophic mismatch the user remembers.
 
-def validate_narrative_numbers(data: dict, market_data: dict, slot: str) -> list[str]:
-    """Detect potential narrative ↔ market_data mismatches.
+# Severity thresholds for option D (Tier-branched validation). Tunable
+# without code changes — bump them up if real-world mismatches are
+# concentrated on rounding edges, bump down if catastrophic-grade
+# errors slip through.
+#
+#   CLEAN        — zero mismatches
+#   MINOR        — small drift only: ≤ MINOR_MAX_COUNT mismatches AND
+#                  every observed diff is < MINOR_MAX_DIFF_PP
+#   CATASTROPHIC — anything else (too many mismatches OR a single one
+#                  that's too far from the verified value)
+MINOR_MAX_COUNT = 2          # ≤2 mismatches still counts as minor
+MINOR_MAX_DIFF_PP = 0.5      # any individual diff ≥ 0.5%p → catastrophic
 
-    Returns a list of warning messages (empty = clean). Read-only — caller
-    decides what to do with the warnings (currently: log as
-    ::warning:: and continue).
+
+def validate_narrative_numbers(data: dict, market_data: dict, slot: str) -> dict:
+    """Detect potential narrative ↔ market_data mismatches and classify
+    them by severity.
+
+    Returns:
+        {
+          "severity":   "clean" | "minor" | "catastrophic",
+          "warnings":   list[str]   — human-readable lines
+          "mismatches": list[dict]  — structured detail per mismatch
+                                       {ticker, name, verified_pct,
+                                        nearest_found_pct, diff_pp}
+          "max_diff":   float       — largest |verified - nearest_found|
+                                       across all mismatches; 0 if clean
+          "count":      int         — total mismatch count
+        }
+
+    Read-only — does not mutate inputs. Caller (main) decides what
+    severity threshold triggers publish vs retry vs block; see the
+    option-D control flow there.
 
     Algorithm:
-      For each ticker name in market_data whose name OR ticker appears in
-      narrative_html_en, extract every signed percentage from the EN
-      narrative. Check whether the verified change_pct (rounded to 1 dp)
-      appears in that set, allowing ±0.06 tolerance for rounding
-      differences (e.g., "+1.2%" matching "+1.18%" → 1.2 vs 1.2 → OK).
+      For each ticker in market_data whose name OR ticker appears in
+      narrative_html_en, find the signed percentage in the prose that's
+      closest to the verified change_pct. If even the closest match
+      exceeds ±0.15 tolerance, record the diff and flag a mismatch.
 
-      If the verified ticker is mentioned but NO matching percentage
-      shows up in the narrative, that's a mismatch signal.
+      Why "nearest" instead of "any present"? When the prose says
+      "S&P 500 closed +0.4% while semis surged +3.2%" and verified
+      S&P is +0.37%, we want to know that the S&P reference matches
+      +0.4 (diff=0.03, OK) and NOT confuse the +3.2 semis number with
+      the S&P verification target.
     """
     import re
 
-    warnings: list[str] = []
+    result = {
+        "severity": "clean",
+        "warnings": [],
+        "mismatches": [],
+        "max_diff": 0.0,
+        "count": 0,
+    }
     narrative_en = (data.get("narrative_html_en") or "").strip()
     if not narrative_en or not market_data:
-        return warnings
+        return result
 
-    # Extract every signed percentage from the EN narrative.
-    # Tolerates surrounding HTML — we just scan text for the pattern.
-    raw_pcts = re.findall(r'[+-]?\d+\.?\d*\s*%', narrative_en)
-    found_pcts: set[float] = set()
-    for s in raw_pcts:
-        try:
-            val = float(s.rstrip("%").strip())
-            # Bucket to 1 decimal place — Claude often writes +1.2 where
-            # the verified value is +1.18, and we don't want to flag those.
-            found_pcts.add(round(val, 1))
-        except ValueError:
-            continue
+    if not re.search(r'[+-]?\d+\.?\d*\s*%', narrative_en):
+        # Narrative has no percentages at all — nothing to validate.
+        return result
+
+    pct_re = re.compile(r'[+-]?\d+\.?\d*\s*%')
+    # For each ticker mention we take the FIRST percentage that appears
+    # within IMMEDIATE_WIN chars after the mention ends. This is much
+    # tighter than a symmetric window and avoids the trap where a short
+    # narrative has all 4 tickers' percentages in one sentence and the
+    # validator picks the wrong neighbor (Case D in the unit tests: S&P
+    # verified +0.37% but the validator was matching it to Nasdaq's
+    # nearby +0.19% instead of S&P's actual +3.7% claim).
+    #
+    # Real narratives almost always quote a ticker's percentage within
+    # 30-50 chars of the ticker mention itself ("S&P 500 +0.37%",
+    # "S&P 500 closed at 6047.20, +0.37% on the day"). 80 chars is a
+    # safe upper bound that catches the long form and still excludes
+    # the next ticker's number.
+    IMMEDIATE_WIN = 80
 
     for name, asset in market_data.items():
         if not isinstance(asset, dict):
@@ -562,26 +604,118 @@ def validate_narrative_numbers(data: dict, market_data: dict, slot: str) -> list
             continue
         ticker = asset.get("ticker") or ""
 
-        # Only check tickers that the narrative actually references.
-        # Avoid false positives for the dozens of tickers in market_data
-        # that the prompt simply didn't have room to mention.
-        # Name match is loose — "S&P 500" inside "the S&P 500 jumped" etc.
-        mentioned = bool(name and name in narrative_en) or bool(ticker and ticker in narrative_en)
-        if not mentioned:
-            continue
+        # Collect end positions of every mention (start + len(needle))
+        # so we can scan FORWARD from where the ticker name ends.
+        mention_ends: list[int] = []
+        for needle in (name, ticker):
+            if not needle:
+                continue
+            try:
+                pattern = re.compile(re.escape(needle))
+            except re.error:
+                continue
+            for mm in pattern.finditer(narrative_en):
+                mention_ends.append(mm.end())
+        if not mention_ends:
+            continue   # Ticker not referenced in the narrative — skip
 
-        verified_rounded = round(float(verified_pct), 1)
-        # Tolerance: ±0.15 in the bucketed space (~0.1 + rounding slack).
-        match = any(abs(p - verified_rounded) <= 0.15 for p in found_pcts)
-        if not match:
-            warnings.append(
-                f"slot={slot} ticker={ticker or '?'} name='{name}': "
-                f"verified change_pct={verified_pct:+.2f}% mentioned in EN narrative "
-                f"but no matching ±% (within ±0.15) found in the prose. "
-                f"Review the published page for possible mismatch."
-            )
+        # For each mention, grab the FIRST % within IMMEDIATE_WIN chars.
+        nearby_pcts: list[float] = []
+        for end in mention_ends:
+            mm = pct_re.search(narrative_en, end, end + IMMEDIATE_WIN)
+            if not mm:
+                continue
+            try:
+                nearby_pcts.append(float(mm.group().rstrip("%").strip()))
+            except ValueError:
+                continue
+        if not nearby_pcts:
+            continue   # Ticker mentioned but no % within 80 chars —
+                       # narrative didn't quote a percentage for it,
+                       # nothing to validate against.
 
-    return warnings
+        verified_f = float(verified_pct)
+        # Among the per-mention first-% candidates, pick the one
+        # CLOSEST to the verified value. This is forgiving for narratives
+        # that mention the same ticker twice with the right number once.
+        nearest = min(nearby_pcts, key=lambda p: abs(p - verified_f))
+        diff = abs(nearest - verified_f)
+        if diff <= 0.15:
+            continue   # within rounding tolerance — OK
+
+        # Record the mismatch.
+        result["mismatches"].append({
+            "ticker": ticker or "?",
+            "name": name,
+            "verified_pct": round(verified_f, 2),
+            "nearest_found_pct": round(nearest, 2),
+            "diff_pp": round(diff, 2),
+        })
+        result["warnings"].append(
+            f"slot={slot} ticker={ticker or '?'} name='{name}': "
+            f"verified change_pct={verified_f:+.2f}% but EN narrative's "
+            f"nearest value (within {IMMEDIATE_WIN} chars of the ticker mention) "
+            f"is {nearest:+.2f}% (diff {diff:.2f}%p). Likely fabricated/swapped number."
+        )
+
+    result["count"] = len(result["mismatches"])
+    if result["mismatches"]:
+        result["max_diff"] = max(m["diff_pp"] for m in result["mismatches"])
+
+    # Severity classification (option D thresholds, defined at module top).
+    if result["count"] == 0:
+        result["severity"] = "clean"
+    elif result["count"] <= MINOR_MAX_COUNT and result["max_diff"] < MINOR_MAX_DIFF_PP:
+        result["severity"] = "minor"
+    else:
+        result["severity"] = "catastrophic"
+
+    return result
+
+
+def build_fix_prompt(original_prompt: str, validation: dict) -> str:
+    """Append a corrective retry instruction to the original prompt.
+
+    Used when validate_narrative_numbers returns severity='catastrophic'.
+    The retry call re-runs the SAME full prompt (so VERIFIED MARKET DATA,
+    OPERATING CONTEXT, all slot-specific rules, web_search tool access,
+    everything is preserved) with an extra section listing the specific
+    mismatches Claude must fix. Cheaper than two separate calls and
+    keeps the conversational context.
+    """
+    if not validation.get("mismatches"):
+        return original_prompt
+
+    bullets = []
+    for m in validation["mismatches"]:
+        bullets.append(
+            f"- **{m['name']}** ({m['ticker']}): VERIFIED change_pct = "
+            f"`{m['verified_pct']:+.2f}%`, but your last `narrative_html_en` "
+            f"had nearest value `{m['nearest_found_pct']:+.2f}%` "
+            f"(off by {m['diff_pp']:.2f}%p)."
+        )
+
+    fix_section = (
+        "\n\n---\n"
+        "# ⚠️ ACCURACY RETRY — your previous response had mismatches\n\n"
+        "Your previous JSON output had numeric discrepancies between the "
+        "narrative_html_en prose and the VERIFIED MARKET DATA block at the "
+        "top of this prompt. Specifically:\n\n"
+        + "\n".join(bullets)
+        + "\n\n"
+        "**REGENERATE the entire JSON response.** This time:\n"
+        "1. Re-read the 🔒 VERIFIED MARKET DATA block above.\n"
+        "2. Use those EXACT values byte-identically in `narrative_html_en` and "
+        "every other field. Same digits, same decimals, same sign.\n"
+        "3. Then translate the corrected English to `narrative_html_ko` → "
+        "`_ja` → `_zh` (the same Step 2/3/4 process).\n"
+        "4. Do NOT recompute change_pct from close/prev_close — use what "
+        "VERIFIED already provided.\n"
+        "5. If you're uncertain about a number, OMIT it. A missing number is "
+        "acceptable; a wrong number destroys reader trust.\n\n"
+        "Output the corrected JSON only. Same schema as before.\n"
+    )
+    return original_prompt + fix_section
 
 
 # ---------------------------------------------------------------------------
@@ -1971,28 +2105,127 @@ def main():
     # may have dropped them).
     publish_langs = [l for l in publish_langs if htmls.get(l)]
 
-    # === ACCURACY DOUBLE-CHECK (option A: warn-only) ===
-    # For each yfinance-verified ticker that the EN narrative actually
-    # mentions, confirm a matching signed % shows up in the prose. Logs
-    # GitHub Actions ::warning:: for any mismatch but does NOT block
-    # the publish. Per user decision: surface mismatches in CI without
-    # interrupting throughput; promote to retry/block later if real
-    # mismatches accumulate. See validate_narrative_numbers() docstring.
+    # === ACCURACY DOUBLE-CHECK (option D: tiered with retry + block) ===
+    # 1. Run validate_narrative_numbers and classify severity:
+    #    - clean        → publish immediately
+    #    - minor        → publish + ::warning:: in GitHub Actions log
+    #    - catastrophic → call Claude one more time with a corrective
+    #                     fix prompt, re-validate; if still catastrophic
+    #                     after retry, BLOCK the publish entirely
+    #
+    # Blocking means: no HTML files written, no posts.js / sitemap update,
+    # no git push. The cron job exits with status 1 so GitHub Actions
+    # marks it as failed → operator gets an email + the slot is missing
+    # from the site, which is the user's explicit preference vs publishing
+    # a wrong number ("잘못 작성된 내용이 posting되면 어떻게해").
+    #
+    # Wrapped in try/except so a bug in the validator itself NEVER
+    # cascades into blocking a publish — validator errors degrade to
+    # plain publish + warning.
     try:
-        accuracy_warnings = validate_narrative_numbers(data, market_data, args.slot)
-        for w in accuracy_warnings:
-            # ::warning:: makes the message show up in the GH Actions UI
-            # without failing the job, so the cron stays green but the
-            # operator can spot drift at a glance.
+        v = validate_narrative_numbers(data, market_data, args.slot)
+        print(f"[validate] severity={v['severity']} count={v['count']} max_diff={v['max_diff']:.2f}%p")
+
+        if v["severity"] == "catastrophic":
+            print(f"::warning::[validate] catastrophic mismatch — issuing corrective retry...")
+            for w in v["warnings"]:
+                print(f"::warning::  pre-retry: {w}")
+
+            # One corrective Claude call. Same full prompt (VERIFIED MARKET
+            # DATA + OPERATING CONTEXT + slot rules + web_search tool) with
+            # a mismatch list appended at the end. We rebuild the prompt
+            # from the same pieces used the first time around.
+            try:
+                fix_prompt = build_fix_prompt(prompt, v)
+                data2 = call_claude(fix_prompt, model=args.model)
+                # Same post-processing as the first response: pct normalization
+                # + skip guard. If retry says skip, treat as a failure: we
+                # already passed the holiday gate so a skip here is suspicious.
+                # Walk asset shapes the same way as the original normalization.
+                for key in ("indices", "mag7", "themes", "winners", "losers",
+                            "kr_indices", "kr_themes", "cn_indices", "cn_themes",
+                            "overnight_us", "gap_watch", "futures",
+                            "foreign_flow", "institution_flow",
+                            "northbound_flow", "southbound_flow",
+                            "kr_news", "cn_news", "news"):
+                    items = data2.get(key)
+                    if isinstance(items, list):
+                        for it in items:
+                            _normalize_pct(it)
+                    elif isinstance(items, dict):
+                        for it in items.values():
+                            if isinstance(it, list):
+                                for ii in it:
+                                    _normalize_pct(ii)
+                            elif isinstance(it, dict):
+                                _normalize_pct(it)
+                pm = data2.get("premarket_movers", {})
+                if isinstance(pm, dict):
+                    for side in ("winners", "losers"):
+                        for it in pm.get(side, []) or []:
+                            _normalize_pct(it)
+                key_metrics = data2.get("key_metrics", {})
+                if isinstance(key_metrics, dict):
+                    for asset_data in key_metrics.values():
+                        if isinstance(asset_data, dict):
+                            _normalize_pct(asset_data)
+
+                if data2.get("skip"):
+                    raise RuntimeError(f"retry returned skip=true: {data2.get('reason','no reason')}")
+
+                v2 = validate_narrative_numbers(data2, market_data, args.slot)
+                print(f"[validate-retry] severity={v2['severity']} count={v2['count']} max_diff={v2['max_diff']:.2f}%p")
+
+                if v2["severity"] == "catastrophic":
+                    # Both attempts failed. Refuse to publish.
+                    print(f"::error::[validate] CATASTROPHIC mismatch PERSISTS after retry — BLOCKING publish for {slug}")
+                    for w in v2["warnings"]:
+                        print(f"::error::  {w}")
+                    print(f"::error::Operator action required: review {slug}, fix prompt or yfinance fetch, then re-run with --force")
+                    raise SystemExit(1)
+
+                # Retry succeeded (clean or minor). Use the retry data.
+                print(f"[validate-retry] retry succeeded — using corrected response")
+                data = data2
+                v = v2
+                # Re-render HTML with the corrected data (the first render
+                # used the bad data; throw it away and redo).
+                htmls = {}
+                for lang in publish_langs:
+                    try:
+                        htmls[lang] = render_html(
+                            args.slot, lang, data, slug=slug, build=build,
+                            og_image_filename=og_filenames[lang],
+                            trading_date=trading_date, publish_date=publish_date,
+                        )
+                    except Exception as e:
+                        print(f"[render-retry] {lang} failed: {type(e).__name__}: {e}")
+                        if lang in ("ko", "en"):
+                            raise
+                # Trim again — same pattern as the first pass.
+                publish_langs = [l for l in publish_langs if htmls.get(l)]
+            except SystemExit:
+                raise  # do not eat the explicit block
+            except Exception as e:
+                # Retry itself crashed. Don't publish bad data — block.
+                print(f"::error::[validate] retry call itself failed: {type(e).__name__}: {e}")
+                print(f"::error::[validate] BLOCKING publish for {slug} because we cannot confirm accuracy")
+                raise SystemExit(1)
+
+        # At this point severity is clean or minor. Surface any remaining
+        # warnings (minor) so the operator can spot drift at a glance.
+        for w in v.get("warnings", []):
             print(f"::warning::[validate] {w}")
-        if accuracy_warnings:
-            print(f"[validate] {len(accuracy_warnings)} potential mismatch(es) — publishing anyway (option A)")
-        else:
-            print(f"[validate] all verified-ticker references in EN narrative match yfinance values")
+        if v["severity"] == "clean":
+            print(f"[validate] all verified-ticker references match yfinance values")
+        elif v["severity"] == "minor":
+            print(f"[validate] {v['count']} minor mismatch(es) — within tolerance, publishing")
+    except SystemExit:
+        raise
     except Exception as e:
-        # Validation is best-effort. Never block a publish on a bug in
-        # the heuristic itself.
-        print(f"[validate] check skipped: {type(e).__name__}: {e}")
+        # Validator bug. Degrade gracefully — publish anyway with a warning.
+        # Never let a validation infrastructure bug block legitimate runs.
+        print(f"::warning::[validate] check failed with internal error: {type(e).__name__}: {e} — publishing anyway")
 
     write_post_files(slug, htmls, og_paths)
 
