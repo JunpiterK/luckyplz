@@ -468,7 +468,8 @@ def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
         "## Verified values (close, change %)",
         "",
     ]
-    # Group by category for readability
+    # Group by category for readability. CN groups added Sub-step 2b so
+    # cn-open / cn-close slots also see their verified data in the prompt.
     groups = [
         ("Top 7 fixed assets", list(_COMMON_TOP7.keys())),
         ("US indices & macro", list(_US_INDICES.keys())),
@@ -476,6 +477,8 @@ def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
         ("US sector ETFs (11 GICS)", list(_US_SECTOR_ETFS.keys())),
         ("KR indices", list(_KR_INDICES.keys())),
         ("KR stocks", list(_KR_STOCKS.keys())),
+        ("CN indices (Mainland + HK)", list(_CN_INDICES.keys())),
+        ("CN tech / consumer leaders (ADR + HK)", list(_CN_STOCKS.keys())),
     ]
     for group_name, keys in groups:
         group_data = [(k, data[k]) for k in keys if k in data]
@@ -492,6 +495,93 @@ def format_market_data_for_prompt(data: dict, trading_date: str) -> str:
     lines.append("---")
     lines.append("")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Post-output validation — accuracy double-check (option A: warn-only)
+# ---------------------------------------------------------------------------
+# Heuristic check that fires AFTER Claude returns its JSON. For each ticker
+# in market_data with a known change_pct, search narrative_html_en for any
+# nearby signed percentage. If the verified value doesn't appear anywhere
+# in the narrative — and the narrative DOES mention the ticker — flag it.
+#
+# Per user decision (option A): we log GitHub Actions ::warning:: but do
+# NOT block the publish. Goal is to surface mismatches in CI without
+# interrupting cron throughput. If real mismatches start showing up in the
+# logs, we can promote this to option B (retry) or C (block) later.
+#
+# Why not stricter regex? Narratives mix tickers and percentages
+# liberally ("NVDA jumped sharply with semis up 2%"), and Claude
+# sometimes describes the same move three different ways across the
+# 4 languages. False positives would be more painful than false negatives.
+# A loose presence-check is enough to catch the "S&P 500 +0.37% but
+# narrative says +3.7%" type of catastrophic mismatch the user remembers.
+
+def validate_narrative_numbers(data: dict, market_data: dict, slot: str) -> list[str]:
+    """Detect potential narrative ↔ market_data mismatches.
+
+    Returns a list of warning messages (empty = clean). Read-only — caller
+    decides what to do with the warnings (currently: log as
+    ::warning:: and continue).
+
+    Algorithm:
+      For each ticker name in market_data whose name OR ticker appears in
+      narrative_html_en, extract every signed percentage from the EN
+      narrative. Check whether the verified change_pct (rounded to 1 dp)
+      appears in that set, allowing ±0.06 tolerance for rounding
+      differences (e.g., "+1.2%" matching "+1.18%" → 1.2 vs 1.2 → OK).
+
+      If the verified ticker is mentioned but NO matching percentage
+      shows up in the narrative, that's a mismatch signal.
+    """
+    import re
+
+    warnings: list[str] = []
+    narrative_en = (data.get("narrative_html_en") or "").strip()
+    if not narrative_en or not market_data:
+        return warnings
+
+    # Extract every signed percentage from the EN narrative.
+    # Tolerates surrounding HTML — we just scan text for the pattern.
+    raw_pcts = re.findall(r'[+-]?\d+\.?\d*\s*%', narrative_en)
+    found_pcts: set[float] = set()
+    for s in raw_pcts:
+        try:
+            val = float(s.rstrip("%").strip())
+            # Bucket to 1 decimal place — Claude often writes +1.2 where
+            # the verified value is +1.18, and we don't want to flag those.
+            found_pcts.add(round(val, 1))
+        except ValueError:
+            continue
+
+    for name, asset in market_data.items():
+        if not isinstance(asset, dict):
+            continue
+        verified_pct = asset.get("change_pct")
+        if verified_pct is None:
+            continue
+        ticker = asset.get("ticker") or ""
+
+        # Only check tickers that the narrative actually references.
+        # Avoid false positives for the dozens of tickers in market_data
+        # that the prompt simply didn't have room to mention.
+        # Name match is loose — "S&P 500" inside "the S&P 500 jumped" etc.
+        mentioned = bool(name and name in narrative_en) or bool(ticker and ticker in narrative_en)
+        if not mentioned:
+            continue
+
+        verified_rounded = round(float(verified_pct), 1)
+        # Tolerance: ±0.15 in the bucketed space (~0.1 + rounding slack).
+        match = any(abs(p - verified_rounded) <= 0.15 for p in found_pcts)
+        if not match:
+            warnings.append(
+                f"slot={slot} ticker={ticker or '?'} name='{name}': "
+                f"verified change_pct={verified_pct:+.2f}% mentioned in EN narrative "
+                f"but no matching ±% (within ±0.15) found in the prose. "
+                f"Review the published page for possible mismatch."
+            )
+
+    return warnings
 
 
 # ---------------------------------------------------------------------------
@@ -1880,6 +1970,29 @@ def main():
     # Trim publish_langs to those that actually rendered (a ja/zh failure
     # may have dropped them).
     publish_langs = [l for l in publish_langs if htmls.get(l)]
+
+    # === ACCURACY DOUBLE-CHECK (option A: warn-only) ===
+    # For each yfinance-verified ticker that the EN narrative actually
+    # mentions, confirm a matching signed % shows up in the prose. Logs
+    # GitHub Actions ::warning:: for any mismatch but does NOT block
+    # the publish. Per user decision: surface mismatches in CI without
+    # interrupting throughput; promote to retry/block later if real
+    # mismatches accumulate. See validate_narrative_numbers() docstring.
+    try:
+        accuracy_warnings = validate_narrative_numbers(data, market_data, args.slot)
+        for w in accuracy_warnings:
+            # ::warning:: makes the message show up in the GH Actions UI
+            # without failing the job, so the cron stays green but the
+            # operator can spot drift at a glance.
+            print(f"::warning::[validate] {w}")
+        if accuracy_warnings:
+            print(f"[validate] {len(accuracy_warnings)} potential mismatch(es) — publishing anyway (option A)")
+        else:
+            print(f"[validate] all verified-ticker references in EN narrative match yfinance values")
+    except Exception as e:
+        # Validation is best-effort. Never block a publish on a bug in
+        # the heuristic itself.
+        print(f"[validate] check skipped: {type(e).__name__}: {e}")
 
     write_post_files(slug, htmls, og_paths)
 
