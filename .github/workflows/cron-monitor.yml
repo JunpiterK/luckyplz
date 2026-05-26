@@ -12,12 +12,14 @@ name: Daily Cron Monitor (auto-rescue missing slots)
 # 돼도 다음 시간 monitor가 catch.
 #
 # 슬롯별 발행 마감 시각 (KST):
-#   us-close:     07:00 (06:00 발화 + 60min 유예)
-#   kr-open:      08:30 (07:30 + 60min)
-#   cn-open:      11:30 (10:30 + 60min)
-#   kr-close:     17:00 (15:45 + 75min)
-#   cn-close:     17:30 (16:30 + 60min)
-#   us-premarket: 22:30 (21:30 + 60min)
+# 새 정책 (2026-05-26~): 개장 1시간 전 / 마감 직후 빠르게 발행이 목표.
+# deadline 이 지났는데 글 없으면 monitor 가 즉시 rescue 발화.
+#   us-close:     06:00 (04:30 cron + 90min 유예 → 마감 +2시간 안)
+#   kr-open:      08:00 (07:00 cron + 60min 유예 → 개장 09:00 -1시간 보장)
+#   cn-open:      09:30 (08:30 cron + 60min 유예 → 개장 10:30 -1시간 보장)
+#   kr-close:     16:30 (15:35 cron + 55min 유예 → 마감 +1시간 안)
+#   cn-close:     17:00 (16:05 cron + 55min 유예 → 마감 +1시간 안)
+#   us-premarket: 22:30 (21:30 cron + 60min 유예 → 개장 22:30 직전)
 
 on:
   workflow_dispatch:
@@ -47,7 +49,7 @@ jobs:
           echo "now KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M %Z')"
           echo "publish_date=$publish_date, us-close trading_date=$trading_date_us_close, hour_kst=$hour_kst"
 
-      - name: Check & rescue us-close (deadline KST 07:00)
+      - name: Check & rescue us-close (deadline KST 06:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -57,14 +59,14 @@ jobs:
             echo "::notice::✅ $slug exists — skipping"
             exit 0
           fi
-          if [ "$hour" -lt 7 ] || [ "$hour" -gt 23 ]; then
-            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 07) — skipping"
+          if [ "$hour" -lt 6 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 06) — skipping"
             exit 0
           fi
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=us-close
 
-      - name: Check & rescue kr-open (deadline KST 08:30)
+      - name: Check & rescue kr-open (deadline KST 08:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -81,7 +83,7 @@ jobs:
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=kr-open
 
-      - name: Check & rescue cn-open (deadline KST 11:30)
+      - name: Check & rescue cn-open (deadline KST 09:30)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -91,14 +93,14 @@ jobs:
             echo "::notice::✅ $slug exists — skipping"
             exit 0
           fi
-          if [ "$hour" -lt 11 ] || [ "$hour" -gt 23 ]; then
-            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 11) — skipping"
+          if [ "$hour" -lt 9 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 09) — skipping"
             exit 0
           fi
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=cn-open
 
-      - name: Check & rescue kr-close (deadline KST 17:00)
+      - name: Check & rescue kr-close (deadline KST 16:30)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -108,14 +110,14 @@ jobs:
             echo "::notice::✅ $slug exists — skipping"
             exit 0
           fi
-          if [ "$hour" -lt 17 ] || [ "$hour" -gt 23 ]; then
-            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 17) — skipping"
+          if [ "$hour" -lt 16 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 16) — skipping"
             exit 0
           fi
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"
           gh workflow run daily-cron.yml -f slot=kr-close
 
-      - name: Check & rescue cn-close (deadline KST 17:30)
+      - name: Check & rescue cn-close (deadline KST 17:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -125,8 +127,8 @@ jobs:
             echo "::notice::✅ $slug exists — skipping"
             exit 0
           fi
-          if [ "$hour" -lt 18 ] || [ "$hour" -gt 23 ]; then
-            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 18) — skipping"
+          if [ "$hour" -lt 17 ] || [ "$hour" -gt 23 ]; then
+            echo "::notice::⏳ $slug missing but pre-deadline (KST $hour < 17) — skipping"
             exit 0
           fi
           echo "::warning::⚠️ $slug missing past deadline — triggering rescue"

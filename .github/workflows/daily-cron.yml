@@ -1,12 +1,18 @@
 name: Daily Market Posts (6 slots)
 
-# Cron는 UTC 기준이다.
-#   KST 06:00 = UTC 21:00 (전날)   ← ① US 마감 리캡 (US session closed at 04:00 KST)
-#   KST 07:30 = UTC 22:30 (전날)   ← ② 한국 개장 브리핑 (09:00 KOSPI open D-day)
-#   KST 10:30 = UTC 01:30          ← ⑤ 중국 개장 브리핑 (09:30 CST = 10:30 KST)
-#   KST 15:45 = UTC 06:45          ← ③ 한국 마감 리캡
-#   KST 16:30 = UTC 07:30          ← ⑥ 중국 마감 리캡 (15:30 CST = 16:30 KST, 30min after close)
-#   KST 21:30 = UTC 12:30          ← ④ 미국 프리마켓 브리핑
+# Cron는 UTC 기준이다. 시각 설계 원칙:
+#   - 마감 슬롯: 시장 마감 +5~30분 (yfinance 데이터 안정 후 가능한 빨리)
+#   - 개장 슬롯: 시장 개장 -2시간 (GH Actions free tier 지연 0~60분 +
+#                Claude 호출 ~5분 마진 후도 개장 1시간 전 발행 완료 보장)
+#   - us-premarket 만 -1시간 (KST 22:30 = ET 08:30 매크로 발표 시점에
+#                              발화하는 게 슬롯의 핵심 가치라 그대로 유지)
+#
+#   KST 04:30 = UTC 19:30 (전날)   ← ① US 마감 리캡 (마감 04:00 + 30분, 빠른 발행)
+#   KST 07:00 = UTC 22:00 (전날)   ← ② 한국 개장 브리핑 (개장 09:00 -2시간)
+#   KST 08:30 = UTC 23:30 (전날)   ← ⑤ 중국 개장 브리핑 (개장 10:30 -2시간)
+#   KST 15:35 = UTC 06:35          ← ③ 한국 마감 리캡 (마감 15:30 +5분, 가장 빠른 발행)
+#   KST 16:05 = UTC 07:05          ← ⑥ 중국 마감 리캡 (마감 16:00 +5분)
+#   KST 21:30 = UTC 12:30          ← ④ 미국 프리마켓 브리핑 (개장 22:30 -1시간, 매크로 발표 ET 08:30 시점)
 
 on:
   workflow_dispatch:
@@ -24,12 +30,12 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "0 21 * * *"     # ① us-close   (06:00 KST)
-    - cron: "30 22 * * *"    # ② kr-open    (07:30 KST)
-    - cron: "30 1 * * *"     # ⑤ cn-open    (10:30 KST = 09:30 CST)
-    - cron: "45 6 * * *"     # ③ kr-close   (15:45 KST)
-    - cron: "30 7 * * *"     # ⑥ cn-close   (16:30 KST = 15:30 CST + 30min margin)
-    - cron: "30 12 * * *"    # ④ us-pre     (21:30 KST)
+    - cron: "30 19 * * *"    # ① us-close   (04:30 KST = US 마감 04:00 + 30분)
+    - cron: "0 22 * * *"     # ② kr-open    (07:00 KST = KOSPI 개장 09:00 -2시간)
+    - cron: "30 23 * * *"    # ⑤ cn-open    (08:30 KST = SSE 개장 10:30 -2시간)
+    - cron: "35 6 * * *"     # ③ kr-close   (15:35 KST = KOSPI 마감 15:30 +5분)
+    - cron: "5 7 * * *"      # ⑥ cn-close   (16:05 KST = SSE 마감 16:00 +5분)
+    - cron: "30 12 * * *"    # ④ us-pre     (21:30 KST = ET 08:30 매크로 발표 시점)
 
 permissions:
   contents: write
@@ -48,13 +54,14 @@ jobs:
             echo "slot=${{ github.event.inputs.slot }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Scheduled run: pick by cron line
+          # Scheduled run: pick by cron line. Each line must match exactly
+          # one of the schedule: entries above.
           case "${{ github.event.schedule }}" in
-            "0 21 * * *")   echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
-            "30 22 * * *")  echo "slot=kr-open" >> "$GITHUB_OUTPUT" ;;
-            "30 1 * * *")   echo "slot=cn-open" >> "$GITHUB_OUTPUT" ;;
-            "45 6 * * *")   echo "slot=kr-close" >> "$GITHUB_OUTPUT" ;;
-            "30 7 * * *")   echo "slot=cn-close" >> "$GITHUB_OUTPUT" ;;
+            "30 19 * * *")  echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
+            "0 22 * * *")   echo "slot=kr-open" >> "$GITHUB_OUTPUT" ;;
+            "30 23 * * *")  echo "slot=cn-open" >> "$GITHUB_OUTPUT" ;;
+            "35 6 * * *")   echo "slot=kr-close" >> "$GITHUB_OUTPUT" ;;
+            "5 7 * * *")    echo "slot=cn-close" >> "$GITHUB_OUTPUT" ;;
             "30 12 * * *")  echo "slot=us-premarket" >> "$GITHUB_OUTPUT" ;;
             *)              echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
           esac
