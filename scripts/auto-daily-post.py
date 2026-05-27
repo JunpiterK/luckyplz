@@ -2216,6 +2216,12 @@ def main():
             is_open, reason = is_trading_day(trading_date, market)
             if not is_open:
                 print(f"[holiday] {market} closed on {trading_date} ({reason}). Exiting cleanly — no post generated.")
+                # Ping HC success so the slot's check doesn't alarm on a
+                # legitimate market holiday (no publish expected).
+                notify_healthcheck(
+                    args.slot, "success",
+                    summary=f"holiday-skip: {market} closed on {trading_date} ({reason})",
+                )
                 return
             else:
                 print(f"[holiday] {market} open on {trading_date} ({reason}). Proceeding with pipeline.")
@@ -2230,6 +2236,18 @@ def main():
         existing = BLOG_DIR / slug / "index.html"
         if existing.exists() and existing.stat().st_size > 1000:
             print(f"[skip] {slug} already published (use --force to overwrite). Exiting.")
+            # Ping HC success because the slot IS published (just by a
+            # different cron run). Without this, an HC auto-recovery
+            # workflow_dispatch that lands on already-published slug
+            # would never ping → HC keeps thinking it's down → false
+            # alarms / repeated webhook fires. This was the 2026-05-27
+            # gap that left us-premarket as `status: new` after manual
+            # recovery: HC needs at least one successful ping to leave
+            # `new` and start the proper up/down alerting cycle.
+            notify_healthcheck(
+                args.slot, "success",
+                summary=f"duplicate-skip: {slug} already on main",
+            )
             return
 
     # === HARD FETCH MARKET DATA (yfinance) ===
@@ -2538,7 +2556,16 @@ def main():
             _normalize_pct(asset_data)
 
     if data.get("skip"):
-        print(f"[skip] {data.get('reason','holiday or no session')}. Exiting.")
+        reason = data.get('reason','holiday or no session')
+        print(f"[skip] {reason}. Exiting.")
+        # Claude declared skip (typically: Sunday market closed, partial
+        # holiday Claude detected via web_search, etc.). Treat as a clean
+        # success for monitoring purposes — same rationale as the
+        # weekday-holiday gate above.
+        notify_healthcheck(
+            args.slot, "success",
+            summary=f"claude-skip: {reason}",
+        )
         return
 
     # Read current build version (gets refreshed by bump-cache later)
