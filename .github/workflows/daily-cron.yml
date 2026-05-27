@@ -7,12 +7,20 @@ name: Daily Market Posts (6 slots)
 #   - us-premarket 만 -1시간 (KST 22:30 = ET 08:30 매크로 발표 시점에
 #                              발화하는 게 슬롯의 핵심 가치라 그대로 유지)
 #
-#   KST 04:30 = UTC 19:30 (전날)   ← ① US 마감 리캡 (마감 04:00 + 30분, 빠른 발행)
-#   KST 07:00 = UTC 22:00 (전날)   ← ② 한국 개장 브리핑 (개장 09:00 -2시간)
-#   KST 08:30 = UTC 23:30 (전날)   ← ⑤ 중국 개장 브리핑 (개장 10:30 -2시간)
-#   KST 15:35 = UTC 06:35          ← ③ 한국 마감 리캡 (마감 15:30 +5분, 가장 빠른 발행)
-#   KST 16:05 = UTC 07:05          ← ⑥ 중국 마감 리캡 (마감 16:00 +5분)
-#   KST 21:30 = UTC 12:30          ← ④ 미국 프리마켓 브리핑 (개장 22:30 -1시간, 매크로 발표 ET 08:30 시점)
+# 2026-05-27 update — GitHub Actions schedule drift 완화:
+#   GitHub 공식 문서는 정시(0분)/반시(30분) 같은 hot minute 에 cron 이
+#   몰리면 "delayed during high loads ... some queued jobs may be dropped"
+#   라고 명시한다. 5/27 kr-open (0 22) 이 정확히 :00 핫스팟이라 UTC 23:03
+#   까지 ~63분 지연된 사례를 본 직후라, 모든 슬롯을 :00/:30 에서 7~13분
+#   오프셋으로 이동. 시장-의미 윈도우 (마감 +5~30분 / 개장 -2시간 / 매크로
+#   발표 +몇 분) 는 그대로 유지.
+#
+#   KST 04:27 = UTC 19:27 (전날)   ← ① US 마감 리캡 (마감 04:00 + 27분, was :30)
+#   KST 07:13 = UTC 22:13 (전날)   ← ② 한국 개장 브리핑 (개장 09:00 -107분, was :00 ★ primary fix)
+#   KST 08:37 = UTC 23:37 (전날)   ← ⑤ 중국 개장 브리핑 (개장 10:30 -113분, was :30)
+#   KST 15:38 = UTC 06:38          ← ③ 한국 마감 리캡 (마감 15:30 +8분, was :35)
+#   KST 16:08 = UTC 07:08          ← ⑥ 중국 마감 리캡 (마감 16:00 +8분, was :05)
+#   KST 21:33 = UTC 12:33          ← ④ 미국 프리마켓 (ET 08:30 매크로 +3분, was :30 ★ secondary fix)
 
 on:
   workflow_dispatch:
@@ -30,12 +38,12 @@ on:
         required: false
         default: "false"
   schedule:
-    - cron: "30 19 * * *"    # ① us-close   (04:30 KST = US 마감 04:00 + 30분)
-    - cron: "0 22 * * *"     # ② kr-open    (07:00 KST = KOSPI 개장 09:00 -2시간)
-    - cron: "30 23 * * *"    # ⑤ cn-open    (08:30 KST = SSE 개장 10:30 -2시간)
-    - cron: "35 6 * * *"     # ③ kr-close   (15:35 KST = KOSPI 마감 15:30 +5분)
-    - cron: "5 7 * * *"      # ⑥ cn-close   (16:05 KST = SSE 마감 16:00 +5분)
-    - cron: "30 12 * * *"    # ④ us-pre     (21:30 KST = ET 08:30 매크로 발표 시점)
+    - cron: "27 19 * * *"    # ① us-close   (04:27 KST = US 마감 04:00 + 27분)
+    - cron: "13 22 * * *"    # ② kr-open    (07:13 KST = KOSPI 개장 09:00 -107분)
+    - cron: "37 23 * * *"    # ⑤ cn-open    (08:37 KST = SSE 개장 10:30 -113분)
+    - cron: "38 6 * * *"     # ③ kr-close   (15:38 KST = KOSPI 마감 15:30 +8분)
+    - cron: "8 7 * * *"      # ⑥ cn-close   (16:08 KST = SSE 마감 16:00 +8분)
+    - cron: "33 12 * * *"    # ④ us-pre     (21:33 KST = ET 08:30 매크로 +3분)
 
 permissions:
   contents: write
@@ -57,12 +65,12 @@ jobs:
           # Scheduled run: pick by cron line. Each line must match exactly
           # one of the schedule: entries above.
           case "${{ github.event.schedule }}" in
-            "30 19 * * *")  echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
-            "0 22 * * *")   echo "slot=kr-open" >> "$GITHUB_OUTPUT" ;;
-            "30 23 * * *")  echo "slot=cn-open" >> "$GITHUB_OUTPUT" ;;
-            "35 6 * * *")   echo "slot=kr-close" >> "$GITHUB_OUTPUT" ;;
-            "5 7 * * *")    echo "slot=cn-close" >> "$GITHUB_OUTPUT" ;;
-            "30 12 * * *")  echo "slot=us-premarket" >> "$GITHUB_OUTPUT" ;;
+            "27 19 * * *")  echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
+            "13 22 * * *")  echo "slot=kr-open" >> "$GITHUB_OUTPUT" ;;
+            "37 23 * * *")  echo "slot=cn-open" >> "$GITHUB_OUTPUT" ;;
+            "38 6 * * *")   echo "slot=kr-close" >> "$GITHUB_OUTPUT" ;;
+            "8 7 * * *")    echo "slot=cn-close" >> "$GITHUB_OUTPUT" ;;
+            "33 12 * * *")  echo "slot=us-premarket" >> "$GITHUB_OUTPUT" ;;
             *)              echo "slot=us-close" >> "$GITHUB_OUTPUT" ;;
           esac
 
@@ -114,6 +122,22 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LP_GIT_PUSH: "1"
+          # Healthchecks.io per-slot ping URLs (optional — empty = silent no-op
+          # inside the script). Set each as a repo secret on GitHub:
+          #   Settings → Secrets and variables → Actions → New repository secret
+          # The value is the full hc-ping.com URL copied from the Healthchecks
+          # dashboard for that check. Creating these is a one-time operator
+          # action; until then the publish pipeline ignores them.
+          HC_URL_US_CLOSE:     ${{ secrets.HC_URL_US_CLOSE }}
+          HC_URL_KR_OPEN:      ${{ secrets.HC_URL_KR_OPEN }}
+          HC_URL_CN_OPEN:      ${{ secrets.HC_URL_CN_OPEN }}
+          HC_URL_KR_CLOSE:     ${{ secrets.HC_URL_KR_CLOSE }}
+          HC_URL_CN_CLOSE:     ${{ secrets.HC_URL_CN_CLOSE }}
+          HC_URL_US_PREMARKET: ${{ secrets.HC_URL_US_PREMARKET }}
+          # Discord webhook for inline alerts on degraded publish / pipeline
+          # failure. Single channel for all slots — clean enough to operate
+          # from a phone. Same one-time setup pattern as HC_URL_*.
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           DATE_ARG=""
           if [ -n "${{ github.event.inputs.date }}" ]; then
@@ -130,6 +154,13 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           LP_GIT_PUSH: "1"
+          HC_URL_US_CLOSE:     ${{ secrets.HC_URL_US_CLOSE }}
+          HC_URL_KR_OPEN:      ${{ secrets.HC_URL_KR_OPEN }}
+          HC_URL_CN_OPEN:      ${{ secrets.HC_URL_CN_OPEN }}
+          HC_URL_KR_CLOSE:     ${{ secrets.HC_URL_KR_CLOSE }}
+          HC_URL_CN_CLOSE:     ${{ secrets.HC_URL_CN_CLOSE }}
+          HC_URL_US_PREMARKET: ${{ secrets.HC_URL_US_PREMARKET }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           for SLOT in us-close kr-open cn-open kr-close cn-close us-premarket; do
             echo "=== Running $SLOT ==="

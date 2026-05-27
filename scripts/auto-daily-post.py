@@ -719,10 +719,104 @@ def build_fix_prompt(original_prompt: str, validation: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Anthropic call
+# Anthropic call — with multi-layer reliability
 # ---------------------------------------------------------------------------
-def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: int = 48000) -> dict:
+# Failure modes the wrapper must survive, ordered by historical pain:
+#
+#   (1) httpx.RemoteProtocolError "incomplete chunked read" — mid-stream
+#       connection drop. Killed 5/27 kr-open. Anthropic SDK's built-in
+#       max_retries does NOT cover this (it only retries the INITIAL
+#       request, not mid-stream failures).
+#   (2) 529 "Overloaded" — server-side capacity. Anthropic-recommended
+#       handling: backoff and retry.
+#   (3) APIConnectionError / APITimeoutError / 5xx — transient network /
+#       infrastructure. Always retry.
+#   (4) RateLimitError (429) — respect Retry-After if present, otherwise
+#       exponential backoff.
+#
+# Solution = tenacity wrapper with:
+#   - 5 attempts (initial + 4 retries)
+#   - wait_random_exponential(min=4, max=120) — AWS-style full jitter
+#     prevents thundering herd if multiple slots collide on a retry boundary.
+#   - retry_if_exception_type for the network + transient HTTP cases.
+#
+# Then a SEPARATE fallback-model layer outside the retry: if all 5 attempts
+# on the primary model fail, try ONE attempt on a fallback model. This
+# protects against single-model server outages (e.g., specific Sonnet
+# version unavailable). The fallback is a smaller, cheaper, generally
+# higher-availability model — we accept lower quality over zero publish.
+#
+# Streaming is preserved (NOT switched to non-streaming) because:
+#   - max_tokens=48000 + web_search up to 25 uses can plausibly exceed
+#     the SDK's 10-min non-streaming wall, and the SDK throws on that.
+#   - The full-restart retry pattern works regardless of stream/non-stream:
+#     a failed stream is discarded and the call starts over from scratch.
+
+# Fallback model used when primary exhausts all retries. claude-sonnet-4
+# is the previous-generation Sonnet — same family / similar prompting
+# behavior / lower quality but much higher likelihood of being available
+# when 4-5 is overloaded.
+CLAUDE_FALLBACK_MODEL = "claude-sonnet-4-20250514"
+
+
+def _claude_one_attempt(client, model: str, max_tokens: int, tools: list, messages: list):
+    """One streaming attempt. Caller (tenacity) re-invokes on retryable failures.
+
+    Returns the final assembled Anthropic response Message object. Raises
+    the underlying exception unchanged so the retry decorator can classify.
+    """
+    with client.messages.stream(
+        model=model,
+        max_tokens=max_tokens,
+        tools=tools,
+        messages=messages,
+    ) as stream:
+        # Drain the stream — we don't need per-token progress, just the
+        # final assembled message. Iteration here is what surfaces
+        # mid-stream errors like RemoteProtocolError.
+        for _event in stream:
+            pass
+        return stream.get_final_message()
+
+
+def _is_retryable_status(exc: BaseException) -> bool:
+    """Whether an Anthropic APIStatusError represents a TRANSIENT failure.
+
+    True for: 408 (timeout), 425 (too early), 429 (rate limit),
+              500/502/503/504 (server), 529 (overloaded).
+    False for: 400 (bad request), 401/403 (auth) — these never fix themselves.
+    """
+    try:
+        import anthropic
+    except Exception:
+        return False
+    if isinstance(exc, anthropic.APIStatusError):
+        return getattr(exc, "status_code", None) in (
+            408, 425, 429, 500, 502, 503, 504, 529,
+        )
+    return False
+
+
+def call_claude(
+    prompt: str,
+    *,
+    model: str = "claude-sonnet-4-5",
+    max_tokens: int = 48000,
+    enable_fallback_model: bool = True,
+) -> dict:
     """Call Claude API with web_search tool. Returns parsed JSON dict.
+
+    Reliability layers (outermost → innermost):
+
+      1. Fallback model: if `enable_fallback_model` and the primary model
+         exhausts all tenacity retries, ONE more attempt with
+         CLAUDE_FALLBACK_MODEL. Disable for the corrective fix-prompt
+         retry where keeping the same model matters more than availability.
+
+      2. tenacity: 5 attempts on each model with exponential backoff +
+         full jitter, retrying on transient network / server errors.
+
+      3. Streaming context manager: SDK-required for our max_tokens range.
 
     max_tokens raised from 32000 to 48000 (Sub-step 2a-2 deploy) to accommodate
     the 4-language narrative output. Sonnet 4.5's hard cap is 64000 output
@@ -731,6 +825,18 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
     bottom_line/fact_check/forward_calendar) and web_search overhead.
     """
     import anthropic
+    import httpx
+    from tenacity import (
+        Retrying,
+        RetryError,
+        stop_after_attempt,
+        wait_random_exponential,
+        retry_if_exception_type,
+        retry_if_exception,
+        retry_any,
+        before_sleep_log,
+    )
+    import logging
 
     client = anthropic.Anthropic()
 
@@ -746,23 +852,70 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
         }
     ]
 
-    print(f"[claude] calling {model} with {max_tokens=}, web_search enabled (max_uses=25) [streaming]")
-    t0 = time.time()
-    # Use streaming because SDK requires it for any call where max_tokens
-    # could plausibly take >10 min (which our 32K limit can hit when Claude
-    # generates KO+EN narratives + web_search 12 uses).
-    with client.messages.stream(
-        model=model,
-        max_tokens=max_tokens,
-        tools=tools,
-        messages=messages,
-    ) as stream:
-        # Drain the stream — we don't need per-token progress, just the final assembled message.
-        for _event in stream:
-            pass
-        resp = stream.get_final_message()
-    dt = time.time() - t0
-    print(f"[claude] response in {dt:.1f}s — stop_reason={resp.stop_reason}")
+    # Exception classes that ALWAYS mean transient. mid-stream
+    # RemoteProtocolError lives here — that's the 5/27 kr-open root cause.
+    transient_exc_types = (
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        anthropic.InternalServerError,
+        anthropic.RateLimitError,
+        httpx.RemoteProtocolError,
+        httpx.ReadTimeout,
+        httpx.ConnectTimeout,
+        httpx.ReadError,
+        httpx.WriteError,
+        httpx.PoolTimeout,
+    )
+
+    log = logging.getLogger("call_claude")
+    if not log.handlers:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    def _try_model(target_model: str, attempts: int):
+        """Run up to `attempts` retries against `target_model`."""
+        print(f"[claude] calling {target_model} with {max_tokens=}, "
+              f"web_search enabled (max_uses=25) [streaming, max {attempts} attempts]")
+        t0 = time.time()
+        retryer = Retrying(
+            reraise=True,
+            stop=stop_after_attempt(attempts),
+            # Full jitter exponential backoff. min=4s so the first retry
+            # isn't instant (gives server time to recover from overload).
+            # max=120s caps individual wait so total wall time stays bounded.
+            wait=wait_random_exponential(multiplier=2, min=4, max=120),
+            retry=retry_any(
+                retry_if_exception_type(transient_exc_types),
+                retry_if_exception(_is_retryable_status),
+            ),
+            before_sleep=before_sleep_log(log, logging.WARNING),
+        )
+        for attempt in retryer:
+            with attempt:
+                resp = _claude_one_attempt(
+                    client, target_model, max_tokens, tools, messages,
+                )
+        dt = time.time() - t0
+        print(f"[claude] response from {target_model} in {dt:.1f}s — stop_reason={resp.stop_reason}")
+        return resp
+
+    try:
+        resp = _try_model(model, attempts=5)
+    except Exception as primary_err:
+        # All 5 primary-model retries exhausted. Last-chance fallback.
+        if not enable_fallback_model:
+            raise
+        print(f"::warning::[claude] primary model {model} failed after 5 retries: "
+              f"{type(primary_err).__name__}: {primary_err}")
+        print(f"::warning::[claude] attempting fallback model {CLAUDE_FALLBACK_MODEL} (1 try, 2 retries)")
+        try:
+            resp = _try_model(CLAUDE_FALLBACK_MODEL, attempts=3)
+            print(f"::warning::[claude] fallback model succeeded — content quality may be lower than primary")
+        except Exception as fallback_err:
+            # Both models exhausted. Re-raise the primary error since it's
+            # what the operator's diagnostic mental model expects.
+            print(f"::error::[claude] fallback model also failed: "
+                  f"{type(fallback_err).__name__}: {fallback_err}")
+            raise primary_err
 
     # Collect text from final assistant message
     text_chunks = []
@@ -811,6 +964,331 @@ def call_claude(prompt: str, *, model: str = "claude-sonnet-4-5", max_tokens: in
                         f"--- first 2000 chars of candidate ---\n{candidate[:2000]}\n"
                         f"--- last 500 chars of candidate ---\n{candidate[-500:]}"
                     )
+
+
+# ---------------------------------------------------------------------------
+# Degraded fallback — used ONLY when both primary AND fallback Claude
+# models exhaust all retries. Returns a `data` dict shaped like Claude's
+# normal output, but built from verified yfinance numbers + honest
+# "AI commentary unavailable" notices. The rest of the publish pipeline
+# (render_html, write_post_files, posts.js update, sitemap update, git
+# push) consumes this dict normally — readers still get the verified
+# market data, just without the narrative analysis layer.
+#
+# Per operator constraint: "신규 업데이트가 유저에게 안 보이는 것은
+# 절대 안 됨" — zero publish is unacceptable. A stripped-down post is
+# always strictly better than a missing slot.
+# ---------------------------------------------------------------------------
+
+# Localized labels used in degraded posts. Kept in module scope (not inside
+# the function) so they're easy to tweak without rebuilding the function.
+_DEGRADED_LABELS = {
+    "ko": {
+        "headline_prefix": "[데이터 요약]",
+        "headline_suffix": "— AI 분석 일시 중단",
+        "summary": "AI 분석 시스템이 일시적으로 응답하지 않아, 검증된 시장 데이터(Yahoo Finance API)만 요약해 발행합니다. 정상 분석은 다음 슬롯에서 복귀합니다.",
+        "notice_title": "안내",
+        "notice_body": "이 글은 AI 분석 시스템이 일시적으로 응답하지 않아 자동으로 발행된 <strong>데이터 요약본</strong>입니다. 모든 가격·등락률은 Yahoo Finance API 에서 직접 가져온 검증된 값이며, AI 가 만든 해설·전망은 포함하지 않습니다. 다음 정기 슬롯에서 정상 분석으로 복귀합니다.",
+        "numbers_title": "검증된 주요 시장 데이터",
+        "bottom_line": "이 슬롯은 데이터 요약본으로 발행되었습니다. AI 분석은 다음 정기 발행 시각에 복귀합니다.",
+        "fact_check": "본 글의 모든 숫자는 Yahoo Finance API 직접 fetch 기반입니다. AI 자동 분석 시스템이 일시 응답 불가 상태였기 때문에 해설·전망 없이 데이터만 발행되었습니다.",
+        "change_label": "등락률",
+        "close_label": "종가",
+    },
+    "en": {
+        "headline_prefix": "[Data Summary]",
+        "headline_suffix": "— AI commentary temporarily unavailable",
+        "summary": "Our AI analysis system is temporarily unavailable. This post contains only verified market data (Yahoo Finance API). Full commentary returns at the next regular slot.",
+        "notice_title": "Notice",
+        "notice_body": "This post was published automatically as a <strong>data-only summary</strong> because the AI analysis system was temporarily unresponsive. All prices and percentage changes were fetched directly from the Yahoo Finance API and are verified; no AI-generated commentary or forecast is included. Full analysis resumes at the next scheduled slot.",
+        "numbers_title": "Verified market data",
+        "bottom_line": "This slot was published as a data-only summary. Full AI analysis resumes at the next scheduled slot.",
+        "fact_check": "Every number in this post comes from a direct Yahoo Finance API fetch. AI commentary was skipped because the analysis system was temporarily unresponsive.",
+        "change_label": "Change",
+        "close_label": "Close",
+    },
+    "ja": {
+        "headline_prefix": "[データサマリー]",
+        "headline_suffix": "— AI 解説一時停止中",
+        "summary": "AI 分析システムが一時的に応答できないため、検証済みの市場データ(Yahoo Finance API)のみを掲載しています。通常解説は次回のスロットで復帰します。",
+        "notice_title": "お知らせ",
+        "notice_body": "AI 分析システムが一時的に応答しなかったため、<strong>データのみの要約</strong>として自動発行しました。すべての価格・騰落率は Yahoo Finance API から直接取得した検証済みの値です。AI 解説・予想は含まれていません。次回の定期スロットで通常解説に戻ります。",
+        "numbers_title": "検証済みの主要市場データ",
+        "bottom_line": "本スロットはデータのみの要約として発行されました。AI 解説は次回の定期スロットで復帰します。",
+        "fact_check": "本記事の全ての数字は Yahoo Finance API から直接取得しています。AI 自動解説システムが一時的に応答できなかったため、解説・予想なしでデータのみを掲載しました。",
+        "change_label": "騰落率",
+        "close_label": "終値",
+    },
+    "zh": {
+        "headline_prefix": "[数据摘要]",
+        "headline_suffix": "— AI 解读暂时不可用",
+        "summary": "AI 分析系统暂时无法响应,本文仅刊载经验证的市场数据 (Yahoo Finance API)。完整解读将在下一时段恢复。",
+        "notice_title": "提示",
+        "notice_body": "由于 AI 分析系统暂时无响应,本文以<strong>仅数据摘要</strong>形式自动发布。所有价格与涨跌幅均直接取自 Yahoo Finance API,数据真实可验证;不包含任何 AI 生成的解读或预测。下一时段将恢复完整分析。",
+        "numbers_title": "经验证的关键市场数据",
+        "bottom_line": "本时段以仅数据摘要形式发布。AI 完整分析将在下一定时时段恢复。",
+        "fact_check": "本文所有数据均来自 Yahoo Finance API 的直接抓取。由于 AI 自动解读系统暂时无响应,本次发布省略了解读与展望,仅刊载数据。",
+        "change_label": "涨跌幅",
+        "close_label": "收盘价",
+    },
+}
+
+
+def build_degraded_data(slot: str, trading_date: str, publish_date: str, market_data: dict) -> dict:
+    """Construct a minimal `data` dict from verified market_data only.
+
+    Output shape mimics what Claude normally returns, but with:
+      - headline / summary / bottom_line in 4 languages explaining the
+        degraded mode honestly
+      - narrative_html_* containing a brief notice + a verified-numbers list
+      - key_metrics mapped from the 7-asset COMMON_TOP7 fetch
+      - indices populated from the relevant slot's index group
+      - skip=False (we want to publish)
+      - _degraded=True (internal flag — callers can detect to skip validation)
+
+    All other fields (themes, news, winners, losers, kr_indices, cn_indices,
+    forward_calendar_html, etc.) are intentionally omitted. The existing
+    render helpers all return "" when given empty/missing input, so the
+    final post is clean: just a notice + key metrics strip + numbers list.
+    """
+    cfg = SLOTS[slot]
+
+    # Map COMMON_TOP7 to the key_metrics shape the renderer expects.
+    # Renderer reads: key_metrics.{usdkrw,gold,silver,wti,btc,eth,xrp} each
+    # with {value, change_pct}.
+    km_keymap = {
+        "USD/KRW": "usdkrw", "Gold": "gold", "Silver": "silver", "WTI": "wti",
+        "BTC": "btc", "ETH": "eth", "XRP": "xrp",
+    }
+    key_metrics = {}
+    for ticker_label, km_key in km_keymap.items():
+        v = market_data.get(ticker_label)
+        if isinstance(v, dict):
+            key_metrics[km_key] = {
+                "value": v.get("close", "—"),
+                "change_pct": v.get("change_pct", 0.0),
+            }
+
+    # Indices snapshot — pick the 6 most relevant for this slot from the
+    # already-fetched market_data. Visual cards render cleanly even with
+    # fewer than 6, so we just include whatever fetched successfully.
+    slot_idx_priority = {
+        "us-close":     ["S&P 500", "Nasdaq Composite", "Dow Jones", "Philadelphia Semi (SOX)", "VIX", "10Y Treasury Yield"],
+        "us-premarket": ["S&P 500", "Nasdaq Composite", "Dow Jones", "Philadelphia Semi (SOX)", "10Y Treasury Yield", "VIX"],
+        "kr-open":      ["KOSPI", "KOSDAQ", "S&P 500", "Nasdaq Composite", "Philadelphia Semi (SOX)", "USD/KRW"],
+        "kr-close":     ["KOSPI", "KOSDAQ", "KOSPI 200", "Nasdaq Composite", "Philadelphia Semi (SOX)", "USD/KRW"],
+        "cn-open":      ["Hang Seng (恒生指数)", "Hang Seng Tech (恒生科技)", "S&P 500", "Nasdaq Composite", "CSI 300 (沪深300)", "SSE Composite (上证综指)"],
+        "cn-close":     ["SSE Composite (上证综指)", "Shenzhen Component (深证成指)", "CSI 300 (沪深300)", "Hang Seng (恒生指数)", "Hang Seng Tech (恒生科技)", "ChiNext (创业板指)"],
+    }
+    indices = []
+    for name in slot_idx_priority.get(slot, [])[:6]:
+        v = market_data.get(name)
+        if not isinstance(v, dict):
+            continue
+        indices.append({
+            "name": name,
+            "value": v.get("close", "—"),
+            "change_pct": v.get("change_pct", 0.0),
+            "tag": "",
+        })
+
+    def _build_numbers_html(lang: str, labels: dict) -> str:
+        """Plain HTML list of every verified ticker, for the narrative body.
+
+        Defensive: if market_data is empty, we still emit a sensible page
+        with just the notice + a 'no data fetched' line.
+        """
+        if not market_data:
+            return (f"<div class=\"tldr-box\">"
+                    f"<h3>{labels['notice_title']}</h3>"
+                    f"<p>{labels['notice_body']}</p>"
+                    f"</div>")
+        rows = []
+        # Group order matches format_market_data_for_prompt for consistency
+        groups_by_lang = [
+            ("Top 7 fixed assets", list(_COMMON_TOP7.keys())),
+            ("US indices & macro", list(_US_INDICES.keys())),
+            ("Mag 7 stocks", list(_MAG7.keys())),
+            ("US sector ETFs", list(_US_SECTOR_ETFS.keys())),
+            ("KR indices", list(_KR_INDICES.keys())),
+            ("KR stocks", list(_KR_STOCKS.keys())),
+            ("CN indices", list(_CN_INDICES.keys())),
+            ("CN tech / consumer", list(_CN_STOCKS.keys())),
+        ]
+        for group_name, keys in groups_by_lang:
+            group_rows = []
+            for k in keys:
+                v = market_data.get(k)
+                if not isinstance(v, dict):
+                    continue
+                chg = v.get("change_pct", 0.0)
+                try:
+                    chg_f = float(chg)
+                except Exception:
+                    chg_f = 0.0
+                sign = "+" if chg_f >= 0 else ""
+                cls = "upx" if chg_f > 0 else ("dn" if chg_f < 0 else "")
+                close_val = v.get("close", "—")
+                group_rows.append(
+                    f"<li><strong>{html_escape(k)}</strong> · "
+                    f"{labels['close_label']} <code>{html_escape(str(close_val))}</code> · "
+                    f"{labels['change_label']} <span class=\"{cls}\">{sign}{chg_f:.2f}%</span></li>"
+                )
+            if group_rows:
+                rows.append(f"<h3>{html_escape(group_name)}</h3><ul>{''.join(group_rows)}</ul>")
+        if not rows:
+            return (f"<div class=\"tldr-box\">"
+                    f"<h3>{labels['notice_title']}</h3>"
+                    f"<p>{labels['notice_body']}</p>"
+                    f"</div>")
+        body = (
+            f"<div class=\"tldr-box\">"
+            f"<h3>{labels['notice_title']}</h3>"
+            f"<p>{labels['notice_body']}</p>"
+            f"</div>"
+            f"<h2>{labels['numbers_title']}</h2>"
+            + "".join(rows)
+        )
+        return body
+
+    data = {
+        "skip": False,
+        "_degraded": True,
+        "key_metrics": key_metrics,
+        "indices": indices,
+        # All other list fields intentionally left empty/absent — the
+        # render helpers gracefully omit their sections when missing.
+    }
+
+    for lang in LANGS:
+        labels = _DEGRADED_LABELS[lang]
+        header_label = cfg.get(f"header_label_{lang}", cfg.get("header_label_en", slot))
+        data[f"headline_{lang}"] = f"{labels['headline_prefix']} {trading_date} {header_label} {labels['headline_suffix']}"
+        data[f"summary_{lang}"] = labels["summary"]
+        data[f"bottom_line_{lang}"] = labels["bottom_line"]
+        data[f"narrative_html_{lang}"] = _build_numbers_html(lang, labels)
+        data[f"fact_check_{lang}"] = labels["fact_check"]
+        # forward_calendar_html intentionally empty — the renderer drops the
+        # section cleanly when content is empty.
+        data[f"forward_calendar_html_{lang}"] = ""
+
+    return data
+
+
+# ---------------------------------------------------------------------------
+# External notifications — Healthchecks.io dead-man-switch + Discord webhook
+# ---------------------------------------------------------------------------
+# Both are CONFIG-FREE BY DEFAULT: if the corresponding env var is empty,
+# the call silently no-ops. The operator can wire these in incrementally by
+# (a) creating 6 checks on Healthchecks.io and setting HC_URL_<SLOT>
+# secrets in the GitHub repo, then (b) creating a Discord channel + webhook
+# and setting DISCORD_WEBHOOK_URL.
+#
+# Why this split:
+#   - Healthchecks is the out-of-band dead-man-switch. It pings success or
+#     /fail per slot; if a slot never pings before its deadline, HC fires
+#     an alert via its own integrations (Discord/email/Slack/ntfy etc.).
+#     This survives even a complete GitHub Actions outage, because HC is
+#     a separate service entirely. The 5/27 kr-open delay would have been
+#     caught here within minutes instead of a few hours.
+#   - Discord direct webhook is for IMMEDIATE inline alerts on degraded
+#     and failure events, without waiting for HC's grace period. We don't
+#     spam on plain success (too noisy for a 6-times-a-day cron).
+#
+# Both helpers are best-effort: any network failure inside them is logged
+# but never propagated, because notification infrastructure must NEVER be
+# allowed to break the actual publish pipeline.
+
+
+def notify_healthcheck(slot: str, status: str, summary: str = "") -> None:
+    """Ping Healthchecks.io for `slot` with the given status.
+
+    Env var convention: `HC_URL_US_CLOSE` for slot `us-close`, etc. The
+    URL is the full hc-ping.com endpoint copied from the Healthchecks
+    dashboard for that check.
+
+    status:
+      'success'  — ping the bare URL (HC marks the check as healthy)
+      'failed'   — ping URL/fail (HC fires its configured alert chain)
+      'start'    — ping URL/start (HC records run start; useful for
+                    measuring run duration on the dashboard)
+
+    summary: optional UTF-8 text body. When non-empty, the ping is POSTed
+    with this body so HC stores it in the run log — the operator can read
+    "why did slot X fail today" from the HC dashboard without opening
+    GitHub Actions logs.
+    """
+    import os
+    slot_env = "HC_URL_" + slot.upper().replace("-", "_")
+    base_url = os.environ.get(slot_env, "").strip()
+    if not base_url:
+        return  # not configured — silent no-op by design
+    url = base_url.rstrip("/")
+    if status == "failed":
+        url = url + "/fail"
+    elif status == "start":
+        url = url + "/start"
+    try:
+        import urllib.request
+        if summary:
+            req = urllib.request.Request(
+                url,
+                data=summary.encode("utf-8", errors="replace"),
+                headers={"Content-Type": "text/plain; charset=utf-8"},
+                method="POST",
+            )
+        else:
+            req = urllib.request.Request(url, method="GET")
+        # 5s timeout — pings must NEVER stall the cron. If HC is itself
+        # down, we want to skip and continue, not block the publish.
+        urllib.request.urlopen(req, timeout=5).read()
+        print(f"[notify] healthcheck ping sent: slot={slot} status={status}")
+    except Exception as e:
+        # Best-effort. Never propagate notification failures.
+        print(f"[notify] healthcheck ping failed (non-fatal): "
+              f"{type(e).__name__}: {e}")
+
+
+# Discord embed colors (RGB int form, as Discord's API expects).
+DISCORD_COLOR_GREEN  = 0x57F287   # normal success — currently unused (no-spam policy)
+DISCORD_COLOR_YELLOW = 0xFEE75C   # degraded (publish OK but downgraded)
+DISCORD_COLOR_RED    = 0xED4245   # failure (no publish)
+
+
+def notify_discord(title: str, body: str, color: int = DISCORD_COLOR_RED) -> None:
+    """Send a Discord webhook embed. Best-effort — never raises.
+
+    Reads DISCORD_WEBHOOK_URL from env. Silent no-op if empty.
+
+    Discord embed limits: title 256 chars, description 4096 chars. We
+    truncate defensively so a long Python traceback never breaks delivery.
+    """
+    import os
+    url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
+    if not url:
+        return
+    try:
+        import json as _json
+        import urllib.request
+        payload = {
+            "username": "luckyplz cron",
+            "embeds": [{
+                "title": (title or "")[:256],
+                "description": (body or "")[:4000],
+                "color": color,
+            }],
+        }
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(req, timeout=5).read()
+        print(f"[notify] discord webhook sent: {title[:60]}")
+    except Exception as e:
+        print(f"[notify] discord webhook failed (non-fatal): "
+              f"{type(e).__name__}: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -2002,8 +2480,23 @@ def main():
         "The entire response must be a single valid JSON object that can be parsed by Python's json.loads()."
     )
 
-    # Call Claude
-    data = call_claude(prompt, model=args.model)
+    # Call Claude — with degraded last-resort fallback. The retry layer +
+    # fallback model inside call_claude already absorb mid-stream drops,
+    # 529 overload, network blips, and partial-Anthropic outages. If even
+    # the fallback model fails (rare — would require both Sonnet 4.5 and
+    # Sonnet 4 to be unavailable simultaneously OR a sustained network
+    # partition), we publish a data-only summary built from the verified
+    # yfinance fetch. Per operator constraint, zero publish is unacceptable.
+    degraded = False
+    try:
+        data = call_claude(prompt, model=args.model)
+    except Exception as claude_err:
+        print(f"::error::[claude] all retries + fallback model exhausted: "
+              f"{type(claude_err).__name__}: {claude_err}")
+        print(f"::warning::[degraded] entering degraded publish mode for "
+              f"{args.slot} {trading_date} — data-only summary from yfinance values")
+        data = build_degraded_data(args.slot, trading_date, publish_date, market_data)
+        degraded = True
 
     # Normalize numeric fields. Claude occasionally returns strings like
     # '+1.08%' / '1,234.56' / '-2.8%' instead of numbers for change_pct
@@ -2122,110 +2615,119 @@ def main():
     # Wrapped in try/except so a bug in the validator itself NEVER
     # cascades into blocking a publish — validator errors degrade to
     # plain publish + warning.
-    try:
-        v = validate_narrative_numbers(data, market_data, args.slot)
-        print(f"[validate] severity={v['severity']} count={v['count']} max_diff={v['max_diff']:.2f}%p")
+    # Degraded data is constructed directly from verified market_data so its
+    # narrative is by definition consistent with verified numbers — there's
+    # nothing to validate. Skip the whole tiered-validation block. We still
+    # surface a CI warning so the operator notices the slot ran degraded.
+    if degraded:
+        print(f"::warning::[validate] skipped — slot {args.slot} {trading_date} "
+              f"was published in DEGRADED mode (Claude unavailable). "
+              f"Numbers are from yfinance directly; no narrative to validate.")
+    else:
+        try:
+            v = validate_narrative_numbers(data, market_data, args.slot)
+            print(f"[validate] severity={v['severity']} count={v['count']} max_diff={v['max_diff']:.2f}%p")
 
-        if v["severity"] == "catastrophic":
-            print(f"::warning::[validate] catastrophic mismatch — issuing corrective retry...")
-            for w in v["warnings"]:
-                print(f"::warning::  pre-retry: {w}")
+            if v["severity"] == "catastrophic":
+                print(f"::warning::[validate] catastrophic mismatch — issuing corrective retry...")
+                for w in v["warnings"]:
+                    print(f"::warning::  pre-retry: {w}")
 
-            # One corrective Claude call. Same full prompt (VERIFIED MARKET
-            # DATA + OPERATING CONTEXT + slot rules + web_search tool) with
-            # a mismatch list appended at the end. We rebuild the prompt
-            # from the same pieces used the first time around.
-            try:
-                fix_prompt = build_fix_prompt(prompt, v)
-                data2 = call_claude(fix_prompt, model=args.model)
-                # Same post-processing as the first response: pct normalization
-                # + skip guard. If retry says skip, treat as a failure: we
-                # already passed the holiday gate so a skip here is suspicious.
-                # Walk asset shapes the same way as the original normalization.
-                for key in ("indices", "mag7", "themes", "winners", "losers",
-                            "kr_indices", "kr_themes", "cn_indices", "cn_themes",
-                            "overnight_us", "gap_watch", "futures",
-                            "foreign_flow", "institution_flow",
-                            "northbound_flow", "southbound_flow",
-                            "kr_news", "cn_news", "news"):
-                    items = data2.get(key)
-                    if isinstance(items, list):
-                        for it in items:
-                            _normalize_pct(it)
-                    elif isinstance(items, dict):
-                        for it in items.values():
-                            if isinstance(it, list):
-                                for ii in it:
-                                    _normalize_pct(ii)
-                            elif isinstance(it, dict):
+                # One corrective Claude call. Same full prompt (VERIFIED MARKET
+                # DATA + OPERATING CONTEXT + slot rules + web_search tool) with
+                # a mismatch list appended at the end. We rebuild the prompt
+                # from the same pieces used the first time around.
+                try:
+                    fix_prompt = build_fix_prompt(prompt, v)
+                    data2 = call_claude(fix_prompt, model=args.model)
+                    # Same post-processing as the first response: pct normalization
+                    # + skip guard. If retry says skip, treat as a failure: we
+                    # already passed the holiday gate so a skip here is suspicious.
+                    # Walk asset shapes the same way as the original normalization.
+                    for key in ("indices", "mag7", "themes", "winners", "losers",
+                                "kr_indices", "kr_themes", "cn_indices", "cn_themes",
+                                "overnight_us", "gap_watch", "futures",
+                                "foreign_flow", "institution_flow",
+                                "northbound_flow", "southbound_flow",
+                                "kr_news", "cn_news", "news"):
+                        items = data2.get(key)
+                        if isinstance(items, list):
+                            for it in items:
                                 _normalize_pct(it)
-                pm = data2.get("premarket_movers", {})
-                if isinstance(pm, dict):
-                    for side in ("winners", "losers"):
-                        for it in pm.get(side, []) or []:
-                            _normalize_pct(it)
-                key_metrics = data2.get("key_metrics", {})
-                if isinstance(key_metrics, dict):
-                    for asset_data in key_metrics.values():
-                        if isinstance(asset_data, dict):
-                            _normalize_pct(asset_data)
+                        elif isinstance(items, dict):
+                            for it in items.values():
+                                if isinstance(it, list):
+                                    for ii in it:
+                                        _normalize_pct(ii)
+                                elif isinstance(it, dict):
+                                    _normalize_pct(it)
+                    pm = data2.get("premarket_movers", {})
+                    if isinstance(pm, dict):
+                        for side in ("winners", "losers"):
+                            for it in pm.get(side, []) or []:
+                                _normalize_pct(it)
+                    key_metrics = data2.get("key_metrics", {})
+                    if isinstance(key_metrics, dict):
+                        for asset_data in key_metrics.values():
+                            if isinstance(asset_data, dict):
+                                _normalize_pct(asset_data)
 
-                if data2.get("skip"):
-                    raise RuntimeError(f"retry returned skip=true: {data2.get('reason','no reason')}")
+                    if data2.get("skip"):
+                        raise RuntimeError(f"retry returned skip=true: {data2.get('reason','no reason')}")
 
-                v2 = validate_narrative_numbers(data2, market_data, args.slot)
-                print(f"[validate-retry] severity={v2['severity']} count={v2['count']} max_diff={v2['max_diff']:.2f}%p")
+                    v2 = validate_narrative_numbers(data2, market_data, args.slot)
+                    print(f"[validate-retry] severity={v2['severity']} count={v2['count']} max_diff={v2['max_diff']:.2f}%p")
 
-                if v2["severity"] == "catastrophic":
-                    # Both attempts failed. Refuse to publish.
-                    print(f"::error::[validate] CATASTROPHIC mismatch PERSISTS after retry — BLOCKING publish for {slug}")
-                    for w in v2["warnings"]:
-                        print(f"::error::  {w}")
-                    print(f"::error::Operator action required: review {slug}, fix prompt or yfinance fetch, then re-run with --force")
+                    if v2["severity"] == "catastrophic":
+                        # Both attempts failed. Refuse to publish.
+                        print(f"::error::[validate] CATASTROPHIC mismatch PERSISTS after retry — BLOCKING publish for {slug}")
+                        for w in v2["warnings"]:
+                            print(f"::error::  {w}")
+                        print(f"::error::Operator action required: review {slug}, fix prompt or yfinance fetch, then re-run with --force")
+                        raise SystemExit(1)
+
+                    # Retry succeeded (clean or minor). Use the retry data.
+                    print(f"[validate-retry] retry succeeded — using corrected response")
+                    data = data2
+                    v = v2
+                    # Re-render HTML with the corrected data (the first render
+                    # used the bad data; throw it away and redo).
+                    htmls = {}
+                    for lang in publish_langs:
+                        try:
+                            htmls[lang] = render_html(
+                                args.slot, lang, data, slug=slug, build=build,
+                                og_image_filename=og_filenames[lang],
+                                trading_date=trading_date, publish_date=publish_date,
+                            )
+                        except Exception as e:
+                            print(f"[render-retry] {lang} failed: {type(e).__name__}: {e}")
+                            if lang in ("ko", "en"):
+                                raise
+                    # Trim again — same pattern as the first pass.
+                    publish_langs = [l for l in publish_langs if htmls.get(l)]
+                except SystemExit:
+                    raise  # do not eat the explicit block
+                except Exception as e:
+                    # Retry itself crashed. Don't publish bad data — block.
+                    print(f"::error::[validate] retry call itself failed: {type(e).__name__}: {e}")
+                    print(f"::error::[validate] BLOCKING publish for {slug} because we cannot confirm accuracy")
                     raise SystemExit(1)
 
-                # Retry succeeded (clean or minor). Use the retry data.
-                print(f"[validate-retry] retry succeeded — using corrected response")
-                data = data2
-                v = v2
-                # Re-render HTML with the corrected data (the first render
-                # used the bad data; throw it away and redo).
-                htmls = {}
-                for lang in publish_langs:
-                    try:
-                        htmls[lang] = render_html(
-                            args.slot, lang, data, slug=slug, build=build,
-                            og_image_filename=og_filenames[lang],
-                            trading_date=trading_date, publish_date=publish_date,
-                        )
-                    except Exception as e:
-                        print(f"[render-retry] {lang} failed: {type(e).__name__}: {e}")
-                        if lang in ("ko", "en"):
-                            raise
-                # Trim again — same pattern as the first pass.
-                publish_langs = [l for l in publish_langs if htmls.get(l)]
-            except SystemExit:
-                raise  # do not eat the explicit block
-            except Exception as e:
-                # Retry itself crashed. Don't publish bad data — block.
-                print(f"::error::[validate] retry call itself failed: {type(e).__name__}: {e}")
-                print(f"::error::[validate] BLOCKING publish for {slug} because we cannot confirm accuracy")
-                raise SystemExit(1)
-
-        # At this point severity is clean or minor. Surface any remaining
-        # warnings (minor) so the operator can spot drift at a glance.
-        for w in v.get("warnings", []):
-            print(f"::warning::[validate] {w}")
-        if v["severity"] == "clean":
-            print(f"[validate] all verified-ticker references match yfinance values")
-        elif v["severity"] == "minor":
-            print(f"[validate] {v['count']} minor mismatch(es) — within tolerance, publishing")
-    except SystemExit:
-        raise
-    except Exception as e:
-        # Validator bug. Degrade gracefully — publish anyway with a warning.
-        # Never let a validation infrastructure bug block legitimate runs.
-        print(f"::warning::[validate] check failed with internal error: {type(e).__name__}: {e} — publishing anyway")
+            # At this point severity is clean or minor. Surface any remaining
+            # warnings (minor) so the operator can spot drift at a glance.
+            for w in v.get("warnings", []):
+                print(f"::warning::[validate] {w}")
+            if v["severity"] == "clean":
+                print(f"[validate] all verified-ticker references match yfinance values")
+            elif v["severity"] == "minor":
+                print(f"[validate] {v['count']} minor mismatch(es) — within tolerance, publishing")
+        except SystemExit:
+            raise
+        except Exception as e:
+            # Validator bug. Degrade gracefully — publish anyway with a warning.
+            # Never let a validation infrastructure bug block legitimate runs.
+            print(f"::warning::[validate] check failed with internal error: {type(e).__name__}: {e} — publishing anyway")
 
     write_post_files(slug, htmls, og_paths)
 
@@ -2238,6 +2740,93 @@ def main():
     git_push(slug, args.slot)
     print(f"[done] {slug}")
 
+    # === SUCCESS NOTIFICATIONS ===
+    # Healthchecks: always ping success when we reach this point (whether
+    # the publish was normal or degraded). The fact that we ran the entire
+    # pipeline to completion is what HC cares about.
+    # Discord: silent on plain success (too noisy for 6x/day). Send a
+    # yellow warning if this slot was degraded — operator wants to know
+    # AI commentary didn't run even though the post landed.
+    notify_healthcheck(
+        args.slot,
+        "success",
+        summary=f"{args.slot} {publish_date} {'DEGRADED' if degraded else 'OK'} → {slug}",
+    )
+    if degraded:
+        notify_discord(
+            title=f"⚠️ {args.slot} published in DEGRADED mode",
+            body=(
+                f"Slot **{args.slot}** for **{publish_date}** was published with "
+                f"data-only summary (Claude API exhausted both primary and "
+                f"fallback model retries).\n\n"
+                f"• Slug: `{slug}`\n"
+                f"• Trading date: {trading_date}\n"
+                f"• Action needed: review the post; consider whether the next "
+                f"slot recovers or requires manual republish."
+            ),
+            color=DISCORD_COLOR_YELLOW,
+        )
+
 
 if __name__ == "__main__":
-    main()
+    # Top-level error envelope. Any uncaught exception (Claude failed past
+    # the degraded fallback, git push refused, disk full, anything) gets
+    # turned into BOTH a Healthchecks /fail ping AND a Discord red alert
+    # before the process exits non-zero. Critical: the env-var-driven
+    # helpers are no-ops without secrets, so this is safe to land before
+    # the operator wires up the Healthchecks/Discord side.
+    import sys as _sys
+    import traceback as _tb
+    # Best-effort slot extraction so the notification carries useful context
+    # even if the exception happened before the normal argparse flow ran
+    # to completion.
+    _argv_slot = "unknown"
+    for i, a in enumerate(_sys.argv):
+        if a == "--slot" and i + 1 < len(_sys.argv):
+            _argv_slot = _sys.argv[i + 1]
+            break
+    try:
+        main()
+    except SystemExit as e:
+        # main() raises SystemExit(1) deliberately when the validator
+        # blocks a publish. That's a real "no post landed" failure — alert.
+        if int(getattr(e, "code", 0) or 0) != 0:
+            try:
+                notify_healthcheck(_argv_slot, "failed",
+                                   summary=f"SystemExit({e.code}) — publish blocked")
+                notify_discord(
+                    title=f"❌ {_argv_slot} publish BLOCKED",
+                    body=(
+                        f"The pipeline exited with status **{e.code}**, meaning a "
+                        f"validator/guard refused to publish this slot.\n\n"
+                        f"Common causes:\n"
+                        f"• Catastrophic narrative ↔ verified-data mismatch even after retry\n"
+                        f"• Holiday-guard tripped after the gate was passed (rare)\n\n"
+                        f"Check the GitHub Actions log for `::error::` lines."
+                    ),
+                    color=DISCORD_COLOR_RED,
+                )
+            except Exception:
+                pass
+        raise
+    except BaseException as exc:
+        tb_text = _tb.format_exc()
+        try:
+            notify_healthcheck(
+                _argv_slot, "failed",
+                summary=(f"{type(exc).__name__}: {exc}\n\n{tb_text}")[:4000],
+            )
+            notify_discord(
+                title=f"❌ {_argv_slot} pipeline crashed",
+                body=(
+                    f"**{type(exc).__name__}**: `{str(exc)[:300]}`\n\n"
+                    f"```\n{tb_text[-1500:]}\n```\n"
+                    f"This means even the degraded fallback did not run. "
+                    f"The slot will be missing from the site until you "
+                    f"`gh workflow run daily-cron.yml -f slot={_argv_slot} -f force=true`."
+                ),
+                color=DISCORD_COLOR_RED,
+            )
+        except Exception:
+            pass
+        raise
