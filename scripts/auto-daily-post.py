@@ -660,28 +660,61 @@ def validate_narrative_numbers(data: dict, market_data: dict, slot: str) -> dict
             continue   # Ticker not referenced in the narrative — skip
 
         # For each mention, grab the FIRST % within IMMEDIATE_WIN chars.
-        nearby_pcts: list[float] = []
+        # We capture BOTH the raw text (so we can tell whether the sign was
+        # explicit) and the float value. Sign-flip false positives were
+        # blocking us-close 2026-06-01 — narrative "XLY fell 2.22%" was
+        # being treated as +2.22 and compared to verified -2.22, scoring
+        # diff 4.44%p. With explicit-sign detection, an unsigned magnitude
+        # match is accepted (sign carried by surrounding verb), and only
+        # an EXPLICITLY signed number with wrong sign triggers a flag.
+        nearby_signed: list[tuple[float, bool]] = []   # (value, sign_was_explicit)
         for end in mention_ends:
             mm = pct_re.search(narrative_en, end, end + IMMEDIATE_WIN)
             if not mm:
                 continue
+            raw = mm.group()
+            stripped = raw.strip()
+            sign_explicit = stripped.startswith("+") or stripped.startswith("-")
             try:
-                nearby_pcts.append(float(mm.group().rstrip("%").strip()))
+                v = float(stripped.rstrip("%").strip())
             except ValueError:
                 continue
-        if not nearby_pcts:
+            nearby_signed.append((v, sign_explicit))
+        if not nearby_signed:
             continue   # Ticker mentioned but no % within 80 chars —
                        # narrative didn't quote a percentage for it,
                        # nothing to validate against.
 
         verified_f = float(verified_pct)
-        # Among the per-mention first-% candidates, pick the one
-        # CLOSEST to the verified value. This is forgiving for narratives
-        # that mention the same ticker twice with the right number once.
-        nearest = min(nearby_pcts, key=lambda p: abs(p - verified_f))
-        diff = abs(nearest - verified_f)
+        verified_abs = abs(verified_f)
+        # Two-pass matching to avoid false positives on unsigned magnitudes:
+        #   PASS A (lenient, accept unsigned) — for each candidate, if its
+        #          sign was NOT explicit ('+' / '-' missing), compare only
+        #          absolute magnitude. "fell 2.22%" → 2.22 vs |verified|.
+        #          Sign is assumed to be carried by surrounding prose
+        #          (rose / fell / up / down / gained / lost).
+        #   PASS B (strict, signed) — for explicit-sign candidates, compare
+        #          signed value directly. A narrative that explicitly writes
+        #          "+2.22%" when verified is -2.22% IS a real sign error
+        #          and must still be flagged.
+        # If ANY candidate from either pass matches within 0.15%p, accept.
+        unsigned_diffs = [abs(abs(v) - verified_abs)
+                          for v, exp in nearby_signed if not exp]
+        signed_diffs   = [abs(v - verified_f)
+                          for v, exp in nearby_signed if exp]
+        best_unsigned = min(unsigned_diffs) if unsigned_diffs else None
+        best_signed   = min(signed_diffs) if signed_diffs else None
+        candidates = [d for d in (best_unsigned, best_signed) if d is not None]
+        if not candidates:
+            continue
+        diff = min(candidates)
         if diff <= 0.15:
             continue   # within rounding tolerance — OK
+        # Pick the actual signed value closest to verified for the
+        # diagnostic message — picks the explicit signed one if available,
+        # otherwise the closest unsigned magnitude (treated as positive).
+        nearest = min((v for v, _ in nearby_signed),
+                      key=lambda p: abs(p - verified_f))
 
         # Record the mismatch.
         result["mismatches"].append({
