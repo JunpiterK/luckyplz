@@ -225,42 +225,82 @@ SLOT_TO_MARKET = {
 }
 
 
-def is_trading_day(date_str: str, market: str) -> tuple[bool, str]:
-    """Check if `date_str` is a trading day on the given market.
+# ---------------------------------------------------------------------------
+# Three-tier check, called separately from main() so each tier can be
+# bypassed (or not) independently.
+#   Tier 0 — weekend (Sat/Sun): NEVER bypassable. Markets are globally
+#            closed both days. Pure-Python, no library dependency, so it
+#            can never silently fail.
+#   Tier 1 — exchange holiday (XNYS / XKRX / XSHG): bypassable only with
+#            explicit --bypass-holiday-guard flag, used for the rare
+#            manual case (e.g., thematic essay we want timestamped on a
+#            real holiday). When the calendar library cannot answer (no
+#            install, date out of range), we now REFUSE to publish (was
+#            previously "default to open" which silently masked failures
+#            during the 2026-05-30/31 weekend incident; see CLAUDE.md).
+# ---------------------------------------------------------------------------
 
-    Returns (is_open, reason). On any library failure, falls back to True
-    (graceful — better to publish a post we can later delete than to skip
-    a real trading day because of a library issue).
+_WEEKDAY_NAMES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
-    market: 'XNYS' (NYSE), 'XKRX' (Korea Exchange), or 'XSHG' (Shanghai
-            Stock Exchange) — ISO MIC codes. exchange_calendars ships
-            all three out of the box.
+
+def is_weekend(date_str: str) -> tuple[bool, str]:
+    """Tier-0 weekend check. Pure Python, no library, always works.
+
+    Returns (is_weekend, day_name). `is_weekend` is True for Sat or Sun.
+    Raises ValueError on invalid date format (caller handles).
     """
     from datetime import datetime
+    target = datetime.strptime(date_str, "%Y-%m-%d").date()
+    wd = target.weekday()    # 0=Mon..6=Sun
+    return wd >= 5, _WEEKDAY_NAMES[wd]
+
+
+def is_exchange_holiday(date_str: str, market: str) -> tuple[bool, str]:
+    """Tier-1 exchange holiday check.
+
+    Returns (is_holiday, reason). Caller MUST have already passed Tier-0
+    (weekend) — this function assumes the date is a weekday.
+
+    Raises ImportError if `exchange_calendars` not installed.
+    Raises any other Exception (e.g., DateOutOfBounds) on lookup failure.
+    The hard-fail design is intentional: silently defaulting to "open"
+    on lookup error masked a real bug in 2026-05 and let us-tech-recap-
+    2026-05-30 / 05-31 ship as weekend posts.
+    """
+    import exchange_calendars as ec
+    cal = ec.get_calendar(market)
+    if cal.is_session(date_str):
+        return False, f"{market} regular trading session"
+    return True, f"{market} holiday (closed weekday)"
+
+
+def is_trading_day(date_str: str, market: str) -> tuple[bool, str]:
+    """Legacy combined API kept for backward compat (used by older
+    callers). New code should call `is_weekend()` and `is_exchange_holiday()`
+    separately so each tier can be bypassed independently.
+
+    Returns (is_open, reason). Hard-fails (returns is_open=False with a
+    diagnostic reason) on library/lookup error rather than the old
+    "default-open" behavior, because the previous behavior silently
+    bypassed the guard when exchange_calendars data was out of range.
+    """
     try:
-        target = datetime.strptime(date_str, "%Y-%m-%d").date()
+        weekend, day_name = is_weekend(date_str)
     except ValueError:
-        return True, f"invalid date format: {date_str}"
-
-    # Tier 1 — weekend (cheap, no library)
-    if target.weekday() >= 5:   # 5=Sat, 6=Sun
-        day_name = ("Mon","Tue","Wed","Thu","Fri","Sat","Sun")[target.weekday()]
+        return False, f"invalid-date-format: {date_str}"
+    if weekend:
         return False, f"weekend ({day_name})"
-
-    # Tier 2 — exchange holiday calendar
     try:
-        import exchange_calendars as ec
-        cal = ec.get_calendar(market)
-        if cal.is_session(date_str):
-            return True, f"{market} regular trading session"
-        # Weekday but not a session = holiday
-        return False, f"{market} holiday (closed weekday)"
+        holiday, reason = is_exchange_holiday(date_str, market)
     except ImportError:
-        print(f"[holiday] exchange_calendars not installed — assuming {market} open on {date_str}")
-        return True, "library unavailable, defaulting open"
+        print(f"[holiday] exchange_calendars not installed — REFUSING to publish on uncertain holiday status for {market} {date_str}")
+        return False, f"calendar-library-missing"
     except Exception as e:
-        print(f"[holiday] {market} calendar lookup failed: {type(e).__name__}: {e} — assuming open")
-        return True, f"calendar lookup error: {e}"
+        print(f"[holiday] {market} calendar lookup failed: {type(e).__name__}: {e} — REFUSING to publish on uncertain status")
+        return False, f"calendar-lookup-error: {type(e).__name__}"
+    if holiday:
+        return False, reason
+    return True, reason
 
 
 # ---------------------------------------------------------------------------
@@ -2179,9 +2219,20 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="Skip git push and bump-cache.")
     p.add_argument("--force", action="store_true",
                    help="Re-publish even if the slug directory already exists. "
-                        "Without this flag, an existing slug is treated as already-published "
-                        "and the run exits cleanly (prevents duplicate posts when both the "
-                        "main cron and the monitor cron fire on the same day).")
+                        "Bypasses the DUPLICATE-PUBLISH guard only — does NOT "
+                        "bypass weekend or holiday guards. Use this when you "
+                        "want to overwrite an existing post (e.g., re-run after "
+                        "a bad publish).")
+    p.add_argument("--bypass-holiday-guard", action="store_true",
+                   help="Skip the exchange-holiday check. Use ONLY for the rare "
+                        "manual case where you want to publish a thematic essay "
+                        "on a market-closed weekday. Weekend (Sat/Sun) is NEVER "
+                        "bypassable — there is no legitimate reason to publish a "
+                        "'trading-day recap' for a weekend.")
+    p.add_argument("--check-only", action="store_true",
+                   help="Run the trading-day guards only and exit. "
+                        "Exit code 0 = would publish, 1 = would skip. "
+                        "Used by cron-monitor to gate rescue triggers.")
     p.add_argument("--model", default="claude-sonnet-4-5")
     args = p.parse_args()
 
@@ -2204,27 +2255,81 @@ def main():
     slug = f"{cfg['slug_prefix']}-{trading_date}"
     print(f"[run] slot={args.slot} trading={trading_date} publish={publish_date} slug={slug}")
 
-    # === HOLIDAY / WEEKEND GUARD (short-circuit before any API call) ===
-    # User report 2026-05-23: holiday posts were being generated from
-    # hallucinated data because Claude's prompt-based holiday detection
-    # is unreliable. Now we check the authoritative exchange calendar
-    # BEFORE spending any Anthropic / yfinance / web_search budget.
-    # Force flag bypasses this for manual backfill scenarios.
-    if not args.force:
-        market = SLOT_TO_MARKET.get(args.slot)
-        if market:
-            is_open, reason = is_trading_day(trading_date, market)
-            if not is_open:
-                print(f"[holiday] {market} closed on {trading_date} ({reason}). Exiting cleanly — no post generated.")
-                # Ping HC success so the slot's check doesn't alarm on a
-                # legitimate market holiday (no publish expected).
-                notify_healthcheck(
-                    args.slot, "success",
-                    summary=f"holiday-skip: {market} closed on {trading_date} ({reason})",
-                )
-                return
-            else:
-                print(f"[holiday] {market} open on {trading_date} ({reason}). Proceeding with pipeline.")
+    # === TIER 0 — WEEKEND GUARD (UNCONDITIONAL) ===
+    # Markets globally are closed Sat/Sun. There is NO legitimate reason
+    # to publish a "trading-day recap" for a weekend. This check is
+    # OUTSIDE every flag (--force, --bypass-holiday-guard) by design.
+    # Lesson from 2026-05-30/31: when the guard is tied to a bypass flag,
+    # automation paths (cron-monitor rescue, retry loops) can silently
+    # set that flag and ship weekend posts. Weekend skip is now ALWAYS.
+    try:
+        weekend, day_name = is_weekend(trading_date)
+    except ValueError:
+        print(f"[guard] invalid trading_date format: {trading_date}. Aborting.")
+        notify_healthcheck(args.slot, "fail",
+                           summary=f"guard-error: invalid date {trading_date}")
+        return
+    if weekend:
+        print(f"[guard] tier-0 WEEKEND: trading_date {trading_date} is {day_name}. "
+              f"Skipping unconditionally (no flag can bypass this).")
+        notify_healthcheck(
+            args.slot, "success",
+            summary=f"weekend-skip: {trading_date} ({day_name})",
+        )
+        if args.check_only:
+            sys.exit(1)
+        return
+
+    # === TIER 1 — EXCHANGE HOLIDAY GUARD (bypassable by --bypass-holiday-guard) ===
+    # User report 2026-05-23: hallucinated holiday content. Now uses the
+    # authoritative exchange_calendars library. Hard-fails (skips) on
+    # library/lookup error — was previously "default to open" which
+    # masked a real failure mode.
+    market = SLOT_TO_MARKET.get(args.slot)
+    if market and not args.bypass_holiday_guard:
+        try:
+            holiday, reason = is_exchange_holiday(trading_date, market)
+        except ImportError:
+            print(f"[guard] tier-1 exchange_calendars NOT INSTALLED — refusing to "
+                  f"publish on uncertain holiday status. Use --bypass-holiday-guard "
+                  f"to override (only if you know markets are open).")
+            notify_healthcheck(args.slot, "fail",
+                               summary="guard-error: exchange_calendars missing")
+            if args.check_only:
+                sys.exit(1)
+            return
+        except Exception as e:
+            err_type = type(e).__name__
+            err_msg = str(e)[:200]
+            print(f"[guard] tier-1 {market} calendar lookup FAILED "
+                  f"({err_type}: {err_msg}). Refusing to publish on uncertain "
+                  f"holiday status. Likely an outdated exchange-calendars pin — "
+                  f"bump >= 4.10 in requirements.txt. Use --bypass-holiday-guard "
+                  f"to override.")
+            notify_healthcheck(args.slot, "fail",
+                               summary=f"guard-error: {market} lookup {err_type}")
+            if args.check_only:
+                sys.exit(1)
+            return
+        if holiday:
+            print(f"[guard] tier-1 HOLIDAY: {market} closed on {trading_date} ({reason}). "
+                  f"Skipping cleanly.")
+            notify_healthcheck(
+                args.slot, "success",
+                summary=f"holiday-skip: {market} closed on {trading_date}",
+            )
+            if args.check_only:
+                sys.exit(1)
+            return
+        print(f"[guard] tier-1 {market} open on {trading_date} ({reason}). Proceeding.")
+    elif market and args.bypass_holiday_guard:
+        print(f"[guard] ⚠️ --bypass-holiday-guard set — skipping holiday check "
+              f"for {market} on {trading_date}. Tier-0 weekend already passed.")
+
+    # If --check-only was set and we got here, the date IS a trading day.
+    if args.check_only:
+        print(f"[check-only] {args.slot} trading_date={trading_date} would publish (open).")
+        sys.exit(0)
 
     # Duplicate-publish guard: if a directory for this slug already exists with
     # an index.html, treat as already-published and skip cleanly. Use --force

@@ -136,6 +136,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 4. **The auto-publish cron itself is fine — leave it alone.** Each cron commit touches ~5 new files (one slot's HTML in 4 languages plus a posts.js + sitemap.xml insert) and does NOT call `bump-cache.sh`. That keeps it well under any reasonable abuse threshold and is why cron commits have never tripped detection.
 5. **If you see `remote: Your account is suspended` from git or in Actions logs**, do NOT retry in a loop. Wait ~30 minutes (the 2026-05-26 case auto-resolved in roughly that window), then verify with a small fetch. Any cron run that was scheduled inside the suspension window is lost — recover it manually with `gh workflow run daily-cron.yml -f slot=<slot>` once the account is back. `cron-monitor.yml` will also flag it, but the monitor itself is subject to the same suspension so cannot self-heal in that window.
 
+**Auto-publish holiday guard (MUST READ before changing cron / monitor / auto-daily-post.py).** 자동 발행 슬롯 6개는 시장 휴장일에 발행하면 안 된다. 2026-05-30 (토) / 5-31 (일) 사고 — Tier-1 weekend 가드가 코드상 있었음에도 9개 슬러그가 토·일에 발행돼 Friday 데이터를 잘못된 날짜로 노출했다 (총 36 디렉토리 + posts.js + sitemap + OG 일괄 삭제). 사고 후 적용된 3중 가드 규칙:
+
+1. **Tier-0 weekend = UNCONDITIONAL** — `scripts/auto-daily-post.py` 의 `is_weekend()` 는 `args.force` 도 `--bypass-holiday-guard` 도 **절대** 무력화 못 한다. Sat/Sun 의 trading_date 는 늘 skip + HC success ping. weekend 가드는 `if not args.force` 블록 밖으로 빼야 한다 (자동화 경로에서 force 가 무심코 켜지면 막을 길이 없어진다 — 사고의 추정 원인).
+2. **Tier-1 exchange holiday = bypassable only with `--bypass-holiday-guard`** — `exchange_calendars` 캘린더에 의존. `--force` 는 더 이상 휴장 가드를 무력화하지 않는다 (의미 분리). 그리고 캘린더 lookup 실패 시 이제 **HARD-FAIL** (skip + HC fail ping). 이전 "default to open" 동작이 silent failure 의 원인이었기 때문에, 모르면 **발행 안 함** 이 원칙.
+3. **cron-monitor 도 자체 weekend 가드** — `.github/workflows/cron-monitor.yml` 의 첫 step 에서 `dow_kst` 계산해 KST 가 Sat/Sun 이면 `MONITOR_WEEKEND=1` 환경변수 세팅. 모든 rescue step 은 `if: env.MONITOR_WEEKEND != '1'`. us-close 만 yesterday-KST 의 DOW 를 따로 확인 (offset=-1 이라 어제가 weekend 면 어제용 recap 도 발행 안 함).
+
+운영 규칙:
+- `--force` = duplicate-publish guard 만 우회 (이미 있는 슬러그 덮어쓰기). 휴장 가드는 안 건드림.
+- `--bypass-holiday-guard` = Tier-1 휴장 가드만 우회 (드문 manual essay 용). Weekend 는 여전히 막힘.
+- `--check-only` = 가드만 돌려보고 종료. exit 0 = 발행 대상, 1 = skip 대상. cron-monitor 가 rescue trigger 전 사전 확인 용도로 쓸 수 있음.
+- `exchange-calendars` pin (`requirements.txt` >= 4.10.0) — 4.5.x 는 XSHG 데이터가 2025-12-31 까지라 2026 lookup 시 `DateOutOfBounds` 발생. lookup 실패는 hard-skip 으로 처리되므로 silent 가 아니지만, 핀이 안 맞으면 그 슬롯 1개가 매일 hard-skip 된다. workflow 로그에서 `[guard] tier-1 ... lookup FAILED ... DateOutOfBounds` 보이면 핀 버전 bump.
+
+휴장에 글이 또 올라간 게 보이면 → (a) 가드가 통과된 이유를 로그에서 확인, (b) `scripts/delete-weekend-posts.py --apply` 로 일괄 정리, (c) 가드 회피 경로 패치. 정리 스크립트는 base + en/ja/zh 4판 + posts.js + sitemap + OG 까지 한 번에 처리하는 멱등 스크립트다.
+
 **No service worker.** `public/sw.js` exists only as a self-destruct routine for legacy installs (deletes all caches and unregisters itself on activation). Every HTML page also includes an inline `navigator.serviceWorker.getRegistrations().forEach(unregister)` right before `siteFooter.js` as a belt-and-suspenders cleanup. **Do not re-introduce a caching service worker.** Stale-SW debugging cost hours during the April 2026 Lotto redesign; if you need offline support later, use versioned asset filenames or a signed-off-on plan, not a revival of the old network-first SW.
 
 **Auth / backend.** Supabase is the only backend. Shared client lives in [public/js/supabase-config.js](public/js/supabase-config.js) and exposes `getSupabase()`, `signUp/signIn/signOut`, `getUser`, `onAuthChange`, `getDisplayName`. The anon/publishable key is intentionally committed (it's public by design). **Core games must stay playable without login** — auth is only for social/board/multiplayer features (see `public/auth/`). Don't add login gates to existing games.

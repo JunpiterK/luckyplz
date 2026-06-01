@@ -43,16 +43,42 @@ jobs:
           publish_date=$(TZ=Asia/Seoul date +%Y-%m-%d)
           trading_date_us_close=$(TZ=Asia/Seoul date -d "yesterday" +%Y-%m-%d)
           hour_kst=$(TZ=Asia/Seoul date +%H)
+          dow_kst=$(TZ=Asia/Seoul date +%u)   # 1=Mon..7=Sun
+          dow_us_close=$(TZ=Asia/Seoul date -d "yesterday" +%u)
           echo "publish_date=$publish_date" >> "$GITHUB_OUTPUT"
           echo "trading_date_us_close=$trading_date_us_close" >> "$GITHUB_OUTPUT"
           echo "hour_kst=$hour_kst" >> "$GITHUB_OUTPUT"
-          echo "now KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M %Z')"
-          echo "publish_date=$publish_date, us-close trading_date=$trading_date_us_close, hour_kst=$hour_kst"
+          echo "dow_kst=$dow_kst" >> "$GITHUB_OUTPUT"
+          echo "dow_us_close=$dow_us_close" >> "$GITHUB_OUTPUT"
+          echo "now KST: $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M %Z') (dow=$dow_kst)"
+          echo "publish_date=$publish_date, us-close trading_date=$trading_date_us_close (dow=$dow_us_close), hour_kst=$hour_kst"
+
+      - name: Tier-0 weekend short-circuit
+        run: |
+          # Belt-and-suspenders: even if a downstream check has a date bug,
+          # the monitor should NEVER trigger a rescue when today (KST) is
+          # Sat/Sun. All 5 slots (kr/cn open + close + us-premarket) compute
+          # trading_date = today KST (offset 0), so weekend in KST means
+          # weekend trading_date. The 6th slot (us-close, offset -1) uses
+          # yesterday — for that we check yesterday's DOW separately below.
+          # If today is Sat (6) or Sun (7), bail before any rescue check.
+          dow=${{ steps.dates.outputs.dow_kst }}
+          if [ "$dow" -ge 6 ]; then
+            echo "::notice::🛌 KST today is weekend (dow=$dow). No rescues will fire today (kr/cn slots all reference today's KST date)."
+            echo "MONITOR_WEEKEND=1" >> "$GITHUB_ENV"
+          fi
 
       - name: Check & rescue us-close (deadline KST 06:00)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # us-close trading_date = yesterday KST. If yesterday was Sat/Sun,
+          # NO recap should exist. Skip rescue. dow values: 1=Mon..7=Sun.
+          dow_yest=${{ steps.dates.outputs.dow_us_close }}
+          if [ "$dow_yest" -ge 6 ]; then
+            echo "::notice::🛌 us-close: yesterday KST is weekend (dow=$dow_yest). No recap expected; skipping rescue."
+            exit 0
+          fi
           slug="us-tech-recap-${{ steps.dates.outputs.trading_date_us_close }}"
           hour=${{ steps.dates.outputs.hour_kst }}
           if [ -d "public/blog/$slug" ]; then
@@ -67,6 +93,7 @@ jobs:
           gh workflow run daily-cron.yml -f slot=us-close
 
       - name: Check & rescue kr-open (deadline KST 08:00)
+        if: env.MONITOR_WEEKEND != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -84,6 +111,7 @@ jobs:
           gh workflow run daily-cron.yml -f slot=kr-open
 
       - name: Check & rescue cn-open (deadline KST 09:30)
+        if: env.MONITOR_WEEKEND != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -101,6 +129,7 @@ jobs:
           gh workflow run daily-cron.yml -f slot=cn-open
 
       - name: Check & rescue kr-close (deadline KST 16:30)
+        if: env.MONITOR_WEEKEND != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -118,6 +147,7 @@ jobs:
           gh workflow run daily-cron.yml -f slot=kr-close
 
       - name: Check & rescue cn-close (deadline KST 17:00)
+        if: env.MONITOR_WEEKEND != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -135,6 +165,7 @@ jobs:
           gh workflow run daily-cron.yml -f slot=cn-close
 
       - name: Check & rescue us-premarket (deadline KST 22:30)
+        if: env.MONITOR_WEEKEND != '1'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
