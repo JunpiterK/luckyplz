@@ -59,6 +59,11 @@ for lang in ("ja","zh"):
     s = s.replace(f'"item":"{BASE}/"', f'"item":"{BASE}{suf}/"')
     for a,b in CFG[lang]:
         s = s.replace(f'href="{a}"', f'href="{b}"')
+    # same-series cross-episode links: fall back to -en (native ja/zh siblings may not all exist yet)
+    if SLUG.startswith("ai-evo") or SLUG.startswith("space-evo"):
+        pref = "ai-evo" if SLUG.startswith("ai-evo") else "space-evo"
+        s = re.sub(r'href="/blog/('+pref+r'-\d+-[a-z0-9-]+?)/"',
+                   lambda m: m.group(0) if m.group(1).endswith(('-en','-ja','-zh')) else f'href="/blog/{m.group(1)}-en/"', s)
     s = s.replace('lang=ko', 'lang='+lang)
     wr(p, s)
     kor = len(re.findall(r'[가-힣]', s))
