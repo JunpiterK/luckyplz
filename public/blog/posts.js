@@ -7246,7 +7246,7 @@ window.BLOG_POSTS = [
    Order here = order in tab UI. First item is the default ("all"). */
 window.BLOG_CATEGORIES = [
     { slug: 'all',         emoji: '🌐', label_ko: '전체',        label_en: 'All' },
-    { slug: 'lifestyle',   emoji: '🍽️', label_ko: '생활·결정',   label_en: 'Lifestyle' },
+    { slug: 'lifestyle',   emoji: '☕', label_ko: '생활·결정',   label_en: 'Lifestyle' },
     { slug: 'probability', emoji: '🎰', label_ko: '확률·통계',   label_en: 'Probability' },
     /* `space-tech` (renamed from `tech-space` on 2026-05-06) holds the
        entire space-industry corpus — SpaceX IPO, Starlink, Falcon, the
@@ -7255,5 +7255,5 @@ window.BLOG_CATEGORIES = [
     { slug: 'ai-tech',     emoji: '🤖', label_ko: 'AI·테크',     label_en: 'AI Tech' },
     { slug: 'industry',    emoji: '💰', label_ko: '경제·산업',   label_en: 'Industry' },
     { slug: 'gaming-history', emoji: '🎮', label_ko: '게임 역사',  label_en: 'Game History' },
-    { slug: 'build',       emoji: '🛠️', label_ko: '빌드인공개',  label_en: 'Build' },
+    { slug: 'build',       emoji: '🔧', label_ko: '빌드인공개',  label_en: 'Build' },
 ];
