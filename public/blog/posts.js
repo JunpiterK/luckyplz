@@ -5699,6 +5699,18 @@ window.BLOG_POSTS = [
         alt: 'spacex-ipo-2026',
     },
     {
+        slug: 'spacex-ipo-2026-ja',
+        lang: 'ja',
+        category: 'space-tech',
+        date: '2026-05-05',
+        readMinutes: 14,
+        coverEmoji: '🚀',
+        tags: ['SpaceX IPO', 'SpaceX 上場', 'マスク', 'XOVR', 'EchoStar', 'Starlink'],
+        title: 'SpaceX IPO徹底分析 — S-1提出完了、2兆ドルのマスク帝国 (SPCX)',
+        excerpt: 'xAI合併・Starship V3・Orbital AI — マスク帝国史上最大のIPOを徹底解説。',
+        alt: 'spacex-ipo-2026',
+    },
+    {
         slug: 'spacex-ipo-2026',
         lang: 'ko',
         category: 'space-tech',
