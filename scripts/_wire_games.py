@@ -2,10 +2,12 @@
 # Wire a ko-ONLY gaming-history post that now has agent-written -en/-ja/-zh.
 # These older posts have NO hreflang block / no inLanguage / no og:locale.
 # Usage: python _wire_games.py <base-slug>
-import io, re, sys
+import io, re, sys, json
 SLUG = sys.argv[1]
 BASE = "https://luckyplz.com/blog/" + SLUG
-GH = ["breakout-jobs-wozniak","burgertime-arcade-history","pacman-history-namco",
+# cross-link family (links to these base slugs become -en in the en/ja/zh files)
+GH = json.loads(sys.argv[2]) if len(sys.argv) > 2 else [
+      "breakout-jobs-wozniak","burgertime-arcade-history","pacman-history-namco",
       "snake-history-nokia","tetris-history-soviet"]
 def rd(p): return io.open(p, encoding="utf-8").read()
 def wr(p, s): io.open(p, "w", encoding="utf-8", newline="\n").write(s)
@@ -20,7 +22,13 @@ def hreflang5(canon_indent=""):
     return ("\n"+canon_indent).join(L)
 def insert_hreflang(s):
     if f'hreflang="en" href="{BASE}-en/"' in s: return s  # already
-    # find canonical line with its indentation
+    # case (b): existing ko + x-default(->ko) pair -> replace with 5-line block
+    m2=re.search(r'([ \t]*)<link rel="alternate" hreflang="ko" href="'+re.escape(BASE)+
+                 r'/">\s*\n[ \t]*<link rel="alternate" hreflang="x-default" href="'+re.escape(BASE)+r'/">', s)
+    if m2:
+        indent=m2.group(1)
+        return s.replace(m2.group(0), indent+hreflang5(indent), 1)
+    # case (a): no hreflang -> insert after canonical
     m=re.search(r'([ \t]*)'+re.escape(CANON), s)
     if not m: return s
     indent=m.group(1)
