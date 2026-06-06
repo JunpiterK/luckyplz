@@ -1,101 +1,134 @@
 /* =====================================================================
-   daily.css — auto-published 증시 글 공통 UI 리프레시 (override sheet)
+   daily.css — 자동발행 증시 글 공통 UI (override sheet, v2)
    ---------------------------------------------------------------------
-   각 자동글의 inline <style> "뒤에" 로드되어 색상 변수·클래스 규칙을 덮어쓴다.
-   기존 글 + 미래 글 모두 이 한 파일로 일관 적용. 인라인 <style> 와 동일
-   specificity 규칙은 "나중에 로드된" 이 시트가 이긴다. 인라인 element style
-   (본문 div) 만 !important + 속성 셀렉터로 덮는다.
+   각 자동글의 inline <style> "뒤에" 로드 → 동일 specificity 클래스 규칙을
+   "나중 로드"로 이긴다. 인라인 element style(본문 div)만 !important 로 덮는다.
+   /css/* 는 no-store → 이 한 파일만 고치면 전 글 즉시 반영(번들 bump 불필요).
 
-   목표 (수동 모바일 분석글 수준):
-   - 시스템 폰트 우선 → 폰에서 즉시 또렷
-   - word-break:keep-all → 한글/일어/중어 줄바꿈 자연스럽게
-   - 좌우 여백 최소화 (거터 16→13px), 본문 폰트 14→15.5px
-   - 부드러운 색 (네온 청록 → soft blue), 본문 밝기↑, 카드 대비 정리
+   설계 원칙 (모바일 리딩 리서치 기반: Material 3 / USWDS / UXPin / WCAG)
+   - 본문 16px, line-height 1.7, word-break:keep-all (한/일/중 줄바꿈 정리)
+   - measure 50~75자 → 폰에서 좌우 거터 최소화로 폭 확보 (edge-to-edge)
+   - **프로즈(글)는 라운드 테두리 박스로 감싸지 않는다.** 좌우 여백이 두 번
+     낭비되기 때문(바깥 margin + 안쪽 padding). 대신 "상단 가로 hairline" 으로
+     영역을 구분하고, 본문은 화면 폭 - 작은 거터 만큼 꽉 쓴다.
+   - **테이블/데이터 카드(지수·Mag7·히트맵·등락표·캘린더)는 테두리 유지** —
+     구조 이해에 테두리가 필요하기 때문.
+   - 상단 스크롤 진행률 바(blogReadingAids.js)로 현재 위치 표시.
    ===================================================================== */
 
-/* ---------- 1. 팔레트 리프레시 (변수만 덮으면 var() 쓰는 인라인 규칙 전부 반영) ---------- */
+/* ---------- 1. 팔레트 (변수만 덮으면 var() 쓰는 인라인 규칙 전부 반영) ---------- */
 :root{
-  --bg:#070a12; --surface:#0f1626; --surface2:#182134; --border:#243049;
+  --bg:#070a12; --surface:#101725; --surface2:#182234; --border:#222f47; --hair:#1a2740;
   --accent:#5cc8ff; --accent2:#ff7a45; --accent3:#5fe0a8; --gold:#ffce5c;
-  --text:#e7edf8; --text-dim:#8a99b3; --red:#ff5a78;
-  --up-strong:#1f9d80; --up:#2bcf8a; --flat:#8a99b3; --down:#ef5a6e; --down-strong:#c62f43;
+  --text:#e8eef9; --text-dim:#93a2bd; --red:#ff5a78;
+  --up-strong:#1f9d80; --up:#2bcf8a; --flat:#93a2bd; --down:#ef5a6e; --down-strong:#c62f43;
 }
 body.convention-kr{
-  --up-strong:#d23145; --up:#ff6373; --flat:#8a99b3; --down:#54adf7; --down-strong:#1f74d6;
+  --up-strong:#d23145; --up:#ff6373; --flat:#93a2bd; --down:#54adf7; --down-strong:#1f74d6;
 }
 
-/* ---------- 2. 본문 타이포 — 시스템 폰트 우선 + 줄바꿈 정리 ---------- */
+/* ---------- 2. 타이포 — 시스템 폰트 우선 + 줄바꿈 정리 + 16px ---------- */
 html{ -webkit-text-size-adjust:100%; }
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard Variable','Pretendard',
               'Noto Sans KR','Noto Sans JP','Noto Sans SC','Segoe UI',Roboto,sans-serif;
-  font-size:15px; line-height:1.72;
-  word-break:keep-all; overflow-wrap:anywhere; letter-spacing:0.005em;
+  font-size:16px; line-height:1.72; word-break:keep-all; overflow-wrap:anywhere; letter-spacing:0.003em;
 }
 .container{ max-width:720px; }
 
-/* ---------- 3. 좌우 거터 축소 (16 → 13px) : 폰에서 좌우 여백 최소화 ---------- */
-.summary-card,.disclaimer-top,.tldr-box,.fact-check,.watch-card,.bottom-line,
-.footer-disclaimer,.related,.km-grid,.scen-grid,.cal-card,.mov-card,.news-card,
-.idx-grid,.mag-grid,.heat-grid{ margin-left:13px; margin-right:13px; }
-.section-title,.section-note{ padding-left:13px; padding-right:13px; }
-.header{ padding:24px 14px 18px; }
-.disclaimer-top{ margin-top:13px; margin-bottom:4px; }
+/* =====================================================================
+   3. 프로즈(글) 블록 — 박스 제거 → 상단 hairline + 풀폭 (좌우 거터 14px)
+   ===================================================================== */
+.summary-card,.tldr-box,.bottom-line,.news-card,.fact-check,.disclaimer-top,
+.watch-card,.scen-card,.footer-disclaimer,.related{
+  margin:0; border:none; border-radius:0; box-shadow:none;
+  background:transparent; padding:16px 14px; border-top:1px solid var(--hair);
+}
+/* 강조 블록(요약/결론/팩트체크/TL;DR): 라운드 박스 대신 풀블리드 옅은 틴트 +
+   좌측 3px 액센트 바(둘러싸는 사각형 아님). 좌우 여백 0 → 폭 최대. */
+.summary-card{ background:linear-gradient(180deg,rgba(92,200,255,.07),transparent); border-left:3px solid var(--accent); padding-left:13px; }
+.bottom-line{ background:linear-gradient(180deg,rgba(95,224,168,.06),transparent); border-left:3px solid var(--accent3); padding-left:13px; }
+.fact-check{ background:transparent; border-left:3px solid var(--up); padding-left:13px; }
+.tldr-box{ background:linear-gradient(180deg,rgba(255,206,92,.06),transparent); border-left:3px solid var(--gold); padding-left:13px; }
+.watch-card{ background:transparent; border-left:3px solid var(--gold); padding-left:13px; }
+.disclaimer-top{ background:transparent; color:#b9a878; font-size:12.5px; border-top:none; padding:10px 14px 2px; }
 
-/* ---------- 4. 본문 내러티브 (인라인 element style → !important 로 덮음) ---------- */
-/* 기존 글: <div style="padding:0 16px 18px;line-height:1.65;font-size:14px;"> */
+/* 프로즈 내부 타이포 */
+.summary-card{ font-size:15.5px; line-height:1.78; color:var(--text); }
+.summary-card strong{ color:var(--accent); } .summary-card em{ color:var(--accent3); font-style:normal; font-weight:700; }
+.bottom-line{ font-size:15px; line-height:1.8; }
+.bottom-line h3,.watch-card h3,.tldr-box h3{ font-size:12.5px; letter-spacing:0.14em; margin-bottom:9px; }
+.tldr-box li{ font-size:14.5px; line-height:1.7; border-bottom:1px dashed var(--hair); padding:7px 0 7px 18px; }
+.tldr-box li:last-child{ border-bottom:none; }
+.scen-grid{ margin:0; gap:0; }
+.scen-card{ border-top:1px solid var(--hair); }
+.scen-card:first-child{ border-top:none; }
+.scen-card p{ font-size:14px; line-height:1.7; }
+.news-card{ }
+.news-card + .news-card{ border-top:1px solid var(--hair); }
+.news-card h4{ font-size:15.5px; line-height:1.45; }
+.news-card p{ font-size:14.5px; line-height:1.72; color:#b3c0d8; }
+.footer-disclaimer{ font-size:11.5px; line-height:1.65; color:var(--text-dim); margin-top:8px; }
+.related{ border-top:1px solid var(--border); margin-top:14px; }
+.related a{ font-size:14.5px; padding:11px 0; border-bottom:1px solid var(--hair); }
+
+/* 섹션 타이틀 — 위 가로선 + 액센트 라벨 (박스 아님) */
+.section-title{ padding:20px 14px 9px; font-size:12.5px; letter-spacing:0.13em; border-top:1px solid var(--border); margin-top:8px; }
+.section-note{ padding-left:14px; padding-right:14px; }
+
+/* =====================================================================
+   4. 본문 내러티브 (인라인 element style → !important)
+   ===================================================================== */
 .container > div[style*="line-height:1.65"][style*="font-size:14px"]{
-  padding:2px 13px 20px !important; font-size:15.5px !important; line-height:1.82 !important;
+  padding:4px 14px 22px !important; font-size:16px !important; line-height:1.8 !important;
   word-break:keep-all; overflow-wrap:anywhere; color:var(--text);
 }
-/* 미래 글(렌더 함수가 class 부여 시) */
-.daily-article{ padding:2px 13px 20px; font-size:15.5px; line-height:1.82; word-break:keep-all; color:var(--text); }
-.daily-article h3{ font-size:17px; color:#fff; font-weight:700; letter-spacing:-0.01em; margin:22px 0 9px; line-height:1.4; }
-.daily-article h3:first-child{ margin-top:4px; }
-.daily-article p{ margin:0 0 12px; }
-.daily-article strong{ color:var(--accent3); font-weight:700; }
-.daily-article em{ color:var(--gold); font-style:normal; font-weight:600; }
-/* 기존 인라인 본문의 h3/p 도 함께 보정 */
-.container > div[style*="line-height:1.65"] h3{ font-size:17px !important; color:#fff !important; line-height:1.4; margin:22px 0 9px !important; letter-spacing:-0.01em; }
-.container > div[style*="line-height:1.65"] p{ margin:0 0 12px !important; }
-/* 표 래퍼 (forward calendar 등 overflow-x) */
-.container > div[style*="overflow-x:auto"]{ padding-left:13px !important; padding-right:13px !important; font-size:13.5px !important; }
-
-/* ---------- 5. 헤더 — 수동글 hero 느낌 (그라데이션 타이틀) ---------- */
-.header h1{ font-size:25px; line-height:1.32; letter-spacing:-0.02em; }
-.header h1 span{
-  background:linear-gradient(135deg,var(--accent) 0%,var(--accent3) 100%);
-  -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:var(--accent);
+.container > div[style*="line-height:1.65"] h3{
+  font-size:18.5px !important; color:#fff !important; font-weight:700; line-height:1.42;
+  margin:24px 0 10px !important; letter-spacing:-0.01em; padding-top:14px; border-top:1px solid var(--hair);
 }
-.header-sub{ font-size:13.5px; color:var(--text-dim); line-height:1.6; }
+.container > div[style*="line-height:1.65"] h3:first-child{ border-top:none; padding-top:0; margin-top:2px !important; }
+.container > div[style*="line-height:1.65"] p{ margin:0 0 13px !important; }
+.container > div[style*="line-height:1.65"] strong{ color:var(--accent3); }
+.container > div[style*="line-height:1.65"] em{ color:var(--gold); font-style:normal; font-weight:600; }
+.container > div[style*="overflow-x:auto"]{ padding-left:14px !important; padding-right:14px !important; font-size:14px !important; }
+/* 미래 글이 class 부여 시 */
+.daily-article{ padding:4px 14px 22px; font-size:16px; line-height:1.8; word-break:keep-all; }
+
+/* =====================================================================
+   5. 헤더 (수동글 hero 느낌)
+   ===================================================================== */
+.header{ padding:24px 14px 18px; }
+.header h1{ font-size:26px; line-height:1.32; letter-spacing:-0.02em; }
+.header h1 span{ background:linear-gradient(135deg,var(--accent),var(--accent3)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; color:var(--accent); }
+.header-sub{ font-size:14px; color:var(--text-dim); line-height:1.6; }
 .header-label{ color:var(--gold); }
 
-/* ---------- 6. 요약 카드 / 박스 가독성 ---------- */
-.summary-card{ font-size:14.5px; line-height:1.75; border-radius:14px; }
-.summary-card strong{ color:var(--accent); } .summary-card em{ color:var(--accent3); }
-.tldr-box li,.bottom-line,.watch-body,.cal-body,.news-card p,.scen-card p{ line-height:1.7; }
-.bottom-line{ font-size:13.5px; border-radius:14px; }
-.section-title{ font-size:13px; letter-spacing:0.12em; }
-
-/* ---------- 7. 데이터 카드 — 라운드/대비 정리 ---------- */
-.idx-card,.mag-tile,.heat-tile,.mov-card,.news-card,.km-cell,.scen-card,.cal-card{ border-radius:11px; }
-.idx-val{ letter-spacing:0.3px; }
-/* movers 표: 4컬럼이 폰에서 너무 빡빡 → trigger 텍스트 줄바꿈 자연스럽게 */
+/* =====================================================================
+   6. 데이터/표 — 테두리 유지(구조용). 컨테이너 거터만 좁힘.
+   ===================================================================== */
+.idx-grid,.mag-grid,.heat-grid,.km-grid{ margin-left:14px; margin-right:14px; }
+.mov-card,.cal-card{ margin-left:14px; margin-right:14px; border-radius:10px; }   /* 표: 테두리 유지 */
+.idx-card,.mag-tile,.heat-tile,.km-cell,.scen-card-DATAKEEP{ border-radius:10px; }
 .mov-row{ gap:7px 8px; }
 .mov-trig{ word-break:keep-all; overflow-wrap:anywhere; line-height:1.5; }
-.mov-tick,.mag-tick,.mag-px,.mov-px,.idx-chg,.mag-pct,.mov-pct{ overflow-wrap:anywhere; }
+.cal-card .cal-body,.cal-card .cal-date{ word-break:keep-all; }
 
-/* ---------- 8. 관련글 / 푸터 ---------- */
-.related{ border-radius:14px; }
-.related a{ font-size:13.5px; }
-.footer-disclaimer{ font-size:11px; line-height:1.65; }
+/* =====================================================================
+   7. 상단 스크롤 진행률 바 (blogReadingAids.js 가 주입; 색만 정렬)
+   ===================================================================== */
+.lp-progress{ height:3px !important; background:rgba(255,255,255,.05) !important; }
+.lp-progress-bar{ background:linear-gradient(90deg,var(--accent),var(--accent3)) !important; }
 
-/* ---------- 9. 아주 작은 폰(≤360px) 추가 압축 ---------- */
+/* =====================================================================
+   8. 아주 작은 폰(≤360px) — 거터 더 압축
+   ===================================================================== */
 @media (max-width:360px){
-  .summary-card,.disclaimer-top,.tldr-box,.fact-check,.watch-card,.bottom-line,
-  .footer-disclaimer,.related,.km-grid,.scen-grid,.cal-card,.mov-card,.news-card,
-  .idx-grid,.mag-grid,.heat-grid{ margin-left:10px; margin-right:10px; }
-  .section-title,.section-note{ padding-left:10px; padding-right:10px; }
-  .container > div[style*="line-height:1.65"]{ padding-left:10px !important; padding-right:10px !important; }
+  .summary-card,.tldr-box,.bottom-line,.news-card,.fact-check,.disclaimer-top,
+  .watch-card,.scen-card,.footer-disclaimer,.related,.section-title{ padding-left:11px; padding-right:11px; }
+  .idx-grid,.mag-grid,.heat-grid,.km-grid,.mov-card,.cal-card{ margin-left:11px; margin-right:11px; }
+  .container > div[style*="line-height:1.65"]{ padding-left:11px !important; padding-right:11px !important; }
+  .summary-card,.bottom-line,.fact-check,.tldr-box,.watch-card{ padding-left:10px; }
   .idx-grid{ gap:6px; } .mag-grid{ gap:5px; }
+  body{ font-size:15.5px; }
 }
