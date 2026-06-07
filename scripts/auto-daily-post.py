@@ -1531,27 +1531,60 @@ def render_news(news: list[dict], lang: str) -> str:
 """
 
 
-def render_watch(watch: dict, lang: str) -> str:
+def render_watch(watch: dict, lang: str, ref_date: str = "") -> str:
+    """Render the forward "this week's key events" watchlist.
+
+    The weekday labels (화/수/목 …) are computed from the post's trading date
+    (`ref_date`, YYYY-MM-DD) — NEVER hardcoded. Previously the labels were a
+    static "화 5/12 / 수 5/13 / 목 5/14" baked in at template-authoring time,
+    so every post since mid-May showed wrong May dates regardless of the actual
+    publish date — a serious credibility bug. Now each weekday slot resolves to
+    the next occurrence of that weekday strictly AFTER the trading date, e.g. a
+    Friday-close post → Tue/Wed/Thu of the upcoming week. Labels localized 4-lang.
+    NOTE: the prompt is instructed to keep dates OUT of the body text so the only
+    date shown is this computed, always-correct one."""
     if not watch:
         return ""
+    # weekday slots: key -> (Mon=0..Sun=6 index, localized weekday abbreviation)
+    wd_slots = {
+        "tue": (1, {"ko": "화", "en": "TUE", "ja": "火", "zh": "周二"}),
+        "wed": (2, {"ko": "수", "en": "WED", "ja": "水", "zh": "周三"}),
+        "thu": (3, {"ko": "목", "en": "THU", "ja": "木", "zh": "周四"}),
+    }
+    non_day = {
+        "risk": {"ko": "리스크", "en": "RISK", "ja": "リスク", "zh": "风险"},
+        "flow": {"ko": "플로우", "en": "FLOW", "ja": "フロー", "zh": "资金"},
+    }
+    base = None
+    if ref_date:
+        try:
+            base = datetime.strptime(str(ref_date)[:10], "%Y-%m-%d")
+        except Exception:
+            base = None
     rows = []
-    label_map_ko = [("tue", "화 5/12"), ("wed", "수 5/13"), ("thu", "목 5/14"),
-                    ("risk", "리스크"), ("flow", "플로우")]
-    label_map_en = [("tue", "TUE"), ("wed", "WED"), ("thu", "THU"),
-                    ("risk", "RISK"), ("flow", "FLOW")]
-    for key, day_label in (label_map_ko if lang == "ko" else label_map_en):
+    for key in ("tue", "wed", "thu", "risk", "flow"):
         body = watch.get(f"{key}_{lang}")
         if not body:
             continue
+        if key in wd_slots:
+            wd, names = wd_slots[key]
+            label = names.get(lang, names["en"])
+            if base is not None:
+                d = base + timedelta(days=((wd - base.weekday() - 1) % 7) + 1)
+                label = f"{label} {d.month}/{d.day}"
+        else:
+            label = non_day[key].get(lang, non_day[key]["en"])
         rows.append(f"""
   <div class="watch-row">
-    <div class="watch-day">{html_escape(day_label)}</div>
+    <div class="watch-day">{html_escape(label)}</div>
     <div class="watch-body">{body}</div>
   </div>""")
     if not rows:
         return ""
-    title = "▸ Tomorrow's Watchlist" if lang == "en" else "▸ 내일 워치리스트"
-    h3 = "📅 KEY EARNINGS · EVENTS · THIS WEEK" if lang == "en" else "📅 이번 주 핵심 어닝 · 이벤트"
+    title = L(lang, ko="▸ 이번 주 워치리스트", en="▸ This Week's Watchlist",
+              ja="▸ 今週のウォッチリスト", zh="▸ 本周观察清单")
+    h3 = L(lang, ko="📅 이번 주 핵심 어닝 · 이벤트", en="📅 KEY EARNINGS · EVENTS · THIS WEEK",
+           ja="📅 今週の主要決算・イベント", zh="📅 本周核心财报 · 事件")
     return f"""<div class="section-title">{title}</div>
 <div class="watch-card">
   <h3>{h3}</h3>
@@ -1633,7 +1666,7 @@ def render_fact_check(text: str, lang: str) -> str:
 """
 
 
-def render_sections(slot: str, data: dict, lang: str) -> str:
+def render_sections(slot: str, data: dict, lang: str, ref_date: str = "") -> str:
     """Stitch the body sections based on slot type."""
     parts = []
     if slot == "us-close":
@@ -1643,7 +1676,7 @@ def render_sections(slot: str, data: dict, lang: str) -> str:
         parts.append(render_movers(data.get("winners", []), lang, "winners"))
         parts.append(render_movers(data.get("losers", []), lang, "losers"))
         parts.append(render_news(data.get("news", []), lang))
-        parts.append(render_watch(data.get("watch", {}), lang))
+        parts.append(render_watch(data.get("watch", {}), lang, ref_date))
     elif slot == "kr-open":
         parts.append(render_indices_block(data.get("overnight_us", []), lang))
         parts.append(render_news(data.get("kr_news", []), lang))
@@ -1884,7 +1917,7 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     # content catches up.
     key_strip = render_key_metrics_strip(data.get("key_metrics", {}), lang)
     narrative = render_narrative(pick_localized(data, "narrative_html", lang), lang)
-    cards = render_sections(slot, data, lang)
+    cards = render_sections(slot, data, lang, trading_date)
     forward_cal = render_forward_calendar(pick_localized(data, "forward_calendar_html", lang), lang)
     fact_check_box = render_fact_check(pick_localized(data, "fact_check", lang), lang)
     # Order: 7-asset strip (fixed top) → deep narrative (main) → visual cards
