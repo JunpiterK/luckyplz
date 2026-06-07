@@ -161,9 +161,12 @@ Tone: 简洁有力的财经评论风格。专业但不晦涩。
     {"label_ko":"...","label_en":"...","pct":...,"names":"..."}
   ],
   "winners": [
-    {"ticker":"...","name_ko":"...","name_en":"...","price":"₩...","change_pct":...,"trigger_ko":"...","trigger_en":"..."}
+    {"ticker":"005930","name_ko":"삼성전자","name_en":"Samsung Elec","name_ja":"サムスン電子","name_zh":"三星电子","price":"₩...","change_pct":...,"trigger_ko":"구체적 촉발요인","trigger_en":"...","trigger_ja":"...","trigger_zh":"..."},
+    ... top 7 INDIVIDUAL KOSPI/KOSDAQ stocks (NOT sectors), each with price + a specific catalyst (실적·수주·외인수급·정책·신제품 등), all 4 languages ...
   ],
-  "losers": [...],
+  "losers": [
+    ... top 7 INDIVIDUAL stocks, identical shape, each with price + a specific catalyst ...
+  ],
   "foreign_flow": [
     {"side":"buy","ticker":"...","name_ko":"...","net_won":"+...억","ko":"...","en":"..."},
     ... top 5 buy + top 5 sell, KOSPI focus ...

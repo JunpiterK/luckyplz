@@ -162,9 +162,12 @@ Tone: 简洁有力的财经评论风格。Mainland 매체 톤 (Caixin / 21st Cen
     {"label_en":"AI Semis","label_ko":"AI 반도체","label_ja":"AI半導体","label_zh":"AI 半导体","pct":...,"names":"SMIC, 华虹, 中微公司"}
   ],
   "winners": [
-    {"ticker":"...","name_en":"...","name_zh":"...","name_ko":"...","name_ja":"...","price":"¥...","change_pct":...,"trigger_en":"...","trigger_zh":"...","trigger_ko":"...","trigger_ja":"..."}
+    {"ticker":"600519.SS","name_en":"Kweichow Moutai","name_zh":"贵州茅台","name_ko":"구이저우 마오타이","name_ja":"貴州茅台","price":"¥...","change_pct":...,"trigger_en":"specific catalyst","trigger_zh":"...","trigger_ko":"...","trigger_ja":"..."},
+    ... top 7 INDIVIDUAL A-share / HK stocks (NOT sectors), each with price + a specific catalyst (业绩·政策·订单·新品 등), all 4 languages ...
   ],
-  "losers": [...],
+  "losers": [
+    ... top 7 INDIVIDUAL stocks, identical shape, each with price + a specific catalyst ...
+  ],
   "northbound_flow": [
     {"side":"buy","ticker":"600519.SS","name_zh":"贵州茅台","name_en":"Kweichow Moutai","net_yuan":"+12 亿","en":"...","zh":"...","ko":"...","ja":"..."},
     ... top 5 buy + top 5 sell ...

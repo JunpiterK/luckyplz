@@ -161,8 +161,13 @@ Tone: 简洁有力的财经评论风格。专业但不晦涩。
     {"label_ko":"XLK 기술","label_en":"XLK Tech","pct":...,"names":"..."},
     ... all 11 GICS sectors ...
   ],
-  "winners": [... top 5 ...],
-  "losers": [... top 5 ...],
+  "winners": [
+    {"ticker":"NVDA","name_ko":"엔비디아","name_en":"Nvidia","name_ja":"エヌビディア","name_zh":"英伟达","price":"$285.10","change_pct":6.2,"trigger_ko":"왜 움직였는지 구체적으로(실적·가이던스·업그레이드·M&A·제품·규제 등)","trigger_en":"specific catalyst","trigger_ja":"...","trigger_zh":"..."},
+    ... top 7 INDIVIDUAL S&P 500 / mega-cap stocks (NOT sector ETFs like XLK/SOX — sectors already live in `themes`). Each REQUIRES price + a SPECIFIC catalyst; never a bare "차익실현"/"profit-taking"/"하락" without a reason ...
+  ],
+  "losers": [
+    ... top 7 INDIVIDUAL stocks, identical shape (ticker/name_*/price/change_pct/trigger_*), each with price + a specific catalyst ...
+  ],
   "news": [
     {"tag_en":"SEMIS","tag_ko":"반도체","tag_ja":"半導体","tag_zh":"半导体","title_en":"...","title_ko":"...","title_ja":"...","title_zh":"...","body_en":"1-2 sentences EN (source-of-truth)","body_ko":"...","body_ja":"...","body_zh":"...","source":"Reuters","source_url":"https://..."},
     ... 3-5 session headlines. tag_* is REQUIRED — a 1-2 word category in each language (e.g. SEMIS/반도체, RATES/금리, EARNINGS/실적, MACRO/거시, ENERGY/에너지, MEGACAP/대형주). Never leave any tag_* blank ...

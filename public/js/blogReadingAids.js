@@ -83,6 +83,25 @@
     }
     transformSources();
 
+    /* ---- movers (상승/하락 리더): collapse empty second line ----
+       The 2-line CSS layout (ticker+% / price·catalyst) shines when each row
+       has a price and a catalyst. Older posts only have ticker+% (price "—",
+       no catalyst) → the second line would render an ugly empty "—". Hide the
+       price when it's a placeholder dash and hide the catalyst when blank, so
+       those rows collapse to a clean single line. Rows WITH real data keep both
+       lines. Runs on existing + future posts (no-store script). */
+    function cleanMovers(){
+        var DASH = {"":1,"-":1,"–":1,"—":1,"$-":1,"$–":1,"$—":1,"N/A":1,"n/a":1};
+        var rows = document.querySelectorAll(".mov-row");
+        Array.prototype.forEach.call(rows, function(r){
+            var px = r.querySelector(".mov-px");
+            var tg = r.querySelector(".mov-trig");
+            if (px && DASH[(px.textContent || "").trim()]) px.style.display = "none";
+            if (tg && !(tg.textContent || "").trim()) tg.style.display = "none";
+        });
+    }
+    cleanMovers();
+
     /* ---- inject scoped styles once ---- */
     var styleId = 'lp-reading-aids-style';
     if (!document.getElementById(styleId)) {
