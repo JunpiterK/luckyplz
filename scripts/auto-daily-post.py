@@ -1512,7 +1512,7 @@ def render_news(news: list[dict], lang: str) -> str:
         return ""
     cards = []
     for n in news[:6]:
-        tag = n.get(f"tag_{lang}") or n.get("tag_en") or ""
+        tag = n.get(f"tag_{lang}") or n.get("tag_en") or n.get("tag") or ""
         title = n.get(f"title_{lang}") or n.get("title_en") or ""
         body = n.get(f"body_{lang}") or n.get("body_en") or ""
         src = n.get("source", "")

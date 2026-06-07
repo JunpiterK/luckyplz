@@ -163,7 +163,10 @@ Tone: 简洁有力的财经评论风格。
     {"ticker":"005930","name_ko":"삼성전자","prev_close":"₩78,500","gap_setup_ko":"...","gap_setup_en":"...","expected_gap_pct":...},
     ... 4-6 stocks ...
   ],
-  "kr_news": [... 2-4 entries ...],
+  "kr_news": [
+    {"tag_en":"SEMIS","tag_ko":"반도체","tag_ja":"半導体","tag_zh":"半导体","title_en":"...","title_ko":"...","title_ja":"...","title_zh":"...","body_en":"1-2 sentences EN (source-of-truth)","body_ko":"...","body_ja":"...","body_zh":"...","source":"...","source_url":"..."},
+    ... 2-4 entries. tag_* is REQUIRED — a 1-2 word category in each language (e.g. SEMIS/반도체, FX/환율, FLOWS/수급, MACRO/거시, BATTERY/배터리). Never leave any tag_* blank ...
+  ],
   "today_watch": {
     "primary_ko":"오늘 핵심 1 단락","primary_en":"...",
     "events_ko":"09:00 개장 · ...","events_en":"..."

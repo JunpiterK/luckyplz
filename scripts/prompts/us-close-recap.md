@@ -163,7 +163,10 @@ Tone: 简洁有力的财经评论风格。专业但不晦涩。
   ],
   "winners": [... top 5 ...],
   "losers": [... top 5 ...],
-  "news": [... 3-5 session headlines, each with tag/title/body/source/source_url ...],
+  "news": [
+    {"tag_en":"SEMIS","tag_ko":"반도체","tag_ja":"半導体","tag_zh":"半导体","title_en":"...","title_ko":"...","title_ja":"...","title_zh":"...","body_en":"1-2 sentences EN (source-of-truth)","body_ko":"...","body_ja":"...","body_zh":"...","source":"Reuters","source_url":"https://..."},
+    ... 3-5 session headlines. tag_* is REQUIRED — a 1-2 word category in each language (e.g. SEMIS/반도체, RATES/금리, EARNINGS/실적, MACRO/거시, ENERGY/에너지, MEGACAP/대형주). Never leave any tag_* blank ...
+  ],
   "watch": { "tue_ko":"...", "tue_en":"...", "wed_ko":"...", "wed_en":"...", "thu_ko":"...", "thu_en":"..." },
   "narrative_html_en": "...4-section structure, ~700 words EN (write FIRST, source-of-truth)...",
   "narrative_html_ko": "...위 영어 본문을 자연스러운 한국어로 번역. ~700자, 같은 4-섹션 구조...",
