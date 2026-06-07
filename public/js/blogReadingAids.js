@@ -32,6 +32,57 @@
     var theme = (document.body.dataset.theme || '').toLowerCase();
     var isPaper = theme === 'paper';
 
+    /* ---- source links → named emerald chips ----
+       Auto-published 증시 posts list their sources in the footer disclaimer as
+       raw URLs (https://www.reuters.com/... · https://www.bloomberg.com/... ).
+       Raw URLs are ugly, hard to read, and the inherited blue is low-contrast.
+       Convert each to a friendly publisher NAME rendered as a tappable chip
+       (styled .lp-src-chip in daily.css). Runs on existing + future posts via
+       this no-store script — no re-render needed. */
+    var SRC_NAMES = {
+        'reuters.com':'Reuters','bloomberg.com':'Bloomberg','cnbc.com':'CNBC',
+        'wsj.com':'WSJ','finance.yahoo.com':'Yahoo Finance','yahoo.com':'Yahoo Finance',
+        'marketwatch.com':'MarketWatch','ft.com':'FT','investing.com':'Investing.com',
+        'nasdaq.com':'Nasdaq','barrons.com':"Barron's",'seekingalpha.com':'Seeking Alpha',
+        'cnn.com':'CNN','apnews.com':'AP','businessinsider.com':'Business Insider',
+        'forbes.com':'Forbes','theinformation.com':'The Information','axios.com':'Axios',
+        'krx.co.kr':'KRX','hankyung.com':'한국경제','mk.co.kr':'매일경제',
+        'yna.co.kr':'연합뉴스','sedaily.com':'서울경제','edaily.co.kr':'이데일리',
+        'mt.co.kr':'머니투데이','fnnews.com':'파이낸셜뉴스',
+        'scmp.com':'SCMP','caixinglobal.com':'Caixin','xinhuanet.com':'신화통신',
+        'sse.com.cn':'上交所','szse.cn':'深交所','hkex.com.hk':'HKEX',
+        'nikkei.com':'Nikkei','tradingview.com':'TradingView','google.com':'Google Finance'
+    };
+    function srcName(href){
+        var h;
+        try { h = new URL(href).hostname.replace(/^www\./,''); } catch(e){ return href; }
+        if (SRC_NAMES[h]) return SRC_NAMES[h];
+        var root = h.split('.')[0] || h;
+        return root.charAt(0).toUpperCase() + root.slice(1);
+    }
+    function transformSources(){
+        var scope = document.querySelector('.footer-disclaimer');
+        if (!scope) return;
+        var links = scope.querySelectorAll('a[href^="http"]');
+        var changed = [];
+        Array.prototype.forEach.call(links, function(a){
+            if (/^https?:\/\//i.test((a.textContent||'').trim())) {
+                a.textContent = srcName(a.getAttribute('href'));
+                a.className = (a.className ? a.className + ' ' : '') + 'lp-src-chip';
+                a.setAttribute('rel','noopener nofollow');
+                changed.push(a);
+            }
+        });
+        /* drop the " · " text separators that sat between the raw URLs */
+        changed.forEach(function(a){
+            var sib = a.nextSibling;
+            if (sib && sib.nodeType === 3 && /^\s*·\s*$/.test(sib.textContent)) {
+                sib.parentNode.removeChild(sib);
+            }
+        });
+    }
+    transformSources();
+
     /* ---- inject scoped styles once ---- */
     var styleId = 'lp-reading-aids-style';
     if (!document.getElementById(styleId)) {
