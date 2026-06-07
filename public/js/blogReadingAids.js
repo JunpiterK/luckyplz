@@ -102,6 +102,60 @@
     }
     cleanMovers();
 
+    /* ---- market pulse band (auto 증시 posts) ----
+       The header badge row just repeated the index %s (and was a flat orange,
+       no direction color) — redundant with the index cards below. Replace it
+       with a "market pulse" band: today's risk tone (위험 회피 / 선호 / 중립)
+       computed from the index moves + the 3-4 headline indices with proper
+       direction colors. Built from the page's own data → existing + future. */
+    function injectPulseBand(){
+        var header = document.querySelector(".header");
+        var cards = Array.prototype.slice.call(document.querySelectorAll(".idx-card"));
+        if (!header || !cards.length) return;
+        if (document.querySelector(".lp-pulse")) return; // idempotent
+        var data = cards.map(function(c){
+            var el = c.querySelector(".idx-chg");
+            var nm = ((c.querySelector(".idx-name") || {}).textContent || "").trim();
+            if (!el) return null;
+            var v = parseFloat((el.textContent || "").replace(/[^0-9.+-]/g, ""));
+            return { name: nm, txt: (el.textContent || "").trim(), v: v,
+                     up: el.classList.contains("up"), down: el.classList.contains("down"),
+                     vol: /VIX|변동성|恐慌|ボラ|波动/i.test(nm) };
+        }).filter(function(d){ return d && !isNaN(d.v); });
+        if (!data.length) return;
+        var equity = data.filter(function(d){ return !d.vol; });
+        var base = equity.length ? equity : data;
+        var avg = base.reduce(function(s, d){ return s + d.v; }, 0) / base.length;
+        var lang = (document.documentElement.lang || "ko").slice(0, 2).toLowerCase();
+        var LAB = {
+            off: { ko: "위험 회피", en: "RISK-OFF", ja: "リスクオフ", zh: "避险" },
+            on:  { ko: "위험 선호", en: "RISK-ON",  ja: "リスクオン", zh: "偏好风险" },
+            neutral: { ko: "중립",  en: "NEUTRAL",  ja: "中立",     zh: "中性" }
+        };
+        var mood = avg <= -0.4 ? "off" : (avg >= 0.4 ? "on" : "neutral");
+        function shortName(n){
+            var m = n.match(/\(([^)]+)\)/);
+            if (m) return m[1];
+            return n.replace(/\s*(Composite|Index|종합지수|종합|지수|综合指数|総合指数)\b.*$/i, "").trim() || n;
+        }
+        var picks = base.slice(0, 3);
+        var vol = data.filter(function(d){ return d.vol; })[0];
+        if (vol) picks.push(vol);
+        var listHtml = picks.map(function(d){
+            var cls = d.up ? "upx" : (d.down ? "dn" : "");
+            return shortName(d.name) + ' <b class="' + cls + '">' + d.txt + "</b>";
+        }).join(' <span class="lp-pulse-sep">·</span> ');
+        var tag = LAB[mood][lang] || LAB[mood].en;
+        var band = document.createElement("div");
+        band.className = "lp-pulse lp-pulse--" + mood;
+        band.innerHTML = '<span class="lp-pulse-tag">' + tag + "</span>"
+                       + '<span class="lp-pulse-list">' + listHtml + "</span>";
+        header.parentNode.insertBefore(band, header.nextSibling);
+        var badgeRow = header.querySelector(".badge-row");
+        if (badgeRow) badgeRow.style.display = "none";
+    }
+    injectPulseBand();
+
     /* ---- inject scoped styles once ---- */
     var styleId = 'lp-reading-aids-style';
     if (!document.getElementById(styleId)) {
