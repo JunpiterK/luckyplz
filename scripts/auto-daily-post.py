@@ -1922,7 +1922,11 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     fact_check_box = render_fact_check(pick_localized(data, "fact_check", lang), lang)
     # Order: 7-asset strip (fixed top) → deep narrative (main) → visual cards
     # (supplementary) → forward calendar → fact-check (closing).
-    sections_html = "\n".join(p for p in [key_strip, narrative, cards, forward_cal, fact_check_box] if p)
+    # Order: hook (summary-card, above) → glanceable DATA snapshot (cards) →
+    # deep-analysis narrative (synthesis) → forward calendar → fact-check.
+    # Leading with the visual data and following with the written synthesis
+    # reads better than dropping a ~700-word wall right under the metrics strip.
+    sections_html = "\n".join(p for p in [key_strip, cards, narrative, forward_cal, fact_check_box] if p)
 
     # Substitutions
     # Font selection by language family:
@@ -2552,6 +2556,26 @@ def main():
         "- For scenario tree: use `.scen-grid` + `.scen-card`, never `<table>`.\n"
     )
     prompt = prompt + visual_guide
+
+    # Shared WRITING-QUALITY guide — appended to EVERY slot. The biggest lever on
+    # perceived quality is prose: specific over generic, lead with the point,
+    # varied rhythm, no filler. Applies to narrative_html_*, summary_*,
+    # bottom_line_*, and every trigger/catalyst/news sentence.
+    writing_guide = (
+        "\n\n---\n"
+        "# WRITING QUALITY — applies to ALL prose (narrative, summary, bottom_line, news, triggers)\n\n"
+        "Write like a sharp, trusted market columnist whose readers forward the piece. Concretely:\n"
+        "1. LEAD WITH THE POINT. Each paragraph's first sentence states its one conclusion; the rest supports it. No throat-clearing ('오늘 시장은…').\n"
+        "2. SPECIFIC OVER GENERIC. Name the catalyst, the number, the mechanism. BANNED filler — never write: '혼조세', '투자자들은 주목', '불확실성이 커지고 있다', '관망세', 'remains to be seen', 'mixed signals'. Replace each with a concrete cause -> effect.\n"
+        "3. NUMBERS DO THE WORK. Tie every claim to a figure (%/$/bp/배수) AND say what it MEANS, not just what it is.\n"
+        "4. VARY RHYTHM. Do not end three sentences in a row the same way (…했다 / …이다 / …것이다). Mix short punches with longer explanatory lines.\n"
+        "5. ONE IDEA PER PARAGRAPH, 2-4 sentences. If a paragraph carries two ideas, split it.\n"
+        "6. EARN A VERDICT. State a clear bias (강세/약세/중립) and the single thing that would flip it. No fence-sitting.\n"
+        "7. MAKE IT MATTER TO THE READER. Map every major move to a specific local sector/ticker and a concrete 'so what'.\n"
+        "8. NO AI TELLS, no self-reference, no repeated hedging ('~로 보입니다'). Confident, human, grounded strictly in the data provided (never invent numbers).\n"
+        "Tone: serious but readable — neither dry wire-copy nor hype. Every sentence must inform or advance the argument; cut the rest.\n"
+    )
+    prompt = prompt + writing_guide
 
     # V4 FACT-CHECK PROTOCOL — mandatory 2-3 source cross-verification for
     # every numeric data point. Without this Claude takes one web_search
