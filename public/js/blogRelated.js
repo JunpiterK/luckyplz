@@ -251,6 +251,7 @@
             + '.lp-rel-card.cat-industry::before{background:linear-gradient(180deg,#e0a33e,rgba(224,163,62,0))}'
             + '.lp-rel-card.cat-football::before{background:linear-gradient(180deg,#8b5cf6,rgba(139,92,246,0))}'
             + '.lp-rel-card.cat-baseball::before{background:linear-gradient(180deg,#f43f5e,rgba(244,63,94,0))}'
+            + '.lp-rel-card.cat-worldcup::before{background:linear-gradient(180deg,#2dd4bf,rgba(45,212,191,0))}'
             + '.lp-rel-card.cat-gaming-history::before{background:linear-gradient(180deg,#FFE66D,rgba(255,230,109,0))}'
             + '.lp-rel-card.cat-lifestyle::before{background:linear-gradient(180deg,#FFE66D,rgba(255,230,109,0))}'
             + '.lp-rel-card.cat-probability::before{background:linear-gradient(180deg,#00D9FF,rgba(0,217,255,0))}'
