@@ -5,14 +5,17 @@
   Fields:
   - lang:     ko | en — each post is written natively in one language; cross-lang
               siblings are linked via `alt`.
-  - category: lifestyle | probability | space-tech | ai-tech | industry | build
+  - category: stocks | industry | ai-tech | space-tech | football | baseball | gaming-history
+              (overhauled 2026-06-11 — see the BLOG_CATEGORIES block below)
+              `stocks` (증시): daily auto market recaps (us/kr/cn) + macro/markets.
+              `industry` (산업): sector/economy deep dives (semiconductors,
+              datacenters, robotics, solar, energy, digital economy).
               `space-tech` covers the entire space-industry corpus (SpaceX IPO,
-              Starlink, Falcon, the 우주 진화사 series). General industry posts
-              (datacenters, semiconductors, robotics, solar) stay in `industry`
-              so the SpaceX-IPO traffic doesn't drown them out.
-              The legacy `tech-space` slug was renamed to `space-tech` on
-              2026-05-06; old `?cat=tech-space` links fall back to "all" via
-              the index.html validation.
+              Starlink, Falcon, 우주 진화사). `gaming-history` (게임) absorbed the
+              retired `lifestyle` + `probability` slugs. `football`/`baseball`
+              feed the daily sports auto-publish system.
+              Legacy slugs (`tech-space`, `lifestyle`, `probability`, `build`)
+              fall back to "all" via index.html validation.
 
   Index renders only posts matching the user's current lang. Users whose
   lang has no posts see an empty-state CTA pointing to the primary pool.
@@ -73,7 +76,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -86,7 +89,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -99,7 +102,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -112,7 +115,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -229,7 +232,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-11',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -242,7 +245,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-11-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -255,7 +258,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-11-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -268,7 +271,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-11-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-11',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -281,7 +284,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -294,7 +297,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -307,7 +310,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -320,7 +323,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -333,7 +336,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -346,7 +349,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -359,7 +362,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -372,7 +375,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -385,7 +388,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -398,7 +401,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -411,7 +414,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -424,7 +427,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -437,7 +440,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -450,7 +453,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -463,7 +466,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -476,7 +479,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -541,7 +544,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -554,7 +557,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -567,7 +570,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -580,7 +583,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -593,7 +596,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -606,7 +609,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -619,7 +622,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -632,7 +635,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -645,7 +648,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -658,7 +661,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -671,7 +674,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -684,7 +687,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-10-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-10',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -697,7 +700,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -710,7 +713,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -723,7 +726,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -736,7 +739,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -749,7 +752,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -762,7 +765,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -775,7 +778,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -788,7 +791,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -801,7 +804,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -814,7 +817,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -827,7 +830,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -840,7 +843,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -853,7 +856,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -866,7 +869,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -879,7 +882,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -892,7 +895,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -905,7 +908,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -918,7 +921,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -931,7 +934,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -944,7 +947,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -957,7 +960,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -970,7 +973,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -983,7 +986,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -996,7 +999,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1009,7 +1012,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1022,7 +1025,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1035,7 +1038,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1048,7 +1051,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-09-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-09',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1061,7 +1064,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1074,7 +1077,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1087,7 +1090,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1100,7 +1103,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1113,7 +1116,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1126,7 +1129,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1139,7 +1142,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1152,7 +1155,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1165,7 +1168,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1178,7 +1181,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1191,7 +1194,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1204,7 +1207,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1217,7 +1220,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1230,7 +1233,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1243,7 +1246,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1256,7 +1259,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1269,7 +1272,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-08',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1282,7 +1285,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-08-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1295,7 +1298,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-08-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1308,7 +1311,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-08-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-08',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1321,7 +1324,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-06',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1334,7 +1337,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-06',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1347,7 +1350,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-06',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1360,7 +1363,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-06',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1373,7 +1376,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1386,7 +1389,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1399,7 +1402,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1412,7 +1415,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1425,7 +1428,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1438,7 +1441,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1451,7 +1454,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1464,7 +1467,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1477,7 +1480,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1490,7 +1493,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1503,7 +1506,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1516,7 +1519,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1529,7 +1532,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1542,7 +1545,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1555,7 +1558,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1568,7 +1571,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1581,7 +1584,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1594,7 +1597,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1607,7 +1610,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1620,7 +1623,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1633,7 +1636,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1646,7 +1649,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1659,7 +1662,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1672,7 +1675,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -1685,7 +1688,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-05',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1698,7 +1701,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-05-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1711,7 +1714,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-05-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1724,7 +1727,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-05-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-05',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1737,7 +1740,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1750,7 +1753,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1763,7 +1766,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1776,7 +1779,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -1789,7 +1792,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1802,7 +1805,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1815,7 +1818,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1828,7 +1831,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -1841,7 +1844,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1854,7 +1857,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1867,7 +1870,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1880,7 +1883,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -1893,7 +1896,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1906,7 +1909,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1919,7 +1922,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1932,7 +1935,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -1945,7 +1948,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1958,7 +1961,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1971,7 +1974,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1984,7 +1987,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -1997,7 +2000,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2010,7 +2013,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2023,7 +2026,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2036,7 +2039,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2049,7 +2052,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2062,7 +2065,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2075,7 +2078,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2088,7 +2091,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-04-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-04',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2101,7 +2104,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2114,7 +2117,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2127,7 +2130,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2140,7 +2143,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2153,7 +2156,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2166,7 +2169,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2179,7 +2182,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2192,7 +2195,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2205,7 +2208,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2218,7 +2221,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2231,7 +2234,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2244,7 +2247,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2257,7 +2260,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2270,7 +2273,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2283,7 +2286,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2296,7 +2299,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2309,7 +2312,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2322,7 +2325,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2335,7 +2338,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2348,7 +2351,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2361,7 +2364,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2374,7 +2377,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2387,7 +2390,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2400,7 +2403,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2413,7 +2416,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2426,7 +2429,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2439,7 +2442,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2452,7 +2455,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-03-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-03',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2465,7 +2468,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2478,7 +2481,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2491,7 +2494,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2504,7 +2507,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2517,7 +2520,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2530,7 +2533,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2543,7 +2546,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2556,7 +2559,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2569,7 +2572,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2582,7 +2585,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2595,7 +2598,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2608,7 +2611,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2621,7 +2624,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2634,7 +2637,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2647,7 +2650,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2660,7 +2663,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -2673,7 +2676,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2686,7 +2689,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2699,7 +2702,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2712,7 +2715,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -2725,7 +2728,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-01',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2738,7 +2741,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-01-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2751,7 +2754,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-01-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2764,7 +2767,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-06-01-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2777,7 +2780,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2790,7 +2793,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2803,7 +2806,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2816,7 +2819,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-02-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-02',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2829,7 +2832,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-01',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2842,7 +2845,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-01-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2855,7 +2858,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-01-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2868,7 +2871,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-06-01-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -2881,7 +2884,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-01',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2894,7 +2897,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-01-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2907,7 +2910,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-01-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2920,7 +2923,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-06-01-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -2933,7 +2936,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-01',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2946,7 +2949,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-01-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2959,7 +2962,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-01-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2972,7 +2975,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-06-01-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-06-01',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -2985,7 +2988,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-29',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-30',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -2998,7 +3001,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-29-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-30',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3011,7 +3014,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-29-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-30',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3024,7 +3027,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-29-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-30',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3037,7 +3040,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-29',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3050,7 +3053,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-29-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3063,7 +3066,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-29-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3076,7 +3079,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-29-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3089,7 +3092,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-29',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3102,7 +3105,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-29-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3115,7 +3118,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-29-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3128,7 +3131,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-29-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3323,7 +3326,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-29',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3336,7 +3339,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-29-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3349,7 +3352,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-29-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3362,7 +3365,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-29-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3479,7 +3482,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-29',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3492,7 +3495,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-29-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3505,7 +3508,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-29-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3518,7 +3521,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-29-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3531,7 +3534,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3544,7 +3547,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3557,7 +3560,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3570,7 +3573,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-29',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3583,7 +3586,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3596,7 +3599,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3609,7 +3612,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3622,7 +3625,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3635,7 +3638,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3648,7 +3651,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3661,7 +3664,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3674,7 +3677,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -3687,7 +3690,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3700,7 +3703,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3713,7 +3716,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3726,7 +3729,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -3739,7 +3742,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3752,7 +3755,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3765,7 +3768,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3778,7 +3781,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3791,7 +3794,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3804,7 +3807,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3817,7 +3820,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3830,7 +3833,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -3843,7 +3846,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3856,7 +3859,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3869,7 +3872,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3882,7 +3885,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -3895,7 +3898,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3908,7 +3911,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3921,7 +3924,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3934,7 +3937,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -3947,7 +3950,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3960,7 +3963,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3973,7 +3976,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3986,7 +3989,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -3999,7 +4002,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4012,7 +4015,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4025,7 +4028,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4038,7 +4041,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4051,7 +4054,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4064,7 +4067,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4077,7 +4080,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4090,7 +4093,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-28-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-28',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4103,7 +4106,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4116,7 +4119,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4129,7 +4132,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4142,7 +4145,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4155,7 +4158,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -4168,7 +4171,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -4181,7 +4184,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -4194,7 +4197,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -4207,7 +4210,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4220,7 +4223,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4233,7 +4236,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4246,7 +4249,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4259,7 +4262,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4272,7 +4275,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4285,7 +4288,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4298,7 +4301,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4311,7 +4314,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-26',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4324,7 +4327,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-26-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4337,7 +4340,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-26-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4350,7 +4353,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-26-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -4363,7 +4366,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-27',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4376,7 +4379,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-27-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4389,7 +4392,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-27-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4402,7 +4405,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-27-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-27',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4415,7 +4418,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-26',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4428,7 +4431,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-26-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4441,7 +4444,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-26-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4454,7 +4457,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-26-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -4467,7 +4470,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-26',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4480,7 +4483,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-26-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4493,7 +4496,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-26-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4506,7 +4509,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-tech-recap-2026-05-26-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 7,
     coverEmoji: '🇨🇳',
@@ -4519,7 +4522,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-26',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4532,7 +4535,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-26-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4545,7 +4548,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-26-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4558,7 +4561,7 @@ window.BLOG_POSTS = [
     {
     slug: 'cn-open-brief-2026-05-26-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇨🇳',
@@ -4571,7 +4574,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-26',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4584,7 +4587,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-26-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4597,7 +4600,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-26-ja',
     lang: 'ja',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4610,7 +4613,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-26-zh',
     lang: 'zh',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-26',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4970,7 +4973,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-22',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -4982,7 +4985,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-22-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5046,7 +5049,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5058,7 +5061,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5070,7 +5073,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5082,7 +5085,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5094,7 +5097,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5106,7 +5109,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5131,7 +5134,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-22',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5143,7 +5146,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-22-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-22',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5155,7 +5158,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5167,7 +5170,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5179,7 +5182,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5191,7 +5194,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5203,7 +5206,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5215,7 +5218,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5227,7 +5230,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5239,7 +5242,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5251,7 +5254,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-21',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5263,7 +5266,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-21-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-21',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5275,7 +5278,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5287,7 +5290,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5299,7 +5302,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5311,7 +5314,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5323,7 +5326,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5335,7 +5338,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5347,7 +5350,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5359,7 +5362,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5371,7 +5374,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5383,7 +5386,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5395,7 +5398,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-20',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5407,7 +5410,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-20-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-20',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5419,7 +5422,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5431,7 +5434,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5443,7 +5446,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5455,7 +5458,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5467,7 +5470,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5479,7 +5482,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5491,7 +5494,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5503,7 +5506,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5515,7 +5518,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5527,7 +5530,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5539,7 +5542,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-19',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5551,7 +5554,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-19-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5563,7 +5566,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5575,7 +5578,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5587,7 +5590,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5599,7 +5602,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5611,7 +5614,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5623,7 +5626,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-19',
     readMinutes: 8,
     coverEmoji: '🇺🇸',
@@ -5635,7 +5638,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5647,7 +5650,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5659,7 +5662,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5671,7 +5674,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5683,7 +5686,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5695,7 +5698,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5707,7 +5710,7 @@ window.BLOG_POSTS = [
     {
     slug: 'us-premarket-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5719,7 +5722,7 @@ window.BLOG_POSTS = [
 {
     slug: 'us-premarket-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇺🇸',
@@ -5731,7 +5734,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-open-brief-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5743,7 +5746,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-open-brief-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 6,
     coverEmoji: '🇰🇷',
@@ -5755,7 +5758,7 @@ window.BLOG_POSTS = [
     {
     slug: 'kr-tech-recap-2026-05-18',
     lang: 'ko',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5767,7 +5770,7 @@ window.BLOG_POSTS = [
 {
     slug: 'kr-tech-recap-2026-05-18-en',
     lang: 'en',
-    category: 'industry',
+    category: 'stocks',
     date: '2026-05-18',
     readMinutes: 7,
     coverEmoji: '🇰🇷',
@@ -5779,7 +5782,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-open-brief-2026-05-18',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-18',
         readMinutes: 10,
         coverEmoji: '🇺🇸',
@@ -5791,7 +5794,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-open-brief-2026-05-18-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-18',
         readMinutes: 10,
         coverEmoji: '🇺🇸',
@@ -5803,7 +5806,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-18',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-18',
         readMinutes: 10,
         coverEmoji: '🇰🇷',
@@ -5815,7 +5818,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-18-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-18',
         readMinutes: 10,
         coverEmoji: '🇰🇷',
@@ -5827,7 +5830,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-15',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-15',
         readMinutes: 9,
         coverEmoji: '🇰🇷',
@@ -5839,7 +5842,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-15-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-15',
         readMinutes: 9,
         coverEmoji: '🇰🇷',
@@ -5851,7 +5854,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-14',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-14',
         readMinutes: 9,
         coverEmoji: '🇰🇷',
@@ -5863,7 +5866,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-14-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-14',
         readMinutes: 9,
         coverEmoji: '🇰🇷',
@@ -5875,7 +5878,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-recap-2026-05-13',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-14',
         readMinutes: 10,
         coverEmoji: '🇺🇸',
@@ -5887,7 +5890,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-recap-2026-05-13-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-14',
         readMinutes: 10,
         coverEmoji: '🇺🇸',
@@ -5899,7 +5902,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ppi-10-prints-2026-may-analysis',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 15,
         coverEmoji: '📊',
@@ -5911,7 +5914,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ppi-10-prints-2026-may-analysis-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 15,
         coverEmoji: '📊',
@@ -5923,7 +5926,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ppi-10-prints-2026-may-analysis-ja',
         lang: 'ja',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 15,
         coverEmoji: '📊',
@@ -5935,7 +5938,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ppi-10-prints-2026-may-analysis-zh',
         lang: 'zh',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 15,
         coverEmoji: '📊',
@@ -5947,7 +5950,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-open-brief-2026-05-13',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 9,
         coverEmoji: '🇺🇸',
@@ -5959,7 +5962,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-close-brief-2026-05-13',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 8,
         coverEmoji: '🇰🇷',
@@ -6019,7 +6022,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-13',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 7,
         coverEmoji: '🇰🇷',
@@ -6031,7 +6034,7 @@ window.BLOG_POSTS = [
     {
         slug: 'kr-open-brief-2026-05-13-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 7,
         coverEmoji: '🇰🇷',
@@ -6043,7 +6046,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-tech-recap-2026-05-12',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 9,
         coverEmoji: '🇺🇸',
@@ -6055,7 +6058,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-tech-recap-2026-05-12-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-13',
         readMinutes: 9,
         coverEmoji: '🇺🇸',
@@ -6067,7 +6070,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-tech-recap-2026-05-11',
         lang: 'ko',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-12',
         readMinutes: 8,
         coverEmoji: '🇺🇸',
@@ -6079,7 +6082,7 @@ window.BLOG_POSTS = [
     {
         slug: 'us-tech-recap-2026-05-11-en',
         lang: 'en',
-        category: 'industry',
+        category: 'stocks',
         date: '2026-05-12',
         readMinutes: 8,
         coverEmoji: '🇺🇸',
@@ -6374,7 +6377,7 @@ window.BLOG_POSTS = [
     {
         slug: 'presentation-order-fair',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '📚',
@@ -6385,7 +6388,7 @@ window.BLOG_POSTS = [
     {
         slug: 'presentation-order-fair-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '📚',
@@ -6397,7 +6400,7 @@ window.BLOG_POSTS = [
     {
         slug: 'presentation-order-fair-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '📚',
@@ -6409,7 +6412,7 @@ window.BLOG_POSTS = [
     {
         slug: 'presentation-order-fair-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '📚',
@@ -6421,7 +6424,7 @@ window.BLOG_POSTS = [
     {
         slug: 'wedding-mc-games',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '💍',
@@ -6432,7 +6435,7 @@ window.BLOG_POSTS = [
     {
         slug: 'wedding-mc-games-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '💍',
@@ -6444,7 +6447,7 @@ window.BLOG_POSTS = [
     {
         slug: 'wedding-mc-games-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '💍',
@@ -6456,7 +6459,7 @@ window.BLOG_POSTS = [
     {
         slug: 'wedding-mc-games-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '💍',
@@ -6468,7 +6471,7 @@ window.BLOG_POSTS = [
     {
         slug: 'elementary-team-grouping',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '📚',
@@ -6479,7 +6482,7 @@ window.BLOG_POSTS = [
     {
         slug: 'elementary-team-grouping-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '📚',
@@ -6491,7 +6494,7 @@ window.BLOG_POSTS = [
     {
         slug: 'elementary-team-grouping-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '📚',
@@ -6503,7 +6506,7 @@ window.BLOG_POSTS = [
     {
         slug: 'elementary-team-grouping-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 7,
         coverEmoji: '📚',
@@ -6515,7 +6518,7 @@ window.BLOG_POSTS = [
     {
         slug: 'club-seating-fair',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '⛪',
@@ -6526,7 +6529,7 @@ window.BLOG_POSTS = [
     {
         slug: 'club-seating-fair-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '⛪',
@@ -6538,7 +6541,7 @@ window.BLOG_POSTS = [
     {
         slug: 'club-seating-fair-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '⛪',
@@ -6550,7 +6553,7 @@ window.BLOG_POSTS = [
     {
         slug: 'club-seating-fair-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 6,
         coverEmoji: '⛪',
@@ -6562,7 +6565,7 @@ window.BLOG_POSTS = [
     {
         slug: 'picnic-game-ideas',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 9,
         coverEmoji: '🌳',
@@ -6573,7 +6576,7 @@ window.BLOG_POSTS = [
     {
         slug: 'picnic-game-ideas-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 9,
         coverEmoji: '🌳',
@@ -6585,7 +6588,7 @@ window.BLOG_POSTS = [
     {
         slug: 'picnic-game-ideas-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 9,
         coverEmoji: '🌳',
@@ -6597,7 +6600,7 @@ window.BLOG_POSTS = [
     {
         slug: 'picnic-game-ideas-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-07',
         readMinutes: 9,
         coverEmoji: '🌳',
@@ -8170,7 +8173,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ladder-fairness-simulation',
         lang: 'ko',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 11,
         coverEmoji: '🪜',
@@ -8181,7 +8184,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ladder-fairness-simulation-en',
         lang: 'en',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 11,
         coverEmoji: '🪜',
@@ -8193,7 +8196,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ladder-fairness-simulation-ja',
         lang: 'ja',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 11,
         coverEmoji: '🪜',
@@ -8205,7 +8208,7 @@ window.BLOG_POSTS = [
     {
         slug: 'ladder-fairness-simulation-zh',
         lang: 'zh',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 11,
         coverEmoji: '🪜',
@@ -8217,7 +8220,7 @@ window.BLOG_POSTS = [
     {
         slug: 'dinner-menu-fair',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 6,
         coverEmoji: '🍱',
@@ -8228,7 +8231,7 @@ window.BLOG_POSTS = [
     {
         slug: 'dinner-menu-fair-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 6,
         coverEmoji: '🍱',
@@ -8240,7 +8243,7 @@ window.BLOG_POSTS = [
     {
         slug: 'dinner-menu-fair-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 6,
         coverEmoji: '🍱',
@@ -8252,7 +8255,7 @@ window.BLOG_POSTS = [
     {
         slug: 'dinner-menu-fair-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-05-04',
         readMinutes: 6,
         coverEmoji: '🍱',
@@ -8264,7 +8267,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-history-story',
         lang: 'ko',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-20',
         readMinutes: 7,
         coverEmoji: '🏛️',
@@ -8275,7 +8278,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-history-story-en',
         lang: 'en',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-20',
         readMinutes: 7,
         coverEmoji: '🏛️',
@@ -8287,7 +8290,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-history-story-ja',
         lang: 'ja',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-20',
         readMinutes: 7,
         coverEmoji: '🏛️',
@@ -8299,7 +8302,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-history-story-zh',
         lang: 'zh',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-20',
         readMinutes: 7,
         coverEmoji: '🏛️',
@@ -8311,7 +8314,7 @@ window.BLOG_POSTS = [
     {
         slug: 'random-name-picker-guide',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '🎯',
@@ -8322,7 +8325,7 @@ window.BLOG_POSTS = [
     {
         slug: 'random-name-picker-guide-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '🎯',
@@ -8334,7 +8337,7 @@ window.BLOG_POSTS = [
     {
         slug: 'random-name-picker-guide-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '🎯',
@@ -8346,7 +8349,7 @@ window.BLOG_POSTS = [
     {
         slug: 'random-name-picker-guide-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '🎯',
@@ -8358,7 +8361,7 @@ window.BLOG_POSTS = [
     {
         slug: 'powerball-random-generator',
         lang: 'en',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎰',
@@ -8370,7 +8373,7 @@ window.BLOG_POSTS = [
     {
         slug: 'powerball-random-generator-en',
         lang: 'en',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎰',
@@ -8382,7 +8385,7 @@ window.BLOG_POSTS = [
     {
         slug: 'powerball-random-generator-ja',
         lang: 'ja',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎰',
@@ -8394,7 +8397,7 @@ window.BLOG_POSTS = [
     {
         slug: 'powerball-random-generator-zh',
         lang: 'zh',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎰',
@@ -8406,7 +8409,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-country-compare',
         lang: 'ko',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎱',
@@ -8418,7 +8421,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-country-compare-en',
         lang: 'en',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎱',
@@ -8430,7 +8433,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-country-compare-ja',
         lang: 'ja',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎱',
@@ -8442,7 +8445,7 @@ window.BLOG_POSTS = [
     {
         slug: 'lotto-country-compare-zh',
         lang: 'zh',
-        category: 'probability',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 7,
         coverEmoji: '🎱',
@@ -8454,7 +8457,7 @@ window.BLOG_POSTS = [
     {
         slug: 'team-split-fair',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '👥',
@@ -8465,7 +8468,7 @@ window.BLOG_POSTS = [
     {
         slug: 'team-split-fair-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '👥',
@@ -8477,7 +8480,7 @@ window.BLOG_POSTS = [
     {
         slug: 'team-split-fair-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '👥',
@@ -8489,7 +8492,7 @@ window.BLOG_POSTS = [
     {
         slug: 'team-split-fair-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 6,
         coverEmoji: '👥',
@@ -8501,7 +8504,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-1-minute',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 5,
         coverEmoji: '☕️',
@@ -8512,7 +8515,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-1-minute-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 5,
         coverEmoji: '☕️',
@@ -8524,7 +8527,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-1-minute-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 5,
         coverEmoji: '☕️',
@@ -8536,7 +8539,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-1-minute-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-19',
         readMinutes: 5,
         coverEmoji: '☕️',
@@ -8548,7 +8551,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-who-pays',
         lang: 'ko',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-17',
         readMinutes: 4,
         coverEmoji: '☕️',
@@ -8559,7 +8562,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-who-pays-en',
         lang: 'en',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-17',
         readMinutes: 4,
         coverEmoji: '☕️',
@@ -8571,7 +8574,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-who-pays-ja',
         lang: 'ja',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-17',
         readMinutes: 4,
         coverEmoji: '☕️',
@@ -8583,7 +8586,7 @@ window.BLOG_POSTS = [
     {
         slug: 'coffee-who-pays-zh',
         lang: 'zh',
-        category: 'lifestyle',
+        category: 'gaming-history',
         date: '2026-04-17',
         readMinutes: 4,
         coverEmoji: '☕️',
@@ -8596,16 +8599,27 @@ window.BLOG_POSTS = [
 
 /* Category metadata for blog index tabs.
    Order here = order in tab UI. First item is the default ("all"). */
+/* Category set overhauled 2026-06-11:
+   - `industry` (경제·산업) split into `stocks` (증시 — daily auto market
+     recaps + macro/markets) and `industry` (산업 — sector/economy deep dives).
+     `industry` keeps its slug (so the thematic posts and ?cat=industry links
+     stay valid); only its label changed 경제·산업 → 산업.
+   - `lifestyle` (생활·결정) + `probability` (확률·통계) merged INTO
+     `gaming-history`, whose label changed 게임 역사 → 게임. Those two slugs
+     are retired (no post should carry them now) but old ?cat= links fall
+     back to "all" via index.html validation.
+   - `football` (축구) + `baseball` (야구) added for the daily sports
+     auto-publish system (La Liga · EPL · MLB).
+   - `space-tech` (renamed from `tech-space` on 2026-05-06) holds the entire
+     space-industry corpus — SpaceX IPO, Starlink, Falcon, 우주 진화사.
+   Zero-post categories are hidden by renderTabs() until a post lands. */
 window.BLOG_CATEGORIES = [
-    { slug: 'all',         emoji: '🌐', label_ko: '전체',        label_en: 'All' },
-    { slug: 'lifestyle',   emoji: '☕', label_ko: '생활·결정',   label_en: 'Lifestyle' },
-    { slug: 'probability', emoji: '🎰', label_ko: '확률·통계',   label_en: 'Probability' },
-    /* `space-tech` (renamed from `tech-space` on 2026-05-06) holds the
-       entire space-industry corpus — SpaceX IPO, Starlink, Falcon, the
-       우주 진화사 series. Industry stays for non-space industry posts. */
-    { slug: 'space-tech',  emoji: '🚀', label_ko: '우주 Tech',   label_en: 'Space Tech' },
-    { slug: 'ai-tech',     emoji: '🤖', label_ko: 'AI·테크',     label_en: 'AI Tech' },
-    { slug: 'industry',    emoji: '💰', label_ko: '경제·산업',   label_en: 'Industry' },
-    { slug: 'gaming-history', emoji: '🎮', label_ko: '게임 역사',  label_en: 'Game History' },
-    { slug: 'build',       emoji: '🔧', label_ko: '빌드인공개',  label_en: 'Build' },
+    { slug: 'all',          emoji: '🌐', label_ko: '전체',      label_en: 'All',        label_ja: 'すべて',     label_zh: '全部' },
+    { slug: 'stocks',       emoji: '📈', label_ko: '증시',      label_en: 'Markets',    label_ja: '株式市場',   label_zh: '股市' },
+    { slug: 'industry',     emoji: '🏭', label_ko: '산업',      label_en: 'Industry',   label_ja: '産業',       label_zh: '产业' },
+    { slug: 'ai-tech',      emoji: '🤖', label_ko: 'AI·테크',   label_en: 'AI Tech',    label_ja: 'AI・テック', label_zh: 'AI·科技' },
+    { slug: 'space-tech',   emoji: '🚀', label_ko: '우주 Tech', label_en: 'Space Tech', label_ja: '宇宙テック', label_zh: '太空科技' },
+    { slug: 'football',     emoji: '⚽', label_ko: '축구',      label_en: 'Football',   label_ja: 'サッカー',   label_zh: '足球' },
+    { slug: 'baseball',     emoji: '⚾', label_ko: '야구',      label_en: 'Baseball',   label_ja: '野球',       label_zh: '棒球' },
+    { slug: 'gaming-history', emoji: '🎮', label_ko: '게임',    label_en: 'Games',      label_ja: 'ゲーム',     label_zh: '游戏' },
 ];

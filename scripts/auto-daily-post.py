@@ -120,7 +120,7 @@ SLOTS = {
         "slug_prefix": "us-tech-recap",
         # "trading_date" = US ET close date the post covers
         "trading_date_offset_days": -1,    # publish day 06:00 KST covers prev US session
-        "category": "industry",
+        "category": "stocks",
         "read_min": 8,
         "cover_emoji": "🇺🇸",
         "header_label_ko": "미국 테크 마감 리캡",
@@ -132,7 +132,7 @@ SLOTS = {
         "prompt": "kr-open-brief.md",
         "slug_prefix": "kr-open-brief",
         "trading_date_offset_days": 0,
-        "category": "industry",
+        "category": "stocks",
         "read_min": 6,
         "cover_emoji": "🇰🇷",
         "header_label_ko": "한국장 개장 브리핑",
@@ -144,7 +144,7 @@ SLOTS = {
         "prompt": "kr-close-recap.md",
         "slug_prefix": "kr-tech-recap",
         "trading_date_offset_days": 0,
-        "category": "industry",
+        "category": "stocks",
         "read_min": 7,
         "cover_emoji": "🇰🇷",
         "header_label_ko": "한국 테크 마감 리캡",
@@ -156,7 +156,7 @@ SLOTS = {
         "prompt": "us-premarket.md",
         "slug_prefix": "us-premarket",
         "trading_date_offset_days": 0,    # US session that opens tonight (KST 22:30)
-        "category": "industry",
+        "category": "stocks",
         "read_min": 6,
         "cover_emoji": "🇺🇸",
         "header_label_ko": "미국 프리마켓 브리핑",
@@ -169,7 +169,7 @@ SLOTS = {
         "slug_prefix": "cn-open-brief",
         # KST 10:30 = CST 09:30 = exact CN opening. Same-day trading_date.
         "trading_date_offset_days": 0,
-        "category": "industry",
+        "category": "stocks",
         "read_min": 6,
         "cover_emoji": "🇨🇳",
         "header_label_ko": "중국장 개장 브리핑",
@@ -182,7 +182,7 @@ SLOTS = {
         "slug_prefix": "cn-tech-recap",
         # KST 16:30 = CST 15:30 = 30 min after CN close (data settled).
         "trading_date_offset_days": 0,
-        "category": "industry",
+        "category": "stocks",
         "read_min": 7,
         "cover_emoji": "🇨🇳",
         "header_label_ko": "중국 테크 마감 리캡",

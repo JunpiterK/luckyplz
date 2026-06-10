@@ -64,9 +64,12 @@ SITEMAP = ROOT / "public" / "sitemap.xml"
 
 KST = ZoneInfo("Asia/Seoul")
 
+# Category set overhauled 2026-06-11 (see public/blog/posts.js BLOG_CATEGORIES).
+# `stocks` is normally produced by auto-daily-post.py, not the manual scaffolder,
+# but it's accepted here for completeness. `lifestyle`/`probability` retired.
 VALID_CATEGORIES = {
-    "ai-tech", "space-tech", "industry",
-    "gaming-history", "lifestyle", "probability",
+    "stocks", "industry", "ai-tech", "space-tech",
+    "football", "baseball", "gaming-history",
 }
 
 VALID_SERIES = {
@@ -409,12 +412,13 @@ LABELS = {
 OG_LOCALES = {"ko": "ko_KR", "en": "en_US", "ja": "ja_JP", "zh": "zh_CN"}
 
 CATEGORY_LABELS = {
+    "stocks":         {"ko": "증시", "en": "Markets", "ja": "株式市場", "zh": "股市"},
+    "industry":       {"ko": "산업", "en": "Industry", "ja": "産業", "zh": "产业"},
     "ai-tech":        {"ko": "AI", "en": "AI", "ja": "AI", "zh": "AI"},
     "space-tech":     {"ko": "우주", "en": "Space", "ja": "宇宙", "zh": "太空"},
-    "industry":       {"ko": "산업", "en": "Industry", "ja": "産業", "zh": "产业"},
-    "gaming-history": {"ko": "게임 역사", "en": "Gaming History", "ja": "ゲーム史", "zh": "游戏史"},
-    "lifestyle":      {"ko": "라이프", "en": "Lifestyle", "ja": "ライフ", "zh": "生活"},
-    "probability":    {"ko": "확률", "en": "Probability", "ja": "確率", "zh": "概率"},
+    "football":       {"ko": "축구", "en": "Football", "ja": "サッカー", "zh": "足球"},
+    "baseball":       {"ko": "야구", "en": "Baseball", "ja": "野球", "zh": "棒球"},
+    "gaming-history": {"ko": "게임", "en": "Games", "ja": "ゲーム", "zh": "游戏"},
 }
 
 

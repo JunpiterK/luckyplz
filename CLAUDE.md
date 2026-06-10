@@ -16,13 +16,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - 모바일 우선 (세로 폰), 데스크탑·태블릿은 확장.
   - 한 게임 = 한 HTML 파일 (inline CSS/JS, 자가완결). 게임 간 의존성 만들지 말 것.
 
-### 2. 블로그 — 테크 위주 + 관련 종목 + 매일 증시
-- **목적**: 기술·산업·금융을 다루는 깊이 있는 글로 사이트 트래픽·신뢰 구축.
-- **세 갈래**:
-  - **자동 발행** — 매일 4편 증시 글 (US 마감·KR 개장·KR 마감·US 프리마켓). `scripts/auto-daily-post.py` 가 GitHub Actions cron 으로 작동. 이미 ko + en 자동 동시 작성.
+### 2. 블로그 — 테크 위주 + 관련 종목 + 매일 증시 + 스포츠
+- **목적**: 기술·산업·금융·스포츠를 다루는 깊이 있는 글로 사이트 트래픽·신뢰 구축.
+- **네 갈래**:
+  - **자동 발행 (증시)** — 매일 증시 글 (US 마감·프리마켓 / KR 개장·마감 / CN 개장·마감, 3개 시장 × 2 슬롯). `scripts/auto-daily-post.py` 가 GitHub Actions cron 으로 작동. ko + en + ja + zh 자동 동시 작성.
+  - **자동 발행 (스포츠)** — 매일 라리가·EPL·MLB 경기 결과·이슈. `scripts/auto-sports-post.py`. 리그 summary 는 객관적 테이블/이슈, 응원 코멘트는 축구=레알 마드리드·맨유, 야구=LA 다저스 팬 관점.
   - **수동 작성 시리즈** — Anthropic 시리즈, SpaceX 시리즈, AI 진화사, 우주 진화사 등 깊이 있는 longform.
-  - **수동 작성 단편** — 라이프스타일·확률·게이밍사 등 단발성 글.
-- **카테고리 (6종)**: `ai-tech`, `space-tech`, `industry`, `gaming-history`, `lifestyle`, `probability`. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
+  - **수동 작성 단편** — 산업·게임·확률 등 단발성 글.
+- **카테고리 (7종, 2026-06-11 개편)**: `stocks`(증시), `industry`(산업), `ai-tech`(AI·테크), `space-tech`(우주 Tech), `football`(축구), `baseball`(야구), `gaming-history`(게임). 정의는 [public/blog/posts.js](public/blog/posts.js) 의 `BLOG_CATEGORIES` 가 단일 진실원천. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
+  - 개편 매핑: 구 `industry`(경제·산업) → 데일리 증시는 `stocks`, 섹터/경제 심층은 `industry`(라벨만 산업으로). 구 `lifestyle`+`probability` → `gaming-history`(라벨 게임). 신설 `football`·`baseball`. 구 슬러그(`lifestyle`/`probability`/`build`/`tech-space`)는 index.html 검증에서 "all" 로 폴백.
 
 ### 운영자의 압축 메시지
 > 게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 **한국어·영어·일본어·중국어(간체) 4종 동시 운영**.
@@ -149,6 +151,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `exchange-calendars` pin (`requirements.txt` >= 4.10.0) — 4.5.x 는 XSHG 데이터가 2025-12-31 까지라 2026 lookup 시 `DateOutOfBounds` 발생. lookup 실패는 hard-skip 으로 처리되므로 silent 가 아니지만, 핀이 안 맞으면 그 슬롯 1개가 매일 hard-skip 된다. workflow 로그에서 `[guard] tier-1 ... lookup FAILED ... DateOutOfBounds` 보이면 핀 버전 bump.
 
 휴장에 글이 또 올라간 게 보이면 → (a) 가드가 통과된 이유를 로그에서 확인, (b) `scripts/delete-weekend-posts.py --apply` 로 일괄 정리, (c) 가드 회피 경로 패치. 정리 스크립트는 base + en/ja/zh 4판 + posts.js + sitemap + OG 까지 한 번에 처리하는 멱등 스크립트다.
+
+**Sports auto-publish (라리가·EPL·MLB 일일 발행 — 2026-06-11 신설).** `scripts/auto-sports-post.py` 가 매일 2 슬롯을 발행한다 (`.github/workflows/sports-cron.yml`):
+- **`football-daily`** (category `football`) — 라리가(PD) + EPL(PL), `football-data.org` v4 API. **`FOOTBALL_DATA_KEY` repo secret 필요** (무료 키, https://www.football-data.org/client/register). cron `20 1 * * *` (10:20 KST, 어제 유럽 경기).
+- **`baseball-daily`** (category `baseball`) — MLB, `statsapi.mlb.com` (키 불필요). cron `50 8 * * *` (17:50 KST, 어제 MLB 슬레이트). 응원 관점: 축구=레알·맨유, 야구=LA 다저스.
+- **팩트 안전 설계 (핵심)**: 경기 결과·순위표 테이블은 **API JSON 에서 직접 렌더**된다. Claude 는 점수를 만질 기회가 없고, **산문(summary·이슈·팬 코멘트)만** 작성한다 → 점수 조작이 구조적으로 불가능. 리그 summary·이슈는 객관적, '팬 시각' 박스만 주관적(명시 라벨).
+- **무경기 가드**: 모니터 리그가 그 날짜에 Final 경기 0개면 깨끗하게 skip + HC success ping. 라리가·EPL 여름 휴식기(6~7월)·MLB 오프시즌(11~3월) 자동 비발행. 휴장 weekend 가드는 **불필요**(스포츠는 주말에도 경기) — 증시 가드 로직과 혼동 금지.
+- 인프라는 `auto-daily-post.py` 의 검증된 함수(`call_claude` retry+fallback, `notify_healthcheck`, `update_sitemap`, `bump_cache`, `git_push`)를 importlib 로 재사용한다. 템플릿은 `daily-base.html` 공용(스포츠는 `article:section`=Sports 로 치환). CSS 는 `public/css/daily.css` 의 `.sp-*` 컴포넌트. OG 는 `scripts/gen_sports_og.py` (gen_daily_og 폰트 재사용, 축구=초록 잔디·야구=네이비 다이아 테마). 프롬프트는 `scripts/prompts/football-daily.md` / `baseball-daily.md`.
+- 운영 첫 가동: (1) `FOOTBALL_DATA_KEY` secret 등록, (2) `gh workflow run sports-cron.yml -f slot=baseball-daily` 로 야구 1편 즉시 발행 테스트(MLB 시즌 중이라 바로 됨), (3) 축구는 8월 시즌 재개 시 자동 가동. 선택: `HC_URL_FOOTBALL_DAILY` / `HC_URL_BASEBALL_DAILY` HC 체크 추가.
 
 **No service worker.** `public/sw.js` exists only as a self-destruct routine for legacy installs (deletes all caches and unregisters itself on activation). Every HTML page also includes an inline `navigator.serviceWorker.getRegistrations().forEach(unregister)` right before `siteFooter.js` as a belt-and-suspenders cleanup. **Do not re-introduce a caching service worker.** Stale-SW debugging cost hours during the April 2026 Lotto redesign; if you need offline support later, use versioned asset filenames or a signed-off-on plan, not a revival of the old network-first SW.
 
