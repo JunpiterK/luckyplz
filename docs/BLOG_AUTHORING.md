@@ -21,16 +21,17 @@ luckyplz.com 의 블로그는 **테크 위주 깊이 있는 글** 이 중심이�
 
 ## 2. 카테고리 6종 — 어디에 분류할지
 
-posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 메인의 필터 탭에 그대로 노출**되므로 일관성 중요.
+posts.js 의 `category` 필드는 7종 중 하나 (2026-06-11 개편). **카테고리는 블로그 메인의 필터 탭에 그대로 노출**되므로 일관성 중요. 단일 진실원천은 [public/blog/posts.js](../public/blog/posts.js) 의 `BLOG_CATEGORIES`.
 
 | 카테고리 | 정의 | 톤·길이 | 대표 예시 |
 |---|---|---|---|
-| **ai-tech** | AI 모델·기업·역사·기술 | 깊이 있게, 12~18분 | Anthropic 시리즈, AI 진화사 (ai-evo-01~08) |
-| **space-tech** | 우주 산업 전체 (SpaceX·Starlink·발사·계약·IPO·우주사) | 깊이 있게, 12~20분 | SpaceX IPO, Starship 발사, 우주 진화사 (space-evo-01~10), Echo Star 위성 |
-| **industry** | AI 외 산업 (반도체·데이터센터·로봇·태양광·자동차·바이오) **+ 자동 발행 증시 글** | 6~14분 | AI 데이터센터 전력, 반도체 랠리, 자동발행 us-tech-recap 등 |
-| **gaming-history** | 레트로 게임 역사·문화 | 가볍게, 6~10분 | Pacman Namco, Tetris Soviet, Snake Nokia, Breakout Jobs/Wozniak |
-| **lifestyle** | 일상·공정성·작은 결정 도구 | 가볍게, 4~8분 | Coffee 1 Minute, Coffee Who Pays, Dinner Menu Fair, Wedding MC Games |
-| **probability** | 확률·랜덤·로또 분석 | 6~12분 | Lotto History, Ladder Fairness, Lotto Country Compare, Powerball Random |
+| **stocks** (증시) | 자동 발행 증시 글 (us/kr/cn 마감·개장) + 거시·마켓 | 6~9분 | 자동발행 us-tech-recap / kr-open-brief / cn-tech-recap, PPI 분석 |
+| **industry** (산업) | 섹터·경제 심층 (반도체·데이터센터·로봇·태양광·에너지·디지털 경제) | 6~14분 | AI 데이터센터 전력, 반도체 랠리, 휴머노이드 로봇, 호르무즈 경제, 디지털 월세 |
+| **ai-tech** (AI·테크) | AI 모델·기업·역사·기술 | 깊이 있게, 12~18분 | Anthropic 시리즈, AI 진화사 (ai-evo-01~08) |
+| **space-tech** (우주 Tech) | 우주 산업 전체 (SpaceX·Starlink·발사·계약·IPO·우주사) | 깊이 있게, 12~20분 | SpaceX IPO, Starship 발사, 우주 진화사 (space-evo-01~10) |
+| **football** (축구) | 라리가·EPL 경기 결과·이슈 (자동 발행) + 축구 기획 | 5~9분 | 자동발행 라리가/EPL 데일리, 레알·맨유 관점 코멘트 |
+| **baseball** (야구) | MLB 경기 결과·이슈 (자동 발행) + 야구 기획 | 5~9분 | 자동발행 MLB 데일리, LA 다저스 관점 코멘트 |
+| **gaming-history** (게임) | 행운의 게임·레트로 게임 역사·확률·결정 도구 (구 lifestyle+probability 흡수) | 가볍게, 4~12분 | Pacman/Tetris/Snake 역사, Lotto 분석, Ladder Fairness, Coffee Who Pays |
 
 ### 카테고리 추가 절차 (향후 확장)
 1. 6종 안에 안 맞는 글 후보가 누적 5편 이상 모이면 새 카테고리 검토.
@@ -246,7 +247,7 @@ posts.js 의 `category` 필드는 6종 중 하나. **카테고리는 블로그 �
 | 트리거 | GitHub Actions cron | Claude Code 세션 또는 사용자 직접 |
 | 시장 | us, kr, **cn** (3개 시장 × 개장/마감 2 슬롯 = 6 슬롯) | — |
 | 언어 | ko + en + ja + zh (4종, **영어 원천 → 3언어 번역**) | ko + en + ja + zh (4종, **한국어 원천 → 3언어 번역**) |
-| 카테고리 | `industry` 고정 | 6종 중 선택 |
+| 카테고리 | 증시=`stocks` 고정, 스포츠=`football`/`baseball` | 7종 중 선택 |
 | 데이터 | yfinance 하드 페치 → 프롬프트 주입 | 수동 리서치 |
 | 길이 | 600~900 단어 narrative | 자유 (보통 6~20분 읽기) |
 | 톤 | 분석 보고서 | 스토리텔링·에세이 |
