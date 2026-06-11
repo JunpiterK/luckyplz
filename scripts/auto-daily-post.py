@@ -2135,50 +2135,18 @@ def update_posts_js(slug: str, slot: str, data: dict, publish_date: str,
 
 def update_sitemap(slug: str, publish_date: str,
                    langs: list[str] | None = None) -> None:
-    """Append one <url> block per published language to sitemap.xml.
+    """No-op for daily auto-posts (2026-06-11 정책).
 
-    Each block carries hreflang alternates for every Tier A language so
-    Google Search Console understands the full cluster, even when only a
-    subset is published (ja/zh fall through to en for search indexing
-    until the prompt is extended to emit them).
+    일별 증시·스포츠 자동발행 글은 `noindex,follow` (daily-base.html 에
+    baked) 로 검색엔진에서 제외된다 — AdSense scaled-content 리스크 헷지.
+    noindex URL 은 sitemap 에 넣지 않는 것이 표준이며 (Google: "don't
+    list noindex URLs in your sitemap"), 넣으면 Search Console 에
+    "Submitted URL marked noindex" 경고만 쌓인다. 그래서 일별 글은
+    sitemap 에 등록하지 않는다. durable SEO 는 주간 통합 리캡(별도 색인)
+    에 집중. 과거에 등록됐던 일별 블록은 scripts/noindex-daily-autoposts.py
+    가 일괄 제거했다.
     """
-    if langs is None:
-        langs = ["ko", "en"]
-
-    sm_path = PUBLIC / "sitemap.xml"
-    raw = sm_path.read_text(encoding="utf-8")
-
-    # Build the cluster of <url> blocks for this slug × langs combination.
-    # Each block reuses the same hreflang alternates so the search engine
-    # sees the language cluster consistently from every entry point.
-    blocks = []
-    for lang in langs:
-        suffix = LANG_META[lang]["slug_suffix"]
-        url_slug = f"{slug}{suffix}"
-        block = textwrap.dedent(f"""\
-            <url>
-                <loc>https://luckyplz.com/blog/{url_slug}/</loc>
-                <lastmod>{publish_date}</lastmod>
-                <changefreq>daily</changefreq>
-                <priority>0.85</priority>
-                <xhtml:link rel="alternate" hreflang="ko" href="https://luckyplz.com/blog/{slug}/"/>
-                <xhtml:link rel="alternate" hreflang="en" href="https://luckyplz.com/blog/{slug}-en/"/>
-                <xhtml:link rel="alternate" hreflang="ja" href="https://luckyplz.com/blog/{slug}-ja/"/>
-                <xhtml:link rel="alternate" hreflang="zh" href="https://luckyplz.com/blog/{slug}-zh/"/>
-                <xhtml:link rel="alternate" hreflang="x-default" href="https://luckyplz.com/blog/{slug}-en/"/>
-            </url>
-            """)
-        blocks.append(block)
-
-    new_block = "\n".join(blocks) + "\n"
-
-    anchor = "<url>\n        <loc>https://luckyplz.com/blog/us-tech-recap-2026-05-11/</loc>"
-    if anchor in raw:
-        raw = raw.replace(anchor, new_block + "    " + anchor.lstrip())
-    else:
-        raw = raw.replace("</urlset>", new_block + "</urlset>")
-    sm_path.write_text(raw, encoding="utf-8")
-    print(f"[sitemap] added {slug} for langs={','.join(langs)}")
+    print(f"[sitemap] skip {slug} (noindex daily auto-post — not listed)")
 
 
 def bump_cache() -> None:
