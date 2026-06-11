@@ -308,7 +308,7 @@ try{
        and is idempotent across multiple loads. */
     if(!window.LpFullscreen){
         var fs=document.createElement('script');
-        fs.src='/js/lpFullscreen.js?v=1781175524';
+        fs.src='/js/lpFullscreen.js?v=1781176667';
         document.body.appendChild(fs);
     }
 
@@ -321,20 +321,21 @@ try{
        the right browser from the first hop, not just /games/*. */
     if(!window.LpInAppExit){
         var ia=document.createElement('script');
-        ia.src='/js/lpInAppExit.js?v=1781175524';
+        ia.src='/js/lpInAppExit.js?v=1781176667';
         ia.defer=true;
         document.body.appendChild(ia);
     }
 
     /* Random-shuffle BGM for /games/* pages. Self-skips if no
        /assets/bgm/<gameId>/track*.mp3 files exist, or if the gameId
-       is in its internal SKIP_GAMES list (car-racing + dodge ship
-       their own audio engines). Module's own first-interaction
-       listener triggers playback after the user's first tap, so even
-       a slow defer load won't cause missed audio. */
+       is in its internal SKIP_GAMES list (car-racing + dodge + tetris
+       ship their own audio engines). 2026-06-11 정책: 페이지 진입
+       시 자동재생하지 않는다. 각 게임의 시작 핸들러가 LpBgm.start()
+       (모듈 로드 전이면 window.__lpBgmWanted=true) 를 호출할 때만
+       재생 시작. */
     if(isGamePage&&!window.LpBgm){
         var bgm=document.createElement('script');
-        bgm.src='/js/lpBgm.js?v=1781175524';
+        bgm.src='/js/lpBgm.js?v=1781176667';
         bgm.defer=true;
         document.body.appendChild(bgm);
     }
@@ -347,12 +348,12 @@ try{
        without waiting on script-load. */
     if(isGamePage&&!window.LpWakeLock){
         var wl=document.createElement('script');
-        wl.src='/js/lpWakeLock.js?v=1781175524';
+        wl.src='/js/lpWakeLock.js?v=1781176667';
         document.body.appendChild(wl);
     }
     if(isGamePage&&!window.LpPhaseTimer){
         var pt=document.createElement('script');
-        pt.src='/js/lpPhaseTimer.js?v=1781175524';
+        pt.src='/js/lpPhaseTimer.js?v=1781176667';
         document.body.appendChild(pt);
     }
 
@@ -360,7 +361,7 @@ try{
        <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
     if(document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1781175524';
+        s.src='/js/adSlots.js?v=1781176667';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -369,7 +370,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1781175524';
+        rr.src='/js/recentResults.js?v=1781176667';
         document.body.appendChild(rr);
     }
 
@@ -377,20 +378,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1781175524';
+        pwa.src='/js/pwaInstall.js?v=1781176667';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1781175524';
+    tr.src='/js/lpTrack.js?v=1781176667';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1781175524';
+    sh.src='/js/lpShare.js?v=1781176667';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -403,7 +404,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1781175524';
+        rr2.src='/js/lpRoom.js?v=1781176667';
         rr2.defer=true;
         document.body.appendChild(rr2);
 
@@ -412,7 +413,7 @@ try{
            every online game can `LpHostCtl.install({role,room,...})`
            without per-game script tag bookkeeping. */
         var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1781175524';
+        hc.src='/js/lpHostCtl.js?v=1781176667';
         hc.defer=true;
         document.body.appendChild(hc);
 
@@ -420,7 +421,7 @@ try{
            `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
            fired by lpRoom; auto-mounts without any per-game wiring. */
         var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1781175524';
+        mp.src='/js/lpMultiplayer.js?v=1781176667';
         mp.defer=true;
         document.body.appendChild(mp);
     }
@@ -430,7 +431,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1781175524';
+        ls.src='/js/lpSocial.js?v=1781176667';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -441,7 +442,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1781175524';
+        la.src='/js/lpActivity.js?v=1781176667';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -456,7 +457,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1781175524';
+        lp.src='/js/lpPresence.js?v=1781176667';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -466,7 +467,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1781175524';
+        li.src='/js/lpInvite.js?v=1781176667';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -476,7 +477,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1781175524';
+        lib.src='/js/lpInviteButton.js?v=1781176667';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -485,7 +486,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1781175524';
+        ln.src='/js/lpNotify.js?v=1781176667';
         ln.defer=true;
         document.body.appendChild(ln);
     }
@@ -499,7 +500,7 @@ try{
     if(isBlogPost && !window.LpReadingAids){
         window.LpReadingAids = true;
         var ra = document.createElement('script');
-        ra.src = '/js/blogReadingAids.js?v=1781175524';
+        ra.src = '/js/blogReadingAids.js?v=1781176667';
         ra.defer = true;
         document.body.appendChild(ra);
     }

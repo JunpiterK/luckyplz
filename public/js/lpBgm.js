@@ -1,9 +1,10 @@
 /* lpBgm.js — random-shuffle background music for /games/* pages.
    ─────────────────────────────────────────────────────────────────
-   Goal: BGM starts the moment the user selects a game (i.e. when the
-   game page first paints), without a redundant tap. After that, plays
-   one of /assets/bgm/<gameId>/track1.mp3 ... track4.mp3 at random;
-   when that track ends, picks another (excluding current) forever.
+   Goal (2026-06-11 정책 변경): BGM 은 페이지 진입 시가 아니라 게임이
+   실제로 시작될 때 시작된다. 각 게임의 시작 버튼 핸들러가
+   LpBgm.start() (또는 모듈 로드 전이면 window.__lpBgmWanted=true) 를
+   호출한다. 그 후에는 /assets/bgm/<gameId>/track1.mp3 ... track4.mp3
+   중 하나를 랜덤 재생; 트랙이 끝나면 다른 트랙으로 무한 셔플.
 
    Why "speculative play" instead of HEAD probe + delayed start
    ────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@
    pointing at the shared file path.
 
    Public API:
-     LpBgm.start()        — kick off (auto-runs on page load + first tap)
+     LpBgm.start()        — kick off (게임 시작 핸들러에서 호출)
      LpBgm.stop()         — immediate stop, drop the audio handle
      LpBgm.toggle()       — flip mute, returns new muted state
      LpBgm.setMuted(bool) — explicit mute (persisted to localStorage)
@@ -78,6 +79,7 @@
 
   var audio=null;
   var started=false;            /* true only after play() actually started */
+  var startRequested=false;     /* true once a game asked for BGM (게임 시작) */
   var currentTrackIdx=-1;
   var muted=(function(){
     try{return localStorage.getItem(MUTE_KEY)==='1'}catch(_){return false}
@@ -194,6 +196,7 @@
   }
 
   function start(){
+    startRequested=true;
     if(started||muted||attemptInFlight)return;
     attemptInFlight=true;
     tryPlayIdx(pickRandomIdx());
@@ -201,6 +204,7 @@
 
   function stop(){
     started=false;
+    startRequested=false;
     attemptInFlight=false;
     if(audio){
       try{audio.pause();audio.src='';audio.load()}catch(_){}
@@ -226,51 +230,41 @@
 
   function toggle(){
     setMuted(!muted);
-    if(!muted&&!started)start();
+    if(!muted&&!started&&startRequested)start();
     return muted;
   }
 
-  /* Auto-start at the earliest possible moment. When the user clicks a
-     game tile on /, navigates to /games/<id>/, and the page paints,
-     we attempt play() right then. Modern browsers (Chrome 76+,
-     Safari 14+, Firefox 66+) honor "sticky activation" — recent same-
-     origin user input grants autoplay, so this typically Just Works.
-     If the browser rejects (e.g. user came in via a fresh tab without
-     prior interaction), the first-interaction listener below retries
-     in proper gesture context. */
-  function attemptAutoStart(){
-    if(muted)return;
+  /* 게임 시작 전에 이 모듈이 아직 로드 안 됐을 수 있다 (siteFooter 가
+     defer 주입). 그 경우 게임 쪽 시작 핸들러는 window.__lpBgmWanted=true
+     플래그만 세워 두고, 여기서 로드 직후 이어받아 start() 한다.
+     사용자가 방금 시작 버튼을 눌렀으므로 sticky activation 으로
+     play() 가 대부분 허용되고, 막히면 아래 interaction 폴백이 잡는다. */
+  if(window.__lpBgmWanted){
     start();
   }
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',attemptAutoStart);
-  }else{
-    /* Document already parsed; defer one tick so the surrounding
-       siteFooter execution finishes first. */
-    setTimeout(attemptAutoStart,0);
-  }
 
-  /* First-interaction fallback. Capture phase + passive — same gesture
-     the game's own button consumes, no preventDefault, no
-     stopPropagation. once:true via internal flag (not the option)
-     because we manage removal explicitly so all three event names
-     come down together. */
-  var firstInteractionFired=false;
-  function onFirstInteraction(){
-    if(firstInteractionFired)return;
-    firstInteractionFired=true;
-    try{document.removeEventListener('touchstart',onFirstInteraction,true)}catch(_){}
-    try{document.removeEventListener('click',onFirstInteraction,true)}catch(_){}
-    try{document.removeEventListener('keydown',onFirstInteraction,true)}catch(_){}
-    if(!muted&&!started){
+  /* Gesture-context retry. 게임이 start() 를 요청했지만 브라우저가
+     autoplay 를 막았을 때 (NotAllowedError), 다음 터치/클릭/키 입력의
+     SYNC 콜스택 안에서 재시도한다. startRequested 가 켜지기 전에는
+     아무것도 하지 않는다 — 페이지 진입만으로 음악이 나오면 안 된다.
+     Capture phase + passive — 게임 버튼이 소비하는 제스처를 그대로
+     공유, preventDefault/stopPropagation 없음. */
+  function onInteraction(){
+    if(started){
+      try{document.removeEventListener('touchstart',onInteraction,true)}catch(_){}
+      try{document.removeEventListener('click',onInteraction,true)}catch(_){}
+      try{document.removeEventListener('keydown',onInteraction,true)}catch(_){}
+      return;
+    }
+    if(startRequested&&!muted){
       /* SYNC inside this handler — the call stack reaches audio.play()
          while the user-gesture flag is still active in the browser. */
       start();
     }
   }
-  document.addEventListener('touchstart',onFirstInteraction,{capture:true,passive:true});
-  document.addEventListener('click',onFirstInteraction,true);
-  document.addEventListener('keydown',onFirstInteraction,true);
+  document.addEventListener('touchstart',onInteraction,{capture:true,passive:true});
+  document.addEventListener('click',onInteraction,true);
+  document.addEventListener('keydown',onInteraction,true);
 
   /* Pause on tab-hide so battery doesn't drain when the user switches
      apps; resume on visible. We can call play() here because the user
@@ -300,6 +294,7 @@
       return{
         gameId:gameId,
         started:started,
+        startRequested:startRequested,
         muted:muted,
         currentTrackIdx:currentTrackIdx,
         knownExisting:Object.keys(knownExisting).map(Number),
