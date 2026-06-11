@@ -410,11 +410,59 @@
         document.head.appendChild(rs);
     }
 
+    /* === Blog → Games CTA =============================================
+       Cross-link from content into the games hub. The blog pulls the bulk
+       of search traffic; the games are where sessions run long and result
+       screens carry ads. One tasteful, non-blocking strip at the end of
+       every post turns a passing reader into a potential player — the
+       single cheapest blog→game funnel we have. Localised 4 languages. */
+    function buildGamesCta() {
+        var copy = {
+            ko: { t: '🎮 머리 식히고 한 판?', s: '룰렛·사다리·로또·팀 뽑기로 30초 내기 — 가입 없이 바로', c: '게임 하러 가기 →' },
+            en: { t: '🎮 Take a quick break', s: 'Roulette, ladder, lotto, team picker — settle it in 30s, no sign-up', c: 'Play now →' },
+            ja: { t: '🎮 ひと息に一勝負', s: 'ルーレット・あみだ・ロト・チーム分けで30秒勝負 — 登録不要', c: '遊びに行く →' },
+            zh: { t: '🎮 歇一会儿来一局', s: '轮盘·梯子·乐透·分队，30秒决定 — 免注册', c: '去玩一局 →' }
+        };
+        var k = copy[lang] ? lang : 'en';
+        var x = copy[k];
+        var a = document.createElement('a');
+        a.className = 'lp-games-cta';
+        a.href = '/';
+        a.innerHTML = '<span class="lp-gc-main"><span class="lp-gc-title">' + x.t
+            + '</span><span class="lp-gc-sub">' + x.s + '</span></span>'
+            + '<span class="lp-gc-go">' + x.c + '</span>';
+        return a;
+    }
+    var gamesCta = buildGamesCta();
+    if (!document.getElementById('lpGamesCtaStyle')) {
+        var gcs = document.createElement('style');
+        gcs.id = 'lpGamesCtaStyle';
+        gcs.textContent = ''
+            + '.lp-games-cta{display:flex;align-items:center;justify-content:space-between;gap:14px;'
+            + 'margin:22px 16px 0;padding:16px 18px;border-radius:14px;text-decoration:none;'
+            + 'background:linear-gradient(135deg,rgba(45,212,191,.12),rgba(251,191,36,.06));'
+            + 'border:1px solid rgba(45,212,191,.32);transition:border-color .2s,transform .12s}'
+            + '.lp-games-cta:hover{border-color:rgba(45,212,191,.6);transform:translateY(-1px)}'
+            + '.lp-games-cta .lp-gc-main{display:flex;flex-direction:column;gap:3px;min-width:0}'
+            + '.lp-games-cta .lp-gc-title{font-family:"Pretendard Variable","Pretendard","Inter",-apple-system,sans-serif;'
+            + 'font-size:15px;font-weight:800;color:#eafaf5;letter-spacing:-.01em}'
+            + '.lp-games-cta .lp-gc-sub{font-size:12px;color:rgba(180,210,200,.7);line-height:1.45}'
+            + '.lp-games-cta .lp-gc-go{flex:none;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;'
+            + 'font-weight:700;letter-spacing:.06em;color:#04231a;background:linear-gradient(90deg,#2dd4bf,#34d399);'
+            + 'padding:9px 13px;border-radius:9px;white-space:nowrap}'
+            + '@media(max-width:480px){.lp-games-cta{margin:18px 12px 0;padding:14px;gap:10px}'
+            + '.lp-games-cta .lp-gc-title{font-size:14px}.lp-games-cta .lp-gc-sub{font-size:11px}'
+            + '.lp-games-cta .lp-gc-go{font-size:10px;padding:8px 10px}}';
+        document.head.appendChild(gcs);
+    }
+
     if (mount) {
         mount.appendChild(section);
         if (recsSection) mount.appendChild(recsSection);
+        mount.appendChild(gamesCta);
     } else {
         anchor.parentNode.insertBefore(section, anchor);
         if (recsSection) anchor.parentNode.insertBefore(recsSection, anchor);
+        anchor.parentNode.insertBefore(gamesCta, anchor);
     }
 })();
