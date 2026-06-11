@@ -1975,6 +1975,7 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
         "{{OG_IMAGE_URL}}": og_image_url,
         "{{OG_IMAGE_ALT}}": html_escape(og_image_alt),
         "{{PUBLISHED_TIME}}": f"{publish_date}T00:00:00+09:00",
+        "{{SNAPSHOT_NOTE}}": snapshot_note(slot, lang, publish_date),
         "{{JSONLD_BLOGPOSTING}}": json.dumps(jsonld_blog, ensure_ascii=False),
         "{{JSONLD_BREADCRUMB}}": json.dumps(jsonld_crumb, ensure_ascii=False),
         "{{FONT_URL}}": font_url,
@@ -2012,6 +2013,44 @@ def _split_h1(title: str) -> str:
         mid = len(words) // 2
         return f"{html_escape(' '.join(words[:mid]))}<br><span>{html_escape(' '.join(words[mid:]))}</span>"
     return f"<span>{html_escape(title)}</span>"
+
+
+# Live-quote landing per market for the snapshot note's "see live price" link.
+# Google Finance index pages are stable and cover all three markets.
+SNAPSHOT_LIVE_URL = {
+    "us": "https://www.google.com/finance/quote/.INX:INDEXSP",   # S&P 500
+    "kr": "https://www.google.com/finance/quote/KOSPI:KRX",       # KOSPI
+    "cn": "https://www.google.com/finance/quote/000001:SHA",      # SSE Composite
+}
+
+
+def snapshot_note(slot: str, lang: str, publish_date: str) -> str:
+    """The '기준 시점 스냅샷' badge under the disclaimer.
+
+    Daily prices are baked at publish time and never change afterwards. For
+    CLOSE recaps that is definitionally correct (the session is over). For
+    OPEN / PRE-MARKET briefs the snapshot is mid-flight, so those add a
+    'see live price' link to the market's index — never overwriting the
+    article's own numbers (the prose interprets them; a live value would
+    contradict the text). Mirrors scripts/inject-snapshot-note.py for
+    existing posts — keep the two in sync.
+    """
+    market = "us" if slot.startswith("us") else "kr" if slot.startswith("kr") else "cn"
+    intraday = slot in ("kr-open", "cn-open", "us-premarket")
+    note = L(
+        lang,
+        ko=f'이 글의 수치는 <b>{publish_date} 발행 시점</b>에 고정된 스냅샷입니다. 실시간 시세가 아닙니다.',
+        en=f'These figures are a snapshot fixed at publication on <b>{publish_date}</b>. Not a live quote.',
+        ja=f'本記事の数値は<b>{publish_date} 公開時点</b>で固定されたスナップショットです。リアルタイム値ではありません。',
+        zh=f'本文数据为<b>{publish_date} 发布时点</b>固定的快照，非实时行情。',
+    )
+    link = ""
+    if intraday:
+        label = L(lang, ko="실시간 현재가 보기", en="See live price",
+                  ja="現在値を見る", zh="查看实时行情")
+        link = (f' <a href="{SNAPSHOT_LIVE_URL[market]}" target="_blank" '
+                f'rel="noopener">{label} →</a>')
+    return f'<div class="snapshot-note">📌 {note}{link}</div>'
 
 
 # ---------------------------------------------------------------------------
