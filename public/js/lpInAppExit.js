@@ -181,7 +181,40 @@
     document.body.classList.add('lp-inapp-banner-on');
   }
 
-  /* Run after DOM is ready so document.body exists. */
+  /* KakaoTalk path — AUTO-bounce to the system browser. The inline <head>
+     snippet (injected by bump-cache-helper.py) already fires on fresh pages
+     before paint; this is the belt-and-suspenders for stale cached HTML that
+     predates that snippet. We share the same 'lp_kko_out' sessionStorage key
+     so we never double-fire. The orange banner is then shown only as a
+     fallback — and only if the page is STILL foreground after a beat, i.e.
+     the external open didn't take (a successful bounce backgrounds us, so
+     document.hidden becomes true and we stay quiet). */
+  if (detected === 'kakaotalk') {
+    var KKEY = 'lp_kko_out';
+    var alreadyBounced = false;
+    try { alreadyBounced = !!sessionStorage.getItem(KKEY); } catch (_) {}
+    if (!alreadyBounced) {
+      try { sessionStorage.setItem(KKEY, '1'); } catch (_) {}
+      openExternal();
+    }
+    var fallback = function () {
+      if (document.hidden) return;   /* external browser opened → stay quiet */
+      showBanner();
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { setTimeout(fallback, 2000); });
+    } else {
+      setTimeout(fallback, 2000);
+    }
+    window.LpInAppExit = {
+      openExternal: openExternal, dismiss: dismiss,
+      isInAppBrowser: true, detected: detected
+    };
+    return;
+  }
+
+  /* Other in-app browsers (Naver, Instagram, …) have no public escape
+     scheme — show the manual banner once the DOM is ready. */
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', showBanner);
   } else {

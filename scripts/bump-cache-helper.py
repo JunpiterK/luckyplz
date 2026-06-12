@@ -45,9 +45,27 @@ def snippet(version: str) -> str:
        most one reload, avoiding loops if the network keeps returning
        the same stale HTML for any reason.
     """
+    # KakaoTalk in-app WebView auto-escape. Runs in <head> before body
+    # paints, so a link shared in a KakaoTalk chat opens straight in the
+    # phone's default browser instead of KakaoTalk's broken in-app view
+    # (forced landscape, blocked fullscreen, flaky storage). Fires ONLY when
+    # the UA is KakaoTalk — every other browser returns immediately and is
+    # untouched. Guarded by sessionStorage so tapping "back" into the
+    # KakaoTalk view doesn't force-bounce again. The external browser loads
+    # with a normal UA, so it never re-triggers (no loop). Plain string (no
+    # f-string) to avoid brace-escaping; carries no {version} interpolation.
+    kakao = (
+        '<script>(function(){try{'
+        'if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;'
+        'var K="lp_kko_out";'
+        'try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}'
+        'location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);'
+        '}catch(e){}})();</script>'
+    )
     return (
         f'{START}\n'
         f'<meta name="lp-build" content="{version}">\n'
+        f'{kakao}\n'
         f'<script>(function(){{var B="{version}";try{{fetch("/build.json?_="+Date.now(),{{cache:"no-store"}}).then(function(r){{return r.ok?r.json():null}}).then(function(d){{if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}}catch(e){{}}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}}).catch(function(){{}});}}catch(e){{}}}})();</script>\n'
         f'{END}'
     )
