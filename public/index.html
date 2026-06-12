@@ -1230,18 +1230,23 @@ function populateBlogSpotlight() {
                : (lc.indexOf('zh') === 0) ? 'zh'
                : 'en';
 
-    var matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket; });
+    /* Never spotlight the thin auto-generated daily market posts — the
+       homepage is the first thing a visitor (and an AdSense reviewer) sees,
+       so it should feature the hand-written longform, not a stock recap. */
+    var DAILY_AUTO_RE = /(^|-)(tech-recap|recap|open-brief|close-brief|premarket|baseball-daily|football-daily)-\d{4}-\d{2}-\d{2}/;
+    var notDaily = function(p){ return !DAILY_AUTO_RE.test(p.slug || ''); };
+    var matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket && notDaily(p); });
     /* Fallback if the chosen bucket has zero posts. For ja/zh (newest
        buckets, backlog still filling), fall back to en; for en/ko fall
        back to the other to ensure SOMETHING shows. */
     if (!matched.length) {
         bucket = bucket === 'ko' ? 'en' : (bucket === 'en' ? 'ko' : 'en');
-        matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket; });
+        matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket && notDaily(p); });
     }
     /* Last-ditch: try ko if still empty (always the most-populated). */
     if (!matched.length) {
         bucket = 'ko';
-        matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket; });
+        matched = posts.filter(function(p){ return (p.lang || 'ko') === bucket && notDaily(p); });
     }
     if (!matched.length) return;
 
