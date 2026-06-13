@@ -1,0 +1,91 @@
+name: Daily World Cup Posts (FIFA World Cup 2026)
+
+# Cron는 UTC 기준.
+#   - 매일 05:55 UTC = 14:55 KST 발행. 어제(KST) = 직전 US 매치데이.
+#     ESPN은 경기를 US date 로 묶는다. 가장 늦은 서부 야간경기(≈05:00 UTC
+#     종료)까지 Final 보장되도록 05:55 UTC 에 발행 → target = yesterday-KST.
+#   - 데이터 소스: ESPN 공개 스코어보드 API (키 불필요, 라이브). 점수·득점자만
+#     팩트로 렌더하고 Claude 는 산문(리뷰·편집 MOM)만 작성 → 점수 조작 불가.
+#
+# 기존 cron 과 겹치지 않는 윈도우(:55) — 증시(19:27/22:13/23:37/06:38/07:08/
+# 12:33)·스포츠(01:20/08:50) UTC 와 ≥40분 간격, 핫미닛(:00) 회피.
+#
+# 무경기일(매치데이 사이 휴식일·7/19 결승 이후)은 스크립트가 깨끗하게 skip +
+# HC success ping. 토너먼트가 끝나면 매일 빈 결과 → 자동 비발행(자기 은퇴).
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Single match date YYYY-MM-DD (default: yesterday KST)"
+        required: false
+        default: ""
+      date_from:
+        description: "Catch-up range START YYYY-MM-DD (with date_to → one recap post)"
+        required: false
+        default: ""
+      date_to:
+        description: "Catch-up range END YYYY-MM-DD"
+        required: false
+        default: ""
+      force:
+        description: "Re-publish even if slug already exists (true/false)"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "55 5 * * *"     # 14:55 KST, 어제 US 매치데이 리뷰
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    name: Publish World Cup review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install fonts (CJK + Nanum + DejaVu fallback for OG)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y fonts-nanum fonts-noto-cjk fonts-noto-cjk-extra fonts-dejavu
+          fc-list | grep -iE "nanum|noto.*cjk" | head -8 || echo "(font listing failed but install ran)"
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Configure git
+        run: |
+          git config --global user.name "luckyplz-bot"
+          git config --global user.email "noreply@anthropic.com"
+
+      - name: Run World Cup pipeline
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LP_GIT_PUSH: "1"
+          # Optional Healthchecks.io ping URL (silent no-op if empty):
+          #   HC_URL_WORLDCUP_DAILY
+          HC_URL_WORLDCUP_DAILY: ${{ secrets.HC_URL_WORLDCUP_DAILY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          ARGS=""
+          if [ -n "${{ github.event.inputs.date_from }}" ] && [ -n "${{ github.event.inputs.date_to }}" ]; then
+            ARGS="--date-from ${{ github.event.inputs.date_from }} --date-to ${{ github.event.inputs.date_to }}"
+          elif [ -n "${{ github.event.inputs.date }}" ]; then
+            ARGS="--date ${{ github.event.inputs.date }}"
+          fi
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          echo "Running: python scripts/auto-worldcup-post.py $ARGS"
+          python scripts/auto-worldcup-post.py $ARGS
