@@ -47,6 +47,11 @@ _c2 = importlib.util.spec_from_file_location("cs2c", ROOT / "scripts" / "color_s
 c2 = importlib.util.module_from_spec(_c2); _c2.loader.exec_module(c2)
 content = c2.content
 
+# accurate CIE data + filled-gamut PNG generator (real standard CMFs)
+_cie = importlib.util.spec_from_file_location("ciedata", ROOT / "scripts" / "color_science_cie_data.py")
+cie = importlib.util.module_from_spec(_cie); _cie.loader.exec_module(cie)
+GAMUT_1931 = "cs-cie1931-gamut.png"
+
 # extra CSS: formula blocks + series nav
 CSS = CSS_BASE + """
 .formula{margin:18px auto;padding:16px 18px;background:#fbf9f4;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 10px 10px 0;font-family:'Cambria','Georgia',serif;font-size:18px;line-height:2;color:#1c2930;overflow-x:auto;text-align:center}
@@ -129,36 +134,42 @@ def fig_match(t):
 
 
 def fig_cmf_rgb(t):
-    W, H = 900, 430
-    ox, oy, w, h = 64, 330, 780, 240
+    """Real CIE 1931 RGB color-matching functions (incl. the true negative lobe)."""
+    W, H = 900, 440
+    ox, oy, w, h = 70, 360, 770, 300
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
+    wl, r, g, b = cie.rgb_cmf()
     lo, hi = 380, 700
+    msk = (wl >= lo) & (wl <= hi)
+    wl, r, g, b = wl[msk], r[msk], g[msk], b[msk]
+    vmax = max(float(r.max()), float(g.max()), float(b.max()))
+    vmin = min(float(r.min()), float(g.min()), float(b.min()))
+    span = vmax - vmin
     xs = lambda nm: ox + w * (nm - lo) / (hi - lo)
-    zero = oy - h * 0.30  # baseline above axis bottom so negatives show
-    s.append(f'<line x1="{ox}" y1="{zero}" x2="{ox+w}" y2="{zero}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy-h}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<text x="{ox+w}" y="{zero-8}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">{t["x"]}</text>')
-    s.append(f'<text x="{ox+6}" y="{oy-h+4}" font-size="{FS}" fill="{PAL["soft"]}">{t["y"]}</text>')
+    Y = lambda v: oy - h * (v - vmin) / span
+    zero = Y(0)
+    # negative region shading (r-bar < 0)
+    neg_lo, neg_hi = 438, 546
+    s.append(f'<rect x="{xs(neg_lo):.0f}" y="{Y(vmax):.0f}" width="{xs(neg_hi)-xs(neg_lo):.0f}" height="{oy-Y(vmax):.0f}" fill="{PAL["L"]}" opacity="0.06"/>')
+    # axes (x at zero line)
+    s.append(f'<line x1="{ox}" y1="{zero:.0f}" x2="{ox+w}" y2="{zero:.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{Y(vmax):.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    s.append(f'<text x="{ox+w}" y="{zero-8:.0f}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">{t["x"]}</text>')
+    s.append(f'<text x="{ox+6}" y="{Y(vmax)+2:.0f}" font-size="{FS}" fill="{PAL["soft"]}">{t["y"]}</text>')
+    s.append(f'<text x="{ox-10}" y="{zero+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">0</text>')
     for nm in range(400, 701, 50):
-        s.append(f'<text x="{xs(nm):.0f}" y="{oy+24}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{nm}</text>')
-        s.append(f'<line x1="{xs(nm):.0f}" y1="{zero}" x2="{xs(nm):.0f}" y2="{zero+5}" stroke="{PAL["axis"]}"/>')
-    sc = h * 0.62
-    # schematic CIE rgb CMFs (shape incl. negative r-bar lobe)
-    def rbar(nm):
-        pos = 0.30 * gauss(nm, 600, 28) + 0.06 * gauss(nm, 445, 18)
-        neg = 0.10 * gauss(nm, 510, 26)
-        return pos - neg
-    def gbar(nm):
-        return 0.30 * gauss(nm, 545, 33) - 0.02 * gauss(nm, 430, 20)
-    def bbar(nm):
-        return 0.34 * gauss(nm, 445, 19)
-    for fn, col, lab, lx in [(bbar, PAL["S"], "b̄(λ)", 455), (gbar, PAL["M"], "ḡ(λ)", 545), (rbar, PAL["L"], "r̄(λ)", 600)]:
-        pts = [(xs(nm), zero - sc * fn(nm)) for nm in range(lo, hi + 1, 2)]
+        s.append(f'<text x="{xs(nm):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{nm}</text>')
+        s.append(f'<line x1="{xs(nm):.0f}" y1="{oy}" x2="{xs(nm):.0f}" y2="{oy+5}" stroke="{PAL["axis"]}"/>')
+    step = 2
+    for arr, col, lab in [(b, PAL["S"], "b̄(λ)"), (g, PAL["M"], "ḡ(λ)"), (r, PAL["L"], "r̄(λ)")]:
+        pts = [(xs(int(wl[i])), Y(float(arr[i]))) for i in range(0, len(wl), step)]
         s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{col}" stroke-width="3.2"/>')
-        s.append(f'<text x="{xs(lx):.0f}" y="{zero - sc*fn(lx) - 12:.0f}" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{col}">{lab}</text>')
-    # highlight negative region of r-bar
-    s.append(f'<rect x="{xs(440):.0f}" y="{zero}" width="{xs(545)-xs(440):.0f}" height="{oy-zero}" fill="{PAL["L"]}" opacity="0.07"/>')
-    s.append(f'<text x="{xs(495):.0f}" y="{oy-6}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">{t["neg"]}</text>')
+    # peak labels
+    import numpy as _np
+    for arr, col, lab in [(b, PAL["S"], "b̄(λ)"), (g, PAL["M"], "ḡ(λ)"), (r, PAL["L"], "r̄(λ)")]:
+        pk = int(_np.argmax(arr)); lx = int(wl[pk])
+        s.append(f'<text x="{xs(lx):.0f}" y="{Y(float(arr[pk]))-12:.0f}" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{col}">{lab}</text>')
+    s.append(f'<text x="{xs(495):.0f}" y="{oy-8:.0f}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">{t["neg"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -188,88 +199,100 @@ def fig_negative(t):
 
 
 def fig_xyz_cmf(t):
+    """Real CIE 1931 XYZ color-matching functions (all positive)."""
     W, H = 900, 400
-    ox, oy, w, h = 64, 330, 780, 250
+    ox, oy, w, h = 70, 330, 770, 250
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
+    wl, x, y, z = cie.cmf_1nm()
     lo, hi = 380, 700
+    msk = (wl >= lo) & (wl <= hi)
+    wl, x, y, z = wl[msk], x[msk], y[msk], z[msk]
+    peak = max(float(x.max()), float(y.max()), float(z.max()))
     xs = lambda nm: ox + w * (nm - lo) / (hi - lo)
     _ax(s, ox, oy, w, h, t["x"], t["y"])
     for nm in range(400, 701, 50):
         s.append(f'<text x="{xs(nm):.0f}" y="{oy+24}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{nm}</text>')
-    peak = max(max(cie_x(n), cie_y(n), cie_z(n)) for n in range(lo, hi))
-    for fn, col, lab, lx in [(cie_z, PAL["S"], "z̄(λ)", 445), (cie_y, PAL["M"], "ȳ(λ)", 558), (cie_x, PAL["L"], "x̄(λ)", 600)]:
-        pts = [(xs(nm), oy - h * fn(nm) / peak) for nm in range(lo, hi + 1, 2)]
+    import numpy as _np
+    for arr, col, lab in [(z, PAL["S"], "z̄(λ)"), (y, PAL["M"], "ȳ(λ)"), (x, PAL["L"], "x̄(λ)")]:
+        pts = [(xs(int(wl[i])), oy - h * float(arr[i]) / peak) for i in range(0, len(wl), 2)]
         s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{col}" stroke-width="3.2"/>')
-        s.append(f'<text x="{xs(lx):.0f}" y="{oy - h*fn(lx)/peak - 12:.0f}" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{col}">{lab}</text>')
+        pk = int(_np.argmax(arr)); lx = int(wl[pk])
+        s.append(f'<text x="{xs(lx):.0f}" y="{oy - h*float(arr[pk])/peak - 12:.0f}" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{col}">{lab}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
 
+def _chroma_axes(s, PX, PY, XR, YR, ox, oy):
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{PX(XR):.0f}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{PY(YR):.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    for v in (0.2, 0.4, 0.6, 0.8):
+        if v <= XR:
+            s.append(f'<text x="{PX(v):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+        if v <= YR:
+            s.append(f'<text x="{ox-12}" y="{PY(v)+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+
+
 def fig_chromaticity(t):
-    W, H = 760, 640
-    ox, oy = 90, 580          # origin (x=0,y=0)
-    sx, sy = 760, 640
+    """Properly FILLED CIE 1931 horseshoe: real CMF + xy->sRGB gamut PNG + vector overlay."""
+    W, H = 740, 720
+    ox, oy, pw, ph = 80, 650, 600, 600
+    XR, YR = 0.8, 0.9
+    PX = lambda x: ox + pw * (x / XR)
+    PY = lambda y: oy - ph * (y / YR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    X0, Y0 = 0.74, 0.85
-    PX = lambda x: ox + (sx - 130) * (x / X0)
-    PY = lambda y: oy - (sy - 110) * (y / Y0)
-    # axes
-    s.append(f'<line x1="{ox}" y1="{oy}" x2="{PX(X0):.0f}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{PY(Y0):.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    for v in (0.2, 0.4, 0.6):
-        s.append(f'<text x="{PX(v):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
-        s.append(f'<text x="{ox-12}" y="{PY(v)+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
-    s.append(f'<text x="{PX(X0):.0f}" y="{oy+26}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">x</text>')
-    s.append(f'<text x="{ox-12}" y="{PY(Y0)+14:.0f}" font-size="{FS}" fill="{PAL["soft"]}">y</text>')
-    # spectral locus boundary (colored by wavelength)
-    locus = [(nm,) + chromaticity(nm) for nm in range(380, 701, 2)]
-    pts = [(PX(x), PY(y)) for nm, x, y in locus]
-    # filled interior (very light) using locus + purple line back to start
-    path = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
-    s.append(f'<path d="{path}" fill="#f3f1ec" stroke="none"/>')
-    # colored boundary segments
-    for i in range(len(pts) - 1):
-        nm = locus[i][0]
-        s.append(f'<line x1="{pts[i][0]:.1f}" y1="{pts[i][1]:.1f}" x2="{pts[i+1][0]:.1f}" y2="{pts[i+1][1]:.1f}" stroke="{wl_to_rgb(nm)}" stroke-width="4"/>')
-    # purple line (close)
-    s.append(f'<line x1="{pts[-1][0]:.1f}" y1="{pts[-1][1]:.1f}" x2="{pts[0][0]:.1f}" y2="{pts[0][1]:.1f}" stroke="#8a2be2" stroke-width="3.5"/>')
-    # wavelength labels
-    for nm in (460, 480, 500, 520, 540, 560, 580, 600, 640):
-        x, y = chromaticity(nm)
-        s.append(f'<text x="{PX(x)+(8 if x>0.2 else -8):.0f}" y="{PY(y)-4:.0f}" font-size="13" fill="{PAL["soft"]}">{nm}</text>')
+    s.append(f'<image href="/assets/blog/{GAMUT_1931}?v={BUILD}" x="{PX(0):.1f}" y="{PY(YR):.1f}" '
+             f'width="{PX(XR)-PX(0):.1f}" height="{PY(0)-PY(YR):.1f}" preserveAspectRatio="none"/>')
+    # spectral locus outline (crisp dark edge)
+    pts = [(PX(x), PY(y)) for x, y in cie.locus_polyline("1931")]
+    poly = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
+    s.append(f'<path d="{poly}" fill="none" stroke="#1c1c1c" stroke-width="1.4" stroke-linejoin="round"/>')
+    _chroma_axes(s, PX, PY, XR, YR, ox, oy)
+    s.append(f'<text x="{PX(XR):.0f}" y="{oy+26}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">x</text>')
+    s.append(f'<text x="{ox-12}" y="{PY(YR)+14:.0f}" font-size="{FS}" fill="{PAL["soft"]}">y</text>')
+    # wavelength labels around the locus (white halo for legibility)
+    cen = (0.32, 0.34)
+    for nm, (x, y) in cie.locus_label_points("1931").items():
+        dx, dy = x - cen[0], y - cen[1]
+        d = max((dx * dx + dy * dy) ** 0.5, 1e-3)
+        lxp, lyp = PX(x) + dx / d * 16, PY(y) - dy / d * 16
+        s.append(f'<circle cx="{PX(x):.0f}" cy="{PY(y):.0f}" r="2.5" fill="#111"/>')
+        s.append(f'<text x="{lxp:.0f}" y="{lyp:.0f}" text-anchor="middle" font-size="13" font-weight="700" '
+                 f'fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{nm}</text>')
     # sRGB triangle + white point
     R, G, B = (0.64, 0.33), (0.30, 0.60), (0.15, 0.06)
     tri = f'{PX(R[0]):.0f},{PY(R[1]):.0f} {PX(G[0]):.0f},{PY(G[1]):.0f} {PX(B[0]):.0f},{PY(B[1]):.0f}'
-    s.append(f'<polygon points="{tri}" fill="none" stroke="{PAL["ink"]}" stroke-width="2" stroke-dasharray="6 4"/>')
-    s.append(f'<text x="{PX(R[0])+8:.0f}" y="{PY(R[1]):.0f}" font-size="13" fill="{PAL["ink"]}">{t["srgb"]}</text>')
+    s.append(f'<polygon points="{tri}" fill="none" stroke="#111" stroke-width="2" stroke-dasharray="7 4"/>')
+    s.append(f'<text x="{PX(R[0])+10:.0f}" y="{PY(R[1])+4:.0f}" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{t["srgb"]}</text>')
     wx, wy = 0.3127, 0.329
-    s.append(f'<circle cx="{PX(wx):.0f}" cy="{PY(wy):.0f}" r="5" fill="#222"/>')
-    s.append(f'<text x="{PX(wx)+9:.0f}" y="{PY(wy)+4:.0f}" font-size="13" fill="{PAL["ink"]}">{t["white"]}</text>')
-    s.append(f'<text x="{PX(0.18):.0f}" y="{PY(0.72):.0f}" font-size="{FS}" font-weight="700" fill="{PAL["soft"]}">{t["locus"]}</text>')
+    s.append(f'<circle cx="{PX(wx):.0f}" cy="{PY(wy):.0f}" r="6" fill="#fff" stroke="#111" stroke-width="2"/>')
+    s.append(f'<text x="{PX(wx)+11:.0f}" y="{PY(wy)+4:.0f}" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{t["white"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
 
 def fig_macadam(t):
-    W, H = 760, 600
-    ox, oy = 90, 540
+    """Real locus outline (dimmed gamut) + exaggerated MacAdam ellipses."""
+    W, H = 740, 660
+    ox, oy, pw, ph = 80, 590, 560, 560
+    XR, YR = 0.8, 0.9
+    PX = lambda x: ox + pw * (x / XR)
+    PY = lambda y: oy - ph * (y / YR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    X0, Y0 = 0.74, 0.85
-    PX = lambda x: ox + 560 * (x / X0)
-    PY = lambda y: oy - 480 * (y / Y0)
-    locus = [(nm,) + chromaticity(nm) for nm in range(380, 701, 3)]
-    pts = [(PX(x), PY(y)) for nm, x, y in locus]
-    path = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
-    s.append(f'<path d="{path}" fill="#f5f3ee" stroke="{PAL["line"]}" stroke-width="1.5"/>')
-    # schematic ellipses (×10 exaggerated): green big, blue small
-    ell = [(0.30, 0.55, 60, 26, 25), (0.20, 0.40, 30, 16, -10), (0.16, 0.20, 18, 12, 60),
-           (0.45, 0.45, 44, 22, -20), (0.55, 0.40, 40, 18, -35), (0.34, 0.36, 30, 18, 10),
-           (0.25, 0.62, 50, 24, 35), (0.42, 0.30, 26, 14, 0)]
+    s.append(f'<image href="/assets/blog/{GAMUT_1931}?v={BUILD}" x="{PX(0):.1f}" y="{PY(YR):.1f}" '
+             f'width="{PX(XR)-PX(0):.1f}" height="{PY(0)-PY(YR):.1f}" preserveAspectRatio="none" opacity="0.42"/>')
+    pts = [(PX(x), PY(y)) for x, y in cie.locus_polyline("1931")]
+    poly = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
+    s.append(f'<path d="{poly}" fill="none" stroke="#444" stroke-width="1.4"/>')
+    _chroma_axes(s, PX, PY, XR, YR, ox, oy)
+    # exaggerated ellipses (×10): green large, blue small
+    ell = [(0.30, 0.55, 58, 26, 25), (0.20, 0.42, 30, 16, -10), (0.17, 0.10, 16, 11, 60),
+           (0.45, 0.47, 44, 22, -20), (0.54, 0.40, 40, 18, -35), (0.34, 0.36, 30, 18, 10),
+           (0.26, 0.62, 48, 24, 35), (0.42, 0.28, 24, 14, 0)]
     for x, y, rx, ry, ang in ell:
-        s.append(f'<ellipse cx="{PX(x):.0f}" cy="{PY(y):.0f}" rx="{rx}" ry="{ry}" transform="rotate({ang} {PX(x):.0f} {PY(y):.0f})" fill="none" stroke="{PAL["ink"]}" stroke-width="2"/>')
-    s.append(f'<text x="{PX(0.30):.0f}" y="{PY(0.55)+4:.0f}" text-anchor="middle" font-size="{FSA}" fill="{PAL["M"]}">{t["green"]}</text>')
-    s.append(f'<text x="{PX(0.16):.0f}" y="{PY(0.20)+4:.0f}" text-anchor="middle" font-size="{FSA}" fill="{PAL["S"]}">{t["blue"]}</text>')
-    s.append(f'<text x="{ox+10}" y="40" font-size="{FS}" fill="{PAL["soft"]}">{t["note"]}</text>')
+        s.append(f'<ellipse cx="{PX(x):.0f}" cy="{PY(y):.0f}" rx="{rx}" ry="{ry}" transform="rotate({ang} {PX(x):.0f} {PY(y):.0f})" fill="none" stroke="#111" stroke-width="2.2"/>')
+    s.append(f'<text x="{PX(0.30):.0f}" y="{PY(0.55)+4:.0f}" text-anchor="middle" font-size="{FSA}" font-weight="700" fill="#0a5a22" stroke="#fff" stroke-width="3" paint-order="stroke">{t["green"]}</text>')
+    s.append(f'<text x="{PX(0.17):.0f}" y="{PY(0.10)-8:.0f}" text-anchor="middle" font-size="{FSA}" font-weight="700" fill="#13408a" stroke="#fff" stroke-width="3" paint-order="stroke">{t["blue"]}</text>')
+    s.append(f'<text x="{ox+6}" y="36" font-size="{FS}" fill="{PAL["soft"]}">{t["note"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -594,6 +617,9 @@ def update_sitemap():
 
 def main():
     ASSETS_BLOG.mkdir(parents=True, exist_ok=True)
+    # filled-gamut PNG (real CMF + xy->sRGB) embedded by the chromaticity figures
+    cie.render_chromaticity_png(ASSETS_BLOG / GAMUT_1931, "1931", res=1000)
+    print(f"[gamut] wrote {GAMUT_1931}")
     for lang in ("ko", "en", "ja", "zh"):
         try:
             make_og(lang)
