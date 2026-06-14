@@ -139,10 +139,10 @@ def fig_em_spectrum(t):
         x = x0 + i * bw
         fill = "url(#rain)" if col == "rainbow" else col
         s.append(f'<rect x="{x:.1f}" y="{y0}" width="{bw-1:.1f}" height="{bh}" fill="{fill}"/>')
-        s.append(f'<text x="{x+bw/2:.1f}" y="{y0+bh+16}" text-anchor="middle" font-size="12" fill="{PAL["soft"]}">{lab}</text>')
+        s.append(f'<text x="{x+bw/2:.1f}" y="{y0+bh+18}" text-anchor="middle" font-size="14" font-weight="600" fill="{PAL["soft"]}">{lab}</text>')
     # wavelength annotation (long -> short)
-    s.append(f'<text x="40" y="38" font-size="11" fill="{PAL["mute"]}">{t["long_wl"]} ←</text>')
-    s.append(f'<text x="{W-40}" y="38" text-anchor="end" font-size="11" fill="{PAL["mute"]}">→ {t["short_wl"]}</text>')
+    s.append(f'<text x="40" y="36" font-size="13" fill="{PAL["mute"]}">{t["long_wl"]} ←</text>')
+    s.append(f'<text x="{W-40}" y="36" text-anchor="end" font-size="13" fill="{PAL["mute"]}">→ {t["short_wl"]}</text>')
     # expand connector from the visible band to the zoom bar
     vx = x0 + 3 * bw
     s.append(f'<path d="M{vx:.1f},{y0+bh} L120,{H-120} M{vx+bw-1:.1f},{y0+bh} L{W-120},{H-120}" stroke="{PAL["line"]}" stroke-width="1.2" fill="none"/>')
@@ -152,57 +152,71 @@ def fig_em_spectrum(t):
     for nm in (400, 450, 500, 550, 600, 650, 700):
         px = zx + zw * (nm - 380) / (700 - 380)
         s.append(f'<line x1="{px:.1f}" y1="{zy+zh}" x2="{px:.1f}" y2="{zy+zh+6}" stroke="{PAL["axis"]}"/>')
-        s.append(f'<text x="{px:.1f}" y="{zy+zh+20}" text-anchor="middle" font-size="11" fill="{PAL["soft"]}">{nm}</text>')
-    s.append(f'<text x="{zx+zw/2:.1f}" y="{zy+zh+38}" text-anchor="middle" font-size="12" fill="{PAL["mute"]}">{t["nm"]}</text>')
-    s.append(f'<text x="{zx+zw/2:.1f}" y="{zy-8}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["ink"]}">{t["vis_full"]}</text>')
+        s.append(f'<text x="{px:.1f}" y="{zy+zh+22}" text-anchor="middle" font-size="13" fill="{PAL["soft"]}">{nm}</text>')
+    s.append(f'<text x="{zx+zw/2:.1f}" y="{zy+zh+42}" text-anchor="middle" font-size="14" fill="{PAL["mute"]}">{t["nm"]}</text>')
+    s.append(f'<text x="{zx+zw/2:.1f}" y="{zy-10}" text-anchor="middle" font-size="15.5" font-weight="800" fill="{PAL["ink"]}">{t["vis_full"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
 
 def _axes(s, ox, oy, w, h, xlabel, ylabel):
-    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox+w}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.3"/>')
-    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy-h}" stroke="{PAL["axis"]}" stroke-width="1.3"/>')
-    s.append(f'<text x="{ox+w}" y="{oy+28}" text-anchor="end" font-size="12" fill="{PAL["soft"]}">{xlabel}</text>')
-    s.append(f'<text x="{ox-8}" y="{oy-h-8}" font-size="12" fill="{PAL["soft"]}">{ylabel}</text>')
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox+w}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.4"/>')
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy-h}" stroke="{PAL["axis"]}" stroke-width="1.4"/>')
+    s.append(f'<text x="{ox+w}" y="{oy+30}" text-anchor="end" font-size="15" font-weight="600" fill="{PAL["soft"]}">{xlabel}</text>')
+    s.append(f'<text x="{ox-6}" y="{oy-h-10}" font-size="15" font-weight="600" fill="{PAL["soft"]}">{ylabel}</text>')
 
 
 def fig_visible_window(t):
-    """Figure 2 — why visible is visible: solar spectrum × atmospheric window."""
-    W, H = 960, 420
-    ox, oy, w, h = 70, 340, 820, 250
+    """Figure 2 — why visible is visible: solar spectrum (filled) × atmospheric window."""
+    W, H = 960, 460
+    ox, oy, w, h = 78, 372, 812, 268
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
     lo, hi = 300, 1100
     xs = lambda nm: ox + w * (nm - lo) / (hi - lo)
-    # visible band shading
-    s.append(f'<rect x="{xs(380):.1f}" y="{oy-h}" width="{xs(700)-xs(380):.1f}" height="{h}" fill="url(#rain2)" opacity="0.16"/>')
-    s.append('<defs><linearGradient id="rain2" x1="0" x2="1">' +
-             "".join(f'<stop offset="{i}%" stop-color="{wl_to_rgb(380+(700-380)*i/100)}"/>' for i in range(0, 101, 5)) +
-             '</linearGradient></defs>')
+    defs = ['<defs>',
+            '<linearGradient id="rain2" x1="0" x2="1">' +
+            "".join(f'<stop offset="{i}%" stop-color="{wl_to_rgb(380+(700-380)*i/100)}"/>' for i in range(0, 101, 4)) +
+            '</linearGradient>',
+            f'<linearGradient id="solfill" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="{PAL["gold"]}" stop-opacity="0.32"/><stop offset="100%" stop-color="{PAL["gold"]}" stop-opacity="0.03"/></linearGradient>',
+            '</defs>']
+    s += defs
+    # visible band column highlight (rainbow, subtle)
+    s.append(f'<rect x="{xs(380):.1f}" y="{oy-h}" width="{xs(700)-xs(380):.1f}" height="{h}" fill="url(#rain2)" opacity="0.18"/>')
+    s.append(f'<rect x="{xs(380):.1f}" y="{oy-h}" width="{xs(700)-xs(380):.1f}" height="{h}" fill="none" stroke="{PAL["line"]}" stroke-dasharray="3 4"/>')
+    # gridlines
+    for v in (0.25, 0.5, 0.75, 1.0):
+        s.append(f'<line x1="{ox}" y1="{oy-h*v:.1f}" x2="{ox+w}" y2="{oy-h*v:.1f}" stroke="{PAL["line"]}" stroke-width="1"/>')
     _axes(s, ox, oy, w, h, t["x"], t["y"])
     for nm in (300, 500, 700, 900, 1100):
-        s.append(f'<text x="{xs(nm):.1f}" y="{oy+18}" text-anchor="middle" font-size="11" fill="{PAL["mute"]}">{nm}</text>')
-    # solar curve (Planck 5800K, normalized)
-    pts = []
-    peak = max(planck_rel(nm) for nm in range(lo, hi, 5))
+        s.append(f'<line x1="{xs(nm):.1f}" y1="{oy}" x2="{xs(nm):.1f}" y2="{oy+5}" stroke="{PAL["axis"]}"/>')
+        s.append(f'<text x="{xs(nm):.1f}" y="{oy+24}" text-anchor="middle" font-size="13" fill="{PAL["mute"]}">{nm}</text>')
+    # solar curve (Planck 5800K, normalized) — filled area + line
+    pts, peak = [], max(planck_rel(nm) for nm in range(lo, hi, 5))
     for nm in range(lo, hi + 1, 5):
-        y = oy - h * (planck_rel(nm) / peak)
-        pts.append((xs(nm), y))
-    s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{PAL["gold"]}" stroke-width="2.6"/>')
-    s.append(f'<text x="{xs(560):.1f}" y="{oy-h+22:.1f}" font-size="12.5" font-weight="700" fill="{PAL["gold"]}">{t["solar"]}</text>')
+        pts.append((xs(nm), oy - h * (planck_rel(nm) / peak)))
+    area = f'M{pts[0][0]:.1f},{oy:.1f} ' + " ".join(f"L{x:.1f},{y:.1f}" for x, y in pts) + f' L{pts[-1][0]:.1f},{oy:.1f} Z'
+    s.append(f'<path d="{area}" fill="url(#solfill)"/>')
+    s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{PAL["gold"]}" stroke-width="3" stroke-linejoin="round"/>')
     # atmospheric transmission (schematic): UV blocked, visible+some NIR open, IR bands absorb
     def atm(nm):
         if nm < 320:
             return 0.05
         v = 0.95
-        v *= 1 - 0.9 * math.exp(-((nm - 320) ** 2) / (2 * 18 ** 2))  # ozone edge
+        v *= 1 - 0.9 * math.exp(-((nm - 320) ** 2) / (2 * 18 ** 2))
         for c, wd, d in [(720, 14, .5), (820, 16, .45), (940, 26, .8), (1130, 30, .7)]:
             v *= 1 - d * math.exp(-((nm - c) ** 2) / (2 * wd ** 2))
         return max(0.03, min(0.97, v))
     pts2 = [(xs(nm), oy - h * atm(nm)) for nm in range(lo, hi + 1, 4)]
-    s.append(f'<polyline points="{_poly(pts2)}" fill="none" stroke="{PAL["S"]}" stroke-width="2.2" stroke-dasharray="1 0"/>')
-    s.append(f'<text x="{xs(430):.1f}" y="{oy-h*0.92:.1f}" font-size="12.5" font-weight="700" fill="{PAL["S"]}">{t["atm"]}</text>')
+    s.append(f'<polyline points="{_poly(pts2)}" fill="none" stroke="{PAL["S"]}" stroke-width="2.6" stroke-dasharray="7 4"/>')
+    # legend (top-right)
+    lx, ly = ox + w - 250, oy - h + 6
+    s.append(f'<rect x="{lx-12}" y="{ly-12}" width="262" height="62" rx="9" fill="#ffffff" stroke="{PAL["line"]}" opacity="0.95"/>')
+    s.append(f'<rect x="{lx}" y="{ly+2}" width="26" height="5" rx="2.5" fill="{PAL["gold"]}"/>')
+    s.append(f'<text x="{lx+34}" y="{ly+8}" font-size="13.5" fill="{PAL["ink"]}">{t["solar"]}</text>')
+    s.append(f'<line x1="{lx}" y1="{ly+28}" x2="{lx+26}" y2="{ly+28}" stroke="{PAL["S"]}" stroke-width="3" stroke-dasharray="7 4"/>')
+    s.append(f'<text x="{lx+34}" y="{ly+33}" font-size="13.5" fill="{PAL["ink"]}">{t["atm"]}</text>')
     # visible band label
-    s.append(f'<text x="{(xs(380)+xs(700))/2:.1f}" y="{oy-h-14}" text-anchor="middle" font-size="13" font-weight="800" fill="{PAL["ink"]}">{t["vis"]}</text>')
+    s.append(f'<text x="{(xs(380)+xs(700))/2:.1f}" y="{oy-h-12}" text-anchor="middle" font-size="15.5" font-weight="800" fill="{PAL["ink"]}">{t["vis"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -220,41 +234,41 @@ def fig_eye(t):
     # eyeball + retina (inner back arc)
     s.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="url(#vit)" stroke="{PAL["line"]}" stroke-width="2.5"/>')
     s.append(f'<path d="M{cx-6},{cy-r+10} A{r-10},{r-10} 0 0 1 {cx-6},{cy+r-10}" fill="none" stroke="url(#ret)" stroke-width="11"/>')
-    s.append(f'<text x="{cx+r-70}" y="{cy-r+40}" font-size="12.5" font-weight="700" fill="{PAL["L"]}">{t["retina"]}</text>')
+    s.append(f'<text x="{cx+r-78}" y="{cy-r+38}" font-size="14.5" font-weight="700" fill="{PAL["L"]}">{t["retina"]}</text>')
     # cornea (front bulge) + lens + iris hint
     s.append(f'<path d="M{cx-r+4},{cy-50} q-30,50 0,100" fill="#e0f2fc" stroke="{PAL["S"]}" stroke-width="1.8"/>')
     lensx = cx - r + 34
     s.append(f'<ellipse cx="{lensx}" cy="{cy}" rx="18" ry="48" fill="#cfeafb" stroke="{PAL["S"]}" stroke-width="1.8"/>')
     s.append(f'<line x1="{lensx}" y1="{cy-48}" x2="{lensx}" y2="{cy-68}" stroke="{PAL["soft"]}" stroke-width="3"/>')
     s.append(f'<line x1="{lensx}" y1="{cy+48}" x2="{lensx}" y2="{cy+68}" stroke="{PAL["soft"]}" stroke-width="3"/>')
-    s.append(f'<text x="{lensx}" y="{cy+74}" text-anchor="middle" font-size="12" fill="{PAL["soft"]}">{t["lens"]}</text>')
+    s.append(f'<text x="{lensx}" y="{cy+76}" text-anchor="middle" font-size="14" fill="{PAL["soft"]}">{t["lens"]}</text>')
     # fovea + optic nerve
     fx, fy = cx + r - 14, cy
     s.append(f'<circle cx="{fx}" cy="{fy}" r="6" fill="{PAL["gold"]}"/>')
-    s.append(f'<text x="{fx+2}" y="{cy+26}" text-anchor="middle" font-size="12" fill="{PAL["gold"]}">{t["fovea"]}</text>')
+    s.append(f'<text x="{fx+4}" y="{cy+28}" text-anchor="middle" font-size="14" fill="{PAL["gold"]}">{t["fovea"]}</text>')
     s.append(f'<path d="M{cx+r-8},{cy+44} q42,30 76,22" stroke="#cbb98f" stroke-width="12" fill="none" stroke-linecap="round"/>')
-    s.append(f'<text x="{cx+r+40}" y="{cy+82}" font-size="12" fill="{PAL["soft"]}">{t["nerve"]}</text>')
+    s.append(f'<text x="{cx+r+42}" y="{cy+84}" font-size="14" fill="{PAL["soft"]}">{t["nerve"]}</text>')
     # light: 3 parallel rays refract through the lens and converge on the fovea
-    s.append(f'<text x="34" y="{cy-72}" font-size="12" fill="{PAL["gold"]}">{t["light"]}</text>')
+    s.append(f'<text x="34" y="{cy-74}" font-size="14" font-weight="600" fill="{PAL["gold"]}">{t["light"]}</text>')
     for dy in (-54, 0, 54):
         s.append(f'<line x1="34" y1="{cy+dy}" x2="{lensx-22}" y2="{cy+dy}" stroke="{PAL["gold"]}" stroke-width="2" opacity="0.9"/>')
         s.append(f'<line x1="{lensx+20}" y1="{cy+dy}" x2="{fx-7}" y2="{fy}" stroke="{PAL["gold"]}" stroke-width="2" opacity="0.85" marker-end="url(#eah)"/>')
     # zoom panel: rod vs cone
     px, py, pw, ph = 562, 60, 364, 308
     s.append(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="14" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')
-    s.append(f'<text x="{px+pw/2:.0f}" y="{py+28}" text-anchor="middle" font-size="13.5" font-weight="700" fill="{PAL["ink"]}">{t["zoom"]}</text>')
+    s.append(f'<text x="{px+pw/2:.0f}" y="{py+28}" text-anchor="middle" font-size="15" font-weight="700" fill="{PAL["ink"]}">{t["zoom"]}</text>')
     rx = px + 98
     s.append(f'<rect x="{rx-13}" y="{py+64}" width="26" height="96" rx="13" fill="#aebcc4"/>')
     s.append(f'<rect x="{rx-9}" y="{py+158}" width="18" height="56" rx="6" fill="#c7d2d8"/>')
     s.append(f'<circle cx="{rx}" cy="{py+224}" r="9" fill="#bcc8ce"/>')
-    s.append(f'<text x="{rx}" y="{py+258}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["soft"]}">{t["rod"]}</text>')
-    s.append(f'<text x="{rx}" y="{py+277}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["rod_sub"]}</text>')
+    s.append(f'<text x="{rx}" y="{py+258}" text-anchor="middle" font-size="14.5" font-weight="700" fill="{PAL["soft"]}">{t["rod"]}</text>')
+    s.append(f'<text x="{rx}" y="{py+278}" text-anchor="middle" font-size="12" fill="{PAL["mute"]}">{t["rod_sub"]}</text>')
     cxx = px + 258
     s.append(f'<path d="M{cxx-17},{py+160} L{cxx+17},{py+160} L{cxx+8},{py+64} L{cxx-8},{py+64} Z" fill="#f0b2a0" stroke="{PAL["L"]}" stroke-width="1.3"/>')
     s.append(f'<rect x="{cxx-9}" y="{py+160}" width="18" height="54" rx="6" fill="#f4cabd"/>')
     s.append(f'<circle cx="{cxx}" cy="{py+224}" r="9" fill="#f0b8aa"/>')
-    s.append(f'<text x="{cxx}" y="{py+258}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["L"]}">{t["cone"]}</text>')
-    s.append(f'<text x="{cxx}" y="{py+277}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["cone_sub"]}</text>')
+    s.append(f'<text x="{cxx}" y="{py+258}" text-anchor="middle" font-size="14.5" font-weight="700" fill="{PAL["L"]}">{t["cone"]}</text>')
+    s.append(f'<text x="{cxx}" y="{py+278}" text-anchor="middle" font-size="12" fill="{PAL["mute"]}">{t["cone_sub"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -283,13 +297,13 @@ def fig_lms(t):
     # horizontal gridlines + y ticks
     for v in (0.25, 0.5, 0.75, 1.0):
         s.append(f'<line x1="{ox}" y1="{ys(v):.1f}" x2="{ox+w}" y2="{ys(v):.1f}" stroke="{PAL["line"]}" stroke-width="1"/>')
-        s.append(f'<text x="{ox-10}" y="{ys(v)+4:.1f}" text-anchor="end" font-size="11" fill="{PAL["mute"]}">{v:.2f}</text>')
+        s.append(f'<text x="{ox-10}" y="{ys(v)+4:.1f}" text-anchor="end" font-size="13" fill="{PAL["mute"]}">{v:.2f}</text>')
     _axes(s, ox, oy, w, h, t["x"], t["y"])
     # wavelength rainbow strip + ticks under the axis
     s.append(f'<rect x="{ox}" y="{oy+7}" width="{w}" height="11" fill="url(#rain3)" rx="2"/>')
     for nm in range(400, 701, 50):
         s.append(f'<line x1="{xs(nm):.1f}" y1="{oy}" x2="{xs(nm):.1f}" y2="{oy+5}" stroke="{PAL["axis"]}"/>')
-        s.append(f'<text x="{xs(nm):.1f}" y="{oy+36}" text-anchor="middle" font-size="11.5" fill="{PAL["mute"]}">{nm}</text>')
+        s.append(f'<text x="{xs(nm):.1f}" y="{oy+38}" text-anchor="middle" font-size="13" fill="{PAL["mute"]}">{nm}</text>')
     # sample the real curves
     series, peak_v, peak_nm = {}, {"S": 0, "M": 0, "L": 0}, {"S": LMIN, "M": LMIN, "L": LMIN}
     for nm in range(LMIN, LMAX + 1, 2):
@@ -309,84 +323,59 @@ def fig_lms(t):
         px, py = xs(peak_nm[name]), ys(peak_v[name])
         s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4.2" fill="{col}" stroke="#fff" stroke-width="1.6"/>')
         s.append(f'<text x="{px:.1f}" y="{py-13:.1f}" text-anchor="middle" font-size="16" font-weight="800" fill="{col}">{name}</text>')
-        s.append(f'<text x="{px:.1f}" y="{py+(20 if name=="S" else -29):.1f}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">≈{peak_nm[name]}nm</text>')
+        s.append(f'<text x="{px:.1f}" y="{py+(22 if name=="S" else -30):.1f}" text-anchor="middle" font-size="12.5" fill="{PAL["mute"]}">≈{peak_nm[name]}nm</text>')
     # legend (top-right, away from the peaks)
-    lx, ly = ox + w - 232, ys(1.0) + 4
+    lx, ly = ox + w - 250, ys(1.0) + 4
     for i, (name, lab) in enumerate([("L", t["l"]), ("M", t["m"]), ("S", t["s"])]):
         col = dict(S=PAL["S"], M=PAL["M"], L=PAL["L"])[name]
-        s.append(f'<rect x="{lx}" y="{ly+i*23}" width="24" height="5" rx="2.5" fill="{col}"/>')
-        s.append(f'<text x="{lx+32}" y="{ly+8+i*23}" font-size="12.5" fill="{PAL["ink"]}">{lab}</text>')
+        s.append(f'<rect x="{lx}" y="{ly+i*25}" width="26" height="5.5" rx="2.5" fill="{col}"/>')
+        s.append(f'<text x="{lx+34}" y="{ly+9+i*25}" font-size="14" fill="{PAL["ink"]}">{lab}</text>')
     s.append('</svg>')
     return "\n".join(s)
+
+
+# Process flows (fig 5 & 6) are responsive HTML, not SVG: a row of icon cards on
+# desktop that reflows to a top-to-bottom stack with larger text on phones.
+_FLOW_ACCENT = [PAL["S"], PAL["gold"], PAL["M"], PAL["L"], "#8a5cd0", "#2f8f9d"]
+_PT_ICONS = ["🧬", "☀️", "🔀", "⚡", "📉", "🔌"]
+_PATH_ICONS = ["👁️", "🕸️", "🧵", "📡", "🧠"]
+
+
+def _flow(steps, icons):
+    cards = []
+    for i, (lab, ic) in enumerate(zip(steps, icons)):
+        c = _FLOW_ACCENT[i % len(_FLOW_ACCENT)]
+        txt = lab.replace("|", " ")
+        cards.append(
+            f'<div class="step" style="--c:{c}">'
+            f'<span class="step-no">{i+1}</span>'
+            f'<span class="step-ic">{ic}</span>'
+            f'<span class="step-tx">{txt}</span></div>')
+        if i < len(steps) - 1:
+            cards.append('<span class="flow-arrow" aria-hidden="true">&#8594;</span>')
+    return '<div class="flow">' + "".join(cards) + '</div>'
 
 
 def fig_phototransduction(t):
-    """Figure 6 — phototransduction cascade inside a cone outer segment."""
-    W, H = 960, 360
-    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
+    """Figure 5 — phototransduction cascade (responsive icon flow)."""
     steps = [t["p1"], t["p2"], t["p3"], t["p4"], t["p5"], t["p6"]]
-    n = len(steps)
-    bw, bh, gap = 132, 92, 18
-    x0 = (W - (n * bw + (n - 1) * gap)) / 2
-    y = 120
-    cols = ["#fde9c8", "#f6d2c7", "#e7d6f3", "#cfe6d6", "#cfe0f5", "#d7dde1"]
-    for i, (lab, col) in enumerate(zip(steps, cols)):
-        x = x0 + i * (bw + gap)
-        s.append(f'<rect x="{x:.1f}" y="{y}" width="{bw}" height="{bh}" rx="11" fill="{col}" stroke="{PAL["line"]}"/>')
-        s.append(f'<text x="{x+14:.1f}" y="{y+22}" font-size="14" font-weight="800" fill="{PAL["soft"]}">{i+1}</text>')
-        # wrap label into <= 3 lines
-        words = lab.split(" ")
-        lines, cur = [], ""
-        for wd in words:
-            if len(cur) + len(wd) > 13 and cur:
-                lines.append(cur); cur = wd
-            else:
-                cur = (cur + " " + wd).strip()
-        if cur:
-            lines.append(cur)
-        for j, ln in enumerate(lines[:3]):
-            s.append(f'<text x="{x+bw/2:.1f}" y="{y+44+j*16}" text-anchor="middle" font-size="11.5" fill="{PAL["ink"]}">{ln}</text>')
-        if i < n - 1:
-            s.append(f'<path d="M{x+bw:.1f},{y+bh/2} L{x+bw+gap:.1f},{y+bh/2}" stroke="{PAL["soft"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ah2)"/>')
-    s.append(f'<defs><marker id="ah2" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["soft"]}"/></marker><marker id="ahg" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["gold"]}"/></marker></defs>')
-    # photon in
-    s.append(f'<text x="{x0:.1f}" y="{y-22}" font-size="13" fill="{PAL["gold"]}">☀ {t["photon"]}</text>')
-    s.append(f'<line x1="{x0+10:.1f}" y1="{y-14}" x2="{x0+30:.1f}" y2="{y-2}" stroke="{PAL["gold"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ahg)"/>')
-    # signal out caption
-    s.append(f'<text x="{W/2:.0f}" y="{y+bh+44}" text-anchor="middle" font-size="12.5" fill="{PAL["soft"]}">{t["caption"]}</text>')
-    s.append('</svg>')
-    return "\n".join(s)
+    flow = _flow(steps, _PT_ICONS)
+    note = (f'<p class="flow-note"><span class="flow-photon">&#9728; {t["photon"]}</span> &middot; {t["caption"]}</p>')
+    return f'<div class="proc" role="img" aria-label="{t["aria"]}">{flow}{note}</div>'
 
 
 def fig_pathway(t):
-    """Figure 7 — retina -> optic nerve -> LGN -> V1, plus opponent recoding."""
-    W, H = 960, 380
-    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    nodes = [(110, t["n1"]), (320, t["n2"]), (520, t["n3"]), (730, t["n4"]), (880, t["n5"])]
-    y = 110
-    for i, (x, lab) in enumerate(nodes):
-        s.append(f'<circle cx="{x}" cy="{y}" r="30" fill="{PAL["panel"]}" stroke="{PAL["S"]}" stroke-width="1.8"/>')
-        for j, ln in enumerate(lab.split("|")):
-            s.append(f'<text x="{x}" y="{y+5+(j-(len(lab.split("|"))-1)/2)*14:.0f}" text-anchor="middle" font-size="11" fill="{PAL["ink"]}">{ln}</text>')
-        if i < len(nodes) - 1:
-            nx = nodes[i + 1][0]
-            s.append(f'<path d="M{x+32},{y} L{nx-32},{y}" stroke="{PAL["soft"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ah3)"/>')
-    s.append(f'<defs><marker id="ah3" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["soft"]}"/></marker></defs>')
-    # opponent-process panel
-    px, py, pw, ph = 150, 200, 660, 150
-    s.append(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="12" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')
-    s.append(f'<text x="{px+pw/2:.0f}" y="{py+26}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["ink"]}">{t["opp_title"]}</text>')
-    chans = [(t["ch1"], PAL["L"], PAL["M"]), (t["ch2"], PAL["S"], PAL["gold"]), (t["ch3"], "#222", "#ddd")]
-    cw = pw / 3
-    for i, (lab, ca, cb) in enumerate(chans):
-        cx = px + cw * i + cw / 2
-        s.append(f'<rect x="{cx-46}" y="{py+52}" width="40" height="22" rx="5" fill="{ca}"/>')
-        s.append(f'<rect x="{cx+6}" y="{py+52}" width="40" height="22" rx="5" fill="{cb}" stroke="{PAL["line"]}"/>')
-        s.append(f'<text x="{cx}" y="{py+68}" text-anchor="middle" font-size="13" font-weight="800" fill="{PAL["soft"]}">↔</text>')
-        s.append(f'<text x="{cx:.0f}" y="{py+98}" text-anchor="middle" font-size="11.5" fill="{PAL["ink"]}">{lab}</text>')
-    s.append(f'<text x="{px+pw/2:.0f}" y="{py+ph-12}" text-anchor="middle" font-size="11" fill="{PAL["mute"]}">{t["opp_sub"]}</text>')
-    s.append('</svg>')
-    return "\n".join(s)
+    """Figure 6 — visual pathway (responsive icon flow) + opponent recoding."""
+    nodes = [t["n1"], t["n2"], t["n3"], t["n4"], t["n5"]]
+    flow = _flow(nodes, _PATH_ICONS)
+    chips = [(t["ch1"], PAL["L"], PAL["M"]), (t["ch2"], PAL["S"], PAL["gold"]), (t["ch3"], "#2b3640", "#d2d9de")]
+    chip_html = "".join(
+        f'<span class="chip"><span class="sw" style="background:{a}"></span>'
+        f'<span class="sw" style="background:{b}"></span>{lab}</span>' for lab, a, b in chips)
+    opp = (f'<div class="opp"><div class="opp-title">{t["opp_title"]}</div>'
+           f'<div class="opp-chips">{chip_html}</div>'
+           f'<div class="opp-sub">{t["opp_sub"]}</div></div>')
+    return f'<div class="proc" role="img" aria-label="{t["aria"]}">{flow}{opp}</div>'
 
 
 # ---------------------------------------------------------------------------
@@ -478,7 +467,7 @@ strong{font-weight:700;color:#11507a}
 figure{margin:24px 0 8px}
 .fig-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 10px;box-shadow:0 2px 16px rgba(34,48,58,.05);overflow-x:auto}
 .fig-box svg{display:block;width:100%;height:auto;min-width:520px}
-figcaption{font-size:13px;line-height:1.6;color:var(--mute);margin:11px 4px 0;padding-left:12px;border-left:3px solid var(--line)}
+figcaption{font-size:14.5px;line-height:1.65;color:var(--mute);margin:13px 4px 0;padding-left:13px;border-left:3px solid var(--line)}
 figcaption b{color:var(--soft)}
 .closing{margin:40px 0 0;padding:22px 20px;background:linear-gradient(180deg,rgba(192,138,45,.07),rgba(192,138,45,.02));border:1px solid rgba(192,138,45,.25);border-radius:14px}
 .closing h2{margin:0 0 10px;font-size:18px;color:var(--accent)}
@@ -500,6 +489,33 @@ footer a{color:var(--soft);font-weight:600}
 }
 @media(min-width:1040px){
   .fig-box{margin-left:-110px;margin-right:-110px}
+}
+/* responsive process flow (fig 5 & 6): horizontal cards on desktop,
+   top-to-bottom stack with bigger text on phones */
+.proc{padding:6px 2px 2px}
+.flow{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:7px}
+.step{flex:1 1 0;min-width:0;background:#fff;border:1px solid var(--line);border-top:3px solid var(--c);border-radius:13px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;box-shadow:0 3px 12px rgba(34,48,58,.06)}
+.step-no{width:23px;height:23px;border-radius:50%;background:var(--c);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
+.step-ic{font-size:36px;line-height:1}
+.step-tx{font-size:14.5px;line-height:1.42;color:var(--ink);font-weight:500}
+.flow-arrow{display:flex;align-items:center;color:var(--mute);font-size:24px;flex:none;font-weight:700}
+.flow-note{font-size:14.5px;color:var(--soft);margin:16px 6px 2px;text-align:center;line-height:1.65}
+.flow-photon{color:var(--accent);font-weight:700}
+.opp{margin-top:18px;background:var(--panel,#f4f7f8);border:1px solid var(--line);border-radius:13px;padding:16px}
+.opp-title{font-size:15px;font-weight:700;color:var(--ink);text-align:center;margin-bottom:13px}
+.opp-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.chip{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 15px;font-size:14px;font-weight:600;color:var(--ink)}
+.chip .sw{width:15px;height:15px;border-radius:4px;display:inline-block;border:1px solid rgba(0,0,0,.08)}
+.opp-sub{font-size:13px;color:var(--mute);text-align:center;margin-top:13px;line-height:1.6}
+@media(max-width:680px){
+  .flow{flex-direction:column;gap:0}
+  .step{flex-direction:row;align-items:center;gap:15px;text-align:left;padding:15px 16px;border-top:1px solid var(--line);border-left:4px solid var(--c)}
+  .step-ic{font-size:42px}
+  .step-tx{font-size:16.5px;flex:1}
+  .flow-arrow{transform:rotate(90deg);justify-content:center;height:30px;font-size:26px}
+  .opp-chips{flex-direction:column}
+  .chip{justify-content:center;font-size:15.5px;padding:11px}
+  .opp-title{font-size:16.5px}.opp-sub{font-size:14.5px}
 }
 """
 
