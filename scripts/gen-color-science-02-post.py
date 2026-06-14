@@ -65,6 +65,16 @@ CSS = CSS_BASE + """
 .fig-box.square{overflow-x:visible;display:flex;justify-content:center}
 .fig-box.square svg{min-width:0;width:100%;max-width:560px;height:auto}
 @media(min-width:900px){.formula{font-size:20px;max-width:760px}.fig-box.square svg{max-width:640px}}
+/* interactive color-matching simulation */
+.cs-sim{margin:26px 0 8px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px 16px 14px;box-shadow:0 2px 18px rgba(34,48,58,.06)}
+.cs-sim .cs-ttl{font-size:15.5px;font-weight:800;color:var(--ink);display:flex;align-items:center;gap:8px}
+.cs-sim .cs-live{font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:800;letter-spacing:.1em;color:#fff;background:#e4572e;padding:2px 7px;border-radius:4px}
+.cs-sim .cs-desc{font-size:13px;color:var(--soft);margin:6px 0 12px;line-height:1.6}
+.cs-sim svg{width:100%;height:auto;display:block;min-width:0}
+.cs-ctrl{display:flex;align-items:center;gap:12px;margin-top:12px}
+.cs-btn{flex-shrink:0;width:44px;height:44px;border-radius:50%;border:none;background:var(--ink);color:#fff;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cs-slider{flex:1;accent-color:var(--accent);height:6px}
+.cs-readout{flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--ink);min-width:76px;text-align:right}
 """
 
 # ---------------------------------------------------------------------------
@@ -104,7 +114,8 @@ FSA = 15   # axis numbers
 def _ax(s, ox, oy, w, h, xl, yl):
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox+w}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy-h}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<text x="{ox+w}" y="{oy+30}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">{xl}</text>')
+    # x-label sits a row BELOW the tick numbers (oy+24) to avoid colliding with the last tick
+    s.append(f'<text x="{ox+w}" y="{oy+46}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">{xl}</text>')
     s.append(f'<text x="{ox-6}" y="{oy-h-10}" font-size="{FS}" fill="{PAL["soft"]}">{yl}</text>')
 
 
@@ -134,17 +145,19 @@ def fig_match(t):
         s.append(f'<line x1="{150+dx*26:.0f}" y1="{120+dy*26:.0f}" x2="{150+dx*34:.0f}" y2="{120+dy*34:.0f}" stroke="{PAL["gold"]}" stroke-width="2"/>')
     s.append(f'<text x="150" y="70" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["test"]}</text>')
     s.append(f'<text x="150" y="180" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">{t["single_wl"]}</text>')
-    # three primary sources + intensity sliders (right)
-    s.append(f'<text x="800" y="56" text-anchor="middle" font-size="{FS}" font-weight="800" fill="{PAL["ink"]}">{t["knobs"]}</text>')
-    prim = [("R 700", PAL["L"]), ("G 546", PAL["M"]), ("B 436", PAL["S"])]
-    for i, (lab, col) in enumerate(prim):
-        y = 100 + i * 70
-        s.append(f'<circle cx="760" cy="{y}" r="16" fill="{col}"/>')
-        s.append(f'<text x="760" y="{y+5}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">{lab[0]}</text>')
-        s.append(f'<rect x="790" y="{y-6}" width="96" height="12" rx="6" fill="#eee" stroke="{PAL["line"]}"/>')
-        s.append(f'<rect x="790" y="{y-6}" width="{40+i*22}" height="12" rx="6" fill="{col}"/>')
-        s.append(f'<circle cx="{790+40+i*22}" cy="{y}" r="8" fill="#fff" stroke="{col}" stroke-width="2"/>')
-        s.append(f'<text x="784" y="{y+5}" text-anchor="end" font-size="{FSA}" font-weight="700" fill="{col}">{lab}</text>')
+    # three primary sources + intensity sliders (right) — lamp + wl below, slider to the right (no overlap)
+    s.append(f'<text x="812" y="54" text-anchor="middle" font-size="{FS}" font-weight="800" fill="{PAL["ink"]}">{t["knobs"]}</text>')
+    prim = [("R", "700", PAL["L"]), ("G", "546", PAL["M"]), ("B", "436", PAL["S"])]
+    tx0, tw = 770, 110
+    for i, (lt, nm, col) in enumerate(prim):
+        y = 100 + i * 66
+        s.append(f'<circle cx="724" cy="{y}" r="15" fill="{col}"/>')
+        s.append(f'<text x="724" y="{y+5}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">{lt}</text>')
+        s.append(f'<text x="724" y="{y+30}" text-anchor="middle" font-size="10.5" fill="{PAL["soft"]}">{nm}nm</text>')
+        s.append(f'<rect x="{tx0}" y="{y-6}" width="{tw}" height="12" rx="6" fill="#eef1f3" stroke="{PAL["line"]}"/>')
+        fillw = 36 + i * 30
+        s.append(f'<rect x="{tx0}" y="{y-6}" width="{fillw}" height="12" rx="6" fill="{col}"/>')
+        s.append(f'<circle cx="{tx0+fillw}" cy="{y}" r="8" fill="#fff" stroke="{col}" stroke-width="2.5"/>')
     # observer eye (bottom)
     ex, ey = fx, 360
     s.append(f'<line x1="{fx-fr*0.6:.0f}" y1="{fy+fr-6}" x2="{ex-26}" y2="{ey-18}" stroke="{PAL["mute"]}" stroke-width="1" stroke-dasharray="4 3"/>')
@@ -268,11 +281,10 @@ def fig_xyz_cmf(t):
 def _chroma_axes(s, PX, PY, XR, YR, ox, oy):
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{PX(XR):.0f}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{PY(YR):.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    for v in (0.2, 0.4, 0.6, 0.8):
-        if v <= XR:
-            s.append(f'<text x="{PX(v):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
-        if v <= YR:
-            s.append(f'<text x="{ox-12}" y="{PY(v)+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+    # ticks at 0.2/0.4/0.6 only — the max-edge tick would collide with the x/y axis label
+    for v in (0.2, 0.4, 0.6):
+        s.append(f'<text x="{PX(v):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+        s.append(f'<text x="{ox-12}" y="{PY(v)+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
 
 
 def fig_chromaticity(t):
@@ -305,7 +317,8 @@ def fig_chromaticity(t):
     R, G, B = (0.64, 0.33), (0.30, 0.60), (0.15, 0.06)
     tri = f'{PX(R[0]):.0f},{PY(R[1]):.0f} {PX(G[0]):.0f},{PY(G[1]):.0f} {PX(B[0]):.0f},{PY(B[1]):.0f}'
     s.append(f'<polygon points="{tri}" fill="none" stroke="#111" stroke-width="2" stroke-dasharray="7 4"/>')
-    s.append(f'<text x="{PX(R[0])+10:.0f}" y="{PY(R[1])+4:.0f}" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{t["srgb"]}</text>')
+    # sRGB label inside the triangle (end-anchored, pointing left) — clear of the wavelength labels at the rim
+    s.append(f'<text x="{PX(R[0])-12:.0f}" y="{PY(R[1])+26:.0f}" text-anchor="end" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3.5" paint-order="stroke">{t["srgb"]}</text>')
     wx, wy = 0.3127, 0.329
     s.append(f'<circle cx="{PX(wx):.0f}" cy="{PY(wy):.0f}" r="6" fill="#fff" stroke="#111" stroke-width="2"/>')
     s.append(f'<text x="{PX(wx)+11:.0f}" y="{PY(wy)+4:.0f}" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{t["white"]}</text>')
@@ -533,6 +546,141 @@ FORMULAS = {
 
 
 # ---------------------------------------------------------------------------
+# Interactive color-matching simulation widget (auto-playing JS animation)
+# ---------------------------------------------------------------------------
+def _sim_data_js():
+    import numpy as np
+    wl, r, g, b = cie.rgb_cmf()
+    WL = list(range(400, 701, 5))
+    at = lambda a, w: round(float(a[int(np.argmin(np.abs(wl - w)))]), 4)
+    R = [at(r, w) for w in WL]; G = [at(g, w) for w in WL]; B = [at(b, w) for w in WL]
+    SPEC = [p1.wl_to_rgb(w) for w in WL]
+    return "const SIM={wl:%s,r:%s,g:%s,b:%s,spec:%s};" % (
+        json.dumps(WL), json.dumps(R), json.dumps(G), json.dumps(B), json.dumps(SPEC))
+
+
+SIM_JS = _sim_data_js()
+
+SIM_SVG = """<svg viewBox="0 0 600 470" xmlns="http://www.w3.org/2000/svg" aria-label="{{ARIA}}">
+  <defs>
+    <linearGradient id="csrain" x1="0" x2="1">
+      <stop offset="0%" stop-color="#7a4bd0"/><stop offset="14%" stop-color="#3b5bd0"/>
+      <stop offset="30%" stop-color="#19b6c4"/><stop offset="46%" stop-color="#36c25a"/>
+      <stop offset="62%" stop-color="#d6d23a"/><stop offset="78%" stop-color="#e07b2a"/>
+      <stop offset="100%" stop-color="#d23b3b"/></linearGradient>
+    <marker id="csauxar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e4572e"/></marker>
+  </defs>
+  <rect x="60" y="38" width="480" height="16" rx="3" fill="url(#csrain)"/>
+  <text x="60" y="30" font-size="12" fill="#8a9aa3">400</text>
+  <text x="540" y="30" font-size="12" fill="#8a9aa3" text-anchor="end">700 nm</text>
+  <polygon id="csPtr" points="0,0" fill="#22303a"/>
+  <clipPath id="csfclip"><circle cx="150" cy="172" r="74"/></clipPath>
+  <g clip-path="url(#csfclip)">
+    <rect id="csTest" x="76" y="98" width="74" height="148" fill="#19b6c4"/>
+    <rect id="csMix"  x="150" y="98" width="74" height="148" fill="#19b6c4"/>
+  </g>
+  <line x1="150" y1="98" x2="150" y2="246" stroke="#fff" stroke-width="1.4" opacity="0.5"/>
+  <circle cx="150" cy="172" r="74" fill="none" stroke="#22303a" stroke-width="2.5"/>
+  <text x="113" y="90" font-size="13" font-weight="700" fill="#22303a" text-anchor="middle">{{TEST}}</text>
+  <text x="187" y="90" font-size="13" font-weight="700" fill="#22303a" text-anchor="middle">{{MIX}}</text>
+  <text x="150" y="270" font-size="12.5" fill="#5a6b76" text-anchor="middle">{{MATCH}}</text>
+  <g id="csAux" opacity="0">
+    <line x1="150" y1="150" x2="113" y2="150" stroke="#e4572e" stroke-width="5" marker-end="url(#csauxar)"/>
+    <text x="150" y="126" font-size="11.5" font-weight="700" fill="#e4572e" text-anchor="middle">{{AUX}}</text>
+  </g>
+  <text x="430" y="90" font-size="13" font-weight="800" fill="#22303a" text-anchor="middle">{{BARS}}</text>
+  <line x1="322" y1="226" x2="540" y2="226" stroke="#9fb0b8" stroke-width="1.5"/>
+  <text x="318" y="230" font-size="11" fill="#8a9aa3" text-anchor="end">0</text>
+  <rect id="csBarR" x="348" y="226" width="40" height="0" fill="#e4572e"/>
+  <rect id="csBarG" x="412" y="226" width="40" height="0" fill="#36a655"/>
+  <rect id="csBarB" x="476" y="226" width="40" height="0" fill="#2d6cdf"/>
+  <text x="368" y="262" font-size="13" font-weight="800" fill="#e4572e" text-anchor="middle">R</text>
+  <text x="432" y="262" font-size="13" font-weight="800" fill="#36a655" text-anchor="middle">G</text>
+  <text x="496" y="262" font-size="13" font-weight="800" fill="#2d6cdf" text-anchor="middle">B</text>
+  <text x="368" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">700</text>
+  <text x="432" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">546</text>
+  <text x="496" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">436</text>
+  <text id="csNeg" x="430" y="300" font-size="10.5" font-weight="700" fill="#e4572e" text-anchor="middle" opacity="0">{{NEG}}</text>
+  <text x="60" y="332" font-size="12" font-weight="700" fill="#5a6b76">{{CMFLBL}}</text>
+  <line x1="60" y1="410" x2="540" y2="410" stroke="#cfd9de" stroke-width="1.2"/>
+  <polyline id="csCurveR" points="" fill="none" stroke="#e4572e" stroke-width="2.4"/>
+  <polyline id="csCurveG" points="" fill="none" stroke="#36a655" stroke-width="2.4"/>
+  <polyline id="csCurveB" points="" fill="none" stroke="#2d6cdf" stroke-width="2.4"/>
+  <line id="csSweep" x1="60" y1="350" x2="60" y2="454" stroke="#22303a" stroke-width="1.6" stroke-dasharray="4 3"/>
+</svg>"""
+
+SIM_SCRIPT = """<script>(function(){{
+{SIMDATA}
+var N=SIM.wl.length, SX0=60,SX1=540, FZERO=410, BASE=226;
+function $(id){{return document.getElementById(id);}}
+function xp(i){{return SX0+(SX1-SX0)*i/(N-1);}}
+function curve(a,sc){{var p='';for(var i=0;i<N;i++){{p+=xp(i).toFixed(1)+','+(FZERO-a[i]*sc).toFixed(1)+' ';}}return p;}}
+$('csCurveR').setAttribute('points',curve(SIM.r,210));
+$('csCurveG').setAttribute('points',curve(SIM.g,210));
+$('csCurveB').setAttribute('points',curve(SIM.b,210));
+function bar(el,v){{var h=Math.abs(v)*300;if(v>=0){{el.setAttribute('y',BASE-h);}}else{{el.setAttribute('y',BASE);}}el.setAttribute('height',h);el.setAttribute('opacity',0.92);}}
+function render(i){{
+  var col=SIM.spec[i];
+  $('csTest').setAttribute('fill',col); $('csMix').setAttribute('fill',col);
+  $('csLamN').textContent=SIM.wl[i]+' nm';
+  var px=xp(i);
+  $('csPtr').setAttribute('points',(px-6)+',34 '+(px+6)+',34 '+px+',46');
+  bar($('csBarR'),SIM.r[i]); bar($('csBarG'),SIM.g[i]); bar($('csBarB'),SIM.b[i]);
+  var neg=SIM.r[i]<0; $('csAux').setAttribute('opacity',neg?1:0); $('csNeg').setAttribute('opacity',neg?1:0);
+  $('csSweep').setAttribute('x1',px); $('csSweep').setAttribute('x2',px);
+  $('csSld').value=i;
+}}
+var i=0, dir=1, playing=true, last=0;
+function tick(t){{ if(playing && t-last>75){{last=t; i+=dir; if(i>=N-1){{i=N-1;dir=-1;}}else if(i<=0){{i=0;dir=1;}} render(i);}} requestAnimationFrame(tick); }}
+$('csPlayBtn').addEventListener('click',function(){{playing=!playing;$('csPlayBtn').textContent=playing?'\\u23F8':'\\u25B6';}});
+$('csSld').addEventListener('input',function(e){{playing=false;$('csPlayBtn').textContent='\\u25B6';i=+e.target.value;render(i);}});
+render(i); requestAnimationFrame(tick);
+}})();</script>"""
+
+
+def sim_labels(lang):
+    return {
+        "ko": dict(aria="색일치 자동 시뮬레이션", ttl="색일치 시뮬레이션", live="AUTO",
+                   desc="파장이 바뀌면 세 기준광 <b>R·G·B</b>의 강도가 변한다. 청록 구간에서 R이 음수가 되면, 혼합 쪽이 아니라 <b>측정 색 쪽에 R을 더하는 보조광(트릭)</b>으로 처리한다 — 이것이 색일치함수의 음수다.",
+                   test="측정", mix="혼합", match="두 반쪽은 항상 일치 (≡)", aux="보조광 +R",
+                   bars="기준광 강도", neg="R < 0 → 보조광", cmf="색일치함수 r̄ ḡ b̄"),
+        "en": dict(aria="Auto color-matching simulation", ttl="Color-matching simulation", live="AUTO",
+                   desc="As the wavelength sweeps, the three primaries <b>R·G·B</b> change intensity. In the cyan band R turns negative, so instead of the mix side, <b>red is added to the test side as an auxiliary light (the trick)</b> — that is the negative in the color-matching function.",
+                   test="test", mix="mix", match="the two halves always match (≡)", aux="aux +R",
+                   bars="primary intensity", neg="R < 0 → auxiliary", cmf="color-matching functions r̄ ḡ b̄"),
+        "ja": dict(aria="等色の自動シミュレーション", ttl="等色シミュレーション", live="AUTO",
+                   desc="波長が変わると三原色 <b>R·G·B</b> の強度が変わる。シアン帯でRが負になると、混合側ではなく <b>測定色側に赤を足す補助光（トリック）</b> で処理する — これが等色関数の負だ。",
+                   test="測定", mix="混合", match="両半分は常に一致 (≡)", aux="補助光 +R",
+                   bars="原色の強度", neg="R < 0 → 補助光", cmf="等色関数 r̄ ḡ b̄"),
+        "zh": dict(aria="颜色匹配自动模拟", ttl="颜色匹配模拟", live="AUTO",
+                   desc="波长扫过时，三原色 <b>R·G·B</b> 的强度随之变化。青色波段R变为负值，于是不在混合侧，而是 <b>把红加到待测色一侧作为辅助光（技巧）</b> — 这正是颜色匹配函数中的负值。",
+                   test="待测", mix="混合", match="两半始终一致 (≡)", aux="辅助光 +R",
+                   bars="原色强度", neg="R < 0 → 辅助光", cmf="颜色匹配函数 r̄ ḡ b̄"),
+    }[lang]
+
+
+def sim_widget(lang):
+    t = sim_labels(lang)
+    svg = SIM_SVG
+    for k, v in {"{{ARIA}}": t["aria"], "{{TEST}}": t["test"], "{{MIX}}": t["mix"],
+                 "{{MATCH}}": t["match"], "{{AUX}}": t["aux"], "{{BARS}}": t["bars"],
+                 "{{NEG}}": t["neg"], "{{CMFLBL}}": t["cmf"]}.items():
+        svg = svg.replace(k, v)
+    script = SIM_SCRIPT.format(SIMDATA=SIM_JS)
+    return (
+        '<div class="cs-sim" role="group">'
+        f'<div class="cs-ttl">{t["ttl"]} <span class="cs-live">● {t["live"]}</span></div>'
+        f'<div class="cs-desc">{t["desc"]}</div>'
+        f'{svg}'
+        '<div class="cs-ctrl">'
+        f'<button class="cs-btn" id="csPlayBtn" aria-label="play/pause">⏸</button>'
+        '<input class="cs-slider" type="range" id="csSld" min="0" max="60" value="0">'
+        '<div class="cs-readout"><span id="csLamN">400 nm</span></div>'
+        '</div></div>'
+        f'{script}')
+
+
+# ---------------------------------------------------------------------------
 # HTML head (part-2 hreflang)
 # ---------------------------------------------------------------------------
 HEAD = p1.HEAD.replace("color-science-01-how-we-see", SLUG)
@@ -605,6 +753,8 @@ def build_html(lang):
         if sec.get("fig2"):
             add_fig(sec["fig2"], sec["cap2"])
         parts.append('</section>')
+        if i == 1:  # after the color-matching-function section: the live simulation
+            parts.append(sim_widget(lang))
         if i == 3:
             parts.append('<div data-lp-ad="blog" style="margin:30px 0;"></div>')
 
