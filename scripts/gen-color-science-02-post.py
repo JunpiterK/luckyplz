@@ -279,7 +279,7 @@ def fig_chromaticity(t):
     """Properly FILLED CIE 1931 horseshoe: real CMF + xy->sRGB gamut PNG + vector overlay."""
     W, H = 740, 720
     ox, oy, pw, ph = 80, 650, 600, 600
-    XR, YR = 0.8, 0.9
+    (_x0, XR), (_y0, YR) = cie.GAMUT_RANGE["1931"]
     PX = lambda x: ox + pw * (x / XR)
     PY = lambda y: oy - ph * (y / YR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
@@ -317,7 +317,7 @@ def fig_macadam(t):
     """Real locus outline (dimmed gamut) + exaggerated MacAdam ellipses."""
     W, H = 740, 660
     ox, oy, pw, ph = 80, 590, 560, 560
-    XR, YR = 0.8, 0.9
+    (_x0, XR), (_y0, YR) = cie.GAMUT_RANGE["1931"]
     PX = lambda x: ox + pw * (x / XR)
     PY = lambda y: oy - ph * (y / YR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
@@ -344,7 +344,7 @@ def fig_chromaticity_1976(t):
     """Filled CIE 1976 UCS (u'v') diagram — real CMF gamut PNG + vector overlay."""
     W, H = 720, 700
     ox, oy, pw, ph = 86, 630, 580, 580
-    UR, VR = 0.64, 0.60
+    (_u0, UR), (_v0, VR) = cie.GAMUT_RANGE["1976"]
     PX = lambda u: ox + pw * (u / UR)
     PY = lambda v: oy - ph * (v / VR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']

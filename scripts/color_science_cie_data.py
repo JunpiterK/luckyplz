@@ -117,39 +117,57 @@ def _xy_to_srgb_grid(xg, yg):
     return np.clip(rgb, 0, 1)
 
 
-def _inside_hull(XG, YG, poly):
-    """Vectorized inside-the-convex-hull test via scipy Delaunay (robust)."""
+# Data ranges used by BOTH the raster fill and the SVG overlay — must match.
+GAMUT_RANGE = {"1931": ((0.0, 0.8), (0.0, 0.9)), "1976": ((0.0, 0.65), (0.0, 0.62))}
+
+# Drop the noisy long-wavelength tail (>700nm) where X+Y+Z -> 0 makes x,y unstable.
+_WL_MAX = 700
+
+
+def hull_boundary(mode="1931"):
+    """Convex-hull boundary of the spectral locus (clean, ordered, closed).
+
+    THE single source of truth for the gamut edge: both the PNG fill and the
+    SVG outline use this, so they cannot disagree. The hull also drops the noisy
+    >700nm tail and any sub-pixel concavities, giving a smooth, exact edge.
+    """
+    from scipy.spatial import ConvexHull
+    wl, sx, sy = spectral_locus()
+    m = wl <= _WL_MAX
+    sx, sy = sx[m], sy[m]
+    if mode == "1976":
+        sx, sy = xy_to_uv1976(sx, sy)
+    pts = np.column_stack([sx, sy])
+    h = ConvexHull(pts)
+    return pts[h.vertices]   # CCW-ordered boundary vertices
+
+
+def _inside_poly(XG, YG, poly):
+    """Inside the (convex) hull polygon via Delaunay find_simplex."""
     from scipy.spatial import Delaunay
     tri = Delaunay(poly)
-    pts = np.column_stack([XG.ravel(), YG.ravel()])
-    return (tri.find_simplex(pts) >= 0).reshape(XG.shape)
+    return (tri.find_simplex(np.column_stack([XG.ravel(), YG.ravel()])) >= 0).reshape(XG.shape)
 
 
-def render_chromaticity_png(out_path, mode="1931", res=900, xr=(0, 0.8), yr=(0, 0.9)):
+def render_chromaticity_png(out_path, mode="1931", res=900):
     """Filled chromaticity diagram PNG (gamut only, transparent outside).
 
     mode '1931' -> xy plane; '1976' -> u'v' plane. Row 0 = top = max-y.
-    Returns (xr, yr) actually used so the SVG overlay can align.
+    Filled exactly inside hull_boundary(mode) so it matches the SVG outline.
+    Returns the (xr, yr) data range used.
     """
     from PIL import Image
-    wl, sx, sy = spectral_locus()
-    if mode == "1976":
-        sx, sy = xy_to_uv1976(sx, sy)
-        xr, yr = (0, 0.65), (0, 0.62)
-    poly = np.column_stack([sx, sy])
-
+    xr, yr = GAMUT_RANGE[mode]
+    poly = hull_boundary(mode)
     W = res
-    H = int(res * (yr[1] - yr[0]) / (xr[1] - xr[0]))
+    H = int(round(res * (yr[1] - yr[0]) / (xr[1] - xr[0])))
     jx = np.linspace(xr[0], xr[1], W)
     iy = np.linspace(yr[1], yr[0], H)   # row 0 = top = max y
     XG, YG = np.meshgrid(jx, iy)
-    inside = _inside_hull(XG, YG, poly) & (YG > 1e-3)
+    inside = _inside_poly(XG, YG, poly) & (YG > 1e-3)
     if mode == "1976":
-        # convert grid back to xy for sRGB
         d = 6 * XG - 16 * YG + 12
-        xx = 9 * XG / d
-        yy = 4 * YG / d
-        rgb = _xy_to_srgb_grid(xx, yy)
+        rgb = _xy_to_srgb_grid(9 * XG / d, 4 * YG / d)
     else:
         rgb = _xy_to_srgb_grid(XG, YG)
     rgb = np.nan_to_num(rgb, nan=0.0)
@@ -160,23 +178,27 @@ def render_chromaticity_png(out_path, mode="1931", res=900, xr=(0, 0.8), yr=(0, 
     return xr, yr
 
 
-# wavelength label anchor points (xy or uv) for the overlay
-def locus_label_points(mode="1931"):
-    wl, sx, sy = spectral_locus()
-    if mode == "1976":
-        sx, sy = xy_to_uv1976(sx, sy)
-    out = {}
-    for w in (460, 480, 490, 500, 510, 520, 540, 560, 580, 600, 620, 700):
-        idx = int(np.argmin(np.abs(wl - w)))
-        out[w] = (float(sx[idx]), float(sy[idx]))
-    return out
-
-
 def locus_polyline(mode="1931"):
+    """Outline = the SAME hull boundary used to fill the PNG (guaranteed match)."""
+    return [(float(x), float(y)) for x, y in hull_boundary(mode)]
+
+
+def locus_label_points(mode="1931"):
+    """Wavelength label anchors, snapped onto the hull boundary so dots sit on the edge."""
     wl, sx, sy = spectral_locus()
+    m = wl <= _WL_MAX
+    wl, sx, sy = wl[m], sx[m], sy[m]
     if mode == "1976":
         sx, sy = xy_to_uv1976(sx, sy)
-    return list(zip(sx.tolist(), sy.tolist()))
+    bnd = hull_boundary(mode)
+    out = {}
+    for w in (460, 480, 490, 500, 510, 520, 540, 560, 580, 600, 620, 680):
+        idx = int(np.argmin(np.abs(wl - w)))
+        px, py = float(sx[idx]), float(sy[idx])
+        # snap to nearest boundary vertex so the dot lands exactly on the drawn edge
+        j = int(np.argmin((bnd[:, 0] - px) ** 2 + (bnd[:, 1] - py) ** 2))
+        out[w] = (float(bnd[j, 0]), float(bnd[j, 1]))
+    return out
 
 
 # ---------------------------------------------------------------------------
