@@ -168,8 +168,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **i18n & SEO.** The site targets 16 languages via `?lang=` query param with full `hreflang` alternates and JSON-LD `ItemList` in [public/index.html](public/index.html). Canonical domain is `https://luckyplz.com/`. When adding pages, replicate the hreflang/canonical/OG block and register the route in `public/sitemap.xml`.
 
+**언어 선택 UI (2026-06-14 개편) — 게임 16 vs 콘텐츠 5.** 게임(홈)은 글로벌 유입 SEO 때문에 16개국어를 유지하되, `.lang-bar` 를 `public/js/langBar.js` 가 5개 주요(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다. **콘텐츠(블로그·도구)는 인구×운영 가성비로 5개국어로 선택집중: ko·en·ja·zh·es** (인도는 영어 커버, 중국은 중국어 필수, 스페인어는 중남미, 프랑스어는 영어로 커버되어 제외). 블로그 인덱스·도구 랜딩·도구 페이지에는 공유 선택기 `public/js/langSelect.js` 를 `<div id="lp-langbar"></div>` 마운트로 붙인다. 디렉토리 페이지(hreflang 구분 언어>1)는 hreflang으로 이동·미번역은 영어, 클라이언트 i18n 페이지(블로그/랜딩)는 `?lang` 리로드. **ko/en 기본, ja/zh/es 미번역 시 영어 폴백** (블로그 인덱스 chrome 는 비-ko 전부 영어).
+
 **Blog content language tiers (다국어 운영 기준).** 메인 페이지의 언어 선택이 블로그에도 그대로 라우팅된다:
-- **Tier A (mandatory, 모든 블로그 글)**: `ko` (한국어), `en` (영어), `ja` (일본어), `zh` (중국어 간체). 새 글은 처음부터 4종으로 만든다. 자세한 룰은 위 "Blog Authoring (MANDATORY)" 섹션 참조.
+- **Tier A (mandatory, 모든 블로그 글)**: `ko` (한국어), `en` (영어), `ja` (일본어), `zh` (중국어 간체). 새 글은 처음부터 4종으로 만든다. 자세한 룰은 위 "Blog Authoring (MANDATORY)" 섹션 참조. **`es`(스페인어)는 콘텐츠 5번째 타깃 언어** — 선택기에 노출되며 미작성 시 영어 폴백. 새 플래그십 콘텐츠는 es 추가 고려.
 - **Tier B (optional, 특정 트래픽 타깃 글)**: 추가 11언어 (de, es, fr, hi, id, it, pt, ru, th, tr, vi). 현재 `spacex-ipo-2026` 시리즈가 7언어로 운영 중. 새 글이 Tier B 로 갈 필요가 있으면 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 "Tier B 승격 절차" 참조.
 - 메인 페이지의 언어 선택은 게임에도 적용되지만, 게임은 UI 가 가벼워 자동 i18n (브라우저 lang 또는 `?lang=`) 으로 처리. 블로그는 본문 자체가 다른 언어로 작성되어야 하므로 디렉토리 분리.
 - **라우팅 규칙 (메인페이지 언어 선택 → 블로그)**: `ko` → `<slug>/`, `ja` → `<slug>-ja/`, `zh` → `<slug>-zh/`, 그 외 (en 포함 fallback) → `<slug>-en/`.
