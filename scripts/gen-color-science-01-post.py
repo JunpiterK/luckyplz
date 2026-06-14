@@ -336,9 +336,66 @@ def fig_lms(t):
 
 # Process flows (fig 5 & 6) are responsive HTML, not SVG: a row of icon cards on
 # desktop that reflows to a top-to-bottom stack with larger text on phones.
+# Icons are hand-drawn inline SVG line-art of the actual structure at each step
+# (chromophore, GPCR, ion channel, cone cell, ganglion neuron, optic chiasm,
+# LGN, V1) — not stock emoji. They inherit the step's accent via currentColor.
 _FLOW_ACCENT = [PAL["S"], PAL["gold"], PAL["M"], PAL["L"], "#8a5cd0", "#2f8f9d"]
-_PT_ICONS = ["🧬", "☀️", "🔀", "⚡", "📉", "🔌"]
-_PATH_ICONS = ["👁️", "🕸️", "🧵", "📡", "🧠"]
+
+
+def _icon(inner):
+    return ('<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.2" '
+            'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + inner + '</svg>')
+
+
+# phototransduction cascade — molecular line-art
+_PT_ICONS = [
+    # 1 11-cis retinal bound in opsin: protein pocket + kinked chromophore
+    _icon('<circle cx="24" cy="24" r="14"/><polyline points="15,27 20,19 25,27 30,19 33,23"/>'),
+    # 2 photon absorbed: light burst
+    _icon('<circle cx="24" cy="24" r="6.5"/>'
+          '<line x1="24" y1="5" x2="24" y2="11"/><line x1="24" y1="37" x2="24" y2="43"/>'
+          '<line x1="5" y1="24" x2="11" y2="24"/><line x1="37" y1="24" x2="43" y2="24"/>'
+          '<line x1="11" y1="11" x2="15" y2="15"/><line x1="33" y1="33" x2="37" y2="37"/>'
+          '<line x1="37" y1="11" x2="33" y2="15"/><line x1="15" y1="33" x2="11" y2="37"/>'),
+    # 3 opsin activated: 7-TM receptor crossing the bilayer + activation spark
+    _icon('<line x1="5" y1="17" x2="43" y2="17"/><line x1="5" y1="31" x2="43" y2="31"/>'
+          '<rect x="17" y="12" width="11" height="24" rx="5.5"/>'
+          '<path d="M36,8 l1.3,3.4 3.4,1.3 -3.4,1.3 -1.3,3.4 -1.3,-3.4 -3.4,-1.3 3.4,-1.3 z"/>'),
+    # 4 transducin -> PDE: two coupled proteins
+    _icon('<circle cx="17" cy="24" r="8"/><circle cx="31" cy="24" r="8"/>'
+          '<circle cx="17" cy="24" r="1.6" fill="currentColor"/><circle cx="31" cy="24" r="1.6" fill="currentColor"/>'),
+    # 5 cGMP falls sharply: downward trend + thinning molecules
+    _icon('<line x1="24" y1="9" x2="24" y2="34"/><polyline points="17,27 24,36 31,27"/>'
+          '<circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="36" cy="12" r="2" fill="currentColor"/>'
+          '<circle cx="12" cy="22" r="2" fill="currentColor"/>'),
+    # 6 CNG channels close -> hyperpolarization: pinched membrane channel
+    _icon('<line x1="5" y1="14" x2="43" y2="14"/><line x1="5" y1="34" x2="43" y2="34"/>'
+          '<path d="M19,14 q6,10 0,20"/><path d="M29,14 q-6,10 0,20"/>'
+          '<line x1="20.5" y1="24" x2="27.5" y2="24"/>'),
+]
+
+# visual pathway — anatomical line-art
+_PATH_ICONS = [
+    # 1 photoreceptor (cone): tapered cell with outer-segment discs
+    _icon('<path d="M19,42 L19,23 L24,8 L29,23 L29,42"/>'
+          '<line x1="20.5" y1="14" x2="27.5" y2="14"/><line x1="19.8" y1="18" x2="28.2" y2="18"/>'
+          '<line x1="19" y1="22" x2="29" y2="22"/>'),
+    # 2 bipolar & ganglion cell: soma + dendrites up + axon down
+    _icon('<circle cx="24" cy="23" r="6"/>'
+          '<path d="M24,17 L24,9"/><path d="M21,18 L15,10"/><path d="M27,18 L33,10"/>'
+          '<path d="M24,29 L24,41"/><path d="M24,41 L20,44"/><path d="M24,41 L28,44"/>'),
+    # 3 optic chiasm: two nerve bundles crossing in an X
+    _icon('<path d="M9,9 C19,19 29,29 39,39" stroke-width="2.8"/>'
+          '<path d="M39,9 C29,19 19,29 9,39" stroke-width="2.8"/>'),
+    # 4 LGN: layered kidney-shaped relay nucleus
+    _icon('<path d="M18,11 C9,13 8,31 17,36 C27,41 37,33 34,23 C37,13 27,9 18,11 Z"/>'
+          '<path d="M14,19 C21,17 28,18 31,21"/><path d="M13,25 C21,23 29,24 32,27"/>'
+          '<path d="M15,31 C21,29 28,30 30,32"/>'),
+    # 5 V1 visual cortex: brain profile + occipital stripes
+    _icon('<path d="M13,29 C9,25 11,18 18,17 C21,11 31,12 33,18 C40,18 41,27 35,29 '
+          'C36,34 28,35 25,31 C20,34 14,33 13,29 Z"/>'
+          '<path d="M31,21 q4,4 1,9"/><path d="M34,20.5 q4,5 1,11"/>'),
+]
 
 
 def _flow(steps, icons):
@@ -496,7 +553,8 @@ footer a{color:var(--soft);font-weight:600}
 .flow{display:flex;flex-wrap:nowrap;align-items:stretch;justify-content:center;gap:7px}
 .step{flex:1 1 0;min-width:0;background:#fff;border:1px solid var(--line);border-top:3px solid var(--c);border-radius:13px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;box-shadow:0 3px 12px rgba(34,48,58,.06)}
 .step-no{width:23px;height:23px;border-radius:50%;background:var(--c);color:#fff;font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none}
-.step-ic{font-size:36px;line-height:1}
+.step-ic{color:var(--c);display:flex;align-items:center;justify-content:center;flex:none}
+.step-ic svg{width:44px;height:44px;display:block}
 .step-tx{font-size:14.5px;line-height:1.42;color:var(--ink);font-weight:500}
 .flow-arrow{display:flex;align-items:center;color:var(--mute);font-size:24px;flex:none;font-weight:700}
 .flow-note{font-size:14.5px;color:var(--soft);margin:16px 6px 2px;text-align:center;line-height:1.65}
@@ -510,7 +568,7 @@ footer a{color:var(--soft);font-weight:600}
 @media(max-width:680px){
   .flow{flex-direction:column;gap:0}
   .step{flex-direction:row;align-items:center;gap:15px;text-align:left;padding:15px 16px;border-top:1px solid var(--line);border-left:4px solid var(--c)}
-  .step-ic{font-size:42px}
+  .step-ic svg{width:50px;height:50px}
   .step-tx{font-size:16.5px;flex:1}
   .flow-arrow{transform:rotate(90deg);justify-content:center;height:30px;font-size:26px}
   .opp-chips{flex-direction:column}
