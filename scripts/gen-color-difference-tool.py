@@ -333,10 +333,11 @@ TEMPLATE = """<!DOCTYPE html>
 <style>{{CSS}}</style>
 </head>
 <body>
-<div class="topbar"><a href="/tools/">← {{HOME}}</a><span class="lang">{{LANGNAV}}</span></div>
+<div class="topbar"><a href="/tools/">← {{HOME}}</a><a href="/">luckyplz.com</a></div>
 <div class="wrap">
   <h1>{{H1}}</h1>
   <div class="sub">{{SUB}}</div>
+  <div id="lp-langbar"></div>
 
   <div class="grid2">
     <div class="card"><h3><span class="dot" id="dotA"></span>{{COLA}}</h3>
@@ -400,6 +401,7 @@ TEMPLATE = """<!DOCTYPE html>
 <script>{{JSCORE}}</script>
 <script>document.getElementById('swatchHint').textContent=L.swatchHint;</script>
 <script>navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})});</script>
+<script src="/js/langSelect.js?v={{BUILD}}" defer></script>
 <script src="/js/siteFooter.js?v={{BUILD}}" defer></script>
 </body>
 </html>
