@@ -96,6 +96,7 @@ S = {
         ja="CIE 1931色度図 · カバー率 = 交差 ÷ 基準色域 · 面積比 = 比較 ÷ 基準",
         zh="CIE 1931色度图 · 覆盖率 = 交集 ÷ 基准色域 · 面积比 = 比较 ÷ 基准",
         es="Diagrama CIE 1931 · cobertura = intersección ÷ referencia · razón de área = comparación ÷ referencia"),
+    "planeLbl": dict(ko="색도 평면", en="Chromaticity plane", ja="色度平面", zh="色度平面", es="Plano de cromaticidad"),
     "refSel": dict(ko="기준 색역 (목표 표준)", en="Reference gamut (target standard)", ja="基準色域 (目標標準)", zh="基准色域 (目标标准)", es="Gama de referencia (estándar objetivo)"),
     "compSel": dict(ko="비교 색역 (내 패널·소스)", en="Comparison gamut (your panel / source)", ja="比較色域 (パネル・ソース)", zh="比较色域 (你的面板/源)", es="Gama de comparación (tu panel / fuente)"),
     "custom": dict(ko="사용자 측정값 (직접 입력)", en="Custom (measured)", ja="カスタム (測定値)", zh="自定义 (测量值)", es="Personalizada (medida)"),
@@ -110,11 +111,11 @@ S = {
     "comp": dict(ko="비교", en="Comparison", ja="比較", zh="比较", es="Comparación"),
     "pipeline": dict(ko="계산 방법 · 커버리지 ≠ 면적비", en="Method · coverage ≠ area ratio", ja="計算方法 · カバー率 ≠ 面積比", zh="计算方法 · 覆盖率 ≠ 面积比", es="Método · cobertura ≠ razón de área"),
     "pipe_body": dict(
-        ko="<b>면적</b>은 세 1차색 (R, G, B) 의 x, y 를 꼭짓점으로 하는 삼각형의 넓이로, 신발끈 공식 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| 로 구합니다.<br><br><b>면적비</b> = 비교 삼각형 면적 ÷ 기준 삼각형 면적 × 100. 흔히 'DCI-P3 대비 OO%' 로 광고되지만, 이건 <b>겹치는 위치를 보지 않습니다</b>. 비교 색역이 기준 밖으로 튀어나가도 면적만 크면 100% 가 넘게 나옵니다.<br><br><b>커버리지</b> = (비교 ∩ 기준) 면적 ÷ 기준 면적 × 100. 두 삼각형의 <b>실제 교집합</b>을 Sutherland–Hodgman 볼록 클리핑으로 구한 뒤 그 넓이를 기준으로 나눕니다. 기준 영역 중 비교 색역이 실제로 재현할 수 있는 비율이라, 패널 평가에는 이쪽이 정직합니다. 도표에서 칠해진 영역이 그 교집합입니다.<br><br>※ xy 평면 면적은 지각적으로 균일하지 않습니다. 더 균일한 비교가 필요하면 CIE 1976 u′v′ 평면 기준 커버리지를 쓰며, 도구의 다음 판에서 추가할 예정입니다.",
-        en="<b>Area</b> is the area of the triangle whose vertices are the x, y of the three primaries (R, G, B), via the shoelace formula ½·|Σ(xᵢyⱼ−xⱼyᵢ)|.<br><br><b>Area ratio</b> = comparison triangle area ÷ reference triangle area × 100. Often advertised as 'OO% of DCI-P3', but it <b>ignores where the triangles overlap</b>. If the comparison spills outside the reference, a larger area alone can read over 100%.<br><br><b>Coverage</b> = area(comparison ∩ reference) ÷ reference area × 100. The <b>actual intersection</b> of the two triangles is found by Sutherland–Hodgman convex clipping, then divided by the reference area. It is the fraction of the target the comparison can really reproduce, so it is the honest number for panel evaluation. The filled region in the diagram is that intersection.<br><br>※ Area on the xy plane is not perceptually uniform. For a more uniform comparison, use coverage on the CIE 1976 u′v′ plane, which a future version of this tool will add.",
-        ja="<b>面積</b>は3原刺激 (R, G, B) のx, yを頂点とする三角形の面積で、靴ひも公式 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| で求めます。<br><br><b>面積比</b> = 比較三角形の面積 ÷ 基準三角形の面積 × 100。よく『DCI-P3比OO%』と宣伝されますが、これは<b>重なる位置を見ていません</b>。比較色域が基準の外にはみ出しても、面積さえ大きければ100%を超えて出ます。<br><br><b>カバー率</b> = (比較 ∩ 基準) 面積 ÷ 基準面積 × 100。2つの三角形の<b>実際の交差</b>をSutherland–Hodgman凸クリッピングで求め、基準面積で割ります。基準のうち比較色域が実際に再現できる割合なので、パネル評価にはこちらが誠実です。図の塗りつぶし領域がその交差です。<br><br>※ xy平面の面積は知覚的に均一ではありません。より均一な比較にはCIE 1976 u′v′平面でのカバー率を用い、本ツールの次版で追加予定です。",
-        zh="<b>面积</b>是以三原色 (R, G, B) 的x, y为顶点的三角形面积，用鞋带公式 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| 求得。<br><br><b>面积比</b> = 比较三角形面积 ÷ 基准三角形面积 × 100。常被宣传为『DCI-P3的OO%』，但它<b>不看三角形重叠的位置</b>。若比较色域超出基准之外，仅凭面积大就可能读出超过100%。<br><br><b>覆盖率</b> = (比较 ∩ 基准) 面积 ÷ 基准面积 × 100。用Sutherland–Hodgman凸裁剪求两三角形的<b>真实交集</b>，再除以基准面积。它是基准中比较色域真正能重现的比例，故对面板评估更诚实。图中填充区域即该交集。<br><br>※ xy平面上的面积并非知觉均匀。若需更均匀的比较，可用CIE 1976 u′v′平面上的覆盖率，本工具的后续版本将加入。",
-        es="El <b>área</b> es la del triángulo cuyos vértices son las x, y de los tres primarios (R, G, B), mediante la fórmula del cordón de zapato ½·|Σ(xᵢyⱼ−xⱼyᵢ)|.<br><br><b>Razón de área</b> = área del triángulo de comparación ÷ área del triángulo de referencia × 100. A menudo se anuncia como 'OO% de DCI-P3', pero <b>ignora dónde se solapan</b> los triángulos. Si la comparación se sale de la referencia, un área mayor por sí sola puede dar más de 100%.<br><br><b>Cobertura</b> = área(comparación ∩ referencia) ÷ área de referencia × 100. La <b>intersección real</b> de los dos triángulos se obtiene por recorte convexo de Sutherland–Hodgman y se divide por el área de referencia. Es la fracción del objetivo que la comparación puede reproducir de verdad, así que es el número honesto para evaluar paneles. La región rellena del diagrama es esa intersección.<br><br>※ El área en el plano xy no es perceptualmente uniforme. Para una comparación más uniforme, usa la cobertura en el plano CIE 1976 u′v′, que una versión futura de esta herramienta añadirá."),
+        ko="<b>면적</b>은 세 1차색 (R, G, B) 의 x, y 를 꼭짓점으로 하는 삼각형의 넓이로, 신발끈 공식 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| 로 구합니다.<br><br><b>면적비</b> = 비교 삼각형 면적 ÷ 기준 삼각형 면적 × 100. 흔히 'DCI-P3 대비 OO%' 로 광고되지만, 이건 <b>겹치는 위치를 보지 않습니다</b>. 비교 색역이 기준 밖으로 튀어나가도 면적만 크면 100% 가 넘게 나옵니다.<br><br><b>커버리지</b> = (비교 ∩ 기준) 면적 ÷ 기준 면적 × 100. 두 삼각형의 <b>실제 교집합</b>을 Sutherland–Hodgman 볼록 클리핑으로 구한 뒤 그 넓이를 기준으로 나눕니다. 기준 영역 중 비교 색역이 실제로 재현할 수 있는 비율이라, 패널 평가에는 이쪽이 정직합니다. 도표에서 칠해진 영역이 그 교집합입니다.<br><br>※ xy 평면 면적은 지각적으로 균일하지 않습니다 (녹색 영역이 과장됨). 상단 <b>색도 평면</b> 토글을 <b>CIE 1976 u′v′</b> 로 바꾸면 지각적으로 더 균일한 평면에서 같은 커버리지·면적비를 다시 계산합니다.",
+        en="<b>Area</b> is the area of the triangle whose vertices are the x, y of the three primaries (R, G, B), via the shoelace formula ½·|Σ(xᵢyⱼ−xⱼyᵢ)|.<br><br><b>Area ratio</b> = comparison triangle area ÷ reference triangle area × 100. Often advertised as 'OO% of DCI-P3', but it <b>ignores where the triangles overlap</b>. If the comparison spills outside the reference, a larger area alone can read over 100%.<br><br><b>Coverage</b> = area(comparison ∩ reference) ÷ reference area × 100. The <b>actual intersection</b> of the two triangles is found by Sutherland–Hodgman convex clipping, then divided by the reference area. It is the fraction of the target the comparison can really reproduce, so it is the honest number for panel evaluation. The filled region in the diagram is that intersection.<br><br>※ Area on the xy plane is not perceptually uniform (it exaggerates the green region). Switch the <b>Chromaticity plane</b> toggle above to <b>CIE 1976 u′v′</b> and the same coverage and area ratio are recomputed on a more perceptually uniform plane.",
+        ja="<b>面積</b>は3原刺激 (R, G, B) のx, yを頂点とする三角形の面積で、靴ひも公式 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| で求めます。<br><br><b>面積比</b> = 比較三角形の面積 ÷ 基準三角形の面積 × 100。よく『DCI-P3比OO%』と宣伝されますが、これは<b>重なる位置を見ていません</b>。比較色域が基準の外にはみ出しても、面積さえ大きければ100%を超えて出ます。<br><br><b>カバー率</b> = (比較 ∩ 基準) 面積 ÷ 基準面積 × 100。2つの三角形の<b>実際の交差</b>をSutherland–Hodgman凸クリッピングで求め、基準面積で割ります。基準のうち比較色域が実際に再現できる割合なので、パネル評価にはこちらが誠実です。図の塗りつぶし領域がその交差です。<br><br>※ xy平面の面積は知覚的に均一ではありません(緑領域が誇張される)。上部の<b>色度平面</b>トグルを<b>CIE 1976 u′v′</b>に切り替えると、より知覚的に均一な平面で同じカバー率・面積比を再計算します。",
+        zh="<b>面积</b>是以三原色 (R, G, B) 的x, y为顶点的三角形面积，用鞋带公式 ½·|Σ(xᵢyⱼ−xⱼyᵢ)| 求得。<br><br><b>面积比</b> = 比较三角形面积 ÷ 基准三角形面积 × 100。常被宣传为『DCI-P3的OO%』，但它<b>不看三角形重叠的位置</b>。若比较色域超出基准之外，仅凭面积大就可能读出超过100%。<br><br><b>覆盖率</b> = (比较 ∩ 基准) 面积 ÷ 基准面积 × 100。用Sutherland–Hodgman凸裁剪求两三角形的<b>真实交集</b>，再除以基准面积。它是基准中比较色域真正能重现的比例，故对面板评估更诚实。图中填充区域即该交集。<br><br>※ xy平面上的面积并非知觉均匀(会夸大绿色区域)。将上方<b>色度平面</b>切换为<b>CIE 1976 u′v′</b>，即可在更知觉均匀的平面上重新计算相同的覆盖率与面积比。",
+        es="El <b>área</b> es la del triángulo cuyos vértices son las x, y de los tres primarios (R, G, B), mediante la fórmula del cordón de zapato ½·|Σ(xᵢyⱼ−xⱼyᵢ)|.<br><br><b>Razón de área</b> = área del triángulo de comparación ÷ área del triángulo de referencia × 100. A menudo se anuncia como 'OO% de DCI-P3', pero <b>ignora dónde se solapan</b> los triángulos. Si la comparación se sale de la referencia, un área mayor por sí sola puede dar más de 100%.<br><br><b>Cobertura</b> = área(comparación ∩ referencia) ÷ área de referencia × 100. La <b>intersección real</b> de los dos triángulos se obtiene por recorte convexo de Sutherland–Hodgman y se divide por el área de referencia. Es la fracción del objetivo que la comparación puede reproducir de verdad, así que es el número honesto para evaluar paneles. La región rellena del diagrama es esa intersección.<br><br>※ El área en el plano xy no es perceptualmente uniforme (exagera la región verde). Cambia el selector <b>Plano de cromaticidad</b> de arriba a <b>CIE 1976 u′v′</b> y se recalculan la misma cobertura y razón de área en un plano perceptualmente más uniforme."),
     "foot": dict(
         ko="이 도구는 1차색 좌표로부터 색역 커버리지를 기하학적으로 산출합니다. CIE 색좌표·색역의 원리는 색채과학 시리즈에서 다룹니다.",
         en="This tool computes gamut coverage geometrically from primary coordinates. The underlying CIE chromaticity and gamut theory is explained in the Color Science series.",
@@ -164,10 +165,16 @@ function intersect(compTri,refTri){return clipPoly(ccw(compTri),ccw(refTri));}
 function coverage(compTri,refTri){var ip=intersect(compTri,refTri);if(ip.length<3)return 0;return area(ip)/area(refTri)*100;}
 function areaRatio(compTri,refTri){return area(compTri)/area(refTri)*100;}
 
-// diagram mapping (matches the shared CIE 1931 gamut PNG: x[0,0.8] y[0,0.9])
-var DOX=46,DOY=470,DPW=410,DPH=410,DXR=0.8,DYR=0.9;
-function PX(x){return DOX+DPW*(x/DXR);}
-function PY(y){return DOY-DPH*(y/DYR);}
+// CIE 1931 xy -> CIE 1976 u'v'
+function xy2uv(x,y){var d=-2*x+12*y+3;return [4*x/d,9*y/d];}
+function plane(){return document.getElementById('planeSel').value;}
+var RANGES={'1931':{xr:0.8,yr:0.9,xl:'x',yl:'y'},'1976':{xr:0.65,yr:0.62,xl:"u'",yl:"v'"}};
+function toP(pt){return plane()==='1976'?xy2uv(pt[0],pt[1]):[pt[0],pt[1]];}
+function triPtsP(g){return [toP(g.R),toP(g.G),toP(g.B)];}
+// diagram mapping (plot box 46,60..456,470; data range depends on plane)
+var DOX=46,DOY=470,DPW=410,DPH=410;
+function PX(x){return DOX+DPW*(x/RANGES[plane()].xr);}
+function PY(y){return DOY-DPH*(y/RANGES[plane()].yr);}
 function num(id){var v=parseFloat(document.getElementById(id).value);return isFinite(v)?v:0;}
 function ptsAttr(tri){return tri.map(function(p){return PX(p[0]).toFixed(1)+','+PY(p[1]).toFixed(1);}).join(' ');}
 
@@ -179,12 +186,21 @@ function curComp(){
 }
 function render(){
  var ref=curRef(),comp=curComp();
- var rt=triPts(ref),ct=triPts(comp);
+ var R=RANGES[plane()];
+ // swap the chromaticity background + axis labels/ticks for the active plane
+ document.getElementById('gamutImg').setAttribute('href',GAMUT_IMG[plane()]);
+ document.getElementById('axX').textContent=R.xl;
+ document.getElementById('axY').textContent=R.yl;
+ var tx=document.getElementById('tickX');tx.setAttribute('x',PX(0.4).toFixed(0));
+ var ty=document.getElementById('tickY');ty.setAttribute('y',PY(0.4).toFixed(0));
+ // geometry in the active plane (xy or u'v')
+ var rt=triPtsP(ref),ct=triPtsP(comp);
  document.getElementById('refTri').setAttribute('points',ptsAttr(rt));
  document.getElementById('compTri').setAttribute('points',ptsAttr(ct));
  var ip=intersect(ct,rt);
  document.getElementById('interPoly').setAttribute('points',ip.length>=3?ptsAttr(ip):'');
- ['R','G','B'].forEach(function(k){var d=document.getElementById('v'+k);d.setAttribute('cx',PX(comp[k][0]).toFixed(1));d.setAttribute('cy',PY(comp[k][1]).toFixed(1));});
+ var cp=[toP(comp.R),toP(comp.G),toP(comp.B)];
+ ['R','G','B'].forEach(function(k,i){var d=document.getElementById('v'+k);d.setAttribute('cx',PX(cp[i][0]).toFixed(1));d.setAttribute('cy',PY(cp[i][1]).toFixed(1));});
  var cov=coverage(ct,rt),ar=areaRatio(ct,rt);
  document.getElementById('covV').textContent=cov.toFixed(1)+'%';
  document.getElementById('arV').textContent=ar.toFixed(1)+'%';
@@ -198,7 +214,7 @@ function render(){
    document.getElementById(pre+kv[0]+'y'+suf).textContent=tri[kv[1]][1].toFixed(3);
   });
  }
- setRow('r',rt,'');setRow('c',ct,'v');
+ setRow('r',triPts(ref),'');setRow('c',triPts(comp),'v');  // table always in xy
 }
 function onCompChange(){
  var custom=document.getElementById('compSel').value==='custom';
@@ -207,6 +223,7 @@ function onCompChange(){
 }
 function init(){
  document.getElementById('refSel').addEventListener('change',render);
+ document.getElementById('planeSel').addEventListener('change',render);
  document.getElementById('compSel').addEventListener('change',onCompChange);
  ['cRx','cRy','cGx','cGy','cBx','cBy'].forEach(function(id){document.getElementById(id).addEventListener('input',render);});
  onCompChange();
@@ -231,14 +248,14 @@ def comp_options(custom_label):
 
 def fig_svg():
     return f'''<svg viewBox="0 0 500 510" xmlns="http://www.w3.org/2000/svg">
-  <image href="/assets/blog/cs-cie1931-gamut.png?v={BUILD}" x="46" y="60" width="410" height="410" preserveAspectRatio="none" opacity="0.55"/>
+  <image id="gamutImg" href="/assets/blog/cs-cie1931-gamut.png?v={BUILD}" x="46" y="60" width="410" height="410" preserveAspectRatio="none" opacity="0.55"/>
   <line x1="46" y1="470" x2="470" y2="470" stroke="#3a4a66" stroke-width="1.2"/>
   <line x1="46" y1="470" x2="46" y2="55" stroke="#3a4a66" stroke-width="1.2"/>
   <text x="40" y="474" text-anchor="end" font-size="10" fill="#647698">0</text>
-  <text x="{46+410*0.4/0.8:.0f}" y="486" text-anchor="middle" font-size="10" fill="#647698">0.4</text>
-  <text x="466" y="486" text-anchor="end" font-size="11" fill="#93a3bf">x</text>
-  <text x="32" y="{470-410*0.4/0.9:.0f}" text-anchor="end" font-size="10" fill="#647698">0.4</text>
-  <text x="34" y="64" font-size="11" fill="#93a3bf">y</text>
+  <text id="tickX" x="{46+410*0.4/0.8:.0f}" y="486" text-anchor="middle" font-size="10" fill="#647698">0.4</text>
+  <text id="axX" x="466" y="486" text-anchor="end" font-size="11" fill="#93a3bf">x</text>
+  <text id="tickY" x="32" y="{470-410*0.4/0.9:.0f}" text-anchor="end" font-size="10" fill="#647698">0.4</text>
+  <text id="axY" x="34" y="64" font-size="11" fill="#93a3bf">y</text>
   <polygon id="interPoly" points="" fill="rgba(93,193,255,.28)" stroke="none"/>
   <polygon id="refTri" points="" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="6 4" opacity="0.9"/>
   <polygon id="compTri" points="" fill="none" stroke="#5dc1ff" stroke-width="2.4"/>
@@ -315,6 +332,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="controls">
     <div class="f"><label>{{REFSEL}}</label><select id="refSel">{{REFOPTS}}</select></div>
     <div class="f"><label>{{COMPSEL}}</label><select id="compSel">{{COMPOPTS}}</select></div>
+    <div class="f"><label>{{PLANELBL}}</label><select id="planeSel"><option value="1931" selected>CIE 1931 xy</option><option value="1976">CIE 1976 u&#8242;v&#8242;</option></select></div>
   </div>
 
   <div class="card" id="customCard" style="display:none">
@@ -354,7 +372,8 @@ TEMPLATE = """<!DOCTYPE html>
 
   <footer>{{FOOT}}<br><a href="{{ARTURL}}">{{READART}}</a> · <a href="/tools/">/tools</a> · <a href="/">{{HOME}}</a></footer>
 </div>
-<script>var CUSTOM_NAME={{CUSTOMNAME}};</script>
+<script>var CUSTOM_NAME={{CUSTOMNAME}};
+var GAMUT_IMG={"1931":"/assets/blog/cs-cie1931-gamut.png?v={{BUILD}}","1976":"/assets/blog/cs-cie1976-gamut.png?v={{BUILD}}"};</script>
 <script>{{JSCORE}}</script>
 <script>navigator.serviceWorker&&navigator.serviceWorker.getRegistrations().then(function(rs){rs.forEach(function(r){r.unregister()})});</script>
 <script src="/js/langSelect.js?v={{BUILD}}" defer></script>
@@ -393,7 +412,7 @@ def build(lang):
         "{{CUSTOMNAME}}": json.dumps(S["custom"][lang], ensure_ascii=False),
         "{{ARTURL}}": art,
         "{{H1}}": S["h1"][lang], "{{SUB}}": S["sub"][lang],
-        "{{REFSEL}}": S["refSel"][lang], "{{COMPSEL}}": S["compSel"][lang], "{{CUSTOMH}}": S["customH"][lang],
+        "{{REFSEL}}": S["refSel"][lang], "{{COMPSEL}}": S["compSel"][lang], "{{CUSTOMH}}": S["customH"][lang], "{{PLANELBL}}": S["planeLbl"][lang],
         "{{DIAGRAM}}": S["diagram"][lang], "{{COVERAGE}}": S["coverage"][lang], "{{COVSUB}}": S["covSub"][lang],
         "{{ARAT}}": S["arat"][lang], "{{ARATSUB}}": S["aratSub"][lang], "{{PRIM}}": S["prim"][lang],
         "{{REF}}": S["ref"][lang], "{{COMP}}": S["comp"][lang],
