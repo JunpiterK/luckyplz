@@ -162,7 +162,7 @@ def fig_em_spectrum(t):
 def _axes(s, ox, oy, w, h, xlabel, ylabel):
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox+w}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.4"/>')
     s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{oy-h}" stroke="{PAL["axis"]}" stroke-width="1.4"/>')
-    s.append(f'<text x="{ox+w}" y="{oy+30}" text-anchor="end" font-size="15" font-weight="600" fill="{PAL["soft"]}">{xlabel}</text>')
+    s.append(f'<text x="{ox+w}" y="{oy+54}" text-anchor="end" font-size="15" font-weight="600" fill="{PAL["soft"]}">{xlabel}</text>')
     s.append(f'<text x="{ox-6}" y="{oy-h-10}" font-size="15" font-weight="600" fill="{PAL["soft"]}">{ylabel}</text>')
 
 
