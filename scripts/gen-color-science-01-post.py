@@ -92,6 +92,21 @@ def _poly(points):
     return " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
 
 
+# Real cone fundamentals from the shared CIE data module (numpy/scipy, local-only).
+# Same single-source data the Part 2 figures use — replaces the old gaussian guess.
+_cie_spec = importlib.util.spec_from_file_location(
+    "cie_data", ROOT / "scripts" / "color_science_cie_data.py")
+_cie = importlib.util.module_from_spec(_cie_spec)
+_cie_spec.loader.exec_module(_cie)
+_wl, _L, _M, _S = _cie.cone_fundamentals()
+_CONES = {int(w): (float(l), float(m), float(sv)) for w, l, m, sv in zip(_wl, _L, _M, _S)}
+
+
+def cone_at(nm):
+    """(L, M, S) sensitivity at nm (peak-normalized). 0 outside the table."""
+    return _CONES.get(int(round(nm)), (0.0, 0.0, 0.0))
+
+
 # ---------------------------------------------------------------------------
 # SVG figures — geometry fixed, text labels injected per language
 # Each returns an <svg> string. viewBox width 960 (scales responsively).
@@ -193,76 +208,114 @@ def fig_visible_window(t):
 
 
 def fig_eye(t):
-    """Figure 3 — eye cross-section + retina layer zoom (rod vs cone)."""
-    W, H = 960, 420
+    """Figure 3 — eye cross-section (light → lens → fovea) + retina layer zoom."""
+    W, H = 960, 430
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    cx, cy, r = 250, 210, 150
-    s.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="#f7fbfd" stroke="{PAL["line"]}" stroke-width="2"/>')
-    # cornea / lens (front, left)
-    s.append(f'<path d="M{cx-r},{cy} q-30,0 -30,-46 q0,-46 30,-46" fill="none" stroke="{PAL["soft"]}" stroke-width="0"/>')
-    s.append(f'<ellipse cx="{cx-r+14}" cy="{cy}" rx="20" ry="54" fill="#cfeefb" stroke="{PAL["S"]}" stroke-width="1.6"/>')
-    s.append(f'<text x="{cx-r-6}" y="{cy-66}" text-anchor="middle" font-size="12" fill="{PAL["soft"]}">{t["lens"]}</text>')
-    # retina (back arc, right)
-    s.append(f'<path d="M{cx},{cy-r+6} A{r-6},{r-6} 0 0 1 {cx},{cy+r-6}" fill="none" stroke="{PAL["L"]}" stroke-width="6" opacity="0.5"/>')
-    s.append(f'<text x="{cx+r+6}" y="{cy-60}" font-size="12" fill="{PAL["L"]}">{t["retina"]}</text>')
-    # fovea
-    s.append(f'<circle cx="{cx+r-8}" cy="{cy}" r="6" fill="{PAL["gold"]}"/>')
-    s.append(f'<text x="{cx+r-4}" y="{cy+26}" font-size="12" fill="{PAL["gold"]}">{t["fovea"]}</text>')
-    # optic nerve
-    s.append(f'<path d="M{cx+r-4},{cy+40} q40,26 70,20" stroke="{PAL["soft"]}" stroke-width="9" fill="none" opacity="0.6"/>')
-    s.append(f'<text x="{cx+r+40}" y="{cy+78}" font-size="12" fill="{PAL["soft"]}">{t["nerve"]}</text>')
-    # incoming light
-    s.append(f'<line x1="40" y1="{cy-40}" x2="{cx-r+2}" y2="{cy-6}" stroke="{PAL["gold"]}" stroke-width="2" marker-end="url(#ah)"/>')
-    s.append(f'<line x1="40" y1="{cy+40}" x2="{cx-r+2}" y2="{cy+6}" stroke="{PAL["gold"]}" stroke-width="2" marker-end="url(#ah)"/>')
-    s.append(f'<defs><marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="{PAL["gold"]}"/></marker></defs>')
-    s.append(f'<text x="44" y="{cy-50}" font-size="12" fill="{PAL["gold"]}">{t["light"]}</text>')
-    # zoom panel: rod & cone
-    px, py, pw, ph = 560, 70, 360, 290
-    s.append(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="12" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')
-    s.append(f'<text x="{px+pw/2:.0f}" y="{py+26}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["ink"]}">{t["zoom"]}</text>')
-    # rod
-    rx = px + 90
-    s.append(f'<rect x="{rx-13}" y="{py+60}" width="26" height="90" rx="13" fill="#b9c6cd"/>')
-    s.append(f'<rect x="{rx-9}" y="{py+150}" width="18" height="60" rx="6" fill="#cfd9de"/>')
-    s.append(f'<text x="{rx}" y="{py+232}" text-anchor="middle" font-size="12.5" font-weight="700" fill="{PAL["soft"]}">{t["rod"]}</text>')
-    s.append(f'<text x="{rx}" y="{py+250}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["rod_sub"]}</text>')
-    # cone
-    cxx = px + 250
-    s.append(f'<path d="M{cxx-16},{py+150} L{cxx+16},{py+150} L{cxx+8},{py+60} L{cxx-8},{py+60} Z" fill="#f2b8a6" stroke="{PAL["L"]}" stroke-width="1.2"/>')
-    s.append(f'<rect x="{cxx-9}" y="{py+150}" width="18" height="60" rx="6" fill="#f6d2c7"/>')
-    s.append(f'<text x="{cxx}" y="{py+232}" text-anchor="middle" font-size="12.5" font-weight="700" fill="{PAL["L"]}">{t["cone"]}</text>')
-    s.append(f'<text x="{cxx}" y="{py+250}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["cone_sub"]}</text>')
+    cx, cy, r = 250, 214, 152
+    s.append('<defs>'
+             '<radialGradient id="vit" cx="42%" cy="50%" r="64%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#e9f3fa"/></radialGradient>'
+             f'<linearGradient id="ret" x1="0" x2="1"><stop offset="0%" stop-color="{PAL["L"]}" stop-opacity="0.10"/><stop offset="100%" stop-color="{PAL["L"]}" stop-opacity="0.60"/></linearGradient>'
+             f'<marker id="eah" markerWidth="11" markerHeight="11" refX="7.6" refY="3.4" orient="auto"><path d="M0,0 L8.6,3.4 L0,6.8 Z" fill="{PAL["gold"]}"/></marker>'
+             '</defs>')
+    # eyeball + retina (inner back arc)
+    s.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="url(#vit)" stroke="{PAL["line"]}" stroke-width="2.5"/>')
+    s.append(f'<path d="M{cx-6},{cy-r+10} A{r-10},{r-10} 0 0 1 {cx-6},{cy+r-10}" fill="none" stroke="url(#ret)" stroke-width="11"/>')
+    s.append(f'<text x="{cx+r-70}" y="{cy-r+40}" font-size="12.5" font-weight="700" fill="{PAL["L"]}">{t["retina"]}</text>')
+    # cornea (front bulge) + lens + iris hint
+    s.append(f'<path d="M{cx-r+4},{cy-50} q-30,50 0,100" fill="#e0f2fc" stroke="{PAL["S"]}" stroke-width="1.8"/>')
+    lensx = cx - r + 34
+    s.append(f'<ellipse cx="{lensx}" cy="{cy}" rx="18" ry="48" fill="#cfeafb" stroke="{PAL["S"]}" stroke-width="1.8"/>')
+    s.append(f'<line x1="{lensx}" y1="{cy-48}" x2="{lensx}" y2="{cy-68}" stroke="{PAL["soft"]}" stroke-width="3"/>')
+    s.append(f'<line x1="{lensx}" y1="{cy+48}" x2="{lensx}" y2="{cy+68}" stroke="{PAL["soft"]}" stroke-width="3"/>')
+    s.append(f'<text x="{lensx}" y="{cy+74}" text-anchor="middle" font-size="12" fill="{PAL["soft"]}">{t["lens"]}</text>')
+    # fovea + optic nerve
+    fx, fy = cx + r - 14, cy
+    s.append(f'<circle cx="{fx}" cy="{fy}" r="6" fill="{PAL["gold"]}"/>')
+    s.append(f'<text x="{fx+2}" y="{cy+26}" text-anchor="middle" font-size="12" fill="{PAL["gold"]}">{t["fovea"]}</text>')
+    s.append(f'<path d="M{cx+r-8},{cy+44} q42,30 76,22" stroke="#cbb98f" stroke-width="12" fill="none" stroke-linecap="round"/>')
+    s.append(f'<text x="{cx+r+40}" y="{cy+82}" font-size="12" fill="{PAL["soft"]}">{t["nerve"]}</text>')
+    # light: 3 parallel rays refract through the lens and converge on the fovea
+    s.append(f'<text x="34" y="{cy-72}" font-size="12" fill="{PAL["gold"]}">{t["light"]}</text>')
+    for dy in (-54, 0, 54):
+        s.append(f'<line x1="34" y1="{cy+dy}" x2="{lensx-22}" y2="{cy+dy}" stroke="{PAL["gold"]}" stroke-width="2" opacity="0.9"/>')
+        s.append(f'<line x1="{lensx+20}" y1="{cy+dy}" x2="{fx-7}" y2="{fy}" stroke="{PAL["gold"]}" stroke-width="2" opacity="0.85" marker-end="url(#eah)"/>')
+    # zoom panel: rod vs cone
+    px, py, pw, ph = 562, 60, 364, 308
+    s.append(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="14" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')
+    s.append(f'<text x="{px+pw/2:.0f}" y="{py+28}" text-anchor="middle" font-size="13.5" font-weight="700" fill="{PAL["ink"]}">{t["zoom"]}</text>')
+    rx = px + 98
+    s.append(f'<rect x="{rx-13}" y="{py+64}" width="26" height="96" rx="13" fill="#aebcc4"/>')
+    s.append(f'<rect x="{rx-9}" y="{py+158}" width="18" height="56" rx="6" fill="#c7d2d8"/>')
+    s.append(f'<circle cx="{rx}" cy="{py+224}" r="9" fill="#bcc8ce"/>')
+    s.append(f'<text x="{rx}" y="{py+258}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["soft"]}">{t["rod"]}</text>')
+    s.append(f'<text x="{rx}" y="{py+277}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["rod_sub"]}</text>')
+    cxx = px + 258
+    s.append(f'<path d="M{cxx-17},{py+160} L{cxx+17},{py+160} L{cxx+8},{py+64} L{cxx-8},{py+64} Z" fill="#f0b2a0" stroke="{PAL["L"]}" stroke-width="1.3"/>')
+    s.append(f'<rect x="{cxx-9}" y="{py+160}" width="18" height="54" rx="6" fill="#f4cabd"/>')
+    s.append(f'<circle cx="{cxx}" cy="{py+224}" r="9" fill="#f0b8aa"/>')
+    s.append(f'<text x="{cxx}" y="{py+258}" text-anchor="middle" font-size="13" font-weight="700" fill="{PAL["L"]}">{t["cone"]}</text>')
+    s.append(f'<text x="{cxx}" y="{py+277}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{t["cone_sub"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
 
 def fig_lms(t):
-    """Figure 5 — L/M/S cone spectral sensitivity (the key figure)."""
-    W, H = 960, 430
-    ox, oy, w, h = 70, 350, 820, 270
+    """Figure 5 — L/M/S cone spectral sensitivity, from real cone fundamentals.
+
+    Hunt-Pointer-Estevez transform of the CIE 1931 CMF (the same verified data the
+    Part 2 figures use), not a gaussian guess: true asymmetric shapes, the heavy
+    L/M overlap, and the narrow blue-shifted S."""
+    W, H = 960, 470
+    ox, oy, w, h = 76, 392, 808, 300
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
     xs = lambda nm: ox + w * (nm - LMIN) / (LMAX - LMIN)
-    # faint rainbow strip under axis
-    s.append('<defs><linearGradient id="rain3" x1="0" x2="1">' +
-             "".join(f'<stop offset="{i}%" stop-color="{wl_to_rgb(LMIN+(LMAX-LMIN)*i/100)}"/>' for i in range(0, 101, 5)) +
-             '</linearGradient></defs>')
-    s.append(f'<rect x="{ox}" y="{oy+6}" width="{w}" height="10" fill="url(#rain3)" opacity="0.9" rx="2"/>')
+    ys = lambda v: oy - h * v
+    # defs: rainbow strip + per-cone vertical fade fills
+    defs = ['<defs>', '<linearGradient id="rain3" x1="0" x2="1">' +
+            "".join(f'<stop offset="{i}%" stop-color="{wl_to_rgb(LMIN+(LMAX-LMIN)*i/100)}"/>' for i in range(0, 101, 4)) +
+            '</linearGradient>']
+    for name, col in (("S", PAL["S"]), ("M", PAL["M"]), ("L", PAL["L"])):
+        defs.append(f'<linearGradient id="cf{name}" x1="0" x2="0" y1="0" y2="1">'
+                    f'<stop offset="0%" stop-color="{col}" stop-opacity="0.26"/>'
+                    f'<stop offset="100%" stop-color="{col}" stop-opacity="0.015"/></linearGradient>')
+    defs.append('</defs>')
+    s += defs
+    # horizontal gridlines + y ticks
+    for v in (0.25, 0.5, 0.75, 1.0):
+        s.append(f'<line x1="{ox}" y1="{ys(v):.1f}" x2="{ox+w}" y2="{ys(v):.1f}" stroke="{PAL["line"]}" stroke-width="1"/>')
+        s.append(f'<text x="{ox-10}" y="{ys(v)+4:.1f}" text-anchor="end" font-size="11" fill="{PAL["mute"]}">{v:.2f}</text>')
     _axes(s, ox, oy, w, h, t["x"], t["y"])
+    # wavelength rainbow strip + ticks under the axis
+    s.append(f'<rect x="{ox}" y="{oy+7}" width="{w}" height="11" fill="url(#rain3)" rx="2"/>')
     for nm in range(400, 701, 50):
-        s.append(f'<text x="{xs(nm):.1f}" y="{oy+34}" text-anchor="middle" font-size="11" fill="{PAL["mute"]}">{nm}</text>')
-    curves = [("S", 420, 26, PAL["S"]), ("M", 534, 38, PAL["M"]), ("L", 564, 42, PAL["L"])]
-    for name, mu, sig, col in curves:
-        pts = [(xs(nm), oy - h * gauss(nm, mu, sig)) for nm in range(LMIN, LMAX + 1, 3)]
-        s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{col}" stroke-width="3"/>')
-        s.append(f'<circle cx="{xs(mu):.1f}" cy="{oy-h:.1f}" r="3.5" fill="{col}"/>')
-        s.append(f'<text x="{xs(mu):.1f}" y="{oy-h-10:.1f}" text-anchor="middle" font-size="13" font-weight="800" fill="{col}">{name}</text>')
-        s.append(f'<text x="{xs(mu):.1f}" y="{oy-h-26:.1f}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">{mu}nm</text>')
-    # legend
-    lx, ly = ox + 30, oy - h + 14
-    for i, (name, lab) in enumerate([("S", t["s"]), ("M", t["m"]), ("L", t["l"])]):
+        s.append(f'<line x1="{xs(nm):.1f}" y1="{oy}" x2="{xs(nm):.1f}" y2="{oy+5}" stroke="{PAL["axis"]}"/>')
+        s.append(f'<text x="{xs(nm):.1f}" y="{oy+36}" text-anchor="middle" font-size="11.5" fill="{PAL["mute"]}">{nm}</text>')
+    # sample the real curves
+    series, peak_v, peak_nm = {}, {"S": 0, "M": 0, "L": 0}, {"S": LMIN, "M": LMIN, "L": LMIN}
+    for nm in range(LMIN, LMAX + 1, 2):
+        l, m, sv = cone_at(nm)
+        series[nm] = {"S": sv, "M": m, "L": l}
+        for k, val in series[nm].items():
+            if val > peak_v[k]:
+                peak_v[k], peak_nm[k] = val, nm
+    # filled areas first, then strokes on top (S, M, L so L sits frontmost)
+    for name, col in (("S", PAL["S"]), ("M", PAL["M"]), ("L", PAL["L"])):
+        pts = [(xs(nm), ys(series[nm][name])) for nm in range(LMIN, LMAX + 1, 2)]
+        area = f'M{pts[0][0]:.1f},{oy:.1f} ' + " ".join(f"L{x:.1f},{y:.1f}" for x, y in pts) + f' L{pts[-1][0]:.1f},{oy:.1f} Z'
+        s.append(f'<path d="{area}" fill="url(#cf{name})"/>')
+        s.append(f'<polyline points="{_poly(pts)}" fill="none" stroke="{col}" stroke-width="3.2" stroke-linejoin="round"/>')
+    # peak markers + bold labels
+    for name, col in (("S", PAL["S"]), ("M", PAL["M"]), ("L", PAL["L"])):
+        px, py = xs(peak_nm[name]), ys(peak_v[name])
+        s.append(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4.2" fill="{col}" stroke="#fff" stroke-width="1.6"/>')
+        s.append(f'<text x="{px:.1f}" y="{py-13:.1f}" text-anchor="middle" font-size="16" font-weight="800" fill="{col}">{name}</text>')
+        s.append(f'<text x="{px:.1f}" y="{py+(20 if name=="S" else -29):.1f}" text-anchor="middle" font-size="10.5" fill="{PAL["mute"]}">≈{peak_nm[name]}nm</text>')
+    # legend (top-right, away from the peaks)
+    lx, ly = ox + w - 232, ys(1.0) + 4
+    for i, (name, lab) in enumerate([("L", t["l"]), ("M", t["m"]), ("S", t["s"])]):
         col = dict(S=PAL["S"], M=PAL["M"], L=PAL["L"])[name]
-        s.append(f'<rect x="{lx}" y="{ly+i*22}" width="13" height="13" rx="3" fill="{col}"/>')
-        s.append(f'<text x="{lx+19}" y="{ly+11+i*22}" font-size="12" fill="{PAL["ink"]}">{lab}</text>')
+        s.append(f'<rect x="{lx}" y="{ly+i*23}" width="24" height="5" rx="2.5" fill="{col}"/>')
+        s.append(f'<text x="{lx+32}" y="{ly+8+i*23}" font-size="12.5" fill="{PAL["ink"]}">{lab}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -294,12 +347,11 @@ def fig_phototransduction(t):
         for j, ln in enumerate(lines[:3]):
             s.append(f'<text x="{x+bw/2:.1f}" y="{y+44+j*16}" text-anchor="middle" font-size="11.5" fill="{PAL["ink"]}">{ln}</text>')
         if i < n - 1:
-            ax = x + bw + gap / 2
-            s.append(f'<path d="M{x+bw:.1f},{y+bh/2} L{x+bw+gap:.1f},{y+bh/2}" stroke="{PAL["axis"]}" stroke-width="2" marker-end="url(#ah2)"/>')
-    s.append(f'<defs><marker id="ah2" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="{PAL["axis"]}"/></marker></defs>')
+            s.append(f'<path d="M{x+bw:.1f},{y+bh/2} L{x+bw+gap:.1f},{y+bh/2}" stroke="{PAL["soft"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ah2)"/>')
+    s.append(f'<defs><marker id="ah2" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["soft"]}"/></marker><marker id="ahg" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["gold"]}"/></marker></defs>')
     # photon in
     s.append(f'<text x="{x0:.1f}" y="{y-22}" font-size="13" fill="{PAL["gold"]}">☀ {t["photon"]}</text>')
-    s.append(f'<line x1="{x0+10:.1f}" y1="{y-14}" x2="{x0+30:.1f}" y2="{y-2}" stroke="{PAL["gold"]}" stroke-width="2" marker-end="url(#ah2)"/>')
+    s.append(f'<line x1="{x0+10:.1f}" y1="{y-14}" x2="{x0+30:.1f}" y2="{y-2}" stroke="{PAL["gold"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ahg)"/>')
     # signal out caption
     s.append(f'<text x="{W/2:.0f}" y="{y+bh+44}" text-anchor="middle" font-size="12.5" fill="{PAL["soft"]}">{t["caption"]}</text>')
     s.append('</svg>')
@@ -318,8 +370,8 @@ def fig_pathway(t):
             s.append(f'<text x="{x}" y="{y+5+(j-(len(lab.split("|"))-1)/2)*14:.0f}" text-anchor="middle" font-size="11" fill="{PAL["ink"]}">{ln}</text>')
         if i < len(nodes) - 1:
             nx = nodes[i + 1][0]
-            s.append(f'<path d="M{x+30},{y} L{nx-30},{y}" stroke="{PAL["axis"]}" stroke-width="2" marker-end="url(#ah3)"/>')
-    s.append(f'<defs><marker id="ah3" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="{PAL["axis"]}"/></marker></defs>')
+            s.append(f'<path d="M{x+32},{y} L{nx-32},{y}" stroke="{PAL["soft"]}" stroke-width="2.6" stroke-linecap="round" marker-end="url(#ah3)"/>')
+    s.append(f'<defs><marker id="ah3" markerWidth="11" markerHeight="11" refX="7" refY="3.4" orient="auto"><path d="M0,0 L8.5,3.4 L0,6.8 Z" fill="{PAL["soft"]}"/></marker></defs>')
     # opponent-process panel
     px, py, pw, ph = 150, 200, 660, 150
     s.append(f'<rect x="{px}" y="{py}" width="{pw}" height="{ph}" rx="12" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')

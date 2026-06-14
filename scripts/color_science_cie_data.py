@@ -89,6 +89,32 @@ def rgb_cmf():
     return wl, rgb[0], rgb[1], rgb[2]
 
 
+# Hunt-Pointer-Estevez transform (equal-energy normalized): XYZ -> LMS cone space.
+# Applied to the CMF (x̄ȳz̄ as functions of λ) it yields physiologically-based
+# cone spectral sensitivities l(λ) m(λ) s(λ) — the standard CIE cone fundamentals,
+# data-grounded (reuses the verified CMF) rather than gaussian approximations.
+_M_XYZ2LMS = np.array([
+    [0.38971, 0.68898, -0.07868],
+    [-0.22981, 1.18340, 0.04641],
+    [0.00000, 0.00000, 1.00000],
+])
+
+
+def cone_fundamentals():
+    """(wl, L, M, S) cone spectral sensitivities at 1nm, each peak-normalized to 1.
+
+    Hunt-Pointer-Estevez transform of the CIE 1931 2° CMF. Peaks ≈ S 446, M 548,
+    L 576 nm; smooth, asymmetric, with the heavy L/M overlap and narrow blue-shifted
+    S that define trichromacy. Cached."""
+    if "cones" not in _cache:
+        wl, x, y, z = cmf_1nm()
+        lms = _M_XYZ2LMS @ np.vstack([x, y, z])
+        L, M, S = (np.clip(lms[i], 0, None) for i in range(3))
+        L = L / L.max(); M = M / M.max(); S = S / S.max()
+        _cache["cones"] = (wl, L, M, S)
+    return _cache["cones"]
+
+
 def spectral_locus():
     """(wl, x, y) of the spectral locus at 1nm."""
     wl, X, Y, Z = cmf_1nm()
