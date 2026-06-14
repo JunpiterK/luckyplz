@@ -51,6 +51,8 @@ content = c2.content
 _cie = importlib.util.spec_from_file_location("ciedata", ROOT / "scripts" / "color_science_cie_data.py")
 cie = importlib.util.module_from_spec(_cie); _cie.loader.exec_module(cie)
 GAMUT_1931 = "cs-cie1931-gamut.png"
+GAMUT_1976 = "cs-cie1976-gamut.png"
+LAB_DISK = "cs-cielab-ab-disk.png"
 
 # extra CSS: formula blocks + series nav
 CSS = CSS_BASE + """
@@ -59,7 +61,10 @@ CSS = CSS_BASE + """
 .snav{display:flex;gap:10px;margin:8px 0 26px;flex-wrap:wrap}
 .snav a{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;background:#fff;border:1px solid var(--line);border-radius:10px;font-size:13.5px;font-weight:600;color:var(--soft)}
 .snav a b{color:var(--ink)}
-@media(min-width:900px){.formula{font-size:20px;max-width:760px}}
+/* square color-diagram figures: fit the screen, never horizontal-scroll on phone */
+.fig-box.square{overflow-x:visible;display:flex;justify-content:center}
+.fig-box.square svg{min-width:0;width:100%;max-width:560px;height:auto}
+@media(min-width:900px){.formula{font-size:20px;max-width:760px}.fig-box.square svg{max-width:640px}}
 """
 
 # ---------------------------------------------------------------------------
@@ -104,31 +109,51 @@ def _ax(s, ox, oy, w, h, xl, yl):
 
 
 def fig_match(t):
-    W, H = 900, 380
+    """A clean optical-apparatus schematic of the bipartite color-matching set-up."""
+    W, H = 900, 440
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    cx, cy, r = 240, 180, 130
-    # bipartite field
-    s.append(f'<clipPath id="cm"><circle cx="{cx}" cy="{cy}" r="{r}"/></clipPath>')
-    s.append(f'<g clip-path="url(#cm)">')
-    s.append(f'<rect x="{cx-r}" y="{cy-r}" width="{r}" height="{2*r}" fill="#10c0c8"/>')  # test (cyan)
-    s.append(f'<rect x="{cx}" y="{cy-r}" width="{r}" height="{2*r}" fill="#16b9c0"/>')   # match
-    s.append('</g>')
-    s.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="{PAL["ink"]}" stroke-width="2"/>')
-    s.append(f'<line x1="{cx}" y1="{cy-r}" x2="{cx}" y2="{cy+r}" stroke="{PAL["bg"] if "bg" in PAL else "#fff"}" stroke-width="2" opacity="0.5"/>')
-    s.append(f'<text x="{cx-r/2:.0f}" y="{cy-r-14}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["test"]}</text>')
-    s.append(f'<text x="{cx+r/2:.0f}" y="{cy-r-14}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["mix"]}</text>')
-    # three primary knobs
-    prim = [("R 700nm", PAL["L"]), ("G 546nm", PAL["M"]), ("B 436nm", PAL["S"])]
-    bx = 540
-    s.append(f'<text x="{bx}" y="{60}" font-size="{FST}" font-weight="700" fill="{PAL["ink"]}">{t["knobs"]}</text>')
+    s.append(f'<defs><marker id="mbeam" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#888"/></marker></defs>')
+    fx, fy, fr = 450, 165, 96
+    # beams first (behind the field)
+    s.append(f'<line x1="180" y1="120" x2="{fx-fr*0.55:.0f}" y2="{fy-10}" stroke="#9bd" stroke-width="6" opacity="0.5" marker-end="url(#mbeam)"/>')
+    for i, col in enumerate(["#f2c4b8", "#bfe6c8", "#bcd2f5"]):
+        s.append(f'<line x1="740" y1="{100+i*70}" x2="{fx+fr*0.55:.0f}" y2="{fy+(i-1)*8}" stroke="{col}" stroke-width="6" opacity="0.6" marker-end="url(#mbeam)"/>')
+    # bipartite circular field (2-degree)
+    s.append(f'<clipPath id="cmf"><circle cx="{fx}" cy="{fy}" r="{fr}"/></clipPath>')
+    s.append(f'<g clip-path="url(#cmf)"><rect x="{fx-fr}" y="{fy-fr}" width="{fr}" height="{2*fr}" fill="#0fb6c4"/>'
+             f'<rect x="{fx}" y="{fy-fr}" width="{fr}" height="{2*fr}" fill="#16b8c0"/></g>')
+    s.append(f'<line x1="{fx}" y1="{fy-fr}" x2="{fx}" y2="{fy+fr}" stroke="#fff" stroke-width="1.5" opacity="0.55"/>')
+    s.append(f'<circle cx="{fx}" cy="{fy}" r="{fr}" fill="none" stroke="{PAL["ink"]}" stroke-width="2.5"/>')
+    s.append(f'<text x="{fx-fr*0.5:.0f}" y="{fy-fr-12}" text-anchor="middle" font-size="{FSA}" font-weight="700" fill="{PAL["ink"]}">{t["test_half"]}</text>')
+    s.append(f'<text x="{fx+fr*0.5:.0f}" y="{fy-fr-12}" text-anchor="middle" font-size="{FSA}" font-weight="700" fill="{PAL["ink"]}">{t["mix_half"]}</text>')
+    # test light source (left)
+    s.append(f'<circle cx="150" cy="120" r="22" fill="#ffe9a8" stroke="{PAL["gold"]}" stroke-width="2"/>')
+    for a in range(0, 360, 45):
+        import math as _m
+        dx, dy = _m.cos(_m.radians(a)), _m.sin(_m.radians(a))
+        s.append(f'<line x1="{150+dx*26:.0f}" y1="{120+dy*26:.0f}" x2="{150+dx*34:.0f}" y2="{120+dy*34:.0f}" stroke="{PAL["gold"]}" stroke-width="2"/>')
+    s.append(f'<text x="150" y="70" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["test"]}</text>')
+    s.append(f'<text x="150" y="180" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">{t["single_wl"]}</text>')
+    # three primary sources + intensity sliders (right)
+    s.append(f'<text x="800" y="56" text-anchor="middle" font-size="{FS}" font-weight="800" fill="{PAL["ink"]}">{t["knobs"]}</text>')
+    prim = [("R 700", PAL["L"]), ("G 546", PAL["M"]), ("B 436", PAL["S"])]
     for i, (lab, col) in enumerate(prim):
         y = 100 + i * 70
-        s.append(f'<circle cx="{bx+20}" cy="{y}" r="20" fill="{col}"/>')
-        s.append(f'<line x1="{bx+20}" y1="{y}" x2="{bx+20+14}" y2="{y-12}" stroke="#fff" stroke-width="3"/>')
-        s.append(f'<rect x="{bx+60}" y="{y-7}" width="180" height="14" rx="7" fill="#eee" stroke="{PAL["line"]}"/>')
-        s.append(f'<rect x="{bx+60}" y="{y-7}" width="{60+i*40}" height="14" rx="7" fill="{col}" opacity="0.8"/>')
-        s.append(f'<text x="{bx+50}" y="{y+6}" text-anchor="end" font-size="{FS}" font-weight="700" fill="{col}">{lab}</text>')
-    s.append(f'<text x="{bx}" y="{330}" font-size="{FS}" fill="{PAL["soft"]}">{t["adjust"]}</text>')
+        s.append(f'<circle cx="760" cy="{y}" r="16" fill="{col}"/>')
+        s.append(f'<text x="760" y="{y+5}" text-anchor="middle" font-size="11" font-weight="800" fill="#fff">{lab[0]}</text>')
+        s.append(f'<rect x="790" y="{y-6}" width="96" height="12" rx="6" fill="#eee" stroke="{PAL["line"]}"/>')
+        s.append(f'<rect x="790" y="{y-6}" width="{40+i*22}" height="12" rx="6" fill="{col}"/>')
+        s.append(f'<circle cx="{790+40+i*22}" cy="{y}" r="8" fill="#fff" stroke="{col}" stroke-width="2"/>')
+        s.append(f'<text x="784" y="{y+5}" text-anchor="end" font-size="{FSA}" font-weight="700" fill="{col}">{lab}</text>')
+    # observer eye (bottom)
+    ex, ey = fx, 360
+    s.append(f'<line x1="{fx-fr*0.6:.0f}" y1="{fy+fr-6}" x2="{ex-26}" y2="{ey-18}" stroke="{PAL["mute"]}" stroke-width="1" stroke-dasharray="4 3"/>')
+    s.append(f'<line x1="{fx+fr*0.6:.0f}" y1="{fy+fr-6}" x2="{ex+26}" y2="{ey-18}" stroke="{PAL["mute"]}" stroke-width="1" stroke-dasharray="4 3"/>')
+    s.append(f'<path d="M{ex-40},{ey} Q{ex},{ey-30} {ex+40},{ey} Q{ex},{ey+30} {ex-40},{ey} Z" fill="#fff" stroke="{PAL["ink"]}" stroke-width="2"/>')
+    s.append(f'<circle cx="{ex}" cy="{ey}" r="15" fill="#5a7"/><circle cx="{ex}" cy="{ey}" r="7" fill="#111"/>')
+    s.append(f'<text x="{ex}" y="{ey+44}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["observer"]}</text>')
+    s.append(f'<text x="{ex+70}" y="{ey-6}" font-size="{FSA}" fill="{PAL["soft"]}">{t["field2"]}</text>')
+    s.append(f'<text x="{W/2:.0f}" y="{H-10}" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">{t["adjust"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -175,25 +200,43 @@ def fig_cmf_rgb(t):
 
 
 def fig_negative(t):
-    W, H = 900, 360
+    """Two clean panels: (1) saturation scale shows a mix can't reach pure cyan;
+    (2) adding red to the TEST side makes r̄ negative."""
+    W, H = 900, 380
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    # left panel: cannot match
-    for px, title, ok in [(40, t["p_left"], False), (480, t["p_right"], True)]:
-        s.append(f'<rect x="{px}" y="40" width="380" height="290" rx="14" fill="{PAL["panel"]}" stroke="{PAL["line"]}"/>')
-        s.append(f'<text x="{px+190}" y="74" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">{title}</text>')
-    # left: test cyan vs mix (too dull) -> X
-    s.append(f'<circle cx="120" cy="160" r="42" fill="#0ec6cf"/><text x="120" y="222" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">{t["test"]}</text>')
-    s.append(f'<text x="210" y="166" text-anchor="middle" font-size="26" fill="{PAL["mute"]}">≠</text>')
-    s.append(f'<circle cx="300" cy="160" r="42" fill="#6aa6a0"/><text x="300" y="222" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">R+G+B</text>')
-    s.append(f'<text x="230" y="300" text-anchor="middle" font-size="{FS}" fill="{PAL["L"]}">{t["dull"]}</text>')
-    # right: test+red -> matches G+B
-    s.append(f'<circle cx="560" cy="150" r="34" fill="#0ec6cf"/>')
-    s.append(f'<text x="610" y="156" text-anchor="middle" font-size="24" fill="{PAL["L"]}">+</text>')
-    s.append(f'<circle cx="660" cy="150" r="22" fill="{PAL["L"]}"/><text x="660" y="120" text-anchor="middle" font-size="{FSA}" fill="{PAL["L"]}">R</text>')
-    s.append(f'<text x="720" y="156" text-anchor="middle" font-size="26" fill="{PAL["M"]}">=</text>')
-    s.append(f'<circle cx="790" cy="150" r="34" fill="#6fae86"/><text x="790" y="120" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">G+B</text>')
-    s.append(f'<text x="670" y="250" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["eq"]}</text>')
-    s.append(f'<text x="670" y="292" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">{t["arrow_neg"]}</text>')
+
+    def panel(px, num, title, col):
+        s.append(f'<rect x="{px}" y="34" width="400" height="312" rx="14" fill="#fff" stroke="{PAL["line"]}"/>')
+        s.append(f'<circle cx="{px+28}" cy="66" r="15" fill="{col}"/><text x="{px+28}" y="71" text-anchor="middle" font-size="{FS}" font-weight="800" fill="#fff">{num}</text>')
+        s.append(f'<text x="{px+52}" y="72" font-size="{FS}" font-weight="800" fill="{PAL["ink"]}">{title}</text>')
+    panel(30, "1", t["p_left"], PAL["L"])
+    panel(470, "2", t["p_right"], PAL["M"])
+
+    # Panel 1 — saturation axis: pure 500nm sits beyond any R+G+B mix
+    ax0, ax1, ay = 70, 400, 200
+    s.append(f'<defs><linearGradient id="satg" x1="0" x2="1"><stop offset="0" stop-color="#b9c7c9"/><stop offset="1" stop-color="#00d6e6"/></linearGradient></defs>')
+    s.append(f'<rect x="{ax0}" y="{ay-9}" width="{ax1-ax0}" height="18" rx="9" fill="url(#satg)"/>')
+    s.append(f'<text x="{ax0}" y="{ay+34}" font-size="{FSA}" fill="{PAL["mute"]}">{t["dull2"]}</text>')
+    s.append(f'<text x="{ax1}" y="{ay+34}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{t["sat"]}</text>')
+    mixx = ax0 + (ax1 - ax0) * 0.58
+    s.append(f'<circle cx="{mixx:.0f}" cy="{ay}" r="9" fill="#5fc0c8" stroke="#fff" stroke-width="2"/>')
+    s.append(f'<text x="{mixx:.0f}" y="{ay-20}" text-anchor="middle" font-size="{FSA}" font-weight="700" fill="{PAL["soft"]}">{t["mixmax"]}</text>')
+    s.append(f'<circle cx="{ax1-6:.0f}" cy="{ay}" r="11" fill="#00d6e6" stroke="#111" stroke-width="2"/>')
+    s.append(f'<text x="{ax1-6:.0f}" y="{ay-20}" text-anchor="middle" font-size="{FSA}" font-weight="800" fill="{PAL["ink"]}">{t["pure"]}</text>')
+    s.append(f'<path d="M{mixx+14:.0f},{ay} L{ax1-22:.0f},{ay}" stroke="{PAL["L"]}" stroke-width="2" stroke-dasharray="4 3"/>')
+    s.append(f'<text x="235" y="300" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">{t["cant"]}</text>')
+
+    # Panel 2 — test ⊕ red = green+blue  ->  test = G+B − R
+    ey = 165
+    s.append(f'<circle cx="560" cy="{ey}" r="32" fill="#0ec6cf" stroke="#111" stroke-width="1.5"/>')
+    s.append(f'<text x="560" y="{ey+52}" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">{t["testc"]}</text>')
+    s.append(f'<text x="612" y="{ey+7}" text-anchor="middle" font-size="26" font-weight="700" fill="{PAL["L"]}">+</text>')
+    s.append(f'<circle cx="652" cy="{ey}" r="18" fill="{PAL["L"]}" stroke="#111" stroke-width="1.5"/><text x="652" y="{ey+5}" text-anchor="middle" font-size="{FS}" font-weight="800" fill="#fff">R</text>')
+    s.append(f'<text x="700" y="{ey+7}" text-anchor="middle" font-size="26" font-weight="700" fill="{PAL["ink"]}">=</text>')
+    s.append(f'<circle cx="752" cy="{ey}" r="32" fill="#5fae9a" stroke="#111" stroke-width="1.5"/><text x="752" y="{ey+5}" text-anchor="middle" font-size="{FS}" font-weight="800" fill="#fff">G+B</text>')
+    s.append(f'<rect x="500" y="248" width="340" height="44" rx="10" fill="{PAL["panel"]}"/>')
+    s.append(f'<text x="670" y="276" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">{t["eq"]}</text>')
+    s.append(f'<text x="670" y="320" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">{t["conc"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -297,47 +340,101 @@ def fig_macadam(t):
     return "\n".join(s)
 
 
-def fig_lab(t):
-    W, H = 760, 520
+def fig_chromaticity_1976(t):
+    """Filled CIE 1976 UCS (u'v') diagram — real CMF gamut PNG + vector overlay."""
+    W, H = 720, 700
+    ox, oy, pw, ph = 86, 630, 580, 580
+    UR, VR = 0.64, 0.60
+    PX = lambda u: ox + pw * (u / UR)
+    PY = lambda v: oy - ph * (v / VR)
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    cx, cy = 380, 300
-    # L* vertical bar (black->white)
-    s.append('<defs><linearGradient id="lstar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#111"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>')
-    s.append(f'<rect x="{cx-18}" y="60" width="36" height="300" fill="url(#lstar)" stroke="{PAL["line"]}"/>')
-    s.append(f'<text x="{cx}" y="44" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">L* {t["light"]}</text>')
-    s.append(f'<text x="{cx+28}" y="72" font-size="{FSA}" fill="{PAL["soft"]}">100</text>')
-    s.append(f'<text x="{cx+28}" y="358" font-size="{FSA}" fill="{PAL["soft"]}">0</text>')
-    # a*-b* plane (isometric-ish), centered below
-    px, py = 380, 410
-    L = 150
-    s.append(f'<line x1="{px-L}" y1="{py}" x2="{px+L}" y2="{py}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<line x1="{px}" y1="{py-90}" x2="{px}" y2="{py+90}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
-    s.append(f'<rect x="{px+L-46}" y="{py-12}" width="44" height="24" rx="5" fill="{PAL["L"]}"/><text x="{px+L+8}" y="{py+5}" font-size="{FS}" font-weight="700" fill="{PAL["L"]}">+a* {t["red"]}</text>')
-    s.append(f'<rect x="{px-L+2}" y="{py-12}" width="44" height="24" rx="5" fill="{PAL["M"]}"/><text x="{px-L-8}" y="{py+5}" text-anchor="end" font-size="{FS}" font-weight="700" fill="{PAL["M"]}">−a* {t["green"]}</text>')
-    s.append(f'<rect x="{px-22}" y="{py-90}" width="44" height="22" rx="5" fill="{PAL["accent"] if "accent" in PAL else "#d6b400"}"/><text x="{px}" y="{py-98}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["gold"]}">+b* {t["yellow"]}</text>')
-    s.append(f'<rect x="{px-22}" y="{py+68}" width="44" height="22" rx="5" fill="{PAL["S"]}"/><text x="{px}" y="{py+108}" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["S"]}">−b* {t["blue"]}</text>')
+    s.append(f'<image href="/assets/blog/{GAMUT_1976}?v={BUILD}" x="{PX(0):.1f}" y="{PY(VR):.1f}" '
+             f'width="{PX(UR)-PX(0):.1f}" height="{PY(0)-PY(VR):.1f}" preserveAspectRatio="none"/>')
+    pts = [(PX(u), PY(v)) for u, v in cie.locus_polyline("1976")]
+    poly = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
+    s.append(f'<path d="{poly}" fill="none" stroke="#1c1c1c" stroke-width="1.4" stroke-linejoin="round"/>')
+    # axes
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{PX(UR):.0f}" y2="{oy}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    s.append(f'<line x1="{ox}" y1="{oy}" x2="{ox}" y2="{PY(VR):.0f}" stroke="{PAL["axis"]}" stroke-width="1.5"/>')
+    for v in (0.2, 0.4, 0.6):
+        s.append(f'<text x="{PX(v):.0f}" y="{oy+26}" text-anchor="middle" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+        s.append(f'<text x="{ox-12}" y="{PY(v)+5:.0f}" text-anchor="end" font-size="{FSA}" fill="{PAL["mute"]}">{v}</text>')
+    s.append(f'<text x="{PX(UR):.0f}" y="{oy+26}" text-anchor="end" font-size="{FS}" fill="{PAL["soft"]}">u′</text>')
+    s.append(f'<text x="{ox-12}" y="{PY(VR)+14:.0f}" font-size="{FS}" fill="{PAL["soft"]}">v′</text>')
+    # wavelength labels
+    cen = (0.2, 0.46)
+    for nm, (u, v) in cie.locus_label_points("1976").items():
+        du, dv = u - cen[0], v - cen[1]
+        d = max((du * du + dv * dv) ** 0.5, 1e-3)
+        lxp, lyp = PX(u) + du / d * 15, PY(v) - dv / d * 15
+        s.append(f'<circle cx="{PX(u):.0f}" cy="{PY(v):.0f}" r="2.3" fill="#111"/>')
+        s.append(f'<text x="{lxp:.0f}" y="{lyp:.0f}" text-anchor="middle" font-size="12.5" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{nm}</text>')
+    # sRGB triangle + white in uv
+    pr = cie.srgb_primaries_uv()
+    tri = f'{PX(pr["R"][0]):.0f},{PY(pr["R"][1]):.0f} {PX(pr["G"][0]):.0f},{PY(pr["G"][1]):.0f} {PX(pr["B"][0]):.0f},{PY(pr["B"][1]):.0f}'
+    s.append(f'<polygon points="{tri}" fill="none" stroke="#111" stroke-width="2" stroke-dasharray="7 4"/>')
+    s.append(f'<circle cx="{PX(pr["W"][0]):.0f}" cy="{PY(pr["W"][1]):.0f}" r="6" fill="#fff" stroke="#111" stroke-width="2"/>')
+    s.append(f'<text x="{PX(pr["W"][0])+11:.0f}" y="{PY(pr["W"][1])+4:.0f}" font-size="14" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">{t["white"]}</text>')
+    s.append('</svg>')
+    return "\n".join(s)
+
+
+def fig_lab(t):
+    """CIELAB: real a*b* hue-chroma wheel (Lab->sRGB PNG) + L* axis + opponent axes."""
+    W, H = 720, 640
+    s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
+    cx, cy, r = 270, 330, 210
+    s.append(f'<image href="/assets/blog/{LAB_DISK}?v={BUILD}" x="{cx-r}" y="{cy-r}" width="{2*r}" height="{2*r}"/>')
+    s.append(f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="none" stroke="#bbb" stroke-width="1"/>')
+    s.append(f'<defs><marker id="ah" markerWidth="11" markerHeight="11" refX="8" refY="4" orient="auto"><path d="M0,0 L9,4 L0,8 Z" fill="#222"/></marker></defs>')
+    # opponent axes through the wheel
+    ext = r + 36
+    for x1, y1, x2, y2 in [(cx-ext, cy, cx+ext, cy), (cx, cy+ext, cx, cy-ext)]:
+        s.append(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="#222" stroke-width="1.6" marker-end="url(#ah)"/>')
+    def lbl(x, y, txt, col, anc="middle"):
+        s.append(f'<text x="{x}" y="{y}" text-anchor="{anc}" font-size="{FST}" font-weight="800" fill="{col}" stroke="#fff" stroke-width="3.5" paint-order="stroke">{txt}</text>')
+    lbl(cx+ext+6, cy+6, f'+a*', PAL["L"], "start"); lbl(cx+ext+6, cy+26, t["red"], PAL["L"], "start")
+    lbl(cx-ext-6, cy+6, f'−a*', PAL["M"], "end"); lbl(cx-ext-6, cy+26, t["green"], PAL["M"], "end")
+    lbl(cx, cy-ext-8, f'+b* {t["yellow"]}', PAL["gold"])
+    lbl(cx, cy+ext+22, f'−b* {t["blue"]}', PAL["S"])
+    # L* vertical lightness bar (right)
+    bx, bt, bh = 600, cy - r, 2 * r
+    s.append('<defs><linearGradient id="lstar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0a0a0a"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>')
+    s.append(f'<rect x="{bx-22}" y="{bt}" width="44" height="{bh}" rx="6" fill="url(#lstar)" stroke="{PAL["line"]}"/>')
+    s.append(f'<text x="{bx}" y="{bt-14}" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">L*</text>')
+    s.append(f'<text x="{bx}" y="{bt-34}" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">{t["light"]}</text>')
+    s.append(f'<text x="{bx+30}" y="{bt+14}" font-size="{FSA}" fill="{PAL["soft"]}">100 ({t["white_w"]})</text>')
+    s.append(f'<text x="{bx+30}" y="{bt+bh}" font-size="{FSA}" fill="{PAL["soft"]}">0 ({t["black_w"]})</text>')
     s.append('</svg>')
     return "\n".join(s)
 
 
 def fig_de(t):
-    W, H = 900, 340
+    """Two CIELAB samples; ΔE76 = straight distance, ΔE00 = perceptual correction."""
+    W, H = 900, 380
     s = [f'<svg viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="{t["aria"]}">']
-    # two swatches + euclidean line
-    s.append(f'<rect x="60" y="80" width="90" height="90" rx="10" fill="#3a6ea5"/><rect x="220" y="120" width="90" height="90" rx="10" fill="#4a86c5"/>')
-    s.append(f'<line x1="150" y1="125" x2="220" y2="165" stroke="{PAL["ink"]}" stroke-width="2.5" stroke-dasharray="5 4"/>')
-    s.append(f'<text x="185" y="120" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">ΔE</text>')
-    s.append(f'<text x="185" y="250" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">{t["e76"]}</text>')
-    # arrow to DE2000 terms
-    s.append(f'<text x="420" y="60" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">CIEDE2000</text>')
+    # left: two close samples + euclidean distance in Lab
+    s.append(f'<rect x="50" y="70" width="120" height="120" rx="12" fill="#2f6fb0"/>')
+    s.append(f'<rect x="210" y="120" width="120" height="120" rx="12" fill="#3f8fd0"/>')
+    s.append(f'<line x1="170" y1="118" x2="210" y2="158" stroke="{PAL["ink"]}" stroke-width="2.6" stroke-dasharray="6 4"/>')
+    s.append(f'<text x="190" y="108" text-anchor="middle" font-size="22" font-weight="800" fill="{PAL["ink"]}">ΔE</text>')
+    s.append(f'<text x="190" y="280" text-anchor="middle" font-size="{FS}" font-weight="700" fill="{PAL["ink"]}">{t["e76"]}</text>')
+    s.append(f'<text x="190" y="306" text-anchor="middle" font-size="{FSA}" fill="{PAL["soft"]}">{t["e76sub"]}</text>')
+    s.append(f'<path d="M360,180 L430,180" stroke="{PAL["axis"]}" stroke-width="2.4" marker-end="url(#dah)"/>')
+    s.append(f'<defs><marker id="dah" markerWidth="10" markerHeight="10" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="{PAL["axis"]}"/></marker></defs>')
+    # right: CIEDE2000 correction terms
+    s.append(f'<text x="660" y="56" text-anchor="middle" font-size="{FST}" font-weight="800" fill="{PAL["ink"]}">CIEDE2000</text>')
     terms = [(t["sl"], PAL["ink"]), (t["sc"], PAL["L"]), (t["sh"], PAL["M"]), (t["rt"], PAL["S"])]
     for i, (lab, col) in enumerate(terms):
-        x = 420 + (i % 2) * 240
-        y = 100 + (i // 2) * 90
-        s.append(f'<rect x="{x}" y="{y}" width="220" height="64" rx="10" fill="{PAL["panel"]}" stroke="{col}" stroke-width="1.5"/>')
+        x = 470 + (i % 2) * 210
+        y = 90 + (i // 2) * 96
+        s.append(f'<rect x="{x}" y="{y}" width="190" height="74" rx="11" fill="#fff" stroke="{col}" stroke-width="2"/>')
+        s.append(f'<rect x="{x}" y="{y}" width="6" height="74" rx="3" fill="{col}"/>')
         for j, ln in enumerate(lab.split("|")):
-            s.append(f'<text x="{x+14}" y="{y+26+j*22}" font-size="{FS}" fill="{PAL["ink"]}">{ln}</text>')
-    s.append(f'<text x="660" y="300" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">{t["goal"]}</text>')
+            fw = "800" if j == 0 else "400"
+            fs = FS if j == 0 else FSA
+            s.append(f'<text x="{x+18}" y="{y+28+j*22}" font-size="{fs}" font-weight="{fw}" fill="{PAL["ink"]}">{ln}</text>')
+    s.append(f'<text x="660" y="356" text-anchor="middle" font-size="{FS}" fill="{PAL["soft"]}">{t["goal"]}</text>')
     s.append('</svg>')
     return "\n".join(s)
 
@@ -348,7 +445,7 @@ def build_figures(lang):
         "match": fig_match(F["match"]), "cmf_rgb": fig_cmf_rgb(F["cmf_rgb"]),
         "negative": fig_negative(F["negative"]), "xyz_cmf": fig_xyz_cmf(F["xyz_cmf"]),
         "chromaticity": fig_chromaticity(F["chromaticity"]), "macadam": fig_macadam(F["macadam"]),
-        "lab": fig_lab(F["lab"]), "de": fig_de(F["de"]),
+        "uv1976": fig_chromaticity_1976(F["uv1976"]), "lab": fig_lab(F["lab"]), "de": fig_de(F["de"]),
     }
 
 
@@ -358,10 +455,10 @@ def build_figures(lang):
 def figure_labels(lang):
     F = {}
     F["match"] = {
-        "ko": dict(aria="색일치 실험", test="측정 단색광", mix="세 원색 혼합", knobs="세 기준광 손잡이", adjust="두 반쪽이 같아 보일 때까지 조절"),
-        "en": dict(aria="Color matching experiment", test="test light", mix="3-primary mix", knobs="three primary knobs", adjust="adjust until both halves look identical"),
-        "ja": dict(aria="等色実験", test="測定単色光", mix="三原色混合", knobs="三原色のつまみ", adjust="両半分が同じに見えるまで調整"),
-        "zh": dict(aria="颜色匹配实验", test="待测单色光", mix="三原色混合", knobs="三原色旋钮", adjust="调到两半看起来相同"),
+        "ko": dict(aria="색일치 실험 장치", test="측정 광원", single_wl="단일 파장", test_half="측정 색", mix_half="혼합 색", knobs="세 기준광 + 강도 조절", observer="관찰자", field2="2° 시야", adjust="세 강도를 돌려 두 반쪽이 똑같아 보이게 맞춘다"),
+        "en": dict(aria="Color-matching apparatus", test="test source", single_wl="single wavelength", test_half="test", mix_half="mixture", knobs="three primaries + intensity", observer="observer", field2="2° field", adjust="turn the three intensities until both halves look identical"),
+        "ja": dict(aria="等色実験装置", test="測定光源", single_wl="単一波長", test_half="測定色", mix_half="混合色", knobs="三原色 + 強度調整", observer="観察者", field2="2° 視野", adjust="三つの強度を回し両半分が同じに見えるよう合わせる"),
+        "zh": dict(aria="颜色匹配装置", test="待测光源", single_wl="单一波长", test_half="待测色", mix_half="混合色", knobs="三原色 + 强度调节", observer="观察者", field2="2° 视场", adjust="转动三个强度，使两半看起来完全相同"),
     }[lang]
     F["cmf_rgb"] = {
         "ko": dict(aria="CIE RGB 색일치함수", x="파장 (nm)", y="값", neg="음수 구간"),
@@ -370,10 +467,18 @@ def figure_labels(lang):
         "zh": dict(aria="CIE RGB颜色匹配函数", x="波长 (nm)", y="值", neg="负值区间"),
     }[lang]
     F["negative"] = {
-        "ko": dict(aria="음수가 나오는 이유", p_left="더해서는 안 됨", p_right="빼면 일치", test="청록", dull="섞을수록 탁해짐", eq="측정색 = G+B − R", arrow_neg="→ 빨강이 음수로 기록"),
-        "en": dict(aria="Why it goes negative", p_left="adding fails", p_right="subtracting matches", test="cyan", dull="mixing only dulls it", eq="test = G+B − R", arrow_neg="→ red recorded as negative"),
-        "ja": dict(aria="なぜ負になるか", p_left="足すと不可", p_right="引くと一致", test="シアン", dull="混ぜると濁る", eq="測定色 = G+B − R", arrow_neg="→ 赤が負として記録"),
-        "zh": dict(aria="为何出现负值", p_left="相加不行", p_right="相减则匹配", test="青", dull="越混越浊", eq="待测 = G+B − R", arrow_neg="→ 红被记为负"),
+        "ko": dict(aria="음수가 나오는 이유", p_left="R+G+B로는 못 만든다", p_right="측정 색에 빨강을 더한다",
+                   dull2="탁함", sat="선명함(채도) →", mixmax="R+G+B 혼합 최대", pure="순수 500nm",
+                   cant="혼합은 순수 청록의 채도에 못 미친다", testc="청록", eq="측정색 = G + B − R", conc="빼준 빨강(−R)이 곧 음수 r̄"),
+        "en": dict(aria="Why the function goes negative", p_left="R+G+B can't reach it", p_right="add red to the test side",
+                   dull2="dull", sat="vividness (chroma) →", mixmax="max R+G+B mix", pure="pure 500nm",
+                   cant="no mix is as saturated as pure cyan", testc="cyan", eq="test = G + B − R", conc="the subtracted red (−R) is the negative r̄"),
+        "ja": dict(aria="なぜ負になるか", p_left="R+G+Bでは作れない", p_right="測定色に赤を足す",
+                   dull2="濁り", sat="鮮やかさ(彩度) →", mixmax="R+G+B混合の最大", pure="純粋500nm",
+                   cant="混合は純粋シアンの彩度に届かない", testc="シアン", eq="測定色 = G + B − R", conc="引いた赤(−R)が負のr̄"),
+        "zh": dict(aria="为何出现负值", p_left="R+G+B无法达到", p_right="给待测色加红",
+                   dull2="浊", sat="鲜艳(彩度) →", mixmax="R+G+B混合上限", pure="纯500nm",
+                   cant="任何混合都不及纯青饱和", testc="青", eq="待测 = G + B − R", conc="被减去的红(−R)即负的r̄"),
     }[lang]
     F["xyz_cmf"] = {
         "ko": dict(aria="CIE 1931 XYZ 색일치함수", x="파장 (nm)", y="값 (전 구간 양수)"),
@@ -393,17 +498,23 @@ def figure_labels(lang):
         "ja": dict(aria="マクアダム楕円", green="緑: 大", blue="青: 小", note="楕円×10誇張 — 位置ごとに大きさ・向きが異なる"),
         "zh": dict(aria="麦克亚当椭圆", green="绿: 大", blue="蓝: 小", note="椭圆×10夸张 — 各位置大小方向不同"),
     }[lang]
+    F["uv1976"] = {
+        "ko": dict(aria="CIE 1976 u'v' 색도도", white="백색점 D65"),
+        "en": dict(aria="CIE 1976 u'v' chromaticity diagram", white="white D65"),
+        "ja": dict(aria="CIE 1976 u'v'色度図", white="白色点 D65"),
+        "zh": dict(aria="CIE 1976 u'v'色度图", white="白点 D65"),
+    }[lang]
     F["lab"] = {
-        "ko": dict(aria="CIELAB 색공간", light="밝기", red="적", green="녹", yellow="황", blue="청"),
-        "en": dict(aria="CIELAB color space", light="lightness", red="red", green="green", yellow="yellow", blue="blue"),
-        "ja": dict(aria="CIELAB色空間", light="明るさ", red="赤", green="緑", yellow="黄", blue="青"),
-        "zh": dict(aria="CIELAB色空间", light="亮度", red="红", green="绿", yellow="黄", blue="蓝"),
+        "ko": dict(aria="CIELAB 색공간", light="밝기", red="적", green="녹", yellow="황", blue="청", white_w="흰색", black_w="검정"),
+        "en": dict(aria="CIELAB color space", light="lightness", red="red", green="green", yellow="yellow", blue="blue", white_w="white", black_w="black"),
+        "ja": dict(aria="CIELAB色空間", light="明るさ", red="赤", green="緑", yellow="黄", blue="青", white_w="白", black_w="黒"),
+        "zh": dict(aria="CIELAB色空间", light="亮度", red="红", green="绿", yellow="黄", blue="蓝", white_w="白", black_w="黑"),
     }[lang]
     F["de"] = {
-        "ko": dict(aria="색차 ΔE 진화", e76="ΔE76 = 단순 직선거리", sl="SL|밝기 가중", sc="SC|채도 가중", sh="SH|색상 가중", rt="RT|파랑 회전 보정", goal="목표: 한 숫자 = 체감 색차"),
-        "en": dict(aria="Evolution of color difference", e76="ΔE76 = plain distance", sl="SL|lightness weight", sc="SC|chroma weight", sh="SH|hue weight", rt="RT|blue rotation", goal="goal: one number = perceived difference"),
-        "ja": dict(aria="色差ΔEの進化", e76="ΔE76 = 単純距離", sl="SL|明度の重み", sc="SC|彩度の重み", sh="SH|色相の重み", rt="RT|青の回転補正", goal="目標: 一つの数 = 体感色差"),
-        "zh": dict(aria="色差ΔE演进", e76="ΔE76 = 简单距离", sl="SL|明度权重", sc="SC|彩度权重", sh="SH|色相权重", rt="RT|蓝区旋转", goal="目标: 一个数 = 体感色差"),
+        "ko": dict(aria="색차 ΔE 진화", e76="ΔE*ab (1976)", e76sub="CIELAB 두 점의 직선거리", sl="SL|밝기 가중", sc="SC|채도 가중", sh="SH|색상 가중", rt="RT|파랑 영역 회전 보정", goal="목표: 한 숫자 = 사람이 느끼는 색 차이"),
+        "en": dict(aria="Evolution of color difference", e76="ΔE*ab (1976)", e76sub="straight distance in CIELAB", sl="SL|lightness weight", sc="SC|chroma weight", sh="SH|hue weight", rt="RT|blue-region rotation", goal="goal: one number = the difference people perceive"),
+        "ja": dict(aria="色差ΔEの進化", e76="ΔE*ab (1976)", e76sub="CIELAB二点の直線距離", sl="SL|明度の重み", sc="SC|彩度の重み", sh="SH|色相の重み", rt="RT|青領域の回転補正", goal="目標: 一つの数 = 人が感じる色差"),
+        "zh": dict(aria="色差ΔE演进", e76="ΔE*ab (1976)", e76sub="CIELAB两点的直线距离", sl="SL|明度权重", sc="SC|彩度权重", sh="SH|色相权重", rt="RT|蓝区旋转修正", goal="目标: 一个数 = 人所感知的色差"),
     }[lang]
     return F
 
@@ -471,6 +582,17 @@ def build_html(lang):
     parts.append(f'<div class="snav"><a href="{prev_url}">{c["prev_label"]} &nbsp;<b>{c["prev_text"]}</b></a></div>')
     parts.append(f'<p class="lead">{c["lead"]}</p>')
 
+    SQUARE = {"chromaticity", "macadam", "uv1976", "lab"}
+    fignum = [0]
+
+    def add_fig(figkey, cap):
+        fignum[0] += 1
+        cls = " square" if figkey in SQUARE else ""
+        parts.append('<figure>')
+        parts.append(f'<div class="fig-box{cls}">{figs[figkey]}</div>')
+        parts.append(f'<figcaption><b>{c["fig_word"]} {fignum[0]}.</b> {cap}</figcaption>')
+        parts.append('</figure>')
+
     for i, sec in enumerate(c["secs"]):
         parts.append('<section>')
         parts.append(f'<h2>{sec["h2"]}</h2>')
@@ -479,10 +601,9 @@ def build_html(lang):
         for fk in sec.get("fml", []):
             parts.append(f'<div class="formula">{FORMULAS[fk]}</div>')
         if sec.get("fig"):
-            parts.append('<figure>')
-            parts.append(f'<div class="fig-box">{figs[sec["fig"]]}</div>')
-            parts.append(f'<figcaption><b>{c["fig_word"]} {i+1}.</b> {sec["cap"]}</figcaption>')
-            parts.append('</figure>')
+            add_fig(sec["fig"], sec["cap"])
+        if sec.get("fig2"):
+            add_fig(sec["fig2"], sec["cap2"])
         parts.append('</section>')
         if i == 3:
             parts.append('<div data-lp-ad="blog" style="margin:30px 0;"></div>')
@@ -617,9 +738,11 @@ def update_sitemap():
 
 def main():
     ASSETS_BLOG.mkdir(parents=True, exist_ok=True)
-    # filled-gamut PNG (real CMF + xy->sRGB) embedded by the chromaticity figures
+    # filled-gamut + Lab disk PNGs (real CMF + xy->sRGB / Lab->sRGB)
     cie.render_chromaticity_png(ASSETS_BLOG / GAMUT_1931, "1931", res=1000)
-    print(f"[gamut] wrote {GAMUT_1931}")
+    cie.render_chromaticity_png(ASSETS_BLOG / GAMUT_1976, "1976", res=1000)
+    cie.render_lab_disk(ASSETS_BLOG / LAB_DISK, L=65, ab=120, res=900)
+    print(f"[gamut] wrote {GAMUT_1931}, {GAMUT_1976}, {LAB_DISK}")
     for lang in ("ko", "en", "ja", "zh"):
         try:
             make_og(lang)

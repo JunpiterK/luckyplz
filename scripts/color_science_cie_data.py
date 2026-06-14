@@ -177,3 +177,52 @@ def locus_polyline(mode="1931"):
     if mode == "1976":
         sx, sy = xy_to_uv1976(sx, sy)
     return list(zip(sx.tolist(), sy.tolist()))
+
+
+# ---------------------------------------------------------------------------
+# CIELAB a*b* plane (filled disk) — Lab -> sRGB, out-of-gamut shown grey
+# ---------------------------------------------------------------------------
+_WHITE_D65 = (0.95047, 1.0, 1.08883)
+
+
+def _lab_to_xyz(L, a, b):
+    fy = (L + 16.0) / 116.0
+    fx = fy + a / 500.0
+    fz = fy - b / 200.0
+    def inv(t):
+        t3 = t ** 3
+        return np.where(t3 > 0.008856, t3, (t - 16.0 / 116.0) / 7.787)
+    Xn, Yn, Zn = _WHITE_D65
+    return inv(fx) * Xn, inv(fy) * Yn, inv(fz) * Zn
+
+
+def render_lab_disk(out_path, L=65.0, ab=128.0, res=900):
+    """CIELAB a*b* hue-chroma wheel at lightness L (disk of radius ab).
+
+    A vibrant educational wheel: colors clipped into sRGB so the disk reads as
+    the familiar a*(green-red) / b*(blue-yellow) plane. Center (a=b=0) is the
+    neutral grey for this L; chroma grows toward the rim. Transparent corners.
+    """
+    from PIL import Image
+    a = np.linspace(-ab, ab, res)
+    b = np.linspace(ab, -ab, res)          # row 0 = top = +b (yellow)
+    A, B = np.meshgrid(a, b)
+    X, Y, Z = _lab_to_xyz(np.full_like(A, L), A, B)
+    XYZ = np.stack([X, Y, Z], axis=-1)
+    lin = np.clip(XYZ @ _M_XYZ2SRGB.T, 0, 1)
+    srgb = np.where(lin <= 0.0031308, 12.92 * lin, 1.055 * np.power(np.clip(lin, 0, None), 1 / 2.4) - 0.055)
+    srgb = np.clip(np.nan_to_num(srgb), 0, 1)
+    rad = np.sqrt(A * A + B * B)
+    disk = rad <= ab
+    # soft anti-aliased rim
+    alpha = np.clip((ab - rad) / 2.0 + 0.5, 0, 1)
+    img = np.zeros((res, res, 4), dtype=np.uint8)
+    img[..., :3] = np.clip(srgb * 255, 0, 255).astype(np.uint8)
+    img[..., 3] = np.where(disk, (alpha * 255).astype(np.uint8), 0)
+    Image.fromarray(img, "RGBA").save(out_path)
+
+
+def srgb_primaries_uv():
+    """sRGB primaries + D65 white in u'v' coords (for the 1976 overlay)."""
+    pts = {"R": (0.64, 0.33), "G": (0.30, 0.60), "B": (0.15, 0.06), "W": (0.3127, 0.329)}
+    return {k: xy_to_uv1976(x, y) for k, (x, y) in pts.items()}
