@@ -561,101 +561,158 @@ def _sim_data_js():
 
 SIM_JS = _sim_data_js()
 
-SIM_SVG = """<svg viewBox="0 0 600 470" xmlns="http://www.w3.org/2000/svg" aria-label="{{ARIA}}">
+SIM_SVG = """<svg viewBox="0 0 600 700" xmlns="http://www.w3.org/2000/svg" aria-label="{{ARIA}}">
   <defs>
-    <linearGradient id="csrain" x1="0" x2="1">
+    <linearGradient id="csRain" x1="0" x2="1">
       <stop offset="0%" stop-color="#7a4bd0"/><stop offset="14%" stop-color="#3b5bd0"/>
       <stop offset="30%" stop-color="#19b6c4"/><stop offset="46%" stop-color="#36c25a"/>
       <stop offset="62%" stop-color="#d6d23a"/><stop offset="78%" stop-color="#e07b2a"/>
       <stop offset="100%" stop-color="#d23b3b"/></linearGradient>
-    <marker id="csauxar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#e4572e"/></marker>
+    <radialGradient id="csSheen" cx="38%" cy="32%" r="75%">
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.45"/>
+      <stop offset="45%" stop-color="#fff" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.16"/></radialGradient>
+    <filter id="csBlur" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
   </defs>
-  <rect x="60" y="38" width="480" height="16" rx="3" fill="url(#csrain)"/>
-  <text x="60" y="30" font-size="12" fill="#8a9aa3">400</text>
-  <text x="540" y="30" font-size="12" fill="#8a9aa3" text-anchor="end">700 nm</text>
-  <polygon id="csPtr" points="0,0" fill="#22303a"/>
-  <clipPath id="csfclip"><circle cx="150" cy="172" r="74"/></clipPath>
-  <g clip-path="url(#csfclip)">
-    <rect id="csTest" x="76" y="98" width="74" height="148" fill="#19b6c4"/>
-    <rect id="csMix"  x="150" y="98" width="74" height="148" fill="#19b6c4"/>
+  <rect x="60" y="30" width="480" height="13" rx="3" fill="url(#csRain)"/>
+  <text x="60" y="22" font-size="11" fill="#8a9aa3">400</text>
+  <text x="540" y="22" font-size="11" fill="#8a9aa3" text-anchor="end">700 nm</text>
+  <polygon id="csPtr" points="" fill="#22303a"/>
+  <polygon id="csBeamMono" points="" fill="#19b6c4" opacity="0.5"/>
+  <polygon id="csBeamAux" points="" fill="#e4572e" opacity="0"/>
+  <polygon id="csBeamR" points="" fill="#e4572e" opacity="0"/>
+  <polygon id="csBeamG" points="" fill="#36a655" opacity="0"/>
+  <polygon id="csBeamB" points="" fill="#2d6cdf" opacity="0"/>
+  <circle cx="300" cy="180" r="80" fill="#11202b" opacity="0.18" filter="url(#csBlur)"/>
+  <clipPath id="csFc"><circle cx="300" cy="180" r="68"/></clipPath>
+  <g clip-path="url(#csFc)">
+    <rect id="csHalfTest" x="232" y="112" width="68" height="136" fill="#19b6c4"/>
+    <rect id="csHalfMix" x="300" y="112" width="68" height="136" fill="#19b6c4"/>
+    <rect x="232" y="112" width="136" height="136" fill="url(#csSheen)"/>
   </g>
-  <line x1="150" y1="98" x2="150" y2="246" stroke="#fff" stroke-width="1.4" opacity="0.5"/>
-  <circle cx="150" cy="172" r="74" fill="none" stroke="#22303a" stroke-width="2.5"/>
-  <text x="113" y="90" font-size="13" font-weight="700" fill="#22303a" text-anchor="middle">{{TEST}}</text>
-  <text x="187" y="90" font-size="13" font-weight="700" fill="#22303a" text-anchor="middle">{{MIX}}</text>
-  <text x="150" y="270" font-size="12.5" fill="#5a6b76" text-anchor="middle">{{MATCH}}</text>
-  <g id="csAux" opacity="0">
-    <line x1="150" y1="150" x2="113" y2="150" stroke="#e4572e" stroke-width="5" marker-end="url(#csauxar)"/>
-    <text x="150" y="126" font-size="11.5" font-weight="700" fill="#e4572e" text-anchor="middle">{{AUX}}</text>
-  </g>
-  <text x="430" y="90" font-size="13" font-weight="800" fill="#22303a" text-anchor="middle">{{BARS}}</text>
-  <line x1="322" y1="226" x2="540" y2="226" stroke="#9fb0b8" stroke-width="1.5"/>
-  <text x="318" y="230" font-size="11" fill="#8a9aa3" text-anchor="end">0</text>
-  <rect id="csBarR" x="348" y="226" width="40" height="0" fill="#e4572e"/>
-  <rect id="csBarG" x="412" y="226" width="40" height="0" fill="#36a655"/>
-  <rect id="csBarB" x="476" y="226" width="40" height="0" fill="#2d6cdf"/>
-  <text x="368" y="262" font-size="13" font-weight="800" fill="#e4572e" text-anchor="middle">R</text>
-  <text x="432" y="262" font-size="13" font-weight="800" fill="#36a655" text-anchor="middle">G</text>
-  <text x="496" y="262" font-size="13" font-weight="800" fill="#2d6cdf" text-anchor="middle">B</text>
-  <text x="368" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">700</text>
-  <text x="432" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">546</text>
-  <text x="496" y="278" font-size="9.5" fill="#8a9aa3" text-anchor="middle">436</text>
-  <text id="csNeg" x="430" y="300" font-size="10.5" font-weight="700" fill="#e4572e" text-anchor="middle" opacity="0">{{NEG}}</text>
-  <text x="60" y="332" font-size="12" font-weight="700" fill="#5a6b76">{{CMFLBL}}</text>
-  <line x1="60" y1="410" x2="540" y2="410" stroke="#cfd9de" stroke-width="1.2"/>
+  <line x1="300" y1="112" x2="300" y2="248" stroke="#fff" stroke-width="1.3" opacity="0.5"/>
+  <circle cx="300" cy="180" r="68" fill="none" stroke="#0d1822" stroke-width="3.5"/>
+  <circle cx="300" cy="180" r="64" fill="none" stroke="#fff" stroke-width="1" opacity="0.25"/>
+  <text x="266" y="103" font-size="12.5" font-weight="800" fill="#22303a" text-anchor="middle">{{TEST}}</text>
+  <text x="334" y="103" font-size="12.5" font-weight="800" fill="#22303a" text-anchor="middle">{{MIX}}</text>
+  <g id="csGlowMono"><circle cx="86" cy="128" r="20" fill="#19b6c4" opacity="0.5" filter="url(#csBlur)"/></g>
+  <circle cx="86" cy="128" r="13" fill="#fff" stroke="#22303a" stroke-width="2"/>
+  <circle id="csBulbMono" cx="86" cy="128" r="9" fill="#19b6c4"/>
+  <text x="86" y="96" font-size="11.5" font-weight="700" fill="#22303a" text-anchor="middle">{{MONO}}</text>
+  <text x="86" y="152" font-size="10" fill="#5a6b76" text-anchor="middle">{{MONOSUB}}</text>
+  <g id="csGlowAux" opacity="0"><circle cx="86" cy="236" r="20" fill="#e4572e" opacity="0.6" filter="url(#csBlur)"/></g>
+  <circle cx="86" cy="236" r="13" fill="#fff" stroke="#22303a" stroke-width="2"/>
+  <circle id="csBulbAux" cx="86" cy="236" r="9" fill="#e4572e" opacity="0.25"/>
+  <text x="86" y="276" font-size="11.5" font-weight="700" fill="#e4572e" text-anchor="middle">{{AUXSRC}}</text>
+  <text id="csAuxNote" x="86" y="292" font-size="10" fill="#e4572e" text-anchor="middle" opacity="0">{{AUXNOTE}}</text>
+  <text x="514" y="96" font-size="11.5" font-weight="800" fill="#22303a" text-anchor="middle">{{PRIM}}</text>
+  <g id="csGlowR" opacity="0"><circle cx="514" cy="124" r="18" fill="#e4572e" opacity="0.6" filter="url(#csBlur)"/></g>
+  <circle cx="514" cy="124" r="12" fill="#fff" stroke="#22303a" stroke-width="2"/><circle id="csBulbR" cx="514" cy="124" r="8" fill="#e4572e" opacity="0.3"/>
+  <text x="540" y="128" font-size="11" font-weight="800" fill="#e4572e">R</text>
+  <g id="csGlowG" opacity="0"><circle cx="514" cy="180" r="18" fill="#36a655" opacity="0.6" filter="url(#csBlur)"/></g>
+  <circle cx="514" cy="180" r="12" fill="#fff" stroke="#22303a" stroke-width="2"/><circle id="csBulbG" cx="514" cy="180" r="8" fill="#36a655" opacity="0.3"/>
+  <text x="540" y="184" font-size="11" font-weight="800" fill="#36a655">G</text>
+  <g id="csGlowB" opacity="0"><circle cx="514" cy="236" r="18" fill="#2d6cdf" opacity="0.6" filter="url(#csBlur)"/></g>
+  <circle cx="514" cy="236" r="12" fill="#fff" stroke="#22303a" stroke-width="2"/><circle id="csBulbB" cx="514" cy="236" r="8" fill="#2d6cdf" opacity="0.3"/>
+  <text x="540" y="240" font-size="11" font-weight="800" fill="#2d6cdf">B</text>
+  <line x1="284" y1="300" x2="278" y2="246" stroke="#9fb0b8" stroke-width="1" stroke-dasharray="4 3"/>
+  <line x1="316" y1="300" x2="322" y2="246" stroke="#9fb0b8" stroke-width="1" stroke-dasharray="4 3"/>
+  <path d="M262,308 Q300,280 338,308 Q300,336 262,308 Z" fill="#fff" stroke="#22303a" stroke-width="2"/>
+  <circle cx="300" cy="308" r="14" fill="#5a8f7a"/><circle cx="300" cy="308" r="6.5" fill="#10202a"/>
+  <circle cx="304" cy="304" r="2.4" fill="#fff" opacity="0.85"/>
+  <text x="300" y="350" font-size="12" font-weight="700" fill="#22303a" text-anchor="middle">{{OBS}}</text>
+  <text x="356" y="296" font-size="10.5" fill="#5a6b76">{{FIELD2}}</text>
+  <text x="60" y="382" font-size="12.5" font-weight="800" fill="#22303a">{{BARS}}</text>
+  <line x1="60" y1="470" x2="540" y2="470" stroke="#cfd9de" stroke-width="1.3"/>
+  <text x="54" y="474" font-size="10" fill="#9fb0b8" text-anchor="end">0</text>
+  <rect id="csBarR" x="250" y="470" width="40" height="0" fill="#e4572e"/>
+  <rect id="csBarG" x="320" y="470" width="40" height="0" fill="#36a655"/>
+  <rect id="csBarB" x="390" y="470" width="40" height="0" fill="#2d6cdf"/>
+  <text x="270" y="510" font-size="12.5" font-weight="800" fill="#e4572e" text-anchor="middle">R</text>
+  <text x="340" y="510" font-size="12.5" font-weight="800" fill="#36a655" text-anchor="middle">G</text>
+  <text x="410" y="510" font-size="12.5" font-weight="800" fill="#2d6cdf" text-anchor="middle">B</text>
+  <text id="csBarNeg" x="170" y="490" font-size="10.5" font-weight="700" fill="#e4572e" text-anchor="middle" opacity="0">{{NEG}}</text>
+  <text x="60" y="536" font-size="12.5" font-weight="800" fill="#22303a">{{CMFLBL}}</text>
+  <line x1="60" y1="612" x2="540" y2="612" stroke="#cfd9de" stroke-width="1.2"/>
+  <text x="60" y="676" font-size="10.5" fill="#8a9aa3">400</text>
+  <text x="540" y="676" font-size="10.5" fill="#8a9aa3" text-anchor="end">700 nm</text>
   <polyline id="csCurveR" points="" fill="none" stroke="#e4572e" stroke-width="2.4"/>
   <polyline id="csCurveG" points="" fill="none" stroke="#36a655" stroke-width="2.4"/>
   <polyline id="csCurveB" points="" fill="none" stroke="#2d6cdf" stroke-width="2.4"/>
-  <line id="csSweep" x1="60" y1="350" x2="60" y2="454" stroke="#22303a" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <line id="csSweep" x1="60" y1="548" x2="60" y2="660" stroke="#22303a" stroke-width="1.6" stroke-dasharray="4 3"/>
+  <circle id="csDotR" cx="60" cy="612" r="4" fill="#e4572e"/>
+  <circle id="csDotG" cx="60" cy="612" r="4" fill="#36a655"/>
+  <circle id="csDotB" cx="60" cy="612" r="4" fill="#2d6cdf"/>
 </svg>"""
 
-SIM_SCRIPT = """<script>(function(){{
-{SIMDATA}
-var N=SIM.wl.length, SX0=60,SX1=540, FZERO=410, BASE=226;
-function $(id){{return document.getElementById(id);}}
-function xp(i){{return SX0+(SX1-SX0)*i/(N-1);}}
-function curve(a,sc){{var p='';for(var i=0;i<N;i++){{p+=xp(i).toFixed(1)+','+(FZERO-a[i]*sc).toFixed(1)+' ';}}return p;}}
-$('csCurveR').setAttribute('points',curve(SIM.r,210));
-$('csCurveG').setAttribute('points',curve(SIM.g,210));
-$('csCurveB').setAttribute('points',curve(SIM.b,210));
-function bar(el,v){{var h=Math.abs(v)*300;if(v>=0){{el.setAttribute('y',BASE-h);}}else{{el.setAttribute('y',BASE);}}el.setAttribute('height',h);el.setAttribute('opacity',0.92);}}
-function render(i){{
-  var col=SIM.spec[i];
-  $('csTest').setAttribute('fill',col); $('csMix').setAttribute('fill',col);
+# JS body (plain string; concatenated with SIM_JS — no .format, so single braces)
+SIM_SCRIPT_BODY = """(function(){
+var N=SIM.wl.length, SX0=60,SX1=540, CZERO=612, BBASE=470, SC=200;
+function $(id){return document.getElementById(id);}
+function xp(i){return SX0+(SX1-SX0)*i/(N-1);}
+function curve(a,sc){var p='';for(var i=0;i<N;i++){p+=xp(i).toFixed(1)+','+(CZERO-a[i]*sc).toFixed(1)+' ';}return p;}
+$('csCurveR').setAttribute('points',curve(SIM.r,SC));
+$('csCurveG').setAttribute('points',curve(SIM.g,SC));
+$('csCurveB').setAttribute('points',curve(SIM.b,SC));
+function beam(id,sx,sy,tx,ty,w){$(id).setAttribute('points',sx+','+(sy-3)+' '+sx+','+(sy+3)+' '+tx+','+(ty+w)+' '+tx+','+(ty-w));}
+beam('csBeamMono',96,128,232,156,15); beam('csBeamAux',96,236,232,204,13);
+beam('csBeamR',502,124,368,156,13); beam('csBeamG',502,180,368,180,13); beam('csBeamB',502,236,368,204,13);
+function bar(el,v){var h=Math.abs(v)*220;if(v>=0){el.setAttribute('y',BBASE-h);}else{el.setAttribute('y',BBASE);}el.setAttribute('height',h);}
+function cl(x){return x<0?0:(x>1?1:x);}
+function render(i){
+  var col=SIM.spec[i], rr=SIM.r[i], gg=SIM.g[i], bb=SIM.b[i], neg=rr<0;
+  $('csHalfTest').setAttribute('fill',col); $('csHalfMix').setAttribute('fill',col);
   $('csLamN').textContent=SIM.wl[i]+' nm';
   var px=xp(i);
-  $('csPtr').setAttribute('points',(px-6)+',34 '+(px+6)+',34 '+px+',46');
-  bar($('csBarR'),SIM.r[i]); bar($('csBarG'),SIM.g[i]); bar($('csBarB'),SIM.b[i]);
-  var neg=SIM.r[i]<0; $('csAux').setAttribute('opacity',neg?1:0); $('csNeg').setAttribute('opacity',neg?1:0);
+  $('csPtr').setAttribute('points',(px-6)+',26 '+(px+6)+',26 '+px+',38');
+  $('csBulbMono').setAttribute('fill',col); $('csBeamMono').setAttribute('fill',col); $('csGlowMono').firstElementChild.setAttribute('fill',col);
+  var auxI=neg?cl(Math.abs(rr)/0.1):0;
+  $('csGlowAux').setAttribute('opacity',neg?(0.3+0.7*auxI):0);
+  $('csBulbAux').setAttribute('opacity',neg?(0.4+0.6*auxI):0.18);
+  $('csBeamAux').setAttribute('opacity',neg?(0.25+0.45*auxI):0);
+  $('csAuxNote').setAttribute('opacity',neg?1:0);
+  var rI=cl(rr/0.34), gI=cl(gg/0.34), bI=cl(bb/0.34);
+  $('csGlowR').setAttribute('opacity',rI*0.85); $('csBulbR').setAttribute('opacity',0.25+rI*0.75); $('csBeamR').setAttribute('opacity',rI*0.6);
+  $('csGlowG').setAttribute('opacity',gI*0.85); $('csBulbG').setAttribute('opacity',0.25+gI*0.75); $('csBeamG').setAttribute('opacity',gI*0.6);
+  $('csGlowB').setAttribute('opacity',bI*0.85); $('csBulbB').setAttribute('opacity',0.25+bI*0.75); $('csBeamB').setAttribute('opacity',bI*0.6);
+  bar($('csBarR'),rr); bar($('csBarG'),gg); bar($('csBarB'),bb);
+  $('csBarNeg').setAttribute('opacity',neg?1:0);
   $('csSweep').setAttribute('x1',px); $('csSweep').setAttribute('x2',px);
+  $('csDotR').setAttribute('cx',px); $('csDotR').setAttribute('cy',CZERO-rr*SC);
+  $('csDotG').setAttribute('cx',px); $('csDotG').setAttribute('cy',CZERO-gg*SC);
+  $('csDotB').setAttribute('cx',px); $('csDotB').setAttribute('cy',CZERO-bb*SC);
   $('csSld').value=i;
-}}
-var i=0, dir=1, playing=true, last=0;
-function tick(t){{ if(playing && t-last>75){{last=t; i+=dir; if(i>=N-1){{i=N-1;dir=-1;}}else if(i<=0){{i=0;dir=1;}} render(i);}} requestAnimationFrame(tick); }}
-$('csPlayBtn').addEventListener('click',function(){{playing=!playing;$('csPlayBtn').textContent=playing?'\\u23F8':'\\u25B6';}});
-$('csSld').addEventListener('input',function(e){{playing=false;$('csPlayBtn').textContent='\\u25B6';i=+e.target.value;render(i);}});
-render(i); requestAnimationFrame(tick);
-}})();</script>"""
+}
+var i=0,dir=1,playing=true,last=0;
+function tick(t){if(playing&&t-last>80){last=t;i+=dir;if(i>=N-1){i=N-1;dir=-1;}else if(i<=0){i=0;dir=1;}render(i);}requestAnimationFrame(tick);}
+$('csPlayBtn').addEventListener('click',function(){playing=!playing;$('csPlayBtn').textContent=playing?'\\u23F8':'\\u25B6';});
+$('csSld').addEventListener('input',function(e){playing=false;$('csPlayBtn').textContent='\\u25B6';i=+e.target.value;render(i);});
+render(0);requestAnimationFrame(tick);
+})();"""
 
 
 def sim_labels(lang):
     return {
-        "ko": dict(aria="색일치 자동 시뮬레이션", ttl="색일치 시뮬레이션", live="AUTO",
-                   desc="파장이 바뀌면 세 기준광 <b>R·G·B</b>의 강도가 변한다. 청록 구간에서 R이 음수가 되면, 혼합 쪽이 아니라 <b>측정 색 쪽에 R을 더하는 보조광(트릭)</b>으로 처리한다 — 이것이 색일치함수의 음수다.",
-                   test="측정", mix="혼합", match="두 반쪽은 항상 일치 (≡)", aux="보조광 +R",
-                   bars="기준광 강도", neg="R < 0 → 보조광", cmf="색일치함수 r̄ ḡ b̄"),
-        "en": dict(aria="Auto color-matching simulation", ttl="Color-matching simulation", live="AUTO",
-                   desc="As the wavelength sweeps, the three primaries <b>R·G·B</b> change intensity. In the cyan band R turns negative, so instead of the mix side, <b>red is added to the test side as an auxiliary light (the trick)</b> — that is the negative in the color-matching function.",
-                   test="test", mix="mix", match="the two halves always match (≡)", aux="aux +R",
-                   bars="primary intensity", neg="R < 0 → auxiliary", cmf="color-matching functions r̄ ḡ b̄"),
-        "ja": dict(aria="等色の自動シミュレーション", ttl="等色シミュレーション", live="AUTO",
-                   desc="波長が変わると三原色 <b>R·G·B</b> の強度が変わる。シアン帯でRが負になると、混合側ではなく <b>測定色側に赤を足す補助光（トリック）</b> で処理する — これが等色関数の負だ。",
-                   test="測定", mix="混合", match="両半分は常に一致 (≡)", aux="補助光 +R",
-                   bars="原色の強度", neg="R < 0 → 補助光", cmf="等色関数 r̄ ḡ b̄"),
-        "zh": dict(aria="颜色匹配自动模拟", ttl="颜色匹配模拟", live="AUTO",
-                   desc="波长扫过时，三原色 <b>R·G·B</b> 的强度随之变化。青色波段R变为负值，于是不在混合侧，而是 <b>把红加到待测色一侧作为辅助光（技巧）</b> — 这正是颜色匹配函数中的负值。",
-                   test="待测", mix="混合", match="两半始终一致 (≡)", aux="辅助光 +R",
-                   bars="原色强度", neg="R < 0 → 辅助光", cmf="颜色匹配函数 r̄ ḡ b̄"),
+        "ko": dict(aria="색일치 자동 시뮬레이션", ttl="색일치 시뮬레이션", live="LIVE",
+                   desc="왼쪽 <b>단색광원</b>이 측정 색을, 오른쪽 <b>3원색</b>이 혼합 색을 만든다. 청록 구간에서 R이 음수가 되면 오른쪽이 아니라 왼쪽 <b>보조광원</b>이 켜져 측정 색에 R을 더한다 — 이것이 색일치함수의 음수다.",
+                   test="측정", mix="혼합", mono="단색광원", monosub="측정 색", auxsrc="보조광원", auxnote="+R (트릭)",
+                   prim="기준광 3원색", obs="관찰자", field2="2° 시야",
+                   bars="기준광 강도 (R·G·B)", neg="R < 0 → 보조광으로", cmf="색일치함수 r̄ ḡ b̄"),
+        "en": dict(aria="Auto color-matching simulation", ttl="Color-matching simulation", live="LIVE",
+                   desc="The <b>monochromatic source</b> (left) makes the test color, the <b>three primaries</b> (right) make the mix. In the cyan band R turns negative, so instead of the right side the <b>auxiliary source</b> (left) lights up and adds R to the test color — that is the negative in the color-matching function.",
+                   test="test", mix="mix", mono="mono source", monosub="test color", auxsrc="aux source", auxnote="+R (trick)",
+                   prim="3 primaries", obs="observer", field2="2° field",
+                   bars="primary intensity (R·G·B)", neg="R < 0 → auxiliary", cmf="color-matching functions r̄ ḡ b̄"),
+        "ja": dict(aria="等色の自動シミュレーション", ttl="等色シミュレーション", live="LIVE",
+                   desc="左の<b>単色光源</b>が測定色を、右の<b>三原色</b>が混合色をつくる。シアン帯でRが負になると右ではなく左の<b>補助光源</b>が点灯し、測定色にRを足す — これが等色関数の負だ。",
+                   test="測定", mix="混合", mono="単色光源", monosub="測定色", auxsrc="補助光源", auxnote="+R (トリック)",
+                   prim="三原色", obs="観察者", field2="2° 視野",
+                   bars="原色の強度 (R·G·B)", neg="R < 0 → 補助光へ", cmf="等色関数 r̄ ḡ b̄"),
+        "zh": dict(aria="颜色匹配自动模拟", ttl="颜色匹配模拟", live="LIVE",
+                   desc="左侧<b>单色光源</b>产生待测色，右侧<b>三原色</b>产生混合色。青色波段R变为负值时，不是右侧而是左侧<b>辅助光源</b>点亮，把R加到待测色 — 这正是颜色匹配函数中的负值。",
+                   test="待测", mix="混合", mono="单色光源", monosub="待测色", auxsrc="辅助光源", auxnote="+R (技巧)",
+                   prim="三原色", obs="观察者", field2="2° 视场",
+                   bars="原色强度 (R·G·B)", neg="R < 0 → 辅助光", cmf="颜色匹配函数 r̄ ḡ b̄"),
     }[lang]
 
 
@@ -663,10 +720,12 @@ def sim_widget(lang):
     t = sim_labels(lang)
     svg = SIM_SVG
     for k, v in {"{{ARIA}}": t["aria"], "{{TEST}}": t["test"], "{{MIX}}": t["mix"],
-                 "{{MATCH}}": t["match"], "{{AUX}}": t["aux"], "{{BARS}}": t["bars"],
+                 "{{MONO}}": t["mono"], "{{MONOSUB}}": t["monosub"], "{{AUXSRC}}": t["auxsrc"],
+                 "{{AUXNOTE}}": t["auxnote"], "{{PRIM}}": t["prim"], "{{OBS}}": t["obs"],
+                 "{{FIELD2}}": t["field2"], "{{BARS}}": t["bars"],
                  "{{NEG}}": t["neg"], "{{CMFLBL}}": t["cmf"]}.items():
         svg = svg.replace(k, v)
-    script = SIM_SCRIPT.format(SIMDATA=SIM_JS)
+    script = "<script>" + SIM_JS + "\n" + SIM_SCRIPT_BODY + "</script>"
     return (
         '<div class="cs-sim" role="group">'
         f'<div class="cs-ttl">{t["ttl"]} <span class="cs-live">● {t["live"]}</span></div>'
