@@ -523,7 +523,7 @@ section p{margin:0 0 16px}
 strong{font-weight:700;color:#11507a}
 figure{margin:24px 0 8px}
 .fig-box{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px 10px;box-shadow:0 2px 16px rgba(34,48,58,.05);overflow-x:auto}
-.fig-box svg{display:block;width:100%;height:auto;min-width:520px}
+.fig-box>svg{display:block;width:100%;height:auto;min-width:520px}
 figcaption{font-size:14.5px;line-height:1.65;color:var(--mute);margin:13px 4px 0;padding-left:13px;border-left:3px solid var(--line)}
 figcaption b{color:var(--soft)}
 .closing{margin:40px 0 0;padding:22px 20px;background:linear-gradient(180deg,rgba(192,138,45,.07),rgba(192,138,45,.02));border:1px solid rgba(192,138,45,.25);border-radius:14px}
@@ -540,7 +540,7 @@ footer a{color:var(--soft);font-weight:600}
   /* figures break out wider than the text column */
   figure{margin:34px 0 10px}
   .fig-box{margin-left:calc((760px - 980px)/2);margin-right:calc((760px - 980px)/2);padding:20px 18px 12px}
-  .fig-box svg{min-width:0}
+  .fig-box>svg{min-width:0}
   figcaption{font-size:13.5px;max-width:760px;margin-left:auto;margin-right:auto}
   footer{max-width:760px}
 }
