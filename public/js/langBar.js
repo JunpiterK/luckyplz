@@ -8,7 +8,10 @@
 */
 
 (function(){
-    const PRIMARY = ['en','ko','ja','zh','es'];
+    // Canonical primary order, shared with the content selector (langSelect.js):
+    // en, ko, zh, ja, es. enhance() reorders the bar to match, so every page
+    // (homepage + each game) shows the same order regardless of its HTML order.
+    const PRIMARY = ['en','ko','zh','ja','es'];
 
     function injectStyles(){
         if (document.getElementById('lp-langbar-enhance-styles')) return;
@@ -44,6 +47,7 @@
         const buttons = [...bar.querySelectorAll('.lang-btn')];
         if (!buttons.length) return;
 
+        const primary = PRIMARY.map(c => buttons.find(b => b.dataset.lang === c)).filter(Boolean);
         const secondary = buttons.filter(b => !PRIMARY.includes(b.dataset.lang));
         if (!secondary.length) return; // nothing to hide
 
@@ -60,6 +64,7 @@
         menu.hidden = true;
 
         secondary.forEach(b => menu.appendChild(b)); // detach from bar, attach to menu
+        primary.forEach(b => bar.appendChild(b)); // re-append primaries in canonical order
 
         bar.appendChild(more);
         bar.appendChild(menu);

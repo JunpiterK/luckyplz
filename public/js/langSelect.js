@@ -18,7 +18,7 @@
 (function () {
   if (document.getElementById('lpLangSelMounted')) return;
   // [code, label, flag-cc] — same labels/flags/style as the homepage .lang-bar
-  var LANGS = [['ko', '한국', 'kr'], ['en', 'EN', 'us'], ['ja', '日本', 'jp'], ['zh', '中文', 'cn'], ['es', 'ES', 'es']];
+  var LANGS = [['en', 'EN', 'us'], ['ko', '한국', 'kr'], ['zh', '中文', 'cn'], ['ja', '日本', 'jp'], ['es', 'ES', 'es']];
   var CODES = LANGS.map(function (l) { return l[0]; });
 
   function norm(l) {
