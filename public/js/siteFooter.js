@@ -183,6 +183,7 @@ try{
             +'<a href="/privacy/">Privacy</a><span class="sep">·</span>'
             +'<a href="/terms/">Terms</a><span class="sep">·</span>'
             +'<a href="/blog/" id="lpFooterBlogLink">Blog</a><span class="sep">·</span>'
+            +'<a href="/tools/">Tools</a><span class="sep">·</span>'
             +'<a href="/contact/">Contact</a>'
             +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
         document.body.appendChild(f);
