@@ -17,7 +17,8 @@
    Mount: appends into #lp-langbar if present, else prepends to <body>. */
 (function () {
   if (document.getElementById('lpLangSelMounted')) return;
-  var LANGS = [['ko', '한국어'], ['en', 'English'], ['ja', '日本語'], ['zh', '中文'], ['es', 'Español']];
+  // [code, label, flag-cc] — flags from flagcdn (same source as the homepage bar)
+  var LANGS = [['ko', '한국어', 'kr'], ['en', 'English', 'us'], ['ja', '日本語', 'jp'], ['zh', '中文', 'cn'], ['es', 'Español', 'es']];
   var CODES = LANGS.map(function (l) { return l[0]; });
 
   function norm(l) {
@@ -54,9 +55,11 @@
   var st = document.createElement('style');
   st.textContent =
     '.lp-langsel{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;padding:8px 10px;font-family:inherit}' +
-    '.lp-langsel button{background:rgba(127,127,127,.12);border:1px solid rgba(127,127,127,.32);' +
-    'border-radius:999px;padding:5px 13px;font-size:13px;font-weight:600;color:inherit;opacity:.62;' +
-    'cursor:pointer;transition:opacity .15s,border-color .15s,color .15s;font-family:inherit;line-height:1.2}' +
+    '.lp-langsel button{display:inline-flex;align-items:center;gap:6px;background:rgba(127,127,127,.12);' +
+    'border:1px solid rgba(127,127,127,.32);border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;' +
+    'color:inherit;opacity:.62;cursor:pointer;transition:opacity .15s,border-color .15s,color .15s;' +
+    'font-family:inherit;line-height:1.2}' +
+    '.lp-langsel button img{width:19px;height:13px;border-radius:2px;object-fit:cover;display:block;flex:none}' +
     '.lp-langsel button:hover{opacity:.92}' +
     '.lp-langsel button.on{opacity:1;border-color:#5dc1ff;color:#5dc1ff;background:rgba(93,193,255,.12)}';
   document.head.appendChild(st);
@@ -68,7 +71,12 @@
   LANGS.forEach(function (L) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.textContent = L[1];
+    var img = document.createElement('img');
+    img.src = 'https://flagcdn.com/w40/' + L[2] + '.png';
+    img.alt = '';
+    img.setAttribute('loading', 'lazy');
+    b.appendChild(img);
+    b.appendChild(document.createTextNode(L[1]));
     b.setAttribute('lang', L[0]);
     if (L[0] === cur) b.className = 'on';
     b.addEventListener('click', function () { go(L[0]); });
