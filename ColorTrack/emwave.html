@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>사인파 전자기파 3D 시각화</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #000;
+            color: white;
+            font-family: 'Courier New', monospace;
+            overflow-x: auto;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .title {
+            text-align: center;
+            font-size: 24px;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #00ff88, #0088ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .visualization {
+            position: relative;
+            width: 100%;
+            height: 700px;
+            background: radial-gradient(circle at center, #001122, #000000);
+            border: 2px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            perspective: 1200px;
+        }
+        
+        .wave-container {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 800px;
+            height: 400px;
+            transform: translate(-50%, -50%) rotateX(20deg) rotateY(-15deg);
+            transform-style: preserve-3d;
+        }
+        
+        /* 전파 방향 축 (z축) */
+        .propagation-axis {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 800px;
+            height: 2px;
+            background: linear-gradient(90deg, #333, #666, #333);
+            transform: translateY(-50%);
+        }
+        
+        /* 전기장 사인파 (E field) */
+        .electric-wave {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 800px;
+            height: 200px;
+            transform: translateY(-50%);
+        }
+        
+        .electric-wave svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .electric-path {
+            fill: none;
+            stroke: #0088ff;
+            stroke-width: 3;
+            filter: drop-shadow(0 0 8px #0088ff);
+            animation: wavePropagate 4s linear infinite;
+        }
+        
+        @keyframes wavePropagate {
+            0% {
+                stroke-dasharray: 0 2000;
+                stroke-dashoffset: 0;
+            }
+            100% {
+                stroke-dasharray: 2000 0;
+                stroke-dashoffset: -2000;
+            }
+        }
+        
+        /* 자기장 사인파 (B field) - 전기장과 수직 */
+        .magnetic-wave {
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 800px;
+            height: 200px;
+            transform: translateY(-50%) rotateX(90deg);
+            transform-origin: center center;
+        }
+        
+        .magnetic-wave svg {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .magnetic-path {
+            fill: none;
+            stroke: #ff4488;
+            stroke-width: 3;
+            filter: drop-shadow(0 0 8px #ff4488);
+            animation: wavePropagate 4s linear infinite;
+            animation-delay: 0s; /* 동위상 */
+        }
+        
+        /* 전기장 벡터 화살표들 */
+        .electric-arrow {
+            position: absolute;
+            width: 2px;
+            background: #0088ff;
+            transform-origin: bottom center;
+            opacity: 0.8;
+            filter: drop-shadow(0 0 4px #0088ff);
+        }
+        
+        /* 자기장 벡터 화살표들 */
+        .magnetic-arrow {
+            position: absolute;
+            height: 2px;
+            background: #ff4488;
+            transform-origin: left center;
+            opacity: 0.8;
+            filter: drop-shadow(0 0 4px #ff4488);
+            transform: rotateX(90deg);
+        }
+        
+        /* 포인팅 벡터 */
+        .poynting-vector {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: radial-gradient(circle, #ffff00, transparent);
+            border-radius: 50%;
+            animation: energyFlow 3s linear infinite;
+            filter: drop-shadow(0 0 8px #ffff00);
+        }
+        
+        @keyframes energyFlow {
+            0% { 
+                left: 0%;
+                top: 50%;
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            100% { 
+                left: 100%;
+                top: 50%;
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.5);
+            }
+        }
+        
+        /* 광자 입자들 */
+        .photon {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: radial-gradient(circle, #00ffff, transparent);
+            border-radius: 50%;
+            animation: photonTravel 3s linear infinite;
+            filter: drop-shadow(0 0 6px #00ffff);
+        }
+        
+        @keyframes photonTravel {
+            0% { 
+                left: 0%;
+                top: 50%;
+                opacity: 1;
+            }
+            100% { 
+                left: 100%;
+                top: 50%;
+                opacity: 0;
+            }
+        }
+        
+        /* 가상 광자 (양자 요동) */
+        .virtual-photon {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: radial-gradient(circle, rgba(255, 0, 255, 0.8), transparent);
+            border-radius: 50%;
+            animation: quantumFluctuation 1s ease-in-out infinite alternate;
+        }
+        
+        @keyframes quantumFluctuation {
+            0% { 
+                opacity: 0.3;
+                transform: scale(0.5);
+            }
+            100% { 
+                opacity: 0.9;
+                transform: scale(1.5);
+            }
+        }
+        
+        /* 파동면 (wavefront) */
+        .wavefront {
+            position: absolute;
+            width: 2px;
+            height: 300px;
+            background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.3), transparent);
+            animation: wavefrontMove 4s linear infinite;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        @keyframes wavefrontMove {
+            0% { left: 0%; opacity: 0.8; }
+            100% { left: 100%; opacity: 0; }
+        }
+        
+        /* 3D 좌표계 */
+        .coordinate-system {
+            position: absolute;
+            bottom: 50px;
+            right: 50px;
+            width: 120px;
+            height: 120px;
+            transform-style: preserve-3d;
+            transform: rotateX(20deg) rotateY(-15deg);
+        }
+        
+        .axis {
+            position: absolute;
+            width: 3px;
+            height: 60px;
+            transform-origin: bottom center;
+        }
+        
+        .axis.x { 
+            background: linear-gradient(to top, #ff4488, #ff8899);
+            transform: rotateZ(90deg) rotateY(90deg);
+            left: 60px;
+            bottom: 0;
+        }
+        .axis.y { 
+            background: linear-gradient(to top, #0088ff, #4499ff);
+            left: 60px;
+            bottom: 0;
+        }
+        .axis.z { 
+            background: linear-gradient(to top, #00ff88, #44ff99);
+            transform: rotateX(90deg);
+            left: 60px;
+            bottom: 0;
+        }
+        
+        .axis-label {
+            position: absolute;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .axis-label.x { color: #ff4488; right: -15px; top: 55px; }
+        .axis-label.y { color: #0088ff; left: 65px; top: -10px; }
+        .axis-label.z { color: #00ff88; left: 65px; top: 40px; }
+        
+        /* 물리학 정보 오버레이 */
+        .physics-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 11px;
+            color: #00ff88;
+            text-shadow: 0 0 5px #00ff88;
+            line-height: 1.3;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .control-btn {
+            background: linear-gradient(45deg, #0088ff, #00ff88);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            transition: opacity 0.3s;
+        }
+        
+        .control-btn:hover {
+            opacity: 0.8;
+        }
+        
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid;
+            font-size: 13px;
+        }
+        
+        .legend-item.electric { border-color: #0088ff; }
+        .legend-item.magnetic { border-color: #ff4488; }
+        .legend-item.energy { border-color: #ffff00; }
+        .legend-item.quantum { border-color: #00ffff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="title">사인파 전자기파의 3D 전파</h1>
+        <p style="text-align: center; color: #888; margin-bottom: 30px;">
+            Sinusoidal Electromagnetic Wave Propagation in 3D Space
+        </p>
+        
+        <div class="visualization" id="visualization">
+            <div class="wave-container">
+                <!-- 전파 방향 축 -->
+                <div class="propagation-axis"></div>
+                
+                <!-- 전기장 사인파 -->
+                <div class="electric-wave">
+                    <svg viewBox="0 0 800 200">
+                        <path class="electric-path" id="electric-sine" d="M0,100 Q50,50 100,100 T200,100 T300,100 T400,100 T500,100 T600,100 T700,100 T800,100" />
+                    </svg>
+                </div>
+                
+                <!-- 자기장 사인파 (전기장과 수직) -->
+                <div class="magnetic-wave">
+                    <svg viewBox="0 0 800 200">
+                        <path class="magnetic-path" id="magnetic-sine" d="M0,100 Q50,50 100,100 T200,100 T300,100 T400,100 T500,100 T600,100 T700,100 T800,100" />
+                    </svg>
+                </div>
+                
+                <!-- 파동면 -->
+                <div class="wavefront"></div>
+                <div class="wavefront" style="animation-delay: 1s;"></div>
+                <div class="wavefront" style="animation-delay: 2s;"></div>
+                
+                <!-- 포인팅 벡터 (에너지 흐름) -->
+                <div class="poynting-vector"></div>
+                <div class="poynting-vector" style="animation-delay: 0.5s;"></div>
+                <div class="poynting-vector" style="animation-delay: 1s;"></div>
+                <div class="poynting-vector" style="animation-delay: 1.5s;"></div>
+                <div class="poynting-vector" style="animation-delay: 2s;"></div>
+                
+                <!-- 광자들 -->
+                <div class="photon" style="animation-delay: 0s;"></div>
+                <div class="photon" style="animation-delay: 0.3s;"></div>
+                <div class="photon" style="animation-delay: 0.6s;"></div>
+                <div class="photon" style="animation-delay: 0.9s;"></div>
+                <div class="photon" style="animation-delay: 1.2s;"></div>
+            </div>
+            
+            <!-- 가상 광자들 -->
+            <div class="virtual-photon" style="left: 20%; top: 30%;"></div>
+            <div class="virtual-photon" style="left: 70%; top: 70%; animation-delay: 0.3s;"></div>
+            <div class="virtual-photon" style="left: 45%; top: 25%; animation-delay: 0.7s;"></div>
+            <div class="virtual-photon" style="left: 80%; top: 60%; animation-delay: 1.1s;"></div>
+            
+            <!-- 3D 좌표계 -->
+            <div class="coordinate-system">
+                <div class="axis x"></div>
+                <div class="axis y"></div>
+                <div class="axis z"></div>
+                <div class="axis-label x">B</div>
+                <div class="axis-label y">E</div>
+                <div class="axis-label z">k</div>
+            </div>
+            
+            <!-- 물리학 정보 -->
+            <div class="physics-overlay">
+                <strong>파동 방정식:</strong><br>
+                E(z,t) = E₀ sin(kz - ωt + φ)<br>
+                B(z,t) = B₀ sin(kz - ωt + φ)<br>
+                <br>
+                <strong>관계식:</strong><br>
+                |E|/|B| = c = 3×10⁸ m/s<br>
+                λ = 2π/k, ω = ck<br>
+                <br>
+                <strong>에너지 밀도:</strong><br>
+                u = ½(ε₀E² + B²/μ₀)<br>
+                <br>
+                <strong>포인팅 벡터:</strong><br>
+                S = (1/μ₀) E × B
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" onclick="toggleAnimation()">일시정지/재생</button>
+            <button class="control-btn" onclick="changeView()">시점 변경</button>
+            <button class="control-btn" onclick="toggleQuantum()">양자 모드</button>
+            <button class="control-btn" onclick="changeWaveform()">파형 변경</button>
+            <button class="control-btn" onclick="changeSpeed()">속도 조절</button>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item electric">
+                <h3>전기장 (E)</h3>
+                <p>파란색 사인파<br>
+                E(z,t) = E₀ sin(kz - ωt)<br>
+                수직 방향 (y축) 진동</p>
+            </div>
+            
+            <div class="legend-item magnetic">
+                <h3>자기장 (B)</h3>
+                <p>빨간색 사인파<br>
+                B(z,t) = B₀ sin(kz - ωt)<br>
+                수평 방향 (x축) 진동, E와 직교</p>
+            </div>
+            
+            <div class="legend-item energy">
+                <h3>에너지 전달</h3>
+                <p>노란색 포인팅 벡터<br>
+                S = E × B<br>
+                전파 방향 (z축)으로 에너지 흐름</p>
+            </div>
+            
+            <div class="legend-item quantum">
+                <h3>양자 해석</h3>
+                <p>청록색 광자<br>
+                E = ℏω, p = ℏk<br>
+                파동-입자 이중성</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let animationRunning = true;
+        let currentView = 0;
+        let quantumMode = false;
+        let currentWaveform = 0;
+        let currentSpeed = 1;
+        
+        // 실제 사인파 생성
+        function generateSineWave(amplitude = 50, frequency = 0.02, phase = 0) {
+            let path = `M0,100`;
+            for (let x = 0; x <= 800; x += 5) {
+                const y = 100 + amplitude * Math.sin(frequency * x + phase);
+                path += ` L${x},${y}`;
+            }
+            return path;
+        }
+        
+        // 사인파 업데이트
+        function updateWaves() {
+            const electricPath = document.getElementById('electric-sine');
+            const magneticPath = document.getElementById('magnetic-sine');
+            
+            if (electricPath && magneticPath) {
+                const time = Date.now() * 0.005;
+                electricPath.setAttribute('d', generateSineWave(50, 0.02, -time));
+                magneticPath.setAttribute('d', generateSineWave(50, 0.02, -time));
+            }
+        }
+        
+        // 동적 벡터 화살표 생성
+        function createFieldArrows() {
+            const container = document.querySelector('.wave-container');
+            
+            // 기존 화살표 제거
+            container.querySelectorAll('.electric-arrow, .magnetic-arrow').forEach(arrow => {
+                arrow.remove();
+            });
+            
+            // 전기장 화살표들
+            for (let i = 0; i < 10; i++) {
+                const arrow = document.createElement('div');
+                arrow.className = 'electric-arrow';
+                arrow.style.left = (i * 80 + 40) + 'px';
+                arrow.style.top = '50%';
+                arrow.style.height = '0px';
+                arrow.style.animation = `electricArrow 2s sin infinite`;
+                arrow.style.animationDelay = (i * 0.2) + 's';
+                container.appendChild(arrow);
+            }
+            
+            // 자기장 화살표들
+            for (let i = 0; i < 10; i++) {
+                const arrow = document.createElement('div');
+                arrow.className = 'magnetic-arrow';
+                arrow.style.left = (i * 80 + 40) + 'px';
+                arrow.style.top = '50%';
+                arrow.style.width = '0px';
+                arrow.style.animation = `magneticArrow 2s sin infinite`;
+                arrow.style.animationDelay = (i * 0.2) + 's';
+                container.appendChild(arrow);
+            }
+        }
+        
+        // CSS에 동적 애니메이션 추가
+        function addDynamicAnimations() {
+            const style = document.createElement('style');
+            style.textContent = `
+                @keyframes electricArrow {
+                    0%, 100% { height: 0px; }
+                    25% { height: 60px; transform: translateY(-60px); }
+                    50% { height: 0px; }
+                    75% { height: 60px; transform: translateY(0px); }
+                }
+                
+                @keyframes magneticArrow {
+                    0%, 100% { width: 0px; }
+                    25% { width: 60px; transform: translateX(-60px); }
+                    50% { width: 0px; }
+                    75% { width: 60px; transform: translateX(0px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        function toggleAnimation() {
+            const visualization = document.getElementById('visualization');
+            if (animationRunning) {
+                visualization.style.animationPlayState = 'paused';
+                visualization.querySelectorAll('*').forEach(el => {
+                    el.style.animationPlayState = 'paused';
+                });
+            } else {
+                visualization.style.animationPlayState = 'running';
+                visualization.querySelectorAll('*').forEach(el => {
+                    el.style.animationPlayState = 'running';
+                });
+            }
+            animationRunning = !animationRunning;
+        }
+        
+        function changeView() {
+            const waveContainer = document.querySelector('.wave-container');
+            const coordSystem = document.querySelector('.coordinate-system');
+            
+            currentView = (currentView + 1) % 5;
+            
+            const transforms = [
+                'translate(-50%, -50%) rotateX(20deg) rotateY(-15deg)',   // 기본
+                'translate(-50%, -50%) rotateX(0deg) rotateY(0deg)',      // 정면
+                'translate(-50%, -50%) rotateX(90deg) rotateY(0deg)',     // 위
+                'translate(-50%, -50%) rotateX(0deg) rotateY(90deg)',     // 옆
+                'translate(-50%, -50%) rotateX(-20deg) rotateY(30deg)'    // 아래
+            ];
+            
+            waveContainer.style.transform = transforms[currentView];
+            coordSystem.style.transform = transforms[currentView];
+        }
+        
+        function toggleQuantum() {
+            quantumMode = !quantumMode;
+            const virtualPhotons = document.querySelectorAll('.virtual-photon');
+            const photons = document.querySelectorAll('.photon');
+            
+            if (quantumMode) {
+                virtualPhotons.forEach(vp => {
+                    vp.style.opacity = '1';
+                    vp.style.transform = 'scale(2)';
+                });
+                photons.forEach(p => {
+                    p.style.filter = 'drop-shadow(0 0 12px #00ffff)';
+                });
+            } else {
+                virtualPhotons.forEach(vp => {
+                    vp.style.opacity = '0.8';
+                    vp.style.transform = 'scale(1)';
+                });
+                photons.forEach(p => {
+                    p.style.filter = 'drop-shadow(0 0 6px #00ffff)';
+                });
+            }
+        }
+        
+        function changeWaveform() {
+            currentWaveform = (currentWaveform + 1) % 3;
+            
+            const electricPath = document.getElementById('electric-sine');
+            const magneticPath = document.getElementById('magnetic-sine');
+            
+            const waveforms = [
+                () => generateSineWave(50, 0.02, 0),        // 사인파
+                () => generateSineWave(50, 0.04, 0),        // 고주파
+                () => generateSineWave(30, 0.015, 0)        // 저주파
+            ];
+            
+            if (electricPath && magneticPath) {
+                electricPath.setAttribute('d', waveforms[currentWaveform]());
+                magneticPath.setAttribute('d', waveforms[currentWaveform]());
+            }
+        }
+        
+        function changeSpeed() {
+            currentSpeed = currentSpeed === 1 ? 0.5 : currentSpeed === 0.5 ? 2 : 1;
+            
+            document.querySelectorAll('[style*="animation"]').forEach(el => {
+                const duration = el.style.animationDuration;
+                if (duration) {
+                    const newDuration = parseFloat(duration) / currentSpeed;
+                    el.style.animationDuration = newDuration + 's';
+                }
+            });
+        }
+        
+        // 초기화
+        addDynamicAnimations();
+        createFieldArrows();
+        
+        // 실시간 사인파 업데이트
+        setInterval(updateWaves, 50);
+        
+        // 실시간 가상 광자 생성
+        setInterval(() => {
+            if (Math.random() < 0.15) {
+                const visualization = document.getElementById('visualization');
+                const virtualPhoton = document.createElement('div');
+                virtualPhoton.className = 'virtual-photon';
+                virtualPhoton.style.left = Math.random() * 80 + 10 + '%';
+                virtualPhoton.style.top = Math.random() * 80 + 10 + '%';
+                virtualPhoton.style.animationDelay = Math.random() * 1 + 's';
+                
+                visualization.appendChild(virtualPhoton);
+                
+                setTimeout(() => {
+                    if (virtualPhoton.parentNode) {
+                        virtualPhoton.parentNode.removeChild(virtualPhoton);
+                    }
+                }, 2000);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
