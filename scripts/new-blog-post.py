@@ -258,25 +258,25 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   body {{
     background: var(--paper); color: var(--ink);
     font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', 'Source Serif Pro', Georgia, serif;
-    font-size: 17px; line-height: 1.85;
+    font-size: 17px; line-height: 1.72;
   }}
   .book {{ max-width: 720px; margin: 0 auto; padding: 0 24px 80px; background: var(--paper); }}
-  .nav {{ display: flex; justify-content: space-between; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line-soft); margin-bottom: 48px; font-family: 'Cormorant Garamond', Georgia, serif; }}
+  .nav {{ display: flex; justify-content: space-between; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--line-soft); margin-bottom: 32px; font-family: 'Cormorant Garamond', Georgia, serif; }}
   .nav a {{ color: var(--ink-soft); text-decoration: none; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }}
   .nav a:hover {{ color: var(--auburn); }}
   .nav .brand {{ font-weight: 600; font-style: italic; font-size: 16px; }}
-  .hero {{ text-align: center; padding: 60px 0 80px; border-bottom: 1px solid var(--line); margin-bottom: 60px; }}
+  .hero {{ text-align: center; padding: 40px 0 36px; border-bottom: 1px solid var(--line); margin-bottom: 34px; }}
   .hero .series {{ font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 16px; color: var(--brown); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 8px; }}
   .hero .episode {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 28px; color: var(--auburn); margin-bottom: 28px; letter-spacing: 1px; }}
   .hero h1 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 34px; line-height: 1.35; color: var(--ink); margin-bottom: 24px; word-break: keep-all; }}
   .hero .subtitle {{ font-family: 'Cormorant Garamond', 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-style: italic; font-size: 19px; color: var(--ink-soft); line-height: 1.6; max-width: 580px; margin: 0 auto; word-break: keep-all; }}
   .hero .meta {{ margin-top: 36px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink-dim); letter-spacing: 2px; }}
   .hero .meta .dot {{ color: var(--brown); margin: 0 8px; }}
-  .chapter {{ margin: 72px 0 0; }}
+  .chapter {{ margin: 40px 0 0; }}
   .chapter-num {{ font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 15px; color: var(--gold); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }}
-  .chapter h2 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1.3; color: var(--ink); margin-bottom: 36px; word-break: keep-all; }}
+  .chapter h2 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1.3; color: var(--ink); margin-bottom: 18px; word-break: keep-all; }}
   .chapter h2 .ornament {{ display: block; width: 60px; height: 2px; background: var(--auburn); margin-top: 14px; }}
-  .book p {{ margin-bottom: 22px; color: var(--ink); word-break: keep-all; }}
+  .book p {{ margin-bottom: 16px; color: var(--ink); word-break: keep-all; }}
   .book p strong {{ color: var(--ink); font-weight: 700; }}
   .book p em {{ color: var(--brown); font-style: italic; }}
   .dropcap::first-letter {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: 64px; line-height: 0.85; float: left; margin: 6px 10px 0 0; color: var(--auburn); }}
@@ -288,22 +288,22 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   .sidebar {{ margin: 36px 0; padding: 20px 24px; background: var(--paper-light); border-left: 3px solid var(--gold); border-radius: 0 6px 6px 0; font-size: 15px; line-height: 1.7; color: var(--ink-soft); }}
   .sidebar h4 {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: 13px; color: var(--brown); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 10px; }}
   .sidebar p {{ margin-bottom: 10px; font-size: 15px; }}
-  .footnotes {{ margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-dim); line-height: 1.65; }}
+  .footnotes {{ margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-dim); line-height: 1.65; }}
   .footnotes h4 {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 600; font-size: 14px; color: var(--brown); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 14px; }}
   .footnotes ol {{ padding-left: 20px; }}
   .footnotes li {{ margin-bottom: 8px; }}
   .footer-block {{ margin-top: 60px; padding: 24px; background: var(--paper-dark); border-radius: 6px; font-size: 12px; line-height: 1.7; color: var(--ink-dim); }}
   .footer-block strong {{ color: var(--brown); }}
   @media (max-width: 540px) {{
-    body {{ font-size: 16px; line-height: 1.8; }}
-    .book {{ padding: 0 18px 60px; }}
+    body {{ font-size: 16px; line-height: 1.6; }}
+    .book {{ padding: 0 14px 52px; }}
     .hero h1 {{ font-size: 26px; }}
     .hero .subtitle {{ font-size: 17px; }}
     .hero .episode {{ font-size: 22px; }}
     .chapter h2 {{ font-size: 23px; }}
     .pullquote {{ font-size: 19px; padding-left: 20px; }}
     .dropcap::first-letter {{ font-size: 52px; }}
-    figure {{ margin: 32px -18px; }}
+    figure {{ margin: 26px -14px; }}
   }}
 </style>
 </head>
