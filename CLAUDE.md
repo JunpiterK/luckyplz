@@ -108,6 +108,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 6. **sitemap.xml 등록** — 4개 `<url>` 블록, 각각 `<xhtml:link rel="alternate" hreflang="…">` 4 줄씩.
 7. **이미지 자산** — `public/assets/<series>/<ep>/fig-NN.{jpg,png}` 위치 확인.
 8. **blog-desktop.css inject** — `python scripts/inject-blog-desktop-css.py` (멱등, 새 파일에만 추가).
+8.5. **color-scheme inject** — `python scripts/inject-color-scheme.py --apply` (멱등). 밝은 글에 `<meta name="color-scheme" content="light">` 주입해 브라우저 force-dark(밝은 베이지 배경이 거무튀튀하게 반전되는 버그) 방지. 배경색으로 light/dark 자동 판별 (daily 증시 글은 dark). 2026-06-20 사고 대응 — 누락 시 새 밝은 글이 데스크탑/모바일 다크모드에서 거무튀튀하게 보인다.
 9. **cache bump** — `bash scripts/bump-cache.sh`.
 10. **로컬 미리보기** — `python server.py` 로 ko/en/ja/zh 4판 모두 열어 본문·이미지·hreflang 확인.
 11. **commit** — 메시지에 ko/en/ja/zh 모두 포함됨을 명시.
