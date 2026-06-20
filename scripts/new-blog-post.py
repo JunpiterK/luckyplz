@@ -90,7 +90,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title} | Lucky Blog</title>
 <meta name="description" content="{excerpt}">
-<meta name="keywords" content="{tags_csv}, lucky please">
+<meta name="keywords" content="{tags_csv}, lucky blog">
 <link rel="canonical" href="https://luckyplz.com/blog/{slug_for_lang}/">
 
 <meta property="og:type" content="article">
@@ -207,7 +207,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{title} | Lucky Blog</title>
 <meta name="description" content="{excerpt}">
-<meta name="keywords" content="{tags_csv}, lucky please">
+<meta name="keywords" content="{tags_csv}, lucky blog">
 <link rel="canonical" href="https://luckyplz.com/blog/{slug_for_lang}/">
 
 <meta property="og:type" content="article">
@@ -470,7 +470,7 @@ def make_posts_js_entry(slug: str, lang: str, args, title: str, excerpt: str,
     to the ko (or en if entry IS ko) slug so older site code keeps working.
     """
     tags_arr = [t.strip() for t in (args.tags or "").split(",") if t.strip()]
-    tags_arr.append("lucky please")
+    tags_arr.append("lucky blog")
     tags_js = "[" + ", ".join(f"'{escape_js(t)}'" for t in tags_arr) + "]"
 
     # Build the alts object: all sibling languages except this entry's lang
