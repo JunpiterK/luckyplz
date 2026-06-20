@@ -489,7 +489,7 @@ def render_sports_html(slot: str, lang: str, data: dict, prose: dict, *,
 
     tnmap = prose.get("team_names", {})
     title = pick_localized(prose, "headline", lang)
-    title_full = f"{title} | Lucky Please"
+    title_full = f"{title} | Lucky Blog"
     raw_summary = pick_localized(prose, "summary", lang)
     summary = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", raw_summary)).strip()
     bottom_body = pick_localized(prose, "bottom_line", lang)
@@ -537,8 +537,8 @@ def render_sports_html(slot: str, lang: str, data: dict, prose: dict, *,
         "@context": "https://schema.org", "@type": "BlogPosting",
         "headline": title, "description": summary[:200],
         "datePublished": publish_date, "dateModified": publish_date,
-        "author": {"@type": "Organization", "name": "Lucky Please", "url": "https://luckyplz.com/"},
-        "publisher": {"@type": "Organization", "name": "Lucky Please",
+        "author": {"@type": "Organization", "name": "Lucky Blog", "url": "https://luckyplz.com/"},
+        "publisher": {"@type": "Organization", "name": "Lucky Blog",
                       "logo": {"@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png"}},
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
         "inLanguage": lang,

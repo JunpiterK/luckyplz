@@ -1732,7 +1732,7 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
     # Read multilingual content with graceful en fallback (ja/zh may be
     # missing if the prompt has not been extended yet).
     title = pick_localized(data, "headline", lang)
-    title_full = f"{title} | Lucky Please"
+    title_full = f"{title} | Lucky Blog"
     # Strip any inline HTML tags from summary — it's used in plain-text
     # contexts (meta description, og:description, twitter:description,
     # header sub-text) where html_escape() would render them as visible
@@ -1803,8 +1803,8 @@ def render_html(slot: str, lang: str, data: dict, *, slug: str, build: str, og_i
         "description": summary[:200],
         "datePublished": publish_date,
         "dateModified": publish_date,
-        "author": {"@type": "Organization", "name": "Lucky Please", "url": "https://luckyplz.com/"},
-        "publisher": {"@type": "Organization", "name": "Lucky Please",
+        "author": {"@type": "Organization", "name": "Lucky Blog", "url": "https://luckyplz.com/"},
+        "publisher": {"@type": "Organization", "name": "Lucky Blog",
                       "logo": {"@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png"}},
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
     }

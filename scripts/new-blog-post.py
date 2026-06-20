@@ -88,7 +88,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title} | Lucky Please</title>
+<title>{title} | Lucky Blog</title>
 <meta name="description" content="{excerpt}">
 <meta name="keywords" content="{tags_csv}, lucky please">
 <link rel="canonical" href="https://luckyplz.com/blog/{slug_for_lang}/">
@@ -98,7 +98,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
 <meta property="og:description" content="{excerpt}">
 <meta property="og:url" content="https://luckyplz.com/blog/{slug_for_lang}/">
 <meta property="og:locale" content="{og_locale}">
-<meta property="og:site_name" content="Lucky Please">
+<meta property="og:site_name" content="Lucky Blog">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{title}">
@@ -119,8 +119,8 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
   "inLanguage": "{lang}",
   "datePublished": "{date}",
   "dateModified": "{date}",
-  "author": {{ "@type": "Organization", "name": "Lucky Please", "url": "https://luckyplz.com/" }},
-  "publisher": {{ "@type": "Organization", "name": "Lucky Please", "logo": {{ "@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png" }}}},
+  "author": {{ "@type": "Organization", "name": "Lucky Blog", "url": "https://luckyplz.com/" }},
+  "publisher": {{ "@type": "Organization", "name": "Lucky Blog", "logo": {{ "@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png" }}}},
   "mainEntityOfPage": {{ "@type": "WebPage", "@id": "https://luckyplz.com/blog/{slug_for_lang}/" }}
 }}
 </script>
@@ -165,7 +165,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
 
   <nav class="nav">
     <a href="/blog/">{nav_back}</a>
-    <a href="/" class="brand">Lucky Please</a>
+    <a href="/" class="brand">Lucky Blog</a>
     <a href="/blog/?cat={category}">{category_label}</a>
   </nav>
 
@@ -205,7 +205,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title} | Lucky Please</title>
+<title>{title} | Lucky Blog</title>
 <meta name="description" content="{excerpt}">
 <meta name="keywords" content="{tags_csv}, lucky please">
 <link rel="canonical" href="https://luckyplz.com/blog/{slug_for_lang}/">
@@ -215,7 +215,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 <meta property="og:description" content="{excerpt}">
 <meta property="og:url" content="https://luckyplz.com/blog/{slug_for_lang}/">
 <meta property="og:locale" content="{og_locale}">
-<meta property="og:site_name" content="Lucky Please">
+<meta property="og:site_name" content="Lucky Blog">
 
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{title}">
@@ -236,8 +236,8 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   "inLanguage": "{lang}",
   "datePublished": "{date}",
   "dateModified": "{date}",
-  "author": {{ "@type": "Organization", "name": "Lucky Please", "url": "https://luckyplz.com/" }},
-  "publisher": {{ "@type": "Organization", "name": "Lucky Please", "logo": {{ "@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png" }}}},
+  "author": {{ "@type": "Organization", "name": "Lucky Blog", "url": "https://luckyplz.com/" }},
+  "publisher": {{ "@type": "Organization", "name": "Lucky Blog", "logo": {{ "@type": "ImageObject", "url": "https://luckyplz.com/assets/icon-192.png" }}}},
   "mainEntityOfPage": {{ "@type": "WebPage", "@id": "https://luckyplz.com/blog/{slug_for_lang}/" }}
 }}
 </script>
@@ -313,7 +313,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
 
   <nav class="nav">
     <a href="/blog/">{nav_back}</a>
-    <a href="/" class="brand">Lucky Please</a>
+    <a href="/" class="brand">Lucky Blog</a>
     <a href="/blog/?cat={category}">{category_label}</a>
   </nav>
 
@@ -327,7 +327,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
       <span class="dot">·</span>
       <span>{read_min} min read</span>
       <span class="dot">·</span>
-      <span>by Lucky Please Editorial</span>
+      <span>by Lucky Blog Editorial</span>
     </div>
   </header>
 
