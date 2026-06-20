@@ -52,8 +52,9 @@
         const s=document.createElement('style');
         s.id='pc-top-nav-styles';
         s.textContent=`
+@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');
 .pc-top-nav{display:none;position:fixed;top:0;left:0;right:0;height:56px;background:rgba(12,14,24,.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid rgba(255,255,255,.08);z-index:500;padding:0 14px;align-items:center;gap:10px;box-shadow:0 2px 12px rgba(0,0,0,.3);font-family:'Noto Sans KR',sans-serif}
-.pc-top-nav .nav-brand{display:flex;align-items:center;gap:8px;padding:0 16px;height:38px;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);color:#0A0A1A;font-family:'Orbitron','Noto Sans KR',sans-serif;font-weight:900;font-size:.9em;border-radius:8px;text-decoration:none;letter-spacing:.03em;transition:filter .2s,transform .15s;box-shadow:0 4px 14px rgba(255,154,60,.25);white-space:nowrap;flex-shrink:0}
+.pc-top-nav .nav-brand{display:flex;align-items:center;gap:8px;padding:0 16px;height:38px;background:linear-gradient(135deg,#FFE66D,#FF9A3C,#FF6B8B);color:#0A0A1A;font-family:'Bungee','Orbitron','Noto Sans KR',sans-serif;font-weight:400;font-size:.78em;border-radius:8px;text-decoration:none;letter-spacing:.02em;transition:filter .2s,transform .15s;box-shadow:0 4px 14px rgba(255,154,60,.25);white-space:nowrap;flex-shrink:0}
 .pc-top-nav .nav-brand:hover{filter:brightness(1.08);transform:translateY(-1px)}
 .pc-top-nav .nav-brand .brand-ico{font-size:1.1em;line-height:1}
 .pc-top-nav .nav-sep{width:1px;height:26px;background:rgba(255,255,255,.08);flex-shrink:0}
