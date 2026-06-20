@@ -153,6 +153,8 @@ posts.js 의 `category` 필드는 8종 중 하나 (2026-06-11 개편 + 2026-06-2
 | figure 풀블리드 margin | -22px | -14px |
 
 > 모바일 한글 한 줄 ≈ 24자(375px)~28자(412px), 행간 25.6px. 검정 표준 테마(`STANDARD_TEMPLATE`)는 이미 16px/1.7·padding 20px 로 본 기준에 부합. 단일 진실원천은 `scripts/new-blog-post.py` 의 `BEIGE_BOOK_TEMPLATE`. 새 베이지 글은 자동 상속하며, 값 변경 시 템플릿 → 기존 글 순으로 동기화.
+>
+> **소급 적용 (2026-06-20)**: 기존 베이지 글(Anthropic 시리즈 등 56개)은 포맷이 제각각(멀티라인 CSS)이라, `</head>` 직전에 마커 펜스된 `<!-- lp-typo:start --> <style>…</style>` **override 블록**을 주입해 표준을 강제 적용함(멱등). 자동발행 글(562개)은 `public/css/daily.css` 의 "본문 내러티브" 규칙 한 곳에 `text-align:justify; word-break:normal` 추가로 일괄 적용. ai-evo·space-evo·spacex·color-science 커스텀 테마는 이미 justify 사용 중이라 무수정. 새 글은 템플릿 상속이라 override 불필요(직접 값으로 들어감).
 
 ---
 
