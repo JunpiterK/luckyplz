@@ -19,16 +19,17 @@ luckyplz.com 의 블로그는 **테크 위주 깊이 있는 글** 이 중심이�
 
 ---
 
-## 2. 카테고리 6종 — 어디에 분류할지
+## 2. 카테고리 8종 — 어디에 분류할지
 
-posts.js 의 `category` 필드는 7종 중 하나 (2026-06-11 개편). **카테고리는 블로그 메인의 필터 탭에 그대로 노출**되므로 일관성 중요. 단일 진실원천은 [public/blog/posts.js](../public/blog/posts.js) 의 `BLOG_CATEGORIES`.
+posts.js 의 `category` 필드는 8종 중 하나 (2026-06-11 개편 + 2026-06-20 robotics 신설). **카테고리는 블로그 메인의 필터 탭에 그대로 노출**되므로 일관성 중요. 단일 진실원천은 [public/blog/posts.js](../public/blog/posts.js) 의 `BLOG_CATEGORIES`.
 
 | 카테고리 | 정의 | 톤·길이 | 대표 예시 |
 |---|---|---|---|
 | **stocks** (증시) | 자동 발행 증시 글 (us/kr/cn 마감·개장) + 거시·마켓 | 6~9분 | 자동발행 us-tech-recap / kr-open-brief / cn-tech-recap, PPI 분석 |
-| **industry** (산업) | 섹터·경제 심층 (반도체·데이터센터·로봇·태양광·에너지·디지털 경제) | 6~14분 | AI 데이터센터 전력, 반도체 랠리, 휴머노이드 로봇, 호르무즈 경제, 디지털 월세 |
+| **industry** (산업) | 섹터·경제 심층 (반도체·데이터센터·태양광·에너지·디지털 경제) | 6~14분 | AI 데이터센터 전력, 반도체 랠리, 호르무즈 경제, 디지털 월세 |
 | **ai-tech** (AI·테크) | AI 모델·기업·역사·기술 | 깊이 있게, 12~18분 | Anthropic 시리즈, AI 진화사 (ai-evo-01~08) |
 | **space-tech** (우주 Tech) | 우주 산업 전체 (SpaceX·Starlink·발사·계약·IPO·우주사) | 깊이 있게, 12~20분 | SpaceX IPO, Starship 발사, 우주 진화사 (space-evo-01~10) |
+| **robotics** (로봇) | 휴머노이드·산업용 로봇: 역사·엔지니어링·증시 밸류체인·미/한/중 국가경쟁 | 깊이 있게, 12~20분 | 휴머노이드 로봇 시리즈 (humanoid-robots-*), ASIMO·Atlas·Optimus·Unitree, 레인보우로보틱스·보스턴다이내믹스 |
 | **football** (축구) | 라리가·EPL 경기 결과·이슈 (자동 발행) + 축구 기획 | 5~9분 | 자동발행 라리가/EPL 데일리, 레알·맨유 관점 코멘트 |
 | **baseball** (야구) | MLB 경기 결과·이슈 (자동 발행) + 야구 기획 | 5~9분 | 자동발행 MLB 데일리, LA 다저스 관점 코멘트 |
 | **gaming-history** (게임) | 행운의 게임·레트로 게임 역사·확률·결정 도구 (구 lifestyle+probability 흡수) | 가볍게, 4~12분 | Pacman/Tetris/Snake 역사, Lotto 분석, Ladder Fairness, Coffee Who Pays |
@@ -75,6 +76,14 @@ posts.js 의 `category` 필드는 7종 중 하나 (2026-06-11 개편). **카테�
 ### 3.4 SpaceX IPO 다국어 시리즈 (`space-tech`, slug 접두사 `spacex-ipo-2026`)
 - **테마**: 표준
 - **언어**: Tier B (ko, en, de, es, hi, jp, zh 7종) — SpaceX IPO 라는 글로벌 검색 트래픽 타깃.
+
+### 3.5 Humanoid Robots (`robotics`, slug 접두사 `humanoid-robots-`)
+- **테마**: 베이지 책 (paper `#f5ebd8`, ink `#2c2416`, auburn `#b5530f`, gold `#b8860b`) — Anthropic Story 와 같은 책 테마, auburn 만 약간 차분하게.
+- **폰트**: Noto Serif KR/JP/SC + Cormorant Garamond + JetBrains Mono. 각 언어판은 해당 CJK serif 를 첫 폰트로 (ja=Noto Serif JP, zh=Noto Serif SC).
+- **구조**: Hero → Prologue → Chapter I..N → Epilogue → series-nav(8편 목차) → footnotes(참고+이미지 크레딧) → footer-block(면책).
+- **실제 사진 필수**: Wikimedia Commons CC/Public Domain 사진을 `public/assets/humanoid-robots/ep<NN>/fig-*.jpg` 에 저장(1200px·q82 최적화), figcaption 에 `사진 <저작자>, <라이선스> (Wikimedia Commons)` 명시. 최신 로봇 등 CC 부재 시 사용자 제공 하이브리드.
+- **8편 구성**: ① 역사 ② 현재의 거인들 ③ 기술 해부 ④ 증시 밸류체인 ⑤ 미국 ⑥ 일본 ⑦ 한국 ⑧ 중국.
+- **현재 발행**: Ep.1 (역사, 2026-06-20, ko/en/ja/zh).
 
 ### 시리즈 추가 절차
 1. 최소 3편 이상 기획되어 있을 때만 시리즈로 시작.

@@ -68,7 +68,7 @@ KST = ZoneInfo("Asia/Seoul")
 # `stocks` is normally produced by auto-daily-post.py, not the manual scaffolder,
 # but it's accepted here for completeness. `lifestyle`/`probability` retired.
 VALID_CATEGORIES = {
-    "stocks", "industry", "ai-tech", "space-tech",
+    "stocks", "industry", "ai-tech", "space-tech", "robotics",
     "football", "baseball", "gaming-history",
 }
 
@@ -416,6 +416,7 @@ CATEGORY_LABELS = {
     "industry":       {"ko": "산업", "en": "Industry", "ja": "産業", "zh": "产业"},
     "ai-tech":        {"ko": "AI", "en": "AI", "ja": "AI", "zh": "AI"},
     "space-tech":     {"ko": "우주", "en": "Space", "ja": "宇宙", "zh": "太空"},
+    "robotics":       {"ko": "로봇", "en": "Robotics", "ja": "ロボット", "zh": "机器人"},
     "football":       {"ko": "축구", "en": "Football", "ja": "サッカー", "zh": "足球"},
     "baseball":       {"ko": "야구", "en": "Baseball", "ja": "野球", "zh": "棒球"},
     "gaming-history": {"ko": "게임", "en": "Games", "ja": "ゲーム", "zh": "游戏"},

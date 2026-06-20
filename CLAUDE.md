@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - **자동 발행 (스포츠)** — 매일 라리가·EPL·MLB 경기 결과·이슈. `scripts/auto-sports-post.py`. 리그 summary 는 객관적 테이블/이슈, 응원 코멘트는 축구=레알 마드리드·맨유, 야구=LA 다저스 팬 관점.
   - **수동 작성 시리즈** — Anthropic 시리즈, SpaceX 시리즈, AI 진화사, 우주 진화사 등 깊이 있는 longform.
   - **수동 작성 단편** — 산업·게임·확률 등 단발성 글.
-- **카테고리 (7종, 2026-06-11 개편)**: `stocks`(증시), `industry`(산업), `ai-tech`(AI·테크), `space-tech`(우주 Tech), `football`(축구), `baseball`(야구), `gaming-history`(게임). 정의는 [public/blog/posts.js](public/blog/posts.js) 의 `BLOG_CATEGORIES` 가 단일 진실원천. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
+- **카테고리 (8종, 2026-06-11 개편 + 2026-06-20 robotics 신설)**: `stocks`(증시), `industry`(산업), `ai-tech`(AI·테크), `space-tech`(우주 Tech), `robotics`(로봇), `football`(축구), `baseball`(야구), `gaming-history`(게임). 정의는 [public/blog/posts.js](public/blog/posts.js) 의 `BLOG_CATEGORIES` 가 단일 진실원천. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
   - 개편 매핑: 구 `industry`(경제·산업) → 데일리 증시는 `stocks`, 섹터/경제 심층은 `industry`(라벨만 산업으로). 구 `lifestyle`+`probability` → `gaming-history`(라벨 게임). 신설 `football`·`baseball`. 구 슬러그(`lifestyle`/`probability`/`build`/`tech-space`)는 index.html 검증에서 "all" 로 폴백.
 
 ### 운영자의 압축 메시지
@@ -72,6 +72,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   - **An Anthropic Story** — 베이지 책 테마 (`#f5ebd8` paper, Noto Serif KR + Cormorant Garamond). 챕터 구조: Prologue → Ch.1~N → Epilogue → series-nav → footnotes → footer-block.
   - **AI Evolution (ai-evo)** — 1~8편 기술 진화사.
   - **Space Evolution (space-evo)** — 1~10편 우주 진화사.
+  - **Humanoid Robots (humanoid-robots)** — 베이지 책 테마, `robotics` 카테고리. 8편 (역사·현재·기술·증시·미국·일본·한국·중국). **실제 사진 필수** (Wikimedia CC/PD, `assets/humanoid-robots/ep<NN>/`). 자세한 규칙은 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 3.5.
 - 시리즈 글의 어조 규칙 (사용자 반복 강조):
   - **em-dash 사용 금지** (단절감). 쉼표·세미콜론·새 문장으로 풀어 쓸 것.
   - **AI 자기언급 금지** — "이 글은 Claude 가 작성했습니다" 같은 메타 문장 금지. 사람 글 느낌.
