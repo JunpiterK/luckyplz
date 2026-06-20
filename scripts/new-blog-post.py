@@ -144,7 +144,7 @@ STANDARD_TEMPLATE = """<!DOCTYPE html>
   .hero .excerpt {{ color: #b8b8b8; font-size: 15px; line-height: 1.7; }}
   .post h2 {{ font-size: 22px; line-height: 1.35; margin: 40px 0 16px; font-weight: 700; word-break: keep-all; }}
   .post h3 {{ font-size: 18px; line-height: 1.4; margin: 28px 0 12px; font-weight: 700; word-break: keep-all; }}
-  .post p {{ margin-bottom: 18px; word-break: keep-all; }}
+  .post p {{ margin-bottom: 18px; text-align: justify; word-break: normal; overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }}
   .post strong {{ color: #fff; }}
   .post em {{ color: #f0b040; font-style: normal; }}
   .post a {{ color: #4da3ff; text-decoration: underline; }}
@@ -276,7 +276,7 @@ BEIGE_BOOK_TEMPLATE = """<!DOCTYPE html>
   .chapter-num {{ font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 15px; color: var(--gold); letter-spacing: 4px; text-transform: uppercase; margin-bottom: 8px; }}
   .chapter h2 {{ font-family: 'Noto Serif KR', 'Noto Serif JP', 'Noto Serif SC', Georgia, serif; font-weight: 700; font-size: 28px; line-height: 1.3; color: var(--ink); margin-bottom: 18px; word-break: keep-all; }}
   .chapter h2 .ornament {{ display: block; width: 60px; height: 2px; background: var(--auburn); margin-top: 14px; }}
-  .book p {{ margin-bottom: 16px; color: var(--ink); word-break: keep-all; }}
+  .book p {{ margin-bottom: 16px; color: var(--ink); text-align: justify; word-break: normal; overflow-wrap: break-word; -webkit-hyphens: auto; hyphens: auto; }}
   .book p strong {{ color: var(--ink); font-weight: 700; }}
   .book p em {{ color: var(--brown); font-style: italic; }}
   .dropcap::first-letter {{ font-family: 'Cormorant Garamond', Georgia, serif; font-weight: 700; font-size: 64px; line-height: 0.85; float: left; margin: 6px 10px 0 0; color: var(--auburn); }}
