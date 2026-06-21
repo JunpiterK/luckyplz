@@ -45,9 +45,11 @@ def detect_scheme(html: str) -> str:
     `color-scheme: dark` and were force-darkened. The fix resolves the var to
     its actual hex and judges by luminance, and short-circuits daily posts.
     """
-    # 데일리 자동발행 글은 /css/daily.css(라이트 종이 override)를 로드한다.
-    # inline body 배경은 var(--bg)(다크)지만 시트가 라이트로 덮으므로 light.
-    if "/css/daily.css" in html:
+    # 데일리(daily.css) 와 라이트 전환된 수동 단편(blog-light.css)은 외부 override
+    # 시트가 inline 다크 :root 를 라이트 종이로 덮는다. inline body 배경이
+    # var(--bg)/var(--dark)(다크)여도 실제 렌더는 라이트이므로 light 로 단축한다.
+    # (안 그러면 inject --apply 재실행 시 이 글들이 dark 로 되돌아간다.)
+    if "/css/daily.css" in html or "/css/blog-light.css" in html:
         return "light"
 
     m = re.search(r"body\s*\{[^}]*?background\s*:\s*([^;]+);", html, re.I | re.S)
