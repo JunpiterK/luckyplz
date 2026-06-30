@@ -359,9 +359,15 @@ try{
         document.body.appendChild(pt);
     }
 
-    /* AdSense slot injector — only loads if the page has a
-       <div data-lp-ad="..."> somewhere. Keeps pages without ads clean. */
-    if(document.querySelector('[data-lp-ad]')){
+    /* AdSense slot injector: load only on pages that explicitly remain
+       eligible for monetization. noindex/user-flow/risk pages carry
+       <meta name="lp-ad-policy" content="off"> so stray placeholders do
+       not become ad inventory. */
+    var adPolicyMeta=document.querySelector('meta[name="lp-ad-policy"]');
+    var adPolicyOff=adPolicyMeta&&String(adPolicyMeta.content||'').toLowerCase()==='off';
+    var robotsMeta=document.querySelector('meta[name="robots"]');
+    var robotsNoindex=robotsMeta&&/noindex/i.test(robotsMeta.content||'');
+    if(!adPolicyOff&&!robotsNoindex&&document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
         s.src='/js/adSlots.js?v=1782791324';
         s.defer=true;

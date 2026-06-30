@@ -10,6 +10,13 @@
       · "Blog Article"  → Replace SLOTS.blog below
    2. Commit the file. Slots go live on next deploy. */
 (function(){
+    const policyMeta=document.querySelector('meta[name="lp-ad-policy"]');
+    const robotsMeta=document.querySelector('meta[name="robots"]');
+    if((policyMeta&&String(policyMeta.content||'').toLowerCase()==='off')||
+       (robotsMeta&&/noindex/i.test(robotsMeta.content||''))){
+        return;
+    }
+
     const CLIENT_ID='ca-pub-5370817769801923';
     const SLOTS={
         result:'3406981908',  /* Game Result — 5 games' result screens */
