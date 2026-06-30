@@ -1,7 +1,7 @@
 """Auto Daily Post pipeline.
 
-Generates one of 4 daily blog slots (us-close / kr-open / kr-close / us-premarket)
-by calling Claude with web_search, rendering bilingual HTML + OG images,
+Generates one of 6 daily blog slots (us-close / us-premarket / kr-open / kr-close / cn-open / cn-close)
+by calling Claude with web_search, rendering ko/en/ja/zh HTML + OG images,
 updating posts.js / sitemap.xml, bumping cache, and committing to git.
 
 Usage:

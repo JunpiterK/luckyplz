@@ -78,4 +78,9 @@ echo "✓ Cache version bumped to ${NEW_VERSION} across ${count} file(s)."
 # Done in Python because regex-injecting an HTML block reliably across
 # 100+ files is grim in pure Bash on Windows (sed handling of multi-line
 # patterns differs by version, and CRLF normalization bites).
-python scripts/bump-cache-helper.py "${NEW_VERSION}"
+PYTHON_BIN="$(command -v python3 || command -v python || command -v py || command -v python.exe || true)"
+if [ -z "$PYTHON_BIN" ]; then
+    echo "error: Python not found. Install Python or add it to PATH." >&2
+    exit 1
+fi
+"$PYTHON_BIN" scripts/bump-cache-helper.py "${NEW_VERSION}"
