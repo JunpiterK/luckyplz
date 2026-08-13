@@ -4,7 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Site Identity & Mission (READ FIRST)
 
-**luckyplz.com 은 두 축으로 운영된다.** 새 기능·새 글·새 디자인 변경은 이 정체성을 반드시 기준으로 삼는다.
+> **2026-06-26 방향 전환 — luckyplz.com 은 이제 "게임 전문 사이트" 다.**
+> 메인 페이지·공용 푸터는 **게임 관련 진입점만** 노출한다. 블로그·도구(툴)로 가는 링크는 홈/푸터에서 모두 제거했다(commit d35d2ac9181). **다시 추가하지 말 것.**
+> - 블로그/도구 **콘텐츠 파일**(`public/blog/*`, `public/tools/*`)은 삭제하지 않고 보존한다 — 운영자가 다른 웹사이트에서 재활용할 예정.
+> - **자동발행 cron 은 모두 비활성화**했다(`daily-cron`·`sports-cron`·`worldcup-cron`·`cron-monitor` 의 `schedule:` 주석 처리). 스크립트·프롬프트·`workflow_dispatch`(수동 실행) 경로는 그대로 남겨 뒀다. 콘텐츠를 타 사이트로 옮길 때 재사용 가능.
+> - 아래의 "블로그 2축" 관련 서술과 Blog Authoring 규칙은 **이 사이트 기준으로는 비활성**이며, 콘텐츠를 다른 사이트로 옮길 때의 작성 규칙 참고용으로만 남겨 둔다.
+
+**(구 정체성, 참고용) luckyplz.com 은 두 축으로 운영된다.** 새 기능·새 글·새 디자인 변경은 이 정체성을 반드시 기준으로 삼는다.
 
 ### 1. 게임 — 친구들과 함께 쓰는 작은 도구
 - **목적**: 친구·동료와 함께 내기·벌칙·역할 정하기, 또는 잠깐의 시간 떼우기.
