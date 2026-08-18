@@ -124,17 +124,23 @@
 
 `scripts/inject-game-about.py` (멱등, 펜스 `<!--lp-game-about:start/end-->`):
 
-| 게임 | 가시 텍스트 | FAQ |
-|---|---|---|
-| roulette | 98 → **601단어** | 5문항 |
-| team | 100 → **544단어** | 5문항 |
-| lotto | 110 → **599단어** | 5문항 |
-| bingo | 115 → **546단어** | 5문항 |
+**2026-08-18 최종: 17종 전부 완료.** 실측 가시 텍스트(CSS·JS 제외) 기준:
 
-- 구조는 `ladder`(715단어)의 검증된 `lp-game-about` 패턴을 이식. 사용법 → 원리/확률 → 요령 → 활용 사례 → FAQ
-- **FAQPage JSON-LD** 를 화면의 `<dl>` 과 1:1로 생성 → 구글 리치결과 요건 충족. 사이트 전체 스키마 38개 파싱 오류 0
-- **숨김 텍스트가 아님**: `overflow:hidden` 은 `@media(min-width:900px)` 안에만 있어 모바일(375px)에서 실제 스크롤로 도달 확인. 모바일 우선 색인 기준 정상 콘텐츠이며, `get_page_text` 추출 시 본문 article 로 인식됨
-- 부수 정비: sitemap 에 `/games/dodge/` 추가(16→17), `lucky-merge` BreadcrumbList 스키마 추가 → **전 게임 스키마·색인 등록 완료**(`dice` 만 보류, 아래 참조)
+| 구간 | 게임 |
+|---|---|
+| 700단어 이상 | quiz 773 · tetris 767 · starship-lander 757 · car-racing 724 · dodge 705 |
+| 650~700 | roulette 685 · lotto 684 · brick 678 · ladder 675 · lucky-merge 673 · dice 665 · bingo 661 |
+| 600~650 | snake 650 · pacman 641 · burger 640 · team 635 · glory-racing 610 |
+
+- **전 게임 600단어 통과** (이전 61~257단어에서 최대 10배 증가)
+- FAQPage 스키마 16종(ladder 제외), 화면 `<dl>` 과 전부 1:1 대응. JSON-LD 50개 파싱 오류 0
+- 모바일 375px 실측: 스크롤로 도달 확인, 게임 캔버스 정상, 콘솔 에러 0
+
+- 구조는 `ladder` 의 검증된 `lp-game-about` 패턴을 이식. 사용법 → 원리/확률 → 요령 → 활용 사례 → 보강 블록 → FAQ
+- **집필 원칙은 정보 이득(Information Gain)**: 조작법 나열은 2026 기준 저품질 판정 대상이라, 각 게임의 역사·수학·전략 원리를 넣어 이 페이지에서만 얻는 내용을 만들었다 (스네이크의 해밀턴 순환, 블록 스택의 7-백 시스템, 주사위 두 개의 합 분포, 착륙의 수어사이드 번 등)
+- **숨김 텍스트가 아님**: `overflow:hidden` 은 `@media(min-width:900px)` 안에만 있어 모바일(375px)에서 실제 스크롤 도달을 브라우저로 확인함. 모바일 우선 색인 기준 정상 콘텐츠
+- 콘텐츠 파일 분리: `inject-game-about.py`(4종) + `game_about_content_2.py`(아케이드 6) + `_3.py`(레이싱·우주·퀴즈·주사위 6) + `_4.py`(600단어 보강 `EXTRA_BLOCKS`)
+- 부수 정비: sitemap 에 `/games/dodge/` 추가, `lucky-merge` BreadcrumbList 추가 → **전 게임 스키마·색인 등록 완료**(`dice` 만 보류)
 
 > **미결 판단 필요 — `dice`**: sitemap 미등록 상태. 메모리에 "주사위 노출 금지"가 기록돼 있으나 현재 홈에는 카드로 노출 중이라 기록이 낡았을 가능성이 크다. 색인 등록은 능동적 노출이므로 임의 판단하지 않고 보류함.
 

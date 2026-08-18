@@ -17,6 +17,7 @@ ladder 만 예외적으로 `lp-game-about` 섹션(715단어)을 갖고 있었고
 
 사용: python scripts/inject-game-about.py
 """
+import importlib.util
 import json
 import re
 import sys
@@ -258,6 +259,27 @@ CONTENT["bingo"] = {
     ],
     "footer": '한 명만 빠르게 뽑을 거라면 <a href="/games/roulette/">룰렛</a>, 순서를 정할 거라면 <a href="/games/ladder/">사다리타기</a>가 더 간단합니다.',
 }
+
+# ---- 2·3차 콘텐츠 병합 (아케이드 6종 + 레이싱/우주/퀴즈/주사위 6종) ----
+# 파일이 비대해지는 것을 막으려 분리했다. 새 게임 콘텐츠는 content_3 에 이어 붙이거나
+# content_4 를 만들어 같은 방식으로 등록한다.
+def _load(mod, var):
+    path = Path(__file__).resolve().parent / (mod + ".py")
+    if not path.exists():
+        return {}
+    spec = importlib.util.spec_from_file_location(mod, path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return getattr(m, var, {})
+
+
+CONTENT.update(_load("game_about_content_2", "CONTENT_2"))
+CONTENT.update(_load("game_about_content_3", "CONTENT_3"))
+
+# 600단어 미달 게임 보강 블록 — 각 게임의 blocks 뒤(FAQ 앞)에 덧붙인다.
+for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
+    if _k in CONTENT:
+        CONTENT[_k]["blocks"] = list(CONTENT[_k]["blocks"]) + list(_extra)
 
 FENCE = re.compile(r'<!--lp-game-about:start-->.*?<!--lp-game-about:end-->\s*', re.S)
 

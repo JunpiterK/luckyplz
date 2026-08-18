@@ -73,7 +73,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **게임 페이지 가시 콘텐츠 (`lp-game-about`).** 게임 페이지는 풀스크린 캔버스라 텍스트가 거의 없었고(61~115단어), 이는 검색 랭킹·AdSense 심사 양쪽에서 치명적이었다. 그래서 게임 하단에 사용법·원리·팁·활용사례·FAQ 를 담은 섹션을 붙인다.
 - **숨김 텍스트가 아니다**: `html,body{overflow:hidden}` 은 `@media(min-width:900px)` 안에만 있어, 모바일에서는 정상 스크롤로 도달한다. 구글은 모바일 우선 색인이므로 이 콘텐츠를 정상적으로 읽는다. 과거의 `left:-9999px` 방식(가이드라인 위반)은 이미 제거됐고 되살리면 안 된다
-- 현재 적용: `ladder`(715단어) `roulette`(601) `lotto`(599) `bingo`(546) `team`(544). 나머지 12종은 미적용 — 2026 기준 **600단어 미만은 thin** 이므로 순차 확대 대상
+- **17종 전부 적용 완료 (2026-08-18)**. 실측 가시 텍스트 610~773단어로 2026 thin 기준(600)을 전 게임이 통과
+- 콘텐츠는 파일 비대화를 막으려 분리 보관: 1차 4종은 `inject-game-about.py` 내부, 아케이드 6종은 `game_about_content_2.py`, 레이싱·우주·퀴즈·주사위 6종은 `_3.py`, 600단어 보강 블록은 `_4.py`(`EXTRA_BLOCKS`). 메인 스크립트가 전부 병합
+- **집필 원칙 — 정보 이득(Information Gain)**: 조작법 나열은 다른 사이트에도 다 있어 2026 기준으로는 저품질 판정을 받는다. 각 게임의 역사·수학·전략 원리처럼 **이 페이지에서만 얻는 내용**을 반드시 넣는다 (예: 스네이크의 해밀턴 순환, 블록 스택의 7-백 시스템, 주사위 두 개의 합 분포, 착륙의 수어사이드 번)
+- 새 게임 추가 시: `game_about_content_4.py` 뒤에 이어 붙이거나 `_5.py` 를 만들어 같은 방식으로 등록
 
 **Hosting & deploy.** 저장소 `JunpiterK/luckyplz`, Cloudflare Pages 프로젝트 `luckyplz` 가 `main` 을 자동 배포(빌드 출력 디렉토리 `public`). `public/_headers` 가 캐시 규칙을 통제 — HTML·`/games/*`·`/js/*` 는 `no-cache` 로 즉시 반영, `/assets/*` 와 `*.mp3` 는 1주 캐시.
 
