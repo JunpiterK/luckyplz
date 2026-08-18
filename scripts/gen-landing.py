@@ -20,7 +20,11 @@
 """
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lp_clusters import CLUSTERS, hreflang_lines  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "public"
@@ -46,8 +50,7 @@ TEMPLATE = """<!DOCTYPE html>
 <meta name="description" content="{description}">
 <meta name="keywords" content="{keywords}">
 <link rel="canonical" href="https://luckyplz.com{slug}">
-<link rel="alternate" hreflang="en" href="https://luckyplz.com{slug}">
-<link rel="alternate" hreflang="x-default" href="https://luckyplz.com{slug}">
+{hreflang}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Lucky Please">
 <meta property="og:locale" content="en_US">
@@ -324,6 +327,9 @@ PAGES["/ladder-draw/"] = dict(
 )
 
 
+SLUG2TOOL = {c["en"]: k for k, c in CLUSTERS.items()}
+
+
 def build(slug, cfg):
     name = cfg["h1"].split(" (")[0]
     app_ld = json.dumps({
@@ -352,7 +358,8 @@ def build(slug, cfg):
     more_html = "\n".join(
         '      <a href="%s">%s<span>%s</span></a>' % (u, t, d) for u, t, d in ALL if u != slug)
 
-    return TEMPLATE.format(slug=slug, app_ld=app_ld, faq_ld=faq_ld, crumb_ld=crumb_ld,
+    hreflang = hreflang_lines(SLUG2TOOL[slug], indent="")
+    return TEMPLATE.format(slug=slug, hreflang=hreflang, app_ld=app_ld, faq_ld=faq_ld, crumb_ld=crumb_ld,
                            faq_html=faq_html, more_html=more_html, **cfg)
 
 

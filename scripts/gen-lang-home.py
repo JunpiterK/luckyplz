@@ -19,11 +19,16 @@
 
     python scripts/gen-lang-home.py
 """
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from lp_clusters import CLUSTERS, member  # noqa: E402
+
 SRC = ROOT / "public" / "index.html"
 
 # hreflang 상호 선언 세트 (전 언어판 공통)
@@ -229,6 +234,52 @@ LANGS["pt"] = dict(
 )
 
 
+# ---------------------------------------------------------------- 도구 링크
+# 랜딩 6종이 서로만 링크하고 있어 홈에서 들어가는 경로가 0이었다. 사이트맵에만
+# 있고 내부 링크가 없는 페이지는 크롤 우선순위가 낮고 홈의 링크 가치도 못 받는다.
+# 게임 카드는 게임 본체를 그대로 가리키고(도구 사이트에서 클릭을 늘리면 안 된다),
+# 링크는 본문 안 텍스트 링크로 따로 둔다.
+LINKS_HEAD = {
+    "ko": "도구 바로 열기",
+    "ja": "ツールを直接開く",
+    "es": "Abrir un sorteo directamente",
+    "pt": "Abrir um sorteio direto",
+}
+
+# ko 는 클러스터의 ko 멤버가 게임 본체라 별도 랜딩이 없다. 이름·설명을 직접 둔다.
+KO_LINKS = [
+    ("roulette", "룰렛", "이름을 넣고 돌리면 하나가 뽑힙니다."),
+    ("team", "팀 나누기", "명단을 붙여 넣으면 인원이 고른 팀으로 나뉩니다."),
+    ("dice", "주사위", "1~6개를 실제로 굴립니다."),
+    ("bingo", "빙고", "중복 없이 번호를 뽑고 호출 목록을 남깁니다."),
+    ("car-racing", "랜덤 레이스", "추첨 결과를 레이스로 보여줘 전체 순위가 나옵니다."),
+    ("ladder", "사다리타기", "경로가 공개되기 전에 각자 선을 고릅니다."),
+]
+
+
+def _landing_content(code):
+    path = HERE / ("landing_content_%s.py" % code)
+    spec = importlib.util.spec_from_file_location("lc_" + code, path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.CONTENT
+
+
+def links_block(code):
+    rows = []
+    if code == "ko":
+        for tool, name, desc in KO_LINKS:
+            rows.append('                <li><a href="%s">%s</a> &mdash; %s</li>'
+                        % (CLUSTERS[tool]["game"], name, desc))
+    else:
+        for tool, cfg in _landing_content(code).items():
+            rows.append('                <li><a href="%s">%s</a> &mdash; %s</li>'
+                        % (member(tool, code), cfg["h1"], cfg["short"]))
+    body = "\n".join(rows)
+    return ("\n            <h3>" + LINKS_HEAD[code] + "</h3>\n"
+            '            <ul class="lp-seo-links">\n' + body + "\n            </ul>\n")
+
+
 def esc(t):
     return t.replace("\\", "\\\\").replace('"', '\\"')
 
@@ -281,10 +332,10 @@ def build(code, cfg, src):
     faq_head = {"ko": "자주 묻는 질문", "ja": "よくある質問",
                 "es": "Preguntas frecuentes", "pt": "Perguntas frequentes"}[code]
     new_sec = ('        <section class="lp-home-seo" lang="%s" aria-label="About Lucky Please">\n'
-               "%s\n\n"
+               "%s\n%s\n"
                "            <h2>%s</h2>\n"
                '            <dl class="lp-seo-faq">\n%s\n            </dl>\n'
-               "        </section>") % (cfg["html_lang"], cfg["prose"], faq_head, faq_dl)
+               "        </section>") % (cfg["html_lang"], cfg["prose"], links_block(code), faq_head, faq_dl)
     s = s[:sec_start] + new_sec + s[sec_end:]
 
     # 언어 강제 주입 — I18N/init 이 읽는다. 첫 <script> 앞이 아니라

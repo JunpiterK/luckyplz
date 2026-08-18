@@ -7,17 +7,24 @@
 
 우선순위 원칙:
     1.0  언어 홈 5종 — 5개 언어 상호 hreflang 을 실제로 선언한다
-    0.9  영어 랜딩 6종 — 메인 6게임의 검색 진입점
-    0.8  메인 6게임 본체
+    0.9  도구 랜딩 24종 — 6 도구 × en/es/pt/ja
+    0.8  메인 6게임 본체 (클러스터의 ko 멤버이기도 하다)
     0.6  아케이드 허브 · 전체 게임 목록 · 나머지 게임 11종
     0.3  법적/정보 페이지
 
+클러스터 URL 은 scripts/lp_clusters.py 가 단일 진실원천이다. 여기서 목록을
+따로 적으면 두 곳이 어긋나 hreflang 상호성이 깨진다.
+
     python scripts/gen-sitemap.py
 """
+import sys
 from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lp_clusters import CLUSTERS, LANGS, member  # noqa: E402
+
 BASE = "https://luckyplz.com"
 TODAY = date.today().isoformat()
 
@@ -25,10 +32,9 @@ TODAY = date.today().isoformat()
 # 지원하며 색인 대상이 아니다 — 근거는 CLAUDE.md 의 언어 우선순위.
 LANG_HOMES = [("en", "/"), ("es", "/es/"), ("pt", "/pt/"), ("ja", "/ja/"), ("ko", "/ko/")]
 
-LANDINGS = ["/wheel-spinner/", "/team-generator/", "/dice-roller/",
-            "/bingo-caller/", "/race-picker/", "/ladder-draw/"]
-
-GAMES_MAIN = ["roulette", "team", "dice", "bingo", "car-racing", "ladder"]
+# 도구 랜딩은 lp_clusters 에서 온다 — 6 도구 × en/es/pt/ja = 24 페이지.
+# ko 멤버는 게임 본체라 아래 GAMES_MAIN 에서 따로 등록한다.
+GAMES_MAIN = list(CLUSTERS.keys())
 GAMES_REST = ["lotto", "glory-racing", "lucky-merge", "dodge", "tetris",
               "starship-lander", "brick", "snake", "pacman", "burger", "quiz"]
 
@@ -59,13 +65,16 @@ def main():
         parts.append(url(path, "1.0", "daily", lang_alts))
     parts.append("")
 
-    for slug in LANDINGS:
-        parts.append(url(slug, "0.9", "monthly",
-                         [("en", slug), ("x-default", slug)]))
-    parts.append("")
-
-    for g in GAMES_MAIN:
-        parts.append(url("/games/%s/" % g, "0.8", "weekly"))
+    # 도구 클러스터 — 각 페이지가 5개 언어 상호 alternate 를 갖는다.
+    # ko 멤버(게임 본체)는 앱 페이지이기도 해서 changefreq 를 따로 준다.
+    for tool in CLUSTERS:
+        alts = [(lg, member(tool, lg)) for lg in LANGS] + [("x-default", CLUSTERS[tool]["en"])]
+        for lg in LANGS:
+            path = member(tool, lg)
+            if lg == "ko":
+                parts.append(url(path, "0.8", "weekly", alts))
+            else:
+                parts.append(url(path, "0.9", "monthly", alts))
     parts.append("")
 
     parts.append(url("/arcade/", "0.6", "monthly"))
@@ -82,8 +91,9 @@ def main():
 
     # 등록한 URL 이 실제로 파일로 존재하는지 확인 — 404 를 색인 요청하면
     # 크롤 예산 낭비이자 품질 신호 감점이다.
-    for path in ([p for _, p in LANG_HOMES] + LANDINGS + ["/arcade/", "/games/"]
-                 + ["/games/%s/" % g for g in GAMES_MAIN + GAMES_REST] + INFO):
+    cluster_paths = [member(t, lg) for t in CLUSTERS for lg in LANGS]
+    for path in ([p for _, p in LANG_HOMES] + cluster_paths + ["/arcade/", "/games/"]
+                 + ["/games/%s/" % g for g in GAMES_REST] + INFO):
         f = ROOT / "public" / path.strip("/") / "index.html" if path != "/" else ROOT / "public" / "index.html"
         if not f.exists():
             missing.append(path)

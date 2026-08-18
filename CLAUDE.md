@@ -26,13 +26,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 사이트 구조 (2026-08-19 확정 — 되돌리기 금지)
 
 ```
-/                 메인 = 랜덤 뽑기 6종 + RETRO 스트립 1개.  영어 canonical
+/                     메인 = 랜덤 뽑기 6종 + RETRO 스트립 1개.  영어 canonical
 /es/ /pt/ /ja/ /ko/   같은 홈의 실제 번역 페이지 (scripts/gen-lang-home.py)
-/wheel-spinner/ /team-generator/ /dice-roller/
-/bingo-caller/ /race-picker/ /ladder-draw/    메인 6종의 영어 검색 진입점
-/arcade/          레거시 아케이드 11종 허브 — SEO 타깃 아님
-/games/           전체 17종 목록 (한국어)
+/arcade/              레거시 아케이드 11종 허브 — SEO 타깃 아님
+/games/               전체 17종 목록 (한국어)
+/games/<id>/          게임 본체 17종. 한국어 본문 500~650단어 보유
 ```
+
+**언어 클러스터 — 한 도구 = 5개 언어 페이지 한 세트 (총 30 페이지).**
+
+| 도구 | en | es | pt | ja | ko(게임 본체) |
+|---|---|---|---|---|---|
+| 룰렛 | `/wheel-spinner/` | `/es/ruleta/` | `/pt/roleta/` | `/ja/roulette/` | `/games/roulette/` |
+| 팀 | `/team-generator/` | `/es/sorteo-equipos/` | `/pt/sorteio-times/` | `/ja/team-generator/` | `/games/team/` |
+| 주사위 | `/dice-roller/` | `/es/tirar-dados/` | `/pt/rolar-dados/` | `/ja/saikoro/` | `/games/dice/` |
+| 빙고 | `/bingo-caller/` | `/es/bingo/` | `/pt/bingo/` | `/ja/bingo/` | `/games/bingo/` |
+| 레이스 | `/race-picker/` | `/es/carrera-aleatoria/` | `/pt/corrida-aleatoria/` | `/ja/random-race/` | `/games/car-racing/` |
+| 사다리 | `/ladder-draw/` | `/es/escalera/` | `/pt/escada/` | `/ja/amidakuji/` | `/games/ladder/` |
+
+- **정의는 [scripts/lp_clusters.py](scripts/lp_clusters.py) 한 곳에만 둔다.** 다른 파일에서 재정의하면 두 곳이 어긋나고, hreflang 은 **한 변만 깨져도 클러스터 전체가 무시**되므로 반쪽 클러스터는 없는 것과 같다
+- ko 멤버는 별도 랜딩이 아니라 **게임 본체**다. 이미 한국어 본문이 있어 새로 만들 이유가 없다
+- 슬러그는 그 언어의 실제 검색어를 담는다 — `/ja/amidakuji/` 처럼 현지 표기가 곧 검색어인 경우가 가장 강하다
+- **변경 후에는 반드시 `python scripts/verify-clusters.py`** — canonical 자기참조 · hreflang 상호성 · `<html lang>` · FAQ 1:1 · JSON-LD 를 30 페이지 전수 검사한다
 
 **메인 6종은 늘리지 말 것.** 룰렛 · 팀 나누기 · 주사위 · 빙고 · 카레이싱 · 사다리.
 근거: 경쟁 사이트 9종(wheelofnames·pickerwheel·pickerspin 외) **전원이 휠+팀+주사위+빙고
@@ -97,6 +112,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **HTML 또는 공용 JS/CSS 를 건드린 커밋 전 반드시**: `bash scripts/bump-cache.sh` (아래 Cache policy 참조)
 - 빌드·번들러·린트·테스트 없음. 프로덕션은 Cloudflare Pages 가 정적 파일로 서빙하고, `server.py` 는 로컬 미리보기 전용이며 Pages 라우팅(디렉토리 → `index.html`)을 그대로 흉내 내야 한다
 
+### SEO·다국어 도구
+
+- `python scripts/verify-clusters.py` — **변경 후 필수 게이트.** 30 페이지 전수 검사
+- `python scripts/gen-lang-home.py` — 언어 홈 4종 생성 (홈을 고치면 반드시 다시 돌릴 것)
+- `python scripts/gen-landing.py` / `gen-landing-i18n.py` — 도구 랜딩 en / es·pt·ja
+- `python scripts/fix-page-lang.py` — 게임 본체의 `<html lang>`·`og:locale`·hreflang 정합화 (멱등)
+- `python scripts/sync-faq-schema.py` — FAQPage 스키마를 화면에서 재생성 (멱등)
+- `python scripts/gen-sitemap.py` — sitemap 생성 + 등록 URL 파일 존재 검증
+
 ### 게임 콘텐츠 도구
 
 - `python scripts/inject-game-about.py` — 게임 하단 가시 SEO 콘텐츠(`lp-game-about` 섹션) + FAQPage 스키마 주입 (멱등, 펜스 `<!--lp-game-about:start/end-->`). 새 게임에 콘텐츠를 붙일 때 `CONTENT` 딕셔너리에 항목 추가
@@ -111,10 +135,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing`(Brawl Run) `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(블록 스택). 이 중 **메인 6종**(roulette·team·dice·bingo·car-racing·ladder)만 홈에 노출되고 나머지 11종은 `/arcade/` 뒤에 있다.
 
-**게임 SEO 랜딩 6종** — 메인 6게임 각각의 영어 검색 진입점. `/wheel-spinner/`(룰렛) `/team-generator/`(팀) `/dice-roller/`(주사위) `/bingo-caller/`(빙고) `/race-picker/`(카레이싱) `/ladder-draw/`(사다리). 게임을 iframe 으로 임베드하고 영어 콘텐츠 + FAQ 스키마를 얹는다. **게임 본체는 수정하지 않는다.**
-- 신규 3종은 `scripts/gen-landing.py` 가 생성(멱등). 기존 3종은 손으로 쓴 콘텐츠라 재생성하지 않으며, 스크립트의 `ALL` 목록만 상호 링크에 쓰인다
-- 본문 848~942단어, FAQ 6문항이 화면 `<details>` 와 스키마에 1:1 대응
+**도구 랜딩.** 게임 본체(`/games/<id>/`)의 가시 콘텐츠는 한국어라 영어·스페인어·포르투갈어·일본어 검색에는 잡히지 않는다. 랜딩은 게임을 iframe 으로 임베드하고 그 언어의 콘텐츠 + FAQ 스키마를 얹는다. **게임 본체는 수정하지 않는다.**
+- 영어 6종 — `scripts/gen-landing.py`. 기존 3종(wheel-spinner·team-generator·dice-roller)은 손으로 쓴 콘텐츠라 재생성하지 않으며, 스크립트의 `ALL` 목록만 상호 링크에 쓰인다
+- es·pt·ja 18종 — `scripts/gen-landing-i18n.py` + 언어별 콘텐츠 모듈 `landing_content_{es,pt,ja}.py`
+- 분량: en 848~942단어 / es 575~732단어 / pt 542~716단어 / ja 1,229~1,765자
 - **집필 원칙은 게임 콘텐츠와 동일 — 정보 이득.** 조작 설명("이름 넣고 버튼 누르기")은 경쟁 사이트에 전부 있다. 빙고 75볼/90볼 밴딩 차이와 콜 수 분포, 레이스의 n! 순열, 사다리의 전단사(bijection) 성질처럼 **이 페이지에서만 얻는 내용**을 넣는다
+- **기계 번역이 아니다.** 각 언어권에서만 의미 있는 맥락을 넣는다 — 일본어판 사다리의 아미다(阿弥陀) 유래와 忘年会 빙고, 포르투갈어판의 festa junina, 스페인어판의 90볼 관행
+
+**내부 링크.** 랜딩끼리만 링크하면 홈에서 들어가는 경로가 0이 되어 사실상 고아 페이지가 된다(2026-08-19에 실제로 그 상태였다). 각 언어 홈 본문에 `ul.lp-seo-links` 로 그 언어의 도구 6개를 텍스트 링크한다. **게임 카드는 게임 본체를 그대로 가리킨다** — 도구 사이트에서 플레이까지 클릭을 늘리면 안 된다.
 
 **홈 가시 콘텐츠 (`lp-home-seo`).** 2026-08-19 이전 홈은 본문 텍스트가 사실상 0 인데 **FAQPage 스키마만 달려 있었다** — 화면에 없는 Q&A 를 스키마에 넣는 건 구글 구조화데이터 정책 위반이다. 지금은 스키마와 1:1 대응하는 `<dl class="lp-seo-faq">` 를 실제로 렌더하고, 영어 850단어 본문(도구별 용도·왜 보이는 추첨이어야 하는가·공정성 수학·사용 상황)이 붙어 있다. **스키마만 늘리고 화면을 안 늘리는 변경을 하지 말 것.**
 
@@ -156,7 +184,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **i18n & SEO.** 게임은 `?lang=` 쿼리로 16개 언어를 지원하며 `hreflang` alternate 와 JSON-LD `ItemList` 가 [public/index.html](public/index.html) 에 있다. 정규 도메인은 `https://luckyplz.com/`. 페이지를 추가하면 canonical/OG 블록을 복제하고 **`python scripts/gen-sitemap.py` 의 목록에 추가한 뒤 다시 돌린다**. sitemap 은 더 이상 손으로 관리하지 않는다 — 손 관리 시절 메인 6종 중 `/games/dice/` 가 통째로 누락돼 있었다. 생성기는 등록한 URL 이 실제 파일로 존재하는지도 검증한다. `.lang-bar` 는 `public/js/langBar.js` 가 주요 5개(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다.
 
-**구조화 데이터.** 전 게임이 JSON-LD 를 갖는다(BreadcrumbList). 콘텐츠가 붙은 게임은 FAQPage 도 함께 — 화면의 `<dl>` 과 1:1 대응해야 구글 리치결과 요건을 만족한다(보이지 않는 Q&A 를 스키마에만 넣으면 위반).
+**구조화 데이터.** 전 게임이 JSON-LD 를 갖는다(BreadcrumbList). 콘텐츠가 붙은 페이지는 FAQPage 도 함께.
+
+**FAQPage 는 화면이 진실원천이다.** 스키마를 손으로 쓰지 말고 `python scripts/sync-faq-schema.py` 로 화면 Q&A 에서 생성한다. 손으로 관리하던 시절 영어 랜딩 3종은 스키마와 화면 문구가 같은 뜻의 다른 문장으로 갈라져 있었고(= 화면에 없는 Q&A 를 선언한 상태), `/games/ladder/` 는 화면에 Q&A 6개가 있는데 스키마가 없어 17종 중 유일하게 리치결과 자격이 없었다. 스크립트는 `<details>`(랜딩)·`<dl class="lp-faq">`(게임)·`<dl class="lp-seo-faq">`(홈) 세 마크업을 모두 읽고 `Q. ` 접두어를 뗀다.
 
 **OG 이미지.** 링크로 공유되는 모든 페이지는 내용에 맞는 OG 이미지를 갖춰야 한다. 생성기는 `scripts/gen-og-games.py`(게임별), `scripts/gen-og-main.py`(사이트 대표). 폰트는 `scripts/og-fonts/`.
 
