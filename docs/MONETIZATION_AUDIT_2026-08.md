@@ -100,8 +100,12 @@
 
 - [x] **푸터 `Blog` 링크 1줄 복구** (5분) — 2026-08-18 완료 (`siteFooter.js`)
       → 게임 정체성은 홈 상단이 지킨다. `id="lpFooterBlogLink"`는 일부러 제외(홈 펄스 NEW 배지 방지)
-- [ ] 팩맨·테트리스 이름·에셋 중립화 (2h)
-      → Tetris Holding의 DMCA 집행 이력(itch.io, Android Market, *Tetris Holding v. Xio*)은 실재. 광고 심사 중 도메인에 상표명 노출은 리스크·수익 비대칭
+- [x] **팩맨·테트리스 표시명 중립화** — 2026-08-18 완료 (`scripts/neutralize-trademarks.py`, 멱등)
+      → 팩맨/Pac-Man → **닷 러너 / Dot Runner**, 테트리스/Tetris → **블록 스택 / Block Stack**
+      → 16개 언어 i18n 전체(en·ko·ja·zh·ru·ar·hi·th·es·de·fr·pt·id·vi·tr·gb) + title/og/twitter/JSON-LD/h1/오버레이 제목
+      → **내부 식별자는 보존**: `gameKey:'tetris'`, `tetris_leaderboard` RPC, CSS 클래스, JS 변수 → 바꿨다면 Supabase 리더보드가 깨졌다
+      → **URL 슬러그 유지**: `/games/pacman/`·`/games/tetris/`. 변경 시 기존 공유 링크·검색 순위 손실. 남은 노출은 URL 경로뿐
+      → **블로그 21개 파일 미변경**: 게임 역사를 다루는 편집 콘텐츠이므로 지명적 공정이용
 - [ ] 재신청 클릭 (30분)
 
 **취소된 하위작업 (실측 반박)**
@@ -112,6 +116,27 @@
   → **이미 존재한다.** `/blog/index.html`이 `AUTO_RE = /(^|-)(tech-recap|recap|open-brief|close-brief|premarket|baseball-daily|football-daily|worldcup-daily)-\d{4}-\d{2}-\d{2}/`로 thin 자동글을 필터링해 **언어별 90~94편(ko 90 / en 94 / ja 92 / zh 91)의 양질 글만** 노출한다. 빠진 건 인덱스가 아니라 **그 인덱스로 가는 링크**였다.
 
 *기대효과*: 승인 확률 추정 10~20% → **25~40%**
+
+### ②-보너스 게임 페이지 SEO 콘텐츠 (2026-08-18 추가 실행)
+
+감사 시점에는 액션 목록에 없었으나, "검색하면 목적대로 유입되게 해 달라"는 요청에 따라
+**근본 원인**(게임 페이지 가시 텍스트 61~115단어)을 직접 해소했다.
+
+`scripts/inject-game-about.py` (멱등, 펜스 `<!--lp-game-about:start/end-->`):
+
+| 게임 | 가시 텍스트 | FAQ |
+|---|---|---|
+| roulette | 98 → **601단어** | 5문항 |
+| team | 100 → **544단어** | 5문항 |
+| lotto | 110 → **599단어** | 5문항 |
+| bingo | 115 → **546단어** | 5문항 |
+
+- 구조는 `ladder`(715단어)의 검증된 `lp-game-about` 패턴을 이식. 사용법 → 원리/확률 → 요령 → 활용 사례 → FAQ
+- **FAQPage JSON-LD** 를 화면의 `<dl>` 과 1:1로 생성 → 구글 리치결과 요건 충족. 사이트 전체 스키마 38개 파싱 오류 0
+- **숨김 텍스트가 아님**: `overflow:hidden` 은 `@media(min-width:900px)` 안에만 있어 모바일(375px)에서 실제 스크롤로 도달 확인. 모바일 우선 색인 기준 정상 콘텐츠이며, `get_page_text` 추출 시 본문 article 로 인식됨
+- 부수 정비: sitemap 에 `/games/dodge/` 추가(16→17), `lucky-merge` BreadcrumbList 스키마 추가 → **전 게임 스키마·색인 등록 완료**(`dice` 만 보류, 아래 참조)
+
+> **미결 판단 필요 — `dice`**: sitemap 미등록 상태. 메모리에 "주사위 노출 금지"가 기록돼 있으나 현재 홈에는 카드로 노출 중이라 기록이 낡았을 가능성이 크다. 색인 등록은 능동적 노출이므로 임의 판단하지 않고 보류함.
 
 ### ③ `/wheel-spinner/` 한 개만 진짜 랜딩으로 — 6~10시간 + 90일 킬 기준
 현재 526단어(team-generator 499, dice-roller 510 — 명백한 템플릿 복제) → 1,200~1,500단어 + 위젯 임베드 + FAQ 스키마 + 내부링크.
