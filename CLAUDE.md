@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Site Identity & Mission (READ FIRST)
 
-> **2026-06-26 방향 전환 — luckyplz.com 은 이제 "게임 전문 사이트" 다.**
+> **2026-08-13 방향 전환 — luckyplz.com 은 이제 "게임 전문 사이트" 다.**
 > 메인 페이지·공용 푸터는 **게임 관련 진입점만** 노출한다. 블로그·도구(툴)로 가는 링크는 홈/푸터에서 모두 제거했다(commit d35d2ac9181). **다시 추가하지 말 것.**
 > - 블로그/도구 **콘텐츠 파일**(`public/blog/*`, `public/tools/*`)은 삭제하지 않고 보존한다 — 운영자가 다른 웹사이트에서 재활용할 예정.
 > - **자동발행 cron 은 모두 비활성화**했다(`daily-cron`·`sports-cron`·`worldcup-cron`·`cron-monitor` 의 `schedule:` 주석 처리). 스크립트·프롬프트·`workflow_dispatch`(수동 실행) 경로는 그대로 남겨 뒀다. 콘텐츠를 타 사이트로 옮길 때 재사용 가능.
