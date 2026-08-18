@@ -8,10 +8,12 @@
 */
 
 (function(){
-    // Canonical primary order, shared with the content selector (langSelect.js):
-    // en, ko, zh, ja, es. enhance() reorders the bar to match, so every page
-    // (homepage + each game) shows the same order regardless of its HTML order.
-    const PRIMARY = ['en','ko','zh','ja','es'];
+    // 2026-08-19: 표시 5개를 SEO 투자 대상 5개 언어와 일치시킨다.
+    // en / es / pt / ja / ko — 각각 실제 경로 페이지(/es/ 등)와 hreflang 을
+    // 갖는 언어들이다. zh 는 본토에서 구글이 차단돼 구글 SEO 로 도달이
+    // 안 되므로 More 드롭다운으로 내렸다(UI 지원은 그대로 유지).
+    // enhance() 가 바를 이 순서로 재정렬하므로 모든 페이지가 동일 순서.
+    const PRIMARY = ['en','es','pt','ja','ko'];
 
     function injectStyles(){
         if (document.getElementById('lp-langbar-enhance-styles')) return;

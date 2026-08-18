@@ -23,12 +23,45 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `/blog/`·`/tools/`·`/labs/`·`/all/` 경로를 되살리지 말 것. `public/_redirects` 에서 **410 Gone** 으로 색인 제거 중이다.
 - 콘텐츠가 필요하면 **게임에 대한 콘텐츠**를 만든다. 게임과 무관한 주제는 `luckyplz_blog` 쪽 일이다.
 
+### 사이트 구조 (2026-08-19 확정 — 되돌리기 금지)
+
+```
+/                 메인 = 랜덤 뽑기 6종 + RETRO 스트립 1개.  영어 canonical
+/es/ /pt/ /ja/ /ko/   같은 홈의 실제 번역 페이지 (scripts/gen-lang-home.py)
+/wheel-spinner/ /team-generator/ /dice-roller/
+/bingo-caller/ /race-picker/ /ladder-draw/    메인 6종의 영어 검색 진입점
+/arcade/          레거시 아케이드 11종 허브 — SEO 타깃 아님
+/games/           전체 17종 목록 (한국어)
+```
+
+**메인 6종은 늘리지 말 것.** 룰렛 · 팀 나누기 · 주사위 · 빙고 · 카레이싱 · 사다리.
+근거: 경쟁 사이트 9종(wheelofnames·pickerwheel·pickerspin 외) **전원이 휠+팀+주사위+빙고
+스위트를 이미 갖고 있다**. 즉 스위트는 차별점이 아니라 진입 요건이다. 차별점은
+**카레이싱(순위를 레이스로 보여주는 도구 — 경쟁사 전무)** 과 사다리(한·일 고유 수요)이고,
+그 둘을 6칸에 넣기 위해 로또·Brawl Run 을 `/arcade/` 로 내렸다. 6칸을 늘리면
+주제 집중이 흐려지고 이 사이트의 유일한 SEO 레버가 사라진다.
+
+**모바일 그리드는 3열 고정** (`repeat(3,1fr)`, 3×2). 이전 `auto-fit` 은 화면폭에 따라
+열 수가 흔들려 아이콘 배열이 매번 달라졌다.
+
+### 언어 정책 (2026-08-19)
+
+| 등급 | 언어 | 실체 |
+|---|---|---|
+| **SEO 투자** | en(기본) · es · pt · ja · ko | 실제 경로 페이지 + 상호 hreflang + 번역 본문 |
+| UI 만 | zh de fr ru ar hi th id vi tr gb | I18N 번역은 유지, hreflang·색인 대상 아님 |
+
+- **영어가 canonical.** 홈의 가시 본문·FAQ 는 영어 고정이며 UI 언어 전환에 따라 바뀌지 않는다 — FAQPage 스키마와 1:1 대응이 깨지면 안 되기 때문
+- **중국어·힌디어를 뺀 이유**: 사용자 수는 크지만(8.9억/1.9억) 중국 본토는 구글이 차단돼 구글 SEO 로 도달 불가, 인도권은 유틸리티 도구를 영어로 검색한다. 국가별 AdSense RPM 격차가 10배 이상이라 도달 가능성 × RPM 으로 우선순위를 잡았다
+- **`?lang=` hreflang 을 다시 만들지 말 것.** 2026-08-19 에 108개를 제거했다. canonical 이 쿼리 없는 URL 을 가리키는 상태에서 `?lang=xx` 를 alternate 로 선언하면 구글이 전부 버린다 — 16개 언어 전부 SEO 가치 0 이었다. 언어 페이지가 필요하면 **실제 경로**를 만든다
+- 홈을 고치면 `python scripts/gen-lang-home.py` 를 다시 돌려야 언어판이 따라온다
+
 ### 게임 — 친구들과 함께 쓰는 작은 도구
 
 - **목적**: 친구·동료와 내기·벌칙·역할 정하기, 또는 잠깐의 시간 떼우기
 - **두 카테고리**
-  - **행운/뽑기 (핵심 정체성)** — 룰렛, 사다리, 로또, 팀뽑기, 주사위, 빙고. 결정·내기·벌칙 도구
-  - **레트로 액션 (부가)** — 스네이크, 닷 러너, 블록 스택, 카레이싱 등 기록 갱신·심심풀이
+  - **행운/뽑기 (핵심 정체성)** — 룰렛, 팀뽑기, 주사위, 빙고, 카레이싱, 사다리. 결정·내기·벌칙 도구
+  - **레트로 액션 (부가)** — `/arcade/` 뒤. 스네이크, 닷 러너, 블록 스택 등. 기록 갱신·심심풀이
 - **원칙**
   - 모든 게임은 **로그인 없이 즉시 플레이 가능**해야 한다. 로그인은 소셜/멀티플레이 기능에만
   - 모바일 우선(세로 폰), 데스크탑·태블릿은 확장
@@ -42,6 +75,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|
 | `games/pacman/` | 닷 러너 / Dot Runner |
 | `games/tetris/` | 블록 스택 / Block Stack |
+| `games/glory-racing/` | Brawl Run / 브롤 런 |
+
+**`UFC RUN` 은 절대 쓰지 말 것** (2026-08-19 검토). Zuffa(UFC)는 유비소프트를 상대로
+게임 이름도 아닌 **패키지 뒷면의 "Ultimate Fighting" 문구 한 줄**을 두고 소송했고
+유비소프트가 합의·패키지 변경했다. 세 글자를 게임명에 직접 쓰는 건 그보다 명백하다.
+반면 **폭력성 표기 자체는 문제없다** — AdSense 는 2023-08 정책 개정으로 게임플레이
+영상에 폭력성 예외를 뒀고, 현재 제한 대상은 고문·성폭력·미성년자/실존인물 대상·차별
+기반 폭력뿐이다. 그래서 Brawl Run 은 이름만 중립화하고 `⚠️ 만화적 몸싸움 연출 포함`
+고지를 title 아래(`.lp-advisory`)와 meta description 에 남겼다 — 호기심 유발 + 정직한 고지.
 
 - 표시명(title·og·h1·i18n `gameTitle`/`subtitle`·설명문)은 16개 언어 전부 중립화됨 — `scripts/neutralize-trademarks.py` (멱등)
 - **내부 식별자는 절대 바꾸지 말 것**: `gameKey:'tetris'`, `tetris_leaderboard` RPC, CSS 클래스, URL 슬러그 → 바꾸면 Supabase 리더보드와 기존 공유 링크가 깨진다
@@ -67,9 +109,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Static multi-page site, no framework.** 모든 게임은 `public/games/<name>/index.html` 에 자가완결 HTML(inline CSS+JS, 자체 `<head>` SEO 블록)로 존재한다. 게임끼리 독립을 유지할 것 — 공용 번들러나 게임 간 import 를 도입하지 말고, 복붙이 의도된 패턴이다(한 게임을 고쳐도 다른 게임이 깨지지 않게).
 
-현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing` `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(블록 스택).
+현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing`(Brawl Run) `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(블록 스택). 이 중 **메인 6종**(roulette·team·dice·bingo·car-racing·ladder)만 홈에 노출되고 나머지 11종은 `/arcade/` 뒤에 있다.
 
-**게임 SEO 랜딩 3종** — `/wheel-spinner/`, `/team-generator/`, `/dice-roller/`. 게임을 iframe 으로 임베드하고 영어 콘텐츠+FAQ 스키마를 얹은 검색 유입용 페이지. 게임 본체는 수정하지 않는다.
+**게임 SEO 랜딩 6종** — 메인 6게임 각각의 영어 검색 진입점. `/wheel-spinner/`(룰렛) `/team-generator/`(팀) `/dice-roller/`(주사위) `/bingo-caller/`(빙고) `/race-picker/`(카레이싱) `/ladder-draw/`(사다리). 게임을 iframe 으로 임베드하고 영어 콘텐츠 + FAQ 스키마를 얹는다. **게임 본체는 수정하지 않는다.**
+- 신규 3종은 `scripts/gen-landing.py` 가 생성(멱등). 기존 3종은 손으로 쓴 콘텐츠라 재생성하지 않으며, 스크립트의 `ALL` 목록만 상호 링크에 쓰인다
+- 본문 848~942단어, FAQ 6문항이 화면 `<details>` 와 스키마에 1:1 대응
+- **집필 원칙은 게임 콘텐츠와 동일 — 정보 이득.** 조작 설명("이름 넣고 버튼 누르기")은 경쟁 사이트에 전부 있다. 빙고 75볼/90볼 밴딩 차이와 콜 수 분포, 레이스의 n! 순열, 사다리의 전단사(bijection) 성질처럼 **이 페이지에서만 얻는 내용**을 넣는다
+
+**홈 가시 콘텐츠 (`lp-home-seo`).** 2026-08-19 이전 홈은 본문 텍스트가 사실상 0 인데 **FAQPage 스키마만 달려 있었다** — 화면에 없는 Q&A 를 스키마에 넣는 건 구글 구조화데이터 정책 위반이다. 지금은 스키마와 1:1 대응하는 `<dl class="lp-seo-faq">` 를 실제로 렌더하고, 영어 850단어 본문(도구별 용도·왜 보이는 추첨이어야 하는가·공정성 수학·사용 상황)이 붙어 있다. **스키마만 늘리고 화면을 안 늘리는 변경을 하지 말 것.**
 
 **게임 페이지 가시 콘텐츠 (`lp-game-about`).** 게임 페이지는 풀스크린 캔버스라 텍스트가 거의 없었고(61~115단어), 이는 검색 랭킹·AdSense 심사 양쪽에서 치명적이었다. 그래서 게임 하단에 사용법·원리·팁·활용사례·FAQ 를 담은 섹션을 붙인다.
 - **숨김 텍스트가 아니다**: `html,body{overflow:hidden}` 은 `@media(min-width:900px)` 안에만 있어, 모바일에서는 정상 스크롤로 도달한다. 구글은 모바일 우선 색인이므로 이 콘텐츠를 정상적으로 읽는다. 과거의 `left:-9999px` 방식(가이드라인 위반)은 이미 제거됐고 되살리면 안 된다
@@ -107,7 +154,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Bot protection (Cloudflare Turnstile).** `supabase-config.js` 에 `TURNSTILE_SITE_KEY` 상수가 있다(기본 빈 값 = 비활성). 값을 넣으면 인증 폼이 Turnstile 위젯을 렌더하고 토큰을 Supabase 로 넘긴다. 활성화하려면 (1) Cloudflare → Turnstile → 사이트 추가(`luckyplz.com`, Managed), (2) SITE KEY 를 상수에, (3) SECRET KEY 를 Supabase → Authentication → Captcha protection 에 넣는다. 둘이 맞아야 하며, 클라이언트 키만 배포하면 Supabase 가 모든 인증을 거부한다.
 
-**i18n & SEO.** 게임은 `?lang=` 쿼리로 16개 언어를 지원하며 `hreflang` alternate 와 JSON-LD `ItemList` 가 [public/index.html](public/index.html) 에 있다. 정규 도메인은 `https://luckyplz.com/`. 페이지를 추가하면 hreflang/canonical/OG 블록을 복제하고 `public/sitemap.xml` 에 등록한다. `.lang-bar` 는 `public/js/langBar.js` 가 주요 5개(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다.
+**i18n & SEO.** 게임은 `?lang=` 쿼리로 16개 언어를 지원하며 `hreflang` alternate 와 JSON-LD `ItemList` 가 [public/index.html](public/index.html) 에 있다. 정규 도메인은 `https://luckyplz.com/`. 페이지를 추가하면 canonical/OG 블록을 복제하고 **`python scripts/gen-sitemap.py` 의 목록에 추가한 뒤 다시 돌린다**. sitemap 은 더 이상 손으로 관리하지 않는다 — 손 관리 시절 메인 6종 중 `/games/dice/` 가 통째로 누락돼 있었다. 생성기는 등록한 URL 이 실제 파일로 존재하는지도 검증한다. `.lang-bar` 는 `public/js/langBar.js` 가 주요 5개(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다.
 
 **구조화 데이터.** 전 게임이 JSON-LD 를 갖는다(BreadcrumbList). 콘텐츠가 붙은 게임은 FAQPage 도 함께 — 화면의 `<dl>` 과 1:1 대응해야 구글 리치결과 요건을 만족한다(보이지 않는 Q&A 를 스키마에만 넣으면 위반).
 

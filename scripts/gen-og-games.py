@@ -343,7 +343,7 @@ GAMES = {
     "brick":           dict(title="BRICK BREAKER", sub="벽돌깨기 — 한 발의 각도 싸움", cat="RETRO", top=(24, 12, 10), bot=(10, 5, 4), accent=(255, 159, 64), motif=m_brick),
     "burger":          dict(title="BURGER CHEF", sub="버거 셰프 — 주문 폭주 스택 쌓기", cat="RETRO", top=(24, 14, 8), bot=(10, 6, 3), accent=(240, 178, 92), motif=m_burger),
     "car-racing":      dict(title="CAR RACE", sub="카레이싱 — 랜덤 레이스 내기", cat="RETRO", top=(20, 8, 12), bot=(8, 3, 5), accent=(235, 64, 84), motif=m_car),
-    "glory-racing":    dict(title="GLORY RACING", sub="영광의 레이싱 — 달리고 빼앗는 내기", cat="RETRO", top=(20, 16, 6), bot=(8, 7, 3), accent=(255, 206, 92), motif=m_glory),
+    "glory-racing":    dict(title="BRAWL RUN", sub="Brawl Run — 달리고 빼앗는 내기", cat="RETRO", top=(20, 16, 6), bot=(8, 7, 3), accent=(255, 206, 92), motif=m_glory),
     "dodge":           dict(title="SPACE-Z", sub="스페이스-Z — 총알 피하기 생존전", cat="RETRO", top=(6, 10, 24), bot=(3, 4, 10), accent=(0, 217, 255), motif=m_dodge),
     "starship-lander": dict(title="STARSHIP LANDER", sub="우주선 착륙 — 추력 조절의 미학", cat="RETRO", top=(8, 12, 24), bot=(3, 5, 10), accent=(255, 160, 60), motif=m_lander),
     "lucky-merge":     dict(title="LUCKY MERGE", sub="행성 합체 — 우주 2048 퍼즐", cat="PUZZLE", top=(14, 10, 28), bot=(6, 4, 12), accent=(167, 139, 250), motif=m_merge),
