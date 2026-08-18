@@ -36,9 +36,14 @@ PUB = ROOT / "public"
 
 # 기본 대상: 화면 FAQ 를 가진 페이지 전부
 DEFAULT = (sorted(PUB.glob("games/*/index.html"))
+           + [PUB / "index.html"]
            + [PUB / p / "index.html" for p in
-              ("wheel-spinner", "team-generator", "dice-roller",
-               "bingo-caller", "race-picker", "ladder-draw")])
+              ("ko", "ja", "es", "pt",
+               "wheel-spinner", "team-generator", "dice-roller",
+               "bingo-caller", "race-picker", "ladder-draw")]
+           + sorted(PUB.glob("es/*/index.html"))
+           + sorted(PUB.glob("pt/*/index.html"))
+           + sorted(PUB.glob("ja/*/index.html")))
 
 
 def text(x):
@@ -47,10 +52,22 @@ def text(x):
 
 
 def extract(t):
-    """화면 Q&A 추출. 없으면 빈 리스트."""
-    pairs = re.findall(r"<details><summary>(.*?)</summary><p>(.*?)</p></details>", t, re.S)
+    """화면 Q&A 추출. 없으면 빈 리스트.
+
+    반드시 **FAQ 컨테이너 안**만 본다. 홈에는 FAQ 말고도 접히는 <details>
+    (본문 폴드)가 있어서, 문서 전체에서 <details> 를 긁으면 FAQ 가 아닌
+    블록까지 스키마에 들어간다. 컨테이너로 범위를 좁혀 그걸 막는다."""
+    scope = None
+    for pat in (r'<div class="faq">(.*?)</div>',        # 도구 랜딩
+                r'<div class="lp-faq-list">(.*?)</div>'):  # 홈·언어판
+        m = re.search(pat, t, re.S)
+        if m:
+            scope = m.group(1)
+            break
+    pairs = re.findall(r"<details><summary>(.*?)</summary><p>(.*?)</p></details>",
+                       scope if scope is not None else "", re.S)
     if not pairs:
-        m = re.search(r'<dl class="lp-(?:seo-)?faq">(.*?)</dl>', t, re.S)
+        m = re.search(r'<dl class="lp-(?:seo-)?faq">(.*?)</dl>', t, re.S)  # 게임 페이지
         if not m:
             return []
         dts = re.findall(r"<dt>(.*?)</dt>", m.group(1), re.S)

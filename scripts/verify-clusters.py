@@ -38,8 +38,15 @@ def visible_faq(t):
     <details> (랜딩) / <dl class="lp-faq"> (게임) / <dl class="lp-seo-faq"> (홈).
     "Q. " 접두어는 화면 표시용 라벨이라 비교 전에 뗀다. scripts/sync-faq-schema.py
     가 스키마를 만들 때와 같은 규칙이어야 한다."""
+    scope = None
+    for pat in (r'<div class="faq">(.*?)</div>', r'<div class="lp-faq-list">(.*?)</div>'):
+        m = re.search(pat, t, re.S)
+        if m:
+            scope = m.group(1)
+            break
     out = [(q, a) for q, a in re.findall(
-        r"<details><summary>(.*?)</summary><p>(.*?)</p></details>", t, re.S)]
+        r"<details><summary>(.*?)</summary><p>(.*?)</p></details>",
+        scope if scope is not None else "", re.S)]
     if not out:
         m = re.search(r'<dl class="lp-(?:seo-)?faq">(.*?)</dl>', t, re.S)
         if m:
