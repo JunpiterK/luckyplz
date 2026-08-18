@@ -1,8 +1,9 @@
 /* Shared site-wide footer. Mounted as a static element at the end of <body>
-   so it flows naturally below scrollable content pages (home, blog, privacy,
-   about) and stays out of the way on game pages, where the page is covered
-   by fixed #setupWrap/#gameWrap panels (the footer is still in the DOM for
-   crawlers + AdSense review to find Privacy/About links). */
+   so it flows naturally below scrollable content pages (home, about, privacy)
+   and stays out of the way on game pages, where the page is covered by fixed
+   #setupWrap/#gameWrap panels (the footer is still in the DOM for crawlers +
+   AdSense review to find Privacy/About links).
+   2026-08-18: 블로그·도구는 luckyplz_blog 로 분리됨. 이 사이트는 게임 전용. */
 /* IMMEDIATELY capture beforeinstallprompt before anything else runs.
    Chrome fires this event exactly once per page load, and we don't
    want to miss it while pwaInstall.js is still being dynamically
@@ -53,27 +54,10 @@ try{
         +'.lp-site-footer a:hover{color:#FFE66D;background:rgba(255,230,109,.06)}'
         +'.lp-site-footer .sep{opacity:.22;margin:0 0;display:inline-block}'
         +'.lp-site-footer .copy{display:block;margin-top:12px;opacity:.5;font-size:.78em;font-weight:400}'
-        /* "NEW" pill anchored above the Blog link. Two render modes:
-           - Default (other pages): only mounts when today === latest blog
-             date. Static pill, no animation.
-           - .always-on (homepage): always mounted as a "look here" hook
-             for first-time visitors arriving from games. Pulses opacity
-             + scale + halo so it reads as a live indicator without
-             being shouty.
-
-           Red-orange linear-gradient stays in both modes — high enough
-           contrast against the muted footer to draw the eye, but
-           saturated enough that the pulse looks intentional rather
-           than alarming. */
-        +'.lp-site-footer .lp-new-badge{position:absolute;top:-6px;right:-2px;background:linear-gradient(135deg,#ff5a6e,#ff3344);color:#fff;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:8.5px;font-weight:800;letter-spacing:.12em;padding:2px 5px;border-radius:4px;line-height:1;text-transform:uppercase;box-shadow:0 2px 6px rgba(255,80,100,.45);pointer-events:none}'
-        +'@keyframes lpNewPulse{0%,100%{opacity:.78;transform:scale(1);box-shadow:0 2px 6px rgba(255,80,100,.4)}50%{opacity:1;transform:scale(1.12);box-shadow:0 3px 14px rgba(255,90,110,.7),0 0 0 4px rgba(255,80,100,.14)}}'
-        +'.lp-site-footer .lp-new-badge.always-on{animation:lpNewPulse 1.7s cubic-bezier(.4,0,.2,1) infinite}'
-        +'@media(prefers-reduced-motion:reduce){.lp-site-footer .lp-new-badge.always-on{animation:none;opacity:1}}'
         +'@media(max-width:600px){'
         +'.lp-site-footer{font-size:1.05em;line-height:1.9;padding:24px 12px 32px}'
         +'.lp-site-footer a{padding:8px 11px;margin:0 2px}'
         +'.lp-site-footer .copy{font-size:.74em;margin-top:14px}'
-        +'.lp-site-footer .lp-new-badge{font-size:8px;padding:2px 4px;top:-5px;right:-3px}'
         +'}'
         /* ========= Digital activity counter ========= */
         /* Sits ABOVE the Home/About/... link row inside the same footer.
@@ -182,63 +166,11 @@ try{
             +'<a href="/about/">About</a><span class="sep">·</span>'
             +'<a href="/privacy/">Privacy</a><span class="sep">·</span>'
             +'<a href="/terms/">Terms</a><span class="sep">·</span>'
-            /* 2026-08-18 — Blog 링크만 복구. 게임 전용 정체성은 홈 상단이 지키고,
-               푸터의 이 한 줄은 (a) 양질 롱폼 90여 편(언어당)으로 가는 유일한 크롤
-               경로이고 (b) AdSense 재심사 시 심사관이 실제 콘텐츠에 도달하는 통로다.
-               2026-08-13 전환 때 이걸 끊으면서 사이트의 광고 재고·품질 신호가 통째로
-               고아가 됐다(docs/MONETIZATION_AUDIT_2026-08.md 참조).
-               id="lpFooterBlogLink" 는 일부러 뺐다 — 그 id 가 있으면 홈에서 펄스
-               NEW 배지가 붙어 게임 중심 화면에서 시선을 뺏는다. 조용한 링크로 둔다.
-               Tools/All 은 복구하지 않는다(감사에서 요구된 바 없음). */
-            +'<a href="/blog/">Blog</a><span class="sep">·</span>'
             +'<a href="/contact/">Contact</a>'
-            +'<span class="copy">© 2026 '+(/^\/blog\//.test(location.pathname)?'Lucky Blog':'Lucky Please')+' · luckyplz.com</span>';
+            +'<span class="copy">© 2026 Lucky Please · luckyplz.com</span>';
         document.body.appendChild(f);
 
-        /* NEW badge logic — two paths:
-
-           HOMEPAGE: badge is always on with a pulsing animation. Most
-           visitors land here from games and never realise the blog
-           exists; the live-indicator nudge is the cheapest way to push
-           click-through up. Mounts immediately, no fetch needed.
-
-           OTHER PAGES: only when today's user-local date matches
-           build.json's latest_blog_date (KST author dates). Static pill,
-           no animation. Failures (no API, network, missing field)
-           silently no-op. */
-        (function(){
-          var blogA = document.getElementById('lpFooterBlogLink');
-          if (!blogA) return;
-
-          function mountBadge(animated){
-            var badge = document.createElement('span');
-            badge.className = 'lp-new-badge' + (animated ? ' always-on' : '');
-            badge.textContent = 'NEW';
-            badge.setAttribute('aria-label', animated ? 'Fresh content' : 'New post today');
-            blogA.appendChild(badge);
-          }
-
-          var path = location.pathname;
-          var isHomepage = (path === '/' || path === '/index.html' || path === '');
-
-          if (isHomepage) {
-            mountBadge(true);
-            return;
-          }
-
-          /* Other pages — only when there's a same-day post. */
-          try {
-            fetch('/build.json?_=' + Date.now(), { cache: 'no-store' })
-              .then(function(r){ return r.ok ? r.json() : null; })
-              .then(function(d){
-                if (!d || !d.latest_blog_date) return;
-                var today = new Date().toLocaleDateString('en-CA');
-                if (d.latest_blog_date !== today) return;
-                mountBadge(false);
-              })
-              .catch(function(){});
-          } catch(e) {}
-        })();
+        
 
         /* Admin-only gate. Early-launch traffic is so low (오늘 1 / 누적 3)
            that showing the counter publicly reads as "dead site" rather
@@ -316,7 +248,7 @@ try{
        and is idempotent across multiple loads. */
     if(!window.LpFullscreen){
         var fs=document.createElement('script');
-        fs.src='/js/lpFullscreen.js?v=1787049833';
+        fs.src='/js/lpFullscreen.js?v=1787052867';
         document.body.appendChild(fs);
     }
 
@@ -329,7 +261,7 @@ try{
        the right browser from the first hop, not just /games/*. */
     if(!window.LpInAppExit){
         var ia=document.createElement('script');
-        ia.src='/js/lpInAppExit.js?v=1787049833';
+        ia.src='/js/lpInAppExit.js?v=1787052867';
         ia.defer=true;
         document.body.appendChild(ia);
     }
@@ -343,7 +275,7 @@ try{
        재생 시작. */
     if(isGamePage&&!window.LpBgm){
         var bgm=document.createElement('script');
-        bgm.src='/js/lpBgm.js?v=1787049833';
+        bgm.src='/js/lpBgm.js?v=1787052867';
         bgm.defer=true;
         document.body.appendChild(bgm);
     }
@@ -356,12 +288,12 @@ try{
        without waiting on script-load. */
     if(isGamePage&&!window.LpWakeLock){
         var wl=document.createElement('script');
-        wl.src='/js/lpWakeLock.js?v=1787049833';
+        wl.src='/js/lpWakeLock.js?v=1787052867';
         document.body.appendChild(wl);
     }
     if(isGamePage&&!window.LpPhaseTimer){
         var pt=document.createElement('script');
-        pt.src='/js/lpPhaseTimer.js?v=1787049833';
+        pt.src='/js/lpPhaseTimer.js?v=1787052867';
         document.body.appendChild(pt);
     }
 
@@ -375,7 +307,7 @@ try{
     var robotsNoindex=robotsMeta&&/noindex/i.test(robotsMeta.content||'');
     if(!adPolicyOff&&!robotsNoindex&&document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1787049833';
+        s.src='/js/adSlots.js?v=1787052867';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -384,7 +316,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1787049833';
+        rr.src='/js/recentResults.js?v=1787052867';
         document.body.appendChild(rr);
     }
 
@@ -392,20 +324,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1787049833';
+        pwa.src='/js/pwaInstall.js?v=1787052867';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1787049833';
+    tr.src='/js/lpTrack.js?v=1787052867';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1787049833';
+    sh.src='/js/lpShare.js?v=1787052867';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -418,7 +350,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1787049833';
+        rr2.src='/js/lpRoom.js?v=1787052867';
         rr2.defer=true;
         document.body.appendChild(rr2);
 
@@ -427,7 +359,7 @@ try{
            every online game can `LpHostCtl.install({role,room,...})`
            without per-game script tag bookkeeping. */
         var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1787049833';
+        hc.src='/js/lpHostCtl.js?v=1787052867';
         hc.defer=true;
         document.body.appendChild(hc);
 
@@ -435,7 +367,7 @@ try{
            `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
            fired by lpRoom; auto-mounts without any per-game wiring. */
         var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1787049833';
+        mp.src='/js/lpMultiplayer.js?v=1787052867';
         mp.defer=true;
         document.body.appendChild(mp);
     }
@@ -445,7 +377,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1787049833';
+        ls.src='/js/lpSocial.js?v=1787052867';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -456,7 +388,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1787049833';
+        la.src='/js/lpActivity.js?v=1787052867';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -471,7 +403,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1787049833';
+        lp.src='/js/lpPresence.js?v=1787052867';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -481,7 +413,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1787049833';
+        li.src='/js/lpInvite.js?v=1787052867';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -491,7 +423,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1787049833';
+        lib.src='/js/lpInviteButton.js?v=1787052867';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -500,7 +432,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1787049833';
+        ln.src='/js/lpNotify.js?v=1787052867';
         ln.defer=true;
         document.body.appendChild(ln);
     }
@@ -510,12 +442,5 @@ try{
        bails if fewer than 3 <h2> are present (auto-protects against
        short posts). Exists in a separate file so non-blog pages don't
        pay the JS payload cost. */
-    var isBlogPost = /^\/blog\/[^/]+\/?$/.test(location.pathname);
-    if(isBlogPost && !window.LpReadingAids){
-        window.LpReadingAids = true;
-        var ra = document.createElement('script');
-        ra.src = '/js/blogReadingAids.js?v=1787049833';
-        ra.defer = true;
-        document.body.appendChild(ra);
-    }
+    
 })();

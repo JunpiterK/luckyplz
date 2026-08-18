@@ -4,186 +4,118 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Site Identity & Mission (READ FIRST)
 
-> **2026-08-13 방향 전환 — luckyplz.com 은 이제 "게임 전문 사이트" 다.**
-> 메인 페이지·공용 푸터는 **게임 관련 진입점만** 노출한다. 블로그·도구(툴)로 가는 링크는 홈/푸터에서 모두 제거했다(commit d35d2ac9181). **다시 추가하지 말 것.**
-> - 블로그/도구 **콘텐츠 파일**(`public/blog/*`, `public/tools/*`)은 삭제하지 않고 보존한다 — 운영자가 다른 웹사이트에서 재활용할 예정.
-> - **자동발행 cron 은 모두 비활성화**했다(`daily-cron`·`sports-cron`·`worldcup-cron`·`cron-monitor` 의 `schedule:` 주석 처리). 스크립트·프롬프트·`workflow_dispatch`(수동 실행) 경로는 그대로 남겨 뒀다. 콘텐츠를 타 사이트로 옮길 때 재사용 가능.
-> - 아래의 "블로그 2축" 관련 서술과 Blog Authoring 규칙은 **이 사이트 기준으로는 비활성**이며, 콘텐츠를 다른 사이트로 옮길 때의 작성 규칙 참고용으로만 남겨 둔다.
+> **luckyplz.com 은 랜덤 뽑기·내기 게임 전용 사이트다.**
+> 2026-08-18 자로 블로그·도구·AI Labs 를 **별도 저장소 `C:\code\python\luckyplz_blog` 로 완전히 분리**했다.
+> 이 저장소에는 **게임과 게임을 굴리는 인프라만** 남는다.
 
-**(구 정체성, 참고용) luckyplz.com 은 두 축으로 운영된다.** 새 기능·새 글·새 디자인 변경은 이 정체성을 반드시 기준으로 삼는다.
+### 왜 이렇게 좁혔나
 
-### 1. 게임 — 친구들과 함께 쓰는 작은 도구
-- **목적**: 친구·동료와 함께 내기·벌칙·역할 정하기, 또는 잠깐의 시간 떼우기.
-- **두 카테고리**:
-  - **행운 게임** — 룰렛, 사다리, 로또, 주사위, 팀나누기. 결정·내기·벌칙 도구.
-  - **레트로 액션** — 스네이크, 팩맨, 테트리스, 카레이싱, 등 기록 갱신·심심풀이.
-- **원칙**:
-  - 모든 게임은 **로그인 없이 즉시 플레이 가능해야 한다**. 로그인은 소셜/멀티플레이 기능에만.
-  - 모바일 우선 (세로 폰), 데스크탑·태블릿은 확장.
-  - 한 게임 = 한 HTML 파일 (inline CSS/JS, 자가완결). 게임 간 의존성 만들지 말 것.
+운영자 판단: *"랜덤게임을 주력으로 하는 사이트로 오랫동안 인식시키는 게 조금이라도 수익을 낼 수 있는 유일한 방법"*.
 
-### 2. 블로그 — 테크 위주 + 관련 종목 + 매일 증시 + 스포츠
-- **목적**: 기술·산업·금융·스포츠를 다루는 깊이 있는 글로 사이트 트래픽·신뢰 구축.
-- **네 갈래**:
-  - **자동 발행 (증시)** — 매일 증시 글 (US 마감·프리마켓 / KR 개장·마감 / CN 개장·마감, 3개 시장 × 2 슬롯). `scripts/auto-daily-post.py` 가 GitHub Actions cron 으로 작동. ko + en + ja + zh 자동 동시 작성.
-  - **자동 발행 (스포츠)** — 매일 라리가·EPL·MLB 경기 결과·이슈. `scripts/auto-sports-post.py`. 리그 summary 는 객관적 테이블/이슈, 응원 코멘트는 축구=레알 마드리드·맨유, 야구=LA 다저스 팬 관점.
-  - **수동 작성 시리즈** — Anthropic 시리즈, SpaceX 시리즈, AI 진화사, 우주 진화사 등 깊이 있는 longform.
-  - **수동 작성 단편** — 산업·게임·확률 등 단발성 글.
-- **카테고리 (8종, 2026-06-11 개편 + 2026-06-20 robotics 신설)**: `stocks`(증시), `industry`(산업), `ai-tech`(AI·테크), `space-tech`(우주 Tech), `robotics`(로봇), `football`(축구), `baseball`(야구), `gaming-history`(게임). 정의는 [public/blog/posts.js](public/blog/posts.js) 의 `BLOG_CATEGORIES` 가 단일 진실원천. 추가는 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 카테고리 추가 절차 참조.
-  - 개편 매핑: 구 `industry`(경제·산업) → 데일리 증시는 `stocks`, 섹터/경제 심층은 `industry`(라벨만 산업으로). 구 `lifestyle`+`probability` → `gaming-history`(라벨 게임). 신설 `football`·`baseball`. 구 슬러그(`lifestyle`/`probability`/`build`/`tech-space`)는 index.html 검증에서 "all" 로 폴백.
+근거는 2026-08-18 수익화 감사([docs/MONETIZATION_AUDIT_2026-08.md](docs/MONETIZATION_AUDIT_2026-08.md)):
+- 구글 2026 심사·랭킹 기준은 **주제 깊이(topical authority)** 이고, 분산된 사이트는 감점된다
+- 게임 사이트에 증시·AI·우주 글이 섞여 있으면 도메인 주제가 무엇인지 신호가 흐려진다
+- AdSense "low value content" 3회 이상 거절 이력이 있어, 주제 일관성 회복이 승인 확률의 핵심 레버
 
-### 운영자의 압축 메시지
-> 게임은 소소하게 친구들과 쓰는 도구, 블로그는 테크 위주 깊이 있는 글. 둘 다 **한국어·영어·일본어·중국어(간체) 4종 동시 운영**.
+### 하지 말 것 (되돌리기 금지)
 
-### 4개국어 운영 — 청중 매핑
-| 언어 | ISO 639-1 | 메인페이지 라우팅 | 청중 |
-|---|---|---|---|
-| **한국어** | `ko` | 한국어 선택 시 | 국내 본진 |
-| **영어** | `en` | 영어 또는 기타 라우팅 미지정 시 (default) | 글로벌 / SEO 표준 |
-| **일본어** | `ja` | 일본어 선택 시 | 일본 AI·테크 시장 |
-| **중국어(간체)** | `zh` | 중국어 선택 시 | 중국 본토·홍콩 (중국 증시 자동발행과 연계) |
+- **홈·푸터·게임 페이지에 블로그/도구/랩 링크를 다시 추가하지 말 것.** 의도적으로 전부 제거했다.
+- `/blog/`·`/tools/`·`/labs/`·`/all/` 경로를 되살리지 말 것. `public/_redirects` 에서 **410 Gone** 으로 색인 제거 중이다.
+- 콘텐츠가 필요하면 **게임에 대한 콘텐츠**를 만든다. 게임과 무관한 주제는 `luckyplz_blog` 쪽 일이다.
 
-자동발행 증시 글은 **3개 시장 × 2 슬롯 = 6 슬롯**, 각 슬롯이 4 언어로 출력되어 하루 **24개 글**이 생성된다. 한국·미국 외에 **중국 증시 (cn-open / cn-close)** 도 자동발행 대상. 자세한 시스템은 [scripts/prompts/README.md](scripts/prompts/README.md).
+### 게임 — 친구들과 함께 쓰는 작은 도구
 
----
+- **목적**: 친구·동료와 내기·벌칙·역할 정하기, 또는 잠깐의 시간 떼우기
+- **두 카테고리**
+  - **행운/뽑기 (핵심 정체성)** — 룰렛, 사다리, 로또, 팀뽑기, 주사위, 빙고. 결정·내기·벌칙 도구
+  - **레트로 액션 (부가)** — 스네이크, 닷 러너, 블록 스택, 카레이싱 등 기록 갱신·심심풀이
+- **원칙**
+  - 모든 게임은 **로그인 없이 즉시 플레이 가능**해야 한다. 로그인은 소셜/멀티플레이 기능에만
+  - 모바일 우선(세로 폰), 데스크탑·태블릿은 확장
+  - 한 게임 = 한 HTML 파일 (inline CSS/JS, 자가완결). 게임 간 의존성 만들지 말 것
 
-## Blog Authoring (MANDATORY — 4 languages by default)
+### 상표 주의 (2026-08-18 중립화 완료)
 
-**모든 새 블로그 글은 한국어 + 영어 + 일본어 + 중국어(간체) 4종 동시 작성한다. 이건 default 다. 다른 언어판은 절대 별도 요청을 기다리지 않는다.**
+레트로 아케이드 2종은 상표를 피해 중립 명칭을 쓴다. **되돌리지 말 것.**
 
-### Why mandatory
-사이트의 언어 선택은 메인 페이지에서 결정된다: **한국어 → `ko`, 일본어 → `ja`, 중국어 → `zh`, 그 외 모두 → `en`**. 한 언어만 올리면 다른 언어 사용자에게는 그 글이 존재하지 않는 것과 같다. 자동 발행 시스템도 같은 정책을 따르며, **3개 시장 (us/kr/cn) × 2 슬롯 × 4 언어 = 하루 24개 글**을 생성한다.
+| 디렉토리(식별자) | 표시명 |
+|---|---|
+| `games/pacman/` | 닷 러너 / Dot Runner |
+| `games/tetris/` | 블록 스택 / Block Stack |
 
-### Source-of-truth 언어
-- **자동발행 증시 글**: 원천은 **영어**로 작성된다. 영어를 기준으로 ko·ja·zh 로 자연스럽게 번역. (Claude 단일 호출에서 4 언어 JSON 필드 모두 출력 → 비용 절약 + 일관성)
-- **수동 작성 일반 블로그**: 원천은 **한국어**로 작성된다. 한국어를 기준으로 en·ja·zh 로 자연스럽게 번역.
-
-### Slug 규칙
-- **ko**: `<slug>` (예: `anthropic-story-03-claude-evolution`) — 한국어가 base slug
-- **en**: `<slug>-en`
-- **ja**: `<slug>-ja`
-- **zh**: `<slug>-zh`
-- 각 언어판 디렉토리는 `public/blog/<slug>[/-en/-ja/-zh]/index.html`
-
-### 작업 흐름 (사용자가 따로 요청하지 않아도 자동 적용)
-1. `scripts/new-blog-post.py --slug <s> --category <c>` 로 4개 디렉토리·posts.js 엔트리·sitemap 자동 비계.
-2. 또는 수동 작성 시 4개 디렉토리·HTML·posts.js 엔트리 모두 만든다.
-3. 각 HTML 의 `<html lang="…">` 와 `hreflang` 메타 정확히 설정.
-4. posts.js 의 `alt` 필드로 ko↔en↔ja↔zh 상호 연결.
-5. sitemap.xml 의 `<xhtml:link rel="alternate" hreflang="…">` 블록 4개 등록.
-
-### 시리즈물 (Anthropic Story 등) 규칙
-- 시리즈는 일관된 시각 테마를 가진다. 새 시리즈 시작 시 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 에 등록.
-- 현재 시리즈:
-  - **An Anthropic Story** — 베이지 책 테마 (`#f5ebd8` paper, Noto Serif KR + Cormorant Garamond). 챕터 구조: Prologue → Ch.1~N → Epilogue → series-nav → footnotes → footer-block.
-  - **AI Evolution (ai-evo)** — 1~8편 기술 진화사.
-  - **Space Evolution (space-evo)** — 1~10편 우주 진화사.
-  - **Humanoid Robots (humanoid-robots)** — 베이지 책 테마, `robotics` 카테고리. 8편 (역사·현재·기술·증시·미국·일본·한국·중국). **실제 사진 필수** (Wikimedia CC/PD, `assets/humanoid-robots/ep<NN>/`). 자세한 규칙은 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 3.5.
-- 시리즈 글의 어조 규칙 (사용자 반복 강조):
-  - **em-dash 사용 금지** (단절감). 쉼표·세미콜론·새 문장으로 풀어 쓸 것.
-  - **AI 자기언급 금지** — "이 글은 Claude 가 작성했습니다" 같은 메타 문장 금지. 사람 글 느낌.
-  - **문장 종결 다양하게** — "~다.", "~이다.", "~었다." 같은 한 가지 종결만 반복하지 말 것.
-  - **너무 딱딱하지 않으면서 너무 천박하지도 않게** — 진지한 스토리텔링 어조.
-
-### 면책 표기 표준
-모든 글 footer 에 `footer-block` 또는 동등한 박스로 면책 명시:
-- 출처: 공개 인터뷰·언론 보도·기업 공식 발표
-- 일부 세부는 추정·재구성될 수 있음을 명시
-- 시리즈물은 다음 회 안내 (`series-nav`) 포함
+- 표시명(title·og·h1·i18n `gameTitle`/`subtitle`·설명문)은 16개 언어 전부 중립화됨 — `scripts/neutralize-trademarks.py` (멱등)
+- **내부 식별자는 절대 바꾸지 말 것**: `gameKey:'tetris'`, `tetris_leaderboard` RPC, CSS 클래스, URL 슬러그 → 바꾸면 Supabase 리더보드와 기존 공유 링크가 깨진다
 
 ---
 
 ## Commands
 
-- Run local dev server: `python server.py` (or double-click `start.bat` on Windows). Serves `public/` on `http://localhost:8080`; `HOST`/`PORT` env vars override. The LAN IP is printed so same-Wi-Fi devices can test mobile.
-- Install deps: `pip install -r requirements.txt` (only Flask).
-- **Bump cache version before every commit that touches HTML or shared JS/CSS:** `bash scripts/bump-cache.sh`. Rewrites every `?v=<stamp>` query on `/js/*.js`, `/blog/*.js`, and `/css/*.css` references to the current epoch so browsers ignoring `no-cache` still fetch fresh bundles. See the "Cache policy" section.
-- **Re-inject blog-desktop.css link after creating new blog posts:** `python scripts/inject-blog-desktop-css.py`. Idempotent — adds the `<link rel="stylesheet" href="/css/blog-desktop.css?v=…">` tag right before `</head>` in every `public/blog/*/index.html` (including the blog index). Run after `bump-cache.sh` so it picks up the latest version stamp.
-- There is no build step, bundler, lint, or test suite. Production is served as static files by Cloudflare Pages — `server.py` exists only for local preview and must mirror Pages' routing (directory → `index.html`).
-- **Scaffold a new blog post (ko + en + ja + zh 동시):** `python scripts/new-blog-post.py --slug <slug> --category <cat> --title-ko "…" --title-en "…" --title-ja "…" --title-zh "…"`. 4개 디렉토리 + posts.js 엔트리 + sitemap hreflang 블록을 한 번에 만든다. 시리즈물은 `--series anthropic-story` 등으로 테마 자동 적용. 자세한 옵션은 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md).
+- 로컬 개발 서버: `python server.py` (또는 `start.bat`). `public/` 을 `http://localhost:8080` 에 서빙. `HOST`/`PORT` 환경변수 override
+- 의존성: `pip install -r requirements.txt` (Flask만)
+- **HTML 또는 공용 JS/CSS 를 건드린 커밋 전 반드시**: `bash scripts/bump-cache.sh` (아래 Cache policy 참조)
+- 빌드·번들러·린트·테스트 없음. 프로덕션은 Cloudflare Pages 가 정적 파일로 서빙하고, `server.py` 는 로컬 미리보기 전용이며 Pages 라우팅(디렉토리 → `index.html`)을 그대로 흉내 내야 한다
 
-## Blog Publishing Checklist (every new post)
+### 게임 콘텐츠 도구
 
-새 블로그 글 발행 시 아래 순서를 모두 거친다. 자동화된 부분은 `new-blog-post.py` 가 처리하지만, 본문 작성은 사람·AI 가 직접.
+- `python scripts/inject-game-about.py` — 게임 하단 가시 SEO 콘텐츠(`lp-game-about` 섹션) + FAQPage 스키마 주입 (멱등, 펜스 `<!--lp-game-about:start/end-->`). 새 게임에 콘텐츠를 붙일 때 `CONTENT` 딕셔너리에 항목 추가
+- `python scripts/neutralize-trademarks.py [--dry-run]` — 상표성 표시명 중립화 (멱등)
+- `python scripts/gen-og-games.py` / `gen-og-main.py` — 게임별·사이트 대표 OG 이미지 생성
 
-1. **4개 디렉토리 생성** — `public/blog/<slug>/`, `<slug>-en/`, `<slug>-ja/`, `<slug>-zh/` 각각에 `index.html`.
-2. **본문 작성** — 원천 언어 먼저 (자동발행=en, 수동=ko), 그 다음 같은 데이터로 나머지 3 언어 자연스러운 번역(기계번역체 금지).
-3. **메타데이터 일치** — 각 HTML 의 `<html lang>`, `<title>`, `<meta description>`, `og:locale`, `canonical` 모두 해당 언어판 URL/언어로 정확히.
-4. **hreflang 상호 링크** — 각 HTML `<head>` 에 ko/en/ja/zh 4개 `hreflang` 등록.
-5. **posts.js 엔트리 4개** — 각 lang 별 entry, `alt` 필드로 상호 연결 (다른 3 언어 슬러그 모두 forward-link).
-6. **sitemap.xml 등록** — 4개 `<url>` 블록, 각각 `<xhtml:link rel="alternate" hreflang="…">` 4 줄씩.
-7. **이미지 자산** — `public/assets/<series>/<ep>/fig-NN.{jpg,png}` 위치 확인.
-8. **blog-desktop.css inject** — `python scripts/inject-blog-desktop-css.py` (멱등, 새 파일에만 추가).
-8.5. **color-scheme inject** — `python scripts/inject-color-scheme.py --apply` (멱등). 밝은 글에 `<meta name="color-scheme" content="light">` 주입해 브라우저 force-dark(밝은 베이지 배경이 거무튀튀하게 반전되는 버그) 방지. 배경색으로 light/dark 자동 판별 (daily 증시 글은 dark). 2026-06-20 사고 대응 — 누락 시 새 밝은 글이 데스크탑/모바일 다크모드에서 거무튀튀하게 보인다.
-9. **cache bump** — `bash scripts/bump-cache.sh`.
-10. **로컬 미리보기** — `python server.py` 로 ko/en/ja/zh 4판 모두 열어 본문·이미지·hreflang 확인.
-11. **commit** — 메시지에 ko/en/ja/zh 모두 포함됨을 명시.
-12. **git pull --rebase + push** — race 안전 패턴 (cron 자동발행과 충돌 회피).
-
-**4개 언어 중 하나라도 빠진 채 commit 하지 말 것.** 부족한 언어판이 있으면 commit 전에 task 로 등록하고 다음 세션 우선 처리.
+---
 
 ## Architecture
 
-**Static multi-page site, no framework.** Every game lives at `public/games/<name>/index.html` as a standalone, self-contained HTML file (inline CSS + JS, own `<head>` SEO block). Keep games independent — do not introduce shared bundlers or cross-game imports; copy-paste is the intended pattern so a game can be edited without regression risk to others. Games currently shipped: `car-racing`, `dice`, `ladder`, `lotto`, `roulette`, `team`.
+**Static multi-page site, no framework.** 모든 게임은 `public/games/<name>/index.html` 에 자가완결 HTML(inline CSS+JS, 자체 `<head>` SEO 블록)로 존재한다. 게임끼리 독립을 유지할 것 — 공용 번들러나 게임 간 import 를 도입하지 말고, 복붙이 의도된 패턴이다(한 게임을 고쳐도 다른 게임이 깨지지 않게).
 
-**Blog has shared cross-cutting concerns** (related-posts injection via `blogRelated.js`, subscribe form via `blogSubscribe.js`, history-based recommendations) that don't fit the games' "fully self-contained" rule. Blog posts also share a single desktop layout override at `public/css/blog-desktop.css` — the inline mobile-first CSS in each blog HTML caps body at 480px (handcrafted for phones), and the desktop stylesheet kicks in at ≥768px to widen the column to 760–820px without touching the inline rules. The link tag is auto-injected into every `public/blog/*/index.html` by `scripts/inject-blog-desktop-css.py` (idempotent, marker-fenced). Run that script after creating a new blog post or it will look 480px-narrow on desktop.
+현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing` `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(블록 스택).
 
-**Hosting & deploy.** Repo is `JunpiterK/luckyplz`; Cloudflare Pages project `luckyplz` auto-deploys `main` with build output dir `public`. `public/_headers` controls Cloudflare cache rules — HTML, `/games/*`, and `/js/*` are `no-cache` so edits go live immediately; `/assets/*` and `*.mp3` are cached 1 week.
+**게임 SEO 랜딩 3종** — `/wheel-spinner/`, `/team-generator/`, `/dice-roller/`. 게임을 iframe 으로 임베드하고 영어 콘텐츠+FAQ 스키마를 얹은 검색 유입용 페이지. 게임 본체는 수정하지 않는다.
 
-**Cache policy — three-layer airbag (MUST READ before committing).** Mobile browsers (Chrome Android, Samsung Internet, older iOS Safari) repeatedly ignore the `no-cache` header for HTML and dynamically-injected `<script>` tags. After half a dozen "내 폰에서는 그대로야" reports the policy is now belt-AND-suspenders-AND-airbag. **Run `bash scripts/bump-cache.sh` before every commit that touches HTML or any file under `public/js/`** — it updates all three layers in lockstep:
+**게임 페이지 가시 콘텐츠 (`lp-game-about`).** 게임 페이지는 풀스크린 캔버스라 텍스트가 거의 없었고(61~115단어), 이는 검색 랭킹·AdSense 심사 양쪽에서 치명적이었다. 그래서 게임 하단에 사용법·원리·팁·활용사례·FAQ 를 담은 섹션을 붙인다.
+- **숨김 텍스트가 아니다**: `html,body{overflow:hidden}` 은 `@media(min-width:900px)` 안에만 있어, 모바일에서는 정상 스크롤로 도달한다. 구글은 모바일 우선 색인이므로 이 콘텐츠를 정상적으로 읽는다. 과거의 `left:-9999px` 방식(가이드라인 위반)은 이미 제거됐고 되살리면 안 된다
+- 현재 적용: `ladder`(715단어) `roulette`(601) `lotto`(599) `bingo`(546) `team`(544). 나머지 12종은 미적용 — 2026 기준 **600단어 미만은 thin** 이므로 순차 확대 대상
 
-1. **`?v=<stamp>` query rewrites** on every shared JS reference (`/js/*.js`, `/blog/posts.js`, plus the dynamic injection inside `siteFooter.js`). Forces the URL itself to change so even cache layers that ignore headers see a different resource.
-2. **`/build.json` lighthouse** — a tiny JSON file with `{"v":"<stamp>"}`. Served with `Cache-Control: no-store` and fetched by every pageload. The single source of truth for "what is the live build?".
-3. **Inline build-check `<script>`** baked into the `<head>` of every HTML page (fenced by `<!--lp-build-check:start-->` / `<!--lp-build-check:end-->`). Compares the version baked into the HTML it shipped with against `/build.json` — on mismatch it hard-reloads with a `_b=<live>` cache-busting query so the browser MUST go back to the network. `sessionStorage` caps it to one reload per stale-HTML version, so users never loop.
+**Hosting & deploy.** 저장소 `JunpiterK/luckyplz`, Cloudflare Pages 프로젝트 `luckyplz` 가 `main` 을 자동 배포(빌드 출력 디렉토리 `public`). `public/_headers` 가 캐시 규칙을 통제 — HTML·`/games/*`·`/js/*` 는 `no-cache` 로 즉시 반영, `/assets/*` 와 `*.mp3` 는 1주 캐시.
 
-`public/_headers` separately serves `/*.html`, `/`, `/games/*`, `/js/*`, `/blog/posts.js`, and `/build.json` with `Cache-Control: no-store, no-cache, must-revalidate, max-age=0`. Together this means a deploy lands within one fetch on every device — even if a CDN edge or mobile cache layer would otherwise have served the previous build for hours. The only state that SHOULD survive across visits is localStorage (saved groups/presets/nicknames + game history). Everything else reaches users on the next page load; if it doesn't, you forgot to run `bump-cache.sh`.
+**Cache policy — 3중 에어백 (커밋 전 필독).** 모바일 브라우저(Chrome Android, 삼성인터넷, 구형 iOS Safari)는 HTML 과 동적 주입 `<script>` 에 대해 `no-cache` 헤더를 반복적으로 무시한다. **HTML 또는 `public/js/` 하위를 건드린 커밋 전에는 반드시 `bash scripts/bump-cache.sh`** 를 돌린다. 세 층이 한꺼번에 갱신된다:
 
-**Cache policy — operating workflow (MUST READ when doing series-scale work).** The three-layer mechanism above is correct and must NOT be simplified. What changed after the 2026-05-26 incident is **how often `bump-cache.sh` is run**, not what it does. The script rewrites the build stamp across 200+ HTML files on every invocation; running it 4 times in a single afternoon (which is what happened during the Anthropic series rollout: Ep.3+4 / Ep.5 / Ep.6 / Ep.7) produced 4 back-to-back commits of ~225 modified files each, and GitHub's automated abuse detection temporarily suspended the account at UTC 12:24 — exactly during the us-premarket cron window, which then silently missed. Recovery was clean (account auto-restored within hours, missed slot manually triggered via `gh workflow run`), but to never trip the same wire again, the workflow rules are:
+1. **`?v=<stamp>` 쿼리 재작성** — 모든 공용 JS 참조(`/js/*.js`)와 `siteFooter.js` 내부의 동적 주입까지. URL 자체를 바꿔 헤더를 무시하는 캐시 층도 새 리소스로 인식하게 한다
+2. **`/build.json` 등대** — `{"v":"<stamp>"}` 한 줄. `Cache-Control: no-store` 로 서빙되며 모든 페이지로드가 fetch 한다. "지금 라이브 빌드가 뭔지"의 단일 진실원천
+3. **인라인 build-check `<script>`** — 모든 HTML `<head>` 에 `<!--lp-build-check:start/end-->` 펜스로 박힌다. HTML 에 baked 된 버전과 `/build.json` 을 비교해 불일치면 `_b=<live>` 쿼리를 붙여 하드 리로드. `sessionStorage` 로 stale 버전당 1회만 리로드하므로 루프가 없다
 
-1. **One bump-cache run per working session, not per commit.** If you are doing a series-scale change (e.g. writing Ep.N of a 4-language series), DO all the writes first, then run `bump-cache.sh` ONCE at the end, then commit ONCE. The stamp is the same across all the new files anyway — running the bumper between sub-steps just multiplies the commit size for zero user-visible benefit.
-2. **Series-scale work should land in 1–2 commits, not one-per-episode.** The 2026-05-26 incident was 4 large commits in ~6 hours. Combine them.
-3. **If multiple large commits are unavoidable, leave ≥30 minutes between pushes.** This avoids colliding with the auto-publish cron schedule (`30 19` us-close / `0 22` kr-open / `30 23` cn-open / `35 6` kr-close / `5 7` cn-close / `30 12` us-premarket, all UTC) and keeps the rate-of-large-commits below the abuse threshold.
-4. **The auto-publish cron itself is fine — leave it alone.** Each cron commit touches ~5 new files (one slot's HTML in 4 languages plus a posts.js + sitemap.xml insert) and does NOT call `bump-cache.sh`. That keeps it well under any reasonable abuse threshold and is why cron commits have never tripped detection.
-5. **If you see `remote: Your account is suspended` from git or in Actions logs**, do NOT retry in a loop. Wait ~30 minutes (the 2026-05-26 case auto-resolved in roughly that window), then verify with a small fetch. Any cron run that was scheduled inside the suspension window is lost — recover it manually with `gh workflow run daily-cron.yml -f slot=<slot>` once the account is back. `cron-monitor.yml` will also flag it, but the monitor itself is subject to the same suspension so cannot self-heal in that window.
+`public/_headers` 는 별도로 `/*.html`·`/`·`/games/*`·`/js/*`·`/build.json` 을 `no-store, no-cache, must-revalidate, max-age=0` 으로 서빙한다. 방문자 간 유지돼야 하는 유일한 상태는 localStorage(저장 그룹·프리셋·닉네임·게임 기록)뿐이다.
 
-**Auto-publish holiday guard (MUST READ before changing cron / monitor / auto-daily-post.py).** 자동 발행 슬롯 6개는 시장 휴장일에 발행하면 안 된다. 2026-05-30 (토) / 5-31 (일) 사고 — Tier-1 weekend 가드가 코드상 있었음에도 9개 슬러그가 토·일에 발행돼 Friday 데이터를 잘못된 날짜로 노출했다 (총 36 디렉토리 + posts.js + sitemap + OG 일괄 삭제). 사고 후 적용된 3중 가드 규칙:
+**Cache policy — 운영 규칙 (대규모 작업 시 필독).** 위 3중 장치는 단순화 금지. 2026-05-26 사고 이후 바뀐 것은 **실행 빈도**다. 스크립트는 매 호출마다 2,000개 이상 HTML 의 빌드 스탬프를 재작성하므로, 하루에 4번 돌렸다가 ~225개 파일 수정 커밋이 연속 4개 생기며 GitHub 자동 어뷰징 탐지에 계정이 일시 정지됐다.
 
-1. **Tier-0 weekend = UNCONDITIONAL** — `scripts/auto-daily-post.py` 의 `is_weekend()` 는 `args.force` 도 `--bypass-holiday-guard` 도 **절대** 무력화 못 한다. Sat/Sun 의 trading_date 는 늘 skip + HC success ping. weekend 가드는 `if not args.force` 블록 밖으로 빼야 한다 (자동화 경로에서 force 가 무심코 켜지면 막을 길이 없어진다 — 사고의 추정 원인).
-2. **Tier-1 exchange holiday = bypassable only with `--bypass-holiday-guard`** — `exchange_calendars` 캘린더에 의존. `--force` 는 더 이상 휴장 가드를 무력화하지 않는다 (의미 분리). 그리고 캘린더 lookup 실패 시 이제 **HARD-FAIL** (skip + HC fail ping). 이전 "default to open" 동작이 silent failure 의 원인이었기 때문에, 모르면 **발행 안 함** 이 원칙.
-3. **cron-monitor 도 자체 weekend 가드** — `.github/workflows/cron-monitor.yml` 의 첫 step 에서 `dow_kst` 계산해 KST 가 Sat/Sun 이면 `MONITOR_WEEKEND=1` 환경변수 세팅. 모든 rescue step 은 `if: env.MONITOR_WEEKEND != '1'`. us-close 만 yesterday-KST 의 DOW 를 따로 확인 (offset=-1 이라 어제가 weekend 면 어제용 recap 도 발행 안 함).
+1. **커밋당이 아니라 세션당 1회.** 여러 파일을 고칠 때는 전부 쓴 뒤 마지막에 한 번만 돌리고 한 번만 커밋한다
+2. **대규모 작업은 1~2 커밋으로.** 잘게 쪼개 여러 번 푸시하지 말 것
+3. **불가피하게 여러 대형 커밋이 필요하면 푸시 사이에 30분 이상** 둔다
+4. `remote: Your account is suspended` 가 보이면 루프 재시도 금지. ~30분 대기 후 작은 fetch 로 확인
 
-운영 규칙:
-- `--force` = duplicate-publish guard 만 우회 (이미 있는 슬러그 덮어쓰기). 휴장 가드는 안 건드림.
-- `--bypass-holiday-guard` = Tier-1 휴장 가드만 우회 (드문 manual essay 용). Weekend 는 여전히 막힘.
-- `--check-only` = 가드만 돌려보고 종료. exit 0 = 발행 대상, 1 = skip 대상. cron-monitor 가 rescue trigger 전 사전 확인 용도로 쓸 수 있음.
-- `exchange-calendars` pin (`requirements.txt` >= 4.10.0) — 4.5.x 는 XSHG 데이터가 2025-12-31 까지라 2026 lookup 시 `DateOutOfBounds` 발생. lookup 실패는 hard-skip 으로 처리되므로 silent 가 아니지만, 핀이 안 맞으면 그 슬롯 1개가 매일 hard-skip 된다. workflow 로그에서 `[guard] tier-1 ... lookup FAILED ... DateOutOfBounds` 보이면 핀 버전 bump.
+**Removed URLs (410 Gone).** 2026-08-18 분리로 사라진 `/blog/*`·`/tools/*`·`/labs/*`·`/all*`·`/unsubscribe/*` 는 `public/_redirects` 에서 **410 Gone** 을 반환한다. 404 로 오래 방치하면 크롤 예산과 품질 평가에 불리하므로, 의도적 제거임을 알려 색인에서 빠르게 내리기 위함이다. 콘텐츠가 다른 도메인에 다시 올라가면 그때 301 로 교체한다. 410 은 `public/404.html` 을 본문으로 쓴다.
 
-휴장에 글이 또 올라간 게 보이면 → (a) 가드가 통과된 이유를 로그에서 확인, (b) `scripts/delete-weekend-posts.py --apply` 로 일괄 정리, (c) 가드 회피 경로 패치. 정리 스크립트는 base + en/ja/zh 4판 + posts.js + sitemap + OG 까지 한 번에 처리하는 멱등 스크립트다.
+**No service worker.** `public/sw.js` 는 레거시 설치본을 자폭시키는 루틴(캐시 전부 삭제 + 자기 등록해제)일 뿐이다. 모든 HTML 은 `siteFooter.js` 직전에 `navigator.serviceWorker.getRegistrations().forEach(unregister)` 인라인도 함께 넣는다. **캐싱 서비스워커를 다시 도입하지 말 것.** 2026년 4월 로또 재디자인 때 stale-SW 디버깅으로 몇 시간을 날렸다.
 
-**Sports auto-publish (라리가·EPL·MLB 일일 발행 — 2026-06-11 신설).** `scripts/auto-sports-post.py` 가 매일 2 슬롯을 발행한다 (`.github/workflows/sports-cron.yml`):
-- **`football-daily`** (category `football`) — 라리가(PD) + EPL(PL), `football-data.org` v4 API. **`FOOTBALL_DATA_KEY` repo secret 필요** (무료 키, https://www.football-data.org/client/register). cron `20 1 * * *` (10:20 KST, 어제 유럽 경기).
-- **`baseball-daily`** (category `baseball`) — MLB, `statsapi.mlb.com` (키 불필요). cron `50 8 * * *` (17:50 KST, 어제 MLB 슬레이트). 응원 관점: 축구=레알·맨유, 야구=LA 다저스.
-- **팩트 안전 설계 (핵심)**: 경기 결과·순위표 테이블은 **API JSON 에서 직접 렌더**된다. Claude 는 점수를 만질 기회가 없고, **산문(summary·이슈·팬 코멘트)만** 작성한다 → 점수 조작이 구조적으로 불가능. 리그 summary·이슈는 객관적, '팬 시각' 박스만 주관적(명시 라벨).
-- **무경기 가드**: 모니터 리그가 그 날짜에 Final 경기 0개면 깨끗하게 skip + HC success ping. 라리가·EPL 여름 휴식기(6~7월)·MLB 오프시즌(11~3월) 자동 비발행. 휴장 weekend 가드는 **불필요**(스포츠는 주말에도 경기) — 증시 가드 로직과 혼동 금지.
-- 인프라는 `auto-daily-post.py` 의 검증된 함수(`call_claude` retry+fallback, `notify_healthcheck`, `update_sitemap`, `bump_cache`, `git_push`)를 importlib 로 재사용한다. 템플릿은 `daily-base.html` 공용(스포츠는 `article:section`=Sports 로 치환). CSS 는 `public/css/daily.css` 의 `.sp-*` 컴포넌트. OG 는 `scripts/gen_sports_og.py` (gen_daily_og 폰트 재사용, 축구=초록 잔디·야구=네이비 다이아 테마). 프롬프트는 `scripts/prompts/football-daily.md` / `baseball-daily.md`.
-- 운영 첫 가동: (1) `FOOTBALL_DATA_KEY` secret 등록, (2) `gh workflow run sports-cron.yml -f slot=baseball-daily` 로 야구 1편 즉시 발행 테스트(MLB 시즌 중이라 바로 됨), (3) 축구는 8월 시즌 재개 시 자동 가동. 선택: `HC_URL_FOOTBALL_DAILY` / `HC_URL_BASEBALL_DAILY` HC 체크 추가.
+**Auth / backend.** Supabase 가 유일한 백엔드. 공용 클라이언트는 [public/js/supabase-config.js](public/js/supabase-config.js) 에 있고 `getSupabase()`, `signUp/signIn/signOut`, `getUser`, `onAuthChange`, `getDisplayName` 를 노출한다. anon/publishable 키는 공개 설계라 의도적으로 커밋돼 있다. **핵심 게임은 로그인 없이 플레이 가능해야 한다** — 인증은 소셜/멀티플레이 전용(`public/auth/`). 기존 게임에 로그인 게이트를 추가하지 말 것.
 
-**No service worker.** `public/sw.js` exists only as a self-destruct routine for legacy installs (deletes all caches and unregisters itself on activation). Every HTML page also includes an inline `navigator.serviceWorker.getRegistrations().forEach(unregister)` right before `siteFooter.js` as a belt-and-suspenders cleanup. **Do not re-introduce a caching service worker.** Stale-SW debugging cost hours during the April 2026 Lotto redesign; if you need offline support later, use versioned asset filenames or a signed-off-on plan, not a revival of the old network-first SW.
+**모바일 WebView 주의.** RLS 로 보호된 테이블을 카카오톡 인앱 브라우저에서 직접 SELECT 하면 **무음 실패**한다. 채팅·소셜 읽기는 반드시 SECURITY DEFINER RPC 로만 할 것.
 
-**Auth / backend.** Supabase is the only backend. Shared client lives in [public/js/supabase-config.js](public/js/supabase-config.js) and exposes `getSupabase()`, `signUp/signIn/signOut`, `getUser`, `onAuthChange`, `getDisplayName`. The anon/publishable key is intentionally committed (it's public by design). **Core games must stay playable without login** — auth is only for social/board/multiplayer features (see `public/auth/`). Don't add login gates to existing games.
+**canvas 모달 클릭 함정.** 부모의 `touchstart preventDefault` 가 click 합성을 취소해서, 새 모달 클래스를 `closest('.overlay')` 목록에 추가하지 않으면 **모바일에서만** 버튼이 무반응이 된다. 진단이 매우 어려우니 새 모달 추가 시 반드시 확인.
 
-**Bot protection (Cloudflare Turnstile).** `supabase-config.js` has a `TURNSTILE_SITE_KEY` constant (default empty = disabled). When set, the auth forms (login/signup/password-reset) render a Turnstile widget and pass its token to Supabase, which validates the token against the secret stored in the dashboard. To enable: (1) Cloudflare dashboard → Turnstile → Add a site (domain `luckyplz.com`, mode Managed); (2) paste the SITE KEY into `TURNSTILE_SITE_KEY` in `public/js/supabase-config.js`; (3) paste the SECRET KEY into Supabase dashboard → Authentication → Captcha protection (Provider: Turnstile, Enable). Both keys must match for the system to work — if you deploy the client-side key without configuring the dashboard, Supabase rejects all auth. Turnstile free tier covers 1 M challenges/month, plenty for our scale. The widget uses dark theme (matches the auth page background).
+**Bot protection (Cloudflare Turnstile).** `supabase-config.js` 에 `TURNSTILE_SITE_KEY` 상수가 있다(기본 빈 값 = 비활성). 값을 넣으면 인증 폼이 Turnstile 위젯을 렌더하고 토큰을 Supabase 로 넘긴다. 활성화하려면 (1) Cloudflare → Turnstile → 사이트 추가(`luckyplz.com`, Managed), (2) SITE KEY 를 상수에, (3) SECRET KEY 를 Supabase → Authentication → Captcha protection 에 넣는다. 둘이 맞아야 하며, 클라이언트 키만 배포하면 Supabase 가 모든 인증을 거부한다.
 
-**i18n & SEO.** The site targets 16 languages via `?lang=` query param with full `hreflang` alternates and JSON-LD `ItemList` in [public/index.html](public/index.html). Canonical domain is `https://luckyplz.com/`. When adding pages, replicate the hreflang/canonical/OG block and register the route in `public/sitemap.xml`.
+**i18n & SEO.** 게임은 `?lang=` 쿼리로 16개 언어를 지원하며 `hreflang` alternate 와 JSON-LD `ItemList` 가 [public/index.html](public/index.html) 에 있다. 정규 도메인은 `https://luckyplz.com/`. 페이지를 추가하면 hreflang/canonical/OG 블록을 복제하고 `public/sitemap.xml` 에 등록한다. `.lang-bar` 는 `public/js/langBar.js` 가 주요 5개(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다.
 
-**언어 선택 UI (2026-06-14 개편) — 게임 16 vs 콘텐츠 5.** 게임(홈)은 글로벌 유입 SEO 때문에 16개국어를 유지하되, `.lang-bar` 를 `public/js/langBar.js` 가 5개 주요(en/ko/ja/zh/es) + "🌐 More" 드롭다운으로 정리한다. **콘텐츠(블로그·도구)는 인구×운영 가성비로 5개국어로 선택집중: ko·en·ja·zh·es** (인도는 영어 커버, 중국은 중국어 필수, 스페인어는 중남미, 프랑스어는 영어로 커버되어 제외). 블로그 인덱스·도구 랜딩·도구 페이지에는 공유 선택기 `public/js/langSelect.js` 를 `<div id="lp-langbar"></div>` 마운트로 붙인다. 디렉토리 페이지(hreflang 구분 언어>1)는 hreflang으로 이동·미번역은 영어, 클라이언트 i18n 페이지(블로그/랜딩)는 `?lang` 리로드. **ko/en 기본, ja/zh/es 미번역 시 영어 폴백** (블로그 인덱스 chrome 는 비-ko 전부 영어).
+**구조화 데이터.** 전 게임이 JSON-LD 를 갖는다(BreadcrumbList). 콘텐츠가 붙은 게임은 FAQPage 도 함께 — 화면의 `<dl>` 과 1:1 대응해야 구글 리치결과 요건을 만족한다(보이지 않는 Q&A 를 스키마에만 넣으면 위반).
 
-**Blog content language tiers (다국어 운영 기준).** 메인 페이지의 언어 선택이 블로그에도 그대로 라우팅된다:
-- **Tier A (mandatory, 모든 블로그 글)**: `ko` (한국어), `en` (영어), `ja` (일본어), `zh` (중국어 간체). 새 글은 처음부터 4종으로 만든다. 자세한 룰은 위 "Blog Authoring (MANDATORY)" 섹션 참조. **`es`(스페인어)는 콘텐츠 5번째 타깃 언어** — 선택기에 노출되며 미작성 시 영어 폴백. 새 플래그십 콘텐츠는 es 추가 고려.
-- **Tier B (optional, 특정 트래픽 타깃 글)**: 추가 11언어 (de, es, fr, hi, id, it, pt, ru, th, tr, vi). 현재 `spacex-ipo-2026` 시리즈가 7언어로 운영 중. 새 글이 Tier B 로 갈 필요가 있으면 [docs/BLOG_AUTHORING.md](docs/BLOG_AUTHORING.md) 의 "Tier B 승격 절차" 참조.
-- 메인 페이지의 언어 선택은 게임에도 적용되지만, 게임은 UI 가 가벼워 자동 i18n (브라우저 lang 또는 `?lang=`) 으로 처리. 블로그는 본문 자체가 다른 언어로 작성되어야 하므로 디렉토리 분리.
-- **라우팅 규칙 (메인페이지 언어 선택 → 블로그)**: `ko` → `<slug>/`, `ja` → `<slug>-ja/`, `zh` → `<slug>-zh/`, 그 외 (en 포함 fallback) → `<slug>-en/`.
+**OG 이미지.** 링크로 공유되는 모든 페이지는 내용에 맞는 OG 이미지를 갖춰야 한다. 생성기는 `scripts/gen-og-games.py`(게임별), `scripts/gen-og-main.py`(사이트 대표). 폰트는 `scripts/og-fonts/`.
 
-**Analytics.** GA4 measurement ID is `G-NZDPE3H3DQ` (property: LuckyPlz). The prior `notmeplz.com` ID `G-W91WWVNLD6` should not appear anywhere — grep before committing.
+**Analytics.** GA4 measurement ID 는 `G-NZDPE3H3DQ` (property: LuckyPlz). 이전 `notmeplz.com` ID `G-W91WWVNLD6` 는 어디에도 남아 있으면 안 된다 — 커밋 전 grep 할 것.
 
-**Migration context.** This repo was split from `notmeplz.com` on 2026-04-17 for branding reasons (lucky vs. "not me" tone). `notmeplz.com` now serves only a 4-language landing page pointing here; no code is shared between the repos. Brand text has been fully renamed to "Lucky Please" — if you spot any stray `notmeplz`/`NotMePlz`/"Not Me Please" strings, they're bugs, not intentional.
+**Monetization.** AdSense Publisher ID `ca-pub-5370817769801923`. **현재 미승인**("low value content" 3회+ 거절). 광고 슬롯 ID 3개는 `public/js/adSlots.js` 에 실값으로 있으나, 게임 17종 전부 `<meta name="lp-ad-policy" content="off">` 라서 `adSlots.js` 가 로드조차 되지 않는다 — 즉 **광고 배선 준비도는 0%** 이며 승인이 나도 2~3주 배선 작업이 남는다. 상세는 [docs/MONETIZATION_AUDIT_2026-08.md](docs/MONETIZATION_AUDIT_2026-08.md).
+
+광고 배치 원칙(유지): 게임 플레이 중·설정 화면·홈 상단 **금지**. 결과 화면·홈 하단만 허용. Auto Ads 금지.
+
+**Migration context.** 이 저장소는 2026-04-17 에 브랜딩 이유로 `notmeplz.com` 에서 분리됐다. 브랜드 텍스트는 "Lucky Please" 로 통일됐으니 `notmeplz`/`NotMePlz`/"Not Me Please" 문자열이 보이면 버그다.
+
+**Content split (2026-08-18).** 블로그(2,015 디렉토리)·도구(27)·AI Labs(8)와 관련 스크립트·워크플로·문서는 `C:\code\python\luckyplz_blog` 로 이동했다. 그쪽 콘텐츠가 필요하면 그 저장소에서 작업하고, 이 저장소로 되가져오지 말 것.
