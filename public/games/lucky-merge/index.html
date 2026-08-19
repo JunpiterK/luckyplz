@@ -30,7 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@500;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');</script>
-<script src="/js/lpI18n.js?v=1787180462"></script>
+<script src="/js/lpI18n.js?v=1787183599"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -2489,7 +2489,7 @@ if(navigator.serviceWorker){
   }).catch(()=>{});
 }
 </script>
-<script src="/js/siteFooter.js?v=1787180462"></script>
+<script src="/js/siteFooter.js?v=1787183599"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
@@ -2504,7 +2504,10 @@ if(navigator.serviceWorker){
    스크롤해서 읽을 때 게임 UI 가 글자 위에 떠 있으면 안 된다.
    배경은 불투명 + 전체 폭이어야 뒤의 고정 UI 가 좌우로 비치지 않는다. */
 .lp-game-about{position:relative;z-index:9100;width:100%;
-  margin-top:100vh;margin-top:100dvh;
+  /* flex-hidden 바디 게임: 이 섹션이 flex 아이템으로 높이를 차지하면
+     게임 영역이 짓눌린다(2026-08-20 벽돌깨기 4×4px 사고). absolute 로
+     흐름에서 빼 화면 아래에 둔다 — 비가시(overflow:hidden)·색인 유지. */
+  margin-top:0;position:absolute;top:100%;left:0;
   background:#0A0A1A;
   padding:36px 20px 80px;color:rgba(255,255,255,.78);
   font-family:'Noto Sans KR','Pretendard',-apple-system,sans-serif;
@@ -2618,6 +2621,26 @@ if(navigator.serviceWorker){
   function place(){
     el = el || document.querySelector('.lp-game-about');
     if (!el) return;
+    /* (2026-08-20 사고 수정) body 가 고정 높이 flex 컬럼 + overflow:hidden 인
+       게임(brick·tetris·lucky-merge·starship-lander)에서는 이 섹션의 큰
+       margin 이 flex 컨테이너를 넘치게 해 형제인 게임 영역이 flex-shrink 로
+       짓눌린다 — 벽돌깨기 캔버스가 4×4px 가 됐다. 그런 레이아웃에서는 밀기
+       자체를 포기한다(섹션은 어차피 overflow:hidden 아래라 이전부터 화면에
+       안 보였고, DOM 텍스트는 색인된다). */
+    var bs = getComputedStyle(document.body);
+    if (bs.display === 'flex' &&
+        ((bs.overflowY || '').indexOf('hidden') !== -1 || (bs.overflow || '').indexOf('hidden') !== -1)) {
+      /* margin 0 으로는 부족하다 — 섹션 자체 높이(~2900px)가 flex 아이템으로
+         컨테이너를 넘치게 해 게임 영역이 여전히 짓눌렸다(실측: 벽돌깨기
+         캔버스 4×4px, about 제거 시 364×524 회복). absolute 로 흐름에서
+         완전히 빼서 화면 아래(top:100%)에 둔다 — overflow:hidden 이라
+         이전과 동일하게 비가시이고, DOM 텍스트는 그대로 색인된다. */
+      el.style.marginTop = '0px';
+      el.style.position = 'absolute';
+      el.style.top = '100%';
+      el.style.left = '0';
+      return;
+    }
     el.style.marginTop = '0px';
     var need = Math.max(0, (window.innerHeight || 0) - docTop(el));
     el.style.marginTop = need + 'px';
