@@ -248,7 +248,7 @@ try{
        and is idempotent across multiple loads. */
     if(!window.LpFullscreen){
         var fs=document.createElement('script');
-        fs.src='/js/lpFullscreen.js?v=1787105194';
+        fs.src='/js/lpFullscreen.js?v=1787114394';
         document.body.appendChild(fs);
     }
 
@@ -261,7 +261,7 @@ try{
        the right browser from the first hop, not just /games/*. */
     if(!window.LpInAppExit){
         var ia=document.createElement('script');
-        ia.src='/js/lpInAppExit.js?v=1787105194';
+        ia.src='/js/lpInAppExit.js?v=1787114394';
         ia.defer=true;
         document.body.appendChild(ia);
     }
@@ -275,7 +275,7 @@ try{
        재생 시작. */
     if(isGamePage&&!window.LpBgm){
         var bgm=document.createElement('script');
-        bgm.src='/js/lpBgm.js?v=1787105194';
+        bgm.src='/js/lpBgm.js?v=1787114394';
         bgm.defer=true;
         document.body.appendChild(bgm);
     }
@@ -288,12 +288,12 @@ try{
        without waiting on script-load. */
     if(isGamePage&&!window.LpWakeLock){
         var wl=document.createElement('script');
-        wl.src='/js/lpWakeLock.js?v=1787105194';
+        wl.src='/js/lpWakeLock.js?v=1787114394';
         document.body.appendChild(wl);
     }
     if(isGamePage&&!window.LpPhaseTimer){
         var pt=document.createElement('script');
-        pt.src='/js/lpPhaseTimer.js?v=1787105194';
+        pt.src='/js/lpPhaseTimer.js?v=1787114394';
         document.body.appendChild(pt);
     }
 
@@ -307,7 +307,7 @@ try{
     var robotsNoindex=robotsMeta&&/noindex/i.test(robotsMeta.content||'');
     if(!adPolicyOff&&!robotsNoindex&&document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1787105194';
+        s.src='/js/adSlots.js?v=1787114394';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -316,7 +316,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1787105194';
+        rr.src='/js/recentResults.js?v=1787114394';
         document.body.appendChild(rr);
     }
 
@@ -324,20 +324,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1787105194';
+        pwa.src='/js/pwaInstall.js?v=1787114394';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1787105194';
+    tr.src='/js/lpTrack.js?v=1787114394';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1787105194';
+    sh.src='/js/lpShare.js?v=1787114394';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -350,7 +350,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1787105194';
+        rr2.src='/js/lpRoom.js?v=1787114394';
         rr2.defer=true;
         document.body.appendChild(rr2);
 
@@ -359,7 +359,7 @@ try{
            every online game can `LpHostCtl.install({role,room,...})`
            without per-game script tag bookkeeping. */
         var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1787105194';
+        hc.src='/js/lpHostCtl.js?v=1787114394';
         hc.defer=true;
         document.body.appendChild(hc);
 
@@ -367,7 +367,7 @@ try{
            `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
            fired by lpRoom; auto-mounts without any per-game wiring. */
         var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1787105194';
+        mp.src='/js/lpMultiplayer.js?v=1787114394';
         mp.defer=true;
         document.body.appendChild(mp);
     }
@@ -377,7 +377,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1787105194';
+        ls.src='/js/lpSocial.js?v=1787114394';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -388,7 +388,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1787105194';
+        la.src='/js/lpActivity.js?v=1787114394';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -403,7 +403,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1787105194';
+        lp.src='/js/lpPresence.js?v=1787114394';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -413,7 +413,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1787105194';
+        li.src='/js/lpInvite.js?v=1787114394';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -423,7 +423,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1787105194';
+        lib.src='/js/lpInviteButton.js?v=1787114394';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -432,7 +432,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1787105194';
+        ln.src='/js/lpNotify.js?v=1787114394';
         ln.defer=true;
         document.body.appendChild(ln);
     }
@@ -442,5 +442,53 @@ try{
        bails if fewer than 3 <h2> are present (auto-protects against
        short posts). Exists in a separate file so non-blog pages don't
        pay the JS payload cost. */
-    
+
+    /* 게임 페이지에만 문자열 현지화 모듈을 붙인다. 홈·랜딩은 이미 자체
+       i18n 이 있어 필요 없고, 불필요한 요청을 만들지 않기 위해서다. */
+    if (isGamePage && !window.LpGameText) {
+        var gt = document.createElement('script');
+        gt.src = '/js/lpGameText.js?v=1787114394';
+        gt.defer = true;
+        document.body.appendChild(gt);
+    }
+
+    /* ── 공통 UI 현지화 (2026-08-19) ────────────────────────────────
+       게임마다 좌상단 홈 링크를 `← 홈` 으로 하드코딩해 두어, 메인에서 고른
+       언어가 게임에 들어가면 이 버튼에서만 깨졌다(17종 전부). 마크업이
+       게임마다 달라(#homeBtn / #homeLink / .floating-home) 파일별로 고치면
+       새 게임에서 또 빠지므로, 전 페이지가 로드하는 여기서 일괄 처리한다.
+
+       텍스트 노드만 바꾸고 화살표는 유지한다 — 아이콘까지 건드리면 게임별
+       스타일이 깨진다. */
+    var LP_HOME_LABEL = {
+        en:'Home', gb:'Home', ko:'홈',  ja:'ホーム', zh:'首页',
+        es:'Inicio', de:'Start', fr:'Accueil', pt:'Início', ru:'Домой',
+        ar:'الرئيسية', hi:'होम', th:'หน้าแรก', id:'Beranda',
+        vi:'Trang chủ', tr:'Ana sayfa'
+    };
+    function lpLocalizeHome(){
+        var lang;
+        try { lang = localStorage.getItem('luckyplz_lang') || 'en'; } catch(e){ lang = 'en'; }
+        var label = LP_HOME_LABEL[lang] || LP_HOME_LABEL.en;
+        var sel = '#homeBtn, #homeLink, .floating-home, .home[href="/"], a.home';
+        var seen = [];
+        document.querySelectorAll(sel).forEach(function(a){
+            if (seen.indexOf(a) !== -1) return;
+            seen.push(a);
+            /* 화살표(←, ‹, ⟵)와 공백을 남기고 낱말만 교체 */
+            var raw = (a.textContent || '').trim();
+            var m = raw.match(/^([←‹⟵<]\s*)?(.*)$/);
+            var arrow = (m && m[1]) ? m[1] : '';
+            if (!raw) return;
+            a.textContent = arrow + label;
+            if (!a.getAttribute('aria-label')) a.setAttribute('aria-label', label);
+        });
+    }
+    try { lpLocalizeHome(); } catch(e){}
+    /* 게임이 자체 applyLanguage() 로 나중에 덮어쓰는 경우가 있어 한 번 더. */
+    setTimeout(function(){ try { lpLocalizeHome(); } catch(e){} }, 600);
+    window.addEventListener('storage', function(e){
+        if (e && e.key === 'luckyplz_lang') { try { lpLocalizeHome(); } catch(err){} }
+    });
+
 })();

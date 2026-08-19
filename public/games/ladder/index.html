@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787105194">
+<meta name="lp-build" content="1787114394">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787105194";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787114394";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -242,14 +242,20 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
    위치, gameWrap (position:fixed) 보다 z-index 낮음 → 게임 시작 후엔 가려짐.
    시각적 무게 낮춤 — 본문 텍스트 0.9em opacity 0.78, 헤더 1em opacity 1.
    메인 게임 UI 와 색·웨이트 모두 차분. */
+/* 게임 UI 가 position:fixed/absolute 라 문서 흐름 높이가 0 이다. 그대로 두면
+   이 섹션이 top:0 에서 시작해 게임 화면 위에 겹친다(2026-08-19 신고).
+   아래 인라인 스크립트가 정확한 여백을 계산하고, 100dvh 는 그 폴백이다.
+   z-index 9100 = 게임 고정 UI 최대치(9040)보다 위. 배경은 불투명 전체 폭. */
 .lp-game-about{
-    position:relative;z-index:1;
-    max-width:880px;margin:0 auto;padding:36px 20px 80px;
+    position:relative;z-index:9100;width:100%;
+    margin-top:100vh;margin-top:100dvh;
+    background:#0A0A1A;
+    padding:36px 20px 80px;
     color:rgba(255,255,255,.78);
     font-family:'Noto Sans KR','Pretendard',-apple-system,sans-serif;
     font-size:14.5px;line-height:1.75;
 }
-.lp-game-about .lp-about-inner{}
+.lp-game-about .lp-about-inner{max-width:880px;margin:0 auto}
 .lp-game-about .lp-about-head{margin-bottom:24px;padding-bottom:16px;border-bottom:1px solid rgba(255,255,255,.06)}
 .lp-game-about .lp-about-head h2{
     font-family:'Orbitron','Noto Sans KR',sans-serif;
@@ -497,6 +503,33 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
             </footer>
         </div>
     </section>
+<script>
+/* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
+   CSS 만으로는 못 한다 — 게임마다 흐름 높이가 0~734px 로 제각각이라
+   100dvh 를 고정으로 주면 흐름 높이가 있는 게임에서 빈 화면이 하나 생긴다.
+   여백을 0 으로 되돌린 뒤 실제 문서 위치를 재고, 한 화면에서 모자란 만큼만 채운다. */
+(function(){
+  var el = null;
+  function docTop(node){ return node.getBoundingClientRect().top + (window.pageYOffset || 0); }
+  function place(){
+    el = el || document.querySelector('.lp-game-about');
+    if (!el) return;
+    el.style.marginTop = '0px';
+    var need = Math.max(0, (window.innerHeight || 0) - docTop(el));
+    el.style.marginTop = need + 'px';
+    /* 인접 형제와 margin 이 상쇄되면(둘 중 큰 값만 적용) 계산한 만큼
+       내려가지 않는다 — car-racing 에서 8px 모자랐다. 실제 위치를 다시
+       재서 모자란 만큼 더한다. */
+    var delta = (window.innerHeight || 0) - docTop(el);
+    if (delta > 0) el.style.marginTop = (need + delta) + 'px';
+  }
+  function boot(){ place(); setTimeout(place, 400); setTimeout(place, 1200); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  window.addEventListener('resize', place);
+  window.addEventListener('orientationchange', function(){ setTimeout(place, 250); });
+})();
+</script>
 
     <!-- GAME -->
     <div id="gameWrap">
@@ -1888,7 +1921,7 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787105194" defer></script>
+<script src="/js/siteFooter.js?v=1787114394" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}

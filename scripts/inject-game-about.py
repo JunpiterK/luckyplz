@@ -37,10 +37,20 @@ CSS = """<style>
    모바일에서 스크롤로 도달하는 실제 콘텐츠. 데스크탑(>=900px)은 게임 UI 가
    화면을 채우므로 overflow:hidden 으로 가려지지만, 모바일 우선 색인 기준
    Googlebot 은 이 콘텐츠를 정상적으로 읽는다. */
-.lp-game-about{position:relative;z-index:1;max-width:880px;margin:0 auto;
+/* 게임 UI 는 대부분 position:fixed/absolute 라 문서 흐름 높이가 0 이다.
+   그대로 두면 이 섹션이 top:0 에서 시작해 게임 화면 위에 겹친다(2026-08-19
+   신고, 17종 전부 해당). 아래 인라인 스크립트가 정확한 여백을 계산하고,
+   여기 100dvh 는 스크립트가 못 돌 때의 폴백이다.
+   z-index 9100 은 게임 고정 UI 최대치(9040 = 전체화면 버튼)보다 위 —
+   스크롤해서 읽을 때 게임 UI 가 글자 위에 떠 있으면 안 된다.
+   배경은 불투명 + 전체 폭이어야 뒤의 고정 UI 가 좌우로 비치지 않는다. */
+.lp-game-about{position:relative;z-index:9100;width:100%;
+  margin-top:100vh;margin-top:100dvh;
+  background:#0A0A1A;
   padding:36px 20px 80px;color:rgba(255,255,255,.78);
   font-family:'Noto Sans KR','Pretendard',-apple-system,sans-serif;
   font-size:14.5px;line-height:1.75}
+.lp-game-about .lp-about-inner{max-width:880px;margin:0 auto}
 .lp-game-about .lp-about-head{margin-bottom:24px;padding-bottom:16px;
   border-bottom:1px solid rgba(255,255,255,.06)}
 .lp-game-about .lp-about-head h2{font-family:'Orbitron','Noto Sans KR',sans-serif;
@@ -281,6 +291,35 @@ for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
     if _k in CONTENT:
         CONTENT[_k]["blocks"] = list(CONTENT[_k]["blocks"]) + list(_extra)
 
+
+PLACE_JS = """<script>
+/* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
+   CSS 만으로는 못 한다 — 게임마다 흐름 높이가 0~734px 로 제각각이라
+   100dvh 를 고정으로 주면 흐름 높이가 있는 게임에서 빈 화면이 하나 생긴다.
+   여백을 0 으로 되돌린 뒤 실제 문서 위치를 재고, 한 화면에서 모자란 만큼만 채운다. */
+(function(){
+  var el = null;
+  function docTop(node){ return node.getBoundingClientRect().top + (window.pageYOffset || 0); }
+  function place(){
+    el = el || document.querySelector('.lp-game-about');
+    if (!el) return;
+    el.style.marginTop = '0px';
+    var need = Math.max(0, (window.innerHeight || 0) - docTop(el));
+    el.style.marginTop = need + 'px';
+    /* 인접 형제와 margin 이 상쇄되면(둘 중 큰 값만 적용) 계산한 만큼
+       내려가지 않는다 — car-racing 에서 8px 모자랐다. 실제 위치를 다시
+       재서 모자란 만큼 더한다. */
+    var delta = (window.innerHeight || 0) - docTop(el);
+    if (delta > 0) el.style.marginTop = (need + delta) + 'px';
+  }
+  function boot(){ place(); setTimeout(place, 400); setTimeout(place, 1200); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+  window.addEventListener('resize', place);
+  window.addEventListener('orientationchange', function(){ setTimeout(place, 250); });
+})();
+</script>"""
+
 FENCE = re.compile(r'<!--lp-game-about:start-->.*?<!--lp-game-about:end-->\s*', re.S)
 
 
@@ -310,7 +349,7 @@ def build_section(data):
                              for q, a in data["faq"]]}
     p += ['<script type="application/ld+json">',
           json.dumps(faq_ld, ensure_ascii=False, indent=1),
-          '</script>', '<!--lp-game-about:end-->']
+          '</script>', PLACE_JS, '<!--lp-game-about:end-->']
     return "\n".join(p) + "\n"
 
 
