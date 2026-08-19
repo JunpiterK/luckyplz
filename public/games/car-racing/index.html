@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787115910">
+<meta name="lp-build" content="1787116771">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787115910";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787116771";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -426,7 +426,7 @@
             .setting-group label{font-size:0.7em;margin-bottom:2px}
             .value-inline{font-size:0.7em}
             #playerRewardRow{flex-direction:row;gap:8px}
-            #infoPanel{width:120px;right:2px;top:2px;bottom:2px;border-radius:8px;padding:0}
+            #infoPanel{width:100px;right:2px;top:2px;bottom:2px;border-radius:8px;padding:0}
             #infoPanelCredit{font-size:0.45em;padding:2px 0}
             #infoPanelHeader{padding:3px 4px 2px}
             #infoPanelHeader .stat-row{font-size:0.7em;margin:1px 0;gap:3px}
@@ -2325,7 +2325,18 @@ function _calcTrackParams(){
     const minDim=Math.min(w,h);
     const isMobile=minDim<=500||('ontouchstart' in window&&w<1024);
     if(isMobile){
-        return{tw:Math.max(55,minDim*0.16),mg:15,rm:Math.min(130,w*0.16)};
+        /* RIGHT_MARGIN 은 순위 패널이 실제로 차지하는 폭에서 계산한다.
+           이전의 min(130, w*0.16) 은 추정치라 실제 패널(120px)보다 넓게
+           잡혔고, 그 차이만큼 코스 오른쪽에 죽은 여백이 생겼다.
+           패널이 아직 display:none 이면 offsetWidth 가 0 이므로 CSS 와
+           같은 값(100)을 폴백으로 둔다. 왼쪽 MARGIN 도 15→8 로 줄여
+           작은 화면에서 코스가 좌우로 최대한 넓게 깔리게 한다. */
+        const panel=document.getElementById('infoPanel');
+        const pw=(panel&&panel.offsetWidth)||100;
+        /* 도로 폭 0.16→0.18 — 작은 화면에서 코스가 왜소해 보인다는
+           피드백. 양 생성기가 pad(0.55~0.7·tw)로 basePath 를 안쪽에
+           깔기 때문에 폭을 키워도 clamp 상자를 넘지 않는다. */
+        return{tw:Math.max(58,minDim*0.18),mg:8,rm:pw+10};
     }
     return{tw:120,mg:40,rm:215};
 }
@@ -2346,6 +2357,42 @@ let selectedCourse='infinite';
 let frameNow=Date.now(),_timerAccum=0,_lbAccum=0;
 let commentaryQueue=[],currentCommentary=null,commentaryTimer=0;
 let lapLength=250,totalLaps=2;
+/* 트랙이 마지막으로 생성된 시점의 화면 치수 (0 = 아직 없음) */
+let _trackBuiltW=0,_trackBuiltH=0;
+
+/* progress(트랙 인덱스)에서 차량 월드 좌표를 다시 유도한다.
+   startGame 초기 배치와 트랙 재생성 직후 양쪽에서 쓴다. */
+function syncCarsToTrack(){
+    players.forEach(car=>{
+        const idx=Math.max(0,Math.min(Math.floor(car.progress),track.length-2));
+        const nxt=Math.min(idx+1,track.length-1);
+        const frac=car.progress-idx;
+        const tp=track[idx],tn=track[nxt];
+        const baseX=lerp(tp.x,tn.x,frac);
+        const baseY=lerp(tp.y,tn.y,frac);
+        const trackAng=Math.atan2(tn.y-tp.y,tn.x-tp.x);
+        const perpAng=trackAng+Math.PI/2;
+        car.x=baseX+Math.cos(perpAng)*car.laneOffset;
+        car.y=baseY+Math.sin(perpAng)*car.laneOffset;
+        car.angle=trackAng;
+        car.displayX=car.x;car.displayY=car.y;car.displayAngle=car.angle;
+    });
+}
+
+/* 화면 치수가 바뀐 뒤 트랙을 현재 뷰포트로 재생성한다 (2026-08-19).
+   세로에서 시작해 게이트 안내대로 가로로 돌리면, 세로 비율로 생성된
+   트랙이 가로 캔버스 왼쪽에 몰려 보이던 버그의 수정.
+   차는 progress 기반이라 레이스 상태는 그대로 유지된다. 좌표를 직접
+   들고 있는 일회성 이펙트·투사체·그물만 비운다 — 옛 좌표계의 잔상이
+   새 트랙 위 엉뚱한 곳에 그려지는 것을 막는다. */
+function rebuildTrackForCurrentView(){
+    if(!track.length||!COURSES[selectedCourse])return;
+    _refreshTrackParams();
+    COURSES[selectedCourse].generator();
+    syncCarsToTrack();
+    collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];
+    splashEffects=[];itemPopups=[];projectiles=[];nearMissEffects=[];activeNets=[];
+}
 
 /* ===== CAR COLORS ===== */
 const carColors=['#E74C3C','#3498DB','#2ECC71','#F39C12','#9B59B6','#1ABC9C','#E91E63','#FF5722','#00BCD4','#8BC34A','#FF9800','#673AB7'];
@@ -2485,6 +2532,9 @@ function buildTrackFromBasePath(rawPath,smoothPasses,opts){
     generateZones();
     generateItemBoxes();
     generateScenery();
+    /* 이 트랙이 어떤 화면 치수로 생성됐는지 기록 — checkOrientation 이
+       치수 변화를 감지해 재생성 여부를 판단하는 기준값. */
+    _trackBuiltW=WIDTH;_trackBuiltH=HEIGHT;
 }
 
 /* ===== ♾️ INFINITE TRACK (figure-8) ===== */
@@ -5667,20 +5717,7 @@ function startGame(){
     for(let i=order.length-1;i>0;i--){const j=randomInt(0,i);[order[i],order[j]]=[order[j],order[i]];}
     players=[];for(let i=0;i<playerCount;i++)players.push(createCar(i,names[order[i]],i));
     /* Initialize car world positions from track */
-    players.forEach(car=>{
-        const idx=Math.max(0,Math.min(Math.floor(car.progress),track.length-2));
-        const nxt=Math.min(idx+1,track.length-1);
-        const frac=car.progress-idx;
-        const tp=track[idx],tn=track[nxt];
-        const baseX=lerp(tp.x,tn.x,frac);
-        const baseY=lerp(tp.y,tn.y,frac);
-        const trackAng=Math.atan2(tn.y-tp.y,tn.x-tp.x);
-        const perpAng=trackAng+Math.PI/2;
-        car.x=baseX+Math.cos(perpAng)*car.laneOffset;
-        car.y=baseY+Math.sin(perpAng)*car.laneOffset;
-        car.angle=trackAng;
-        car.displayX=car.x;car.displayY=car.y;car.displayAngle=car.angle;
-    });
+    syncCarsToTrack();
     finishOrder=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];itemPopups=[];projectiles=[];nearMissEffects=[];activeNets=[];
     totalCollisionsThisRace=0;commentaryQueue=[];currentCommentary=null;raceElapsedTime=0;
     rewardData=collectRewardData();
@@ -5944,7 +5981,9 @@ function initEventListeners(){
     document.getElementById('listModal').addEventListener('click',e=>{if(e.target.id==='listModal')closeListModal()});
     document.getElementById('savedListsContainer').addEventListener('click',e=>{const btn=e.target.closest('.list-item-btn');if(!btn)return;const action=btn.dataset.action,index=parseInt(btn.dataset.index);if(action==='load')loadList(index);else if(action==='delete')deleteList(index)});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSaveModal();closeListModal()}if(e.key===' '&&gameRunning)togglePause()});
-    window.addEventListener('resize',()=>{if(gameRunning){WIDTH=_lpVW();HEIGHT=_lpVH();canvas.width=WIDTH;canvas.height=HEIGHT}});
+    /* (2026-08-19 제거) 여기 있던 두 번째 resize 핸들러는 canvas.width 를
+       DPR 없이 대입해 applyCanvasDPR 의 배율·transform 을 파괴했다.
+       리사이즈 대응은 checkOrientation 한 곳으로 일원화한다. */
     initRewardListeners();
     /* Language selector */
     document.getElementById('langSelector').addEventListener('click',e=>{
@@ -6296,6 +6335,19 @@ function checkOrientation(){
            user rotates, putting cars visibly off the road. */
         if(wasPortraitBefore&&window._lpGuest&&_lpLastRaceStartPayload&&typeof _lpApplyRaceStartOnGuest==='function'){
             try{_lpApplyRaceStartOnGuest(_lpLastRaceStartPayload)}catch(_){}
+        }
+        /* 솔로·호스트: 트랙이 생성될 때의 치수와 지금 치수가 의미 있게
+           다르면 현재 뷰포트로 재생성한다. 문턱의 근거 —
+           · 폭 40px: 회전은 폭이 수백 px 바뀌므로 확실히 걸리고,
+             모바일 URL 바 수축은 폭을 바꾸지 않아 걸리지 않는다
+           · 높이 150px: URL 바 수축(±60~100px)에는 침묵하고, 세로만
+             크게 바뀌는 데스크탑 창 리사이즈에는 반응한다
+           재생성은 존·아이템을 다시 뽑으므로 이 문턱 아래의 잔변화에는
+           절대 발화하면 안 된다. 게스트는 위 payload 경로가 이미
+           재생성했으므로 기록된 치수가 일치해 이 분기를 타지 않는다. */
+        else if(track.length&&_trackBuiltW>0&&
+                (Math.abs(WIDTH-_trackBuiltW)>40||Math.abs(HEIGHT-_trackBuiltH)>150)){
+            try{rebuildTrackForCurrentView()}catch(_){}
         }
     }
     if(overlay)overlay._wasPortraitBefore=shouldShowRotate;
@@ -6967,7 +7019,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787115910" defer></script>
+<script src="/js/siteFooter.js?v=1787116771" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
