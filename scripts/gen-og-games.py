@@ -221,24 +221,47 @@ def m_car(d, img):
 
 
 def m_glory(d, img):
+    """트랙 위에서 서로 밀치며 달리는 두 주자. 앞(빨강)/뒤(청록)."""
+    # 트랙 — 체크무늬 바닥 라인
     sq = 34
     for r in range(2):
         for i in range(9):
-            if (i + r) % 2 == 0:
-                d.rectangle([MX + 30 + i * sq, MY + 14 + r * sq, MX + 30 + (i + 1) * sq, MY + 14 + (r + 1) * sq], fill=WHITE)
-            else:
-                d.rectangle([MX + 30 + i * sq, MY + 14 + r * sq, MX + 30 + (i + 1) * sq, MY + 14 + (r + 1) * sq], fill=(28, 32, 44))
-    cx, cy = MCX, MCY + 70
-    d.pieslice([cx - 110, cy - 120, cx + 110, cy + 80], 180, 360, fill=(255, 206, 92))
-    d.rectangle([cx - 110, cy - 20, cx + 110, cy + 6], fill=(255, 206, 92))
-    d.ellipse([cx - 150, cy - 90, cx - 90, cy - 10], outline=(255, 206, 92), width=14)
-    d.ellipse([cx + 90, cy - 90, cx + 150, cy - 10], outline=(255, 206, 92), width=14)
-    d.rounded_rectangle([cx - 26, cy + 6, cx + 26, cy + 70], 8, fill=(230, 170, 60))
-    d.rounded_rectangle([cx - 70, cy + 70, cx + 70, cy + 100], 10, fill=(255, 206, 92))
-    f = font("arialbd.ttf", 44)
-    tb = d.textbbox((0, 0), "1", font=f)
-    d.text((cx - (tb[2] - tb[0]) / 2, cy - 80), "1", font=f, fill=(120, 80, 20))
+            c = WHITE if (i + r) % 2 == 0 else (28, 32, 44)
+            d.rectangle([MX + 20 + i * sq, MY + 322 + r * sq,
+                         MX + 20 + (i + 1) * sq, MY + 322 + (r + 1) * sq], fill=c)
+    # 속도선
+    for i, y in enumerate((MY + 120, MY + 165, MY + 210)):
+        d.line([(MX + 20, y), (MX + 20 + 70 - i * 14, y)], fill=(255, 255, 255, 90), width=7)
 
+    def runner(cx, cy, col, lean, arm_to):
+        """cy=머리 중심. lean>0 이면 오른쪽으로 기운 자세."""
+        hr = 30
+        d.ellipse([cx - hr, cy - hr, cx + hr, cy + hr], fill=col)
+        # 몸통
+        d.line([(cx, cy + hr), (cx + lean * 10, cy + hr + 78)], fill=col, width=34)
+        # 미는 팔 — 상대 쪽으로 뻗는다
+        d.line([(cx + lean * 6, cy + hr + 22), arm_to], fill=col, width=24)
+        # 반대 팔
+        d.line([(cx - lean * 6, cy + hr + 22), (cx - lean * 46, cy + hr + 4)], fill=col, width=20)
+        # 다리 (앞뒤로 벌어진 러닝 자세)
+        base = (cx + lean * 10, cy + hr + 78)
+        d.line([base, (cx + lean * 10 - 46, cy + hr + 150)], fill=col, width=26)
+        d.line([base, (cx + lean * 10 + 40, cy + hr + 118)], fill=col, width=26)
+        d.line([(cx + lean * 10 + 40, cy + hr + 118), (cx + lean * 10 + 30, cy + hr + 168)], fill=col, width=24)
+
+    cy = MCY - 92
+    runner(MCX - 130, cy + 20, (77, 208, 225), 1, (MCX - 20, cy + 42))    # 뒤 주자 — 앞사람을 민다
+    runner(MCX + 120, cy, (255, 107, 107), -1, (MCX + 10, cy + 40))       # 앞 주자 — 뒤로 막는다
+
+    # 충돌 임팩트 — 두 팔이 만나는 지점
+    ix, iy = MCX - 5, cy + 40
+    star = []
+    import math
+    for k in range(10):
+        rr = 46 if k % 2 == 0 else 20
+        a = math.pi / 5 * k - math.pi / 2
+        star.append((ix + math.cos(a) * rr, iy + math.sin(a) * rr))
+    d.polygon(star, fill=(255, 206, 92))
 
 def m_dodge(d, img):
     rnd = random.Random(9)
