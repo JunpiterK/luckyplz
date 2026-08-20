@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787203474">
+<meta name="lp-build" content="1787204787">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787203474";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787204787";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -62,6 +62,12 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .topbar .title{font-family:'Orbitron',sans-serif;font-weight:900;font-size:15px;letter-spacing:.08em;
     background:linear-gradient(135deg,var(--primary),var(--accent));
     -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.bgm-btn{width:38px;height:38px;border-radius:11px;border:1.5px solid var(--line);
+    background:rgba(255,255,255,.06);color:#fff;font-size:16px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;touch-action:manipulation;
+    transition:border-color .2s,background .2s}
+.bgm-btn.on{border-color:rgba(255,230,109,.6);background:rgba(255,230,109,.12)}
+.bgm-btn[hidden]{display:none}
 
 /* ── 스테이지 레이아웃: 세로폰 우선, 한 화면 안에 전부 ── */
 #stage{max-width:640px;margin:0 auto;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 18px);
@@ -201,7 +207,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <div class="topbar">
     <a class="home" href="/">← 홈</a>
     <div class="title">🎈 BALLOON POP</div>
-    <span style="width:44px"></span>
+    <button class="bgm-btn" id="btnBgm" type="button" aria-label="BGM" hidden>🔇</button>
 </div>
 
 <div id="stage">
@@ -516,6 +522,49 @@ function sPop(){
 }
 function vib(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(_){}}
 
+/* ══ BGM + 벌칙 징글 (운영자 제작 Suno mp3, 2026-08-20) ══
+   /assets/balloon-bgm.mp3        — 게임 중 루프 (~1분)
+   /assets/balloon-pop-jingle.mp3 — 파열 직후 1회 (11초)
+   파일이 아직 없으면(404) 토글 버튼을 숨기고 전부 무시한다 — 배선을
+   먼저 깔아 두고 파일만 얹으면 되는 구조. 기본 OFF, 선택은 localStorage. */
+const BGM_KEY='lp_balloon_bgm';
+let bgm=null,jingle=null,bgmReady=false,bgmOn=false;
+try{bgmOn=localStorage.getItem(BGM_KEY)==='1'}catch(_){}
+function initBgm(){
+    bgm=new Audio('/assets/balloon-bgm.mp3');
+    bgm.loop=true;bgm.volume=.35;bgm.preload='auto';
+    jingle=new Audio('/assets/balloon-pop-jingle.mp3');
+    jingle.preload='auto';jingle.volume=.8;
+    bgm.addEventListener('canplaythrough',()=>{
+        if(bgmReady)return;
+        bgmReady=true;
+        const b=$('btnBgm');b.hidden=false;syncBgmBtn();
+    },{once:true});
+    bgm.addEventListener('error',()=>{ $('btnBgm').hidden=true; });
+}
+function syncBgmBtn(){
+    const b=$('btnBgm');
+    b.textContent=bgmOn?'🔊':'🔇';
+    b.classList.toggle('on',bgmOn);
+}
+function bgmPlay(){ if(bgmReady&&bgmOn){bgm.volume=.35;bgm.play().catch(()=>{});} }
+function bgmStop(){ if(bgm){try{bgm.pause();bgm.currentTime=0}catch(_){}} }
+/* 위험도에 따라 볼륨이 차오른다 — 음악까지 긴장에 가담 */
+function bgmSwell(h){ if(bgmReady&&bgmOn&&!bgm.paused)bgm.volume=Math.min(.6,.35+h*.7); }
+function jinglePlay(){ if(bgmReady&&bgmOn&&jingle){try{jingle.currentTime=0;jingle.play().catch(()=>{})}catch(_){}} }
+function jingleStop(){ if(jingle){try{jingle.pause();jingle.currentTime=0}catch(_){}} }
+document.addEventListener('DOMContentLoaded',initBgm);
+if(document.readyState!=='loading')initBgm();
+document.addEventListener('click',function bgmBind(e){
+    if(e.target&&e.target.id==='btnBgm'){
+        bgmOn=!bgmOn;
+        try{localStorage.setItem(BGM_KEY,bgmOn?'1':'0')}catch(_){}
+        syncBgmBtn();
+        if(bgmOn){ if($('gameScreen').classList.contains('on'))bgmPlay(); }
+        else { bgmStop();jingleStop(); }
+    }
+});
+
 /* ══ 게임 상태 ══ */
 let players=[],turn=0,pumps=0,turnPumps=0,perPlayer=[],popped=false;
 /* 해저드: 처음 SAFE_FREE 회는 절대 안전. 그 뒤 매 펌프
@@ -536,6 +585,7 @@ function startGame(){
     w.classList.remove('gone');
     setBalloon();renderTurn();
     ac(); /* 사용자 제스처 안에서 오디오 언락 */
+    bgmPlay();
 }
 $('btnStart').addEventListener('click',startGame);
 
@@ -564,6 +614,7 @@ function setBalloon(){
     fill.classList.toggle('hot',h>=.15);
     txt.classList.toggle('hot',h>=.15);
     txt.textContent=h===0?T('safe'):h<.15?T('warm'):h<.3?T('hot'):T('edge');
+    bgmSwell(h);
 }
 
 $('btnPump').addEventListener('click',()=>{
@@ -589,7 +640,9 @@ $('btnPass').addEventListener('click',()=>{
 
 function doPop(){
     popped=true;
+    bgmStop();
     sPop();vib([25,35,110]);
+    setTimeout(jinglePlay,350); /* 파열음이 먼저, 징글은 반 박자 뒤 */
     const fl=$('popFlash');fl.classList.remove('on');void fl.offsetWidth;fl.classList.add('on');
     /* 고무 파편 */
     const zone=$('balloonZone');
@@ -615,6 +668,7 @@ function doPop(){
 }
 
 $('btnAgain').addEventListener('click',()=>{
+    jingleStop();bgmPlay();
     $('resultOv').classList.remove('on');
     pumps=0;turnPumps=0;popped=false;
     perPlayer=players.map(()=>0);
@@ -623,6 +677,7 @@ $('btnAgain').addEventListener('click',()=>{
     $('balloonWrap').classList.remove('gone');
 });
 $('btnEdit').addEventListener('click',()=>{
+    jingleStop();bgmStop();
     $('resultOv').classList.remove('on');
     $('gameScreen').classList.remove('on');
     $('setupScreen').classList.remove('off');
@@ -642,13 +697,13 @@ applyI18n();
 })();
 </script>
 
-<script src="/js/nextGames.js?v=1787203474"></script>
+<script src="/js/nextGames.js?v=1787204787"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787203474" defer></script>
+<script src="/js/siteFooter.js?v=1787204787" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
