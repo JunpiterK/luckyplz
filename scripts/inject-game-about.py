@@ -292,6 +292,11 @@ for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
     if _k in CONTENT:
         CONTENT[_k]["blocks"] = list(CONTENT[_k]["blocks"]) + list(_extra)
 
+# 2차 보강 (2026-08-20) — 홈 노출 3종만. AdSense 재신청 전 thin 리스크 제거.
+for _k, _extra in _load("game_about_content_6", "EXTRA_BLOCKS_6").items():
+    if _k in CONTENT:
+        CONTENT[_k]["blocks"] = list(CONTENT[_k]["blocks"]) + list(_extra)
+
 
 PLACE_JS = """<script>
 /* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
