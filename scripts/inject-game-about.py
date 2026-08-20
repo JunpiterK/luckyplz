@@ -79,7 +79,36 @@ CSS = """<style>
   padding-left:8px;border-left:2px solid rgba(255,255,255,.06)}
 .lp-game-about .lp-about-footer{margin-top:32px;padding-top:18px;
   border-top:1px solid rgba(255,255,255,.05);font-size:.82em;color:rgba(255,255,255,.5)}
+/* ── 핵심 카드 (2026-08-21) — 스크롤해 내려온 사람이 가장 먼저 만나는 것.
+   글을 읽히려 하지 말고 '이 도구를 언제 쓰는가'를 3초 안에 보여준다. */
+.lp-game-about .lp-quick{display:grid;grid-template-columns:1fr;gap:8px;margin:0 0 22px}
+.lp-game-about .lp-quick-card{display:flex;align-items:center;gap:10px;
+  padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.07)}
+.lp-game-about .lp-quick-ico{font-size:1.45em;line-height:1;flex-shrink:0}
+.lp-game-about .lp-quick-txt{min-width:0}
+.lp-game-about .lp-quick-t{display:block;font-weight:700;color:#fff;font-size:.92em;
+  line-height:1.3}
+.lp-game-about .lp-quick-d{display:block;font-size:.8em;color:rgba(255,255,255,.5);
+  line-height:1.35;margin-top:1px}
+/* ── 접기 — 닫힌 상태에서는 제목 줄만 보인다 (홈 lp-fold 와 같은 원칙) */
+.lp-game-about .lp-about-block{margin:0;border-top:1px solid rgba(255,255,255,.07)}
+.lp-game-about .lp-about-block > summary{cursor:pointer;list-style:none;
+  padding:13px 30px 13px 2px;font-weight:700;color:rgba(255,255,255,.88);
+  font-size:.97em;position:relative;user-select:none;-webkit-user-select:none;
+  touch-action:manipulation}
+.lp-game-about .lp-about-block > summary::-webkit-details-marker{display:none}
+.lp-game-about .lp-about-block > summary::after{content:'+';position:absolute;
+  right:6px;top:50%;transform:translateY(-50%);color:#5dc1ff;font-weight:900;
+  font-size:1.1em;line-height:1}
+.lp-game-about .lp-about-block[open] > summary::after{content:'\2013'}
+.lp-game-about .lp-about-block[open] > summary{color:#fff}
+.lp-game-about .lp-about-block > summary:hover{color:#fff}
+.lp-game-about .lp-fold-body{padding:2px 2px 18px}
+.lp-game-about .lp-about-block > summary:focus-visible{outline:2px solid rgba(255,230,109,.7);
+  outline-offset:2px;border-radius:6px}
 @media (min-width:600px){
+  .lp-game-about .lp-quick{grid-template-columns:1fr 1fr 1fr}
   .lp-game-about{padding:48px 32px 100px;font-size:15px}
   .lp-game-about .lp-use-cases{grid-template-columns:1fr 1fr}
   .lp-game-about .lp-about-head h2{font-size:1.55em}
@@ -349,6 +378,32 @@ PLACE_JS = """<script>
 FENCE = re.compile(r'<!--lp-game-about:start-->.*?<!--lp-game-about:end-->\s*', re.S)
 
 
+USE_LI = re.compile(r'<li>\s*([^\s<]+)\s*<strong>(.*?)</strong>\s*(?:&mdash;|—|-)?\s*(.*?)</li>', re.S)
+
+
+def quick_cards(data):
+    """'이럴 때 씁니다' li 에서 상위 3개를 뽑아 시각 카드로 만든다.
+
+    새 집필 없이 기존 콘텐츠를 재사용한다 — 스크롤해 내려온 사람이
+    글을 읽기 전에 '언제 쓰는 도구인가'를 아이콘으로 먼저 파악하게 한다.
+    li 형식이 다르면(추출 실패) 카드를 생략하고 조용히 넘어간다."""
+    for _h3, body in data["blocks"]:
+        if 'lp-use-cases' not in body:
+            continue
+        items = USE_LI.findall(body)[:3]
+        if len(items) < 3:
+            continue
+        cards = []
+        for ico, title, desc in items:
+            desc = re.sub(r'<[^>]+>', '', desc).strip()
+            cards.append(
+                '      <div class="lp-quick-card"><span class="lp-quick-ico">{}</span>'
+                '<span class="lp-quick-txt"><span class="lp-quick-t">{}</span>'
+                '<span class="lp-quick-d">{}</span></span></div>'.format(ico, title, desc))
+        return ['    <div class="lp-quick">'] + cards + ['    </div>']
+    return []
+
+
 def build_section(data):
     p = ['<!--lp-game-about:start-->', CSS,
          '<section class="lp-game-about" aria-label="About this game" lang="ko">',
@@ -357,14 +412,24 @@ def build_section(data):
          '      <h2>{}</h2>'.format(data["h2"]),
          '      <p class="lp-about-sub">{}</p>'.format(data["sub"]),
          '    </header>']
+    p += quick_cards(data)
+    # 본문은 전부 접는다 (2026-08-21 운영자 원칙) — 닫힌 상태에서 보이는
+    # 것은 제목 줄뿐. 구글은 아코디언 안 콘텐츠를 정상 색인하므로 색인
+    # 가치는 그대로이고, 사람이 만나는 글자 수만 줄어든다. FAQ 는 접기로
+    # 감싸되 dl.lp-faq 마크업을 유지해야 sync-faq-schema.py 와 FAQPage
+    # 1:1 대응이 깨지지 않는다.
     for h3, body in data["blocks"]:
-        p += ['    <article class="lp-about-block">',
-              '      <h3>{}</h3>'.format(h3), body, '    </article>']
-    p += ['    <article class="lp-about-block">', '      <h3>❓ 자주 묻는 질문</h3>',
+        p += ['    <details class="lp-about-block">',
+              '      <summary>{}</summary>'.format(h3),
+              '      <div class="lp-fold-body">', body, '      </div>',
+              '    </details>']
+    p += ['    <details class="lp-about-block">',
+          '      <summary>❓ 자주 묻는 질문</summary>',
+          '      <div class="lp-fold-body">',
           '      <dl class="lp-faq">']
     for q, a in data["faq"]:
         p += ['        <dt>Q. {}</dt>'.format(q), '        <dd>{}</dd>'.format(a)]
-    p += ['      </dl>', '    </article>',
+    p += ['      </dl>', '      </div>', '    </details>',
           '    <footer class="lp-about-footer">{}</footer>'.format(data["footer"]),
           '  </div>', '</section>']
 
