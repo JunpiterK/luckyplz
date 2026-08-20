@@ -95,19 +95,16 @@ def m_lotto(d, img):
 
 
 def m_team(d, img):
-    rnd = random.Random(5)
-    f = font("arialbd.ttf", 58)
-    for i in range(7):
-        x = MX + 40 + rnd.randint(0, 110); y = MY + 60 + i * 48 + rnd.randint(-12, 12)
-        d.ellipse([x - 22, y - 22, x + 22, y + 22], fill=(93, 193, 255))
-    for i in range(7):
-        x = MX + MW - 150 + rnd.randint(0, 110); y = MY + 60 + i * 48 + rnd.randint(-12, 12)
-        d.ellipse([x - 22, y - 22, x + 22, y + 22], fill=(255, 107, 53))
-    d.rounded_rectangle([MCX - 5, MY + 24, MCX + 5, MY + MH - 24], 5, fill=(255, 255, 255, 60))
-    tb = d.textbbox((0, 0), "VS", font=f)
-    d.rounded_rectangle([MCX - 62, MCY - 48, MCX + 62, MCY + 48], 24, fill=(18, 22, 34), outline=(255, 206, 92), width=4)
-    d.text((MCX - (tb[2] - tb[0]) / 2, MCY - (tb[3] - tb[1]) / 2 - tb[1]), "VS", font=f, fill=(255, 206, 92))
+    """홍팀 vs 블루팀 3:3 대치 — 갈라진 땅 + 3D 블록 VS.
 
+    장면은 scripts/og-assets/team-scene.png (홈 타일 TEAM_SVG 원본 SVG 를
+    880px 렌더). 갱신 방법은 og-assets/team-scene.svg 를 브라우저 캔버스로
+    다시 렌더해 저장 — m_glory 와 같은 방식.
+    """
+    scene = Image.open(HERE / "og-assets" / "team-scene.png").convert("RGBA")
+    size = 445
+    scene = scene.resize((size, size), Image.LANCZOS)
+    img.paste(scene, (MCX - size // 2 - 12, MCY - size // 2 - 6), scene)
 
 def m_dice(d, img):
     def die(x, y, s, c, pips):
