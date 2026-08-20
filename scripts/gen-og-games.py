@@ -95,16 +95,19 @@ def m_lotto(d, img):
 
 
 def m_team(d, img):
-    """홍팀 vs 블루팀 3:3 대치 — 갈라진 땅 + 3D 블록 VS.
+    """홍팀 vs 블루팀 3:3 팔짱 대치 — Blender Cycles 렌더 합성.
 
-    장면은 scripts/og-assets/team-scene.png (홈 타일 TEAM_SVG 원본 SVG 를
-    880px 렌더). 갱신 방법은 og-assets/team-scene.svg 를 브라우저 캔버스로
-    다시 렌더해 저장 — m_glory 와 같은 방식.
+    원본: scripts/blender/team_scene.py → og-assets/team-scene-3d.png.
+    수정하려면 그 씬 스크립트를 고치고 Blender 로 재렌더한다
+    (C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P team_scene.py).
     """
-    scene = Image.open(HERE / "og-assets" / "team-scene.png").convert("RGBA")
-    size = 445
-    scene = scene.resize((size, size), Image.LANCZOS)
-    img.paste(scene, (MCX - size // 2 - 12, MCY - size // 2 - 6), scene)
+    scene = Image.open(HERE / "og-assets" / "team-scene-3d.png").convert("RGBA")
+    b = scene.getbbox()
+    scene = scene.crop(b)
+    w = 500
+    h = round(scene.height * w / scene.width)
+    scene = scene.resize((w, h), Image.LANCZOS)
+    img.paste(scene, (MCX - w // 2 - 6, MCY - h // 2 + 10), scene)
 
 def m_dice(d, img):
     def die(x, y, s, c, pips):
@@ -219,27 +222,19 @@ def m_car(d, img):
 
 
 def m_glory(d, img):
-    """트랙 위에서 몸싸움하며 달리는 두 주자 — 표정 있는 캐릭터 장면.
+    """달리며 미는 두 러너 — Blender Cycles 렌더 합성.
 
-    장면은 scripts/og-assets/brawl-scene.png (홈 타일 GLORY_SVG 를 880px 로
-    렌더한 것). PIL 재작화보다 곡선·표정 품질이 좋고 타일과 그림이 일치한다.
-    자산을 갱신하려면 public/index.html 의 GLORY_SVG 원본 SVG 를 브라우저
-    캔버스로 880px 렌더해 다시 저장한다.
+    원본: scripts/blender/brawl_scene.py → og-assets/brawl-scene-3d.png.
+    수정하려면 씬 스크립트를 고치고 Blender 로 재렌더한다
+    (C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P brawl_scene.py).
     """
-    # 트랙 — 체크무늬 바닥 라인
-    sq = 34
-    for r in range(2):
-        for i in range(9):
-            c = WHITE if (i + r) % 2 == 0 else (28, 32, 44)
-            d.rectangle([MX + 20 + i * sq, MY + 322 + r * sq,
-                         MX + 20 + (i + 1) * sq, MY + 322 + (r + 1) * sq], fill=c)
-    scene = Image.open(HERE / "og-assets" / "brawl-scene.png").convert("RGBA")
-    size = 430
-    scene = scene.resize((size, size), Image.LANCZOS)
-    # 발이 트랙 윗줄에 닿도록: 장면 내 발 위치 ≈ 높이의 74%
-    px = MCX - size // 2
-    py = (MY + 330) - int(size * 0.74)
-    img.paste(scene, (px, py), scene)
+    scene = Image.open(HERE / "og-assets" / "brawl-scene-3d.png").convert("RGBA")
+    b = scene.getbbox()
+    scene = scene.crop(b)
+    w = 500
+    h = round(scene.height * w / scene.width)
+    scene = scene.resize((w, h), Image.LANCZOS)
+    img.paste(scene, (MCX - w // 2 - 6, MCY - h // 2 + 10), scene)
 
 def m_dodge(d, img):
     rnd = random.Random(9)
