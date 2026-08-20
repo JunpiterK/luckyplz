@@ -78,9 +78,17 @@ echo "✓ Cache version bumped to ${NEW_VERSION} across ${count} file(s)."
 # Done in Python because regex-injecting an HTML block reliably across
 # 100+ files is grim in pure Bash on Windows (sed handling of multi-line
 # patterns differs by version, and CRLF normalization bites).
-PYTHON_BIN="$(command -v python3 || command -v python || command -v py || command -v python.exe || true)"
+# `command -v` 만으로 고르면 Windows 의 Store 스텁(WindowsApps/python3)이
+# 잡힌다 — "Python" 한 줄만 찍고 exit 49 로 죽어서 레이어 2·3 이 조용히
+# 빠진다(2026-08-20 실제 사고: ?v= 만 갱신되고 build.json/lp-build 는
+# 구 스탬프로 남았다). 실제로 실행되는 인터프리터인지 검사해서 고른다.
+PYTHON_BIN=""
+for c in python3 python py python.exe; do
+    if "$c" -c "import sys" >/dev/null 2>&1; then PYTHON_BIN="$c"; break; fi
+done
 if [ -z "$PYTHON_BIN" ]; then
-    echo "error: Python not found. Install Python or add it to PATH." >&2
+    echo "error: no working Python found. Install Python or add it to PATH." >&2
     exit 1
 fi
 "$PYTHON_BIN" scripts/bump-cache-helper.py "${NEW_VERSION}"
+echo "✓ build.json + inline build-check updated to ${NEW_VERSION}."
