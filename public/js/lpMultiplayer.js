@@ -61,7 +61,7 @@
         closeConfirm:'ルームを閉じますか？\nすべてのゲストの接続が切れます。',
         leave:'退出',leaveConfirm:'ルームから退出しますか？',
         homeConfirm:'ホームに移動するとマルチプレイルームが閉じます。\n続行しますか？',
-        nextHint:'👥 次のゲームはマルチプレイパネルから選択'},
+        nextHint:'👥 次のゲームはマルチプレイパネルから選べます'},
     es:{title:'Multijugador',min:'Contraer',max:'Pantalla completa',switchGame:'Cambiar juego',hostOnly:'Solo anfitrión',
         hostSelf:'Anfitrión {n} · yo',hostRow:'Anfitrión {n}',players:'Participantes',countFmt:'{c}',
         emptyHost:'Aún no hay participantes — comparte el enlace',waiting:'Esperando…',

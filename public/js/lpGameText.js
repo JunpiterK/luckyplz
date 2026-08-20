@@ -240,6 +240,61 @@
         }
     };
 
+    /* ── 퀴즈 UI (2026-08-21) — 자체 i18n 테이블이 없는 유일한 게임이라
+       스페인어로 열어도 한국어 48종이 그대로 남아 있었다(실측). 게임
+       HTML 에 테이블을 새로 만들면 다음 게임에서 또 빠지므로 여기에 둔다. */
+    MAP['🌏 Region · 지역'] = { en: '🌏 Region', ja: '🌏 Region · 地域', es: '🌏 Región', pt: '🌏 Região' };
+    MAP['문제는 이 언어 기준으로 출제돼요. 방에 들어오는 모든 게스트가 같은 언어 문제를 봐요.'] = { en: 'Questions come in this language. Everyone who joins sees the same set.', ja: '問題はこの言語で出題されます。参加者全員が同じ言語の問題を見ます。', es: 'Las preguntas salen en este idioma. Todos los que entren verán las mismas.', pt: 'As perguntas vêm neste idioma. Todo mundo que entrar vê as mesmas.' };
+    MAP['한국어'] = { en: 'Korean', ja: '韓国語', es: 'Coreano', pt: 'Coreano' };
+    MAP['🎲 카테고리 선택'] = { en: '🎲 Pick categories', ja: '🎲 カテゴリ選択', es: '🎲 Elige categorías', pt: '🎲 Escolha categorias' };
+    MAP['여러 개 고르면 섞여서 나와요. 어린이~어른 모두 소외 안 되게'] = { en: 'Pick a few and they get mixed, so nobody from kids to grown-ups feels left out.', ja: '複数選ぶと混ざって出ます。子どもから大人まで誰も置いていかれないように', es: 'Si eliges varias, se mezclan para que nadie, de niños a adultos, quede fuera.', pt: 'Escolha várias e elas se misturam, para que ninguém, de crianças a adultos, fique de fora.' };
+    MAP['혼합'] = { en: 'Mixed', ja: 'ミックス', es: 'Mixto', pt: 'Misto' };
+    MAP['추천.'] = { en: 'recommended.', ja: 'がおすすめ。', es: 'recomendado.', pt: 'recomendado.' };
+    MAP['총 문제 수'] = { en: 'Total questions', ja: '問題数', es: 'Total de preguntas', pt: 'Total de perguntas' };
+    MAP['📦 카테고리별 분배'] = { en: '📦 Split by category', ja: '📦 カテゴリ別の配分', es: '📦 Reparto por categoría', pt: '📦 Divisão por categoria' };
+    MAP['⟳ 균등 분배'] = { en: '⟳ Split evenly', ja: '⟳ 均等に分ける', es: '⟳ Repartir igual', pt: '⟳ Dividir igualmente' };
+    MAP['합계'] = { en: 'Total', ja: '合計', es: 'Total', pt: 'Total' };
+    MAP['문제'] = { en: 'questions', ja: '問', es: 'preguntas', pt: 'perguntas' };
+    MAP['문제당 시간'] = { en: 'Time per question', ja: '1問あたりの時間', es: 'Tiempo por pregunta', pt: 'Tempo por pergunta' };
+    MAP['초'] = { en: 'sec', ja: '秒', es: 's', pt: 's' };
+    MAP['🙋 호스트도 같이 플레이'] = { en: '🙋 Host plays too', ja: '🙋 ホストも参加する', es: '🙋 El anfitrión también juega', pt: '🙋 O anfitrião também joga' };
+    MAP['OFF면 진행만 — 문제 풀지 않고 순위에 안 들어가요'] = { en: 'Off means you just run the game — no answering, no ranking.', ja: 'OFF なら進行のみ — 回答せず順位にも入りません', es: 'Si está apagado, solo diriges: no respondes ni entras en el ranking.', pt: 'Desligado significa que você só conduz: não responde nem entra no ranking.' };
+    MAP['▶ 방 만들기 (게스트 모집)'] = { en: '▶ Create a room', ja: '▶ ルームを作る', es: '▶ Crear sala', pt: '▶ Criar sala' };
+    MAP['호스트가 알려준'] = { en: 'Enter the', ja: 'ホストから聞いた', es: 'Introduce el', pt: 'Digite o' };
+    MAP['6자리 코드'] = { en: '6-character code', ja: '6桁のコード', es: 'código de 6 caracteres', pt: 'código de 6 caracteres' };
+    MAP['와'] = { en: 'and the', ja: 'と', es: 'y el', pt: 'e o' };
+    MAP['4자리 PIN'] = { en: '4-digit PIN', ja: '4桁のPIN', es: 'PIN de 4 dígitos', pt: 'PIN de 4 dígitos' };
+    MAP['을 입력하세요.'] = { en: 'the host gave you.', ja: 'を入力してください。', es: 'que te dio el anfitrión.', pt: 'que o anfitrião passou.' };
+    MAP['닉네임 (선택)'] = { en: 'Nickname (optional)', ja: 'ニックネーム（任意）', es: 'Apodo (opcional)', pt: 'Apelido (opcional)' };
+    MAP['참가하기 →'] = { en: 'Join →', ja: '参加する →', es: 'Entrar →', pt: 'Entrar →' };
+    MAP['방 코드 · PIN'] = { en: 'Room code · PIN', ja: 'ルームコード · PIN', es: 'Código · PIN', pt: 'Código · PIN' };
+    MAP['🔗 링크 복사'] = { en: '🔗 Copy link', ja: '🔗 リンクをコピー', es: '🔗 Copiar enlace', pt: '🔗 Copiar link' };
+    MAP['📤 공유'] = { en: '📤 Share', ja: '📤 共有', es: '📤 Compartir', pt: '📤 Compartilhar' };
+    MAP['명 참가중'] = { en: 'joined', ja: '人 参加中', es: 'conectados', pt: 'conectados' };
+    MAP['방 나가기'] = { en: 'Leave room', ja: 'ルームを出る', es: 'Salir de la sala', pt: 'Sair da sala' };
+    MAP['일반'] = { en: 'General', ja: '一般', es: 'General', pt: 'Geral' };
+    MAP['문제를 불러오는 중…'] = { en: 'Loading questions…', ja: '問題を読み込み中…', es: 'Cargando preguntas…', pt: 'Carregando perguntas…' };
+    MAP['답변'] = { en: 'Answers', ja: '回答', es: 'Respuestas', pt: 'Respostas' };
+    MAP['정답!'] = { en: 'Correct!', ja: '正解！', es: '¡Correcto!', pt: 'Certa!' };
+    MAP['📊 답변 통계'] = { en: '📊 Answer breakdown', ja: '📊 回答の内訳', es: '📊 Reparto de respuestas', pt: '📊 Distribuição das respostas' };
+    MAP['잠시 후 다음 문제…'] = { en: 'Next question coming up…', ja: 'まもなく次の問題…', es: 'Siguiente pregunta en un momento…', pt: 'Próxima pergunta já vem…' };
+    MAP['🏆 중간 순위'] = { en: '🏆 Standings so far', ja: '🏆 途中順位', es: '🏆 Clasificación parcial', pt: '🏆 Classificação parcial' };
+    MAP['🎉 최종 결과'] = { en: '🎉 Final results', ja: '🎉 最終結果', es: '🎉 Resultado final', pt: '🎉 Resultado final' };
+    MAP['📋 전체 순위'] = { en: '📋 Full ranking', ja: '📋 全順位', es: '📋 Clasificación completa', pt: '📋 Classificação completa' };
+    MAP['내 퀴즈 관리'] = { en: 'My questions', ja: 'マイクイズ管理', es: 'Mis preguntas', pt: 'Minhas perguntas' };
+    MAP['로그인한 계정으로 직접 만든 문제예요. 서버에'] = { en: 'Questions you wrote while signed in. They stay on the server for', ja: 'ログイン中に自分で作った問題です。サーバーには', es: 'Preguntas que escribiste con tu cuenta. Se guardan en el servidor durante', pt: 'Perguntas que você criou logado. Ficam no servidor por' };
+    MAP['7일'] = { en: '7 days', ja: '7日間', es: '7 días', pt: '7 dias' };
+    MAP['까지 보관되고 그 이후 자동으로 삭제됩니다. 최대 200문제까지 저장 가능.'] = { en: 'and are deleted automatically after that. Up to 200 questions.', ja: '保存され、その後は自動で削除されます。最大200問まで。', es: 'y luego se borran solas. Hasta 200 preguntas.', pt: 'e depois são apagadas sozinhas. Até 200 perguntas.' };
+    MAP['선택지 (정답에 표시)'] = { en: 'Options (mark the right one)', ja: '選択肢（正解にチェック）', es: 'Opciones (marca la correcta)', pt: 'Opções (marque a certa)' };
+    MAP['힌트 (선택)'] = { en: 'Hint (optional)', ja: 'ヒント（任意）', es: 'Pista (opcional)', pt: 'Dica (opcional)' };
+    MAP['＋ 문제 추가'] = { en: '＋ Add question', ja: '＋ 問題を追加', es: '＋ Añadir pregunta', pt: '＋ Adicionar pergunta' };
+    MAP['내 문제'] = { en: 'My questions', ja: 'マイ問題', es: 'Mis preguntas', pt: 'Minhas perguntas' };
+    /* 카운터 접미사 — 영어·스페인어·포르투갈어에는 대응어가 없다. 빈
+   문자열은 falsy 라 치환이 스킵되므로 공백 한 칸을 쓴다. */
+MAP['개'] = { en: ' ', ja: '件', es: ' ', pt: ' ' };
+    MAP['탭하여 펼치기 / 휴지통으로 삭제'] = { en: 'Tap to expand · trash to delete', ja: 'タップで展開 / ゴミ箱で削除', es: 'Toca para abrir · papelera para borrar', pt: 'Toque para abrir · lixeira para excluir' };
+    MAP['아직 만든 문제가 없어요. 위에서 추가해보세요!'] = { en: 'No questions yet — add one above!', ja: 'まだ問題がありません。上から追加してみましょう！', es: 'Aún no hay preguntas: ¡añade una arriba!', pt: 'Ainda sem perguntas — adicione uma acima!' };
+
     function pickLang() {
         var l;
         try { l = localStorage.getItem('luckyplz_lang') || 'en'; } catch (e) { l = 'en'; }
@@ -262,6 +317,16 @@
         if (seenText) return seenText.has(n);
         for (var i = 0; i < regText.length; i++) if (regText[i].node === n) return true;
         return false;
+    }
+
+    /* 공백 정규화된 key 로 raw 안을 치환한다. raw 에 줄바꿈이 있으면
+       raw.replace(key,…) 가 못 찾으므로(2026-08-21 퀴즈 두 줄 안내문)
+       노드 전체를 번역문으로 바꾸되 앞뒤 여백만 보존한다. 신규 스캔과
+       재적용(regText) 양쪽이 같은 함수를 써야 한다 — 한쪽에만 넣었더니
+       첫 적용 뒤 400ms 재적용에서 한국어로 되돌아갔다. */
+    function renderText(raw, key, val) {
+        if (raw.indexOf(key) !== -1) return raw.replace(key, val);
+        return raw.match(/^\s*/)[0] + val + raw.match(/\s*$/)[0];
     }
 
     function applyHtml(lang) {
@@ -301,7 +366,7 @@
             var r = regText[k];
             if (!r.node.isConnected) continue;
             var row0 = MAP[r.key];
-            r.node.nodeValue = (lang && row0 && row0[lang]) ? r.raw.replace(r.key, row0[lang]) : r.raw;
+            r.node.nodeValue = (lang && row0 && row0[lang]) ? renderText(r.raw, r.key, row0[lang]) : r.raw;
         }
         if (!lang) { applied++; return 0; }
         /* 2) 신규 스캔 — 게임이 나중에 다시 그린 노드를 잡는다. */
@@ -319,7 +384,7 @@
             if (!el || el.closest('.lp-game-about')) continue;   /* 의도적 한국어 SEO 콘텐츠 */
             if (el.closest('script,style,noscript,textarea')) continue;
             if (el.dataset && el.dataset.lpOrigHtml != null) continue; /* HTML 맵 관할 */
-            pending.push([node, raw.replace(key, row[lang]), raw, key]);
+            pending.push([node, renderText(raw, key, row[lang]), raw, key]);
             hits++;
         }
         for (var i2 = 0; i2 < pending.length; i2++) {
