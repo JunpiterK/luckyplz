@@ -250,40 +250,84 @@
 
     var applied = 0;
 
+    /* ── 원문 레지스트리 (2026-08-20) ─────────────────────────────────
+       치환이 원문 파괴형이면 언어를 두 번 바꿀 수 없다 — 이미 영어가 된
+       노드는 한국어 키와 매칭이 안 돼 이전 언어로 잔류한다. 그래서 처음
+       치환할 때 원문을 기록해 두고, 재적용은 항상 원문 기준으로 한다.
+       ko 로 돌아오면 원문을 그대로 복원한다. */
+    var regText = [];   /* {node, raw(원문 nodeValue), key} */
+    var regHtml = [];   /* {el, key} — 원문은 el.dataset.lpOrigHtml */
+    var seenText = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+    function textSeen(n) {
+        if (seenText) return seenText.has(n);
+        for (var i = 0; i < regText.length; i++) if (regText[i].node === n) return true;
+        return false;
+    }
+
     function applyHtml(lang) {
-        /* 텍스트 맵보다 먼저. 후보를 좁히려고 태그를 포함한 요소만 훑는다. */
+        /* 1) 등록분 재렌더 — 원문 기준이라 어느 언어에서 와도 올바르다. */
+        for (var i = 0; i < regHtml.length; i++) {
+            var r = regHtml[i];
+            if (!r.el.isConnected) continue;
+            var row0 = HTML_MAP[r.key];
+            r.el.innerHTML = (lang && row0 && row0[lang]) ? row0[lang] : r.el.dataset.lpOrigHtml;
+        }
+        if (!lang) return;
+        /* 2) 신규 스캔. 텍스트 맵보다 먼저. 태그를 포함한 요소만 훑는다. */
         var nodes = document.querySelectorAll('p, li, div, span, h1, h2, h3');
-        for (var i = 0; i < nodes.length; i++) {
-            var el = nodes[i];
+        for (var j = 0; j < nodes.length; j++) {
+            var el = nodes[j];
+            if (el.dataset.lpOrigHtml != null) continue;   /* 이미 등록됨 */
             if (el.closest('.lp-game-about')) continue;
             var html = el.innerHTML;
-            if (!html || html.length > 400 || !/[\uAC00-\uD7A3]/.test(html)) continue;
+            if (!html || html.length > 400 || !/[가-힣]/.test(html)) continue;
             var key = html.replace(/\s+/g, ' ').trim();
             var row = HTML_MAP[key];
-            if (row && row[lang]) el.innerHTML = row[lang];
+            if (row && row[lang]) {
+                el.dataset.lpOrigHtml = html;
+                regHtml.push({ el: el, key: key });
+                el.innerHTML = row[lang];
+            }
         }
     }
 
     function apply() {
         var lang = pickLang();
-        if (!lang) return;
+        /* ko 인데 치환 이력도 없으면 할 일 없음 — 다수 사용자(ko)의 비용 0. */
+        if (!lang && !regText.length && !regHtml.length) return;
         try { applyHtml(lang); } catch (e) {}
+        /* 1) 등록분 재렌더 */
+        for (var k = 0; k < regText.length; k++) {
+            var r = regText[k];
+            if (!r.node.isConnected) continue;
+            var row0 = MAP[r.key];
+            r.node.nodeValue = (lang && row0 && row0[lang]) ? r.raw.replace(r.key, row0[lang]) : r.raw;
+        }
+        if (!lang) { applied++; return 0; }
+        /* 2) 신규 스캔 — 게임이 나중에 다시 그린 노드를 잡는다. */
         var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
         var node, hits = 0;
         var pending = [];
         while ((node = walker.nextNode())) {
             var raw = node.nodeValue;
             if (!raw || !/[가-힣]/.test(raw)) continue;   /* 한글이 없으면 건너뜀 */
+            if (textSeen(node)) continue;                 /* 등록분은 위에서 처리 */
             var key = raw.replace(/\s+/g, ' ').trim();
             var row = MAP[key];
             if (!row || !row[lang]) continue;
             var el = node.parentElement;
             if (!el || el.closest('.lp-game-about')) continue;   /* 의도적 한국어 SEO 콘텐츠 */
             if (el.closest('script,style,noscript,textarea')) continue;
-            pending.push([node, raw.replace(key, row[lang])]);
+            if (el.dataset && el.dataset.lpOrigHtml != null) continue; /* HTML 맵 관할 */
+            pending.push([node, raw.replace(key, row[lang]), raw, key]);
             hits++;
         }
-        for (var i = 0; i < pending.length; i++) pending[i][0].nodeValue = pending[i][1];
+        for (var i2 = 0; i2 < pending.length; i2++) {
+            var p = pending[i2];
+            regText.push({ node: p[0], raw: p[2], key: p[3] });
+            if (seenText) seenText.add(p[0]);
+            p[0].nodeValue = p[1];
+        }
         applied++;
         return hits;
     }
@@ -303,6 +347,11 @@
     /* 다른 탭에서 언어를 바꾼 경우 */
     window.addEventListener('storage', function (e) {
         if (e && e.key === 'luckyplz_lang') apply();
+    });
+    /* 같은 탭의 lang bar 전환 — storage 이벤트는 타 탭 전용이라
+       이 신호(langBar.js 발행)가 없으면 리로드 전까지 혼종 화면. */
+    document.addEventListener('lp:langchanged', function () {
+        try { apply(); } catch (e) {}
     });
 
     window.LpGameText = { apply: apply, map: MAP };

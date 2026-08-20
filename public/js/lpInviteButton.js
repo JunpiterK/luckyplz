@@ -31,7 +31,63 @@
 
     let _pillEl = null;
     let _modalEl = null;
-    let _pendingByFriend = new Map(); /* friendId → invite id for active sends */
+    /* ── UI i18n (2026-08-20) — 모달 전체가 한국어 고정이었다.
+       SEO 5개 언어 + en 폴백. 게임명은 lpInvite 와 동일 표기. */
+    const IB_I18N = {
+        ko:{invite:'친구 초대',loading:'불러오는 중…',noSocial:'소셜 모듈을 불러올 수 없어요.',
+            loadFail:'친구 목록을 불러오지 못했어요.',
+            noFriends:'아직 친구가 없어요.<br><a style="color:#00D9FF" href="/messages/">/messages/</a> 에서 추가해보세요.',
+            secOnline:'온라인 · 초대 가능',secDnd:'방해금지',secOffline:'오프라인',
+            subDnd:'방해금지 중',subOffline:'오프라인',
+            act:'초대',actDisabled:'초대 불가',sending:'전송 중…',waiting:'대기 중…',
+            errOffline:'오프라인',errNotFriends:'친구 아님',errSelf:'본인 초대 불가',errRetry:'재시도',
+            accepted:'수락함 ✓',declined:'거절함',expiredLbl:'만료',game:'게임',
+            games:{lotto:'로또',roulette:'룰렛',ladder:'사다리',dice:'주사위',team:'팀 나누기',bingo:'빙고','car-racing':'카레이싱'}},
+        en:{invite:'Invite friends',loading:'Loading…',noSocial:'Could not load the social module.',
+            loadFail:'Could not load your friends list.',
+            noFriends:'No friends yet.<br>Add some at <a style="color:#00D9FF" href="/messages/">/messages/</a>.',
+            secOnline:'Online · can invite',secDnd:'Do not disturb',secOffline:'Offline',
+            subDnd:'Do not disturb',subOffline:'Offline',
+            act:'Invite',actDisabled:'Unavailable',sending:'Sending…',waiting:'Waiting…',
+            errOffline:'Offline',errNotFriends:'Not friends',errSelf:'That is you',errRetry:'Retry',
+            accepted:'Accepted ✓',declined:'Declined',expiredLbl:'Expired',game:'Game',
+            games:{lotto:'Lotto',roulette:'Roulette',ladder:'Ladder',dice:'Dice',team:'Team Picker',bingo:'Bingo','car-racing':'Car Racing'}},
+        ja:{invite:'友だちを招待',loading:'読み込み中…',noSocial:'ソーシャルモジュールを読み込めません。',
+            loadFail:'フレンド一覧を読み込めませんでした。',
+            noFriends:'まだフレンドがいません。<br><a style="color:#00D9FF" href="/messages/">/messages/</a> で追加できます。',
+            secOnline:'オンライン · 招待可能',secDnd:'おやすみモード',secOffline:'オフライン',
+            subDnd:'おやすみモード中',subOffline:'オフライン',
+            act:'招待',actDisabled:'招待不可',sending:'送信中…',waiting:'待機中…',
+            errOffline:'オフライン',errNotFriends:'フレンドではありません',errSelf:'自分には送れません',errRetry:'再試行',
+            accepted:'参加 ✓',declined:'辞退',expiredLbl:'期限切れ',game:'ゲーム',
+            games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース'}},
+        es:{invite:'Invitar amigos',loading:'Cargando…',noSocial:'No se pudo cargar el módulo social.',
+            loadFail:'No se pudo cargar tu lista de amigos.',
+            noFriends:'Aún no tienes amigos.<br>Agrégalos en <a style="color:#00D9FF" href="/messages/">/messages/</a>.',
+            secOnline:'En línea · se puede invitar',secDnd:'No molestar',secOffline:'Desconectado',
+            subDnd:'No molestar',subOffline:'Desconectado',
+            act:'Invitar',actDisabled:'No disponible',sending:'Enviando…',waiting:'Esperando…',
+            errOffline:'Desconectado',errNotFriends:'No sois amigos',errSelf:'Eres tú',errRetry:'Reintentar',
+            accepted:'Aceptó ✓',declined:'Rechazó',expiredLbl:'Caducado',game:'Juego',
+            games:{lotto:'Lotería',roulette:'Ruleta',ladder:'Escalera',dice:'Dados',team:'Equipos',bingo:'Bingo','car-racing':'Carrera'}},
+        pt:{invite:'Convidar amigos',loading:'Carregando…',noSocial:'Não foi possível carregar o módulo social.',
+            loadFail:'Não foi possível carregar sua lista de amigos.',
+            noFriends:'Ainda sem amigos.<br>Adicione em <a style="color:#00D9FF" href="/messages/">/messages/</a>.',
+            secOnline:'Online · pode convidar',secDnd:'Não perturbe',secOffline:'Offline',
+            subDnd:'Não perturbe',subOffline:'Offline',
+            act:'Convidar',actDisabled:'Indisponível',sending:'Enviando…',waiting:'Aguardando…',
+            errOffline:'Offline',errNotFriends:'Não são amigos',errSelf:'É você',errRetry:'Tentar de novo',
+            accepted:'Aceitou ✓',declined:'Recusou',expiredLbl:'Expirado',game:'Jogo',
+            games:{lotto:'Loteria',roulette:'Roleta',ladder:'Escada',dice:'Dados',team:'Times',bingo:'Bingo','car-racing':'Corrida'}}
+    };
+    function IBT() {
+        let l; try { l = localStorage.getItem('luckyplz_lang') || 'en'; } catch (_) { l = 'en'; }
+        if (l === 'gb') l = 'en';
+        return IB_I18N[l] || IB_I18N.en;
+    }
+
+    let _pendingByFriend = new Map();
+    let _dragCleanup = []; /* friendId → invite id for active sends */
     let _responseUnsub = null;
     let _presenceUnsub = null;
     let _booted = false;
@@ -227,9 +283,10 @@
             e.preventDefault();
             _begin(e.clientX, e.clientY);
         });
-        document.addEventListener('mousemove', (e) => {
+        const _onMouseMove = (e) => {
             if (_move(e.clientX, e.clientY)) e.preventDefault();
-        });
+        };
+        document.addEventListener('mousemove', _onMouseMove);
         document.addEventListener('mouseup', _end);
 
         /* Touch */
@@ -238,7 +295,7 @@
             if (!t) return;
             _begin(t.clientX, t.clientY);
         }, {passive:true});
-        document.addEventListener('touchmove', (e) => {
+        const _onTouchMove = (e) => {
             const t = e.touches && e.touches[0];
             if (!t) return;
             if (_move(t.clientX, t.clientY)){
@@ -247,7 +304,8 @@
                    page. */
                 if (e.cancelable) e.preventDefault();
             }
-        }, {passive:false});
+        };
+        document.addEventListener('touchmove', _onTouchMove, {passive:false});
         document.addEventListener('touchend', _end);
         document.addEventListener('touchcancel', _end);
 
@@ -265,9 +323,21 @@
         /* Re-clamp on viewport resize / orientation change so a saved
            position from landscape doesn't strand the pill off-screen
            after a rotation to portrait. */
-        window.addEventListener('resize', () => {
+        const _onResize = () => {
             const r = btn.getBoundingClientRect();
             _applyPos(btn, {left:r.left, top:r.top});
+        };
+        window.addEventListener('resize', _onResize);
+
+        /* 로그아웃(_teardown) 후에도 document/window 리스너가 잔류하던
+           누수 — 해제 함수를 모아 두고 teardown 에서 실행한다. */
+        _dragCleanup.push(() => {
+            document.removeEventListener('mousemove', _onMouseMove);
+            document.removeEventListener('mouseup', _end);
+            document.removeEventListener('touchmove', _onTouchMove);
+            document.removeEventListener('touchend', _end);
+            document.removeEventListener('touchcancel', _end);
+            window.removeEventListener('resize', _onResize);
         });
     }
 
@@ -277,7 +347,7 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'lp-ib-pill';
-        btn.innerHTML = '<span class="ico">👥</span><span>친구 초대</span>';
+        btn.innerHTML = '<span class="ico">👥</span><span>' + IBT().invite + '</span>';
         btn.addEventListener('click', _openModal);
         document.body.appendChild(btn);
         _pillEl = btn;
@@ -309,7 +379,7 @@
         wrap.innerHTML =
             '<div class="lp-ib-card">'
             + '<div class="lp-ib-head">'
-                + '<h3>친구 초대 · ' + _esc(_humanGame(_gameTypeFromPath())) + '</h3>'
+                + '<h3>' + IBT().invite + ' · ' + _esc(_humanGame(_gameTypeFromPath())) + '</h3>'
                 + '<button class="close" type="button" aria-label="Close">✕</button>'
             + '</div>'
             + '<div class="lp-ib-body" id="lpIbBody"></div>'
@@ -322,13 +392,13 @@
 
     async function _renderFriendsList() {
         const body = _modalEl.querySelector('#lpIbBody');
-        body.innerHTML = '<div class="lp-ib-empty">불러오는 중…</div>';
-        if (!window.LpSocial) { body.innerHTML = '<div class="lp-ib-empty">소셜 모듈을 불러올 수 없어요.</div>'; return; }
+        body.innerHTML = '<div class="lp-ib-empty">' + IBT().loading + '</div>';
+        if (!window.LpSocial) { body.innerHTML = '<div class="lp-ib-empty">' + IBT().noSocial + '</div>'; return; }
         const r = await LpSocial.getFriends();
-        if (!r.ok) { body.innerHTML = '<div class="lp-ib-empty">친구 목록을 불러오지 못했어요.</div>'; return; }
+        if (!r.ok) { body.innerHTML = '<div class="lp-ib-empty">' + IBT().loadFail + '</div>'; return; }
         const accepted = (r.rows || []).filter(f => f.direction === 'accepted');
         if (!accepted.length) {
-            body.innerHTML = '<div class="lp-ib-empty">아직 친구가 없어요.<br><a style="color:#00D9FF" href="/messages/">/messages/</a> 에서 추가해보세요.</div>';
+            body.innerHTML = '<div class="lp-ib-empty">' + IBT().noFriends + '</div>';
             return;
         }
 
@@ -342,15 +412,15 @@
 
         let html = '';
         if (buckets.online.length) {
-            html += '<div class="lp-ib-section-label">온라인 · 초대 가능</div>';
+            html += '<div class="lp-ib-section-label">' + IBT().secOnline + '</div>';
             html += buckets.online.map(f => _friendRowHtml(f, 'online', false)).join('');
         }
         if (buckets.dnd.length) {
-            html += '<div class="lp-ib-section-label">방해금지</div>';
+            html += '<div class="lp-ib-section-label">' + IBT().secDnd + '</div>';
             html += buckets.dnd.map(f => _friendRowHtml(f, 'dnd', true)).join('');
         }
         if (buckets.offline.length) {
-            html += '<div class="lp-ib-section-label">오프라인</div>';
+            html += '<div class="lp-ib-section-label">' + IBT().secOffline + '</div>';
             html += buckets.offline.map(f => _friendRowHtml(f, 'offline', true)).join('');
         }
         body.innerHTML = html;
@@ -363,10 +433,10 @@
         const av = f.avatar_url
             ? '<div class="lp-ib-av"><img src="' + _esc(f.avatar_url) + '" referrerpolicy="no-referrer" alt=""><span class="sd ' + status + '"></span></div>'
             : '<div class="lp-ib-av">' + _esc((f.nickname || '?').trim()[0] || '?').toUpperCase() + '<span class="sd ' + status + '"></span></div>';
-        const sub = status === 'dnd' ? '방해금지 중' : status === 'offline' ? '오프라인' : '';
+        const sub = status === 'dnd' ? IBT().subDnd : status === 'offline' ? IBT().subOffline : '';
         const btn = disabled
-            ? '<button class="lp-ib-act" disabled>초대 불가</button>'
-            : '<button class="lp-ib-act" type="button" data-invite-to="' + _esc(f.friend_id) + '">초대</button>';
+            ? '<button class="lp-ib-act" disabled>' + IBT().actDisabled + '</button>'
+            : '<button class="lp-ib-act" type="button" data-invite-to="' + _esc(f.friend_id) + '">' + IBT().act + '</button>';
         return '<div class="lp-ib-row' + (disabled ? ' disabled' : '') + '">'
             + av
             + '<div class="lp-ib-meta">'
@@ -380,7 +450,7 @@
     async function _sendOne(friendId, btn) {
         if (!window.LpInvite) return;
         btn.disabled = true;
-        btn.textContent = '전송 중…';
+        btn.textContent = IBT().sending;
         btn.classList.add('sent');
         const gameType = _gameTypeFromPath();
         const gameUrl  = location.href;
@@ -390,19 +460,20 @@
             btn.classList.add('declined');
             btn.textContent = _errToLabel(r.error);
             /* Revert after 2.5 s so the user can retry */
-            setTimeout(() => { btn.classList.remove('declined'); btn.textContent = '초대'; btn.disabled = false; }, 2500);
+            setTimeout(() => { btn.classList.remove('declined'); btn.textContent = IBT().act; btn.disabled = false; }, 2500);
             return;
         }
         _pendingByFriend.set(friendId, r.id);
-        btn.textContent = '대기 중…';
+        btn.textContent = IBT().waiting;
     }
 
     function _errToLabel(err) {
+        const t = IBT();
         switch (err) {
-            case 'offline':     return '오프라인';
-            case 'not_friends': return '친구 아님';
-            case 'self':        return '본인 초대 불가';
-            default:            return '재시도';
+            case 'offline':     return t.errOffline;
+            case 'not_friends': return t.errNotFriends;
+            case 'self':        return t.errSelf;
+            default:            return t.errRetry;
         }
     }
 
@@ -415,15 +486,15 @@
         btn.classList.remove('sent','accepted','declined');
         if (row.status === 'accepted') {
             btn.classList.add('accepted');
-            btn.textContent = '수락함 ✓';
+            btn.textContent = IBT().accepted;
         } else if (row.status === 'declined') {
             btn.classList.add('declined');
-            btn.textContent = '거절함';
+            btn.textContent = IBT().declined;
         } else if (row.status === 'expired') {
             btn.classList.add('declined');
-            btn.textContent = '만료';
+            btn.textContent = IBT().expiredLbl;
         } else {
-            btn.textContent = '초대';
+            btn.textContent = IBT().act;
             btn.disabled = false;
         }
         _pendingByFriend.delete(row.to_id);
@@ -431,8 +502,8 @@
 
     function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
     function _humanGame(type){
-        const map={lotto:'로또',roulette:'룰렛',ladder:'사다리',dice:'주사위',team:'팀 나누기',bingo:'빙고','car-racing':'카레이싱'};
-        return map[type]||'게임';
+        const t = IBT();
+        return t.games[type]||t.game;
     }
 
     /* ---- Boot --------------------------------------------- */
@@ -455,6 +526,8 @@
 
     function _teardown() {
         _unmountPill();
+        _dragCleanup.forEach((fn) => { try { fn(); } catch (_) {} });
+        _dragCleanup = [];
         if (_responseUnsub)  { _responseUnsub(); _responseUnsub = null; }
         if (_presenceUnsub)  { _presenceUnsub(); _presenceUnsub = null; }
         if (_modalEl)        { _modalEl.remove(); _modalEl = null; }

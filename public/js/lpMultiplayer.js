@@ -34,6 +34,74 @@
      silently rehydrated by `LpRoom.tryResumeHost` today (quiz seeds
      questions + lobby flow via button clicks), so they're shown
      greyed-out until their page grows a resume path. */
+  /* ── UI i18n (2026-08-20) — 언어 정책상 en 이 canonical 인데 이 패널이
+     한국어 고정이라 비한국어 사용자에게 멀티플레이 UI 전체가 한국어로
+     노출됐다. SEO 5개 언어를 갖추고 나머지 UI 언어는 en 폴백. */
+  var MP_I18N={
+    ko:{title:'멀티플레이',min:'접기',max:'전체화면',switchGame:'게임 전환',hostOnly:'호스트 전용',
+        hostSelf:'방장 {n} · 나',hostRow:'방장 {n}',players:'참여자',countFmt:'{c}명',
+        emptyHost:'아직 참여자 없음 — 링크를 공유해 보세요',waiting:'대기 중…',
+        copyLink:'🔗 링크 복사',copied:'✓ 복사됨',closeRoom:'방 닫기',
+        closeConfirm:'방을 닫으시겠어요?\n모든 게스트 연결이 끊깁니다.',
+        leave:'나가기',leaveConfirm:'방에서 나가시겠어요?',
+        homeConfirm:'홈으로 이동하면 멀티플레이 방이 닫힙니다.\n계속하시겠어요?',
+        nextHint:'👥 다음 게임은 멀티플레이 패널에서 선택하세요'},
+    en:{title:'Multiplayer',min:'Collapse',max:'Fullscreen',switchGame:'Switch game',hostOnly:'Host only',
+        hostSelf:'Host {n} · me',hostRow:'Host {n}',players:'Players',countFmt:'{c}',
+        emptyHost:'No players yet — share the link',waiting:'Waiting…',
+        copyLink:'🔗 Copy link',copied:'✓ Copied',closeRoom:'Close room',
+        closeConfirm:'Close the room?\nAll guests will be disconnected.',
+        leave:'Leave',leaveConfirm:'Leave the room?',
+        homeConfirm:'Going home will close the multiplayer room.\nContinue?',
+        nextHint:'👥 Pick the next game from the multiplayer panel'},
+    ja:{title:'マルチプレイ',min:'折りたたむ',max:'全画面',switchGame:'ゲーム切替',hostOnly:'ホスト専用',
+        hostSelf:'ホスト {n} · 自分',hostRow:'ホスト {n}',players:'参加者',countFmt:'{c}人',
+        emptyHost:'まだ参加者なし — リンクを共有しましょう',waiting:'待機中…',
+        copyLink:'🔗 リンクをコピー',copied:'✓ コピー済み',closeRoom:'ルームを閉じる',
+        closeConfirm:'ルームを閉じますか？\nすべてのゲストの接続が切れます。',
+        leave:'退出',leaveConfirm:'ルームから退出しますか？',
+        homeConfirm:'ホームに移動するとマルチプレイルームが閉じます。\n続行しますか？',
+        nextHint:'👥 次のゲームはマルチプレイパネルから選択'},
+    es:{title:'Multijugador',min:'Contraer',max:'Pantalla completa',switchGame:'Cambiar juego',hostOnly:'Solo anfitrión',
+        hostSelf:'Anfitrión {n} · yo',hostRow:'Anfitrión {n}',players:'Participantes',countFmt:'{c}',
+        emptyHost:'Aún no hay participantes — comparte el enlace',waiting:'Esperando…',
+        copyLink:'🔗 Copiar enlace',copied:'✓ Copiado',closeRoom:'Cerrar sala',
+        closeConfirm:'¿Cerrar la sala?\nSe desconectarán todos los invitados.',
+        leave:'Salir',leaveConfirm:'¿Salir de la sala?',
+        homeConfirm:'Ir al inicio cerrará la sala multijugador.\n¿Continuar?',
+        nextHint:'👥 Elige el siguiente juego en el panel multijugador'},
+    pt:{title:'Multijogador',min:'Recolher',max:'Tela cheia',switchGame:'Trocar de jogo',hostOnly:'Só o anfitrião',
+        hostSelf:'Anfitrião {n} · eu',hostRow:'Anfitrião {n}',players:'Participantes',countFmt:'{c}',
+        emptyHost:'Ainda sem participantes — compartilhe o link',waiting:'Aguardando…',
+        copyLink:'🔗 Copiar link',copied:'✓ Copiado',closeRoom:'Fechar sala',
+        closeConfirm:'Fechar a sala?\nTodos os convidados serão desconectados.',
+        leave:'Sair',leaveConfirm:'Sair da sala?',
+        homeConfirm:'Ir para o início fechará a sala multijogador.\nContinuar?',
+        nextHint:'👥 Escolha o próximo jogo no painel multijogador'}
+  };
+  function MT(k){
+    var l;try{l=localStorage.getItem('luckyplz_lang')||'en'}catch(_){l='en'}
+    if(l==='gb')l='en';
+    var t=MP_I18N[l]||MP_I18N.en;
+    return t[k]!=null?t[k]:MP_I18N.en[k];
+  }
+  var GAME_LABELS={
+    roulette:{en:'Roulette',ja:'ルーレット',es:'Ruleta',pt:'Roleta'},
+    ladder:{en:'Ladder',ja:'あみだくじ',es:'Escalera',pt:'Escada'},
+    team:{en:'Teams',ja:'チーム分け',es:'Equipos',pt:'Times'},
+    lotto:{en:'Lotto',ja:'ロト',es:'Lotería',pt:'Loteria'},
+    bingo:{en:'Bingo',ja:'ビンゴ',es:'Bingo',pt:'Bingo'},
+    'car-racing':{en:'Racing',ja:'レース',es:'Carrera',pt:'Corrida'},
+    quiz:{en:'Quiz',ja:'クイズ',es:'Quiz',pt:'Quiz'}
+  };
+  function gameLabel(g){
+    var l;try{l=localStorage.getItem('luckyplz_lang')||'en'}catch(_){l='en'}
+    if(l==='ko')return g.label;
+    if(l==='gb')l='en';
+    var m=GAME_LABELS[g.id];
+    return (m&&(m[l]||m.en))||g.label;
+  }
+
   var GAMES=[
     {id:'roulette',  label:'룰렛',    emoji:'🎯', path:'/games/roulette/',  resumable:true },
     {id:'ladder',    label:'사다리',  emoji:'🪜', path:'/games/ladder/',    resumable:true },
@@ -175,7 +243,7 @@
        and unwrapped (#resultScreen direct h1 in car-racing) layouts. */
     'body.lp-mp-active #resultScreen .result-card::after,',
     'body.lp-mp-active #resultScreen > h1:first-child::after{',
-    '  content:"👥 다음 게임은 멀티플레이 패널에서 선택하세요";',
+    '  content:"'+MT('nextHint')+'";',
     '  display:block;margin:14px auto 0;padding:10px 16px;',
     '  background:rgba(79,195,247,.18);border:1px solid rgba(79,195,247,.45);',
     '  border-radius:10px;color:#4FC3F7;font-size:.85em;font-weight:700;',
@@ -411,12 +479,12 @@
     p.innerHTML=
       '<div class="lp-mp-titlebar">'
       +'<span class="lp-mp-icon">🌐</span>'
-      +'<span class="lp-mp-title">멀티플레이</span>'
+      +'<span class="lp-mp-title">'+MT('title')+'</span>'
       +'<span class="lp-mp-code"></span>'
       +'<span class="lp-mp-rtt" hidden title="round-trip latency"></span>'
       +'<div class="lp-mp-actions">'
-        +'<button class="lp-mp-btn-min" title="접기" aria-label="접기">–</button>'
-        +'<button class="lp-mp-btn-max" title="전체화면" aria-label="전체화면">▢</button>'
+        +'<button class="lp-mp-btn-min" title="'+MT('min')+'" aria-label="'+MT('min')+'">–</button>'
+        +'<button class="lp-mp-btn-max" title="'+MT('max')+'" aria-label="'+MT('max')+'">▢</button>'
       +'</div>'
       +'</div>'
       +'<div class="lp-mp-body">'
@@ -500,12 +568,12 @@
         var attrs=(isCurrent?' data-current="1"':'')+(disabled?' disabled':'');
         return '<button type="button" class="lp-mp-sw-btn" data-path="'+g.path+'" data-id="'+g.id+'"'+attrs+'>'
           +'<span class="lp-mp-sw-emoji">'+g.emoji+'</span>'
-          +'<span>'+esc(g.label)+'</span>'
+          +'<span>'+esc(gameLabel(g))+'</span>'
         +'</button>';
       }).join('');
       sec.hidden=false;
       sec.innerHTML=
-        '<div class="lp-mp-sec-label"><span>게임 전환</span><b>호스트 전용</b></div>'
+        '<div class="lp-mp-sec-label"><span>'+MT('switchGame')+'</span><b>'+MT('hostOnly')+'</b></div>'
         +'<div class="lp-mp-switcher-grid">'+html+'</div>';
       Array.prototype.forEach.call(sec.querySelectorAll('.lp-mp-sw-btn'),function(btn){
         if(btn.disabled)return;
@@ -521,32 +589,32 @@
       panel.querySelector('.lp-mp-code').textContent=code;
       panel.querySelector('.lp-mp-host-row').innerHTML=
         '<span class="lp-mp-dot"></span>'
-        +'<span>방장 <strong>'+esc(hn)+'</strong> · 나</span>';
+        +'<span>'+MT('hostSelf').replace('{n}','<strong>'+esc(hn)+'</strong>')+'</span>';
 
       var chips=list.map(function(g){
         return '<span class="lp-mp-chip">'+esc(g.nickname||'Guest')+'</span>';
       }).join('');
       panel.querySelector('.lp-mp-guests-sec').innerHTML=
-        '<div class="lp-mp-sec-label"><span>참여자</span><b>'+list.length+'명</b></div>'
+        '<div class="lp-mp-sec-label"><span>'+MT('players')+'</span><b>'+MT('countFmt').replace('{c}',list.length)+'</b></div>'
         +(list.length?'<div class="lp-mp-guest-list">'+chips+'</div>'
-                     :'<div class="lp-mp-empty">아직 참여자 없음 — 링크를 공유해 보세요</div>');
+                     :'<div class="lp-mp-empty">'+MT('emptyHost')+'</div>');
 
       renderSwitcher();
 
       panel.querySelector('.lp-mp-footer').innerHTML=
-        '<button class="lp-mp-copy">🔗 링크 복사</button>'
-        +'<button class="lp-mp-danger lp-mp-end">방 닫기</button>';
+        '<button class="lp-mp-copy">'+MT('copyLink')+'</button>'
+        +'<button class="lp-mp-danger lp-mp-end">'+MT('closeRoom')+'</button>';
 
       panel.querySelector('.lp-mp-copy').onclick=function(){
         var btn=this;var url='';
         try{url=(typeof room.shareUrl==='function')?room.shareUrl():(location.origin+'/?room='+code)}
         catch(_){url=location.origin+'/?room='+code}
         try{navigator.clipboard.writeText(url);}catch(_){}
-        var orig=btn.textContent;btn.textContent='✓ 복사됨';
+        var orig=btn.textContent;btn.textContent=MT('copied');
         setTimeout(function(){btn.textContent=orig},1400);
       };
       panel.querySelector('.lp-mp-end').onclick=function(){
-        if(!confirm('방을 닫으시겠어요?\n모든 게스트 연결이 끊깁니다.'))return;
+        if(!confirm(MT('closeConfirm')))return;
         try{room.close&&room.close()}catch(_){}
         unmount();
       };
@@ -616,21 +684,21 @@
       panel.querySelector('.lp-mp-code').textContent=code;
       panel.querySelector('.lp-mp-host-row').innerHTML=
         '<span class="lp-mp-dot"></span>'
-        +'<span>방장 <strong>'+esc(hostAuthedName||'Host')+'</strong></span>';
+        +'<span>'+MT('hostRow').replace('{n}','<strong>'+esc(hostAuthedName||'Host')+'</strong>')+'</span>';
 
       var chips=roster.map(function(p){
         var self=(p.self||(p.id&&p.id===g.gid))?' data-self="1"':'';
         return '<span class="lp-mp-chip"'+self+'>'+esc(p.nickname||'Guest')+'</span>';
       }).join('');
       panel.querySelector('.lp-mp-guests-sec').innerHTML=
-        '<div class="lp-mp-sec-label"><span>참여자</span><b>'+roster.length+'명</b></div>'
+        '<div class="lp-mp-sec-label"><span>'+MT('players')+'</span><b>'+MT('countFmt').replace('{c}',roster.length)+'</b></div>'
         +(roster.length?'<div class="lp-mp-guest-list">'+chips+'</div>'
-                       :'<div class="lp-mp-empty">대기 중…</div>');
+                       :'<div class="lp-mp-empty">'+MT('waiting')+'</div>');
 
       panel.querySelector('.lp-mp-footer').innerHTML=
-        '<button class="lp-mp-danger lp-mp-leave">나가기</button>';
+        '<button class="lp-mp-danger lp-mp-leave">'+MT('leave')+'</button>';
       panel.querySelector('.lp-mp-leave').onclick=function(){
-        if(!confirm('방에서 나가시겠어요?'))return;
+        if(!confirm(MT('leaveConfirm')))return;
         try{g.close&&g.close()}catch(_){}
         unmount();
       };
@@ -780,11 +848,7 @@
     var btn=e.target.closest('.floating-home');
     if(!btn)return;
     e.preventDefault();
-    var ko=(localStorage.getItem('luckyplz_lang')||'en').startsWith('ko');
-    var msg=ko
-      ?'홈으로 이동하면 멀티플레이 방이 닫힙니다.\n계속하시겠어요?'
-      :'Going home will close the multiplayer room.\nContinue?';
-    if(confirm(msg)){
+    if(confirm(MT('homeConfirm'))){
       try{current.api&&current.api.close&&current.api.close()}catch(_){}
       location.href='/';
     }

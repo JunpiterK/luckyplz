@@ -98,23 +98,47 @@
             menu.hidden = !menu.hidden;
         });
 
-        // Close on outside click — menu is position:fixed so it lives
-        // outside the bar visually; test against both.
-        document.addEventListener('click', (e) => {
-            if (!bar.contains(e.target) && !menu.contains(e.target)) menu.hidden = true;
-        });
-
-        // Reposition on scroll/resize while open
-        window.addEventListener('resize', () => { if(!menu.hidden) positionMenu(); });
-        window.addEventListener('scroll', () => { if(!menu.hidden) positionMenu(); }, true);
-
         // Close when a language inside menu is chosen (after the game's delegated handler runs)
         menu.addEventListener('click', (e) => {
             if (e.target.closest('.lang-btn')) {
                 setTimeout(() => { menu.hidden = true; }, 60);
             }
         });
+
+        /* document/window 리스너는 바마다 달지 않는다 — 바가 2개 이상인
+           페이지에서 중복 누적되던 누수. 모듈 레벨 공유 리스너가
+           registry 를 순회한다. */
+        registry.push({ bar, menu, positionMenu });
     }
+
+    /* ── 모듈 레벨 공유 리스너 (1회 등록) ───────────────────────────── */
+    const registry = [];
+    document.addEventListener('click', (e) => {
+        registry.forEach(({ bar, menu }) => {
+            if (!bar.contains(e.target) && !menu.contains(e.target)) menu.hidden = true;
+        });
+    });
+    window.addEventListener('resize', () => {
+        registry.forEach(({ menu, positionMenu }) => { if (!menu.hidden) positionMenu(); });
+    });
+    window.addEventListener('scroll', () => {
+        registry.forEach(({ menu, positionMenu }) => { if (!menu.hidden) positionMenu(); });
+    }, true);
+
+    /* 같은 탭 언어 전환 신호. 게임의 위임 핸들러가 localStorage 를 갱신한
+       뒤에 lpGameText/siteFooter 가 다시 적용할 수 있도록, 언어 버튼
+       클릭을 한 틱 뒤에 lp:langchanged 로 방송한다. storage 이벤트는
+       타 탭에서만 발화하므로 이 신호가 없으면 같은 탭은 리로드 전까지
+       혼종 화면이 된다. (홈은 자체 발행하지만 중복 적용은 무해·멱등) */
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.lang-btn');
+        if (!btn || !btn.dataset.lang) return;
+        setTimeout(() => {
+            try {
+                document.dispatchEvent(new CustomEvent('lp:langchanged', { detail: { lang: btn.dataset.lang } }));
+            } catch (_) {}
+        }, 0);
+    });
 
     function run(){
         injectStyles();

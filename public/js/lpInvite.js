@@ -162,7 +162,7 @@
 
         /* Look up sender nickname + avatar from profiles. If the fetch
            fails, fall back to a generic label — the toast still works. */
-        let fromNick = '친구', fromAvatar = null;
+        let fromNick = IVT().friend, fromAvatar = null;
         try {
             const { data } = await getSupabase().from('profiles')
                 .select('nickname, avatar_url').eq('id', inv.from_id).maybeSingle();
@@ -173,14 +173,16 @@
         const el = document.createElement('div');
         el.className = 'lp-invite-toast';
         el.setAttribute('role', 'alert');
+        const ivt = IVT();
         el.innerHTML =
-            '<div class="lp-iv-head">🎮 게임 초대</div>' +
-            '<div class="lp-iv-body"><span class="lp-iv-nick">' + _esc(fromNick) + '</span>님이 ' +
-                '<span class="lp-iv-game">' + _esc(game) + '</span> 에 초대했어요!</div>' +
-            '<div class="lp-iv-timer" data-remaining="60">60초 남음</div>' +
+            '<div class="lp-iv-head">' + ivt.head + '</div>' +
+            '<div class="lp-iv-body">' + ivt.bodyFmt
+                .replace('{nick}', '<span class="lp-iv-nick">' + _esc(fromNick) + '</span>')
+                .replace('{game}', '<span class="lp-iv-game">' + _esc(game) + '</span>') + '</div>' +
+            '<div class="lp-iv-timer" data-remaining="60">' + ivt.timerFmt.replace('{s}', 60) + '</div>' +
             '<div class="lp-iv-actions">' +
-                '<button class="lp-iv-decline" type="button">거절</button>' +
-                '<button class="lp-iv-accept" type="button">수락</button>' +
+                '<button class="lp-iv-decline" type="button">' + ivt.decline + '</button>' +
+                '<button class="lp-iv-accept" type="button">' + ivt.accept + '</button>' +
             '</div>';
         document.body.appendChild(el);
         _toastEl = el;
@@ -190,7 +192,7 @@
         _toastCountdown = setInterval(() => {
             left -= 1;
             if (left <= 0) { _dismissToast(); return; }
-            if (timerEl) timerEl.textContent = left + '초 남음';
+            if (timerEl) timerEl.textContent = IVT().timerFmt.replace('{s}', left);
         }, 1000);
 
         el.querySelector('.lp-iv-accept').addEventListener('click', async () => {
@@ -199,9 +201,9 @@
             if (r.ok && r.game_url) {
                 location.assign(r.game_url);
             } else if (r.error === 'expired') {
-                _flash('초대가 만료됐어요.');
+                _flash(IVT().expired);
             } else if (!r.ok) {
-                _flash('수락 실패: ' + (r.error || 'unknown'));
+                _flash(IVT().acceptFail + (r.error || 'unknown'));
             }
         });
         el.querySelector('.lp-iv-decline').addEventListener('click', async () => {
@@ -211,6 +213,36 @@
 
         /* Auto-dismiss at 60s (server TTL is 120s, we show earlier). */
         _toastTimer = setTimeout(_dismissToast, 60 * 1000);
+    }
+
+    /* ── UI i18n (2026-08-20) — 토스트가 한국어 고정이라 비한국어
+       사용자에게 초대 UI 가 한국어로 노출됐다. SEO 5개 언어 + en 폴백. */
+    const IV_I18N = {
+        ko:{friend:'친구',head:'🎮 게임 초대',bodyFmt:'{nick}님이 {game} 에 초대했어요!',
+            timerFmt:'{s}초 남음',decline:'거절',accept:'수락',
+            expired:'초대가 만료됐어요.',acceptFail:'수락 실패: ',game:'게임',
+            games:{lotto:'로또',roulette:'룰렛',ladder:'사다리',dice:'주사위',team:'팀 나누기',bingo:'빙고','car-racing':'카레이싱'}},
+        en:{friend:'A friend',head:'🎮 Game invite',bodyFmt:'{nick} invited you to {game}!',
+            timerFmt:'{s}s left',decline:'Decline',accept:'Accept',
+            expired:'The invite expired.',acceptFail:'Accept failed: ',game:'a game',
+            games:{lotto:'Lotto',roulette:'Roulette',ladder:'Ladder',dice:'Dice',team:'Team Picker',bingo:'Bingo','car-racing':'Car Racing'}},
+        ja:{friend:'友だち',head:'🎮 ゲーム招待',bodyFmt:'{nick}さんが{game}に招待しました！',
+            timerFmt:'残り{s}秒',decline:'辞退',accept:'参加',
+            expired:'招待の期限が切れました。',acceptFail:'参加に失敗: ',game:'ゲーム',
+            games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース'}},
+        es:{friend:'Un amigo',head:'🎮 Invitación a jugar',bodyFmt:'¡{nick} te invitó a {game}!',
+            timerFmt:'Quedan {s} s',decline:'Rechazar',accept:'Aceptar',
+            expired:'La invitación caducó.',acceptFail:'Error al aceptar: ',game:'un juego',
+            games:{lotto:'Lotería',roulette:'Ruleta',ladder:'Escalera',dice:'Dados',team:'Equipos',bingo:'Bingo','car-racing':'Carrera'}},
+        pt:{friend:'Um amigo',head:'🎮 Convite de jogo',bodyFmt:'{nick} convidou você para {game}!',
+            timerFmt:'Faltam {s} s',decline:'Recusar',accept:'Aceitar',
+            expired:'O convite expirou.',acceptFail:'Falha ao aceitar: ',game:'um jogo',
+            games:{lotto:'Loteria',roulette:'Roleta',ladder:'Escada',dice:'Dados',team:'Times',bingo:'Bingo','car-racing':'Corrida'}}
+    };
+    function IVT() {
+        let l; try { l = localStorage.getItem('luckyplz_lang') || 'en'; } catch (_) { l = 'en'; }
+        if (l === 'gb') l = 'en';
+        return IV_I18N[l] || IV_I18N.en;
     }
 
     /* Super-simple flash for inline errors (after accept/decline). */
@@ -232,11 +264,8 @@
     /* game_type → human-readable Korean label. If we ship a new game,
        add an entry here. Fallback is the raw type string. */
     function _humanGame(type) {
-        const map = {
-            lotto:'로또', roulette:'룰렛', ladder:'사다리', dice:'주사위',
-            team:'팀 나누기', bingo:'빙고', 'car-racing':'카레이싱'
-        };
-        return map[type] || type || '게임';
+        const t = IVT();
+        return t.games[type] || type || t.game;
     }
 
     /* ---- Public API ----------------------------------------- */
