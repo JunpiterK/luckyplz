@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787195593">
+<meta name="lp-build" content="1787203474">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787195593";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787203474";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -394,35 +394,125 @@ let saved=[];try{saved=JSON.parse(localStorage.getItem('lp_balloon_players')||'[
 if(!Array.isArray(saved)||saved.length<2)saved=['',''];
 saved.slice(0,MAXP).forEach(v=>addRow(v,false));
 
-/* ══ 오디오 (WebAudio 신스 — mp3 없음) ══ */
-let AC=null;
+/* ══ 오디오 (WebAudio 신스 — mp3 없음, 2026-08-20 리얼 사운드 재설계) ══
+   펌프 = "후욱" 하고 공기를 실제로 불어넣는 숨 소리(밴드패스 스윕 노이즈
+   3레이어), 파열 = 크랙 임펄스 + 뱅 몸통 + 저역 펀치 + 방 잔향의
+   4레이어 + tanh 소프트클리퍼. 위험 구간에는 고무 삐걱 + 심장 박동을
+   얹어 긴장을 청각으로도 쌓는다. */
+let AC=null,NOISE=null;
 function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}
     if(AC&&AC.state==='suspended')AC.resume().catch(()=>{});return AC}
+function noiseBuf(c){
+    if(!NOISE){
+        NOISE=c.createBuffer(1,c.sampleRate,c.sampleRate);
+        const d=NOISE.getChannelData(0);
+        for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    }
+    return NOISE;
+}
 function sPump(k){
     const c=ac();if(!c)return;
     const t=c.currentTime;
-    const o=c.createOscillator(),g=c.createGain();
-    o.type='sine';o.frequency.setValueAtTime(140+k*6,t);
-    o.frequency.exponentialRampToValueAtTime(90+k*5,t+.09);
-    g.gain.setValueAtTime(.18,t);g.gain.exponentialRampToValueAtTime(.001,t+.12);
-    o.connect(g).connect(c.destination);o.start(t);o.stop(t+.13);
-    if(k>7){ /* 삐걱 — 위험 구간의 청각 신호 */
-        const o2=c.createOscillator(),g2=c.createGain();
-        o2.type='sawtooth';o2.frequency.setValueAtTime(900+Math.random()*500,t+.02);
-        g2.gain.setValueAtTime(.028,t+.02);g2.gain.exponentialRampToValueAtTime(.001,t+.1);
-        o2.connect(g2).connect(c.destination);o2.start(t+.02);o2.stop(t+.11);
+    /* L1 바람 몸통 — "후우" : 밴드패스 노이즈, 필터가 올라갔다 내려오며
+       숨을 불어넣는 궤적을 그린다. 풍선이 클수록(k↑) 등압이 높아
+       중심 주파수가 살짝 올라간다. */
+    const s1=c.createBufferSource();s1.buffer=noiseBuf(c);
+    s1.playbackRate.value=.92+Math.random()*.16;
+    const bp=c.createBiquadFilter();bp.type='bandpass';bp.Q.value=.8;
+    bp.frequency.setValueAtTime(240,t);
+    bp.frequency.exponentialRampToValueAtTime(820+k*26,t+.09);
+    bp.frequency.exponentialRampToValueAtTime(300,t+.30);
+    const g1=c.createGain();
+    g1.gain.setValueAtTime(.0001,t);
+    g1.gain.exponentialRampToValueAtTime(.55,t+.045);
+    g1.gain.setValueAtTime(.55,t+.11);
+    g1.gain.exponentialRampToValueAtTime(.0001,t+.32);
+    s1.connect(bp).connect(g1).connect(c.destination);
+    s1.start(t);s1.stop(t+.34);
+    /* L2 입술 히스 — 고역 숨소리가 있어야 "사람이 분다"로 들린다 */
+    const s2=c.createBufferSource();s2.buffer=noiseBuf(c);
+    const hp=c.createBiquadFilter();hp.type='highpass';hp.frequency.value=2200;
+    const g2=c.createGain();
+    g2.gain.setValueAtTime(.0001,t);
+    g2.gain.exponentialRampToValueAtTime(.10,t+.05);
+    g2.gain.exponentialRampToValueAtTime(.0001,t+.24);
+    s2.connect(hp).connect(g2).connect(c.destination);
+    s2.start(t);s2.stop(t+.26);
+    /* L3 팽창 공명 — 풍선 몸통이 받아내는 낮은 울림, 커질수록 팽팽해진다 */
+    const o=c.createOscillator(),g3=c.createGain();
+    o.type='triangle';
+    o.frequency.setValueAtTime(64+k*4,t+.02);
+    o.frequency.linearRampToValueAtTime(88+k*5,t+.20);
+    g3.gain.setValueAtTime(.0001,t+.02);
+    g3.gain.exponentialRampToValueAtTime(.09,t+.10);
+    g3.gain.exponentialRampToValueAtTime(.0001,t+.30);
+    o.connect(g3).connect(c.destination);o.start(t+.02);o.stop(t+.31);
+    /* 위험 구간: 고무 삐걱(하강 스윕 새츄레이션) + 심장 박동 한 번 */
+    if(hazard(k+1)>0){
+        const o2=c.createOscillator(),bq=c.createBiquadFilter(),g4=c.createGain();
+        o2.type='sawtooth';
+        const f0=1500+Math.random()*700;
+        o2.frequency.setValueAtTime(f0,t+.05);
+        o2.frequency.exponentialRampToValueAtTime(f0*.55,t+.19);
+        bq.type='bandpass';bq.Q.value=9;bq.frequency.value=f0*.8;
+        g4.gain.setValueAtTime(.0001,t+.05);
+        g4.gain.exponentialRampToValueAtTime(.05+hazard(k+1)*.12,t+.09);
+        g4.gain.exponentialRampToValueAtTime(.0001,t+.21);
+        o2.connect(bq).connect(g4).connect(c.destination);
+        o2.start(t+.05);o2.stop(t+.22);
+    }
+    if(hazard(k+1)>=.15){
+        const hb=c.createOscillator(),g5=c.createGain();
+        hb.type='sine';hb.frequency.setValueAtTime(52,t+.16);
+        g5.gain.setValueAtTime(.0001,t+.16);
+        g5.gain.exponentialRampToValueAtTime(.22,t+.19);
+        g5.gain.exponentialRampToValueAtTime(.0001,t+.34);
+        hb.connect(g5).connect(c.destination);hb.start(t+.16);hb.stop(t+.35);
     }
 }
 function sPop(){
     const c=ac();if(!c)return;
     const t=c.currentTime;
-    const len=c.sampleRate*.35,buf=c.createBuffer(1,len,c.sampleRate),d=buf.getChannelData(0);
-    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,1.8);
-    const src=c.createBufferSource();src.buffer=buf;
-    const f=c.createBiquadFilter();f.type='lowpass';
-    f.frequency.setValueAtTime(9000,t);f.frequency.exponentialRampToValueAtTime(300,t+.32);
-    const g=c.createGain();g.gain.setValueAtTime(.85,t);g.gain.exponentialRampToValueAtTime(.001,t+.35);
-    src.connect(f).connect(g).connect(c.destination);src.start(t);
+    /* 마스터 → tanh 소프트클리퍼: 레이어 합이 뭉개지지 않고 "펑" 하고
+       때리는 펀치가 된다 */
+    const master=c.createGain();master.gain.value=1;
+    const shaper=c.createWaveShaper();
+    const N=256,curve=new Float32Array(N);
+    for(let i=0;i<N;i++){const x=i/(N-1)*2-1;curve[i]=Math.tanh(2.4*x);}
+    shaper.curve=curve;
+    master.connect(shaper).connect(c.destination);
+    /* L1 크랙 — 파열의 정체는 첫 3ms 의 광대역 임펄스다 */
+    const s1=c.createBufferSource();s1.buffer=noiseBuf(c);
+    const hp=c.createBiquadFilter();hp.type='highpass';hp.frequency.value=1400;
+    const g1=c.createGain();
+    g1.gain.setValueAtTime(1.0,t);
+    g1.gain.exponentialRampToValueAtTime(.001,t+.03);
+    s1.connect(hp).connect(g1).connect(master);s1.start(t);s1.stop(t+.05);
+    /* L2 뱅 몸통 — 광대역에서 저역으로 빠르게 무너지는 노이즈 */
+    const s2=c.createBufferSource();s2.buffer=noiseBuf(c);
+    const lp=c.createBiquadFilter();lp.type='lowpass';
+    lp.frequency.setValueAtTime(2600,t);
+    lp.frequency.exponentialRampToValueAtTime(150,t+.16);
+    const g2=c.createGain();
+    g2.gain.setValueAtTime(.9,t+.002);
+    g2.gain.exponentialRampToValueAtTime(.001,t+.20);
+    s2.connect(lp).connect(g2).connect(master);s2.start(t);s2.stop(t+.22);
+    /* L3 저역 펀치 — 가슴을 치는 드롭 (폰 스피커 고려해 160Hz 시작) */
+    const o=c.createOscillator(),g3=c.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(165,t);
+    o.frequency.exponentialRampToValueAtTime(48,t+.14);
+    g3.gain.setValueAtTime(.7,t);
+    g3.gain.exponentialRampToValueAtTime(.001,t+.16);
+    o.connect(g3).connect(master);o.start(t);o.stop(t+.17);
+    /* L4 방 잔향 꼬리 — 이게 있어야 "방 안에서 터졌다"가 된다 */
+    const s3=c.createBufferSource();s3.buffer=noiseBuf(c);
+    const lp2=c.createBiquadFilter();lp2.type='lowpass';lp2.frequency.value=900;
+    const g4=c.createGain();
+    g4.gain.setValueAtTime(.0001,t+.02);
+    g4.gain.exponentialRampToValueAtTime(.16,t+.05);
+    g4.gain.exponentialRampToValueAtTime(.0001,t+.60);
+    s3.connect(lp2).connect(g4).connect(master);s3.start(t+.02);s3.stop(t+.65);
 }
 function vib(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(_){}}
 
@@ -552,13 +642,13 @@ applyI18n();
 })();
 </script>
 
-<script src="/js/nextGames.js?v=1787195593"></script>
+<script src="/js/nextGames.js?v=1787203474"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787195593" defer></script>
+<script src="/js/siteFooter.js?v=1787203474" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
