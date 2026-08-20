@@ -331,7 +331,29 @@ def m_quiz(d, img):
         d.text((MX + 98 - (tb[2] - tb[0]) / 2, y + 25 - (tb[3] - tb[1]) / 2 - tb[1]), label, font=fb, fill=(15, 18, 28))
 
 
+
+def m_balloon(d, img):
+    """풍선 룰렛 — 크기가 커지는 풍선 3개 + 마지막은 파열 파편."""
+    balloons = [(MX + 70, MY + 240, 46), (MX + 190, MY + 210, 66), (MX + 330, MY + 170, 92)]
+    for x, y, r in balloons:
+        d.ellipse([x - r, y - r * 1.18, x + r, y + r * 1.02], fill=(255, 92, 122))
+        d.ellipse([x - r, y - r * 1.18, x + r, y + r * 1.02], outline=(255, 255, 255, 70), width=3)
+        d.ellipse([x - r + int(r * .25), y - r + int(r * .1), x - r + int(r * .58), y - r + int(r * .62)],
+                  fill=(255, 255, 255, 90))
+        d.polygon([(x - 8, y + r), (x + 8, y + r), (x, y + r + 16)], fill=(217, 42, 78))
+        d.line([(x, y + r + 16), (x - 6, y + r + 44), (x + 4, y + r + 70)], fill=(255, 255, 255, 90), width=3)
+    # 파열 파편 (우상단)
+    import math
+    cx, cy = MX + 440, MY + 90
+    for i in range(10):
+        a = i / 10 * 6.283
+        x1 = cx + math.cos(a) * 22; y1 = cy + math.sin(a) * 22
+        x2 = cx + math.cos(a) * (52 + (i % 3) * 12); y2 = cy + math.sin(a) * (52 + (i % 3) * 12)
+        d.line([(x1, y1), (x2, y2)], fill=(255, 206, 92), width=6)
+
+
 GAMES = {
+    "balloon":         dict(title="BALLOON POP", sub="풍선 룰렛 — 터뜨린 사람이 벌칙", cat="LUCKY", top=(28, 10, 18), bot=(11, 4, 8), accent=(255, 92, 122), motif=m_balloon),
     "roulette":        dict(title="ROULETTE", sub="룰렛 — 돌려서 정하는 내기 한 판", cat="LUCKY", top=(26, 10, 16), bot=(10, 4, 8), accent=(255, 206, 92), motif=m_roulette),
     "ladder":          dict(title="LADDER GAME", sub="사다리타기 — 벌칙·내기 공정 결정", cat="LUCKY", top=(8, 16, 30), bot=(4, 7, 14), accent=(80, 200, 255), motif=m_ladder),
     "lotto":           dict(title="LOTTO", sub="로또 번호 생성기 — 오늘의 행운 번호", cat="LUCKY", top=(10, 22, 16), bot=(4, 9, 7), accent=(61, 214, 140), motif=m_lotto),
