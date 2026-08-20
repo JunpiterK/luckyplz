@@ -59,7 +59,7 @@
             subDnd:'おやすみモード中',subOffline:'オフライン',
             act:'招待',actDisabled:'今は招待できません',sending:'送信中…',waiting:'待機中…',
             errOffline:'オフライン',errNotFriends:'フレンドではありません',errSelf:'自分には送れません',errRetry:'再試行',
-            accepted:'参加 ✓',declined:'辞退',expiredLbl:'期限切れ',game:'ゲーム',
+            accepted:'参加しました ✓',declined:'断りました',expiredLbl:'期限切れ',game:'ゲーム',
             games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース'}},
         es:{invite:'Invitar amigos',loading:'Cargando…',noSocial:'No se pudo cargar el módulo social.',
             loadFail:'No se pudo cargar tu lista de amigos.',

@@ -104,12 +104,12 @@ CONTENT["team"] = dict(
 
 CONTENT["dice"] = dict(
     h1="Rolar Dados Online",
-    short="Jogue de um a seis dados com rolagem física.",
+    short="Role de um a seis dados com física de verdade.",
     title="Rolar Dados Online Grátis — Dado Virtual de 1 a 6 Dados | Lucky Please",
     description="Role dados online grátis com rolagem física de verdade. De um a seis dados, sem cadastro e sem instalar nada. Ideal para o jogo de tabuleiro que perdeu o dado.",
     keywords="rolar dados online, dado virtual, jogar dados online, dado online gratis, simulador de dados, dado 6 faces, dados 3d online, sortear numero dado",
     og_title="Rolar Dados Online Grátis — Dado Virtual",
-    og_desc="Jogue de um a seis dados com rolagem física. Grátis, sem cadastro.",
+    og_desc="Role de um a seis dados com física de verdade. Grátis, sem cadastro.",
     lead="De um a seis dados que rolam de verdade antes de parar. Para o jogo que perdeu o dado, e para qualquer coisa que se resolva mais rápido com dois números do que com uma discussão.",
     steps=[
         "<b>Escolha quantos dados.</b> De um a seis, conforme o jogo pedir.",
@@ -151,7 +151,7 @@ CONTENT["dice"] = dict(
 
 CONTENT["bingo"] = dict(
     h1="Bingo Online: Globo Automático",
-    short="Canta números sem repetir e com o histórico na tela.",
+    short="Cante números sem repetir e com o histórico na tela.",
     title="Globo de Bingo Online Grátis — Sortear Números | Lucky Please",
     description="Globo de bingo online grátis. Sorteia números sem repetir, mantém o histórico na tela e dá para ler do fundo da sala. Sem cadastro nem instalação.",
     keywords="bingo online gratis, globo de bingo, sortear numeros bingo, bingo virtual, cantar bingo online, gerador de numeros bingo, bingo para sala de aula",
@@ -199,7 +199,7 @@ CONTENT["bingo"] = dict(
 
 CONTENT["car-racing"] = dict(
     h1="Corrida Aleatória: Sorteio com Ordem Completa",
-    short="Transforma o sorteio em corrida com ordem de chegada.",
+    short="Transforme o sorteio em corrida com ordem de chegada.",
     title="Corrida Aleatória Online — Sorteio com Ordem de Chegada | Lucky Please",
     description="Um sorteio que roda como corrida e devolve a ordem completa de chegada, não só um vencedor. Grátis, sem cadastro, funciona em qualquer celular.",
     keywords="corrida aleatoria, sorteio com ordem, ordenar aleatoriamente, gerador de ordem aleatoria, sortear ordem de apresentacao, classificacao aleatoria, sortear turnos",

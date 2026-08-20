@@ -227,7 +227,7 @@
             expired:'The invite expired.',acceptFail:'Accept failed: ',game:'a game',
             games:{lotto:'Lotto',roulette:'Roulette',ladder:'Ladder',dice:'Dice',team:'Team Picker',bingo:'Bingo','car-racing':'Car Racing'}},
         ja:{friend:'友だち',head:'🎮 ゲーム招待',bodyFmt:'{nick}さんが{game}に招待しました！',
-            timerFmt:'残り{s}秒',decline:'断る',accept:'参加',
+            timerFmt:'残り{s}秒',decline:'断る',accept:'参加する',
             expired:'招待の期限が切れました。',acceptFail:'参加に失敗: ',game:'ゲーム',
             games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース'}},
         es:{friend:'Un amigo',head:'🎮 Invitación a jugar',bodyFmt:'¡{nick} te invita a jugar {game}!',

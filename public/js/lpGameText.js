@@ -295,6 +295,10 @@ MAP['개'] = { en: ' ', ja: '件', es: ' ', pt: ' ' };
     MAP['탭하여 펼치기 / 휴지통으로 삭제'] = { en: 'Tap to expand · trash to delete', ja: 'タップで展開 / ゴミ箱で削除', es: 'Toca para abrir · papelera para borrar', pt: 'Toque para abrir · lixeira para excluir' };
     MAP['아직 만든 문제가 없어요. 위에서 추가해보세요!'] = { en: 'No questions yet — add one above!', ja: 'まだ問題がありません。上から追加してみましょう！', es: 'Aún no hay preguntas: ¡añade una arriba!', pt: 'Ainda sem perguntas — adicione uma acima!' };
 
+    /* 카레이싱 랩 표시의 HTML 초기값 — JS 가 레이스 시작 시 갱신하지만
+       그 전까지 화면에 한국어로 남는다(2026-08-21 실측). */
+    MAP['🔄 2바퀴 순환'] = { en: '🔄 2 laps', ja: '🔄 2周', es: '🔄 2 vueltas', pt: '🔄 2 voltas' };
+
     function pickLang() {
         var l;
         try { l = localStorage.getItem('luckyplz_lang') || 'en'; } catch (e) { l = 'en'; }

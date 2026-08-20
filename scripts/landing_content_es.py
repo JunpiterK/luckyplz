@@ -11,11 +11,11 @@ CONTENT["roulette"] = dict(
     h1="Ruleta de Nombres",
     short="Escribe nombres, gira y sale uno al azar.",
     title="Ruleta de Nombres Online Gratis — Girar y Elegir al Azar | Lucky Please",
-    description="Ruleta de nombres gratis para elegir al azar. Escribe las opciones, gira y sale una. Sin registro, funciona en el móvil y se comparte con un toque.",
+    description="Ruleta de nombres gratis para elegir al azar. Escribe las opciones, gira y sale una. Sin registro, funciona en el celular y se comparte con un toque.",
     keywords="ruleta de nombres, ruleta aleatoria, girar la ruleta, ruleta online gratis, sorteo de nombres, elegir al azar, ruleta para decidir, sorteador de nombres, quien paga",
     og_title="Ruleta de Nombres Online Gratis",
     og_desc="Escribe nombres, gira y deja que la ruleta elija. Gratis y sin registro.",
-    lead="Escribe cualquier lista de nombres u opciones, gira, y la ruleta elige una. Sin registro y sin instalar nada: funciona aquí mismo en el navegador del móvil o del ordenador.",
+    lead="Escribe cualquier lista de nombres u opciones, gira, y la ruleta elige una. Sin registro y sin instalar nada: funciona aquí mismo en el navegador del celular o del computadora.",
     steps=[
         "<b>Escribe las opciones.</b> Nombres de personas, restaurantes, tareas, premios: lo que sea que haya que repartir.",
         "<b>Gira.</b> Toca la ruleta o el botón. Acelera, frena y se detiene en un sector al azar.",
@@ -25,16 +25,16 @@ CONTENT["roulette"] = dict(
     uses=[
         ("Quién paga", "La ronda de café, la cena o la cuenta del bar."),
         ("Decidir sin discutir", "Qué comer, qué ver, a dónde ir."),
-        ("En clase", "Sacar a alguien a la pizarra o elegir al siguiente en exponer."),
-        ("Sorteos", "Mete los nombres de los participantes y saca un ganador en directo."),
-        ("Turnos", "Quién empieza la partida o quién friega hoy."),
+        ("En clase", "Sacar a alguien a el pizarrón o elegir al siguiente en exponer."),
+        ("Sorteos", "Mete los nombres de los participantes y saca un ganador en vivo."),
+        ("Turnos", "Quién empieza la partida o quién lava los platos hoy."),
         ("Desempates", "Cualquier discusión de dos, o de diez, en un solo giro."),
     ],
     sections="""    <h2>Por qué una ruleta y no un número al azar</h2>
     <p>Cualquier generador de números aleatorios haría el mismo trabajo en una línea de código, y sin embargo nadie lo usa para decidir quién paga. El motivo no es matemático sino social: la decisión necesita ser <b>presenciada</b>. Cuando todo el grupo mira cómo la misma ruleta va frenando, el resultado deja de pertenecer a una persona y pasa a pertenecer al procedimiento. Nadie puede decir "lo has elegido tú" porque todos estaban delante.</p>
-    <p>De ahí que la animación no sea un adorno. Es la parte que hace que el resultado se acepte sin discusión, y por eso conviene girar con el móvil a la vista de todos y no en el bolsillo.</p>
+    <p>De ahí que la animación no sea un adorno. Es la parte que hace que el resultado se acepte sin discusión, y por eso conviene girar con el celular a la vista de todos y no en el bolsillo.</p>
 
-    <h2>Cómo de justo es en realidad</h2>
+    <h2>Qué tan justo es en realidad</h2>
     <p>Cada giro usa el generador de números aleatorios del propio navegador. Todos los sectores tienen el mismo tamaño y la misma probabilidad, y da igual dónde esté cada nombre en la rueda. Con <i>n</i> opciones, cada una tiene 1/<i>n</i> en cada giro.</p>
     <p>Un detalle que provoca muchas acusaciones injustas: los giros son <b>independientes</b>. Salir una vez no reduce tu probabilidad en el siguiente giro. Con seis personas, que a la misma le toque dos veces seguidas tiene una probabilidad de 1 entre 36, así que en una noche cualquiera le pasará a alguien. Si quieres que quien ya salió deje de participar, bórralo de la lista antes de volver a girar: la ruleta no lo hace sola a propósito.</p>
 """,
@@ -45,8 +45,8 @@ CONTENT["roulette"] = dict(
          "Sí. Cada giro usa el generador de números aleatorios del navegador, así que todas las opciones tienen la misma probabilidad de salir."),
         ("¿Cuántos nombres puedo añadir?",
          "Los que quieras. La ruleta ajusta el tamaño de cada sector automáticamente para que todas las entradas se sigan leyendo."),
-        ("¿Funciona en el móvil?",
-         "Sí. Está diseñada primero para pantalla de móvil y escala a tableta y ordenador, sin instalar nada."),
+        ("¿Funciona en el celular?",
+         "Sí. Está diseñada primero para pantalla de celular y escala a tableta y computadora, sin instalar nada."),
         ("¿Puedo compartir el resultado?",
          "Sí. Después de girar obtienes un enlace de un toque y quien lo abra verá exactamente el mismo resultado."),
         ("¿Hace falta crear una cuenta?",
@@ -58,13 +58,13 @@ CONTENT["team"] = dict(
     h1="Sorteo de Equipos",
     short="Pega una lista y divídela en equipos equilibrados.",
     title="Sorteo de Equipos Aleatorio — Generador de Equipos Gratis | Lucky Please",
-    description="Generador de equipos aleatorio y gratuito. Pega la lista de participantes y se divide en grupos equilibrados al instante. Sin registro, funciona en cualquier móvil.",
+    description="Generador de equipos aleatorio y gratuito. Pega la lista de participantes y se divide en grupos equilibrados al instante. Sin registro, funciona en cualquier celular.",
     keywords="sorteo de equipos, generador de equipos, dividir en equipos, hacer equipos aleatorios, sortear grupos, formar grupos al azar, repartir equipos, generador de grupos",
     og_title="Sorteo de Equipos Aleatorio — Generador Gratis",
     og_desc="Pega la lista y se divide en equipos equilibrados al instante. Gratis y sin registro.",
     lead="Pega la lista de participantes, elige cuántos equipos quieres y el reparto se hace solo. Equipos del mismo tamaño, sin que nadie del grupo haya tocado nada.",
     steps=[
-        "<b>Pega la lista.</b> Un nombre por línea, tal cual lo tengas en el móvil o en una hoja.",
+        "<b>Pega la lista.</b> Un nombre por línea, tal cual lo tengas en el celular o en una hoja.",
         "<b>Elige cuántos equipos.</b> El reparto mantiene los grupos del mismo tamaño y coloca el resto donde toque.",
         "<b>Sortea.</b> Cada nombre cae en un equipo al azar, a la vista de todos.",
         "<b>Reparte el enlace.</b> Quien lo abra ve la misma composición, así que no hay versiones distintas circulando.",
@@ -120,7 +120,7 @@ CONTENT["dice"] = dict(
         ("Juegos de mesa", "Parchís, Monopoly, rol: el dado que siempre acaba debajo del sofá."),
         ("Desempatar", "El número más alto gana y se acabó la discusión."),
         ("Prendas y castigos", "El más bajo paga, invita o cumple la prenda."),
-        ("Deberes de clase", "Probabilidad con dos dados, en directo y sin material."),
+        ("Deberes de clase", "Probabilidad con dos dados, en vivo y sin material."),
         ("Rol de mesa", "Tiradas rápidas cuando falta el set completo."),
         ("Elegir un número", "Del 1 al 6 sin pensarlo demasiado."),
     ],
@@ -130,7 +130,7 @@ CONTENT["dice"] = dict(
     <p>La regla práctica: para sortear entre opciones equiprobables, usa <b>un</b> dado y asigna una opción a cada cara. Los dos dados son para jugar, no para repartir.</p>
 
     <h2>Por qué la tirada tarda</h2>
-    <p>El número está decidido en el instante en que pulsas, y aun así el dado rueda un segundo largo antes de parar. Es intencionado. Una cifra que aparece de golpe se lee como una salida de ordenador y siempre queda la duda de si alguien la ha tocado; un dado que rueda y se detiene se lee como algo que ha ocurrido. Cuando el resultado decide quién paga, esa diferencia es la razón de existir de la herramienta.</p>
+    <p>El número está decidido en el instante en que pulsas, y aun así el dado rueda un segundo largo antes de parar. Es intencionado. Una cifra que aparece de golpe se lee como una salida de computadora y siempre queda la duda de si alguien la ha tocado; un dado que rueda y se detiene se lee como algo que ha ocurrido. Cuando el resultado decide quién paga, esa diferencia es la razón de existir de la herramienta.</p>
 """,
     faq=[
         ("¿Es gratis?",
@@ -160,7 +160,7 @@ CONTENT["bingo"] = dict(
     steps=[
         "<b>Ponlo en la pantalla más grande que tengas.</b> Un portátil en el proyector o una tableta apoyada: el historial se queda visible todo el rato.",
         "<b>Saca un número.</b> Sale de los que aún no han salido, así que repetir es imposible y no hay que comprobarlo a mano.",
-        "<b>Cántalo dos veces y espera.</b> La queja más habitual en una partida en directo no es el ritmo lento, es el rápido.",
+        "<b>Cántalo dos veces y espera.</b> La queja más habitual en una partida en vivo no es el ritmo lento, es el rápido.",
         "<b>Comprueba contra el historial.</b> Cuando alguien cante, repasa su cartón con la lista de la pantalla. Esa lista es el acta.",
     ],
     uses=[
@@ -190,7 +190,7 @@ CONTENT["bingo"] = dict(
         ("¿Sirve con cartones de papel?",
          "Sí. Sustituye al bombo y a las bolas, no a los cartones. Funciona con cualquier juego de cartones impresos."),
         ("¿Se puede usar en un proyector o compartiendo pantalla?",
-         "Sí. Escala desde el móvil hasta un proyector, así que puedes ponerlo en la pantalla grande de la sala o compartirlo en una videollamada."),
+         "Sí. Escala desde el celular hasta un proyector, así que puedes ponerlo en la pantalla grande de la sala o compartirlo en una videollamada."),
         ("¿Cuántas bolas dura una partida normal?",
          "En el bingo de 90 bolas, la primera línea suele caer sobre la bola veinte y el cartón lleno hacia la cincuenta. En el de 75, una línea cae entre la quince y la veinticinco."),
     ],
@@ -200,7 +200,7 @@ CONTENT["car-racing"] = dict(
     h1="Carrera Aleatoria: Sorteo con Orden Completo",
     short="Convierte el sorteo en una carrera con orden de llegada.",
     title="Carrera Aleatoria Online — Sorteo con Orden de Llegada | Lucky Please",
-    description="Un sorteo que se resuelve como una carrera y te da el orden completo de llegada, no solo un ganador. Gratis, sin registro, funciona en cualquier móvil.",
+    description="Un sorteo que se resuelve como una carrera y te da el orden completo de llegada, no solo un ganador. Gratis, sin registro, funciona en cualquier celular.",
     keywords="carrera aleatoria, sorteo con orden, ordenar al azar, generador de orden aleatorio, sortear turnos, orden de exposicion al azar, clasificacion aleatoria",
     og_title="Carrera Aleatoria — Sorteo con Orden de Llegada",
     og_desc="El sorteo se resuelve como una carrera y da la clasificación completa. Gratis.",
@@ -250,7 +250,7 @@ CONTENT["ladder"] = dict(
     h1="Escalera Aleatoria (Amidakuji)",
     short="Ghost leg / amidakuji: elige tu línea antes de ver los caminos.",
     title="Escalera Aleatoria Online — Amidakuji y Ghost Leg Gratis | Lucky Please",
-    description="Escalera aleatoria online, también conocida como amidakuji o ghost leg. Cada persona elige su línea antes de revelar los caminos. Gratis, sin registro, en cualquier móvil.",
+    description="Escalera aleatoria online, también conocida como amidakuji o ghost leg. Cada persona elige su línea antes de revelar los caminos. Gratis, sin registro, en cualquier celular.",
     keywords="escalera aleatoria, amidakuji, ghost leg, sorteo escalera, reparto aleatorio, asignar tareas al azar, sorteo amigo invisible, escalera de la suerte",
     og_title="Escalera Aleatoria Online — Amidakuji y Ghost Leg",
     og_desc="Elige tu línea antes de que aparezcan los caminos. Gratis, sin registro.",
