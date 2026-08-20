@@ -71,7 +71,13 @@
     body.has-top-nav #setupWrap{top:56px !important}
     body.has-top-nav #gameWrap,body.has-top-nav #gameScreen{top:56px !important}
     body.has-top-nav .pc-ad-slot{top:56px !important}
-    body.has-top-nav .floating-home{display:none}
+    /* PC 에서 홈 링크 중복 제거 (2026-08-20 운영자 신고) — 브랜드 타일이
+       홈 역할을 하므로 게임 자체의 '← 홈' 을 전부 숨긴다. 게임마다 클래스가
+       제각각(.floating-home / #homeBtn / a.home)이고 car-racing 은 인라인
+       style(display:inline-block)이라 !important 가 필요하다. */
+    body.has-top-nav .floating-home,
+    body.has-top-nav a#homeBtn[href="/"],
+    body.has-top-nav a.home[href="/"]{display:none !important}
 }
 @media(max-width:899px){
     .pc-top-nav{display:none !important}
