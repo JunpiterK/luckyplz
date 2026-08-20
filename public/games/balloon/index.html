@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787204787">
+<meta name="lp-build" content="1787205529">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787204787";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787205529";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -69,9 +69,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .bgm-btn.on{border-color:rgba(255,230,109,.6);background:rgba(255,230,109,.12)}
 .bgm-btn[hidden]{display:none}
 
-/* ── 스테이지 레이아웃: 세로폰 우선, 한 화면 안에 전부 ── */
-#stage{max-width:640px;margin:0 auto;padding:0 16px calc(env(safe-area-inset-bottom,0px) + 18px);
-    min-height:calc(100svh - 64px);display:flex;flex-direction:column}
+/* ── 스테이지 레이아웃: 세로폰 우선, 한 화면 안에 전부 ──
+   "100svh − 64px" 방식은 노치 폰에서 상단바(safe-area 포함)가 64px 를
+   넘는 순간 그만큼 하단이 잘렸다(2026-08-20 실기기 신고 — PUMP/넘기기
+   버튼 하단 클립). 셸을 100svh 플렉스 컬럼으로 잡고 스테이지가 나머지를
+   flex:1 로 받게 하면 상단바 실제 높이와 무관하게 정확히 맞는다. */
+#shell{min-height:100vh;min-height:100svh;display:flex;flex-direction:column}
+#stage{width:100%;max-width:640px;margin:0 auto;
+    padding:0 16px calc(env(safe-area-inset-bottom,0px) + 14px);
+    flex:1;min-height:0;display:flex;flex-direction:column}
 
 /* ── 셋업 카드 ── */
 .card{background:linear-gradient(150deg,rgba(24,18,34,.94),rgba(12,10,24,.97));
@@ -167,7 +173,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     border:1.5px solid rgba(0,217,255,.4);color:var(--secondary);font-weight:800}
 #btnPass:disabled{opacity:.35;cursor:not-allowed}
 #btnPass:not(:disabled):hover{background:rgba(0,217,255,.18)}
-.pump-count{text-align:center;color:rgba(255,255,255,.4);font-size:.78em;margin-top:9px;
+.pump-count{text-align:center;color:rgba(255,255,255,.4);font-size:.78em;margin-top:7px;
     font-family:'Orbitron',sans-serif;letter-spacing:.08em}
 
 /* ── 결과 오버레이 ── */
@@ -204,6 +210,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <div id="dynamicBg"></div>
 <div class="pop-flash" id="popFlash"></div>
 
+<div id="shell">
 <div class="topbar">
     <a class="home" href="/">← 홈</a>
     <div class="title">🎈 BALLOON POP</div>
@@ -258,6 +265,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         <p class="pump-count" id="pumpCount"></p>
     </div>
 </div>
+</div><!-- /shell -->
 
 <!-- ══ 결과 ══ -->
 <div class="overlay" id="resultOv">
@@ -528,30 +536,31 @@ function vib(p){try{if(navigator.vibrate)navigator.vibrate(p)}catch(_){}}
    파일이 아직 없으면(404) 토글 버튼을 숨기고 전부 무시한다 — 배선을
    먼저 깔아 두고 파일만 얹으면 되는 구조. 기본 OFF, 선택은 localStorage. */
 const BGM_KEY='lp_balloon_bgm';
-let bgm=null,jingle=null,bgmReady=false,bgmOn=false;
+let bgm=null,jingle=null,bgmOn=false;
 try{bgmOn=localStorage.getItem(BGM_KEY)==='1'}catch(_){}
 function initBgm(){
+    /* canplaythrough 를 기다리면 안 된다 — 모바일은 사용자 제스처 전
+       프리로드를 미루는 경우가 많아 그 이벤트가 영영 안 오고, 버튼과
+       재생이 통째로 잠겼다(2026-08-20 실기기 신고). 버튼은 즉시 보이고,
+       재생은 제스처 안에서 play() 를 바로 부른다 — 브라우저가 알아서
+       버퍼링 후 시작한다. 파일이 없을 때(404)만 숨긴다. */
     bgm=new Audio('/assets/balloon-bgm.mp3');
     bgm.loop=true;bgm.volume=.35;bgm.preload='auto';
     jingle=new Audio('/assets/balloon-pop-jingle.mp3');
     jingle.preload='auto';jingle.volume=.8;
-    bgm.addEventListener('canplaythrough',()=>{
-        if(bgmReady)return;
-        bgmReady=true;
-        const b=$('btnBgm');b.hidden=false;syncBgmBtn();
-    },{once:true});
-    bgm.addEventListener('error',()=>{ $('btnBgm').hidden=true; });
+    const b=$('btnBgm');b.hidden=false;syncBgmBtn();
+    bgm.addEventListener('error',()=>{ b.hidden=true;bgmOn=false; });
 }
 function syncBgmBtn(){
     const b=$('btnBgm');
     b.textContent=bgmOn?'🔊':'🔇';
     b.classList.toggle('on',bgmOn);
 }
-function bgmPlay(){ if(bgmReady&&bgmOn){bgm.volume=.35;bgm.play().catch(()=>{});} }
+function bgmPlay(){ if(bgmOn&&bgm){bgm.volume=.35;bgm.play().catch(()=>{});} }
 function bgmStop(){ if(bgm){try{bgm.pause();bgm.currentTime=0}catch(_){}} }
 /* 위험도에 따라 볼륨이 차오른다 — 음악까지 긴장에 가담 */
-function bgmSwell(h){ if(bgmReady&&bgmOn&&!bgm.paused)bgm.volume=Math.min(.6,.35+h*.7); }
-function jinglePlay(){ if(bgmReady&&bgmOn&&jingle){try{jingle.currentTime=0;jingle.play().catch(()=>{})}catch(_){}} }
+function bgmSwell(h){ if(bgmOn&&bgm&&!bgm.paused)bgm.volume=Math.min(.6,.35+h*.7); }
+function jinglePlay(){ if(bgmOn&&jingle){try{jingle.currentTime=0;jingle.play().catch(()=>{})}catch(_){}} }
 function jingleStop(){ if(jingle){try{jingle.pause();jingle.currentTime=0}catch(_){}} }
 document.addEventListener('DOMContentLoaded',initBgm);
 if(document.readyState!=='loading')initBgm();
@@ -697,13 +706,13 @@ applyI18n();
 })();
 </script>
 
-<script src="/js/nextGames.js?v=1787204787"></script>
+<script src="/js/nextGames.js?v=1787205529"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787204787" defer></script>
+<script src="/js/siteFooter.js?v=1787205529" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
