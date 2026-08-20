@@ -164,11 +164,23 @@ document.addEventListener('click', function(e) {
    games: they shouldn't be driving navigation at all. The host
    transfers everyone via host:navigate. Disable the cards so
    clicks don't stranded the guest on a room-less page. */
-document.addEventListener('DOMContentLoaded', function() {
-    if (!window._lpGuest) return;
+function _disableCardsForGuest() {
     document.querySelectorAll('.lp-next-card').forEach(function(c) {
         c.style.pointerEvents = 'none';
         c.style.opacity = '0.45';
         c.title = 'Waiting for host to pick next game';
     });
+}
+/* DOMContentLoaded 시점엔 게스트 join(비동기 구독+핸드셰이크)이 끝나 있지
+   않아 _lpGuest 체크가 사실상 항상 false 였다 — 실제 신호는
+   lp-room-guest-ready 이벤트다. 카드가 이벤트 뒤에 렌더될 수도 있으니
+   위임 클릭 가드도 함께 둔다. */
+document.addEventListener('DOMContentLoaded', function() {
+    if (window._lpGuest) _disableCardsForGuest();
 });
+window.addEventListener('lp-room-guest-ready', _disableCardsForGuest);
+document.addEventListener('click', function(e) {
+    if (!window._lpGuest) return;
+    const card = e.target.closest('.lp-next-card');
+    if (card) e.preventDefault();
+}, true);

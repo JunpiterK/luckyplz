@@ -553,7 +553,7 @@
             elBody.innerHTML = html;
         } catch(e){
             console.warn('[lpRankSheet] threw', e);
-            elBody.innerHTML = '<div class="lp-rank-empty">불러오기 실패</div>';
+            elBody.innerHTML = '<div class="lp-rank-empty">' + esc(T('loadFailed')) + '</div>';
         }
     }
 

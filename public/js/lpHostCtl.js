@@ -99,7 +99,11 @@
     endedTitle:     '게임 종료',
     endedHostSub:   '게임을 종료했어요. 참가자는 모두 방에서 나갔어요.',
     endedGuestSub:  '호스트가 게임을 종료했어요. 파티는 해제되었습니다.',
-    homeBtn:        '🏠 홈으로'
+    homeBtn:        '🏠 홈으로',
+    /* {n} 은 남은 초로 치환. 게임이 texts 로 다른 언어를 넘기면 그대로 따른다 —
+       하드코딩하면 영어 UI 게스트도 카운트다운 5초 동안 한국어를 본다. */
+    resumeCountHost:  '{n}초 후 참가자 전원 화면이 다시 움직여요',
+    resumeCountGuest: '{n}초 후 게임이 다시 시작돼요'
   };
 
   function esc(s){
@@ -312,9 +316,8 @@
         const origResumeLabel = btnResume.innerHTML;
         let n = seconds;
         function render(){
-          povlSub.textContent = isHost
-            ? `${n}초 후 참가자 전원 화면이 다시 움직여요`
-            : `${n}초 후 게임이 다시 시작돼요`;
+          povlSub.textContent = (isHost ? texts.resumeCountHost : texts.resumeCountGuest)
+            .replace('{n}', n);
           btnResume.innerHTML = `<span class="lp-hc-cd-num" key="${n}">${n}</span>`;
         }
         render();

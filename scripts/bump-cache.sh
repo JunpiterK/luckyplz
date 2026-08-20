@@ -46,11 +46,21 @@ JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
 CSS_RE='(/css/[a-zA-Z0-9_-]+\.css)\?v=[0-9a-zA-Z]{4,20}'
 
+# 무버전 참조도 잡는다: src="/js/x.js" 처럼 ?v= 없이 로드되는 공용 JS 는
+# 이 스크립트가 영원히 못 덮어서 stale 로 남는다(2026-08-20 감사 —
+# topNav/langBar/supabase-config 등 다수). 따옴표 직전의 .js 에 스탬프를
+# 새로 붙인다. 이미 ?v= 가 있으면 다음 문자가 ? 라 매칭되지 않는다.
+JS_BARE_RE='(/js/[a-zA-Z0-9_-]+\.js)(["'"'"'])'
+
 count=0
 while IFS= read -r -d '' f; do
     matched=0
     if grep -qE "$JS_RE" "$f" 2>/dev/null; then
         sed -i -E "s|${JS_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+        matched=1
+    fi
+    if grep -qE "$JS_BARE_RE" "$f" 2>/dev/null; then
+        sed -i -E "s|${JS_BARE_RE}|\\1?v=${NEW_VERSION}\\2|g" "$f"
         matched=1
     fi
     if grep -qE "$BLOG_RE" "$f" 2>/dev/null; then
@@ -69,6 +79,7 @@ done < <(find public -name '*.html' -print0)
 # siteFooter.js itself dynamically injects lpRoom.js with a ?v= query.
 if grep -qE "$JS_RE" public/js/siteFooter.js 2>/dev/null; then
     sed -i -E "s|${JS_RE}|\\1?v=${NEW_VERSION}|g" public/js/siteFooter.js
+    sed -i -E "s|${JS_BARE_RE}|\\1?v=${NEW_VERSION}\\2|g" public/js/siteFooter.js
     count=$((count+1))
 fi
 

@@ -325,6 +325,10 @@
     btn.addEventListener('click',function(e){
       e.preventDefault();
       e.stopPropagation();
+      /* 사용자가 ⛶ 로 직접 종료하면 first-interaction 자동 재진입
+         리스너를 걷어낸다 — 안 걷으면 다음 탭에서 곧장 다시 전체화면이
+         되어 토글이 장식이 된다. */
+      if(isFullscreenActive())cleanupFirstInteraction();
       toggle();
     });
     document.body.appendChild(btn);

@@ -619,7 +619,7 @@
         +'<span>방장 <strong>'+esc(hostAuthedName||'Host')+'</strong></span>';
 
       var chips=roster.map(function(p){
-        var self=(p.id===g.gid)?' data-self="1"':'';
+        var self=(p.self||(p.id&&p.id===g.gid))?' data-self="1"':'';
         return '<span class="lp-mp-chip"'+self+'>'+esc(p.nickname||'Guest')+'</span>';
       }).join('');
       panel.querySelector('.lp-mp-guests-sec').innerHTML=
@@ -657,7 +657,16 @@
        it on every join/leave, so this is our authoritative source. */
     try{
       g.on&&g.on('host:guests',function(p){
-        if(p&&Array.isArray(p.guests)){roster=p.guests;render()}
+        /* 호스트 페이로드는 {nicknames, roster, ...} — `guests` 필드는
+           존재한 적이 없다(게스트 패널 로스터가 항상 비어 있던 원인).
+           lpRoom 의 게스트 바와 같은 규약으로 읽는다. */
+        if(!p)return;
+        if(Array.isArray(p.roster)){
+          roster=p.roster.map(function(e){return{nickname:e.nickname,self:e.nickname===(g.nickname||'')}});
+        }else if(Array.isArray(p.nicknames)){
+          roster=p.nicknames.map(function(n){return{nickname:n,self:n===(g.nickname||'')}});
+        }else return;
+        render();
       });
       g.on&&g.on('host:config',function(p){
         if(p&&p.hostName){hostAuthedName=p.hostName;render()}

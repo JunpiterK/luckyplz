@@ -782,8 +782,13 @@
                 if(status==='SUBSCRIBED'){
                     chan.send({type:'broadcast',event:'guest:probe',payload:{pid:pid}});
                     setTimeout(function(){done({ok:false,error:'not_found'})},4000);
+                }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){
+                    done({ok:false,error:'channel_error'});
                 }
             });
+            /* 구독이 어떤 상태 콜백도 안 주는 경우(오프라인 등)의 최후 안전망 —
+               settle 안 되는 Promise 는 "방 확인 중…" 무한 고착이 된다. */
+            setTimeout(function(){done({ok:false,error:'timeout'})},8000);
         });
     }
 
@@ -934,7 +939,9 @@
                one snapshot request. */
             setTimeout(function(){
                 _gapPending=false;
-                if(!subscribed||guestClosing||!accepted)return;
+                /* hostCreate 쪽 지역변수 `subscribed` 를 잘못 참조하면
+                   ReferenceError 로 gap 복구가 통째로 죽는다(2026-08-20). */
+                if(!guestSubscribed||guestClosing||!accepted)return;
                 try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid,reason:'seq_gap'}})}catch(_){}
                 dbgLog('guest: seq gap → request_snapshot');
             },50);
@@ -1585,7 +1592,7 @@
         );
         _renderQr(document.getElementById('lpRoomQr'),url,220);
         const qrBigBtn=document.getElementById('lpRoomQrBig');
-        if(qrBigBtn)qrBigBtn.addEventListener('click',function(){showQrFullscreen(room,url)});
+        if(qrBigBtn)qrBigBtn.addEventListener('click',function(){showQrFullscreen(room,url,opts)});
 
         function renderGuests(){
             const body=document.getElementById('lpRoomGuestsBody');
@@ -1668,7 +1675,7 @@
        projector so attendees scan with their phone camera. Tap / ESC to
        close. Shows the room code + PIN underneath so audience can enter
        manually if they prefer. */
-    function showQrFullscreen(room,url){
+    function showQrFullscreen(room,url,opts){
         injectStyles();
         const prev=document.getElementById('lpRoomBackdrop');
         if(prev)prev.remove();
@@ -1692,7 +1699,9 @@
         document.body.appendChild(overlay);
         /* Render QR at big size — 400px target but lets CSS scale down */
         _renderQr(document.getElementById('lpRoomQrBigCanvas'),url,400);
-        function close(){overlay.remove();document.removeEventListener('keydown',onKey);showHostShare(room,{})}
+        /* opts 를 그대로 되돌려줘야 한다 — {} 로 복귀하면 onReady/fromHome 이
+           사라져 "시작!" 이 게임 배선 없이 돌고 홈 게임 피커도 없어진다. */
+        function close(){overlay.remove();document.removeEventListener('keydown',onKey);showHostShare(room,opts||{})}
         function onKey(e){if(e.key==='Escape')close()}
         document.addEventListener('keydown',onKey);
         document.getElementById('lpRoomQrClose').addEventListener('click',close);

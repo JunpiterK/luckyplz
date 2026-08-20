@@ -36,7 +36,11 @@
            sits as an empty block with margin → users see a blank
            white rectangle where the ad would be. Start hidden +
            reveal on successful fill. */
-        container.style.display='none';
+        /* display:none 금지 — ins 의 가시 폭이 0 이면 AdSense 가
+           "No slot size for availableWidth=0" 으로 요청 자체를 안 하므로
+           filled 가 영영 안 된다. 폭은 살리고 높이만 접는다. */
+        container.style.height='0';
+        container.style.overflow='hidden';
         const ins=document.createElement('ins');
         ins.className='adsbygoogle';
         ins.style.display='block';
@@ -62,7 +66,8 @@
             attempts++;
             const status=ins.getAttribute('data-ad-status');
             if(status==='filled'){
-                container.style.display='';
+                container.style.height='';
+                container.style.overflow='';
                 clearInterval(poll);
             }else if(status==='unfilled'||attempts>=15){ /* 15 * 200ms = 3s */
                 clearInterval(poll);

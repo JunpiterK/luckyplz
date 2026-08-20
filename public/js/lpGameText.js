@@ -43,8 +43,6 @@
         '친구':          { en: 'Friends', ja: 'フレンド', es: 'Amigos', pt: 'Amigos' },
         '🏆 랭킹':       { en: '🏆 Ranking', ja: '🏆 ランキング', es: '🏆 Ranking', pt: '🏆 Ranking' },
         '🎮 다른 게임':  { en: '🎮 More games', ja: '🎮 ほかのゲーム', es: '🎮 Más juegos', pt: '🎮 Mais jogos' },
-        '📊 IPO 분석':   { en: '📊 IPO analysis', ja: '📊 IPO 分析', es: '📊 Análisis de la OPI', pt: '📊 Análise do IPO' },
-        '📊 IPO 분석 →': { en: '📊 IPO analysis →', ja: '📊 IPO 分析 →', es: '📊 Análisis de la OPI →', pt: '📊 Análise do IPO →' },
         '완벽한 착륙 + 충분한 연료': { en: 'Perfect landing, fuel to spare', ja: '完璧な着陸 + 燃料に余裕', es: 'Aterrizaje perfecto y combustible de sobra', pt: 'Pouso perfeito e combustível de sobra' },
         '속도 초과 또는 착륙장 이탈': { en: 'Too fast, or off the pad', ja: '速度超過、または着陸場から外れました', es: 'Demasiada velocidad o fuera de la plataforma', pt: 'Rápido demais ou fora da plataforma' },
         '어떻게 불러드릴까요?': { en: 'What should we call you?', ja: 'お名前は？', es: '¿Cómo te llamamos?', pt: 'Como te chamamos?' },
@@ -192,11 +190,11 @@
             es: '<b>3</b>Combustible + velocidad + precisión del ángulo',
             pt: '<b>3</b>Combustível + velocidade + precisão do ângulo'
         },
-        '<b>4</b>각 스테이지마다 IPO 분석 연결': {
-            en: '<b>4</b>Every stage links to an IPO breakdown',
-            ja: '<b>4</b>各ステージから IPO 分析へリンク',
-            es: '<b>4</b>Cada etapa enlaza a un análisis de la OPI',
-            pt: '<b>4</b>Cada estágio leva a uma análise do IPO'
+        '<b>4</b>각 스테이지마다 실제 데이터': {
+            en: '<b>4</b>Real data at every stage',
+            ja: '<b>4</b>各ステージに実データ',
+            es: '<b>4</b>Datos reales en cada etapa',
+            pt: '<b>4</b>Dados reais em cada estágio'
         },
         '<b>5</b>화살표 / 스페이스 / 터치': {
             en: '<b>5</b>Arrows / space / touch',
@@ -222,11 +220,11 @@
             es: '<b>Puntuación</b> — combustible + velocidad + precisión del ángulo',
             pt: '<b>Pontuação</b> — combustível + velocidade + precisão do ângulo'
         },
-        '<b>SpaceX 팩트</b> — 각 스테이지마다 IPO 분석 연결': {
-            en: '<b>SpaceX facts</b> — every stage links to an IPO breakdown',
-            ja: '<b>SpaceX の豆知識</b> — 各ステージから IPO 分析へリンク',
-            es: '<b>Datos de SpaceX</b> — cada etapa enlaza a un análisis de la OPI',
-            pt: '<b>Fatos da SpaceX</b> — cada estágio leva a uma análise do IPO'
+        '<b>SpaceX 팩트</b> — 각 스테이지마다 실제 데이터': {
+            en: '<b>SpaceX facts</b> — real data at every stage',
+            ja: '<b>SpaceX の豆知識</b> — 各ステージに実データ',
+            es: '<b>Datos de SpaceX</b> — datos reales en cada etapa',
+            pt: '<b>Fatos da SpaceX</b> — dados reais em cada estágio'
         },
         '친구들과 실시간으로 대결하는 멀티플레이 퀴즈예요. 호스트가 방을 만들고 게스트는 방 코드 + 4자리 PIN으로 <b>회원가입 없이</b> 참가합니다. 최대 <b>100명</b>까지, <b>최소 2명</b> (호스트 1 + 게스트 1) 부터 시작 가능.': {
             en: 'A live multiplayer quiz. The host opens a room and guests join with the room code and a 4-digit PIN &mdash; <b>no sign-up</b>. Up to <b>100 players</b>, and <b>2 is enough</b> (one host, one guest) to start.',
