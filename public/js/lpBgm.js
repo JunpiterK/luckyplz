@@ -61,7 +61,8 @@
   var SKIP_GAMES={
     'car-racing':true,
     'dodge':true,
-    'tetris':true     /* 3-tier dynamic BGM tied to stack height */
+    'tetris':true,    /* 3-tier dynamic BGM tied to stack height */
+    'balloon':true    /* 단일 트랙 + 위험도 볼륨 스웰 + 벌칙 징글 자체 엔진 */
   };
 
   /* Detect game from URL. Lobby + home + blog → no BGM. */
@@ -282,6 +283,50 @@
   });
 
   window.addEventListener('beforeunload',stop);
+
+  /* ── 표준 BGM 토글 버튼 (2026-08-20, 풍선 룰렛 프레임으로 통일) ──
+     그동안 toggle() API 만 있고 이를 노출하는 UI 가 없어, lpBgm 구동
+     게임 9종에서 사용자가 음악을 끌 방법이 없었다. 전체화면 버튼
+     (top-left)의 우측 미러 자리에 38px 버튼을 놓는다. track1 존재를
+     HEAD 로 확인한 뒤에만 표시 — 트랙 없는 게임에 죽은 버튼을 두지
+     않는다 (HEAD 는 재생이 아니라 autoplay 제약과 무관하다). */
+  var bgmBtn=null;
+  function syncBgmBtn(){
+    if(!bgmBtn)return;
+    bgmBtn.textContent=muted?'🔇':'🔊';
+    bgmBtn.classList.toggle('on',!muted);
+  }
+  function mountBgmBtn(){
+    if(bgmBtn)return;
+    var st=document.createElement('style');
+    st.textContent=
+      '.lp-bgm-btn{position:fixed;'
+      +'top:calc(56px + env(safe-area-inset-top,0px));'
+      +'right:calc(10px + env(safe-area-inset-right,0px));'
+      +'z-index:9040;width:38px;height:38px;border-radius:11px;'
+      +'border:1.5px solid rgba(255,255,255,.14);background:rgba(10,10,26,.55);'
+      +'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);'
+      +'color:#fff;font-size:16px;cursor:pointer;padding:0;'
+      +'display:flex;align-items:center;justify-content:center;'
+      +'touch-action:manipulation;transition:border-color .2s,background .2s}'
+      +'.lp-bgm-btn.on{border-color:rgba(255,230,109,.6);background:rgba(255,230,109,.14)}';
+    document.head.appendChild(st);
+    bgmBtn=document.createElement('button');
+    bgmBtn.type='button';
+    bgmBtn.className='lp-bgm-btn';
+    bgmBtn.setAttribute('aria-label','BGM on/off');
+    bgmBtn.addEventListener('click',function(){toggle();syncBgmBtn();});
+    syncBgmBtn();
+    (document.body||document.documentElement).appendChild(bgmBtn);
+  }
+  try{
+    fetch(TRACK_BASE+'1.mp3',{method:'HEAD'}).then(function(r){
+      if(r&&r.ok){
+        if(document.body)mountBgmBtn();
+        else document.addEventListener('DOMContentLoaded',mountBgmBtn);
+      }
+    }).catch(function(){});
+  }catch(_){}
 
   window.LpBgm={
     start:start,
