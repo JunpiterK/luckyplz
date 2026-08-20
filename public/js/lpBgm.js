@@ -299,17 +299,24 @@
   function mountBgmBtn(){
     if(bgmBtn)return;
     var st=document.createElement('style');
+    /* 배치 원칙 (2026-08-20, 운영자 요구 — 기기별 오버랩 금지):
+       우상단은 호스트 컨트롤 바(lp-hc: top58/right10)와 멀티플레이
+       Create 칩의 자리라 금지. 좌측 세로 스택을 쓴다 —
+       · ≤900px(폰·세로 태블릿): 전체화면 ⛶(top56/left10, lpFullscreen
+         isSmallScreen 과 동일 기준) 바로 아래 top:102
+       · >900px(데스크탑·가로 태블릿): ⛶ 가 없으므로 그 자리 top:56 */
     st.textContent=
       '.lp-bgm-btn{position:fixed;'
       +'top:calc(56px + env(safe-area-inset-top,0px));'
-      +'right:calc(10px + env(safe-area-inset-right,0px));'
+      +'left:calc(10px + env(safe-area-inset-left,0px));'
       +'z-index:9040;width:38px;height:38px;border-radius:11px;'
       +'border:1.5px solid rgba(255,255,255,.14);background:rgba(10,10,26,.55);'
       +'backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);'
       +'color:#fff;font-size:16px;cursor:pointer;padding:0;'
       +'display:flex;align-items:center;justify-content:center;'
       +'touch-action:manipulation;transition:border-color .2s,background .2s}'
-      +'.lp-bgm-btn.on{border-color:rgba(255,230,109,.6);background:rgba(255,230,109,.14)}';
+      +'.lp-bgm-btn.on{border-color:rgba(255,230,109,.6);background:rgba(255,230,109,.14)}'
+      +'@media(max-width:900px){.lp-bgm-btn{top:calc(102px + env(safe-area-inset-top,0px))}}';
     document.head.appendChild(st);
     bgmBtn=document.createElement('button');
     bgmBtn.type='button';
