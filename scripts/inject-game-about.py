@@ -315,6 +315,7 @@ def _load(mod, var):
 CONTENT.update(_load("game_about_content_2", "CONTENT_2"))
 CONTENT.update(_load("game_about_content_3", "CONTENT_3"))
 CONTENT.update(_load("game_about_content_5", "CONTENT_5"))  # 2026-08-20 풍선 룰렛
+CONTENT.update(_load("game_about_content_7", "CONTENT_7"))  # 2026-08-22 궤도 연구소
 
 # 600단어 미달 게임 보강 블록 — 각 게임의 blocks 뒤(FAQ 앞)에 덧붙인다.
 for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
