@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787291054">
+<meta name="lp-build" content="1787292643">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787291054";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787292643";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1414,10 +1414,10 @@ body::after{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1787291054"></script>
-<script src="/js/lpI18n.js?v=1787291054"></script>
-<script src="/js/lpRankSheet.js?v=1787291054"></script>
-<script src="/js/lpAudio.js?v=1787291054"></script>
+<script src="/js/supabase-config.js?v=1787292643"></script>
+<script src="/js/lpI18n.js?v=1787292643"></script>
+<script src="/js/lpRankSheet.js?v=1787292643"></script>
+<script src="/js/lpAudio.js?v=1787292643"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -6483,6 +6483,26 @@ const HIT_RADIUS=5;
 const INVINCIBLE_MS=2000;
 const FLASH_INTERVAL=120;
 
+/* ── Blender 렌더 스프라이트 (2026-08-21) ──
+   손으로 그린 캔버스 도형 대신 실제 3D 렌더를 쓴다.
+   원본 씬: scripts/blender/ship_scene.py
+   로드 전에는 기존 그리기로 폴백한다. */
+const SZ_SPRITES = {};
+(function(){
+    const names = ['ship', 'meteor_a', 'meteor_b', 'meteor_c', 'mine'];
+    for(const n of names){
+        const im = new Image();
+        im.decoding = 'async';
+        im.src = '/assets/spacez/' + n + '.webp';
+        SZ_SPRITES[n] = im;
+    }
+})();
+function szReady(n){
+    const im = SZ_SPRITES[n];
+    return im && im.complete && im.naturalWidth > 0;
+}
+const SZ_METEOR_KEYS = ['meteor_a', 'meteor_b', 'meteor_c'];
+
 let player={x:CW/2, y:CH*0.65};
 const STARTING_LIVES = 3;
 const MAX_LIVES = 5;
@@ -11156,13 +11176,28 @@ function drawFrame(now, dt){
         }
         ctx.globalAlpha = 1;
 
-        /* HEAD — unchanged from previous design */
+        /* HEAD — Blender 렌더 운석 스프라이트 (2026-08-21).
+           예전엔 반지름 6 의 단색 원이었다. 꼬리 트레일은 속도감을 만드니
+           그대로 두고 머리만 실제 암석으로 바꾼다. 3종을 인덱스로 골라
+           개별 각도를 주면 같은 스프라이트를 써도 다 달라 보인다. */
         ctx.shadowColor = haloColor;
         ctx.shadowBlur = 10;
-        ctx.fillStyle = headColor;
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, 6, 0, Math.PI*2);
-        ctx.fill();
+        if(szReady('meteor_a')){
+            const key = SZ_METEOR_KEYS[(b._mv !== undefined ? b._mv : (b._mv = (Math.random() * 3) | 0))];
+            const im = SZ_SPRITES[key];
+            const R = 15;                         /* 표시 지름 절반 — 원(6)보다 크게 */
+            const rot = (b._mr !== undefined ? b._mr : (b._mr = Math.random() * Math.PI * 2));
+            ctx.save();
+            ctx.translate(b.x, b.y);
+            ctx.rotate(rot);
+            ctx.drawImage(im, -R, -R, R * 2, R * 2);
+            ctx.restore();
+        } else {
+            ctx.fillStyle = headColor;
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 6, 0, Math.PI*2);
+            ctx.fill();
+        }
         ctx.shadowBlur = 0;
     }
     ctx.globalAlpha = 1;
@@ -11218,53 +11253,43 @@ function drawFrame(now, dt){
         ctx.moveTo(-5,8); ctx.lineTo(0,8+fl+9); ctx.lineTo(5,8);
         ctx.closePath(); ctx.fill();
 
-        /* Aft delta fins — large swept triangles behind body */
-        const finG=ctx.createLinearGradient(-16,5,16,5);
-        finG.addColorStop(0,'#1a2028'); finG.addColorStop(0.30,'#50606c');
-        finG.addColorStop(0.70,'#44545e'); finG.addColorStop(1,'#181e26');
-        ctx.fillStyle=finG;
-        /* right fin: swept leading edge, wide at base */
-        ctx.beginPath();
-        ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8);
-        ctx.closePath(); ctx.fill();
-        /* left fin (mirror) */
-        ctx.beginPath();
-        ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8);
-        ctx.closePath(); ctx.fill();
-
-        /* Body — ogive conical nose + cylinder, stainless steel gradient */
-        const bG=ctx.createLinearGradient(-5,0,5,0);
-        bG.addColorStop(0,'#32404c'); bG.addColorStop(0.18,'#7c8c9a');
-        bG.addColorStop(0.44,'#c2ced8'); bG.addColorStop(0.64,'#cad4de');
-        bG.addColorStop(0.82,'#94a2ae'); bG.addColorStop(1,'#42505c');
-        ctx.shadowColor='rgba(170,188,210,0.50)'; ctx.shadowBlur=8;
-        ctx.fillStyle=bG;
-        ctx.beginPath();
-        ctx.moveTo(0,-19);                          /* nose tip */
-        ctx.quadraticCurveTo(4,-13,5,-9);           /* right ogive curve */
-        ctx.lineTo(5,8);                            /* right body */
-        ctx.lineTo(-5,8);                           /* base */
-        ctx.lineTo(-5,-9);                          /* left body */
-        ctx.quadraticCurveTo(-4,-13,0,-19);         /* left ogive curve */
-        ctx.closePath(); ctx.fill();
-        ctx.shadowBlur=0;
-
-        /* Heat shield tiles — right-lower body */
-        ctx.save();
-        ctx.beginPath(); ctx.rect(0,-1,5,9); ctx.clip();
-        ctx.fillStyle='rgba(12,14,20,0.72)'; ctx.fillRect(0,-1,6,11);
-        ctx.strokeStyle='rgba(40,48,58,0.85)'; ctx.lineWidth=0.5;
-        for(let ty=-1;ty<=8;ty+=2.5){ctx.beginPath();ctx.moveTo(0,ty);ctx.lineTo(5,ty);ctx.stroke();}
-        for(let tx=0;tx<=5;tx+=2.5){ctx.beginPath();ctx.moveTo(tx,-1);ctx.lineTo(tx,8);ctx.stroke();}
-        ctx.restore();
-
-        /* SUS specular sheen — left-center vertical highlight */
-        const spG=ctx.createLinearGradient(-2,-18,-2,8);
-        spG.addColorStop(0,'rgba(255,255,255,0.32)');
-        spG.addColorStop(0.45,'rgba(255,255,255,0.12)');
-        spG.addColorStop(1,'rgba(255,255,255,0)');
-        ctx.fillStyle=spG;
-        ctx.beginPath(); ctx.ellipse(-1.5,-5,1.5,11,0,0,Math.PI*2); ctx.fill();
+        /* 기체 — Blender 렌더 스프라이트 (2026-08-21).
+           예전에는 핀·동체·히트실드·시닝을 캔버스 도형으로 그렸다. 형태는
+           나쁘지 않았지만 평면적이라 배경 행성·운석과 질감이 겉돌았다.
+           화염은 위에서 이미 캔버스로 그렸다 — flamePulse 맥동이 살아 있어
+           스프라이트보다 낫다. 기체를 그 위에 겹친다. */
+        if(szReady('ship')){
+            const SH = 40;                       /* 표시 높이(px). 히트박스(5)는 그대로 */
+            const im = SZ_SPRITES.ship;
+            const SW = SH * (im.naturalWidth / im.naturalHeight);
+            /* 스프라이트 중심을 기존 동체 중심(대략 y=-5)에 맞춘다 */
+            ctx.drawImage(im, -SW / 2, -SH * 0.62, SW, SH);
+        } else {
+            /* ---- 폴백: 기존 캔버스 기체 ---- */
+            const finG=ctx.createLinearGradient(-16,5,16,5);
+            finG.addColorStop(0,'#1a2028'); finG.addColorStop(0.30,'#50606c');
+            finG.addColorStop(0.70,'#44545e'); finG.addColorStop(1,'#181e26');
+            ctx.fillStyle=finG;
+            ctx.beginPath();
+            ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8);
+            ctx.closePath(); ctx.fill();
+            const bG=ctx.createLinearGradient(-5,0,5,0);
+            bG.addColorStop(0,'#32404c'); bG.addColorStop(0.18,'#7c8c9a');
+            bG.addColorStop(0.44,'#c2ced8'); bG.addColorStop(0.64,'#cad4de');
+            bG.addColorStop(0.82,'#94a2ae'); bG.addColorStop(1,'#42505c');
+            ctx.shadowColor='rgba(170,188,210,0.50)'; ctx.shadowBlur=8;
+            ctx.fillStyle=bG;
+            ctx.beginPath();
+            ctx.moveTo(0,-19);
+            ctx.quadraticCurveTo(4,-13,5,-9);
+            ctx.lineTo(5,8); ctx.lineTo(-5,8); ctx.lineTo(-5,-9);
+            ctx.quadraticCurveTo(-4,-13,0,-19);
+            ctx.closePath(); ctx.fill();
+            ctx.shadowBlur=0;
+        }
 
         ctx.restore();
         /* PvP 모드 시 본인 닉네임 — 우주선 아래, 반투명. */
@@ -12680,7 +12705,7 @@ $('pauseBtn').addEventListener('click', (e)=>{
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1787291054"></script>
+<script src="/js/siteFooter.js?v=1787292643"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

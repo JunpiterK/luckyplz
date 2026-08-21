@@ -43,7 +43,8 @@ def reset_scene():
     sc.render.resolution_x = RES
     sc.render.resolution_y = RES
     sc.render.film_transparent = True
-    sc.view_settings.look = 'AgX - Punchy'
+    sc.view_settings.look = 'AgX - High Contrast'
+    sc.view_settings.exposure = 0.18   # 명도 상향. 0.45 는 지구·태양이 하얗게 날아갔다
     w = bpy.data.worlds.new("W")
     w.use_nodes = True
     w.node_tree.nodes["Background"].inputs[0].default_value = (0, 0, 0, 1)
@@ -62,7 +63,7 @@ def add_camera(ortho=2.30):
     return cam
 
 
-def add_lights(key_energy=5.0, rim_energy=2.6, warm=False):
+def add_lights(key_energy=6.2, rim_energy=3.2, warm=False):
     """왼쪽 위 키 + 오른쪽 뒤 림. 전 천체 공통이라 나란히 놓아도 광원이 일치한다."""
     bpy.ops.object.light_add(type='SUN', location=(-4, -4.5, 3.4))
     key = bpy.context.object
@@ -260,13 +261,16 @@ def t06_earth():
     cr = ramp.color_ramp
     while len(cr.elements) > 1:
         cr.elements.remove(cr.elements[-1])
-    cr.elements[0].position = 0.00; cr.elements[0].color = (0.015, 0.09, 0.30, 1)
-    e = cr.elements.new(0.42);  e.color = (0.04, 0.22, 0.52, 1)
-    e = cr.elements.new(0.495); e.color = (0.06, 0.34, 0.62, 1)
-    e = cr.elements.new(0.515); e.color = (0.78, 0.70, 0.44, 1)
-    e = cr.elements.new(0.56);  e.color = (0.16, 0.42, 0.14, 1)
-    e = cr.elements.new(0.70);  e.color = (0.30, 0.36, 0.16, 1)
-    e = cr.elements.new(0.86);  e.color = (0.62, 0.58, 0.50, 1)
+    # 딥블루 계열 (2026-08-21 운영자 요청) — 심해를 진한 코발트로 내리고
+    # 얕은 바다를 선명한 청색으로 올려 물이 '파랗게' 읽히게 한다.
+    # 대륙은 채도를 올려 바다와의 대비를 키웠다
+    cr.elements[0].position = 0.00; cr.elements[0].color = (0.004, 0.022, 0.26, 1)
+    e = cr.elements.new(0.42);  e.color = (0.008, 0.075, 0.50, 1)
+    e = cr.elements.new(0.495); e.color = (0.02, 0.20, 0.74, 1)
+    e = cr.elements.new(0.515); e.color = (0.86, 0.78, 0.50, 1)
+    e = cr.elements.new(0.56);  e.color = (0.14, 0.52, 0.16, 1)
+    e = cr.elements.new(0.70);  e.color = (0.36, 0.44, 0.16, 1)
+    e = cr.elements.new(0.86);  e.color = (0.70, 0.66, 0.56, 1)
     links.new(tex.outputs["Fac"], ramp.inputs["Fac"])
     links.new(ramp.outputs["Color"], bsdf.inputs["Base Color"])
     bmp = nodes.new("ShaderNodeBump")
@@ -298,8 +302,9 @@ def t06_earth():
         cnz.inputs["Distortion"].default_value = 2.2
     cra = cn.new("ShaderNodeValToRGB")
     ccr = cra.color_ramp
-    ccr.elements[0].position = 0.50; ccr.elements[0].color = (0, 0, 0, 1)
-    ccr.elements[1].position = 0.66; ccr.elements[1].color = (1, 1, 1, 1)
+    # 구름 임계 상향 — 0.50/0.66 은 구름이 지구를 덮어 바다가 안 보였다
+    ccr.elements[0].position = 0.66; ccr.elements[0].color = (0, 0, 0, 1)
+    ccr.elements[1].position = 0.82; ccr.elements[1].color = (1, 1, 1, 1)
     clk.new(cnz.outputs["Fac"], cra.inputs["Fac"])
     clk.new(cra.outputs["Color"], mix.inputs[0])
     clk.new(tr.outputs[0], mix.inputs[1])
@@ -308,7 +313,8 @@ def t06_earth():
     cm.blend_method = 'BLEND'
     cl.data.materials.append(cm)
 
-    emissive_shell(1.075, (0.35, 0.62, 1.0), 2.4, "earth_atmo")
+    # 강도 2.6 은 프레넬이 구 전체를 덮어 바다가 하늘색이 됐다 → 가장자리 힌트만
+    emissive_shell(1.10, (0.20, 0.52, 1.0), 1.1, "earth_atmo")
     render_to("tier06.png")
 
 
@@ -363,7 +369,10 @@ def t09_saturn():
 
 
 def t10_star():
-    reset_scene(); add_camera(ortho=2.62)
+    sc = reset_scene(); add_camera(ortho=2.62)
+    sc.view_settings.view_transform = 'Standard'
+    sc.view_settings.look = 'None'
+    sc.view_settings.exposure = 0.0
     o = uv_sphere(1.0, tilt=8, spin=20)
     m = new_mat("star")
     nodes, links = m.node_tree.nodes, m.node_tree.links
@@ -375,11 +384,11 @@ def t10_star():
     tex = nodes.new("ShaderNodeTexImage")
     tex.image = bpy.data.images.load(os.path.join(DIR, "tex_sun.png"), check_existing=True)
     links.new(tex.outputs["Color"], emit.inputs["Color"])
-    emit.inputs["Strength"].default_value = 7.0
+    emit.inputs["Strength"].default_value = 1.35  # 표준 변환에서는 1.35 가 금빛. 2.6 은 R,G 가 모두 클리핑돼 형광 노랑이 된다
     links.new(emit.outputs[0], out.inputs["Surface"])
     o.data.materials.append(m)
-    emissive_shell(1.08, (1.0, 0.62, 0.16), 3.2, "corona1")
-    emissive_shell(1.18, (1.0, 0.40, 0.08), 1.3, "corona2")
+    emissive_shell(1.08, (1.0, 0.66, 0.16), 2.2, "corona1")
+    emissive_shell(1.18, (1.0, 0.40, 0.07), 1.1, "corona2")
     render_to("tier10.png")
 
 

@@ -81,9 +81,21 @@ def polar_fade(arr, start=78.0, end=89.0):
     return arr * (1 - t) + row_mean * t
 
 
+def saturate(arr, amt=1.22, lift=0.03):
+    """채도·명도 소폭 상향 (2026-08-21 운영자 요청: "조금 더 쨍하게").
+
+    회색축(휘도)에서 멀어지는 방향으로 밀어 채도를 올리고, 전체를 살짝
+    들어 올려 어두운 면이 뭉개지지 않게 한다.
+    """
+    lum = (arr * np.array([0.2126, 0.7152, 0.0722], np.float32)).sum(axis=2, keepdims=True)
+    out = lum + (arr - lum) * amt
+    return np.clip(out + lift, 0, 1)
+
+
 def save(arr, name):
     if not name.startswith("rings"):
         arr = polar_fade(arr)
+    arr = saturate(arr)
     im = Image.fromarray((np.clip(arr, 0, 1) * 255).astype(np.uint8), 'RGB')
     p = os.path.join(OUT, "tex_" + name + ".png")
     im.save(p)
@@ -328,8 +340,11 @@ def tex_sun():
     gran = fbm(shape, 40, 5, seed=111)
     supergran = fbm(shape, 9, 4, seed=112)
     t = np.clip(gran * 0.55 + supergran * 0.45, 0, 1)
-    r, g, b = ramp(t, [(0.0, (1.00, 0.32, 0.02)), (0.45, (1.00, 0.60, 0.08)),
-                       (0.72, (1.00, 0.84, 0.30)), (1.0, (1.00, 0.98, 0.80))])
+    # 더 밝은 태양색 — 살구빛에서 금빛 백열 쪽으로 (2026-08-21)
+    # 표면은 진한 주황~금으로 두고 '밝기'는 발광(emission)으로 만든다.
+    # 팔레트를 크림색까지 올리면 렌더에서 흰 원반이 된다 (2026-08-21)
+    r, g, b = ramp(t, [(0.0, (1.00, 0.42, 0.02)), (0.38, (1.00, 0.62, 0.06)),
+                       (0.68, (1.00, 0.80, 0.20)), (1.0, (1.00, 0.94, 0.56))])
     # 흑점 몇 개
     lat, lon = lat_grid(shape)
     sp = np.random.default_rng(7)
