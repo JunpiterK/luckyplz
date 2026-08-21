@@ -134,119 +134,173 @@ DARK = None
 
 
 def build_ship(with_flame=False):
-    """스타십 계열 실루엣 — 뾰족한 노즈 + 삼각 델타윙 + 후미 엔진 3기.
+    """실제 SpaceX Starship 형상.
 
-    탑다운이라 위에서 봤을 때의 실루엣이 전부다. 옆모습 디테일보다
-    (1) 노즈가 어디인지 (2) 날개 폭 (3) 엔진 위치가 즉시 읽혀야 한다.
+    탑다운 평면도라 위에서 본 실루엣이 전부다. 스타십을 스타십으로 읽게 하는
+    요소는 다음 다섯이며, 하나라도 빠지면 일반 SF 전투기가 된다.
+      1. 지름이 일정한 스테인리스 원통 동체 (테이퍼 없음, 비율 약 1:5.5)
+      2. 둥근 탄젠트 오자이브 노즈
+      3. 후퇴익이 아니라 플랩 4장 — 노즈 아래 전방 2장(작다) + 기저부 2장(크다)
+      4. 한쪽 면을 덮는 검은 내열타일
+      5. 기저부 랩터 엔진 클러스터. 조종석 캐노피는 없다
     """
     global HULL, ACCENT, GLASS, DARK
-    HULL = mat("hull", (0.93, 0.95, 0.99), rough=0.34, metal=0.55)
-    ACCENT = mat("accent", (0.10, 0.72, 0.92), rough=0.25, metal=0.6,
-                 emit=(0.15, 0.92, 1.0), emit_str=3.2)
-    GLASS = mat("glass", (0.03, 0.22, 0.36), rough=0.06, metal=0.15,
-                emit=(0.30, 0.95, 1.0), emit_str=5.0)
-    DARK = mat("dark", (0.10, 0.12, 0.18), rough=0.5, metal=0.4)
+    # 스테인리스 스틸 — 스타십의 상징. 무광에 가까운 금속
+    HULL = mat("hull", (0.905, 0.925, 0.955), rough=0.34, metal=0.42)
+    # 내열타일. 순검정이면 어두운 우주 배경에서 실루엣 절반이 사라져
+    # 짙은 차콜블루로 올리고 러프니스를 낮춰 림라이트를 받게 한다
+    TILE = mat("tile", (0.150, 0.160, 0.195), rough=0.52, metal=0.12)
+    ACCENT = mat("accent", (0.12, 0.74, 0.94), rough=0.28, metal=0.5,
+                 emit=(0.15, 0.92, 1.0), emit_str=1.6)
+    DARK = mat("dark", (0.13, 0.14, 0.18), rough=0.40, metal=0.55)
+
+    # 금속은 반사할 환경이 없으면 검게 렌더된다 (v2 실패 원인).
+    # film_transparent 라 배경에는 안 보이고 반사·조명에만 기여한다.
+    _w = bpy.context.scene.world.node_tree.nodes["Background"]
+    _w.inputs[0].default_value = (0.42, 0.50, 0.64, 1.0)
+    _w.inputs[1].default_value = 0.55
+
+    R = 0.26           # 동체 반지름 (실제 스타십 9m 지름에 대응)
+    Y0 = -1.34         # 기저부
+    Y1 = 0.84          # 원통 끝 = 노즈 시작
+    NOSE = 0.72        # 노즈 길이. 실제 스타십은 전장의 약 25% (50m 중 12m)
+    SEG = 48           # 원주 분할. 4의 배수여야 x=0 을 걸치는 면이 없다
 
     parts = []
 
-    # 동체 — 길쭉한 캡슐. Y+ 가 진행 방향
-    bpy.ops.mesh.primitive_cylinder_add(radius=0.30, depth=1.7, vertices=48,
-                                        location=(0, -0.05, 0))
-    body = bpy.context.object
-    body.rotation_euler = (math.radians(90), 0, 0)
-    body.data.materials.append(HULL)
-    parts.append(smooth(body))
+    # ── 동체 + 노즈: 회전체를 직접 생성 ──
+    # 탄젠트 오자이브: r(t) = sqrt(rho^2 - t^2) + R - rho,  t 는 노즈 밑에서의 거리
+    rho = (R * R + NOSE * NOSE) / (2.0 * R)
+    prof = [(Y0, R), (Y1, R)]
+    NSAMP = 26
+    for i in range(1, NSAMP + 1):
+        t = NOSE * i / NSAMP
+        rr = math.sqrt(max(0.0, rho * rho - t * t)) + R - rho
+        prof.append((Y1 + t, max(0.0, rr)))
 
-    # 노즈콘 — 원뿔
-    bpy.ops.mesh.primitive_cone_add(radius1=0.30, radius2=0.0, depth=0.85,
-                                    vertices=48, location=(0, 1.22, 0))
-    nose = bpy.context.object
-    nose.rotation_euler = (math.radians(-90), 0, 0)
-    nose.data.materials.append(HULL)
-    parts.append(smooth(nose))
+    verts, faces, mat_idx = [], [], []
+    rings = []
+    for (yy, rr) in prof:
+        ring = []
+        if rr <= 1e-5:
+            ring = [len(verts)]
+            verts.append((0.0, yy, 0.0))
+        else:
+            for k in range(SEG):
+                a = math.pi * 2 * k / SEG
+                ring.append(len(verts))
+                verts.append((math.cos(a) * rr, yy, math.sin(a) * rr))
+        rings.append(ring)
 
-    # 델타윙 — 좌우 대칭 삼각 판
-    for sgn in (1, -1):
-        verts = [
-            (sgn * 0.16, 0.55, 0.0),
-            (sgn * 0.92, -0.55, 0.0),
-            (sgn * 0.34, -0.70, 0.0),
-            (sgn * 0.16, -0.10, 0.0),
-        ]
-        faces = [[0, 1, 2, 3]]
-        me = bpy.data.meshes.new("wing")
-        me.from_pydata(verts, [], faces)
-        me.update()
-        wing = bpy.data.objects.new("wing", me)
-        bpy.context.collection.objects.link(wing)
-        sol = wing.modifiers.new("S", 'SOLIDIFY')
-        sol.thickness = 0.20   # 34px 에서 날개가 반투명하게 뭉개지지 않도록 두껍게
-        wing.data.materials.append(HULL)
-        parts.append(wing)
-        # 윙팁 발광 스트립
-        bpy.ops.mesh.primitive_cube_add(size=1, location=(sgn * 0.86, -0.58, 0.06))
-        tip = bpy.context.object
-        tip.scale = (0.22, 0.055, 0.03)
-        tip.rotation_euler = (0, 0, math.radians(sgn * -52))
-        tip.data.materials.append(ACCENT)
-        parts.append(tip)
+    def face_side(idxs):
+        """면 중심의 x 부호 → 0=hull, 1=tile."""
+        cx = sum(verts[i][0] for i in idxs) / len(idxs)
+        return 1 if cx > 0.0 else 0
 
-    # 캐노피 — 청록 발광 (조종석)
-    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.20, segments=40, ring_count=20,
-                                         location=(0, 0.52, 0.19))
-    can = bpy.context.object
-    can.scale = (0.95, 1.65, 0.60)
-    can.data.materials.append(GLASS)
-    parts.append(smooth(can))
+    for a in range(len(rings) - 1):
+        lo, hi = rings[a], rings[a + 1]
+        if len(hi) == 1:                      # 노즈 끝: 삼각 부채꼴
+            for k in range(SEG):
+                f = [lo[k], lo[(k + 1) % SEG], hi[0]]
+                faces.append(f); mat_idx.append(face_side(f))
+        else:
+            for k in range(SEG):
+                f = [lo[k], lo[(k + 1) % SEG], hi[(k + 1) % SEG], hi[k]]
+                faces.append(f); mat_idx.append(face_side(f))
+    # 기저부 뚜껑
+    faces.append(list(reversed(rings[0]))); mat_idx.append(0)
 
-    # 등줄기 라인 — 기체 중앙 발광 스트립
-    bpy.ops.mesh.primitive_cube_add(size=1, location=(0, -0.35, 0.28))
-    spine = bpy.context.object
-    spine.scale = (0.055, 0.46, 0.02)
-    spine.data.materials.append(ACCENT)
-    parts.append(spine)
+    me = bpy.data.meshes.new("starship_hull")
+    me.from_pydata(verts, [], faces)
+    me.update()
+    hull = bpy.data.objects.new("starship_hull", me)
+    bpy.context.collection.objects.link(hull)
+    hull.data.materials.append(HULL)
+    hull.data.materials.append(TILE)
+    for i, p in enumerate(hull.data.polygons):
+        p.use_smooth = True
+        p.material_index = mat_idx[i] if i < len(mat_idx) else 0
+    parts.append(hull)
 
-    # 엔진 3기 — 후미
-    for ex in (-0.34, 0.0, 0.34):
-        bpy.ops.mesh.primitive_cylinder_add(radius=0.155, depth=0.30, vertices=32,
-                                            location=(ex, -0.94, 0))
+    # ── 타일 경계선(chine) — 밝은 청록 실선.
+    #    어두운 타일 면이 배경에 먹히지 않도록 실루엣을 잡아주는 장치다 ──
+    for sx in (1, -1):
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(sx * R * 1.005, (Y0 + Y1) / 2, 0))
+        ln = bpy.context.object
+        ln.scale = (0.010, (Y1 - Y0) * 0.96, 0.020)
+        ln.data.materials.append(ACCENT)
+        parts.append(ln)
+
+    # ── 플랩 4장 ──
+    def flap(sx, y0, y1, span, thick, tiled, sweep):
+        """아래는 넓고 위는 좁은 육면체. 측면 베벨이 림라이트를 받아 두께가 읽힌다.
+           sweep: 바깥 끝을 뒤로 눕히는 양 (전방 플랩의 후퇴각)."""
+        xi = R * 0.86 * sx
+        xo = span * sx
+        bot = [(xi, y0, -thick), (xo, y0 + sweep, -thick),
+               (xo, y1 - sweep * 0.75, -thick), (xi, y1, -thick)]
+        ins = 0.045
+        top = [(xi, y0 + ins, thick), (xo - ins * sx, y0 + sweep + ins, thick),
+               (xo - ins * sx, y1 - sweep * 0.75 - ins, thick), (xi, y1 - ins, thick)]
+        vs = bot + top
+        fs = [[0, 1, 2, 3], [7, 6, 5, 4],
+              [0, 4, 5, 1], [1, 5, 6, 2], [2, 6, 7, 3], [3, 7, 4, 0]]
+        m2 = bpy.data.meshes.new("flap")
+        m2.from_pydata(vs, [], fs)
+        m2.update()
+        ob = bpy.data.objects.new("flap", m2)
+        bpy.context.collection.objects.link(ob)
+        ob.data.materials.append(TILE if tiled else HULL)
+        parts.append(ob)
+
+    # 전방 플랩 — 노즈 바로 아래, 작다
+    for sx in (1, -1):
+        flap(sx, Y1 - 0.36, Y1 + 0.14, 0.58, 0.075, sx > 0, 0.17)
+    # 후방 플랩 — 기저부, 크다
+    for sx in (1, -1):
+        flap(sx, Y0 + 0.03, Y0 + 0.84, 0.84, 0.095, sx > 0, 0.20)
+
+    # ── 랩터 엔진 6기 ──
+    for k in range(6):
+        a = math.pi * 2 * k / 6
+        bpy.ops.mesh.primitive_cone_add(radius1=R * 0.32, radius2=R * 0.21, depth=0.20,
+                                        vertices=24,
+                                        location=(math.cos(a) * R * 0.56, Y0 - 0.09,
+                                                  math.sin(a) * R * 0.56))
         eng = bpy.context.object
         eng.rotation_euler = (math.radians(90), 0, 0)
         eng.data.materials.append(DARK)
         parts.append(smooth(eng))
-        # 노즐 내부 발광
-        bpy.ops.mesh.primitive_cylinder_add(radius=0.115, depth=0.06, vertices=28,
-                                            location=(ex, -1.06, 0))
-        gl = bpy.context.object
-        gl.rotation_euler = (math.radians(90), 0, 0)
-        gl.data.materials.append(emit_mat("nozzle" + str(ex), (0.40, 0.88, 1.0), 3.5))
-        parts.append(smooth(gl))
 
-        if with_flame:
-            # 추진 화염 — 원뿔 2겹 (안쪽 흰-청, 바깥 청)
-            bpy.ops.mesh.primitive_cone_add(radius1=0.135, radius2=0.02, depth=0.95,
-                                            vertices=28, location=(ex, -1.58, 0))
+    # ── 기저부 링 — 소형 표시에서 '아래쪽'을 즉시 알려준다 ──
+    bpy.ops.mesh.primitive_torus_add(major_radius=R * 1.01, minor_radius=0.020,
+                                     major_segments=48, minor_segments=10,
+                                     location=(0, Y0 + 0.05, 0))
+    ring = bpy.context.object
+    ring.rotation_euler = (math.radians(90), 0, 0)
+    ring.data.materials.append(ACCENT)
+    parts.append(ring)
+
+    if with_flame:
+        for k in range(3):
+            bpy.ops.mesh.primitive_cone_add(radius1=R * 0.34, radius2=0.02, depth=0.9,
+                                            vertices=24,
+                                            location=((k - 1) * R * 0.50, Y0 - 0.60, 0))
             fl = bpy.context.object
             fl.rotation_euler = (math.radians(90), 0, 0)
-            fl.data.materials.append(emit_mat("flameIn" + str(ex), (0.80, 0.95, 1.0), 5.5))
+            fl.data.materials.append(emit_mat("fl%d" % k, (0.80, 0.95, 1.0), 4.0))
             parts.append(smooth(fl))
-            bpy.ops.mesh.primitive_cone_add(radius1=0.20, radius2=0.03, depth=1.45,
-                                            vertices=28, location=(ex, -1.86, 0))
-            fo = bpy.context.object
-            fo.rotation_euler = (math.radians(90), 0, 0)
-            fo.data.materials.append(emit_mat("flameOut" + str(ex), (0.18, 0.58, 1.0), 2.4))
-            parts.append(smooth(fo))
     return parts
 
 
 def s_ship():
-    reset_scene(); top_camera(3.15); lights()
+    reset_scene(); top_camera(3.45); lights()
     build_ship(False)
     render_to("ship.png")
 
 
 def s_ship_thrust():
-    reset_scene(); top_camera(3.9); lights()
+    reset_scene(); top_camera(4.4); lights()
     build_ship(True)
     render_to("ship_thrust.png")
 

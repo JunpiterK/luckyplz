@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1787292893">
+<meta name="lp-build" content="1787294802">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787292893";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787294802";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -30,7 +30,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@500;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
-<script src="/js/lpI18n.js?v=1787292893"></script>
+<script src="/js/lpI18n.js?v=1787294802"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -1801,12 +1801,17 @@ function drawTier11(x, y, r, b){
    손으로 그린 캔버스 2D 천체는 '행성'으로 읽히지 않았다. 실제 렌더를
    미리 불러 두고, 아직 로드 전이면 기존 드로어로 폴백한다.
    원본: scripts/blender/planets_scene.py (텍스처는 planet_textures.py) */
+/* 티어별 스프라이트 프레임 배율 — 렌더 알파 bbox 실측값.
+   9(토성) 은 고리, 10(항성) 은 코로나, 11(블랙홀) 은 강착원반 때문에 넓다. */
+const SPRITE_OVER = [0, 1.08, 1.06, 1.01, 1.01, 1.01, 1.11, 1.01, 1.01, 1.60, 1.19, 1.35];
 const PLANET_SPRITES = [null];
 let _spritesReady = 0;
+/* 자산 캐시(1일) 우회 — bump-cache.sh 가 갱신하는 빌드 스탬프를 붙인다. */
+const _SPR_BV = (function(){var m=document.querySelector('meta[name="lp-build"]');return m && m.content ? '?v=' + m.content : '';})();
 for(let i = 1; i <= 11; i++){
   const im = new Image();
   im.decoding = 'async';
-  im.src = '/assets/planets/t' + String(i).padStart(2, '0') + '.webp';
+  im.src = '/assets/planets/t' + String(i).padStart(2, '0') + '.webp' + _SPR_BV;
   im.onload = () => { _spritesReady++; };
   PLANET_SPRITES[i] = im;
 }
@@ -1845,9 +1850,10 @@ function drawBody(b){
   const _paint = (cx, cy, rr) => {
     if(_useSprite){
       const im = PLANET_SPRITES[b.tier];
-      /* 토성 고리·항성 코로나·블랙홀 원반은 구 바깥까지 그림이 있어
-         스프라이트 프레임이 반지름보다 넓다. 그만큼 키워 그린다. */
-      const over = (b.tier === 9 || b.tier === 10 || b.tier === 11) ? 1.34 : 1.06;
+      /* 스프라이트 프레임은 천체마다 구 반지름보다 넓다 (대기 림·고리·코로나·
+         강착원반). 렌더 결과의 알파 bbox 를 실측해 구한 값이라 이 표를
+         쓰면 구 본체가 정확히 반지름 r 로 그려진다 (2026-08-21). */
+      const over = SPRITE_OVER[b.tier] || 1.06;
       const d = rr * 2 * over;
       ctx.drawImage(im, cx - d / 2, cy - d / 2, d, d);
     } else {
@@ -1973,7 +1979,7 @@ function drawDropIndicator(){
   const fakeBody = { id:0, age:1000, rot:0 };
   if(spriteReady(S.dropTier)){
     const im = PLANET_SPRITES[S.dropTier];
-    const over = (S.dropTier === 9 || S.dropTier === 10 || S.dropTier === 11) ? 1.34 : 1.06;
+    const over = SPRITE_OVER[S.dropTier] || 1.06;
     const d = t.r * 2 * over;
     ctx.drawImage(im, x - d / 2, y - d / 2, d, d);
   } else {
@@ -2600,7 +2606,7 @@ if(navigator.serviceWorker){
   }).catch(()=>{});
 }
 </script>
-<script src="/js/siteFooter.js?v=1787292893"></script>
+<script src="/js/siteFooter.js?v=1787294802"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

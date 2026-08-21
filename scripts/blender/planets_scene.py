@@ -336,12 +336,14 @@ def t08_jupiter():
 
 
 def t09_saturn():
-    reset_scene(); add_camera(ortho=3.10); add_lights(warm=True)
-    o = uv_sphere(0.95, tilt=8)
+    # ortho 3.10 은 프레임 반폭 1.55 < 고리 2.05 라 좌우가 잘렸다 (2026-08-21 실측).
+    # 고리를 1.60 으로 줄이고 프레임을 3.50 으로 — 게임에서도 고리가 과하지 않다
+    reset_scene(); add_camera(ortho=3.50); add_lights(warm=True)
+    o = uv_sphere(1.0, tilt=8)
     o.scale = (1.0, 1.0, 0.90)
     textured_planet(o, "tex_saturn.png", rough=0.70, name="saturn")
 
-    ring = annulus(1.22, 2.05, 220, "saturn_ring")
+    ring = annulus(1.20, 1.60, 220, "saturn_ring")
     ring.rotation_euler = (math.radians(17), 0, math.radians(9))
     rm = new_mat("rings")
     rn, rl = rm.node_tree.nodes, rm.node_tree.links
