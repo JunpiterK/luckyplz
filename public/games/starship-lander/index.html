@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1787282693">
+<meta name="lp-build" content="1787285316">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787282693";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787285316";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -503,7 +503,12 @@ const FUEL_BURN_SIDE = 0.18;
 const THRUST_MAIN = 0.13;
 const THRUST_SIDE = 0.0035; // angular impulse
 
-function update(){
+function update(k){
+  /* k = 프레임 배율 (60fps 기준 1.0).
+     예전엔 dt 를 계산해두고 쓰지 않아 물리가 프레임률에 그대로 묶였다.
+     120Hz 단말에서는 중력·추력·연료소모가 모두 2배 속도로 진행돼
+     같은 스테이지가 전혀 다른(사실상 불가능한) 난도가 됐다 (2026-08-21) */
+  k = (typeof k === 'number' && isFinite(k) && k > 0) ? Math.min(k, 3) : 1;
   const ship = S.ship;
   if (!ship || ship.landed || ship.crashed) return;
   const stage = STAGES[S.stage];
@@ -512,37 +517,41 @@ function update(){
   if (S.thrust.main && ship.fuel > 0) {
     const ax = Math.sin(ship.angle) * THRUST_MAIN;
     const ay = -Math.cos(ship.angle) * THRUST_MAIN;
-    ship.vx += ax;
-    ship.vy += ay;
-    ship.fuel -= FUEL_BURN_MAIN;
+    ship.vx += ax * k;
+    ship.vy += ay * k;
+    ship.fuel -= FUEL_BURN_MAIN * k;
     ship.flameTime = 6;
     spawnFlame(ship);
   }
   if (S.thrust.left && ship.fuel > 0) {
-    ship.angularV -= THRUST_SIDE;
-    ship.fuel -= FUEL_BURN_SIDE;
+    ship.angularV -= THRUST_SIDE * k;
+    ship.fuel -= FUEL_BURN_SIDE * k;
     spawnSideJet(ship, 'left');
   }
   if (S.thrust.right && ship.fuel > 0) {
-    ship.angularV += THRUST_SIDE;
-    ship.fuel -= FUEL_BURN_SIDE;
+    ship.angularV += THRUST_SIDE * k;
+    ship.fuel -= FUEL_BURN_SIDE * k;
     spawnSideJet(ship, 'right');
   }
 
   // Gravity
-  ship.vy += stage.gravity;
+  ship.vy += stage.gravity * k;
   // Wind (random gust)
   if (stage.wind > 0) {
-    ship.vx += (Math.random() - 0.5) * stage.wind * 2;
+    ship.vx += (Math.random() - 0.5) * stage.wind * 2 * k;
   }
 
   // Cap fuel
   if (ship.fuel < 0) ship.fuel = 0;
 
   // Update position
-  ship.x += ship.vx;
-  ship.y += ship.vy;
-  ship.angle += ship.angularV;
+  ship.x += ship.vx * k;
+  ship.y += ship.vy * k;
+  ship.angle += ship.angularV * k;
+  /* -PI~PI 로 정규화 — 한 바퀴 회전하면 angle 이 6.28 이 되어, 화면상
+     똑바로 서 있는데도 착륙 판정(|angle| < landMaxAng)에서 떨어졌다 */
+  if (ship.angle > Math.PI) ship.angle -= Math.PI * 2;
+  else if (ship.angle < -Math.PI) ship.angle += Math.PI * 2;
 
   // Angular damping
   ship.angularV *= 0.985;
@@ -769,6 +778,7 @@ function onCrash(){
 }
 
 function startStage(stage){
+  S.scoreAtStageStart = S.totalScore;   /* RETRY 되감기 기준점 */
   S.stage = stage;
   S.thrust = { left:false, right:false, main:false };
   document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('pressed'));
@@ -787,7 +797,13 @@ function startGame(){ S.totalScore = 0;try{if(window.LpBgm){window.LpBgm.start()
 function nextStage(){
   if (S.stage + 1 < STAGES.length) startStage(S.stage + 1);
 }
-function retry(){ startStage(S.stage); }
+function retry(){
+    /* 스테이지 시작 시점 총점으로 되감는다. 예전엔 착륙 성공 후 RETRY 를
+       누르면 이미 더해진 stageScore 가 남아, 같은 스테이지를 반복 착륙하며
+       최고점을 무한히 부풀릴 수 있었다 (2026-08-21) */
+    if (typeof S.scoreAtStageStart === 'number') S.totalScore = S.scoreAtStageStart;
+    startStage(S.stage);
+}
 function togglePause(){
   if (!S.running) return;
   S.paused = !S.paused;
@@ -822,7 +838,7 @@ function loop(t){
   const dt = Math.min(50, t - S.lastFrame);
   S.lastFrame = t;
   if (S.running && !S.paused) {
-    update();
+    update(dt / (1000/60));   /* 60fps 기준 배율 */
     updateStatsUI();
   }
   render();
@@ -839,7 +855,7 @@ requestAnimationFrame(loop);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1787282693" defer></script>
+<script src="/js/siteFooter.js?v=1787285316" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

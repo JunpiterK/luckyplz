@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787282693">
+<meta name="lp-build" content="1787285316">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787282693";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787285316";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>블록 스택 · Block Stack | Lucky Please</title>
@@ -902,9 +902,9 @@ body{
         </aside>
     </div>
 </main>
-<script src="/js/supabase-config.js?v=1787282693"></script>
-<script src="/js/lpI18n.js?v=1787282693"></script>
-<script src="/js/lpRankSheet.js?v=1787282693"></script>
+<script src="/js/supabase-config.js?v=1787285316"></script>
+<script src="/js/lpI18n.js?v=1787285316"></script>
+<script src="/js/lpRankSheet.js?v=1787285316"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -1938,6 +1938,7 @@ function spawnPiece(){
    Piece 를 slot 에 보관 후 다른 piece (또는 새 piece) 와 교체.
    canHold 가 false 면 (이번 piece 이미 hold 사용했으면) 무시. */
 function holdCurrentPiece(){
+    lastMoveRotated = false;   /* 홀드로 스핀 판정이 새어 가짜 T-스핀이 되던 문제 */
     if(!current || !canHold || paused || gameOverFlag || !running) return;
     Sfx.rotate();   /* hold = 회전과 비슷한 trigger SFX */
     const incoming = current.type;
@@ -2040,11 +2041,14 @@ function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
     const kickKey = fromRot + '->' + toRot;
     const kickTable = current.type === 'I' ? KICKS_I : KICKS_JLSTZ;
     const kicks = kickTable[kickKey] || [[0,0]];
+    /* 킥 테이블은 화면좌표(y-down) 기준이므로 그대로 더한다.
+       `y - ky` 로 빼면 모든 수직 킥이 뒤집혀, 바닥에서 회전할 때 조각이
+       위로 떠오르고 T-스핀 트리플이 불가능해진다 (2026-08-21 실측 수정) */
     for(const [kx, ky] of kicks){
-        if(tryPos(current.type, toRot, current.x + kx, current.y - ky)){
+        if(tryPos(current.type, toRot, current.x + kx, current.y + ky)){
             current.rot = toRot;
             current.x += kx;
-            current.y -= ky;
+            current.y += ky;
             Sfx.rotate();
             lastMoveRotated = true;   /* spin 후보 — lock 시 검증 */
             if(landed){
@@ -2087,7 +2091,7 @@ function softDrop(){
     }
 }
 function hardDrop(){
-    if(!current || paused || gameOverFlag) return;
+    if(!current || paused || gameOverFlag || clearing) return;
     /* Trail snapshot — drop 시작 위치/타입 저장. lock() 후에는 current
        이 새 piece 로 바뀌므로 미리 캡처. */
     const startY = current.y;
@@ -2212,7 +2216,12 @@ function addScorePopup(text, color){
 }
 
 /* ---- Lock + clear lines + spawn next ---- */
+/* 라인 클리어 연출 중 잠금 — 연출 동안 current 는 이미 보드에 찍힌
+   조각을 계속 가리키는데 중력이 돌아 lock() 이 재실행되던 버그를 막는다 */
+let clearing = false;
+
 function lock(){
+    if(clearing) return;
     if(!current) return;
     /* Spin 검증 — board 수정 전에 (current piece 위치 그대로 평가) */
     const spinResult = detectSpin();
@@ -2237,6 +2246,7 @@ function lock(){
         if(board[y].every(c => c != null)) cleared.push(y);
     }
     if(cleared.length > 0){
+        clearing = true;
         /* 라인 클리어 시퀀스:
              1. 즉시 사운드 발사 (sweep + 멜로디 / TETRIS 면 boom + sweep)
              2. 캔버스 wrap 흔들기 (shake CSS 클래스)
@@ -2395,12 +2405,14 @@ function lock(){
             if(gameMode === 'sprint' && lines >= SPRINT_TARGET){
                 /* spawnPiece 전에 sprint complete — 게임 끝. */
                 sprintComplete();
+                clearing = false;
                 return;
             }
             /* 라인 클리어 후 보드 settle 됨 → BGM tier 재평가
                (라인 빠진 만큼 topRow 아래로 내려가서 음악이 차분해질
                수 있음). */
             try { TetrisBGM.update(board); } catch(_){}
+            clearing = false;
             spawnPiece();
             render();
         }, dur);
@@ -2975,7 +2987,13 @@ function loop(now){
     }
     if(!paused){
         const interval = softDropping ? Math.min(SOFT_DROP_INTERVAL, dropMs) : dropMs;
-        while(now - lastDrop >= interval){
+        /* 라인 클리어 연출 중에는 중력을 멈춘다 (이중 lock 방지) */
+        if(clearing){ lastDrop = now; }
+        /* 캐치업 상한 — 탭 복귀 시 수천 스텝이 한 프레임에 몰려 즉사하던 문제.
+           고레벨(interval 5ms)에서 30초 백그라운드 = 6000 스텝이었다 */
+        let _catchup = 0;
+        while(!clearing && now - lastDrop >= interval){
+            if(++_catchup > 8){ lastDrop = now; break; }
             lastDrop += interval;
             const moved = dropOne();
             if(moved){
@@ -3711,6 +3729,16 @@ document.querySelectorAll('.cbtn').forEach(b => {
 });
 
 /* Pause button */
+/* 모바일에서 알림·앱 전환이 오면 자동 일시정지. 없으면 복귀 시
+   중력 캐치업으로 판이 그냥 끝나 있었다 (2026-08-21) */
+document.addEventListener('visibilitychange', () => {
+    if(document.hidden){
+        if(running && !paused){ paused = true; try{ syncPauseUI(); }catch(_){} }
+    } else {
+        lastDrop = performance.now();   /* 복귀 순간 기준점 재설정 */
+    }
+});
+
 $('pauseBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     if(!running || gameOverFlag) return;
@@ -3973,7 +4001,7 @@ async function loadLeaderboard(scope){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1787282693" defer></script>
+<script src="/js/siteFooter.js?v=1787285316" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

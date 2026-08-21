@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1787282693">
+<meta name="lp-build" content="1787285316">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787282693";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787285316";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -31,7 +31,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@500;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
-<script src="/js/lpI18n.js?v=1787282693"></script>
+<script src="/js/lpI18n.js?v=1787285316"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -1429,6 +1429,7 @@ function hitBrick(br, hx, hy, fromAOE){
 }
 
 function loseLife(){
+  if(!S.running || S._levelCleared) return;   /* 클리어 연출 중/종료 후 중복 차감 방지 */
   S.lives--;
   S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
   resetSpeedTier(); // ball death → speed back to base for the comeback
@@ -1498,6 +1499,7 @@ function onLevelClear(){
   updateUI();
 }
 function onGameOver(reason){
+  if(!S.running) return;   /* 이중 호출 방어 */
   S.running = false;
   if(S.score > S.best){ S.best = S.score; }
   if(S.level > S.bestLevel){ S.bestLevel = S.level; }
@@ -2046,6 +2048,13 @@ function flashBorder(){
   cv.style.boxShadow = '0 0 50px rgba(255,230,109,0.5), inset 0 0 40px rgba(0,0,0,0.5)';
   setTimeout(()=>{ cv.style.boxShadow = ''; }, 250);
 }
+/* 모바일에서 앱 전환·알림이 오면 자동 일시정지.
+   스테이지 제한시간(1스테이지 50초)이 실시간 기준이라, 이 처리가 없으면
+   전화 한 통에 무조건 시간초과 패배였다 (2026-08-21) */
+document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden && S.running && !S.paused){ try{ togglePause(); }catch(_){} }
+});
+
 function togglePause(){
   if(!S.running) return;
   S.paused = !S.paused;
@@ -2086,7 +2095,10 @@ function loop(t){
   if(S.running && !S.paused){
     physAccum += realDt;
     let steps = 0;
-    while(physAccum >= PHYSICS_DT && steps < 6){
+    /* S.running 조건 추가 — 한 프레임에 최대 6스텝을 도는데, 1스텝에서
+       게임오버가 나도 남은 스텝이 계속 돌아 loseLife() 가 다시 불리고
+       lives 가 음수가 되며 게임오버 사운드·최고점 기록이 중복됐다 */
+    while(S.running && physAccum >= PHYSICS_DT && steps < 6){
       update(PHYSICS_DT);
       physAccum -= PHYSICS_DT;
       steps++;
