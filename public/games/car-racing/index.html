@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787278061">
+<meta name="lp-build" content="1787282693">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787278061";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787282693";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -694,15 +694,15 @@
     </div>
     <div id="collisionLabelsContainer"></div>
     <div id="eventPopupContainer"></div>
-<script src="/js/topNav.js?v=1787278061"></script>
-<script src="/js/langBar.js?v=1787278061"></script>
-<script src="/js/participantPresets.js?v=1787278061"></script>
-<script src="/js/nextGames.js?v=1787278061"></script>
+<script src="/js/topNav.js?v=1787282693"></script>
+<script src="/js/langBar.js?v=1787282693"></script>
+<script src="/js/participantPresets.js?v=1787282693"></script>
+<script src="/js/nextGames.js?v=1787282693"></script>
 <!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
      for Watch-Together. Without window.supabase the room-create /
      room-join flow silently no-ops. -->
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1787278061"></script>
+<script src="/js/supabase-config.js?v=1787282693"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -3104,6 +3104,7 @@ function updatePlayers(dt){
             }
         }
         if(car.slowTimer>0){car.slowTimer-=dt;speed*=0.4}
+        else if(car.state===CarState.SLOWED){car.state=CarState.RACING;car.stateTimer=0} /* SLOWED 는 종료 코드가 없어 영구 지속되던 버그 */
         if(car.stunTimer>0){car.stunTimer-=dt;speed*=0.1;car.state=CarState.STUNNED}
 
 
@@ -3187,6 +3188,13 @@ function updatePlayers(dt){
          *  추월 해제:
          *    공격자(source)가 피해자를 추월하는 순간 즉시 해제
          * ------------------------------------------------------------ */
+        if(car.state===CarState.STICKY_ATTACHED){
+            /* 링크 무결성 워치독: 공격자가 미사일·지뢰 등으로 BOOST 를 잃었는데
+               피해자만 7초 내내 감속·역주행하는 고아 상태 방지 (2026-08-21) */
+            if(!car.stickySource||car.stickySource.state!==CarState.STICKY_BOOST||car.stickySource.stickyTarget!==car){
+                car.state=CarState.RACING;car.stateTimer=0;car.stickySource=null;car.stickyHitCount=0;car.targetLaneOffset=0;
+            }
+        }
         if(car.state===CarState.STICKY_ATTACHED){
             const fullSpeed=car.baseSpeed*1400*gameSpeed;
             const t=car.stateTimer;
@@ -3651,27 +3659,32 @@ function updatePlayers(dt){
             const _rr=activePlayers.length>1?_rk/(activePlayers.length-1):0; /* 0=선두 1=꼴찌 */
             const pickR=20+10*_rr;
             itemBoxes.forEach(box=>{
-                if(box.collected||box.respawnTimer>0)return;
+                if(!box.takenBy)box.takenBy={};
+                if(box.takenBy[car.index]!==undefined&&raceElapsedTime-box.takenBy[car.index]<(box.fastRespawn?1:5))return;
                 const dx=car.x-box.worldX, dy=car.y-box.worldY;
                 const pixelDist=Math.sqrt(dx*dx+dy*dy);
                 if(pixelDist<pickR){
+                    box.takenBy[car.index]=raceElapsedTime;
                     let items;
                     if(_rr<0.34){ /* 선두권: 공격 최소, 지뢰 리스크 */
                         items=[ItemType.WATER_BALLOON,ItemType.WATER_BALLOON,ItemType.BANANA,ItemType.BANANA,ItemType.LANDMINE,ItemType.LANDMINE,ItemType.NET,ItemType.STICKY,ItemType.GHOST];
                     }else if(_rr<0.67){ /* 중위권: 균형 */
-                        items=[ItemType.WATER_BALLOON,ItemType.MISSILE,ItemType.BANANA,ItemType.STICKY,ItemType.STICKY,ItemType.NET,ItemType.BOOSTER,ItemType.GHOST,ItemType.WING,ItemType.LANDMINE];
+                        items=[ItemType.WATER_BALLOON,ItemType.MISSILE,ItemType.BANANA,ItemType.STICKY,ItemType.NET,ItemType.NET,ItemType.BOOSTER,ItemType.GHOST,ItemType.WING,ItemType.LANDMINE];
                     }else{ /* 하위권: 역전 화력, 지뢰 없음 */
-                        items=[ItemType.MISSILE,ItemType.MISSILE,ItemType.BOOSTER,ItemType.WING,ItemType.WING,ItemType.STICKY,ItemType.GHOST,ItemType.GHOST,ItemType.NET,ItemType.BANANA];
+                        items=[ItemType.MISSILE,ItemType.MISSILE,ItemType.BOOSTER,ItemType.WING,ItemType.WING,ItemType.STICKY,ItemType.STICKY,ItemType.GHOST,ItemType.NET,ItemType.BANANA];
                     }
                     const selectedItem=items[randomInt(0,items.length-1)];
-                    box.collected=true;
-                    box.respawnTimer=box.fastRespawn?1:5;
+                    /* 차당 판정(2026-08-21): 박스는 사라지지 않고 차마다 독립
+                       쿨다운(일반 5초/막판 1초)을 가진다. 공유 collected 방식은
+                       선두 팩이 지나간 구간을 비워 뒷차 아이템 격차(+34%)와
+                       슬롯 승률 편향의 구조적 원인이었다 (600판 시뮬 실측) */
                     if(selectedItem===ItemType.LANDMINE){
                         /* 지뢰: 즉시 자폭 — 미사일 피격과 동일 효과, 7초 지속
                          * 유령 상태에서도 지뢰는 터짐 → 유령 해제 후 폭발 */
                         if(car.state===CarState.GHOST){
                             car.ghostTimer=0;
                         }
+                        releaseStickyPair(car); /* 끈끈이 공격/피격 중 지뢰 자폭 시 페어 정리 */
                         AudioEngine.sfx.crash();
                         addCommentary('landmine',{name:car.name});
                         itemPopups.push({x:car.x,y:car.y-30,emoji:'💣',life:1});
@@ -3703,8 +3716,12 @@ function updatePlayers(dt){
             });
         }
 
-        /* Use item automatically (비행 중 아이템 사용 불가) */
-        if(car.heldItem&&car.state!==CarState.FLYING&&Math.random()<0.008*eventFrequency*dt*60){
+        /* Use item automatically.
+           사용 불가: 비행 중 + 무력화 상태(폭발·그물·스핀·미끄러짐·끈끈이 피격·스턴).
+           가드 없던 시절엔 그물(5초 정지) 안에서 부스터를 써서 즉시 탈출하는
+           식의 부자연스러운 조합이 가능했다 (2026-08-21) */
+        const _incap=car.state===CarState.MISSILE_HIT||car.state===CarState.NETTED||car.state===CarState.SPINNING||car.state===CarState.SLIPPING||car.state===CarState.STICKY_ATTACHED||car.stunTimer>0;
+        if(car.heldItem&&!_incap&&car.state!==CarState.FLYING&&Math.random()<0.008*eventFrequency*dt*60){
             if(car.heldItem===ItemType.BOOSTER){
                 /* BOOSTER: self-use — 꼴찌는 2배(10초), 그 외 5초 */
                 const myRankBoost=sorted.indexOf(car)+1;
@@ -4215,6 +4232,7 @@ function updatePlayers(dt){
                     if(d<=NET_CATCH_RADIUS){
                         /* 유령 상태도 거미줄에 잡힘 → 유령 해제 */
                         if(car.state===CarState.GHOST) car.ghostTimer=0;
+                        releaseStickyPair(car); /* 끈끈이 피해자가 그물에 잡히면 공격자 BOOST 도 해제 */
                         car.state=CarState.NETTED;
                         car.stateTimer=0;
                         net.caughtCars.add(car.index);
@@ -4313,18 +4331,42 @@ function deployNet(car,target){
     itemPopups.push({x:car.x,y:car.y-30,emoji:'🕸️',life:1});
 }
 
+/* 끈끈이 페어 강제 해제 — 미사일·그물·지뢰로 한쪽이 무력화될 때
+   반대쪽이 고아 상태(대상 없는 BOOST / 공격자 없는 ATTACHED)로
+   7초를 낭비하지 않게 양쪽을 함께 정리한다 (2026-08-21) */
+function releaseStickyPair(car){
+    if(car.state===CarState.STICKY_ATTACHED){
+        const src=car.stickySource;
+        if(src&&src.state===CarState.STICKY_BOOST&&src.stickyTarget===car){
+            src.state=CarState.RACING;src.stateTimer=0;src.stickyTarget=null;src.targetLaneOffset=0;
+        }
+        car.stickySource=null;car.stickyHitCount=0;
+    }else if(car.state===CarState.STICKY_BOOST){
+        const tgt=car.stickyTarget;
+        if(tgt&&tgt.state===CarState.STICKY_ATTACHED&&tgt.stickySource===car){
+            tgt.state=CarState.RACING;tgt.stateTimer=0;tgt.stickySource=null;tgt.stickyHitCount=0;tgt.targetLaneOffset=0;
+        }
+        car.stickyTarget=null;
+    }
+}
+
 function applyItemEffect(type,target,source){
     switch(type){
         case ItemType.WATER_BALLOON:
-            target.slowTimer=3;
-            target.state=CarState.SLOWED;
-            target.stateTimer=0;
+            target.slowTimer=Math.max(target.slowTimer,3);
+            /* 무력화 상태(폭발·그물·스핀·끈끈이)는 덮어쓰지 않는다 — 물풍선이
+               미사일 6.5초 정지를 3초 슬로우로 격하시키는 식의 조기 탈출 버그 */
+            if(target.state===CarState.RACING||target.state===CarState.SLOWED||target.state===CarState.IN_WATER||target.state===CarState.IN_MUD||target.state===CarState.ON_ICE||target.state===CarState.CLIMBING){
+                target.state=CarState.SLOWED;
+                target.stateTimer=0;
+            }
             AudioEngine.sfx.splash();
             addCommentary('itemHit',{name:target.name,item:getItemName('water_balloon'),itemKey:'water_balloon'});
             splashEffects.push(...Array.from({length:10},()=>({x:target.x+randomRange(-20,20),y:target.y+randomRange(-20,20),vx:randomRange(-3,3),vy:randomRange(-5,-1),size:randomRange(3,6),life:1})));
             break;
         case ItemType.MISSILE:
             /* Míssile: explosion → car bounces up → falls → 3s freeze */
+            releaseStickyPair(target); /* 피격자가 끈끈이 페어의 한쪽이면 반대쪽도 정리 */
             target.state=CarState.MISSILE_HIT;
             target.stateTimer=0;
             target.bounceY=0;
@@ -4348,14 +4390,18 @@ function applyItemEffect(type,target,source){
             }
             break;
         case ItemType.BANANA:
-            /* Banana causes dramatic spin-out: loss of steering + speed */
-            target.state=CarState.SPINNING;
-            target.stateTimer=0;
-            target.spinAngle=0;
-            target.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
-            target.slowTimer=2.5; /* additional speed penalty after spin */
-            target.targetLaneOffset+=randomRange(-50,50); /* lateral displacement (부드럽게) */
-            target.targetLaneOffset=clamp(target.targetLaneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
+            /* Banana causes dramatic spin-out: loss of steering + speed.
+               단, 이미 무력화된 대상(폭발·그물·끈끈이)의 상태는 덮어쓰지 않고
+               감속만 추가 — 그물 5초 정지가 스핀 2초로 격하되던 버그 방지 */
+            target.slowTimer=Math.max(target.slowTimer,2.5);
+            if(target.state!==CarState.MISSILE_HIT&&target.state!==CarState.NETTED&&target.state!==CarState.STICKY_ATTACHED){
+                target.state=CarState.SPINNING;
+                target.stateTimer=0;
+                target.spinAngle=0;
+                target.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
+                target.targetLaneOffset+=randomRange(-50,50);
+                target.targetLaneOffset=clamp(target.targetLaneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
+            }
             AudioEngine.sfx.slip();
             AudioEngine.sfx.crash();
             addCommentary('itemHit',{name:target.name,item:getItemName('banana'),itemKey:'banana'});
@@ -7163,7 +7209,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787278061" defer></script>
+<script src="/js/siteFooter.js?v=1787282693" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
