@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787268638">
+<meta name="lp-build" content="1787278061">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787268638";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787278061";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -694,15 +694,15 @@
     </div>
     <div id="collisionLabelsContainer"></div>
     <div id="eventPopupContainer"></div>
-<script src="/js/topNav.js?v=1787268638"></script>
-<script src="/js/langBar.js?v=1787268638"></script>
-<script src="/js/participantPresets.js?v=1787268638"></script>
-<script src="/js/nextGames.js?v=1787268638"></script>
+<script src="/js/topNav.js?v=1787278061"></script>
+<script src="/js/langBar.js?v=1787278061"></script>
+<script src="/js/participantPresets.js?v=1787278061"></script>
+<script src="/js/nextGames.js?v=1787278061"></script>
 <!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
      for Watch-Together. Without window.supabase the room-create /
      room-join flow silently no-ops. -->
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1787268638"></script>
+<script src="/js/supabase-config.js?v=1787278061"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -2804,7 +2804,7 @@ function createCar(index,name,gridPosition){
     const physicalRatio=randomRange(0.3,0.7); /* 0.3=speedy/fragile, 0.7=slow/tank */
     const speedRatio=1-physicalRatio;          /* inverse */
     /* Map to actual multipliers – wider gap between fastest and slowest */
-    const baseSpeed=0.60+speedRatio*0.80;     /* 0.60~1.40 (fast car=1.40, slow tank=0.60) */
+    const baseSpeed=0.72+speedRatio*0.56;     /* 0.68~1.32 — 0.60~1.40 은 스탯이 결과를 지배 (스탯1위 승률 2.5배, 시뮬 실측) */
     const physical=physicalRatio;              /* 0.3~0.7 used in collision */
 
     /* === TERRAIN SKILLS: fully random & independent === */
@@ -2826,8 +2826,13 @@ function createCar(index,name,gridPosition){
     const startProgress=Math.max(2,STARTLINE_IDX-2-(gridRow*ROW_GAP));
     const gridLaneOff=(gridCol===0?-1:1)*TRACK_WIDTH*0.30;  /* 좌우 ±30% 배치 */
 
+    /* 그리드 핸디캡: 뒷줄은 출발선까지의 적자를 초반 6초간 자동 상환 (롤링 스타트).
+       시뮬 실측: 이 보정 전 1번 슬롯 승률 22.8% vs 6번 10.7% — 앞줄이 2.1배 유리했다 */
+    const startDeficit=(STARTLINE_IDX-2)-startProgress;
     return{
         index,name,
+        startDeficit:Math.max(0,startDeficit),
+        startDeficitRate:Math.max(0,startDeficit)/1.5,
         color:carColors[index%carColors.length],
         accentColor:carAccentColors[index%carAccentColors.length],
         baseSpeed:baseSpeed,
@@ -2923,7 +2928,12 @@ function updatePlayers(dt){
     const leader=sorted[0];
     const lastPlace=sorted[sorted.length-1];
 
-    activePlayers.forEach(car=>{
+    /* 갱신 순서를 매 프레임 셔플 — 고정 순서(0번부터)면 아이템 박스 선점과
+       충돌 선처리가 낮은 번호에 누적되어 슬롯 승률이 22.7% vs 11.5% 로
+       기울었다 (600판 시뮬 실측). 셔플로 평균적으로 공평해진다 */
+    const iterOrder=[...activePlayers];
+    for(let _i=iterOrder.length-1;_i>0;_i--){const _j=Math.floor(Math.random()*(_i+1));[iterOrder[_i],iterOrder[_j]]=[iterOrder[_j],iterOrder[_i]];}
+    iterOrder.forEach(car=>{
         if(car.finished)return;
         car.stateTimer+=dt;
         car.exhaustTimer+=dt;
@@ -2939,9 +2949,32 @@ function updatePlayers(dt){
                 car.wasLastPlace=true;
                 addCommentary('lastBoost',{name:car.name});
             }
-            speed*=1.5;
+            speed*=1.25; /* 1.5 → 1.25: 러버밴딩·자석픽업·순위풀이 하위권을 이미 들어올려 총량 재배분 (시뮬 튜닝) */
         }else{
             car.wasLastPlace=false;
+        }
+
+        /* === 그리드 핸디캡 상환 (롤링 스타트) === */
+        if(car.startDeficit>0){
+            const chunk=Math.min(car.startDeficit,(car.startDeficitRate||0)*dt);
+            car.progress+=chunk;car.startDeficit-=chunk;
+        }
+
+        /* === 거리 러버밴딩: 선두와 멀수록 최대 +15% (막판 랩은 +30%)
+           시뮬 실측: 도입 전 속도스탯 1위 차 승률 25.5% vs 꼴찌 10.3%,
+           1·2등 격차 평균 7.2초(접전 9.7%뿐) — 스탯이 결과를 지배하고
+           결승이 싱거웠다. 마지막 랩 수렴 강화로 포토피니시를 만든다 === */
+        if(leader&&leader!==car){
+            const gapRatio=clamp((leader.progress-car.progress)/(lapLength*0.6),0,1);
+            const finalLap=leader.progress>=lapLength*(totalLaps-1)+STARTLINE_IDX;
+            speed*=1+(finalLap?0.30:0.15)*gapRatio;
+        }
+
+        /* === 완주 서지: 1등이 들어올 때마다 남은 차 +12% (중첩)
+           시뮬 실측: 1등 완주 후 꼴찌까지 26초를 더 기다렸고
+           10인전은 18.7%가 시간초과로 끝났다 === */
+        if(finishOrder.length>0){
+            speed*=1+Math.min(0.6,0.12*finishOrder.length);
         }
 
         /* Zone effects - use modulo to map back to base track for zone checks */
@@ -3605,14 +3638,31 @@ function updatePlayers(dt){
         if(car.itemCooldown>0)car.itemCooldown-=dt;
         if(car.collisionCooldown>0)car.collisionCooldown-=dt;
 
-        /* Item pickup - pixel overlap check (비행 중 아이템 획득 불가) */
-        if(!car.heldItem&&car.itemCooldown<=0&&car.state!==CarState.FLYING){
+        /* Item pickup - pixel overlap check (비행 중 아이템 획득 불가)
+         *
+         * 순위 보정 2종 (2026-08-21 시뮬 튜닝 — 마리오카트 방식):
+         *  1) 픽업 자석: 하위권일수록 판정 반경 20→34px. 앞줄이 박스를
+         *     쓸어가 슬롯 승률이 22.5% vs 12% 로 기울던 원인(앞차 평균
+         *     8.0개 vs 뒷차 6.2개 수집, 600판 실측)을 직접 상쇄한다
+         *  2) 순위별 아이템 풀: 선두권은 방어·꽝(지뢰) 위주, 하위권은
+         *     미사일·부스터·윙 위주 — 선두 리스크와 역전 드라마를 만든다 */
+        if(!car.heldItem&&car.itemCooldown<=0&&car.state!==CarState.FLYING&&raceElapsedTime>4){
+            const _rk=getPlayerRank(car);
+            const _rr=activePlayers.length>1?_rk/(activePlayers.length-1):0; /* 0=선두 1=꼴찌 */
+            const pickR=20+10*_rr;
             itemBoxes.forEach(box=>{
                 if(box.collected||box.respawnTimer>0)return;
                 const dx=car.x-box.worldX, dy=car.y-box.worldY;
                 const pixelDist=Math.sqrt(dx*dx+dy*dy);
-                if(pixelDist<20){ /* car center within 20px of item center = pickup */
-                    const items=[ItemType.WATER_BALLOON,ItemType.MISSILE,ItemType.BANANA,ItemType.STICKY,ItemType.NET,ItemType.BOOSTER,ItemType.GHOST,ItemType.WING,ItemType.LANDMINE];
+                if(pixelDist<pickR){
+                    let items;
+                    if(_rr<0.34){ /* 선두권: 공격 최소, 지뢰 리스크 */
+                        items=[ItemType.WATER_BALLOON,ItemType.WATER_BALLOON,ItemType.BANANA,ItemType.BANANA,ItemType.LANDMINE,ItemType.LANDMINE,ItemType.NET,ItemType.STICKY,ItemType.GHOST];
+                    }else if(_rr<0.67){ /* 중위권: 균형 */
+                        items=[ItemType.WATER_BALLOON,ItemType.MISSILE,ItemType.BANANA,ItemType.STICKY,ItemType.STICKY,ItemType.NET,ItemType.BOOSTER,ItemType.GHOST,ItemType.WING,ItemType.LANDMINE];
+                    }else{ /* 하위권: 역전 화력, 지뢰 없음 */
+                        items=[ItemType.MISSILE,ItemType.MISSILE,ItemType.BOOSTER,ItemType.WING,ItemType.WING,ItemType.STICKY,ItemType.GHOST,ItemType.GHOST,ItemType.NET,ItemType.BANANA];
+                    }
                     const selectedItem=items[randomInt(0,items.length-1)];
                     box.collected=true;
                     box.respawnTimer=box.fastRespawn?1:5;
@@ -7113,7 +7163,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1787268638" defer></script>
+<script src="/js/siteFooter.js?v=1787278061" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
