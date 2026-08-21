@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1787285316">
+<meta name="lp-build" content="1787288267">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787285316";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787288267";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>버거 셰프 · Burger Chef | Lucky Please</title>
@@ -237,10 +237,10 @@ body{
         </aside>
     </div>
 </main>
-<script src="/js/supabase-config.js?v=1787285316"></script>
-<script src="/js/lpI18n.js?v=1787285316"></script>
-<script src="/js/lpRankSheet.js?v=1787285316"></script>
-<script src="/js/lpAudio.js?v=1787285316"></script>
+<script src="/js/supabase-config.js?v=1787288267"></script>
+<script src="/js/lpI18n.js?v=1787288267"></script>
+<script src="/js/lpRankSheet.js?v=1787288267"></script>
+<script src="/js/lpAudio.js?v=1787288267"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -824,7 +824,9 @@ const LAYER_H = {
    ======================================================================== */
 const TAP_IDS = ['lettuce','patty','cheese','onion','tomato'];
 function generateSample(lvl){
-    const len = Math.min(3 + Math.floor(lvl/2), 7);
+    /* 재료 수 상한 7 → 9. 예전엔 레벨 8 에서 7개로 굳어, 그 뒤로는
+       난이도가 전혀 변하지 않는 무한 소모전이었다 (2026-08-21) */
+    const len = Math.min(3 + Math.floor(lvl/2), 9);
     const out = [];
     for (let i=0; i<len; i++){
         let id;
@@ -846,7 +848,10 @@ function timeForLevel(lvl){
        pressure on the memorisation phase too — at L1 (3 fillings) you
        still have ~3.7 s per tap, at L9 (7 fillings) it drops to 1.6 s
        which forces real fluency. */
-    return 11.2;
+    /* 2026-08-21: 레벨 8 이후 제한시간이 상수라 난이도 곡선이 사라졌다.
+       8레벨까지는 기존 11.2초를 유지하고, 그 뒤로 레벨당 0.35초씩 조여
+       8.0초에서 멈춘다. 재료 수 상한(9)과 함께 후반 압박을 만든다. */
+    return Math.max(8.0, 11.2 - Math.max(0, lvl - 8) * 0.35);
 }
 
 /* ========================================================================
@@ -1492,7 +1497,25 @@ function drawBurgerPanels(now){
     const leftX  = (W/2) - panelW - gap/2;
     const rightX = (W/2) + gap/2;
 
-    drawBurgerIn(now, leftX,  PANEL_Y, panelW, PANEL_H, sample, sample.length, 'sample');
+    if (paused){
+        /* 일시정지 중에는 정답 레시피를 가린다 — 예전엔 시계를 멈춘 채
+           레시피를 무제한으로 들여다볼 수 있어 기록 경쟁이 무의미했다 */
+        ctx.save();
+        ctx.fillStyle = 'rgba(12,14,28,.92)';
+        ctx.fillRect(leftX, PANEL_Y, panelW, PANEL_H);
+        ctx.strokeStyle = 'rgba(255,255,255,.18)';
+        ctx.strokeRect(leftX + .5, PANEL_Y + .5, panelW - 1, PANEL_H - 1);
+        ctx.fillStyle = 'rgba(255,255,255,.55)';
+        ctx.font = '700 13px "Noto Sans KR", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('일시정지', leftX + panelW/2, PANEL_Y + PANEL_H/2 - 10);
+        ctx.font = '11px "Noto Sans KR", sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.fillText('레시피 가림', leftX + panelW/2, PANEL_Y + PANEL_H/2 + 10);
+        ctx.restore();
+    } else {
+        drawBurgerIn(now, leftX,  PANEL_Y, panelW, PANEL_H, sample, sample.length, 'sample');
+    }
     drawBurgerIn(now, rightX, PANEL_Y, panelW, PANEL_H, sample.slice(0, progress), progress, 'wip');
 
     /* Labels below each plate. 내 버거 turns green on completion. */
@@ -2566,6 +2589,11 @@ function drawPops(now){
     ctx.textAlign = 'start';
 }
 
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden){ if (running && !paused){ paused = true; try{ syncPauseUI(); }catch(_){} } }
+    else { lastTick = performance.now(); }
+});
+
 function loop(now){
     if (!running) return;
     if (!paused){
@@ -2606,8 +2634,9 @@ document.addEventListener('keydown', (e)=>{
         );
         e.preventDefault();
     } else if (k === ' '){
-        if (running){ paused = !paused; syncPauseUI(); }
-        e.preventDefault();
+        /* 게임이 돌 때만 스페이스를 가로챈다. 무조건 preventDefault 하면
+           아래 본문 영역에서도 스페이스 스크롤이 막힌다 */
+        if (running){ paused = !paused; syncPauseUI(); e.preventDefault(); }
     } else if (k === 'Enter'){
         if (!running) startGame();
     }
@@ -2684,7 +2713,7 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1787285316"></script>
+<script src="/js/siteFooter.js?v=1787288267"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

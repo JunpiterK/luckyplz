@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1787285316">
+<meta name="lp-build" content="1787288267">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787285316";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787288267";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -31,7 +31,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@500;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
-<script src="/js/lpI18n.js?v=1787285316"></script>
+<script src="/js/lpI18n.js?v=1787288267"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -859,6 +859,17 @@ function normalizeSpeed(b){
 }
 function clampMinAngle(b){
   if(b.attached) return;
+  /* 최소 vx 보장 — 패들 정중앙에 맞으면 반사각이 정확히 -90도가 되어
+     vx 가 사실상 0(5e-16)이 된다. 기존 보정은 vy 만 봐서 공이 한 열에
+     갇힌 채 무한 왕복했고, 스테이지 제한시간과 겹치면 손도 못 쓰고
+     시간초과 패배였다 (2026-08-21) */
+  const minVx = b.speed * 0.14;
+  if(Math.abs(b.vx) < minVx){
+    const sx = Math.sign(b.vx) || (Math.random() < 0.5 ? -1 : 1);
+    b.vx = sx * minVx;
+    const sy = Math.sign(b.vy) || -1;
+    b.vy = sy * Math.sqrt(Math.max(0.01, b.speed*b.speed - b.vx*b.vx));
+  }
   const minVy = b.speed * C.MIN_VY_RATIO;
   if(Math.abs(b.vy) < minVy){
     const dir = b.vy >= 0 ? 1 : -1;
@@ -1326,10 +1337,18 @@ function updateBall(b){
       const sp = b.speed;
       b.vx = Math.cos(ang) * sp;
       b.vy = Math.sin(ang) * sp;
+      /* 콤보 감쇠 — 예전엔 패들에 닿는 즉시 1로 초기화돼 ×4(10타)·×5(15타)
+         구간이 멀티볼 없이는 도달 불가능한 죽은 콘텐츠였다. 이제 한 왕복은
+         버티고 그 다음에 끊긴다 (2026-08-21) */
       if(S.combo > 1){
-        S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
+        if(S.comboGrace){
+          S.combo = 1; S.comboCount = 0; S.lastComboMilestone = 1;
+          S.comboGrace = false;
+        } else {
+          S.comboGrace = true;
+        }
         updateUI();
-      }
+      } else { S.comboGrace = false; }
       sfxPaddle();
       // 2026-05-10: paddle hit accumulator. 10타 단위 boundary 를 넘으면
       // retuneBalls 으로 모든 ball 의 speed 을 새 multiplier 적용.
@@ -1405,6 +1424,7 @@ function hitBrick(br, hx, hy, fromAOE){
     if(S.comboCount >= 15) newCombo = 5;
     if(newCombo > S.combo){
       S.combo = newCombo;
+      S.comboGrace = false;
       sfxCombo(newCombo);
     }
     S.comboTimer = C.COMBO_RESET_MS;
