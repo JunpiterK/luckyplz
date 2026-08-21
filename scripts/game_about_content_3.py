@@ -185,7 +185,7 @@ CONTENT_3["starship-lander"] = {
         ("모바일에서도 정밀 조작이 되나요?",
          "됩니다. 화면 탭으로 추진, 좌우 버튼으로 회전이며, 짧게 끊어 누르면 미세 조정이 가능합니다."),
     ],
-    "footer": '다른 우주 게임은 <a href="/games/dodge/">스페이스-Z</a>·<a href="/games/lucky-merge/">럭키 머지</a>에서 이어집니다.',
+    "footer": '다른 우주 게임은 <a href="/games/dodge/">스페이스-Z</a>·<a href="/games/lucky-merge/">행성 키우기</a>에서 이어집니다.',
 }
 
 CONTENT_3["quiz"] = {
