@@ -288,6 +288,32 @@ def m_merge(d, img):
     d.ellipse([p3x - r3 + 20, p3y - r3 + 18, p3x - r3 + 58, p3y - r3 + 44], fill=(206, 188, 255))
 
 
+def m_orbit(d, img):
+    """지구 + 타원 궤도 + 위성. 이 게임의 한 장면이 그대로 요약이다."""
+    rnd = random.Random(23)
+    for _ in range(30):
+        x, y = MX + rnd.randint(0, MW), MY + rnd.randint(0, MH)
+        r = rnd.choice([1, 1, 2])
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, rnd.randint(60, 150)))
+    # 궤도 두 개 — 안쪽은 원, 바깥은 타원(아직 다듬는 중)
+    d.ellipse([MCX - 150, MCY - 150, MCX + 150, MCY + 150], outline=(79, 227, 193), width=3)
+    d.ellipse([MCX - 196, MCY - 118, MCX + 196, MCY + 118], outline=(240, 165, 55), width=3)
+    # 지구
+    er = 74
+    glow(img, MCX, MCY, er + 30, (60, 140, 220), 80)
+    d.ellipse([MCX - er, MCY - er, MCX + er, MCY + er], fill=(21, 74, 120))
+    d.ellipse([MCX - er + 16, MCY - 34, MCX - er + 74, MCY + 10], fill=(52, 140, 96))
+    d.ellipse([MCX + 4, MCY + 14, MCX + 52, MCY + 48], fill=(52, 140, 96))
+    d.ellipse([MCX - er, MCY - er, MCX + er, MCY + er], outline=(120, 190, 245), width=3)
+    # 위성 두 기
+    for sx, sy in [(MCX + 150, MCY), (MCX - 106, MCY - 106)]:
+        d.rounded_rectangle([sx - 11, sy - 8, sx + 11, sy + 8], 4, fill=(226, 232, 242))
+        d.rectangle([sx - 34, sy - 5, sx - 15, sy + 5], fill=(30, 48, 110))
+        d.rectangle([sx + 15, sy - 5, sx + 34, sy + 5], fill=(30, 48, 110))
+    # 원지점 표식
+    d.ellipse([MCX + 190 - 9, MCY - 9, MCX + 190 + 9, MCY + 9], outline=(240, 165, 55), width=3)
+
+
 def m_bingo(d, img):
     cs = 64
     ox, oy = MX + 40, MY + 60
@@ -365,6 +391,7 @@ GAMES = {
     "dodge":           dict(title="SPACE-Z", sub="스페이스-Z — 총알 피하기 생존전", cat="RETRO", top=(6, 10, 24), bot=(3, 4, 10), accent=(0, 217, 255), motif=m_dodge),
     "starship-lander": dict(title="STARSHIP LANDER", sub="우주선 착륙 — 추력 조절의 미학", cat="RETRO", top=(8, 12, 24), bot=(3, 5, 10), accent=(255, 160, 60), motif=m_lander),
     "lucky-merge":     dict(title="LUCKY MERGE", sub="행성 합체 — 우주 2048 퍼즐", cat="PUZZLE", top=(14, 10, 28), bot=(6, 4, 12), accent=(167, 139, 250), motif=m_merge),
+    "orbit":           dict(title="ORBIT LAB", sub="궤도 연구소 — 위성망을 짓는 연구 미션", cat="PUZZLE", top=(6, 12, 26), bot=(3, 5, 12), accent=(79, 227, 193), motif=m_orbit),
     "bingo":           dict(title="BINGO", sub="빙고 — 친구와 실시간 한 판", cat="PARTY", top=(24, 10, 18), bot=(10, 4, 8), accent=(255, 99, 132), motif=m_bingo),
     "quiz":            dict(title="LIVE QUIZ", sub="라이브 퀴즈 — 같이 풀고 겨루기", cat="PARTY", top=(14, 10, 30), bot=(6, 4, 13), accent=(167, 139, 250), motif=m_quiz),
 }
