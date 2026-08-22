@@ -391,7 +391,7 @@ GAMES = {
     "dodge":           dict(title="SPACE-Z", sub="스페이스-Z — 총알 피하기 생존전", cat="RETRO", top=(6, 10, 24), bot=(3, 4, 10), accent=(0, 217, 255), motif=m_dodge),
     "starship-lander": dict(title="STARSHIP LANDER", sub="우주선 착륙 — 추력 조절의 미학", cat="RETRO", top=(8, 12, 24), bot=(3, 5, 10), accent=(255, 160, 60), motif=m_lander),
     "lucky-merge":     dict(title="LUCKY MERGE", sub="행성 합체 — 우주 2048 퍼즐", cat="PUZZLE", top=(14, 10, 28), bot=(6, 4, 12), accent=(167, 139, 250), motif=m_merge),
-    "orbit":           dict(title="ORBIT LAB", sub="궤도 연구소 — 위성망을 짓는 연구 미션", cat="PUZZLE", top=(6, 12, 26), bot=(3, 5, 12), accent=(79, 227, 193), motif=m_orbit),
+    "orbit":           dict(title="DELTA-V", sub="델타-브이 — 우주기업 연구원 시뮬레이션", cat="SIM", top=(4, 6, 14), bot=(1, 2, 5), accent=(56, 232, 200), motif=m_orbit),
     "bingo":           dict(title="BINGO", sub="빙고 — 친구와 실시간 한 판", cat="PARTY", top=(24, 10, 18), bot=(10, 4, 8), accent=(255, 99, 132), motif=m_bingo),
     "quiz":            dict(title="LIVE QUIZ", sub="라이브 퀴즈 — 같이 풀고 겨루기", cat="PARTY", top=(14, 10, 30), bot=(6, 4, 13), accent=(167, 139, 250), motif=m_quiz),
 }
