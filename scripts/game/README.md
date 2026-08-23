@@ -3,7 +3,7 @@
 ## 왜 번들러를 쓰나
 
 사이트 원칙은 "빌드·번들러 없음" 이고 그대로 유지된다 — **프로덕션은 여전히
-정적 파일만 서빙한다.** 번들은 여기서 로컬로 만들어 `public/js/deltav-bundle.js`
+정적 파일만 서빙한다.** 번들은 여기서 로컬로 만들어 `public/assets/deltav/deltav-bundle.js`
 로 **커밋**한다. Cloudflare Pages 는 빌드하지 않는다.
 
 Babylon 전체 UMD 는 8.2MB(gzip 1.8MB)라 라이브에 못 올린다.
@@ -17,7 +17,7 @@ npm install
 npm run build
 ```
 
-산출물 `public/js/deltav-bundle.js` 를 **반드시 함께 커밋**한다.
+산출물 `public/assets/deltav/deltav-bundle.js` 를 **반드시 함께 커밋**한다.
 
 ## 에셋
 
