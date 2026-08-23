@@ -4,9 +4,9 @@
 <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1787449532">
+<meta name="lp-build" content="1787452176">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1787449532";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1787452176";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -313,7 +313,12 @@ input[type=range]{width:100%;accent-color:#38E8C8;background:transparent}
 
 /* ── 시험대 (Mission 1-1) ── */
 .ts-stage{grid-area:r;position:relative;background:#05070c;overflow:hidden;min-height:0}
-#tsCv{width:100%;height:100%;display:block;outline:none;touch-action:none}
+#tsCv,#tsCv2{position:absolute;inset:0;width:100%;height:100%;display:block;
+  outline:none;touch-action:none}
+/* 한 캔버스에 WebGL 컨텍스트를 둘 올릴 수 없어 캔버스를 두 장 두고 번갈아 쓴다 */
+#tsCv2{display:none}
+.ts-stage.pump #tsCv{display:none}
+.ts-stage.pump #tsCv2{display:block}
 .ts-hud{position:absolute;left:18px;top:16px;font:600 11.5px/1.75 var(--m);
   color:var(--tx2);text-shadow:0 1px 8px #000;pointer-events:none;
   font-variant-numeric:tabular-nums}
@@ -361,8 +366,16 @@ input[type=range]{width:100%;accent-color:#38E8C8;background:transparent}
 .ts-pick button:hover{border-color:var(--ac)}
 .ts-pick button small{display:block;margin-top:4px;font:400 11px/1.5 var(--m);
   color:var(--tx3)}
-.ts-go{width:100%;margin-top:16px;padding:13px;border:0;border-radius:7px;
-  background:var(--ac);color:#02120F;font:700 14px/1 var(--s);cursor:pointer}
+.ts-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px}
+.ts-seg button{padding:11px 6px;border-radius:7px;border:1px solid var(--k3);
+  background:var(--k2);color:var(--tx2);cursor:pointer;font:600 12.5px/1 var(--s)}
+.ts-seg button:hover:not(:disabled){border-color:var(--ac)}
+.ts-seg button.on{border-color:var(--ac);color:var(--ac);background:#0E2A26}
+.ts-seg button:disabled{opacity:.5;cursor:default}
+.ts-go{position:sticky;bottom:-34px;z-index:2;width:100%;margin-top:16px;
+  padding:13px;border:0;border-radius:7px;
+  background:var(--ac);color:#02120F;font:700 14px/1 var(--s);cursor:pointer;
+  box-shadow:0 -18px 22px -10px var(--k1)}
 .ts-go:disabled{background:var(--k2);color:var(--tx3);cursor:default}
 .ts-go.again{background:var(--k2);color:var(--tx);border:1px solid var(--k3)}
 .ts-tip{margin:11px 0 0;font-size:12px;line-height:1.7;color:var(--wr)}
@@ -454,6 +467,7 @@ input[type=range]{width:100%;accent-color:#38E8C8;background:transparent}
       <div class="lst ts-rail" id="tsRail"></div>
       <div class="ts-stage">
         <canvas id="tsCv"></canvas>
+        <canvas id="tsCv2"></canvas>
         <div class="ts-hud" id="tsHud"></div>
         <div class="ts-msg" id="tsMsg"></div>
         <div class="ts-note" id="tsNote">시험대를 불러오는 중입니다…</div>
@@ -510,7 +524,7 @@ var P = {
   co: { yr:'2002 · 03', fund:18.0, win:0, fail:0 },
   pick: {}
 };
-var LS = 'lp_dv3';
+var LS = 'lp_dv4';
 try{ var _r = localStorage.getItem(LS); if(_r) P = JSON.parse(_r); }catch(e){}
 function save(){ try{ localStorage.setItem(LS, JSON.stringify(P)); }catch(e){} }
 
@@ -551,6 +565,7 @@ function openApp(id){
   else if(TS.st) TS.st.engine.stopRenderLoop();
   /* 보이지 않는 WebGL 씬이 계속 도는 것은 순전한 낭비다 */
   if(id !== 'vSite' && LAB) LAB.stop();
+  if(id !== 'vTest' && PM.rig) PM.rig.stop();
 }
 
 /* ══════════ 사람들 ══════════
@@ -671,7 +686,15 @@ var MAIL = [
       ['p','시험대는 열어 뒀다. 연소실 제원은 벽에 붙어 있다. 필요한 건 다 있다.'],
       ['p','조건은 세 줄이다 — <b>15초 연속 안정 연소</b>, <b>벽면 최고 온도 900°C 이하</b>, 그리고 <b>추력 340kN 이상</b>. 하나라도 놓치면 실패다.']],
     sig:'— 창업자\n"우는 이유를 모르면 달래는 방법도 모른다."' },
-  { id:'m2', step:2, from:'founder', to:'전원', time:'2006-03-24 07:12',
+  { id:'m2', step:2, from:'founder', to:'추진팀 · 전원', time:'2003-11-02 21:08',
+    sub:'심장이 세 번 터졌다',
+    body:[['p','연소는 잡았다. 이번엔 <b>터보펌프</b>다.'],
+      ['p','산소 펌프 시제품 세 대를 태워 먹었다. 하나는 베어링이 눌어붙었고, 하나는 임펠러가 <b>벌집처럼 뚫려</b> 나왔다. 세 번째는 그냥 터졌다.'],
+      ['q','액체 산소를 −183°C 에서, 수만 RPM 으로. 이게 이 엔진에서 가장 잔인한 부품이다.'],
+      ['p','벌집이 된 임펠러부터 설명해라. 그게 무엇인지 모르면 다음 것도 똑같이 뚫린다.'],
+      ['p','조건은 <b>연속 60초</b> 정격 유량·압력이다. 분해했을 때 임펠러와 베어링에 이상이 없어야 한다.']],
+    sig:'— 창업자\\n"심장이 멈추면 나머지는 아무 의미가 없다."' },
+  { id:'m3', step:3, from:'founder', to:'전원', time:'2006-03-24 07:12',
     sub:'비행 1호 — 결과 보고',
     body:[['p','33초.'],
       ['p','추진제 선택은 옳았다. 1단은 정상적으로 점화했고 상승도 정상이었다.'],
@@ -696,7 +719,7 @@ function chatScript(){
   if(foundN() >= 5) L.push({ w:'jy', t:['자료 다 모였네. 해석 돌려 봐.',
     '한 가지만 — Isp 제일 높은 걸로 바로 가지 마. 밀도 봐.'] });
   if(P.pick.prop === 'lh2') L.push({ w:'hs', t:['수소? 탱크 길이 계산은 해 봤어?'] });
-  if(P.step >= 2) L.push({ w:'mk', t:['부식이었대. 우리가 고른 건 문제없었어.',
+  if(P.step >= 3) L.push({ w:'mk', t:['부식이었대. 우리가 고른 건 문제없었어.',
     '오멜렉은 바다 한가운데야. 염분 밀도가 내륙의 몇 배인지 아무도 확인 안 했지.'] });
   return L;
 }
@@ -716,15 +739,15 @@ var STORY = [
       ['','로켓 한 발의 가격에서 <b>재료비가 차지하는 비중은 생각보다 작았다.</b> 나머지는 조직과, 한 번 만들고 버리는 방식에서 왔다.'],
       ['d','그는 회사를 세웠다. 당신은 그 회사의 연구원이다. 책상에 워크스테이션이 하나 있고, 메일이 한 통 와 있다.']],
     st:['연도 2002','자금 $18.0M'] },
-  { at:2, yr:'2006 · 3월 24일', title:'비행 1호 — 33초', img:'E1',
+  { at:3, yr:'2006 · 3월 24일', title:'비행 1호 — 33초', img:'E1',
     body:[['win','추진제 선택은 옳았다. 1단은 정상적으로 점화했다.'],
       ['hit','33초 뒤 엔진부에서 불이 났다. 통제를 잃고 바다로 떨어졌다.'],
       ['','오멜렉 섬은 적도에 가까워 발사에 유리하지만, 습하고 염분이 많다. 연료 배관 이음쇠의 <b>알루미늄 너트가 부식돼</b> 갈라져 있었다.'],
       ['d','가장 비싼 부품이 아니라 가장 싼 부품이 로켓을 죽였다. 다음 지시가 곧 온다.']],
     st:['연도 2006','자금 $12.0M','기록 0승 1패'], fund:-6, fail:1, yr:'2006 · 03' },
-  { at:3, yr:'다음', title:'여기까지가 지금 만들어진 부분입니다',
+  { at:4, yr:'다음', title:'여기까지가 지금 만들어진 부분입니다',
     body:[['','메일·메신저·문서고·해석·현장·시험대가 돌아가고, 코덱스 제1부 Mission 1-1 이 실제 3D 시험대 위에서 진행됩니다.'],
-      ['d','다음에 붙을 것: 1-2 터보펌프, 1-3 정적 연소 시험, 제2부 팰컨1 네 번의 비행.']],
+      ['d','다음에 붙을 것: 1-3 장시간 정적 연소 시험, 제2부 팰컨1 네 번의 비행.']],
     st:[] }
 ];
 
@@ -911,7 +934,7 @@ var LAB = null, LAB_META = null, labNode = null, labFail = false;
    `.glb` 들은 여기서 쿼리를 파생시킨다 — glb 경로는 코드에서 조립되므로
    스크립트가 직접 못 잡는다. 이걸 빼면 `/assets/*` 의 1일 캐시에 갇혀
    모델을 고쳐도 하루 동안 반영되지 않는다(실제로 겪었다). */
-var LAB_JSON = '/assets/deltav/lab.json?v=1787449532';
+var LAB_JSON = '/assets/deltav/lab.json?v=1787452176';
 var ASSET_V = LAB_JSON.slice(LAB_JSON.indexOf('?'));
 /* 페이지의 노드 키와 glb 파일명이 하나만 다르다 — test ↔ node_teststand */
 var LAB_GLB = { hall:'node_hall', prop:'node_prop', store:'node_store',
@@ -1041,13 +1064,16 @@ function tsLoad(cb){
   if(TS.boot) return;
   TS.boot = true;
   var sc = document.createElement('script');
-  sc.src = '/assets/deltav/deltav-bundle.js?v=1787449532';
+  sc.src = '/assets/deltav/deltav-bundle.js?v=1787452176';
   sc.onload = function(){ cb(!!window.DV3D); };
   sc.onerror = function(){ cb(false); };
   document.head.appendChild(sc);
 }
 
 function openTest(){
+  /* 시험대는 이제 두 미션을 담는다. 진행 단계가 무대를 고른다. */
+  TS.mid = (P.step >= 2 || P.m11.done) ? 12 : 11;
+  if(TS.mid === 12){ openPump(); return; }
   if(P.m11.done && TS.ph === 0) TS.ph = 3;
   tsRail();
   tsLoad(function(ok){
@@ -1131,9 +1157,9 @@ function tsRail(){
       '<input type="range" id="tsFilm" min="0" max="20" step="0.5" value="' + TS.film + '"' +
         (TS.run ? ' disabled' : '') + '>' +
       '<span class="ts-lb">예측 계기</span>' + tsSheet(e) +
+      '<p class="ts-tip' + (e && e.pass ? ' ok' : '') + '">' + tsTip(e) + '</p>' +
       '<button class="ts-go" id="tsGo" type="button"' + (TS.run ? ' disabled' : '') + '>' +
-        (TS.run ? '연소 중…' : '점화') + '</button>' +
-      '<p class="ts-tip' + (e && e.pass ? ' ok' : '') + '">' + tsTip(e) + '</p>';
+        (TS.run ? '연소 중…' : '점화') + '</button>';
   } else {
     h += '<span class="ph">완료</span><h3>멀린이 15초를 버텼다</h3>' +
       '<p class="d">배플 <b>' + (P.m11.baffle || 0) + ' mm</b>, 필름 쿨링 <b>' + (P.m11.film || 0) + ' %</b> 에서 ' +
@@ -1288,6 +1314,305 @@ function tsFrame(dt){
   }
 }
 
+/* ══════════ 미션 1-2 「터보펌프의 악몽」 ══════════
+   Phase 1 재료 : 산소 펌프에 무엇을 쓸 것인가 (LOX 적합성)
+   Phase 2 설계 : 회전수 · 블레이드 각 · 인듀서 · 베어링 냉각
+   Phase 3 시험 : 60초 연속 운전
+
+   **인듀서 없이는 어떤 조합으로도 통과할 수 없다.** 설계 공간 전수 조사에서
+   확인했다 — 인듀서 없이는 요구 NPSH 가 128m 까지 치솟는데 가용은 32m 다.
+   역사에서 인듀서가 필수였던 이유가 숫자로 드러나게 두었다. */
+var PM = { ph:0, rpm:26000, beta:28, ind:'long', cool:4,
+           run:false, t:0, now:0, cavDmg:0, heatT:0, vibT:0, powT:0,
+           rig:null, boot:false, fail:'', done:false };
+if(!P.m12) P.m12 = {};
+/* 진단용 손잡이 — DVTS·DVLAB 과 같은 이유. `DVPM.frame(dt)` 로 한 프레임씩 민다. */
+window.DVPM = PM;
+
+var LOX_MAT = [
+  { id:'ss', nm:'스테인리스 304', sub:'Fe-Cr-Ni',
+    d:'값이 싸고 가공이 쉽다. 저온 인성도 좋다.',
+    why:'산소 중 충격 시험에서 발화 사례가 있다. 마찰로 국부 발열이 생기면 산화가 스스로 이어진다. 펌프처럼 미세한 접촉이 반복되는 곳에는 못 쓴다.' },
+  { id:'ni', nm:'니켈 합금 (모넬)', sub:'Ni-Cu',
+    d:'값이 비싸고 가공이 어렵다. 밀도가 높아 무겁다.',
+    why:'산소 중에서 자기소화성을 갖는다 — 불이 붙어도 스스로 꺼진다. 마찰 발화 문턱이 시험한 금속 중 가장 높아, 실제 LOX 터보펌프의 표준 재료다.' },
+  { id:'al', nm:'알루미늄 7075', sub:'Al-Zn-Mg',
+    d:'가볍고 비강도가 가장 높다. 회전체에 유리해 보인다.',
+    why:'한 번 발화하면 스스로 연소를 지속한다. 자기소화성이 없어 산소 배관·펌프에는 금지에 가깝다. 가벼운 것이 답이 아닌 드문 경우다.' }
+];
+
+function pmEval(){
+  if(!window.DV3D) return null;
+  return DV3D.evaluatePump(PM.rpm, PM.beta, PM.ind, PM.cool);
+}
+
+function openPump(){
+  if(P.m12.done && PM.ph === 0) PM.ph = 3;
+  $('tsSub').textContent = '맥그리거 · 산소 터보펌프 시험 리그';
+  document.querySelector('.ts-stage').classList.add('pump');
+  pmRail();
+  tsLoad(function(ok){
+    if(!ok){ $('tsNote').textContent = '해석·3D 모듈을 불러오지 못했습니다.'; pmRail(); return; }
+    pmRail();
+    if(PM.rig){
+      PM.rig.engine.stopRenderLoop();
+      PM.rig.run(function(dt){ pmFrame(dt); });
+      PM.rig.engine.resize();
+      return;
+    }
+    try{
+      PM.rig = new DV3D.PumpRig($('tsCv2'));
+      $('tsNote').textContent = '시험 리그 · 펌프를 거치하는 중…';
+      PM.rig.load('/assets/deltav/pumprig.glb' + ASSET_V).then(function(){
+        $('tsNote').textContent = '산소 터보펌프 · 아래가 흡입, 위가 터빈 · 끌어서 돌려 볼 수 있습니다.';
+        PM.rig.setInducer(PM.ind);
+        PM.rig.setBlade(PM.beta);
+        PM.rig.run(function(dt){ pmFrame(dt); });
+        PM.rig.engine.resize();
+      }).catch(function(){
+        $('tsNote').textContent = '펌프 모델을 불러오지 못했습니다. 계기만으로 진행합니다.';
+      });
+    }catch(e){
+      PM.rig = null;
+      $('tsNote').textContent = 'WebGL 을 쓸 수 없는 환경입니다. 계기만으로 진행합니다.';
+    }
+  });
+}
+
+/* ── 계기판 ── */
+function pmRail(){
+  var r = $('tsRail'), h = '';
+  if(PM.ph === 0){
+    h += '<span class="ph">Phase 1 · 재료</span><h3>산소는 금속도 태운다</h3>' +
+      '<p class="d">벌집처럼 뚫린 임펠러는 <b>캐비테이션</b>이지만, 눌어붙은 베어링과 터진 한 대는 다른 문제다. ' +
+      '액체 산소 안에서는 <b>금속 자체가 연료가 된다.</b> 미세한 마찰 하나가 발화점이 될 수 있다.</p>' +
+      '<span class="ts-lb">LOX 적합성 · 자재실 자료</span>' +
+      '<div class="ts-pick">' +
+      LOX_MAT.map(function(m){
+        return '<button type="button" data-m="' + m.id + '">' + m.nm +
+          '<small>' + m.sub + ' · ' + m.d + '</small></button>';
+      }).join('') +
+      '</div>' + (PM.fail ? '<p class="ts-tip">' + PM.fail + '</p>' : '');
+  } else if(PM.ph === 1){
+    var e = pmEval();
+    h += '<span class="ph">Phase 2 · 설계</span><h3>돌리되 끓이지 않는다</h3>' +
+      '<p class="d">회전수를 올리면 <b>헤드</b>가 오르지만 흡입구 압력이 증기압 아래로 내려가 ' +
+      '<b>캐비테이션</b>이 난다. <b>인듀서</b>가 그 문턱을 끌어올린다. 블레이드 각을 키우면 ' +
+      '헤드는 오르지만 효율이 떨어져 <b>터빈이 못 따라간다</b>. 베어링은 식혀야 하지만 ' +
+      '냉각 블리드는 정격 유량을 깎는다.</p>' +
+      '<span class="ts-lb">회전수</span>' +
+      '<div class="ts-rv"><b id="pmRv">' + PM.rpm.toLocaleString() + ' rpm</b><span>16,000 – 34,000</span></div>' +
+      '<input type="range" id="pmRpm" min="16000" max="34000" step="250" value="' + PM.rpm + '"' + (PM.run ? ' disabled' : '') + '>' +
+      '<span class="ts-lb">임펠러 블레이드 각</span>' +
+      '<div class="ts-rv"><b id="pmBv">' + PM.beta + ' °</b><span>12 – 48</span></div>' +
+      '<input type="range" id="pmBeta" min="12" max="48" step="1" value="' + PM.beta + '"' + (PM.run ? ' disabled' : '') + '>' +
+      '<span class="ts-lb">인듀서</span>' +
+      '<div class="ts-seg" id="pmInd">' +
+      [['none','없음'],['short','짧게'],['long','길게']].map(function(o){
+        return '<button type="button" data-i="' + o[0] + '" class="' +
+          (PM.ind === o[0] ? 'on' : '') + '"' + (PM.run ? ' disabled' : '') + '>' + o[1] + '</button>';
+      }).join('') + '</div>' +
+      '<span class="ts-lb">베어링 냉각 블리드</span>' +
+      '<div class="ts-rv"><b id="pmCv">' + PM.cool.toFixed(1) + ' %</b><span>0 – 10</span></div>' +
+      '<input type="range" id="pmCool" min="0" max="10" step="0.5" value="' + PM.cool + '"' + (PM.run ? ' disabled' : '') + '>' +
+      '<span class="ts-lb">예측 계기</span>' + pmSheet(e) +
+      '<p class="ts-tip' + (e && e.pass ? ' ok' : '') + '">' + pmTip(e) + '</p>' +
+      '<button class="ts-go" id="pmGo" type="button"' + (PM.run ? ' disabled' : '') + '>' +
+        (PM.run ? '운전 중…' : '기동') + '</button>';
+  } else {
+    h += '<span class="ph">완료</span><h3>60초를 버텼다</h3>' +
+      '<p class="d">회전수 <b>' + (P.m12.rpm || 0).toLocaleString() + ' rpm</b>, 블레이드 <b>' +
+      (P.m12.beta || 0) + '°</b>, <b>' + ({none:'인듀서 없음',short:'짧은 인듀서',long:'긴 인듀서'}[P.m12.ind] || '') +
+      '</b>, 냉각 <b>' + (P.m12.cool || 0) + '%</b>. 분해했더니 임펠러와 베어링 모두 이상이 없었다.</p>' +
+      '<span class="ts-lb">확정 제원</span>' + pmSheet(pmEval()) +
+      '<button class="ts-go again" id="pmRedo" type="button">다시 시험해 본다</button>';
+  }
+  r.innerHTML = h;
+  pmBind();
+}
+
+function pmSheet(e){
+  if(!e) return '<div class="ts-sheet"><dl><dt>해석 모듈</dt><dd>불러오지 못함</dd></dl></div>';
+  var P0 = DV3D.PUMP;
+  return '<div class="ts-sheet"><dl>' +
+    '<dt>토출 헤드</dt><dd class="' + (e.headOK ? 'ok' : 'no') + '">' + e.head.toFixed(0) + ' / ' + P0.Hreq + ' m</dd>' +
+    '<dt>요구 NPSH</dt><dd class="' + (e.cavOK ? 'ok' : 'no') + '">' + e.npshr.toFixed(1) + ' / ' + P0.npshA + ' m</dd>' +
+    '<dt>축동력</dt><dd class="' + (e.powerOK ? 'ok' : 'no') + '">' + (e.power / 1000).toFixed(0) + ' / ' + (P0.Plimit / 1000) + ' kW</dd>' +
+    '<dt>펌프 효율</dt><dd>' + (e.eff * 100).toFixed(1) + ' %</dd>' +
+    '<dt>베어링 온도</dt><dd class="' + (e.tempOK ? 'ok' : 'no') + '">' + e.temp.toFixed(0) + ' / ' + P0.Tlimit + ' °C</dd>' +
+    '<dt>냉각 블리드</dt><dd class="' + (e.bleedOK ? 'ok' : 'no') + '">' + PM.cool.toFixed(1) + ' / ' + P0.bleedLimit + ' %</dd>' +
+    '<dt>임계 회전수 여유</dt><dd class="' + (e.vibOK ? 'ok' : 'no') + '">' + (e.vib * 100).toFixed(0) + ' / 15 %</dd>' +
+    '</dl></div>';
+}
+
+function pmTip(e){
+  if(!e) return '해석 모듈을 불러오지 못해 예측값을 낼 수 없습니다.';
+  if(!e.cavOK) return PM.ind === 'none'
+    ? '흡입구에서 산소가 끓는다. 인듀서 없이는 요구 NPSH 를 절대 못 맞춘다.'
+    : '요구 NPSH 가 가용치를 넘는다. 회전수를 낮추거나 인듀서를 키워라.';
+  if(!e.vibOK) return '1차 임계 회전수(18,000 rpm) 에 너무 가깝다. 위로든 아래로든 15% 는 떨어져야 한다.';
+  if(!e.headOK) return '토출 헤드가 모자라 연소실을 못 채운다. 회전수나 블레이드 각을 올려라.';
+  if(!e.powerOK) return '축동력이 가스발생기 한계를 넘는다. 헤드를 과하게 만들고 있거나 효율이 나쁘다.';
+  if(!e.tempOK) return '베어링이 허용 온도를 넘는다. LOX 중에서는 곧 발화다. 냉각을 늘려라.';
+  if(!e.bleedOK) return '냉각 블리드가 과해 정격 유량을 못 채운다.';
+  return '여섯 조건을 모두 만족한다. 기동해서 60초를 버텨라.';
+}
+
+function pmBind(){
+  var pick = $('tsRail').querySelectorAll('.ts-pick button');
+  Array.prototype.forEach.call(pick, function(b){
+    b.addEventListener('click', function(){ pmMaterial(b.getAttribute('data-m')); });
+  });
+  var seg = $('tsRail').querySelectorAll('.ts-seg button');
+  Array.prototype.forEach.call(seg, function(b){
+    b.addEventListener('click', function(){
+      PM.ind = b.getAttribute('data-i');
+      if(PM.rig && PM.rig.ready) PM.rig.setInducer(PM.ind);
+      pmRail();
+    });
+  });
+  var rp = $('pmRpm'), bt = $('pmBeta'), cl = $('pmCool'),
+      go = $('pmGo'), rd = $('pmRedo');
+  if(rp) rp.addEventListener('input', function(){
+    PM.rpm = +rp.value; $('pmRv').textContent = PM.rpm.toLocaleString() + ' rpm'; pmRefresh(); });
+  if(bt) bt.addEventListener('input', function(){
+    PM.beta = +bt.value; $('pmBv').textContent = PM.beta + ' °';
+    if(PM.rig && PM.rig.ready) PM.rig.setBlade(PM.beta);
+    pmRefresh(); });
+  if(cl) cl.addEventListener('input', function(){
+    PM.cool = +cl.value; $('pmCv').textContent = PM.cool.toFixed(1) + ' %'; pmRefresh(); });
+  if(go) go.addEventListener('click', pmStart);
+  if(rd) rd.addEventListener('click', function(){ PM.ph = 1; PM.done = false; pmRail(); });
+}
+
+function pmRefresh(){
+  var e = pmEval();
+  var sheet = $('tsRail').querySelector('.ts-sheet');
+  if(sheet) sheet.outerHTML = pmSheet(e);
+  var tip = $('tsRail').querySelector('.ts-tip');
+  if(tip){ tip.textContent = pmTip(e); tip.className = 'ts-tip' + (e && e.pass ? ' ok' : ''); }
+}
+
+function pmMaterial(id){
+  var m = LOX_MAT.filter(function(x){ return x.id === id; })[0];
+  if(id === 'ni'){
+    PM.ph = 1; PM.fail = '';
+    modal('Phase 1 · 통과', '니켈 합금 (모넬)',
+      '<div class="body"><p>' + m.why + '</p>' +
+      '<p>산소 적합성은 <b>강도나 무게로 고르는 문제가 아니다.</b> 가장 가벼운 알루미늄은 한 번 붙으면 스스로 타고, 가장 흔한 스테인리스도 마찰 발열에서 자유롭지 않다.</p>' +
+      '<p>이제 형상이다. 임펠러가 벌집이 된 이유 — <b>캐비테이션</b> — 을 잡아야 한다. 흡입구에서 압력이 산소의 증기압 아래로 내려가면 기포가 생기고, 그 기포가 임펠러 표면에서 붕괴하며 금속을 때린다.</p></div>',
+      function(){ pmRail(); });
+  } else {
+    PM.fail = m.nm + ' — ' + m.why;
+    pmRail();
+  }
+}
+
+/* ── 기동 ── */
+function pmStart(){
+  if(!pmEval()) return;
+  PM.run = true; PM.t = 0; PM.now = 0;
+  PM.cavDmg = 0; PM.heatT = 0; PM.vibT = 0; PM.powT = 0; PM.done = false;
+  $('tsMsg').classList.remove('on');
+  pmRail();
+  if(!PM.rig) pmHeadless();
+}
+
+function pmHeadless(){
+  var last = Date.now();
+  var id = setInterval(function(){
+    if(!PM.run){ clearInterval(id); return; }
+    var now = Date.now();
+    pmFrame(Math.min(0.1, (now - last) / 1000));
+    last = now;
+  }, 50);
+}
+
+function pmEnd(ok, title, sub){
+  PM.run = false; PM.done = true;
+  if(PM.rig){ PM.rig.rpm = 0; PM.rig.cav = 0; PM.rig.shake = 0; }
+  var m = $('tsMsg');
+  m.style.color = ok ? '#38E8C8' : '#FF5470';
+  m.innerHTML = title + '<small>' + sub + '</small>';
+  m.classList.add('on');
+  if(ok){
+    P.m12 = { done:true, rpm:PM.rpm, beta:PM.beta, ind:PM.ind, cool:PM.cool };
+    P.co.yr = '2003 · 11'; save();
+    PM.ph = 3; pmRail(); syncBar();
+    setTimeout(function(){ if(P.step === 2) advance(); }, 1700);
+  } else {
+    PM.ph = 1; pmRail();
+  }
+}
+
+/* ── 매 프레임 ── */
+function pmFrame(dt){
+  if(!PM.run){ if(PM.rig){ PM.rig.rpm = 0; PM.rig.cav = 0; } return; }
+  PM.t += dt;
+  /* 기동 램프 4초. 축동력이 한계를 넘으면 **거기서 더 못 올라간다** —
+     터빈이 못 따라가는 것이 눈에 보이게. */
+  var want = PM.rpm * Math.min(1, PM.t / 4);
+  var probe = DV3D.evaluatePump(want, PM.beta, PM.ind, PM.cool);
+  var capped = probe.power > DV3D.PUMP.Plimit && want > PM.now;
+  if(capped) want = PM.now;
+  PM.now = want;
+  /* 한계에 걸린 채로 계속 지령하면 가스발생기가 과열된다 */
+  if(capped) PM.powT += dt; else PM.powT = Math.max(0, PM.powT - dt * 0.5);
+  var e = DV3D.evaluatePump(PM.now, PM.beta, PM.ind, PM.cool);
+
+  /* 캐비테이션 손상 누적 — 임펠러가 벌집이 된다 */
+  PM.cavDmg = Math.min(1.4, PM.cavDmg + e.cavSeverity * dt * 0.42);
+  /* 베어링이 한계를 넘은 채로 머문 시간 */
+  if(e.temp > DV3D.PUMP.Tlimit) PM.heatT += dt; else PM.heatT = Math.max(0, PM.heatT - dt * 0.6);
+  /* 임계 회전수 대역에 머문 시간 — 스쳐 지나가는 것은 괜찮다 */
+  var inBand = Math.abs(PM.now - DV3D.PUMP.Ncrit) / DV3D.PUMP.Ncrit < DV3D.PUMP.vibMargin;
+  if(inBand) PM.vibT += dt; else PM.vibT = Math.max(0, PM.vibT - dt * 0.8);
+
+  if(PM.rig){
+    PM.rig.rpm = PM.now;
+    PM.rig.cav = Math.min(1, e.cavSeverity * 1.4);
+    PM.rig.heat = Math.max(0, Math.min(1, (e.temp + 150) / 230));
+    PM.rig.shake = Math.min(1, (inBand ? 0.75 : 0.06) + e.cavSeverity * 0.5);
+  }
+
+  var tc = e.temp > DV3D.PUMP.Tlimit ? 'bad' : (e.temp > 0 ? 'hot' : '');
+  $('tsHud').innerHTML = 'T + <b>' + PM.t.toFixed(1) + '</b> s<br>' +
+    Math.round(PM.now).toLocaleString() + ' rpm<br>' +
+    '헤드 ' + e.head.toFixed(0) + ' m<br>' +
+    '베어링 <span class="' + tc + '">' + e.temp.toFixed(0) + ' °C</span>' +
+    (e.cavSeverity > 0.02 ? '<br><span class="bad">캐비테이션 ' + (PM.cavDmg * 100).toFixed(0) + '%</span>' : '');
+
+  if(PM.cavDmg >= 1){
+    pmEnd(false, '임펠러 파손',
+      '흡입구에서 산소가 끓었다. 붕괴하는 기포가 블레이드를 벌집으로 만들었다. T+' + PM.t.toFixed(1) + 's');
+  } else if(PM.heatT >= 3){
+    pmEnd(false, '베어링 소착',
+      'LOX 중에서 베어링이 허용 온도를 넘긴 채 3초를 넘겼다. T+' + PM.t.toFixed(1) + 's');
+  } else if(PM.vibT >= 6){
+    pmEnd(false, '축 파단',
+      '1차 임계 회전수 대역에 머물렀다. 공진이 축을 부쉈다. T+' + PM.t.toFixed(1) + 's');
+  } else if(PM.powT >= 6){
+    pmEnd(false, '가스발생기 과열',
+      '지령 회전수가 터빈이 낼 수 있는 축동력을 넘는다. 가스발생기를 한계로 계속 ' +
+      '돌린 끝에 터빈 입구가 녹았다. 회전수 ' + Math.round(PM.now).toLocaleString() +
+      ' rpm 에서 더 오르지 못했다. T+' + PM.t.toFixed(1) + 's');
+  } else if(PM.t >= 4 + DV3D.PUMP.runTarget){
+    var f = DV3D.evaluatePump(PM.rpm, PM.beta, PM.ind, PM.cool);
+    if(f.pass && Math.abs(PM.now - PM.rpm) < 1){
+      pmEnd(true, '60초 · 정격 운전',
+        '헤드 ' + f.head.toFixed(0) + ' m, 축동력 ' + (f.power / 1000).toFixed(0) +
+        ' kW, 베어링 ' + f.temp.toFixed(0) + ' °C. 분해 결과 이상 없음.');
+    } else if(!f.headOK){
+      pmEnd(false, '헤드 부족',
+        '토출 헤드 ' + f.head.toFixed(0) + ' m 로는 연소실 압력을 못 이긴다. ' +
+        '요구치는 ' + DV3D.PUMP.Hreq + ' m 다.');
+    } else {
+      pmEnd(false, '조건 미달', pmTip(f));
+    }
+  }
+}
+PM.frame = pmFrame;
+
 /* ── 압력 스펙트럼 ──
    진짜 FFT 를 돌리지는 않는다. 로렌치안 공명 곡선 + 잡음으로 계측 화면을
    재현한다 — 플레이어가 읽어야 하는 것은 피크의 위치와 높이뿐이다. */
@@ -1413,7 +1738,7 @@ if(navigator.serviceWorker){
   }).catch(function(){});
 }
 </script>
-<script src="/js/siteFooter.js?v=1787449532"></script>
+<script src="/js/siteFooter.js?v=1787452176"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

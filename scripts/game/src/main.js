@@ -41,6 +41,8 @@ import { HighlightLayer } from "@babylonjs/core/Layers/highlightLayer";
 import { PointerEventTypes } from "@babylonjs/core/Events/pointerEvents";
 import "@babylonjs/core/Culling/ray";                 /* 피킹에 필요 */
 import "@babylonjs/core/Cameras/Inputs/freeCameraMouseInput";
+/* 터보펌프 리그 — 회전체를 한 노드에 묶어 돌린다 */
+import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
 
 /* ═════════════ 물리 — 미션 1-1 ═════════════
    코덱스의 수식을 그대로 쓴다.
@@ -550,5 +552,273 @@ export class LabView {
   }
 }
 
+/* ═════════════ 물리 — 미션 1-2 「터보펌프의 악몽」 ═════════════
+
+   코덱스가 요구하는 네 가지를 그대로 축으로 삼는다:
+     임펠러 형상(블레이드 각) · 베어링/실 · 인듀서 · 고속 회전 시험
+
+   쓰는 식:
+     ψ = gH/u²              헤드 계수 — 후향 블레이드 각이 클수록 커진다
+     P = ρgQH/η             터빈이 대야 하는 축동력
+     Nss = N√Q / NPSH^0.75  흡입 비속도 — **인듀서가 이걸 끌어올린다**
+
+   흡입 비속도가 이 미션의 심장이다. 인듀서 없이는 요구 NPSH 가 128m 까지
+   치솟아 **어떤 조합으로도 통과할 수 없다**(설계 공간 전수 조사로 확인).
+   실제 역사에서 인듀서가 필수였던 이유가 숫자로 드러난다. */
+export const PUMP = {
+  rho: 1141,        // LOX 밀도 (kg/m³)
+  g: 9.80665,
+  Q: 0.071,         // 체적 유량 (m³/s) — 추력 340kN, Isp 300s, O/F 2.34
+  Qgpm: 1125,       // 같은 유량 (gpm) — Nss 는 이 단위가 관례다
+  r: 0.042,         // 임펠러 반지름 (m)
+  Hreq: 670,        // 요구 토출 헤드 (m) — 연소실 6.0MPa + 인젝터 1.2MPa + 손실
+  npshA: 32,        // 가용 NPSH (m) — 탱크 가압 0.32MPa + 정수두
+  Plimit: 800e3,    // 가스발생기 축동력 상한 (W)
+  Tlimit: 20,       // 베어링 허용 온도 (°C) — LOX 중에서는 발화 위험
+  bleedLimit: 8,    // 냉각 블리드 상한 (%) — 넘으면 정격 유량 미달
+  Ncrit: 18000,     // 1차 임계 회전수 (rpm)
+  vibMargin: 0.15,  // 임계에서 15% 는 떨어져야 한다
+  runTarget: 60     // 연속 운전 목표 (s)
+};
+export const INDUCER = { none:9000, short:23000, long:30000 };
+
+export function psiOf(beta){ return 0.30 + 0.0090 * beta; }
+export function etaOf(beta){ return 0.78 - 0.00035 * (beta - 28) * (beta - 28); }
+
+export function evaluatePump(rpm, beta, ind, cool){
+  const u = 2 * Math.PI * rpm / 60 * PUMP.r;
+  const head = psiOf(beta) * u * u / PUMP.g;
+  const eff = etaOf(beta);
+  const power = PUMP.rho * PUMP.g * PUMP.Q * head / eff;
+  const nss = INDUCER[ind] || INDUCER.none;
+  const npshr = Math.pow(rpm * Math.sqrt(PUMP.Qgpm) / nss, 4 / 3) * 0.3048;
+  const temp = -150 + 0.0072 * rpm - 9.5 * cool;
+  const vib = Math.abs(rpm - PUMP.Ncrit) / PUMP.Ncrit;
+  const r = {
+    u, head, eff, power, npshr, temp, vib,
+    headOK: head >= PUMP.Hreq,
+    cavOK: npshr <= PUMP.npshA,
+    powerOK: power <= PUMP.Plimit,
+    tempOK: temp <= PUMP.Tlimit,
+    bleedOK: cool <= PUMP.bleedLimit,
+    vibOK: vib >= PUMP.vibMargin
+  };
+  r.pass = r.headOK && r.cavOK && r.powerOK && r.tempOK && r.bleedOK && r.vibOK;
+  /* 캐비테이션 심각도 0~1 — 기포 연출과 손상 누적에 쓴다 */
+  r.cavSeverity = Math.max(0, Math.min(1, (r.npshr - PUMP.npshA) / 24));
+  return r;
+}
+
+/* ═════════════ 3D — 터보펌프 시험 리그 ═════════════ */
+export class PumpRig {
+  constructor(canvas){
+    this.canvas = canvas;
+    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false });
+    this.scene = new Scene(this.engine);
+    this.scene.clearColor = new Color4(0.018, 0.023, 0.035, 1);
+    this.ready = false;
+    this.rpm = 0;         // 현재 회전수 (rpm)
+    this.cav = 0;         // 0~1 캐비테이션
+    this.heat = 0;        // 0~1 베어링 가열
+    this.shake = 0;       // 0~1 진동
+    this._t = 0;
+    this._spinAngle = 0;
+    this._build();
+    window.addEventListener("resize", () => this.engine.resize());
+  }
+
+  _build(){
+    const sc = this.scene;
+    const cam = new ArcRotateCamera("c", -Math.PI * 0.62, Math.PI * 0.46, 3.6,
+                                    new Vector3(0, 1.35, 0), sc);
+    cam.lowerRadiusLimit = 1.9;
+    cam.upperRadiusLimit = 7.0;
+    cam.lowerBetaLimit = 0.25;
+    cam.upperBetaLimit = Math.PI * 0.49;
+    cam.wheelPrecision = 42;
+    cam.panningSensibility = 0;      /* 패닝은 막는다 — 대상을 잃어버린다 */
+    cam.attachControl(this.canvas, true);
+    this.cam = cam;
+    this._camTarget = cam.target.clone();
+
+    const hemi = new HemisphericLight("h", new Vector3(0.2, 1, 0.1), sc);
+    hemi.intensity = 0.42;
+    hemi.diffuse = new Color3(0.60, 0.68, 0.84);
+    hemi.groundColor = new Color3(0.10, 0.11, 0.15);
+
+    const key = new DirectionalLight("k", new Vector3(-0.55, -1, 0.42), sc);
+    key.position = new Vector3(3.2, 5.4, -2.6);
+    key.intensity = 2.4;
+    this.key = key;
+    const sg = new ShadowGenerator(1024, key);
+    sg.usePercentageCloserFiltering = true;
+    sg.bias = 0.0012;
+    this.shadows = sg;
+
+    const rim = new DirectionalLight("r", new Vector3(0.7, -0.35, -0.6), sc);
+    rim.intensity = 0.75;
+    rim.diffuse = new Color3(0.55, 0.72, 1.0);
+
+    const ground = CreateGround("g", { width: 26, height: 26 }, sc);
+    const gm = new PBRMaterial("gm", sc);
+    gm.albedoColor = new Color3(0.045, 0.05, 0.062);
+    gm.metallic = 0.1;
+    gm.roughness = 0.85;
+    ground.material = gm;
+    ground.receiveShadows = true;
+
+    this.glow = new GlowLayer("g", sc);
+    this.glow.intensity = 0.7;
+
+    const pipe = new DefaultRenderingPipeline("p", true, sc, [cam]);
+    pipe.bloomEnabled = true;
+    pipe.bloomThreshold = 0.65;
+    pipe.bloomWeight = 0.40;
+    pipe.imageProcessing.contrast = 1.18;
+    pipe.imageProcessing.exposure = 1.05;
+    pipe.imageProcessing.vignetteEnabled = true;
+    pipe.imageProcessing.vignetteWeight = 1.7;
+    pipe.fxaaEnabled = true;
+    pipe.depthOfFieldEnabled = false;
+  }
+
+  async load(url){
+    const sc = this.scene;
+    await SceneLoader.AppendAsync("", url, sc);
+
+    /* 회전체를 한 노드 아래로 모아 통째로 돌린다.
+       메시마다 축을 계산해 돌리면 위치까지 손으로 회전시켜야 한다. */
+    const spin = new TransformNode("spin", sc);
+    this.spin = spin;
+    this.inducers = { short: [], long: [] };
+    this.blades = [];
+    sc.meshes.forEach(m => {
+      if(!m.name || m.name === "__root__") return;
+      m.receiveShadows = true;
+      this.shadows.addShadowCaster(m);
+      if(/^rot_/.test(m.name)) m.setParent(spin);
+      const mi = /^rot_ind_(short|long)_/.exec(m.name);
+      if(mi) this.inducers[mi[1]].push(m);
+      if(/^rot_blade_/.test(m.name)){
+        m._baseY = m.rotation.y;
+        this.blades.push(m);
+      }
+      if(/brg_house/.test(m.name)) this.bearing = m;
+    });
+    this.bearingMat = this.bearing ? this.bearing.material : null;
+    this._cavity();
+    this.setInducer("long");
+    this.setBlade(28);
+    this.ready = true;
+    return this;
+  }
+
+  /** 인듀서 변형을 갈아 끼운다 — 플레이어 선택이 눈에 보여야 한다 */
+  setInducer(kind){
+    if(!this.inducers) return;
+    ["short", "long"].forEach(k => {
+      this.inducers[k].forEach(m => { m.setEnabled(kind === k); });
+    });
+    this.inducerKind = kind;
+  }
+
+  /** 블레이드 각도를 실제로 기울인다 (기준 28°) */
+  setBlade(beta){
+    if(!this.blades) return;
+    const d = (beta - 28) * Math.PI / 180;
+    this.blades.forEach(m => { m.rotation.y = m._baseY + d; });
+    this.beta = beta;
+  }
+
+  /** 캐비테이션 기포 — 입구에서 피어오른다 */
+  _cavity(){
+    const sc = this.scene;
+    const ps = new ParticleSystem("cav", 700, sc);
+    ps.particleTexture = new Texture(this._dot(), sc);
+    ps.emitter = new Vector3(0, 0.92, 0);
+    ps.minEmitBox = new Vector3(-0.16, -0.06, -0.16);
+    ps.maxEmitBox = new Vector3(0.16, 0.06, 0.16);
+    ps.color1 = new Color4(0.80, 0.92, 1.0, 0.85);
+    ps.color2 = new Color4(0.55, 0.75, 0.95, 0.6);
+    ps.colorDead = new Color4(0.4, 0.6, 0.8, 0);
+    ps.minSize = 0.014; ps.maxSize = 0.05;
+    ps.minLifeTime = 0.25; ps.maxLifeTime = 0.7;
+    ps.emitRate = 0;
+    ps.direction1 = new Vector3(-0.5, 1.4, -0.5);
+    ps.direction2 = new Vector3(0.5, 2.4, 0.5);
+    ps.minEmitPower = 0.5; ps.maxEmitPower = 1.6;
+    ps.gravity = new Vector3(0, 0.6, 0);
+    ps.blendMode = ParticleSystem.BLENDMODE_STANDARD;
+    ps.start();
+    this.cavPS = ps;
+  }
+
+  _dot(){
+    if(this._dotUrl) return this._dotUrl;
+    const c = document.createElement("canvas");
+    c.width = c.height = 64;
+    const x = c.getContext("2d");
+    const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, "rgba(255,255,255,1)");
+    gr.addColorStop(0.45, "rgba(255,255,255,0.55)");
+    gr.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = gr;
+    x.fillRect(0, 0, 64, 64);
+    this._dotUrl = c.toDataURL();
+    return this._dotUrl;
+  }
+
+  tick(dt){
+    if(!this.ready) return;
+    this._t += dt;
+
+    /* 회전 — 화면에서는 실제 rpm 을 그대로 쓰면 스트로보로 멈춰 보인다.
+       회전 느낌만 남기고 속도에 비례시킨다. */
+    if(this.spin){
+      this._spinAngle += (this.rpm / 30000) * 26 * dt;
+      this.spin.rotation.y = this._spinAngle;
+    }
+    if(this.cavPS) this.cavPS.emitRate = 620 * this.cav;
+
+    /* 베어링이 달아오른다 */
+    if(this.bearingMat){
+      const h = this.heat;
+      this.bearingMat.emissiveColor = new Color3(0.95 * h, 0.22 * h * h, 0.04 * h * h);
+      this.bearingMat.emissiveIntensity = 1.0;
+    }
+    if(this.glow) this.glow.intensity = 0.7 + 1.0 * this.heat + 0.5 * this.cav;
+
+    /* 진동 — 임계 회전수에 가까우면 화면이 떨린다 */
+    const sK = this.shake;
+    if(sK > 0.001){
+      const w = 2 * Math.PI * 17, a = 0.05 * sK;
+      this.cam.target = this._camTarget.add(new Vector3(
+        Math.sin(this._t * w) * a,
+        Math.sin(this._t * w * 1.6 + 0.9) * a,
+        Math.cos(this._t * w * 0.85) * a * 0.7));
+    } else if(this.cam.target !== this._camTarget){
+      this.cam.target = this._camTarget.clone();
+    }
+  }
+
+  run(onFrame){
+    this.engine.runRenderLoop(() => {
+      const dt = Math.min(0.05, this.engine.getDeltaTime() / 1000);
+      if(onFrame) onFrame(dt);
+      this.tick(dt);
+      this.scene.render();
+    });
+  }
+
+  stop(){ this.engine.stopRenderLoop(); }
+
+  dispose(){
+    this.stop();
+    this.scene.dispose();
+    this.engine.dispose();
+  }
+}
+
 /* 검증·디버그용으로 밖에서 잡을 수 있게 노출한다 */
-window.DV3D = { TestStand, LabView, evaluate, PHYS, f1L, f1T };
+window.DV3D = { TestStand, LabView, PumpRig, evaluate, evaluatePump,
+                PHYS, PUMP, INDUCER, psiOf, etaOf, f1L, f1T };
