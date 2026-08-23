@@ -49,7 +49,7 @@ CSS_RE='(/css/[a-zA-Z0-9_-]+\.css)\?v=[0-9a-zA-Z]{4,20}'
 # 피하려고 /assets/deltav/ 로 옮겼는데(Pages 의 _headers 는 매칭 규칙을 전부
 # 이어 붙여서 예외를 만들 수 없다), 그러면 위의 JS_RE 가 못 잡아 ?v= 가
 # 영원히 안 바뀐다. 경로에 슬래시가 들어가므로 문자군에 / 를 넣는다.
-ASSETJS_RE='(/assets/[a-zA-Z0-9_/-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
+ASSETJS_RE='(/assets/[a-zA-Z0-9_/-]+\.js(on)?)\?v=[0-9a-zA-Z]{4,20}'
 
 # 무버전 참조도 잡는다: src="/js/x.js" 처럼 ?v= 없이 로드되는 공용 JS 는
 # 이 스크립트가 영원히 못 덮어서 stale 로 남는다(2026-08-20 감사 —

@@ -34,6 +34,13 @@ import "@babylonjs/core/Animations/animatable";
 import "@babylonjs/core/Loading/loadingScreen";
 import "@babylonjs/core/Materials/Textures/Loaders/envTextureLoader";
 import "@babylonjs/loaders/glTF/2.0";
+/* 현장(LabView) 용 */
+import { UniversalCamera } from "@babylonjs/core/Cameras/universalCamera";
+import { PointLight } from "@babylonjs/core/Lights/pointLight";
+import { HighlightLayer } from "@babylonjs/core/Layers/highlightLayer";
+import { PointerEventTypes } from "@babylonjs/core/Events/pointerEvents";
+import "@babylonjs/core/Culling/ray";                 /* 피킹에 필요 */
+import "@babylonjs/core/Cameras/Inputs/freeCameraMouseInput";
 
 /* ═════════════ 물리 — 미션 1-1 ═════════════
    코덱스의 수식을 그대로 쓴다.
@@ -313,5 +320,235 @@ export class TestStand {
   }
 }
 
+/* ═════════════ 현장 — 실시간 3D 1인칭 뷰 ═════════════
+
+   프리렌더 PNG(960×640) 를 대체한다. 그 방식의 문제는 두 가지였다:
+     · 1440px 모니터에서 확대되어 흐렸다
+     · 핫스팟이 **카메라 기준으로 계산된 사각형**이라, 씬을 조금만 고쳐도
+       클릭 영역이 물체에서 어긋났다
+
+   지금은 같은 Blender 씬을 `.glb` 로 받아 실시간 렌더하고, 클릭은
+   **레이 피킹**으로 진짜 메시를 맞힌다. 집을 수 있는 물체는 Blender 쪽에서
+   이름이 `hs_<키>` 로 붙어 나온다 (`scripts/blender/export_lab_gltf.py`).
+
+   카메라는 제자리에서 **둘러보기만** 한다. 방 안을 걸어 다니게 하면 벽을
+   뚫고 나가고, 게임의 성격(현장을 훑어 근거를 찾는다)과도 안 맞는다. */
+export class LabView {
+  /** @param onPick 핫스팟 키를 받는 콜백. `hs_` 접두어는 떼어서 준다 */
+  constructor(canvas, onPick){
+    this.canvas = canvas;
+    this.onPick = onPick || function(){};
+    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true });
+    this.scene = null;
+    this.node = null;
+    this.hover = null;
+    this._running = false;
+    window.addEventListener("resize", () => { if(this.engine) this.engine.resize(); });
+  }
+
+  /** 노드 하나를 통째로 갈아 끼운다.
+      씬을 새로 만드는 편이 메시를 골라 지우는 것보다 확실하다 — 노드 하나가
+      50~190KB 라 다시 만드는 비용이 누수 위험보다 싸다. */
+  async goto(url, meta){
+    if(this.scene){ this.scene.dispose(); this.scene = null; }
+    const sc = new Scene(this.engine);
+    sc.clearColor = new Color4(0.012, 0.016, 0.026, 1);
+    this.scene = sc;
+
+    const cp = meta.cam || [0, 1.6, 0];
+    const tp = meta.target || [0, 1.6, -3];
+    const cam = new UniversalCamera("eye", new Vector3(cp[0], cp[1], cp[2]), sc);
+    cam.setTarget(new Vector3(tp[0], tp[1], tp[2]));
+    cam.fov = meta.fov || 1.05;
+    cam.minZ = 0.05;
+    cam.speed = 0;                       /* 이동 금지 — 제자리에서 둘러보기만 */
+    cam.inertia = 0.72;
+    cam.angularSensibility = 2600;
+    cam.attachControl(this.canvas, true);
+    /* 키보드 이동 입력을 떼어 낸다. 남겨 두면 방향키로 벽을 뚫고 나간다. */
+    if(cam.inputs && cam.inputs.attached && cam.inputs.attached.keyboard){
+      cam.inputs.removeByType("FreeCameraKeyboardMoveInput");
+    }
+    this.cam = cam;
+    /* _base/_home 은 좌표계 보정 뒤에 다시 잡는다 (아래) */
+
+    /* 조명 — Blender 의 area light 는 glTF 에 담기지 않아 JSON 으로 받아
+       point light 로 근사한다. 천장 램프 메시는 이미시브라 GlowLayer 가 받는다. */
+    const amb = new HemisphericLight("amb", new Vector3(0, 1, 0), sc);
+    amb.intensity = 0.32;
+    amb.diffuse = new Color3(0.62, 0.68, 0.82);
+    amb.groundColor = new Color3(0.10, 0.11, 0.15);
+    this.lights = [];
+    (meta.lights || []).forEach((L, i) => {
+      const p = new PointLight("p" + i, new Vector3(L.p[0], L.p[1], L.p[2]), sc);
+      /* Blender 의 W 값을 그대로 쓰면 실내가 하얗게 탄다. 패널 55W 를
+         기준 1.0 으로 두고 비례시킨 뒤 상한을 건다. */
+      p.intensity = Math.min(2.2, (L.power || 55) / 55 * 0.95);
+      p.diffuse = new Color3(L.c[0], L.c[1], L.c[2]);
+      p.range = 14;
+      this.lights.push(p);
+    });
+
+    await SceneLoader.AppendAsync("", url, sc);
+
+    /* ── 좌표계 보정 (2026-08-23 실제 버그) ──
+       glTF 는 오른손 Y-up, Babylon 은 기본이 왼손이라 로더가 `__root__` 에
+       scaling z=-1 + Y 180° 를 걸어 모델을 통째로 변환한다. 결과적으로
+       **x 부호가 뒤집힌다.** Blender 좌표를 그대로 쓴 카메라는 씬의 거울상에
+       서게 되고, 방이 대칭이라 겉보기엔 멀쩡해 눈치채기 어렵다.
+       실제로 자재 창고의 수소 카드가 화면 밖 54.8° 로 밀려나 있었다.
+       루트의 월드 행렬을 그대로 먹여 카메라·조명을 같은 공간으로 옮긴다. */
+    const root = sc.getNodes().filter(n => n.name === "__root__")[0];
+    if(root){
+      const M = root.getWorldMatrix();
+      const cw = Vector3.TransformCoordinates(new Vector3(cp[0], cp[1], cp[2]), M);
+      const tw = Vector3.TransformCoordinates(new Vector3(tp[0], tp[1], tp[2]), M);
+      cam.position.copyFrom(cw);
+      cam.setTarget(tw);
+      this.lights.forEach((L, i) => {
+        const q = meta.lights[i];
+        L.position = Vector3.TransformCoordinates(
+          new Vector3(q.p[0], q.p[1], q.p[2]), M);
+      });
+    }
+    this._base = { rx: cam.rotation.x, ry: cam.rotation.y };
+    this._home = cam.position.clone();
+
+    /* 집을 수 있는 것과 없는 것을 가른다 */
+    this.hots = [];
+    sc.meshes.forEach(m => {
+      if(!m.name || m.name === "__root__") return;
+      if(/^hs_/.test(m.name)){
+        m.isPickable = true;
+        this.hots.push(m);
+      } else {
+        m.isPickable = false;     /* 벽·바닥이 레이를 가로채지 않게 */
+      }
+    });
+
+    const glow = new GlowLayer("g", sc);
+    glow.intensity = 0.85;
+    this.glow = glow;
+
+    /* 무엇을 누를 수 있는지 보이게 한다. 프리렌더 시절엔 CSS 로 사각형을
+       빛냈는데, 지금은 물체 자체에 테두리를 준다. */
+    const hl = new HighlightLayer("hl", sc);
+    hl.innerGlow = false;
+    this.hl = hl;
+    this.hots.forEach(m => hl.addMesh(m, new Color3(0.22, 0.91, 0.78)));
+
+    const pipe = new DefaultRenderingPipeline("lab", true, sc, [cam]);
+    pipe.bloomEnabled = true;
+    pipe.bloomThreshold = 0.62;
+    pipe.bloomWeight = 0.42;
+    pipe.bloomKernel = 42;
+    pipe.imageProcessing.contrast = 1.14;
+    pipe.imageProcessing.exposure = 1.02;
+    pipe.imageProcessing.vignetteEnabled = true;
+    pipe.imageProcessing.vignetteWeight = 1.5;
+    pipe.fxaaEnabled = true;
+
+    /* **POINTERPICK 을 쓰지 말 것** (2026-08-23 실제 버그).
+       Babylon 은 자기 **정확 피킹**이 down·up 양쪽에서 같은 메시를 맞혀야만
+       POINTERPICK 을 던진다. 즉 아래의 너그러운 `_pickNear` 가 개입할 자리가
+       없어, 작은 핫스팟은 영원히 안 눌린다. down/up 을 직접 받아 처리한다. */
+    let down = null;
+    sc.onPointerObservable.add((pi) => {
+      const t = pi.type;
+      if(t === PointerEventTypes.POINTERMOVE){
+        const m = this._pickNear(sc.pointerX, sc.pointerY);
+        if(m !== this.hover){
+          this.hover = m;
+          this.canvas.style.cursor = m ? "pointer" : "default";
+        }
+      } else if(t === PointerEventTypes.POINTERDOWN){
+        down = { x: sc.pointerX, y: sc.pointerY };
+      } else if(t === PointerEventTypes.POINTERUP){
+        if(!down) return;
+        /* 시점을 돌리려고 끈 것과 누른 것을 가른다 */
+        const moved = Math.abs(sc.pointerX - down.x) + Math.abs(sc.pointerY - down.y);
+        const at = down;
+        down = null;
+        if(moved > 6) return;
+        const m = this._pickNear(at.x, at.y);
+        if(m) this.onPick(m.name.replace(/^hs_/, ""));
+      }
+    });
+
+    /* 제자리에서 둘러보기만 — 회전 범위를 묶고 위치를 매 프레임 되돌린다.
+       UniversalCamera 는 speed=0 이어도 관성으로 미세하게 밀린다. */
+    sc.onBeforeRenderObservable.add(() => {
+      const b = this._base, C = this.cam;
+      C.position.copyFrom(this._home);
+      C.rotation.y = Math.max(b.ry - 0.44, Math.min(b.ry + 0.44, C.rotation.y));
+      C.rotation.x = Math.max(b.rx - 0.24, Math.min(b.rx + 0.24, C.rotation.x));
+      const t = performance.now() * 0.0035;
+      this.hl.blurHorizontalSize = 0.7 + 0.35 * Math.sin(t);
+      this.hl.blurVerticalSize = 0.7 + 0.35 * Math.sin(t);
+    });
+
+    this.ready = true;
+    if(!this._running) this.run();
+    this.engine.resize();
+    return this;
+  }
+
+  /** 커서 주변까지 훑어 핫스팟을 집는다.
+
+      원근 때문에 먼 물체는 화면의 0.03% (약 16×16px) 밖에 안 된다 — 정확히
+      그 픽셀을 찍어야만 반응하면 못 누른다. 프리렌더 시절엔 투영 사각형에
+      최소 크기(10%)를 강제했는데, 3D 에서는 기하를 부풀릴 수 없으므로
+      **집는 쪽을 너그럽게** 만든다. 가까운 고리부터 훑어 제일 가까운 것을
+      고르므로, 물체가 클 때의 정확도는 그대로다. */
+  _pickNear(px, py){
+    const sc = this.scene;
+    const hit = (x, y) => {
+      const p = sc.pick(x, y);
+      return (p && p.hit && p.pickedMesh && /^hs_/.test(p.pickedMesh.name))
+        ? p.pickedMesh : null;
+    };
+    let m = hit(px, py);
+    if(m) return m;
+    const RINGS = [9, 18, 28];
+    for(let r = 0; r < RINGS.length; r++){
+      const rad = RINGS[r];
+      for(let a = 0; a < 8; a++){
+        const th = a * Math.PI / 4;
+        m = hit(px + Math.cos(th) * rad, py + Math.sin(th) * rad);
+        if(m) return m;
+      }
+    }
+    return null;
+  }
+
+  /** 핫스팟 표시를 껐다 켠다 (이미 찾은 자료는 표시를 줄인다) */
+  setFound(keys){
+    if(!this.hl) return;
+    this.hots.forEach(m => {
+      const k = m.name.replace(/^hs_/, "");
+      this.hl.removeMesh(m);
+      this.hl.addMesh(m, keys && keys.indexOf(k) >= 0
+        ? new Color3(0.30, 0.36, 0.46)      /* 이미 챙긴 것 — 눈에 덜 띄게 */
+        : new Color3(0.22, 0.91, 0.78));
+    });
+  }
+
+  run(){
+    this._running = true;
+    this.engine.runRenderLoop(() => { if(this.scene) this.scene.render(); });
+  }
+
+  stop(){
+    this._running = false;
+    this.engine.stopRenderLoop();
+  }
+
+  dispose(){
+    this.stop();
+    if(this.scene) this.scene.dispose();
+    this.engine.dispose();
+  }
+}
+
 /* 검증·디버그용으로 밖에서 잡을 수 있게 노출한다 */
-window.DV3D = { TestStand, evaluate, PHYS, f1L, f1T };
+window.DV3D = { TestStand, LabView, evaluate, PHYS, f1L, f1T };
