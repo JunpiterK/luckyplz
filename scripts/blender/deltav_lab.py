@@ -227,56 +227,304 @@ def n_hall():
 
 # ─────────────────────── 추진 연구동 ───────────────────────
 def n_prop():
-    """추진 연구동 — 화이트보드(수식이 적힐 자리)와 엔진 시험대."""
+    """추진 연구동 — 화이트보드와 엔진 시험 셀.
+
+    2026-08-23 재작성. 실시간 3D 로 바뀌면서 절차적 노이즈가 사라졌으므로
+    디테일을 **기하와 재질 수**로 낸다. 상자 몇 개짜리 방이었던 것을 실제
+    시험 셀처럼 채운다 — 구조 트러스, 케이블 트레이, 가스 실린더 뱅크,
+    계측 랙, 작업대, 안전 설비.
+    """
     reset()
-    WALL = mat("w", (0.28, 0.30, 0.33), rough=0.74, rough_var=0.10, noise_scale=16)
-    FLOOR = mat("f", (0.095, 0.10, 0.115), rough=0.30, rough_var=0.10, noise_scale=24)
-    CEIL = mat("c", (0.15, 0.16, 0.18), rough=0.80)
-    BOARD = mat("b", (0.90, 0.905, 0.91), rough=0.22, rough_var=0.04, noise_scale=90)
-    FRAME = mat("fr", (0.50, 0.52, 0.55), rough=0.32, metal=0.85)
-    STEEL = mat("s", (0.58, 0.60, 0.63), rough=0.28, metal=1.0, rough_var=0.10, noise_scale=90)
-    DARK = mat("dk", (0.07, 0.075, 0.09), rough=0.50, metal=0.4)
-    COPPER = mat("cu", (0.72, 0.36, 0.18), rough=0.26, metal=1.0, rough_var=0.08)
-    LAMP = mat("l", (1, 1, 1), rough=0.4, emit=(1.0, 0.96, 0.90), emit_str=5.0)
-    SCREEN = mat("sc", (0.05, 0.08, 0.10), rough=0.14,
-                 emit=(0.10, 0.55, 0.62), emit_str=1.4)
+    # ── 재질 — 회색 하나로 뭉치지 않는다 ──
+    WALL = mat("wall", (0.285, 0.30, 0.325), rough=0.68)
+    WALL2 = mat("wall2", (0.20, 0.215, 0.24), rough=0.60)      # 허리 아래 짙은 도장
+    FLOOR = mat("floor", (0.105, 0.11, 0.125), rough=0.42)
+    CEIL = mat("ceil", (0.135, 0.142, 0.16), rough=0.85)
+    HAZ = mat("haz", (0.62, 0.50, 0.10), rough=0.55)           # 경고 노랑(바닥 띠)
+    GRATE = mat("grate", (0.17, 0.18, 0.20), rough=0.52, metal=0.7)
+    BOARD = mat("board", (0.905, 0.91, 0.915), rough=0.16)
+    FRAME = mat("frame", (0.62, 0.64, 0.67), rough=0.30, metal=0.9)
+    ALU = mat("alu", (0.55, 0.57, 0.60), rough=0.36, metal=1.0)   # 브러시드 알루미늄
+    STEEL = mat("steel", (0.48, 0.50, 0.54), rough=0.26, metal=1.0)
+    INCO = mat("inco", (0.42, 0.40, 0.38), rough=0.34, metal=1.0)  # 니켈합금(연소실)
+    COPPER = mat("copper", (0.71, 0.36, 0.17), rough=0.24, metal=1.0)
+    BRASS = mat("brass", (0.72, 0.58, 0.24), rough=0.30, metal=1.0)
+    ANOD = mat("anod", (0.085, 0.09, 0.105), rough=0.40, metal=0.55)  # 아노다이즈 흑색
+    RUBBER = mat("rubber", (0.055, 0.058, 0.065), rough=0.88)
+    PAINT_R = mat("paint_r", (0.42, 0.09, 0.08), rough=0.48)      # 소화기·비상
+    PAINT_G = mat("paint_g", (0.10, 0.30, 0.16), rough=0.52)      # 가스병 뱅크
+    PAINT_B = mat("paint_b", (0.10, 0.20, 0.36), rough=0.52)
+    LAMP = mat("lamp", (1, 1, 1), rough=0.4, emit=(1.0, 0.95, 0.88), emit_str=5.2)
+    SCREEN = mat("screen", (0.04, 0.07, 0.09), rough=0.12,
+                 emit=(0.10, 0.58, 0.66), emit_str=1.7)
+    SCREEN2 = mat("screen2", (0.05, 0.05, 0.04), rough=0.12,
+                  emit=(0.62, 0.42, 0.10), emit_str=1.2)
+    LED_G = mat("led_g", (0.1, 0.5, 0.2), rough=0.3, emit=(0.15, 1.0, 0.45), emit_str=6.0)
+    LED_R = mat("led_r", (0.5, 0.1, 0.1), rough=0.3, emit=(1.0, 0.20, 0.15), emit_str=6.0)
+    STRIP = mat("strip", (0.4, 0.3, 0.05), rough=0.5,
+                emit=(1.0, 0.62, 0.08), emit_str=2.2)
 
-    room(9.0, 11.0, 3.4, WALL, FLOOR, CEIL)
-    for y in (-3.0, 0.5, 4.0):
-        box((0, y, 3.34), (2.4, 0.26, 0.06), LAMP, bev=0)
-        panel_light((0, y, 3.22), (2.5, 0.4), 70)
+    W, D, H = 10.0, 12.5, 4.6
+    room(W, D, H, WALL, FLOOR, CEIL)
 
-    # 화이트보드 — 이 게임에서 가장 중요한 물건. 수식이 여기 적힌다
-    board = box((-4.36, 0.6, 1.85), (0.06, 3.4, 1.7), BOARD)
-    box((-4.30, 0.6, 1.85), (0.02, 3.56, 1.86), FRAME)
-    box((-4.28, -0.9, 0.94), (0.05, 0.5, 0.05), FRAME)   # 마커 받침
+    # ── 벽 — 허리 아래 짙은 도장 + 몰딩. 단조로운 벽 한 장을 피한다 ──
+    for (px, py, sx, sy) in ((0, D / 2 - 0.02, W, 0.06),
+                             (0, -D / 2 + 0.02, W, 0.06),
+                             (-W / 2 + 0.02, 0, 0.06, D),
+                             (W / 2 - 0.02, 0, 0.06, D)):
+        box((px, py, 0.60), (sx, sy, 1.20), WALL2, bev=0)
+        box((px, py, 1.24), (sx * 1.001, sy * 1.4, 0.05), FRAME, bev=0.006)
 
-    # 엔진 시험대 — 노즈콘 아래로 향한 종형 노즐
-    base = box((2.2, 1.2, 0.35), (2.6, 2.6, 0.7), DARK)
-    cyl((2.2, 1.2, 1.55), 0.42, 1.5, STEEL)
-    bpy.ops.mesh.primitive_cone_add(radius1=0.86, radius2=0.40, depth=1.1, vertices=48,
-                                    location=(2.2, 1.2, 2.75))
+    # ── 천장 구조 — 노출 보. 빈 천장은 실내를 싸구려로 만든다 ──
+    for y in range(-5, 6, 2):
+        box((0, y, H - 0.22), (W - 0.3, 0.16, 0.44), FRAME, bev=0.01)
+        box((0, y, H - 0.44), (W - 0.3, 0.42, 0.05), FRAME, bev=0.006)
+    for x in (-3.4, 0, 3.4):
+        box((x, 0, H - 0.52), (0.14, D - 0.4, 0.30), FRAME, bev=0.01)
+
+    # 조명 — 라인 4줄
+    for y in (-4.4, -1.5, 1.5, 4.4):
+        box((-2.2, y, H - 0.62), (2.6, 0.22, 0.07), LAMP, bev=0)
+        box((2.2, y, H - 0.62), (2.6, 0.22, 0.07), LAMP, bev=0)
+        panel_light((-2.2, y, H - 0.72), (2.7, 0.34), 62)
+        panel_light((2.2, y, H - 0.72), (2.7, 0.34), 62)
+
+    # ── 케이블 트레이 — 벽을 타고 천장으로. 실제 시험동의 표식 ──
+    def tray(x, y, z, length, along_y=True, mm=ALU):
+        sx, sy = (0.34, length) if along_y else (length, 0.34)
+        box((x, y, z), (sx, sy, 0.05), mm, bev=0.006)
+        box((x - (0 if along_y else 0), y, z + 0.07),
+            (sx if along_y else length, 0.03 if along_y else sy, 0.14), mm, bev=0.004)
+        n = max(2, int(length / 0.8))
+        for i in range(n):
+            t = -length / 2 + length * (i + 0.5) / n
+            if along_y:
+                box((x, y + t, z + 0.04), (0.30, 0.05, 0.05), ANOD, bev=0.004)
+            else:
+                box((x + t, y, z + 0.04), (0.05, 0.30, 0.05), ANOD, bev=0.004)
+
+    tray(-4.6, 0.0, H - 1.05, D - 1.2, True)
+    tray(4.6, 0.0, H - 1.05, D - 1.2, True)
+    tray(0.0, -5.6, H - 1.05, W - 1.2, False)
+
+    # 벽 배관 — 굵기와 재질을 섞는다
+    for (x, r, mm, zz) in ((-4.72, 0.075, STEEL, 2.55), (-4.72, 0.055, BRASS, 2.30),
+                           (4.72, 0.085, STEEL, 2.62), (4.72, 0.045, COPPER, 2.38)):
+        cyl((x, 0.4, zz), r, D - 2.0, mm, rot=(math.radians(90), 0, 0), verts=20)
+        for yy in (-4.2, -1.4, 1.4, 4.2):
+            cyl((x, yy, zz), r * 1.5, 0.10, ANOD, rot=(math.radians(90), 0, 0), verts=18)
+
+    # ── 바닥 — 경고 띠와 배수 그레이팅 ──
+    for sx in (-1.9, 1.9):
+        box((2.4 + sx * 0.85, 1.4, 0.012), (0.16, 5.2, 0.02), HAZ, bev=0)
+    for sy in (-1.0, 1.0):
+        box((2.4, 1.4 + sy * 2.6, 0.012), (3.4, 0.16, 0.02), HAZ, bev=0)
+    for i in range(9):
+        box((2.4, -1.9 + i * 0.13, 0.02), (2.2, 0.07, 0.04), GRATE, bev=0.004)
+
+    # ══════════ 화이트보드 — 이 방에서 가장 중요한 물건 ══════════
+    BX = -W / 2 + 0.10
+    board = box((BX + 0.04, 0.8, 1.95), (0.05, 4.0, 1.9), BOARD)
+    box((BX, 0.8, 1.95), (0.04, 4.20, 2.10), FRAME, bev=0.01)          # 테두리
+    box((BX + 0.06, -1.15, 0.96), (0.09, 0.62, 0.05), FRAME, bev=0.006)  # 마커 받침
+    for i, cc in enumerate(((0.7, 0.1, 0.1), (0.1, 0.1, 0.7), (0.1, 0.1, 0.1))):
+        mk = mat("mk%d" % i, cc, rough=0.42)
+        cyl((BX + 0.10, -1.32 + i * 0.15, 1.01), 0.011, 0.13, mk,
+            rot=(0, math.radians(90), 0), verts=12)
+    # 보드 옆 압정으로 붙인 출력물 — 사람이 쓰는 방으로 보이게 한다
+    for i, (yy, zz, ww, hh) in enumerate(((3.35, 2.55, 0.42, 0.58),
+                                          (3.35, 1.85, 0.42, 0.58),
+                                          (3.90, 2.20, 0.40, 0.54))):
+        pp = mat("paper%d" % i, (0.86, 0.85, 0.82), rough=0.70)
+        box((BX + 0.05, yy, zz), (0.01, ww, hh), pp, bev=0)
+
+    # ══════════ 엔진 시험 셀 ══════════
+    EX, EY = 2.4, 1.4
+
+    # 추력 프레임 — 4주 트러스 + 사선 브레이스
+    for sx in (-1.5, 1.5):
+        for sy in (-1.5, 1.5):
+            box((EX + sx, EY + sy, 1.75), (0.17, 0.17, 3.5), FRAME, bev=0.012)
+            box((EX + sx, EY + sy, 0.06), (0.42, 0.42, 0.12), ANOD, bev=0.008)
+            for a in range(4):     # 앵커 볼트
+                ang = math.pi / 2 * a + math.pi / 4
+                cyl((EX + sx + math.cos(ang) * 0.15, EY + sy + math.sin(ang) * 0.15, 0.14),
+                    0.022, 0.09, STEEL, verts=10)
+    for z in (1.1, 2.4):
+        for sy in (-1.5, 1.5):
+            box((EX, EY + sy, z), (3.0, 0.12, 0.12), FRAME, bev=0.008)
+        for sx in (-1.5, 1.5):
+            box((EX + sx, EY, z), (0.12, 3.0, 0.12), FRAME, bev=0.008)
+    for sy in (-1.5, 1.5):        # 사선 브레이스
+        box((EX, EY + sy, 1.75), (3.3, 0.09, 0.09), FRAME,
+            rot=(0, math.radians(23), 0), bev=0.006)
+    box((EX, EY, 3.52), (3.3, 3.3, 0.16), FRAME, bev=0.012)      # 상부 크로스헤드
+    box((EX, EY, 3.30), (1.3, 1.3, 0.30), ANOD, bev=0.01)        # 마운트 블록
+
+    # 엔진 — 인젝터 돔 · 연소실 · 종형 노즐 · 냉각 리브
+    cyl((EX, EY, 3.02), 0.34, 0.26, ANOD, verts=48)                     # 짐벌
+    cyl((EX, EY, 2.76), 0.44, 0.30, ALU, verts=48)                      # 인젝터 돔
+    bpy.ops.mesh.primitive_uv_sphere_add(radius=0.44, segments=48, ring_count=24,
+                                         location=(EX, EY, 2.88))
+    dome = bpy.context.object
+    dome.scale = (1, 1, 0.55)
+    dome.data.materials.append(ALU)
+    for p in dome.data.polygons:
+        p.use_smooth = True
+    for a in range(16):           # 돔 볼트 링
+        ang = math.pi * 2 * a / 16
+        cyl((EX + math.cos(ang) * 0.455, EY + math.sin(ang) * 0.455, 2.62),
+            0.020, 0.055, STEEL, verts=8)
+    cyl((EX, EY, 2.20), 0.31, 0.86, INCO, verts=48)                     # 연소실
+    for a in range(28):           # 재생냉각 채널 리브
+        ang = math.pi * 2 * a / 28
+        box((EX + math.cos(ang) * 0.322, EY + math.sin(ang) * 0.322, 2.20),
+            (0.030, 0.030, 0.80), COPPER, rot=(0, 0, ang), bev=0.004)
+    cyl((EX, EY, 1.72), 0.345, 0.14, BRASS, verts=48)                   # 스로트 매니폴드
+
+    bpy.ops.mesh.primitive_cone_add(radius1=0.92, radius2=0.29, depth=1.30,
+                                    vertices=64, location=(EX, EY, 1.02))
     noz = bpy.context.object
     noz.rotation_euler = (math.radians(180), 0, 0)
     noz.data.materials.append(COPPER)
     for p in noz.data.polygons:
         p.use_smooth = True
-    # 배관
-    for a in range(6):
-        ang = math.pi * 2 * a / 6
-        cyl((2.2 + math.cos(ang) * 0.62, 1.2 + math.sin(ang) * 0.62, 1.9),
-            0.055, 1.9, STEEL)
+    for a in range(36):           # 노즐 냉각관
+        ang = math.pi * 2 * a / 36
+        cyl((EX + math.cos(ang) * 0.63, EY + math.sin(ang) * 0.63, 1.02),
+            0.026, 1.28, STEEL, rot=(math.radians(13) * math.cos(ang + math.pi / 2),
+                                     math.radians(13) * math.sin(ang + math.pi / 2), 0),
+            verts=8)
+    cyl((EX, EY, 0.37), 0.96, 0.07, INCO, verts=64)                     # 출구 링
 
-    # 계측 콘솔
-    box((3.0, -2.6, 0.45), (2.0, 0.9, 0.9), DARK)
-    screen = box((3.0, -2.95, 1.25), (1.8, 0.10, 0.72), SCREEN, rot=(math.radians(-12), 0, 0))
+    # 터보펌프 2기 + 배관
+    for sx in (-1, 1):
+        px, py = EX + sx * 0.72, EY + 0.30
+        cyl((px, py, 2.36), 0.20, 0.40, ALU, verts=32)
+        cyl((px, py, 2.62), 0.12, 0.18, ANOD, verts=24)
+        cyl((px, py, 2.06), 0.15, 0.24, STEEL, verts=24)
+        # 벨로우즈가 있는 급기 배관
+        cyl((px, py - 0.55, 2.06), 0.085, 0.9, STEEL,
+            rot=(math.radians(90), 0, 0), verts=20)
+        for i in range(5):
+            cyl((px, py - 0.30 - i * 0.10, 2.06), 0.105, 0.06, ALU,
+                rot=(math.radians(90), 0, 0), verts=20)
+        # 밸브 바디
+        box((px, py - 1.02, 2.06), (0.22, 0.22, 0.24), BRASS, bev=0.01)
+        cyl((px, py - 1.02, 2.28), 0.055, 0.22, STEEL, verts=16)
+        cyl((px, py - 1.02, 2.40), 0.13, 0.03, PAINT_R, verts=20)       # 핸들
 
-    # 1차 실패: 시선이 왼쪽에 쏠려 엔진 시험대가 프레임 밖으로 잘렸다.
-    eye((0.2, -4.6, 1.62), (-0.9, 1.1, 1.80), lens=18)
+    # 짐벌 액추에이터 2기
+    for a in (0.6, math.pi - 0.6):
+        ax, ay = EX + math.cos(a) * 0.95, EY + math.sin(a) * 0.95
+        cyl((ax, ay, 2.60), 0.075, 0.70, ALU,
+            rot=(math.radians(28) * math.sin(a), math.radians(28) * math.cos(a), 0), verts=16)
+        cyl((ax, ay, 2.30), 0.045, 0.34, STEEL,
+            rot=(math.radians(28) * math.sin(a), math.radians(28) * math.cos(a), 0), verts=12)
+
+    # 화염 유도로 — 엔진 아래
+    box((EX, EY, 0.03), (2.0, 2.0, 0.06), ANOD, bev=0)
+    cyl((EX, EY, 0.10), 0.78, 0.20, ANOD, verts=40)
+
+    # ══════════ 계측 랙 · 콘솔 ══════════
+    # 카메라 정면 0.8m 에 두면 모니터가 화면의 11% 를 먹고 방을 가린다(실측).
+    # 왼쪽 중경으로 물려 화면 구성을 연다.
+    CX, CY = -2.4, -1.9
+    box((CX, CY - 0.32, 1.00), (2.9, 0.72, 2.00), ANOD, bev=0.012)       # 19인치 랙
+    for i in range(7):                                                    # 랙 유닛
+        zz = 0.24 + i * 0.26
+        uu = [ALU, ANOD, ALU, STEEL, ANOD, ALU, ANOD][i]
+        box((CX, CY - 0.66, zz), (2.76, 0.06, 0.21), uu, bev=0.005)
+        for j in range(4):
+            box((CX - 1.15 + j * 0.77, CY - 0.70, zz), (0.05, 0.03, 0.05),
+                LED_G if (i + j) % 3 else LED_R, bev=0)
+    box((CX, CY - 0.70, 2.06), (2.9, 0.05, 0.05), STRIP, bev=0)          # 경고 스트립
+
+    # 책상 + 모니터 3대
+    box((CX + 2.6, CY + 0.10, 0.74), (2.4, 1.0, 0.06), ALU, bev=0.008)
+    for sx in (-1.1, 1.1):
+        box((CX + 2.6 + sx, CY + 0.10, 0.36), (0.08, 0.86, 0.72), ANOD, bev=0.006)
+    scr = None
+    for i, sx in enumerate((-0.78, 0.0, 0.78)):
+        cyl((CX + 2.6 + sx, CY + 0.34, 0.80), 0.11, 0.03, ANOD, verts=20)
+        box((CX + 2.6 + sx, CY + 0.34, 0.96), (0.05, 0.05, 0.30), ANOD, bev=0.004)
+        m = box((CX + 2.6 + sx, CY + 0.36, 1.34), (0.70, 0.04, 0.44),
+                SCREEN if i != 1 else SCREEN2, rot=(math.radians(-8), 0, 0), bev=0.004)
+        if i == 1:
+            scr = m
+    box((CX + 2.6, CY - 0.22, 0.79), (0.62, 0.20, 0.02), ANOD, bev=0.004)   # 키보드
+    # 의자
+    box((CX + 2.6, CY - 0.95, 0.46), (0.52, 0.50, 0.07), RUBBER, bev=0.02)
+    box((CX + 2.6, CY - 1.20, 0.78), (0.50, 0.07, 0.56), RUBBER,
+        rot=(math.radians(-9), 0, 0), bev=0.02)
+    cyl((CX + 2.6, CY - 0.95, 0.22), 0.045, 0.44, STEEL, verts=16)
+    for a in range(5):
+        ang = math.pi * 2 * a / 5
+        box((CX + 2.6 + math.cos(ang) * 0.20, CY - 0.95 + math.sin(ang) * 0.20, 0.04),
+            (0.30, 0.05, 0.04), ANOD, rot=(0, 0, ang), bev=0.004)
+
+    # ══════════ 지원 설비 ══════════
+    # 가스 실린더 뱅크 — 벽에 체인으로 묶여 있다
+    for i in range(5):
+        gx = -3.9 + i * 0.46
+        cyl((gx, 5.85, 0.78), 0.155, 1.50, PAINT_G, verts=28)
+        bpy.ops.mesh.primitive_uv_sphere_add(radius=0.155, segments=28, ring_count=14,
+                                             location=(gx, 5.85, 1.53))
+        cap = bpy.context.object
+        cap.scale = (1, 1, 0.55)
+        cap.data.materials.append(PAINT_G)
+        for p in cap.data.polygons:
+            p.use_smooth = True
+        cyl((gx, 5.85, 1.72), 0.045, 0.16, BRASS, verts=14)
+        cyl((gx, 5.85, 1.82), 0.085, 0.03, BRASS, verts=18)
+    box((-3.0, 5.72, 1.10), (2.6, 0.04, 0.05), STEEL, bev=0.004)         # 체인 대용 스트랩
+
+    # 작업대 — 오른쪽 벽. 카메라가 서는 남쪽 코너는 비워 둔다
+    box((4.35, -3.2, 0.86), (0.85, 3.4, 0.08), ALU, bev=0.008)
+    for sy in (-1.5, 1.5):
+        box((4.35, -3.2 + sy, 0.43), (0.78, 0.10, 0.86), ANOD, bev=0.006)
+    box((4.35, -3.2, 0.42), (0.70, 3.1, 0.05), ANOD, bev=0.006)
+    for i in range(6):                                                    # 부품통
+        by = -4.5 + i * 0.52
+        bmat = [PAINT_B, PAINT_R, PAINT_G][i % 3]
+        box((4.55, by, 1.02), (0.34, 0.44, 0.24), bmat, bev=0.012)
+    for i in range(7):                                                    # 벽걸이 공구
+        cyl((4.72, -4.4 + i * 0.36, 1.72), 0.017, 0.34, STEEL,
+            rot=(0, math.radians(90), 0), verts=10)
+        box((4.72, -4.4 + i * 0.36, 1.94), (0.05, 0.09, 0.11), ANOD, bev=0.006)
+    box((4.76, -3.2, 1.85), (0.03, 2.8, 0.62), WALL2, bev=0)             # 공구판
+
+    # 이동식 공구함 — 왼쪽 벽 앞
+    box((-4.1, -4.5, 0.52), (0.86, 0.62, 0.94), PAINT_R, bev=0.012)
+    for i in range(4):
+        box((-3.70, -4.5, 0.20 + i * 0.24), (0.05, 0.48, 0.05), ALU, bev=0.004)
+    for sx in (-0.3, 0.3):
+        for sy in (-0.22, 0.22):
+            cyl((-4.1 + sx, -4.5 + sy, 0.06), 0.06, 0.05, RUBBER,
+                rot=(math.radians(90), 0, 0), verts=14)
+
+    # 안전 설비 — 소화기 · 구급함 · 비상등
+    cyl((4.72, -0.6, 0.70), 0.115, 0.72, PAINT_R, rot=(0, math.radians(90), 0), verts=24)
+    cyl((4.72, -0.6, 1.12), 0.045, 0.16, ANOD, verts=14)
+    box((4.70, 2.6, 1.55), (0.06, 0.44, 0.36), PAINT_R, bev=0.01)
+    box((4.66, 2.6, 1.55), (0.01, 0.16, 0.05), BOARD, bev=0)
+    box((4.66, 2.6, 1.55), (0.01, 0.05, 0.16), BOARD, bev=0)
+    for yy in (-3.6, 3.6):
+        box((4.70, yy, 2.85), (0.07, 0.34, 0.14), STRIP, bev=0.006)
+
+    # 사다리 — 크로스헤드로 올라가는
+    for sx in (-0.24, 0.24):
+        box((EX + 2.1 + sx, EY - 1.9, 1.80), (0.06, 0.06, 3.6), ALU, bev=0.006)
+    for i in range(11):
+        box((EX + 2.1, EY - 1.9, 0.28 + i * 0.32), (0.50, 0.05, 0.04), ALU, bev=0.004)
+
+    # ── 카메라 ──
+    # 화이트보드(왼쪽)와 엔진(오른쪽)이 한 프레임에 들어와야 한다.
+    eye((0.3, -5.75, 1.70), (-0.4, 1.2, 1.85), lens=17)
     bpy.context.view_layer.update()
     mark('prop', 'board', board)
     mark('prop', 'engine', noz, pad=0.02)
-    mark('prop', 'console', screen)
+    mark('prop', 'console', scr)
     render("node_prop.png")
 
 
