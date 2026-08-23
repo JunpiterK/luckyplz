@@ -43,6 +43,42 @@ import "@babylonjs/core/Culling/ray";                 /* 피킹에 필요 */
 import "@babylonjs/core/Cameras/Inputs/freeCameraMouseInput";
 /* 터보펌프 리그 — 회전체를 한 노드에 묶어 돌린다 */
 import { TransformNode } from "@babylonjs/core/Meshes/transformNode";
+/* 정적 메시 병합 — 드로우콜을 줄이는 표준 수단 */
+import { Mesh } from "@babylonjs/core/Meshes/mesh";
+
+/* ═════════════ 렌더 해상도 ═════════════
+   Babylon 은 기본적으로 **CSS 픽셀 해상도**로 그린다. 화면 배율이 125%·150%
+   인 윈도우나 레티나에서는 그 결과가 확대되어 번진다.
+
+   `new Engine(..., adaptToDeviceRatio=true)` 로도 되지만, 그러면 resize() 가
+   매번 `_hardwareScalingLevel` 을 devicePixelRatio 로 덮어써서 상한을 걸 수
+   없다. 4K·200% 같은 조합에서 픽셀 수가 4배가 되면 프레임이 무너지므로
+   **2배까지만** 올린다. 그래서 직접 관리한다. */
+function applyDPR(engine){
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  engine.setHardwareScalingLevel(1 / dpr);
+}
+
+/* 후처리 공통 — 선명함을 깎는 설정을 걷어낸다.
+   FXAA 는 대비가 큰 가장자리를 흐려 계단을 감추는 방식이라 화면 전체가
+   물러진다. MSAA 는 기하 가장자리만 다루므로 텍스트·계기·금속 하이라이트가
+   살아 있다. 샤픈은 아주 약하게만 — 과하면 윤곽에 흰 테가 생긴다. */
+function tunePipeline(pipe, opt){
+  const o = opt || {};
+  pipe.samples = 4;                 /* MSAA 4x — 기본값 1(꺼짐) */
+  pipe.fxaaEnabled = false;
+  pipe.sharpenEnabled = true;
+  pipe.sharpen.edgeAmount = 0.22;
+  pipe.sharpen.colorAmount = 1.0;
+  pipe.bloomEnabled = true;
+  pipe.bloomThreshold = o.bloomThreshold != null ? o.bloomThreshold : 0.80;
+  pipe.bloomWeight = o.bloomWeight != null ? o.bloomWeight : 0.22;
+  pipe.bloomKernel = 32;
+  pipe.imageProcessing.contrast = o.contrast != null ? o.contrast : 1.10;
+  pipe.imageProcessing.exposure = o.exposure != null ? o.exposure : 1.02;
+  pipe.imageProcessing.vignetteEnabled = true;
+  pipe.imageProcessing.vignetteWeight = o.vignette != null ? o.vignette : 0.9;
+}
 
 /* ═════════════ 물리 — 미션 1-1 ═════════════
    코덱스의 수식을 그대로 쓴다.
@@ -97,6 +133,7 @@ export class TestStand {
   constructor(canvas){
     this.canvas = canvas;
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false });
+    applyDPR(this.engine);
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.02, 0.028, 0.045, 1);
     this.ready = false;
@@ -155,15 +192,8 @@ export class TestStand {
 
     /* 포스트 — 블룸·비네트. 화면이 '카메라로 찍은 것' 처럼 보이는 값싼 장치 */
     const pipe = new DefaultRenderingPipeline("pipe", true, sc, [cam]);
-    pipe.fxaaEnabled = true;
-    pipe.bloomEnabled = true;
-    pipe.bloomThreshold = 0.62;
-    pipe.bloomWeight = 0.42;
-    pipe.bloomKernel = 48;
-    pipe.imageProcessing.vignetteEnabled = true;
-    pipe.imageProcessing.vignetteWeight = 2.1;
-    pipe.imageProcessing.contrast = 1.14;
-    pipe.imageProcessing.exposure = 1.05;
+    tunePipeline(pipe, { bloomThreshold: 0.74, bloomWeight: 0.30,
+                        contrast: 1.14, exposure: 1.04, vignette: 1.1 });
     this.pipe = pipe;
   }
 
@@ -312,7 +342,10 @@ export class TestStand {
       this.tick(dt);
       this.scene.render();
     });
-    window.addEventListener("resize", () => this.engine.resize());
+    window.addEventListener("resize", () => {
+      applyDPR(this.engine);
+      this.engine.resize();
+    });
   }
 
   dispose(){
@@ -341,11 +374,16 @@ export class LabView {
     this.canvas = canvas;
     this.onPick = onPick || function(){};
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true });
+    applyDPR(this.engine);
     this.scene = null;
     this.node = null;
     this.hover = null;
     this._running = false;
-    window.addEventListener("resize", () => { if(this.engine) this.engine.resize(); });
+    window.addEventListener("resize", () => {
+      if(!this.engine) return;
+      applyDPR(this.engine);
+      this.engine.resize();
+    });
   }
 
   /** 노드 하나를 통째로 갈아 끼운다.
@@ -377,9 +415,24 @@ export class LabView {
     /* 조명 — Blender 의 area light 는 glTF 에 담기지 않아 JSON 으로 받아
        point light 로 근사한다. 천장 램프 메시는 이미시브라 GlowLayer 가 받는다. */
     const amb = new HemisphericLight("amb", new Vector3(0, 1, 0), sc);
-    amb.intensity = 0.32;
+    /* 앰비언트를 낮춘다 — 밝게 채워 두면 그림자가 안 읽혀 방이 납작해진다 */
+    amb.intensity = 0.22;
     amb.diffuse = new Color3(0.62, 0.68, 0.82);
     amb.groundColor = new Color3(0.10, 0.11, 0.15);
+
+    /* 딱딱한 방향광 하나 — 참고 사진의 시험 셀은 강한 빛이 그레이팅에
+       줄무늬 그림자를 떨어뜨린다. 그림자가 없으면 물건이 바닥에 안 붙어
+       보이고, 아무리 디테일을 넣어도 종이처럼 보인다. */
+    const key = new DirectionalLight("key", new Vector3(-0.42, -1, 0.34), sc);
+    key.position = new Vector3(2.6, 4.2, -3.4);
+    key.intensity = 1.35;
+    key.diffuse = new Color3(1.0, 0.96, 0.88);
+    const sg = new ShadowGenerator(1024, key);
+    sg.usePercentageCloserFiltering = true;
+    sg.filteringQuality = ShadowGenerator.QUALITY_LOW;
+    sg.bias = 0.002;
+    sg.normalBias = 0.012;
+    this.shadows = sg;
     this.lights = [];
     (meta.lights || []).forEach((L, i) => {
       const p = new PointLight("p" + i, new Vector3(L.p[0], L.p[1], L.p[2]), sc);
@@ -416,10 +469,40 @@ export class LabView {
     this._base = { rx: cam.rotation.x, ry: cam.rotation.y };
     this._home = cam.position.clone();
 
+    /* ── 정적 메시 병합 ──
+       방 하나가 메시 500 개다. 그림자까지 켜면 드로우콜이 1,000 회를 넘어
+       **CPU 가 먼저 막힌다**(실측 21.9ms — 이건 GPU 가 아니라 제출 비용이다).
+       전부 정지해 있으므로 재질별로 하나씩 합친다. 집을 수 있는 `hs_*` 만
+       따로 남긴다 — 합치면 레이 피킹으로 무엇을 집었는지 알 수 없다. */
+    const groups = {};
+    sc.meshes.forEach(m => {
+      if(!m.name || m.name === "__root__") return;
+      if(/^hs_/.test(m.name)) return;
+      if(!m.material || !m.geometry) return;
+      const k = m.material.name;
+      (groups[k] = groups[k] || []).push(m);
+    });
+    Object.keys(groups).forEach(k => {
+      const g = groups[k];
+      if(g.length < 2) return;
+      const merged = Mesh.MergeMeshes(g, true, true, undefined, false, true);
+      if(merged) merged.name = "merged_" + k;
+    });
+
     /* 집을 수 있는 것과 없는 것을 가른다 */
     this.hots = [];
     sc.meshes.forEach(m => {
       if(!m.name || m.name === "__root__") return;
+      m.receiveShadows = true;
+      /* 캐스터를 고른다. 500 메시를 전부 넣으면 그림자 패스가 프레임을
+         12.6ms → 21.6ms 로 밀어 올린다(실측). 고DPI 에서는 더 나빠진다.
+         · 벽·바닥·천장은 받기만 한다 — 방 전체를 덮어 셰도우맵 해상도를 낭비
+         · 볼트처럼 작은 것은 어차피 그림자가 안 보인다 */
+      const mn = (m.material && m.material.name) || "";
+      const rad = m.getBoundingInfo
+        ? m.getBoundingInfo().boundingSphere.radiusWorld : 1;
+      if(!/wall|floor|ceil|room/i.test(mn) && rad > 0.075)
+        this.shadows.addShadowCaster(m);
       if(/^hs_/.test(m.name)){
         m.isPickable = true;
         this.hots.push(m);
@@ -440,15 +523,8 @@ export class LabView {
     this.hots.forEach(m => hl.addMesh(m, new Color3(0.22, 0.91, 0.78)));
 
     const pipe = new DefaultRenderingPipeline("lab", true, sc, [cam]);
-    pipe.bloomEnabled = true;
-    pipe.bloomThreshold = 0.62;
-    pipe.bloomWeight = 0.42;
-    pipe.bloomKernel = 42;
-    pipe.imageProcessing.contrast = 1.14;
-    pipe.imageProcessing.exposure = 1.02;
-    pipe.imageProcessing.vignetteEnabled = true;
-    pipe.imageProcessing.vignetteWeight = 1.5;
-    pipe.fxaaEnabled = true;
+    tunePipeline(pipe, { bloomThreshold: 0.78, bloomWeight: 0.24,
+                        contrast: 1.10, exposure: 1.02, vignette: 0.85 });
 
     /* **POINTERPICK 을 쓰지 말 것** (2026-08-23 실제 버그).
        Babylon 은 자기 **정확 피킹**이 down·up 양쪽에서 같은 메시를 맞혀야만
@@ -614,6 +690,7 @@ export class PumpRig {
   constructor(canvas){
     this.canvas = canvas;
     this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: false });
+    applyDPR(this.engine);
     this.scene = new Scene(this.engine);
     this.scene.clearColor = new Color4(0.018, 0.023, 0.035, 1);
     this.ready = false;
@@ -624,7 +701,10 @@ export class PumpRig {
     this._t = 0;
     this._spinAngle = 0;
     this._build();
-    window.addEventListener("resize", () => this.engine.resize());
+    window.addEventListener("resize", () => {
+      applyDPR(this.engine);       /* 모니터를 옮기면 DPR 이 바뀐다 */
+      this.engine.resize();
+    });
   }
 
   _build(){
@@ -671,14 +751,8 @@ export class PumpRig {
     this.glow.intensity = 0.7;
 
     const pipe = new DefaultRenderingPipeline("p", true, sc, [cam]);
-    pipe.bloomEnabled = true;
-    pipe.bloomThreshold = 0.65;
-    pipe.bloomWeight = 0.40;
-    pipe.imageProcessing.contrast = 1.18;
-    pipe.imageProcessing.exposure = 1.05;
-    pipe.imageProcessing.vignetteEnabled = true;
-    pipe.imageProcessing.vignetteWeight = 1.7;
-    pipe.fxaaEnabled = true;
+    tunePipeline(pipe, { bloomThreshold: 0.76, bloomWeight: 0.26,
+                        contrast: 1.12, exposure: 1.03, vignette: 1.0 });
     pipe.depthOfFieldEnabled = false;
   }
 
@@ -820,5 +894,5 @@ export class PumpRig {
 }
 
 /* 검증·디버그용으로 밖에서 잡을 수 있게 노출한다 */
-window.DV3D = { TestStand, LabView, PumpRig, evaluate, evaluatePump,
+window.DV3D = { TestStand, LabView, PumpRig, applyDPR, evaluate, evaluatePump,
                 PHYS, PUMP, INDUCER, psiOf, etaOf, f1L, f1T };

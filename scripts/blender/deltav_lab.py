@@ -26,9 +26,17 @@
 import bpy
 import math
 import os
+import sys
 import json
 from mathutils import Vector
 from bpy_extras.object_utils import world_to_camera_view
+
+# 시험동 부품 키트 — 휜 배관·그레이팅·삼각대·플랜지·호스.
+# 방마다 프리미티브를 다시 쌓지 말고 여기서 조합한다.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
+import rig_kit as K
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DIR = os.path.join(HERE, "..", "og-assets", "deltav")
@@ -314,13 +322,14 @@ def n_prop():
         for yy in (-4.2, -1.4, 1.4, 4.2):
             cyl((x, yy, zz), r * 1.5, 0.10, ANOD, rot=(math.radians(90), 0, 0), verts=18)
 
-    # ── 바닥 — 경고 띠와 배수 그레이팅 ──
-    for sx in (-1.9, 1.9):
-        box((2.4 + sx * 0.85, 1.4, 0.012), (0.16, 5.2, 0.02), HAZ, bev=0)
-    for sy in (-1.0, 1.0):
-        box((2.4, 1.4 + sy * 2.6, 0.012), (3.4, 0.16, 0.02), HAZ, bev=0)
-    for i in range(9):
-        box((2.4, -1.9 + i * 0.13, 0.02), (2.2, 0.07, 0.04), GRATE, bev=0.004)
+    # ── 바닥 — 시험 셀 전체가 스틸 그레이팅 ──
+    # 참고 사진(HAER OH-124-A-41)의 시험 셀은 바닥이 통짜가 아니라 전부
+    # 그레이팅이다. 조명이 줄무늬 그림자를 만들어 바닥이 살아난다.
+    K.grating(2.4, 1.4, 0.035, 4.6, 5.6, GRATE, bar=0.06, gap=0.115, cross=0.62)
+    for sx in (-1, 1):
+        box((2.4 + sx * 2.42, 1.4, 0.016), (0.14, 5.6, 0.028), HAZ, bev=0)
+    for sy in (-1, 1):
+        box((2.4, 1.4 + sy * 2.92, 0.016), (5.1, 0.14, 0.028), HAZ, bev=0)
 
     # ══════════ 화이트보드 — 이 방에서 가장 중요한 물건 ══════════
     BX = -W / 2 + 0.10
@@ -341,15 +350,10 @@ def n_prop():
     # ══════════ 엔진 시험 셀 ══════════
     EX, EY = 2.4, 1.4
 
-    # 추력 프레임 — 4주 트러스 + 사선 브레이스
-    for sx in (-1.5, 1.5):
-        for sy in (-1.5, 1.5):
-            box((EX + sx, EY + sy, 1.75), (0.17, 0.17, 3.5), FRAME, bev=0.012)
-            box((EX + sx, EY + sy, 0.06), (0.42, 0.42, 0.12), ANOD, bev=0.008)
-            for a in range(4):     # 앵커 볼트
-                ang = math.pi / 2 * a + math.pi / 4
-                cyl((EX + sx + math.cos(ang) * 0.15, EY + sy + math.sin(ang) * 0.15, 0.14),
-                    0.022, 0.09, STEEL, verts=10)
+    # 추력 프레임 — 벌어진 원형 튜브 4주.
+    # 수직 각파이프로 세우면 가구처럼 보인다. 사진의 받침은 전부 아래로
+    # 벌어진 원형 튜브라 '무거운 것을 받치고 있다'로 읽힌다.
+    K.tripod(EX, EY, 3.5, 1.28, 1.95, FRAME, ANOD, legs=4, r=0.095)
     for z in (1.1, 2.4):
         for sy in (-1.5, 1.5):
             box((EX, EY + sy, z), (3.0, 0.12, 0.12), FRAME, bev=0.008)
@@ -381,6 +385,10 @@ def n_prop():
         box((EX + math.cos(ang) * 0.322, EY + math.sin(ang) * 0.322, 2.20),
             (0.030, 0.030, 0.80), COPPER, rot=(0, 0, ang), bev=0.004)
     cyl((EX, EY, 1.72), 0.345, 0.14, BRASS, verts=48)                   # 스로트 매니폴드
+    # 플랜지는 크게. 사진에서 플랜지·볼트는 배관 지름 대비 훨씬 크다 —
+    # 작게 넣으면 장난감처럼 보인다.
+    K.flange((EX, EY, 2.62), 0.52, ALU, STEEL, n=20, th=0.055)
+    K.flange((EX, EY, 1.63), 0.44, BRASS, STEEL, n=16, th=0.05)
 
     bpy.ops.mesh.primitive_cone_add(radius1=0.92, radius2=0.29, depth=1.30,
                                     vertices=64, location=(EX, EY, 1.02))
@@ -397,22 +405,24 @@ def n_prop():
             verts=8)
     cyl((EX, EY, 0.37), 0.96, 0.07, INCO, verts=64)                     # 출구 링
 
-    # 터보펌프 2기 + 배관
+    # 터보펌프 2기 + 배관.
+    # **배관은 휘어야 한다.** 직선 실린더만 쓴 것이 참고 사진과 가장 크게
+    # 달랐다. 커브에 두께를 줘서 모퉁이가 실제로 둥글게 돌아간다.
     for sx in (-1, 1):
         px, py = EX + sx * 0.72, EY + 0.30
         cyl((px, py, 2.36), 0.20, 0.40, ALU, verts=32)
         cyl((px, py, 2.62), 0.12, 0.18, ANOD, verts=24)
         cyl((px, py, 2.06), 0.15, 0.24, STEEL, verts=24)
-        # 벨로우즈가 있는 급기 배관
-        cyl((px, py - 0.55, 2.06), 0.085, 0.9, STEEL,
-            rot=(math.radians(90), 0, 0), verts=20)
-        for i in range(5):
-            cyl((px, py - 0.30 - i * 0.10, 2.06), 0.105, 0.06, ALU,
-                rot=(math.radians(90), 0, 0), verts=20)
-        # 밸브 바디
-        box((px, py - 1.02, 2.06), (0.22, 0.22, 0.24), BRASS, bev=0.01)
-        cyl((px, py - 1.02, 2.28), 0.055, 0.22, STEEL, verts=16)
-        cyl((px, py - 1.02, 2.40), 0.13, 0.03, PAINT_R, verts=20)       # 핸들
+        # 펌프 → 인젝터 돔으로 크게 휘어 넘어가는 급기관
+        K.pipe([(px, py, 2.30), (px, py - 0.62, 2.42),
+                (px + sx * 0.18, py - 0.70, 2.86),
+                (EX + sx * 0.30, EY + 0.02, 2.92)], 0.082, STEEL)
+        K.flange((px, py - 0.62, 2.42), 0.15, ALU, STEEL, n=12, th=0.045, axis='Y')
+        # 벽에서 들어오는 저온 라인 — 크게 한 번 돌아 들어온다
+        K.pipe([(EX + sx * 2.6, EY - 2.5, 0.55), (EX + sx * 1.9, EY - 1.4, 1.35),
+                (px + sx * 0.35, py - 1.5, 2.00), (px, py - 0.95, 2.06)],
+               0.075, STEEL)
+        K.valve((px + sx * 0.34, py - 1.42, 1.98), 0.10, BRASS, PAINT_R)
 
     # 짐벌 액추에이터 2기
     for a in (0.6, math.pi - 0.6):
@@ -425,6 +435,10 @@ def n_prop():
     # 화염 유도로 — 엔진 아래
     box((EX, EY, 0.03), (2.0, 2.0, 0.06), ANOD, bev=0)
     cyl((EX, EY, 0.10), 0.78, 0.20, ANOD, verts=40)
+    # 굵은 고무 호스가 바닥을 가로지른다. 사진에서 가장 눈에 띄는 요소 중 하나다.
+    K.hose((EX + 2.3, EY - 2.6, 0.14), (EX - 0.6, EY - 1.5, 0.12), 0.16, 0.055, RUBBER)
+    K.hose((EX + 2.5, EY - 1.2, 0.14), (EX + 0.2, EY + 0.6, 0.12), 0.13, 0.045, RUBBER)
+    K.hose((-1.2, -2.5, 0.13), (EX - 1.6, EY - 2.2, 0.12), 0.20, 0.05, RUBBER)
 
     # ══════════ 계측 랙 · 콘솔 ══════════
     # 카메라 정면 0.8m 에 두면 모니터가 화면의 11% 를 먹고 방을 가린다(실측).
