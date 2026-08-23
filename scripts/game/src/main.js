@@ -893,6 +893,185 @@ export class PumpRig {
   }
 }
 
+/* ═════════════ 검사 — 돌려 보며 찾는 조작 장치 ═════════════
+
+   지금까지 미션이 전부 '숫자 읽고 슬라이더' 라 손으로 하는 것이 없었다.
+   이건 그 반대쪽 장치다. 특정 미션에 묶지 않는다 — 대상 glb 와 목표 개수만
+   갈아 끼우면 다음 미션에서도 쓴다.
+
+   표적은 모델 안에 이름으로 심어 둔다 (`dmg_*` 진짜 / `bait_*` 미끼).
+   화면에서는 표적 구를 **숨기고** 레이 피킹에만 쓴다 — 정답이 빛나 보이면
+   찾을 것이 없다. */
+export class InspectView {
+  /** @param onMark (kind, key, found, total) — 'hit' | 'miss' | 'again' */
+  constructor(canvas, onMark){
+    this.canvas = canvas;
+    this.onMark = onMark || function(){};
+    this.engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true });
+    applyDPR(this.engine);
+    this.scene = new Scene(this.engine);
+    this.scene.clearColor = new Color4(0.020, 0.026, 0.038, 1);
+    this.found = {};
+    this.total = 0;
+    this._build();
+    window.addEventListener("resize", () => {
+      applyDPR(this.engine);
+      this.engine.resize();
+    });
+  }
+
+  _build(){
+    const sc = this.scene;
+    const cam = new ArcRotateCamera("c", -Math.PI * 0.5, Math.PI * 0.34, 1.15,
+                                    Vector3.Zero(), sc);
+    cam.lowerRadiusLimit = 0.55;
+    cam.upperRadiusLimit = 2.4;
+    cam.wheelPrecision = 120;
+    cam.panningSensibility = 0;
+    cam.attachControl(this.canvas, true);
+    this.cam = cam;
+
+    const amb = new HemisphericLight("a", new Vector3(0.1, 1, 0.2), sc);
+    amb.intensity = 0.40;
+    amb.diffuse = new Color3(0.66, 0.72, 0.86);
+    amb.groundColor = new Color3(0.10, 0.11, 0.14);
+    /* 비스듬한 강한 빛 — 침식은 **그림자로 읽힌다.** 정면광으로 채우면
+       구멍이 평면처럼 보여 아무것도 못 찾는다. */
+    const key = new DirectionalLight("k", new Vector3(-0.5, -0.75, 0.42), sc);
+    key.position = new Vector3(1.6, 2.4, -1.4);
+    key.intensity = 2.6;
+    const fill = new DirectionalLight("f", new Vector3(0.8, -0.2, -0.6), sc);
+    fill.intensity = 0.5;
+    fill.diffuse = new Color3(0.55, 0.70, 1.0);
+
+    this.hl = new HighlightLayer("hl", sc);
+    const pipe = new DefaultRenderingPipeline("insp", true, sc, [cam]);
+    tunePipeline(pipe, { bloomThreshold: 0.86, bloomWeight: 0.14,
+                        contrast: 1.16, exposure: 1.06, vignette: 1.2 });
+  }
+
+  async load(url){
+    const sc = this.scene;
+    await SceneLoader.AppendAsync("", url, sc);
+    this.targets = [];
+    sc.meshes.forEach(m => {
+      if(!m.name || m.name === "__root__") return;
+      const t = /^(dmg|bait)_/.exec(m.name);
+      if(t){
+        /* 표적은 보이지 않는다. 빛나면 찾을 것이 없다. */
+        m.isVisible = false;
+        m.isPickable = true;
+        this.targets.push(m);
+        if(t[1] === "dmg") this.total++;
+      } else {
+        m.isPickable = false;   /* 부품이 레이를 가로채면 표적을 못 집는다 */
+      }
+    });
+    this._bindPointer();
+    this.ready = true;
+    this.run();
+    this.engine.resize();
+    return this;
+  }
+
+  _bindPointer(){
+    const sc = this.scene;
+    let down = null;
+    sc.onPointerObservable.add((pi) => {
+      const t = pi.type;
+      if(t === PointerEventTypes.POINTERMOVE){
+        const m = this._pickNear(sc.pointerX, sc.pointerY);
+        this.canvas.style.cursor = m ? "crosshair" : "grab";
+      } else if(t === PointerEventTypes.POINTERDOWN){
+        down = { x: sc.pointerX, y: sc.pointerY };
+      } else if(t === PointerEventTypes.POINTERUP){
+        if(!down) return;
+        const moved = Math.abs(sc.pointerX - down.x) + Math.abs(sc.pointerY - down.y);
+        const at = down;
+        down = null;
+        if(moved > 6) return;      /* 돌려 본 것과 찍은 것을 가른다 */
+        this._mark(at.x, at.y);
+      }
+    });
+  }
+
+  /** 표적이 작으므로 커서 주변까지 훑는다 — 현장 뷰와 같은 이유 */
+  _pickNear(px, py){
+    const sc = this.scene;
+    /* **프레디케이트가 필요하다.** Babylon 의 기본 피킹은
+       `isEnabled && isVisible && isPickable` 을 요구하므로, 숨겨 둔 표적은
+       그냥 `scene.pick` 으로는 절대 안 잡힌다(실제로 겪었다 — 표적 6개가
+       전부 화면에서 사라졌다). 프레디케이트를 주면 가시성 검사를 건너뛴다. */
+    const only = (mesh) => /^(dmg|bait)_/.test(mesh.name);
+    const hit = (x, y) => {
+      const p = sc.pick(x, y, only);
+      return (p && p.hit && p.pickedMesh) ? p.pickedMesh : null;
+    };
+    let m = hit(px, py);
+    if(m) return m;
+    for(const rad of [10, 20]){
+      for(let a = 0; a < 8; a++){
+        const th = a * Math.PI / 4;
+        m = hit(px + Math.cos(th) * rad, py + Math.sin(th) * rad);
+        if(m) return m;
+      }
+    }
+    return null;
+  }
+
+  _mark(x, y){
+    const m = this._pickNear(x, y);
+    if(!m){ this.onMark("miss", null, this._count(), this.total); return; }
+    const isDmg = /^dmg_/.test(m.name);
+    if(this.found[m.name]){
+      this.onMark("again", m.name, this._count(), this.total);
+      return;
+    }
+    this.found[m.name] = true;
+    /* 찍은 자리를 남긴다 — 무엇을 이미 봤는지 화면에 있어야 한다 */
+    m.isVisible = true;
+    const mat = new StandardMaterial("pin_" + m.name, this.scene);
+    mat.emissiveColor = isDmg ? new Color3(0.16, 0.92, 0.72)
+                              : new Color3(0.95, 0.32, 0.30);
+    mat.alpha = 0.42;
+    mat.disableLighting = true;
+    m.material = mat;
+    this.hl.addMesh(m, isDmg ? new Color3(0.16, 0.92, 0.72)
+                             : new Color3(0.95, 0.32, 0.30));
+    this.onMark(isDmg ? "hit" : "miss", m.name, this._count(), this.total);
+  }
+
+  _count(){
+    return Object.keys(this.found).filter(k => /^dmg_/.test(k)).length;
+  }
+
+  /** 다시 처음부터 */
+  reset(){
+    Object.keys(this.found).forEach(k => {
+      const m = this.scene.meshes.filter(x => x.name === k)[0];
+      if(m){ m.isVisible = false; this.hl.removeMesh(m); }
+    });
+    this.found = {};
+  }
+
+  run(){
+    if(this._running) return;
+    this._running = true;
+    this.engine.runRenderLoop(() => {
+      if(this.scene) this.scene.render();
+    });
+  }
+
+  stop(){ this._running = false; this.engine.stopRenderLoop(); }
+
+  dispose(){
+    this.stop();
+    this.scene.dispose();
+    this.engine.dispose();
+  }
+}
+
 /* 검증·디버그용으로 밖에서 잡을 수 있게 노출한다 */
-window.DV3D = { TestStand, LabView, PumpRig, applyDPR, evaluate, evaluatePump,
+window.DV3D = { TestStand, LabView, PumpRig, InspectView, applyDPR,
+                evaluate, evaluatePump,
                 PHYS, PUMP, INDUCER, psiOf, etaOf, f1L, f1T };
