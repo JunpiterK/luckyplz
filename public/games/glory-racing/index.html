@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790192536">
+<meta name="lp-build" content="1790193249">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790192536";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790193249";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -1617,24 +1617,36 @@ window.BRG=(function(){
     const rf=rankFrac(p),base=rf<0.34?0.4:rf>0.66?0.7:0.5;
     return Math.min(0.92,base+(track.length&&p.progress>track.length*0.7?0.25:0));
   }
-  /* 상자 배치 — 운영자: "마지막 MUD 에 아이템이 몰려 있다. 해저드에는 최대한 줄이고 평범한 구간에
-     분산, 결승 조금 전에는 없어야 하지만 그 전에는 여기저기". 물·진흙·언덕·빙판(앞 4칸·뒤 3칸 여유)을
-     뺀 평범한 칸만 모아 나누고, 결승선(track.length-6) 16칸(약 2초) 전부터는 두지 않는다 */
+  /* 상자 배치 — 운영자(2026-09-24): "해저드엔 넣지 말고 평범한 구간에 분산, 해저드 사이 매우 짧은 구간엔
+     넣지 마, 마지막 구간은 아래 멘트가 뜨는 곳까지 균일하게".
+     **칸 번호가 아니라 실제 길이(px)로 나눈다.** 이 트랙은 칸 길이가 커브 3.5px ~ 직선 50px 로 14배 차이라,
+     칸 기준으로 고르게 놓으면 화면에선 커브(진흙 옆·U턴)에 몰리고 직선은 텅 빈다(실제로 그랬다).
+       - 구역 앞 60px·뒤 45px 여유를 뺀 평범한 구간만, 260px 보다 짧은 틈은 버린다
+       - 모든 구간에 같은 간격, 마지막 직선은 결승선 앞 20%(최소 200px)를 비운다
+         — 화면 아래 중계 문구가 끝나는 지점쯤까지 상자가 이어진다 */
   function layoutBoxes(){
-    const L=track.length,DS=DRAW_SCALE,start=14,end=L-22;
-    const hz=[...deepWaterZones,...mudZones,...hillZones,...iceZones];
-    const bad=i=>hz.some(z=>i>=z.start-4&&i<=z.end+3);
-    const ok=[];for(let i=start;i<=end;i++)if(!bad(i))ok.push(i);
-    const out=[];if(!ok.length)return out;
-    /* 후반(60% 이후) 평범한 칸은 1.8배 촘촘히 — 결승 직전을 비운 대신 그 앞에서 역전이 나게.
-       (결승 20칸 전까지 비웠더니 85% 이후 선두 교체가 2.2→1.6회로 줄었다) */
-    const w=ok.map(i=>i>L*0.6?1.8:1),tot=w.reduce((a,b)=>a+b,0);
-    const N=Math.max(6,Math.min(16,Math.floor(ok.length/4)));
-    const pickAt=u=>{let acc=0;for(let j=0;j<ok.length;j++){acc+=w[j];if(acc>=u)return ok[j]}return ok[ok.length-1]};
-    for(let k=0;k<N;k++){
-      const i=pickAt((k+0.5)*tot/N),pair=(k%3===1),fast=i>L*0.65;
-      out.push({trackPos:i,offsetX:pair?-22*DS:(k%2?1:-1)*(6+Math.random()*12)*DS,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2,fast});
-      if(pair)out.push({trackPos:i,offsetX:22*DS,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2,fast});
+    const L=track.length,DS=DRAW_SCALE,out=[];if(L<10)return out;
+    const s=[0];for(let i=1;i<L;i++)s.push(s[i-1]+Math.hypot(track[i].x-track[i-1].x,track[i].y-track[i-1].y));
+    const hz=[...deepWaterZones,...mudZones,...hillZones,...iceZones]
+      .map(z=>[s[Math.max(0,z.start)],s[Math.min(L-1,z.end)]]).sort((a,b)=>a[0]-b[0]);
+    const PRE=60*DS,POST=45*DS,MIN=260*DS,sFin=s[L-6];
+    const segs=[];let cur=160*DS;
+    for(const [a,b] of hz){if(a-PRE>cur)segs.push([cur,a-PRE]);cur=Math.max(cur,b+POST)}
+    const clear=Math.max(200*DS,(sFin-cur)*0.2);if(sFin-clear>cur)segs.push([cur,sFin-clear]);
+    const good=segs.filter(g=>g[1]-g[0]>=MIN);
+    const total=good.reduce((t,g)=>t+g[1]-g[0],0);if(!total)return out;
+    const gap=Math.max(150*DS,total/16);
+    const idxAt=v=>{let lo=0,hi=L-1;while(lo<hi){const m=(lo+hi)>>1;if(s[m]<v)lo=m+1;else hi=m}
+      return (lo>0&&Math.abs(s[lo-1]-v)<Math.abs(s[lo]-v))?lo-1:lo};
+    let k=0;
+    for(const [a,b] of good){
+      const n=Math.max(1,Math.round((b-a)/gap)),step=(b-a)/n;
+      for(let j=0;j<n;j++){
+        const i=idxAt(a+step*(j+0.5)),pair=(k%3===1),fast=s[i]>s[L-1]*0.65;
+        out.push({trackPos:i,offsetX:pair?-22*DS:(k%2?1:-1)*(6+Math.random()*12)*DS,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2,fast});
+        if(pair)out.push({trackPos:i,offsetX:22*DS,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2,fast});
+        k++;
+      }
     }
     return out;
   }
@@ -2863,7 +2875,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790192536" defer></script>
+<script src="/js/siteFooter.js?v=1790193249" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
