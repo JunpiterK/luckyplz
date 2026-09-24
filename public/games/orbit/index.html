@@ -4,9 +4,9 @@
 <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -124,6 +124,10 @@ html,body{margin:0;background:var(--dv-bg);color:var(--dv-ink);font-family:'IBM 
 .kv b{font:700 16px 'IBM Plex Mono',monospace}
 .lesson{font-size:14px;color:#cdd8ef;margin:4px 0 16px;line-height:1.6}
 .card .row.c{justify-content:center}
+/* 일시정지 — 정지 중에도 게임 홈·전체 홈으로 (2026-09-24) */
+#scPause{align-items:center;justify-content:center;padding:20px;background:rgba(0,3,10,.62)}
+#scPause .card{text-align:center;width:min(420px,100%)}
+#scPause .verdict{color:var(--dv-warn)}
 /* 상단 바 (비행 중) */
 #topBar{position:absolute;left:0;right:0;top:0;z-index:4;display:none;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;pointer-events:none}
 #topBar.on{display:flex}
@@ -203,7 +207,13 @@ html,body{margin:0;background:var(--dv-bg);color:var(--dv-ink);font-family:'IBM 
     <div class="row c"><button class="btn" id="rHub" type="button">연대기</button><button class="btn" id="rRetry" type="button">다시</button><button class="btn pri" id="rNext" type="button">다음 미션</button></div>
   </div></div>
 
-  <div id="topBar"><span class="ttl" id="tTtl"></span><div class="r"><button class="ib" id="tMute" type="button" aria-label="소리">🔊</button><button class="ib" id="tQuit" type="button" aria-label="연대기로">✕</button></div></div>
+  <div class="sc" id="scPause"><div class="card">
+    <div class="verdict">PAUSED</div>
+    <h2 id="pTitle"></h2>
+    <div class="row c"><button class="btn" id="pHub" type="button">연대기</button><button class="btn pri" id="pGo" type="button">▶ 계속</button></div>
+  </div></div>
+
+  <div id="topBar"><span class="ttl" id="tTtl"></span><div class="r"><button class="ib" id="tPause" type="button" aria-label="일시정지">⏸</button><button class="ib" id="tMute" type="button" aria-label="소리">🔊</button><button class="ib" id="tQuit" type="button" aria-label="연대기로">✕</button></div></div>
   <div id="call"><b id="callB"></b><span id="callS"></span></div>
   <div id="keyHint"></div>
   <div id="ctl">
@@ -398,7 +408,7 @@ const SAVE_KEY='lp_dv4';
 let SV={stars:{},funds:0,flights:0,wins:0};
 try{const o=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');if(o&&typeof o==='object')SV=Object.assign(SV,o)}catch(e){}
 function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SV))}catch(e){}}
-const GAME={run:false,m:null,st:null,idx:0};
+const GAME={run:false,m:null,st:null,idx:0,paused:false};
 const angDiff=(a,b)=>Math.atan2(Math.sin(a-b),Math.cos(a-b));
 const MISSIONS=[];   /* missions.js 가 채운다 */
 
@@ -444,7 +454,7 @@ function setAct(label,hot){const b=$('#cAct');if(!label){b.hidden=true;return}b.
 function totalStars(){return MISSIONS.reduce((s,m)=>s+(SV.stars[m.id]||0),0)}
 function unlocked(i){return i===0||(SV.stars[MISSIONS[i-1].id]||0)>0}
 
-function openHub(){GAME.run=false;GAME.m=null;Snd.engOff();hudOn(false);clearIn();PS.length=0;
+function openHub(){GAME.run=false;GAME.m=null;GAME.paused=false;Snd.engOff();hudOn(false);clearIn();PS.length=0;
   $('#hFunds').textContent='$'+fmt(SV.funds)+'M';$('#hFlights').textContent=fmt(SV.flights);$('#hStars').textContent=totalStars()+' / '+MISSIONS.length*3;
   const tr=$('#track');tr.innerHTML='';
   MISSIONS.forEach((m,i)=>{const d=document.createElement('div');const lk=!unlocked(i);d.className='ms'+(lk?' lock':'');
@@ -457,7 +467,7 @@ function openHub(){GAME.run=false;GAME.m=null;Snd.engOff();hudOn(false);clearIn(
 function openBrief(i){const m=MISSIONS[i];GAME.idx=i;$('#bYr').textContent=m.yr+' · MISSION '+(i+1);$('#bTitle').textContent=m.title;
   $('#bMemo').innerHTML=m.memo+'<span class="sig">— 창업자</span>';$('#bObj').innerHTML=m.obj.map(o=>'<li>'+o+'</li>').join('');
   $('#bKeys').innerHTML=m.keys.map(k=>'<span><kbd>'+k[0]+'</kbd>'+k[1]+'</span>').join('');show('scBrief')}
-function startMission(i){const m=MISSIONS[i];GAME.idx=i;GAME.m=m;PS.length=0;clearIn();Snd.ctx();
+function startMission(i){const m=MISSIONS[i];GAME.idx=i;GAME.m=m;GAME.paused=false;PS.length=0;clearIn();Snd.ctx();
   const st={t:0,over:false,res:null,stars:0,evs:[]};GAME.st=st;setAct(null);m.init(st);GAME.run=true;show('');hudOn(true,m);SV.flights++;save()}
 /* 미션 종료 — 1.8초 뒤 결과 화면 */
 function finish(win,title,kv,lesson,stars){const st=GAME.st;if(!st||st.over)return;st.over=true;st.win=win;
@@ -468,7 +478,14 @@ function finish(win,title,kv,lesson,stars){const st=GAME.st;if(!st||st.over)retu
     $('#rStars').innerHTML=[0,1,2].map(k=>'<i class="'+(win&&k<stars?'on':'')+'">★</i>').join('');
     $('#rTitle').textContent=title;$('#rKv').innerHTML=kv.map(p=>'<div><span>'+p[0]+'</span><b>'+p[1]+'</b></div>').join('');
     $('#rLesson').textContent=lesson||'';const nx=GAME.idx+1<MISSIONS.length&&unlocked(GAME.idx+1);$('#rNext').style.display=nx?'':'none';
-    show('scResult')},win?2200:2600)}
+    show('scResult');lpNav('#scResult')},win?2200:2600)}
+/* 정지·종료 화면 공통 버튼 — 🎮 게임 홈(= 타이틀) · 🏠 전체 홈 (lpGameNav.js, siteFooter 가 defer 로 싣는다) */
+function lpNav(sel){try{window.LpNav&&window.LpNav.mount($(sel+' .card'),{gameHome:goTitle})}catch(_){}}
+function goTitle(){GAME.run=false;GAME.m=null;GAME.paused=false;Snd.engOff();hudOn(false);clearIn();PS.length=0;show('scTitle')}
+/* 일시정지 — 시뮬레이션만 멈춘다(그리기도 멈춰 마지막 장면이 뒤에 남는다). 결과 연출 중(st.over)에는 걸지 않는다 */
+function setPause(on){const st=GAME.st;if(on&&(!GAME.run||!GAME.m||!st||st.over))return;if(!on&&!GAME.paused)return;
+  GAME.paused=!!on;clearIn();lastTs=0;
+  if(on){Snd.engOff();$('#pTitle').textContent=GAME.m.yr+' · '+GAME.m.title;show('scPause');lpNav('#scPause')}else show('')}
 
 $('#bStart').addEventListener('click',()=>{Snd.ctx();Snd.click();
   /* 처음이면 1번 미션 브리핑으로 곧장 */
@@ -478,7 +495,11 @@ $('#bGo').addEventListener('click',()=>{Snd.click();startMission(GAME.idx)});
 $('#rHub').addEventListener('click',()=>{Snd.click();openHub()});
 $('#rRetry').addEventListener('click',()=>{Snd.click();startMission(GAME.idx)});
 $('#rNext').addEventListener('click',()=>{Snd.click();openBrief(GAME.idx+1)});
-$('#tQuit').addEventListener('click',()=>{Snd.click();openHub()});
+$('#tQuit').addEventListener('click',()=>{Snd.click();GAME.paused=false;openHub()});
+$('#tPause').addEventListener('click',()=>{Snd.click();setPause(true)});
+$('#pGo').addEventListener('click',()=>{Snd.click();setPause(false)});
+$('#pHub').addEventListener('click',()=>{Snd.click();GAME.paused=false;openHub()});
+addEventListener('keydown',e=>{if((e.code==='Escape'||e.code==='KeyP')&&!e.repeat){if(GAME.paused){e.preventDefault();setPause(false)}else if(GAME.run){e.preventDefault();setPause(true)}}});
 $('#tMute').addEventListener('click',()=>{const m=Snd.toggle();$('#tMute').textContent=m?'🔇':'🔊'});
 $('#tMute').textContent=Snd.muted?'🔇':'🔊';
 
@@ -486,6 +507,7 @@ $('#tMute').textContent=Snd.muted?'🔇':'🔊';
 let lastTs=0;
 function frame(ts){requestAnimationFrame(frame);const dt=Math.min(0.05,(ts-(lastTs||ts))/1000);lastTs=ts;tick(dt)}
 function tick(dt){g.setTransform(DPR,0,0,DPR,0,0);
+  if(GAME.paused&&GAME.run&&GAME.m)return;
   if(GAME.run&&GAME.m){const m=GAME.m,st=GAME.st;
     if(!st.over||m.stepAfterOver){const n=Math.max(1,Math.round(dt*120));const warp=st.warp||1;for(let i=0;i<n;i++){m.step(st,(1/120)*warp);if(st.over&&!m.stepAfterOver)break}}
     st.t+=dt;m.fx&&m.fx(st,dt);stepPS(dt,st.wind||0);m.draw(st,dt);drawFlash(dt)}
@@ -1061,7 +1083,7 @@ function drawTitleScene(dt){TS.t+=dt;const t=TS.t;cam.s=W>H?H/102:H/150;cam.x=W>
 
 /* ─── 부팅 ─── */
 resize();addEventListener('resize',resize);
-document.addEventListener('visibilitychange',()=>{if(document.hidden){clearIn();Snd.engOff()}lastTs=0});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){clearIn();Snd.engOff();setPause(true)}lastTs=0});
 requestAnimationFrame(frame);
 /* 개발·검증용 훅 — 화면 밖에서 한 프레임씩 밀 수 있다 */
 window.DV={MISSIONS,GAME,IN,start:startMission,tick,get st(){return GAME.st},cam};
@@ -1076,7 +1098,7 @@ if(navigator.serviceWorker){
   }).catch(function(){});
 }
 </script>
-<script src="/js/siteFooter.js?v=1790253237"></script>
+<script src="/js/siteFooter.js?v=1790255183"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

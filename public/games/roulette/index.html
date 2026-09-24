@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -295,13 +295,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <canvas id="confettiCanvas"></canvas>
     <div class="share-toast" id="shareToast"></div>
 
-<script src="/js/topNav.js?v=1790253237"></script>
-<script src="/js/langBar.js?v=1790253237"></script>
-<script src="/js/participantPresets.js?v=1790253237"></script>
+<script src="/js/topNav.js?v=1790255183"></script>
+<script src="/js/langBar.js?v=1790255183"></script>
+<script src="/js/participantPresets.js?v=1790255183"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790253237"></script>
-<script src="/js/groups.js?v=1790253237"></script>
-<script src="/js/nextGames.js?v=1790253237"></script>
+<script src="/js/supabase-config.js?v=1790255183"></script>
+<script src="/js/groups.js?v=1790255183"></script>
+<script src="/js/nextGames.js?v=1790255183"></script>
 <script>
 /* ========================================
    Lucky Please - Roulette
@@ -1388,12 +1388,30 @@ function onPointerUp(e){
 }
 
 /* Result */
+/* ── 게임 홈 · 전체 홈 (2026-09-24 운영자: "정지·종료 화면엔 게임 홈과 전체 홈 둘 다") ──
+   LpNav(lpGameNav.js)는 siteFooter 가 늦게 주입하므로 없으면 잠깐 기다렸다 붙인다.
+   after 바로 뒤로 옮겨 기존 액션 버튼 아래에 놓고, 같은 일을 하던 버튼(hideEl)은 짝이 붙은 뒤에만 숨긴다 */
+function _lpNavMount(card,after,gameHome,hideEl,tries){
+    if(!card)return;
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavMount(card,after,gameHome,hideEl,(tries|0)+1)},200);return}
+    const row=window.LpNav.mount(card,{gameHome:gameHome});
+    if(row&&after&&after.parentNode===card&&after.nextElementSibling!==row)after.insertAdjacentElement('afterend',row);
+    if(row&&hideEl)hideEl.style.display='none';
+}
+/* 방 일시정지·종료 오버레이(LpHostCtl 공용)에도 같은 짝. 종료 카드의 '🏠 홈으로'는 전체 홈과 같은 일이라 숨긴다 */
+function _lpNavHostCtl(tries){
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavHostCtl((tries|0)+1)},200);return}
+    document.querySelectorAll('.lp-hc-pcard,.lp-hc-ecard').forEach(function(c){window.LpNav.mount(c)});
+    document.querySelectorAll('.lp-hc-ehome').forEach(function(b){b.style.display='none'});
+}
 function showResult(name){
     spinActive=false;
     document.getElementById('gameScreen').style.display='none';
     document.getElementById('resultScreen').style.display='flex';
     document.getElementById('wName').textContent=name;
     startConfetti();buildShareButtons(name);
+    /* 설정 버튼(backToSetup)은 게임 홈과 같은 일 → 짝으로 교체 */
+    _lpNavMount(document.querySelector('#resultScreen .result-card'),document.querySelector('#resultScreen .result-btns'),backToSetup,document.getElementById('backToSetupBtn'));
     if(window.LpRecent)window.LpRecent.save('roulette',(lang==='ko'?name+' 당첨':name+' picked'),'/games/roulette/?winner='+encodeURIComponent(name));
     /* Pre-render a 1200×630 result card for richer Kakao/LINE
        previews. Stashed on window for the share button click path. */
@@ -1625,7 +1643,7 @@ function init(){
         if(window.LpHostCtl){
             window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:function(){
                 try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
-            }});
+            }});_lpNavHostCtl();
         }
     }
     /* Online button(s): wire every .lp-room-online-btn (there may be
@@ -1677,7 +1695,7 @@ function init(){
         if(window.LpHostCtl){
             window.LpHostCtl.install({role:'guest',room:g,canPause:false,onEnd:function(){
                 try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
-            }});
+            }});_lpNavHostCtl();
         }
 
         g.on('host:config',function(p){
@@ -1901,7 +1919,7 @@ function _stopGuestRenderLoop(){
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790253237" defer></script>
+<script src="/js/siteFooter.js?v=1790255183" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}

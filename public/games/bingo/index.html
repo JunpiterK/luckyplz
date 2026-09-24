@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -543,7 +543,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790253237"></script>
+<script src="/js/supabase-config.js?v=1790255183"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -1928,6 +1928,22 @@ function stopGame(){
     _stopHeartbeat();
     _stopGuestWatchdog();
 }
+/* ── 게임 홈 · 전체 홈 (2026-09-24 운영자: "정지·종료 화면엔 게임 홈과 전체 홈 둘 다") ──
+   LpNav(lpGameNav.js)는 siteFooter 가 늦게 주입하므로 없으면 잠깐 기다렸다 붙인다. after 바로 뒤(기존 액션 버튼 아래)로 옮긴다 */
+function _lpNavMount(card,after,gameHome,tries){
+    if(!card)return;
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavMount(card,after,gameHome,(tries|0)+1)},200);return}
+    const row=window.LpNav.mount(card,{gameHome:gameHome});
+    if(row&&after&&after.parentNode===card&&after.nextElementSibling!==row)after.insertAdjacentElement('afterend',row);
+}
+/* 방 일시정지·종료 오버레이(LpHostCtl 공용)에도 같은 짝. 종료 카드의 '🏠 홈으로'는 전체 홈과 같은 일이라 숨긴다 */
+function _lpNavHostCtl(tries){
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavHostCtl((tries|0)+1)},200);return}
+    document.querySelectorAll('.lp-hc-pcard,.lp-hc-ecard').forEach(function(c){window.LpNav.mount(c)});
+    document.querySelectorAll('.lp-hc-ehome').forEach(function(b){b.style.display='none'});
+}
+/* 게임 홈 = 설정 화면. '다시하기'가 결과·게임 화면을 닫고 설정으로 돌아가는 길을 그대로 쓴다 */
+function _bingoGameHome(){const rb=document.getElementById('replayBtn');if(rb)rb.click();window.scrollTo(0,0)}
 function showResult(){
     stopGame();
     const ranked=computeRanks(winners);
@@ -1950,6 +1966,7 @@ function showResult(){
     if(rankingsEl)rankingsEl.innerHTML=ranksHtml;
     document.getElementById('resultScreen').classList.add('active');
     try{window.lpMountAds&&window.lpMountAds()}catch(_){}
+    _lpNavMount(document.getElementById('resultScreen'),document.getElementById('replayBtn'),_bingoGameHome);
     launchConfetti(160);
     /* Recent-results feed on home. */
     if(window.LpRecent&&ranked.length){
@@ -2131,7 +2148,7 @@ function _lpWireHostRoom(room){
         window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:()=>{
             try{gameActive=false;}catch(_){}
             try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
-        }});
+        }});_lpNavHostCtl();
     }
 }
 document.querySelectorAll('.lp-room-online-btn').forEach(btn=>{
@@ -2167,7 +2184,7 @@ _waitForLpRoom(()=>{
         if(window.LpHostCtl){
             window.LpHostCtl.install({role:'guest',room:g,canPause:false,onHostEnded:()=>{
                 try{gameActive=false;}catch(_){}
-            }});
+            }});_lpNavHostCtl();
         }
         function applyConfig(p){
             if(!p)return;
@@ -2420,8 +2437,8 @@ window.addEventListener('pageshow',_onVisibilityRestore);
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/topNav.js?v=1790253237"></script>
-<script src="/js/siteFooter.js?v=1790253237" defer></script>
+<script src="/js/topNav.js?v=1790255183"></script>
+<script src="/js/siteFooter.js?v=1790255183" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

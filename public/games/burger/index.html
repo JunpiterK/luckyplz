@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>버거 셰프 · Burger Chef | Lucky Please</title>
@@ -187,6 +187,21 @@ body{
     .right-col .sheet .handle{display:none}
     .right-col .sheet-backdrop, .topbar .lb-btn{display:none}
 }
+/* ---- 정지·종료 이동 버튼 (🎮 게임 홈 · 🏠 전체 홈 — /js/lpGameNav.js) ----
+   정지: 캔버스 하단에 겹친다(캔버스가 어둡게 덮여 있어 가릴 것이 없다). 종료: 다시하기 바로 아래 */
+.lp-pause-nav{position:absolute;left:0;right:0;bottom:16px;padding:0 16px;z-index:3;display:none}
+.lp-pause-nav.on{display:block}
+.lp-pause-nav .lp-nav2{margin-top:0}
+.lp-pause-nav .lp-nav2 button{background:rgba(8,8,20,.86);backdrop-filter:blur(4px)}
+.overlay .lp-ov-nav{width:100%;max-width:320px}
+.overlay .lp-ov-nav .lp-nav2{margin-top:10px}
+/* 터치 기기에는 Enter 키가 없다 — 좁은 폰에서 결과 카드가 넘치지 않게 키 안내를 뺀다 */
+@media (hover:none) and (pointer:coarse){.overlay .lp-ov-nav + .kbd-hint{display:none}}
+/* 360px 폰에서 결과 카드가 캔버스보다 길어 제목·버튼이 잘리던 문제 — 글자를 눌러 겹치게 두지 말고
+   카드 여백만 조금 줄이고, 그래도 넘치면 카드 안에서 스크롤 */
+.overlay{overflow-y:auto;justify-content:safe center;touch-action:pan-y}
+.overlay>*{flex-shrink:0}
+@media(max-width:380px){.overlay .rank-card{padding:12px 14px;margin:6px 0 10px;gap:6px}}
     </style>
     <script src="/vendor/supabase.min.js"></script>
     <script type="application/ld+json">
@@ -231,6 +246,7 @@ body{
                 <button class="btn" id="ovBtn">시작</button>
                 <div class="kbd-hint"><kbd>탭</kbd> 또는 <kbd>1</kbd>-<kbd>5</kbd> · <kbd>Space</kbd> 일시정지</div>
             </div>
+            <div class="lp-pause-nav" id="lpPauseNav"></div>
         </div>
 
         <div class="hint">샘플과 <b>동일한 순서</b>로 재료 접시 5개를 탭! 완성할수록 시간이 짧아지고 재료도 길어져요.</div>
@@ -253,10 +269,10 @@ body{
         </aside>
     </div>
 </main>
-<script src="/js/supabase-config.js?v=1790253237"></script>
-<script src="/js/lpI18n.js?v=1790253237"></script>
-<script src="/js/lpRankSheet.js?v=1790253237"></script>
-<script src="/js/lpAudio.js?v=1790253237"></script>
+<script src="/js/supabase-config.js?v=1790255183"></script>
+<script src="/js/lpI18n.js?v=1790255183"></script>
+<script src="/js/lpRankSheet.js?v=1790255183"></script>
+<script src="/js/lpAudio.js?v=1790255183"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -923,8 +939,16 @@ let timeLeft, timeLevelBudget;
 let combo, maxCombo;
 let running, paused;
 
+/* 정지·종료 화면의 🎮 게임 홈 · 🏠 전체 홈 (siteFooter 가 싣는 lpGameNav) */
+function lpNavMount(el){
+    if(!el) return;
+    if(window.LpNav){ window.LpNav.mount(el); return; }
+    setTimeout(()=>{ if(window.LpNav && el.isConnected && (el.id!=='lpPauseNav' || el.classList.contains('on'))) window.LpNav.mount(el); }, 800);
+}
 /* ---- Pause UI sync (mobile/tablet/PC parity) ---- */
 function syncPauseUI(){
+    const pn=$('lpPauseNav');
+    if(pn){ pn.classList.toggle('on', !!(running && paused)); if(running && paused) lpNavMount(pn); }
     const gc=$('gameCtrl'), btn=$('pauseBtn');
     if(!gc||!btn) return;
     if(running){
@@ -1092,8 +1116,10 @@ function gameOver(){
       +   '<button class="rank-card-link" id="ovRankBtn">🏆 랭크</button>'
       + '</div>'
       + '<button class="btn" id="ovBtn">다시하기</button>'
+      + '<div class="lp-ov-nav" id="lpEndNav"></div>'
       + '<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
     $('overlay').classList.remove('hidden');
+    lpNavMount($('lpEndNav'));
     $('ovBtn').addEventListener('click', startGame);
     $('ovRankBtn').addEventListener('click', openBurgerRankSheet);
 
@@ -2928,7 +2954,7 @@ try{
     }
 }catch(_){}
 </script>
-<script src="/js/siteFooter.js?v=1790253237"></script>
+<script src="/js/siteFooter.js?v=1790255183"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

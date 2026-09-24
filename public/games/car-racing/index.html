@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -173,6 +173,11 @@
         #exitBtn:hover{background:linear-gradient(135deg,#C0392B,#A93226);transform:scale(1.03)}
         #pauseOverlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:90;justify-content:center;align-items:center}
         #pauseOverlay .pause-text{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:5em;font-weight:900;color:rgba(255,230,109,0.8);text-shadow:0 0 30px rgba(255,230,109,0.5);animation:pausePulse 1.5s ease-in-out infinite}
+        /* 정지 화면에도 게임 홈·전체 홈 (lpGameNav) — 글자 아래 한 줄 */
+        #pauseOverlay{flex-direction:column}
+        #pauseOverlay .lp-nav2{margin-top:18px;max-width:min(340px,86vw);flex-wrap:wrap}
+        #pauseOverlay .lp-nav2 button{flex:1 1 128px}
+        .result-btn-container .lp-nav2{margin-top:0}
         @keyframes pausePulse{0%,100%{opacity:0.7;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
         #infoPanelHeader{padding:10px 10px 6px;border-bottom:1px solid rgba(255,255,255,0.08);flex-shrink:0}
         #infoPanelHeader .stat-row{display:flex;align-items:center;gap:6px;margin:4px 0;font-size:0.9em}
@@ -694,15 +699,15 @@
     </div>
     <div id="collisionLabelsContainer"></div>
     <div id="eventPopupContainer"></div>
-<script src="/js/topNav.js?v=1790253237"></script>
-<script src="/js/langBar.js?v=1790253237"></script>
-<script src="/js/participantPresets.js?v=1790253237"></script>
-<script src="/js/nextGames.js?v=1790253237"></script>
+<script src="/js/topNav.js?v=1790255183"></script>
+<script src="/js/langBar.js?v=1790255183"></script>
+<script src="/js/participantPresets.js?v=1790255183"></script>
+<script src="/js/nextGames.js?v=1790255183"></script>
 <!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
      for Watch-Together. Without window.supabase the room-create /
      room-join flow silently no-ops. -->
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790253237"></script>
+<script src="/js/supabase-config.js?v=1790255183"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -6892,6 +6897,28 @@ function lpPodiumReveal(root){
     setTimeout(()=>slots.forEach(s=>s.classList.add('up')),1200);
 }
 
+/* ── 게임 홈 · 전체 홈 (2026-09-24 운영자: "정지·종료 화면엔 게임 홈과 전체 홈 둘 다") ──
+   LpNav(lpGameNav.js)는 siteFooter 가 늦게 주입하므로 없으면 잠깐 기다렸다 붙인다 */
+function _lpNavMount(el,gameHome,tries){
+    if(!el)return;
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavMount(el,gameHome,(tries|0)+1)},200);return}
+    window.LpNav.mount(el,{gameHome:gameHome});
+}
+/* 방 일시정지·종료 오버레이(LpHostCtl 공용)에도 같은 짝. 종료 카드의 '🏠 홈으로'는 전체 홈과 같은 일이라 숨긴다 */
+function _lpNavHostCtl(tries){
+    if(!window.LpNav){if((tries|0)<50)setTimeout(function(){_lpNavHostCtl((tries|0)+1)},200);return}
+    document.querySelectorAll('.lp-hc-pcard,.lp-hc-ecard').forEach(function(c){window.LpNav.mount(c)});
+    document.querySelectorAll('.lp-hc-ehome').forEach(function(b){b.style.display='none'});
+}
+/* 게임 홈 = 설정 화면. 종료 버튼과 같은 정리(화면 켜짐 해제 → resetGame: BGM·루프·정지·전체화면 해제) */
+function _crGameHome(){try{if(window.LpWakeLock)LpWakeLock.release()}catch(_){}resetGame()}
+/* 정지 화면: 오른쪽 정보 패널(z95)이 정지 막(z90) 위에 있어 세로 폰에선 버튼 절반을 가린다 → 패널 왼쪽 빈 곳에 가운데 맞춤.
+   막을 패널 위로 올리면 패널의 '재개' 버튼이 막 아래로 들어가므로 올리지 않는다 */
+function _crPauseFit(ov){
+    const ip=document.getElementById('infoPanel');let pr=0;
+    if(ip&&ip.style.display!=='none'){const r=ip.getBoundingClientRect(),w=ov.clientWidth||innerWidth;if(r.width&&r.left>w*0.3)pr=Math.max(0,Math.round(w-r.left))}
+    ov.style.paddingRight=pr?(pr+8)+'px':'';ov.style.paddingLeft=pr?'8px':'';
+}
 function showResults(){
     document.getElementById('infoPanel').style.display='none';
     document.getElementById('centerTimer').style.display='none';
@@ -6920,6 +6947,7 @@ function showResults(){
     }).join('');
     lpPodiumReveal(finalRankings);
     buildShareButtons();
+    _lpNavMount(resultScreen.querySelector('.result-btn-container'),_crGameHome);
 
     if(window.LpRecent&&finishOrder.length){
         const winner=finishOrder[0]?.name;
@@ -6990,7 +7018,7 @@ function resetGame(){
 function togglePause(){
     if(!gameRunning)return;gamePaused=!gamePaused;
     const btn=document.getElementById('pauseBtn');const overlay=document.getElementById('pauseOverlay');
-    if(gamePaused){btn.textContent=T('resumeBtn');btn.classList.add('resumed');overlay.style.display='flex';AudioEngine.pauseBGM()}
+    if(gamePaused){btn.textContent=T('resumeBtn');btn.classList.add('resumed');overlay.style.display='flex';AudioEngine.pauseBGM();_crPauseFit(overlay);_lpNavMount(overlay,_crGameHome)}
     else{btn.textContent=T('pauseBtn');btn.classList.remove('resumed');overlay.style.display='none';if(AudioEngine.isBGMEnabled())AudioEngine.resumeBGM()}
 }
 
@@ -8072,7 +8100,7 @@ function _lpWireHostRoom(room){
        a mid-race pause would desync the RAF loops on every guest, so
        host can pause mid-race + end cleanly. */
     if(window.LpHostCtl){
-        window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});
+        window.LpHostCtl.install({role:'host',room:room,canPause:true,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});_lpNavHostCtl();
     }
 }
 /* Lightweight setup-config broadcast so a guest joining BEFORE the
@@ -8110,7 +8138,7 @@ _waitForLpRoom(()=>{
         const rb=document.getElementById('resetBtn');if(rb)rb.disabled=true;
         document.querySelectorAll('.lp-room-online-btn').forEach(b=>b.style.display='none');
         if(window.LpHostCtl){
-            window.LpHostCtl.install({role:'guest',room:g,canPause:false,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});
+            window.LpHostCtl.install({role:'guest',room:g,canPause:false,onEnd:()=>{try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}}});_lpNavHostCtl();
         }
         g.on('host:config',p=>{
             if(!p)return;
@@ -8139,7 +8167,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790253237" defer></script>
+<script src="/js/siteFooter.js?v=1790255183" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}

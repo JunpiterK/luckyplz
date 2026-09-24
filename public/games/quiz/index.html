@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Live Quiz | Lucky Please</title>
@@ -223,7 +223,7 @@ body.qlive-in .lp-fs-btn,body.qlive-in .lp-bgm-btn,body.qlive-in #lpSwFab{displa
 <main id="qview"></main></div>
 <div id="qtoast" role="status" aria-live="polite"></div>
 <script src="/vendor/qrcode.js"></script>
-<script src="/js/supabase-config.js?v=1790253237"></script>
+<script src="/js/supabase-config.js?v=1790255183"></script>
 <script>
 /* ═══ LIVE QUIZ v2 — 서버 진행형 (supabase/migrations/2026-09-24-quiz-live-v2.sql) ═══
    신뢰성 설계:
@@ -354,6 +354,11 @@ function clearSession(){LS.del('lp_qlive_session')}
 function getSession(){const s=LS.get('lp_qlive_session',null);if(!s||!s.code||Date.now()-s.t>8*3600e3)return null;return s}
 function enterRoom(role,code,hostKey){document.body.classList.add('qlive-in');S.role=role;S.code=code;S.hostKey=hostKey||null;S.st=null;S.rev=-1;S.key='';S.local={};S.prevTop=null;saveSession();
   try{history.replaceState(null,'',location.pathname+'?c='+code)}catch(e){}joinChannel();pollSoon(0);render()}
+/* 정지·종료 화면 공통 버튼 — 🎮 게임 홈(= 퀴즈 첫 화면, 방을 제대로 나가 자동 복귀 세션도 지운다) · 🏠 전체 홈 */
+function quizHome(){const p=$('#qpaused');if(p)p.remove();leaveRoom()}
+function lpNav(el){if(!el)return;try{window.LpNav&&window.LpNav.mount(el,{gameHome:quizHome})}catch(e){}}
+/* 전체 홈으로 나갈 때도 세션을 지운다 — 다음에 퀴즈를 열었을 때 끝난 방으로 곧장 복귀하지 않게 (lpGameNav 보다 먼저: window 캡처) */
+['pointerup','click'].forEach(ev=>addEventListener(ev,e=>{const b=e.target&&e.target.closest&&e.target.closest('[data-lp-nav="main"]');if(b&&S.code){clearSession();leaveChannel()}},true));
 function leaveRoom(){document.body.classList.remove('qlive-in');leaveChannel();clearTimeout(pollT);S.code=null;S.role=null;S.st=null;clearSession();try{history.replaceState(null,'',location.pathname)}catch(e){}viewHome()}
 
 /* ─── 상태 적용 ─── */
@@ -401,7 +406,7 @@ function bannerHtml(){const st=S.st;if(!st)return '';let h='';if(S.role==='playe
 function render(){const v=$('#qview');if(!S.code){return}const st=S.st;
   if(!st){v.innerHTML='<div class="waitBox"><div class="e">📡</div><div class="t dots">'+(LANG==='ko'?'연결 중':'Connecting')+'</div></div>';return}
   if(S.role==='host')renderHost(st,v);else renderPlayer(st,v);
-  const po=$('#qpaused');if(st.paused&&st.phase!=='lobby'&&st.phase!=='final'){if(!po){const d=document.createElement('div');d.id='qpaused';d.className='pausedOv';d.innerHTML='⏸ '+T('paused')+'<span>'+T('pausedD')+'</span>'+(S.role==='host'?'<button class="big pri" style="width:auto;padding:12px 26px;margin-top:10px" id="qres">▶ '+T('resumeBtn')+'</button>':'');document.body.appendChild(d);const b=$('#qres');if(b)b.onclick=()=>hostAct('resume')}}else if(po)po.remove();
+  const po=$('#qpaused');if(st.paused&&st.phase!=='lobby'&&st.phase!=='final'){if(!po){const d=document.createElement('div');d.id='qpaused';d.className='pausedOv';d.innerHTML='⏸ '+T('paused')+'<span>'+T('pausedD')+'</span>'+(S.role==='host'?'<button class="big pri" style="width:auto;padding:12px 26px;margin-top:10px" id="qres">▶ '+T('resumeBtn')+'</button>':'');document.body.appendChild(d);const b=$('#qres');if(b)b.onclick=()=>hostAct('resume');lpNav(d)}}else if(po)po.remove();
   tickTimer()}
 function update(){const st=S.st;if(!st)return;
   const a=$('#qansd');if(a&&st.answered!=null)a.textContent=st.answered+' / '+(st.active||st.players);
@@ -426,8 +431,8 @@ function renderPlayer(st,v){const me=st.me||{},q=st.question,showq=(st.settings|
       (above?'<div class="d" style="margin-top:6px;color:var(--acc)">'+rankTxt(above.rank)+' '+T('toNext')+' '+(above.score-me.score).toLocaleString()+T('pts')+'</div>':'')+'</div>'+boardHtml(tp.slice(0,5),me.nick)}
   else if(st.phase==='final'){const tp=st.top||[];h+='<h2 style="text-align:center;font-size:24px;margin:6px 0">🏆 '+T('final')+'</h2>'+podiumHtml(tp)+
     '<div class="meFinal"><div style="color:var(--dim);font-size:13px">'+T('myRank')+'</div><div class="rkBig">'+rankTxt(me.rank||'-')+'</div><div class="stats"><div><b>'+(me.score||0).toLocaleString()+'</b><span>'+T('score')+'</span></div><div><b>'+(me.n_correct||0)+'/'+st.total+'</b><span>'+T('nCorrect')+'</span></div><div><b>'+(me.best_streak||0)+'</b><span>'+T('bestStreak')+'</span></div></div></div>'+
-    '<p class="sub" style="margin-top:12px">'+T('waitReplay')+'</p><button class="big ghost" id="qhome">'+T('home')+'</button>'}
-  h+='</div>';v.innerHTML=h;
+    '<p class="sub" style="margin-top:12px">'+T('waitReplay')+'</p>'+(window.LpNav?'<div id="qnav"></div>':'<button class="big ghost" id="qhome">'+T('home')+'</button>')}
+  h+='</div>';v.innerHTML=h;lpNav($('#qnav'));
   v.querySelectorAll('.playerAns .ab').forEach(b=>b.addEventListener('click',()=>answer(+b.dataset.i)));
   const hb=$('#qhome');if(hb)hb.onclick=()=>leaveRoom();
   if(st.phase==='final'&&S.role==='player')saveAttemptOnce(st)}
@@ -465,8 +470,8 @@ function renderHost(st,v){const q=st.question;let h='<div class="wrap stage"><di
         (q.h?'<div class="hint">💡 '+esc(q.h)+'</div>':'')+(st.ends_at?timerBar():'')+ctl}
     else if(st.phase==='board'){h+=head+'<h2 style="text-align:center;margin:4px 0">🏅 TOP 5</h2>'+boardHtml((st.top||[]).slice(0,5),null)+(st.ends_at?timerBar():'')+ctl}
     else if(st.phase==='final'){h+='<h2 style="text-align:center;font-size:30px;margin:8px 0">🏆 '+T('final')+'</h2>'+podiumHtml(st.top||[])+boardHtml((st.top||[]).slice(3,10),null)+
-      '<div class="row" style="margin-top:14px"><button class="big pri" id="qagain">🔁 '+T('again')+'</button><button class="big ghost" id="qnew">'+T('newRoom')+'</button></div>'}}
-  h+='</div>';v.innerHTML=h;
+      '<div class="row" style="margin-top:14px"><button class="big pri" id="qagain">🔁 '+T('again')+'</button><button class="big ghost" id="qnew">'+T('newRoom')+'</button></div><div id="qnav"></div>'}}
+  h+='</div>';v.innerHTML=h;lpNav($('#qnav'));
   if(st.phase==='lobby'){drawQR();const u=joinUrl();$('#qcopy').onclick=async()=>{try{await navigator.clipboard.writeText(u);toast(T('copied'))}catch(e){prompt('',u)}};
     $('#qshare').onclick=async()=>{const tx=T('shareTxt')+' ('+S.code+')';try{if(navigator.share){await navigator.share({title:'LIVE QUIZ',text:tx,url:u});return}}catch(e){if(e&&e.name==='AbortError')return}
       try{await navigator.clipboard.writeText(tx+'\n'+u);toast(T('copied'))}catch(e){prompt('',u)}};
@@ -581,8 +586,8 @@ window.QLIVE={S,poll,rpc,useClient(c){SB=c}};   /* useClient: 로컬 검증 서�
 })();
 
 </script>
-<script src="/js/topNav.js?v=1790253237"></script>
-<script src="/js/siteFooter.js?v=1790253237"></script>
+<script src="/js/topNav.js?v=1790255183"></script>
+<script src="/js/siteFooter.js?v=1790255183"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

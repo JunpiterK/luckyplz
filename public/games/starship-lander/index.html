@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1790253237">
+<meta name="lp-build" content="1790255183">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790253237";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790255183";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -245,6 +245,16 @@ canvas#g{display:block;background:#000814;border-radius:10px;box-shadow:0 0 0 1.
     </div>
   </div>
 </div>
+
+<!-- PAUSE — 정지 중에도 게임 홈·전체 홈으로 나갈 수 있게 (2026-09-24) -->
+<div class="overlay" id="pauseOv">
+  <div class="modal">
+    <h2 id="pauseTitle">PAUSED</h2>
+    <div class="btn-row">
+      <button class="btn primary" id="btnResume" type="button" style="width:100%;max-width:none">▶ RESUME</button>
+    </div>
+  </div>
+</div>
 <script>
 (()=>{
 'use strict';
@@ -418,6 +428,8 @@ _tx('#btnReplay', T.retry);
 _tx('#btnNext', T.next);
 _tx('#btnTryAgain', T.retry);
 _tx('#completeOv h2', T.complete_title);
+_tx('#pauseTitle', T.paused);
+_tx('#btnResume', '▶ ' + T.resume);
 _tx('#completeOv .sub', T.complete_sub);
 _hx('#completeOv .sub', T.complete_text, 1);
 _tx('#btnRestartAll', T.restart_all);
@@ -520,6 +532,7 @@ const introOv = document.getElementById('introOv');
 const winOv = document.getElementById('winOv');
 const loseOv = document.getElementById('loseOv');
 const completeOv = document.getElementById('completeOv');
+const pauseOv = document.getElementById('pauseOv');
 
 // ============ CANVAS FIT (DPR) ============
 /* 캔버스를 홀더에 3:5 로 꽉 맞추고, 백킹스토어는 CSS 크기 × DPR.
@@ -1558,7 +1571,7 @@ function showLanded(){
   if (S.stage >= STAGES.length - 1){
     document.getElementById('completeScore').textContent = S.totalScore.toLocaleString();
     document.getElementById('completeBest').textContent = S.best.toLocaleString();
-    completeOv.classList.add('show');
+    completeOv.classList.add('show'); lpNav(completeOv);
   } else {
     document.getElementById('winScore').textContent = stageScore.toLocaleString();
     document.getElementById('winBest').textContent = S.best.toLocaleString();
@@ -1569,7 +1582,7 @@ function showLanded(){
     const ge = document.getElementById('winGrade');
     ge.textContent = T['g_' + r.grade]; ge.className = 'grade ' + r.grade;
     document.getElementById('winSub').textContent = T['s_' + r.grade];
-    winOv.classList.add('show'); try{ window.lpMountAds && window.lpMountAds(); }catch(_){}
+    winOv.classList.add('show'); lpNav(winOv); try{ window.lpMountAds && window.lpMountAds(); }catch(_){}
   }
 }
 function showCrashed(){
@@ -1586,7 +1599,31 @@ function showCrashed(){
   else { why = T.why_hull; tip = (st.tower || st.rough > 20) ? T.tip_hull : T.tip_fast; }
   document.getElementById('loseWhy').textContent = why;
   document.getElementById('loseTip').textContent = '💡 ' + tip;
-  loseOv.classList.add('show'); try{ window.lpMountAds && window.lpMountAds(); }catch(_){}
+  loseOv.classList.add('show'); lpNav(loseOv); try{ window.lpMountAds && window.lpMountAds(); }catch(_){}
+}
+/* 정지·종료 화면 공통 버튼 — 🎮 게임 홈(= 시작 화면) · 🏠 전체 홈 (lpGameNav.js, siteFooter 가 defer 로 싣는다) */
+function lpNav(ov){
+  try { window.LpNav && window.LpNav.mount(ov.querySelector('.modal'), { gameHome: goIntro }); } catch(_){}
+}
+function goIntro(){
+  S.running = false; S.paused = false; S.phase = 'intro';
+  S.stage = 0; S.totalScore = 0;
+  S.thrust = { left:false, right:false, main:false };
+  S.canvasThrust = false;
+  document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('pressed', 'cue'));
+  SND.engine(0, false);
+  S.boom = null; S.result = null; S.endShown = true; S.flashUntil = 0;
+  S.terrain = buildTerrain(0);
+  initStars();
+  initShip();
+  buildBackdrops();
+  _tx('#btnPause', T.pause);
+  winOv.classList.remove('show');
+  loseOv.classList.remove('show');
+  completeOv.classList.remove('show');
+  pauseOv.classList.remove('show');
+  introOv.classList.add('show');
+  updateStatsUI();
 }
 
 function startStage(stage){
@@ -1611,6 +1648,7 @@ function startStage(stage){
   winOv.classList.remove('show');
   loseOv.classList.remove('show');
   completeOv.classList.remove('show');
+  pauseOv.classList.remove('show');
   updateStatsUI();
 }
 function startGame(){ SND.unlock(); S.totalScore = 0; try{ if(window.LpBgm){ window.LpBgm.start(); } else { window.__lpBgmWanted = true; } }catch(_){} startStage(0); }
@@ -1632,6 +1670,8 @@ function togglePause(force){
   if (S.paused) SND.engine(0, false);
   S.lastFrame = 0;
   document.getElementById('btnPause').textContent = S.paused ? T.resume : T.pause;
+  pauseOv.classList.toggle('show', S.paused);
+  if (S.paused) lpNav(pauseOv);
 }
 /* 모바일 알림·앱 전환 시 자동 일시정지 (복귀 순간 추락 방지) */
 document.addEventListener('visibilitychange', () => { if (document.hidden) togglePause(true); });
@@ -1642,6 +1682,7 @@ document.getElementById('btnNext').addEventListener('click', nextStage);
 document.getElementById('btnTryAgain').addEventListener('click', retry);
 document.getElementById('btnRestartAll').addEventListener('click', () => { S.totalScore = 0; startStage(0); });
 document.getElementById('btnPause').addEventListener('click', () => togglePause());
+document.getElementById('btnResume').addEventListener('click', () => togglePause(false));
 /* 처음부터 — confirm() 대신 두 번 누르기 (모바일에서 차단형 대화상자는 흐름을 끊는다) */
 (function(){
   const b = document.getElementById('btnRestart');
@@ -1723,7 +1764,7 @@ setTimeout(fitCanvas, 300);
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1790253237" defer></script>
+<script src="/js/siteFooter.js?v=1790255183" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
