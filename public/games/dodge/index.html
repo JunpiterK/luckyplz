@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790250923">
+<meta name="lp-build" content="1790252643">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790250923";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790252643";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1427,10 +1427,10 @@ body::after{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1790250923"></script>
-<script src="/js/lpI18n.js?v=1790250923"></script>
-<script src="/js/lpRankSheet.js?v=1790250923"></script>
-<script src="/js/lpAudio.js?v=1790250923"></script>
+<script src="/js/supabase-config.js?v=1790252643"></script>
+<script src="/js/lpI18n.js?v=1790252643"></script>
+<script src="/js/lpRankSheet.js?v=1790252643"></script>
+<script src="/js/lpAudio.js?v=1790252643"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -9808,6 +9808,7 @@ function onDepotCollected(d, fromPeer){
     }
     sfxStart();
     if(navigator.vibrate) try{navigator.vibrate(30)}catch(_){}
+    try{ window.SZX && SZX.onTake(d); }catch(_){}   /* 동시 대결 — 먼저 먹은 사람이 임자 */
     /* PvP — 상대에게도 알려서 같은 depot 못 먹게. P2P + supabase 둘다 보냄
        (P2P 가 빠르지만 미연결 시 supabase fallback). 둘다 도달해도 onDepotCollected
        의 위 d.collected 체크로 멱등. */
@@ -10288,8 +10289,9 @@ function spawnBullet(now, speed, aimedRatio, multi){
            이제 player 가 활동하는 영역 (40~CW-40, CH*0.40~CH*0.85) 안에서
            rand() 로 매번 다른 target 선택 — 양쪽 player 공평하게 위협. */
         const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
-        const aimX = isPvp ? (40 + rand() * (CW - 80)) : player.x;
-        const aimY = isPvp ? (CH * 0.40 + rand() * CH * 0.45) : player.y;
+        const _shared = isPvp || _szRacing();   /* 동시 대결도 같은 운석장을 쓴다 */
+        const aimX = _shared ? (40 + rand() * (CW - 80)) : player.x;
+        const aimY = _shared ? (CH * 0.40 + rand() * CH * 0.45) : player.y;
 
         /* 화면 밖 SZ_SPAWN_OFF(34px) 에서 출발 — 가장자리 경고 화살표가 보일 시간을 번다 */
         let bx, by;
@@ -10301,7 +10303,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
         /* 공정성 — 기체 코앞(150px) 가장자리에서 튀어나오는 스폰 금지 (싱글).
            가장자리를 따라 거울 반사하고, 그래도 가까우면 반대쪽 끝으로 민다.
            추가 rand() 없이 결정적이라 PvP·재현성에 영향 없음. */
-        if(!isPvp){
+        if(!_shared){
             const S2 = SZ_SPAWN_SAFE * SZ_SPAWN_SAFE;
             let ddx = bx - player.x, ddy = by - player.y;
             if(ddx*ddx + ddy*ddy < S2){
@@ -12243,6 +12245,7 @@ function drawFrame(now, dt){
     drawSplitters();           /* v3 — 달아오르는 분열암 */
     drawComets(now);           /* v3 — 혜성 예고선·머리·꼬리 */
     drawWaves();               /* v3 — 편대 예고(틈은 초록) */
+    try{ window.SZX && SZX.drawGhosts(ctx); }catch(_){}   /* 동시 대결 — 같이 나는 사람들 */
     drawPulsarBeam(now);       /* Stage 6 — rotating lighthouse, on top */
     drawMissionOrbit(now);          /* Phase B — orbital ring during active mission */
     drawSatelliteOrbiting(now);     /* Phase C — successful satellites in their home zone */
@@ -13829,7 +13832,7 @@ $('pauseBtn').addEventListener('click', (e)=>{
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TX={
-ko:{duo:'1:1 실시간 PvP · 로그인',race:'👥 친구와 동시 대결',raceT:'👥 동시 대결',raceSub:'같은 코스를 동시에 한 판. 오래 버틴 순서대로 순위, 꼴찌는 벌칙!',nick:'닉네임',create:'방 만들기',or:'또는',codePh:'6자리 코드',join:'입장',back:'← 돌아가기',
+ko:{got:'획득',first:'먼저 먹었어요!',full:'방이 가득 찼어요 (최대 8명)',link:'직통',duo:'1:1 실시간 PvP · 로그인',race:'👥 친구와 동시 대결',raceT:'👥 동시 대결',raceSub:'최대 8명이 한 우주를 같이 날아요. 보급은 먼저 먹는 사람 것, 오래 버틴 순서대로 순위 — 꼴찌는 벌칙!',nick:'닉네임',create:'방 만들기',or:'또는',codePh:'6자리 코드',join:'입장',back:'← 돌아가기',
     needNick:'닉네임을 입력해 주세요',needCode:'6자리 코드를 입력해 주세요',conn:'연결 중…',connFail:'연결 실패 — 네트워크 확인 후 다시',
     room:'방 코드',share:'📤 카톡·메신저로 초대',copy:'복사',copied:'링크 복사됨!',players:'참가자',waitHost:'방장이 출발을 누르면 전원 동시에 발사해요',
     go:'🚀 전원 동시 출발',need2:'2명 이상 모이면 출발할 수 있어요',leave:'나가기',host:'방장',me:'나',
@@ -13839,7 +13842,7 @@ ko:{duo:'1:1 실시간 PvP · 로그인',race:'👥 친구와 동시 대결',rac
     chBanner:'⚔ <b>{n}</b>님의 도전장 — <b>{t}</b> · 같은 코스',chWin:'🏆 도전 성공! {d}초 앞섰어요',chLose:'💀 {d}초 모자랐어요',
     chSend:'⚔ 이 코스로 도전장 보내기',chBackfire:'⚔ 되받아치기 — 내 기록으로 도전장',chTxt:'🚀 스페이스-Z 도전장 — 내 기록 {t}. 같은 코스로 이겨 봐!',
     askNick:'도전장에 쓸 닉네임',newRec:'NEW RECORD!',anon:'익명 파일럿',leftApp:'앱을 벗어나 비행 종료'},
-en:{duo:'1:1 real-time PvP · login',race:'👥 Race friends live',raceT:'👥 Live Race',raceSub:'Everyone flies the same course at once. Longest survivor wins — last place takes the penalty!',nick:'Nickname',create:'Create room',or:'or',codePh:'6-digit code',join:'Join',back:'← Back',
+en:{got:'got it',first:'grabbed it first!',full:'Room is full (max 8)',link:'direct',duo:'1:1 real-time PvP · login',race:'👥 Race friends live',raceT:'👥 Live Race',raceSub:'Up to 8 pilots share one sky. Supplies go to whoever grabs them first; longest survivor wins — last place pays!',nick:'Nickname',create:'Create room',or:'or',codePh:'6-digit code',join:'Join',back:'← Back',
     needNick:'Enter a nickname',needCode:'Enter the 6-digit code',conn:'Connecting…',connFail:'Connection failed — check network and retry',
     room:'Room code',share:'📤 Invite via messenger',copy:'Copy',copied:'Link copied!',players:'Players',waitHost:'Launch starts for everyone when the host taps GO',
     go:'🚀 Launch everyone',need2:'Need 2+ players to launch',leave:'Leave',host:'HOST',me:'ME',
@@ -13849,7 +13852,7 @@ en:{duo:'1:1 real-time PvP · login',race:'👥 Race friends live',raceT:'👥 L
     chBanner:'⚔ Challenge from <b>{n}</b> — <b>{t}</b> · same course',chWin:'🏆 You won by {d}s!',chLose:'💀 Short by {d}s',
     chSend:'⚔ Challenge a friend on this course',chBackfire:'⚔ Fire back with my time',chTxt:'🚀 Space-Z challenge — my time {t}. Beat it on the same course!',
     askNick:'Your nickname for the challenge',newRec:'NEW RECORD!',anon:'Anonymous pilot',leftApp:'Left the app — flight ended'},
-ja:{duo:'1:1 リアルタイム対戦 · ログイン',race:'👥 友だちと同時対戦',raceT:'👥 同時対戦',raceSub:'全員が同じコースを同時に1回。長く生き残った順に順位、最下位は罰ゲーム！',nick:'ニックネーム',create:'部屋を作る',or:'または',codePh:'6桁コード',join:'参加',back:'← 戻る',
+ja:{got:'ゲット',first:'が先に取った!',full:'満員です（最大8人）',link:'直結',duo:'1:1 リアルタイム対戦 · ログイン',race:'👥 友だちと同時対戦',raceT:'👥 同時対戦',raceSub:'全員が同じコースを同時に1回。長く生き残った順に順位、最下位は罰ゲーム！',nick:'ニックネーム',create:'部屋を作る',or:'または',codePh:'6桁コード',join:'参加',back:'← 戻る',
     needNick:'ニックネームを入力',needCode:'6桁コードを入力',conn:'接続中…',connFail:'接続失敗 — 通信を確認して再試行',
     room:'部屋コード',share:'📤 LINE・メッセンジャーで招待',copy:'コピー',copied:'コピーしました！',players:'参加者',waitHost:'ホストが出発を押すと全員同時に発射',
     go:'🚀 全員同時に出発',need2:'2人以上で出発できます',leave:'退出',host:'ホスト',me:'自分',
@@ -13859,7 +13862,7 @@ ja:{duo:'1:1 リアルタイム対戦 · ログイン',race:'👥 友だちと�
     chBanner:'⚔ <b>{n}</b>さんの挑戦状 — <b>{t}</b> · 同じコース',chWin:'🏆 挑戦成功！{d}秒差で勝利',chLose:'💀 あと{d}秒足りず',
     chSend:'⚔ このコースで挑戦状を送る',chBackfire:'⚔ 自分の記録で挑戦し返す',chTxt:'🚀 スペースZ 挑戦状 — 記録 {t}。同じコースで勝てる？',
     askNick:'挑戦状に書くニックネーム',newRec:'NEW RECORD!',anon:'名無しパイロット',leftApp:'アプリを離れたため終了'},
-es:{duo:'PvP 1:1 en tiempo real · login',race:'👥 Carrera en vivo',raceT:'👥 Carrera en vivo',raceSub:'Todos vuelan el mismo recorrido a la vez. Gana quien más aguante; el último paga.',nick:'Apodo',create:'Crear sala',or:'o',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Volver',
+es:{got:'lo tomó',first:'lo tomó primero!',full:'Sala llena (máx. 8)',link:'directo',duo:'PvP 1:1 en tiempo real · login',race:'👥 Carrera en vivo',raceT:'👥 Carrera en vivo',raceSub:'Todos vuelan el mismo recorrido a la vez. Gana quien más aguante; el último paga.',nick:'Apodo',create:'Crear sala',or:'o',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Volver',
     needNick:'Escribe un apodo',needCode:'Escribe el código de 6 dígitos',conn:'Conectando…',connFail:'Error de conexión — revisa la red',
     room:'Código',share:'📤 Invitar por mensajería',copy:'Copiar',copied:'¡Enlace copiado!',players:'Jugadores',waitHost:'Todos despegan cuando el anfitrión pulse salir',
     go:'🚀 Despegar todos',need2:'Se necesitan 2+ jugadores',leave:'Salir',host:'ANFITRIÓN',me:'YO',
@@ -13869,7 +13872,7 @@ es:{duo:'PvP 1:1 en tiempo real · login',race:'👥 Carrera en vivo',raceT:'�
     chBanner:'⚔ Reto de <b>{n}</b> — <b>{t}</b> · mismo recorrido',chWin:'🏆 ¡Ganaste por {d}s!',chLose:'💀 Te faltaron {d}s',
     chSend:'⚔ Retar a un amigo en este recorrido',chBackfire:'⚔ Devolver el reto',chTxt:'🚀 Reto Space-Z — mi tiempo {t}. ¡Supéralo en el mismo recorrido!',
     askNick:'Tu apodo para el reto',newRec:'¡NUEVO RÉCORD!',anon:'Piloto anónimo',leftApp:'Saliste de la app — vuelo terminado'},
-pt:{duo:'PvP 1:1 em tempo real · login',race:'👥 Corrida ao vivo',raceT:'👥 Corrida ao vivo',raceSub:'Todos voam o mesmo percurso ao mesmo tempo. Vence quem durar mais; o último paga.',nick:'Apelido',create:'Criar sala',or:'ou',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Voltar',
+pt:{got:'pegou',first:'pegou primeiro!',full:'Sala cheia (máx. 8)',link:'direto',duo:'PvP 1:1 em tempo real · login',race:'👥 Corrida ao vivo',raceT:'👥 Corrida ao vivo',raceSub:'Todos voam o mesmo percurso ao mesmo tempo. Vence quem durar mais; o último paga.',nick:'Apelido',create:'Criar sala',or:'ou',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Voltar',
     needNick:'Digite um apelido',needCode:'Digite o código de 6 dígitos',conn:'Conectando…',connFail:'Falha na conexão — verifique a rede',
     room:'Código',share:'📤 Convidar pelo mensageiro',copy:'Copiar',copied:'Link copiado!',players:'Jogadores',waitHost:'Todos decolam quando o anfitrião tocar em partir',
     go:'🚀 Decolar todos',need2:'Precisa de 2+ jogadores',leave:'Sair',host:'ANFITRIÃO',me:'EU',
@@ -14031,6 +14034,11 @@ function track(force){
     R.lastTrack=now;
     const m=R.myMeta||metaOut();m.u=now;
     R.members[pid]=Object.assign({},m);R.seenAt[pid]=now;
+    /* 직통(P2P)으로는 매번, 서버 방송은 중요한 순간(force===true: 입장·출발·추락)엔 항상,
+       비행 중 주기 갱신은 직통이 다 붙었으면 5초·아니면 2.5초에 한 번 — 무료 한도(초당 100건) 보호 */
+    const r=meshBroadcast({e:'st',m});
+    if(force!==true&&m.s==='play'&&now-(R.supaStAt||0)<(r.all?5000:2500))return;
+    R.supaStAt=now;
     try{R.ch.send({type:'broadcast',event:'st',payload:m})}catch(_){}
 }
 function onSt(m){
@@ -14044,8 +14052,14 @@ function onSt(m){
 }
 setInterval(()=>{
     if(!R.code||!R.joined)return;
-    track(true);
+    track('hb');
     const now=Date.now();let gone=false;
+    /* 정원 8명 — 들어온 순서로 9번째부터는 돌려보낸다(입장 3초 뒤 한 번 확인) */
+    if(!R.fullChecked&&now-R.subT>3000&&R.view==='lobby'){
+        R.fullChecked=true;
+        const ord=Object.values(R.members).sort((a,b)=>(a.j-b.j)||(a.p<b.p?-1:1));
+        if(ord.findIndex(m=>m.p===pid)>=MAXP){disconnect(false);setView('entry');setTimeout(()=>setErr(t('full')),50);return}
+    }
     Object.keys(R.members).forEach(p=>{if(p!==pid&&now-(R.seenAt[p]||0)>12000){delete R.members[p];gone=true}});
     if(gone)render();
 },2500);
@@ -14062,6 +14076,9 @@ function connect(code,creator){
     R.ch=ch;R.joined=false;R.subT=Date.now();
     ch.on('broadcast',{event:'st'},({payload})=>onSt(payload));
     ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0)});
+    ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload));
+    ch.on('broadcast',{event:'pos'},({payload})=>{if(payload&&payload.p)ghostPt(payload.p,payload.x,payload.y,false)});
+    ch.on('broadcast',{event:'tk'},({payload})=>onTakeMsg(payload));
     ch.subscribe(status=>{
         if(status==='SUBSCRIBED'){R.joined=true;track(true);render()}
         else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){R.joined=false;render()}
@@ -14074,7 +14091,7 @@ function disconnect(keep){
         const c=R.ch;setTimeout(()=>{try{getSupabase().removeChannel(c)}catch(_){}},keep?0:300);
     }
     R.ch=null;R.joined=false;
-    if(!keep){clearSession();R.code='';R.round=0;R.results={};R.finalized={};R.tally={};R.members={};R.racing=false;R.spect=false;R.myMeta=null;R.joinedAt=0}
+    if(!keep){meshCloseAll();for(const k of Object.keys(GH))delete GH[k];R.fullChecked=false;clearSession();R.code='';R.round=0;R.results={};R.finalized={};R.tally={};R.members={};R.racing=false;R.spect=false;R.myMeta=null;R.joinedAt=0}
 }
 /* 연결 감시 — 모바일은 백그라운드에서 소켓이 자주 죽는다. 끊긴 채 8초면 채널을 새로 만든다 */
 setInterval(()=>{
@@ -14082,6 +14099,214 @@ setInterval(()=>{
     if(!R.joined&&Date.now()-R.subT>8000&&!document.hidden){connect(R.code,R.creator)}
 },3000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&R.code&&!R.joined)connect(R.code,R.creator)});
+
+/* ══ 같은 공간 비행 (2026-09-24 2차) ══
+   운영자: "각자 따로가 아니라 같이 — 한정된 아이템을 서로 먼저 먹으며 오래 버티기".
+   · 운석·위험물·보급은 모두 같은 시드로 각 폰이 똑같이 만든다 → 네트워크로 운석을 보내지 않는다
+   · 네트워크로 오가는 건 위치(초당 10번)·보급 획득·상태뿐 — 폰끼리 직통(WebRTC P2P 메시)
+   · Supabase 무료 한도는 초당 100건(보낸 것+받은 것, 방송 1번 = 인원수만큼)이라
+     위치를 서버로 돌리면 8명에서 바로 넘친다. 서버는 연결 신호(초당 1건 제한)·출발·결과·
+     직통이 안 되는 짝의 위치(2초에 1번) 에만 쓴다
+   · 최대 8명 — 폰 1대가 7개 직통 연결을 유지하는 선, 화면(360×600) 에 기체 8대가 읽히는 선,
+     무료 한도 안에서 여러 방이 동시에 돌 수 있는 선의 교집합 */
+const MAXP = 8;
+const MESH = {};
+const sigQ = [];
+let sigLast = 0;
+const GH = {};
+const GCOL = ['#FF6B8B', '#7CFFB2', '#FFD166', '#8EC5FF', '#C39BFF', '#FF9F5A', '#5CE1E6', '#F7A8FF'];
+function iceList(){ try{ if(typeof RTC_ICE_SERVERS !== 'undefined') return RTC_ICE_SERVERS; }catch(_){} return [{urls:'stun:stun.l.google.com:19302'}]; }
+function sigSend(to, kind, data){ sigQ.push({to, from: pid, kind, data}); }
+setInterval(()=>{
+    if(!sigQ.length || !R.ch || !R.joined) return;
+    if(Date.now() - sigLast < 950) return;
+    sigLast = Date.now();
+    const m = sigQ.shift();
+    try{ R.ch.send({type:'broadcast', event:'sig', payload:m}); }catch(_){}
+}, 250);
+function meshWaitIce(pc){
+    return new Promise(res=>{
+        if(pc.iceGatheringState === 'complete') return res();
+        const to = setTimeout(res, 2500);
+        pc.addEventListener('icegatheringstatechange', ()=>{ if(pc.iceGatheringState === 'complete'){ clearTimeout(to); res(); } });
+    });
+}
+function meshClose(peer){
+    const M = MESH[peer]; if(!M) return;
+    try{ M.dc && M.dc.close(); }catch(_){}
+    try{ M.pc.close(); }catch(_){}
+    delete MESH[peer];
+}
+function meshCloseAll(){ Object.keys(MESH).forEach(meshClose); sigQ.length = 0; }
+function meshNew(peer, offerer){
+    const tries = MESH[peer] ? (MESH[peer].tries || 0) : 0;
+    meshClose(peer);
+    if(typeof RTCPeerConnection === 'undefined') return null;
+    let pc;
+    try{ pc = new RTCPeerConnection({iceServers: iceList()}); }catch(_){ return null; }
+    const M = {pc, dc:null, ready:false, init:Date.now(), offerer, tries, lastRx:0};
+    MESH[peer] = M;
+    const bind = dc=>{
+        M.dc = dc;
+        dc.onopen = ()=>{ M.ready = true; render(); };
+        dc.onclose = ()=>{ M.ready = false; };
+        dc.onerror = ()=>{ M.ready = false; };
+        dc.onmessage = ev=>{ M.lastRx = Date.now(); let o; try{ o = JSON.parse(ev.data); }catch(_){ return; } onP2P(peer, o); };
+    };
+    pc.onconnectionstatechange = ()=>{ const s = pc.connectionState; if(s === 'failed' || s === 'closed') M.ready = false; };
+    if(offerer){
+        /* 순서 없음 + 재전송 없음 = UDP 처럼 — 늦게 온 위치는 쓸모없다 */
+        try{ bind(pc.createDataChannel('szx', {ordered:false, maxRetransmits:0})); }catch(_){ return M; }
+        (async()=>{
+            try{
+                const o = await pc.createOffer(); await pc.setLocalDescription(o);
+                /* 후보를 다 모아 SDP 한 통으로 — ICE 를 낱개로 보내면 서버 메시지가 열 배로 는다 */
+                await meshWaitIce(pc);
+                sigSend(peer, 'offer', pc.localDescription.sdp);
+            }catch(_){}
+        })();
+    } else {
+        pc.ondatachannel = ev=>bind(ev.channel);
+    }
+    return M;
+}
+async function onSig(s){
+    if(!s || s.to !== pid || !s.from || s.from === pid) return;
+    if(s.kind === 'offer'){
+        const M = meshNew(s.from, false); if(!M) return;
+        try{
+            await M.pc.setRemoteDescription({type:'offer', sdp:s.data});
+            const a = await M.pc.createAnswer(); await M.pc.setLocalDescription(a);
+            await meshWaitIce(M.pc);
+            sigSend(s.from, 'answer', M.pc.localDescription.sdp);
+        }catch(_){}
+    } else if(s.kind === 'answer'){
+        const M = MESH[s.from]; if(!M || !M.offerer) return;
+        try{ await M.pc.setRemoteDescription({type:'answer', sdp:s.data}); }catch(_){}
+    }
+}
+/* 연결 관리 — pid 가 작은 쪽이 건다(양쪽이 동시에 걸면 꼬인다). 15초 안에 안 열리면 최대 3번 다시 */
+setInterval(()=>{
+    if(!R.code || !R.joined || typeof RTCPeerConnection === 'undefined') return;
+    const now = Date.now();
+    for(const p of Object.keys(MESH)) if(!R.members[p]) meshClose(p);
+    for(const p of Object.keys(R.members)){
+        if(p === pid || !(pid < p)) continue;
+        const M = MESH[p];
+        if(!M) meshNew(p, true);
+        else if(!M.ready && now - M.init > 15000 && (M.tries || 0) < 3){ const n = meshNew(p, true); if(n) n.tries = (M.tries || 0) + 1; }
+    }
+}, 2000);
+function meshBroadcast(obj){
+    const s = JSON.stringify(obj); let n = 0, all = true;
+    for(const p of Object.keys(R.members)){
+        if(p === pid) continue;
+        const M = MESH[p];
+        if(M && M.ready && M.dc && M.dc.readyState === 'open'){ try{ M.dc.send(s); n++; }catch(_){ all = false; } }
+        else all = false;
+    }
+    return {n, all};
+}
+function meshReadyCount(){ return Object.keys(R.members).filter(p=>p !== pid && MESH[p] && MESH[p].ready).length; }
+function onP2P(from, o){
+    if(!o) return;
+    if(o.e === 'p') ghostPt(from, o.x, o.y, true);
+    else if(o.e === 'st' && o.m) onSt(o.m);
+    else if(o.e === 'tk') onTakeMsg(o);
+}
+
+/* ── 다른 사람 기체(유령) — 120ms 늦게 보간해 그려 끊김을 숨긴다 ── */
+function ghostPt(p, x, y, viaP2P){
+    if(p === pid) return;
+    const g = GH[p] || (GH[p] = {pts:[], deadAt:0});
+    if(!viaP2P && g.p2pAt && Date.now() - g.p2pAt < 3000) return;   /* 직통이 살아 있으면 서버 위치는 무시 */
+    if(viaP2P) g.p2pAt = Date.now();
+    g.pts.push({t: Date.now(), x, y});
+    if(g.pts.length > 12) g.pts.shift();
+}
+function ghostColor(p){
+    const ids = Object.keys(R.members).sort();
+    return GCOL[Math.max(0, ids.indexOf(p)) % GCOL.length];
+}
+function drawGhosts(c){
+    if(!R.racing && !R.spect) return;
+    const now = Date.now(), T = now - 120;
+    for(const p of Object.keys(GH)){
+        const g = GH[p], m = R.members[p];
+        if(!g.pts.length || !m || m.r !== R.round) continue;
+        let a = g.pts[0], b = g.pts[g.pts.length - 1];
+        for(let i = g.pts.length - 1; i > 0; i--){ if(g.pts[i - 1].t <= T){ a = g.pts[i - 1]; b = g.pts[i]; break; } }
+        const k = b.t > a.t ? Math.max(0, Math.min(1, (T - a.t) / (b.t - a.t))) : 1;
+        const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k;
+        const col = ghostColor(p);
+        c.save();
+        if(m.s === 'done'){
+            if(!g.deadAt) g.deadAt = now;
+            const e = (now - g.deadAt) / 700; if(e > 1){ c.restore(); continue; }
+            c.globalAlpha = 1 - e; c.strokeStyle = col; c.lineWidth = 2;
+            c.beginPath(); c.arc(x, y, 8 + e * 26, 0, 6.283); c.stroke();
+            c.restore(); continue;
+        }
+        if(now - b.t > 4000){ c.restore(); continue; }
+        c.translate(x, y);
+        c.globalAlpha = 0.6;
+        c.fillStyle = 'rgba(255,170,80,0.75)';
+        c.beginPath(); c.moveTo(-3, 6); c.lineTo(0, 11 + Math.random() * 4); c.lineTo(3, 6); c.closePath(); c.fill();
+        c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(0, -11); c.lineTo(7, 8); c.lineTo(0, 4); c.lineTo(-7, 8); c.closePath(); c.fill(); c.stroke();
+        c.globalAlpha = 0.85; c.font = '700 9px "Noto Sans KR",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'top';
+        c.fillStyle = col; c.fillText(String(m.n || '').slice(0, 8), 0, 13);
+        c.restore();
+    }
+}
+/* 비행 중 위치 — 직통 초당 10번, 직통이 안 되는 짝이 있으면 서버로 2초에 1번 */
+let posSupaAt = 0;
+setInterval(()=>{
+    if(!(R.racing && running && typeof player !== 'undefined')) return;
+    const x = Math.round(player.x), y = Math.round(player.y);
+    const r = meshBroadcast({e:'p', x, y});
+    if(!r.all && R.ch && R.joined && Date.now() - posSupaAt > 2000){
+        posSupaAt = Date.now();
+        try{ R.ch.send({type:'broadcast', event:'pos', payload:{p:pid, x, y}}); }catch(_){}
+    }
+}, 100);
+
+/* ── 한정 보급 — 먼저 먹은 사람이 임자. 거의 동시면 비행 시간이 이른 쪽(같으면 pid 순) ── */
+function onTake(d){
+    if(!R.racing || !d) return;
+    d._myT = Math.round(elapsedMs);
+    const o = {e:'tk', k:d.key, t:d._myT, it:d.item, p:pid, n:R.nick};
+    meshBroadcast(o);
+    try{ R.ch && R.ch.send({type:'broadcast', event:'tk', payload:o}); }catch(_){}
+}
+function revokeItem(item){
+    try{
+        if(typeof ITEM !== 'undefined' && item === ITEM.HEART){ if(lives > 1) lives--; return; }
+        const i = inventory.indexOf(item);
+        if(i >= 0){ inventory[i] = null; syncInventoryUI(); }
+    }catch(_){}
+}
+function onTakeMsg(o){
+    if(!o || !o.k || o.p === pid || !R.racing) return;
+    R.taken = R.taken || {};
+    const prev = R.taken[o.k];
+    if(!prev || o.t < prev.t || (o.t === prev.t && o.p < prev.p)) R.taken[o.k] = {t:o.t, p:o.p, n:o.n};
+    applyTaken(o.k);
+}
+function applyTaken(k){
+    const tk = R.taken && R.taken[k]; if(!tk || typeof depots === 'undefined') return;
+    const d = depots.find(x=>x.key === k); if(!d) return;
+    if(!d.collected){
+        onDepotCollected(d, true);
+        try{ szPopup(String(tk.n || '').slice(0, 8) + ' ' + t('got'), d.x, (d.y || 0) - 18, ghostColor(tk.p), 11, 1.2); }catch(_){}
+    } else if(!d.collectedByPeer && d._myT != null && (tk.t < d._myT || (tk.t === d._myT && tk.p < pid))){
+        d.collectedByPeer = true; d._lost = true;
+        revokeItem(d.item);
+        try{ szPopup(String(tk.n || '').slice(0, 8) + ' ' + t('first'), player.x, player.y - 26, '#FF8FA3', 12, 1.4); }catch(_){}
+    }
+}
+/* 내 쪽에 아직 안 생긴 보급을 남이 먼저 먹었다는 소식이 먼저 올 수 있다 — 생기는 대로 반영 */
+setInterval(()=>{ if(R.racing && R.taken) for(const k of Object.keys(R.taken)) applyTaken(k); }, 250);
 
 /* 방장 메타(hr,hs)로 방송을 놓친 사람도 따라잡는다 — 3초 안이면 합류, 늦으면 관전 */
 function hostCatchUp(){
@@ -14111,7 +14336,8 @@ function startRound(){
 function onGo(r,s){
     if(r<=R.round)return;
     if(running||(typeof _introRunning!=='undefined'&&_introRunning)){R.round=r;R.seed=s;R.spect=true;metaOut({r,s:'spec'});track(true);return}
-    R.round=r;R.seed=s;R.spect=false;R.racing=true;
+    R.round=r;R.seed=s;R.spect=false;R.racing=true;R.taken={};
+    for(const k of Object.keys(GH))delete GH[k];
     (R.results[r]=R.results[r]||{})[pid]={p:pid,n:R.nick,s:'play',t:0,z:0,c:0,at:Date.now()};
     metaOut({r,s:'play',t:0,z:0,c:0});track(true);
     pendingSeed=s;
@@ -14204,8 +14430,9 @@ function render(){
           +'<div class="szx-col"><button class="szx-b hot" data-a="share" type="button">'+esc(t('share'))+'</button>'
           +'<div class="szx-link"><span>'+esc(link)+'</span><button type="button" data-a="copy">'+esc(t('copy'))+'</button></div></div>'
           +'<div class="szx-qr" id="szxQr"></div>';
-        B='<div class="szx-sub">'+esc(t('players'))+' '+n+(R.joined?'':' · '+esc(t('conn')))+'</div><div class="szx-list">';
-        ms.forEach(m=>{B+='<div class="szx-m'+(m.p===pid?' me':'')+'"><span class="szx-dot"></span><span class="nm">'+esc(m.n)+'</span>'
+        const pr=meshReadyCount(),others=Math.max(0,n-1);
+        B='<div class="szx-sub">'+esc(t('players'))+' '+n+'/'+MAXP+(R.joined?(others?' · '+esc(t('link'))+' '+pr+'/'+others:''):' · '+esc(t('conn')))+'</div><div class="szx-list">';
+        ms.forEach(m=>{B+='<div class="szx-m'+(m.p===pid?' me':'')+'"><span class="szx-dot" style="background:'+ghostColor(m.p)+';box-shadow:0 0 8px '+ghostColor(m.p)+'"></span><span class="nm">'+esc(m.n)+'</span>'
             +(m.h?'<span class="szx-tag host">'+esc(t('host'))+'</span>':'')+(m.p===pid?'<span class="szx-tag">'+esc(t('me'))+'</span>':'')+'</div>'});
         B+='</div>';
         C='<div class="szx-col">';
@@ -14316,6 +14543,9 @@ document.addEventListener('lp:langchanged',()=>{const b=$('szxRaceBtn');if(b)b.t
 window.SZX={
     count,unlock,applySeed,onGameOver,decorateResult,
     hasRoar:()=>!!SND.roar,
+    onTake,drawGhosts,
+    _gh:()=>GH,
+    _mesh:()=>Object.fromEntries(Object.entries(MESH).map(([k,v])=>[k,v.ready])),
     _snd:()=>({ctx:AC&&AC.state,loaded:Object.keys(SND),roar:!!roar,seed:curSeed}),
     racing:()=>R.racing,
     busy:()=>!!(panel&&panel.classList.contains('on')),
@@ -14324,7 +14554,7 @@ window.SZX={
 })();
 </script>
 
-<script src="/js/siteFooter.js?v=1790250923"></script>
+<script src="/js/siteFooter.js?v=1790252643"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
@@ -14474,7 +14704,7 @@ window.SZX={
         <dt>Q. 장애물 패턴은 정해져 있나요?</dt>
         <dd>판마다 새 코스(시드)가 뽑혀 배치가 달라집니다. 다만 같은 시드면 운석·위험물·보급 위치가 완전히 같아서, 결과 화면의 도전장 링크를 받은 친구는 내가 날았던 바로 그 코스로 기록에 도전합니다. 조준탄은 각자의 기체 위치를 겨누므로 실력 차이는 그대로 드러납니다.</dd>
         <dt>Q. 여러 명이 동시에 겨룰 수 있나요?</dt>
-        <dd>'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 방장이 출발을 누르면 모두 같은 코스로 동시에 한 판을 날고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 판이 거듭되면 1등 횟수가 누적됩니다.</dd>
+        <dd>'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 최대 8명이 한 우주를 같이 날며 서로의 기체가 화면에 보이고, 보급은 먼저 먹은 사람이 가져갑니다. 운석은 모두에게 똑같이 쏟아지고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 위치는 폰끼리 직접 주고받아(초당 10번) LTE 에서도 끊김이 적고, 직통이 막힌 짝만 서버를 거칩니다.</dd>
         <dt>Q. 잘 피하는 요령이 있나요?</dt>
         <dd>자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다.</dd>
         <dt>Q. 어디까지 갈 수 있나요?</dt>
@@ -14487,7 +14717,7 @@ window.SZX={
     <footer class="lp-about-footer">다른 액션 게임은 <a href="/games/starship-lander/">스타십 착륙</a>·<a href="/games/snake/">스네이크</a>를 확인해 보세요.</footer>
   </div>
 </section>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"점수는 어떻게 계산되나요?","acceptedAnswer":{"@type":"Answer","text":"버틴 시간이 곧 점수입니다. 진행 구간이 올라갈수록 획득 속도도 빨라집니다."}},{"@type":"Question","name":"장애물 패턴은 정해져 있나요?","acceptedAnswer":{"@type":"Answer","text":"판마다 새 코스(시드)가 뽑혀 배치가 달라집니다. 다만 같은 시드면 운석·위험물·보급 위치가 완전히 같아서, 결과 화면의 도전장 링크를 받은 친구는 내가 날았던 바로 그 코스로 기록에 도전합니다. 조준탄은 각자의 기체 위치를 겨누므로 실력 차이는 그대로 드러납니다."}},{"@type":"Question","name":"여러 명이 동시에 겨룰 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 방장이 출발을 누르면 모두 같은 코스로 동시에 한 판을 날고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 판이 거듭되면 1등 횟수가 누적됩니다."}},{"@type":"Question","name":"잘 피하는 요령이 있나요?","acceptedAnswer":{"@type":"Answer","text":"자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다."}},{"@type":"Question","name":"어디까지 갈 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"지구에서 출발해 말머리 성운까지 이어집니다. 구간마다 배경과 난이도가 달라집니다."}},{"@type":"Question","name":"모바일과 PC 중 어디가 유리한가요?","acceptedAnswer":{"@type":"Answer","text":"둘 다 지원합니다. 모바일은 드래그로 직관적이고, PC는 방향키로 미세 조정이 쉬워 취향에 따라 다릅니다."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"점수는 어떻게 계산되나요?","acceptedAnswer":{"@type":"Answer","text":"버틴 시간이 곧 점수입니다. 진행 구간이 올라갈수록 획득 속도도 빨라집니다."}},{"@type":"Question","name":"장애물 패턴은 정해져 있나요?","acceptedAnswer":{"@type":"Answer","text":"판마다 새 코스(시드)가 뽑혀 배치가 달라집니다. 다만 같은 시드면 운석·위험물·보급 위치가 완전히 같아서, 결과 화면의 도전장 링크를 받은 친구는 내가 날았던 바로 그 코스로 기록에 도전합니다. 조준탄은 각자의 기체 위치를 겨누므로 실력 차이는 그대로 드러납니다."}},{"@type":"Question","name":"여러 명이 동시에 겨룰 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 최대 8명이 한 우주를 같이 날며 서로의 기체가 화면에 보이고, 보급은 먼저 먹은 사람이 가져갑니다. 운석은 모두에게 똑같이 쏟아지고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 위치는 폰끼리 직접 주고받아(초당 10번) LTE 에서도 끊김이 적고, 직통이 막힌 짝만 서버를 거칩니다."}},{"@type":"Question","name":"잘 피하는 요령이 있나요?","acceptedAnswer":{"@type":"Answer","text":"자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다."}},{"@type":"Question","name":"어디까지 갈 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"지구에서 출발해 말머리 성운까지 이어집니다. 구간마다 배경과 난이도가 달라집니다."}},{"@type":"Question","name":"모바일과 PC 중 어디가 유리한가요?","acceptedAnswer":{"@type":"Answer","text":"둘 다 지원합니다. 모바일은 드래그로 직관적이고, PC는 방향키로 미세 조정이 쉬워 취향에 따라 다릅니다."}}]}</script>
 <script>
 /* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
    CSS 만으로는 못 한다 — 게임마다 흐름 높이가 0~734px 로 제각각이라
