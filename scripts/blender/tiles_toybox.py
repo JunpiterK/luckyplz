@@ -607,12 +607,295 @@ def balloon():
     return g
 
 
+# ════════════ 아케이드 11종 (2026-09-24) ════════════
+# 운영자: "아케이드 들어간 화면도 메인 UI 와 결이 같게". 이모지 11개를 같은 진열장 장난감으로.
+GLASS = lambda: mat('glass', (0.7, 0.85, 1.0), rough=0.05, coat=0, trans=0.9)
+
+
+def lotto():
+    """로또 — 유리 추첨기 안에 색색 공, 앞에 뽑혀 나온 공 하나."""
+    g = group("lotto", math.radians(-20))
+    cyl(0.62, 0.34, (0, 0, 0.17), P('mustard'), bevel=0.06, parent=g)
+    cyl(0.66, 0.06, (0, 0, 0.36), CHROME(), bevel=0.01, parent=g)
+    cyl(0.36, 0.14, (0, 0, 0.45), P('tomato'), bevel=0.03, parent=g)
+    C = Vector((0, 0, 1.2))
+    sph(0.76, C, GLASS(), parent=g, seg=48)
+    torus(0.3, 0.04, (0, 0, 0.5), GOLD(), parent=g)
+    cols = ['tomato', 'teal', 'mustard', 'cobalt', 'pink', 'green', 'orange', 'cream', 'violet']
+    spots = [(-0.32, 0.1, -0.38), (0.05, 0.2, -0.46), (0.36, 0.0, -0.36), (-0.12, -0.2, -0.3), (0.2, -0.22, -0.12),
+             (-0.35, 0.05, 0.02), (0.05, 0.1, 0.18), (0.38, 0.12, 0.25), (-0.18, -0.1, 0.36)]
+    for (x, y, z), cn in zip(spots, cols):
+        sph(0.15, (C.x + x, C.y + y, C.z + z), P(cn, coat=0.9), parent=g, seg=24)
+    cyl(0.12, 0.42, (0, 0, 2.1), GLASS(), bevel=0.0, parent=g)
+    sph(0.16, (0, 0, 2.33), CHROME(), scale=(1, 1, 0.6), parent=g, seg=24)
+    # 뽑혀 나온 공 — 흰 원판 + 번호
+    B = (0.78, -0.5, 0.26)
+    sph(0.26, B, P('tomato', coat=0.9), parent=g, seg=32)
+    cyl(0.15, 0.03, (B[0], B[1] - 0.245, B[2]), P('white'), rot=(math.radians(90), 0, 0), bevel=0.01, parent=g)
+    text("7", 0.2, (B[0], B[1] - 0.27, B[2] - 0.005), DARK(), extrude=0.008, parent=g)
+    return g
+
+
+def planet():
+    """행성 키우기 — 띠무늬 행성 + 기운 고리 + 달 + 꼬리 달린 운석."""
+    g = group("planet", math.radians(-15))
+    cyl(0.42, 0.12, (0, 0, 0.06), P('navy'), bevel=0.04, parent=g)
+    capsule((0, 0, 0.1), (0, 0, 0.55), 0.06, CHROME(), parent=g)
+    C = (0, 0, 1.25)
+    R = 0.68
+    sph(R, C, P('violet'), parent=g, seg=48)
+    for dz, cn in ((-0.34, 'pink'), (0.02, 'mustard'), (0.34, 'pink')):
+        torus(math.sqrt(R * R - dz * dz) - 0.01, 0.055, (C[0], C[1], C[2] + dz), P(cn), parent=g)
+    ring = torus(1.08, 0.07, C, P('cream'), rot=(math.radians(-16), math.radians(14), 0), parent=g)
+    ring.scale = (1, 1, 0.5)
+    sph(0.16, (0.92, -0.35, 2.02), P('cream', rough=0.6), parent=g, seg=24)
+    sph(0.13, (-0.98, -0.25, 2.0), P('orange'), parent=g, seg=24)
+    tail = mat('tail', (1.0, 0.6, 0.2), emit=(1.0, 0.55, 0.15), estr=1.2, coat=0)
+    cone(0.11, 0.0, 0.5, (-1.16, -0.25, 2.18), tail, rot=(0, math.radians(-45), 0), parent=g)
+    return g
+
+
+def engine():
+    """델타-브이 — 시험대에 매달린 로켓 엔진(구리 노즐 + 불꽃) + 스패너."""
+    g = group("orbit", math.radians(-24))
+    box((1.9, 1.0, 0.16), (0, 0, 0.08), P('slate'), bevel=0.05, parent=g)
+    for s in (-1, 1):
+        box((0.12, 0.12, 2.0), (s * 0.72, 0.1, 1.1), P('teal'), bevel=0.03, parent=g)
+    box((1.56, 0.14, 0.14), (0, 0.1, 2.08), P('teal'), bevel=0.03, parent=g)
+    cyl(0.26, 0.42, (0, 0, 1.78), P('cream'), bevel=0.04, parent=g)
+    sph(0.26, (0, 0, 1.99), P('cream'), scale=(1, 1, 0.5), parent=g)
+    for s in (-1, 1):
+        capsule((s * 0.2, 0, 1.8), (s * 0.66, 0.1, 1.8), 0.05, CHROME(), parent=g)
+        capsule((s * 0.14, -0.1, 1.62), (s * 0.3, -0.12, 1.35), 0.045, P('tomato'), parent=g)
+    copper = mat('copper', (0.85, 0.45, 0.25), rough=0.25, metal=1.0, coat=0)
+    cone(0.42, 0.17, 0.72, (0, 0, 1.2), copper, parent=g)
+    flame = mat('flame', (1.0, 0.7, 0.25), emit=(1.0, 0.55, 0.15), estr=2.2, coat=0)
+    cone(0.32, 0.03, 0.6, (0, 0, 0.55), flame, parent=g)
+    core = mat('flamecore', (1.0, 0.95, 0.7), emit=(1.0, 0.9, 0.6), estr=3.0, coat=0)
+    cone(0.16, 0.02, 0.4, (0, -0.02, 0.66), core, parent=g)
+    w = group("wrench", 0, loc=(0.98, -0.42, 0.18))
+    w.parent = g
+    w.rotation_euler = (math.radians(-10), math.radians(28), 0)
+    box((0.1, 0.05, 0.9), (0, 0, 0.45), CHROME(), bevel=0.02, parent=w)
+    torus(0.12, 0.05, (0, 0, 0.98), CHROME(), rot=(math.radians(90), 0, 0), parent=w)
+    return g
+
+
+def rocket():
+    """스페이스-Z — 빨강·흰 틴 로켓이 소행성 사이를 비스듬히 뚫고 오른다."""
+    g = group("dodge", math.radians(-12))
+    r = group("rkt", 0, loc=(0.05, 0, 1.2))
+    r.parent = g
+    r.rotation_euler = (0, math.radians(32), 0)
+    W = P('white', coat=0.8)
+    cyl(0.3, 1.0, (0, 0, 0), W, bevel=0.02, parent=r)
+    cone(0.3, 0.0, 0.62, (0, 0, 0.81), P('tomato'), parent=r)
+    cyl(0.305, 0.08, (0, 0, 0.36), P('tomato'), bevel=0.0, parent=r)
+    cyl(0.13, 0.04, (0, -0.29, 0.12), GLASS(), rot=(math.radians(90), 0, 0), bevel=0.01, parent=r)
+    torus(0.13, 0.03, (0, -0.3, 0.12), CHROME(), rot=(math.radians(90), 0, 0), parent=r)
+    for k in range(3):
+        a = k * 2 * math.pi / 3 + math.pi / 2
+        fin = prism([(0, 0), (0.34, -0.1), (0.34, -0.42), (0, -0.22)], 0.06, (0, 0, -0.26), P('tomato'),
+                    rot=(math.radians(90), 0, a), parent=r)
+        fin.location = (math.cos(a) * 0.28, math.sin(a) * 0.28, -0.26)
+        fin.rotation_euler = (math.radians(90), 0, a)
+    cyl(0.18, 0.14, (0, 0, -0.56), CHROME(), bevel=0.02, parent=r)
+    flame = mat('flame', (1.0, 0.7, 0.25), emit=(1.0, 0.55, 0.15), estr=2.2, coat=0)
+    cone(0.2, 0.0, 0.55, (0, 0, -0.9), flame, rot=(math.pi, 0, 0), parent=r)
+    rock = P('slate', rough=0.7, coat=0.1)
+    for (x, y, z, s, sc) in ((-0.9, -0.1, 1.85, 0.26, (1.2, 1, 0.8)), (0.95, 0.1, 0.55, 0.2, (1, 0.9, 1.2)),
+                              (-0.75, -0.3, 0.45, 0.15, (1, 1, 0.8)), (1.0, -0.2, 1.95, 0.12, (1.1, 1, 1))):
+        sph(s, (x, y, z), rock, scale=sc, parent=g, seg=14)
+    return g
+
+
+def blocks():
+    """블록 스택 — 쌓인 테트로미노 + 위에서 떨어지는 T 블록."""
+    g = group("blocks", math.radians(-22))
+    s = 0.36
+    cells = {
+        'cobalt': [(0, 0), (1, 0), (2, 0), (0, 1)],
+        'mustard': [(3, 0), (4, 0), (3, 1), (4, 1)],
+        'green': [(1, 1), (2, 1), (2, 2), (3, 2)],
+        'teal': [(0, 2), (0, 3), (1, 2), (0, 4)],
+    }
+    for cn, cs in cells.items():
+        for (cx, cz) in cs:
+            box((s * 0.95, s * 0.95, s * 0.95), ((cx - 2) * s, 0, cz * s + s / 2), P(cn), bevel=0.05, parent=g)
+    t = group("T", 0, loc=(0.45, -0.05, 2.1))
+    t.parent = g
+    t.rotation_euler = (0, math.radians(-12), 0)
+    for (cx, cz) in ((-1, 0), (0, 0), (1, 0), (0, -1)):
+        box((s * 0.95, s * 0.95, s * 0.95), (cx * s, 0, cz * s), P('tomato'), bevel=0.05, parent=t)
+    for k in range(3):
+        box((0.03, 0.03, 0.22), (0.45 + (k - 1) * 0.3, -0.05, 1.55 - k * 0.05), mat('spd', (1, 1, 1), coat=0, emit=(1, 1, 1), estr=0.5), bevel=0.0, parent=g)
+    return g
+
+
+def lander():
+    """스타십 착륙 — 다리 셋 달린 착륙선이 H 패드 위로 불꽃을 뿜으며 내려온다."""
+    g = group("lander", math.radians(-20))
+    cyl(1.0, 0.12, (0, 0, 0.06), P('slate'), bevel=0.04, parent=g)
+    torus(0.86, 0.03, (0, 0, 0.13), mat('padlight', (1, 0.8, 0.3), emit=(1, 0.75, 0.2), estr=1.5, coat=0), parent=g)
+    text("H", 0.7, (0, 0, 0.14), P('mustard'), rot=(0, 0, 0), extrude=0.02, parent=g)
+    Z = 1.5
+    cyl(0.5, 0.3, (0, 0, Z - 0.25), P('cream'), bevel=0.05, parent=g)
+    sph(0.5, (0, 0, Z), P('violet'), scale=(1, 1, 0.78), parent=g)
+    sph(0.17, (0, -0.4, Z + 0.1), GLASS(), scale=(1, 0.5, 1), parent=g, seg=24)
+    torus(0.17, 0.03, (0, -0.43, Z + 0.1), CHROME(), rot=(math.radians(90), 0, 0), parent=g)
+    capsule((0, 0, Z + 0.35), (0.12, 0, Z + 0.72), 0.025, CHROME(), parent=g)
+    sph(0.06, (0.12, 0, Z + 0.74), P('tomato'), parent=g, seg=16)
+    for k in range(3):
+        a = k * 2 * math.pi / 3 - math.pi / 2
+        c, s = math.cos(a), math.sin(a)
+        capsule((c * 0.4, s * 0.4, Z - 0.3), (c * 0.85, s * 0.85, 0.55), 0.05, CHROME(), parent=g)
+        cyl(0.13, 0.05, (c * 0.86, s * 0.86, 0.52), CHROME(), bevel=0.01, parent=g)
+    cone(0.22, 0.14, 0.2, (0, 0, Z - 0.5), CHROME(), parent=g)
+    flame = mat('flame', (1.0, 0.7, 0.25), emit=(1.0, 0.55, 0.15), estr=2.2, coat=0)
+    cone(0.2, 0.0, 0.62, (0, 0, Z - 0.9), flame, rot=(math.pi, 0, 0), parent=g)
+    return g
+
+
+def bricks():
+    """벽돌깨기 — 세운 판에 색 벽돌 줄(몇 개 빠짐) + 튀는 공 + 패들."""
+    g = group("bricks", math.radians(-18))
+    box((2.2, 0.16, 2.2), (0, 0.12, 1.12), P('navy'), bevel=0.07, parent=g)
+    box((1.3, 0.55, 0.12), (0, 0.1, 0.06), P('slate'), bevel=0.04, parent=g)
+    rows = ['tomato', 'orange', 'mustard', 'green']
+    missing = {(1, 1), (2, 3), (3, 2), (3, 3)}
+    for ri, cn in enumerate(rows):
+        for ci in range(4):
+            if (ri, ci) in missing:
+                continue
+            box((0.42, 0.14, 0.2), (-0.72 + ci * 0.48, -0.02, 1.95 - ri * 0.25), P(cn), bevel=0.035, parent=g)
+    box((0.62, 0.16, 0.14), (0.15, -0.05, 0.4), P('cobalt'), bevel=0.06, parent=g)
+    ball = mat('ballglow', (1, 1, 1), emit=(1.0, 0.95, 0.8), estr=0.4, coat=0.8)
+    sph(0.1, (0.42, -0.1, 1.02), ball, parent=g, seg=24)
+    trail = mat('trail', (1, 1, 1), emit=(1, 0.9, 0.7), estr=0.3, coat=0)
+    for k, (x, z, r) in enumerate(((0.3, 0.84, 0.06), (0.2, 0.68, 0.045), (0.12, 0.55, 0.03))):
+        sph(r, (x, -0.1, z), trail, parent=g, seg=16)
+    return g
+
+
+def snake():
+    """스네이크 — 줄무늬 구슬 뱀이 S 자로 기어 와서 고개를 들고 사과를 노린다."""
+    g = group("snake", math.radians(-10))
+    pts = []
+    n = 16
+    for i in range(n):
+        u = i / (n - 1)
+        x = -1.05 + u * 1.55
+        y = 0.4 * math.sin(u * 2.4 * math.pi) + 0.1
+        r = 0.12 + 0.08 * u
+        pts.append((x, y, r))
+    for i, (x, y, r) in enumerate(pts):
+        sph(r, (x, y, r), P('green' if i % 3 else 'mustard', coat=0.8), parent=g, seg=24)
+    neck = [(0.58, -0.08, 0.32, 0.2), (0.62, -0.16, 0.52, 0.2)]
+    for (x, y, z, r) in neck:
+        sph(r, (x, y, z), P('green', coat=0.8), parent=g, seg=24)
+    H = Vector((0.66, -0.26, 0.78))
+    sph(0.3, H, P('green', coat=0.8), scale=(1.15, 1.05, 0.85), parent=g, seg=32)
+    W = P('white', coat=0.6)
+    for s in (-1, 1):
+        sph(0.1, (H.x + s * 0.13, H.y - 0.2, H.z + 0.12), W, scale=(1, 0.6, 1), parent=g, seg=20)
+        sph(0.05, (H.x + s * 0.13 + 0.02, H.y - 0.26, H.z + 0.11), DARK(), scale=(1, 0.5, 1), parent=g, seg=16)
+    for s in (-1, 1):
+        capsule((H.x + 0.25, H.y - 0.22, H.z - 0.1), (H.x + 0.44, H.y - 0.3 + s * 0.05, H.z - 0.12), 0.018, P('tomato'), parent=g)
+    A = (1.05, -0.5, 0.24)
+    sph(0.24, A, P('tomato', coat=0.9), scale=(1, 1, 0.92), parent=g, seg=32)
+    capsule((A[0], A[1], A[2] + 0.18), (A[0] + 0.03, A[1], A[2] + 0.34), 0.025, P('wood'), parent=g)
+    sph(0.09, (A[0] + 0.12, A[1], A[2] + 0.32), P('green'), scale=(1.4, 0.4, 0.7), parent=g, seg=16)
+    return g
+
+
+def ghost(col, loc, look=(0.0, -1.0), parent=None, scale=1.0):
+    e = group("ghost", 0, loc=(loc[0], loc[1], 0))
+    if parent:
+        e.parent = parent
+    C = P(col, coat=0.8)
+    sph(0.42, (0, 0, 1.0), C, parent=e, seg=40)
+    cyl(0.42, 0.5, (0, 0, 0.75), C, bevel=0.0, parent=e)
+    for k in range(8):
+        a = k * 2 * math.pi / 8
+        sph(0.11, (math.cos(a) * 0.33, math.sin(a) * 0.33, 0.5), C, scale=(1, 1, 1.3), parent=e, seg=20)
+    W = P('white', coat=0.6)
+    for s in (-1, 1):
+        sph(0.12, (s * 0.15, -0.34, 1.02), W, scale=(0.9, 0.6, 1.15), parent=e, seg=24)
+        sph(0.06, (s * 0.15 + look[0] * 0.05, -0.41, 1.0 + look[1] * 0.0), P('cobalt'), scale=(1, 0.5, 1), parent=e, seg=16)
+    e.scale = (scale, scale, scale)
+    return e
+
+
+def ghosts():
+    """닷 러너 — 도망치는 금색 점 줄을 유령 둘이 쫓아온다."""
+    g = group("dots", math.radians(-14))
+    ghost('tomato', (-0.55, 0.35), look=(1.0, 0), parent=g, scale=1.0)
+    ghost('teal', (0.45, 0.55), look=(-1.0, 0), parent=g, scale=0.85)
+    dot = mat('dot', PAL['mustard'], emit=(1.0, 0.7, 0.2), estr=0.35, coat=0.8)
+    for k in range(5):
+        sph(0.07, (-0.9 + k * 0.42, -0.55, 0.08), dot, parent=g, seg=16)
+    sph(0.15, (1.05, -0.5, 0.16), dot, parent=g, seg=24)
+    return g
+
+
+def burger():
+    """버거 셰프 — 참깨빵 치즈버거 + 이쑤시개 깃발."""
+    g = group("burger", math.radians(-18))
+    bun = mat('bun', (0.93, 0.58, 0.22), rough=0.35, coat=0.6)
+    cyl(0.62, 0.12, (0, 0, 0.06), P('cream'), bevel=0.04, parent=g)  # 접시
+    cyl(0.78, 0.24, (0, 0, 0.26), bun, bevel=0.1, parent=g)
+    cyl(0.86, 0.22, (0, 0, 0.5), mat('patty', (0.33, 0.16, 0.08), rough=0.7, coat=0.2), bevel=0.08, parent=g)
+    box((1.3, 1.3, 0.05), (0, 0, 0.64), mat('cheese', (1.0, 0.75, 0.15), rough=0.3, coat=0.5), rot=(0, 0, math.radians(45)), bevel=0.02, parent=g)
+    cyl(0.8, 0.09, (0, 0, 0.72), P('tomato'), bevel=0.03, parent=g)
+    let = mat('lettuce', (0.35, 0.8, 0.25), rough=0.4, coat=0.5)
+    for k in range(10):
+        a = k * 2 * math.pi / 10
+        sph(0.2, (math.cos(a) * 0.72, math.sin(a) * 0.72, 0.8), let, scale=(1.2, 1.2, 0.3), parent=g, seg=20)
+    cyl(0.8, 0.06, (0, 0, 0.8), let, bevel=0.02, parent=g)
+    sph(0.84, (0, 0, 0.84), bun, scale=(1, 1, 0.62), parent=g, seg=48)
+    seed = P('ivory')
+    for k in range(9):
+        a = k * 2.4
+        rr = 0.25 + (k % 3) * 0.17
+        x, y = math.cos(a) * rr, math.sin(a) * rr
+        z = 0.84 + 0.52 * math.sqrt(max(0, 1 - (x * x + y * y) / 0.7))
+        sph(0.045, (x, y, z), seed, scale=(1.4, 0.8, 0.5), parent=g, seg=12)
+    capsule((0.08, 0, 1.3), (0.1, 0, 2.05), 0.018, P('wood'), parent=g)
+    prism([(0, 0), (0.42, -0.1), (0, -0.24)], 0.02, (0.1, 0, 2.05), P('tomato'), parent=g)
+    return g
+
+
+def quiz():
+    """라이브 퀴즈 — 큰 빨간 부저 + 금색 물음표 팻말."""
+    g = group("quiz", math.radians(-20))
+    box((1.2, 0.95, 0.46), (0.3, 0, 0.23), P('violet'), bevel=0.08, parent=g)
+    box((1.22, 0.1, 0.12), (0.3, -0.45, 0.34), P('mustard'), bevel=0.03, parent=g)
+    cyl(0.44, 0.1, (0.3, 0, 0.51), CHROME(), bevel=0.02, parent=g)
+    btn = mat('buzz', PAL['tomato'], emit=(1.0, 0.15, 0.1), estr=0.35, coat=1.0, rough=0.15)
+    sph(0.4, (0.3, 0, 0.56), btn, scale=(1, 1, 0.62), parent=g, seg=40)
+    bulb = mat('bulb', (1, 0.9, 0.6), emit=(1.0, 0.82, 0.45), estr=8, coat=0)
+    for k in range(5):
+        sph(0.035, (-0.14 + k * 0.22, -0.48, 0.2), bulb, parent=g, seg=12)
+    q = group("q", 0, loc=(-0.62, 0.15, 0))
+    q.parent = g
+    q.rotation_euler = (0, 0, math.radians(14))
+    capsule((0, 0, 0.1), (0, 0, 0.9), 0.04, CHROME(), parent=q)
+    cyl(0.25, 0.08, (0, 0, 0.04), P('slate'), bevel=0.02, parent=q)
+    cyl(0.48, 0.1, (0, -0.02, 1.35), P('cobalt'), rot=(math.radians(90), 0, 0), bevel=0.03, parent=q)
+    torus(0.48, 0.04, (0, -0.02, 1.35), GOLD(), rot=(math.radians(90), 0, 0), parent=q)
+    text("?", 0.72, (0, -0.1, 1.35), GOLD(), extrude=0.05, parent=q)
+    return g
+
+
 TOYS = {'roulette': roulette, 'car-racing': car, 'glory-racing': brawl, 'dice': dice, 'ladder': ladder,
-        'bingo': bingo, 'team': team, 'retro': arcade, 'balloon': balloon}
+        'bingo': bingo, 'team': team, 'retro': arcade, 'balloon': balloon,
+        'lotto': lotto, 'lucky-merge': planet, 'orbit': engine, 'dodge': rocket, 'tetris': blocks,
+        'starship-lander': lander, 'brick': bricks, 'snake': snake, 'pacman': ghosts, 'burger': burger, 'quiz': quiz}
+HOME_IDS = ['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
 
 if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
-    ids = argv or list(TOYS)
+    ids = argv or HOME_IDS
     for tid in ids:
         sc = studio()
         TOYS[tid]()
