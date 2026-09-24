@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790220653">
+<meta name="lp-build" content="1790222410">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790220653";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790222410";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -658,13 +658,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <canvas id="confettiCanvas"></canvas>
     <div class="share-toast" id="shareToast"></div>
 
-<script src="/js/topNav.js?v=1790220653"></script>
-<script src="/js/langBar.js?v=1790220653"></script>
-<script src="/js/participantPresets.js?v=1790220653"></script>
+<script src="/js/topNav.js?v=1790222410"></script>
+<script src="/js/langBar.js?v=1790222410"></script>
+<script src="/js/participantPresets.js?v=1790222410"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790220653"></script>
-<script src="/js/groups.js?v=1790220653"></script>
-<script src="/js/nextGames.js?v=1790220653"></script>
+<script src="/js/supabase-config.js?v=1790222410"></script>
+<script src="/js/groups.js?v=1790222410"></script>
+<script src="/js/nextGames.js?v=1790222410"></script>
 <script>
 /* ========================================
    Lucky Please - Ladder Game (사다리타기)
@@ -1034,96 +1034,107 @@ function resizeCanvas(){
     if(ladder&&Array.isArray(ladder.rungs)&&typeof layoutLadder==='function')layoutLadder();
 }
 
+/* ─── 2026-09-24 비주얼 대개편 ───
+   레일 = 속이 빛나는 유리관, 가로대 = 양끝 볼트로 고정된 관, 위 = 플레이어 토큰, 아래 = 결과 카드.
+   지나간 길은 그 플레이어 색 빛으로 칠해져 남고, 도착하면 결과 카드가 튀어 오르며 켜진다. */
+const LAD={bg:null,bgW:0,bgH:0,sparks:[]};
+function hexRgb(h){const m=/^#?([0-9a-f]{6})$/i.exec(h||'');if(!m)return[255,255,255];const v=parseInt(m[1],16);return[v>>16&255,v>>8&255,v&255]}
+function rgba(h,a){const c=hexRgb(h);return`rgba(${c[0]},${c[1]},${c[2]},${a})`}
+function ladderBg(){
+    if(LAD.bg&&LAD.bgW===W&&LAD.bgH===H)return LAD.bg;
+    const c=document.createElement('canvas');c.width=Math.max(1,W*dpr);c.height=Math.max(1,H*dpr);const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+    const g=x.createRadialGradient(W/2,H*0.45,20,W/2,H*0.5,Math.max(W,H)*0.8);g.addColorStop(0,'#1b1740');g.addColorStop(0.6,'#0e0c24');g.addColorStop(1,'#06050f');
+    x.fillStyle=g;x.fillRect(0,0,W,H);
+    /* 옅은 도트 격자 — 게임판 느낌 */
+    x.fillStyle='rgba(160,170,255,0.07)';for(let yy=12;yy<H;yy+=22)for(let xx=12;xx<W;xx+=22){x.beginPath();x.arc(xx,yy,1,0,Math.PI*2);x.fill()}
+    const v=x.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35,W/2,H/2,Math.max(W,H)*0.75);v.addColorStop(0,'rgba(0,0,0,0)');v.addColorStop(1,'rgba(0,0,0,0.55)');x.fillStyle=v;x.fillRect(0,0,W,H);
+    LAD.bg=c;LAD.bgW=W;LAD.bgH=H;return c;
+}
+function tubeV(x,y1,y2,w,col,lit){
+    const g=ctx.createLinearGradient(x-w/2,0,x+w/2,0);
+    g.addColorStop(0,'rgba(10,12,30,0.95)');g.addColorStop(0.28,rgba(col,lit?0.55:0.22));g.addColorStop(0.42,'rgba(255,255,255,0.55)');g.addColorStop(0.58,rgba(col,lit?0.5:0.2));g.addColorStop(1,'rgba(6,8,20,0.95)');
+    ctx.fillStyle=g;ctx.fillRect(x-w/2,y1,w,y2-y1);
+}
+function tubeH(x1,x2,y,w){
+    const g=ctx.createLinearGradient(0,y-w/2,0,y+w/2);
+    g.addColorStop(0,'#2a2d44');g.addColorStop(0.35,'#c9cfe8');g.addColorStop(0.55,'#7d84a6');g.addColorStop(1,'#1a1c2e');
+    ctx.fillStyle=g;ctx.fillRect(x1,y-w/2,x2-x1,w);
+}
+function rivet(x,y,r){
+    const g=ctx.createRadialGradient(x-r*0.35,y-r*0.4,0.5,x,y,r);g.addColorStop(0,'#ffffff');g.addColorStop(0.45,'#b8bfd8');g.addColorStop(1,'#3a3f5c');
+    ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+}
+function rrect(x,y,w,h,r){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(x,y,w,h,r);else ctx.rect(x,y,w,h)}
 function drawLadder(){
     const{verticals:v,horizontals:h,names,results,n}=ladder;
-
-    // Draw vertical lines with neon glow
+    if(!v||!v.length)return;
+    ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(ladderBg(),0,0);ctx.restore();
+    const now=performance.now();
+    const gap=n>1?v[1].x-v[0].x:120;
+    const tw=Math.max(5,Math.min(11,gap*0.09));
+    /* 레일 뒤 빛 번짐 */
+    v.forEach((vert,i)=>{const col=COLORS[i%COLORS.length];
+        ctx.save();ctx.globalCompositeOperation='lighter';const gl=ctx.createLinearGradient(vert.x-tw*2.5,0,vert.x+tw*2.5,0);gl.addColorStop(0,rgba(col,0));gl.addColorStop(0.5,rgba(col,0.12));gl.addColorStop(1,rgba(col,0));
+        ctx.fillStyle=gl;ctx.fillRect(vert.x-tw*2.5,vert.topY,tw*5,vert.botY-vert.topY);ctx.restore()});
+    /* 가로대 — 레일 뒤에 끼워진 관 + 양끝 볼트 */
+    const rw=Math.max(4,tw*0.72);
+    h.forEach(rung=>{tubeH(rung.x1,rung.x2,rung.y,rw);});
+    /* 레일 */
+    v.forEach((vert,i)=>{const col=COLORS[i%COLORS.length];tubeV(vert.x,vert.topY,vert.botY,tw,col,false);
+        rivet(vert.x,vert.topY,tw*0.75);rivet(vert.x,vert.botY,tw*0.75)});
+    h.forEach(rung=>{rivet(rung.x1,rung.y,rw*0.62);rivet(rung.x2,rung.y,rw*0.62)});
+    /* 지나간 길 — 플레이어 색 빛으로 칠해진다 */
+    if(typeof tracers!=='undefined')tracers.forEach(t=>paintPath(t));
+    /* 위: 플레이어 토큰 + 이름 */
+    const fontSize=Math.max(9,Math.min(14,gap*0.2));   /* 폰 6명: 칸 56px → 11px, 이름끼리 안 붙는다 */
+    const tokR=Math.max(11,Math.min(18,gap*0.17));
     v.forEach((vert,i)=>{
-        ctx.save();
-        ctx.shadowColor=COLORS[i%COLORS.length];
-        ctx.shadowBlur=8;
-        ctx.strokeStyle=COLORS[i%COLORS.length];
-        ctx.globalAlpha=0.4;
-        ctx.lineWidth=3;
-        ctx.beginPath();ctx.moveTo(vert.x,vert.topY);ctx.lineTo(vert.x,vert.botY);ctx.stroke();
-        ctx.restore();
-
-        // Brighter core line
-        ctx.save();
-        ctx.strokeStyle='rgba(255,255,255,0.25)';
-        ctx.lineWidth=1.5;
-        ctx.beginPath();ctx.moveTo(vert.x,vert.topY);ctx.lineTo(vert.x,vert.botY);ctx.stroke();
-        ctx.restore();
+        const col=COLORS[i%COLORS.length],x=vert.x,y=vert.topY-tokR-8;
+        const running=typeof tracers!=='undefined'&&tracers.some(t=>t.playerIdx===i&&!t.done);
+        const pulse=running?1+0.08*Math.sin(now/120):1;
+        ctx.save();ctx.shadowColor=col;ctx.shadowBlur=running?22:12;
+        const g=ctx.createRadialGradient(x-tokR*0.35,y-tokR*0.4,1,x,y,tokR*pulse);g.addColorStop(0,'#fff');g.addColorStop(0.3,col);g.addColorStop(1,rgba(col,0.55));
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,tokR*pulse,0,Math.PI*2);ctx.fill();ctx.restore();
+        ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,tokR*pulse,0,Math.PI*2);ctx.stroke();
+        ctx.fillStyle='#0b0b18';ctx.font=`900 ${Math.round(tokR*0.95)}px 'Orbitron','Noto Sans KR',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(i+1,x,y+1);
+        ctx.font=`800 ${fontSize}px 'Noto Sans KR',sans-serif`;ctx.textBaseline='alphabetic';
+        ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillText(names[i]||'',x+1,y-tokR-7+1,gap*0.95);
+        ctx.fillStyle='#fff';ctx.fillText(names[i]||'',x,y-tokR-7,gap*0.95);
     });
-
-    // Draw horizontal rungs
-    h.forEach(rung=>{
-        ctx.save();
-        ctx.shadowColor='rgba(255,230,109,0.5)';
-        ctx.shadowBlur=6;
-        ctx.strokeStyle='rgba(255,230,109,0.35)';
-        ctx.lineWidth=2.5;
-        ctx.beginPath();ctx.moveTo(rung.x1,rung.y);ctx.lineTo(rung.x2,rung.y);ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        ctx.strokeStyle='rgba(255,255,255,0.2)';
-        ctx.lineWidth=1;
-        ctx.beginPath();ctx.moveTo(rung.x1,rung.y);ctx.lineTo(rung.x2,rung.y);ctx.stroke();
-        ctx.restore();
-    });
-
-    // Draw player names at top
-    const fontSize=Math.min(14,W/(n*3));
-    ctx.font=`bold ${fontSize}px 'Orbitron','Noto Sans KR',sans-serif`;
-    ctx.textAlign='center';
+    /* 아래: 결과 카드 — 항상 보이고, 도착하면 그 플레이어 색으로 켜지며 튀어 오른다 */
     v.forEach((vert,i)=>{
-        // Circle
-        ctx.save();
-        ctx.shadowColor=COLORS[i%COLORS.length];
-        ctx.shadowBlur=12;
-        ctx.fillStyle=COLORS[i%COLORS.length];
-        ctx.beginPath();ctx.arc(vert.x,vert.topY-22,14,0,Math.PI*2);ctx.fill();
+        const arrT=(typeof tracers!=='undefined')?tracers.find(t=>t.done&&t.endCol===i):null;
+        const arrived=!!arrT||gamePhase==='done';
+        const col=arrT?arrT.color:'#FF6B35';
+        const age=arrT&&arrT.doneAt?(now-arrT.doneAt)/1000:9;
+        const pop=age<0.5?1+0.28*Math.sin(age/0.5*Math.PI):1;
+        const txt=results[i]||'',hasText=!!txt;
+        const bw=Math.min(96,gap*0.86,W/(n*1.1)),bh=32;
+        const cxp=vert.x,cyp=vert.botY+12+bh/2;
+        ctx.save();ctx.translate(cxp,cyp);ctx.scale(pop,pop);
+        if(arrived){ctx.shadowColor=col;ctx.shadowBlur=18}
+        const g=ctx.createLinearGradient(0,-bh/2,0,bh/2);
+        if(arrived){g.addColorStop(0,rgba(col,0.95));g.addColorStop(1,rgba(col,0.6))}else{g.addColorStop(0,'rgba(255,255,255,0.10)');g.addColorStop(1,'rgba(255,255,255,0.04)')}
+        ctx.fillStyle=g;rrect(-bw/2,-bh/2,bw,bh,9);ctx.fill();ctx.shadowBlur=0;
+        ctx.strokeStyle=arrived?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.22)';ctx.lineWidth=arrived?2:1.2;ctx.stroke();
+        ctx.fillStyle='rgba(255,255,255,0.22)';rrect(-bw/2+3,-bh/2+2,bw-6,bh*0.38,6);ctx.fill();
+        ctx.fillStyle=arrived?'#0b0b18':(hasText?'rgba(255,255,255,0.85)':'rgba(255,255,255,0.35)');
+        ctx.font=`900 ${Math.min(13,fontSize)}px 'Noto Sans KR',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(hasText?txt:'?',0,1,bw-10);
         ctx.restore();
-
-        // Number inside circle
-        ctx.fillStyle='#fff';
-        ctx.font=`bold 11px 'Orbitron','Noto Sans KR',sans-serif`;
-        ctx.fillText(i+1,vert.x,vert.topY-18);
-
-        // Name below circle
-        ctx.font=`bold ${fontSize}px 'Noto Sans KR',sans-serif`;
-        ctx.fillStyle='#fff';
-        ctx.fillText(names[i]||'',vert.x,vert.topY-42);
+        if(arrT&&age<0.9){const k=age/0.9;ctx.save();ctx.strokeStyle=rgba(col,1-k);ctx.lineWidth=3*(1-k)+1;rrect(cxp-bw/2-k*22,cyp-bh/2-k*14,bw+k*44,bh+k*28,10+k*8);ctx.stroke();ctx.restore()}
     });
-
-    // Draw result slots at bottom — ALWAYS VISIBLE (pre-revealed).
-    // Slots where a tracer has arrived get highlighted; empty slots (no user input) show '?'.
-    v.forEach((vert,i)=>{
-        const arrived=tracers.some(t=>t.done&&t.endCol===i)||gamePhase==='done';
-        const txt=results[i]||'';
-        const hasText=!!txt;
-        ctx.save();
-        // Highlighted color if tracer arrived; otherwise muted but still visible
-        ctx.fillStyle=arrived?'rgba(255,107,53,0.25)':'rgba(255,107,53,0.08)';
-        ctx.strokeStyle=arrived?'rgba(255,107,53,0.7)':'rgba(255,107,53,0.25)';
-        ctx.lineWidth=arrived?2:1.5;
-        const bw=Math.min(80,W/(n*1.2));
-        const bh=28;
-        const rx=vert.x-bw/2;const ry=vert.botY+12;
-        ctx.beginPath();
-        ctx.roundRect?ctx.roundRect(rx,ry,bw,bh,8):(() => {ctx.moveTo(rx+8,ry);ctx.lineTo(rx+bw-8,ry);ctx.quadraticCurveTo(rx+bw,ry,rx+bw,ry+8);ctx.lineTo(rx+bw,ry+bh-8);ctx.quadraticCurveTo(rx+bw,ry+bh,rx+bw-8,ry+bh);ctx.lineTo(rx+8,ry+bh);ctx.quadraticCurveTo(rx,ry+bh,rx,ry+bh-8);ctx.lineTo(rx,ry+8);ctx.quadraticCurveTo(rx,ry,rx+8,ry)})();
-        ctx.fill();ctx.stroke();
-        ctx.restore();
-
-        ctx.save();
-        if(arrived){ctx.shadowColor='rgba(255,107,53,0.6)';ctx.shadowBlur=8}
-        ctx.fillStyle=hasText?(arrived?'#fff':'rgba(255,255,255,0.85)'):'rgba(255,255,255,0.35)';
-        ctx.font=`bold ${Math.min(12,fontSize)}px 'Noto Sans KR',sans-serif`;
-        ctx.textAlign='center';
-        ctx.fillText(hasText?txt:'?',vert.x,ry+bh/2+4,bw-8);
-        ctx.restore();
-    });
+}
+/* 경로 페인팅 — 진행한 만큼 3겹(번짐·색·흰 심) 빛 선 */
+function paintPath(t){
+    if(!t.segs||!t.segs.length)return;
+    const pts=[[t.segs[0].from.x,t.segs[0].from.y]];let dist=0;
+    for(const seg of t.segs){if(dist+seg.len<=t.progress){pts.push([seg.to.x,seg.to.y]);dist+=seg.len;continue}
+        const f=Math.max(0,(t.progress-dist)/seg.len);pts.push([seg.from.x+(seg.to.x-seg.from.x)*f,seg.from.y+(seg.to.y-seg.from.y)*f]);break}
+    if(pts.length<2)return;
+    const line=(w,c)=>{ctx.strokeStyle=c;ctx.lineWidth=w;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke()};
+    ctx.save();ctx.globalCompositeOperation='lighter';line(16,rgba(t.color,0.16));line(9,rgba(t.color,0.35));ctx.restore();
+    line(5,t.color);line(1.8,'rgba(255,255,255,0.85)');
 }
 
 /* ===== TRACERS (animated balls) ===== */
@@ -1158,6 +1169,7 @@ function updateTracer(t,dt){
             if(seg.type==='turn'&&frac<0.1&&!seg._sounded){
                 seg._sounded=true;
                 Sfx.turn();
+                LAD.sparks.push({x:seg.from.x,y:seg.from.y,t:0,c:t.color});
             }
             break;
         }
@@ -1181,7 +1193,7 @@ function updateTracer(t,dt){
 
     // Done?
     if(t.progress>=t.totalLen){
-        t.done=true;
+        t.done=true;t.doneAt=performance.now();t.progress=t.totalLen;
         t.x=t.segs[t.segs.length-1].to.x;
         t.y=t.segs[t.segs.length-1].to.y;
         arrivedCount++;
@@ -1237,7 +1249,7 @@ function updateTracer(t,dt){
                     const lastSeg=tracer.segs[tracer.segs.length-1];
                     tracer.x=lastSeg.to.x;tracer.y=lastSeg.to.y;
                     tracer.progress=tracer.totalLen;
-                    tracer.done=true;
+                    tracer.done=true;tracer.doneAt=performance.now();
                     tracer.trail=fullTrail;
                     tracers.push(tracer);
                     /* Register completion manually (we bypass the
@@ -1325,33 +1337,23 @@ function updateTracer(t,dt){
 }
 
 function drawTracers(){
+    const now=performance.now();
     tracers.forEach(t=>{
-        // Trail
-        t.trail.forEach((p,i)=>{
-            ctx.save();
-            ctx.globalAlpha=p.alpha*0.4;
-            ctx.shadowColor=t.color;
-            ctx.shadowBlur=10;
-            ctx.fillStyle=t.color;
-            const s=3+i/t.trail.length*4;
-            ctx.beginPath();ctx.arc(p.x,p.y,s,0,Math.PI*2);ctx.fill();
-            ctx.restore();
-        });
-
-        // Main ball
-        if(!t.done||Math.sin(performance.now()/200)>0){
-            ctx.save();
-            ctx.shadowColor=t.color;
-            ctx.shadowBlur=20;
-            ctx.fillStyle=t.color;
-            ctx.beginPath();ctx.arc(t.x,t.y,8,0,Math.PI*2);ctx.fill();
-            // White core
-            ctx.shadowBlur=0;
-            ctx.fillStyle='rgba(255,255,255,0.8)';
-            ctx.beginPath();ctx.arc(t.x,t.y,3,0,Math.PI*2);ctx.fill();
-            ctx.restore();
-        }
+        /* 혜성 꼬리 */
+        if(!t.done&&t.trail.length>1){ctx.save();ctx.globalCompositeOperation='lighter';
+            for(let i=1;i<t.trail.length;i++){const p=t.trail[i],q=t.trail[i-1],k=i/t.trail.length;ctx.strokeStyle=rgba(t.color,0.5*k*p.alpha);ctx.lineWidth=2+k*9;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(p.x,p.y);ctx.stroke()}
+            ctx.restore()}
+        /* 머리: 빛 구슬 + 번호. 도착한 뒤에는 결과 카드 위에서 살짝 떠 있다 */
+        const r=t.done?9:11,bob=t.done?Math.sin(now/300+t.playerIdx)*2:0;
+        ctx.save();ctx.globalCompositeOperation='lighter';const gl=ctx.createRadialGradient(t.x,t.y+bob,0,t.x,t.y+bob,r*3.2);gl.addColorStop(0,rgba(t.color,0.6));gl.addColorStop(1,rgba(t.color,0));ctx.fillStyle=gl;ctx.beginPath();ctx.arc(t.x,t.y+bob,r*3.2,0,Math.PI*2);ctx.fill();ctx.restore();
+        const g=ctx.createRadialGradient(t.x-r*0.35,t.y+bob-r*0.4,0.5,t.x,t.y+bob,r);g.addColorStop(0,'#fff');g.addColorStop(0.35,t.color);g.addColorStop(1,rgba(t.color,0.7));
+        ctx.fillStyle=g;ctx.beginPath();ctx.arc(t.x,t.y+bob,r,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=1.5;ctx.stroke();
+        ctx.fillStyle='#0b0b18';ctx.font=`900 ${Math.round(r*1.05)}px 'Orbitron',sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t.playerIdx+1,t.x,t.y+bob+1);
     });
+    /* 꺾일 때 불꽃 고리 */
+    for(let i=LAD.sparks.length-1;i>=0;i--){const s=LAD.sparks[i];s.t+=1/60;if(s.t>0.45){LAD.sparks.splice(i,1);continue}const k=s.t/0.45;
+        ctx.strokeStyle=rgba(s.c,1-k);ctx.lineWidth=3*(1-k)+0.5;ctx.beginPath();ctx.arc(s.x,s.y,6+k*22,0,Math.PI*2);ctx.stroke()}
 }
 
 function drawParticles(dt){
@@ -1446,13 +1448,7 @@ function gameLoop(ts){
     lastTime=ts;
 
     ctx.clearRect(0,0,W,H);
-
-    // Background gradient
-    const bg=ctx.createLinearGradient(0,0,0,H);
-    bg.addColorStop(0,'#0A0A1A');bg.addColorStop(0.5,'#12122A');bg.addColorStop(1,'#0A0A1A');
-    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-
-    drawLadder();
+    drawLadder();   /* 배경까지 그린다 */
 
     if(gamePhase==='playing'){
         tracers.forEach(t=>updateTracer(t,dt));
@@ -2024,7 +2020,7 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790220653" defer></script>
+<script src="/js/siteFooter.js?v=1790222410" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
