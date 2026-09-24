@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790218670">
+<meta name="lp-build" content="1790219330">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790218670";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790219330";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -182,7 +182,9 @@ body .lp-ib-pill{top:14px;right:14px;bottom:auto;left:auto}
 
 /* Game screen */
 #gameScreen{display:block;position:fixed;top:0;left:0;width:100%;height:100%;z-index:50;background:linear-gradient(180deg,#080818 0%,#101028 50%,#080818 100%);filter:blur(12px);transform:scale(1.02);transition:filter .35s ease,transform .35s ease;pointer-events:none}
-body.prepared #gameScreen{filter:none;transform:scale(1);pointer-events:auto}
+body.prepared #gameScreen{filter:none;transform:none;pointer-events:auto}
+/* transform:scale(1) 도 '변환'이라 안쪽 position:fixed 사이드바의 기준이 화면이 아니라 #gameScreen 이 됐다 →
+   사이드바가 캔버스 오른쪽 320px 를 덮어 추첨기가 잘렸다(2026-09-24). 준비 후에는 변환을 없앤다 */
 #gameCanvas{display:block;width:100%;height:100%}
 /* Hide the sidebar entirely while setup is still showing — otherwise
    the blurred drum preview competes with a sidebar full of controls. */
@@ -703,11 +705,11 @@ body:not(.prepared) #lottoSidebar{display:none}
 <canvas id="confettiCanvas"></canvas>
 <div class="share-toast" id="shareToast"></div>
 
-<script src="/js/topNav.js?v=1790218670"></script>
-<script src="/js/langBar.js?v=1790218670"></script>
+<script src="/js/topNav.js?v=1790219330"></script>
+<script src="/js/langBar.js?v=1790219330"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790218670"></script>
-<script src="/js/nextGames.js?v=1790218670"></script>
+<script src="/js/supabase-config.js?v=1790219330"></script>
+<script src="/js/nextGames.js?v=1790219330"></script>
 <script>
 /* ========================================
    Lucky Please - Lotto Ball
@@ -1096,6 +1098,7 @@ function applyLottoPreset(preset){
 ============================================ */
 let canvas,ctx,dpr,W,H,animId;
 let balls=[],drawnBalls=[],drawing=false;
+const LOT={sc:1,mouthY:0,capY:0,rail:null,bg:null,fx:[],dt:0.016,blow:0,waitT:0};   /* 2026-09-24 추첨기 개편 공유 상태 */
 
 let BALL_R=14;
 let machineX,machineY,machineR,exitX,exitY,exitR;
@@ -1163,31 +1166,29 @@ function initCanvas(){
 }
 
 function resizeCanvas(){
-    /* Use parent (#gameScreen) size so the canvas fills exactly the
-       column the sidebar + ad reserve leave behind. window.innerWidth
-       was making the canvas a full-viewport block clipped by the
-       sidebar — visually it looked shoved to the right because the
-       machine center (W/2) was drawn at window-center, which is no
-       longer gameScreen-center once 280px of left ad reserve + 320px
-       of right sidebar are taken out. */
     const parent=canvas.parentElement;
     W=(parent&&parent.clientWidth)||window.innerWidth;
     H=(parent&&parent.clientHeight)||window.innerHeight;
     canvas.width=W*dpr;canvas.height=H*dpr;
     canvas.style.width=W+'px';canvas.style.height=H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
-    /* Scale machine + balls purely off the parent column. Removing the
-       legacy 380 / 22 pixel caps so larger monitors grow naturally
-       (same wheelofnames-style fix used on roulette). Smaller viewports
-       are unaffected — both factors stay below the old cap there. */
-    machineR=Math.min(W*.42,H*.35);
-    BALL_R=Math.max(10,machineR*0.08);
-    machineX=W/2;machineY=H*.38;
+    /* 2026-09-24 재배치: 오른쪽에 레일 자리(1.3R)가 들어가도록 반지름을 줄이고, 위에는 튜브·캡, 아래에는 받침대·결과 트레이 */
+    machineR=Math.min(W*0.34,H*0.3);
+    BALL_R=Math.max(9,machineR*0.075);
+    machineX=W/2;
+    machineY=Math.max(machineR*1.42+14,H*0.4);
     exitX=machineX;exitY=machineY+machineR+BALL_R+8;exitR=BALL_R+4;
-    trayY=exitY+BALL_R+30;
+    trayY=Math.min(H-BALL_R*2.4,machineY+machineR*1.3+BALL_R*2.2);
     trayStartX=W/2;
+    LOT.sc=machineR/250;
+    LOT.mouthY=machineY-machineR*0.36;
+    LOT.capY=machineY-machineR-machineR*0.2;
+    buildRail();
+    LOT.bg=null;
     buildWalls();
 }
+
+
 let trayY=0,trayStartX=0,gateOpen=false,gateAnim=0;
 
 function createBalls(labels,colors,bonusFlags){
@@ -1219,114 +1220,40 @@ function createBalls(labels,colors,bonusFlags){
 /* Apply wind/blower forces each frame */
 let blowerStartTime=0;
 function applyWindForces(){
-    const t=performance.now()*.001;
-    const elapsed=t-blowerStartTime;
-
-    // Blower ramps up over first 2 seconds (balls start settled, then blown)
-    const ramp=Math.min(1,elapsed/2);
-
-    // Multiple independent air jets from different positions
-    // Each jet has its own cycle, creating chaotic non-uniform flow
-    const jet1Str=Math.sin(t*1.1)*0.5+0.5;// 0~1 pulsing
-    const jet2Str=Math.sin(t*1.7+2)*0.5+0.5;
-    const jet3Str=Math.sin(t*0.8+4)*0.5+0.5;
-
+    /* 2026-09-24 공기 순환: 바닥 송풍구의 상승 기류(가운데 기둥) → 위에서 퍼짐 → 벽을 따라 하강.
+       공은 공기 속도를 향해 끌려간다(항력). 예전의 사인파 '제트'보다 실제 에어믹스 추첨기처럼 분수 모양으로 돈다 */
+    const t=performance.now()*.001,elapsed=t-blowerStartTime,ramp=Math.min(1,elapsed/1.5);
+    const blow=ramp*(drawing?1:0.45),sc=LOT.sc||1;LOT.blow=blow;
     for(const b of balls){
         if(b.drawn||b.extracting||!b.body)continue;
-        const pos=b.body.position;
-        const dx=pos.x-machineX,dy=pos.y-machineY;
-        const dist=Math.sqrt(dx*dx+dy*dy)||1;
-        const vertPos=(pos.y-machineY)/machineR;// -1=top, +1=bottom
-        const horizPos=(pos.x-machineX)/machineR;// -1=left, +1=right
-        const seed=b.label*7.13;
-        const mass=b.body.mass;
-
-        // === JET 1: Center bottom — straight up (moderate) ===
-        const centerDist=Math.abs(horizPos);
-        const jet1=Math.max(0,vertPos+0.3)*(1-centerDist*0.5)*0.025*jet1Str*ramp;
-        Body.applyForce(b.body,pos,{x:0,y:-jet1});
-
-        // === JET 2: Left side — up and right (gentle) ===
-        const nearLeft=Math.max(0,-horizPos)*Math.max(0,vertPos+0.2);
-        const jet2=nearLeft*0.018*jet2Str*ramp;
-        Body.applyForce(b.body,pos,{x:jet2*0.6,y:-jet2});
-
-        // === JET 3: Right side — up and left (gentle) ===
-        const nearRight=Math.max(0,horizPos)*Math.max(0,vertPos+0.2);
-        const jet3=nearRight*0.018*jet3Str*ramp;
-        Body.applyForce(b.body,pos,{x:-jet3*0.6,y:-jet3});
-
-        // === Per-ball turbulence (softer) ===
-        const turbMag=0.004*ramp;
-        Body.applyForce(b.body,pos,{
-            x:Math.sin(t*4.7+seed)*turbMag+Math.sin(t*7.3+seed*2.1)*turbMag*0.4,
-            y:Math.cos(t*3.9+seed*1.4)*turbMag+Math.cos(t*6.1+seed*0.7)*turbMag*0.4
-        });
-
-        // === Occasional gentle kicks ===
-        const kickPhase=Math.sin(t*8.3+seed*3.7);
-        if(kickPhase>0.95){
-            Body.applyForce(b.body,pos,{
-                x:(Math.random()-.5)*0.02*ramp,
-                y:-(Math.random()*0.015)*ramp
-            });
-        }
-
-        // === Safety: keep inside globe ===
-        if(dist>machineR-BALL_R-4){
-            const nx=dx/dist,ny=dy/dist;
-            Body.setPosition(b.body,{
-                x:machineX+nx*(machineR-BALL_R-5),
-                y:machineY+ny*(machineR-BALL_R-5)
-            });
-            const vel=b.body.velocity;
-            const dot=vel.x*nx+vel.y*ny;
-            if(dot>0)Body.setVelocity(b.body,{x:vel.x-1.8*dot*nx,y:vel.y-1.8*dot*ny});
-        }
-
-        // === Z-axis depth (visual) ===
-        b.vz+=(Math.sin(t*3+seed*0.7))*4*0.016;
-        b.vz+=(Math.random()-.5)*5*0.016;
-        b.vz*=0.94;
-        b.z+=b.vz*0.016;
-        if(b.z>1){b.z=1;b.vz*=-0.7}
-        if(b.z<-1){b.z=-1;b.vz*=-0.7}
+        const pos=b.body.position,v=b.body.velocity;
+        const dx=pos.x-machineX,dy=pos.y-machineY,dist=Math.sqrt(dx*dx+dy*dy)||1;
+        const hx=dx/machineR,vy=dy/machineR,seed=(b.seed=b.seed||Math.random()*100);
+        const core=Math.exp(-(hx*hx)/0.12),gust=1+0.35*Math.max(0,Math.sin(t*1.3)+Math.sin(t*2.1+1)-0.6);
+        let ux=0,uy=-core*(0.7+0.9*Math.max(0,vy+0.25))*15*sc*gust;
+        ux+=(hx>=0?1:-1)*Math.max(0,-vy-0.15)*8*sc*(1-core*0.5);
+        const side=Math.max(0,Math.abs(hx)-0.4)/0.6;uy+=side*3.5*sc;ux-=hx*side*2*sc;
+        ux+=(Math.sin(t*2.3+seed)+Math.sin(t*3.7+seed*1.7))*3.2*sc;uy+=(Math.cos(t*2.9+seed*1.3)+Math.cos(t*4.3+seed*0.6))*3.2*sc;
+        ux*=blow;uy*=blow;
+        const m=b.body.mass,c=0.08*blow;
+        Body.applyForce(b.body,pos,{x:(ux-v.x)*c*m/277,y:(uy-v.y)*c*m/277});
+        if(Math.random()<0.004*blow)Body.setAngularVelocity(b.body,(Math.random()-0.5)*0.6);
+        if(dist>machineR-BALL_R-4){const nx=dx/dist,ny=dy/dist;Body.setPosition(b.body,{x:machineX+nx*(machineR-BALL_R-5),y:machineY+ny*(machineR-BALL_R-5)});
+            const dot=v.x*nx+v.y*ny;if(dot>0)Body.setVelocity(b.body,{x:v.x-1.7*dot*nx,y:v.y-1.7*dot*ny})}
+        b.vz=(b.vz||0)+(Math.random()-.5)*0.08;b.vz*=0.94;b.z=Math.max(-1,Math.min(1,(b.z||0)+b.vz*0.05));
     }
-
-    /* === VENUS SUCTION — when valve is open, pull balls toward tube mouth === */
+    /* 흡입 — 밸브가 열리면 튜브 입구 쪽으로 빨아들인다. 2.4초 안에 못 들어오면 가장 가까운 공을 넣는다 */
     if(suctionActive&&waitingForCapture){
-        const mouthX=machineX;
-        const mouthY=machineY-machineR*0.15;// matches tube mouth in drawMachine
-        const captureR=BALL_R*1.6;// ball enters tube if center within this radius
-        const suctionRange=machineR*0.7;// range of suction influence
-
-        let closest=null,closestDist=Infinity;
-        for(const b of balls){
-            if(b.drawn||b.extracting||!b.body)continue;
-            const pos=b.body.position;
-            const sdx=mouthX-pos.x,sdy=mouthY-pos.y;
-            const sDist=Math.sqrt(sdx*sdx+sdy*sdy);
-
-            // Suction pull — stronger near the mouth (inverse-square-ish)
-            if(sDist<suctionRange&&sDist>1){
-                const proximity=1-sDist/suctionRange;
-                const strength=0.005*proximity*proximity;
-                Body.applyForce(b.body,pos,{
-                    x:sdx/sDist*strength,
-                    y:sdy/sDist*strength-0.002*proximity// extra upward pull
-                });
-            }
-
-            // Track closest ball to mouth for capture
-            if(sDist<closestDist){closestDist=sDist;closest=b}
-        }
-
-        // Capture: first ball whose center enters tube mouth radius
-        if(closest&&closestDist<captureR){
-            captureBall(closest);
-        }
-    }
+        if(!LOT.waitT)LOT.waitT=t;
+        const mx=machineX,my=LOT.mouthY,capR=BALL_R*1.5,range=machineR*0.75;
+        let best=null,bd=1e9;
+        for(const b of balls){if(b.drawn||b.extracting||!b.body)continue;const p=b.body.position,sx=mx-p.x,sy=my-p.y,d=Math.sqrt(sx*sx+sy*sy);
+            if(d<range&&d>1){const pr=1-d/range,f=0.0055*pr*pr*b.body.mass/0.6;Body.applyForce(b.body,p,{x:sx/d*f,y:sy/d*f-0.002*pr*b.body.mass/0.6})}
+            if(d<bd){bd=d;best=b}}
+        if(best&&(bd<capR||t-LOT.waitT>2.4)){LOT.waitT=0;captureBall(best)}
+    }else LOT.waitT=0;
 }
+
 
 /* === Venus capture — physics selected this ball === */
 function captureBall(ball){
@@ -1352,8 +1279,8 @@ function captureBall(ball){
     setTimeout(()=>{
         ball.drawn=true;ball.extracting=false;
         SFX.pop();
-        const capY=machineY-machineR-20+BALL_R+6;
-        drawnBalls.push({label:ball.label,color:ball.color,exitAnim:0,dispX:machineX,dispY:capY,isBonus});
+        const capY=LOT.capY;
+        drawnBalls.push({label:ball.label,color:ball.color,exitAnim:0,dispX:machineX,dispY:capY,isBonus,d:ball.d});
         drawnResults.push({label:ball.label,color:ball.color,isBonus});
         if(isBonus)drawnBonusCount++;else drawnMainCount++;
         /* Mirror this exact capture to every guest. Sending the host's
@@ -1384,56 +1311,51 @@ function captureBall(ball){
 
 function updateBalls(dt){
     applyWindForces();
-    Engine.update(engine,dt*1000);// Matter.js uses ms
-    // Sync ball positions from physics bodies
+    Engine.update(engine,dt*1000);
     for(const b of balls){
         if(b.drawn||!b.body)continue;
-        b.x=b.body.position.x;
-        b.y=b.body.position.y;
+        b.x=b.body.position.x;b.y=b.body.position.y;
+        const v=b.body.velocity;rollBall(b,v.x*60,v.y*60,dt,b.r);
     }
 }
+/* 굴러가는 공: 번호 무늬(구 위의 한 점 d)를 이동 방향에 수직인 축으로 회전 — 번호가 돌며 뒤로 숨었다 나온다 */
+function rollBall(b,vx,vy,dt,r){
+    if(!b.d){const a=Math.random()*Math.PI*2,z=0.3+Math.random()*0.7,s=Math.sqrt(1-z*z);b.d=[Math.cos(a)*s,Math.sin(a)*s,z]}
+    const sp=Math.sqrt(vx*vx+vy*vy);if(sp<1)return;
+    const th=sp*dt/r,kx=-vy/sp,ky=vx/sp,d=b.d,c=Math.cos(th),s=Math.sin(th),kd=kx*d[0]+ky*d[1];
+    const cx=ky*d[2],cy=-kx*d[2],cz=kx*d[1]-ky*d[0];
+    b.d=[d[0]*c+cx*s+kx*kd*(1-c),d[1]*c+cy*s+ky*kd*(1-c),d[2]*c+cz*s];
+    const n=Math.hypot(b.d[0],b.d[1],b.d[2])||1;b.d=[b.d[0]/n,b.d[1]/n,b.d[2]/n];
+}
 
-function drawBall(x,y,r,color,label,highlight=false){
+
+function drawBall(x,y,r,color,label,highlight=false,d){
     ctx.save();
-    // Shadow
-    ctx.shadowColor='rgba(0,0,0,.4)';ctx.shadowBlur=8;ctx.shadowOffsetY=3;
-
-    // Main sphere gradient
-    const g=ctx.createRadialGradient(x-r*.3,y-r*.3,r*.1,x,y,r);
-    g.addColorStop(0,'rgba(255,255,255,.35)');
-    g.addColorStop(.3,color);
-    g.addColorStop(.8,color);
-    g.addColorStop(1,darkenColor(color,.3));
+    ctx.fillStyle='rgba(0,0,0,.28)';ctx.beginPath();ctx.ellipse(x+r*0.18,y+r*0.9,r*0.8,r*0.22,0,0,Math.PI*2);ctx.fill();
+    const g=ctx.createRadialGradient(x-r*.35,y-r*.4,r*.08,x,y,r*1.05);
+    g.addColorStop(0,'#ffffff');g.addColorStop(.18,color);g.addColorStop(.72,color);g.addColorStop(1,darkenColor(color,.45));
     ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
-
-    // Glossy highlight
-    ctx.shadowColor='transparent';
-    const hl=ctx.createRadialGradient(x-r*.25,y-r*.3,0,x-r*.25,y-r*.3,r*.6);
-    hl.addColorStop(0,'rgba(255,255,255,.5)');
-    hl.addColorStop(.5,'rgba(255,255,255,.15)');
-    hl.addColorStop(1,'rgba(255,255,255,0)');
+    /* 번호 무늬 — 구 위의 점 d 를 투영. 앞면일수록 둥글고, 가장자리로 갈수록 납작해진다 */
+    const dd=d||[0,0,1];
+    if(label!==undefined&&dd[2]>-0.05){
+        const k=Math.max(0.06,dd[2]),ang=Math.atan2(dd[1],dd[0]),off=Math.hypot(dd[0],dd[1])*r*0.6;
+        ctx.save();ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.clip();
+        ctx.translate(x+Math.cos(ang)*off,y+Math.sin(ang)*off);ctx.rotate(ang);ctx.scale(k,1);ctx.rotate(-ang);
+        const cr=r*0.6,light=isLightColor(color);
+        ctx.fillStyle=light?'rgba(255,255,255,.95)':'rgba(255,255,255,.96)';ctx.beginPath();ctx.arc(0,0,cr,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(0,0,0,.12)';ctx.lineWidth=Math.max(0.6,r*0.04);ctx.stroke();
+        ctx.font=`900 ${Math.round(r*0.72)}px 'Noto Sans KR',sans-serif`;ctx.fillStyle='#1a1a1a';ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(String(label),0,r*0.04,cr*1.8);ctx.restore();
+    }
+    /* 반사 · 가장자리 */
+    const hl=ctx.createRadialGradient(x-r*.38,y-r*.45,0,x-r*.38,y-r*.45,r*.55);hl.addColorStop(0,'rgba(255,255,255,.85)');hl.addColorStop(.35,'rgba(255,255,255,.25)');hl.addColorStop(1,'rgba(255,255,255,0)');
     ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=hl;ctx.fill();
-
-    // Number circle - adapt to ball color brightness
-    if(label!==undefined){
-        const cr=r*.55;
-        const isLight=isLightColor(color);
-        ctx.beginPath();ctx.arc(x,y+r*.05,cr,0,Math.PI*2);
-        ctx.fillStyle=isLight?'rgba(0,0,0,.12)':'rgba(255,255,255,.9)';ctx.fill();
-        // Number text
-        const fs=Math.min(r*.7,cr*1.2);
-        ctx.font=`900 ${fs}px 'Orbitron','Noto Sans KR',sans-serif`;
-        ctx.fillStyle=isLight?'#333':'#222';ctx.textAlign='center';ctx.textBaseline='middle';
-        const txt=String(label);
-        ctx.fillText(txt,x,y+r*.08,cr*1.8);
-    }
-
-    if(highlight){
-        ctx.strokeStyle='rgba(255,255,255,.6)';ctx.lineWidth=3;
-        ctx.beginPath();ctx.arc(x,y,r+2,0,Math.PI*2);ctx.stroke();
-    }
+    ctx.strokeStyle='rgba(0,0,0,.25)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,r-0.5,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.35)';ctx.lineWidth=Math.max(1,r*0.07);ctx.beginPath();ctx.arc(x,y,r*0.86,Math.PI*0.15,Math.PI*0.55);ctx.stroke();
+    if(highlight){ctx.shadowColor='rgba(255,230,120,.8)';ctx.shadowBlur=10;ctx.strokeStyle='rgba(255,240,180,.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r+1.5,0,Math.PI*2);ctx.stroke()}
     ctx.restore();
 }
+
 
 function darkenColor(hex,amt){
     let r,g,b;
@@ -1450,132 +1372,88 @@ function isLightColor(hex){
     return(r*299+g*587+b*114)/1000>180;
 }
 
-function drawMachine(){
-    const mx=machineX,my=machineY,mr=machineR;
-
-    // === STAND / PEDESTAL ===
-    ctx.save();
-    const poleW=16;
-    const poleTop=my+mr+5;const poleBot=trayY+10;
-    const poleGrad=ctx.createLinearGradient(mx-poleW,0,mx+poleW,0);
-    poleGrad.addColorStop(0,'#555');poleGrad.addColorStop(.3,'#999');poleGrad.addColorStop(.5,'#aaa');poleGrad.addColorStop(.7,'#999');poleGrad.addColorStop(1,'#555');
-    ctx.fillStyle=poleGrad;
-    ctx.fillRect(mx-poleW/2,poleTop,poleW,poleBot-poleTop);
-    ctx.restore();
-
-    // === GLASS GLOBE (behind balls) ===
-    ctx.save();
-    ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);
-    const glassFill=ctx.createRadialGradient(mx,my,mr*.2,mx,my,mr);
-    glassFill.addColorStop(0,'rgba(200,220,255,.03)');
-    glassFill.addColorStop(.7,'rgba(150,200,255,.02)');
-    glassFill.addColorStop(1,'rgba(100,150,200,.04)');
-    ctx.fillStyle=glassFill;ctx.fill();
-    ctx.restore();
-
-    // === METAL RIM (gold ring around globe) ===
-    ctx.save();
-    ctx.beginPath();ctx.arc(mx,my,mr+5,0,Math.PI*2);
-    const rimGrad=ctx.createLinearGradient(mx-mr,my-mr,mx+mr,my+mr);
-    rimGrad.addColorStop(0,'#8B7320');rimGrad.addColorStop(.2,'#D4AF37');rimGrad.addColorStop(.4,'#FFD700');rimGrad.addColorStop(.5,'#FFF8DC');rimGrad.addColorStop(.6,'#FFD700');rimGrad.addColorStop(.8,'#D4AF37');rimGrad.addColorStop(1,'#8B7320');
-    ctx.strokeStyle=rimGrad;ctx.lineWidth=6;ctx.stroke();
-    ctx.beginPath();ctx.arc(mx,my,mr+1,0,Math.PI*2);
-    ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;ctx.stroke();
-    ctx.restore();
-
-    // === VENUS-STYLE CENTER EXTRACTION TUBE ===
-    // Tube runs from upper-center of globe up through the top
-    const tubeW=BALL_R*2+6;
-    const tubeMouthY=my-mr*0.15;// mouth inside globe, slightly above center
-    const tubeTop=my-mr-20;// extends above globe
-    const capR=BALL_R+6;// cap at top to trap ball
-
-    // Tube body (metallic) — from mouth up through globe top
-    ctx.save();
-    const tubeGrad=ctx.createLinearGradient(mx-tubeW/2,0,mx+tubeW/2,0);
-    tubeGrad.addColorStop(0,'rgba(80,80,100,.4)');
-    tubeGrad.addColorStop(.3,'rgba(150,150,170,.3)');
-    tubeGrad.addColorStop(.5,'rgba(180,180,200,.35)');
-    tubeGrad.addColorStop(.7,'rgba(150,150,170,.3)');
-    tubeGrad.addColorStop(1,'rgba(80,80,100,.4)');
-    ctx.fillStyle=tubeGrad;
-    ctx.fillRect(mx-tubeW/2,tubeTop+capR,tubeW,tubeMouthY-tubeTop-capR);
-
-    // Tube edges
-    ctx.strokeStyle='rgba(200,200,220,.25)';ctx.lineWidth=1.5;
-    ctx.beginPath();ctx.moveTo(mx-tubeW/2,tubeMouthY);ctx.lineTo(mx-tubeW/2,tubeTop+capR);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(mx+tubeW/2,tubeMouthY);ctx.lineTo(mx+tubeW/2,tubeTop+capR);ctx.stroke();
-
-    // Neon glow when suction active (gateOpen = valve open)
-    if(gateOpen){
-        gateAnim=Math.min(1,gateAnim+.06);
-    }else{
-        gateAnim=Math.max(0,gateAnim-.04);
-    }
-    if(gateAnim>0){
-        ctx.save();
-        const neonAlpha=gateAnim*0.6;
-        // Inner neon glow
-        const neonGrad=ctx.createLinearGradient(mx,tubeMouthY,mx,tubeTop+capR);
-        neonGrad.addColorStop(0,`rgba(0,200,255,${neonAlpha*0.8})`);
-        neonGrad.addColorStop(.5,`rgba(0,255,200,${neonAlpha})`);
-        neonGrad.addColorStop(1,`rgba(0,200,255,${neonAlpha*0.5})`);
-        ctx.fillStyle=neonGrad;
-        ctx.fillRect(mx-tubeW/2+2,tubeTop+capR,tubeW-4,tubeMouthY-tubeTop-capR);
-        // Suction vortex effect at tube mouth
-        const vortexR=BALL_R*2.5;
-        const vortexGrad=ctx.createRadialGradient(mx,tubeMouthY,0,mx,tubeMouthY,vortexR);
-        vortexGrad.addColorStop(0,`rgba(0,255,220,${neonAlpha*0.4})`);
-        vortexGrad.addColorStop(.5,`rgba(0,200,255,${neonAlpha*0.15})`);
-        vortexGrad.addColorStop(1,'rgba(0,200,255,0)');
-        ctx.fillStyle=vortexGrad;
-        ctx.beginPath();ctx.arc(mx,tubeMouthY,vortexR,0,Math.PI*2);ctx.fill();
-        // Glow blur around tube
-        ctx.shadowColor='rgba(0,220,255,0.6)';ctx.shadowBlur=15;
-        ctx.strokeStyle=`rgba(0,255,220,${neonAlpha})`;ctx.lineWidth=2;
-        ctx.beginPath();ctx.moveTo(mx-tubeW/2,tubeMouthY);ctx.lineTo(mx-tubeW/2,tubeTop+capR);ctx.stroke();
-        ctx.beginPath();ctx.moveTo(mx+tubeW/2,tubeMouthY);ctx.lineTo(mx+tubeW/2,tubeTop+capR);ctx.stroke();
-        ctx.restore();
-    }
-
-    // Cap at top (dome shape)
-    ctx.beginPath();
-    ctx.arc(mx,tubeTop+capR,capR,Math.PI,0);// half circle dome
-    const capGrad=ctx.createRadialGradient(mx-capR*.2,tubeTop+capR-capR*.3,0,mx,tubeTop+capR,capR);
-    capGrad.addColorStop(0,'#bbb');capGrad.addColorStop(.5,'#888');capGrad.addColorStop(1,'#555');
-    ctx.fillStyle=capGrad;ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.2)';ctx.lineWidth=1;ctx.stroke();
-
-    // Funnel/valve at tube mouth (inside globe)
-    ctx.beginPath();
-    ctx.moveTo(mx-tubeW*1.2,tubeMouthY+8);
-    ctx.lineTo(mx-tubeW/2,tubeMouthY);
-    ctx.lineTo(mx+tubeW/2,tubeMouthY);
-    ctx.lineTo(mx+tubeW*1.2,tubeMouthY+8);
-    ctx.strokeStyle='rgba(200,200,220,.25)';ctx.lineWidth=1.5;ctx.stroke();
-    // Small ring at mouth
-    ctx.beginPath();ctx.arc(mx,tubeMouthY,tubeW/2+2,Math.PI,0);
-    ctx.strokeStyle='rgba(180,180,200,.2)';ctx.lineWidth=2;ctx.stroke();
-
-    ctx.restore();
+/* 무대 배경 — 크기가 바뀔 때만 다시 굽는다 */
+function lotBg(){
+    if(LOT.bg&&LOT.bgW===W&&LOT.bgH===H)return LOT.bg;
+    const c=document.createElement('canvas');c.width=W*dpr;c.height=H*dpr;const x=c.getContext('2d');x.setTransform(dpr,0,0,dpr,0,0);
+    const g=x.createLinearGradient(0,0,0,H);g.addColorStop(0,'#0d0a2b');g.addColorStop(0.6,'#0a0b22');g.addColorStop(1,'#05050f');x.fillStyle=g;x.fillRect(0,0,W,H);
+    for(const sx of [0.1,0.9]){const gx=x.createRadialGradient(W*sx,-20,0,W*sx,-20,H*0.9);gx.addColorStop(0,'rgba(140,110,255,0.20)');gx.addColorStop(1,'rgba(140,110,255,0)');x.fillStyle=gx;x.fillRect(0,0,W,H)}
+    x.save();x.globalCompositeOperation='lighter';for(const [sx,tx] of [[0.12,-0.25],[0.88,0.25]]){const ox=W*sx,t2=machineX+machineR*tx*2,gr=x.createLinearGradient(ox,0,t2,machineY+machineR);gr.addColorStop(0,'rgba(255,240,200,0.13)');gr.addColorStop(1,'rgba(255,240,200,0)');
+      x.fillStyle=gr;x.beginPath();x.moveTo(ox-6,0);x.lineTo(ox+6,0);x.lineTo(t2+machineR*0.5,machineY+machineR*1.2);x.lineTo(t2-machineR*0.5,machineY+machineR*1.2);x.closePath();x.fill()}x.restore();
+    const fy=machineY+machineR*1.24,fg=x.createRadialGradient(machineX,fy,4,machineX,fy,machineR*1.6);fg.addColorStop(0,'rgba(120,160,255,0.22)');fg.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=fg;x.beginPath();x.ellipse(machineX,fy,machineR*1.6,machineR*0.28,0,0,Math.PI*2);x.fill();
+    LOT.bg=c;LOT.bgW=W;LOT.bgH=H;return c;
 }
+function drawMachine(){
+    const mx=machineX,my=machineY,mr=machineR,sc=LOT.sc||1;
+    /* 유리 구 — 뒤쪽 면 */
+    const back=ctx.createRadialGradient(mx-mr*0.2,my-mr*0.25,mr*0.1,mx,my,mr);back.addColorStop(0,'rgba(160,190,255,0.10)');back.addColorStop(0.75,'rgba(60,80,160,0.16)');back.addColorStop(1,'rgba(20,30,80,0.45)');
+    ctx.fillStyle=back;ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);ctx.fill();
+    /* 바닥 송풍구의 빛 기둥(가동 중일수록 진하게) */
+    const bl=LOT.blow||0;if(bl>0.05){ctx.save();ctx.beginPath();ctx.arc(mx,my,mr-2,0,Math.PI*2);ctx.clip();ctx.globalCompositeOperation='lighter';
+      const jg=ctx.createLinearGradient(0,my+mr,0,my-mr*0.6);jg.addColorStop(0,`rgba(90,190,255,${0.28*bl})`);jg.addColorStop(1,'rgba(90,190,255,0)');ctx.fillStyle=jg;ctx.fillRect(mx-mr*0.32,my-mr,mr*0.64,mr*2);
+      for(let i=0;i<14;i++){const ph=(performance.now()*0.0006*(1+i%3*0.3)+i*0.13)%1,px=mx+Math.sin(i*2.1+ph*6)*mr*0.22,py=my+mr*0.9-ph*mr*1.6;ctx.fillStyle=`rgba(200,235,255,${0.35*bl*(1-ph)})`;ctx.beginPath();ctx.arc(px,py,1.5+2*(1-ph),0,Math.PI*2);ctx.fill()}
+      ctx.restore()}
+}
+
 
 function drawGlassOverlay(){
-    const mx=machineX,my=machineY,mr=machineR;
+    const mx=machineX,my=machineY,mr=machineR,sc=LOT.sc||1,t=performance.now()*0.001;
     ctx.save();
-    ctx.beginPath();
-    ctx.arc(mx,my,mr-2,Math.PI*1.15,Math.PI*1.85);
-    const ref=ctx.createLinearGradient(mx-mr*.6,my-mr*.6,mx+mr*.2,my+mr*.2);
-    ref.addColorStop(0,'rgba(255,255,255,.12)');ref.addColorStop(.5,'rgba(255,255,255,.04)');ref.addColorStop(1,'rgba(255,255,255,0)');
-    ctx.strokeStyle=ref;ctx.lineWidth=mr*.15;ctx.stroke();
-
-    ctx.beginPath();ctx.ellipse(mx-mr*.35,my-mr*.4,mr*.15,mr*.08,-0.5,0,Math.PI*2);
-    ctx.fillStyle='rgba(255,255,255,.15)';ctx.fill();
-
-    ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);
-    ctx.strokeStyle='rgba(200,230,255,.1)';ctx.lineWidth=2;ctx.stroke();
+    /* 유리 앞면 반사 */
+    ctx.strokeStyle='rgba(255,255,255,0.20)';ctx.lineWidth=mr*0.07;ctx.lineCap='round';ctx.beginPath();ctx.arc(mx,my,mr*0.86,Math.PI*1.08,Math.PI*1.42);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.10)';ctx.lineWidth=mr*0.03;ctx.beginPath();ctx.arc(mx,my,mr*0.86,Math.PI*1.48,Math.PI*1.58);ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,0.22)';ctx.beginPath();ctx.ellipse(mx+mr*0.45,my-mr*0.5,mr*0.05,mr*0.12,0.6,0,Math.PI*2);ctx.fill();
+    const fl=ctx.createLinearGradient(0,my+mr*0.55,0,my+mr);fl.addColorStop(0,'rgba(160,200,255,0)');fl.addColorStop(1,'rgba(160,200,255,0.16)');ctx.fillStyle=fl;ctx.beginPath();ctx.arc(mx,my,mr-1,0.15,Math.PI-0.15);ctx.fill();
+    ctx.strokeStyle='rgba(210,230,255,0.45)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(mx,my,mr,0,Math.PI*2);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=1;ctx.beginPath();ctx.arc(mx,my,mr-5,0,Math.PI*2);ctx.stroke();
+    /* 흡입 튜브(투명 아크릴) — 입구에서 위 캡까지 */
+    const tw=BALL_R*2+8*sc,top=LOT.capY,mouth=LOT.mouthY;
+    if(gateOpen)gateAnim=Math.min(1,gateAnim+.06);else gateAnim=Math.max(0,gateAnim-.04);
+    ctx.fillStyle='rgba(200,230,255,0.07)';ctx.fillRect(mx-tw/2,top,tw,mouth-top);
+    if(gateAnim>0){const ng=ctx.createLinearGradient(0,mouth,0,top);ng.addColorStop(0,`rgba(0,220,255,${0.35*gateAnim})`);ng.addColorStop(1,`rgba(0,255,200,${0.15*gateAnim})`);ctx.fillStyle=ng;ctx.fillRect(mx-tw/2+2,top,tw-4,mouth-top);
+      const vg=ctx.createRadialGradient(mx,mouth,0,mx,mouth,BALL_R*3);vg.addColorStop(0,`rgba(0,255,220,${0.35*gateAnim})`);vg.addColorStop(1,'rgba(0,200,255,0)');ctx.fillStyle=vg;ctx.beginPath();ctx.arc(mx,mouth,BALL_R*3,0,Math.PI*2);ctx.fill()}
+    ctx.strokeStyle='rgba(220,240,255,0.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(mx-tw/2,mouth);ctx.lineTo(mx-tw/2,top);ctx.moveTo(mx+tw/2,mouth);ctx.lineTo(mx+tw/2,top);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx-tw/2+4,mouth-4);ctx.lineTo(mx-tw/2+4,top+4);ctx.stroke();
+    /* 튜브 입구 깔때기 */
+    const mg=ctx.createLinearGradient(mx-tw,0,mx+tw,0);mg.addColorStop(0,'#6b7285');mg.addColorStop(0.5,'#e8ecf5');mg.addColorStop(1,'#6b7285');
+    ctx.fillStyle=mg;ctx.beginPath();ctx.moveTo(mx-tw*0.95,mouth+6*sc);ctx.lineTo(mx-tw/2,mouth);ctx.lineTo(mx+tw/2,mouth);ctx.lineTo(mx+tw*0.95,mouth+6*sc);ctx.lineTo(mx+tw*0.8,mouth+9*sc);ctx.lineTo(mx-tw*0.8,mouth+9*sc);ctx.closePath();ctx.fill();
+    /* 위 캡(크롬 돔) */
+    const cr=tw*0.72,cg=ctx.createRadialGradient(mx-cr*0.3,top-cr*0.4,1,mx,top,cr*1.1);cg.addColorStop(0,'#ffffff');cg.addColorStop(0.5,'#aeb6c8');cg.addColorStop(1,'#4c5366');
+    ctx.fillStyle=cg;ctx.beginPath();ctx.ellipse(mx,top,cr*1.15,cr,0,Math.PI,0);ctx.fill();ctx.fillStyle='#3a4050';ctx.fillRect(mx-cr*1.2,top-2,cr*2.4,5*sc+2);
+    ctx.fillStyle='#ffd24a';ctx.beginPath();ctx.arc(mx,top-cr,3*sc+1.5,0,Math.PI*2);ctx.fill();
+    /* 받침(구가 앉는 링 + 몸통 + 송풍구 + LED) */
+    const ry=my+mr*0.97,rw=mr*0.5,bh=mr*0.32,bw=mr*1.2;
+    const rg=ctx.createLinearGradient(mx-rw,0,mx+rw,0);rg.addColorStop(0,'#5d6475');rg.addColorStop(0.45,'#f4f6ff');rg.addColorStop(1,'#4c5366');
+    ctx.fillStyle=rg;ctx.beginPath();ctx.ellipse(mx,ry,rw,rw*0.16,0,0,Math.PI*2);ctx.fill();
+    const bg=ctx.createLinearGradient(mx-bw/2,0,mx+bw/2,0);bg.addColorStop(0,'#141726');bg.addColorStop(0.35,'#2e3450');bg.addColorStop(0.65,'#252a44');bg.addColorStop(1,'#0e101c');
+    ctx.fillStyle=bg;ctx.beginPath();ctx.moveTo(mx-rw*0.95,ry+2);ctx.lineTo(mx+rw*0.95,ry+2);ctx.lineTo(mx+bw/2,ry+bh);ctx.lineTo(mx-bw/2,ry+bh);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(200,210,240,0.35)';ctx.lineWidth=1.5;ctx.stroke();
+    const bl=LOT.blow||0;for(let i=0;i<5;i++){const yy=ry+bh*0.28+i*bh*0.11,ww=rw*(0.9+i*0.08);ctx.fillStyle=`rgba(${60+120*bl|0},${140+80*bl|0},255,${0.25+0.5*bl})`;ctx.fillRect(mx-ww/2,yy,ww,bh*0.05)}
+    for(let i=0;i<18;i++){const u=i/17,lx=mx-bw/2+10+u*(bw-20),on=drawing?((Math.floor(t*10)+i)%4===0):((i+Math.floor(t*2))%6===0);ctx.fillStyle=on?'#fff3a0':'rgba(255,210,120,0.3)';ctx.beginPath();ctx.arc(lx,ry+bh-6*sc,2.2*sc+0.8,0,Math.PI*2);ctx.fill()}
+    /* 레일 */
+    drawRail();
     ctx.restore();
 }
+/* 레일: 캡 → 추첨기 오른쪽을 돌아 → 트레이 오른쪽 끝. 공은 중력으로 가속하며 굴러 내려간다 */
+function buildRail(){
+    const mx=machineX,my=machineY,R=machineR,cap=LOT.capY,g=_trayGeom?_trayGeom():{trayW:BALL_R*20};
+    const trayRight=machineX+g.trayW/2+BALL_R*0.2;
+    const P=[[mx+BALL_R*1.2,cap+BALL_R*0.3],[mx+R*0.55,cap-R*0.02],[mx+R*1.08,my-R*0.62],[mx+R*1.24,my+R*0.1],[mx+R*1.14,my+R*0.85],[Math.max(trayRight+BALL_R*2,mx+R*0.8),trayY-BALL_R*0.2],[trayRight,trayY]];
+    const pts=[];for(let i=0;i<P.length-1;i++){const p0=P[Math.max(0,i-1)],p1=P[i],p2=P[i+1],p3=P[Math.min(P.length-1,i+2)];
+      for(let k=0;k<16;k++){const t=k/16,t2=t*t,t3=t2*t;pts.push([0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)])}}
+    pts.push(P[P.length-1]);const cum=[0];for(let i=1;i<pts.length;i++)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+    LOT.rail={pts,cum,len:cum[cum.length-1]};
+}
+function railAt(s){const r=LOT.rail;if(!r)return[machineX,trayY,1,0];s=Math.max(0,Math.min(r.len,s));let i=1;while(i<r.cum.length-1&&r.cum[i]<s)i++;const a=r.pts[i-1],b=r.pts[i],seg=(r.cum[i]-r.cum[i-1])||1,f=(s-r.cum[i-1])/seg;
+    const dx=(b[0]-a[0])/seg,dy=(b[1]-a[1])/seg;return[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,dx,dy]}
+function drawRail(){
+    const r=LOT.rail;if(!r)return;const off=BALL_R*0.78;
+    for(const [sd,col,wd] of [[1,'rgba(40,44,60,0.9)',4],[-1,'rgba(40,44,60,0.9)',4],[1,'#d9deea',2],[-1,'#d9deea',2]]){
+      ctx.strokeStyle=col;ctx.lineWidth=wd;ctx.lineJoin='round';ctx.beginPath();
+      for(let i=0;i<r.pts.length;i++){const a=r.pts[Math.max(0,i-1)],b=r.pts[Math.min(r.pts.length-1,i+1)],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1,nx=-dy/l,ny=dx/l,x=r.pts[i][0]+nx*off*sd,y=r.pts[i][1]+ny*off*sd;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.stroke()}
+    ctx.strokeStyle='rgba(120,130,150,0.6)';ctx.lineWidth=2;for(let s=40;s<r.len-20;s+=48){const p=railAt(s),nx=-p[3],ny=p[2];ctx.beginPath();ctx.moveTo(p[0]-nx*off,p[1]-ny*off);ctx.lineTo(p[0]+nx*off,p[1]+ny*off);ctx.stroke()}
+}
+
 
 /* bonusStart = slot index where bonus balls begin (0 = no split).
    When set, an extra visual gap + gold divider separates main from
@@ -1587,8 +1465,9 @@ function drawSingleTray(tx,ty,slots,bonusStart,bonusColor){
     const trayH=BALL_R*2+14;
 
     ctx.save();
+    /* 2026-09-24: 나무 트레이 → 어두운 광택 진열대 + 홈 */
     const woodGrad=ctx.createLinearGradient(tx,ty,tx,ty+trayH);
-    woodGrad.addColorStop(0,'#8B5E3C');woodGrad.addColorStop(.3,'#A0704F');woodGrad.addColorStop(.5,'#8B5E3C');woodGrad.addColorStop(.8,'#6B3F23');woodGrad.addColorStop(1,'#5A3420');
+    woodGrad.addColorStop(0,'#2c3150');woodGrad.addColorStop(.45,'#1b1f36');woodGrad.addColorStop(1,'#0c0e1c');
     ctx.fillStyle=woodGrad;
 
     ctx.beginPath();
@@ -1602,9 +1481,10 @@ function drawSingleTray(tx,ty,slots,bonusStart,bonusColor){
     ctx.quadraticCurveTo(tx,ty,tx+6,ty);
     ctx.closePath();ctx.fill();
 
-    // Grain
-    ctx.strokeStyle='rgba(0,0,0,.1)';ctx.lineWidth=.5;
-    for(let i=0;i<5;i++){ctx.beginPath();ctx.moveTo(tx+6,ty+3+i*(trayH/5));ctx.lineTo(tx+trayW-6,ty+3+i*(trayH/5));ctx.stroke()}
+    // 홈(공이 앉는 오목한 자리)
+    for(let i=0;i<slots;i++){const shift=(splitGap&&i>=bonusStart)?splitGap:0,cx=tx+10+i*gap+gap/2+shift,cy=ty+trayH/2;
+        const hg=ctx.createRadialGradient(cx,cy-BALL_R*0.3,1,cx,cy,BALL_R*1.1);hg.addColorStop(0,'rgba(0,0,0,.55)');hg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=hg;ctx.beginPath();ctx.ellipse(cx,cy,BALL_R*1.05,BALL_R*0.95,0,0,Math.PI*2);ctx.fill()}
+    ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(tx+6,ty+2,trayW-12,2);
 
     // Inner shadow
     const ig=ctx.createLinearGradient(tx,ty,tx,ty+8);
@@ -1612,7 +1492,7 @@ function drawSingleTray(tx,ty,slots,bonusStart,bonusColor){
     ctx.fillStyle=ig;ctx.fillRect(tx+3,ty+2,trayW-6,8);
 
     // Border
-    ctx.strokeStyle='#4A2A15';ctx.lineWidth=2;
+    ctx.strokeStyle='rgba(180,195,240,.55)';ctx.lineWidth=1.5;
     ctx.beginPath();
     ctx.moveTo(tx+6,ty);ctx.lineTo(tx+trayW-6,ty);ctx.quadraticCurveTo(tx+trayW,ty,tx+trayW,ty+6);ctx.lineTo(tx+trayW,ty+trayH-6);ctx.quadraticCurveTo(tx+trayW,ty+trayH,tx+trayW-6,ty+trayH);ctx.lineTo(tx+6,ty+trayH);ctx.quadraticCurveTo(tx,ty+trayH,tx,ty+trayH-6);ctx.lineTo(tx,ty+6);ctx.quadraticCurveTo(tx,ty,tx+6,ty);
     ctx.closePath();ctx.stroke();
@@ -1665,95 +1545,53 @@ function drawWoodenTray(){
 
 function drawDrawnBalls(){
     const{gap,bonusStart,splitGap,trayW}=_trayGeom();
-    const tx=machineX-trayW/2+10;
-    const capY=machineY-machineR-20+BALL_R+6;// ball starts at cap
-
+    const tx=machineX-trayW/2+10,dt=LOT.dt||0.016,sc=LOT.sc||1;
+    if(!LOT.rail||Math.abs((LOT.railTrayW||0)-trayW)>0.5){LOT.railTrayW=trayW;buildRail()}
     drawnBalls.forEach((b,i)=>{
-        const shift=(splitGap&&i>=bonusStart)?splitGap:0;
-        const targetX=tx+i*gap+gap/2+shift;
-        const targetY=trayY;
-
-        if(b.exitAnim<1){
-            b.exitAnim=Math.min(1,b.exitAnim+.015);
-            const t=b.exitAnim;
-            // Phase 1: stay at cap briefly (0-0.2)
-            if(t<.2){
-                b.dispX=machineX;b.dispY=capY;
-            }
-            // Phase 2: arc from cap down to tray (0.2-1.0)
-            else{
-                const p=(t-.2)/.8;
-                const ease=1-Math.pow(1-p,2);
-                b.dispX=machineX+(targetX-machineX)*ease;
-                b.dispY=capY+(targetY-capY)*ease-Math.sin(p*Math.PI)*30;
-            }
-        }else{b.dispX=targetX;b.dispY=targetY}
-        drawBall(b.dispX,b.dispY,BALL_R+1,b.color,b.label,true);
+        const shift=(splitGap&&i>=bonusStart)?splitGap:0,targetX=tx+i*gap+gap/2+shift,targetY=trayY;
+        if(!b.phase){b.phase=b.exitAnim>=1?'rest':'cap';b.t=0;b.s=0;b.v=40*sc;b.d=b.d||[0,0,1];if(b.phase==='rest'){b.dispX=targetX;b.dispY=targetY}}
+        b.t+=dt;
+        if(b.phase==='cap'){b.dispX=machineX;b.dispY=LOT.capY+BALL_R*0.2;if(b.t>0.25){b.phase='rail';b.t=0}}
+        else if(b.phase==='rail'){const p0=railAt(b.s);b.v=Math.min(b.v+Math.max(0.15,p0[3])*1500*sc*dt,760*sc);b.s+=b.v*dt;const p=railAt(b.s);b.dispX=p[0];b.dispY=p[1];rollBall(b,p[2]*b.v,p[3]*b.v,dt,BALL_R);
+            if(b.s>=LOT.rail.len){b.phase='tray';b.vx=-b.v*0.9}}
+        else if(b.phase==='tray'){const dx=targetX-b.dispX;b.vx+=(dx*30-b.vx*9)*dt;b.dispX+=b.vx*dt;b.dispY=targetY;rollBall(b,b.vx,0,dt,BALL_R);
+            if(Math.abs(dx)<0.8&&Math.abs(b.vx)<20){b.phase='rest';b.dispX=targetX;b.pop=1;LOT.fx.push({x:targetX,y:targetY,t:0,c:b.color});try{SFX.trayLand()}catch(e){}}}
+        else{b.dispX=targetX;b.dispY=targetY;if(b.d){b.d=[b.d[0]*0.9,b.d[1]*0.9,b.d[2]+(1-b.d[2])*0.1];const n=Math.hypot(...b.d)||1;b.d=[b.d[0]/n,b.d[1]/n,b.d[2]/n]}}
+        const pr=b.pop?1+0.25*Math.sin(Math.min(1,1-b.pop)*Math.PI):1;if(b.pop){b.pop=Math.max(0,b.pop-dt*2.5)}
+        drawBall(b.dispX,b.dispY,(BALL_R+1)*pr,b.color,b.label,b.phase==='rest',b.d);
     });
+    /* 착지 섬광 */
+    for(let i=LOT.fx.length-1;i>=0;i--){const f=LOT.fx[i];f.t+=dt;if(f.t>0.6){LOT.fx.splice(i,1);continue}const k=f.t/0.6;
+        ctx.save();ctx.globalCompositeOperation='lighter';const g=ctx.createRadialGradient(f.x,f.y,0,f.x,f.y,BALL_R*3.2);g.addColorStop(0,`rgba(255,240,180,${0.6*(1-k)})`);g.addColorStop(1,'rgba(255,240,180,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(f.x,f.y,BALL_R*3.2,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle=`rgba(255,255,255,${0.7*(1-k)})`;ctx.lineWidth=2;ctx.beginPath();ctx.arc(f.x,f.y,BALL_R*(1.2+k*1.6),0,Math.PI*2);ctx.stroke();ctx.restore()}
 }
+
 
 /* Draw sequence */
 /* Main loop */
 let lastTime=0;
 function loop(ts){
     const dt=Math.min((ts-(lastTime||ts))/1000,.033);
-    lastTime=ts;
-    ctx.clearRect(0,0,W,H);
-
-    // Background
-    const bg=ctx.createLinearGradient(0,0,0,H);
-    bg.addColorStop(0,'#080818');bg.addColorStop(.5,'#101028');bg.addColorStop(1,'#080818');
-    ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
-
+    lastTime=ts;LOT.dt=dt;
+    ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(lotBg(),0,0);ctx.setTransform(dpr,0,0,dpr,0,0);
     drawMachine();
     updateBalls(dt);
-
-    // Draw balls in machine (clip to globe)
-    // Sort by z: back balls drawn first, front balls drawn LAST (on top = overlap)
-    ctx.save();
-    ctx.beginPath();ctx.arc(machineX,machineY,machineR-2,0,Math.PI*2);ctx.clip();
+    ctx.save();ctx.beginPath();ctx.arc(machineX,machineY,machineR-2,0,Math.PI*2);ctx.clip();
     const sortedBalls=[...balls].filter(b=>!b.drawn&&!b.extracting).sort((a,b)=>(a.z||0)-(b.z||0));
-    for(const b of sortedBalls){
-        /* Uniform ball size. Earlier revision scaled 0.92–1.0 and
-           dimmed 0.7–1.0 by z-depth for a 3D-globe effect, but users
-           correctly pointed out that real lotto balls are all the
-           same physical size — the varying ones read as a bug. Keep
-           the subtle z-ordering (back balls drawn first) but render
-           every ball at its true radius with full opacity. */
-        drawBall(b.x,b.y,b.r,b.color,b.label);
-    }
+    for(const b of sortedBalls)drawBall(b.x,b.y,b.r,b.color,b.label,false,b.d);
     ctx.restore();
-
-    // Draw balls being extracted through tube (Venus: from mouth up to cap)
+    /* 튜브를 타고 올라가는 공 */
     for(const b of balls){
         if(!b.extracting)continue;
-        const elapsed=performance.now()-b.extractStart;
-        const prog=Math.min(1,elapsed/b.extractDur);
-        const ease=1-Math.pow(1-prog,3);// ease-out
-        const tubeMouthY=machineY-machineR*0.15;// matches drawMachine tube mouth
-        const tubeCapY=machineY-machineR-20+BALL_R+6;
-        const ballY=tubeMouthY+(tubeCapY-tubeMouthY)*ease;
-        drawBall(machineX,ballY,BALL_R,b.color,b.label,true);
+        const prog=Math.min(1,(performance.now()-b.extractStart)/b.extractDur),e=prog<0.5?2*prog*prog:1-Math.pow(-2*prog+2,2)/2;
+        const y=LOT.mouthY+(LOT.capY+BALL_R*0.2-LOT.mouthY)*e;rollBall(b,0,-600*(LOT.sc||1),dt,BALL_R);
+        drawBall(machineX,y,BALL_R,b.color,b.label,true,b.d);
     }
-
-    // Glass overlay on top
     drawGlassOverlay();
-
-    // Wooden tray
     drawWoodenTray();
-
-    // Drawn balls in tray
     drawDrawnBalls();
-
-    // Status text
-    if(drawing){
-        ctx.fillStyle='rgba(255,230,109,.8)';ctx.font='bold 14px "Noto Sans KR",sans-serif';
-        ctx.textAlign='center';ctx.fillText(T('drawing'),W/2,H-30);
-    }else if(drawnBalls.length>0){
-        ctx.fillStyle='rgba(0,255,136,.8)';ctx.font='bold 14px "Noto Sans KR",sans-serif';
-        ctx.textAlign='center';ctx.fillText(T('complete'),W/2,H-30);
-    }
-
+    if(drawing){ctx.fillStyle='rgba(255,230,109,.85)';ctx.font='bold 14px "Noto Sans KR",sans-serif';ctx.textAlign='center';ctx.fillText(T('drawing'),machineX,Math.min(H-8,trayY+BALL_R+30))}
+    else if(drawnBalls.length>0){ctx.fillStyle='rgba(0,255,136,.85)';ctx.font='bold 14px "Noto Sans KR",sans-serif';ctx.textAlign='center';ctx.fillText(T('complete'),machineX,Math.min(H-8,trayY+BALL_R+30))}
     animId=requestAnimationFrame(loop);
 }
 
@@ -2887,7 +2725,7 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790218670" defer></script>
+<script src="/js/siteFooter.js?v=1790219330" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
