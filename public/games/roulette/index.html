@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790237131">
+<meta name="lp-build" content="1790240270">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790237131";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790240270";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -116,7 +116,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 @keyframes winPulse{0%{transform:translateX(-50%) scale(0.8);opacity:0}50%{transform:translateX(-50%) scale(1.05)}100%{transform:translateX(-50%) scale(1);opacity:1}}
 
 /* Home btn overlay */
-.top-btns{position:absolute;top:12px;left:12px;z-index:20;display:flex;gap:8px}
+/* 오른쪽 위 — 왼쪽 위는 사이트 공통 '← 홈'(fixed, z1000)이 덮고 있어 두 버튼이 겹쳤다 */
+.top-btns{position:absolute;top:12px;right:12px;z-index:20;display:flex;gap:8px}
 .top-btn{padding:6px 14px;border-radius:16px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.4);color:rgba(255,255,255,0.6);font-size:0.75em;font-weight:700;cursor:pointer;backdrop-filter:blur(8px);transition:all 0.3s;text-decoration:none}
 .top-btn:hover{background:rgba(255,255,255,0.1);color:#fff}
 
@@ -294,13 +295,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     <canvas id="confettiCanvas"></canvas>
     <div class="share-toast" id="shareToast"></div>
 
-<script src="/js/topNav.js?v=1790237131"></script>
-<script src="/js/langBar.js?v=1790237131"></script>
-<script src="/js/participantPresets.js?v=1790237131"></script>
+<script src="/js/topNav.js?v=1790240270"></script>
+<script src="/js/langBar.js?v=1790240270"></script>
+<script src="/js/participantPresets.js?v=1790240270"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790237131"></script>
-<script src="/js/groups.js?v=1790237131"></script>
-<script src="/js/nextGames.js?v=1790237131"></script>
+<script src="/js/supabase-config.js?v=1790240270"></script>
+<script src="/js/groups.js?v=1790240270"></script>
+<script src="/js/nextGames.js?v=1790240270"></script>
 <script>
 /* ========================================
    Lucky Please - Roulette
@@ -339,16 +340,119 @@ let playerCount=6,players=[],spinning=false;
    and on Replay/backToSetup. */
 let spinActive=false;
 
-/* Audio */
-/* AudioContext starts suspended on modern Chrome/Edge until a user
+/* Audio — 2026-09-24 WebAudio 합성 (mp3 없음).
+   AudioContext starts suspended on modern Chrome/Edge until a user
    gesture. Calling resume() inside g() unlocks it — important because
    startGame kicks off doSpin via setTimeout, which drops out of the
    user-gesture context and would otherwise leave the context muted.
-   Tick is 200 Hz (deep thud) with slightly higher gain and a touch
-   longer duration to compensate for low-frequency perceptual loudness. */
-const SFX=(()=>{let c;function g(){if(!c)c=new(window.AudioContext||window.webkitAudioContext)();if(c.state==='suspended')c.resume();return c}
-function p(f,d,t='sine',v=0.12){try{const x=g(),o=x.createOscillator(),ga=x.createGain();o.type=t;o.frequency.value=f;ga.gain.setValueAtTime(v,x.currentTime);ga.gain.exponentialRampToValueAtTime(0.001,x.currentTime+d);o.connect(ga);ga.connect(x.destination);o.start();o.stop(x.currentTime+d)}catch(e){}}
-return{tick(){p(200,0.05,'square',0.11)},win(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>p(f,0.25,'sine',0.18),i*100))},click(){p(600,0.04,'square',0.08)},g}
+   모든 소리는 master gain → 컴프레서를 거친다 (딸깍이 초당 70번 겹쳐도
+   클리핑 없음). 사이트 공용 효과음 음소거 키(lpAudio.muted)를 존중한다.
+   BGM 토글(lp_bgm_muted)은 음악 전용이라 효과음과 분리 — 기존 동작 유지.
+     clack(I)  페그↔플래퍼 딸깍: ① 대역 노이즈 트랜지언트 ② 공명 몸통
+               (삼각파, 짧은 피치 드롭) ③ 저역 '툭'. 세기 I(0~1)가 클수록
+               밝고 크고, 느릴수록 몸통이 두꺼워 막판 한 칸이 묵직하다.
+               매번 피치 ±6%·게인 ±15% 흔들어 기계음 반복감을 없앤다
+     whirr(ω)  회전 바람소리 — 저역 노이즈 루프. 갱신이 끊기면 0.3초 뒤
+               스스로 꺼진다(탭 전환·루프 정지에도 윙 소리가 안 남는다)
+     whoosh()  출발 / settle() 정지 '툭-팅' / win() 금관 팡파르 + 차임 */
+const SFX=(()=>{
+let c=null,out=null,nb=null,lastClack=0,wh=null,mC=false,mT=0;
+function g(){
+    if(!c){
+        c=new(window.AudioContext||window.webkitAudioContext)();
+        const comp=c.createDynamicsCompressor();
+        comp.threshold.value=-16;comp.knee.value=12;comp.ratio.value=5;comp.attack.value=.002;comp.release.value=.18;
+        out=c.createGain();out.gain.value=.9;out.connect(comp);comp.connect(c.destination);
+    }
+    if(c.state==='suspended')c.resume();
+    return c;
+}
+function muted(){const n=Date.now();if(n-mT>1000){mT=n;try{mC=localStorage.getItem('lpAudio.muted')==='1'}catch(_){mC=false}}return mC}
+function ok(){if(muted())return null;try{return g()}catch(e){return null}}
+function noise(x){
+    if(!nb){const len=Math.floor(x.sampleRate*1.2);nb=x.createBuffer(1,len,x.sampleRate);const d=nb.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1}
+    return nb;
+}
+function env(p,t,peak,att,dec){p.setValueAtTime(.0001,t);p.exponentialRampToValueAtTime(Math.max(.0002,peak),t+att);p.exponentialRampToValueAtTime(.0001,t+att+dec)}
+function tone(x,type,f0,f1,t,peak,att,dec,dest){
+    const o=x.createOscillator(),ga=x.createGain();o.type=type;
+    o.frequency.setValueAtTime(f0,t);if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(f1,t+att+dec);
+    env(ga.gain,t,peak,att,dec);o.connect(ga);ga.connect(dest||out);o.start(t);o.stop(t+att+dec+.03);return o;
+}
+function burst(x,t,type,freq,q,peak,att,dec){
+    const s=x.createBufferSource();s.buffer=noise(x);
+    const f=x.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;
+    const ga=x.createGain();env(ga.gain,t,peak,att,dec);
+    s.connect(f);f.connect(ga);ga.connect(out);s.start(t,Math.random()*.9,att+dec+.04);return{s,f,ga};
+}
+function clack(I){
+    const x=ok();if(!x)return;const t=x.currentTime;
+    if(t-lastClack<.006)return;lastClack=t;
+    I=Math.max(.05,Math.min(1,I));
+    const pr=1+(Math.random()-.5)*.12,gv=(.5+.5*I)*(.85+Math.random()*.3);
+    try{
+        burst(x,t,'bandpass',(1700+3300*I)*pr,1.1,.42*gv,.0012,.016+.014*(1-I));
+        tone(x,'triangle',1180*pr,760*pr,t,.15*gv,.001,.045+.03*(1-I));
+        tone(x,'sine',210*pr,118*pr,t,(.15+.17*(1-I))*gv,.002,.07+.05*(1-I));
+    }catch(e){}
+}
+function whirr(v){
+    if(!c||c.state!=='running')return;   // 컨텍스트를 새로 만들지 않는다 (제스처 전 경고 방지)
+    try{
+        const t=c.currentTime,s01=Math.min(1,v/20),target=muted()?0:.07*Math.pow(s01,1.3);
+        if(!wh){
+            if(target<.001)return;
+            const s=c.createBufferSource();s.buffer=noise(c);s.loop=true;
+            const f=c.createBiquadFilter();f.type='lowpass';f.frequency.value=300;f.Q.value=.7;
+            const ga=c.createGain();ga.gain.value=0;s.connect(f);f.connect(ga);ga.connect(out);s.start();wh={s,f,ga};
+        }
+        const p=wh.ga.gain;
+        if(p.cancelAndHoldAtTime)p.cancelAndHoldAtTime(t);else p.cancelScheduledValues(t);
+        p.setTargetAtTime(target,t,.06);p.setTargetAtTime(0,t+.3,.12);
+        wh.f.frequency.setTargetAtTime(150+650*s01,t,.08);
+    }catch(e){}
+}
+function whoosh(){
+    const x=ok();if(!x)return;const t=x.currentTime;
+    try{
+        const b=burst(x,t,'bandpass',350,1.3,.3,.09,.42);
+        b.f.frequency.setValueAtTime(320,t);b.f.frequency.exponentialRampToValueAtTime(2600,t+.42);
+        tone(x,'triangle',480,980,t,.045,.01,.2);
+    }catch(e){}
+}
+function settle(){
+    const x=ok();if(!x)return;const t=x.currentTime;
+    try{
+        tone(x,'sine',150,80,t,.34,.003,.24);
+        burst(x,t,'lowpass',900,.8,.22,.002,.08);
+        tone(x,'triangle',2093,2093,t+.02,.045,.002,.4);
+    }catch(e){}
+}
+function brass(x,f,t,dur,peak){
+    const ga=x.createGain(),lp=x.createBiquadFilter();lp.type='lowpass';lp.Q.value=1.6;
+    lp.frequency.setValueAtTime(650,t);lp.frequency.exponentialRampToValueAtTime(3800,t+.05);lp.frequency.exponentialRampToValueAtTime(1500,t+dur+.2);
+    ga.gain.setValueAtTime(.0001,t);ga.gain.exponentialRampToValueAtTime(peak,t+.025);ga.gain.exponentialRampToValueAtTime(peak*.6,t+.15);
+    ga.gain.setValueAtTime(peak*.6,t+Math.max(.16,dur-.1));ga.gain.exponentialRampToValueAtTime(.0001,t+dur+.28);
+    lp.connect(ga);ga.connect(out);
+    const vib=x.createOscillator(),vg=x.createGain();vib.frequency.value=5.5;vg.gain.value=f*.004;vib.connect(vg);
+    vib.start(t+.18);vib.stop(t+dur+.32);
+    [-7,0,7].forEach(ct=>{const o=x.createOscillator();o.type='sawtooth';o.frequency.value=f;o.detune.value=ct;vg.connect(o.frequency);o.connect(lp);o.start(t);o.stop(t+dur+.32)});
+}
+function bell(x,f,t,peak,dec){tone(x,'sine',f,f,t,peak,.002,dec);tone(x,'sine',f*2.76,f*2.76,t,peak*.22,.002,dec*.45)}
+function win(){
+    const x=ok();if(!x)return;const t=x.currentTime+.02;
+    try{
+        /* 빠-밤! — 짧은 픽업 화음 + 길게 끄는 장3화음 (금관 = 톱니파 3겹 디튠 + 필터 스윕) */
+        [392,523.25,659.25].forEach(f=>brass(x,f,t,.11,.05));
+        [523.25,659.25,783.99,1046.5].forEach(f=>brass(x,f,t+.16,.95,.045));
+        /* 글로켄 상승 아르페지오 + 반짝이 차임 (펜타토닉 고음 무작위) */
+        [1046.5,1318.5,1568,2093].forEach((f,i)=>bell(x,f,t+.16+i*.07,.07,.6));
+        const pent=[2093,2349.3,2637,3136,3520,4186];
+        for(let i=0;i<12;i++)bell(x,pent[Math.floor(Math.random()*pent.length)],t+.5+i*.075+Math.random()*.03,.032,.35);
+    }catch(e){}
+}
+function click(){const x=ok();if(!x)return;const t=x.currentTime;try{tone(x,'triangle',900,600,t,.06,.001,.035)}catch(e){}}
+return{g,tick(){clack(.45)},clack,whirr,whoosh,settle,win,click};
 })();
 
 /* Stars */
@@ -400,385 +504,657 @@ function recordCurrentAsPreset(){
 }
 
 /* ============================================
-   CANVAS ROULETTE WHEEL - 60fps smooth
+   CANVAS ROULETTE WHEEL — 2026-09-24 '게임쇼 프라이즈 휠' 개편
+   ─ 구성: 고정 마키 링(전구 36개 + 잔보석) / 회전판(세그먼트·라벨·페그)
+     / 12시 플래퍼(스토퍼) / 보석 허브.
+   ─ 성능: 변하지 않는 그림은 오프스크린 레이어에 한 번만 그린다.
+       L_base  = 그림자·후광·마키 링·금테·전구 소켓·보석·브래킷 (고정 조명)
+       L_face  = 세그먼트·구분선·라벨 (회전 — drawImage 한 번)
+       L_gloss = 가장자리 비네트·유리 광택·보석 허브 (고정)
+     매 프레임은 레이어 3장 + 페그·전구·반짝이·플래퍼 스프라이트만 그린다.
+     금테·링은 회전 대칭이라 고정 레이어에 두면 조명이 항상 좌상단에서 온다.
+   ─ 물리: 화면 크기와 무관한 기준 좌표(REF: 바깥 링 반지름 = 200)에서 돈다.
+     폰·PC·게스트가 같은 플래퍼 각도를 쓰고, 딸깍 임계속도가 화면에 따라
+     달라지지 않는다.
+   ─ 당첨 판정은 기존과 동일: 바퀴가 물리적으로 멈춘 뒤 12시(-π/2) 아래
+     조각(getSelectedIndex). 페그 수는 항목 수의 배수라 모든 항목이 같은
+     수의 칸을 갖는다 → 공정성 유지. 플래퍼는 페그를 밀어낼 뿐 넘을 수
+     없으므로, 정지 시 플래퍼 끝과 12시 선은 항상 같은 칸에 있다.
 ============================================ */
-let canvas,ctx,dpr,W,H,cx,cy,radius;
+let canvas,ctx,dpr=1,W,H,cx,cy,radius;   // radius = 바깥 마키 링 반지름(px)
 let angle=0;         // current rotation in radians
 let velocity=0;      // radians per second
-let lastTick=-1;     // which segment last ticked
+let lastTick=-1;     // (레거시 — 리셋 지점 호환용)
 let selectedIdx=-1;
 let animId;
-/* Flapper (hinged pointer at top) — bats against pegs on the wheel rim.
-   Spring-damped pendulum that gets kicked each time a peg passes. */
-let flapperAngle=0;  // 0 = rest (straight down), + = tipped to the right
+/* Flapper (hinged pointer at top). 0 = rest (straight down).
+   canvas rotate(+φ) 는 아래로 뻗은 팔을 화면 왼쪽으로 돌린다. */
+let flapperAngle=0;
 let flapperVel=0;    // rad/s
+let spinHoldLeft=0;  // 저마찰 '밀어주는' 구간 남은 시간(s). 물리 시간으로 센다
+
+/* ── 기준 좌표 (REF 단위) ── */
+const RG={outer:200,ringIn:177,wheel:173,face:158,pegOrbit:165.5,pegR:5.2,tipR:3.2,
+          flapL:62,flapPen:3.6,bulbR:188.5,hubR:31,half:250};
+RG.pivot=RG.pegOrbit-RG.flapPen+RG.flapL;          // 피벗: 중심 위 223.9
+/* 물리 상수 — 헤드리스 몬테카를로로 튜닝 (평균 9~10초, 막판 1~3칸 딸깍 서스펜스)
+   Kf/Cf : 플래퍼 판스프링·감쇠 (ω0≈33 rad/s — 한 칸 넘기면 바로 튕겨 돌아옴)
+   kc/cd : 팁↔페그 접촉 페널티 강성·감쇠 (서브스텝이 이를 안정적으로 적분)
+   Iw    : 바퀴 관성 — 플래퍼 스프링 에너지 대비. 약 0.5 rad/s 밑이면 페그를
+           못 넘고 0.5초쯤 밀다가 되밀린다(실제 게임쇼 휠의 '넘을까 말까')
+   hyst  : 접촉 중 스프링이 풀릴 때 돌려주는 힘 비율(가죽 플래퍼의 손실)
+   fric* : 지수 감쇠(베어링·공기), coul: 쿨롱 마찰(유한 시간 정지),
+           coulLow: vLow 이하 추가 굴림 저항 — 되밀린 뒤 몇 도에서 선다
+   실측(6항목 150회): 평균 9.4초(8.2~10.4), 되밀림 67%·중앙값 5°, 강제정지 0 */
+const PH={Kf:1100,Cf:13,kc:7,cd:.035,Iw:1300,maxA:.64,fricHold:.12,fricRun:.34,coul:.32,coulLow:1.6,vLow:.6,hyst:.6};
+const BULBS=36;
+function pegCountFor(n){n=Math.max(1,n|0);return n*Math.max(1,Math.round(24/n))}
 
 function initCanvas(){
     canvas=document.getElementById('wheelCanvas');
     ctx=canvas.getContext('2d');
-    dpr=window.devicePixelRatio||1;
     resize();
 }
 
 function resize(){
     const wrap=canvas.parentElement;
     W=wrap.clientWidth;H=wrap.clientHeight;
-    /* Reserve vertical space above the wheel for the external flapper
-       bracket + arm. Without this reserve, a large radius would push the
-       pivot off the top of the canvas. ~64px fits bracket (18) + arm (32)
-       + margin. Also leave ~24px at the bottom for the msg bar. */
-    const topReserve=64;
-    const botReserve=24;
-    const usableH=H-topReserve-botReserve;
-    /* Single viewport-relative formula — no hard pixel cap. Width-bound
-       on phones (W*0.45 wins), height-bound on tablet/PC landscape
-       (usableH*0.45 wins). Same physical-screen → same wheel ratio,
-       even when two monitors share size but differ in resolution.
-       0.45 leaves ~5% breathing room above and below the wheel inside
-       the usable area — previous 0.52 made the diameter exceed
-       usableH and clipped the bottom edge. */
-    const maxR=Math.min(W*0.45,usableH*0.45);
-    radius=maxR;
-    canvas.width=W*dpr;canvas.height=H*dpr;
+    dpr=Math.min(2,window.devicePixelRatio||1);
+    /* 위로는 플래퍼 브래킷 끝(피벗+20), 아래로는 링+그림자. 폰은 폭이,
+       PC·태블릿 가로는 높이가 결정한다. 하단 24px 는 여유. */
+    const up=RG.pivot+20,down=RG.outer+14,topPad=6,botReserve=24;
+    const sW=(W-6)/(2*RG.outer+8);
+    const sH=(H-botReserve-topPad)/(up+down);
+    S=Math.max(.2,Math.min(sW,sH));
+    radius=RG.outer*S;
+    canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);
     canvas.style.width=W+'px';canvas.style.height=H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
     cx=W/2;
-    cy=topReserve+usableH/2;
+    const extra=Math.max(0,H-botReserve-topPad-(up+down)*S);
+    cy=topPad+up*S+extra*.5;
 }
 
-function drawWheel(){
-    ctx.clearRect(0,0,W,H);
-    const n=players.length;
-    const sliceAngle=Math.PI*2/n;
-
-    ctx.save();
-    ctx.translate(cx,cy);
-
-    // Outer shadow
-    ctx.save();
-    ctx.shadowColor='rgba(0,0,0,0.5)';
-    ctx.shadowBlur=40;
-    ctx.shadowOffsetY=8;
-    ctx.beginPath();ctx.arc(0,0,radius+10,0,Math.PI*2);
-    ctx.fillStyle='rgba(0,0,0,0.01)';ctx.fill();
-    ctx.restore();
-
-    // Outer ring (gold) — slightly thicker so pegs read as protruding pins
-    ctx.beginPath();ctx.arc(0,0,radius+10,0,Math.PI*2);
-    const ringGrad=ctx.createRadialGradient(0,0,radius,0,0,radius+10);
-    ringGrad.addColorStop(0,'#b8860b');ringGrad.addColorStop(0.5,'#ffd700');ringGrad.addColorStop(1,'#8a6410');
-    ctx.fillStyle=ringGrad;ctx.fill();
-
-    // Draw slices — all the way to center (no hub cover)
-    for(let i=0;i<n;i++){
-        const startA=angle+i*sliceAngle;
-        const endA=startA+sliceAngle;
-
-        ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,radius,startA,endA);ctx.closePath();
-        const grad=ctx.createRadialGradient(0,0,radius*0.15,0,0,radius);
-        grad.addColorStop(0,players[i].color);grad.addColorStop(1,players[i].dark);
-        ctx.fillStyle=grad;ctx.fill();
-
-        ctx.strokeStyle='rgba(0,0,0,0.3)';ctx.lineWidth=1.8;ctx.stroke();
-
-        ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,radius*0.92,startA,endA);ctx.closePath();
-        ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=1;ctx.stroke();
-
-        const midA=startA+sliceAngle/2;
-        ctx.save();ctx.rotate(midA);
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        const _isPc=window.matchMedia('(min-width:900px)').matches;
-        const fontSize=_isPc?Math.min(36,radius*0.26,sliceAngle*radius*0.64):Math.min(18,radius*0.13,sliceAngle*radius*0.32);
-        ctx.font=`bold ${fontSize}px 'Noto Sans KR',sans-serif`;
-        ctx.fillStyle='#fff';
-        ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=3;
-        const maxTextW=radius*0.7;
-        let txt=players[i].name;
-        if(ctx.measureText(txt).width>maxTextW){while(txt.length>1&&ctx.measureText(txt+'…').width>maxTextW)txt=txt.slice(0,-1);txt+='…'}
-        ctx.fillText(txt,radius*0.58,0,maxTextW);
-        ctx.restore();
-    }
-
-    /* Pegs — fixed 36 pins around the rim, independent of slice count.
-       The rim is a physical edge; its stud density shouldn't change when
-       the user just adds a name. 36 = 10° spacing, a clean balance of
-       clatter density without looking busy. Slice boundaries and pegs
-       no longer align for non-divisor slice counts, which is fine — real
-       wheels have pegs as rim hardware, not slice markers. */
-    const pegCount=36;
-    const pegStep=Math.PI*2/pegCount;
-    for(let i=0;i<pegCount;i++){
-        const a=angle+i*pegStep;
-        const nx=Math.cos(a)*(radius+6);
-        const ny=Math.sin(a)*(radius+6);
-        ctx.beginPath();ctx.arc(nx,ny,5,0,Math.PI*2);
-        const pg=ctx.createRadialGradient(nx-1.5,ny-1.5,0,nx,ny,5);
-        pg.addColorStop(0,'#fff4c2');pg.addColorStop(0.55,'#e9bd3a');pg.addColorStop(1,'#4a3008');
-        ctx.fillStyle=pg;ctx.fill();
-        ctx.strokeStyle='rgba(0,0,0,0.6)';ctx.lineWidth=1;ctx.stroke();
-    }
-
-    // Tiny center nail (axis marker — not a hub covering the slices)
-    ctx.beginPath();ctx.arc(0,0,5.5,0,Math.PI*2);
-    const nailGrad=ctx.createRadialGradient(-1.5,-1.5,0,0,0,5.5);
-    nailGrad.addColorStop(0,'#ffe9a0');nailGrad.addColorStop(0.7,'#b8860b');nailGrad.addColorStop(1,'#4a2f08');
-    ctx.fillStyle=nailGrad;ctx.fill();
-    ctx.strokeStyle='rgba(0,0,0,0.55)';ctx.lineWidth=1;ctx.stroke();
-
-    ctx.restore();
-
-    // Flapper — hinged pointer that pegs bat against
-    drawFlapper();
-}
-
-/* Flapper — like a wheel-of-fortune pointer. The hinge and bracket sit
-   OUTSIDE the wheel (above the rim); only the flapper's tip reaches down
-   into the peg orbit so passing pegs bat it sideways. Geometry:
-
-       bracket (fixed)
-            |
-            * pivot    <- cy - pegOrbit - flapperLen + overlap
-           /|
-          / |  flapper arm (rotates around pivot)
-         /  |
-        /   *  tip      <- sits just inside peg orbit
-       ---(peg orbit)---------- wheel edge
-
-   overlap controls how deep the tip penetrates the peg circle. Big
-   enough that pegs can't slip past without contact (~5px). */
-function drawFlapper(){
-    const pegOrbitR=radius+6;
-    const flapperLen=32;
-    const pivotX=cx;
-    const pivotY=cy-pegOrbitR-flapperLen+5;
-
-    /* Mount bracket — static, anchored to the world (above the wheel). */
-    ctx.save();
-    ctx.fillStyle='#1a0f04';
-    ctx.strokeStyle='#c8a029';ctx.lineWidth=1.4;
-    ctx.beginPath();
-    ctx.arc(pivotX,pivotY-6,11,Math.PI,0,false);
-    ctx.lineTo(pivotX+7,pivotY-1);
-    ctx.lineTo(pivotX-7,pivotY-1);
-    ctx.closePath();
-    ctx.fill();ctx.stroke();
-    /* Small screw heads on the bracket for detail */
-    ctx.fillStyle='#c8a029';
-    ctx.beginPath();ctx.arc(pivotX-6,pivotY-7,1.3,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(pivotX+6,pivotY-7,1.3,0,Math.PI*2);ctx.fill();
-    ctx.restore();
-
-    /* Arm — rotates around (pivotX, pivotY) by flapperAngle */
-    ctx.save();
-    ctx.translate(pivotX,pivotY);
-    ctx.rotate(flapperAngle);
-
-    ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=6;ctx.shadowOffsetY=2;
-    ctx.beginPath();
-    ctx.moveTo(-10,0);
-    ctx.lineTo(10,0);
-    ctx.lineTo(5,flapperLen-3);
-    ctx.quadraticCurveTo(0,flapperLen+4,-5,flapperLen-3);
-    ctx.closePath();
-    const fg=ctx.createLinearGradient(0,0,0,flapperLen);
-    fg.addColorStop(0,'#ffe066');fg.addColorStop(0.5,'#ff9f1c');fg.addColorStop(1,'#c24407');
-    ctx.fillStyle=fg;ctx.fill();
-    ctx.shadowColor='transparent';
-    ctx.strokeStyle='#5a2200';ctx.lineWidth=1.5;ctx.stroke();
-
-    /* Hinge pin — the pivot axis */
-    ctx.beginPath();ctx.arc(0,0,4.5,0,Math.PI*2);
-    const hg=ctx.createRadialGradient(-1.2,-1.2,0,0,0,4.5);
-    hg.addColorStop(0,'#aaa');hg.addColorStop(0.7,'#222');hg.addColorStop(1,'#000');
-    ctx.fillStyle=hg;ctx.fill();
-    ctx.strokeStyle='#ffd700';ctx.lineWidth=1;ctx.stroke();
-
-    ctx.restore();
-}
-
-/* Rigid-body contact constraint between the flapper tip and pegs.
-   The spring+damper pendulum above runs a ballistic step each frame,
-   which left the tip free to penetrate pegs (both are supposed to be
-   rigid). This resolver runs AFTER the ballistic step: for every peg
-   near the top it checks whether the tip is inside the peg's contact
-   circle and, if so, snaps the tip to the nearest point on the
-   flapper-arc × peg-circle intersection — i.e. slides the tip around
-   the peg along its own rotation arc. Velocity is bled heavily when
-   a contact happens so the naive spring velocity (which was driving
-   the tip into the peg) can't immediately re-penetrate next frame.
-   Up to 3 iterations so a single frame can resolve contact with
-   multiple neighboring pegs. */
-function resolveFlapperContact(){
-    if(!players.length)return;
-    const pegOrbitR=radius+6;
-    const flapperLen=32;
-    const pivotX=cx;
-    const pivotY=cy-pegOrbitR-flapperLen+5;
-    const pegR=4.5, tipR=3;
-    const contactR=pegR+tipR;
-    const pegCount=36;
-    const pegStep=Math.PI*2/pegCount;
-    const maxA=0.55;
-
-    const tipPos=(a)=>({x:pivotX-Math.sin(a)*flapperLen,y:pivotY+Math.cos(a)*flapperLen});
-    const normAngle=((angle%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
-    const topOff=((-Math.PI/2-normAngle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
-    const centerSlot=Math.floor(topOff/pegStep);
-
-    let flAngle=flapperAngle;
-    let anyContact=false;
-
-    for(let iter=0;iter<3;iter++){
-        const tp=tipPos(flAngle);
-        let bestPeg=null, bestPen=0;
-        for(let ds=-3;ds<=3;ds++){
-            const pegI=((centerSlot+ds)%pegCount+pegCount)%pegCount;
-            const pegScreenAngle=angle+pegI*pegStep;
-            const px=cx+Math.cos(pegScreenAngle)*pegOrbitR;
-            const py=cy+Math.sin(pegScreenAngle)*pegOrbitR;
-            const dx=tp.x-px, dy=tp.y-py;
-            const d=Math.sqrt(dx*dx+dy*dy);
-            const pen=contactR-d;
-            if(pen>bestPen){bestPen=pen;bestPeg={x:px,y:py}}
+/* ============ 물리 ============ */
+let _contact=false,_contactPeg=-1,_contactGap=1,_stallT=0;
+let dragTarget=null;
+/* 한 프레임 전진. 페그 속도에 비례해 서브스텝을 나눠(페그가 한 스텝에
+   2.2 REF 이상 못 움직이게) 고속에서도 팁을 관통하지 않는다.
+   접촉은 페널티 스프링: 팁 원(tipR)과 페그 원(pegR)이 겹친 깊이만큼
+   법선 방향 힘 F → 플래퍼 토크(r_tip×F), 바퀴 반작용 토크(r_peg×-F).
+   그래서 느린 바퀴는 플래퍼를 밀다 힘이 달려 되밀리고(rock-back),
+   꼭대기를 넘은 페그는 플래퍼가 앞으로 차 준다(click-over). */
+function stepPhysics(frameDt){
+    const n=players.length;if(!n||!(frameDt>0))return;
+    const PC=pegCountFor(n),step=Math.PI*2/PC,TAU=Math.PI*2;
+    const dragging=dragTarget!==null;
+    const locked=selectedIdx!==-1&&!dragging;      // 결과가 나온 바퀴는 고정
+    if(dragging)velocity=normDa(dragTarget-angle)/frameDt;
+    else if(locked)velocity=0;
+    const sub=Math.min(48,Math.max(4,Math.ceil(Math.abs(velocity)*RG.pegOrbit*frameDt/2.2)));
+    const h=frameDt/sub;
+    const L=RG.flapL,cR=RG.pegR+RG.tipR,pvy=-RG.pivot;
+    let hitSpeed=-1,inC=false;
+    for(let s=0;s<sub;s++){
+        const sn=Math.sin(flapperAngle),cs=Math.cos(flapperAngle);
+        const rx=-L*sn,ry=L*cs,tx=rx,ty=pvy+ry;
+        const tvx=-L*cs*flapperVel,tvy=-L*sn*flapperVel;
+        const k0=Math.round((Math.atan2(ty,tx)-angle)/step);
+        let tauF=0,tauW=0;inC=false;
+        for(let k=k0-1;k<=k0+1;k++){
+            const pa=angle+k*step,px=RG.pegOrbit*Math.cos(pa),py=RG.pegOrbit*Math.sin(pa);
+            const dx=tx-px,dy=ty-py,d2=dx*dx+dy*dy;
+            if(d2>=cR*cR||d2<1e-9)continue;
+            const d=Math.sqrt(d2),nx=dx/d,ny=dy/d;
+            /* 팁 기준 상대속도의 법선 성분 (+ = 떨어지는 중) */
+            const vrel=(tvx+velocity*py)*nx+(tvy-velocity*px)*ny;
+            const F=Math.max(0,PH.kc*(cR-d)-PH.cd*vrel);
+            tauF+=rx*F*ny-ry*F*nx;
+            tauW-=F*(px*ny-py*nx);
+            inC=true;
+            const pi=((k%PC)+PC)%PC;
+            if((pi!==_contactPeg||_contactGap>.035)&&-vrel>hitSpeed)hitSpeed=Math.max(0,-vrel);
+            _contactPeg=pi;
         }
-        if(!bestPeg)break;
-        anyContact=true;
-
-        /* Circle-circle intersection: flapper-tip arc (pivot, flapperLen)
-           vs peg contact circle (bestPeg, contactR). Two intersection
-           points; choose the one closer to the current tip so the tip
-           slides around the peg naturally. */
-        const dcx=bestPeg.x-pivotX, dcy=bestPeg.y-pivotY;
-        const D=Math.sqrt(dcx*dcx+dcy*dcy);
-        if(D>flapperLen+contactR||D<Math.abs(flapperLen-contactR))break;
-        const aProj=(D*D+flapperLen*flapperLen-contactR*contactR)/(2*D);
-        const h2=flapperLen*flapperLen-aProj*aProj;
-        if(h2<0)break;
-        const h=Math.sqrt(h2);
-        const baseX=pivotX+aProj*dcx/D, baseY=pivotY+aProj*dcy/D;
-        const perpX=-dcy/D, perpY=dcx/D;
-        const p1x=baseX+h*perpX, p1y=baseY+h*perpY;
-        const p2x=baseX-h*perpX, p2y=baseY-h*perpY;
-        const tpNow=tipPos(flAngle);
-        const d1=(p1x-tpNow.x)**2+(p1y-tpNow.y)**2;
-        const d2=(p2x-tpNow.x)**2+(p2y-tpNow.y)**2;
-        const pickX=d1<d2?p1x:p2x, pickY=d1<d2?p1y:p2y;
-        const newAngle=Math.atan2(-(pickX-pivotX),pickY-pivotY);
-        flAngle=Math.max(-maxA,Math.min(maxA,newAngle));
+        /* 가죽·고무 플래퍼의 히스테리시스: 페그에 눌렸다 풀릴 때(접촉 중 |φ| 감소)는
+           스프링이 받은 힘의 일부만 돌려준다. 없으면 막판에 못 넘은 바퀴가 거의 한
+           칸(14°)을 1.3초 동안 되굴러간다(실측) — 실물은 몇 도 튕기고 선다. */
+        const kEff=(inC&&flapperAngle*flapperVel<0)?PH.Kf*PH.hyst:PH.Kf;
+        flapperVel+=(-kEff*flapperAngle-PH.Cf*flapperVel+tauF)*h;
+        flapperAngle+=flapperVel*h;
+        if(flapperAngle>PH.maxA){flapperAngle=PH.maxA;if(flapperVel>0)flapperVel*=-.3}
+        else if(flapperAngle<-PH.maxA){flapperAngle=-PH.maxA;if(flapperVel<0)flapperVel*=-.3}
+        if(!dragging&&!locked){
+            velocity+=tauW/PH.Iw*h;
+            velocity*=Math.exp(-(spinning?PH.fricHold:PH.fricRun)*h);
+            /* 쿨롱 마찰은 플래퍼와 떨어져 있을 때만. 접촉 중에 걸면 약한 스프링
+               힘과 비겨서 바퀴가 페그를 누른 채 기어가듯 멈춘다(실측 28%) —
+               플래퍼가 비스듬히 누운 채로 결과가 나오면 안 된다. */
+            if(!spinning&&!inC){
+                /* 저속 구간 추가 마찰(굴림 저항) — 되밀린 뒤 한참 굴러가지 않고 몇 도에서 선다 */
+                const c=(PH.coul+PH.coulLow*Math.max(0,1-Math.abs(velocity)/PH.vLow))*h;
+                if(Math.abs(velocity)>c)velocity-=Math.sign(velocity)*c;
+                else velocity=0;
+            }
+        }
+        angle+=velocity*h;
+        if(inC)_contactGap=0;else _contactGap+=h;
     }
-
-    if(anyContact){
-        flapperAngle=flAngle;
-        /* Naive ballistic velocity was driving tip INTO the peg; keep just
-           a small residual so the peg feels like it "carries" the flapper
-           rather than instantly stopping it. 0.3 tuned to stay visually
-           lively without re-penetrating. */
-        flapperVel*=0.3;
+    angle%=TAU;if(angle<0)angle+=TAU;
+    _contact=inC;
+    if(spinHoldLeft>0){spinHoldLeft-=frameDt;if(spinHoldLeft<=0){spinHoldLeft=0;spinning=false}}
+    if(hitSpeed>=0){
+        /* 세기: 상대 충돌 속도 기준. 최고속 ≈ 3300 REF/s, 막판 ≈ 60~150 */
+        const I=Math.max(.06,Math.min(1,Math.sqrt(hitSpeed/2600)));
+        try{SFX.clack(I)}catch(e){}
+        _clackVisual(I,velocity>=0?1:-1);
     }
+}
+/* 멈춤 판정: 바퀴가 서 있고 플래퍼가 거의 제자리(|φ|<0.08).
+   접촉이 '0'이 되길 기다리지 않는다 — 스프링이 풀릴수록 힘도 0 에 수렴해
+   마지막 1초 이상을 기어가듯 끌었다(실측). |φ|<0.08 이면 팁의 가로 편차는
+   62·sin0.08 ≈ 5 REF 로, 팁이 닿은 페그 중심까지의 가로 거리(≈7.6)보다
+   작다 → 페그는 반드시 12시 선 반대편에 있고, 팁과 12시 선은 같은 칸이다.
+   (당첨 판정 = 12시 선, 화면의 바늘 = 팁 — 둘이 어긋날 수 없다) */
+function physicsSettled(frameDt){
+    if(Math.abs(velocity)<.035)_stallT+=frameDt;else{_stallT=0;return false}
+    if(_stallT>3.5)return true;   // 안전장치
+    return Math.abs(flapperAngle)<.08&&Math.abs(flapperVel)<2.5;
 }
 
 function getSelectedIndex(){
     const n=players.length;
     const sliceAngle=Math.PI*2/n;
     // Pointer is at top = -PI/2
-    // Normalize angle
     let a=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
     return Math.floor(a/sliceAngle)%n;
 }
 
-/* Main animation loop — wheel kinematics + flapper/peg collision physics.
-   Design targets a ~10s spin: initial velocity ~20 rad/s, low friction while
-   "spinning" flag is held, higher friction after release, plus a small bite
-   of energy on every peg collision so the decay feels physical. */
+/* ============ 렌더 레이어 ============ */
+let S=1,_layerKey='',_faceKey='',_fontEpoch=0;
+let L_base=null,L_face=null,L_gloss=null;const SPR={};
+let winFx=null;            // {idx,t0,burst}
+let clackFlash=0,visSpeed=0,_prevDrawA=null,_prevDrawT=0,_chaseT=0,_hubLabelA=0,_sparkBudget=6,_lastWhirr=0;
+let parts=[],glints=[];
+let _mainLoopTs=0;
+try{if(document.fonts&&document.fonts.addEventListener)document.fonts.addEventListener('loadingdone',function(){_fontEpoch++})}catch(_){}
+
+function _mk(w,h){const c=document.createElement('canvas');c.width=Math.max(1,Math.round(w));c.height=Math.max(1,Math.round(h));return c}
+/* REF 단위로 그리는 2D 컨텍스트. 캔버스 한 변 = 2*half*S*dpr, 중심 = (half,half) */
+function _refCtx(c,half){const g=c.getContext('2d'),k=S*dpr;g.setTransform(k,0,0,k,half*k,half*k);return g}
+function _hexRgb(h){h=String(h||'#888').replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const v=parseInt(h,16)||0;return[(v>>16)&255,(v>>8)&255,v&255]}
+function _mix(hex,to,t){const a=_hexRgb(hex),b=to==='w'?[255,255,255]:[0,0,0];return'rgb('+a.map((x,i)=>Math.round(x+(b[i]-x)*t)).join(',')+')'}
+function _rgba(hex,al){const a=_hexRgb(hex);return'rgba('+a[0]+','+a[1]+','+a[2]+','+al+')'}
+function _easeOutBack(x){const c1=1.9,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)}
+/* 금 베벨 — 좌상단 광원. rev=true 면 반대(움푹 들어간 면) */
+function _gold(g,r,rev){
+    const gr=g.createLinearGradient(-r*.75,-r,r*.75,r);
+    const st=rev?[[0,'#5a3d08'],[.28,'#a07216'],[.55,'#f2cf68'],[.78,'#fff2c0'],[1,'#c08c1c']]
+                :[[0,'#fff7d4'],[.2,'#f6d56e'],[.48,'#c38e1f'],[.76,'#6a490a'],[.9,'#b8871c'],[1,'#e8c060']];
+    st.forEach(s=>gr.addColorStop(s[0],s[1]));return gr;
+}
+const GEM={dia:[232,244,255],ruby:[255,36,78],emer:[30,220,140],sapp:[60,128,255]};
+const GEM_RING=[GEM.dia,GEM.ruby,GEM.dia,GEM.emer,GEM.dia,GEM.sapp];
+/* 잔보석: 방사 방향으로 누운 마름모 4면 컷. 면마다 좌상단 광원과의
+   각도로 밝기를 정해, 링 어디에 박혀 있어도 빛이 한 방향에서 온다. */
+function _gem(g,x,y,r,col,a){
+    const ca=Math.cos(a),sa=Math.sin(a);
+    const P=[[r*1.25,0],[0,r*.92],[-r*1.05,0],[0,-r*.92]].map(p=>[x+p[0]*ca-p[1]*sa,y+p[0]*sa+p[1]*ca]);
+    g.fillStyle='#e9c35c';
+    P.forEach(p=>{const dx=p[0]-x,dy=p[1]-y,l=Math.hypot(dx,dy)||1;g.beginPath();g.arc(x+dx/l*(l+.9),y+dy/l*(l+.9),.8,0,Math.PI*2);g.fill()});
+    for(let f=0;f<4;f++){
+        const p1=P[f],p2=P[(f+1)%4];
+        const fa=Math.atan2((p1[1]+p2[1])/2-y,(p1[0]+p2[0])/2-x);
+        const b=.5+.5*Math.cos(fa+Math.PI*.75);
+        const lv=.32+.78*b,hot=b>.82?(b-.82)*520:0;
+        g.fillStyle='rgb('+col.map(v=>Math.min(255,Math.round(v*lv+hot))).join(',')+')';
+        g.beginPath();g.moveTo(x,y);g.lineTo(p1[0],p1[1]);g.lineTo(p2[0],p2[1]);g.closePath();g.fill();
+    }
+    g.strokeStyle='rgba(255,255,255,.5)';g.lineWidth=.35;
+    g.beginPath();g.moveTo(P[0][0],P[0][1]);for(let f=1;f<4;f++)g.lineTo(P[f][0],P[f][1]);g.closePath();g.stroke();
+    g.fillStyle='rgba(255,255,255,.9)';g.beginPath();g.arc(x-r*.28,y-r*.28,r*.22,0,Math.PI*2);g.fill();
+}
+/* 브릴리언트 컷 (허브 중앙): 바깥 8면 + 스타 8면 + 8각 테이블 */
+function _brilliant(g,r,col){
+    const N=8,TAU=Math.PI*2,L=-Math.PI*.75;
+    const shade=(a,base)=>{const b=.5+.5*Math.cos(a-L),lv=base+.8*b,hot=b>.85?(b-.85)*600:0;return'rgb('+col.map(v=>Math.min(255,Math.round(v*lv+hot))).join(',')+')'};
+    for(let i=0;i<N;i++){
+        const a0=i*TAU/N-Math.PI/N,a1=a0+TAU/N,am=(a0+a1)/2;
+        g.fillStyle=shade(am,.25);
+        g.beginPath();g.moveTo(Math.cos(a0)*r,Math.sin(a0)*r);g.lineTo(Math.cos(a1)*r,Math.sin(a1)*r);g.lineTo(Math.cos(am)*r*.62,Math.sin(am)*r*.62);g.closePath();g.fill();
+        g.fillStyle=shade(a0+Math.PI,.18);
+        g.beginPath();g.moveTo(Math.cos(a0)*r,Math.sin(a0)*r);g.lineTo(Math.cos(am-TAU/N)*r*.62,Math.sin(am-TAU/N)*r*.62);g.lineTo(Math.cos(am)*r*.62,Math.sin(am)*r*.62);g.closePath();g.fill();
+    }
+    const gr=g.createLinearGradient(-r*.6,-r*.6,r*.6,r*.6);
+    gr.addColorStop(0,'rgb('+col.map(v=>Math.min(255,v+120)).join(',')+')');gr.addColorStop(.5,'rgb('+col.join(',')+')');gr.addColorStop(1,'rgb('+col.map(v=>Math.round(v*.45)).join(',')+')');
+    g.fillStyle=gr;g.beginPath();
+    for(let i=0;i<N;i++){const a=i*TAU/N;g[i?'lineTo':'moveTo'](Math.cos(a)*r*.55,Math.sin(a)*r*.55)}
+    g.closePath();g.fill();
+    g.strokeStyle='rgba(255,255,255,.35)';g.lineWidth=.4;g.stroke();
+    g.fillStyle='rgba(255,255,255,.85)';g.beginPath();g.ellipse(-r*.26,-r*.3,r*.2,r*.11,-.7,0,Math.PI*2);g.fill();
+}
+
+function _buildBase(){
+    const half=RG.half,k=S*dpr,TAU=Math.PI*2;
+    L_base=_mk(2*half*k,2*half*k);const g=_refCtx(L_base,half);
+    /* 1) 후광 — 무대 조명 받는 느낌 */
+    let gr=g.createRadialGradient(0,0,RG.outer*.92,0,0,RG.outer+46);
+    gr.addColorStop(0,'rgba(255,200,90,.26)');gr.addColorStop(.4,'rgba(255,150,40,.09)');gr.addColorStop(1,'rgba(255,120,0,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,RG.outer+46,0,TAU);g.fill();
+    /* 2) 드롭 섀도 */
+    g.save();g.shadowColor='rgba(0,0,0,.75)';g.shadowBlur=24*k;g.shadowOffsetY=12*k;
+    g.fillStyle='#120804';g.beginPath();g.arc(0,0,RG.outer,0,TAU);g.fill();g.restore();
+    /* 3) 바깥 금 베벨 */
+    g.fillStyle=_gold(g,RG.outer);g.beginPath();g.arc(0,0,RG.outer,0,TAU);g.fill();
+    g.strokeStyle='rgba(255,250,225,.5)';g.lineWidth=.7;g.beginPath();g.arc(0,0,RG.outer-1.4,0,TAU);g.stroke();
+    /* 4) 버건디 옻칠 밴드 */
+    gr=g.createRadialGradient(0,0,RG.ringIn+2,0,0,RG.outer-4);
+    gr.addColorStop(0,'#190207');gr.addColorStop(.5,'#5e0b1d');gr.addColorStop(1,'#22030a');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,RG.outer-4,0,TAU);g.fill();
+    gr=g.createLinearGradient(-150,-170,120,160);
+    gr.addColorStop(0,'rgba(255,255,255,.17)');gr.addColorStop(.45,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(0,0,0,.28)');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,RG.outer-4,0,TAU);g.arc(0,0,RG.ringIn+3,0,TAU,true);g.fill();
+    /* 5) 안쪽 금 베벨 (역광 = 움푹) */
+    g.fillStyle=_gold(g,RG.ringIn+3,true);g.beginPath();g.arc(0,0,RG.ringIn+3,0,TAU);g.fill();
+    /* 6) 링-바퀴 틈 */
+    g.fillStyle='#090402';g.beginPath();g.arc(0,0,RG.ringIn,0,TAU);g.fill();
+    /* 7) 회전판 금테 (페그가 박히는 면) */
+    g.fillStyle=_gold(g,RG.wheel);g.beginPath();g.arc(0,0,RG.wheel,0,TAU);g.fill();
+    g.strokeStyle='rgba(60,35,0,.55)';g.lineWidth=.8;
+    [RG.wheel-1,RG.face+2].forEach(r=>{g.beginPath();g.arc(0,0,r,0,TAU);g.stroke()});
+    g.strokeStyle='rgba(255,247,210,.35)';g.lineWidth=.5;g.beginPath();g.arc(0,0,RG.pegOrbit,0,TAU);g.stroke();
+    /* 8) 전구 소켓 (꺼진 유리) */
+    for(let i=0;i<BULBS;i++){
+        const a=-Math.PI/2+(i+.5)*TAU/BULBS,x=Math.cos(a)*RG.bulbR,y=Math.sin(a)*RG.bulbR;
+        gr=g.createRadialGradient(x-1.8,y-2,0,x,y,6.6);
+        gr.addColorStop(0,'#fff7d0');gr.addColorStop(.45,'#dcae42');gr.addColorStop(1,'#533606');
+        g.fillStyle=gr;g.beginPath();g.arc(x,y,6.6,0,TAU);g.fill();
+        gr=g.createRadialGradient(x-1,y-1.2,0,x,y,4.8);
+        gr.addColorStop(0,'#9a7650');gr.addColorStop(.6,'#46290f');gr.addColorStop(1,'#1a0d04');
+        g.fillStyle=gr;g.beginPath();g.arc(x,y,4.8,0,TAU);g.fill();
+        g.fillStyle='rgba(255,255,255,.5)';g.beginPath();g.arc(x-1.5,y-1.7,1.05,0,TAU);g.fill();
+    }
+    /* 9) 전구 사이 잔보석 — 다이아 위주, 루비·에메랄드·사파이어 포인트 */
+    for(let i=0;i<BULBS;i++){
+        const a=-Math.PI/2+i*TAU/BULBS;
+        _gem(g,Math.cos(a)*RG.bulbR,Math.sin(a)*RG.bulbR,3.3,GEM_RING[i%GEM_RING.length],a);
+    }
+    /* 10) 플래퍼 브래킷 — 링 위 12시에 얹힌 금 방패 */
+    const py=-RG.pivot;
+    g.save();g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=7*k;g.shadowOffsetY=3*k;
+    g.beginPath();
+    g.moveTo(-18,-RG.outer+7);g.lineTo(-15.5,py+3);
+    g.quadraticCurveTo(-15.5,py-16,0,py-19);g.quadraticCurveTo(15.5,py-16,15.5,py+3);
+    g.lineTo(18,-RG.outer+7);g.quadraticCurveTo(0,-RG.outer+1,-18,-RG.outer+7);g.closePath();
+    gr=g.createLinearGradient(-18,0,18,0);
+    gr.addColorStop(0,'#5e400a');gr.addColorStop(.28,'#f2cf68');gr.addColorStop(.48,'#fff6d2');gr.addColorStop(.7,'#c08c1c');gr.addColorStop(1,'#4d3406');
+    g.fillStyle=gr;g.fill();g.restore();
+    g.strokeStyle='rgba(60,35,0,.75)';g.lineWidth=.9;g.stroke();
+    g.fillStyle='#3a0610';g.beginPath();g.moveTo(-9,-RG.outer+4);g.lineTo(-9,py+2);g.quadraticCurveTo(0,py-9,9,py+2);g.lineTo(9,-RG.outer+4);g.closePath();g.fill();
+    _gem(g,0,py-11.5,3.1,GEM.dia,-Math.PI/2);
+}
+
+function _buildFace(){
+    const n=players.length,k=S*dpr,half=RG.face+1,R=RG.face,TAU=Math.PI*2;
+    L_face=_mk(2*half*k,2*half*k);const g=_refCtx(L_face,half);
+    if(!n)return;
+    const sl=TAU/n;
+    for(let i=0;i<n;i++){
+        const a0=i*sl,a1=a0+sl,col=players[i].color,dk=players[i].dark;
+        g.beginPath();g.moveTo(0,0);g.arc(0,0,R,a0,a1);g.closePath();
+        let gr=g.createRadialGradient(0,0,R*.06,0,0,R);
+        gr.addColorStop(0,_mix(col,'w',.38));gr.addColorStop(.42,col);gr.addColorStop(.86,dk);gr.addColorStop(1,_mix(dk,'k',.4));
+        g.fillStyle=gr;g.fill();
+        /* 새틴 광택 — 조각 한쪽 모서리는 밝게, 반대쪽은 어둡게 (커팅된 패널) */
+        g.save();g.clip();
+        const mid=(a0+a1)/2,px=Math.cos(mid+Math.PI/2),py=Math.sin(mid+Math.PI/2);
+        const w=R*Math.min(1,Math.sin(Math.min(Math.PI/2,sl/2)))+1;
+        gr=g.createLinearGradient(-px*w,-py*w,px*w,py*w);
+        gr.addColorStop(0,'rgba(255,255,255,.17)');gr.addColorStop(.5,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(0,0,0,.17)');
+        g.fillStyle=gr;g.fillRect(-R,-R,2*R,2*R);
+        g.restore();
+    }
+    /* 금 구분선 — 어두운 홈 위에 가는 금선 (베벨) */
+    if(n>1)for(let i=0;i<n;i++){
+        const a=i*sl,c=Math.cos(a),s=Math.sin(a),r0=RG.hubR*.7;
+        g.strokeStyle='rgba(22,8,0,.55)';g.lineWidth=3.4;
+        g.beginPath();g.moveTo(c*r0,s*r0);g.lineTo(c*R,s*R);g.stroke();
+        const gr=g.createLinearGradient(c*r0,s*r0,c*R,s*R);
+        gr.addColorStop(0,'#8a6212');gr.addColorStop(.55,'#ffeaa6');gr.addColorStop(1,'#c7951f');
+        g.strokeStyle=gr;g.lineWidth=1.5;
+        g.beginPath();g.moveTo(c*r0,s*r0);g.lineTo(c*R,s*R);g.stroke();
+    }
+    /* 라벨 — 테두리에서 중심 쪽으로 읽히게 오른쪽 정렬. 조각은 안쪽으로
+       갈수록 좁아지므로 글자 끝 지점의 조각 폭까지 확인하며 줄인다. */
+    const rOut=R-11,rMin=RG.hubR+7,span=rOut-rMin;
+    const font=f=>`800 ${f}px 'Noto Sans KR','Apple SD Gothic Neo','Malgun Gothic',sans-serif`;
+    /* 한 줄 맞춤: 반지름 방향 길이(span)와, 글자 끝 지점의 조각 폭(room)을 함께 본다 */
+    const fit1=(txt,fs0,lines)=>{
+        let fs=fs0;g.font=font(fs);let w=g.measureText(txt).width;
+        for(let it=0;it<30;it++){
+            const room=n<=2?1e9:sl*Math.max(rOut-w,1);
+            if(w<=span&&fs*1.12*lines<=room)break;
+            if(fs<=10.5)break;
+            fs*=.93;g.font=font(fs);w=g.measureText(txt).width;
+        }
+        return fs;
+    };
+    for(let i=0;i<n;i++){
+        g.save();g.rotate((i+.5)*sl);
+        g.textAlign='right';g.textBaseline='middle';
+        const fs0=Math.max(10,Math.min(n<=2?25:23,sl*rOut*.4));
+        const raw=String(players[i].name||'');
+        let lines=[raw],fs=fit1(raw,fs0,1);
+        /* 긴 이름은 조각이 넓을 때 두 줄로 — 한 줄로 욱여넣어 글자가 너무 작아지는 것보다 읽기 쉽다 */
+        const sp=raw.indexOf(' ');
+        if(fs<fs0*.66&&sp>0&&sl*(rMin+span*.5)>fs0*2.6){
+            let best=null;
+            for(let j=0;j<raw.length;j++){if(raw[j]!==' ')continue;const d=Math.abs(j-raw.length/2);if(!best||d<best.d)best={j,d}}
+            const L2=[raw.slice(0,best.j).trim(),raw.slice(best.j+1).trim()];
+            const f2=Math.min(fit1(L2[0],fs0,2),fit1(L2[1],fs0,2));
+            if(f2>fs*1.15){lines=L2;fs=f2}
+        }
+        g.font=font(fs);
+        lines=lines.map(tx=>{if(g.measureText(tx).width<=span)return tx;while(tx.length>1&&g.measureText(tx+'…').width>span)tx=tx.slice(0,-1);return tx+'…'});
+        const lh=fs*1.08;
+        lines.forEach((tx,li)=>{
+            const y=(li-(lines.length-1)/2)*lh;
+            g.save();
+            g.lineJoin='round';g.lineWidth=fs*.2;g.strokeStyle='rgba(28,10,0,.55)';g.strokeText(tx,rOut,y);
+            g.shadowColor='rgba(0,0,0,.35)';g.shadowBlur=2*k;g.shadowOffsetY=1*k;
+            g.fillStyle='#fff';g.fillText(tx,rOut,y);
+            g.restore();
+        });
+        g.restore();
+    }
+}
+
+function _buildGloss(){
+    const k=S*dpr,half=RG.face+2,R=RG.face,TAU=Math.PI*2;
+    L_gloss=_mk(2*half*k,2*half*k);const g=_refCtx(L_gloss,half);
+    /* 가장자리 비네트 — 판이 금테 아래로 살짝 들어간 깊이감 */
+    let gr=g.createRadialGradient(0,0,R*.6,0,0,R);
+    gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(.8,'rgba(0,0,0,.1)');gr.addColorStop(1,'rgba(0,0,0,.4)');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,R,0,TAU);g.fill();
+    /* 유리 광택 (좌상단 고정 조명) — 판이 돌아도 빛은 제자리라 '코팅된 판' 느낌 */
+    g.save();g.beginPath();g.arc(0,0,R,0,TAU);g.clip();
+    g.save();g.translate(-R*.3,-R*.44);g.rotate(-.6);g.scale(1,.6);
+    gr=g.createRadialGradient(0,0,0,0,0,R*.9);
+    gr.addColorStop(0,'rgba(255,255,255,.22)');gr.addColorStop(.45,'rgba(255,255,255,.07)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,R*.9,0,TAU);g.fill();g.restore();
+    gr=g.createLinearGradient(0,R*.4,0,R);gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(1,'rgba(255,220,160,.07)');
+    g.fillStyle=gr;g.fillRect(-R,R*.4,2*R,R*.6);
+    g.restore();
+    g.strokeStyle='rgba(30,14,0,.65)';g.lineWidth=1.6;g.beginPath();g.arc(0,0,R-.6,0,TAU);g.stroke();
+    /* 보석 허브: 금 돔 + 다이아 12알 + 중앙 루비 브릴리언트 */
+    const r=RG.hubR;
+    g.save();g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=9*k;g.shadowOffsetY=3*k;
+    g.fillStyle=_gold(g,r);g.beginPath();g.arc(0,0,r,0,TAU);g.fill();g.restore();
+    g.strokeStyle='rgba(255,250,225,.55)';g.lineWidth=.6;g.beginPath();g.arc(0,0,r-1.2,0,TAU);g.stroke();
+    gr=g.createRadialGradient(0,0,r*.5,0,0,r*.88);gr.addColorStop(0,'#26030a');gr.addColorStop(1,'#5e0b1d');
+    g.fillStyle=gr;g.beginPath();g.arc(0,0,r*.86,0,TAU);g.fill();
+    for(let i=0;i<12;i++){const a=i*Math.PI/6+Math.PI/12;_gem(g,Math.cos(a)*r*.71,Math.sin(a)*r*.71,2.25,GEM.dia,a)}
+    g.fillStyle=_gold(g,r*.56,true);g.beginPath();g.arc(0,0,r*.56,0,TAU);g.fill();
+    _brilliant(g,r*.47,[215,18,58]);
+}
+
+function _buildSprites(){
+    const k=S*dpr,TAU=Math.PI*2;
+    /* 전구 빛 (가산 합성) */
+    SPR.glow=_mk(36*k,36*k);{const g=_refCtx(SPR.glow,18);
+        const gr=g.createRadialGradient(0,0,0,0,0,18);
+        gr.addColorStop(0,'rgba(255,255,250,1)');gr.addColorStop(.17,'rgba(255,245,200,1)');gr.addColorStop(.3,'rgba(255,212,110,.55)');
+        gr.addColorStop(.6,'rgba(255,165,40,.15)');gr.addColorStop(1,'rgba(255,140,0,0)');
+        g.fillStyle=gr;g.beginPath();g.arc(0,0,18,0,TAU);g.fill();}
+    /* 반짝임 별 (4갈래 + 45° 보조 갈래) */
+    SPR.glint=_mk(32*k,32*k);{const g=_refCtx(SPR.glint,16);
+        const gr=g.createRadialGradient(0,0,0,0,0,7);
+        gr.addColorStop(0,'rgba(255,255,255,1)');gr.addColorStop(.35,'rgba(255,245,210,.55)');gr.addColorStop(1,'rgba(255,230,160,0)');
+        g.fillStyle=gr;g.beginPath();g.arc(0,0,7,0,TAU);g.fill();
+        [[15.5,1.25,1],[9,.8,.7]].forEach((sp,j)=>{g.save();g.globalAlpha=sp[2];g.rotate(j*Math.PI/4);g.fillStyle='#fff';
+            for(let q=0;q<2;q++){g.beginPath();g.moveTo(-sp[0],0);g.quadraticCurveTo(0,-sp[1],sp[0],0);g.quadraticCurveTo(0,sp[1],-sp[0],0);g.fill();g.rotate(Math.PI/2)}
+            g.restore()});}
+    /* 페그 — 금 핀 (조명 고정: 스프라이트를 회전하지 않고 위치만 옮긴다) */
+    SPR.peg=_mk(22*k,22*k);{const g=_refCtx(SPR.peg,11);
+        g.save();g.shadowColor='rgba(0,0,0,.6)';g.shadowBlur=2.5*k;g.shadowOffsetX=1*k;g.shadowOffsetY=1.8*k;
+        const gr=g.createRadialGradient(-1.7,-1.9,.2,0,0,RG.pegR);
+        gr.addColorStop(0,'#ffffff');gr.addColorStop(.22,'#fff1bd');gr.addColorStop(.6,'#d4a331');gr.addColorStop(1,'#56380a');
+        g.fillStyle=gr;g.beginPath();g.arc(0,0,RG.pegR,0,TAU);g.fill();g.restore();
+        g.strokeStyle='rgba(40,20,0,.7)';g.lineWidth=.55;g.beginPath();g.arc(0,0,RG.pegR,0,TAU);g.stroke();}
+    /* 플래퍼 — 루비 에나멜 포인터 + 금 테두리. 피벗 = 스프라이트 (22,14) */
+    const L=RG.flapL,fw=44,fh=L+30;
+    SPR.flap=_mk(fw*k,fh*k);{const g=SPR.flap.getContext('2d');g.setTransform(k,0,0,k,22*k,14*k);
+        const path=()=>{g.beginPath();g.moveTo(-9,-2);
+            g.bezierCurveTo(-9.5,18,-5.6,L-16,-3.5,L-1.5);g.quadraticCurveTo(0,L+4.2,3.5,L-1.5);
+            g.bezierCurveTo(5.6,L-16,9.5,18,9,-2);g.arc(0,-2,9,0,Math.PI,true);g.closePath()};
+        g.save();g.shadowColor='rgba(0,0,0,.55)';g.shadowBlur=6*k;g.shadowOffsetX=2.5*k;g.shadowOffsetY=4.5*k;
+        path();let gr=g.createLinearGradient(-9,0,9,0);
+        gr.addColorStop(0,'#5a000e');gr.addColorStop(.3,'#d11834');gr.addColorStop(.46,'#ff7486');gr.addColorStop(.6,'#e0203c');gr.addColorStop(1,'#4a000a');
+        g.fillStyle=gr;g.fill();g.restore();
+        path();gr=g.createLinearGradient(0,-11,0,L+4);gr.addColorStop(0,'#fff2c0');gr.addColorStop(.5,'#c9931f');gr.addColorStop(1,'#f7d774');
+        g.strokeStyle=gr;g.lineWidth=1.6;g.stroke();
+        g.fillStyle='rgba(255,255,255,.38)';g.beginPath();g.moveTo(-5.2,4);g.bezierCurveTo(-5.4,18,-3.2,L-20,-2,L-10);g.lineTo(-3.2,L-10);g.bezierCurveTo(-4.6,L-22,-6.8,18,-6.6,4);g.closePath();g.fill();
+        gr=g.createRadialGradient(-.8,L-.8,0,0,L,3.4);gr.addColorStop(0,'#fff6d0');gr.addColorStop(.5,'#d9a93a');gr.addColorStop(1,'#6a4808');
+        g.fillStyle=gr;g.beginPath();g.arc(0,L-.4,3.1,0,TAU);g.fill();}
+    SPR.flapBox=[-22,-14,fw,fh];
+    /* 힌지 캡 — 금 원판 + 루비 */
+    SPR.hinge=_mk(22*k,22*k);{const g=_refCtx(SPR.hinge,11);
+        g.save();g.shadowColor='rgba(0,0,0,.55)';g.shadowBlur=3*k;g.shadowOffsetY=1.5*k;
+        g.fillStyle=_gold(g,7.6);g.beginPath();g.arc(0,0,7.6,0,TAU);g.fill();g.restore();
+        _brilliant(g,4.4,[220,20,60]);}
+}
+
+function _ensureLayers(){
+    const lk=S.toFixed(4)+'|'+dpr;
+    if(lk!==_layerKey||!L_base){_layerKey=lk;_buildBase();_buildGloss();_buildSprites();_faceKey=''}
+    const fk=lk+'|'+_fontEpoch+'|'+players.map(p=>p.name+'\u0001'+p.color).join('\u0002');
+    if(fk!==_faceKey){_faceKey=fk;_buildFace()}
+}
+
+/* ============ 매 프레임 ============ */
+function _cyc(x){x%=BULBS;return x<0?x+BULBS:x}
+/* 전구 밝기 — 대기: 느린 불규칙 반짝임 / 회전: 3줄 혜성 체이스(속도 비례)
+   / 막판: 딸깍마다 전체 펄스 / 당첨: 짝홀 교차 점멸 + 12시에서 양쪽으로
+   달리는 쌍혜성. */
+function _bulbLevel(i,t,now){
+    const u=i+.5;   // 12시 기준 시계방향 거리(전구 단위)
+    if(winFx){
+        const wt=(now-winFx.t0)/1000;
+        if(wt<0)return .95;                                   // 정지 순간 한 박자 멈춤
+        const alt=((i+Math.floor(wt*5))%2)?1:.22;
+        const H=_cyc(wt*15),d1=_cyc(H-u),d2=_cyc(H-_cyc(-u));
+        const comet=Math.max(d1<5?1-d1/5:0,d2<5?1-d2/5:0);
+        return Math.max(alt*(wt<1.2?1:.75),comet);
+    }
+    const sp=Math.abs(visSpeed);
+    let b;
+    if(sp>.3){
+        const dir=visSpeed>=0?1:-1,Hh=_cyc(_chaseT);let c=0;
+        for(let q=0;q<3;q++){const hq=_cyc(Hh+q*BULBS/3),d=dir>0?_cyc(hq-u):_cyc(u-hq);if(d<6)c=Math.max(c,Math.pow(1-d/6,1.4))}
+        b=.24+.76*c;
+        if(sp<3)b=Math.max(b,.22+.7*clackFlash);
+    }else{
+        b=.32+.5*Math.pow(.5+.5*Math.sin(t*1.6+i*2.39996),3)+.2*(.5+.5*Math.sin(t*.8-i*.35));
+        b=Math.max(b,.25+.6*clackFlash);
+    }
+    if(i===0||i===BULBS-1)b=Math.max(b,clackFlash);           // 플래퍼 양옆은 딸깍마다 번쩍
+    return Math.min(1,b);
+}
+/* 딸깍 순간 시각효과: 전구 펄스 + 팁에서 금 불꽃 몇 알 (초당 예산 제한) */
+function _clackVisual(I,dir){
+    clackFlash=Math.max(clackFlash,.35+.65*I);
+    let cnt=Math.min(Math.floor(_sparkBudget),Math.round(1+3*I));
+    if(cnt<=0||parts.length>160)return;
+    _sparkBudget-=cnt;
+    const tx=-RG.flapL*Math.sin(flapperAngle),ty=-RG.pivot+RG.flapL*Math.cos(flapperAngle);
+    while(cnt--){parts.push({type:'spark',x:tx,y:ty,vx:dir*(40+220*I*Math.random())+(Math.random()-.5)*60,vy:-(30+140*Math.random()*(.4+I)),life:0,max:.16+Math.random()*.16,g:500})}
+}
+function _spawnWinBurst(){
+    const n=players.length,sl=Math.PI*2/n,idx=winFx.idx;
+    const ty=-RG.pivot+RG.flapL;
+    for(let i=0;i<44;i++){
+        const a=Math.random()*Math.PI*2,sp=70+Math.random()*240;
+        parts.push({type:'star',x:(Math.random()-.5)*8,y:ty,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-50,life:0,max:.8+Math.random()*.9,sz:.35+Math.random()*.55,g:240,rot:Math.random()*3});
+    }
+    for(let i=0;i<22;i++){
+        const th=angle+(idx+.08+Math.random()*.84)*sl,r=RG.hubR+12+Math.random()*(RG.face-RG.hubR-22);
+        parts.push({type:'tw',x:Math.cos(th)*r,y:Math.sin(th)*r,vx:0,vy:0,life:-Math.random()*1.4,max:.55+Math.random()*.4,sz:.3+Math.random()*.45,g:0});
+    }
+}
+function _drawWinSegment(now){
+    const n=players.length;if(!n)return;
+    const sl=Math.PI*2/n,a0=winFx.idx*sl,a1=a0+sl,R=RG.face;
+    const wt=Math.max(0,(now-winFx.t0)/1000),k=Math.min(1,wt/.3);
+    if(k<=0)return;
+    /* 나머지 조각은 어둡게 — 당첨 조각만 무대 조명 */
+    ctx.fillStyle='rgba(0,0,0,'+(.46*k)+')';
+    ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.moveTo(0,0);ctx.arc(0,0,R,a0,a1);ctx.closePath();ctx.fill('evenodd');
+    /* 당첨 조각이 앞으로 튀어나옴 (easeOutBack) + 숨쉬기 */
+    const pk=1+.05*_easeOutBack(Math.min(1,wt/.38))+.008*Math.sin(wt*6)*k;
+    const fh=RG.face+1;
+    ctx.save();ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R*pk,a0,a1);ctx.closePath();ctx.clip();
+    ctx.scale(pk,pk);ctx.drawImage(L_face,-fh,-fh,2*fh,2*fh);ctx.restore();
+    const pulse=.5+.5*Math.sin(wt*7.5);
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,R*pk,a0,a1);ctx.closePath();
+    ctx.fillStyle=_rgba(players[winFx.idx].color,(.1+.16*pulse)*k);ctx.fill();
+    ctx.lineJoin='round';
+    ctx.strokeStyle='rgba(255,210,110,'+((.45+.4*pulse)*k)+')';ctx.lineWidth=4.2;ctx.stroke();
+    ctx.strokeStyle='rgba(255,250,225,'+(.8*k)+')';ctx.lineWidth=1.2;ctx.stroke();
+    ctx.restore();
+}
+/* 빛 쓸기 — 판 위를 사선으로 지나가는 하이라이트 (대기 7초마다 / 당첨 순간) */
+function _drawSweep(now){
+    let p=-1,al=.9;
+    if(winFx){const wt=(now-winFx.t0)/1000;if(wt>.12&&wt<.82)p=(wt-.12)/.7}
+    else if(Math.abs(visSpeed)<.3){const c=(now/1000)%7;if(c<1.3)p=c/1.3;al=.6}
+    if(p<0)return;
+    const R=RG.face,x=-R*1.5+p*R*3;
+    ctx.save();ctx.beginPath();ctx.arc(0,0,R,0,Math.PI*2);ctx.clip();
+    ctx.rotate(-.5);ctx.globalCompositeOperation='lighter';ctx.globalAlpha=al;
+    const gr=ctx.createLinearGradient(x-42,0,x+42,0);
+    gr.addColorStop(0,'rgba(255,255,255,0)');gr.addColorStop(.5,'rgba(255,248,225,.24)');gr.addColorStop(1,'rgba(255,255,255,0)');
+    ctx.fillStyle=gr;ctx.fillRect(x-42,-R*1.3,84,R*2.6);
+    ctx.restore();
+}
+
+function drawWheel(){
+    if(!ctx)return;
+    const now=performance.now(),t=now/1000,TAU=Math.PI*2;
+    const dt=_prevDrawT?Math.min(.05,Math.max(0,(now-_prevDrawT)/1000)):1/60;_prevDrawT=now;
+    _ensureLayers();
+    /* 시각 속도 — angle 변화량으로 추정 (호스트·게스트 공통) */
+    if(_prevDrawA!==null&&dt>0){const inst=normDa(angle-_prevDrawA)/dt;visSpeed+=(inst-visSpeed)*Math.min(1,dt*10)}
+    _prevDrawA=angle;
+    if(Math.abs(visSpeed)>.02||_lastWhirr>.02){try{SFX.whirr(Math.abs(visSpeed))}catch(e){}_lastWhirr=Math.abs(visSpeed)}
+    if(winFx&&selectedIdx===-1)winFx=null;                   // 다시 돌리기·설정 복귀 시 해제
+    clackFlash=Math.max(0,clackFlash-dt*5.5);
+    _sparkBudget=Math.min(6,_sparkBudget+dt*40);
+    _chaseT+=dt*(4+20*Math.min(1,Math.abs(visSpeed)/12))*(visSpeed>=0?1:-1);
+
+    ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+    ctx.save();ctx.translate(cx,cy);ctx.scale(S,S);
+    const hb=RG.half,fh=RG.face+1,gh=RG.face+2;
+    ctx.drawImage(L_base,-hb,-hb,2*hb,2*hb);
+
+    /* 회전판 */
+    ctx.save();ctx.rotate(angle);
+    ctx.drawImage(L_face,-fh,-fh,2*fh,2*fh);
+    if(winFx)_drawWinSegment(now);
+    ctx.restore();
+
+    /* 페그 — 위치만 회전, 스프라이트는 고정 (하이라이트가 늘 좌상단) */
+    const n=players.length;
+    if(n){const PC=pegCountFor(n),st=TAU/PC,ps=11;
+        for(let i=0;i<PC;i++){const a=angle+i*st;ctx.drawImage(SPR.peg,Math.cos(a)*RG.pegOrbit-ps,Math.sin(a)*RG.pegOrbit-ps,2*ps,2*ps)}}
+
+    ctx.drawImage(L_gloss,-gh,-gh,2*gh,2*gh);
+    _drawSweep(now);
+
+    /* 전구 + 보석 반짝임 (가산 합성) */
+    ctx.save();ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<BULBS;i++){
+        const b=_bulbLevel(i,t,now);if(b<.03)continue;
+        const a=-Math.PI/2+(i+.5)*TAU/BULBS,x=Math.cos(a)*RG.bulbR,y=Math.sin(a)*RG.bulbR,z=.72+.4*b;
+        ctx.globalAlpha=b;ctx.drawImage(SPR.glow,x-18*z,y-18*z,36*z,36*z);
+    }
+    const gRate=winFx?14:(Math.abs(visSpeed)>.3?4:2);
+    if(Math.random()<gRate*dt)glints.push({i:Math.floor(Math.random()*(BULBS+12)),t0:now,dur:380+Math.random()*420,s:.55+Math.random()*.55});
+    glints=glints.filter(gl=>{
+        const p=(now-gl.t0)/gl.dur;if(p>=1)return false;
+        let x,y;
+        if(gl.i<BULBS){const a=-Math.PI/2+gl.i*TAU/BULBS;x=Math.cos(a)*RG.bulbR;y=Math.sin(a)*RG.bulbR}
+        else{const a=(gl.i-BULBS)*Math.PI/6+Math.PI/12;x=Math.cos(a)*RG.hubR*.71;y=Math.sin(a)*RG.hubR*.71}
+        const e=Math.sin(Math.PI*p),z=gl.s*e;
+        ctx.globalAlpha=e;ctx.drawImage(SPR.glint,x-16*z,y-16*z,32*z,32*z);return true;
+    });
+    ctx.restore();
+
+    /* 플래퍼 + 힌지 */
+    ctx.save();ctx.translate(0,-RG.pivot);ctx.rotate(flapperAngle);
+    const fb=SPR.flapBox;ctx.drawImage(SPR.flap,fb[0],fb[1],fb[2],fb[3]);
+    ctx.restore();
+    if(clackFlash>.35){
+        const tx=-RG.flapL*Math.sin(flapperAngle),ty=-RG.pivot+RG.flapL*Math.cos(flapperAngle),z=.35*clackFlash;
+        ctx.save();ctx.globalCompositeOperation='lighter';ctx.globalAlpha=clackFlash*.8;
+        ctx.drawImage(SPR.glint,tx-16*z,ty-16*z,32*z,32*z);ctx.restore();
+    }
+    ctx.drawImage(SPR.hinge,-11,-RG.pivot-11,22,22);
+
+    /* 허브 'SPIN' — 누르면 돌아간다는 표시 (대기 중에만) */
+    const idle=!spinActive&&selectedIdx===-1&&!window._lpGuest&&n>1;
+    _hubLabelA+=((idle?1:0)-_hubLabelA)*Math.min(1,dt*8);
+    if(_hubLabelA>.02){
+        const p=.5+.5*Math.sin(t*3.2);
+        ctx.save();ctx.globalAlpha=_hubLabelA;
+        ctx.strokeStyle='rgba(255,224,130,'+(.25+.45*p)+')';ctx.lineWidth=1.6;
+        ctx.beginPath();ctx.arc(0,0,RG.hubR+3+3*p,0,TAU);ctx.stroke();
+        const label=String(T('spin')||'SPIN').toUpperCase();
+        let fs=12.5;ctx.font=`900 ${fs}px 'Orbitron','Noto Sans KR',sans-serif`;
+        const w=ctx.measureText(label).width,maxW=RG.hubR*1.75;
+        if(w>maxW){fs*=maxW/w;ctx.font=`900 ${fs}px 'Orbitron','Noto Sans KR',sans-serif`}
+        ctx.textAlign='center';ctx.textBaseline='middle';ctx.lineJoin='round';
+        ctx.lineWidth=3.2;ctx.strokeStyle='rgba(45,0,10,.88)';ctx.strokeText(label,0,.6);
+        ctx.fillStyle='#fff6d6';ctx.fillText(label,0,.6);
+        ctx.restore();
+    }
+
+    /* 당첨 버스트 + 파티클 */
+    if(winFx&&!winFx.burst&&now>=winFx.t0){winFx.burst=true;_spawnWinBurst()}
+    if(parts.length){
+        ctx.save();ctx.globalCompositeOperation='lighter';ctx.lineCap='round';
+        parts=parts.filter(q=>{
+            q.life+=dt;if(q.life>=q.max)return false;if(q.life<0)return true;
+            q.vx*=Math.pow(.2,dt);q.vy=q.vy*Math.pow(.2,dt)+q.g*dt;q.x+=q.vx*dt;q.y+=q.vy*dt;
+            const p=q.life/q.max;
+            if(q.type==='spark'){
+                ctx.globalAlpha=1-p;ctx.strokeStyle='rgb(255,'+Math.round(230-90*p)+','+Math.round(150-110*p)+')';ctx.lineWidth=1.3;
+                ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x-q.vx*.025,q.y-q.vy*.025);ctx.stroke();
+            }else{
+                const e=q.type==='tw'?Math.sin(Math.PI*p):(1-p)*(p<.12?p/.12:1),z=q.sz*e;
+                ctx.globalAlpha=Math.min(1,e*1.2);
+                ctx.drawImage(SPR.glint,q.x-16*z,q.y-16*z,32*z,32*z);
+            }
+            return true;
+        });
+        ctx.restore();
+    }
+    ctx.restore();
+}
+
+/* Main animation loop — 물리 한 프레임 + 멈춤 판정 + 렌더 */
 let lastTime=0;
 function loop(ts){
     const dt=Math.min((ts-(lastTime||ts))/1000,0.05);
-    lastTime=ts;
-
-    const n=players.length;
-    /* Fixed peg count — see drawWheel comment. Must match the draw loop. */
-    const pegCount=36;
-    const pegStep=Math.PI*2/pegCount;
-
-    if(Math.abs(velocity)>0.001){
-        /* Base friction. While spinning flag is set (early hold phase) the
-           wheel keeps most of its energy; after release it decays faster. */
-        const friction=spinning?0.998:0.993;
-        velocity*=Math.pow(friction,dt*60);
-        angle+=velocity*dt;
-        angle=angle%(Math.PI*2);if(angle<0)angle+=Math.PI*2;
-
-        /* Peg collision: track which peg slot is currently under the
-           flapper (top = -π/2). 6× more pegs than slices, so per-peg
-           damping is halved again vs the 3× version to keep a ~10s spin. */
-        const topAngle=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
-        const pegSlot=Math.floor(topAngle/pegStep);
-        if(pegSlot!==lastTick){
-            if(lastTick!==-1){
-                SFX.tick();
-                const sf=Math.min(1,Math.abs(velocity)/9);
-                /* Kick direction flipped from the obvious sign. On Canvas
-                   (Y axis points DOWN), ctx.rotate(+θ) sends a downward-
-                   pointing arm visually LEFT, not right. So a CW-spinning
-                   wheel (positive velocity) where pegs travel right
-                   across the top needs the flapper tip to go right —
-                   which is a NEGATIVE rotation angle on canvas. */
-                const dir=velocity>=0?-1:1;
-                /* Strong kick (15 rad/s at full wheel speed) with a low
-                   15% floor so the swing amplitude tracks wheel speed
-                   dramatically: big whacks at spin start, gentle taps
-                   as it decays. Clamped to maxA below. */
-                flapperVel+=15*dir*(0.15+0.85*sf);
-                velocity*=(1-0.00065-0.0021*sf);
-            }
-            lastTick=pegSlot;
-        }
-    }
-
-    /* Flapper dynamics — a leaf-spring pendulum that naturally wants its
-       tip pointing straight down. Retuned for "snappy return":
-         K = 650 (ω₀ ≈ 25.5 rad/s) — stiff spring, fast restoring arc.
-         Cbase = 9 (ζ ≈ 0.18) — clearly underdamped; the arm actually
-             springs back to center after each strike instead of being
-             dragged along by the wheel.
-         Cagainst = 1.4× Cbase (ζ ≈ 0.25) — only a mild asymmetry; we
-             still bias the arm slightly toward the spin direction, but
-             nothing like the old 3× which felt limp. The tip tracks
-             wheel direction while still clearly bouncing back.
-         maxA = 0.55 rad (~31°) — deflection cap; fast wheels kick the
-             arm hard enough that it frequently reaches this cap (looks
-             like a big swing), slow wheels never do (tiny wiggle).
-       Note: kick sign is flipped (see comment above), so peg-pushed
-       motion has sign -wheelDir and spring-restoring return has sign
-       +wheelDir. The "damp return harder" flag is flapperVel*wheelDir
-       > 0. */
-    const K=650;
-    const Cbase=9;
-    const wheelDir=velocity>=0?1:-1;
-    const movingEnough=Math.abs(velocity)>0.3;
-    const againstWheel=movingEnough&&flapperVel*wheelDir>0;
-    const C=againstWheel?Cbase*1.4:Cbase;
-    flapperVel+=(-K*flapperAngle-C*flapperVel)*dt;
-    flapperAngle+=flapperVel*dt;
-    const maxA=0.55;
-    if(flapperAngle>maxA){flapperAngle=maxA;if(flapperVel>0)flapperVel*=-0.2}
-    if(flapperAngle<-maxA){flapperAngle=-maxA;if(flapperVel<0)flapperVel*=-0.2}
-
-    /* Rigid-body contact: the ballistic spring step above can shove the
-       tip into a peg. Resolve before drawing so the tip stays outside
-       every peg's contact circle (both are rigid — cannot overlap). */
-    resolveFlapperContact();
-
-    /* Stop condition — wheel velocity has decayed AND we're past the held
-       spin phase. Lock in the result. */
-    if(!spinning&&velocity!==0&&Math.abs(velocity)<0.06){
-        velocity=0;
-        if(selectedIdx===-1){
+    lastTime=ts;_mainLoopTs=performance.now();
+    if(dt>0){
+        stepPhysics(dt);
+        if(spinActive&&!spinning&&selectedIdx===-1&&physicsSettled(dt)){
+            velocity=0;
             selectedIdx=getSelectedIndex();
             onStopped();
         }
     }
-
     drawWheel();
     /* Stream the current wheel angle to any watching guests. No-op when
        not hosting, so the render loop stays cheap for everyone else.
@@ -787,29 +1163,46 @@ function loop(ts){
     animId=requestAnimationFrame(loop);
 }
 
-function onStopped(){
-    const name=players[selectedIdx].name;
-    SFX.win();
-    if(typeof _lpBroadcastResult==='function')_lpBroadcastResult(name);
-    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
-    setTimeout(()=>showResult(name),2000);
+/* PC 미리보기용 대기 루프 — 전구 반짝임·드래그·플래퍼만. 메인 루프나
+   게스트 렌더 루프가 돌면 양보한다(물리를 두 번 돌리지 않게). */
+let _idleRAF=0,_idleLast=0;
+function _ensureIdleLoop(){
+    if(_idleRAF)return;
+    _idleLast=0;
+    const step=ts=>{
+        _idleRAF=0;
+        if(!isPCLayout()||!ctx)return;
+        if(performance.now()-_mainLoopTs<250||_guestRenderId){_idleLast=0;_idleRAF=requestAnimationFrame(step);return}
+        const dt=_idleLast?Math.min(.05,(ts-_idleLast)/1000):0;_idleLast=ts;
+        if(dt>0)stepPhysics(dt);
+        drawWheel();
+        _idleRAF=requestAnimationFrame(step);
+    };
+    _idleRAF=requestAnimationFrame(step);
 }
 
-/* Spin — kick off with enough initial energy for a ~10s run given the
-   friction + peg-damping tuning above. */
+function onStopped(){
+    const name=players[selectedIdx].name;
+    /* 정지 → 0.14초 정지 화면(hit-stop) → 당첨 조명·버스트·팡파르.
+       화면 흔들림은 쓰지 않는다(운영자 원칙). */
+    winFx={idx:selectedIdx,t0:performance.now()+140,burst:false};
+    try{SFX.settle()}catch(e){}
+    setTimeout(()=>{try{SFX.win()}catch(e){}},140);
+    if(typeof _lpBroadcastResult==='function')_lpBroadcastResult(name);
+    try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
+    setTimeout(()=>showResult(name),2300);
+}
+
+/* Spin — 초기 속도 19–23 rad/s, 처음 2.8–4.0초는 저마찰 구간 (기존 분포 유지) */
 function doSpin(){
     if(spinActive)return;
     spinActive=true;
-    SFX.g();SFX.click();
+    SFX.g();SFX.whoosh();
     try { if(window.LpWakeLock) LpWakeLock.acquire('roulette'); } catch(_){}
     spinning=true;
-    selectedIdx=-1;
+    selectedIdx=-1;winFx=null;_stallT=0;dragTarget=null;
     velocity=19+Math.random()*4;  // 19–23 rad/s
-    flapperAngle=0;flapperVel=0;
-    /* Hold the low-friction phase for the first ~3s so the spin feels long
-       and powerful before gradual decay. */
-    const holdTime=2800+Math.random()*1200;
-    setTimeout(()=>{spinning=false},holdTime);
+    spinHoldLeft=(2800+Math.random()*1200)/1000;
 }
 
 /* Swipe/drag to spin.
@@ -817,21 +1210,20 @@ function doSpin(){
    - Once a spin is live (spinActive), all pointer events are ignored.
    - Spin triggers on the FINAL flick of a drag — we keep the last
      ~150ms of pointer samples and use their delta to compute release
-     velocity. This means a user can slowly explore the wheel and
-     still trigger a spin if they whip the mouse at the end.
-   - Angular deltas are unwrapped across the ±π atan2 seam so drags
-     that cross the left (x<0,y=0) boundary don't produce a bogus 2π
-     jump in the wheel rotation. */
-let dragStart=null,dragAngle=0,dragSamples=[];
+     velocity.
+   - Angular deltas are unwrapped across the ±π atan2 seam.
+   - 드래그 중 바퀴는 손을 따라가는 운동학 물체(dragTarget)라, 끌면서
+     지나가는 페그도 플래퍼를 딸깍 친다.
+   - 허브(가운데 보석)를 톡 누르면 바로 돌린다 (모바일에 SPIN 버튼이 없어서). */
+let dragStart=null,dragAngle=0,dragSamples=[],hubPress=null;
 function onPointerDown(e){
     if(spinActive)return;
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.touches?.[0]?.clientY)-r.top-cy;
     const dist=Math.sqrt(x*x+y*y);
-    /* Hub is gone — only skip drags that start outside the wheel or on the
-       tiny center nail (where radial drag has no meaningful angular delta). */
-    if(dist<8||dist>radius+30)return;
+    if(dist<=(RG.hubR+6)*S){hubPress={x,y,t:performance.now()};return}
+    if(dist>radius+30)return;
     const now=performance.now();
     const ang=Math.atan2(y,x);
     dragStart={x,y,a:ang,t:now};
@@ -851,27 +1243,35 @@ function onPointerMove(e){
     const y=(e.clientY||e.touches?.[0]?.clientY)-r.top-cy;
     const a=Math.atan2(y,x);
     const da=normDa(a-dragStart.a);
-    angle=dragAngle+da;
-    /* Record the sample and prune anything older than 150ms so the
-       release-velocity estimate only sees the most recent motion. */
+    dragTarget=dragAngle+da;
     const now=performance.now();
     dragSamples.push({t:now,a:a});
     const cutoff=now-150;
     while(dragSamples.length>1&&dragSamples[0].t<cutoff)dragSamples.shift();
 }
+function _hubTap(){
+    if(spinActive||window._lpGuest)return;
+    if(performance.now()-_mainLoopTs<250)doSpin();
+    else if(isPCLayout())startGame();
+}
 function onPointerUp(e){
+    if(hubPress){
+        const hp=hubPress;hubPress=null;
+        const r=canvas.getBoundingClientRect();
+        const cxv=e.clientX||e.changedTouches?.[0]?.clientX,cyv=e.clientY||e.changedTouches?.[0]?.clientY;
+        const x=cxv-r.left-cx,y=cyv-r.top-cy;
+        if((cxv==null||Math.hypot(x-hp.x,y-hp.y)<16)&&performance.now()-hp.t<800)_hubTap();
+        return;
+    }
     if(!dragStart)return;
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.changedTouches?.[0]?.clientX)-r.left-cx;
     const y=(e.clientY||e.changedTouches?.[0]?.clientY)-r.top-cy;
     const a=Math.atan2(y,x);
     const totalDa=normDa(a-dragStart.a);
-    dragStart=null;
+    dragStart=null;dragTarget=null;
     if(spinActive){dragSamples=[];return;}
 
-    /* Release velocity from the last 150ms window, not the whole drag.
-       Captures the "flick at the end" intent correctly even when the
-       user took a while to line up the motion. */
     let releaseVel=0;
     if(dragSamples.length>=2){
         const first=dragSamples[0];
@@ -884,19 +1284,18 @@ function onPointerUp(e){
     dragSamples=[];
 
     /* Gate: drag must have covered ~15° total AND the last-150ms
-       release velocity must clear 3 rad/s. Both guards are needed —
-       pure-speed gates false-triggered on accidental nudges, pure-
-       distance gates missed legitimate slow-then-flick drags. */
+       release velocity must clear 3 rad/s. */
     if(Math.abs(totalDa)>Math.PI/12&&Math.abs(releaseVel)>3){
         spinActive=true;
-        SFX.g();SFX.click();
+        SFX.g();SFX.whoosh();
         try { if(window.LpWakeLock) LpWakeLock.acquire('roulette'); } catch(_){}
         /* Floor 10, ceiling 25 rad/s — visible spin but never a
            physics-breaking jump. */
         velocity=Math.min(Math.max(Math.abs(releaseVel)*1.5,10),25);
-        spinning=true;selectedIdx=-1;
-        flapperAngle=0;flapperVel=0;
-        setTimeout(()=>{spinning=false},2500+Math.random()*1500);
+        spinning=true;selectedIdx=-1;winFx=null;_stallT=0;
+        spinHoldLeft=(2500+Math.random()*1500)/1000;
+    }else{
+        velocity=0;
     }
 }
 
@@ -953,6 +1352,7 @@ function renderPreview(){
     if(!ctx){initCanvas()}else{resize()}
     angle=angle||0;velocity=0;lastTick=-1;selectedIdx=-1;
     drawWheel();
+    _ensureIdleLoop();   /* 전구 반짝임·드래그용 대기 루프 (메인 루프가 돌면 양보) */
 }
 
 function startGame(){
@@ -1368,20 +1768,25 @@ function _lpRouletteInterpolate(){
     flapperAngle=_lpAngleLerp(a.fa,b.fa,f);
 }
 /* Guest-side peg-tick SFX. Host plays SFX.tick() every time the flapper
-   crosses into a new peg slot (see peg-collision logic ~L706 in the
-   host loop). Guest has the same 36-peg topology + the interpolated
+   crosses into a new peg slot (see stepPhysics in the host loop).
+   Guest has the same peg topology (pegCountFor) + the interpolated
    angle, so we can replay the same crossing check at render time and
    play tick locally. Keeps the wheel click/click/click audio coherent
    without a per-peg broadcast (36×~10spin = 360 messages per spin
    would blow the Realtime budget). */
-const _LP_GUEST_PEG_COUNT=36;
-const _LP_GUEST_PEG_STEP=Math.PI*2/_LP_GUEST_PEG_COUNT;
+/* 페그 수는 항목 수에 따라 달라진다(pegCountFor) — 호스트와 같은 배치. */
 let _lpGuestLastPegSlot=-1;
 function _lpGuestPegTickCheck(){
+    const step=Math.PI*2/pegCountFor(players.length);
     const topAngle=((-Math.PI/2-angle)%(Math.PI*2)+Math.PI*2)%(Math.PI*2);
-    const pegSlot=Math.floor(topAngle/_LP_GUEST_PEG_STEP);
+    const pegSlot=Math.floor(topAngle/step);
     if(pegSlot!==_lpGuestLastPegSlot){
-        if(_lpGuestLastPegSlot!==-1){try{SFX.tick()}catch(e){}}
+        if(_lpGuestLastPegSlot!==-1){
+            /* 세기는 보이는 회전속도로 추정 — 호스트와 비슷한 밝기·크기 */
+            const I=Math.max(.06,Math.min(1,Math.sqrt(Math.abs(visSpeed)*RG.pegOrbit/2600)));
+            try{SFX.clack(I)}catch(e){}
+            try{_clackVisual(I,visSpeed>=0?1:-1)}catch(e){}
+        }
         _lpGuestLastPegSlot=pegSlot;
     }
 }
@@ -1407,7 +1812,7 @@ function _stopGuestRenderLoop(){
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790237131" defer></script>
+<script src="/js/siteFooter.js?v=1790240270" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
