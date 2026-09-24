@@ -11,12 +11,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Roleta', l:['Adicione opções, gire e sai só uma','Toque em SPIN no centro ou deslize a roleta','Vence a casa onde o ponteiro parar','Cada giro é independente: pode repetir']}
   },
   'team': {
-    ko: {t:'팀 뽑기', l:['뽑기 방식부터 골라요: 가챠(추천)·플링코·카드','참가자와 팀 수(또는 팀당 인원)를 정하고 시작','같이 보기: 메신저 링크로 각자 폰에서 함께 봐요','실력 차가 크면 티어 밸런스 모드를 쓰세요']},
-    en: {t:'Team Picker', l:['Pick a style first: Gacha (best), Plinko or Cards','Set players and teams (or people per team), then start','Watch together: others follow live via a chat-app link','Uneven skill? Use Skill balanced mode']},
-    ja: {t:'チーム分け', l:['まず方式を選択：ガチャ（おすすめ）・プリンコ・カード','参加者とチーム数（または1チームの人数）を決めて開始','みんなで見る：リンクを送れば各自のスマホで同時に見られます','実力差があるなら「実力で均等」モードを']},
-    zh: {t:'分队抽签', l:['先选方式：扭蛋（推荐）、弹珠台或翻牌','设定人数和队数（或每队人数）后开始','一起看：发链接，大家在自己手机上同步观看','水平差距大时，用“等级平衡”模式']},
-    es: {t:'Sorteo de Equipos', l:['Primero el estilo: Gacha (top), Plinko o Cartas','Pon jugadores y equipos (o personas por equipo) y empieza','Ver juntos: con un enlace, los demás lo siguen en su móvil','¿Niveles dispares? Usa el modo Por Nivel']},
-    pt: {t:'Sorteio de Times', l:['Primeiro o estilo: Gacha (top), Plinko ou Cartas','Defina jogadores e times (ou pessoas por time) e comece','Ver juntos: com um link, todos assistem no próprio celular','Níveis bem diferentes? Use o modo Por Nível']}
+    ko: {t:'팀 뽑기', l:['가챠 기계가 캡슐을 한 팀씩 뽑아 줘요','참가자와 팀 수(또는 팀당 인원)를 정하고 시작','같이 보기: 메신저 링크로 각자 폰에서 함께 봐요','실력 차가 크면 티어 밸런스 모드를 쓰세요']},
+    en: {t:'Team Picker', l:['A gacha machine pops out capsules, team by team','Set players and teams (or people per team), then start','Watch together: others follow live via a chat-app link','Uneven skill? Use Skill balanced mode']},
+    ja: {t:'チーム分け', l:['ガチャマシンがカプセルを1チームずつ出します','参加者とチーム数（または1チームの人数）を決めて開始','みんなで見る：リンクを送れば各自のスマホで同時に見られます','実力差があるなら「実力で均等」モードを']},
+    zh: {t:'分队抽签', l:['扭蛋机一队一队地吐出胶囊','设定人数和队数（或每队人数）后开始','一起看：发链接，大家在自己手机上同步观看','水平差距大时，用“等级平衡”模式']},
+    es: {t:'Sorteo de Equipos', l:['Una máquina gacha saca cápsulas, equipo por equipo','Pon jugadores y equipos (o personas por equipo) y empieza','Ver juntos: con un enlace, los demás lo siguen en su móvil','¿Niveles dispares? Usa el modo Por Nivel']},
+    pt: {t:'Sorteio de Times', l:['Uma máquina gacha solta cápsulas, time por time','Defina jogadores e times (ou pessoas por time) e comece','Ver juntos: com um link, todos assistem no próprio celular','Níveis bem diferentes? Use o modo Por Nível']}
   },
   'dice': {
     ko: {t:'주사위 배틀', l:['퀵 롤: 한 번 굴려 바로 승부','낮은 숫자와 높은 숫자 중 어느 쪽이 질지 정해요','돼지 게임: 굴려서 점수를 쌓되 1이 나오면 그 턴 0점','돼지 게임은 한 턴 20점쯤에서 멈추는 게 유리해요']},
