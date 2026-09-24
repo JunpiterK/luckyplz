@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790257446">
+<meta name="lp-build" content="1790286862">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790257446";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790286862";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -529,6 +529,22 @@
             .primary-grid .game-desc{font-size:clamp(.62rem,8.5cqw,.92rem)}
         }
 
+        /* ── 균일 최대 맞춤 (2026-09-25) ─────────────────────────────
+           운영자: '폰에서 카드 글자·아이콘이 너무 작다. 3×3 안에서 최대한'.
+           정사각 카드의 세로는 고정이라 글자를 키우면 아이콘이 줄어든다 — 그래서
+           고정 비율 대신 JS(lpFitTiles)가 '지금 언어·지금 폭'에서 ① 모든 이름이
+           안 잘리는 가장 큰 크기 ② 모든 설명이 한 줄(안 되면 두 줄)에 드는 가장 큰
+           크기를 9장 공통으로 고르고 ③ 남는 세로를 전부 아이콘에 준다.
+           한국어처럼 짧은 언어는 크게, 스페인어처럼 긴 언어는 잘림 없이.
+           data-fit 이 없으면(스크립트 실패) 위의 cqw 비율이 그대로 폴백이다. */
+        .primary-grid[data-fit] .game-icon{font-size:calc(var(--fit-icon) / 1.3)}
+        .primary-grid[data-fit] .game-name{font-size:var(--fit-name)}
+        .primary-grid[data-fit] .game-desc{font-size:var(--fit-desc);-webkit-line-clamp:var(--fit-lines,2)}
+        @media(max-width:600px){
+            .primary-grid{gap:6px}
+            .primary-grid .game-card{padding:5px}
+        }
+
         /* ── 게임별 색 (2026-08-19) ──────────────────────────────────
            단색 회색 타일 6개가 나란히 있으면 아무리 커도 밋밋하다. 게임마다
            색을 주면 살아 보이고, 색 자체가 "그 게임"의 표시가 되어 두 번째
@@ -687,7 +703,8 @@
                without vertical scrolling. Every vertical dimension
                below is shrunk with that in mind. */
             /* padding-top = 44px glass chip strip + 8px breathing room. */
-            .container{padding:52px 10px 0;min-height:0}
+            .container{padding:52px 8px 0;min-height:0}
+            .games-grid{max-width:100%}   /* 2026-09-25 카드 키우기 — 94vw 대신 좌우 8px 만 남기고 꽉 */
             .header{margin-bottom:10px}
             .logo{font-size:1.55em;margin-bottom:2px}
             .tagline{font-size:.7em}
@@ -1020,7 +1037,7 @@
 
 <!-- 2026-06-26: /blog/posts.js manifest load removed (games-only specialization);
      the blog spotlight banner it fed no longer exists. -->
-<script src="/js/recentResults.js?v=1790257446"></script>
+<script src="/js/recentResults.js?v=1790286862"></script>
 <script>
 /* ===== I18N ===== */
 const I18N = {
@@ -1627,9 +1644,9 @@ function init() {
 init();
 </script>
 
-<script src="/js/langBar.js?v=1790257446"></script>
+<script src="/js/langBar.js?v=1790286862"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790257446"></script>
+<script src="/js/supabase-config.js?v=1790286862"></script>
 <script>
 (async function(){
     try{
@@ -2111,11 +2128,93 @@ document.addEventListener('keydown', (e) => {
 });
 </script>
 
+<script>
+/* lpFitTiles — 홈 3×3 타일의 '균일 최대 맞춤' (2026-09-25, CSS 주석 '균일 최대 맞춤' 참조).
+   정사각 카드 안쪽 높이 H 를 이름 한 줄 + 설명 1~2줄 + 아이콘이 나눠 쓴다.
+   ① 이름: 가장 긴 이름이 폭에 드는 크기(카드의 14.5% 상한, 11px 하한)
+   ② 설명: 전부 한 줄에 드는 크기가 10px 이상이면 한 줄, 아니면 두 줄에 드는 가장 큰 크기
+   ③ 아이콘: H 에서 글자·여백을 뺀 나머지(카드의 62% 상한)
+   9장 공통 값이라 카드끼리 글자 크기가 들쭉날쭉하지 않다. 폭·언어·글자가 바뀌면 다시 잰다. */
+(function(){
+  var grid=null,busy=false,raf=0;
+  function px(v){return parseFloat(v)||0}
+  function fit(){
+    raf=0;grid=document.querySelector('.primary-grid');
+    if(!grid||busy)return;
+    try{fit2()}catch(e){try{console.warn('lpFitTiles',e)}catch(_){}}finally{busy=false}
+  }
+  function fit2(){
+    var cards=[].slice.call(grid.querySelectorAll('.game-card'));
+    if(!cards.length)return;
+    var c0=cards[0],cs=getComputedStyle(c0),r=c0.getBoundingClientRect();
+    if(r.width<40)return;
+    busy=true;
+    /* 하한 = 이전 고정값(.78rem·.62rem). 그보다 작게 줄이지 않는다 — 그래도 넘치면 예전처럼 말줄임 */
+    var W=r.width-px(cs.paddingLeft)-px(cs.paddingRight)-2,H=r.height-px(cs.paddingTop)-px(cs.paddingBottom)-2;
+    var cw=r.width,root=px(getComputedStyle(document.documentElement).fontSize)||16;
+    /* PC 상한은 기존 clamp 최대값 근처로 — 큰 화면에서 글자가 과해지지 않게 */
+    /* 상한: 폰은 카드 비율, PC 는 예전 clamp 최대값(1.3rem·.92rem) — 큰 화면에서 글자가 아이콘을 누르지 않게 */
+    var nameMax=Math.max(12.5,Math.min(cw*.145,20.8)),descMax=Math.max(9.9,Math.min(cw*.1,14.7)),iconMax=Math.min(cw*.62,166);
+    var names=cards.map(function(c){return c.querySelector('.game-name')}).filter(Boolean);
+    var descs=cards.map(function(c){return c.querySelector('.game-desc')}).filter(function(d){return d&&getComputedStyle(d).display!=='none'&&d.textContent.trim()});
+    grid.setAttribute('data-fit','');
+    function set(k,v){grid.style.setProperty(k,v)}
+    function nameOver(){return names.some(function(n){return n.scrollWidth>n.clientWidth+1||n.scrollWidth>W-3})}   /* 3px 여유 — 기기마다 글꼴 폭이 조금씩 달라 딱 맞으면 말줄임이 난다 */
+    function descOver(k){set('--fit-lines',k);return descs.some(function(d){return d.scrollHeight>d.clientHeight+1})}
+    function layoutText(nCap,dCap){
+      /* ① 이름 — 넘치지 않을 때까지 0.5px 씩(하한 12.5px = 예전 최소값) */
+      var ns=nCap;set('--fit-name',ns+'px');
+      while(ns>12.5&&nameOver()){ns=Math.max(12.5,ns-.5);set('--fit-name',ns+'px')}
+      /* ② 설명 — 9.9px 이상에서 한 줄에 들면 한 줄, 아니면 두 줄(하한 9.9px) */
+      if(!descs.length)return;
+      var ds=dCap,lines=1;set('--fit-desc',ds+'px');
+      while(ds>9.9&&descOver(1)){ds=Math.max(9.9,ds-.5);set('--fit-desc',ds+'px')}
+      if(descOver(1)){lines=2;ds=dCap;set('--fit-desc',ds+'px');
+        while(ds>9.9&&descOver(2)){ds=Math.max(9.9,ds-.5);set('--fit-desc',ds+'px')}}
+      set('--fit-lines',lines);
+    }
+    function iconRoom(){
+      /* 카드마다 설명 줄 수가 다르다(첫 카드는 한 줄, 다른 카드는 두 줄) — 가장 높은 카드 기준으로 잰다 */
+      var ic=c0.querySelector('.game-icon'),nh=0,dh=0;
+      names.forEach(function(n){nh=Math.max(nh,n.getBoundingClientRect().height+px(getComputedStyle(n).marginTop)+px(getComputedStyle(n).marginBottom))});
+      descs.forEach(function(d){dh=Math.max(dh,d.getBoundingClientRect().height+px(getComputedStyle(d).marginTop))});
+      var used=nh+dh;
+      if(ic)used+=px(getComputedStyle(ic).marginBottom)+px(getComputedStyle(ic).marginTop);
+      return H-used;
+    }
+    /* ③ 아이콘 = 남는 세로. 아이콘이 카드의 절반보다 작아지면 글자 상한을 8% 씩 낮춰 다시 — 아이콘이 주인공 */
+    var nCap=nameMax,dCap=descMax,room=0;
+    for(var i=0;i<8;i++){
+      layoutText(nCap,dCap);room=iconRoom();
+      if(room>=cw*.5||(nCap<=12.5&&dCap<=9.9))break;
+      nCap=Math.max(12.5,nCap*.92);dCap=Math.max(9.9,dCap*.92);
+    }
+    var icon=Math.max(28,Math.min(iconMax,room));
+    set('--fit-icon',icon.toFixed(1)+'px');
+  }
+  function soon(){if(!raf)raf=requestAnimationFrame(fit)}
+  function watch(){
+    var g=document.querySelector('.primary-grid');
+    if(!g){setTimeout(watch,200);return}
+    fit();
+    if(window.ResizeObserver){var ro=new ResizeObserver(soon);ro.observe(document.getElementById('gamesGrid')||g)}
+    else window.addEventListener('resize',soon);
+    /* 언어 전환·다시 그리기 — 글자나 카드가 바뀌면 다시 잰다(우리가 바꾸는 style 속성은 무시) */
+    new MutationObserver(function(m){if(busy)return;for(var i=0;i<m.length;i++){if(m[i].type!=='attributes'){soon();return}}})
+      .observe(document.getElementById('gamesGrid')||g,{childList:true,subtree:true,characterData:true});
+    /* 웹폰트는 늦게 바뀐다(글자 폭이 달라짐) — 로딩이 끝날 때마다, 그리고 안전하게 두 번 더 */
+    if(document.fonts){if(document.fonts.ready)document.fonts.ready.then(soon);try{document.fonts.addEventListener('loadingdone',soon)}catch(_){}}
+    window.addEventListener('load',soon);
+    setTimeout(soon,1500);setTimeout(soon,4000);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',watch);else watch();
+})();
+</script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790257446" defer></script>
+<script src="/js/siteFooter.js?v=1790286862" defer></script>
 </body>
 </html>
