@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790222410">
+<meta name="lp-build" content="1790226484">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790222410";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790226484";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스네이크 · Snake Classic | Lucky Please</title>
@@ -112,7 +112,8 @@ body{
     width:100%;max-width:436px;
     touch-action:none
 }
-#snake-canvas{display:block;width:100%;height:100%}
+/* contain — PC 의 max-height 로 상자가 눌려도 보드가 찌그러지지 않는다 */
+#snake-canvas{display:block;width:100%;height:100%;object-fit:contain}
 
 .overlay{
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -292,15 +293,19 @@ body{
 .lb-score{font-family:'Orbitron',sans-serif;font-weight:800;font-size:.92em;color:#00E676;text-align:right;font-variant-numeric:tabular-nums}
 .lb-empty{padding:28px 14px;text-align:center;color:var(--muted-2);font-size:.86em}
 
-/* ---- Shake on death ---- */
-@keyframes shake{
-    0%,100%{transform:translate(0,0)}
-    20%{transform:translate(-3px,2px)}
-    40%{transform:translate(3px,-2px)}
-    60%{transform:translate(-2px,-2px)}
-    80%{transform:translate(2px,3px)}
+/* ---- 죽음 알림 — 화면 흔들림 금지(운영자). 테두리 번쩍임으로 대신한다 ---- */
+@keyframes hitFlash{
+    0%{border-color:#FF3366;box-shadow:0 0 0 3px rgba(255,51,102,.55),0 0 40px rgba(255,51,102,.45)}
+    100%{border-color:rgba(0,230,118,.22);box-shadow:0 14px 34px -10px rgba(0,230,118,.18)}
 }
-.canvas-wrap.shake{animation:shake .4s ease}
+.canvas-wrap.hitflash{animation:hitFlash .7s ease-out}
+.ss .v.bump{animation:scoreBump .22s ease-out}
+@keyframes scoreBump{0%{transform:scale(1.18);color:#7CFFB8}100%{transform:scale(1)}}
+.overlay .nb{color:#FFE66D;font-family:'Orbitron',sans-serif;letter-spacing:.06em}
+.overlay h2.play{filter:drop-shadow(0 0 14px rgba(0,230,118,.4))}
+.overlay .btn{transition:transform .08s,box-shadow .15s}
+.overlay .btn:hover{box-shadow:0 12px 32px -6px rgba(0,230,118,.7)}
+@media(prefers-reduced-motion:reduce){.ss .v.bump{animation:none}}
 
 
 
@@ -428,10 +433,10 @@ body{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1790222410"></script>
-<script src="/js/lpI18n.js?v=1790222410"></script>
-<script src="/js/lpRankSheet.js?v=1790222410"></script>
-<script src="/js/lpAudio.js?v=1790222410"></script>
+<script src="/js/supabase-config.js?v=1790226484"></script>
+<script src="/js/lpI18n.js?v=1790226484"></script>
+<script src="/js/lpRankSheet.js?v=1790226484"></script>
+<script src="/js/lpAudio.js?v=1790226484"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -545,21 +550,42 @@ async function loadMyStats(){
 }
 
 /* ======== Game engine ======== */
+/* 2026-09-24 대개편 — 칸 사이를 부드럽게 미끄러지는 보간 렌더, 입력 큐 3칸,
+   벽 직전 1틱 유예, 먹이·죽음 연출. 규칙(점수·서버 기록)은 그대로다.
+
+   보간: 논리는 여전히 칸 단위 틱이다. 화면은 '직전 틱 위치 → 현재 틱 위치'
+   사이를 (지금-마지막틱)/틱간격 비율로 그린다. 그래서 속도가 올라가도
+   뚝뚝 끊기지 않고, 판정은 예전과 똑같이 칸 단위로 정확하다. */
 const GRID=20;
 const canvas=$('snake-canvas');
 const ctx=canvas.getContext('2d');
 const BASE_SIZE=400;
 const cell=BASE_SIZE/GRID;
+const REDUCED=(function(){ try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ return false; } })();
 
-let snake=[], dir={x:1,y:0}, queued=[], food={x:15,y:10};
-let score=0, foodsEaten=0, tickMs=130;
+let snake=[], prevSnake=[], dir={x:1,y:0}, queued=[], food={x:15,y:10};
+let score=0, foodsEaten=0, tickMs=140;
 let running=false, paused=false, lastTick=0, startedAt=0;
+let pauseFrac=0;             /* 일시정지 순간의 보간 비율 — 멈출 때 뱀이 뒤로 튀지 않게 */
+let graceUsed=false;         /* 벽·몸 직전 1틱 유예를 이번 칸에서 썼는가 */
+let stalled=false;           /* 유예 중인 틱 — 제자리 */
+let dying=null;              /* {t0, hit:{x,y}} */
+let bulges=[];               /* 삼킨 먹이 덩어리가 몸을 따라 내려가는 위치(세그먼트 인덱스) */
+let foodBornAt=0, lastLevel=1;
+let bgLayer=null, _pxScale=1;
 /* True while the 3-2-1-GO countdown is animating. Blocks the game
    loop, pause toggles, and re-entry of startGame() so a rapid double-
    tap on the Start button can't stack two countdowns on top of each
    other. Cleared the moment the actual game loop starts. */
 let countdownActive=false;
 let countdownTimers=[];   /* setTimeout handles to cancel on early abort */
+
+/* 속도 곡선 — 140ms 에서 시작해 72ms 로 부드럽게 수렴한다.
+   예전: 130 - 1.7×먹이 (먹이 40개면 62ms 바닥, 이후 평탄) — 중반에 갑자기
+   너무 빨라져 '억울한 죽음'이 몰렸다. 지금 먹이 10/20/40/80개 → 118/104/87/75ms.
+   서버 impossible_pace(먹이당 80ms) 보다 항상 느리다. */
+function tickFor(f){ return Math.round(72 + 68*Math.exp(-f/26)); }
+function levelFor(f){ return 1 + Math.floor(f/8); }
 
 /* ---- Pause UI sync (mobile/tablet/PC parity) ---- */
 function syncPauseUI(){
@@ -573,40 +599,66 @@ function syncPauseUI(){
         gc.classList.remove('on');
     }
 }
+function setPaused(v){
+    if(!running || dying) return;
+    if(v===paused) return;
+    if(v){ pauseFrac=Math.max(0, Math.min(1, (performance.now()-lastTick)/tickMs)); }
+    else { lastTick=performance.now()-pauseFrac*tickMs; }
+    paused=v;
+    syncPauseUI();
+}
 
 function fitCanvas(){
-    const dpr=Math.min(2, window.devicePixelRatio||1);
+    const dpr=Math.min(3, window.devicePixelRatio||1);
     const rect=canvas.getBoundingClientRect();
-    canvas.width=Math.round(rect.width*dpr);
-    canvas.height=Math.round(rect.height*dpr);
-    ctx.setTransform(dpr*rect.width/BASE_SIZE,0,0,dpr*rect.height/BASE_SIZE,0,0);
+    /* object-fit:contain — 상자가 max-height 로 눌려도 정사각형 유지 */
+    const css=Math.max(1, Math.min(rect.width||BASE_SIZE, rect.height||BASE_SIZE));
+    const px=Math.max(BASE_SIZE, Math.round(css*dpr));
+    if(canvas.width!==px || canvas.height!==px){ canvas.width=px; canvas.height=px; }
+    _pxScale=px/BASE_SIZE;
+    ctx.setTransform(_pxScale,0,0,_pxScale,0,0);
+    bgLayer=buildBg();
 }
-window.addEventListener('resize', fitCanvas);
+(function(){
+    let pend=false;
+    const refit=()=>{
+        if(pend) return; pend=true;
+        requestAnimationFrame(()=>{ pend=false; fitCanvas(); if(!running) render(performance.now()); });
+    };
+    if('ResizeObserver' in window) new ResizeObserver(refit).observe($('canvasWrap'));
+    else window.addEventListener('resize', refit);
+    window.addEventListener('orientationchange', ()=>setTimeout(refit, 250));
+})();
 /* 모바일 알림·앱 전환 시 자동 일시정지 (복귀 캐치업 즉사 방지) */
 document.addEventListener('visibilitychange', ()=>{
-    if(document.hidden){ if(running && !paused){ paused=true; try{ syncPauseUI(); }catch(_){} } }
-    else { lastTick=performance.now(); }
+    if(document.hidden){ if(running && !paused){ setPaused(true); render(performance.now()); } }
+    else if(paused){ lastTick=performance.now()-pauseFrac*tickMs; }
 });
 
 function randomEmptyCell(){
     const occupied=new Set(snake.map(s=>s.x+','+s.y));
     const cands=[];
+    const h=snake[0];
     for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++){
-        if(!occupied.has(x+','+y))cands.push({x,y});
+        if(occupied.has(x+','+y)) continue;
+        /* 머리와 맞닿은 칸에는 놓지 않는다 — 공짜 먹이는 재미가 없다 */
+        if(h && Math.abs(x-h.x)+Math.abs(y-h.y)<=1) continue;
+        cands.push({x,y});
+    }
+    if(!cands.length){
+        for(let y=0;y<GRID;y++)for(let x=0;x<GRID;x++) if(!occupied.has(x+','+y)) cands.push({x,y});
     }
     return cands.length?cands[Math.floor(Math.random()*cands.length)]:null;
 }
 
-/* ========== Sound (LPAudio) — sfxr-style 8-bit synthesis ==========
-   eat = "pickup/coin" two-tone ascending square (NES classic).
-   levelup = bright 4-note arpeggio + noise sparkle (speed step).
-   crash = noise burst + low saw downsweep + dissonant chord stab.
-   over = descending mournful 4-note dirge.
-   start = ascending fanfare. */
-function sfxEat(){
-    /* Coin pickup: short low click → high ping. */
-    LPAudio.beep({freq:660, dur:0.05, vol:0.16, type:'square', decay:0.4});
-    setTimeout(()=>LPAudio.beep({freq:990, dur:0.09, vol:0.18, type:'square', decay:0.5}), 45);
+/* ========== Sound (LPAudio) — sfxr-style 8-bit synthesis ========== */
+function sfxEat(combo){
+    const up=Math.min(6, combo||0)*40;
+    LPAudio.beep({freq:660+up, dur:0.05, vol:0.16, type:'square', decay:0.4});
+    setTimeout(()=>LPAudio.beep({freq:990+up*1.5, dur:0.09, vol:0.18, type:'square', decay:0.5}), 45);
+}
+function sfxGolden(){
+    LPAudio.seq([{f:880,d:0.05},{f:1175,d:0.05},{f:1568,d:0.05},{f:2093,d:0.14}], {vol:0.17, type:'square'});
 }
 function sfxLevelUp(){
     LPAudio.seq([
@@ -615,7 +667,6 @@ function sfxLevelUp(){
     setTimeout(()=>LPAudio.noise({dur:0.18, vol:0.06}), 280);
 }
 function sfxCrash(){
-    /* impact: white noise burst + low rumble + brief dissonant 2-note. */
     LPAudio.noise({dur:0.22, vol:0.22});
     LPAudio.beep({freq:240, dur:0.32, vol:0.22, type:'sawtooth', slide:50, decay:0.85});
     LPAudio.chord([196, 233], {dur:0.18, vol:0.1, type:'square', decay:0.6});
@@ -631,24 +682,25 @@ function sfxOver(){
     ], {vol:0.22, type:'sawtooth'});
     setTimeout(()=>LPAudio.beep({freq:90, dur:0.4, vol:0.14, type:'triangle', decay:0.85}), 60);
 }
+function vib(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(_){} }
 
 function resetGame(){
     snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+    prevSnake=snake.map(s=>({x:s.x,y:s.y}));
     dir={x:1,y:0}; queued=[];
-    score=0; foodsEaten=0; tickMs=130;
-    goldenLeft=0; goldenScore=0; goldenFlash=0;
+    score=0; foodsEaten=0; tickMs=tickFor(0);
+    goldenLeft=0; goldenScore=0; goldenFlashT=0;
+    graceUsed=false; stalled=false; dying=null; bulges=[]; FX.length=0; banner=null; flashA=0;
+    lastLevel=1;
     food=randomEmptyCell()||{x:15,y:10};
+    foodBornAt=performance.now();
     $('scoreNow').textContent='0';
     $('lenNow').textContent='3';
 }
 
 /* Pre-game countdown — reset the board immediately (so the player sees
    their snake's starting position behind the count), display 3 → 2 → 1
-   → GO over ~2.4s, THEN flip running=true and kick off the game loop.
-   Same flow for first start AND restart (overlay's "다시하기" button).
-   On phones especially, the snake immediately hits the right wall before
-   the user can put their thumb on the d-pad — the countdown gives them
-   a beat to settle in. Same UX every device for parity. */
+   → GO over ~2.4s, THEN flip running=true and kick off the game loop. */
 function _clearCountdownTimers(){
     countdownTimers.forEach(function(t){clearTimeout(t)});
     countdownTimers=[];
@@ -656,9 +708,6 @@ function _clearCountdownTimers(){
 function _showCountStep(text,isGo){
     const el=$('countdown');
     if(!el)return;
-    /* Wipe + re-trigger the animation. Browsers debounce identical
-       animation re-applications, so we have to remove the class, force
-       a layout flush, and add it back. */
     el.classList.remove('tick','go-anim','go','hidden');
     el.textContent=text;
     void el.offsetWidth; /* reflow */
@@ -674,10 +723,6 @@ function _hideCountdown(){
 }
 
 function startGame(){
-    /* Block re-entry while a previous countdown is still animating —
-       a quick double-tap on the start button used to stack two count-
-       downs and then the game ran for both, which manifested as the
-       snake stuttering at start. */
     if(countdownActive)return;
     /* BGM 은 게임 시작 시점에만 — 제스처 콜스택 안에서 SYNC 호출 */
     try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}
@@ -685,19 +730,11 @@ function startGame(){
     _clearCountdownTimers();
     resetGame();
     $('overlay').classList.add('hidden');
-    /* Render once so the user sees the snake's starting position
-       behind the countdown overlay. Without this initial paint, the
-       canvas is blank during the count and the user can't tell which
-       direction they're facing. */
-    render();   /* draw() 는 존재하지 않는 함수였다 — 카운트다운 동안 빈 화면 */
+    $('canvasWrap').classList.remove('hitflash');
+    render(performance.now());
     sfxStart();
     countdownActive=true;
-    /* Show "3" immediately, then 2/1/GO at 700ms intervals. Animation
-       duration matches each step so the previous number fully fades
-       before the next pops in. */
-    /* 재시작은 짧은 카운트다운 — 매 판 2.7초를 기다리는 건 1~3분짜리
-       아케이드에서 "한 판 더" 를 막는 실질적 마찰이었다 (2026-08-21).
-       첫 판만 3-2-1-GO 를 다 보여주고, 그 뒤로는 GO! 만 0.7초. */
+    /* 재시작은 짧은 카운트다운 — 첫 판만 3-2-1-GO 를 다 보여주고, 그 뒤로는 GO! 만 0.7초. */
     const _fast = _playedOnce;
     if(_fast){
         _showCountStep('GO!',true);
@@ -712,9 +749,6 @@ function startGame(){
         countdownActive=false;
         _playedOnce=true;
         running=true; paused=false;
-        /* Reset timing AT GAME START not at countdown start — the player's
-           recorded duration / leaderboard time should be the actual play
-           time, not 2.4s padded. */
         startedAt=performance.now(); lastTick=startedAt;
         syncPauseUI();
         requestAnimationFrame(loop);
@@ -723,7 +757,7 @@ function startGame(){
 
 let _playedOnce=false;          /* 두 번째 판부터 카운트다운 단축 */
 const GOLDEN_TICKS=40;          /* 황금 먹이 유효 틱 수 */
-let goldenLeft=0, goldenScore=0, goldenFlash=0;
+let goldenLeft=0, goldenScore=0, goldenFlashT=0;
 const LS_BEST='lp_snake_best';
 function loadLocalBest(){
     try{ return parseInt(localStorage.getItem(LS_BEST)||'0',10)||0; }catch(_){ return 0; }
@@ -742,22 +776,24 @@ function syncBestUI(){
 
 function gameOver(){
     running=false;
+    paused=false;
+    dying=null;
     syncPauseUI();
+    let isNewBest=false;
     if(!me){
         const prev=loadLocalBest();
-        if(score>prev){ saveLocalBest(score); }
+        if(score>prev){ saveLocalBest(score); isNewBest=prev>0; }
         syncBestUI();
     }
     sfxOver();
     const duration=Math.round(performance.now()-startedAt);
     const wrap=$('canvasWrap');
-    wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
-    if(navigator.vibrate)try{navigator.vibrate([30,20,60])}catch(_){}
+    wrap.classList.remove('hitflash'); void wrap.offsetWidth; wrap.classList.add('hitflash');
 
     $('overlay').innerHTML=
         '<h2 class="go">GAME OVER</h2>'
       +'<div class="score-big">'+score+'</div>'
-      +'<p>먹이 '+foodsEaten+'개 · '+(duration/1000).toFixed(1)+'초</p>'
+      +'<p>먹이 '+foodsEaten+'개 · '+(duration/1000).toFixed(1)+'초'+(isNewBest?'<br><b class="nb">🏆 NEW BEST!</b>':'')+'</p>'
       +'<div class="rank-card" id="ovRankCard">'
       +  '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
       +  '<div class="rank-card-pct" id="ovRankPct"></div>'
@@ -944,117 +980,399 @@ function gameOver(){
     }catch(_){}
 }
 
+function cellCenter(p){ return {x:p.x*cell+cell/2, y:p.y*cell+cell/2}; }
+
+function die(nx, ny){
+    /* 화면 흔들림 없이: 짧은 정지(0.18s) → 머리부터 꼬리까지 조각이 터진다 */
+    sfxCrash();
+    vib([30,20,60]);
+    const h=snake[0];
+    const hx=Math.max(-0.5, Math.min(GRID-0.5, (h.x+nx)/2)), hy=Math.max(-0.5, Math.min(GRID-0.5, (h.y+ny)/2));
+    dying={t0:performance.now(), hit:{x:hx*cell+cell/2, y:hy*cell+cell/2}, popped:0};
+    prevSnake=snake.map(s=>({x:s.x,y:s.y}));
+    flash(0.12, '255,60,90');
+    ringFx(dying.hit.x, dying.hit.y, '#FF6B8B', 34, 0.45);
+    burst(dying.hit.x, dying.hit.y, '#FFFFFF', 10, 150, 3);
+}
+
 function step(){
-    while(queued.length){
+    /* 큐는 틱당 한 칸만 소비한다 — 빠른 ㄱ자 두 번 입력이 연속 두 틱에 걸쳐 들어간다 */
+    if(queued.length){
         const q=queued.shift();
-        if((q.x===-dir.x && q.y===-dir.y) || (q.x===dir.x && q.y===dir.y)) continue;
-        dir=q; break;
+        if(!(q.x===-dir.x && q.y===-dir.y)) dir=q;
     }
     const head=snake[0];
     const nx=head.x+dir.x, ny=head.y+dir.y;
-    if(nx<0||nx>=GRID||ny<0||ny>=GRID){ sfxCrash(); gameOver(); return; }
-    const willEat=(nx===food.x && ny===food.y);
-    if(goldenLeft>0) goldenLeft--;
-    if(goldenFlash>0) goldenFlash--;
+    const willEat=(food && nx===food.x && ny===food.y);
     const body=willEat?snake:snake.slice(0,-1);
-    if(body.some(s=>s.x===nx && s.y===ny)){ sfxCrash(); gameOver(); return; }
+    const fatal = nx<0||nx>=GRID||ny<0||ny>=GRID || body.some(s=>s.x===nx && s.y===ny);
+    if(fatal){
+        /* 1틱 유예 — 부딪히기 직전 한 박자 멈춰 늦은 입력을 받아 준다.
+           손가락이 한 프레임 늦었을 뿐인데 죽는 '억울한 죽음'을 없앤다.
+           같은 칸에서 두 번은 없다. */
+        if(!graceUsed){
+            graceUsed=true; stalled=true;
+            prevSnake=snake.map(s=>({x:s.x,y:s.y}));
+            return;
+        }
+        die(nx, ny);
+        return;
+    }
+    graceUsed=false; stalled=false;
+    prevSnake=snake.map(s=>({x:s.x,y:s.y}));
     snake.unshift({x:nx,y:ny});
+    if(goldenLeft>0) goldenLeft--;
+    for(let i=0;i<bulges.length;i++) bulges[i]+=1;
+    bulges=bulges.filter(b=>b<snake.length+1);
     if(willEat){
         foodsEaten++;
+        const fc=cellCenter(food);
+        let bonus=0;
         /* 황금 먹이를 남은 시간 안에 먹으면 가산 (최대 +40) */
         if(goldenLeft>0){
-            const bonus=Math.max(0, Math.round(40*goldenLeft/GOLDEN_TICKS));
+            bonus=Math.max(0, Math.round(40*goldenLeft/GOLDEN_TICKS));
             goldenScore+=bonus;
-            if(bonus>0){ goldenFlash=12; }
+            if(bonus>0){ goldenFlashT=0.35; }
         }
         score=foodsEaten*10+goldenScore;
-        sfxEat();
+        if(bonus>0){
+            sfxGolden();
+            burst(fc.x, fc.y, '#FFD147', 22, 170, 3.2);
+            ringFx(fc.x, fc.y, '#FFF3C4', 44, 0.5);
+            popText(fc.x, fc.y-4, '+'+(10+bonus), '#FFD147', 17);
+        } else {
+            sfxEat(foodsEaten%5);
+            burst(fc.x, fc.y, '#FF5C85', 14, 120, 2.6);
+            ringFx(fc.x, fc.y, '#FF9DB5', 28, 0.35);
+            popText(fc.x, fc.y-4, '+10', '#FFFFFF', 13);
+        }
+        bulges.push(0);
+        headGulp=performance.now();
         $('scoreNow').textContent=score;
+        bump($('scoreNow'));
         $('lenNow').textContent=snake.length;
-        /* 연속 속도 램프 — 기존 4단 계단은 먹이 35개(≈350점) 이후 82ms 로
-           고정돼 난이도가 완전히 평탄했다. 길어질수록 조금씩 빨라진다 */
-        const prevTick=tickMs;
-        tickMs=Math.max(62, 130 - foodsEaten*1.7);
-        if(Math.floor(prevTick/10)!==Math.floor(tickMs/10)) sfxLevelUp();
+        tickMs=tickFor(foodsEaten);
+        const lv=levelFor(foodsEaten);
+        if(lv>lastLevel){
+            lastLevel=lv;
+            sfxLevelUp();
+            showBanner('SPEED UP', 'LV '+lv, 1.1);
+        }
         /* 황금 먹이 — 5개마다. 가치가 시간에 따라 50→10 으로 줄어 "지금
            위험을 감수하고 달려갈지" 판단이 생긴다 */
         goldenLeft=(foodsEaten%5===0)?GOLDEN_TICKS:0;
         food=randomEmptyCell();
+        foodBornAt=performance.now();
         if(!food){ gameOver(); return; }
-        if(navigator.vibrate)try{navigator.vibrate(12)}catch(_){}
+        vib(12);
     } else snake.pop();
 }
+let headGulp=0;
+function bump(el){ if(!el||REDUCED) return; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 
-function render(){
-    ctx.fillStyle='#05120a';
-    ctx.fillRect(0,0,BASE_SIZE,BASE_SIZE);
-    ctx.strokeStyle='rgba(0,230,118,.06)'; ctx.lineWidth=1;
-    for(let i=1;i<GRID;i++){
-        ctx.beginPath();
-        ctx.moveTo(i*cell,0); ctx.lineTo(i*cell,BASE_SIZE);
-        ctx.moveTo(0,i*cell); ctx.lineTo(BASE_SIZE,i*cell);
-        ctx.stroke();
+/* ========== 이펙트 ========== */
+const FX=[];
+let flashA=0, flashRGB='255,255,255', banner=null, lastFxT=0;
+function burst(x,y,color,n,speed,size){
+    if(REDUCED) n=Math.ceil(n/3);
+    for(let i=0;i<n;i++){
+        const a=Math.random()*Math.PI*2, v=speed*(0.35+Math.random()*0.8);
+        FX.push({k:'p',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:0.4+Math.random()*0.35,max:0.75,size:size*(0.6+Math.random()*0.6),color});
     }
-    if(food){
-        const fx=food.x*cell+cell/2, fy=food.y*cell+cell/2;
-        if(goldenLeft>0){
-            /* 황금 먹이 — 남은 시간에 따라 빛이 약해지고 링이 줄어든다.
-               "지금 위험을 감수하고 달려갈지"를 눈으로 판단하게 하는 장치 */
-            const ratio=goldenLeft/GOLDEN_TICKS;
-            const pulse=1+0.10*Math.sin(performance.now()/110);
-            ctx.fillStyle='rgba(255,209,71,'+(0.14+0.26*ratio).toFixed(3)+')';
-            ctx.beginPath(); ctx.arc(fx,fy,cell*0.78*pulse,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#FFD147';
-            ctx.beginPath(); ctx.arc(fx,fy,cell*0.42*pulse,0,Math.PI*2); ctx.fill();
-            /* 남은 시간 링 */
-            ctx.strokeStyle='#FFF3C4'; ctx.lineWidth=Math.max(1,cell*0.10);
-            ctx.beginPath();
-            ctx.arc(fx,fy,cell*0.60,-Math.PI/2,-Math.PI/2+Math.PI*2*ratio);
-            ctx.stroke();
-            ctx.fillStyle='#8A5A00';
-            ctx.beginPath(); ctx.arc(fx,fy,cell*0.14,0,Math.PI*2); ctx.fill();
-        } else {
-            const pulse=1+0.04*Math.sin(performance.now()/220);
-            ctx.fillStyle='rgba(255,51,102,.25)';
-            ctx.beginPath(); ctx.arc(fx,fy,cell*0.56*pulse,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#FF3366';
-            ctx.beginPath(); ctx.arc(fx,fy,cell*0.38*pulse,0,Math.PI*2); ctx.fill();
-            ctx.fillStyle='#00C97A';
-            ctx.fillRect(fx-1,fy-cell*0.46,2,cell*0.14);
+}
+function ringFx(x,y,color,r,life){ FX.push({k:'r',x,y,r,color,life:life||0.4,max:life||0.4}); }
+function popText(x,y,text,color,size){ FX.push({k:'t',x,y,text,color,size:size||13,life:0.9,max:0.9}); }
+function flash(a,rgb){ if(REDUCED) return; flashA=Math.min(0.12, Math.max(flashA,a)); flashRGB=rgb||'255,255,255'; }
+function showBanner(text, sub, secs){ banner={text,sub:sub||'',t:secs,max:secs}; }
+function updateFx(dt){
+    for(let i=FX.length-1;i>=0;i--){
+        const f=FX[i];
+        f.life-=dt;
+        if(f.life<=0){ FX.splice(i,1); continue; }
+        if(f.k==='p'){ f.x+=f.vx*dt; f.y+=f.vy*dt; f.vx*=(1-3*dt); f.vy*=(1-3*dt); f.vy+=60*dt; }
+        else if(f.k==='t'){ f.y-=26*dt; }
+    }
+    if(flashA>0) flashA=Math.max(0, flashA-dt*0.5);
+    if(goldenFlashT>0) goldenFlashT=Math.max(0, goldenFlashT-dt);
+    if(banner){ banner.t-=dt; if(banner.t<=0) banner=null; }
+}
+function drawFx(){
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    for(const f of FX){
+        const a=Math.max(0, f.life/f.max);
+        if(f.k==='p'){
+            ctx.globalAlpha=a; ctx.fillStyle=f.color;
+            const s=f.size*(0.4+a*0.6);
+            ctx.beginPath(); ctx.arc(f.x, f.y, s/2, 0, Math.PI*2); ctx.fill();
+        } else if(f.k==='r'){
+            ctx.globalAlpha=a*0.9; ctx.strokeStyle=f.color; ctx.lineWidth=3*a+0.5;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.r*(1-a*a)+3, 0, Math.PI*2); ctx.stroke();
         }
     }
-    /* 황금 먹이 획득 순간 화면 가장자리 플래시 */
-    if(goldenFlash>0){
-        ctx.strokeStyle='rgba(255,209,71,'+(goldenFlash/12*0.6).toFixed(3)+')';
-        ctx.lineWidth=6;
-        ctx.strokeRect(3,3,BASE_SIZE-6,BASE_SIZE-6);
+    ctx.restore();
+    for(const f of FX){
+        if(f.k!=='t') continue;
+        const a=Math.min(1, f.life/f.max*2.2);
+        const pop=1+Math.max(0, f.life-f.max+0.12)*4;
+        ctx.save();
+        ctx.globalAlpha=a;
+        ctx.translate(f.x, f.y); ctx.scale(pop, pop);
+        ctx.font='900 '+f.size+'px Orbitron, system-ui, sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.lineWidth=4; ctx.strokeStyle='rgba(0,20,10,.85)'; ctx.strokeText(f.text,0,0);
+        ctx.fillStyle=f.color; ctx.fillText(f.text,0,0);
+        ctx.restore();
     }
-    for(let i=snake.length-1;i>=0;i--){
-        const s=snake[i];
-        const t=1 - i/Math.max(1,snake.length);
-        const r=Math.round(0+40*t), g=Math.round(200+30*t), b=Math.round(110+20*t);
-        ctx.fillStyle=`rgb(${r},${g},${b})`;
-        const pad=1.5;
-        roundRect(ctx, s.x*cell+pad, s.y*cell+pad, cell-pad*2, cell-pad*2, i===0?6:4);
-        ctx.fill();
+}
+
+/* ========== 렌더 ========== */
+function buildBg(){
+    const c=document.createElement('canvas');
+    c.width=canvas.width; c.height=canvas.height;
+    const g=c.getContext('2d');
+    g.setTransform(_pxScale,0,0,_pxScale,0,0);
+    const bg=g.createRadialGradient(BASE_SIZE/2, BASE_SIZE*0.42, 20, BASE_SIZE/2, BASE_SIZE/2, BASE_SIZE*0.75);
+    bg.addColorStop(0,'#0a2416'); bg.addColorStop(1,'#030b07');
+    g.fillStyle=bg; g.fillRect(0,0,BASE_SIZE,BASE_SIZE);
+    /* 체커보드 잔디 */
+    g.fillStyle='rgba(0,230,118,.028)';
+    for(let y=0;y<GRID;y++) for(let x=0;x<GRID;x++) if((x+y)%2===0) g.fillRect(x*cell, y*cell, cell, cell);
+    /* 칸 모서리 점 — 격자선보다 덜 시끄럽다 */
+    g.fillStyle='rgba(120,255,180,.10)';
+    for(let y=1;y<GRID;y++) for(let x=1;x<GRID;x++){ g.fillRect(x*cell-0.6, y*cell-0.6, 1.2, 1.2); }
+    /* 벽 — 안쪽 네온 테두리 */
+    g.strokeStyle='rgba(0,230,118,.55)'; g.lineWidth=2;
+    g.shadowColor='rgba(0,230,118,.8)'; g.shadowBlur=10*_pxScale;
+    g.strokeRect(1.5,1.5,BASE_SIZE-3,BASE_SIZE-3);
+    g.shadowBlur=0;
+    const vg=g.createRadialGradient(BASE_SIZE/2,BASE_SIZE/2,BASE_SIZE*0.35,BASE_SIZE/2,BASE_SIZE/2,BASE_SIZE*0.74);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.4)');
+    g.fillStyle=vg; g.fillRect(0,0,BASE_SIZE,BASE_SIZE);
+    return c;
+}
+function lerpSeg(i, a){
+    const c=snake[i], p=prevSnake[i]||c;
+    return {x:(p.x+(c.x-p.x)*a)*cell+cell/2, y:(p.y+(c.y-p.y)*a)*cell+cell/2};
+}
+function drawFood(now){
+    if(!food) return;
+    const fx=food.x*cell+cell/2, fy=food.y*cell+cell/2;
+    const age=(now-foodBornAt)/1000;
+    /* 등장 팝 — 0 에서 튀어나와 살짝 넘쳤다가 자리 잡는다 */
+    const k=Math.max(0, Math.min(1, age/0.32));
+    const popS=REDUCED?1:(k<1 ? (1-Math.pow(1-k,3))*(1+0.25*Math.sin(k*Math.PI)) : 1);
+    const t=now/1000;
+    ctx.save();
+    ctx.translate(fx, fy);
+    ctx.scale(popS, popS);
+    /* 그림자 */
+    ctx.fillStyle='rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.ellipse(1.5, cell*0.36, cell*0.34, cell*0.12, 0, 0, Math.PI*2); ctx.fill();
+    if(goldenLeft>0){
+        const ratio=goldenLeft/GOLDEN_TICKS;
+        const pulse=1+0.10*Math.sin(t*9);
+        ctx.globalCompositeOperation='lighter';
+        const halo=ctx.createRadialGradient(0,0,0,0,0,cell*0.95*pulse);
+        halo.addColorStop(0,'rgba(255,209,71,'+(0.35+0.35*ratio).toFixed(3)+')'); halo.addColorStop(1,'rgba(255,209,71,0)');
+        ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(0,0,cell*0.95*pulse,0,Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+        const gg=ctx.createRadialGradient(-cell*0.12,-cell*0.14,1,0,0,cell*0.42);
+        gg.addColorStop(0,'#FFF8D6'); gg.addColorStop(0.5,'#FFD147'); gg.addColorStop(1,'#C98A00');
+        ctx.fillStyle=gg;
+        /* 별 모양 */
+        ctx.beginPath();
+        for(let i=0;i<10;i++){
+            const r=(i%2?0.22:0.46)*cell*pulse, a=-Math.PI/2+i*Math.PI/5+t*0.8;
+            ctx[i?'lineTo':'moveTo'](Math.cos(a)*r, Math.sin(a)*r);
+        }
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,.6)'; ctx.lineWidth=0.8; ctx.stroke();
+        /* 남은 시간 링 */
+        ctx.strokeStyle='#FFF3C4'; ctx.lineWidth=Math.max(1.2,cell*0.09); ctx.lineCap='round';
+        ctx.beginPath(); ctx.arc(0,0,cell*0.66,-Math.PI/2,-Math.PI/2+Math.PI*2*ratio); ctx.stroke();
+    } else {
+        const bob=Math.sin(t*3.2)*0.8;
+        ctx.translate(0, bob);
+        ctx.globalCompositeOperation='lighter';
+        const halo=ctx.createRadialGradient(0,0,0,0,0,cell*0.8);
+        halo.addColorStop(0,'rgba(255,60,110,.32)'); halo.addColorStop(1,'rgba(255,60,110,0)');
+        ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(0,0,cell*0.8,0,Math.PI*2); ctx.fill();
+        ctx.globalCompositeOperation='source-over';
+        const ag=ctx.createRadialGradient(-cell*0.13,-cell*0.13,1,0,0,cell*0.4);
+        ag.addColorStop(0,'#FFB3C6'); ag.addColorStop(0.45,'#FF3366'); ag.addColorStop(1,'#A0103A');
+        ctx.fillStyle=ag;
+        ctx.beginPath(); ctx.arc(-cell*0.1,0.5,cell*0.33,0,Math.PI*2); ctx.arc(cell*0.1,0.5,cell*0.33,0,Math.PI*2); ctx.fill();
+        /* 꼭지 + 잎 */
+        ctx.strokeStyle='#6B3A1E'; ctx.lineWidth=1.6; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(0,-cell*0.24); ctx.quadraticCurveTo(1,-cell*0.4, 2.5,-cell*0.46); ctx.stroke();
+        ctx.fillStyle='#2BE38A';
+        ctx.beginPath(); ctx.ellipse(cell*0.18,-cell*0.38,cell*0.16,cell*0.07,-0.5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle='rgba(255,255,255,.75)';
+        ctx.beginPath(); ctx.ellipse(-cell*0.2,-cell*0.1,cell*0.07,cell*0.11,0.5,0,Math.PI*2); ctx.fill();
     }
-    if(snake.length){
-        const h=snake[0];
-        const cx=h.x*cell+cell/2, cy=h.y*cell+cell/2;
-        const ex=dir.x, ey=dir.y;
-        const px=-ey, py=ex;
-        const off=cell*0.18, ahead=cell*0.18;
+    ctx.restore();
+}
+function drawSnake(now, a){
+    const n=snake.length;
+    if(!n) return;
+    let popped=0, deadK=0;
+    if(dying){
+        const e=(now-dying.t0)/1000;
+        deadK=Math.min(1, e/0.18);
+        popped=e<0.18?0:Math.floor((e-0.18)/0.62*n)+1;
+        if(popped>dying.popped){
+            for(let i=dying.popped;i<Math.min(popped,n);i++){
+                const p=lerpSeg(i, 0);
+                burst(p.x, p.y, i===0?'#FFFFFF':(i%2?'#00E676':'#7CFFB8'), i===0?10:4, 110, 3);
+            }
+            if(popped<=n && !REDUCED) LPAudio.beep({freq:300+Math.random()*200, dur:0.03, vol:0.05, type:'square', decay:0.4});
+            dying.popped=popped;
+        }
+    }
+    const P=new Array(n);
+    for(let i=0;i<n;i++) P[i]=lerpSeg(i, a);
+    const W=(i)=>{
+        let w=cell*(0.52+0.30*(1-i/Math.max(1,n-1)));
+        for(const b of bulges){ const d=i-(b-1+a); w*=1+0.38*Math.exp(-(d*d)/0.9); }
+        return w;
+    };
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    /* 1) 그림자 */
+    ctx.save();
+    ctx.translate(1.5, 2.5);
+    ctx.strokeStyle='rgba(0,0,0,.35)';
+    for(let i=n-1;i>=1;i--){
+        if(i<popped) continue;
+        ctx.lineWidth=W(i)+1;
+        ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[i-1].x,P[i-1].y); ctx.stroke();
+    }
+    ctx.restore();
+    /* 1.5) 외곽선 — 몸이 배경에서 또렷하게 떨어져 보이게 */
+    ctx.strokeStyle=dying?'rgba(90,0,20,.9)':'rgba(0,55,28,.95)';
+    for(let i=n-1;i>=1;i--){
+        if(i<popped) continue;
+        ctx.lineWidth=W(i)+2.4;
+        ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[i-1].x,P[i-1].y); ctx.stroke();
+    }
+    /* 2) 몸통 — 머리 쪽은 밝은 민트, 꼬리 쪽은 깊은 초록. 비늘 무늬는 교대 명암 */
+    for(let i=n-1;i>=1;i--){
+        if(i<popped) continue;
+        const t=i/Math.max(1,n-1);
+        let r=Math.round(20+40*(1-t)), g=Math.round(170+70*(1-t)), b=Math.round(95+45*(1-t));
+        if(i%2===0){ r=Math.round(r*0.86); g=Math.round(g*0.9); b=Math.round(b*0.88); }
+        if(dying && deadK<1 && Math.floor(now/60)%2===0){ r=255; g=235; b=240; }
+        ctx.strokeStyle='rgb('+r+','+g+','+b+')';
+        ctx.lineWidth=W(i);
+        ctx.beginPath(); ctx.moveTo(P[i].x,P[i].y); ctx.lineTo(P[i-1].x,P[i-1].y); ctx.stroke();
+    }
+    /* 3) 등줄기 하이라이트 */
+    ctx.strokeStyle='rgba(210,255,230,.28)';
+    for(let i=n-1;i>=1;i--){
+        if(i<popped) continue;
+        ctx.lineWidth=W(i)*0.28;
+        ctx.beginPath(); ctx.moveTo(P[i].x-1.2,P[i].y-1.4); ctx.lineTo(P[i-1].x-1.2,P[i-1].y-1.4); ctx.stroke();
+    }
+    if(popped>0) return;
+    /* 4) 머리 */
+    const H=P[0];
+    const hr=cell*0.47*(1+(REDUCED?0:0.12*Math.max(0,Math.min(1,1-(now-headGulp)/160))));
+    let fdx=dir.x, fdy=dir.y;
+    if(prevSnake[0] && (snake[0].x!==prevSnake[0].x || snake[0].y!==prevSnake[0].y)){
+        fdx=snake[0].x-prevSnake[0].x; fdy=snake[0].y-prevSnake[0].y;
+    }
+    ctx.save();
+    ctx.globalCompositeOperation='lighter';
+    const hg=ctx.createRadialGradient(H.x,H.y,0,H.x,H.y,cell*1.3);
+    hg.addColorStop(0,'rgba(0,230,118,.28)'); hg.addColorStop(1,'rgba(0,230,118,0)');
+    ctx.fillStyle=hg; ctx.beginPath(); ctx.arc(H.x,H.y,cell*1.3,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    const headG=ctx.createRadialGradient(H.x-fdy*2-fdx*1, H.y+fdx*2-fdy*1, 1, H.x, H.y, hr);
+    headG.addColorStop(0, dying?'#FFE3EA':'#B8FFD6'); headG.addColorStop(0.55, dying?'#FF8FA8':'#3CF08F'); headG.addColorStop(1, dying?'#C0304F':'#0FA85A');
+    ctx.fillStyle=headG;
+    ctx.beginPath(); ctx.arc(H.x, H.y, hr, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle=dying?'rgba(90,0,20,.9)':'rgba(0,55,28,.95)'; ctx.lineWidth=1.2; ctx.stroke();
+    /* 혀 — 1.7초마다 날름 */
+    const tp=(now%1700)/1700;
+    if(!dying && tp<0.14){
+        const L=cell*(0.35+0.25*Math.sin(tp/0.14*Math.PI));
+        const tx=H.x+fdx*(hr+L), ty=H.y+fdy*(hr+L);
+        ctx.strokeStyle='#FF3B6B'; ctx.lineWidth=1.4; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(H.x+fdx*hr*0.8, H.y+fdy*hr*0.8); ctx.lineTo(tx,ty);
+        ctx.moveTo(tx,ty); ctx.lineTo(tx+fdx*3-fdy*2.2, ty+fdy*3+fdx*2.2);
+        ctx.moveTo(tx,ty); ctx.lineTo(tx+fdx*3+fdy*2.2, ty+fdy*3-fdx*2.2);
+        ctx.stroke();
+    }
+    /* 눈 — 가끔 깜빡인다. 먹이가 가까우면 커진다 */
+    const px=-fdy, py=fdx;
+    const off=hr*0.45, ahead=hr*0.28;
+    const near=food && Math.abs(food.x-snake[0].x)+Math.abs(food.y-snake[0].y)<=3;
+    const blink=((now+700)%3100)<110;
+    const er=hr*(near?0.36:0.3);
+    for(const s of [1,-1]){
+        const ex=H.x+fdx*ahead+px*off*s, ey=H.y+fdy*ahead+py*off*s;
         ctx.fillStyle='#fff';
-        ctx.beginPath(); ctx.arc(cx+ex*ahead+px*off, cy+ey*ahead+py*off, cell*0.09, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx+ex*ahead-px*off, cy+ey*ahead-py*off, cell*0.09, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle='#001800';
-        ctx.beginPath(); ctx.arc(cx+ex*ahead*1.4+px*off, cy+ey*ahead*1.4+py*off, cell*0.045, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(cx+ex*ahead*1.4-px*off, cy+ey*ahead*1.4-py*off, cell*0.045, 0, Math.PI*2); ctx.fill();
+        if(blink || dying){
+            ctx.strokeStyle= dying?'#3a0010':'#063';
+            ctx.lineWidth=1.4;
+            ctx.beginPath();
+            if(dying){ const q=er*0.7; ctx.moveTo(ex-q,ey-q); ctx.lineTo(ex+q,ey+q); ctx.moveTo(ex+q,ey-q); ctx.lineTo(ex-q,ey+q); }
+            else { ctx.moveTo(ex-px*er, ey-py*er); ctx.lineTo(ex+px*er, ey+py*er); }
+            ctx.stroke();
+            continue;
+        }
+        ctx.beginPath(); ctx.arc(ex, ey, er, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='#04140B';
+        ctx.beginPath(); ctx.arc(ex+fdx*er*0.35, ey+fdy*er*0.35, er*0.55, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle='#fff';
+        ctx.beginPath(); ctx.arc(ex+fdx*er*0.15-er*0.2, ey+fdy*er*0.15-er*0.25, er*0.2, 0, Math.PI*2); ctx.fill();
+    }
+}
+function render(now){
+    if(now==null) now=performance.now();
+    const dt=lastFxT?Math.min(0.1, Math.max(0,(now-lastFxT)/1000)):0;
+    lastFxT=now;
+    if(!paused) updateFx(dt);
+    ctx.setTransform(_pxScale,0,0,_pxScale,0,0);
+    if(bgLayer) ctx.drawImage(bgLayer, 0, 0, BASE_SIZE, BASE_SIZE);
+    else { ctx.fillStyle='#05120a'; ctx.fillRect(0,0,BASE_SIZE,BASE_SIZE); }
+    let a=0;
+    if(running && !dying && !stalled){
+        a=paused?pauseFrac:Math.max(0, Math.min(1, (now-lastTick)/tickMs));
+    }
+    drawFood(now);
+    /* 황금 먹이 획득 순간 화면 가장자리 플래시 */
+    if(goldenFlashT>0){
+        ctx.strokeStyle='rgba(255,209,71,'+(goldenFlashT/0.35*0.7).toFixed(3)+')';
+        ctx.lineWidth=7;
+        ctx.strokeRect(3.5,3.5,BASE_SIZE-7,BASE_SIZE-7);
+    }
+    drawSnake(now, a);
+    drawFx();
+    if(banner){
+        const k=banner.t/banner.max;
+        const inA=Math.min(1,(1-k)*6), outA=Math.min(1,k*4);
+        const sc=1+Math.max(0,1-(1-k)*7)*0.35;
+        ctx.save();
+        ctx.globalAlpha=Math.min(inA,outA)*0.95;
+        ctx.translate(BASE_SIZE/2, BASE_SIZE*0.2); ctx.scale(sc,sc);
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.font='900 30px Orbitron, system-ui, sans-serif';
+        ctx.lineWidth=6; ctx.strokeStyle='rgba(0,20,10,.85)'; ctx.strokeText(banner.text,0,0);
+        ctx.fillStyle='#7CFFB8'; ctx.fillText(banner.text,0,0);
+        if(banner.sub){
+            ctx.font='800 14px Orbitron, system-ui, sans-serif';
+            ctx.lineWidth=4; ctx.strokeText(banner.sub,0,28);
+            ctx.fillStyle='#FFE66D'; ctx.fillText(banner.sub,0,28);
+        }
+        ctx.restore();
+    }
+    if(flashA>0){
+        ctx.fillStyle='rgba('+flashRGB+','+flashA.toFixed(3)+')';
+        ctx.fillRect(0,0,BASE_SIZE,BASE_SIZE);
     }
     /* ---- Pause indicator ---- */
     if(paused && running){
-        /* ctx 에는 BASE_SIZE 기준 변환이 걸려 있다. canvas.width(백킹스토어)를
-           쓰면 DPR 배만큼 벗어나 텍스트가 화면 밖에 그려졌다 */
         const W=BASE_SIZE, H=BASE_SIZE;
         ctx.fillStyle='rgba(5,5,15,.72)';
         ctx.fillRect(0,0,W,H);
@@ -1082,6 +1400,12 @@ function roundRect(ctx,x,y,w,h,r){
 }
 function loop(now){
     if(!running) return;
+    if(dying){
+        render(now);
+        if((now-dying.t0)/1000>=1.05){ gameOver(); render(now); return; }
+        requestAnimationFrame(loop);
+        return;
+    }
     if(!paused){
         /* 캐치업 상한 — 탭이 백그라운드로 가면 rAF 가 멈추고, 복귀 시
            밀린 틱이 한 프레임에 수백 번 실행돼 즉사했다 (2026-08-21) */
@@ -1089,14 +1413,20 @@ function loop(now){
         while(now-lastTick>=tickMs){
             if(++_c>4){ lastTick=now; break; }
             lastTick+=tickMs; step();
-            if(!running){ render(); return; }
+            if(!running||dying) break;
         }
-    } else lastTick=now;
-    render();
-    requestAnimationFrame(loop);
+    }
+    render(now);
+    if(running) requestAnimationFrame(loop);
 }
+/* 입력 큐 — 마지막으로 예약된 방향 기준으로 검사한다. 오른쪽으로 가다 위→왼쪽을
+   빠르게 누르면 [위, 왼쪽] 이 연속 두 틱에 들어간다(예전엔 2칸 제한 + 현재
+   방향 기준 검사라 두 번째가 자주 버려졌다). */
 function queueDir(x,y){
-    if(queued.length>=2) queued.length=1;
+    if(dying) return;
+    const last=queued.length?queued[queued.length-1]:dir;
+    if((x===last.x && y===last.y) || (x===-last.x && y===-last.y)) return;
+    if(queued.length>=3) return;
     queued.push({x,y});
 }
 
@@ -1107,8 +1437,8 @@ function onKey(e){
     else if(k==='ArrowDown'||k==='s'||k==='S') queueDir(0,1);
     else if(k==='ArrowLeft'||k==='a'||k==='A') queueDir(-1,0);
     else if(k==='ArrowRight'||k==='d'||k==='D') queueDir(1,0);
-    else if(k===' '){ paused = running ? !paused : paused; syncPauseUI(); e.preventDefault(); }
-    else if(k==='Enter'){ if(!running) startGame(); }
+    else if(k===' '||k==='p'||k==='P'||k==='Escape'){ if(running) setPaused(!paused); if(k===' ') e.preventDefault(); }
+    else if(k==='Enter'){ if(!running && !countdownActive) startGame(); }
     else return;
     if(k.startsWith('Arrow')) e.preventDefault();
 }
@@ -1120,8 +1450,6 @@ document.querySelectorAll('.dpad button').forEach(b=>{
        reflow 로 재시작) + 햅틱 진동. */
     let pressSafety=0;
     const press=(isTouch)=>{
-        /* pressed(지속)는 터치에서만 — 데스크탑은 :active 가 담당하고,
-           click 시점(mouseup 뒤)에 넣으면 떼어낼 이벤트가 없어 잔류한다. */
         if(isTouch){
             b.classList.add('pressed');
             clearTimeout(pressSafety);
@@ -1139,7 +1467,7 @@ document.querySelectorAll('.dpad button').forEach(b=>{
         else if(d==='down') queueDir(0,1);
         else if(d==='left') queueDir(-1,0);
         else if(d==='right') queueDir(1,0);
-        else if(d==='pause'){ if(running){ paused=!paused; syncPauseUI(); } }
+        else if(d==='pause'){ if(running) setPaused(!paused); }
     };
     b.addEventListener('click', fire);
     /* Fire on touchstart too for lower latency on mobile */
@@ -1148,22 +1476,27 @@ document.querySelectorAll('.dpad button').forEach(b=>{
         b.addEventListener(ev, release));
 });
 
-let touchStart=null;
+/* 스와이프 — 손을 떼기 전(touchmove)에 판정하고 기준점을 다시 잡는다.
+   한 번 긋는 동안 ㄱ자로 꺾으면 두 번 입력된다. passive 라 오버레이 버튼의
+   click 합성은 그대로 살아 있다(모바일 클릭 함정). */
+let touchAnchor=null;
 const wrap=$('canvasWrap');
 wrap.addEventListener('touchstart',(e)=>{
     const t=e.touches[0];
-    touchStart={x:t.clientX,y:t.clientY};
+    touchAnchor={x:t.clientX,y:t.clientY};
 },{passive:true});
-wrap.addEventListener('touchend',(e)=>{
-    if(!touchStart) return;
-    const t=e.changedTouches[0];
-    const dx=t.clientX-touchStart.x, dy=t.clientY-touchStart.y;
+wrap.addEventListener('touchmove',(e)=>{
+    if(!touchAnchor || !(running||countdownActive)) return;
+    const t=e.touches[0];
+    const dx=t.clientX-touchAnchor.x, dy=t.clientY-touchAnchor.y;
     const ax=Math.abs(dx), ay=Math.abs(dy);
-    touchStart=null;
-    if(Math.max(ax,ay)<20) return;
+    if(Math.max(ax,ay)<18) return;
     if(ax>ay) queueDir(dx>0?1:-1, 0);
     else      queueDir(0, dy>0?1:-1);
-});
+    touchAnchor={x:t.clientX,y:t.clientY};
+},{passive:true});
+wrap.addEventListener('touchend',()=>{ touchAnchor=null; },{passive:true});
+wrap.addEventListener('touchcancel',()=>{ touchAnchor=null; },{passive:true});
 
 /* ======== Bottom sheet (leaderboard) ======== */
 const sheet=$('sheet'), sheetBack=$('sheetBack');
@@ -1231,14 +1564,13 @@ $('ovBtn').addEventListener('click', startGame);
 $('pauseBtn').addEventListener('click', (e)=>{
     e.stopPropagation();
     if(!running) return;
-    paused=!paused;
-    syncPauseUI();
+    setPaused(!paused);
 });
 (async()=>{
     /* fitCanvas 는 로그인 여부와 무관하게 필요하다. 예전엔 if(me) 안에 있어
        비로그인 사용자(방문자 대다수)는 400x400 속성값 그대로 확대돼
        레티나에서 뿌옇게 보였다 (2026-08-21) */
-    fitCanvas(); render();
+    resetGame(); fitCanvas(); render(performance.now());
     await initAuth();
     syncBestUI();
     if(me){
@@ -1251,7 +1583,7 @@ $('pauseBtn').addEventListener('click', (e)=>{
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1790222410" defer></script>
+<script src="/js/siteFooter.js?v=1790226484" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

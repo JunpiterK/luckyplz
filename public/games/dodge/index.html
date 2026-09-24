@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790222410">
+<meta name="lp-build" content="1790226484">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790222410";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790226484";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -616,6 +616,19 @@ body::after{
 @keyframes overlayRadar{to{transform:translate(-50%,-52%) rotate(360deg)}}
 .overlay > *{position:relative;z-index:1}
 .overlay.hidden{opacity:0;pointer-events:none}
+/* 2026-09-24 — 게임오버 카드: 캔버스 폭발 연출(0.85s) 뒤에 떠오른다 */
+.overlay.go-enter{animation:goEnter .5s cubic-bezier(.2,.9,.25,1.15) .85s both}
+.overlay.go-enter.go-lock{pointer-events:none}
+@keyframes goEnter{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+.overlay h2.go{letter-spacing:.06em;text-shadow:0 0 18px rgba(255,51,102,.55),0 0 2px rgba(255,255,255,.6)}
+.overlay .score-big{text-shadow:0 0 22px rgba(0,217,255,.45);font-variant-numeric:tabular-nums}
+.overlay .go-stats{display:flex;gap:8px;justify-content:center;margin:0 0 4px;width:100%;max-width:300px}
+.overlay .go-stat{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 6px;border-radius:12px;
+    background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.1)}
+.overlay .go-stat-l{font-family:'Orbitron',sans-serif;font-size:.58em;font-weight:800;letter-spacing:.14em;color:rgba(255,255,255,.5)}
+.overlay .go-stat-v{font-family:'Orbitron',sans-serif;font-size:1.05em;font-weight:900;color:#FFE66D;font-variant-numeric:tabular-nums}
+.overlay .go-stat-v small{font-size:.62em;color:rgba(255,255,255,.45);margin-left:1px}
+@media (prefers-reduced-motion:reduce){.overlay.go-enter{animation-duration:.01s;animation-delay:.3s}}
 
 
 
@@ -1414,10 +1427,10 @@ body::after{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1790222410"></script>
-<script src="/js/lpI18n.js?v=1790222410"></script>
-<script src="/js/lpRankSheet.js?v=1790222410"></script>
-<script src="/js/lpAudio.js?v=1790222410"></script>
+<script src="/js/supabase-config.js?v=1790226484"></script>
+<script src="/js/lpI18n.js?v=1790226484"></script>
+<script src="/js/lpRankSheet.js?v=1790226484"></script>
+<script src="/js/lpAudio.js?v=1790226484"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -2698,9 +2711,11 @@ function drawMechazillaLaunch(now){
     /* 하늘 색 전이 — liftT 따라 dawn-blue → space-black */
     const skyT = liftT;
     /* 진동 amplitude */
-    const shakeAmp = shakeT * (4 + fullFlame * 6);
-    const sx = (Math.random() - 0.5) * shakeAmp;
-    const sy = (Math.random() - 0.5) * shakeAmp;
+    /* 화면 흔들림 금지 (2026-09-24, 운영자 원칙) — 진동감은 화염·연기 맥동으로만 낸다.
+       translate(sx,sy) 구조는 남겨 두되 항상 0. */
+    void shakeT;
+    const sx = 0;
+    const sy = 0;
 
     /* === 1. SKY === (shake 영향 없음, 풀스크린 채움) */
     const skyG = ctx.createLinearGradient(0, 0, 0, CH);
@@ -3346,26 +3361,42 @@ const BOUNDARY_INFO = {
 };
 let boundaryLabel = { idx:-1, timer:0 };
 
-/* ---- Stars ---- */
-const STAR_COUNT=70;
+/* ---- Stars ----
+   2026-09-24 — 3층 패럴랙스. 먼 층은 작고 느리게 반짝이고, 가까운 층은
+   빠르게 흐르며 짧은 속도선으로 그린다. 기체 좌우 위치에 따라 층마다 다르게
+   밀려 깊이감이 생긴다. (전부 Math.random — PvP 시드 RNG 와 무관) */
+const STAR_COUNT=112;
+const STAR_LAYERS=[
+    /* n, speed[min,max], r[min,max], alpha[min,max], parallax */
+    { n:62, sp:[9,18],   r:[0.35,0.8], a:[0.18,0.5], par:0.025 },
+    { n:36, sp:[30,58],  r:[0.6,1.2],  a:[0.32,0.72], par:0.07 },
+    { n:14, sp:[110,170],r:[0.9,1.6],  a:[0.45,0.85], par:0.16 }
+];
 const stars=[];
 function initStars(){
     stars.length=0;
-    for(let i=0;i<STAR_COUNT;i++){
-        stars.push({
-            x:Math.random()*CW,
-            y:Math.random()*CH,
-            r:Math.random()*1.4+0.3,
-            speed:Math.random()*55+18,
-            alpha:Math.random()*0.55+0.15,
-            hue:0 // 0=white; updated per zone
-        });
+    for(let li=0; li<STAR_LAYERS.length; li++){
+        const L=STAR_LAYERS[li];
+        for(let i=0;i<L.n;i++){
+            stars.push({
+                x:Math.random()*CW,
+                y:Math.random()*CH,
+                r:L.r[0]+Math.random()*(L.r[1]-L.r[0]),
+                speed:L.sp[0]+Math.random()*(L.sp[1]-L.sp[0]),
+                alpha:L.a[0]+Math.random()*(L.a[1]-L.a[0]),
+                layer:li,
+                tw:Math.random()*Math.PI*2,
+                tws:1.2+Math.random()*2.4,
+                hue:0
+            });
+        }
     }
 }
 function updateStars(dt){
     for(const s of stars){
         s.y+=s.speed*dt;
-        if(s.y>CH) s.y=-2;
+        s.tw+=s.tws*dt;
+        if(s.y>CH+6){ s.y=-6; s.x=Math.random()*CW; }
     }
 }
 function getStarColor(zIdx, alpha){
@@ -3382,23 +3413,46 @@ function getStarColor(zIdx, alpha){
 }
 function drawStars(){
     const zIdx=currentZoneIdx;
+    const pxOff=(typeof player!=='undefined' && player) ? (player.x-CW/2) : 0;
+    ctx.save();
+    ctx.lineCap='round';
     for(let i=0;i<stars.length;i++){
         const s=stars[i];
+        const L=STAR_LAYERS[s.layer]||STAR_LAYERS[0];
+        let a=s.alpha;
+        if(s.layer===0) a*=0.72+0.28*Math.sin(s.tw);
+        a=Math.round(a*100)/100;
         let col;
         if(zIdx===10){
             const cycle=i%3;
-            if(cycle===0) col='rgba(255,160,120,'+s.alpha+')';
-            else if(cycle===1) col='rgba(180,200,255,'+s.alpha+')';
-            else col='rgba(255,255,255,'+s.alpha+')';
+            if(cycle===0) col='rgba(255,160,120,'+a+')';
+            else if(cycle===1) col='rgba(180,200,255,'+a+')';
+            else col='rgba(255,255,255,'+a+')';
         } else {
-            col=getStarColor(zIdx, s.alpha)||'rgba(255,255,255,'+s.alpha+')';
+            col=getStarColor(zIdx, a)||'rgba(255,255,255,'+a+')';
         }
-        ctx.globalAlpha=1;
-        ctx.fillStyle=col;
-        ctx.beginPath();
-        ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-        ctx.fill();
+        let x=s.x-pxOff*L.par;
+        if(x<-4) x+=CW+8; else if(x>CW+4) x-=CW+8;
+        if(s.layer===2){
+            /* 가까운 층 — 속도선 */
+            const len=s.speed*0.075;
+            ctx.strokeStyle=col;
+            ctx.lineWidth=s.r;
+            ctx.beginPath();
+            ctx.moveTo(x, s.y-len);
+            ctx.lineTo(x, s.y);
+            ctx.stroke();
+        } else if(s.r<0.9){
+            ctx.fillStyle=col;
+            ctx.fillRect(x-s.r, s.y-s.r, s.r*2, s.r*2);
+        } else {
+            ctx.fillStyle=col;
+            ctx.beginPath();
+            ctx.arc(x,s.y,s.r,0,Math.PI*2);
+            ctx.fill();
+        }
     }
+    ctx.restore();
     ctx.globalAlpha=1;
 }
 
@@ -9973,10 +10027,13 @@ function spawnBullet(now, speed, aimedRatio, multi){
     /* host 가 broadcast 할 spawn 정보 누적. */
     const hostBroadcast = isPvp ? [] : null;
     for(let m=0;m<multi;m++){
-        const edge=Math.floor(rand()*4);
-        let bx,by,vx,vy;
-        let aimed=rand()<aimedRatio;
-        let spread=(m-Math.floor(multi/2))*14;
+        /* 2026-09-24 밸런스 — 가장자리 가중치: 위 40% · 오른쪽 22% · 왼쪽 22% · 아래 16%.
+           기체는 위를 보고 있어 아래·옆에서 튀어나오는 운석이 가장 억울하다.
+           rand() 호출 수·순서는 예전과 같다 (edge → aimed → [PvP aim] → 위치 → [목표]). */
+        const er=rand();
+        const edge = er<0.40 ? 0 : er<0.62 ? 1 : er<0.84 ? 3 : 2;
+        const aimed=rand()<aimedRatio;
+        const spread=(m-Math.floor(multi/2))*14;
 
         /* PvP 시 aimed target 을 player 위치 대신 random fixed point 로 —
            이전 fixed (CW/2, CH*0.65) 는 host 의 시작 위치라 host 만 노려졌음.
@@ -9986,59 +10043,37 @@ function spawnBullet(now, speed, aimedRatio, multi){
         const aimX = isPvp ? (40 + rand() * (CW - 80)) : player.x;
         const aimY = isPvp ? (CH * 0.40 + rand() * CH * 0.45) : player.y;
 
-        if(edge===0){
-            bx=rand()*CW; by=-8;
-            if(aimed){
-                const dx=aimX-bx, dy=aimY-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            } else {
-                const tx=CW*0.2+rand()*CW*0.6+spread;
-                const ty=CH*0.3+rand()*CH*0.4;
-                const dx=tx-bx, dy=ty-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            }
-        } else if(edge===1){
-            bx=CW+8; by=rand()*CH;
-            if(aimed){
-                const dx=aimX-bx, dy=aimY-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            } else {
-                const tx=CW*0.2+rand()*CW*0.4;
-                const ty=CH*0.2+rand()*CH*0.6+spread;
-                const dx=tx-bx, dy=ty-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            }
-        } else if(edge===2){
-            bx=rand()*CW; by=CH+8;
-            if(aimed){
-                const dx=aimX-bx, dy=aimY-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            } else {
-                const tx=CW*0.2+rand()*CW*0.6+spread;
-                const ty=CH*0.3+rand()*CH*0.4;
-                const dx=tx-bx, dy=ty-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            }
-        } else {
-            bx=-8; by=rand()*CH;
-            if(aimed){
-                const dx=aimX-bx, dy=aimY-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
-            } else {
-                const tx=CW*0.6+rand()*CW*0.4;
-                const ty=CH*0.2+rand()*CH*0.6+spread;
-                const dx=tx-bx, dy=ty-by;
-                const d=Math.sqrt(dx*dx+dy*dy)||1;
-                vx=dx/d*speed; vy=dy/d*speed;
+        /* 화면 밖 SZ_SPAWN_OFF(34px) 에서 출발 — 가장자리 경고 화살표가 보일 시간을 번다 */
+        let bx, by;
+        if(edge===0){ bx=rand()*CW; by=-SZ_SPAWN_OFF; }
+        else if(edge===1){ bx=CW+SZ_SPAWN_OFF; by=rand()*CH; }
+        else if(edge===2){ bx=rand()*CW; by=CH+SZ_SPAWN_OFF; }
+        else { bx=-SZ_SPAWN_OFF; by=rand()*CH; }
+
+        /* 공정성 — 기체 코앞(150px) 가장자리에서 튀어나오는 스폰 금지 (싱글).
+           가장자리를 따라 거울 반사하고, 그래도 가까우면 반대쪽 끝으로 민다.
+           추가 rand() 없이 결정적이라 PvP·재현성에 영향 없음. */
+        if(!isPvp){
+            const S2 = SZ_SPAWN_SAFE * SZ_SPAWN_SAFE;
+            let ddx = bx - player.x, ddy = by - player.y;
+            if(ddx*ddx + ddy*ddy < S2){
+                if(edge===0 || edge===2) bx = CW - bx; else by = CH - by;
+                ddx = bx - player.x; ddy = by - player.y;
+                if(ddx*ddx + ddy*ddy < S2){
+                    if(edge===0 || edge===2) bx = (player.x < CW/2) ? CW - 16 : 16;
+                    else by = (player.y < CH/2) ? CH - 16 : 16;
+                }
             }
         }
+
+        let tx, ty;
+        if(aimed){ tx=aimX; ty=aimY; }
+        else if(edge===0 || edge===2){ tx=CW*0.2+rand()*CW*0.6+spread; ty=CH*0.3+rand()*CH*0.4; }
+        else if(edge===1){ tx=CW*0.2+rand()*CW*0.4; ty=CH*0.2+rand()*CH*0.6+spread; }
+        else { tx=CW*0.6+rand()*CW*0.4; ty=CH*0.2+rand()*CH*0.6+spread; }
+        const ddx2=tx-bx, ddy2=ty-by;
+        const dd=Math.sqrt(ddx2*ddx2+ddy2*ddy2)||1;
+        const vx=ddx2/dd*speed, vy=ddy2/dd*speed;
         bullets.push({x:bx, y:by, vx, vy, aimed, trail:[]});
         if(hostBroadcast){
             hostBroadcast.push({x:bx, y:by, vx, vy, aimed});
@@ -10436,6 +10471,7 @@ function resetGame(){
     shieldBubbleUntil = 0;
     shieldHitFlashUntil = 0;
     zoneEnteredAt = performance.now();
+    szResetFx();
 }
 
 async function startGame(){
@@ -10452,6 +10488,11 @@ async function startGame(){
        overlay 의 토글로 사용자가 변경한 값이 즉시 콕핏 panel 에 반영되도록. */
     applySteerToControlRow();
     $('overlay').classList.add('hidden');
+    $('overlay').classList.remove('go-enter', 'go-lock');
+    /* 두 번째 판부터는 idleLoop 가 멈춰 있어 카운트다운 동안 발사 장면이
+       그려지지 않고 직전 판 마지막 프레임이 얼어 있었다 — 다시 깨운다. */
+    szDeathFx = null;
+    szKickIdle();
     /* 인트로 스토리 + 3·2·1·GO 카운트다운 (~3.3초). 매번 6개 후보
        중 랜덤 1개. lang 자동 적용. */
     await runIntroCountdown();
@@ -10482,9 +10523,11 @@ function triggerGameOver(){
     syncPauseUI();
     const duration=Math.round(elapsedMs);
     const score=Math.floor(duration/100);
-    const wrap=$('canvasWrap');
-    wrap.classList.remove('shake'); void wrap.offsetWidth; wrap.classList.add('shake');
+    /* 화면 흔들림(.shake) 제거 — 대신 캔버스 안에서 폭발 연출을 0.9초 보여 준 뒤
+       결과 카드가 떠오른다 (szStartDeathFx). */
     if(navigator.vibrate)try{navigator.vibrate([40,20,80])}catch(_){}
+    const _isPvpDeath = !!(pvpState && pvpState.gameMode === 'pvp');
+    if(!_isPvpDeath){ try{ szStartDeathFx(performance.now()); }catch(_){} }
 
     /* PvP 모드면 별도 처리 — finish RPC + 결과 화면 polling. single-player 흐름 skip. */
     if(pvpState && pvpState.gameMode === 'pvp' && pvpState.roomId){
@@ -10507,6 +10550,10 @@ function triggerGameOver(){
         '<h2 class="go">'+esc(tT('gameOverTitle'))+'</h2>'
       +'<div class="score-big">'+timeStr+'</div>'
       +'<p>'+esc(tT('survivalLabel'))+'<br><span style="font-size:.85em;color:rgba(0,217,255,.8)">'+esc(zoneReachedName)+esc(tT('zoneReachedSuffix'))+'</span></p>'
+      +'<div class="go-stats">'
+      +  '<div class="go-stat"><span class="go-stat-l">MAX COMBO</span><span class="go-stat-v">×'+(comboMaxThisRun|0)+'</span></div>'
+      +  '<div class="go-stat"><span class="go-stat-l">ZONE</span><span class="go-stat-v">'+(currentZoneIdx+1)+'<small>/'+ZONES.length+'</small></span></div>'
+      +'</div>'
       +'<div class="rank-card" id="ovRankCard">'
       +  '<div class="rank-card-rank" id="ovRankNum">'+esc(tT('rankLoading'))+'</div>'
       +  '<div class="rank-card-pct" id="ovRankPct"></div>'
@@ -10517,6 +10564,17 @@ function triggerGameOver(){
       +'</div>'
       +'<button class="btn" id="ovBtn">'+esc(tT('retryBtn'))+'</button>'
       +'<div class="kbd-hint">'+esc(tT('enterRestart'))+'</div>';
+    {
+        /* 폭발 연출이 보이도록 결과 카드는 짧게 늦게 떠오른다(싱글만).
+           CSS 애니메이션 지연 동안에는 클릭을 막아 폭발 중 오터치로 재시작되지 않게. */
+        const ovEl = $('overlay');
+        ovEl.classList.remove('go-enter', 'go-lock');
+        if(!_isPvpDeath){
+            void ovEl.offsetWidth;
+            ovEl.classList.add('go-enter', 'go-lock');
+            setTimeout(()=>{ try{ ovEl.classList.remove('go-lock'); }catch(_){} }, 900);
+        }
+    }
     $('overlay').classList.remove('hidden');
     $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); });
     $('ovRankBtn').addEventListener('click', (e)=>{ e.stopPropagation(); openDodgeRankSheet(); });
@@ -10758,6 +10816,701 @@ function triggerGameOver(){
     }catch(_){}
 }
 
+/* =====================================================================
+   SPACE-Z FX v2 (2026-09-24) — 그래픽·조작감·타격감 개편
+   - 전부 시각 효과: Math.random() 만 쓰고 rand()(PvP 시드 RNG)는 건드리지 않는다
+   - 화면 흔들림 없음(운영자 원칙). 타격감은 짧은 정지(hitstop 85ms)·약한
+     번쩍임(≤0.12)·기체 찌그러짐·파편·충격파 링으로 낸다
+   - shadowBlur 대신 미리 구운 글로우 스프라이트를 drawImage — 모바일 부담 감소
+   ===================================================================== */
+const SZ_SPAWN_SAFE = 150;          /* 플레이어 코앞(px) 가장자리 스폰 금지 반경 */
+const SZ_SPAWN_OFF  = 34;           /* 화면 밖 스폰 거리 — 가장자리 경고 표시 시간을 번다 */
+const SZ_HITSTOP_MS = 85;
+const SZ_KB_ACC = 3000;             /* 키보드 가속 px/s² — 0.11초에 최고속 */
+const SZ_KB_DEC = 4400;             /* 손 떼면 0.07초 안에 정지 — 미끄러짐 없음 */
+let szHitStopUntil = 0;
+let szFlashUntil = 0, szFlashDur = 140, szFlashRGB = '255,255,255', szFlashPeak = 0.12;
+let szSquashUntil = 0;
+let szShipHidden = false;
+let szDeathFx = null;
+let szDebris = [];
+let szRings = [];
+let szPopups = [];
+let szExhaust = [];
+let szExhaustAcc = 0;
+let szPlayerVel = {x:0, y:0};
+let szBank = 0;
+let szPrevPos = null;
+let szKeyVel = {x:0, y:0};
+let szHeartBreak = [];
+let szLastGrazeSfx = 0;
+let szNebulaY = 0;
+
+function szMakeGlow(r, g, b, size){
+    const c = document.createElement('canvas');
+    c.width = c.height = size || 64;
+    const x = c.getContext('2d');
+    const h = c.width / 2;
+    const gr = x.createRadialGradient(h, h, 0, h, h, h);
+    gr.addColorStop(0,    'rgba(' + r + ',' + g + ',' + b + ',1)');
+    gr.addColorStop(0.28, 'rgba(' + r + ',' + g + ',' + b + ',0.55)');
+    gr.addColorStop(0.62, 'rgba(' + r + ',' + g + ',' + b + ',0.14)');
+    gr.addColorStop(1,    'rgba(' + r + ',' + g + ',' + b + ',0)');
+    x.fillStyle = gr;
+    x.fillRect(0, 0, c.width, c.height);
+    return c;
+}
+const SZ_GLOW = {
+    cold:   szMakeGlow(150, 190, 255),
+    hot:    szMakeGlow(255, 110, 40),
+    white:  szMakeGlow(255, 245, 225),
+    cyan:   szMakeGlow(0, 217, 255),
+    gold:   szMakeGlow(255, 214, 90),
+    pink:   szMakeGlow(255, 70, 120)
+};
+function szGlow(img, x, y, radius, alpha){
+    if(alpha <= 0.01) return;
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.drawImage(img, x - radius, y - radius, radius * 2, radius * 2);
+}
+
+/* ---- 성운 텍스처 — 부팅 시 1회 굽고 천천히 흘린다 ---- */
+const SZ_NEBULA = (function(){
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 512;
+    const x = c.getContext('2d');
+    const hues = [[40,180,255],[150,90,255],[255,70,160],[60,120,255],[0,220,200]];
+    for(let i = 0; i < 26; i++){
+        const h = hues[i % hues.length];
+        const cx = Math.random() * 256, cy = Math.random() * 512;
+        const r = 40 + Math.random() * 110;
+        const a = 0.05 + Math.random() * 0.07;
+        /* 위아래로 이어 붙여도 이음새가 없도록 세 번 찍는다 */
+        for(const dy of [-512, 0, 512]){
+            const gr = x.createRadialGradient(cx, cy + dy, 0, cx, cy + dy, r);
+            gr.addColorStop(0, 'rgba(' + h[0] + ',' + h[1] + ',' + h[2] + ',' + a + ')');
+            gr.addColorStop(1, 'rgba(' + h[0] + ',' + h[1] + ',' + h[2] + ',0)');
+            x.fillStyle = gr;
+            x.fillRect(0, 0, 256, 512);
+        }
+    }
+    return c;
+})();
+function szDrawNebula(dt){
+    const H = CW * 2;
+    szNebulaY = (szNebulaY + (dt || 0) * 7) % H;
+    const zi = currentZoneIdx || 0;
+    /* 태양계 안(0~5)은 옅게, 외곽·성간·은하 구간은 짙게 */
+    const a = zi >= 10 ? 0.95 : zi >= 6 ? 0.6 : 0.4;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = a;
+    ctx.drawImage(SZ_NEBULA, 0, szNebulaY - H, CW, H);
+    ctx.drawImage(SZ_NEBULA, 0, szNebulaY, CW, H);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+function szResetFx(){
+    szHitStopUntil = 0; szFlashUntil = 0; szSquashUntil = 0;
+    szShipHidden = false; szDeathFx = null;
+    szDebris = []; szRings = []; szPopups = []; szExhaust = []; szExhaustAcc = 0;
+    szPlayerVel = {x:0, y:0}; szBank = 0; szPrevPos = null;
+    szKeyVel = {x:0, y:0}; szHeartBreak = [];
+}
+
+/* 기체 실제 이동 속도(부드럽게) — 기울기·화염 길이·배기 방향에 쓴다 */
+function szTrackPlayer(dt){
+    if(!szPrevPos){ szPrevPos = {x:player.x, y:player.y}; return; }
+    if(dt > 0){
+        const rvx = (player.x - szPrevPos.x) / dt;
+        const rvy = (player.y - szPrevPos.y) / dt;
+        const k = Math.min(1, dt * 14);
+        szPlayerVel.x += (Math.max(-900, Math.min(900, rvx)) - szPlayerVel.x) * k;
+        szPlayerVel.y += (Math.max(-900, Math.min(900, rvy)) - szPlayerVel.y) * k;
+        const target = Math.max(-1, Math.min(1, szPlayerVel.x / 420)) * 0.34;
+        szBank += (target - szBank) * Math.min(1, dt * 12);
+    }
+    szPrevPos.x = player.x; szPrevPos.y = player.y;
+}
+
+/* 키보드 이동 — 목표 속도로 가속/감속. 즉시 최고속·즉시 정지보다 손맛이 있고,
+   0.1초 안에 반응해 굼뜨지 않다 */
+function szApproach(v, target, step){
+    if(v < target) return Math.min(target, v + step);
+    if(v > target) return Math.max(target, v - step);
+    return v;
+}
+function szKeyboardMove(mx, my, dt){
+    let tx = 0, ty = 0;
+    if(mx || my){
+        const mag = Math.sqrt(mx*mx + my*my);
+        tx = mx / mag * PLAYER_SPEED;
+        ty = my / mag * PLAYER_SPEED;
+    }
+    /* 방향 전환(부호 반대)·정지는 감속값, 가속은 가속값 */
+    const ax = (tx === 0 || tx * szKeyVel.x < 0) ? SZ_KB_DEC : SZ_KB_ACC;
+    const ay = (ty === 0 || ty * szKeyVel.y < 0) ? SZ_KB_DEC : SZ_KB_ACC;
+    szKeyVel.x = szApproach(szKeyVel.x, tx, ax * dt);
+    szKeyVel.y = szApproach(szKeyVel.y, ty, ay * dt);
+    player.x += szKeyVel.x * dt;
+    player.y += szKeyVel.y * dt;
+}
+
+function szSpawnExhaust(dt){
+    if(szShipHidden) return;
+    szExhaustAcc += dt * 58;
+    const tilt = szBank * 0.5;
+    while(szExhaustAcc >= 1){
+        szExhaustAcc -= 1;
+        const nx = player.x - Math.sin(tilt) * 16;
+        const ny = player.y + Math.cos(tilt) * 16;
+        szExhaust.push({
+            x: nx + (Math.random() - 0.5) * 3,
+            y: ny,
+            vx: (Math.random() - 0.5) * 24 - szPlayerVel.x * 0.18 - Math.sin(tilt) * 60,
+            vy: 120 + Math.random() * 70 + Math.max(0, -szPlayerVel.y) * 0.25,
+            life: 0.3 + Math.random() * 0.22,
+            max: 0.52,
+            r: 2 + Math.random() * 1.6
+        });
+    }
+    if(szExhaust.length > 80) szExhaust.splice(0, szExhaust.length - 80);
+}
+
+function szUpdateFx(dt){
+    if(!dt) return;
+    let w = 0;
+    for(let i = 0; i < szExhaust.length; i++){
+        const p = szExhaust[i];
+        p.life -= dt; if(p.life <= 0) continue;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.vx *= Math.pow(0.2, dt);
+        szExhaust[w++] = p;
+    }
+    szExhaust.length = w;
+    w = 0;
+    for(let i = 0; i < szDebris.length; i++){
+        const p = szDebris[i];
+        p.life -= dt; if(p.life <= 0) continue;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        const drag = Math.pow(p.drag || 0.35, dt);
+        p.vx *= drag; p.vy *= drag;
+        p.vy += (p.grav || 0) * dt;
+        p.rot += p.spin * dt;
+        szDebris[w++] = p;
+    }
+    szDebris.length = w;
+    w = 0;
+    for(let i = 0; i < szRings.length; i++){
+        const r = szRings[i];
+        r.t += dt; if(r.t >= r.dur) continue;
+        szRings[w++] = r;
+    }
+    szRings.length = w;
+    w = 0;
+    for(let i = 0; i < szPopups.length; i++){
+        const p = szPopups[i];
+        p.t += dt; if(p.t >= p.dur) continue;
+        szPopups[w++] = p;
+    }
+    szPopups.length = w;
+    if(szDebris.length > 160) szDebris.splice(0, szDebris.length - 160);
+}
+
+function szBurst(x, y, opts){
+    const o = opts || {};
+    const rocks = o.rocks || 0, sparks = o.sparks || 0, shards = o.shards || 0;
+    for(let i = 0; i < rocks; i++){
+        const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * (o.power || 160);
+        szDebris.push({kind:'rock', x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+            life:0.5 + Math.random()*0.5, max:1, r:1.6 + Math.random()*2.8,
+            rot:Math.random()*6.28, spin:(Math.random()-0.5)*12, drag:0.25, grav:40});
+    }
+    for(let i = 0; i < shards; i++){
+        const a = Math.random() * Math.PI * 2, sp = 90 + Math.random() * (o.power || 220);
+        szDebris.push({kind:'shard', x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+            life:0.8 + Math.random()*0.9, max:1.7, r:2 + Math.random()*3.5,
+            rot:Math.random()*6.28, spin:(Math.random()-0.5)*16, drag:0.3, grav:30});
+    }
+    for(let i = 0; i < sparks; i++){
+        const a = Math.random() * Math.PI * 2, sp = 80 + Math.random() * (o.power || 200) * 1.3;
+        szDebris.push({kind:'spark', x, y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+            life:0.25 + Math.random()*0.35, max:0.6, r:1 + Math.random()*1.4,
+            rot:0, spin:0, drag:0.12, grav:0, hot:Math.random() < 0.5});
+    }
+    if(o.ring) szRings.push({x, y, t:0, dur:o.ringDur || 0.45, r0:6, r1:o.ring, rgb:o.ringRGB || '255,210,120', w:o.ringW || 3});
+}
+
+function szFlash(rgb, peak, dur){
+    szFlashRGB = rgb; szFlashPeak = Math.min(0.12, peak); szFlashDur = dur;
+    szFlashUntil = performance.now() + dur;
+}
+
+function szPopup(text, x, y, color, size, dur){
+    szPopups.push({text, x, y, color:color || '#FFE66D', size:size || 14, t:0, dur:dur || 0.9});
+    if(szPopups.length > 6) szPopups.shift();
+}
+
+/* 피격 — 운석 파편 + 충격파 + 짧은 정지 + 약한 번쩍임 + 기체 찌그러짐 */
+function szOnHit(now, x, y){
+    const pvp = !!(pvpState && pvpState.gameMode === 'pvp');
+    if(!pvp) szHitStopUntil = now + SZ_HITSTOP_MS;
+    szSquashUntil = now + 240;
+    szFlash('255,90,110', 0.12, 160);
+    szBurst(x, y, {rocks:12, sparks:16, power:170, ring:46, ringRGB:'255,120,90', ringDur:0.4});
+    szHeartBreak.push({idx: Math.max(0, lives), t0: now});
+    if(szHeartBreak.length > 4) szHeartBreak.shift();
+}
+
+/* 스침(니어미스) — 작은 링 + 틱 소리 + 10콤보마다 팝업 */
+function szOnGraze(now){
+    szRings.push({x:player.x, y:player.y, t:0, dur:0.22, r0:10, r1:26, rgb:'255,230,109', w:1.4});
+    if(now - szLastGrazeSfx > 70 && typeof LPAudio !== 'undefined'){
+        szLastGrazeSfx = now;
+        try{ LPAudio.beep({freq: 900 + Math.min(40, comboCount) * 22, dur:0.035, vol:0.035, type:'triangle', decay:0.5}); }catch(_){}
+    }
+    if(comboCount > 0 && comboCount % 10 === 0){
+        const big = comboCount % 50 === 0;
+        const col = comboCount >= 50 ? '#FF6688' : comboCount >= 25 ? '#FF9A3C' : '#FFE66D';
+        szPopup('×' + comboCount + ' COMBO', player.x, player.y - 34, col, big ? 19 : 15, big ? 1.2 : 0.9);
+        if(big) szRings.push({x:player.x, y:player.y, t:0, dur:0.5, r0:14, r1:70, rgb:'255,102,136', w:2.4});
+    }
+}
+
+/* 사망 — 슬로모션 속에서 기체가 터지고, 0.85초 뒤 결과 카드 */
+function szStartDeathFx(now){
+    szDeathFx = {t0: now, x: player.x, y: player.y};
+    szShipHidden = true;
+    szHitStopUntil = 0;
+    try{ gravityFieldActive = false; }catch(_){}
+    szFlash('255,200,150', 0.12, 260);
+    szBurst(player.x, player.y, {shards:22, sparks:34, rocks:6, power:230, ring:120, ringRGB:'255,190,110', ringDur:0.7, ringW:4});
+    szRings.push({x:player.x, y:player.y, t:-0.12, dur:0.9, r0:10, r1:190, rgb:'0,217,255', w:2});
+    szKickIdle();
+}
+function szDrawDeathFx(now, dt){
+    const d = szDeathFx;
+    const t = (now - d.t0) / 1000;
+    const slow = t < 0.9 ? 0.25 : 0.6;          /* 첫 0.9초는 슬로모션 */
+    for(const b of bullets){ b.x += b.vx * dt * slow; b.y += b.vy * dt * slow; }
+    updateStars(dt * slow);
+    updateParticles(dt * slow);
+    updateCinematicFx(dt);
+    szUpdateFx(dt * (t < 0.9 ? 0.55 : 1));
+    drawFrame(now, 0);
+    /* 화구 */
+    if(t < 0.75){
+        const k = t / 0.75;
+        const R = 12 + 70 * (1 - Math.pow(1 - k, 3));
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        szGlow(SZ_GLOW.hot, d.x, d.y, R * 1.6, (1 - k) * 0.9);
+        szGlow(SZ_GLOW.white, d.x, d.y, R * 0.8, (1 - k) * 1.0);
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    }
+    if(t > 3.2) szDeathFx = null;   /* 이후엔 평상시 대기 배경 */
+}
+
+/* ---- 그리기 ---- */
+function szDrawExhaust(){
+    if(!szExhaust.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for(const p of szExhaust){
+        const k = p.life / p.max;               /* 1=막 나옴 → 0=사라짐 */
+        const img = k > 0.62 ? SZ_GLOW.cold : SZ_GLOW.hot;
+        szGlow(img, p.x, p.y, p.r * (1.6 + (1 - k) * 2.6), k * 0.5);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+function szDrawFxWorld(){
+    /* 파편·불꽃 */
+    if(szDebris.length){
+        ctx.save();
+        for(const p of szDebris){
+            const k = Math.max(0, p.life / p.max);
+            if(p.kind === 'spark'){
+                ctx.globalCompositeOperation = 'lighter';
+                szGlow(p.hot ? SZ_GLOW.hot : SZ_GLOW.gold, p.x, p.y, p.r * 4, k);
+                ctx.globalAlpha = Math.min(1, k * 1.4);
+                ctx.strokeStyle = p.hot ? '#FFD39A' : '#FFF6C8';
+                ctx.lineWidth = p.r;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(p.x - p.vx * 0.03, p.y - p.vy * 0.03);
+                ctx.stroke();
+                ctx.globalCompositeOperation = 'source-over';
+            } else {
+                ctx.globalAlpha = Math.min(1, k * 1.5);
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rot);
+                if(p.kind === 'rock'){
+                    ctx.fillStyle = '#6b6258';
+                    ctx.beginPath();
+                    ctx.moveTo(-p.r, -p.r*0.4); ctx.lineTo(-p.r*0.2, -p.r);
+                    ctx.lineTo(p.r, -p.r*0.3); ctx.lineTo(p.r*0.5, p.r); ctx.lineTo(-p.r*0.7, p.r*0.7);
+                    ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = 'rgba(255,170,90,' + (0.6 * k).toFixed(3) + ')';
+                    ctx.fillRect(-p.r*0.3, -p.r*0.3, p.r*0.6, p.r*0.6);
+                } else {
+                    /* 기체 파편 — 금속 조각 + 달아오른 모서리 */
+                    ctx.fillStyle = k > 0.5 ? '#d9e2ea' : '#8a96a2';
+                    ctx.beginPath();
+                    ctx.moveTo(-p.r, -p.r*0.25); ctx.lineTo(p.r, -p.r*0.5);
+                    ctx.lineTo(p.r*0.6, p.r*0.45); ctx.lineTo(-p.r*0.8, p.r*0.3);
+                    ctx.closePath(); ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,150,70,' + (0.8 * k).toFixed(3) + ')';
+                    ctx.lineWidth = 0.8;
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    }
+    /* 충격파 링 */
+    if(szRings.length){
+        ctx.save();
+        for(const r of szRings){
+            if(r.t < 0) continue;
+            const k = r.t / r.dur;
+            const e = 1 - Math.pow(1 - k, 3);
+            const rad = r.r0 + (r.r1 - r.r0) * e;
+            ctx.globalAlpha = (1 - k) * 0.85;
+            ctx.strokeStyle = 'rgb(' + r.rgb + ')';
+            ctx.lineWidth = r.w * (1 - k * 0.6);
+            ctx.beginPath();
+            ctx.arc(r.x, r.y, rad, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function szDrawPopups(){
+    if(!szPopups.length) return;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for(const p of szPopups){
+        const k = p.t / p.dur;
+        const pop = k < 0.15 ? 0.6 + (k / 0.15) * 0.55 : k < 0.28 ? 1.15 - ((k - 0.15) / 0.13) * 0.15 : 1;
+        const y = p.y - 26 * (1 - Math.pow(1 - k, 2));
+        const x = Math.max(60, Math.min(CW - 60, p.x));
+        ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+        ctx.font = '900 ' + Math.round(p.size * pop) + 'px Orbitron, sans-serif';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+        ctx.strokeText(p.text, x, y);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, x, y);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+function szDrawFlash(now){
+    if(now >= szFlashUntil) return;
+    const k = (szFlashUntil - now) / szFlashDur;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(szFlashPeak, szFlashPeak * k));
+    ctx.fillStyle = 'rgb(' + szFlashRGB + ')';
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+/* 화면 밖에서 들어오는 운석 — 가장자리 화살표로 미리 알린다 */
+function szDrawEdgeWarnings(){
+    if(!bullets.length) return;
+    ctx.save();
+    for(const b of bullets){
+        const out = b.x < 0 || b.x > CW || b.y < 0 || b.y > CH;
+        if(!out) continue;
+        /* 들어오는 중인 것만 */
+        if((b.x < 0 && b.vx <= 0) || (b.x > CW && b.vx >= 0) || (b.y < 0 && b.vy <= 0) || (b.y > CH && b.vy >= 0)) continue;
+        const ex = Math.max(7, Math.min(CW - 7, b.x));
+        const ey = Math.max(7, Math.min(CH - 7, b.y));
+        const dist = Math.max(-b.x, b.x - CW, -b.y, b.y - CH, 0);
+        const a = Math.max(0.3, 1 - dist / (SZ_SPAWN_OFF + 6));
+        const ang = Math.atan2(b.vy, b.vx);
+        ctx.globalCompositeOperation = 'lighter';
+        szGlow(b.aimed ? SZ_GLOW.hot : SZ_GLOW.gold, ex, ey, 13, a * 0.7);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = a;
+        ctx.save();
+        ctx.translate(ex, ey);
+        ctx.rotate(ang);
+        ctx.fillStyle = b.aimed ? '#FF6A3D' : '#FFE66D';
+        ctx.beginPath();
+        ctx.moveTo(6, 0); ctx.lineTo(-4, -5); ctx.lineTo(-1.5, 0); ctx.lineTo(-4, 5);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+/* 운석 — 속도 방향 꼬리(점점 굵어지는 선) + 회전 + 열기 글로우 */
+function szDrawBullets(now){
+    const TRAIL_CAP = 8;
+    const useSprite = szReady('meteor_a');
+    ctx.save();
+    ctx.lineCap = 'round';
+    for(const b of bullets){
+        const aimed = b.aimed;
+        const N = b.trailLen || 0;
+        if(N > 1){
+            const start = (b.trailHead - N + TRAIL_CAP) % TRAIL_CAP;
+            ctx.globalCompositeOperation = 'lighter';
+            let prev = b.trail[start];
+            for(let i = 1; i <= N; i++){
+                const cur = (i === N) ? b : b.trail[(start + i) % TRAIL_CAP];
+                const k = i / N;
+                ctx.globalAlpha = k * k * (aimed ? 0.62 : 0.5);
+                ctx.strokeStyle = aimed ? (k > 0.6 ? '#FFB070' : '#FF5A28') : (k > 0.6 ? '#DDE8FF' : '#7FA8FF');
+                ctx.lineWidth = 1 + 8.5 * k;
+                ctx.beginPath();
+                ctx.moveTo(prev.x, prev.y);
+                ctx.lineTo(cur.x, cur.y);
+                ctx.stroke();
+                prev = cur;
+            }
+            ctx.globalCompositeOperation = 'source-over';
+        }
+        /* 머리 뒤 글로우 — 어두운 운석이 배경에 묻히지 않게 (가독성) */
+        ctx.globalCompositeOperation = 'lighter';
+        szGlow(aimed ? SZ_GLOW.hot : SZ_GLOW.cold, b.x, b.y, aimed ? 24 : 21, aimed ? 0.62 : 0.42);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+        if(useSprite){
+            const key = SZ_METEOR_KEYS[(b._mv !== undefined ? b._mv : (b._mv = (Math.random() * 3) | 0))];
+            const im = SZ_SPRITES[key];
+            const R = 15;
+            if(b._mr === undefined) b._mr = Math.random() * Math.PI * 2;
+            if(b._ms === undefined) b._ms = (Math.random() - 0.5) * 4;
+            const rot = b._mr + now * 0.001 * b._ms;
+            ctx.save();
+            ctx.translate(b.x, b.y);
+            ctx.rotate(rot);
+            ctx.drawImage(im, -R, -R, R * 2, R * 2);
+            ctx.restore();
+            /* 진행 방향 앞쪽 가열 림 */
+            const sp = Math.hypot(b.vx, b.vy) || 1;
+            const fx = b.x + b.vx / sp * 7, fy = b.y + b.vy / sp * 7;
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(aimed ? SZ_GLOW.hot : SZ_GLOW.white, fx, fy, 9, aimed ? 0.55 : 0.28);
+            ctx.globalCompositeOperation = 'source-over';
+        } else {
+            ctx.fillStyle = aimed ? '#FF8844' : '#ffffff';
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+/* 기체 — 화염(3겹)·기울기·찌그러짐·무적 실드·히트박스 코어 */
+function szDrawShip(px, py, now, alpha, guestTint){
+    const inv = now < invincibleUntil;
+    const up = Math.max(-1, Math.min(1, -szPlayerVel.y / 300));
+    const thrust = 0.85 + up * 0.45;
+    const flick = Math.sin(flamePulse) * 0.5 + 0.5;
+    const L = (14 + flick * 6 + Math.random() * 2.5) * thrust;
+    const NZ = 14.5;
+
+    ctx.save();
+    ctx.translate(px, py);
+    /* 아래 깔리는 은은한 광원 */
+    ctx.globalCompositeOperation = 'lighter';
+    szGlow(SZ_GLOW.cyan, 0, 4, 34, 0.16 * alpha);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    ctx.rotate(szBank * 0.5);
+    let sx = 1 - Math.abs(szBank) * 0.26, sy = 1;
+    if(now < szSquashUntil){
+        const k = (szSquashUntil - now) / 240;
+        sx *= 1 + 0.28 * k; sy *= 1 - 0.22 * k;
+    }
+    ctx.scale(sx, sy);
+    if(guestTint){
+        try { ctx.filter = 'sepia(0.6) hue-rotate(-25deg) saturate(1.4) brightness(1.05)'; } catch(_){}
+    }
+
+    /* 엔진 화염 3겹 */
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha;
+    let g = ctx.createLinearGradient(0, NZ, 0, NZ + L * 1.55);
+    g.addColorStop(0, 'rgba(255,150,60,0.6)');
+    g.addColorStop(0.5, 'rgba(255,70,20,0.3)');
+    g.addColorStop(1, 'rgba(255,40,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(-5.5, NZ);
+    ctx.quadraticCurveTo(-7.5, NZ + L * 0.55, 0, NZ + L * 1.55);
+    ctx.quadraticCurveTo(7.5, NZ + L * 0.55, 5.5, NZ);
+    ctx.closePath(); ctx.fill();
+    g = ctx.createLinearGradient(0, NZ, 0, NZ + L);
+    g.addColorStop(0, 'rgba(255,244,210,0.95)');
+    g.addColorStop(0.35, 'rgba(255,190,80,0.7)');
+    g.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(-3.6, NZ);
+    ctx.quadraticCurveTo(-4.2, NZ + L * 0.45, 0, NZ + L);
+    ctx.quadraticCurveTo(4.2, NZ + L * 0.45, 3.6, NZ);
+    ctx.closePath(); ctx.fill();
+    g = ctx.createLinearGradient(0, NZ, 0, NZ + L * 0.5);
+    g.addColorStop(0, 'rgba(225,240,255,1)');
+    g.addColorStop(1, 'rgba(120,180,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(-2, NZ);
+    ctx.quadraticCurveTo(-2, NZ + L * 0.3, 0, NZ + L * 0.5);
+    ctx.quadraticCurveTo(2, NZ + L * 0.3, 2, NZ);
+    ctx.closePath(); ctx.fill();
+    szGlow(SZ_GLOW.hot, 0, NZ + 3, 13 + flick * 3, 0.5 * alpha);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = alpha;
+
+    if(szReady('ship')){
+        const SH = 46;
+        const im = SZ_SPRITES.ship;
+        const SW = SH * (im.naturalWidth / im.naturalHeight);
+        ctx.drawImage(im, -SW / 2, -SH * 0.62, SW, SH);
+    } else {
+        szDrawShipFallback();
+    }
+    try { ctx.filter = 'none'; } catch(_){}
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    /* 무적 — 깜빡여 사라지는 대신 회전하는 실드 링 (조종 중 기체를 놓치지 않게) */
+    if(inv){
+        const rem = Math.max(0, invincibleUntil - now) / INVINCIBLE_MS;
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(now * 0.004);
+        ctx.setLineDash([5, 6]);
+        ctx.strokeStyle = 'rgba(120,235,255,' + (0.35 + 0.35 * rem).toFixed(3) + ')';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.arc(0, -2, 25, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+    }
+    /* 히트박스 코어 — 판정 지점은 이 점 하나다 (탄막 게임 표준 가독성) */
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    szGlow(SZ_GLOW.cyan, px, py, 7 + pulse * 2, 0.55);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(px, py, 1.9, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
+function szDrawShipFallback(){
+    const finG=ctx.createLinearGradient(-16,5,16,5);
+    finG.addColorStop(0,'#1a2028'); finG.addColorStop(0.30,'#50606c');
+    finG.addColorStop(0.70,'#44545e'); finG.addColorStop(1,'#181e26');
+    ctx.fillStyle=finG;
+    ctx.beginPath();
+    ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8);
+    ctx.closePath(); ctx.fill();
+    const bG=ctx.createLinearGradient(-5,0,5,0);
+    bG.addColorStop(0,'#32404c'); bG.addColorStop(0.18,'#7c8c9a');
+    bG.addColorStop(0.44,'#c2ced8'); bG.addColorStop(0.64,'#cad4de');
+    bG.addColorStop(0.82,'#94a2ae'); bG.addColorStop(1,'#42505c');
+    ctx.fillStyle=bG;
+    ctx.beginPath();
+    ctx.moveTo(0,-19);
+    ctx.quadraticCurveTo(4,-13,5,-9);
+    ctx.lineTo(5,8); ctx.lineTo(-5,8); ctx.lineTo(-5,-9);
+    ctx.quadraticCurveTo(-4,-13,0,-19);
+    ctx.closePath(); ctx.fill();
+}
+
+/* 생명 HUD — 글자 ♥ 대신 그린 하트 + 잃을 때 두 쪽으로 갈라짐.
+   마지막 하나 남으면 두근거린다 (위기 신호) */
+function szHeartPath(x, y, s){
+    ctx.beginPath();
+    ctx.moveTo(x, y + s * 0.3);
+    ctx.bezierCurveTo(x, y, x - s * 0.5, y, x - s * 0.5, y + s * 0.3);
+    ctx.bezierCurveTo(x - s * 0.5, y + s * 0.6, x, y + s * 0.78, x, y + s);
+    ctx.bezierCurveTo(x, y + s * 0.78, x + s * 0.5, y + s * 0.6, x + s * 0.5, y + s * 0.3);
+    ctx.bezierCurveTo(x + s * 0.5, y, x, y, x, y + s * 0.3);
+    ctx.closePath();
+}
+function szDrawLives(now){
+    const s = 12, gap = 15, x0 = 16, y0 = 40;
+    ctx.save();
+    for(let i = 0; i < MAX_LIVES; i++){
+        const cx = x0 + i * gap;
+        if(i < lives){
+            const beat = (lives === 1) ? 1 + 0.14 * Math.max(0, Math.sin(now * 0.012)) : 1;
+            ctx.save();
+            ctx.translate(cx, y0 + s / 2);
+            ctx.scale(beat, beat);
+            ctx.translate(-cx, -(y0 + s / 2));
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.pink, cx, y0 + s * 0.5, 11, 0.35);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 1;
+            const g = ctx.createLinearGradient(cx, y0, cx, y0 + s);
+            g.addColorStop(0, '#FF7FA0'); g.addColorStop(1, '#E0164E');
+            ctx.fillStyle = g;
+            szHeartPath(cx, y0, s); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.beginPath(); ctx.arc(cx - s * 0.24, y0 + s * 0.27, s * 0.09, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        } else {
+            ctx.globalAlpha = 0.5;
+            ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+            ctx.lineWidth = 1;
+            szHeartPath(cx, y0, s); ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+    }
+    /* 방금 잃은 하트 — 반으로 갈라져 떨어진다 */
+    for(const hb of szHeartBreak){
+        const t = (now - hb.t0) / 650;
+        if(t < 0 || t >= 1) continue;
+        const cx = x0 + hb.idx * gap;
+        for(const side of [-1, 1]){
+            ctx.save();
+            ctx.globalAlpha = 1 - t;
+            ctx.translate(cx + side * 6 * t, y0 + s / 2 + 14 * t * t);
+            ctx.rotate(side * 0.6 * t);
+            ctx.translate(-cx, -(y0 + s / 2));
+            ctx.beginPath();
+            ctx.rect(side < 0 ? cx - s : cx, y0 - 2, s, s + 4);
+            ctx.clip();
+            ctx.fillStyle = '#FF3366';
+            szHeartPath(cx, y0, s); ctx.fill();
+            ctx.restore();
+        }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+
 /* ---- Main loop ---- */
 let lastFrame=0;
 function gameLoop(now){
@@ -10766,6 +11519,12 @@ function gameLoop(now){
     lastFrame=now;
 
     if(paused){
+        drawFrame(now, 0);
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+    /* 피격 순간 짧은 정지(hitstop) — 화면 흔들림 대신 쓰는 타격감. 싱글만. */
+    if(now < szHitStopUntil){
         drawFrame(now, 0);
         requestAnimationFrame(gameLoop);
         return;
@@ -10821,6 +11580,7 @@ function gameLoop(now){
        touchmove 에서 player 를 갱신하지 않음 (DOM/main-thread 부담 분산).
        desktop pointer 와 키보드는 기존 즉시 follow 유지. */
     flushTpInput();
+    if(pointer.active || pendingTp.active){ szKeyVel.x = 0; szKeyVel.y = 0; }
     if(pointer.active){
         const dx=pointer.x-player.x, dy=pointer.y-player.y;
         const dist=Math.sqrt(dx*dx+dy*dy);
@@ -10838,11 +11598,8 @@ function gameLoop(now){
         if(keys['ArrowRight']||keys['d']||keys['D']) mx+=1;
         if(keys['ArrowUp']) my-=1;
         if(keys['ArrowDown']) my+=1;
-        if(mx||my){
-            const mag=Math.sqrt(mx*mx+my*my);
-            player.x+=mx/mag*PLAYER_SPEED*dt;
-            player.y+=my/mag*PLAYER_SPEED*dt;
-        }
+        /* 2026-09-24 — 즉시 최고속/즉시 정지 → 짧은 가감속(0.1초). 조작감 개선 */
+        szKeyboardMove(mx, my, dt);
     }
     /* ---- PvP GRAV pull — 상대 우주선의 cone (forward -Y, ±45°, 180px) 안에
        본인이 있으면 상대 쪽으로 끌림. force 는 visible 강도 + 거리에 따라 강해짐.
@@ -10869,6 +11626,11 @@ function gameLoop(now){
 
     player.x=Math.max(16, Math.min(CW-16, player.x));
     player.y=Math.max(18, Math.min(CH-18, player.y));
+    /* 벽에 닿으면 키보드 관성도 0 — 벽에 붙어 미끄러지는 느낌 방지 */
+    if(player.x<=16 || player.x>=CW-16) szKeyVel.x = 0;
+    if(player.y<=18 || player.y>=CH-18) szKeyVel.y = 0;
+    szTrackPlayer(dt);
+    szSpawnExhaust(dt);
 
     /* ---- Spawn bullets ----
        WIPE 직후 5 초간 spawn 차단 — lastSpawn 을 now 로 계속 끌어올려서
@@ -10947,6 +11709,7 @@ function gameLoop(now){
                     if(comboCount > comboMaxThisRun) comboMaxThisRun = comboCount;
                     comboFlashUntil = now + 180;
                     spawnGrazeFx(b.x, b.y, now);
+                    szOnGraze(now);
                 }
             }
             if(b.x < -40 || b.x > CW + 40 || b.y < -40 || b.y > CH + 40) continue;
@@ -11030,10 +11793,12 @@ function gameLoop(now){
     if(now>invincibleUntil){
         const HR2 = (HIT_RADIUS+6) * (HIT_RADIUS+6);
         let hit = false;
+        let hitX = player.x, hitY = player.y;
         for(let i = 0; i < bullets.length; i++){
             const b = bullets[i];
             const dx = b.x - player.x, dy = b.y - player.y;
             if(dx*dx + dy*dy < HR2){
+                hitX = (b.x + player.x) / 2; hitY = (b.y + player.y) / 2;
                 bullets.splice(i, 1);
                 hit = true;
                 break;
@@ -11051,6 +11816,7 @@ function gameLoop(now){
         if(hit){
             triggerHitFx(now);
             lives--;
+            szOnHit(now, hitX, hitY);
             invincibleUntil = now + INVINCIBLE_MS;
             flashVisible = true;
             lastFlashToggle = now;
@@ -11086,6 +11852,7 @@ function gameLoop(now){
     /* ---- Particles ---- */
     updateParticles(dt);
     updateCinematicFx(dt);
+    szUpdateFx(dt);
 
     /* ---- Flame pulse ---- */
     flamePulse=(flamePulse+dt*12)%(Math.PI*2);
@@ -11173,6 +11940,8 @@ function gameLoop(now){
 function drawFrame(now, dt){
     /* ---- Background ---- */
     drawBackground();
+    /* 성운 층 — 천천히 흐르는 색 구름 (2026-09-24) */
+    szDrawNebula(dt);
 
     /* ---- Zone planet/object ---- */
     drawZonePlanet(currentZoneIdx, dt);
@@ -11187,52 +11956,10 @@ function drawFrame(now, dt){
        PERF v3: trail 8-sample ring buffer + 단일 패스로 통합 (이전 2-layer
        halo+core 는 30 bullets × 16 trail × 2 = 960 arc → 30 × 8 × 1 = 240).
        halo 효과는 head 의 shadowBlur 로 대체 — 글로우 시각 유지. */
-    const TRAIL_CAP = 8;
-    for(const b of bullets){
-        const headColor = b.aimed ? '#FF8844' : '#ffffff';
-        const haloColor = b.aimed ? '#FF5500' : '#aaaaff';
-        const N = b.trailLen || 0;
-        if(N > 0){
-            /* ring buffer: 가장 오래된 = (head - N + CAP) % CAP, 가장 새 = (head - 1 + CAP) % CAP */
-            const start = (b.trailHead - N + TRAIL_CAP) % TRAIL_CAP;
-            ctx.fillStyle = headColor;
-            for(let i = 0; i < N; i++){
-                const idx = (start + i) % TRAIL_CAP;
-                const t = b.trail[idx];
-                const k = (i + 1) / N;       /* 0 = 꼬리 끝, 1 = head */
-                ctx.globalAlpha = k * k * 0.78;
-                ctx.beginPath();
-                ctx.arc(t.x, t.y, 0.6 + 3.5 * k, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-        ctx.globalAlpha = 1;
-
-        /* HEAD — Blender 렌더 운석 스프라이트 (2026-08-21).
-           예전엔 반지름 6 의 단색 원이었다. 꼬리 트레일은 속도감을 만드니
-           그대로 두고 머리만 실제 암석으로 바꾼다. 3종을 인덱스로 골라
-           개별 각도를 주면 같은 스프라이트를 써도 다 달라 보인다. */
-        ctx.shadowColor = haloColor;
-        ctx.shadowBlur = 10;
-        if(szReady('meteor_a')){
-            const key = SZ_METEOR_KEYS[(b._mv !== undefined ? b._mv : (b._mv = (Math.random() * 3) | 0))];
-            const im = SZ_SPRITES[key];
-            const R = 15;                         /* 표시 지름 절반 — 원(6)보다 크게 */
-            const rot = (b._mr !== undefined ? b._mr : (b._mr = Math.random() * Math.PI * 2));
-            ctx.save();
-            ctx.translate(b.x, b.y);
-            ctx.rotate(rot);
-            ctx.drawImage(im, -R, -R, R * 2, R * 2);
-            ctx.restore();
-        } else {
-            ctx.fillStyle = headColor;
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, 6, 0, Math.PI*2);
-            ctx.fill();
-        }
-        ctx.shadowBlur = 0;
-    }
-    ctx.globalAlpha = 1;
+    /* 2026-09-24 — 꼬리 선 + 회전 + 글로우 스프라이트 (szDrawBullets). 예전 원형 점
+       꼬리 + shadowBlur 는 모바일에서 무겁고 어두운 운석이 배경에 묻혔다 */
+    szDrawBullets(now);
+    szDrawEdgeWarnings();
 
     /* ---- Stage 2-6 zone obstacles — order matters for layering.
        Background-feeling things (rings, flares) below mid-layer (rocks,
@@ -11261,70 +11988,19 @@ function drawFrame(now, dt){
     /* ---- Cinematic feedback (graze sparks, hit debris, zone warp) ---- */
     drawCinematicFx(now);
 
-    /* ---- Player: SpaceX Starship (ogive nose, SUS metallic) ---- */
-    if(flashVisible){
+    /* ---- 파편·충격파 (2026-09-24) ---- */
+    szDrawFxWorld();
+
+    /* ---- Player ----
+       2026-09-24 개편: 배기 입자 + 3겹 화염 + 이동 방향 기울기 + 피격 찌그러짐.
+       무적 중에는 사라졌다 나타나는 깜빡임 대신 반투명 + 회전 실드 링 —
+       피격 직후 기체 위치를 놓쳐 연속 피격되던 문제. */
+    if(!szShipHidden){
         const px=player.x, py=player.y;
-        ctx.save();
-        ctx.translate(px, py);
-        /* PvP guest 면 ship 색을 gold 톤으로. ctx.filter 로 sepia+hue-rotate
-           조합. 모바일 Safari 13+/Chrome Android 50+ 지원 (대부분 OK). */
         const _pvpGuestTint = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.role === 'guest');
-        if(_pvpGuestTint){
-            try { ctx.filter = 'sepia(0.6) hue-rotate(-25deg) saturate(1.4) brightness(1.05)'; } catch(_){}
-        }
-
-        /* Raptor exhaust — blue-white core → orange → fade */
-        const fl=9+Math.sin(flamePulse)*5;
-        const flG=ctx.createLinearGradient(0,8,0,8+fl+9);
-        flG.addColorStop(0,   'rgba(215,228,255,1)');
-        flG.addColorStop(0.10,'rgba(100,160,255,.95)');
-        flG.addColorStop(0.42,'rgba(255,172,28,.85)');
-        flG.addColorStop(1,   'rgba(255,48,0,0)');
-        ctx.fillStyle=flG;
-        ctx.beginPath();
-        ctx.moveTo(-5,8); ctx.lineTo(0,8+fl+9); ctx.lineTo(5,8);
-        ctx.closePath(); ctx.fill();
-
-        /* 기체 — Blender 렌더 스프라이트 (2026-08-21).
-           예전에는 핀·동체·히트실드·시닝을 캔버스 도형으로 그렸다. 형태는
-           나쁘지 않았지만 평면적이라 배경 행성·운석과 질감이 겉돌았다.
-           화염은 위에서 이미 캔버스로 그렸다 — flamePulse 맥동이 살아 있어
-           스프라이트보다 낫다. 기체를 그 위에 겹친다. */
-        if(szReady('ship')){
-            const SH = 46;                       /* 표시 높이(px). 히트박스(5)는 그대로.
-                                                    스타십은 실제 비율(1:5.5)이라 폭이 좁아 40 이면 작게 읽힌다 */
-            const im = SZ_SPRITES.ship;
-            const SW = SH * (im.naturalWidth / im.naturalHeight);
-            /* 스프라이트 중심을 기존 동체 중심(대략 y=-5)에 맞춘다 */
-            ctx.drawImage(im, -SW / 2, -SH * 0.62, SW, SH);
-        } else {
-            /* ---- 폴백: 기존 캔버스 기체 ---- */
-            const finG=ctx.createLinearGradient(-16,5,16,5);
-            finG.addColorStop(0,'#1a2028'); finG.addColorStop(0.30,'#50606c');
-            finG.addColorStop(0.70,'#44545e'); finG.addColorStop(1,'#181e26');
-            ctx.fillStyle=finG;
-            ctx.beginPath();
-            ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8);
-            ctx.closePath(); ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8);
-            ctx.closePath(); ctx.fill();
-            const bG=ctx.createLinearGradient(-5,0,5,0);
-            bG.addColorStop(0,'#32404c'); bG.addColorStop(0.18,'#7c8c9a');
-            bG.addColorStop(0.44,'#c2ced8'); bG.addColorStop(0.64,'#cad4de');
-            bG.addColorStop(0.82,'#94a2ae'); bG.addColorStop(1,'#42505c');
-            ctx.shadowColor='rgba(170,188,210,0.50)'; ctx.shadowBlur=8;
-            ctx.fillStyle=bG;
-            ctx.beginPath();
-            ctx.moveTo(0,-19);
-            ctx.quadraticCurveTo(4,-13,5,-9);
-            ctx.lineTo(5,8); ctx.lineTo(-5,8); ctx.lineTo(-5,-9);
-            ctx.quadraticCurveTo(-4,-13,0,-19);
-            ctx.closePath(); ctx.fill();
-            ctx.shadowBlur=0;
-        }
-
-        ctx.restore();
+        const invNow = now < invincibleUntil;
+        szDrawExhaust();
+        szDrawShip(px, py, now, invNow ? (flashVisible ? 0.95 : 0.42) : 1, _pvpGuestTint);
         /* PvP 모드 시 본인 닉네임 — 우주선 아래, 반투명. */
         if(typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.me){
             ctx.save();
@@ -11334,6 +12010,8 @@ function drawFrame(now, dt){
             ctx.fillText((pvpState.me.nickname || '').substring(0, 10), px, py + 22);
             ctx.restore();
         }
+    } else {
+        szDrawExhaust();
     }
 
     /* ---- PvP 상대 우주선 ---- */
@@ -11359,20 +12037,13 @@ function drawFrame(now, dt){
     drawBoundaryLabel(dt);
     /* 현재 구간과 다음 목적지를 짧게 보여주는 항로 디렉터 */
     drawFlightDirector(now);
+    /* 콤보 팝업 — 블룸 뒤에 그려 글자가 선명하게 */
+    szDrawPopups();
 
     /* ---- HUD: lives (max MAX_LIVES, 현재 lives 만큼 채움) ----
        2026-05-11 v5 — score-strip HTML overlay (y=5-30) 와 안 겹치게 y=10→y=40.
        하트 크기도 16→13 으로 축소 (overlay 와 위계 분리). */
-    const heartSize=13;
-    const heartPad=2;
-    for(let i=0;i<MAX_LIVES;i++){
-        ctx.globalAlpha=i<lives?0.92:0.16;
-        ctx.fillStyle='#FF3366';
-        ctx.font='bold '+heartSize+'px sans-serif';
-        ctx.textBaseline='top';
-        ctx.fillText('♥', 10+i*(heartSize+heartPad), 40);
-    }
-    ctx.globalAlpha=1;
+    szDrawLives(now);
 
     /* ---- HUD: level badge ---- 2026-05-11 v5: y=10→y=40, font 13→11 ---- */
     const s=running?elapsedMs/1000:0;
@@ -11386,6 +12057,7 @@ function drawFrame(now, dt){
         ctx.textAlign='left';
     }
     drawDangerVignette(now);
+    szDrawFlash(now);
 
     /* ---- Pause indicator ---- */
     if(paused){
@@ -11411,17 +12083,29 @@ function drawFrame(now, dt){
 
 /* ---- RAF kick-off for idle star animation ---- */
 function idleLoop(now){
-    if(running)return;
+    if(running){ idleLoop._on = false; return; }
+    idleLoop._on = true;
     lastFrame=now;
+    const idt = Math.min(0.05, Math.max(0, (now-(idleLoop._last||now))/1000));
     if(introLaunchActive){
         /* MECHAZILLA 발사 시퀀스 — 카운트다운 동안 캔버스 점령 */
         drawMechazillaLaunch(now);
+    } else if(szDeathFx){
+        /* 게임오버 폭발 연출 — 마지막 판 화면 위에 파편·충격파를 그린다 */
+        szDrawDeathFx(now, idt);
     } else {
-        updateStars((now-(idleLoop._last||now))/1000);
+        updateStars(idt);
         drawBackground();
+        szDrawNebula(idt);
         drawStars();
     }
     idleLoop._last=now;
+    requestAnimationFrame(idleLoop);
+}
+function szKickIdle(){
+    if(idleLoop._on) return;
+    idleLoop._on = true;
+    idleLoop._last = performance.now();
     requestAnimationFrame(idleLoop);
 }
 
@@ -12733,12 +13417,12 @@ $('pauseBtn').addEventListener('click', (e)=>{
     /* boot 시점 1회 호출 — 폰/터치면 gameCtrl 인라인 display:none 유지,
        PC 면 풀어둠 (게임 시작 전엔 어차피 안 보이지만 init state 통일). */
     syncPauseUI();
-    requestAnimationFrame(idleLoop);
+    szKickIdle();
     if(matchMedia('(min-width:1024px)').matches) loadLeaderboard('world');
 })();
 </script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
-<script src="/js/siteFooter.js?v=1790222410"></script>
+<script src="/js/siteFooter.js?v=1790226484"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
