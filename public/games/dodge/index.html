@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790240270">
+<meta name="lp-build" content="1790250184">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790240270";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790250184";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1427,10 +1427,10 @@ body::after{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1790240270"></script>
-<script src="/js/lpI18n.js?v=1790240270"></script>
-<script src="/js/lpRankSheet.js?v=1790240270"></script>
-<script src="/js/lpAudio.js?v=1790240270"></script>
+<script src="/js/supabase-config.js?v=1790250184"></script>
+<script src="/js/lpI18n.js?v=1790250184"></script>
+<script src="/js/lpRankSheet.js?v=1790250184"></script>
+<script src="/js/lpAudio.js?v=1790250184"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -7387,6 +7387,251 @@ function drawSolarFlares(){
     }
 }
 
+
+/* =====================================================================
+   NEW HAZARDS v3 (2026-09-24) — 운영자: "너무 완만히 어려워진다, 더 다채롭게".
+   비어 있던 '관광' 구간(5~7·9~11·13~14·16~18)에 구간마다 새 위협을 하나씩 준다.
+   · ☄️ 혜성(COMET)   — 0.9초 붉은 점선 예고 → 흰 머리 + 긴 꼬리가 화면을 가로지른다
+   · 💥 분열암(SPLIT) — 붉게 달아오르며 내려오는 큰 바위가 일정 높이에서 사방으로 터진다
+   · 🌊 편대(WAVE)    — 틈 하나 있는 벽 / V자 / 나선 / 옆 벽. 0.8초 예고(틈은 초록으로 표시)
+   은하 가장자리(19) 이후는 셋이 섞여 나온다. 모두 randH()(위험물 전용 시드 수열)로
+   정해 동시 대결·도전장에서 같은 코스가 유지된다. 파편·편대 운석은 일반 운석 배열에 넣어
+   그리기·충돌·그레이즈 콤보를 그대로 쓴다. 화면 흔들림 없음.
+   ===================================================================== */
+const COMET_ZONES = new Set([5, 9, 13, 17]);
+const SPLIT_ZONES = new Set([6, 10, 14, 18]);
+const WAVE_ZONES  = new Set([7, 11, 16]);
+const NH_MIX_FROM = 20;                 /* 이 구간부터는 셋이 섞인다 */
+const COMET_WARN_MS = 900, COMET_SPEED = 820, COMET_R = 11;
+const SPLIT_R = 24, SPLIT_FRAGS = 8;
+const WAVE_WARN_MS = 800;
+const NH_WARN_TOP = 66;                /* 위 가장자리 경고는 HUD(시간·하트 줄) 아래에 그린다 */
+let comets = [], splitters = [], waves = [];
+let lastCometAt = 0, lastSplitAt = 0, lastWaveAt = 0, lastMixAt = 0;
+function nhReset(){ comets = []; splitters = []; waves = []; lastCometAt = lastSplitAt = lastWaveAt = lastMixAt = 0; }
+function nhClear(){ comets = []; splitters = []; waves = []; }
+function _nhSfx(kind){
+    try{
+        if(kind === 'warn'){ LPAudio.beep({freq:940, dur:0.07, vol:0.07, type:'square', decay:0.5}); setTimeout(()=>{ try{LPAudio.beep({freq:940, dur:0.07, vol:0.07, type:'square', decay:0.5})}catch(_){} }, 130); }
+        else if(kind === 'comet'){ LPAudio.noise({dur:0.45, vol:0.13}); LPAudio.beep({freq:1400, dur:0.5, vol:0.08, type:'sawtooth', slide:180, decay:0.9}); }
+        else if(kind === 'split'){ LPAudio.noise({dur:0.32, vol:0.2}); LPAudio.beep({freq:150, dur:0.35, vol:0.2, type:'sine', slide:45, decay:0.9}); }
+        else if(kind === 'wave'){ LPAudio.seq([{f:520,d:0.06},{f:660,d:0.06},{f:880,d:0.1}], {vol:0.08, type:'square'}); }
+    }catch(_){}
+}
+
+/* ── ☄️ 혜성 ── 화면을 가로지르는 직선. 한 변에서 반대 변으로(대각선 포함) */
+function spawnComet(){
+    const side = Math.floor(randH() * 3);          /* 0 위→아래, 1 왼→오, 2 오→왼 */
+    let x1, y1, x2, y2;
+    if(side === 0){ x1 = 30 + randH() * (CW - 60); y1 = -30; x2 = 30 + randH() * (CW - 60); y2 = CH + 30; }
+    else if(side === 1){ x1 = -30; y1 = CH * (0.15 + randH() * 0.7); x2 = CW + 30; y2 = CH * (0.15 + randH() * 0.7); }
+    else { x1 = CW + 30; y1 = CH * (0.15 + randH() * 0.7); x2 = -30; y2 = CH * (0.15 + randH() * 0.7); }
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    comets.push({x1, y1, x2, y2, len, phase:'warn', t:0, x:x1, y:y1, trail:[]});
+    _nhSfx('warn');
+}
+function updateComets(dt){
+    for(let i = comets.length - 1; i >= 0; i--){
+        const c = comets[i];
+        c.t += dt * 1000;
+        if(c.phase === 'warn'){
+            if(c.t >= COMET_WARN_MS){ c.phase = 'fly'; c.t = 0; _nhSfx('comet'); }
+            continue;
+        }
+        const d = Math.min(c.len, c.t / 1000 * COMET_SPEED), k = d / c.len;
+        c.x = c.x1 + (c.x2 - c.x1) * k; c.y = c.y1 + (c.y2 - c.y1) * k;
+        c.trail.push({x:c.x, y:c.y}); if(c.trail.length > 16) c.trail.shift();
+        if(k >= 1) comets.splice(i, 1);
+    }
+}
+function checkCometCollision(){
+    const R = COMET_R + HIT_RADIUS;
+    for(const c of comets){
+        if(c.phase !== 'fly') continue;
+        const dx = c.x - player.x, dy = c.y - player.y;
+        if(dx*dx + dy*dy < R*R) return true;
+    }
+    return false;
+}
+function drawComets(now){
+    for(const c of comets){
+        ctx.save();
+        if(c.phase === 'warn'){
+            const p = c.t / COMET_WARN_MS, pulse = 0.35 + Math.abs(Math.sin(c.t * 0.016)) * 0.5;
+            ctx.strokeStyle = `rgba(255,120,80,${pulse})`; ctx.lineWidth = 2;
+            ctx.setLineDash([8, 8]); ctx.lineDashOffset = -c.t * 0.12;
+            ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); ctx.setLineDash([]);
+            /* 진입 지점 경고 삼각형 — 화면 안쪽으로 당겨서 그린다 */
+            const ex = Math.max(16, Math.min(CW - 16, c.x1)), ey = Math.max(NH_WARN_TOP, Math.min(CH - 16, c.y1));
+            ctx.fillStyle = `rgba(255,90,70,${0.5 + 0.5 * Math.abs(Math.sin(c.t * 0.02))})`;
+            ctx.font = '900 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('⚠', ex, ey);
+            /* 모이는 빛 — 예고가 끝나갈수록 진입점이 밝아진다 */
+            const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, 26 * p + 4);
+            g.addColorStop(0, `rgba(255,220,180,${0.55 * p})`); g.addColorStop(1, 'rgba(255,120,60,0)');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(ex, ey, 26 * p + 4, 0, 6.283); ctx.fill();
+        } else {
+            /* 꼬리 — 뒤로 갈수록 가늘고 푸르게 */
+            const tr = c.trail;
+            for(let j = 1; j < tr.length; j++){
+                const a = j / tr.length;
+                ctx.strokeStyle = `rgba(${Math.round(140 + 115 * a)},${Math.round(200 + 55 * a)},255,${0.55 * a})`;
+                ctx.lineWidth = 2 + 14 * a; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(tr[j - 1].x, tr[j - 1].y); ctx.lineTo(tr[j].x, tr[j].y); ctx.stroke();
+            }
+            const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, COMET_R * 2.6);
+            g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.35, 'rgba(200,235,255,0.9)'); g.addColorStop(1, 'rgba(90,170,255,0)');
+            ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, COMET_R * 2.6, 0, 6.283); ctx.fill();
+            if(Math.random() < 0.6 && typeof _pushFxSpark === 'function' && typeof grazeSparks !== 'undefined')
+                _pushFxSpark(grazeSparks, c.x, c.y, '#BFE6FF', 90, 0.35);
+        }
+        ctx.restore();
+    }
+}
+
+/* ── 💥 분열암 ── */
+function spawnSplitter(){
+    splitters.push({x: 50 + randH() * (CW - 100), y: -SPLIT_R - 6, vy: 62 + randH() * 22,
+        splitY: CH * (0.26 + randH() * 0.16), rot: randH() * 6.28, spin: (randH() - 0.5) * 1.6,
+        off: randH() * 6.28, speed: 150 + randH() * 40, t: 0});
+}
+function updateSplitters(dt){
+    for(let i = splitters.length - 1; i >= 0; i--){
+        const s = splitters[i];
+        s.t += dt; s.y += s.vy * dt; s.rot += s.spin * dt;
+        if(s.y >= s.splitY){
+            for(let k = 0; k < SPLIT_FRAGS; k++){
+                const a = s.off + k * Math.PI * 2 / SPLIT_FRAGS;
+                bullets.push({x: s.x + Math.cos(a) * 8, y: s.y + Math.sin(a) * 8, vx: Math.cos(a) * s.speed, vy: Math.sin(a) * s.speed, aimed: false, trail: [], frag: true});
+            }
+            try{ szBurst(s.x, s.y, {rocks: 10, sparks: 18, power: 190, ring: 70, ringRGB: '255,120,70', ringDur: 0.45}); }catch(_){}
+            _nhSfx('split');
+            splitters.splice(i, 1);
+        }
+    }
+}
+function checkSplitterCollision(){
+    const R = SPLIT_R * 0.85 + HIT_RADIUS;
+    for(const s of splitters){ const dx = s.x - player.x, dy = s.y - player.y; if(dx*dx + dy*dy < R*R) return true; }
+    return false;
+}
+function drawSplitters(){
+    for(const s of splitters){
+        const heat = Math.max(0, Math.min(1, (s.y + SPLIT_R) / (s.splitY + SPLIT_R)));
+        const beat = heat > 0.65 ? 0.5 + 0.5 * Math.sin(s.t * (8 + heat * 16)) : 0;
+        ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.rot);
+        /* 달아오르는 겉불 */
+        const g = ctx.createRadialGradient(0, 0, SPLIT_R * 0.4, 0, 0, SPLIT_R * 1.9);
+        g.addColorStop(0, `rgba(255,${Math.round(150 - 90 * heat)},60,${0.25 + 0.45 * heat + 0.2 * beat})`); g.addColorStop(1, 'rgba(255,60,30,0)');
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, SPLIT_R * 1.9, 0, 6.283); ctx.fill();
+        /* 몸통 — 울퉁불퉁한 다각형 */
+        ctx.fillStyle = '#5B4A44'; ctx.strokeStyle = '#2A201D'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for(let k = 0; k < 9; k++){ const a = k / 9 * 6.283, r = SPLIT_R * (0.82 + 0.18 * Math.sin(k * 2.7 + 1)); k ? ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r) : ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        /* 빛나는 균열 — 터질 때가 가까울수록 굵고 밝게 */
+        ctx.strokeStyle = `rgba(255,${Math.round(200 - 80 * heat)},90,${0.35 + 0.65 * heat})`;
+        ctx.lineWidth = 1.5 + 2.5 * heat; ctx.lineCap = 'round';
+        ctx.beginPath();
+        for(let k = 0; k < 5; k++){ const a = k * 1.26 + 0.3; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * SPLIT_R * 0.55, Math.sin(a) * SPLIT_R * 0.55); ctx.lineTo(Math.cos(a + 0.35) * SPLIT_R * 0.9, Math.sin(a + 0.35) * SPLIT_R * 0.9); }
+        ctx.stroke();
+        ctx.restore();
+    }
+}
+
+/* ── 🌊 편대 ── 예고(틈 표시) → 발사. 나선은 1.2초에 걸쳐 차례로 쏜다 */
+function spawnWave(speed){
+    const kinds = ['wall', 'vee', 'spiral', 'side'];
+    const kind = kinds[Math.floor(randH() * kinds.length)];
+    const w = {kind, t: 0, phase: 'warn', speed: Math.round(speed * 0.82), gap: 0, side: randH() < 0.5 ? -1 : 1, emitted: 0, cx: 60 + randH() * (CW - 120), rot: randH() * 6.28};
+    if(kind === 'wall') w.gap = 1 + Math.floor(randH() * 7);        /* 9칸 중 틈 1칸(+옆 반칸 여유) */
+    if(kind === 'side') w.gap = 1 + Math.floor(randH() * 8);        /* 11칸 중 틈 */
+    waves.push(w);
+    _nhSfx('wave');
+}
+function _waveEmit(w){
+    const sp = w.speed;
+    if(w.kind === 'wall'){
+        const n = 9, step = CW / n;
+        for(let k = 0; k < n; k++){ if(k === w.gap) continue; bullets.push({x: step * (k + 0.5), y: -SZ_SPAWN_OFF, vx: 0, vy: sp, aimed: false, trail: [], wave: true}); }
+    } else if(w.kind === 'side'){
+        const n = 11, step = CH * 0.8 / n, x0 = w.side < 0 ? -SZ_SPAWN_OFF : CW + SZ_SPAWN_OFF;
+        for(let k = 0; k < n; k++){ if(k === w.gap || k === w.gap + 1) continue; bullets.push({x: x0, y: CH * 0.1 + step * (k + 0.5), vx: -w.side * sp * 0.85, vy: 0, aimed: false, trail: [], wave: true}); }
+    }
+}
+function updateWaves(dt){
+    for(let i = waves.length - 1; i >= 0; i--){
+        const w = waves[i];
+        w.t += dt * 1000;
+        if(w.phase === 'warn'){
+            if(w.t >= WAVE_WARN_MS){ w.phase = 'go'; w.t = 0; if(w.kind === 'wall' || w.kind === 'side'){ _waveEmit(w); waves.splice(i, 1); } }
+            continue;
+        }
+        /* V자: 화면 밖 40px 너머는 즉시 지워지므로 뒤 열을 시간차(90ms)로 쏜다 — 앞장선 한 발 뒤로 날개가 펼쳐진다 */
+        if(w.kind === 'vee'){
+            const due = Math.min(4, Math.floor(w.t / 90) + 1);
+            while(w.emitted < due){
+                const k = w.emitted;
+                for(const s of (k === 0 ? [0] : [-k, k])) bullets.push({x: w.cx + s * 26, y: -SZ_SPAWN_OFF, vx: 0, vy: w.speed, aimed: false, trail: [], wave: true});
+                w.emitted++;
+            }
+            if(w.emitted >= 4) waves.splice(i, 1);
+            continue;
+        }
+        /* 나선: 화면 위 가운데 근처에서 12발을 돌려 가며 */
+        const due = Math.min(12, Math.floor(w.t / 100) + 1);
+        while(w.emitted < due){
+            const a = w.rot + w.emitted * 0.52, x = w.cx, y = -SZ_SPAWN_OFF + 4;
+            const vx = Math.sin(a) * w.speed * 0.55, vy = w.speed * (0.75 + 0.25 * Math.cos(a));
+            bullets.push({x, y, vx, vy, aimed: false, trail: [], wave: true});
+            w.emitted++;
+        }
+        if(w.emitted >= 12) waves.splice(i, 1);
+    }
+}
+function drawWaves(){
+    for(const w of waves){
+        if(w.phase !== 'warn') continue;
+        const p = w.t / WAVE_WARN_MS, blink = 0.45 + 0.55 * Math.abs(Math.sin(w.t * 0.018));
+        ctx.save();
+        ctx.font = '900 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(255,60,60,.8)'; ctx.shadowBlur = 8;
+        if(w.kind === 'wall'){
+            const n = 9, step = CW / n;
+            for(let k = 0; k < n; k++){
+                if(k === w.gap){ ctx.fillStyle = `rgba(90,255,160,${0.12 + 0.14 * blink})`; ctx.fillRect(step * k + 3, 0, step - 6, CH * 0.22 * p + 10); continue; }
+                ctx.fillStyle = `rgba(255,90,80,${blink})`; ctx.fillText('▼', step * (k + 0.5), NH_WARN_TOP);
+            }
+        } else if(w.kind === 'side'){
+            const n = 11, step = CH * 0.8 / n, x = w.side < 0 ? 10 : CW - 10;
+            for(let k = 0; k < n; k++){
+                const y = CH * 0.1 + step * (k + 0.5);
+                if(k === w.gap || k === w.gap + 1){ ctx.fillStyle = `rgba(90,255,160,${0.12 + 0.14 * blink})`; ctx.fillRect(w.side < 0 ? 0 : CW - CW * 0.25 * p - 10, y - step / 2 + 2, CW * 0.25 * p + 10, step - 4); continue; }
+                ctx.fillStyle = `rgba(255,90,80,${blink})`; ctx.fillText(w.side < 0 ? '▶' : '◀', x, y);
+            }
+        } else {
+            ctx.fillStyle = `rgba(255,90,80,${blink})`;
+            for(let k = -2; k <= 2; k++) ctx.fillText('▼', w.cx + k * 18, NH_WARN_TOP + Math.abs(k) * 5);
+        }
+        ctx.restore();
+    }
+}
+
+/* 구간별 스폰 — 게임 루프(비 PvP)에서 호출. 섞임 구간은 9초마다 하나를 뽑는다 */
+function nhSpawnTick(now, zone, diff){
+    if(zone >= NH_MIX_FROM){
+        if(now - lastMixAt > 9000){
+            lastMixAt = now;
+            const r = randH();
+            if(r < 0.34) spawnComet(); else if(r < 0.67) spawnSplitter(); else spawnWave(diff.bulletSpeed);
+        }
+        return;
+    }
+    if(COMET_ZONES.has(zone) && now - lastCometAt > 6200){ lastCometAt = now; spawnComet(); }
+    if(SPLIT_ZONES.has(zone) && now - lastSplitAt > 6800){ lastSplitAt = now; spawnSplitter(); }
+    if(WAVE_ZONES.has(zone)  && now - lastWaveAt  > 8500){ lastWaveAt  = now; spawnWave(diff.bulletSpeed); }
+}
+
 /* =====================================================================
    MAGNETIC MINES (자기 기뢰) — Cosmic Filament / Galactic Rim.
    Slow-homing red mines. GRAV cone REVERSES attraction → push away.
@@ -9725,6 +9970,7 @@ function triggerWipe(){
         }
     }
     bullets = [];
+    nhClear();
     /* Wipe clears the instant-threat obstacles (bullets, rocks, mines,
        active supernova rings, lethal flares). Pulsar beam stays —
        it's a persistent zone feature, not a discrete projectile. */
@@ -10140,26 +10386,31 @@ function _handleBulletSpawnPayload(p){
 
    PvP determinism 유지 (rand() 안 씀). 양쪽 phase 모두 pure function. */
 function _computeDiffAt(eMs){
+    /* 2026-09-24 v3 — 운영자: "너무 완만히 어려워진다". 예전엔 4분에 걸쳐 오르던 1단계를
+       2분에 끝내고(같은 곡선을 두 배 속도로), 2단계는 2~10분, 3단계는 10~20분 천천히.
+       시작 난이도는 비슷하게 둬서 첫 판이 억울하지 않게 한다. 시간에만 의존 → 결정적 */
     const s = eMs / 1000;
-    /* ---- Phase 1: 0-4분, sEff 기반 곡선 ---- */
-    const sEff = Math.min(106, 60 + s * (46/240));
     const ss=(t)=>{ const c=Math.min(Math.max(t,0),1); return c*c*(3-2*c); };
+    const sEff = Math.min(106, 64 + s * (42/120));
     let spawnInterval = Math.round(1600 - ss(sEff/170) * 1350);
     let bulletSpeed   = Math.round(95 + ss(sEff/170) * 275);
     const arT = Math.max(0, Math.min((sEff-20)/150, 1));
     let aimedRatio    = Math.min(0.65, arT*arT*0.70);
     let msRaw         = 1 + Math.min(2, Math.max(0, (sEff-50)/120)*2);
-
-    /* ---- Phase 2: 4분 → 20분, cap 위에서 80% 추가 상승 ---- */
-    if(s > 240){
-        const p2T = Math.min(1, (s - 240) / 960);   /* 0 → 1 over 16분 */
-        const sm  = ss(p2T);                         /* smoothstep 부드럽게 */
-        spawnInterval = Math.round(680 + sm * (510 - 680));   /* 680 → 510 */
-        bulletSpeed   = Math.round(282 + sm * (350 - 282));   /* 282 → 350 */
-        aimedRatio    = 0.23 + sm * (0.45 - 0.23);            /* 23% → 45% */
-        msRaw         = 1.933 + sm * (2.6 - 1.933);           /* 1.933 → 2.6 */
+    if(s > 120){
+        const sm = ss(Math.min(1, (s - 120) / 480));
+        spawnInterval = Math.round(680 + sm * (470 - 680));
+        bulletSpeed   = Math.round(282 + sm * (370 - 282));
+        aimedRatio    = 0.23 + sm * (0.48 - 0.23);
+        msRaw         = 1.933 + sm * (2.7 - 1.933);
     }
-
+    if(s > 600){
+        const sm = ss(Math.min(1, (s - 600) / 600));
+        spawnInterval = Math.round(470 - sm * 70);
+        bulletSpeed   = Math.round(370 + sm * 30);
+        aimedRatio    = 0.48;
+        msRaw         = 2.7 + sm * 0.3;
+    }
     const msFloor = Math.floor(msRaw);
     return { spawnInterval, bulletSpeed, aimedRatio, msRaw, msFloor };
 }
@@ -10388,6 +10639,7 @@ function resetGame(){
     supernovaRings=[];                 /* Stage 5 reset */
     lastSupernovaAt=0;
     pulsarBeam=null;                   /* Stage 6 reset */
+    nhReset();                         /* v3 혜성·분열암·편대 */
     pulsarElapsed=0;
     /* Satellite mission state reset (Phase B+C) — also clear reward slots
        so a new run starts with empty reward bar. */
@@ -11767,6 +12019,8 @@ function gameLoop(now){
                 lastSupernovaAt = now;
             }
         }
+        /* v3 — 혜성·분열암·편대 (비어 있던 관광 구간 + 은하 가장자리 이후 섞임) */
+        nhSpawnTick(now, currentZoneIdx, _computeDiffAt(elapsedMs));
         /* Pulsar beam (Stage 6) — single persistent beam, ensure exists in zone */
         if(_isPulsarZone(currentZoneIdx)) ensurePulsarBeam(now);
         else if(pulsarBeam) clearPulsarBeam();
@@ -11778,6 +12032,7 @@ function gameLoop(now){
     updateMagneticMines(wDt, now);
     updateSupernovaRings(wDt);
     updatePulsarTime(dt, now);          /* 내부에서 _worldDt 적용 */
+    updateComets(wDt); updateSplitters(wDt); updateWaves(wDt);
     /* Satellite mission state machine (Phase B) — pending → active → success/failed → idle */
     updateMissionState(now);
     /* Satellite installation (Phase C v2) — hold-to-deploy progress (player 행동) */
@@ -11825,6 +12080,8 @@ function gameLoop(now){
         if(!hit && magneticMines.length)   hit = checkMagneticMineCollision();
         if(!hit && supernovaRings.length)  hit = checkSupernovaRingCollision();
         if(!hit && pulsarBeam)             hit = checkPulsarBeamCollision(now);
+        if(!hit && comets.length)          hit = checkCometCollision();
+        if(!hit && splitters.length)       hit = checkSplitterCollision();
         if(!hit && isBlackHoleZone())      hit = checkBlackHoleJetCollision();
         if(hit){
             triggerHitFx(now);
@@ -11958,6 +12215,7 @@ function drawFrame(now, dt){
 
     /* ---- Zone planet/object ---- */
     drawZonePlanet(currentZoneIdx, dt);
+    if(running){ ctx.fillStyle = 'rgba(3,5,18,0.34)'; ctx.fillRect(0, 0, CW, CH); }
 
     /* ---- Stars (on top of planet, under everything else) ---- */
     drawStars();
@@ -11982,6 +12240,9 @@ function drawFrame(now, dt){
     drawAsteroidClusters();    /* Stage 2 — rock formations */
     drawMagneticMines();       /* Stage 4 — homing mines */
     drawSolarFlares();         /* Stage 3 — beam warnings + lethal beam */
+    drawSplitters();           /* v3 — 달아오르는 분열암 */
+    drawComets(now);           /* v3 — 혜성 예고선·머리·꼬리 */
+    drawWaves();               /* v3 — 편대 예고(틈은 초록) */
     drawPulsarBeam(now);       /* Stage 6 — rotating lighthouse, on top */
     drawMissionOrbit(now);          /* Phase B — orbital ring during active mission */
     drawSatelliteOrbiting(now);     /* Phase C — successful satellites in their home zone */
@@ -14063,7 +14324,7 @@ window.SZX={
 })();
 </script>
 
-<script src="/js/siteFooter.js?v=1790240270"></script>
+<script src="/js/siteFooter.js?v=1790250184"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
@@ -14199,6 +14460,7 @@ window.SZX={
       <div class="lp-fold-body">
 <p>이 게임은 단순한 무한 회피가 아니라 <strong>지구에서 출발해 말머리 성운까지 가는 여정</strong>이라는 뼈대를 갖고 있습니다. 구간을 넘길 때마다 배경이 바뀌며 어디까지 왔는지 보여 줍니다.</p>
 <p>초반 구간은 지구 근처의 우주 쓰레기와 작은 파편들입니다. 밀도가 낮아 조작에 익숙해지기 좋습니다. 중반으로 가면 소행성대처럼 큰 물체가 늘고, 피할 공간을 미리 계산해야 하는 구간이 시작됩니다. 후반부는 속도와 밀도가 모두 올라가 반응보다 예측이 중요해집니다.</p>
+<p>구간마다 고유한 위협이 하나씩 붙습니다. 토성·태양권 경계·견우직녀·말머리 성운에서는 <strong>혜성</strong>이 붉은 점선으로 0.9초 먼저 경로를 알린 뒤 화면을 가로지르고, 천왕성·오르트 구름·좀생이별·창조의 기둥에서는 붉게 달아오르던 <strong>분열암</strong>이 공중에서 여덟 조각으로 터집니다. 해왕성·프록시마·오리온 성운에서는 틈이 하나뿐인 벽, V자, 나선 같은 <strong>운석 편대</strong>가 몰려오는데, 예고 순간 초록으로 빛나는 칸이 빠져나갈 길입니다. 사람이 시각 신호에 반응하는 데는 보통 0.2~0.3초가 걸리므로, 예고 시간은 그 세 배쯤인 0.8~0.9초로 맞춰 "보고 피할 수 있는" 선을 지켰습니다. 은하 가장자리를 지나면 세 가지가 섞여 나옵니다.</p>
 <p>실제 말머리 성운은 오리온자리에 있는 암흑성운으로, 지구에서 약 1,300광년 떨어져 있습니다. 빛의 속도로 가도 1,300년이 걸리는 거리입니다. 게임에서 몇 분 만에 도달하는 여정이 현실에서는 인류 문명의 전체 역사보다 긴 시간이 필요한 셈입니다.</p>
 <p>기록을 갱신하고 싶다면 후반 구간을 반복해서 익히기보다, 초반에 실수 없이 연료 같은 집중력을 아껴 두는 편이 효과적입니다.</p>
       </div>

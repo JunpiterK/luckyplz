@@ -523,20 +523,115 @@ def team():
     return g
 
 
+def _brawl_face(e, H, HR, mood):
+    """브롤런 전용 얼굴 — B급 표정. angry(부릅+이빨) / hit(질끈 >< + 쩍 벌린 입 + 혀)"""
+    D = DARK()
+    W = P('white', coat=0.6)
+    fy = H.y - HR * 0.93
+    if mood == 'angry':
+        for s in (-1, 1):
+            sph(0.1, (s * 0.15, fy + 0.03, H.z + 0.04), W, scale=(1, 0.5, 0.85), parent=e, seg=24)
+            sph(0.05, (s * 0.12, fy - 0.02, H.z + 0.03), D, scale=(1, 0.5, 1), parent=e, seg=16)
+            box((0.22, 0.05, 0.065), (s * 0.15, fy + 0.0, H.z + 0.17), D, rot=(0, math.radians(-30 * s), 0), bevel=0.02, parent=e)
+        box((0.3, 0.06, 0.11), (0, fy + 0.04, H.z - 0.18), W, bevel=0.025, parent=e)
+        for k in (-0.075, 0, 0.075):
+            box((0.006, 0.07, 0.11), (k, fy + 0.02, H.z - 0.18), D, bevel=0.0, parent=e)
+        box((0.3, 0.07, 0.006), (0, fy + 0.02, H.z - 0.18), D, bevel=0.0, parent=e)
+    else:
+        # 질끈 감은 눈 > < — 두 막대로 꺾쇠
+        for s in (-1, 1):
+            cx, cz = s * 0.15, H.z + 0.07
+            box((0.13, 0.05, 0.045), (cx, fy + 0.01, cz + 0.035), D, rot=(0, math.radians(28 * s), 0), bevel=0.015, parent=e)
+            box((0.13, 0.05, 0.045), (cx, fy + 0.01, cz - 0.035), D, rot=(0, math.radians(-28 * s), 0), bevel=0.015, parent=e)
+        # 쩍 벌린 입 + 혀
+        sph(0.13, (0.02, fy + 0.03, H.z - 0.19), D, scale=(1.05, 0.45, 0.85), parent=e, seg=24)
+        sph(0.07, (0.03, fy - 0.0, H.z - 0.25), mat('tongue', (0.95, 0.35, 0.42), rough=0.3, coat=0.4), scale=(1, 0.5, 0.6), parent=e, seg=20)
+        # 볼 빨개짐(맞은 쪽)
+        sph(0.07, (-0.27, fy + 0.07, H.z - 0.06), mat('blush', (1.0, 0.42, 0.40), rough=0.4, coat=0.2), scale=(1, 0.4, 0.7), parent=e, seg=16)
+
+
+def _runner(col, loc, yaw, tilt, mood, parent, head_yaw=None):
+    """전력 질주 피규어 — 앞다리 무릎이 올라가고 뒷다리는 뒤로 차올린 한 순간. 몸통은 앞으로 기운다.
+    로컬 정면 = -y. 팔은 호출하는 쪽에서 월드 좌표로 붙인다(상대에게 뻗어야 해서)."""
+    e = group("run", 0, loc=(loc[0], loc[1], 0.1))
+    e.rotation_euler = (math.radians(tilt), 0, yaw)
+    e.parent = parent
+    e.scale = (0.9, 0.9, 0.9)
+    C = P(col)
+    N = P('navy')
+    capsule((0, 0, 0.55), (0, 0, 0.8), 0.28, C, parent=e)
+    # 앞다리: 허벅지가 앞으로 들리고 정강이는 아래로
+    capsule((-0.12, 0, 0.42), (-0.13, -0.36, 0.42), 0.1, N, parent=e)
+    capsule((-0.13, -0.36, 0.42), (-0.13, -0.46, 0.14), 0.095, N, parent=e)
+    sph(0.12, (-0.13, -0.53, 0.1), DARK(), scale=(1, 1.4, 0.7), parent=e)
+    # 뒷다리: 뒤로 차올림
+    capsule((0.12, 0, 0.42), (0.13, 0.26, 0.22), 0.1, N, parent=e)
+    capsule((0.13, 0.26, 0.22), (0.13, 0.56, 0.44), 0.095, N, parent=e)
+    sph(0.12, (0.13, 0.63, 0.47), DARK(), scale=(1, 0.75, 1.3), parent=e)
+    # 몸은 옆(달리는 방향)으로 돌려야 보폭이 화면에 읽히고, 얼굴은 카메라 쪽이어야 표정이 읽힌다
+    # → 머리만 따로 돌린다(목 위치에 별도 그룹)
+    H = Vector((0, 0, 1.38))
+    HR = 0.42
+    if head_yaw is None:
+        hd = e
+    else:
+        bpy.context.view_layer.update()
+        hp = e.matrix_world @ Vector((0, -0.05, 1.38))
+        hd = group("head", 0, loc=(hp.x, hp.y, hp.z - 1.38 * 0.9))
+        hd.rotation_euler = (0, 0, head_yaw)
+        hd.parent = parent
+        hd.scale = (0.9, 0.9, 0.9)
+    sph(HR, H, P('cream'), parent=hd)
+    _brawl_face(hd, H, HR, mood)
+    return e, hd
+
+
 def brawl():
-    """브롤런 — 빨강이 앞선 파랑을 두 손으로 밀친다 + 충돌 별 + 흙먼지."""
+    """브롤런 — 달리면서 치고받는다(2026-09-24 운영자: '더 치열하게 싸우면서 달리는 느낌').
+    빨강 주먹이 파랑 뺨에 꽂히는 순간, 파랑은 손바닥으로 빨강 얼굴을 밀어낸다 — 둘 다 전력 질주 중.
+    뒤로 속도선·흙먼지, 앞으로 땀방울. 수위는 톰과 제리(피·상처 없음)."""
     g = group("brawl", 0)
-    a = figure('tomato', (-0.78, 0.2), 0, 'shove', 'angry', parent=g)
-    a.rotation_euler = (0, math.radians(10), math.radians(38))
-    b = figure('cobalt', (0.72, -0.2), 0, 'flail', 'panic', parent=g)
-    b.rotation_euler = (0, math.radians(-24), math.radians(12))
-    for f in (a, b):
-        f.scale = (0.9, 0.9, 0.9)
+    (red, redH) = _runner('tomato', (-0.55, 0.22), math.radians(74), 21, 'angry', g, head_yaw=math.radians(34))
+    (blue, blueH) = _runner('cobalt', (0.5, -0.1), math.radians(70), 17, 'hit', g, head_yaw=math.radians(18))
+    bpy.context.view_layer.update()
+    W = lambda e, p: e.matrix_world @ Vector(p)
+    R, B = P('tomato'), P('cobalt')
+    SK = P('cream')
     hot = mat('impact', (1.0, 0.82, 0.15), emit=(1.0, 0.7, 0.1), estr=0.4, coat=0)
-    prism(star_pts(0.3, 0.13, 8), 0.07, (0.02, -0.5, 1.02), hot, parent=g)
-    dust = mat('dust', (0.72, 0.58, 0.42), rough=0.95, coat=0)
-    for (x, y, z, r) in ((-1.2, 0.35, 0.16, 0.2), (-1.42, 0.45, 0.24, 0.15), (-1.0, 0.5, 0.12, 0.14)):
+    # 빨강: 뒷팔은 달리기 스윙, 앞팔 주먹이 파랑 뺨으로
+    rs_back, rs_front = W(red, (-0.27, 0.02, 0.84)), W(red, (0.27, 0.02, 0.84))
+    capsule(rs_back, W(red, (-0.36, 0.3, 0.62)), 0.085, R, parent=g)
+    sph(0.11, W(red, (-0.37, 0.36, 0.58)), SK, parent=g, seg=20)
+    cheek = W(blueH, (-0.3, -0.12, 1.3))
+    fist = rs_front + (cheek - rs_front) * 0.86
+    capsule(rs_front, fist, 0.09, R, parent=g)
+    sph(0.135, fist, SK, parent=g, seg=24)
+    # 파랑: 한 팔은 뒤로 뻗어 손바닥으로 빨강 얼굴을 밀고, 다른 팔은 허우적
+    bs_back, bs_front = W(blue, (-0.27, 0.02, 0.84)), W(blue, (0.27, 0.02, 0.84))
+    face_r = W(redH, (0.16, -0.3, 1.66))   # 이마 — 별 위로 손이 보이게
+    palm = bs_back + (face_r - bs_back) * 0.93
+    elbow = (bs_back + palm) / 2 + Vector((0.05, -0.12, 0.22))
+    capsule(bs_back, elbow, 0.085, B, parent=g)
+    capsule(elbow, palm, 0.085, B, parent=g)
+    sph(0.13, palm, SK, scale=(0.75, 1.0, 1.15), parent=g, seg=24)
+    capsule(bs_front, W(blue, (0.52, 0.05, 1.28)), 0.085, B, parent=g)
+    sph(0.11, W(blue, (0.56, 0.06, 1.34)), SK, parent=g, seg=20)
+    # 충돌 별 두 개 — 카메라 쪽으로 살짝 띄운다
+    prism(star_pts(0.22, 0.1, 8), 0.06, (cheek.x - 0.16, cheek.y - 0.3, cheek.z + 0.2), hot, parent=g)
+    # 속도선 — 달려온 뒤쪽(-x) 으로 길게
+    spd = mat('speed', (0.97, 0.95, 0.9), emit=(1.0, 0.98, 0.9), estr=0.25, coat=0)
+    for (x0, z, L) in ((-1.0, 1.62, 0.5), (-1.08, 1.3, 0.72), (-1.02, 0.98, 0.55), (-0.95, 0.66, 0.42), (-0.05, 2.0, 0.45), (0.2, 0.62, 0.35)):
+        capsule((x0, 0.35, z), (x0 - L, 0.45, z - 0.04), 0.022, spd, parent=g)
+    # 흙먼지 — 뒷발 뒤로 끌리는 구름
+    dust = mat('dust', (0.78, 0.63, 0.46), rough=0.95, coat=0)
+    for (x, y, z, r) in ((-1.05, 0.55, 0.2, 0.2), (-1.32, 0.62, 0.3, 0.15), (-1.52, 0.66, 0.2, 0.11),
+                         (-0.05, 0.25, 0.14, 0.15), (-0.28, 0.3, 0.22, 0.11)):
         sph(r, (x, y, z), dust, parent=g, seg=20)
+    # 땀방울 — 파랑 머리에서 튄다
+    sweat = mat('sweat', (0.45, 0.8, 1.0), rough=0.05, coat=1.0)
+    hb = W(blueH, (0, 0, 1.38))
+    for (dx, dz, s) in ((0.45, 0.35, 0.07), (0.62, 0.12, 0.055), (0.3, 0.55, 0.05)):
+        sph(s, (hb.x + dx, hb.y - 0.2, hb.z + dz), sweat, scale=(0.8, 0.8, 1.3), parent=g, seg=18)
     return g
 
 
