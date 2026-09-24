@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790207244">
+<meta name="lp-build" content="1790208878">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790207244";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790208878";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -694,15 +694,15 @@
     </div>
     <div id="collisionLabelsContainer"></div>
     <div id="eventPopupContainer"></div>
-<script src="/js/topNav.js?v=1790207244"></script>
-<script src="/js/langBar.js?v=1790207244"></script>
-<script src="/js/participantPresets.js?v=1790207244"></script>
-<script src="/js/nextGames.js?v=1790207244"></script>
+<script src="/js/topNav.js?v=1790208878"></script>
+<script src="/js/langBar.js?v=1790208878"></script>
+<script src="/js/participantPresets.js?v=1790208878"></script>
+<script src="/js/nextGames.js?v=1790208878"></script>
 <!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
      for Watch-Together. Without window.supabase the room-create /
      room-join flow silently no-ops. -->
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790207244"></script>
+<script src="/js/supabase-config.js?v=1790208878"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -2534,6 +2534,7 @@ window.addEventListener('resize',resize);resize();
 function buildTrackFromBasePath(rawPath,smoothPasses,opts){
     if(smoothPasses===undefined)smoothPasses=3;
     if(!opts)opts={};
+    CROSS=opts.cross||null;   /* 다른 코스는 교차 없음 */
     const trackWidthOverride=opts.trackWidth||TRACK_WIDTH;
     /* Refresh the guardrail clamp so cars can use the full width of
        whatever course we're about to build. Must happen BEFORE any
@@ -2564,6 +2565,7 @@ function buildTrackFromBasePath(rawPath,smoothPasses,opts){
     }
     track.forEach((p,i)=>p.index=i);
     lapLength=basePath.length;
+    if(CROSS&&CROSS.z.length===lapLength){for(let i=0;i<track.length;i++)track[i].z=CROSS.z[i%lapLength]}
 
     /* ===== PRECOMPUTE SMOOTH NORMALS ===== */
     trackNormals=[];
@@ -2613,39 +2615,31 @@ function buildTrackFromBasePath(rawPath,smoothPasses,opts){
 }
 
 /* ===== ♾️ INFINITE TRACK (figure-8) ===== */
+/* 2026-09-24 운영자: "가운데를 한쪽은 위로 올라가고 하나는 아래로 내려가서 고저차가 있고 교차하는 느낌으로".
+   원래 코스는 가운데 두 가닥이 나란히 스칠 뿐 교차하지 않았다. 지금은 제로노 8자 곡선
+   (x=sin t, y=sin 2t)이라 가운데에서 X 로 교차하고, 한 가닥은 다리(z>0), 다른 가닥은 지하차도(z<0)다.
+   - 교차점은 한 바퀴의 49%·99% 지점 — 기존 구역 배치(0.08~0.905)를 가장 덜 건드리는 자리
+   - 출발(0.1) 뒤 처음 만나는 49% 가 다리, 99% 가 지하차도
+   - z 는 판정에도 쓴다: 높이가 다른 두 차는 충돌하지 않는다(CROSS 참고) */
+let CROSS=null;
+function crossZ(prog){const p=track[Math.max(0,Math.min(track.length-1,Math.floor(prog)))];return(p&&p.z)||0}
 function generateInfiniteTrack(){
     const cx=(WIDTH-RIGHT_MARGIN+MARGIN)/2, cy=HEIGHT/2;
     const hw8=(WIDTH-RIGHT_MARGIN-MARGIN)/2;
     const hh8=(HEIGHT-MARGIN*2)/2;
-    const pad=TRACK_WIDTH*0.55;
-    const L=hw8-pad, R8=hw8-pad;
-    const T=hh8-pad, B=hh8-pad;
-    const ctrlPts=[
-        {x:cx,          y:cy-T*0.15},
-        {x:cx+R8*0.95,  y:cy-T*0.90},
-        {x:cx+R8*0.95,  y:cy+B*0.0},
-        {x:cx+R8*0.50,  y:cy+B*0.55},
-        {x:cx,          y:cy+B*0.15},
-        {x:cx-L*0.95,   y:cy+B*0.90},
-        {x:cx-L*0.95,   y:cy-T*0.0},
-        {x:cx-L*0.50,   y:cy-T*0.55}
-    ];
-    const N=ctrlPts.length;
-    const segments=400;
-    const rawPath=[];
-    for(let i=0;i<segments;i++){
-        const t=i/segments;
-        const posF=t*N;
-        const seg=Math.floor(posF)%N;
-        const localT=posF-Math.floor(posF);
-        const p0=ctrlPts[((seg-1)%N+N)%N];
-        const p1=ctrlPts[seg%N];
-        const p2=ctrlPts[(seg+1)%N];
-        const p3=ctrlPts[(seg+2)%N];
-        const point=catmullRom(p0,p1,p2,p3,localT);
-        rawPath.push({x:point.x,y:point.y});
+    const A=hw8-TRACK_WIDTH*0.6, Bh=hh8-TRACK_WIDTH*0.6;
+    const N=400,fB=0.49,fA=0.99;
+    /* base 0 의 매개변수: 교차점(t=π)이 fB 에 오도록 */
+    const t0=Math.PI-fB*Math.PI*2;
+    const rawPath=[],z=new Float32Array(N),D=0.085;  /* 고저차 구간 반폭(바퀴 비율) */
+    const bump=d=>d>=D?0:0.5*(1+Math.cos(Math.PI*d/D));
+    const fd=(f,c)=>{let d=Math.abs(f-c)%1;return Math.min(d,1-d)};
+    for(let i=0;i<N;i++){
+        const t=t0+i/N*Math.PI*2;
+        rawPath.push({x:cx+A*Math.sin(t),y:cy+Bh*Math.sin(2*t)});
+        const f=i/N;z[i]=bump(fd(f,fB))-bump(fd(f,fA));
     }
-    buildTrackFromBasePath(rawPath,3);
+    buildTrackFromBasePath(rawPath,3,{cross:{z,fB,fA,D,N}});
 }
 
 /* ===== ⚙️ GEAR TRACK (톱니바퀴) ===== */
@@ -2738,6 +2732,16 @@ function generateZones(){
             case 'ice':if(!isOverlappingAnyZone(start,start+iceLen))iceZones.push({start,end:start+iceLen});break;
         }
     });
+    /* 다리·지하차도 위에는 구역을 두지 않는다 — 걸치면 뒤로 밀고, 자리가 없으면 뺀다 */
+    if(CROSS){
+        const Lb=lapLength,win=Math.ceil(CROSS.D*Lb*0.8),cs=[CROSS.fB*Lb,CROSS.fA*Lb];
+        const hit=(s0,e0)=>cs.some(c=>{for(const o of [-Lb,0,Lb]){if(!(e0<=c+o-win||s0>=c+o+win))return true}return false});
+        const fix=arr=>{for(let i=arr.length-1;i>=0;i--){const z=arr[i];if(!hit(z.start,z.end))continue;const len=z.end-z.start;
+            arr.splice(i,1);let ok=false;
+            for(let sh=1;sh<Lb*0.2&&!ok;sh++)for(const sg of [1,-1]){const ns=z.start+sg*(win+sh);if(ns<Lb*0.06||ns+len>Lb*0.93)continue;
+                if(!hit(ns,ns+len)&&!isOverlappingAnyZone(ns-3,ns+len+3)){z.start=ns;z.end=ns+len;arr.push(z);ok=true;break}}}};
+        [waterZones,hillZones,mudZones,iceZones].forEach(fix);
+    }
 }
 
 function generateItemBoxes(){
@@ -2756,6 +2760,7 @@ function generateItemBoxes(){
         const ang=Math.atan2(tn.y-tp.y,tn.x-tp.x)+Math.PI/2;
         const wx=tp.x+Math.cos(ang)*laneOff;
         const wy=tp.y+Math.sin(ang)*laneOff;
+        if(CROSS){const f=tidx/baseLen;if([CROSS.fB,CROSS.fA].some(c=>{const d=Math.abs(f-c)%1;return Math.min(d,1-d)<CROSS.D*0.55}))continue}
         itemBoxes.push({trackIndex:tidx,laneOff:laneOff,collected:false,respawnTimer:0,worldX:wx,worldY:wy,fastRespawn:false});
     }
     /* Final stretch items: 2 boxes between last ice zone (0.88) and finish line */
@@ -3948,6 +3953,8 @@ function updatePlayers(dt){
             if(car.state===CarState.STICKY_BOOST&&car.stickyTarget===other)return;
             if(other.state===CarState.STICKY_BOOST&&other.stickyTarget===car)return;
             if(car.collisionCooldown>0||other.collisionCooldown>0)return;
+            /* 다리 위와 지하차도의 차는 화면에서 겹쳐도 서로 닿지 않는다 */
+            if(CROSS&&Math.abs(crossZ(car.progress)-crossZ(other.progress))>0.3)return;
             const dist=distance(car.x,car.y,other.x,other.y);
             if(dist<50&&dist>=25&&car.index<other.index){
                 /* 2026-09-23: 연출 난사 억제 — 판정과 무관 */
@@ -5600,7 +5607,7 @@ function render(){
     drawTrack();
     if(_fx)_fx.drawUnderlays();
     const _rp=[];for(let i=0;i<players.length;i++){const p=players[i];if(p.displayX>-9000&&!isNaN(p.displayX))_rp.push(p)}_rp.sort((a,b)=>(a.displayY||a.y)-(b.displayY||b.y));const sortedPlayers=_rp;
-    sortedPlayers.forEach(car=>drawCar(car));
+    if(_fx&&_fx.drawCars)_fx.drawCars(sortedPlayers,drawCar);else sortedPlayers.forEach(car=>drawCar(car));
     drawProjectiles();drawEffects();
     if(_fx){_fx.drawWorldTop();_fx.end();_fx.drawOverlay();}
     displayCommentary();
@@ -5679,6 +5686,76 @@ window.LPFX=(function(){
     paintZones(c,R);
     paintStart(c);
     paintVignette(c,W,H);
+    S.brg=null;if(CROSS)paintCrossing(c);
+  }
+  /* ── ♾️ 입체 교차 ──
+     지하차도: 노면을 어둡게 + 양옆 콘크리트 옹벽(빛 반대쪽 그늘).
+     다리: 따로 구운 덮개 캔버스(S.brg) — 지하 차를 그린 **뒤**, 나머지 차를 그리기 **전**에 얹는다.
+     그래서 다리 밑을 지나는 차는 상판에 가려지고, 다리 위 차는 그 위를 달린다 */
+  function crossRuns(sign){
+    const L=N(),out=[];let cur=null;
+    for(let i=0;i<=L;i++){const k=i%L,z=(track[k].z||0)*sign;
+      if(z>0.02){if(!cur){cur=[];out.push(cur)}cur.push(k)}else cur=null}
+    /* 끝과 처음이 이어지는 구간 합치기 */
+    if(out.length>1&&out[0][0]===0&&out[out.length-1][out[out.length-1].length-1]===0){const last=out.pop();last.pop();out[0]=last.concat(out[0])}
+    return out;
+  }
+  function runPath(c,run,B,off){c.beginPath();run.forEach((k,j)=>{const p=B?B[k]:track[k];let x=p.x,y=p.y;if(off){const v=off(k);x+=v[0];y+=v[1]}j?c.lineTo(x,y):c.moveTo(x,y)})}
+  function paintCrossing(c){
+    const RW=S.RW||TRACK_WIDTH,TW=TRACK_WIDTH,a=Math.max(4,TW*0.06);
+    c.save();c.lineJoin='round';c.lineCap='round';
+    /* 지하차도 */
+    for(const run of crossRuns(-1)){
+      for(let j=0;j<run.length-1;j++){const k=run[j],d=-(track[k].z||0);
+        c.strokeStyle='rgba(0,0,0,'+(0.34*d).toFixed(3)+')';c.lineWidth=RW+a*2;c.beginPath();c.moveTo(track[k].x,track[k].y);c.lineTo(track[run[j+1]].x,track[run[j+1]].y);c.stroke()}
+      const deep=run.filter(k=>-(track[k].z||0)>0.3);if(deep.length<2)continue;
+      [trackBorderLeft,trackBorderRight].forEach(B=>{
+        c.strokeStyle='rgba(20,22,26,0.55)';c.lineWidth=a*2.6;runPath(c,deep,B);c.stroke();
+        c.strokeStyle='#9aa1aa';c.lineWidth=a*1.6;runPath(c,deep,B);c.stroke();
+        c.strokeStyle='rgba(255,255,255,0.35)';c.lineWidth=a*0.5;runPath(c,deep,B,k=>[-1,-1]);c.stroke()});
+    }
+    c.restore();
+    /* 다리 덮개 */
+    const runs=crossRuns(1);if(!runs.length)return;
+    const cv=document.createElement('canvas');cv.width=canvas.width;cv.height=canvas.height;const g=cv.getContext('2d');
+    g.setTransform(DPR,0,0,DPR,0,0);g.lineJoin='round';g.lineCap='round';
+    for(const run of runs){
+      /* ① 상판 그림자 — 높을수록 멀리(좌상단 빛) */
+      for(let j=0;j<run.length-1;j++){const k=run[j],z=track[k].z||0,ox=TW*0.16*z,oy=TW*0.22*z;
+        g.strokeStyle='rgba(0,0,0,'+(0.30*z).toFixed(3)+')';g.lineWidth=RW+a*2+TW*0.1*z;
+        g.beginPath();g.moveTo(track[k].x+ox,track[k].y+oy);g.lineTo(track[run[j+1]].x+ox,track[run[j+1]].y+oy);g.stroke()}
+      /* ② 상판 — 원래 도로와 같은 층 구성이라 경사로 끝에서 이음새가 안 보인다 */
+      g.strokeStyle='rgba(24,26,30,0.95)';g.lineWidth=RW+a*2;runPath(g,run);g.stroke();
+      g.strokeStyle='rgba(200,206,214,0.97)';g.lineWidth=RW+a;runPath(g,run);g.stroke();
+      g.strokeStyle=asphalt(g);g.lineWidth=RW;runPath(g,run);g.stroke();
+      g.strokeStyle='rgba(0,0,0,0.13)';g.lineWidth=TW*0.40;runPath(g,run);g.stroke();
+      g.setLineDash([TW*0.13,TW*0.2]);g.strokeStyle='rgba(255,255,255,0.22)';g.lineWidth=Math.max(1.2,TW*0.02);runPath(g,run);g.stroke();g.setLineDash([]);
+      /* ③ 높은 곳: 밝은 노면 + 콘크리트 난간 + 난간 기둥 */
+      const hi=run.filter(k=>(track[k].z||0)>0.25);
+      if(hi.length>1){
+        for(let j=0;j<run.length-1;j++){const k=run[j],z=track[k].z||0;if(z<0.05)continue;
+          g.strokeStyle='rgba(255,250,235,'+(0.07*z).toFixed(3)+')';g.lineWidth=RW;g.beginPath();g.moveTo(track[k].x,track[k].y);g.lineTo(track[run[j+1]].x,track[run[j+1]].y);g.stroke()}
+        [trackBorderLeft,trackBorderRight].forEach(B=>{
+          g.strokeStyle='rgba(15,16,20,0.6)';g.lineWidth=a*2.8;runPath(g,hi,B);g.stroke();
+          g.strokeStyle='#e4e7eb';g.lineWidth=a*1.8;runPath(g,hi,B);g.stroke();
+          g.strokeStyle='rgba(120,128,138,0.9)';g.lineWidth=a*0.6;runPath(g,hi,B,k=>{const n=trackNormals[k];return[n.nx*0,n.ny*0]});g.stroke();
+          g.fillStyle='#8d949d';for(let j=0;j<hi.length;j+=4){const p=B[hi[j]];g.beginPath();g.arc(p.x,p.y,a*0.75,0,Math.PI*2);g.fill()}});
+      }
+    }
+    S.brg=cv;
+  }
+  function drawCars(list,dc){
+    if(!S.ok||!CROSS){list.forEach(dc);return}
+    const under=[],rest=[];
+    for(const c of list)(crossZ(c.progress)<-0.02?under:rest).push(c);
+    const one=c=>{const z=crossZ(c.progress);
+      if(Math.abs(z)<0.03){dc(c);return}
+      const x=c.displayX,y=c.displayY,s=z>0?1+0.16*z:1+0.1*z;
+      if(z>0.2){ctx.fillStyle='rgba(0,0,0,'+(0.22*z).toFixed(3)+')';ctx.beginPath();ctx.ellipse(x+TRACK_WIDTH*0.1*z,y+TRACK_WIDTH*0.14*z,TRACK_WIDTH*0.17,TRACK_WIDTH*0.09,0,0,Math.PI*2);ctx.fill()}
+      ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.translate(-x,-y);dc(c);ctx.restore()};
+    under.forEach(one);
+    if(S.brg){ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(S.brg,Math.round(S.shx*DPR),Math.round(S.shy*DPR));ctx.restore()}
+    rest.forEach(one);
   }
 
   function paintGround(c,W,H,R){
@@ -6371,7 +6448,7 @@ window.LPFX=(function(){
     }catch(e){}
   });
 
-  return{get ok(){return S.ok},begin,end,drawStatic,drawUnderlays,drawWorldTop,drawOverlay,
+  return{drawCars,get ok(){return S.ok},begin,end,drawStatic,drawUnderlays,drawWorldTop,drawOverlay,
     drawCarBody,drawItemBoxes,drawParticles,nameTag,onLap,onFinish,tick,updateLapInfo,reset,invalidate,
     banner,_S:S};
 })();
@@ -8044,7 +8121,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790207244" defer></script>
+<script src="/js/siteFooter.js?v=1790208878" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
