@@ -428,3 +428,6 @@ grant execute on function public.qlive_answer(text, uuid, int, int)             
 grant execute on function public.qlive_host(text, uuid, text, jsonb)             to anon, authenticated;
 grant execute on function public.qlive_state(text, uuid, uuid)                   to anon, authenticated;
 revoke execute on function public._qlive_advance(text) from anon, authenticated, public;
+
+-- PostgREST 스키마 캐시 새로고침 — 없으면 새 함수가 API 에서 404(PGRST202)로 안 보인다
+notify pgrst, 'reload schema';
