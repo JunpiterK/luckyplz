@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790208878">
+<meta name="lp-build" content="1790212582">
 <script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790208878";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790212582";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -694,15 +694,15 @@
     </div>
     <div id="collisionLabelsContainer"></div>
     <div id="eventPopupContainer"></div>
-<script src="/js/topNav.js?v=1790208878"></script>
-<script src="/js/langBar.js?v=1790208878"></script>
-<script src="/js/participantPresets.js?v=1790208878"></script>
-<script src="/js/nextGames.js?v=1790208878"></script>
+<script src="/js/topNav.js?v=1790212582"></script>
+<script src="/js/langBar.js?v=1790212582"></script>
+<script src="/js/participantPresets.js?v=1790212582"></script>
+<script src="/js/nextGames.js?v=1790212582"></script>
 <!-- Supabase: needed so siteFooter.js dynamically loads lpRoom.js
      for Watch-Together. Without window.supabase the room-create /
      room-join flow silently no-ops. -->
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790208878"></script>
+<script src="/js/supabase-config.js?v=1790212582"></script>
 <script>
 /* ===== I18N INTERNATIONALIZATION ===== */
 let currentLang='en';
@@ -2399,6 +2399,7 @@ let _tp=_calcTrackParams();
 let TRACK_WIDTH=_tp.tw,MARGIN=_tp.mg,RIGHT_MARGIN=_tp.rm;
 const STORAGE_KEY='gloryCarRacingListsV1',MAX_LISTS=5;
 let GUARDRAIL_LIMIT=TRACK_WIDTH/2-10;
+let ROAD_HALF=TRACK_WIDTH/2;   /* 그려진 노면 반폭(경계선 중앙값) — 차체 표시 클램프 기준 */
 function _refreshTrackParams(){
     _tp=_calcTrackParams();TRACK_WIDTH=_tp.tw;MARGIN=_tp.mg;RIGHT_MARGIN=_tp.rm;
     GUARDRAIL_LIMIT=TRACK_WIDTH/2-10;
@@ -2606,6 +2607,8 @@ function buildTrackFromBasePath(rawPath,smoothPasses,opts){
         }
     }
 
+    {const ds=[];for(let i=0;i<bLen;i+=4)ds.push(Math.hypot(trackBorderLeft[i].x-basePath[i].x,trackBorderLeft[i].y-basePath[i].y)+Math.hypot(trackBorderRight[i].x-basePath[i].x,trackBorderRight[i].y-basePath[i].y));
+     ds.sort((a,b)=>a-b);ROAD_HALF=(ds[ds.length>>1]||trackWidthOverride)/2}
     generateZones();
     generateItemBoxes();
     generateScenery();
@@ -4112,10 +4115,16 @@ function updatePlayers(dt){
                 /* Project displayX/displayY onto perpendicular to measure offset */
                 const dOffX=car.displayX-bx,dOffY=car.displayY-by;
                 const dispOffset=dOffX*perpNx+dOffY*perpNy;
-                if(Math.abs(dispOffset)>GUARDRAIL_LIMIT){
-                    const clamped=clamp(dispOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
-                    car.displayX=bx+perpNx*clamped;
-                    car.displayY=by+perpNy*clamped;
+                /* 차체 모서리까지 가드레일 안에 — 차가 도로 방향에서 틀어진 만큼(스핀 포함) 반폭이 커진다.
+                   판정용 laneOffset 은 그대로 두고 그리는 위치만 안쪽으로 */
+                const _sc=TRACK_WIDTH/120,_hl=16*_sc,_hw=9*_sc;
+                let _yaw=(car.displayAngle||0)+((car.state===CarState.SPINNING||car.state===CarState.MISSILE_HIT)?(car.spinAngle||0):0)-ang;
+                const _ext=(Math.abs(Math.sin(_yaw))*_hl+Math.abs(Math.cos(_yaw))*_hw)*((typeof CROSS!=='undefined'&&CROSS)?1+0.16*Math.max(0,crossZ(car.progress)):1);
+                const _lim=Math.max(4,Math.min(GUARDRAIL_LIMIT,ROAD_HALF-_ext-1));
+                if(Math.abs(dispOffset)>_lim){
+                    const clamped=clamp(dispOffset,-_lim,_lim);
+                    car.displayX+=perpNx*(clamped-dispOffset);
+                    car.displayY+=perpNy*(clamped-dispOffset);
                 }
             }
         }
@@ -4152,9 +4161,12 @@ function updatePlayers(dt){
            logic. */
         const targetX=p.target.x;
         const targetY=p.target.y;
-        const dx=targetX-p.x,dy=targetY-p.y;
-        const dist=Math.sqrt(dx*dx+dy*dy)||1;
         const spd=(p.type===ItemType.STICKY?3000:1200)*dt;
+        /* 2026-09-24: 직선으로 쫓으면 커브에서 잔디·가드레일 밖을 가로질렀다 → 도로를 따라 비행 */
+        const _trk=projAlongTrack(p,spd,dt);
+        let dx=targetX-p.x,dy=targetY-p.y;
+        let dist=Math.sqrt(dx*dx+dy*dy)||1;
+        if(_trk&&Math.abs(p.target.progress-p.progress)<0.02)dist=Math.min(dist,spd+19);
 
         /* Míssile smoke trail */
         if(p.type===ItemType.MISSILE){
@@ -4207,9 +4219,8 @@ function updatePlayers(dt){
             return false;
         }
 
-        /* Move toward target */
-        p.x+=dx/dist*spd;
-        p.y+=dy/dist*spd;
+        /* Move toward target (도로 추적이 안 될 때만 직선) */
+        if(!_trk){p.x+=dx/dist*spd;p.y+=dy/dist*spd}
         return true;
     });
 
@@ -4329,6 +4340,43 @@ function updatePlayers(dt){
     });
 }
 
+/* 트랙 위 점 — progress 와 차선 오프셋(차 위치 계산과 같은 식) */
+function trackPt(prog,lane){
+    const L=track.length;const ci=Math.max(0,Math.min(L-2,Math.floor(prog))),fr=Math.max(0,Math.min(1,prog-ci));
+    const a=track[ci],b=track[ci+1];const ang=Math.atan2(b.y-a.y,b.x-a.x),nx=-Math.sin(ang),ny=Math.cos(ang);
+    return{x:a.x+(b.x-a.x)*fr+nx*lane,y:a.y+(b.y-a.y)*fr+ny*lane,nx,ny};
+}
+/* 투사체를 도로를 따라 spd 픽셀만큼 전진 — 목표 progress 를 넘지 않는다 */
+function projAlongTrack(p,spd,dt){
+    if(track.length<3||typeof p.progress!=='number'||isNaN(p.progress)||!p.target||isNaN(p.target.progress))return false;
+    if(p.lane===undefined)p.lane=(p.source&&!isNaN(p.source.laneOffset))?p.source.laneOffset:0;
+    let rem=spd,guard=0;const tgt=p.target.progress;
+    while(rem>0.01&&guard++<80){
+        const gap=tgt-p.progress;if(Math.abs(gap)<1e-4)break;const dir=gap>0?1:-1;
+        const ci=Math.max(0,Math.min(track.length-2,Math.floor(p.progress)));
+        const segL=Math.hypot(track[ci+1].x-track[ci].x,track[ci+1].y-track[ci].y)||1;
+        const room=dir>0?(ci+1-p.progress):(p.progress-ci);const lim=Math.min(Math.abs(gap),room>1e-6?room:1,rem/segL);
+        p.progress+=dir*lim;rem-=lim*segL;
+    }
+    p.lane+=((p.target.laneOffset||0)-p.lane)*Math.min(1,dt*10);
+    const q=trackPt(p.progress,p.lane);if(isNaN(q.x)||isNaN(q.y))return false;
+    p.x=q.x;p.y=q.y;return true;
+}
+/* 끈끈이 줄 — 두 점 사이를 도로를 따라 잇는 점들(끝점은 실제 그려진 위치) */
+function strandPts(pa,la,pb,lb,ax,ay,bx,by){
+    const n=Math.max(2,Math.min(70,Math.ceil(Math.abs(pb-pa)*1.5)+1)),out=[];
+    for(let k=0;k<n;k++){const u=k/(n-1),q=trackPt(pa+(pb-pa)*u,la+(lb-la)*u);out.push(q)}
+    /* 끝 몇 점은 실제 그려진 차 위치로 부드럽게 끌어당긴다 */
+    const m=Math.min(4,n-1);
+    for(let k=0;k<=m;k++){const w=1-k/(m+1);out[k].x+= (ax-out[0].x)*w;out[k].y+=(ay-out[0].y)*w}
+    for(let k=0;k<=m;k++){const i=n-1-k,w=1-k/(m+1);out[i].x+=(bx-out[n-1].x)*w;out[i].y+=(by-out[n-1].y)*w}
+    out[0].x=ax;out[0].y=ay;out[n-1].x=bx;out[n-1].y=by;
+    return out;
+}
+function strokePts(pts,wob){ctx.beginPath();for(let i=0;i<pts.length;i++){const p=pts[i],w=wob?wob(i,pts.length):0;i?ctx.lineTo(p.x+p.nx*w,p.y+p.ny*w):ctx.moveTo(p.x,p.y)}}
+function ptAt(pts,u){let tot=0;const cum=[0];for(let i=1;i<pts.length;i++){tot+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);cum.push(tot)}
+    const d=u*tot;for(let i=1;i<pts.length;i++)if(cum[i]>=d){const f=(d-cum[i-1])/((cum[i]-cum[i-1])||1);return{x:pts[i-1].x+(pts[i].x-pts[i-1].x)*f,y:pts[i-1].y+(pts[i].y-pts[i-1].y)*f}}
+    return pts[pts.length-1];}
 function useItem(car,target){
     const item=car.heldItem;
     if(!item||!ItemInfo[item])return;
@@ -5378,65 +5426,20 @@ function drawCar(car){
             const t=car.stateTimer||0;
             const alpha=t<1?Math.min(1,t*2):t<5.5?1.0:Math.max(0.1,1-(t-5.5)/1.5);
             if(alpha>0.05){
-                const midX=(dx+tx)/2,midY=(dy+ty)/2;
-                const dist=Math.sqrt((tx-dx)**2+(ty-dy)**2)||1;
-                /* Wave amplitude - taut when pulling, loose when releasing */
-                const wave1=Math.sin(frameNow*0.006)*6*(t<2?1:0.3);
-                const wave2=Math.cos(frameNow*0.008)*5*(t<2?1:0.3);
-
-                /* === OUTER GLOW (wide, dim) === */
-                ctx.shadowColor='#00FF66';ctx.shadowBlur=0;
-                ctx.strokeStyle=`rgba(0,255,80,${alpha*0.25})`;
-                ctx.lineWidth=10;ctx.setLineDash([]);
-                ctx.beginPath();ctx.moveTo(dx,dy);
-                ctx.bezierCurveTo(dx+(tx-dx)*0.3,dy+(ty-dy)*0.3+wave1*2,
-                    dx+(tx-dx)*0.7,dy+(ty-dy)*0.7-wave2*2,tx,ty);
-                ctx.stroke();
-
-                /* === MAIN WEB STRAND (fluorescent green) === */
-                ctx.shadowBlur=0;
-                ctx.strokeStyle=`rgba(0,255,100,${alpha*0.7})`;
-                ctx.lineWidth=4;
-                ctx.beginPath();ctx.moveTo(dx,dy);
-                ctx.bezierCurveTo(dx+(tx-dx)*0.3,dy+(ty-dy)*0.3+wave1,
-                    dx+(tx-dx)*0.7,dy+(ty-dy)*0.7-wave2,tx,ty);
-                ctx.stroke();
-
-                /* === INNER BRIGHT CORE === */
-                ctx.shadowBlur=0;
-                ctx.strokeStyle=`rgba(180,255,180,${alpha*0.8})`;
-                ctx.lineWidth=1.5;
-                ctx.beginPath();ctx.moveTo(dx,dy);
-                ctx.bezierCurveTo(dx+(tx-dx)*0.3,dy+(ty-dy)*0.3+wave1,
-                    dx+(tx-dx)*0.7,dy+(ty-dy)*0.7-wave2,tx,ty);
-                ctx.stroke();
-
-                /* === SECONDARY WEB THREADS (branching strands) === */
+                /* 2026-09-24: 두 차 사이를 도로를 따라 잇는다 — 직선 베지어는 커브에서 잔디·가드레일 밖을 가로질렀다 */
+                const tgt=car.stickyTarget,tight=t<2?1:0.3;
+                const pts=strandPts(car.progress,car.laneOffset||0,tgt.progress,tgt.laneOffset||0,dx,dy,tx,ty);
+                const wob=(i,n)=>Math.sin(i/(n-1)*Math.PI)*Math.sin(frameNow*0.007+i*0.55)*5*tight;
+                ctx.lineJoin='round';ctx.lineCap='round';ctx.shadowBlur=0;ctx.setLineDash([]);
+                ctx.strokeStyle=`rgba(0,255,80,${alpha*0.25})`;ctx.lineWidth=10;strokePts(pts,wob);ctx.stroke();
+                ctx.strokeStyle=`rgba(0,255,100,${alpha*0.7})`;ctx.lineWidth=4;strokePts(pts,wob);ctx.stroke();
+                ctx.strokeStyle=`rgba(180,255,180,${alpha*0.8})`;ctx.lineWidth=1.5;strokePts(pts,wob);ctx.stroke();
+                /* 가지 거미줄 · 줄을 타고 흐르는 빛 */
                 ctx.strokeStyle=`rgba(0,255,100,${alpha*0.3})`;ctx.lineWidth=1;
-                for(let s=0;s<3;s++){
-                    const st=(s+1)/4;
-                    const bx=lerp(dx,tx,st)+Math.sin(frameNow*0.005+s*2)*wave1;
-                    const by=lerp(dy,ty,st)+Math.cos(frameNow*0.007+s*2)*wave2;
-                    /* Branch off from main strand */
-                    const branchAng=Math.sin(frameNow*0.003+s)*0.6;
-                    const branchLen=8+Math.sin(frameNow*0.01+s)*4;
-                    ctx.beginPath();ctx.moveTo(bx,by);
-                    ctx.lineTo(bx+Math.cos(branchAng)*branchLen,by+Math.sin(branchAng)*branchLen);
-                    ctx.stroke();
-                }
-
-                /* === ENERGY PULSES traveling along the strand === */
-                const numPulses=t<2?4:2;
-                for(let i=0;i<numPulses;i++){
-                    const pt=((frameNow*0.001+i/numPulses)%1); /* 0-1 position */
-                    const px=lerp(tx,dx,pt);
-                    const py=lerp(ty,dy,pt);
-                    const pwave=Math.sin(frameNow*0.006)*wave1*(1-Math.abs(pt-0.5)*2);
-                    ctx.fillStyle=`rgba(150,255,150,${alpha*0.8})`;
-                    ctx.shadowColor='#00FF66';ctx.shadowBlur=0;
-                    ctx.beginPath();ctx.arc(px+pwave*0.3,py-pwave*0.3,3,0,Math.PI*2);ctx.fill();
-                    ctx.shadowBlur=0;
-                }
+                for(let s2=0;s2<3;s2++){const q=ptAt(pts,(s2+1)/4),ba=Math.sin(frameNow*0.003+s2)*0.6,bl=8+Math.sin(frameNow*0.01+s2)*4;
+                    ctx.beginPath();ctx.moveTo(q.x,q.y);ctx.lineTo(q.x+Math.cos(ba)*bl,q.y+Math.sin(ba)*bl);ctx.stroke()}
+                const numPulses=t<2?4:2;ctx.fillStyle=`rgba(150,255,150,${alpha*0.8})`;
+                for(let i=0;i<numPulses;i++){const q=ptAt(pts,1-((frameNow*0.001+i/numPulses)%1));ctx.beginPath();ctx.arc(q.x,q.y,3,0,Math.PI*2);ctx.fill()}
             }
             ctx.setLineDash([]);
             ctx.restore();
@@ -5457,18 +5460,15 @@ function drawProjectiles(){
             /* Outer glow strand */
             ctx.shadowColor='#00FF66';ctx.shadowBlur=0;
             ctx.strokeStyle='rgba(0,255,100,0.6)';ctx.lineWidth=4;
-            ctx.beginPath();ctx.moveTo(sx,sy);
-            /* Wavy web strand */
-            const mx=(sx+p.x)/2,my=(sy+p.y)/2;
-            const wave=Math.sin(frameNow*0.008)*8;
-            ctx.quadraticCurveTo(mx+wave,my-wave,p.x,p.y);
-            ctx.stroke();
+            /* 도로를 따라 늘어나는 줄 — 직선이면 커브에서 잔디를 가로질렀다 */
+            const _pts=strandPts(p.source.progress,p.source.laneOffset||0,p.progress,p.lane!==undefined?p.lane:(p.target.laneOffset||0),sx,sy,p.x,p.y);
+            const _wob=(i,n)=>Math.sin(i/(n-1)*Math.PI)*Math.sin(frameNow*0.008+i*0.6)*3;
+            ctx.lineJoin='round';ctx.lineCap='round';
+            strokePts(_pts,_wob);ctx.stroke();
             /* Inner bright core */
             ctx.shadowBlur=0;
             ctx.strokeStyle='rgba(150,255,150,0.9)';ctx.lineWidth=2;
-            ctx.beginPath();ctx.moveTo(sx,sy);
-            ctx.quadraticCurveTo(mx+wave,my-wave,p.x,p.y);
-            ctx.stroke();
+            strokePts(_pts,_wob);ctx.stroke();
             /* Projectile head - green blob */
             ctx.fillStyle='#00FF66';
             ctx.shadowColor='#00FF66';ctx.shadowBlur=0;
@@ -5701,48 +5701,71 @@ window.LPFX=(function(){
     return out;
   }
   function runPath(c,run,B,off){c.beginPath();run.forEach((k,j)=>{const p=B?B[k]:track[k];let x=p.x,y=p.y;if(off){const v=off(k);x+=v[0];y+=v[1]}j?c.lineTo(x,y):c.moveTo(x,y)})}
+  /* 원호 자국 원인: ① 둥근 끝(round cap)으로 그은 상판이 경사로 끝에서 반원 가드레일 띠를 남겼고
+     ② 반투명 짧은 선을 구간마다 겹쳐 그어 이음새마다 원호 모양으로 진해졌다.
+     지금: 상판은 각진 끝(butt) — 원래 도로와 같은 색이라 끝이 안 보인다.
+     명암은 **불투명한 회색 층**에 칠하고 곱하기/스크린으로 한 번에 얹는다 — 겹쳐도 누적되지 않는다 */
   function paintCrossing(c){
     const RW=S.RW||TRACK_WIDTH,TW=TRACK_WIDTH,a=Math.max(4,TW*0.06);
-    c.save();c.lineJoin='round';c.lineCap='round';
-    /* 지하차도 */
-    for(const run of crossRuns(-1)){
-      for(let j=0;j<run.length-1;j++){const k=run[j],d=-(track[k].z||0);
-        c.strokeStyle='rgba(0,0,0,'+(0.34*d).toFixed(3)+')';c.lineWidth=RW+a*2;c.beginPath();c.moveTo(track[k].x,track[k].y);c.lineTo(track[run[j+1]].x,track[run[j+1]].y);c.stroke()}
-      const deep=run.filter(k=>-(track[k].z||0)>0.3);if(deep.length<2)continue;
-      [trackBorderLeft,trackBorderRight].forEach(B=>{
-        c.strokeStyle='rgba(20,22,26,0.55)';c.lineWidth=a*2.6;runPath(c,deep,B);c.stroke();
-        c.strokeStyle='#9aa1aa';c.lineWidth=a*1.6;runPath(c,deep,B);c.stroke();
-        c.strokeStyle='rgba(255,255,255,0.35)';c.lineWidth=a*0.5;runPath(c,deep,B,k=>[-1,-1]);c.stroke()});
+    const sm=x=>x<=0?0:x>=1?1:x*x*(3-2*x),zz=k=>track[k].z||0;
+    const mk=fill=>{const cv=document.createElement('canvas');cv.width=canvas.width;cv.height=canvas.height;const g=cv.getContext('2d');
+      if(fill){g.fillStyle=fill;g.fillRect(0,0,cv.width,cv.height)}g.setTransform(DPR,0,0,DPR,0,0);g.lineJoin='round';g.lineCap='round';return{cv,g}};
+    const seg=(g,k1,k2,B,ox,oy)=>{const p=B?B[k1]:track[k1],q=B?B[k2]:track[k2];g.beginPath();g.moveTo(p.x+(ox||0),p.y+(oy||0));g.lineTo(q.x+(ox||0),q.y+(oy||0));g.stroke()};
+    const put=(dst,layer,op)=>{dst.save();dst.setTransform(1,0,0,1,0,0);dst.globalCompositeOperation=op;dst.drawImage(layer.cv,0,0);dst.restore()};
+    const mix=(c1,c2,t)=>'rgb('+c1.map((v,i)=>Math.round(v+(c2[i]-v)*t)).join(',')+')';
+    /* ── 지하차도: 깊을수록 어둡게(곱하기) + 옹벽이 서서히 두꺼워짐 ── */
+    const under=crossRuns(-1);
+    if(under.length){
+      const U=mk('#fff');
+      for(const run of under)for(let j=0;j<run.length-1;j++){const d=sm(-zz(run[j])/0.9),v=Math.round(255*(1-0.5*d));
+        U.g.strokeStyle='rgb('+v+','+v+','+Math.min(255,v+6)+')';U.g.lineWidth=RW+a*2;seg(U.g,run[j],run[j+1])}
+      put(c,U,'multiply');
+      c.save();c.lineJoin='round';c.lineCap='round';
+      /* 바깥 선 전부 → 안쪽 선 전부 (구간마다 번갈아 그으면 이음새가 구슬처럼 보인다) */
+      for(let pass=0;pass<2;pass++)for(const run of under)for(let j=0;j<run.length-1;j++){const d=sm(-zz(run[j])/0.9);if(d<0.02)continue;
+        [trackBorderLeft,trackBorderRight].forEach(B=>{
+          if(!pass){c.strokeStyle=mix([24,26,30],[40,42,48],d);c.lineWidth=a*(2+1.8*d)}
+          else{c.strokeStyle=mix([200,206,214],[150,157,166],d);c.lineWidth=a*(1+1.2*d)}
+          seg(c,run[j],run[j+1],B)})}
+      c.restore();
     }
-    c.restore();
-    /* 다리 덮개 */
-    const runs=crossRuns(1);if(!runs.length)return;
-    const cv=document.createElement('canvas');cv.width=canvas.width;cv.height=canvas.height;const g=cv.getContext('2d');
-    g.setTransform(DPR,0,0,DPR,0,0);g.lineJoin='round';g.lineCap='round';
+    /* ── 다리 덮개 캔버스 ── */
+    const runs=crossRuns(1);if(!runs.length){S.brg=null;return}
+    const O=mk(null),g=O.g;
+    /* ① 그림자: 불투명 가면 → 흐린 그림자만 옮겨 찍기 */
+    const Mk=mk(null);Mk.g.strokeStyle='#000';Mk.g.lineCap='butt';
+    for(const run of runs)for(let j=0;j<run.length-1;j++){const z=zz(run[j]);if(z<0.03)continue;Mk.g.lineWidth=RW+a*2;seg(Mk.g,run[j],run[j+1],null,TW*0.2*z,TW*0.26*z)}
+    const FAR=40000;g.save();g.setTransform(1,0,0,1,0,0);g.shadowColor='rgba(0,0,0,0.5)';g.shadowBlur=10*DPR;g.shadowOffsetX=FAR;g.drawImage(Mk.cv,-FAR,0);g.restore();
+    /* ② 옆면(돌출) — 상판 아래쪽으로 콘크리트 옆벽이 보이게. 끝은 각지게(둥근 끝은 경사로 끝 너머로 반원이 삐져나왔다) */
+    g.lineCap='butt';
+    for(const run of runs)for(let j=0;j<run.length-1;j++){const z=zz(run[j]);if(z<0.02)continue;const h=TW*0.17*sm(z);
+      g.strokeStyle=mix([70,74,82],[92,98,108],sm(z));g.lineWidth=RW+a*2;seg(g,run[j],run[j+1],null,0,h)}
+    /* ③ 상판 — 각진 끝, 원래 도로와 같은 층 구성 */
+    g.lineCap='butt';
     for(const run of runs){
-      /* ① 상판 그림자 — 높을수록 멀리(좌상단 빛) */
-      for(let j=0;j<run.length-1;j++){const k=run[j],z=track[k].z||0,ox=TW*0.16*z,oy=TW*0.22*z;
-        g.strokeStyle='rgba(0,0,0,'+(0.30*z).toFixed(3)+')';g.lineWidth=RW+a*2+TW*0.1*z;
-        g.beginPath();g.moveTo(track[k].x+ox,track[k].y+oy);g.lineTo(track[run[j+1]].x+ox,track[run[j+1]].y+oy);g.stroke()}
-      /* ② 상판 — 원래 도로와 같은 층 구성이라 경사로 끝에서 이음새가 안 보인다 */
-      g.strokeStyle='rgba(24,26,30,0.95)';g.lineWidth=RW+a*2;runPath(g,run);g.stroke();
-      g.strokeStyle='rgba(200,206,214,0.97)';g.lineWidth=RW+a;runPath(g,run);g.stroke();
+      g.strokeStyle='rgba(24,26,30,1)';g.lineWidth=RW+a*2;runPath(g,run);g.stroke();
+      g.strokeStyle='rgb(200,206,214)';g.lineWidth=RW+a;runPath(g,run);g.stroke();
       g.strokeStyle=asphalt(g);g.lineWidth=RW;runPath(g,run);g.stroke();
       g.strokeStyle='rgba(0,0,0,0.13)';g.lineWidth=TW*0.40;runPath(g,run);g.stroke();
       g.setLineDash([TW*0.13,TW*0.2]);g.strokeStyle='rgba(255,255,255,0.22)';g.lineWidth=Math.max(1.2,TW*0.02);runPath(g,run);g.stroke();g.setLineDash([]);
-      /* ③ 높은 곳: 밝은 노면 + 콘크리트 난간 + 난간 기둥 */
-      const hi=run.filter(k=>(track[k].z||0)>0.25);
-      if(hi.length>1){
-        for(let j=0;j<run.length-1;j++){const k=run[j],z=track[k].z||0;if(z<0.05)continue;
-          g.strokeStyle='rgba(255,250,235,'+(0.07*z).toFixed(3)+')';g.lineWidth=RW;g.beginPath();g.moveTo(track[k].x,track[k].y);g.lineTo(track[run[j+1]].x,track[run[j+1]].y);g.stroke()}
-        [trackBorderLeft,trackBorderRight].forEach(B=>{
-          g.strokeStyle='rgba(15,16,20,0.6)';g.lineWidth=a*2.8;runPath(g,hi,B);g.stroke();
-          g.strokeStyle='#e4e7eb';g.lineWidth=a*1.8;runPath(g,hi,B);g.stroke();
-          g.strokeStyle='rgba(120,128,138,0.9)';g.lineWidth=a*0.6;runPath(g,hi,B,k=>{const n=trackNormals[k];return[n.nx*0,n.ny*0]});g.stroke();
-          g.fillStyle='#8d949d';for(let j=0;j<hi.length;j+=4){const p=B[hi[j]];g.beginPath();g.arc(p.x,p.y,a*0.75,0,Math.PI*2);g.fill()}});
-      }
     }
-    S.brg=cv;
+    g.lineCap='round';
+    /* ④ 높이 명암 — 높을수록 밝게(스크린), 상판 안에서만 */
+    const Hh=mk('#000');
+    for(const run of runs)for(let j=0;j<run.length-1;j++){const v=Math.round(255*0.13*sm(zz(run[j])));Hh.g.strokeStyle='rgb('+v+','+v+','+v+')';Hh.g.lineWidth=RW;seg(Hh.g,run[j],run[j+1])}
+    const Mk2=mk(null);Mk2.g.strokeStyle='#000';Mk2.g.lineCap='butt';for(const run of runs){Mk2.g.lineWidth=RW;runPath(Mk2.g,run);Mk2.g.stroke()}
+    Hh.g.save();Hh.g.setTransform(1,0,0,1,0,0);Hh.g.globalCompositeOperation='destination-in';Hh.g.drawImage(Mk2.cv,0,0);Hh.g.restore();
+    put(g,Hh,'screen');
+    /* ⑤ 난간 — 높이에 따라 서서히 두꺼워지는 콘크리트, 높은 곳에 기둥 */
+    for(let pass=0;pass<2;pass++)for(const run of runs)for(let j=0;j<run.length-1;j++){const z=sm((zz(run[j])-0.05)/0.6);if(z<0.02)continue;
+      [trackBorderLeft,trackBorderRight].forEach(B=>{
+        if(!pass){g.strokeStyle=mix([24,26,30],[18,20,24],z);g.lineWidth=a*(2+1.2*z)}
+        else{g.strokeStyle=mix([200,206,214],[232,235,239],z);g.lineWidth=a*(1+0.9*z)}
+        seg(g,run[j],run[j+1],B)})}
+    g.fillStyle='#8d949d';
+    for(const run of runs)for(let j=0;j<run.length;j+=5){const z=zz(run[j]);if(z<0.45)continue;
+      [trackBorderLeft,trackBorderRight].forEach(B=>{const p=B[run[j]];g.beginPath();g.arc(p.x,p.y,a*0.7*sm(z),0,Math.PI*2);g.fill()})}
+    S.brg=O.cv;
   }
   function drawCars(list,dc){
     if(!S.ok||!CROSS){list.forEach(dc);return}
@@ -8121,7 +8144,7 @@ _waitForLpRoom(()=>{
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790208878" defer></script>
+<script src="/js/siteFooter.js?v=1790212582" defer></script>
 <!-- lp-game-guide:start -->
 <style>
 .lp-game-guide{max-width:740px;width:calc(100% - 32px);margin:36px auto 24px;padding:22px 22px 18px;border-radius:14px;background:linear-gradient(180deg,rgba(93,193,255,.05) 0%,rgba(167,139,250,.03) 100%);border:1px solid rgba(93,193,255,.2);box-sizing:border-box;position:relative;z-index:1}
