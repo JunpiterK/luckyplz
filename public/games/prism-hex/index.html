@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790307533">
+<meta name="lp-build" content="1790311093">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790307533";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790311093";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -862,6 +862,8 @@ function netPush(){
   if(S.phase==='play'){const bot=botDrivesSeat(S,seatOfC(S,S.turn));S.tl=(deadline&&!bot)?Math.max(0,deadline-Date.now()):0}
   const payload={g:GID,st:S};
   try{room.broadcast('host:state',payload);room.snapshot(payload)}catch(_){}
+  /* 방장이 새로고침해도 이어서 — 탭 안(sessionStorage)에 권위 상태를 남긴다 (lpRoom.saveSnapshot) */
+  try{if(room.saveSnapshot)room.saveSnapshot({S,seqN,setup:{np:setup.np,timer:setup.timer,seats:setup.seats}})}catch(_){}
 }
 function lobbyState(){
   return {phase:'lobby',seq:seqN,np:setup.np,timer:setup.timer,
@@ -1595,12 +1597,26 @@ function showInvite(){
 }
 function wireHost(r){
   room=r;ROLE='host';
-  setup.seats.forEach((t,i)=>{t.owner=null;t.ctrl=i===0?'host':'open'});
-  setup.seats[0].owner={name:myName()||T('host'),pid:myPid};
+  /* 새로고침한 방장 — lpRoom 이 되살린 방(같은 코드)에 직전 상태를 복원한다. 게스트는 lpRoom 이 다시 붙인다 */
+  let rs=null;try{rs=r.restoredSnapshot&&r.restoredSnapshot()}catch(_){}
+  if(rs&&rs.S&&rs.setup&&Array.isArray(rs.setup.seats)){
+    setup=Object.assign(setup,rs.setup);S=rs.S;seqN=rs.seqN|0;V=null;
+  }else{
+    rs=null;
+    setup.seats.forEach((t,i)=>{t.owner=null;t.ctrl=i===0?'host':'open'});
+    setup.seats[0].owner={name:myName()||T('host'),pid:myPid};
+  }
   r.onGuestAction(p=>{if(p&&p.type===GID)onIntent(p)});
   r.onGuestJoin(()=>setTimeout(netPush,150));
   r.onGuestLeave(info=>{const pid=gidPid[info&&info.id];if(!pid)return;markOff(pid,true)});
   if(window.LpHostCtl){try{window.LpHostCtl.install({role:'host',room:r,canPause:false,onEnd:()=>{room=null;ROLE='local';V=null;S=null;show('scrMode')}});navHostCtl()}catch(_){}}
+  if(rs){
+    /* 게스트 자리는 10초 안에 다시 신호가 오지 않으면 '연결 끊김'(→ 봇 대행) */
+    const now=Date.now();
+    (S.seats||[]).concat(setup.seats).forEach(t=>{if(t&&t.ctrl==='guest'&&t.owner&&t.owner.pid)lastSeen[t.owner.pid]=now});
+    if(S.phase==='lobby')publishLobby();else{dlKey='';publish({k:'resume'})}
+    return;
+  }
   publishLobby();
 }
 function markOff(pid,off){
@@ -1677,7 +1693,9 @@ function navHostCtl(tries){
   document.querySelectorAll('.lp-hc-ehome').forEach(b=>{b.style.display='none'});
 }
 /* 링크로 들어온 사람은 바로 참가 창 */
-waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname})}}catch(_){}});
+waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname});return}
+  /* 방장이 새로고침/탭 복원 — 이 탭이 방장이던 방만 lpRoom 이 되살린다(다른 탭은 게스트 참가 제안) */
+  if(window.LpRoom.tryResumeHost)window.LpRoom.tryResumeHost({gameId:GID}).then(r=>{if(r&&ROLE==='local'&&!room)wireHost(r)}).catch(()=>{})}catch(_){}});
 
 /* ════════════════════════ 소리 버튼 · 언어 · 시작 ════════════════════════ */
 function sndUi(){$('btnSnd').textContent=muted()?'🔇':'🔊'}
@@ -1718,14 +1736,14 @@ window.__ph={get S(){return S},get V(){return V},get role(){return ROLE},get sel
 </script>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790307533"></script>
-<script src="/js/nextGames.js?v=1790307533"></script>
+<script src="/js/supabase-config.js?v=1790311093"></script>
+<script src="/js/nextGames.js?v=1790311093"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790307533" defer></script>
+<script src="/js/siteFooter.js?v=1790311093" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

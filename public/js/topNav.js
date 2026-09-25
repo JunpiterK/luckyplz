@@ -96,7 +96,7 @@
 }
 
 /* ---- Mobile game switcher (floating FAB + bottom sheet) ---- */
-.lp-sw-fab{display:none;position:fixed;bottom:84px;right:14px;z-index:600;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#FFE66D,#FF9A3C);box-shadow:0 6px 18px rgba(0,0,0,.35);border:none;color:#0A0A1A;font-size:22px;cursor:pointer;font-family:inherit;font-weight:900;line-height:1;align-items:center;justify-content:center;padding:0}
+.lp-sw-fab{display:none;position:fixed;bottom:calc(84px + env(safe-area-inset-bottom,0px));right:calc(14px + env(safe-area-inset-right,0px));z-index:600;transition:opacity .16s ease,transform .16s ease,visibility 0s linear 0s;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#FFE66D,#FF9A3C);box-shadow:0 6px 18px rgba(0,0,0,.35);border:none;color:#0A0A1A;font-size:22px;cursor:pointer;font-family:inherit;font-weight:900;line-height:1;align-items:center;justify-content:center;padding:0}
 .lp-sw-fab:active{transform:scale(.94)}
 @media(max-width:899px){.lp-sw-fab{display:flex}}
 /* Host-locked: hide the mobile FAB so the host's only game-switch
@@ -104,6 +104,13 @@
    switch" confusion + guards against accidental transfers during
    an active room. */
 body.lp-host-active .lp-sw-fab{display:none !important}
+/* lpChrome.js 상태 (2026-09-25) — 플레이 중(lp-chrome-playing)·게임이 끈 페이지(lp-no-swfab)·
+   아래에 버튼/입력칸/캔버스가 있을 때(.lp-obstructed)는 숨기고, 스크롤하는 동안은 잠깐 감춘다.
+   시작 버튼 같은 주 버튼을 🎮 가 가리지 않게 하는 공용 규칙 — 게임별 body 클래스(ladder·car-racing)는 그대로 유효 */
+body.lp-chrome-playing .lp-sw-fab,body.lp-no-swfab .lp-sw-fab,.lp-sw-fab.lp-obstructed{
+    opacity:0;visibility:hidden;pointer-events:none;
+    transition:opacity .16s ease,visibility 0s linear .16s}
+body.lp-chrome-scrolling .lp-sw-fab{opacity:0;pointer-events:none}
 
 .lp-sw-modal{display:none;position:fixed;inset:0;z-index:700;font-family:'Noto Sans KR',sans-serif}
 .lp-sw-modal.on{display:block}

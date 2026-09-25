@@ -192,7 +192,10 @@
          iOS\'s home indicator on notched devices. */
       /* 좌상단 배치 (2026-08-19). 우하단에 두면 브롤런·카레이싱의
          일시정지/종료 버튼(우측 패널 하단)과 겹쳤다. 홈 버튼이 좌상단
-         12px 부근 높이 ~40px 을 쓰므로 그 아래 56px 에서 시작한다. */
+         12px 부근 높이 ~40px 을 쓰므로 그 아래 56px 에서 시작한다.
+         2026-09-25: 게임 페이지에서는 lpChrome.js 가 이 버튼을 좌상단 독
+         (⛶ → 🔊 → ?)으로 옮기고, 플레이 중에는 손잡이 하나로 접는다.
+         아래 fixed 좌표는 독이 없을 때의 폴백이다. */
       '.lp-fs-btn{position:fixed;',
       '  top:calc(56px + env(safe-area-inset-top,0px));',
       '  left:calc(10px + env(safe-area-inset-left,0px));',

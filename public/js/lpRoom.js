@@ -156,7 +156,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.04.29-seq';
+    const LP_ROOM_VERSION='2026.09.25-presence';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Diagnostic log — console-only. The visible floating panel was
@@ -195,6 +195,126 @@
 
     function shortId(){return Math.random().toString(36).slice(2,10)}
 
+    /* ============ Presence / resume hardening (2026-09-25) ============
+       13. Guest liveness — every accepted guest sends guest:hb every 4s
+           (with vis:'visible'|'hidden') and a guest:leave{reason:'bye'}
+           on pagehide. The host tracks lastSeen per guest from ANY guest
+           message (hb, pong, action, request_snapshot) and drops a guest
+           that has been silent for GUEST_STALE_MS (15s), or
+           GUEST_HIDDEN_GRACE_MS (40s) when its last word was "I'm
+           hidden" (phone switched apps — the OS may freeze the page).
+           Dropping fires onGuestLeave({reason:'stale'}) so seats free
+           up. Before this, only an explicit g.close() reported a leave,
+           so a closed tab / crash kept its seat forever.
+       14. Transparent rejoin — a guest the host no longer knows (dropped
+           as stale, or the host reloaded) is told host:rejoin{gid}; the
+           guest re-sends join_request with the SAME gid/pid/nickname and
+           rejoin:true. Known pids are accepted even when the room is
+           locked, and keep their nickname.
+       15. Host epoch — every hostCreate() picks a random epoch stamped
+           on heartbeat / join_ack / every broadcast (_ep). A guest that
+           sees the epoch change knows the host page restarted: it resets
+           its seq tracking (the new host counts from 0 — without the
+           reset every new snapshot would be dropped as "stale") and
+           rejoins.
+       16. One host per room — the "I am hosting" marker lives in
+           sessionStorage (per tab) and the room holds a Web Lock
+           (lp-host-<CODE>) for the page lifetime. tryResumeHost only
+           resumes when THIS tab was the host and no other live tab
+           holds the lock. A second tab no longer silently becomes a
+           second host; it gets an offer to join as a guest instead.
+       17. Host snapshot persistence — room.saveSnapshot(obj) keeps a
+           host-private restore blob in sessionStorage; after a reload
+           tryResumeHost's room exposes it as room.restoredSnapshot().
+       18. Realtime keep-alive while hidden — supabase-js (phoenix)
+           refuses to reconnect a dropped socket while the page is
+           hidden ("Not reconnecting as page is hidden!"), so a guest
+           in a background tab that hit a network blip stayed offline
+           (and an invite-link join in a background tab failed) until
+           the user looked at the tab. While any room is active we
+           reconnect it ourselves. */
+    const GUEST_HB_MS=4000;
+    const GUEST_STALE_MS=15000;
+    const GUEST_HIDDEN_GRACE_MS=40000;
+    const SS_HOST='lp_hostTab';       /* this tab hosts/hosted: {code,pin,hostName,gameId,t} */
+    const SS_SNAP='lp_hostSnap';      /* {code,gameId,t,data} — room.saveSnapshot */
+    const SS_ROSTER='lp_hostRoster';  /* {code,list:[{pid,nickname}],t} — known guests */
+    function _ssGet(k){try{const r=sessionStorage.getItem(k);return r?JSON.parse(r):null}catch(_){return null}}
+    function _ssSet(k,v){try{sessionStorage.setItem(k,JSON.stringify(v));return true}catch(_){return false}}
+    function _ssDel(k){try{sessionStorage.removeItem(k)}catch(_){}}
+    function _ssUsable(){try{sessionStorage.setItem('__lp_ss','1');sessionStorage.removeItem('__lp_ss');return true}catch(_){return false}}
+
+    /* Fire-and-forget channel send — chan.send returns a promise that
+       rejects when the socket is down; an unhandled rejection is just
+       console noise, the caller never needs the result. */
+    function _send(chan,event,payload){
+        try{const r=chan.send({type:'broadcast',event:event,payload:payload});if(r&&typeof r.catch==='function')r.catch(function(){})}catch(_){}
+    }
+
+    /* ---- Realtime keep-alive (item 18) ---- */
+    let _kaUsers=0,_kaTimer=null,_kaSb=null;
+    function _kaCheck(){
+        const rt=_kaSb&&_kaSb.realtime;
+        if(!rt||typeof rt.connect!=='function')return;
+        /* Visible pages: phoenix runs its own backoff reconnect — don't fight it. */
+        if(!document.hidden)return;
+        try{
+            if(typeof rt.isConnected==='function'&&rt.isConnected())return;
+            if(typeof rt.isConnecting==='function'&&rt.isConnecting())return;
+            if(typeof rt.isDisconnecting==='function'&&rt.isDisconnecting())return;
+            dbgLog('keepalive: realtime socket down while hidden → connect()');
+            rt.connect();
+        }catch(_){}
+    }
+    function _keepAliveAcquire(sb){
+        _kaSb=sb;_kaUsers++;
+        if(_kaTimer)return;
+        _kaTimer=setInterval(_kaCheck,4000);
+        try{window.addEventListener('online',_kaCheck)}catch(_){}
+    }
+    function _keepAliveRelease(){
+        _kaUsers=Math.max(0,_kaUsers-1);
+        if(_kaUsers||!_kaTimer)return;
+        clearInterval(_kaTimer);_kaTimer=null;
+        try{window.removeEventListener('online',_kaCheck)}catch(_){}
+    }
+
+    /* ---- One host per room (item 16) ---- */
+    function _lockName(code){return 'lp-host-'+String(code).toUpperCase()}
+    /* Resolves {ok, release}. waitMs=0 → ifAvailable (new rooms);
+       waitMs>0 → wait that long for a previous holder to go away (a
+       reloading tab's old document releases asynchronously). No Web
+       Locks support → {ok:true} (falls back to the sessionStorage gate). */
+    function _acquireHostLock(code,waitMs){
+        return new Promise(function(resolve){
+            const noop={ok:true,release:function(){}};
+            if(!navigator.locks||typeof navigator.locks.request!=='function')return resolve(noop);
+            let settled=false;
+            const ac=(waitMs>0&&typeof AbortController!=='undefined')?new AbortController():null;
+            const timer=waitMs>0?setTimeout(function(){
+                if(settled)return;settled=true;
+                try{ac&&ac.abort()}catch(_){}
+                resolve({ok:false,release:function(){}});
+            },waitMs):null;
+            const lopts=waitMs>0?(ac?{signal:ac.signal}:{}):{ifAvailable:true};
+            try{
+                navigator.locks.request(_lockName(code),lopts,function(lock){
+                    if(!lock){if(!settled){settled=true;if(timer)clearTimeout(timer);resolve({ok:false,release:function(){}})}return}
+                    if(settled)return; /* timed out meanwhile — let it go */
+                    settled=true;if(timer)clearTimeout(timer);
+                    return new Promise(function(rel){resolve({ok:true,release:rel})});
+                }).catch(function(){if(!settled){settled=true;if(timer)clearTimeout(timer);resolve(noop)}});
+            }catch(_){if(!settled){settled=true;if(timer)clearTimeout(timer);resolve(noop)}}
+        });
+    }
+    /* true = another live tab hosts this code, false = nobody, null = unknown */
+    function _isHostLockHeld(code){
+        if(!navigator.locks||typeof navigator.locks.query!=='function')return Promise.resolve(null);
+        return navigator.locks.query().then(function(s){
+            return (s&&s.held||[]).some(function(l){return l.name===_lockName(code)});
+        }).catch(function(){return null});
+    }
+
     /* ============ HOST ============ */
     /* Look up whether the caller is a logged-in Lucky Please user with
        a verified profile. Used to tag roster entries with a ✓ badge
@@ -222,12 +342,55 @@
         const sb=await waitForSupabase();
         const hostAuth=await _lpAuthSignature();
         const code=opts.code||genCode();
-        dbgLog('host: create '+code+' game='+gameId);
+        /* resumed: true when tryResumeHost re-creates a room this tab
+           was already hosting (reload / tab restore / game switch). */
+        const resumed=!!opts.resumed;
+        /* Host epoch (item 15) — changes every time a host page (re)creates
+           the room, so guests can tell "host restarted" apart from noise. */
+        const epoch=shortId().slice(0,6);
+        dbgLog('host: create '+code+' game='+gameId+(resumed?' (resumed)':'')+' ep='+epoch);
         const chan=sb.channel(channelName(code),{config:{broadcast:{self:false,ack:false},presence:{key:'h-'+shortId()}}});
 
-        const guests=new Map(); /* guestId -> {nickname, joinedAt} */
+        /* Hold the per-room Web Lock for the page lifetime (item 16). */
+        let _hostLock=opts._lock||null;
+        if(!_hostLock){
+            _acquireHostLock(code,0).then(function(l){
+                if(closing){try{l.release()}catch(_){}return}
+                _hostLock=l;
+            });
+        }
+        _keepAliveAcquire(sb);
+        let _resReleased=false;
+        function _releaseHostResources(){
+            if(_resReleased)return;_resReleased=true;
+            try{_hostLock&&_hostLock.release()}catch(_){}
+            _keepAliveRelease();
+        }
+
+        const guests=new Map(); /* guestId -> {nickname, pid, joinedAt, lastSeen, vis} */
         const guestJoinCbs=[];
         const guestLeaveCbs=[];
+        const guestPresenceCbs=[];
+        /* Everyone ever accepted into this room: pid → nickname. Lets a
+           returning guest back in even after lock(), and keeps their
+           nickname. Survives a host reload via sessionStorage. */
+        const _knownPids=new Map();
+        if(resumed){
+            const rr=_ssGet(SS_ROSTER);
+            if(rr&&rr.code===code&&Array.isArray(rr.list)){
+                rr.list.forEach(function(e){if(e&&e.pid)_knownPids.set(e.pid,e.nickname||'')});
+            }
+        }
+        function _persistRoster(){
+            const list=[];_knownPids.forEach(function(n,p){list.push({pid:p,nickname:n})});
+            _ssSet(SS_ROSTER,{code:code,list:list.slice(-60),t:Date.now()});
+        }
+        /* host-private restore blob from before the reload (item 17) */
+        let _restoredSnap=null;
+        if(resumed){
+            const sn=_ssGet(SS_SNAP);
+            if(sn&&sn.code===code&&sn.gameId===gameId&&(Date.now()-(sn.t||0))<12*3600e3)_restoredSnap=sn.data;
+        }
         let subscribed=false;
         /* Once the host presses the game's Start button, additional guest
            join_requests are rejected with reason:'locked'. This gives
@@ -279,8 +442,13 @@
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
-            dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin));
-            if(locked){
+            dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin)+(p.rejoin?' [rejoin]':''));
+            /* A rejoin from someone already accepted into this room
+               (same gid still listed, or a pid we've seen) bypasses the
+               lock — they were here before the game started. */
+            const wasPresent=guests.has(p.gid);
+            const isKnown=wasPresent||!!(p.pid&&_knownPids.has(p.pid));
+            if(locked&&!(p.rejoin&&isKnown)){
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'locked'}});
                 return;
             }
@@ -301,39 +469,55 @@
                nick+1. This keeps the roster stable across
                reconnects and matches what the client's pid-keyed
                card store expects. */
-            var reusedNick=null;
+            var reusedNick=wasPresent?guests.get(p.gid).nickname:null;
+            var zombieGone=false;
             if(p.pid){
                 guests.forEach(function(g,k){
                     if(g.pid===p.pid&&k!==p.gid){
                         reusedNick=g.nickname;
                         guests.delete(k);
+                        zombieGone=true;
                         dbgLog('host: cleared zombie '+k.slice(0,6)+' ('+g.nickname+') for returning pid');
                     }
                 });
             }
+            /* A known pid coming back after a host reload / stale drop:
+               prefer the nickname they had in this room. */
+            if(!reusedNick&&p.pid&&_knownPids.has(p.pid))reusedNick=_knownPids.get(p.pid)||null;
             /* Dedupe the nickname against the host + all current
                guests (case-insensitive). 진희 + 진희 → 진희 / 진희2,
-               Alice + alice → Alice / alice2. Max 99 suffixes. */
+               Alice + alice → Alice / alice2. Max 99 suffixes.
+               The requester's own current entry (same gid) doesn't count —
+               otherwise a rejoin would rename 진희 → 진희2. */
             var want=(p.nickname||'Guest').trim().slice(0,18)||'Guest';
             var taken={};
             taken[hostName.toLowerCase()]=1;
-            guests.forEach(function(g){taken[(g.nickname||'').toLowerCase()]=1});
+            guests.forEach(function(g,k){if(k!==p.gid)taken[(g.nickname||'').toLowerCase()]=1});
             var finalNick=want,i=2;
             /* If we just freed a slot for this returning pid AND the
                incoming base name matches the start of the old name,
                prefer the old name so 진희2 stays 진희2 on reconnect. */
-            if(reusedNick&&reusedNick.toLowerCase().indexOf(want.toLowerCase())===0){
+            if(reusedNick&&!taken[reusedNick.toLowerCase()]&&reusedNick.toLowerCase().indexOf(want.toLowerCase())===0){
                 finalNick=reusedNick;
             }else{
                 while(taken[finalNick.toLowerCase()]&&i<=99){finalNick=want+i;i++}
             }
+            const prevEntry=wasPresent?guests.get(p.gid):null;
             guests.set(p.gid,{
-                nickname:finalNick,pid:p.pid||'',joinedAt:Date.now(),
-                authed:!!p.authed,authedName:p.authedName||null
+                nickname:finalNick,pid:p.pid||'',joinedAt:prevEntry?prevEntry.joinedAt:Date.now(),
+                authed:!!p.authed,authedName:p.authedName||null,
+                lastSeen:Date.now(),vis:p.vis==='hidden'?'hidden':'visible'
             });
-            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,hostAuthed:!!hostAuth.authed,gameId:gameId,nickname:finalNick}});
+            if(p.pid){_knownPids.set(p.pid,finalNick);_persistRoster()}
+            _rejoinAskT.delete(p.gid);
+            chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:true,hostName:hostName,hostAuthed:!!hostAuth.authed,gameId:gameId,nickname:finalNick,ep:epoch}});
             dbgLog('host: sent join_ack (nick='+finalNick+(finalNick!==want?' from '+want:'')+(reusedNick?' [returning]':'')+')');
-            guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:finalNick})}catch(e){}});
+            /* Same gid still listed = a reconnect of someone we never lost:
+               re-ack + snapshot, but don't announce a "new" guest. */
+            if(!wasPresent){
+                const rejoin=!!p.rejoin||zombieGone||!!(p.pid&&isKnown);
+                guestJoinCbs.forEach(function(cb){try{cb({id:p.gid,nickname:finalNick,pid:p.pid||'',rejoin:rejoin})}catch(e){}});
+            }
             /* replay last snapshot so the newcomer catches up */
             if(currentSnapshot){
                 chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
@@ -347,16 +531,60 @@
             setTimeout(broadcastGuestList,80);
         });
 
+        /* Remove a guest and tell the game. reason: 'left' (g.close()),
+           'bye' (tab closed / navigated away — pagehide), 'stale' (went
+           silent past the grace window). */
+        function _dropGuest(gid,reason){
+            if(!guests.has(gid))return;
+            const info=guests.get(gid);
+            guests.delete(gid);
+            /* Drop the RTT sample for the leaving guest so room.rtt()'s
+               median doesn't include a ghost reading. */
+            try{_rttByGuest&&_rttByGuest.delete(gid)}catch(_){}
+            try{_guestActionBuckets&&_guestActionBuckets.delete(gid)}catch(_){}
+            dbgLog('host: guest '+gid.slice(0,6)+' ('+info.nickname+') gone — '+reason);
+            guestLeaveCbs.forEach(function(cb){try{cb({id:gid,nickname:info.nickname,pid:info.pid||'',reason:reason})}catch(e){}});
+            broadcastGuestList();
+        }
+        /* Any word from a guest proves it's alive. Unknown gid = someone
+           we dropped as stale, or who joined before this page reloaded —
+           ask them to rejoin (throttled per gid). Returns true when the
+           gid is a current guest. */
+        const _rejoinAskT=new Map();
+        function _touch(gid,vis){
+            if(!gid)return false;
+            const g=guests.get(gid);
+            if(g){
+                g.lastSeen=Date.now();
+                if((vis==='hidden'||vis==='visible')&&g.vis!==vis){
+                    g.vis=vis;
+                    guestPresenceCbs.forEach(function(cb){try{cb({id:gid,nickname:g.nickname,pid:g.pid||'',vis:vis})}catch(_){}});
+                }
+                return true;
+            }
+            if(!subscribed||closing)return false;
+            const now=Date.now();
+            const ask=_rejoinAskT.get(gid)||{t:0,n:0};
+            /* throttled per gid; an old-build guest that can't rejoin
+               stops being asked after a few tries */
+            if(now-ask.t>3000&&ask.n<6){
+                _rejoinAskT.set(gid,{t:now,n:ask.n+1});
+                dbgLog('host: unknown guest '+gid.slice(0,6)+' → host:rejoin');
+                _send(chan,'host:rejoin',{gid:gid,ep:epoch});
+            }
+            return false;
+        }
+
         chan.on('broadcast',{event:'guest:leave'},function(msg){
             const p=msg.payload||{};
             if(!p.gid||!guests.has(p.gid))return;
-            const info=guests.get(p.gid);
-            guests.delete(p.gid);
-            /* Drop the RTT sample for the leaving guest so room.rtt()'s
-               median doesn't include a ghost reading. */
-            try{_rttByGuest&&_rttByGuest.delete(p.gid)}catch(_){}
-            guestLeaveCbs.forEach(function(cb){try{cb({id:p.gid,nickname:info.nickname})}catch(e){}});
-            broadcastGuestList();
+            _dropGuest(p.gid,p.reason==='bye'?'bye':'left');
+        });
+
+        /* Guest liveness beacon (item 13) — {gid,pid,vis}. */
+        chan.on('broadcast',{event:'guest:hb'},function(msg){
+            const p=msg.payload||{};
+            _touch(p.gid,p.vis);
         });
 
         /* A guest returning from background (phone call / app switch)
@@ -367,6 +595,7 @@
         chan.on('broadcast',{event:'guest:request_snapshot'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
+            _touch(p.gid);
             dbgLog('host: snapshot requested by '+p.gid.slice(0,6));
             if(currentSnapshot){
                 chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
@@ -385,7 +614,8 @@
         const guestActionCbs=[];
         chan.on('broadcast',{event:'guest:action'},function(msg){
             const p=msg.payload||{};
-            if(!p.gid||!guests.has(p.gid))return; /* ignore spoof */
+            /* ignore spoof — and an unknown gid gets asked to rejoin */
+            if(!p.gid||!_touch(p.gid))return;
             if(!_guestActionAllowed(p.gid)){
                 dbgLog('host: rate-limited guest:action from '+p.gid.slice(0,6));
                 return;
@@ -406,11 +636,16 @@
 
         let currentSnapshot=null;
 
-        await new Promise(function(resolve,reject){
+        try{await new Promise(function(resolve,reject){
             const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},10000);
             chan.subscribe(function(status){
                 if(status==='SUBSCRIBED'){
+                    const wasDown=connStatus==='reconnecting';
                     subscribed=true;
+                    /* We couldn't hear anyone while the socket was down —
+                       restart everyone's silence clock instead of mass-
+                       dropping them on the next sweep. */
+                    if(wasDown)guests.forEach(function(g){g.lastSeen=Date.now()});
                     _setConn('connected');
                     clearTimeout(to);
                     resolve();
@@ -430,7 +665,15 @@
                     if(subscribed){subscribed=false;_setConn('reconnecting')}
                 }
             });
-        });
+        })}catch(e){
+            /* Creation failed — give back the lock + keep-alive slot and
+               drop the half-open channel so a late SUBSCRIBED can't
+               resurrect a room nobody holds. */
+            closing=true;
+            _releaseHostResources();
+            try{sb.removeChannel(chan)}catch(_){}
+            throw e;
+        }
 
         /* ---- Tick coalescing + RTT tracking ----
            Source-engine "send-rate cap" pattern: high-frequency events
@@ -498,6 +741,7 @@
         }
         chan.on('broadcast',{event:'guest:pong'},function(msg){
             const p=msg.payload||{};
+            _touch(p.gid);
             const sentAt=_pendingPings.get(p.pingId);
             if(sentAt!=null&&p.gid&&guests.has(p.gid)){
                 const rtt=Math.round(performance.now()-sentAt);
@@ -525,18 +769,90 @@
                    pong from; absent entries mean "not yet measured". */
                 const rttMap={};
                 _rttByGuest.forEach(function(rtt,gid){rttMap[gid]=rtt});
-                try{chan.send({type:'broadcast',event:'host:heartbeat',payload:{seq:++_hbSeq,t:Date.now(),rtts:rttMap}})}catch(_){}
+                _send(chan,'host:heartbeat',{seq:++_hbSeq,t:Date.now(),rtts:rttMap,ep:epoch});
+                /* keep this tab's "I'm hosting" marker fresh (24h TTL) */
+                _writeHostMarker();
             },5000);
         }
+
+        /* Stale-guest sweep (item 13). Skips while our own socket is down
+           (we can't hear anyone) and after a long timer gap (tab was
+           frozen/throttled — the silence is ours, not theirs). */
+        let _sweepTimer=null,_lastSweepT=Date.now();
+        function _startSweep(){
+            if(_sweepTimer)return;
+            _sweepTimer=setInterval(function(){
+                const now=Date.now(),gap=now-_lastSweepT;
+                _lastSweepT=now;
+                if(!subscribed||closing)return;
+                if(gap>8000){
+                    guests.forEach(function(g){g.lastSeen=Math.max(g.lastSeen||0,now-GUEST_HB_MS)});
+                    return;
+                }
+                const drop=[];
+                guests.forEach(function(g,gid){
+                    const lim=g.vis==='hidden'?GUEST_HIDDEN_GRACE_MS:GUEST_STALE_MS;
+                    if(now-(g.lastSeen||g.joinedAt||now)>lim)drop.push(gid);
+                });
+                drop.forEach(function(gid){_dropGuest(gid,'stale')});
+                _rejoinAskT.forEach(function(a,k){if(now-a.t>120000)_rejoinAskT.delete(k)});
+            },2000);
+        }
+
+        function _writeHostMarker(){
+            if(closing)return;
+            _ssSet(SS_HOST,{code:code,pin:pin,hostName:hostName,gameId:gameId,t:Date.now()});
+        }
+        _writeHostMarker();
         _startHeartbeat();
         _startPingLoop();
+        _startSweep();
+        /* Host came back after a reload — tell guests still on the channel
+           to re-register (item 14). Repeated because a guest's socket may
+           itself be mid-reconnect. Not for a game-switch transit: those
+           guests follow host:navigate and join the new page fresh. */
+        if(resumed&&opts.resumed!=='transit'){
+            [0,1500,4000].forEach(function(ms){
+                setTimeout(function(){if(!closing&&subscribed)_send(chan,'host:rejoin',{ep:epoch})},ms);
+            });
+        }
 
         var roomApi={
             code:code,
             gameId:gameId,
             pin:pin,
             hostName:hostName,
-            guests:function(){return Array.from(guests.entries()).map(function(e){return{id:e[0],nickname:e[1].nickname,joinedAt:e[1].joinedAt,authed:!!e[1].authed,authedName:e[1].authedName||null}})},
+            /* lastSeen = ms timestamp of the guest's last message; online =
+               heard from within ~2.5 heartbeats; vis = what the guest last
+               reported ('hidden' = tab in background / app switched). */
+            guests:function(){
+                const now=Date.now();
+                return Array.from(guests.entries()).map(function(e){return{
+                    id:e[0],nickname:e[1].nickname,pid:e[1].pid||'',joinedAt:e[1].joinedAt,
+                    authed:!!e[1].authed,authedName:e[1].authedName||null,
+                    lastSeen:e[1].lastSeen||e[1].joinedAt,vis:e[1].vis||'visible',
+                    online:(now-(e[1].lastSeen||e[1].joinedAt))<GUEST_HB_MS*2.5
+                }});
+            },
+            /* true when this room object was re-created by tryResumeHost
+               (reload / tab restore / game switch) rather than freshly made. */
+            resumed:resumed,
+            epoch:epoch,
+            /* Host-private restore blob (item 17). Persisted per tab in
+               sessionStorage; after a host reload, tryResumeHost's room
+               returns it from restoredSnapshot() so the game can pick up
+               where it left off. Returns false if storage refused it
+               (quota / private mode). Not broadcast — use snapshot() for
+               what late-joining guests should see. */
+            saveSnapshot:function(obj){
+                if(closing)return false;
+                return _ssSet(SS_SNAP,{code:code,gameId:gameId,t:Date.now(),data:obj});
+            },
+            restoredSnapshot:function(){return _restoredSnap},
+            clearSnapshot:function(){_restoredSnap=null;_ssDel(SS_SNAP)},
+            /* Guest visibility changes ({id,nickname,pid,vis}) — e.g. to
+               show "away" next to a seat while the guest's app is hidden. */
+            onGuestPresence:function(cb){if(typeof cb==='function')guestPresenceCbs.push(cb)},
             broadcast:function(event,payload){
                 if(!subscribed){dbgLog('host: broadcast '+event+' DROPPED (not subscribed)');return false}
                 /* Centralised tick throttle so games don't have to
@@ -552,7 +868,7 @@
                    wrap into a fresh object rather than mutating the
                    caller's payload — game code may reuse the same
                    payload reference (e.g. saved as snapshot input). */
-                const wrapped=Object.assign({},payload||{},{_seq:++_bcastSeq});
+                const wrapped=Object.assign({},payload||{},{_seq:++_bcastSeq,_ep:epoch});
                 try{chan.send({type:'broadcast',event:event,payload:wrapped})}
                 catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
                 if(event!=='host:tick')dbgLog('host: broadcast '+event+' (seq='+_bcastSeq+')');
@@ -611,7 +927,7 @@
                    _seqAtSnap pins the snapshot to a generation point so
                    late-arriving snapshots can be safely dropped if the
                    guest already has newer state (see guest dispatch). */
-                currentSnapshot=Object.assign({},payload||{},{_seqAtSnap:_bcastSeq});
+                currentSnapshot=Object.assign({},payload||{},{_seqAtSnap:_bcastSeq,_ep:epoch});
                 dbgLog('host: snapshot set ('+Object.keys(currentSnapshot).length+' keys, seqAtSnap='+_bcastSeq+')');
             },
             onGuestJoin:function(cb){if(typeof cb==='function')guestJoinCbs.push(cb)},
@@ -632,6 +948,12 @@
                    and trip the reconnecting state. */
                 if(_hbTimer){clearInterval(_hbTimer);_hbTimer=null}
                 if(_pingTimer){clearInterval(_pingTimer);_pingTimer=null}
+                if(_sweepTimer){clearInterval(_sweepTimer);_sweepTimer=null}
+                /* This tab no longer hosts anything — forget the per-tab
+                   resume marker, restore blob and known roster, and let
+                   go of the room lock + keep-alive slot. */
+                _ssDel(SS_HOST);_ssDel(SS_SNAP);_ssDel(SS_ROSTER);
+                _releaseHostResources();
                 /* Critical-event retransmit: send host:close 3x at 200ms
                    spacing. A single dropped packet would leave guests
                    stuck on a phantom-alive room until their watchdog
@@ -753,7 +1075,10 @@
         /* Host control protocol (lpHostCtl.js). Same "must register or
            it's silently dropped" rule — guests wouldn't see the pause
            overlay or resume countdown without these. */
-        'host:paused','host:resumed','host:ended','host:resume_countdown'
+        'host:paused','host:resumed','host:ended','host:resume_countdown',
+        /* "please re-register" — host reloaded, or dropped us as stale
+           and then heard from us again (items 14/15). */
+        'host:rejoin'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
@@ -805,6 +1130,89 @@
         const listeners={}; /* event → [fn] */
         let accepted=false;
         let guestSubscribed=false;
+        /* Keep the realtime socket up even while this tab is hidden
+           (item 18) — covers the join handshake too. */
+        _keepAliveAcquire(sb);
+        let _kaHeld=true;
+        function _kaDrop(){if(_kaHeld){_kaHeld=false;_keepAliveRelease()}}
+        var _pid='';try{_pid=(window.getLpPlayerId&&window.getLpPlayerId())||''}catch(_){}
+        /* Identity we (re)register with — the host may rename us on the
+           first ack (진희 → 진희2); rejoins reuse that name. */
+        let _myNick=nickname;
+        let _authSig=null;
+        let hostEpoch=null;
+        let _navigating=false;
+        let _rejoinPending=false;
+        let _lastRejoinT=0;
+        let _ackEp=null;      /* host epoch of our latest successful (re)join */
+        let _guestHbTimer=null;
+        function _sendJoinRequest(rejoin){
+            const base={gid:gid,pid:_pid,pin:pin,nickname:_myNick,gameId:gameId,
+                vis:document.hidden?'hidden':'visible'};
+            if(rejoin)base.rejoin=true;
+            if(_authSig){base.authed=!!_authSig.authed;base.authedName=_authSig.authedName||null}
+            _send(chan,'guest:join_request',base);
+        }
+        function _sendHb(){
+            if(guestClosing||_leaving||!accepted)return;
+            _send(chan,'guest:hb',{gid:gid,pid:_pid,vis:document.hidden?'hidden':'visible'});
+        }
+        function _startGuestHb(){
+            if(_guestHbTimer)return;
+            _guestHbTimer=setInterval(_sendHb,GUEST_HB_MS);
+        }
+        /* Re-register with the host under the same gid/pid/nickname —
+           after a host reload, a stale drop, a socket reconnect or a
+           bfcache restore. Deferred until the channel is subscribed. */
+        function _rejoin(reason){
+            if(guestClosing||_navigating||_leaving||!accepted)return;
+            if(!guestSubscribed){_rejoinPending=true;return}
+            const now=Date.now();
+            if(now-_lastRejoinT<1500)return;
+            _lastRejoinT=now;_rejoinPending=false;
+            dbgLog('guest: rejoin ('+reason+')');
+            _sendJoinRequest(true);
+        }
+        /* Tab closing / navigating away: say goodbye right now so the host
+           frees our seat immediately instead of after the stale window.
+           Capture phase so it runs before supabase-js's own pagehide
+           handler disconnects the socket. */
+        let _leaving=false;
+        function _sendBye(){
+            if(guestClosing||!accepted)return;
+            _send(chan,'guest:leave',{gid:gid,reason:'bye'});
+        }
+        /* beforeunload fires earlier than pagehide on desktop close/reload.
+           If something cancels the unload we're still here: our next
+           heartbeat makes the host ask us to rejoin, so it self-heals. */
+        function _onBeforeUnload(){_sendBye()}
+        function _onPageHide(){
+            _sendBye();
+            /* The page is going away (or into bfcache): don't let the
+               keep-alive / rejoin logic re-register us on the way out. */
+            _leaving=true;
+            _kaDrop();
+        }
+        function _onPageShow(e){
+            if(!(e&&e.persisted))return;
+            _leaving=false;
+            if(!_kaHeld&&!guestClosing){_keepAliveAcquire(sb);_kaHeld=true}
+            _rejoin('pageshow');
+        }
+        try{window.addEventListener('beforeunload',_onBeforeUnload,true)}catch(_){}
+        try{window.addEventListener('pagehide',_onPageHide,true)}catch(_){}
+        try{window.addEventListener('pageshow',_onPageShow)}catch(_){}
+        /* Stop every timer/listener this guest session owns (close, or a
+           join that never completed). */
+        function _guestTeardown(){
+            if(_guestHbTimer){clearInterval(_guestHbTimer);_guestHbTimer=null}
+            if(_watchdogTimer){clearInterval(_watchdogTimer);_watchdogTimer=null}
+            try{document.removeEventListener('visibilitychange',_onVisibilityChange)}catch(_){}
+            try{window.removeEventListener('beforeunload',_onBeforeUnload,true)}catch(_){}
+            try{window.removeEventListener('pagehide',_onPageHide,true)}catch(_){}
+            try{window.removeEventListener('pageshow',_onPageShow)}catch(_){}
+            _kaDrop();
+        }
         /* Set by g.close() so the CLOSED status that Supabase emits
            after removeChannel() doesn\'t flip the pill to
            "reconnecting" when the user intentionally left the room. */
@@ -899,7 +1307,11 @@
            covers that gap. Pattern: Chrome dev guide on Page Lifecycle
            (https://developer.chrome.com/docs/web-platform/page-lifecycle-api). */
         function _onVisibilityChange(){
-            if(document.hidden||guestClosing||!accepted)return;
+            if(guestClosing||!accepted)return;
+            /* Tell the host right away whether we're in the background —
+               it grants hidden guests a longer grace before dropping them. */
+            _sendHb();
+            if(document.hidden)return;
             try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid,reason:'visible'}})}catch(_){}
             _lastHostSignalT=Date.now(); /* avoid an immediate watchdog re-fire */
         }
@@ -957,19 +1369,65 @@
 
             if(ev==='host:join_ack'){
                 if(p.gid!==gid)return; /* not for us */
+                const wasAccepted=accepted;
                 if(p.ok){
                     accepted=true;
+                    _noteHostSignal();
+                    if(p.ep){
+                        /* New host page → its seq counter restarted at 0. */
+                        if(hostEpoch&&p.ep!==hostEpoch){_lastSeenSeq=0;_lastSnapApplied=0}
+                        hostEpoch=p.ep;
+                    }
+                    if(p.nickname)_myNick=p.nickname;
+                    if(p.ep)_ackEp=p.ep;
                     _startWatchdog();
+                    _startGuestHb();
+                    if(wasAccepted){
+                        dbgLog('guest: rejoined as '+_myNick);
+                        if(guestApi)guestApi.nickname=_myNick;
+                        emit('room:rejoined',{nickname:_myNick,hostName:p.hostName});
+                        return;
+                    }
                     /* Host may have renamed us to avoid collision
                        (진희 → 진희2). Fall back to our originally
                        requested nick if the host didn't include one
                        (older host builds). */
                     emit('_accepted',{hostName:p.hostName,gameId:p.gameId,nickname:p.nickname||nickname});
                 }else{
+                    if(wasAccepted){
+                        /* Rejoin refused (e.g. a brand-new host that never
+                           knew us and is locked). We keep watching the
+                           public channel; the game can react. */
+                        dbgLog('guest: rejoin refused ('+(p.reason||'rejected')+')');
+                        emit('room:rejoin_failed',{reason:p.reason||'rejected'});
+                        return;
+                    }
                     emit('_rejected',{reason:p.reason||'rejected'});
                 }
                 return;
             }
+            /* Host restart detection (item 15) — any stamped host event
+               carrying a different epoch means the host page reloaded. */
+            const _ep=p._ep||p.ep;
+            if(_ep&&accepted){
+                if(!hostEpoch)hostEpoch=_ep;
+                else if(_ep!==hostEpoch){
+                    dbgLog('guest: host epoch '+hostEpoch+' → '+_ep+' (host restarted)');
+                    hostEpoch=_ep;
+                    _lastSeenSeq=0;_lastSnapApplied=0;
+                    _rejoin('host_epoch');
+                }
+            }
+            if(ev==='host:rejoin'){
+                _noteHostSignal();
+                if(p.gid&&p.gid!==gid)return;
+                /* The resumed host repeats its broadcast rejoin call; once
+                   this epoch has acked us there's nothing more to do. */
+                if(!p.gid&&p.ep&&p.ep===_ackEp)return;
+                _rejoin(p.gid?'host_forgot_us':'host_resumed');
+                return;
+            }
+            if(ev==='host:navigate')_navigating=true;
             /* Liveness signal — every host:* event resets the silence
                timer. Heartbeat is the catch-all for idle game states. */
             _noteHostSignal();
@@ -1060,6 +1518,8 @@
                    CustomEvent here — after the normal emit so any game
                    code hooks still run first. */
                 if(ev==='host:close'){
+                    /* Room is gone — stop our heartbeat / keep-alive. */
+                    _guestTeardown();
                     /* Host tore down the room — any lp_lastRoom pointer for
                        this code is now dead, wipe it so the home modal
                        doesn't show a card that would just re-fail. */
@@ -1086,23 +1546,45 @@
         }
 
         await new Promise(function(resolve,reject){
-            const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},10000);
+            /* Hidden tab: timers are throttled and the socket may need our
+               keep-alive to come back — allow a longer first subscribe. */
+            const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},document.hidden?20000:10000);
             chan.subscribe(function(status){
                 dbgLog('guest: subscribe status='+status);
                 if(status==='SUBSCRIBED'){
+                    const wasDown=guestConnStatus==='reconnecting';
                     guestSubscribed=true;
                     _setGuestConn('connected');
                     clearTimeout(to);
                     resolve();
+                    /* Back from a socket drop (or a rejoin was queued while
+                       offline): the host may have dropped us as stale
+                       meanwhile — re-register. Harmless if it hadn't. */
+                    if(accepted&&(wasDown||_rejoinPending))_rejoin('resubscribed');
                 }else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'){
                     if(guestClosing)return;
-                    if(!guestSubscribed){clearTimeout(to);reject(new Error('channel_error'))}
+                    if(!guestSubscribed){
+                        /* Socket blip while the tab is hidden (invite link
+                           opened in a background tab, or the user switched
+                           away mid-join): supabase-js won't reconnect on its
+                           own until the tab is shown. Kick the keep-alive
+                           and let the channel rejoin — only the timeout
+                           above fails the join. */
+                        if(document.hidden){dbgLog('guest: pre-join channel error while hidden — waiting for keep-alive');setTimeout(_kaCheck,300);return}
+                        clearTimeout(to);reject(new Error('channel_error'));
+                    }
                     else {guestSubscribed=false;_setGuestConn('reconnecting')}
                 }else if(status==='CLOSED'){
                     if(guestClosing)return;
                     if(guestSubscribed){guestSubscribed=false;_setGuestConn('reconnecting')}
                 }
             });
+        }).catch(function(e){
+            /* never subscribed — this session is dead on arrival */
+            guestClosing=true;
+            _guestTeardown();
+            try{sb.removeChannel(chan)}catch(_){}
+            throw e;
         });
 
         /* Send join request, wait for ack (or timeout). Default 8s is
@@ -1124,19 +1606,26 @@
                lookup so we don't delay the join timer — worst case,
                authed tag shows up on the NEXT broadcastGuestList after
                the host processes our join_request with authed=false. */
+            if(pid)_pid=pid;
+            /* …but never let the auth lookup hold the join hostage: in a
+               background tab supabase-auth can sit on its storage lock /
+               session recovery for seconds, and the join timer (3s on the
+               silent path) would expire before we even asked. Send after
+               the lookup or 1.2s, whichever comes first. */
+            let _joinSent=false;
+            function _fireJoin(){if(_joinSent)return;_joinSent=true;_sendJoinRequest(false)}
+            const _authWait=setTimeout(_fireJoin,1200);
             _lpAuthSignature().then(function(sig){
-                chan.send({type:'broadcast',event:'guest:join_request',payload:{
-                    gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId,
-                    authed:!!sig.authed,authedName:sig.authedName||null
-                }});
+                _authSig=sig||null;
+                clearTimeout(_authWait);_fireJoin();
             }).catch(function(){
-                chan.send({type:'broadcast',event:'guest:join_request',payload:{
-                    gid:gid,pid:pid,pin:pin,nickname:nickname,gameId:gameId
-                }});
+                clearTimeout(_authWait);_fireJoin();
             });
         });
 
         if(!result.ok){
+            guestClosing=true;
+            _guestTeardown();
             try{sb.removeChannel(chan)}catch(e){}
             return {ok:false,error:result.error};
         }
@@ -1206,7 +1695,7 @@
                         /* Use host-assigned (deduped) nickname so
                            guest:action payloads match whatever the
                            host + DB store under. */
-                        payload:Object.assign({gid:gid,nickname:finalNick,type:type,t:Date.now()},payload||{})
+                        payload:Object.assign({gid:gid,nickname:_myNick||finalNick,type:type,t:Date.now()},payload||{})
                     });
                 }catch(_){}
             },
@@ -1215,8 +1704,7 @@
                 /* Stop the watchdog + visibility hook BEFORE removing the
                    channel so a late tick doesn't try to send on a torn
                    socket. */
-                if(_watchdogTimer){clearInterval(_watchdogTimer);_watchdogTimer=null}
-                try{document.removeEventListener('visibilitychange',_onVisibilityChange)}catch(_){}
+                _guestTeardown();
                 /* Save a 24h rejoin pointer ONLY for voluntary leaves — the
                    home modal uses this to render a "최근 방" one-click
                    rejoin card. We intentionally omit this branch from the
@@ -1230,7 +1718,7 @@
                         t:Date.now()
                     }));
                 }catch(_){}
-                try{chan.send({type:'broadcast',event:'guest:leave',payload:{gid:gid}})}catch(e){}
+                _send(chan,'guest:leave',{gid:gid,reason:'left'});
                 try{sb.removeChannel(chan)}catch(e){}
                 try{if(window.LpRoom_currentGuestRoom===guestApi)window.LpRoom_currentGuestRoom=null}catch(_){}
                 try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'self'}}))}catch(_){}
@@ -1253,7 +1741,12 @@
                status synchronously on subscribe so late listeners
                catch up. */
             onStatusChange:function(cb){if(typeof cb==='function'){guestStatusCbs.push(cb);try{cb(guestConnStatus)}catch(_){}}},
-            connectionStatus:function(){return guestConnStatus}
+            connectionStatus:function(){return guestConnStatus},
+            /* Re-register with the host (same gid/pid/nickname). lpRoom
+               already does this on host reload / stale drop / reconnect;
+               exposed for games that want to force it. Listen for
+               g.on('room:rejoined') / g.on('room:rejoin_failed'). */
+            rejoin:function(){_lastRejoinT=0;_rejoin('manual')}
         };
         /* Same late-listener safety net as the host path — see comment
            there. Stash the live guest API globally so lpMultiplayer
@@ -1395,6 +1888,12 @@
            +'.lp-room-join-toast.leave{background:rgba(255,107,139,.95);color:#1a0004;box-shadow:0 6px 20px rgba(255,107,139,.35)}'
            +'.lp-room-join-toast.out{opacity:0;transform:translate(-50%,-10px);transition:opacity .6s,transform .6s}'
            +'@keyframes lpRoomToastIn{from{opacity:0;transform:translate(-50%,-10px)}to{opacity:1;transform:translate(-50%,0)}}'
+           /* "This room is live in another tab" offer (tryResumeHost). */
+           +'.lp-room-foreign{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9120;max-width:min(92vw,380px);width:max-content;background:rgba(14,14,28,.97);border:1px solid rgba(0,217,255,.4);border-radius:14px;padding:12px 14px;color:#fff;font-family:"Noto Sans KR",sans-serif;font-size:.84em;box-shadow:0 14px 36px rgba(0,0,0,.5);animation:lpRoomToastIn .3s ease}'
+           +'.lp-room-foreign-t{line-height:1.45;margin-bottom:10px}'
+           +'.lp-room-foreign-row{display:flex;gap:8px}'
+           +'.lp-room-foreign-row button{flex:1;padding:8px 12px;border-radius:9px;font-family:inherit;font-weight:700;font-size:.95em;cursor:pointer;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.06);color:rgba(255,255,255,.8)}'
+           +'.lp-room-foreign-row .lp-room-foreign-join{background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001220;border:0}'
            +'.lp-room-status .x{margin-left:6px;cursor:pointer;opacity:.5;font-weight:700}'
            +'.lp-room-status .x:hover{opacity:1}'
            /* QR in share modal */
@@ -1857,12 +2356,14 @@
             /* Brief toast-like inline announcement so the host notices a
                new joiner even when the list is collapsed. */
             const who=(info&&info.nickname)||(lang==='ko'?'새 접속자':'new guest');
-            _lpStackedToast((lang==='ko'?'➕ ':'')+who+(lang==='ko'?' 님 입장':' joined'));
+            if(info&&info.rejoin)_lpStackedToast((lang==='ko'?'🔌 ':'')+who+(lang==='ko'?' 님 다시 연결':' reconnected'));
+            else _lpStackedToast((lang==='ko'?'➕ ':'')+who+(lang==='ko'?' 님 입장':' joined'));
         });
         room.onGuestLeave(function(info){
             refresh();
             const who=(info&&info.nickname)||(lang==='ko'?'접속자':'guest');
-            _lpStackedToast((lang==='ko'?'➖ ':'')+who+(lang==='ko'?' 님 나감':' left'),'leave');
+            if(info&&info.reason==='stale')_lpStackedToast((lang==='ko'?'🔌 ':'')+who+(lang==='ko'?' 님 연결 끊김':' disconnected'),'leave');
+            else _lpStackedToast((lang==='ko'?'➖ ':'')+who+(lang==='ko'?' 님 나감':' left'),'leave');
         });
         document.body.appendChild(bar);
         /* Mobile default = collapsed. Users can tap the pill to expand
@@ -2118,6 +2619,20 @@
             if(main)main.textContent=text;
         }
 
+        /* Background tab (invite link opened with ctrl/middle-click, or the
+           user switched away mid-join): browsers throttle timers and
+           supabase-js won't reconnect a dropped socket while hidden, so a
+           failure here usually just means "not now". Instead of parking an
+           error form in a tab nobody is looking at, wait until the tab is
+           shown and run the whole attempt sequence once more. */
+        let hiddenRetryUsed=false;
+        function _waitVisible(){
+            return new Promise(function(r){
+                if(!document.hidden)return r();
+                function f(){if(!document.hidden){document.removeEventListener('visibilitychange',f);r()}}
+                document.addEventListener('visibilitychange',f);
+            });
+        }
         let g=null,lastErr=null;
         for(let attempt=0;attempt<RETRY_TIMEOUTS.length;attempt++){
             if(attempt>0){
@@ -2129,7 +2644,15 @@
                 g=await guestJoin({code:code,pin:pinVal,nickname:nickVal,gameId:opts.gameId,joinTimeout:RETRY_TIMEOUTS[attempt]});
             }catch(e){
                 /* Transport-level fault (subscribe timeout, channel error).
-                   Don't retry — a broken socket won't fix itself in 800ms. */
+                   Don't retry — a broken socket won't fix itself in 800ms.
+                   Exception: hidden tab → retry once it's visible. */
+                if(document.hidden&&!hiddenRetryUsed){
+                    hiddenRetryUsed=true;
+                    _setPillText(_t('방 연결 대기 중…','Waiting to connect…'));
+                    await _waitVisible();
+                    _setPillText(_t('방 연결 중…','Connecting…'));
+                    g=null;attempt=-1;continue;
+                }
                 try{pill.remove()}catch(_){}
                 return showGuestJoinModal(code,Object.assign({},opts,{_fallbackError:(e&&e.message)||'transport_error'}));
             }
@@ -2138,6 +2661,13 @@
             /* Only host_unreachable warrants a retry — bad_pin / locked /
                wrong_game won't change by waiting. */
             if(g.error!=='host_unreachable')break;
+            if(attempt===RETRY_TIMEOUTS.length-1&&document.hidden&&!hiddenRetryUsed){
+                hiddenRetryUsed=true;
+                _setPillText(_t('방 연결 대기 중…','Waiting to connect…'));
+                await _waitVisible();
+                _setPillText(_t('방 연결 중…','Connecting…'));
+                attempt=-1;
+            }
         }
 
         if(!g||!g.ok){
@@ -2771,22 +3301,32 @@
         return result;
     }
 
-    /* If a host-transferred room is sitting in localStorage (set by
-       room.transferTo in the previous page), silently re-open the
-       same Supabase channel with the same code + pin + hostName so
-       guests that followed the host:navigate broadcast re-attach to
-       the same logical room. Returns a room object on success or
-       null if no pending/recent host session matches this gameId.
+    /* Re-open the room THIS TAB was hosting (same code + pin + hostName)
+       so guests re-attach to the same logical room. Returns the room or
+       null.
 
-       Two-layer resume:
-       1. lp_hostTransit (60s) — normal game-switcher handoff
-       2. lp_lastHostRoom (24h) — accidental reload / tab-close recovery
+       Sources, in order:
+       1. lp_hostTransit (localStorage, 60s) — game-switcher handoff
+          written by room.transferTo just before this same tab navigated.
+       2. lp_hostTab (sessionStorage, 24h) — reload / tab restore.
 
-       The long-lived token MUST match the current gameId so a stale
-       session for a different game doesn't get silently resurrected
-       when the host opens a different game URL. */
+       Both require the per-tab marker (sessionStorage lp_hostTab) to name
+       the same code: localStorage is shared by every tab, so before
+       2026-09-25 opening the same game in a second tab silently made it a
+       SECOND host of the room (split state, guests talking to whichever
+       answered first). On top of that the room's Web Lock must be free —
+       a "Duplicate tab" copies sessionStorage, but the original tab still
+       holds the lock. When the room is live in another tab we offer to
+       join it as a guest instead (item 16).
+
+       Browsers without sessionStorage fall back to the old localStorage
+       behaviour. */
     async function tryResumeHost(opts){
         opts=opts||{};
+        const targetGame=opts.gameId||null;
+        const ssOk=_ssUsable();
+        const marker=ssOk?_ssGet(SS_HOST):null;
+        const DAY=24*60*60*1000;
         var rec=null;
         var fromTransit=false;
 
@@ -2796,7 +3336,8 @@
             if(rawT){
                 var recT=JSON.parse(rawT);
                 if(recT&&recT.code&&recT.pin&&(Date.now()-(recT.t||0))<=60*1000){
-                    rec=recT;fromTransit=true;
+                    if(!ssOk||(marker&&marker.code===recT.code)){rec=recT;fromTransit=true}
+                    /* else: another tab's handoff — leave it for that tab */
                 }else{
                     /* Stale transit — clear */
                     try{localStorage.removeItem('lp_hostTransit')}catch(_){}
@@ -2804,27 +3345,35 @@
             }
         }catch(_){}
 
-        /* Layer 2: 24h resume (must match gameId) */
+        /* Layer 2: this tab's own hosting marker (must match gameId) */
         if(!rec){
-            try{
-                var rawL=localStorage.getItem('lp_lastHostRoom');
-                if(rawL){
-                    var recL=JSON.parse(rawL);
-                    var targetGame=opts.gameId||null;
-                    var gameMatch=!targetGame||!recL.gameId||recL.gameId===targetGame;
-                    if(recL&&recL.code&&recL.pin&&(Date.now()-(recL.t||0))<=24*60*60*1000&&gameMatch){
-                        rec=recL;
-                    }else if(recL&&(Date.now()-(recL.t||0))>24*60*60*1000){
-                        try{localStorage.removeItem('lp_lastHostRoom')}catch(_){}
-                    }
-                }
-            }catch(_){}
+            var cand=null;
+            if(ssOk)cand=marker;
+            else{try{cand=JSON.parse(localStorage.getItem('lp_lastHostRoom')||'null')}catch(_){cand=null}}
+            if(cand&&cand.code&&cand.pin&&(Date.now()-(cand.t||0))<=DAY){
+                const gameMatch=!targetGame||!cand.gameId||cand.gameId===targetGame;
+                if(gameMatch)rec=cand;
+            }else if(cand&&(Date.now()-(cand.t||0))>DAY){
+                if(ssOk)_ssDel(SS_HOST);
+            }
         }
 
-        if(!rec)return null;
+        if(!rec){
+            _offerForeignRoom(targetGame);
+            return null;
+        }
+        /* The previous document of THIS tab releases the lock
+           asynchronously during a reload — wait a little for it. If it
+           never frees up, a different live tab owns the room. */
+        const lock=await _acquireHostLock(rec.code,3000);
+        if(!lock.ok){
+            dbgLog('host: resume '+rec.code+' refused — another tab is hosting it');
+            if(ssOk&&marker&&marker.code===rec.code)_ssDel(SS_HOST);
+            _offerForeignRoom(targetGame,rec);
+            return null;
+        }
         /* Consume the transit entry so a page refresh doesn't keep
-           re-resuming via the short handoff path. lp_lastHostRoom is
-           kept intact and refreshed when the new room spins up. */
+           re-resuming via the short handoff path. */
         if(fromTransit){
             try{localStorage.removeItem('lp_hostTransit')}catch(_){}
         }
@@ -2833,10 +3382,56 @@
                 gameId:opts.gameId||rec.gameId,
                 pin:rec.pin,
                 hostName:rec.hostName||opts.hostName||'Host',
-                code:rec.code
+                code:rec.code,
+                resumed:fromTransit?'transit':true,
+                _lock:lock
             });
             return room;
-        }catch(e){return null}
+        }catch(e){
+            try{lock.release()}catch(_){}
+            return null;
+        }
+    }
+
+    /* The room recorded in lp_lastHostRoom is live in ANOTHER tab of this
+       browser (it holds the room lock). Rather than silently becoming a
+       second host, offer: join it as a guest, or dismiss (the game's own
+       "create room" button makes a new one). Only shown when we can
+       positively tell the other tab is alive (Web Locks). */
+    function _offerForeignRoom(targetGame,rec){
+        /* A page opened from an invite link is already joining as a guest. */
+        try{if(new URLSearchParams(location.search).get('room'))return}catch(_){}
+        let r=rec||null;
+        if(!r){try{r=JSON.parse(localStorage.getItem('lp_lastHostRoom')||'null')}catch(_){r=null}}
+        if(!r||!r.code||!r.pin)return;
+        if((Date.now()-(r.t||0))>24*60*60*1000)return;
+        if(targetGame&&r.gameId&&r.gameId!==targetGame)return;
+        _isHostLockHeld(r.code).then(function(held){
+            if(held!==true)return;
+            if(window.LpRoom_currentHostRoom||window.LpRoom_currentGuestRoom)return;
+            if(document.getElementById('lpRoomForeign'))return;
+            injectStyles();
+            const el=document.createElement('div');
+            el.id='lpRoomForeign';
+            el.className='lp-room-foreign';
+            el.innerHTML='<div class="lp-room-foreign-t">'
+                +_t('📡 방 '+escapeHtml(r.code)+' 이(가) 다른 탭에서 진행 중이에요','📡 Room '+escapeHtml(r.code)+' is open in another tab')
+                +'</div><div class="lp-room-foreign-row">'
+                +'<button type="button" class="lp-room-foreign-join">'+_t('게스트로 참가','Join as guest')+'</button>'
+                +'<button type="button" class="lp-room-foreign-x" aria-label="close">'+_t('닫기','Dismiss')+'</button>'
+                +'</div>';
+            document.body.appendChild(el);
+            el.querySelector('.lp-room-foreign-x').addEventListener('click',function(){el.remove()});
+            el.querySelector('.lp-room-foreign-join').addEventListener('click',function(){
+                let nick='';try{nick=(localStorage.getItem('luckyplz_nick')||'').trim()}catch(_){}
+                if(!nick)nick=_t('나','Me');
+                try{sessionStorage.setItem('lp_guestTransit',JSON.stringify({code:r.code,pin:r.pin,nick:nick,t:Date.now()}))}catch(_){}
+                const gid=r.gameId||targetGame;
+                const path=gid==='lobby'?'/lobby/':(gid?'/games/'+encodeURIComponent(gid)+'/':location.pathname);
+                location.href=path+'?room='+encodeURIComponent(r.code);
+            });
+            setTimeout(function(){try{el.remove()}catch(_){}},30000);
+        });
     }
 
     /* Public probe for the 24h guest resume token. Returns the stored

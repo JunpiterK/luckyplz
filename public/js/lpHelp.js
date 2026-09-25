@@ -5,7 +5,7 @@
  *
  * - 게임 아래 긴 글(.lp-game-about)은 화면에서 숨긴다. 지우지 않는다 — 구글·애드센스는
  *   버튼 뒤에 접힌 글도 정상 색인하므로 검색 노출은 유지된다(운영자 선택: '도움말 안으로 이동').
- * - 왼쪽 세로 버튼 줄(⛶ 전체화면 · 🔊 소리) 맨 아래 빈자리에 ? 버튼을 붙인다 → 기기별 겹침 없음.
+ * - ? 버튼은 lpChrome.js 좌상단 독(⛶ 전체화면 · 🔊 소리 · ?)의 맨 아래에 들어간다 → 기기별 겹침 없음.
  * - 누르면 시트: 맨 위 = 언어별 3~4줄 간단 도움말(lpHelpText.js, 처음 열 때만 불러온다),
  *   아래 '자세히' = 숨겨 둔 긴 글을 시트 안으로 옮겨 펼친다.
  * - 언어는 luckyplz_lang 를 따른다. 간단 도움말이 없는 언어는 영어.
@@ -77,19 +77,9 @@
     btn.setAttribute('aria-label', ui().help);
     document.body.appendChild(btn);
 
-    /* 왼쪽 세로 버튼 줄의 맨 아래 빈자리 — ⛶·🔊 은 늦게 붙기도 해서 몇 번 다시 잰다 */
-    function place() {
-        var bottom = 0;
-        var els = document.querySelectorAll('.lp-fs-btn,.lp-bgm-btn');
-        for (var i = 0; i < els.length; i++) {
-            var r = els[i].getBoundingClientRect();
-            if (r.width && r.height && r.left < 90 && r.top < 260 && getComputedStyle(els[i]).display !== 'none') bottom = Math.max(bottom, r.bottom);
-        }
-        btn.style.top = bottom ? (bottom + 8) + 'px' : '';
-    }
-    place();
-    [400, 1200, 2500, 5000].forEach(function (t) { setTimeout(place, t); });
-    window.addEventListener('resize', place);
+    /* 자리는 lpChrome.js 의 좌상단 독이 정한다(⛶ → 🔊 → ? 순서, 붙는 즉시). 예전엔 여기서
+       400/1200/2500/5000ms 에 ⛶·🔊 아래를 재서 붙였는데, 늦게 붙는 🔊 를 놓쳐 ? 가 그 위에 겹쳤다. */
+    if (window.LpChrome) window.LpChrome.refresh();
 
     var ov = null, listEl, titleEl, moreBtn, bodyEl, xBtn, loaded = false, moved = false;
     function build() {

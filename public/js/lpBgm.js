@@ -328,6 +328,8 @@
     bgmBtn.addEventListener('click',function(){toggle();syncBgmBtn();});
     syncBgmBtn();
     (document.body||document.documentElement).appendChild(bgmBtn);
+    /* 실제 자리는 lpChrome.js 좌상단 독(⛶ → 🔊 → ?)이 정한다 — 위 top 값은 독이 없을 때의 폴백 */
+    if(window.LpChrome)window.LpChrome.refresh();
   }
   try{
     fetch(TRACK_BASE+'1.mp3',{method:'HEAD'}).then(function(r){

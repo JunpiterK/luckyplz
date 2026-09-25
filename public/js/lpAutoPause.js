@@ -155,5 +155,11 @@
     var q = window.LpAutoPauseQ;
     if (q && q.length) q.forEach(add);
     window.LpAutoPauseQ = { push: add };
-    window.LpAutoPause = { mount: add, isShowing: function () { return !!(ov && ov.classList.contains('on')); } };
+    /* anyActive — 등록된 게임 중 지금 플레이 중인 것이 있는가. lpChrome(공용 버튼 독)이 '플레이 중이면 접기'에 쓴다 */
+    function anyActive() {
+        if (pending) return false;
+        for (var i = 0; i < cfgs.length; i++) { try { if (cfgs[i].isActive()) return true; } catch (_) {} }
+        return false;
+    }
+    window.LpAutoPause = { mount: add, anyActive: anyActive, isShowing: function () { return !!(ov && ov.classList.contains('on')); } };
 })();
