@@ -37,7 +37,7 @@ LANG_HOMES = [("en", "/"), ("es", "/es/"), ("pt", "/pt/"), ("ja", "/ja/"), ("ko"
 GAMES_MAIN = list(CLUSTERS.keys())
 GAMES_REST = ["balloon", "lotto", "glory-racing", "lucky-merge", "orbit", "dodge", "tetris",
               "starship-lander", "brick", "snake", "pacman", "burger", "quiz", "bubble",
-              "yut", "ludo", "reversi", "gummy"]
+              "yut", "ludo", "reversi", "gummy", "prism-hex"]
 
 INFO = ["/about/", "/contact/", "/terms/", "/privacy/"]
 

@@ -96,7 +96,8 @@
     yut:{en:'Yut Nori',ja:'ユンノリ',es:'Yut Nori',pt:'Yut Nori'},
     ludo:{en:'Ludo',ja:'ルドー',es:'Ludo',pt:'Ludo'},
     reversi:{en:'Reversi',ja:'リバーシ',es:'Reversi',pt:'Reversi'},
-    gummy:{en:'Gummy Chain',ja:'グミチェイン',es:'Gummy Chain',pt:'Gummy Chain'}
+    gummy:{en:'Gummy Chain',ja:'グミチェイン',es:'Gummy Chain',pt:'Gummy Chain'},
+    'prism-hex':{en:'Prism Hex',ja:'プリズムヘックス',es:'Prism Hex',pt:'Prism Hex'}
   };
   function gameLabel(g){
     var l;try{l=localStorage.getItem('luckyplz_lang')||'en'}catch(_){l='en'}

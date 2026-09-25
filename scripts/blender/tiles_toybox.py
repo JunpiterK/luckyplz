@@ -1654,6 +1654,85 @@ def gummy_toy():
 
 
 TOYS['gummy'] = gummy_toy
+
+
+def _gem_mat(name, col, estr=0.22):
+    """보석 — 투명(투과) + 코팅 광택 + 같은 색 약한 발광(어두운 판 위에서 색이 죽지 않게)."""
+    m = mat('gem_' + name, col, rough=0.03, coat=1.0, emit=col, estr=estr, trans=0.72)
+    try:
+        m.node_tree.nodes["Principled BSDF"].inputs["IOR"].default_value = 1.62
+    except Exception:
+        pass
+    return m
+
+
+def _gem_cell(cx, cy, z0, r, h, m, parent, crown=0.055):
+    """육각 보석 한 칸 — 옆면 6 + 크라운 면 6 + 테이블(윗면)로 깎인 면이 빛을 나눠 반사한다."""
+    me = bpy.data.meshes.new("gem")
+    bm = bmesh.new()
+    ang = [k * math.pi / 3 for k in range(6)]
+    bot = [bm.verts.new((cx + r * math.cos(a), cy + r * math.sin(a), z0)) for a in ang]
+    top = [bm.verts.new((cx + r * math.cos(a), cy + r * math.sin(a), z0 + h)) for a in ang]
+    ri = r * 0.5
+    tab = [bm.verts.new((cx + ri * math.cos(a), cy + ri * math.sin(a), z0 + h + crown)) for a in ang]
+    bm.faces.new(list(reversed(bot)))
+    for k in range(6):
+        j = (k + 1) % 6
+        bm.faces.new((bot[k], bot[j], top[j], top[k]))
+        bm.faces.new((top[k], top[j], tab[j], tab[k]))
+    bm.faces.new(tab)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+    o = bpy.data.objects.new("gem", me)
+    bpy.context.collection.objects.link(o)
+    return _fin(o, m, bevel=0.005, seg=1, smooth=False, parent=parent)
+
+
+def prism_hex_toy():
+    """프리즘 헥스 (2026-09-25) — 흑요석 육각판(금 테) 위 깎인 보석 블록들 + 위에서 내려앉는 토파즈 5칸 + 반짝 별.
+    칸은 flat-top 육각(axial q,r): x = 1.5q·s, y = √3(r+q/2)·s."""
+    g = group("prism-hex", math.radians(-8))
+    s = 0.2
+    sq3 = math.sqrt(3)
+    XY = lambda q, r: (1.5 * q * s, sq3 * (r + q / 2) * s + 0.12)
+    # 판 — 금 테 + 흑요석 + 홈
+    cyl(1.46, 0.12, (0, 0.12, 0.06), GOLD(), rot=(0, 0, math.radians(30)), bevel=0.03, verts=6, parent=g)
+    obs = mat('obsidian', (0.05, 0.04, 0.10), rough=0.18, coat=0.9)
+    cyl(1.36, 0.06, (0, 0.12, 0.14), obs, rot=(0, 0, math.radians(30)), bevel=0.012, verts=6, parent=g)
+    slot = mat('slot', (0.12, 0.09, 0.22), rough=0.4, coat=0.3)
+    cells = [(q, r) for q in range(-3, 4) for r in range(-3, 4) if max(abs(q), abs(r), abs(q + r)) <= 3]
+    for q, r in cells:
+        x, y = XY(q, r)
+        cyl(s * 0.86, 0.02, (x, y, 0.178), slot, bevel=0.004, verts=6, parent=g)
+    # 놓인 보석 블록
+    H = 0.1
+    pieces = [('ruby', (0.86, 0.06, 0.17), [(-3, 1), (-3, 2), (-2, 2), (-1, 1)]),
+              ('sapph', (0.10, 0.28, 0.95), [(1, -3), (2, -3), (3, -3), (2, -2)]),
+              ('emer', (0.03, 0.72, 0.42), [(0, 2), (1, 1)]),
+              ('ame', (0.55, 0.22, 0.95), [(-2, -1), (-1, -2), (-1, -1)]),
+              ('dia', (0.80, 0.93, 1.0), [(3, 0)])]
+    for nm, col, cs in pieces:
+        m = _gem_mat(nm, col, estr=0.12 if nm == 'dia' else 0.22)
+        for q, r in cs:
+            x, y = XY(q, r)
+            _gem_cell(x, y, 0.19, s * 0.97, H, m, g)
+    # 내려앉는 토파즈 5칸 — 살짝 기울어 공중에
+    f = group("fall", 0, loc=(0.02, 0.0, 0.95))
+    f.parent = g
+    f.rotation_euler = (math.radians(22), math.radians(-10), math.radians(6))
+    tz = _gem_mat('topaz', (1.0, 0.62, 0.05), estr=0.3)
+    for q, r in [(-1, 0), (0, 0), (1, 0), (-2, 1), (-3, 2)]:
+        x, y = 1.5 * q * s, sq3 * (r + q / 2) * s
+        _gem_cell(x + 0.35, y - 0.05, 0.0, s * 0.97, H, tz, f)
+    # 반짝 별(4갈래) — 흰 발광
+    spark = mat('spark', (1, 1, 1), emit=(1.0, 0.95, 0.8), estr=2.2, coat=0)
+    for (x, y, z, r) in ((0.95, -0.35, 1.28, 0.16), (-0.62, -0.2, 0.55, 0.1), (0.2, -0.5, 1.45, 0.07)):
+        prism(star_pts(r, r * 0.22, n=4), 0.02, (x, y, z), spark, parent=g)
+    return g
+
+
+TOYS['prism-hex'] = prism_hex_toy
 HOME_IDS = ['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
 
 if __name__ == "__main__":

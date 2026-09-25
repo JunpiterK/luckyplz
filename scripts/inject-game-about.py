@@ -321,6 +321,7 @@ CONTENT.update(_load("game_about_content_ludo", "CONTENT_LUDO"))  # 2026-09-25 �
 CONTENT.update(_load("game_about_content_reversi", "CONTENT_REVERSI"))  # 2026-09-25 리버시
 CONTENT.update(_load("game_about_content_yut", "CONTENT_YUT"))  # 2026-09-25 윷놀이
 CONTENT.update(_load("game_about_content_gummy", "CONTENT_GUMMY"))  # 2026-09-25 구미 체인
+CONTENT.update(_load("game_about_content_prism_hex", "CONTENT_PRISM_HEX"))  # 2026-09-25 프리즘 헥스
 
 # 600단어 미달 게임 보강 블록 — 각 게임의 blocks 뒤(FAQ 앞)에 덧붙인다.
 for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():

@@ -35,12 +35,20 @@ window.LP_HELP_TEXT = {
     pt: {t:'Reversi', l:['Cerque peças rivais entre as suas e todas viram','Só dá para jogar nas casas com ponto; sem jogada, passa','Cantos nunca viram: evite a casa diagonal ao lado deles']}
   },
   'yut': {
-    ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모·잡기는 한 번 더! 모서리·방에 멈추면 지름길']},
-    en: {t:'Yut Nori', l:['2–4 teams race to bring all their pieces home','Throw the sticks, tap a piece, then tap a glowing spot','Yut, Mo or a capture = throw again; stop on a corner for a shortcut']},
-    ja: {t:'ユンノリ', l:['2〜4チームで、先に全部のコマをゴールさせたら勝ち','棒を投げる → コマをタップ → 光るマスをタップ','ユッ・モ・つかまえたらもう一回。角で止まると近道']},
-    zh: {t:'掷柶(尤茨)', l:['2–4队比赛，先让所有棋子走完一圈的队获胜','掷柶 → 点棋子 → 点发光的格子移动','掷出4步、5步或吃子可再掷一次；停在角上可抄近路']},
-    es: {t:'Yut Nori', l:['2–4 equipos: gana quien saque primero todas sus fichas','Lanza los palos, toca una ficha y luego la casilla brillante','Yut, Mo o capturar = otro tiro; para en una esquina para el atajo']},
-    pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut, Mo ou captura = joga de novo; pare num canto para o atalho']}
+    ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모는 한 번 더, 도·개·걸로 잡아도 한 번 더 · 모서리·방에 멈추면 지름길']},
+    en: {t:'Yut Nori', l:['2–4 teams race to bring all their pieces home','Throw the sticks, tap a piece, then tap a glowing spot','Yut/Mo = throw again; a capture with Do/Gae/Geol too · corners give shortcuts']},
+    ja: {t:'ユンノリ', l:['2〜4チームで、先に全部のコマをゴールさせたら勝ち','棒を投げる → コマをタップ → 光るマスをタップ','ユッ・モはもう一回、ト・ケ・コルで取ってももう一回。角で止まると近道']},
+    zh: {t:'掷柶(尤茨)', l:['2–4队比赛，先让所有棋子走完一圈的队获胜','掷柶 → 点棋子 → 点发光的格子移动','掷出4步、5步再掷一次；用1-3步吃子也再掷；停在角上可抄近路']},
+    es: {t:'Yut Nori', l:['2–4 equipos: gana quien saque primero todas sus fichas','Lanza los palos, toca una ficha y luego la casilla brillante','Yut/Mo = otro tiro; capturar con Do/Gae/Geol también · esquina = atajo']},
+    pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut/Mo = joga de novo; capturar com Do/Gae/Geol também · canto = atalho']}
+  },
+  'prism-hex': {
+    ko: {t:'프리즘 헥스', l:['보석 블록 18개를 판에 최대한 많이 놓으면 승리 — 남은 칸이 적은 순','첫 블록은 ★ 시작 칸, 같은 색은 변이 닿으면 안 되고 꼭짓점 다리로만 연결','블록 고르기 → 판 누르기(착지) → 한 번 더 누르면 놓기 · 두 손가락으로 확대']},
+    en: {t:'Prism Hex', l:['Place as many of your 18 gem blocks as you can — fewest cells left wins','First block covers your ★ start; same colors never share an edge, only a corner bridge','Pick a block, tap the board to land it, tap again to place · pinch to zoom']},
+    ja: {t:'プリズムヘックス', l:['宝石ブロック18個をできるだけ多く置く — 残りマスが少ない人の勝ち','最初は★スタートマス、同じ色は辺で接さず角のブリッジでだけつなぐ','ブロックを選ぶ → 盤をタップで仮置き → もう一度タップで確定 · 2本指で拡大']},
+    zh: {t:'棱镜六角棋', l:['尽量把18块宝石积木放上棋盘，剩余格数最少者获胜','第一块盖住★起点；同色不能边对边，只能用角上的桥相连','选积木 → 点棋盘先放下 → 再点一次确定 · 双指缩放']},
+    es: {t:'Prism Hex', l:['Coloca todos los bloques de gemas que puedas: gana quien deje menos celdas','El primero cubre tu ★; el mismo color nunca comparte lado, solo un puente de esquina','Elige un bloque, toca el tablero para posarlo y otra vez para colocar · pellizca para ampliar']},
+    pt: {t:'Prism Hex', l:['Coloque o máximo dos 18 blocos de gemas: vence quem sobrar menos casas','O primeiro cobre sua ★; a mesma cor nunca encosta pelo lado, só por uma ponte de canto','Escolha um bloco, toque no tabuleiro para pousar e de novo para colocar · pinça para zoom']}
   },
   'gummy': {
     ko: {t:'구미 체인', l:['같은 색 젤리 4개 이상을 이으면 터져요','떨어져서 또 터지면 연쇄 — 점수가 크게 뛰어요','대전에선 연쇄가 설탕 블록 공격, 내 연쇄로 예고분을 상쇄','3열 맨 윗칸이 막히면 패배']},

@@ -619,7 +619,26 @@ def m_gummy(d, img):
     img.alpha_composite(toy, (MCX - w // 2, MCY - h // 2 + 8))
 
 
+def m_prism_hex(d, img):
+    """프리즘 헥스 — 홈 타일과 같은 Blender 장난감 렌더(tiles_toybox.py 의 prism_hex_toy)를 합성.
+
+    원본: scripts/og-assets/tiles3d/prism-hex.png. 수정은 씬 스크립트에서 하고 재렌더한다
+    (blender -b -P scripts/blender/tiles_toybox.py -- prism-hex). 뒤에 보석색 후광을 깐다.
+    """
+    glow(img, MCX, MCY + 20, 250, (168, 85, 247), 50)
+    glow(img, MCX + 110, MCY - 80, 150, (255, 178, 26), 34)
+    glow(img, MCX - 120, MCY + 60, 140, (46, 107, 255), 30)
+    toy = Image.open(HERE / "og-assets" / "tiles3d" / "prism-hex.png").convert("RGBA")
+    a = toy.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    toy = toy.crop(a.getbbox())
+    w = 450
+    h = round(toy.height * w / toy.width)
+    toy = toy.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(toy, (MCX - w // 2, MCY - h // 2 + 10))
+
+
 GAMES = {
+    "prism-hex":       dict(title="PRISM HEX", sub="프리즘 헥스 — 보석 블록을 꼭짓점으로 잇기", cat="BOARD", top=(22, 12, 38), bot=(8, 5, 16), accent=(246, 211, 138), motif=m_prism_hex),
     "gummy":           dict(title="GUMMY CHAIN", sub="구미 체인 — 쫀득한 연쇄로 1:1 대결", cat="PUZZLE", top=(30, 12, 40), bot=(12, 5, 18), accent=(255, 111, 168), motif=m_gummy),
     "yut":             dict(title="YUT NORI", sub="윷놀이 — 여럿이 함께, 최대 4팀", cat="BOARD", top=(30, 18, 12), bot=(12, 7, 5), accent=(244, 195, 90), motif=m_yut),
     "reversi":         dict(title="REVERSI", sub="리버시 — AI·친구와 한 판, 모서리를 잡아라", cat="BOARD", top=(8, 26, 18), bot=(3, 10, 7), accent=(232, 200, 114), motif=m_reversi),

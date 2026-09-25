@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790303117">
+<meta name="lp-build" content="1790307533">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790303117";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1790307533";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -226,6 +226,20 @@ body.online .brand{visibility:hidden}
   .pp-sub{font-size:11px}
   .pp-av{width:42px;height:42px}
 }
+body.fabgap .pp[data-seat="1"]{padding-left:44px}
+/* 가로 폰 — 보드 가운데 · 패널 좌우 (layout() 이 body.land 를 붙인다) */
+body.land #play{display:grid;grid-template-columns:minmax(0,1fr) var(--bw) minmax(0,1fr);
+  grid-template-rows:auto 1fr 1fr;grid-template-areas:"bn bd ." "s1 bd s2" "s0 bd s3";
+  column-gap:12px;row-gap:6px;padding:0 10px 8px calc(env(safe-area-inset-left,0px) + 56px);align-items:center}
+body.land .prow{display:contents}
+body.land #banner{grid-area:bn;width:100%;padding:0 4px;align-self:end;font-size:13px}
+body.land #boardWrap{grid-area:bd;align-self:center}
+body.land .pp{width:100%;max-width:230px;justify-self:center}
+body.land .pp[data-seat="1"]{grid-area:s1;align-self:end}
+body.land .pp[data-seat="2"]{grid-area:s2;align-self:end}
+body.land .pp[data-seat="0"]{grid-area:s0;align-self:start}
+body.land .pp[data-seat="3"]{grid-area:s3;align-self:start}
+body.land.fabgap .pp[data-seat="1"]{padding-left:7px}
 @media (max-width:340px){
   .pp-av{width:32px;height:32px}.pp-av canvas{width:22px;height:27px}
   .pp-name{font-size:12px}
@@ -297,7 +311,7 @@ body.online .brand{visibility:hidden}
 <canvas id="fx"></canvas>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790303117"></script>
+<script src="/js/supabase-config.js?v=1790307533"></script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════
    LUDO — Lucky Please 보드게임 (2026-09-25)
@@ -725,11 +739,15 @@ let BW=320,DPR=1,U=20,boardCache=null;
 let pawnCache={};
 function layout(){
   const W=window.innerWidth,H=window.innerHeight;
+  /* 가로로 눕힌 폰(높이 560 이하) — 보드 가운데, 플레이어 패널은 좌우 두 줄. 세로 배치로는 보드가 220 하한에 걸려 아래 패널이 화면 밖으로 밀렸다 */
+  const land=W>H*1.25&&H<=560;
+  document.body.classList.toggle('land',land);
   const top=$('play').getBoundingClientRect().top;
   const panelH=W>=600?64:58;
   const availH=H-top-36-panelH*2-8*3-26;
   const availW=Math.min(W,860)-16;
-  BW=Math.max(220,Math.floor(Math.min(availW,availH,780)));
+  BW=land?Math.max(150,Math.floor(Math.min(H-top-14,W-56-2*132-40,640)))
+         :Math.max(220,Math.floor(Math.min(availW,availH,780)));
   document.documentElement.style.setProperty('--bw',BW+'px');
   const D=Math.round(Math.max(38,Math.min(52,BW*.112)));
   document.documentElement.style.setProperty('--D',D+'px');
@@ -741,7 +759,19 @@ function layout(){
   pawnCache={};
   buildBoard();
   drawAvatars();
+  fabGap();
 }
+/* 공용 ⛶·? 버튼(좌상단 고정)이 왼쪽 위 플레이어 패널의 아바타를 덮으면 그 패널 안쪽만 비켜 준다 */
+function fabGap(){
+  const pp=document.querySelector('.pp[data-seat="1"]');if(!pp)return;
+  document.body.classList.remove('fabgap');
+  const r=pp.getBoundingClientRect();let hit=false;
+  document.querySelectorAll('.lp-fs-btn,.lp-help-fab,.lp-bgm-btn').forEach(b=>{
+    if(getComputedStyle(b).display==='none')return;const q=b.getBoundingClientRect();
+    if(q.width&&q.right>r.left&&q.left<r.left+40&&q.bottom>r.top&&q.top<r.bottom)hit=true});
+  document.body.classList.toggle('fabgap',hit);
+}
+[800,2000,4500,7000].forEach(t=>setTimeout(fabGap,t));
 
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
 function starPath(g,x,y,R,r,n){g.beginPath();for(let i=0;i<n*2;i++){const a=-Math.PI/2+i*Math.PI/n;const rad=i%2?r:R;g.lineTo(x+Math.cos(a)*rad,y+Math.sin(a)*rad)}g.closePath()}
@@ -1538,7 +1568,7 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1790303117" defer></script>
+<script src="/js/siteFooter.js?v=1790307533" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

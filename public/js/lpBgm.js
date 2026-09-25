@@ -59,7 +59,7 @@
 
   /* Skip games whose pages already wire their own audio engine. */
   var SKIP_GAMES={
-    'yut':true,'ludo':true,   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
+    'yut':true,'ludo':true,'prism-hex':true,   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
     'car-racing':true,
     'dodge':true,
     'tetris':true,    /* 3-tier dynamic BGM tied to stack height */
