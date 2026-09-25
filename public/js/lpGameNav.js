@@ -14,6 +14,14 @@
  */
 (function () {
     'use strict';
+    /* pointerup 으로 처리한 뒤 곧이어 오는 click 이, 방금 같은 자리에 새로 뜬 버튼(예: 시작 화면 Start)을
+       눌러 버리는 문제(2026-09-25 실측) — 0.45초 동안 그 click 을 삼킨다. 공용(두 모듈이 같은 값을 쓴다) */
+    if (!window.__lpClickGuard) {
+        window.__lpClickGuard = 1;
+        window.addEventListener('click', function (e) {
+            if (Date.now() < (window.__lpSwallowClickUntil || 0)) { e.preventDefault(); e.stopImmediatePropagation(); }
+        }, true);
+    }
     if (window.LpNav) return;
     var L = {
         ko: ['게임 홈', '전체 홈'], en: ['Game home', 'Main home'], ja: ['ゲームホーム', 'トップへ'],
@@ -66,6 +74,7 @@
         var now = Date.now();
         if (now - lastAt < 400) return;
         lastAt = now;
+        if (e.type === 'pointerup') window.__lpSwallowClickUntil = now + 450;
         e.preventDefault(); e.stopPropagation();
         var row = b.closest('[data-lp-nav2]');
         if (b.getAttribute('data-lp-nav') === 'main') goMainHome();

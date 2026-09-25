@@ -36,7 +36,8 @@ LANG_HOMES = [("en", "/"), ("es", "/es/"), ("pt", "/pt/"), ("ja", "/ja/"), ("ko"
 # ko 멤버는 게임 본체라 아래 GAMES_MAIN 에서 따로 등록한다.
 GAMES_MAIN = list(CLUSTERS.keys())
 GAMES_REST = ["balloon", "lotto", "glory-racing", "lucky-merge", "orbit", "dodge", "tetris",
-              "starship-lander", "brick", "snake", "pacman", "burger", "quiz"]
+              "starship-lander", "brick", "snake", "pacman", "burger", "quiz", "bubble",
+              "yut", "ludo", "reversi", "gummy"]
 
 INFO = ["/about/", "/contact/", "/terms/", "/privacy/"]
 

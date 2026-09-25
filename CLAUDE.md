@@ -49,7 +49,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 슬러그는 그 언어의 실제 검색어를 담는다 — `/ja/amidakuji/` 처럼 현지 표기가 곧 검색어인 경우가 가장 강하다
 - **변경 후에는 반드시 `python scripts/verify-clusters.py`** — canonical 자기참조 · hreflang 상호성 · `<html lang>` · FAQ 1:1 · JSON-LD 를 30 페이지 전수 검사한다
 
-**메인 = 3×3 그리드, 8타일 (2026-08-20).** 배치는 운영자 지정 — 1행: 룰렛·카레이싱·브롤런(간판 3종) / 2행: 주사위·사다리·빙고 / 3행: 팀 뽑기·**레트로 타일**·(여유 1칸). 레트로는 별도 스트립이 아니라 그리드 안 8번째 타일이다(슬레이트 색 = 입구 신호, data-game-id 없음 → 런치 다이얼로그 없이 /arcade/ 직행). 여유 칸은 **채우기 위해 채우지 말 것**.
+**메인 = 5분류 버튼 + 분류별 타일 (2026-09-25 운영자 결정 — 아래 8타일 규칙을 대체).** `public/index.html` 의 `LP_CATS`:
+랜덤뽑기(룰렛·카레이싱·브롤런·주사위·사다리·팀·풍선) / 추첨게임(빙고·로또) / 아케이드(행성 키우기·스페이스-Z·테트로미노 쌓기·스타십 착륙·벽돌깨기·스네이크·닷 러너·버거 셰프·버블 버스트) / 미션게임(라이브 퀴즈·델타-브이) / 보드게임(윷놀이·루도·리버시).
+분류 아이콘은 `toy-cat-<id>.webp`(같은 장난감 세트). 마지막 선택은 localStorage `lp_home_cat`, `#arcade` 같은 해시로 직접 연결. 랜덤뽑기·빙고만 런치 다이얼로그, 나머지는 바로 이동. 레트로 입구 타일은 폐지(아케이드 분류가 대체), `/arcade/` 페이지는 검색 유입용으로 유지.
+타일은 아이콘+이름만(설명은 PC 툴팁) — `lpFitTiles` 참조. 새 게임은 `LP_CATS` 에 id 를 넣고 `GAMES_*` 배열·I18N 이름·`LP_TINT_MORE` 를 채운다.
+
+**(이전 규칙) 메인 = 3×3 그리드, 8타일 (2026-08-20).** 배치는 운영자 지정 — 1행: 룰렛·카레이싱·브롤런(간판 3종) / 2행: 주사위·사다리·빙고 / 3행: 팀 뽑기·**레트로 타일**·(여유 1칸). 레트로는 별도 스트립이 아니라 그리드 안 8번째 타일이다(슬레이트 색 = 입구 신호, data-game-id 없음 → 런치 다이얼로그 없이 /arcade/ 직행). 여유 칸은 **채우기 위해 채우지 말 것**.
 - 브롤런 승격 근거: 운영자 감 — 재미 면에서 카레이싱보다 끌린다. 검색 유입은 랜딩 클러스터(race-picker 등)가 홈 노출과 무관하게 담당하므로 카레이싱도 홈에 남는다. **홈 타일과 SEO 클러스터는 독립**이다
 - 브롤런 타일에는 `isAdv` → ⚠️ 미니 배지 (교실·가족 사용자 대상 정직한 고지)
 근거: 경쟁 사이트 9종(wheelofnames·pickerwheel·pickerspin 외) **전원이 휠+팀+주사위+빙고
@@ -93,21 +98,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **목적**: 친구·동료와 내기·벌칙·역할 정하기, 또는 잠깐의 시간 떼우기
 - **두 카테고리**
   - **행운/뽑기 (핵심 정체성)** — 룰렛, 팀뽑기, 주사위, 빙고, 카레이싱, 사다리. 결정·내기·벌칙 도구
-  - **레트로 액션 (부가)** — `/arcade/` 뒤. 스네이크, 닷 러너, 블록 스택 등. 기록 갱신·심심풀이
+  - **레트로 액션 (부가)** — `/arcade/` 뒤. 스네이크, 닷 러너, 테트로미노 쌓기 등. 기록 갱신·심심풀이
 - **원칙**
   - 모든 게임은 **로그인 없이 즉시 플레이 가능**해야 한다. 로그인은 소셜/멀티플레이 기능에만
   - 모바일 우선(세로 폰), 데스크탑·태블릿은 확장
   - 한 게임 = 한 HTML 파일 (inline CSS/JS, 자가완결). 게임 간 의존성 만들지 말 것
 
-### 상표 주의 (2026-08-18 중립화 완료)
+### 상표 주의 (2026-08-18 중립화 · 2026-09-25 테트로미노 개명)
 
 레트로 아케이드 2종은 상표를 피해 중립 명칭을 쓴다. **되돌리지 말 것.**
 
 | 디렉토리(식별자) | 표시명 |
 |---|---|
 | `games/pacman/` | 닷 러너 / Dot Runner |
-| `games/tetris/` | 블록 스택 / Block Stack |
+| `games/tetris/` | 테트로미노 쌓기 / Tetromino Stack (2026-09-25 블록 스택에서 개명) |
+| `games/brick/` | 벽돌깨기 / Brick Breaker (장르 일반명 — 개명 없음) |
 | `games/glory-racing/` | Brawl Run / 브롤 런 |
+
+**원작 연상 + 비침해 이름 (2026-09-25, 운영자 요청).** 원작이 떠오르되 상표는 피한다.
+- 테트리스 계열: **`tetromino`(정사각형 4칸 조각)는 1953년 솔로몬 골롬의 수학 용어**라 일반명이다. TTC 의 등록상표는 `TETRIS`·`Tetrimino`(i 철자)이고, Google Play 에 'Tetromino' 제목 앱이 다수 있다. 그래서 이름에 테트로미노를 쓰되 **`TETRIS`·`TETRIMINO`·`-tris` 어미·중국어 `俄罗斯方块`(Tetris 공식 중국어명)은 절대 금지**. TTC 는 이름이 아니라 **외관(trade dress)** 으로도 이긴다(Tetris v. Xio, 2012) — 이름과 별개로 공식 색·로고·음악을 베끼지 말 것
+- 벽돌깨기 계열: `Breakout`(아타리)·`Arkanoid`(타이토) 금지, `Brick Out` 도 Breakout 과 혼동 위험이라 금지. `Brick Breaker`·벽돌깨기·ブロック崩し·打砖块·Casse-briques 는 장르 일반명이다
+- 16개 언어 표시명은 각 게임 i18n 표(`TETRIS_I18N.gameTitle`, `BRICK_I18N.title`)가 원천
 
 **`UFC RUN` 은 절대 쓰지 말 것** (2026-08-19 검토). Zuffa(UFC)는 유비소프트를 상대로
 게임 이름도 아닌 **패키지 뒷면의 "Ultimate Fighting" 문구 한 줄**을 두고 소송했고
@@ -150,7 +161,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Static multi-page site, no framework.** 모든 게임은 `public/games/<name>/index.html` 에 자가완결 HTML(inline CSS+JS, 자체 `<head>` SEO 블록)로 존재한다. 게임끼리 독립을 유지할 것 — 공용 번들러나 게임 간 import 를 도입하지 말고, 복붙이 의도된 패턴이다(한 게임을 고쳐도 다른 게임이 깨지지 않게).
 
-현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing`(Brawl Run) `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(블록 스택). 이 중 **메인 6종**(roulette·team·dice·bingo·car-racing·ladder)만 홈에 노출되고 나머지 11종은 `/arcade/` 뒤에 있다.
+현재 게임 17종: `bingo` `brick` `burger` `car-racing` `dice` `dodge` `glory-racing`(Brawl Run) `ladder` `lotto` `lucky-merge` `pacman`(닷 러너) `quiz` `roulette` `snake` `starship-lander` `team` `tetris`(테트로미노 쌓기). 이 중 **메인 6종**(roulette·team·dice·bingo·car-racing·ladder)만 홈에 노출되고 나머지 11종은 `/arcade/` 뒤에 있다.
 
 **도구 랜딩.** 게임 본체(`/games/<id>/`)의 가시 콘텐츠는 한국어라 영어·스페인어·포르투갈어·일본어 검색에는 잡히지 않는다. 랜딩은 게임을 iframe 으로 임베드하고 그 언어의 콘텐츠 + FAQ 스키마를 얹는다. **게임 본체는 수정하지 않는다.**
 - 영어 6종 — `scripts/gen-landing.py`. 기존 3종(wheel-spinner·team-generator·dice-roller)은 손으로 쓴 콘텐츠라 재생성하지 않으며, 스크립트의 `ALL` 목록만 상호 링크에 쓰인다
@@ -183,7 +194,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **숨김 텍스트가 아니다**: `html,body{overflow:hidden}` 은 `@media(min-width:900px)` 안에만 있어, 모바일에서는 정상 스크롤로 도달한다. 구글은 모바일 우선 색인이므로 이 콘텐츠를 정상적으로 읽는다. 과거의 `left:-9999px` 방식(가이드라인 위반)은 이미 제거됐고 되살리면 안 된다
 - **17종 전부 적용 완료 (2026-08-18)**. 실측 가시 텍스트 610~773단어로 2026 thin 기준(600)을 전 게임이 통과
 - 콘텐츠는 파일 비대화를 막으려 분리 보관: 1차 4종은 `inject-game-about.py` 내부, 아케이드 6종은 `game_about_content_2.py`, 레이싱·우주·퀴즈·주사위 6종은 `_3.py`, 600단어 보강 블록은 `_4.py`(`EXTRA_BLOCKS`). 메인 스크립트가 전부 병합
-- **집필 원칙 — 정보 이득(Information Gain)**: 조작법 나열은 다른 사이트에도 다 있어 2026 기준으로는 저품질 판정을 받는다. 각 게임의 역사·수학·전략 원리처럼 **이 페이지에서만 얻는 내용**을 반드시 넣는다 (예: 스네이크의 해밀턴 순환, 블록 스택의 7-백 시스템, 주사위 두 개의 합 분포, 착륙의 수어사이드 번)
+- **집필 원칙 — 정보 이득(Information Gain)**: 조작법 나열은 다른 사이트에도 다 있어 2026 기준으로는 저품질 판정을 받는다. 각 게임의 역사·수학·전략 원리처럼 **이 페이지에서만 얻는 내용**을 반드시 넣는다 (예: 스네이크의 해밀턴 순환, 테트로미노 쌓기의 7-백 시스템, 주사위 두 개의 합 분포, 착륙의 수어사이드 번)
 - 새 게임 추가 시: `game_about_content_4.py` 뒤에 이어 붙이거나 `_5.py` 를 만들어 같은 방식으로 등록
 
 **Hosting & deploy.** 저장소 `JunpiterK/luckyplz`, Cloudflare Pages 프로젝트 `luckyplz` 가 `main` 을 자동 배포(빌드 출력 디렉토리 `public`). `public/_headers` 가 캐시 규칙을 통제 — HTML·`/games/*`·`/js/*` 는 `no-cache` 로 즉시 반영, `/assets/*` 와 `*.mp3` 는 1주 캐시.

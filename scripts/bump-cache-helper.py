@@ -54,9 +54,20 @@ def snippet(version: str) -> str:
     # KakaoTalk view doesn't force-bounce again. The external browser loads
     # with a normal UA, so it never re-triggers (no loop). Plain string (no
     # f-string) to avoid brace-escaping; carries no {version} interpolation.
+    # 2026-09-25: guards added — mobile token required (the link-preview
+    # scraper "kakaotalk-scrap" must never match), never inside an iframe
+    # (landing pages embed games), never on /auth/ or an OAuth callback
+    # (?code=&state= — the state lives in THIS WebView's sessionStorage, so
+    # bouncing would break Kakao login), and ?lp_iab=off disables it for
+    # testing. Everything after the bounce (success/failure detection, the
+    # instruction sheet, other messengers) is public/js/lpInApp.js, which
+    # shares the same "lp_kko_out" flag.
     kakao = (
         '<script>(function(){try{'
-        'if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;'
+        'if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;'
+        'if(window.top!==window.self)return;'
+        'var l=location,q=l.search;'
+        'if(/^\\/auth(\\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;'
         'var K="lp_kko_out";'
         'try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}'
         'location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);'

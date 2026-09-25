@@ -2,6 +2,8 @@
 # -*- coding: utf-8 -*-
 """neutralize-trademarks.py — 아케이드 2종의 상표성 제품명을 중립 명칭으로 교체 (멱등).
 
+현재 표시명: 닷 러너 / Dot Runner, 테트로미노 쌓기 / Tetromino Stack (2026-09-25 블록 스택에서 개명).
+
 배경 (2026-08-18 수익화 감사):
 "Pac-Man"(반다이남코)·"Tetris"(Tetris Holding)는 등록상표이고, Tetris Holding 은
 itch.io·Android Market 등에서 실제로 DMCA 집행을 해 온 이력이 있다. AdSense 재심사가
@@ -30,20 +32,29 @@ if sys.platform == "win32":
         pass
 
 # 표시명 치환 사전 (긴 문자열 먼저 — 부분 치환 방지)
+# 2026-09-25 개명: 블록 스택 → 테트로미노 쌓기 / Tetromino Stack.
+#   "tetromino"(정사각형 4칸 조각)는 1953년 수학자 솔로몬 골롬의 일반 수학 용어라 상표가 아니고
+#   (TTC 의 등록상표는 'Tetrimino' 철자), Google Play 에도 'Tetromino' 제목 앱이 다수 있다.
+#   TETRIS·TETRIMINO·'-tris' 는 여전히 금지. 옛 중립명(Block Stack 등)도 새 이름으로 옮긴다.
+#   새 이름에는 옛 문자열이 들어 있지 않으므로 여러 번 돌려도 결과가 같다(멱등).
 RENAMES = [
     ("Pac-Man Classic", "Dot Runner"),
-    ("Tetris Classic", "Block Stack"),
+    ("Tetris Classic", "Tetromino Stack"),
     ("Pac-Man", "Dot Runner"),
     ("PacMan", "Dot Runner"),
     ("Pacman", "Dot Runner"),
-    ("Tetris", "Block Stack"),
+    ("Tetris", "Tetromino Stack"),
+    ("Block Stack", "Tetromino Stack"),
     ("팩맨", "닷 러너"),
-    ("테트리스", "블록 스택"),
+    ("테트리스", "테트로미노 쌓기"),
+    ("블록 스택", "테트로미노 쌓기"),
     # 일본어·중국어 표시명 (각 언어의 상표 표기)
     ("パックマン", "ドットランナー"),
-    ("テトリス", "ブロックスタック"),
+    ("テトリス", "テトロミノ・スタック"),
+    ("ブロックスタック", "テトロミノ・スタック"),
     ("吃豆人", "点点跑者"),
-    ("俄罗斯方块", "方块堆叠"),
+    ("俄罗斯方块", "四格方块"),   # 俄罗斯方块 = Tetris 의 중국어 공식 명칭(상표)
+    ("方块堆叠", "四格方块"),
 ]
 
 # 표시 문맥만 매칭 — 내부 식별자(gameKey, RPC, CSS)는 이 패턴에 걸리지 않는다

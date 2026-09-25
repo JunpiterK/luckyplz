@@ -374,7 +374,257 @@ def m_balloon(d, img):
         d.line([(x1, y1), (x2, y2)], fill=(255, 206, 92), width=6)
 
 
+def m_bubble(d, img):
+    """버블 버스트 — 벌집 격자로 매달린 광택 버블 + 벽 튕김 조준선 + 발사대 + 터지는 링."""
+    import math
+    cols = [(255, 77, 106), (255, 210, 63), (61, 220, 132), (61, 139, 255), (176, 107, 255)]
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    g = ImageDraw.Draw(lay)
+    r = 30
+    row_h = int(2 * r * 0.866)
+
+    def ball(cx, cy, c, rr=r):
+        g.ellipse([cx - rr, cy - rr, cx + rr, cy + rr], fill=c + (255,), outline=(16, 10, 30, 255), width=3)
+        dk = tuple(int(v * .62) for v in c)
+        g.chord([cx - rr + 3, cy - rr + 3, cx + rr - 3, cy + rr - 3], 20, 160, fill=dk + (150,))
+        g.ellipse([cx - rr * .62, cy - rr * .66, cx - rr * .05, cy - rr * .28], fill=(255, 255, 255, 190))
+
+    pat = [[0, 3, 3, 1, 4, 2], [3, 1, 1, 4, 2], [0, 0, 1, 4, 3, 2], [None, 0, 2, None, 3]]
+    x0, y0 = MX + 58 + r, MY + 6 + r
+    for ri, row in enumerate(pat):
+        for ci, k in enumerate(row):
+            if k is None:
+                continue
+            cx = x0 + ci * 2 * r + (r if ri % 2 else 0)
+            ball(cx, y0 + ri * row_h, cols[k])
+    # 터지는 링 + 파편 (위치는 아래 조준선 끝)
+    px, py = x0 + 1 * 2 * r + r, y0 + 3 * row_h
+    lx, ly = MCX - 40, MY + MH - 30
+    wall = MX + MW - 6
+    px = wall - (70 + 6) * (wall - lx) / (ly - py - 70) - 30
+    for k in range(3):
+        rr = 36 + k * 16
+        g.ellipse([px - rr, py - rr, px + rr, py + rr], outline=(255, 255, 255, 150 - k * 45), width=4 - k)
+    for i in range(10):
+        a = i / 10 * 6.283
+        g.ellipse([px + math.cos(a) * 64 - 5, py + math.sin(a) * 64 - 5, px + math.cos(a) * 64 + 5, py + math.sin(a) * 64 + 5],
+                  fill=cols[1] + (230,))
+    # 발사대 + 벽 튕김 조준선
+    lx, ly = MCX - 40, MY + MH - 30
+    wall = MX + MW - 6
+    by = py + 70
+    tx, ty = wall - (by - py + 6) * (wall - lx) / (ly - by), py + 6
+    for (ax, ay), (bx, byy) in (((lx, ly), (wall, by)), ((wall, by), (tx, ty))):
+        n = int(math.hypot(bx - ax, byy - ay) / 20)
+        for j in range(1, n):
+            u = j / n
+            qx, qy = ax + (bx - ax) * u, ay + (byy - ay) * u
+            g.ellipse([qx - 4, qy - 4, qx + 4, qy + 4], fill=(61, 220, 132, 220))
+    g.rectangle([wall + 2, MY, wall + 6, MY + MH], fill=(95, 227, 255, 120))
+    g.pieslice([lx - 78, ly - 40, lx + 78, ly + 116], 180, 360, fill=(246, 231, 198, 255), outline=(16, 10, 30, 255), width=3)
+    ball(lx, ly - 6, cols[2], 32)
+    img.alpha_composite(lay)
+
+
+def m_ludo(d, img):
+    """루도 — 4색 기지·십자 길·가운데 삼각 집의 미니 판 + 광택 말 + 주사위."""
+    cols = [(229, 57, 80), (31, 174, 91), (244, 180, 26), (45, 123, 229)]
+    S = 400
+    u = S / 15
+    ox, oy = MX + (MW - S) // 2 + 6, MY + (MH - S) // 2 + 6
+    # 원목 테두리 + 상아 판
+    d.rounded_rectangle([ox - 14, oy - 14, ox + S + 14, oy + S + 14], 26, fill=(110, 68, 34))
+    d.rounded_rectangle([ox - 6, oy - 6, ox + S + 6, oy + S + 6], 18, fill=(70, 40, 18))
+    d.rounded_rectangle([ox, oy, ox + S, oy + S], 12, fill=(240, 232, 214))
+    P = lambda c, r: (ox + c * u, oy + r * u)
+    # 기지(좌하 빨강·좌상 초록·우상 노랑·우하 파랑)
+    bases = [(0, 9), (0, 0), (9, 0), (9, 9)]
+    for (bx, by), col in zip(bases, cols):
+        x0, y0 = P(bx, by)
+        d.rounded_rectangle([x0 + 3, y0 + 3, x0 + 6 * u - 3, y0 + 6 * u - 3], 14, fill=col)
+        d.rounded_rectangle([x0 + u, y0 + u, x0 + 5 * u, y0 + 5 * u], 12, fill=(252, 248, 240))
+        for tx, ty in [(2, 2), (4, 2), (2, 4), (4, 4)]:
+            cx, cy = P(bx + tx, by + ty)
+            d.ellipse([cx - u * .62, cy - u * .62, cx + u * .62, cy + u * .62], fill=col)
+    # 길 칸
+    def cell(c, r, fill):
+        x0, y0 = P(c, r)
+        d.rounded_rectangle([x0 + 1.5, y0 + 1.5, x0 + u - 1.5, y0 + u - 1.5], 4, fill=fill)
+    for r in range(15):
+        for c in range(15):
+            inarm = (6 <= c <= 8 and (r <= 5 or r >= 9)) or (6 <= r <= 8 and (c <= 5 or c >= 9))
+            if inarm:
+                cell(c, r, (255, 255, 255))
+    for k in range(5):
+        cell(7, 13 - k, cols[0]); cell(1 + k, 7, cols[1]); cell(7, 1 + k, cols[2]); cell(13 - k, 7, cols[3])
+    cell(6, 13, cols[0]); cell(1, 6, cols[1]); cell(8, 1, cols[2]); cell(13, 8, cols[3])
+    # 가운데 집
+    c0 = P(7.5, 7.5)
+    tris = [((6, 9), (9, 9)), ((6, 6), (6, 9)), ((6, 6), (9, 6)), ((9, 6), (9, 9))]
+    for (a, b), col in zip(tris, cols):
+        d.polygon([P(*a), P(*b), c0], fill=col)
+    d.ellipse([c0[0] - u * .55, c0[1] - u * .55, c0[0] + u * .55, c0[1] + u * .55], fill=(242, 193, 78))
+
+    # 광택 말
+    def pawn(cx, by, s, col):
+        dk = tuple(int(v * .6) for v in col)
+        lt = tuple(min(255, int(v + (255 - v) * .5)) for v in col)
+        d.ellipse([cx - s * .40, by - s * .02, cx + s * .40, by + s * .16], fill=(0, 0, 0, 90))
+        d.ellipse([cx - s * .37, by - s * .12, cx + s * .37, by + s * .12], fill=dk)
+        d.ellipse([cx - s * .37, by - s * .16, cx + s * .37, by + s * .08], fill=col)
+        d.polygon([(cx - s * .27, by - s * .04), (cx - s * .1, by - s * .55), (cx + s * .1, by - s * .55), (cx + s * .27, by - s * .04)], fill=col)
+        d.polygon([(cx - s * .2, by - s * .06), (cx - s * .08, by - s * .5), (cx - s * .02, by - s * .5), (cx - s * .1, by - s * .06)], fill=lt)
+        d.ellipse([cx - s * .17, by - s * .6, cx + s * .17, by - s * .5], fill=dk)
+        d.ellipse([cx - s * .21, by - s * .95, cx + s * .21, by - s * .53], fill=col)
+        d.ellipse([cx - s * .13, by - s * .88, cx - s * .02, by - s * .8], fill=(255, 255, 255))
+    s = u * 1.25
+    pawn(*P(6.5, 11.7), s, cols[0])
+    pawn(*P(2.5, 6.7), s, cols[1])
+    pawn(*P(12.5, 6.7), s, cols[3])
+    pawn(*P(8.5, 3.7), s, cols[2])
+    # 주사위(우하 코너에 걸쳐)
+    dx, dy, ds = ox + S - 40, oy + S - 52, 92
+    d.rounded_rectangle([dx + 6, dy + 10, dx + ds + 6, dy + ds + 10], 20, fill=(0, 0, 0, 110))
+    d.rounded_rectangle([dx, dy, dx + ds, dy + ds], 20, fill=(250, 246, 238), outline=(200, 190, 172), width=3)
+    for px, py in [(.27, .27), (.73, .27), (.27, .5), (.73, .5), (.27, .73), (.73, .73)]:
+        cx, cy = dx + ds * px, dy + ds * py
+        d.ellipse([cx - 8, cy - 8, cx + 8, cy + 8], fill=(26, 26, 36))
+
+
+def m_reversi(d, img):
+    """리버시 — 호두나무 틀 + 녹색 펠트 8×8, 광택 흑백 돌, 뒤집히는 중인 돌 하나."""
+    SS = 2                       # 2배로 그린 뒤 줄여 가장자리를 매끈하게
+    S = 404
+    bx, by = MX + (MW - S) // 2, MY + (MH - S) // 2 + 6
+    lay = Image.new("RGBA", (S * SS + 80, S * SS + 80), (0, 0, 0, 0))
+    g = ImageDraw.Draw(lay)
+    o = 40
+    fr = int(S * .058) * SS
+    # 그림자 + 틀
+    sh = Image.new("RGBA", lay.size, (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle([o + 10, o + 26, o + S * SS + 10, o + S * SS + 26], 28, fill=(0, 0, 0, 170))
+    lay.alpha_composite(sh.filter(ImageFilter.GaussianBlur(22)))
+    g.rounded_rectangle([o, o, o + S * SS, o + S * SS], 28, fill=(92, 54, 26))
+    rnd = random.Random(7)
+    for _ in range(170):
+        y = o + rnd.random() * S * SS
+        a = rnd.randint(18, 60)
+        col = (40, 18, 6, a) if rnd.random() < .65 else (255, 200, 140, a // 3)
+        pts = [(o + x, y + math.sin(x * .01 + rnd.random()) * 3) for x in range(0, S * SS, 24)]
+        g.line(pts, fill=col, width=rnd.randint(1, 3))
+    x0 = o + fr
+    w = S * SS - 2 * fr
+    g.rectangle([x0 - 4, x0 - 4, x0 + w + 4, x0 + w + 4], fill=(20, 10, 4))
+    g.rectangle([x0, x0, x0 + w, x0 + w], fill=(18, 108, 64))
+    cell = w / 8
+    for k in range(9):
+        p = x0 + k * cell
+        g.line([(p, x0), (p, x0 + w)], fill=(6, 50, 28), width=3)
+        g.line([(x0, p), (x0 + w, p)], fill=(6, 50, 28), width=3)
+    for a_, b_ in ((2, 2), (6, 2), (2, 6), (6, 6)):
+        cx, cy = x0 + a_ * cell, x0 + b_ * cell
+        g.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(6, 40, 22))
+    inl = fr * .42
+    g.rectangle([x0 - inl, x0 - inl, x0 + w + inl, x0 + w + inl], outline=(214, 178, 106), width=3)
+    pos = ["........",
+           "........",
+           "..BW....",
+           "..BBB...",
+           "...BWW..",
+           "...WBB..",
+           "....W...",
+           "........"]
+    R = cell * .41
+
+    def disc(cx, cy, col, sx=1.0):
+        rx = R * sx
+        dark = (18, 18, 20) if col == "B" else (190, 188, 176)
+        side = (200, 198, 188) if col == "B" else (24, 24, 26)
+        g.ellipse([cx - rx + 8, cy - R + 16, cx + rx + 8, cy + R + 16], fill=(0, 0, 0, 110))
+        g.ellipse([cx - rx, cy - R + 6, cx + rx, cy + R + 6], fill=side)
+        g.ellipse([cx - rx, cy - R + 3, cx + rx, cy + R + 3], fill=dark)
+        top = (20, 20, 23) if col == "B" else (238, 237, 230)
+        g.ellipse([cx - rx, cy - R, cx + rx, cy + R], fill=top)
+        hl = (120, 120, 128, 150) if col == "B" else (255, 255, 255, 255)
+        g.ellipse([cx - rx * .62, cy - R * .72, cx - rx * .05, cy - R * .28], fill=hl)
+    for r, row in enumerate(pos):
+        for c, ch in enumerate(row):
+            if ch in "BW":
+                disc(x0 + (c + .5) * cell, x0 + (r + .5) * cell, ch)
+    # 뒤집히는 중인 돌 (f5 쪽으로 넘어가는 중) + 방금 놓은 돌 표시
+    fx, fy = x0 + 5.5 * cell, x0 + 3.5 * cell - cell * .28
+    disc(fx, fy, "W", .38)
+    lx, ly = x0 + 2.5 * cell, x0 + 3.5 * cell
+    g.ellipse([lx - 9, ly - 9, lx + 9, ly + 9], fill=(255, 106, 61))
+    small = lay.resize((lay.width // SS, lay.height // SS), Image.LANCZOS)
+    img.alpha_composite(small, (bx - o // SS, by - o // SS))
+
+
+def m_yut(d, img):
+    """윷놀이 — 공중의 윷가락 넷 + Blender 말 4종(public/assets/yut/pieces.webp 아틀라스, 신남 표정).
+
+    말 원본: scripts/blender/yut_pieces.py → scripts/build_yut_atlas.py."""
+    import math
+    atlas = Image.open(ROOT / "public" / "assets" / "yut" / "pieces.webp").convert("RGBA")
+    cell = atlas.width // 6
+    # 윷판 조각(한지 + 먹선 + 말밭)
+    bx0, by0, bx1, by1 = MX + 50, MY + 125, MX + MW - 20, MY + MH + 25
+    d.rounded_rectangle([bx0 - 12, by0 - 12, bx1 + 12, by1 + 12], 22, fill=(110, 66, 34))
+    d.rounded_rectangle([bx0, by0, bx1, by1], 14, fill=(243, 228, 198))
+    ink = (74, 42, 22)
+    d.line([(bx0 + 40, by0 + 40), (bx1 - 40, by1 - 40)], fill=ink, width=5)
+    d.line([(bx1 - 40, by0 + 40), (bx0 + 40, by1 - 40)], fill=ink, width=5)
+    d.rectangle([bx0 + 40, by0 + 40, bx1 - 40, by1 - 40], outline=ink, width=5)
+    for k in range(6):
+        for (x, y) in ((bx0 + 40 + k * (bx1 - bx0 - 80) / 5, by0 + 40), (bx0 + 40 + k * (bx1 - bx0 - 80) / 5, by1 - 40),
+                       (bx0 + 40, by0 + 40 + k * (by1 - by0 - 80) / 5), (bx1 - 40, by0 + 40 + k * (by1 - by0 - 80) / 5)):
+            big = k in (0, 5)
+            r = 17 if big else 11
+            d.ellipse([x - r, y - r, x + r, y + r], fill=(201, 67, 47) if big else (255, 246, 226), outline=(242, 193, 90) if big else ink, width=3)
+    cx, cy = (bx0 + bx1) / 2, (by0 + by1) / 2
+    d.ellipse([cx - 17, cy - 17, cx + 17, cy + 17], fill=(40, 66, 140), outline=(242, 193, 90), width=3)
+    # 말 네 마리 (신남 표정 = 5번째 열)
+    for i, (x, y, sz) in enumerate(((MX + 95, MY + 420, 165), (MX + 190, MY + 360, 165), (MX + 285, MY + 410, 165), (MX + 360, MY + 330, 160))):
+        spr = atlas.crop((4 * cell, i * cell, 5 * cell, (i + 1) * cell)).resize((sz, sz), Image.LANCZOS)
+        img.alpha_composite(spr, (int(x - sz / 2), int(y - sz * 0.86)))
+    # 공중의 윷가락
+    d2 = ImageDraw.Draw(img)
+    for i, (x, y, a, flat) in enumerate(((MX + 90, MY + 40, -30, True), (MX + 190, MY + 10, 20, False),
+                                         (MX + 300, MY + 45, -10, True), (MX + 400, MY + 20, 40, True))):
+        L, W = 120, 26
+        ca, sa = math.cos(math.radians(a)), math.sin(math.radians(a))
+        pts = [(x + ca * dx - sa * dy, y + sa * dx + ca * dy) for dx, dy in ((-L / 2, -W / 2), (L / 2, -W / 2), (L / 2, W / 2), (-L / 2, W / 2))]
+        d2.polygon(pts, fill=(244, 222, 170) if flat else (160, 92, 40), outline=(40, 18, 6))
+        if flat:
+            for k in (-1, 0, 1):
+                ux, uy = x + ca * k * 30, y + sa * k * 30
+                d2.line([(ux - 7, uy - 7), (ux + 7, uy + 7)], fill=(70, 30, 10), width=3)
+                d2.line([(ux + 7, uy - 7), (ux - 7, uy + 7)], fill=(70, 30, 10), width=3)
+
+
+def m_gummy(d, img):
+    """구미 체인 — 홈 타일과 같은 Blender 장난감 렌더(tiles_toybox.py 의 gummy_toy)를 합성.
+
+    원본: scripts/og-assets/tiles3d/gummy.png. 수정은 씬 스크립트에서 하고 재렌더한다
+    (blender -b -P scripts/blender/tiles_toybox.py -- gummy). 뒤에 젤리색 후광을 깐다.
+    """
+    glow(img, MCX, MCY + 10, 250, (255, 111, 168), 46)
+    glow(img, MCX + 90, MCY - 90, 150, (124, 240, 200), 30)
+    toy = Image.open(HERE / "og-assets" / "tiles3d" / "gummy.png").convert("RGBA")
+    a = toy.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    toy = toy.crop(a.getbbox())
+    h = 470
+    w = round(toy.width * h / toy.height)
+    toy = toy.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(toy, (MCX - w // 2, MCY - h // 2 + 8))
+
+
 GAMES = {
+    "gummy":           dict(title="GUMMY CHAIN", sub="구미 체인 — 쫀득한 연쇄로 1:1 대결", cat="PUZZLE", top=(30, 12, 40), bot=(12, 5, 18), accent=(255, 111, 168), motif=m_gummy),
+    "yut":             dict(title="YUT NORI", sub="윷놀이 — 여럿이 함께, 최대 4팀", cat="BOARD", top=(30, 18, 12), bot=(12, 7, 5), accent=(244, 195, 90), motif=m_yut),
+    "reversi":         dict(title="REVERSI", sub="리버시 — AI·친구와 한 판, 모서리를 잡아라", cat="BOARD", top=(8, 26, 18), bot=(3, 10, 7), accent=(232, 200, 114), motif=m_reversi),
+    "ludo":            dict(title="LUDO", sub="루도 — 친구와 온라인 보드게임", cat="BOARD", top=(24, 12, 20), bot=(9, 5, 10), accent=(255, 209, 102), motif=m_ludo),
+    "bubble":          dict(title="BUBBLE BURST", sub="버블 버스트 — 같은 색 셋이면 펑", cat="RETRO", top=(22, 12, 34), bot=(8, 5, 16), accent=(255, 95, 162), motif=m_bubble),
     "balloon":         dict(title="BALLOON POP", sub="풍선 룰렛 — 터뜨린 사람이 벌칙", cat="LUCKY", top=(28, 10, 18), bot=(11, 4, 8), accent=(255, 92, 122), motif=m_balloon),
     "roulette":        dict(title="ROULETTE", sub="룰렛 — 돌려서 정하는 내기 한 판", cat="LUCKY", top=(26, 10, 16), bot=(10, 4, 8), accent=(255, 206, 92), motif=m_roulette),
     "ladder":          dict(title="LADDER GAME", sub="사다리타기 — 벌칙·내기 공정 결정", cat="LUCKY", top=(8, 16, 30), bot=(4, 7, 14), accent=(80, 200, 255), motif=m_ladder),
@@ -382,8 +632,8 @@ GAMES = {
     "team":            dict(title="TEAM PICKER", sub="팀나누기 — 공정한 랜덤 팀 배정", cat="LUCKY", top=(10, 14, 30), bot=(5, 6, 13), accent=(93, 193, 255), motif=m_team),
     "dice":            dict(title="DICE ROLLER", sub="주사위 — 흔들어서 결정", cat="LUCKY", top=(18, 12, 30), bot=(8, 5, 13), accent=(167, 139, 250), motif=m_dice),
     "snake":           dict(title="SNAKE", sub="스네이크 — 클래식 기록 갱신", cat="RETRO", top=(8, 20, 12), bot=(3, 8, 5), accent=(61, 214, 140), motif=m_snake),
-    "pacman":          dict(title="PACMAN", sub="팩맨 — 미로 속 추격전", cat="RETRO", top=(10, 10, 26), bot=(4, 4, 11), accent=(255, 221, 51), motif=m_pacman),
-    "tetris":          dict(title="TETRIS", sub="테트리스 — 한 줄의 쾌감", cat="RETRO", top=(12, 10, 28), bot=(5, 4, 12), accent=(93, 193, 255), motif=m_tetris),
+    "pacman":          dict(title="DOT RUNNER", sub="닷 러너 — 미로 속 추격전", cat="RETRO", top=(10, 10, 26), bot=(4, 4, 11), accent=(255, 221, 51), motif=m_pacman),
+    "tetris":          dict(title="TETROMINO STACK", sub="테트로미노 쌓기 — 한 줄의 쾌감", cat="RETRO", top=(12, 10, 28), bot=(5, 4, 12), accent=(93, 193, 255), motif=m_tetris),
     "brick":           dict(title="BRICK BREAKER", sub="벽돌깨기 — 한 발의 각도 싸움", cat="RETRO", top=(24, 12, 10), bot=(10, 5, 4), accent=(255, 159, 64), motif=m_brick),
     "burger":          dict(title="BURGER CHEF", sub="버거 셰프 — 주문 폭주 스택 쌓기", cat="RETRO", top=(24, 14, 8), bot=(10, 6, 3), accent=(240, 178, 92), motif=m_burger),
     "car-racing":      dict(title="CAR RACE", sub="카레이싱 — 랜덤 레이스 내기", cat="RETRO", top=(20, 8, 12), bot=(8, 3, 5), accent=(235, 64, 84), motif=m_car),
@@ -441,9 +691,14 @@ def build(slug, cfg):
 
 
 def main():
+    import sys
+    # 인자로 slug 를 주면 그 게임만 만든다 (예: python scripts/gen-og-games.py bubble)
+    only = set(sys.argv[1:])
     OUT.mkdir(parents=True, exist_ok=True)
     print("Generating per-game OG images:")
     for slug, cfg in GAMES.items():
+        if only and slug not in only:
+            continue
         build(slug, cfg)
     print("done.")
 

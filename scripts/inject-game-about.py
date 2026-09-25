@@ -15,7 +15,7 @@ ladder 만 예외적으로 `lp-game-about` 섹션(715단어)을 갖고 있었고
 멱등: `<!--lp-game-about:start-->` ~ `<!--lp-game-about:end-->` 펜스로 감싸고,
 재실행 시 블록을 통째로 교체한다.
 
-사용: python scripts/inject-game-about.py
+사용: python scripts/inject-game-about.py [게임id ...]   (인자 없으면 전체)
 """
 import importlib.util
 import json
@@ -101,7 +101,7 @@ CSS = """<style>
 .lp-game-about .lp-about-block > summary::after{content:'+';position:absolute;
   right:6px;top:50%;transform:translateY(-50%);color:#5dc1ff;font-weight:900;
   font-size:1.1em;line-height:1}
-.lp-game-about .lp-about-block[open] > summary::after{content:'\2013'}
+.lp-game-about .lp-about-block[open] > summary::after{content:'\\2013'}
 .lp-game-about .lp-about-block[open] > summary{color:#fff}
 .lp-game-about .lp-about-block > summary:hover{color:#fff}
 .lp-game-about .lp-fold-body{padding:2px 2px 18px}
@@ -316,6 +316,11 @@ CONTENT.update(_load("game_about_content_2", "CONTENT_2"))
 CONTENT.update(_load("game_about_content_3", "CONTENT_3"))
 CONTENT.update(_load("game_about_content_5", "CONTENT_5"))  # 2026-08-20 풍선 룰렛
 CONTENT.update(_load("game_about_content_7", "CONTENT_7"))  # 2026-08-22 궤도 연구소
+CONTENT.update(_load("game_about_content_8", "CONTENT_8"))  # 2026-09-25 버블 버스트
+CONTENT.update(_load("game_about_content_ludo", "CONTENT_LUDO"))  # 2026-09-25 루도
+CONTENT.update(_load("game_about_content_reversi", "CONTENT_REVERSI"))  # 2026-09-25 리버시
+CONTENT.update(_load("game_about_content_yut", "CONTENT_YUT"))  # 2026-09-25 윷놀이
+CONTENT.update(_load("game_about_content_gummy", "CONTENT_GUMMY"))  # 2026-09-25 구미 체인
 
 # 600단어 미달 게임 보강 블록 — 각 게임의 blocks 뒤(FAQ 앞)에 덧붙인다.
 for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
@@ -446,8 +451,13 @@ def build_section(data):
 
 
 def main():
+    # 인자로 게임 id 를 주면 그 게임만 주입한다 — 다른 게임 파일을 동시에 고치는 중일 때
+    # 전체를 다시 쓰면 남의 작업을 덮을 수 있다 (예: python scripts/inject-game-about.py bubble)
+    only = set(sys.argv[1:])
     changed = 0
     for key, data in CONTENT.items():
+        if only and key not in only:
+            continue
         f = GAMES / key / "index.html"
         if not f.exists():
             print("[skip] {} — 파일 없음".format(key))

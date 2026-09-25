@@ -53,8 +53,8 @@ GAME_DEFS = {
     # Skill games — VideoGame
     'dodge':    ('VideoGame', 'GameApplication', 'Arcade', 'Space-Z',
                  '우주에서 운석을 피하며 살아남는 모바일 닷지 게임. 중력파·방어막 아이템.'),
-    'tetris':   ('VideoGame', 'GameApplication', 'Puzzle', '테트리스',
-                 '클래식 테트리스. 모바일 스와이프 + PC 키보드 조작 지원.'),
+    'tetris':   ('VideoGame', 'GameApplication', 'Puzzle', '테트로미노 쌓기',
+                 '클래식 테트로미노 낙하 퍼즐. 모바일 스와이프 + PC 키보드 조작 지원.'),
     'snake':    ('VideoGame', 'GameApplication', 'Arcade', '스네이크',
                  '먹이 먹고 길어지는 클래식 스네이크 게임. 모바일·PC 호환.'),
     'pacman':   ('VideoGame', 'GameApplication', 'Arcade', '팩맨',

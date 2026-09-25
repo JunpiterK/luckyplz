@@ -59,10 +59,13 @@
 
   /* Skip games whose pages already wire their own audio engine. */
   var SKIP_GAMES={
+    'yut':true,'ludo':true,   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
     'car-racing':true,
     'dodge':true,
     'tetris':true,    /* 3-tier dynamic BGM tied to stack height */
-    'balloon':true    /* 단일 트랙 + 위험도 볼륨 스웰 + 벌칙 징글 자체 엔진 */
+    'balloon':true,   /* 단일 트랙 + 위험도 볼륨 스웰 + 벌칙 징글 자체 엔진 */
+    'reversi':true,   /* 보드게임 — BGM 없음(돌 소리가 주인공). 없는 트랙 HEAD 404 방지 */
+    'gummy':true      /* 구미 체인 — 연쇄 음이 올라가는 자체 WebAudio 효과음. 없는 트랙 HEAD 404 방지 */
   };
 
   /* Detect game from URL. Lobby + home + blog → no BGM. */

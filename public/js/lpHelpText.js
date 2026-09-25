@@ -1,6 +1,6 @@
 /* lpHelpText.js — 게임별 간단 도움말 (언어별 3~4줄). lpHelp(siteFooter) 가 ? 버튼 시트 맨 위에 보여 준다.
    키 = public/games/<id>/ 디렉토리명. 언어 ko·en·ja·zh·es·pt, 그 밖의 언어는 코드에서 en 폴백.
-   t = 게임이 실제로 쓰는 표시명(상표 중립명 유지: 닷 러너·블록 스택·브롤 런), l = 무엇을 / 어떻게 / 쓸모 있는 팁 한 줄. */
+   t = 게임이 실제로 쓰는 표시명(상표 중립명 유지: 닷 러너·테트로미노 쌓기·브롤 런), l = 무엇을 / 어떻게 / 쓸모 있는 팁 한 줄. */
 window.LP_HELP_TEXT = {
   'roulette': {
     ko: {t:'룰렛', l:['항목을 넣고 돌려서 딱 하나를 뽑아요','가운데 SPIN을 누르거나 휠을 스와이프해요','멈췄을 때 바늘이 가리킨 칸이 당첨','매번 독립이라 같은 항목이 또 나올 수 있어요']},
@@ -9,6 +9,46 @@ window.LP_HELP_TEXT = {
     zh: {t:'轮盘', l:['输入选项，转一下只选出一个','点中间的 SPIN，或直接滑动转盘','停下时指针指向的格子就是结果','每次都独立，同一项可能连续出现']},
     es: {t:'Ruleta', l:['Añade opciones, gira y sale solo una','Toca SPIN en el centro o desliza la ruleta','Gana la casilla donde se detiene la aguja','Cada giro es independiente: puede repetirse']},
     pt: {t:'Roleta', l:['Adicione opções, gire e sai só uma','Toque em SPIN no centro ou deslize a roleta','Vence a casa onde o ponteiro parar','Cada giro é independente: pode repetir']}
+  },
+  'bubble': {
+    ko: {t:'버블 버스트', l:['같은 색 버블 3개 이상을 붙이면 터져요','끌어서 조준하고 떼면 발사 — 벽에 튕겨도 돼요','천장과 끊긴 덩어리는 통째로 떨어져 점수가 커요','헛방이 쌓이면 새 줄이 내려와요 — 작은 버블을 눌러 교체']},
+    en: {t:'Bubble Burst', l:['Touch 3+ bubbles of one color to pop them','Drag to aim, release to shoot — bank off the walls','Anything cut off from the ceiling drops for big points','Misses bring down a new row; tap the small bubble to swap']},
+    ja: {t:'バブルバースト', l:['同じ色を3つ以上つなげると消えます','ドラッグで狙って離すと発射、壁で跳ね返せます','天井から切れた塊はまとめて落ちて高得点','ミスが続くと新しい列が下りてきます。小さいバブルで交換']},
+    zh: {t:'泡泡爆破', l:['三个以上同色泡泡相连就会爆掉','拖动瞄准，松开发射，可以借墙反弹','与顶部断开的泡泡会整串掉落，分数更高','失误多了会压下新一行；点小泡泡可交换']},
+    es: {t:'Revienta Burbujas', l:['Junta 3 o más del mismo color para reventarlas','Arrastra para apuntar y suelta para disparar; rebota en las paredes','Lo que queda suelto del techo cae y da más puntos','Si fallas mucho baja una fila; toca la burbuja pequeña para cambiar']},
+    pt: {t:'Estoura Bolhas', l:['Junte 3 ou mais da mesma cor para estourar','Arraste para mirar e solte para atirar; use as paredes','O que se solta do teto cai e vale mais pontos','Errou muito? Desce uma fileira; toque na bolha pequena para trocar']}
+  },
+  'ludo': {
+    ko: {t:'루도', l:['주사위를 굴려 말 4개를 먼저 가운데 집에 넣으면 승리','6이 나와야 출발, 6이면 한 번 더 · 상대 말 위에 멈추면 잡기','별 칸·출발칸은 안전 · 친구와 온라인: 메신저 링크로 각자 폰에서']},
+    en: {t:'Ludo', l:['Roll the dice and race all 4 tokens into the center home','Roll a 6 to leave base; a 6 rolls again. Land on a rival to capture','Stars and start squares are safe. Play online: share a chat link']},
+    ja: {t:'ルドー', l:['サイコロを振り、4つのコマを先に中央のゴールへ','6で出発、6ならもう一回 · 相手のコマに止まると取れる','星マスとスタートは安全 · オンライン: リンクで各自のスマホから']},
+    zh: {t:'鲁多棋', l:['掷骰子，先把四枚棋子全部送进中央的家','掷出6才能出发，6可再掷 · 停在对手棋子上即可吃掉','星格和起点格安全 · 在线玩：发链接，各用各的手机']},
+    es: {t:'Ludo', l:['Tira el dado y lleva tus 4 fichas a la casa central','Sal con un 6; el 6 repite. Cae sobre un rival para comerlo','Estrellas y salidas son seguras. Online: comparte el enlace']},
+    pt: {t:'Ludo', l:['Jogue o dado e leve suas 4 peças à casa central','Saia com um 6; o 6 joga de novo. Pare no rival para capturar','Estrelas e saídas são seguras. Online: compartilhe o link']}
+  },
+  'reversi': {
+    ko: {t:'리버시', l:['상대 돌을 내 돌 사이에 끼우면 전부 내 색으로 뒤집혀요','점 표시된 칸에만 둘 수 있고, 둘 곳이 없으면 자동 패스','모서리는 절대 안 뒤집혀요 — 모서리 옆 대각선 칸은 피하세요']},
+    en: {t:'Reversi', l:['Sandwich opponent discs between yours to flip them all','You can only play on dotted squares; no move means a pass','Corners never flip: avoid the diagonal square next to one']},
+    ja: {t:'リバーシ', l:['相手の石を自分の石で挟むと全部ひっくり返ります','点のあるマスにだけ置けます。置けなければ自動でパス','角は二度と返されません。角の斜め隣は避けましょう']},
+    zh: {t:'黑白棋', l:['用自己的棋子夹住对方棋子，就能全部翻成己色','只能下在有圆点的格子；无处可下时自动跳过','角上的棋子永远不会被翻，避开角的斜邻格']},
+    es: {t:'Reversi', l:['Encierra fichas rivales entre las tuyas y se voltean','Solo juegas en casillas con punto; si no hay, pasas','Las esquinas nunca se voltean: evita la casilla diagonal vecina']},
+    pt: {t:'Reversi', l:['Cerque peças rivais entre as suas e todas viram','Só dá para jogar nas casas com ponto; sem jogada, passa','Cantos nunca viram: evite a casa diagonal ao lado deles']}
+  },
+  'yut': {
+    ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모·잡기는 한 번 더! 모서리·방에 멈추면 지름길']},
+    en: {t:'Yut Nori', l:['2–4 teams race to bring all their pieces home','Throw the sticks, tap a piece, then tap a glowing spot','Yut, Mo or a capture = throw again; stop on a corner for a shortcut']},
+    ja: {t:'ユンノリ', l:['2〜4チームで、先に全部のコマをゴールさせたら勝ち','棒を投げる → コマをタップ → 光るマスをタップ','ユッ・モ・つかまえたらもう一回。角で止まると近道']},
+    zh: {t:'掷柶(尤茨)', l:['2–4队比赛，先让所有棋子走完一圈的队获胜','掷柶 → 点棋子 → 点发光的格子移动','掷出4步、5步或吃子可再掷一次；停在角上可抄近路']},
+    es: {t:'Yut Nori', l:['2–4 equipos: gana quien saque primero todas sus fichas','Lanza los palos, toca una ficha y luego la casilla brillante','Yut, Mo o capturar = otro tiro; para en una esquina para el atajo']},
+    pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut, Mo ou captura = joga de novo; pare num canto para o atalho']}
+  },
+  'gummy': {
+    ko: {t:'구미 체인', l:['같은 색 젤리 4개 이상을 이으면 터져요','떨어져서 또 터지면 연쇄 — 점수가 크게 뛰어요','대전에선 연쇄가 설탕 블록 공격, 내 연쇄로 예고분을 상쇄','3열 맨 윗칸이 막히면 패배']},
+    en: {t:'Gummy Chain', l:['Link 4+ gummies of one color to pop them','Pops that cause more pops are chains — big score','In versus, chains send sugar blocks; your chains cancel incoming ones','Lose when the top of column 3 is blocked']},
+    ja: {t:'グミチェイン', l:['同じ色を4つ以上つなげると消える','落ちてまた消えれば連鎖、得点が大きく伸びる','対戦では連鎖が砂糖ブロック攻撃、自分の連鎖で予告を相殺','3列目のいちばん上が埋まると負け']},
+    zh: {t:'软糖连锁', l:['同色软糖4个以上相连即消除','落下后再次消除即连锁，分数大增','对战中连锁会发送糖块，自己的连锁可抵消预告','第3列最上方被堵住即失败']},
+    es: {t:'Gummy Chain', l:['Une 4+ gominolas del mismo color para explotarlas','Si lo que cae vuelve a explotar es una cadena: muchos puntos','En duelo las cadenas envían bloques de azúcar; las tuyas anulan los que llegan','Pierdes si se llena la parte alta de la columna 3']},
+    pt: {t:'Gummy Chain', l:['Ligue 4+ balas da mesma cor para estourar','Se o que cai estourar de novo é uma corrente: muitos pontos','No duelo, correntes enviam blocos de açúcar; as suas anulam os que chegam','Perde quando o topo da coluna 3 fica bloqueado']}
   },
   'team': {
     ko: {t:'팀 뽑기', l:['가챠 기계가 캡슐을 한 팀씩 뽑아 줘요','참가자와 팀 수(또는 팀당 인원)를 정하고 시작','같이 보기: 메신저 링크로 각자 폰에서 함께 봐요','실력 차가 크면 티어 밸런스 모드를 쓰세요']},
@@ -99,12 +139,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Space-Z', l:['Desvie dos asteroides: o tempo que você sobrevive é a pontuação','Arraste no celular, setas no PC; itens e GRAV te salvam','👥 Corrida ao vivo: até 8 voam no mesmo espaço por um link','Suprimento é de quem pega primeiro; o desafio envia sua rota']}
   },
   'tetris': {
-    ko: {t:'블록 스택', l:['떨어지는 블록을 돌리고 옮겨 가로줄을 채우면 지워져요','폰: 아래 버튼으로 이동·회전·홀드, 낙하 두 번 탭 = 즉시','PC: ← → 이동 · ↑ 회전 · Space 즉시 낙하','한 열을 비워 두고 긴 막대로 4줄을 한 번에 지우세요']},
-    en: {t:'Block Stack', l:['Rotate and move falling blocks; full rows clear','Phone: bottom buttons move, rotate, hold; double-tap drop to slam','PC: ← → move, ↑ rotate, ↓ soft drop, Space hard drop','Leave one column open and clear 4 rows at once with the long bar']},
-    ja: {t:'ブロックスタック', l:['落ちてくるブロックを回して動かし、横一列そろうと消えます','スマホ：下のボタンで移動・回転・ホールド、落下2回タップで即落下','PC：← → 移動・↑ 回転・↓ 速く・Space 即落下','1列を空けておき、長い棒で4列を一気に消しましょう']},
-    zh: {t:'方块堆叠', l:['旋转、移动下落的方块，填满一整行就消除','手机：下方按钮移动、旋转、暂存，下落键双击＝直接落底','电脑：← → 移动，↑ 旋转，↓ 加速，Space 直接落底','留出一列，用长条一次消4行']},
-    es: {t:'Block Stack', l:['Gira y mueve los bloques; las filas completas desaparecen','Móvil: botones abajo mueven, giran y guardan; doble toque = caída','PC: ← → mover, ↑ girar, ↓ bajar, Espacio caída instantánea','Deja una columna libre y borra 4 filas de golpe con la barra larga']},
-    pt: {t:'Block Stack', l:['Gire e mova os blocos; linhas completas somem','Celular: botões embaixo movem, giram e guardam; toque duplo = queda','PC: ← → mover, ↑ girar, ↓ descer, Espaço queda instantânea','Deixe uma coluna livre e limpe 4 linhas de uma vez com a barra longa']}
+    ko: {t:'테트로미노 쌓기', l:['떨어지는 블록을 돌리고 옮겨 가로줄을 채우면 지워져요','폰: 아래 버튼으로 이동·회전·홀드, 낙하 두 번 탭 = 즉시','PC: ← → 이동 · ↑ 회전 · Space 즉시 낙하','한 열을 비워 두고 긴 막대로 4줄을 한 번에 지우세요']},
+    en: {t:'Tetromino Stack', l:['Rotate and move falling blocks; full rows clear','Phone: bottom buttons move, rotate, hold; double-tap drop to slam','PC: ← → move, ↑ rotate, ↓ soft drop, Space hard drop','Leave one column open and clear 4 rows at once with the long bar']},
+    ja: {t:'テトロミノ・スタック', l:['落ちてくるブロックを回して動かし、横一列そろうと消えます','スマホ：下のボタンで移動・回転・ホールド、落下2回タップで即落下','PC：← → 移動・↑ 回転・↓ 速く・Space 即落下','1列を空けておき、長い棒で4列を一気に消しましょう']},
+    zh: {t:'四格方块', l:['旋转、移动下落的方块，填满一整行就消除','手机：下方按钮移动、旋转、暂存，下落键双击＝直接落底','电脑：← → 移动，↑ 旋转，↓ 加速，Space 直接落底','留出一列，用长条一次消4行']},
+    es: {t:'Tetrominós', l:['Gira y mueve los bloques; las filas completas desaparecen','Móvil: botones abajo mueven, giran y guardan; doble toque = caída','PC: ← → mover, ↑ girar, ↓ bajar, Espacio caída instantánea','Deja una columna libre y borra 4 filas de golpe con la barra larga']},
+    pt: {t:'Tetraminós', l:['Gire e mova os blocos; linhas completas somem','Celular: botões embaixo movem, giram e guardam; toque duplo = queda','PC: ← → mover, ↑ girar, ↓ descer, Espaço queda instantânea','Deixe uma coluna livre e limpe 4 linhas de uma vez com a barra longa']}
   },
   'starship-lander': {
     ko: {t:'스타십 착륙', l:['연료를 아끼며 착륙장에 느리고 똑바로 내려앉혀요','⟲ ⟳ 누르는 동안 회전, MAIN·화면 탭은 분사 (PC: 방향키)','늦게, 강하게: STOP 표시가 땅에 닿을 때 길게 분사','점선 끝 = 지금 분사를 멈추면 닿을 지점']},

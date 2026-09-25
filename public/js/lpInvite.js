@@ -221,23 +221,23 @@
         ko:{friend:'친구',head:'🎮 게임 초대',bodyFmt:'{nick}님이 {game} 에 초대했어요!',
             timerFmt:'{s}초 남음',decline:'거절',accept:'수락',
             expired:'초대가 만료됐어요.',acceptFail:'수락 실패: ',game:'게임',
-            games:{lotto:'로또',roulette:'룰렛',ladder:'사다리',dice:'주사위',team:'팀 나누기',bingo:'빙고','car-racing':'카레이싱'}},
+            games:{lotto:'로또',roulette:'룰렛',ladder:'사다리',dice:'주사위',team:'팀 나누기',bingo:'빙고','car-racing':'카레이싱',yut:'윷놀이',ludo:'루도',reversi:'리버시'}},
         en:{friend:'A friend',head:'🎮 Game invite',bodyFmt:'{nick} invited you to {game}!',
             timerFmt:'{s}s left',decline:'Decline',accept:'Accept',
             expired:'The invite expired.',acceptFail:'Accept failed: ',game:'a game',
-            games:{lotto:'Lotto',roulette:'Roulette',ladder:'Ladder',dice:'Dice',team:'Team Picker',bingo:'Bingo','car-racing':'Car Racing'}},
+            games:{lotto:'Lotto',roulette:'Roulette',ladder:'Ladder',dice:'Dice',team:'Team Picker',bingo:'Bingo','car-racing':'Car Racing',yut:'Yut Nori',ludo:'Ludo',reversi:'Reversi'}},
         ja:{friend:'友だち',head:'🎮 ゲーム招待',bodyFmt:'{nick}さんが{game}に招待しました！',
             timerFmt:'残り{s}秒',decline:'断る',accept:'参加する',
             expired:'招待の期限が切れました。',acceptFail:'参加に失敗: ',game:'ゲーム',
-            games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース'}},
+            games:{lotto:'ロト',roulette:'ルーレット',ladder:'あみだくじ',dice:'サイコロ',team:'チーム分け',bingo:'ビンゴ','car-racing':'カーレース',yut:'ユンノリ',ludo:'ルドー',reversi:'リバーシ'}},
         es:{friend:'Un amigo',head:'🎮 Invitación a jugar',bodyFmt:'¡{nick} te invita a jugar {game}!',
             timerFmt:'Quedan {s} s',decline:'Rechazar',accept:'Aceptar',
             expired:'La invitación caducó.',acceptFail:'Error al aceptar: ',game:'un juego',
-            games:{lotto:'Lotería',roulette:'Ruleta',ladder:'Escalera',dice:'Dados',team:'Equipos',bingo:'Bingo','car-racing':'Carrera'}},
+            games:{lotto:'Lotería',roulette:'Ruleta',ladder:'Escalera',dice:'Dados',team:'Equipos',bingo:'Bingo','car-racing':'Carrera',yut:'Yut Nori',ludo:'Ludo',reversi:'Reversi'}},
         pt:{friend:'Um amigo',head:'🎮 Convite de jogo',bodyFmt:'{nick} está te chamando pra jogar {game}!',
             timerFmt:'Faltam {s} s',decline:'Recusar',accept:'Aceitar',
             expired:'O convite expirou.',acceptFail:'Falha ao aceitar: ',game:'um jogo',
-            games:{lotto:'Loteria',roulette:'Roleta',ladder:'Escada',dice:'Dados',team:'Times',bingo:'Bingo','car-racing':'Corrida'}}
+            games:{lotto:'Loteria',roulette:'Roleta',ladder:'Escada',dice:'Dados',team:'Times',bingo:'Bingo','car-racing':'Corrida',yut:'Yut Nori',ludo:'Ludo',reversi:'Reversi'}}
     };
     function IVT() {
         let l; try { l = localStorage.getItem('luckyplz_lang') || 'en'; } catch (_) { l = 'en'; }

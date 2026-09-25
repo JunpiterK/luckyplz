@@ -2521,7 +2521,7 @@
                 if(!lr||!lr.code)return '';
                 if(Date.now()-(lr.t||0)>24*60*60*1000){localStorage.removeItem('lp_lastRoom');return ''}
                 _lastRoom=lr;
-                const gnames={roulette:'룰렛',ladder:'사다리',team:'팀뽑기',lotto:'로또',bingo:'빙고','car-racing':'레이싱',quiz:'퀴즈'};
+                const gnames={roulette:'룰렛',ladder:'사다리',team:'팀뽑기',lotto:'로또',bingo:'빙고','car-racing':'레이싱',quiz:'퀴즈',yut:'윷놀이',ludo:'루도',reversi:'리버시',gummy:'구미 체인'};
                 const gameLabel=gnames[lr.gameId]||lr.gameId||'';
                 const titleTxt=_t('최근 방','Recent room');
                 const rejoinTxt=_t('재접속','Rejoin');
@@ -2709,7 +2709,7 @@
             }
             /* Validate gameId — 'unknown' is truthy so the old fallback
                never fired; now we whitelist valid ids explicitly. */
-            const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz'];
+            const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz','ludo','yut','reversi','gummy','bubble'];
             const _gid=_validGames.includes(probe.gameId)?probe.gameId:'roulette';
             const target='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
             location.href=target;

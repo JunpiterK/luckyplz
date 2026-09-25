@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1790292021">
-<script>(function(){try{if(!/KAKAOTALK/i.test(navigator.userAgent||""))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1790292021";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<meta name="lp-build" content="1790303117">
+<script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
+<script>(function(){var B="1790303117";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>스페이스-Z · Space-Z | Lucky Please</title>
@@ -1445,10 +1445,10 @@ body::after{
     </div>
 
 </main>
-<script src="/js/supabase-config.js?v=1790292021"></script>
-<script src="/js/lpI18n.js?v=1790292021"></script>
-<script src="/js/lpRankSheet.js?v=1790292021"></script>
-<script src="/js/lpAudio.js?v=1790292021"></script>
+<script src="/js/supabase-config.js?v=1790303117"></script>
+<script src="/js/lpI18n.js?v=1790303117"></script>
+<script src="/js/lpRankSheet.js?v=1790303117"></script>
+<script src="/js/lpAudio.js?v=1790303117"></script>
 <script>
 const $=(id)=>document.getElementById(id);
 const esc=(s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
@@ -6789,7 +6789,9 @@ document.addEventListener('keydown',(e)=>{
            seeded RNG sequence 가 frame 마다 다르게 진행 → depot 위치/메테오 패턴
            양쪽 desync. (totalPausedMs 가 실제로는 한 번도 업데이트 안 되는 dead
            code 라 pause 시 elapsedMs 가 그냥 jump 함.) */
-        if(running && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing()){
+        /* 자리 비움 창이 떠 있거나 방금 그 창의 Space 로 재개했으면 무시 (같은 키가 다시 멈춤으로 뒤집지 않게) */
+        const _apBusy = (window.LpAutoPause && LpAutoPause.isShowing()) || (performance.now() - (_szApResumedAt || 0) < 400);
+        if(!_apBusy && running && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing()){
             paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI();
         }
     }
@@ -6967,6 +6969,7 @@ let grazeSparks = [];
 let hitSparks = [];
 let hitShockUntil = 0;
 let zoneWarpUntil = 0;
+let zoneWarpRGB = '160,200,255';   /* 새 존 색 (ZONE_BG 에서 밝게 뽑은 액센트) */
 
 function _pushFxSpark(arr, x, y, color, power, life){
     const a = Math.random() * Math.PI * 2;
@@ -6996,8 +6999,24 @@ function triggerHitFx(now){
     }
 }
 
+/* 2026-09-25 — 존 전환 연출 교체. 운영자: "하늘색 줄들이 너무 지저분하고 난잡해 보여 — 은은하게".
+   예전 18줄 시안 광선 → 새 존 색으로 물든 가장자리 빛(비네트) + 가는 고리 하나가 한 번 퍼진다.
+   새 존의 배경색(ZONE_BG) 에서 색을 뽑아 존마다 다른 빛 = 존이 바뀐 걸 색으로 알린다. 흔들림 없음 */
+const ZONE_WARP_MS = 1150;
+function _zoneAccentRGB(idx){
+    try{
+        const c = ZONE_BG[idx] || ZONE_BG[0];
+        let r = 0, g = 0, b = 0;
+        for(const h of c){ const v = hexToRgb(h); r += v[0]; g += v[1]; b += v[2]; }
+        const m = Math.max(r, g, b, 1);
+        /* 채널 최대를 255 로 올려 색조만 남기고, 흰빛 40% 를 섞어 파스텔로 */
+        const f = (x) => Math.round((x / m) * 255 * 0.6 + 255 * 0.4);
+        return f(r) + ',' + f(g) + ',' + f(b);
+    }catch(_){ return '160,200,255'; }
+}
 function triggerZoneWarpFx(now){
-    zoneWarpUntil = now + 950;
+    zoneWarpUntil = now + ZONE_WARP_MS;
+    zoneWarpRGB = _zoneAccentRGB(currentZoneIdx);
 }
 
 function _updateFxArray(arr, dt){
@@ -7041,27 +7060,26 @@ function _drawSparkArray(arr){
 
 function drawCinematicFx(now){
     if(now < zoneWarpUntil){
-        const p = 1 - (zoneWarpUntil - now) / 950;
-        const a = Math.sin(Math.min(1, p) * Math.PI);
+        const p = Math.min(1, Math.max(0, 1 - (zoneWarpUntil - now) / ZONE_WARP_MS));
+        const a = Math.sin(p * Math.PI);            /* 0 → 1 → 0 부드럽게 */
+        const rgb = zoneWarpRGB;
         ctx.save();
         ctx.globalCompositeOperation = 'screen';
-        for(let i = 0; i < 18; i++){
-            const x = (i / 17) * CW;
-            const off = (Math.sin(i * 1.7 + now * 0.008) * 10);
-            ctx.strokeStyle = 'rgba(0,217,255,' + (0.08 + a * 0.18) + ')';
-            ctx.lineWidth = 1 + a * 2.2;
-            ctx.beginPath();
-            ctx.moveTo(x + off, -30);
-            ctx.lineTo(CW/2 + (x - CW/2) * (0.55 + a * 0.45), CH + 30);
-            ctx.stroke();
-        }
-        ctx.globalAlpha = a * 0.22;
-        const g = ctx.createRadialGradient(CW/2, CH*0.35, 20, CW/2, CH*0.35, 260);
-        g.addColorStop(0, 'rgba(255,255,255,0.6)');
-        g.addColorStop(0.35, 'rgba(0,217,255,0.35)');
-        g.addColorStop(1, 'rgba(0,217,255,0)');
+        /* ① 가장자리 빛 — 가운데는 비우고 테두리만 새 존 색으로 은은히 물든다 */
+        const R = Math.hypot(CW, CH) * 0.62;
+        const g = ctx.createRadialGradient(CW/2, CH*0.45, R * 0.42, CW/2, CH*0.45, R);
+        g.addColorStop(0, 'rgba(' + rgb + ',0)');
+        g.addColorStop(1, 'rgba(' + rgb + ',' + (0.20 * a).toFixed(3) + ')');
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, CW, CH);
+        /* ② 가는 고리 하나 — 화면 가운데서 한 번 퍼지며 사라진다 */
+        const e = 1 - Math.pow(1 - p, 3);           /* easeOutCubic */
+        ctx.globalAlpha = 0.32 * (1 - p);
+        ctx.strokeStyle = 'rgb(' + rgb + ')';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(CW/2, CH*0.45, 24 + e * Math.max(CW, CH) * 0.7, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.restore();
         ctx.globalAlpha = 1;
     }
@@ -8066,6 +8084,66 @@ let missionOrbit = null;         /* {cx, cy, r} resolved to canvas px */
 let missionsCompletedZones = new Set();
 let missionBannerHideAt = 0;     /* ms after success/fail to hide banner */
 
+/* 통신망 (2026-09-25) — 운영자: "위성을 계속 설치해야 통신이 유지되고 위치를 파악할 수 있어서
+   아이템을 공급받을 수 있다". 위성 미션을 하나라도 놓치면(시간 초과·미션 중 존 종료)
+   그 순간부터 보급(거점 depot 전부 — 유일한 아이템 공급 경로)이 끊긴다.
+   다음 위성 설치에 성공하면 그때부터 다시 보급 (만회 가능). 싱글 전용 —
+   1:1 PvP 와 동시 대결은 같은 보급을 두고 다투는 공정성·시드 동기화 때문에 제외. */
+let commLinkLost = false;
+let _szLooseBannerHideAt = 0;    /* 미션 상태와 무관하게 떠 있는 배너(존 종료로 끊긴 실패 안내) 숨김 시각 */
+function _szSoloRun(){
+    try{ return !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing(); }catch(_){ return true; }
+}
+const SZ_COMM_TXT = {
+    ko:{ lost:'📡 통신 두절 — 보급 중단', lostSub:'다음 위성을 설치하면 복구돼요', back:'📡 통신 복구 — 보급 재개', backSub:'보상 획득 · 슬롯을 눌러 사용', intro:'궤도에서 SAT 2초 → 위성 설치 · 보급 유지', hud:'통신 두절' },
+    en:{ lost:'📡 Comms Lost — Supplies Cut', lostSub:'Install the next satellite to restore', back:'📡 Comms Restored — Supplies Back', backSub:'Reward granted · tap slot to use', intro:'Hold SAT on orbit 2s — keeps supplies coming', hud:'NO LINK' },
+    ja:{ lost:'📡 通信途絶 — 補給停止', lostSub:'次の衛星を設置すると復旧', back:'📡 通信復旧 — 補給再開', backSub:'報酬獲得 · スロットをタップ', intro:'軌道でSATを2秒 → 衛星設置で補給維持', hud:'通信途絶' },
+    zh:{ lost:'📡 通信中断 — 补给停止', lostSub:'安装下一颗卫星即可恢复', back:'📡 通信恢复 — 补给重启', backSub:'获得奖励 · 点击槽位使用', intro:'在轨道上按住SAT 2秒 → 安装卫星 · 保持补给', hud:'通信中断' },
+    es:{ lost:'📡 Sin enlace — Suministros cortados', lostSub:'Instala el próximo satélite para recuperarlo', back:'📡 Enlace restablecido — Vuelven los suministros', backSub:'Recompensa obtenida · toca la ranura', intro:'Mantén SAT 2 s en la órbita — mantiene los suministros', hud:'SIN ENLACE' },
+    pt:{ lost:'📡 Sem sinal — Suprimentos cortados', lostSub:'Instale o próximo satélite para restaurar', back:'📡 Sinal restaurado — Suprimentos de volta', backSub:'Recompensa obtida · toque no slot', intro:'Segure SAT 2 s na órbita — mantém os suprimentos', hud:'SEM SINAL' }
+};
+function _szCommT(k){
+    let l = 'en';
+    try{ if(window.LpI18n && typeof window.LpI18n.getLang === 'function') l = window.LpI18n.getLang() || 'en'; }catch(_){}
+    const t = SZ_COMM_TXT[l] || SZ_COMM_TXT.en;
+    return t[k] || SZ_COMM_TXT.en[k];
+}
+/* 통신망 HUD — 하트 줄 바로 오른쪽 캔버스에 작은 📡 (캔버스 좌표라 화면 배율이 달라도 하트와 붙어 다닌다).
+   연결 = 희미한 안테나 + 초록 점, 두절 = 빨간 사선 + 짧은 글자가 천천히 깜빡 */
+function szDrawCommHud(now){
+    if(!running || !_szSoloRun()) return;
+    const x = 16 + MAX_LIVES * 15 - 2, y = 46;
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.font = '11px sans-serif';
+    if(!commLinkLost){
+        ctx.globalAlpha = 0.5;
+        ctx.fillText('📡', x, y);
+        ctx.globalAlpha = 0.85;
+        ctx.fillStyle = '#3dff9a';
+        ctx.beginPath(); ctx.arc(x + 14, y + 4, 2, 0, Math.PI * 2); ctx.fill();
+    } else {
+        ctx.globalAlpha = 0.45;
+        ctx.fillText('📡', x, y);
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = '#ff5a6e';
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - 1, y + 6); ctx.lineTo(x + 13, y - 6); ctx.stroke();
+        ctx.globalAlpha = 0.6 + 0.35 * Math.sin(now * 0.0035);
+        ctx.fillStyle = '#ff8a98';
+        ctx.font = 'bold 9px "Noto Sans KR",sans-serif';
+        ctx.fillText(_szCommT('hud'), x + 17, y + 1);
+    }
+    ctx.restore();
+}
+function _szCommLose(){
+    if(!_szSoloRun()) return false;
+    commLinkLost = true;
+    return true;
+}
+
 function _missionLang(){
     if(typeof window.LpI18n !== 'undefined' && typeof window.LpI18n.getLang === 'function'){
         const l = window.LpI18n.getLang();
@@ -8124,7 +8202,8 @@ function _showMissionBanner(zIdx, kind){
     const timerEl = document.getElementById('mbTimer');
     if(kind === 'active'){
         if(titleEl) titleEl.textContent = titles[zIdx] || ('Zone ' + zIdx);
-        if(subEl) subEl.textContent = subs[zIdx] || subs.default;
+        /* 미션 안내 — '위성을 놓아야 보급이 이어진다' 를 짧게 (블랙홀은 3배 보상 안내 유지) */
+        if(subEl) subEl.textContent = (zIdx === MISSION_BLACKHOLE_ZONE) ? (subs[zIdx] || subs.default) : _szCommT('intro');
         if(iconEl) iconEl.textContent = '📡';
         if(timerEl) timerEl.textContent = '25';
         banner.classList.remove('success','failed');
@@ -8135,6 +8214,20 @@ function _showMissionBanner(zIdx, kind){
         if(timerEl) timerEl.textContent = '✓';
         banner.classList.remove('failed');
         banner.classList.add('success');
+    } else if(kind === 'restored'){
+        if(titleEl) titleEl.textContent = _szCommT('back');
+        if(subEl) subEl.textContent = _szCommT('backSub');
+        if(iconEl) iconEl.textContent = '✨';
+        if(timerEl) timerEl.textContent = '✓';
+        banner.classList.remove('failed');
+        banner.classList.add('success');
+    } else if(kind === 'failed' && commLinkLost){
+        if(titleEl) titleEl.textContent = _szCommT('lost');
+        if(subEl) subEl.textContent = _szCommT('lostSub');
+        if(iconEl) iconEl.textContent = '✗';
+        if(timerEl) timerEl.textContent = '—';
+        banner.classList.remove('success');
+        banner.classList.add('failed');
     } else if(kind === 'failed'){
         if(titleEl) titleEl.textContent = (lang === 'ko') ? '✗ 미션 실패' : '✗ Mission Failed';
         if(subEl) subEl.textContent = (lang === 'ko') ? '시간 초과 — 다음 zone 도전' : 'Timed out — try next zone';
@@ -8192,6 +8285,7 @@ function _missionCurrentOrbit(){
 }
 
 function _activateMission(now){
+    _szLooseBannerHideAt = 0;
     missionState = 'active';
     missionActiveUntil = now + MISSION_DURATION_MS;
     _showMissionBanner(missionZoneIdx, 'active');
@@ -8202,6 +8296,7 @@ function _activateMission(now){
 function _failMission(now){
     missionState = 'failed';
     missionsCompletedZones.add(missionZoneIdx);    /* one shot per zone */
+    _szCommLose();                                 /* 싱글: 통신 두절 → 보급 중단 */
     missionBannerHideAt = now + 3500;
     _showMissionBanner(missionZoneIdx, 'failed');
     _setSatBtnState('disabled');
@@ -8217,7 +8312,10 @@ function completeMission(now){
     missionState = 'success';
     missionsCompletedZones.add(z);
     missionBannerHideAt = now + 3500;
-    _showMissionBanner(z, opponentWonThisZone ? 'opp_won' : 'success');
+    /* 끊겼던 통신망은 위성 설치 성공으로 복구 → 이 순간부터 보급 재개 */
+    const _restored = commLinkLost && !opponentWonThisZone;
+    if(_restored) commLinkLost = false;
+    _showMissionBanner(z, opponentWonThisZone ? 'opp_won' : (_restored ? 'restored' : 'success'));
     _setSatBtnState('disabled');
     if(opponentWonThisZone){
         /* 너무 늦었음 — reward 없음, 점수만 (점수는 missionsCompletedZones 로 누적된 통계용) */
@@ -8266,6 +8364,10 @@ function _handleMissionWonPayload(p){
 }
 
 function updateMissionState(now){
+    if(_szLooseBannerHideAt && now >= _szLooseBannerHideAt){
+        _szLooseBannerHideAt = 0;
+        if(missionState === 'idle' || missionState === 'pending') _hideMissionBanner();
+    }
     if(missionState === 'idle') return;
     if(missionState === 'pending'){
         if(now >= missionPendingUntil) _activateMission(now);
@@ -9303,6 +9405,9 @@ let depotsSpawnedZones = new Set();  /* "zoneIdx-slotIdx" 들 중 이미 spawn �
 let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
 
 function maybeSpawnDepot(zoneIdx, now){
+    /* 통신 두절(싱글) — 보급선이 위치를 못 잡는다. 이번 존 슬롯은 '안 떨어진 채' 남겨 두어
+       같은 존에서 위성 설치에 성공하면 바로 떨어진다 (key 를 소모하지 않음) */
+    if(commLinkLost) return;
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
     /* PvP guest 는 spawn 결정 안 함 — host 의 'depot_spawn' broadcast 만 신뢰.
@@ -10431,6 +10536,13 @@ function _computeDiffAt(eMs){
         aimedRatio    = 0.48;
         msRaw         = 2.7 + sm * 0.3;
     }
+    /* 2026-09-25 v4 — 운영자: "지금 조금 쉬워". 첫 15초는 그대로(첫 판 억울함 방지),
+       15→60초에 걸쳐 스며들어 이후 전 구간: 스폰 간격 −12%(운석 밀도 +13.6%),
+       운석 속도 +6%, 조준 비율 +4%p. 시간에만 의존 → 여전히 결정적(PvP·시드 코스 안전) */
+    const hk = ss((s - 15) / 45);
+    spawnInterval = Math.round(spawnInterval * (1 - 0.12 * hk));
+    bulletSpeed   = Math.round(bulletSpeed * (1 + 0.06 * hk));
+    aimedRatio    = Math.min(0.65, aimedRatio + 0.04 * hk);
     const msFloor = Math.floor(msRaw);
     return { spawnInterval, bulletSpeed, aimedRatio, msRaw, msFloor };
 }
@@ -10471,9 +10583,19 @@ function _lpMarkPause(isPaused){
     const t = performance.now();
     if(isPaused){ if(!pausedAt) pausedAt = t; }
     else if(pausedAt){
-        totalPausedMs += t - pausedAt;
+        const d = t - pausedAt;
+        totalPausedMs += d;
         pausedAt = 0;
         try{ lastSpawn = t; }catch(_){}   /* 재개 순간 스폰 기준 재설정 */
+        /* 미션·보급 타이머도 멈춘 시간만큼 민다 — 자리 비움 일시정지 뒤 돌아왔는데
+           미션이 시간 초과(= 통신 두절)로 끝나 있으면 억울하다 (2026-09-25) */
+        try{
+            if(missionPendingUntil) missionPendingUntil += d;
+            if(missionActiveUntil) missionActiveUntil += d;
+            if(missionBannerHideAt) missionBannerHideAt += d;
+            if(_szLooseBannerHideAt) _szLooseBannerHideAt += d;
+            if(zoneEnteredAt) zoneEnteredAt += d;
+        }catch(_){}
     }
 }
 
@@ -10677,6 +10799,8 @@ function resetGame(){
     missionOrbit=null;
     missionsCompletedZones=new Set();
     missionBannerHideAt=0;
+    commLinkLost=false;                /* 통신망 — 새 판은 연결된 상태로 */
+    _szLooseBannerHideAt=0;
     satelliteOrbiting=[];
     satHeld=false;                     /* Phase C v2 reset */
     satInstallProgress=0;
@@ -11869,7 +11993,20 @@ function gameLoop(now){
            동시 시작 → 먼저 완료한 사람만 reward 획득 (race system). */
         /* clear any in-flight mission from previous zone (banner safety) */
         if(missionState !== 'idle'){
-            _hideMissionBanner();
+            /* 2026-09-25 — 위성을 못 놓은 채 존이 끝나면(싱글) 실패 = 통신 두절.
+               예전엔 조용히 지워서 '건너뛰기' 가 벌이 없었다. 실패 안내는 3.5초 남긴다 */
+            const _cut = (missionState === 'active') && _szSoloRun();
+            const _endingBanner = (missionState === 'success' || missionState === 'failed');
+            if(_cut){
+                missionsCompletedZones.add(missionZoneIdx);
+                _szCommLose();
+                _showMissionBanner(missionZoneIdx, 'failed');
+                _szLooseBannerHideAt = now + 3500;
+            } else if(_endingBanner){
+                _szLooseBannerHideAt = Math.max(now + 600, missionBannerHideAt);
+            } else {
+                _hideMissionBanner();
+            }
             missionState = 'idle';
             missionZoneIdx = -1;
             missionOrbit = null;
@@ -12358,6 +12495,7 @@ function drawFrame(now, dt){
        2026-05-11 v5 — score-strip HTML overlay (y=5-30) 와 안 겹치게 y=10→y=40.
        하트 크기도 16→13 으로 축소 (overlay 와 위계 분리). */
     szDrawLives(now);
+    szDrawCommHud(now);                /* 통신망 📡 — 하트 줄 오른쪽 */
 
     /* ---- HUD: level badge ---- 2026-05-11 v5: y=10→y=40, font 13→11 ---- */
     const s=running?elapsedMs/1000:0;
@@ -12429,7 +12567,34 @@ document.addEventListener('visibilitychange', ()=>{
        시계만 흐르면 복귀 후 바로 죽어도 숨긴 시간이 기록에 붙는 구멍이 생긴다 */
     if(document.hidden && running && _szRacing()){ try{ triggerGameOver(); }catch(_){} return; }
     if(document.hidden && running && !paused && !(pvpState && pvpState.gameMode === 'pvp')){
+        /* 공용 자리 비움 모듈(lpAutoPause.js)이 떠 있으면 그쪽이 멈추고, 돌아오면
+           '계속하기 / 그만하기' 창을 띄운다 — 여기서 먼저 멈추면 모듈이 '이미 멈춤' 으로 보고
+           창을 안 띄우므로 양보한다. 모듈이 아직 안 올라왔을 때만 예전처럼 직접 멈춘다 */
+        if(window.LpAutoPause) return;
         paused = true; try{ BGM.pause(); }catch(_){}; try{ syncPauseUI(); }catch(_){}
+    }
+});
+
+/* 자리 비움 자동 일시정지 등록 (2026-09-25) — 싱글 비행 중일 때만.
+   1:1 PvP·동시 대결은 제외 (남의 판·동기화를 멈추면 안 된다. 동시 대결은 이탈 = 그 순간 기록으로 종료) */
+var _szApResumedAt = 0;
+(window.LpAutoPauseQ = window.LpAutoPauseQ || []).push({
+    isActive: function(){
+        return !!running && !paused && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing();
+    },
+    pause: function(){
+        if(!running || paused) return;
+        paused = true; try{ BGM.pause(); }catch(_){}; try{ syncPauseUI(); }catch(_){}
+    },
+    resume: function(){
+        if(!running || !paused) return;
+        _szApResumedAt = performance.now();
+        paused = false; try{ BGM.resume(); }catch(_){}; try{ syncPauseUI(); }catch(_){}
+    },
+    quit: function(){
+        /* 판 기록 없이 시작 화면으로 — 일시정지 메뉴의 '게임 홈' 과 같은 길 */
+        if(window.LpNav && typeof LpNav.goGameHome === 'function') LpNav.goGameHome();
+        else location.href = location.pathname;
     }
 });
 
@@ -14610,7 +14775,7 @@ window.SZX={
 })();
 </script>
 
-<script src="/js/siteFooter.js?v=1790292021"></script>
+<script src="/js/siteFooter.js?v=1790303117"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
@@ -14681,7 +14846,7 @@ window.SZX={
 .lp-game-about .lp-about-block > summary::after{content:'+';position:absolute;
   right:6px;top:50%;transform:translateY(-50%);color:#5dc1ff;font-weight:900;
   font-size:1.1em;line-height:1}
-.lp-game-about .lp-about-block[open] > summary::after{content:'3'}
+.lp-game-about .lp-about-block[open] > summary::after{content:'\2013'}
 .lp-game-about .lp-about-block[open] > summary{color:#fff}
 .lp-game-about .lp-about-block > summary:hover{color:#fff}
 .lp-game-about .lp-fold-body{padding:2px 2px 18px}
@@ -14746,7 +14911,6 @@ window.SZX={
       <div class="lp-fold-body">
 <p>이 게임은 단순한 무한 회피가 아니라 <strong>지구에서 출발해 말머리 성운까지 가는 여정</strong>이라는 뼈대를 갖고 있습니다. 구간을 넘길 때마다 배경이 바뀌며 어디까지 왔는지 보여 줍니다.</p>
 <p>초반 구간은 지구 근처의 우주 쓰레기와 작은 파편들입니다. 밀도가 낮아 조작에 익숙해지기 좋습니다. 중반으로 가면 소행성대처럼 큰 물체가 늘고, 피할 공간을 미리 계산해야 하는 구간이 시작됩니다. 후반부는 속도와 밀도가 모두 올라가 반응보다 예측이 중요해집니다.</p>
-<p>구간마다 고유한 위협이 하나씩 붙습니다. 토성·태양권 경계·견우직녀·말머리 성운에서는 <strong>혜성</strong>이 붉은 점선으로 0.9초 먼저 경로를 알린 뒤 화면을 가로지르고, 천왕성·오르트 구름·좀생이별·창조의 기둥에서는 붉게 달아오르던 <strong>분열암</strong>이 공중에서 여덟 조각으로 터집니다. 해왕성·프록시마·오리온 성운에서는 틈이 하나뿐인 벽, V자, 나선 같은 <strong>운석 편대</strong>가 몰려오는데, 예고 순간 초록으로 빛나는 칸이 빠져나갈 길입니다. 사람이 시각 신호에 반응하는 데는 보통 0.2~0.3초가 걸리므로, 예고 시간은 그 세 배쯤인 0.8~0.9초로 맞춰 "보고 피할 수 있는" 선을 지켰습니다. 은하 가장자리를 지나면 세 가지가 섞여 나옵니다.</p>
 <p>실제 말머리 성운은 오리온자리에 있는 암흑성운으로, 지구에서 약 1,300광년 떨어져 있습니다. 빛의 속도로 가도 1,300년이 걸리는 거리입니다. 게임에서 몇 분 만에 도달하는 여정이 현실에서는 인류 문명의 전체 역사보다 긴 시간이 필요한 셈입니다.</p>
 <p>기록을 갱신하고 싶다면 후반 구간을 반복해서 익히기보다, 초반에 실수 없이 연료 같은 집중력을 아껴 두는 편이 효과적입니다.</p>
       </div>
@@ -14758,9 +14922,7 @@ window.SZX={
         <dt>Q. 점수는 어떻게 계산되나요?</dt>
         <dd>버틴 시간이 곧 점수입니다. 진행 구간이 올라갈수록 획득 속도도 빨라집니다.</dd>
         <dt>Q. 장애물 패턴은 정해져 있나요?</dt>
-        <dd>판마다 새 코스(시드)가 뽑혀 배치가 달라집니다. 다만 같은 시드면 운석·위험물·보급 위치가 완전히 같아서, 결과 화면의 도전장 링크를 받은 친구는 내가 날았던 바로 그 코스로 기록에 도전합니다. 조준탄은 각자의 기체 위치를 겨누므로 실력 차이는 그대로 드러납니다.</dd>
-        <dt>Q. 여러 명이 동시에 겨룰 수 있나요?</dt>
-        <dd>'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 최대 8명이 한 우주를 같이 날며 서로의 기체가 화면에 보이고, 보급은 먼저 먹은 사람이 가져갑니다. 운석은 모두에게 똑같이 쏟아지고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 위치는 폰끼리 직접 주고받아(초당 10번) LTE 에서도 끊김이 적고, 직통이 막힌 짝만 서버를 거칩니다.</dd>
+        <dd>구간마다 특성이 있지만 배치는 매번 달라집니다. 외우기보다 회피 습관을 기르는 편이 효과적입니다.</dd>
         <dt>Q. 잘 피하는 요령이 있나요?</dt>
         <dd>자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다.</dd>
         <dt>Q. 어디까지 갈 수 있나요?</dt>
@@ -14773,7 +14935,7 @@ window.SZX={
     <footer class="lp-about-footer">다른 액션 게임은 <a href="/games/starship-lander/">스타십 착륙</a>·<a href="/games/snake/">스네이크</a>를 확인해 보세요.</footer>
   </div>
 </section>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"점수는 어떻게 계산되나요?","acceptedAnswer":{"@type":"Answer","text":"버틴 시간이 곧 점수입니다. 진행 구간이 올라갈수록 획득 속도도 빨라집니다."}},{"@type":"Question","name":"장애물 패턴은 정해져 있나요?","acceptedAnswer":{"@type":"Answer","text":"판마다 새 코스(시드)가 뽑혀 배치가 달라집니다. 다만 같은 시드면 운석·위험물·보급 위치가 완전히 같아서, 결과 화면의 도전장 링크를 받은 친구는 내가 날았던 바로 그 코스로 기록에 도전합니다. 조준탄은 각자의 기체 위치를 겨누므로 실력 차이는 그대로 드러납니다."}},{"@type":"Question","name":"여러 명이 동시에 겨룰 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"'친구와 동시 대결'에서 방을 만들고 카톡·메신저로 링크를 보내면, 받은 사람은 닉네임만 쓰고 들어옵니다. 로그인도 카메라(QR)도 필요 없습니다. 최대 8명이 한 우주를 같이 날며 서로의 기체가 화면에 보이고, 보급은 먼저 먹은 사람이 가져갑니다. 운석은 모두에게 똑같이 쏟아지고, 오래 버틴 순서대로 순위가 매겨져 꼴찌에게 벌칙 표시가 붙습니다. 위치는 폰끼리 직접 주고받아(초당 10번) LTE 에서도 끊김이 적고, 직통이 막힌 짝만 서버를 거칩니다."}},{"@type":"Question","name":"잘 피하는 요령이 있나요?","acceptedAnswer":{"@type":"Answer","text":"자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다."}},{"@type":"Question","name":"어디까지 갈 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"지구에서 출발해 말머리 성운까지 이어집니다. 구간마다 배경과 난이도가 달라집니다."}},{"@type":"Question","name":"모바일과 PC 중 어디가 유리한가요?","acceptedAnswer":{"@type":"Answer","text":"둘 다 지원합니다. 모바일은 드래그로 직관적이고, PC는 방향키로 미세 조정이 쉬워 취향에 따라 다릅니다."}}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"점수는 어떻게 계산되나요?","acceptedAnswer":{"@type":"Answer","text":"버틴 시간이 곧 점수입니다. 진행 구간이 올라갈수록 획득 속도도 빨라집니다."}},{"@type":"Question","name":"장애물 패턴은 정해져 있나요?","acceptedAnswer":{"@type":"Answer","text":"구간마다 특성이 있지만 배치는 매번 달라집니다. 외우기보다 회피 습관을 기르는 편이 효과적입니다."}},{"@type":"Question","name":"잘 피하는 요령이 있나요?","acceptedAnswer":{"@type":"Answer","text":"자기 기체가 아니라 장애물이 나타나는 화면 위쪽을 보세요. 그리고 화면 가장자리보다 가운데에 있는 편이 회피로가 두 배로 열립니다."}},{"@type":"Question","name":"어디까지 갈 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"지구에서 출발해 말머리 성운까지 이어집니다. 구간마다 배경과 난이도가 달라집니다."}},{"@type":"Question","name":"모바일과 PC 중 어디가 유리한가요?","acceptedAnswer":{"@type":"Answer","text":"둘 다 지원합니다. 모바일은 드래그로 직관적이고, PC는 방향키로 미세 조정이 쉬워 취향에 따라 다릅니다."}}]}</script>
 <script>
 /* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
    CSS 만으로는 못 한다 — 게임마다 흐름 높이가 0~734px 로 제각각이라
