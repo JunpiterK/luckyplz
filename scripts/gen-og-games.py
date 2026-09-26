@@ -566,7 +566,7 @@ def m_yut(d, img):
     말 원본: scripts/blender/yut_pieces.py → scripts/build_yut_atlas.py."""
     import math
     atlas = Image.open(ROOT / "public" / "assets" / "yut" / "pieces.webp").convert("RGBA")
-    cell = atlas.width // 6
+    cell = atlas.height // 4
     # 윷판 조각(한지 + 먹선 + 말밭)
     bx0, by0, bx1, by1 = MX + 50, MY + 125, MX + MW - 20, MY + MH + 25
     d.rounded_rectangle([bx0 - 12, by0 - 12, bx1 + 12, by1 + 12], 22, fill=(110, 66, 34))
@@ -637,7 +637,42 @@ def m_prism_hex(d, img):
     img.alpha_composite(toy, (MCX - w // 2, MCY - h // 2 + 10))
 
 
+def m_mahjong_solitaire(d, img):
+    """마작 솔리테어 — 홈 타일과 같은 Blender 장난감 렌더(tiles_toybox.py 의 mahjong_solitaire_toy)를 합성.
+
+    원본: scripts/og-assets/tiles3d/mahjong-solitaire.png. 수정은 씬 스크립트에서 하고 재렌더한다
+    (blender -b -P scripts/blender/tiles_toybox.py -- mahjong-solitaire). 뒤에 비취·금빛 후광을 깐다.
+    """
+    glow(img, MCX, MCY + 30, 250, (47, 155, 115), 48)
+    glow(img, MCX + 20, MCY - 120, 150, (255, 205, 90), 34)
+    toy = Image.open(HERE / "og-assets" / "tiles3d" / "mahjong-solitaire.png").convert("RGBA")
+    a = toy.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    toy = toy.crop(a.getbbox())
+    h = 460
+    w = round(toy.width * h / toy.height)
+    toy = toy.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(toy, (MCX - w // 2, MCY - h // 2 + 6))
+
+
+def m_mahjong_tw(d, img):
+    """台灣麻將 — 홈 타일과 같은 Blender 장난감 렌더(tiles_toybox.py 의 mahjong_tw_toy)를 합성.
+
+    원본: scripts/og-assets/tiles3d/mahjong-tw.png (blender -b -P scripts/blender/tiles_toybox.py -- mahjong-tw).
+    게임 탁자와 같은 진홍·금빛 후광."""
+    glow(img, MCX, MCY + 10, 260, (190, 30, 36), 70)
+    glow(img, MCX + 80, MCY - 100, 150, (233, 196, 106), 34)
+    toy = Image.open(HERE / "og-assets" / "tiles3d" / "mahjong-tw.png").convert("RGBA")
+    a = toy.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    toy = toy.crop(a.getbbox())
+    w = 470
+    h = round(toy.height * w / toy.width)
+    toy = toy.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(toy, (MCX - w // 2 + 40, MCY - h // 2 + 18))   # 부제가 길어 오른쪽으로 비킨다
+
+
 GAMES = {
+    "mahjong-tw":      dict(title="TAIWAN MAHJONG", sub="대만 마작 台灣麻將 — 16장, 친구와 각자 폰으로", cat="BOARD", top=(52, 8, 12), bot=(16, 3, 4), accent=(233, 196, 106), motif=m_mahjong_tw),
+    "mahjong-solitaire": dict(title="MAHJONG", sub="마작 솔리테어 — 같은 패 짝지어 144장 치우기", cat="SOLITAIRE", top=(40, 10, 12), bot=(14, 4, 5), accent=(233, 196, 106), motif=m_mahjong_solitaire),
     "prism-hex":       dict(title="PRISM HEX", sub="프리즘 헥스 — 보석 블록을 꼭짓점으로 잇기", cat="BOARD", top=(22, 12, 38), bot=(8, 5, 16), accent=(246, 211, 138), motif=m_prism_hex),
     "gummy":           dict(title="GUMMY CHAIN", sub="구미 체인 — 쫀득한 연쇄로 1:1 대결", cat="PUZZLE", top=(30, 12, 40), bot=(12, 5, 18), accent=(255, 111, 168), motif=m_gummy),
     "yut":             dict(title="YUT NORI", sub="윷놀이 — 여럿이 함께, 최대 4팀", cat="BOARD", top=(30, 18, 12), bot=(12, 7, 5), accent=(244, 195, 90), motif=m_yut),

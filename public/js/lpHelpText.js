@@ -10,6 +10,22 @@ window.LP_HELP_TEXT = {
     es: {t:'Ruleta', l:['Añade opciones, gira y sale solo una','Toca SPIN en el centro o desliza la ruleta','Gana la casilla donde se detiene la aguja','Cada giro es independiente: puede repetirse']},
     pt: {t:'Roleta', l:['Adicione opções, gire e sai só uma','Toque em SPIN no centro ou deslize a roleta','Vence a casa onde o ponteiro parar','Cada giro é independente: pode repetir']}
   },
+  'mahjong-tw': {
+    ko: {t:'대만 마작', l:['16장을 들고 17장째로 면자 5개 + 머리 1개를 먼저 만들면 화료','패를 한 번 누르면 들고, 한 번 더 누르면 버려요 · 고른 패를 버렸을 때의 대기(聽)가 오른쪽 아래에','吃는 윗사람 패만, 碰·槓은 누구 패든 · 버튼은 8초 뒤 자동 過 · 꽃패는 자동 補花','점수는 底 300 + 台 × 100 포인트(돈 아님) · 첫 화면의 台 점수표 참고']},
+    en: {t:'Taiwanese Mahjong', l:['Hold 16 tiles; the 17th completes 5 sets + 1 pair to win','Tap a tile to lift it, tap again to discard · the waits (聽) for that discard show at the bottom right','Chow only from the player before you; pong/kong from anyone · buttons auto-pass after 8 s · flowers are replaced automatically','Points: base 300 + 100 per tai (no money) · see the Tai table on the start screen']},
+    ja: {t:'台湾麻雀', l:['16枚を持ち、17枚目で5面子＋雀頭を先にそろえたら和了','牌をタップで持ち上げ、もう一度で捨てる・その牌を切ったときの待ち(聽)が右下に','チーは上家からだけ、ポン・カンは誰からでも・ボタンは8秒で自動パス・花牌は自動で補花','点数は底300＋台×100ポイント（お金なし）・最初の画面の台数表を参照']},
+    zh: {t:'台灣麻將', l:['16 張起手，摸到第 17 張湊成五組＋一對就胡','點一張牌升起，再點一次打出 · 打這張會聽哪些牌顯示在右下','吃只能吃上家，碰槓不限 · 按鈕 8 秒後自動「過」· 花牌自動補花','積分：底 300＋每台 100（不涉及金錢）· 首頁可看台數表']},
+    es: {t:'Mahjong Taiwanés', l:['Con 16 fichas, la 17.ª completa 5 grupos + 1 pareja para ganar','Toca una ficha para levantarla y otra vez para descartarla · abajo a la derecha ves las esperas (聽)','Chow solo del jugador anterior; pong/kong de cualquiera · los botones pasan solos a los 8 s · flores automáticas','Puntos: base 300 + 100 por tai (sin dinero) · tabla de tai en la pantalla inicial']},
+    pt: {t:'Mahjong Taiwanês', l:['Com 16 peças, a 17.ª completa 5 grupos + 1 par para vencer','Toque uma peça para erguê-la e de novo para descartar · as esperas (聽) aparecem no canto inferior direito','Chow só do jogador anterior; pong/kong de qualquer um · botões passam sozinhos em 8 s · flores automáticas','Pontos: base 300 + 100 por tai (sem dinheiro) · veja a tabela de tai na tela inicial']}
+  },
+  'mahjong-solitaire': {
+    ko: {t:'마작 솔리테어', l:['같은 패 두 장을 눌러 짝지어 판을 모두 비워요','위에 겹친 패가 없고 왼쪽·오른쪽 중 한쪽이 트인 패만 뗄 수 있어요','꽃패는 꽃패끼리, 계절패는 계절패끼리 아무거나 짝','막히면 섞기(풀리는 배치로) · 힌트 · 되돌리기, 두 손가락으로 확대']},
+    en: {t:'Mahjong Solitaire', l:['Tap two identical tiles to pair them off and clear the table','A tile is free only if nothing sits on it and its left or right side is open','Any flower pairs with any flower, any season with any season','Stuck? Shuffle (always solvable), Hint or Undo; pinch to zoom']},
+    ja: {t:'麻雀ソリティア', l:['同じ牌を2枚タップして取り、全部なくせばクリア','上に牌がなく、左右どちらかが空いている牌だけ取れます','花牌は花牌どうし、季節牌は季節牌どうしどれでもペア','詰まったらシャッフル・ヒント・戻す、2本指で拡大']},
+    zh: {t:'麻将接龙', l:['点两张相同的牌配对消除，清空整个牌桌','上面没有压牌、且左右任一侧空着的牌才能取','花牌任两张、季节牌任两张都能配对','卡住时可洗牌（保证有解）、提示或撤销，两指放大']},
+    es: {t:'Mahjong Solitario', l:['Toca dos fichas iguales para emparejarlas y vaciar la mesa','Solo están libres si nada las tapa y un lado (izq. o der.) está abierto','Cualquier flor con cualquier flor, cualquier estación con otra','¿Atascado? Mezclar (siempre resoluble), Pista o Deshacer; pellizca para zoom']},
+    pt: {t:'Paciência Mahjong', l:['Toque em duas peças iguais para formar o par e limpar a mesa','Só estão livres se nada as cobre e um lado (esq. ou dir.) está aberto','Qualquer flor com qualquer flor, qualquer estação com outra','Travou? Embaralhar (sempre resolvível), Dica ou Desfazer; pinça para zoom']}
+  },
   'bubble': {
     ko: {t:'버블 버스트', l:['같은 색 버블 3개 이상을 붙이면 터져요','끌어서 조준하고 떼면 발사 — 벽에 튕겨도 돼요','천장과 끊긴 덩어리는 통째로 떨어져 점수가 커요','헛방이 쌓이면 새 줄이 내려와요 — 작은 버블을 눌러 교체']},
     en: {t:'Bubble Burst', l:['Touch 3+ bubbles of one color to pop them','Drag to aim, release to shoot — bank off the walls','Anything cut off from the ceiling drops for big points','Misses bring down a new row; tap the small bubble to swap']},

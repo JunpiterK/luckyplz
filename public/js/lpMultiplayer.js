@@ -97,7 +97,8 @@
     ludo:{en:'Ludo',ja:'ルドー',es:'Ludo',pt:'Ludo'},
     reversi:{en:'Reversi',ja:'リバーシ',es:'Reversi',pt:'Reversi'},
     gummy:{en:'Gummy Chain',ja:'グミチェイン',es:'Gummy Chain',pt:'Gummy Chain'},
-    'prism-hex':{en:'Prism Hex',ja:'プリズムヘックス',es:'Prism Hex',pt:'Prism Hex'}
+    'prism-hex':{en:'Prism Hex',ja:'プリズムヘックス',es:'Prism Hex',pt:'Prism Hex'},
+    'mahjong-tw':{en:'Taiwanese Mahjong',ja:'台湾麻雀',es:'Mahjong Taiwanés',pt:'Mahjong Taiwanês',zh:'台灣麻將'}
   };
   function gameLabel(g){
     var l;try{l=localStorage.getItem('luckyplz_lang')||'en'}catch(_){l='en'}

@@ -1733,7 +1733,118 @@ def prism_hex_toy():
 
 
 TOYS['prism-hex'] = prism_hex_toy
-HOME_IDS = ['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
+
+
+def _mj_font():
+    """마작패 글자 — 굵은 고딕. 획 윤곽이 겹치는 글꼴(msjh 등)은 Blender 의 짝홀 채우기에서
+    겹친 부분이 구멍으로 뚫려 '中' 이 속 빈 테두리처럼 나온다 → 윤곽이 겹치지 않는 글꼴을 먼저."""
+    for p in ("C:/Windows/Fonts/malgunbd.ttf", "C:/Windows/Fonts/simhei.ttf", "C:/Windows/Fonts/msjhbd.ttc"):
+        try:
+            return bpy.data.fonts.load(p, check_existing=True)
+        except Exception:
+            pass
+    return None
+
+
+def _mj_tile(loc, rot, face, parent, s=1.0):
+    """두 겹 마작패 — 상아 앞판(위) + 비취 뒷판(아래), 둥근 베벨. 로컬 +z 가 그림 면.
+    face: '中' '發' (새김 글자) · 'dots' (통수 동전) · 'bam' (삭수 막대) · 'white' (白 파란 테)"""
+    e = group("mjtile", 0, loc=loc)
+    e.parent = parent
+    e.rotation_euler = rot
+    e.scale = (s, s, s)
+    W, L, HJ, HI = 0.46, 0.60, 0.12, 0.17
+    IV = mat('mj_ivory', (0.97, 0.93, 0.82), rough=0.16, coat=1.0)
+    JD = mat('mj_jade', (0.03, 0.42, 0.27), rough=0.14, coat=1.0)
+    box((W, L, HJ), (0, 0, HJ / 2), JD, bevel=0.05, seg=4, parent=e)
+    box((W, L, HI), (0, 0, HJ + HI / 2 - 0.004), IV, bevel=0.06, seg=4, parent=e)
+    zt = HJ + HI - 0.004
+    RED = mat('mj_red', (0.78, 0.05, 0.08), rough=0.3, coat=0.6)
+    GRN = mat('mj_green', (0.04, 0.45, 0.25), rough=0.3, coat=0.6)
+    BLU = mat('mj_blue', (0.08, 0.22, 0.66), rough=0.3, coat=0.6)
+    if face in ('中', '發'):
+        bpy.ops.object.text_add(location=(0, 0, zt + 0.004), rotation=(0, 0, 0))
+        o = bpy.context.object
+        o.data.body = face
+        o.data.size = 0.46 if face == '中' else 0.4
+        o.data.extrude = 0.008
+        try:
+            o.data.fill_mode = 'BOTH'
+        except Exception:
+            pass
+        o.data.align_x = 'CENTER'
+        o.data.align_y = 'CENTER'
+        f = _mj_font()
+        if f:
+            o.data.font = f
+        o.data.materials.append(RED if face == '中' else GRN)
+        o.parent = e
+    elif face == 'dots':
+        for (x, y, m) in ((-0.1, 0.14, BLU), (0.1, -0.14, GRN), (0.0, 0.0, RED)):
+            torus(0.07, 0.018, (x, y, zt + 0.004), m, parent=e)
+            cyl(0.03, 0.02, (x, y, zt + 0.002), m, bevel=0.005, verts=24, parent=e)
+    elif face == 'bam':
+        for (x, m) in ((-0.1, GRN), (0.0, RED), (0.1, GRN)):
+            capsule((x, -0.15, zt + 0.006), (x, 0.15, zt + 0.006), 0.026, m, parent=e)
+    elif face == 'white':
+        for (sx, sy, x, y) in ((0.3, 0.025, 0, 0.2), (0.3, 0.025, 0, -0.2), (0.025, 0.42, 0.14, 0), (0.025, 0.42, -0.14, 0)):
+            box((sx, sy, 0.012), (x, y, zt + 0.002), BLU, bevel=0.004, seg=1, parent=e)
+    return e
+
+
+def mahjong_solitaire_toy():
+    """마작 솔리테어 (2026-09-27) — 상아·비취 두 겹 마작패 세 층 피라미드 + 방금 짝이 맞아
+    공중에서 딸깍 부딪치는 中 두 장 + 금빛 불꽃. 게임 화면의 패 문법(상아 앞판·비취 뒷판)과 같다."""
+    g = group("mahjong-solitaire", math.radians(-16))
+    S = 1.32
+    W, L, H, gp = 0.46 * S, 0.60 * S, 0.29 * S, 0.02 * S
+    base = ['dots', 'bam', '發', 'white', 'dots', 'bam']
+    k = 0
+    y0 = 0.12
+    for r, y in enumerate((y0 + (L + gp) / 2, y0 - (L + gp) / 2)):
+        for c, x in enumerate((-(W + gp), 0.0, W + gp)):
+            _mj_tile((x, y, 0.0), (0, 0, 0), base[k], g, s=S)
+            k += 1
+    for x, f in ((-(W + gp) / 2, '發'), ((W + gp) / 2, 'dots')):
+        _mj_tile((x, y0, H), (0, 0, 0), f, g, s=S)
+    _mj_tile((0.0, y0, 2 * H), (0, 0, 0), 'white', g, s=S)
+    # 짝이 맞은 中 두 장 — 피라미드 위 공중에서 세워져 카메라를 보고, 윗머리를 맞대며 딸깍
+    for sx, tilt in ((-1, 12), (1, -12)):
+        _mj_tile((sx * 0.29, -0.62, 1.42), (math.radians(90), math.radians(tilt), math.radians(-sx * 8)), '中', g, s=1.0)
+    spark = mat('mj_spark', PAL['mustard'], emit=(1.0, 0.78, 0.25), estr=2.4, coat=0)
+    prism(star_pts(0.18, 0.05, n=4), 0.03, (0.0, -0.95, 2.2), spark, parent=g)
+    for (x, z, r) in ((-0.55, 2.12, 0.045), (0.58, 2.08, 0.04), (0.28, 2.34, 0.03), (-0.26, 2.36, 0.028)):
+        sph(r, (x, -0.95, z), spark, parent=g, seg=14)
+    return g
+
+
+TOYS['mahjong-solitaire'] = mahjong_solitaire_toy
+
+
+def mahjong_tw_toy():
+    """台灣麻將 (2026-09-27) — 금테 두른 진홍 천 받침 위에 세운 패 세 장(中·發·筒)이 부채꼴로 서고,
+    앞에 누운 條 한 장과 상아 주사위 두 개. 게임 화면(붉은 천 탁자·상아/비취 두 겹 패)과 같은 문법."""
+    g = group("mahjong-tw", math.radians(-14))
+    felt = mat('mjtw_felt', (0.55, 0.04, 0.06), rough=0.62, coat=0.15)
+    gold = mat('mjtw_gold', (0.95, 0.70, 0.28), rough=0.22, metal=0.85, coat=0.3)
+    WD = P('wood', rough=0.4, coat=0.5)
+    box((2.36, 1.72, 0.14), (0, 0.06, 0.07), WD, bevel=0.06, parent=g)
+    box((2.2, 1.56, 0.04), (0, 0.06, 0.15), gold, bevel=0.015, parent=g)
+    box((2.1, 1.46, 0.04), (0, 0.06, 0.17), felt, bevel=0.012, parent=g)
+    z0 = 0.19
+    # 세운 패 세 장 — 카메라를 향해 부채꼴
+    for (x, y, yaw, f) in ((-0.56, 0.36, 14, 'dots'), (0.0, 0.46, 0, '中'), (0.56, 0.36, -14, '發')):
+        _mj_tile((x, y, z0 + 0.30), (math.radians(90), 0, math.radians(yaw)), f, g, s=1.0)
+    # 누운 패 한 장 + 주사위 둘
+    _mj_tile((-0.52, -0.46, z0), (0, 0, math.radians(18)), 'bam', g, s=0.95)
+    # 주사위는 0.5 이상이어야 눈(납작한 구)이 면 위로 올라온다
+    _ivory_die((0.42, -0.58, z0 + 0.22), 0.44, (0, 0, math.radians(24)), [(2, 1, 4), (1, -1, 1), (0, 1, 2)], g)
+    _ivory_die((0.86, -0.4, z0 + 0.22), 0.44, (0, 0, math.radians(-16)), [(2, 1, 6), (1, -1, 3), (0, 1, 5)], g)
+    return g
+
+
+TOYS['mahjong-tw'] = mahjong_tw_toy
+HOME_IDS =['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
 
 if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
