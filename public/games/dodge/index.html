@@ -1427,8 +1427,8 @@ body::after{
                     <button class="sat-btn disabled" id="satBtn" type="button" aria-label="Satellite Launch">
                         <span class="sat-icon">📡</span><span class="sat-label">SAT</span>
                     </button>
-                    <button class="grav-btn" id="gravBtn" type="button">
-                        <span class="grav-icon">⊕</span><span class="grav-label">GRAV</span>
+                    <button class="grav-btn" id="gravBtn" type="button" aria-label="BEAM">
+                        <span class="grav-icon">⊕</span><span class="grav-label">BEAM</span>
                     </button>
                 </div>
             </div>
@@ -2703,8 +2703,11 @@ function _stopIntroLaunch(){
     const ov = document.getElementById('introOverlay');
     if(ov) ov.classList.remove('launch-mode');
 }
-function runIntroCountdown(){
+/* P5 — 빠른 재시작: 싱글 두 번째 판부터 'GO!' + 목표 한 줄만 약 1.15초(발사 장면은 점화→상승만 짧게).
+   대결·도전장·오늘의 코스·첫 판은 3·2·1 그대로 */
+function runIntroCountdown(fast){
     if(_introRunning) return Promise.resolve();
+    if(fast) return _runIntroFast();
     _introRunning = true;
     const overlay = $('introOverlay');
     const countEl = $('introCount');
@@ -2749,6 +2752,39 @@ function runIntroCountdown(){
             }
         };
         tick();
+    });
+}
+
+function _runIntroFast(){
+    _introRunning = true;
+    const overlay = $('introOverlay');
+    const countEl = $('introCount');
+    const storyEl = $('introStory');
+    let story = '';
+    try{ story = szCountdownLine(); }catch(_){}
+    storyEl.textContent = story;
+    countEl.textContent = '';
+    countEl.classList.remove('go');
+    overlay.classList.add('on', 'sz-fast');
+    overlay.setAttribute('aria-hidden', 'false');
+    _startIntroLaunch(performance.now() - 2150);   /* 발사 장면 2.15s 지점(점화 최대)부터 — 0.55s 뒤 상승 */
+    try{ window.SZX && SZX.count(-1); }catch(_){}   /* 추진음만(카운트 음성 없음) */
+    return new Promise(resolve => {
+        setTimeout(() => {
+            countEl.textContent = 'GO!';
+            countEl.classList.add('go');
+            try{ window.SZX && SZX.count(0); }catch(_){}
+            countEl.style.animation = 'none';
+            void countEl.offsetWidth;
+            countEl.style.animation = '';
+        }, 450);
+        setTimeout(() => {
+            overlay.classList.remove('on', 'sz-fast');
+            overlay.setAttribute('aria-hidden', 'true');
+            _stopIntroLaunch();
+            _introRunning = false;
+            resolve();
+        }, 1150);
     });
 }
 
@@ -3209,6 +3245,11 @@ const SZ_FLAGS = (function(){
     return { fx: fx, beamMerge: true, spectate: true };
 })();
 window.SZ_FLAGS = SZ_FLAGS;
+try{ document.documentElement.classList.toggle('sz-beam-merge', !!SZ_FLAGS.beamMerge && !(function(){ try{ return localStorage.getItem('szx_beammerge') === '0'; }catch(_){ return false; } })()); }catch(_){}
+/* P5 — BEAM 조작 설정. szx_beam = 'tap'(기본: 터치는 탭 토글) | 'hold'(누르고 있기, 예전 방식).
+   PC 키(F·S·Shift)·마우스는 늘 누르고 있기. szx_beammerge='0' 이면 SAT 버튼을 되살린다(비상 스위치) */
+try{ SZ_FLAGS.beamHold = localStorage.getItem('szx_beam') === 'hold'; }catch(_){ SZ_FLAGS.beamHold = false; }
+try{ if(localStorage.getItem('szx_beammerge') === '0') SZ_FLAGS.beamMerge = false; }catch(_){}
 /*</sz:mod:flags>*/
 
 /* ======================================================
@@ -6912,7 +6953,7 @@ document.addEventListener('keydown',(e)=>{
            code 라 pause 시 elapsedMs 가 그냥 jump 함.) */
         /* 자리 비움 창이 떠 있거나 방금 그 창의 Space 로 재개했으면 무시 (같은 키가 다시 멈춤으로 뒤집지 않게) */
         const _apBusy = (window.LpAutoPause && LpAutoPause.isShowing()) || (performance.now() - (_szApResumedAt || 0) < 400);
-        if(!_apBusy && running && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing()){
+        if(!_apBusy && running && !szSpectating && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing()){
             paused=!paused; if(paused) BGM.pause(); else BGM.resume(); syncPauseUI();
         }
     }
@@ -6927,10 +6968,9 @@ document.addEventListener('keydown',(e)=>{
         else if(e.key==='2' || e.key==='w' || e.key==='W'){ inventoryUseSlot(1); e.preventDefault(); }
         else if(e.key==='3' || e.key==='e' || e.key==='E'){ inventoryUseSlot(2); e.preventDefault(); }
         else if(e.key==='f' || e.key==='F' || e.key==='s' || e.key==='S' || e.key==='Shift'){
-            /* 쉴드와 GRAV 동시 사용 허용 — 별개 시스템이라 게임플레이 제약 없음 */
-            if(_gravTryActivate()){
-                const gb = $('gravBtn'); if(gb) gb.classList.add('active');
-            }
+            /* 쉴드와 GRAV 동시 사용 허용 — 별개 시스템이라 게임플레이 제약 없음.
+               P5 — PC 키는 늘 누르고 있기(키 반복 입력은 무시) */
+            if(!e.repeat && !gravityFieldActive) szBeamOn(false);
             e.preventDefault();
         }
     }
@@ -6938,8 +6978,7 @@ document.addEventListener('keydown',(e)=>{
 document.addEventListener('keyup',(e)=>{
     keys[e.key]=false;
     if(e.key==='f' || e.key==='F' || e.key==='s' || e.key==='S' || e.key==='Shift'){
-        _gravRelease();
-        const gb = $('gravBtn'); if(gb) gb.classList.remove('active');
+        if(!_szBeamLatched) szBeamOff();
     }
 });
 
@@ -6966,18 +7005,24 @@ function _wireItemBar(){
     const gb = document.getElementById('gravBtn');
     if(!gb) return;
     let gravTouchId = null;
+    /* P5 — 터치는 탭 토글(기본): 누르는 순간 켜고, 켜져 있으면 끈다. 손을 떼도 유지 →
+       한 손가락으로 BEAM 켜고 바로 트랙패드로 옮겨 조종. 게이지 소진·대상 획득·다시 탭하면 꺼진다.
+       설정 '누르고 있기'(szx_beam=hold)·마우스는 예전처럼 누르는 동안만 */
     const press = (e) => {
         e.preventDefault(); e.stopPropagation();
         if(!running || paused) return;
-        if(e.changedTouches && e.changedTouches.length){
+        const touch = !!(e.changedTouches && e.changedTouches.length);
+        if(touch){
             /* 이미 추적 중이면 두 번째 손가락은 무시 */
             if(gravTouchId !== null) return;
             gravTouchId = e.changedTouches[0].identifier;
         }
-        /* 쉴드와 GRAV 동시 사용 허용 — cooldown 중이면 _gravTryActivate 가 false. */
-        if(_gravTryActivate()){
-            gb.classList.add('active');
+        if(touch && !SZ_FLAGS.beamHold){
+            if(gravityFieldActive) szBeamOff(); else szBeamOn(true);
+            return;
         }
+        /* 쉴드와 GRAV 동시 사용 허용 — 게이지 40% 미만이면 szBeamOn 이 false. */
+        szBeamOn(false);
     };
     const release = (e) => {
         if(e && e.changedTouches){
@@ -6987,8 +7032,8 @@ function _wireItemBar(){
             if(!ours) return;
             gravTouchId = null;
         }
-        _gravRelease();
-        gb.classList.remove('active');
+        if(_szBeamLatched) return;   /* 탭 토글로 켠 BEAM 은 손을 떼도 유지 */
+        szBeamOff();
     };
     gb.addEventListener('mousedown', press);
     gb.addEventListener('touchstart', press, {passive:false});
@@ -7347,7 +7392,7 @@ function szIdleJobs(jobs){
 }
 
 function drawDangerVignette(now){
-    const hitT = Math.max(0, hitShockUntil - now) / 560;
+    const hitT = Math.min(1, Math.max(0, hitShockUntil - now) / 560);   /* 시계가 뒤로 가도(합성 시계·탭 복귀) 반지름이 음수가 되지 않게 */
     const danger = Math.max(0, (STARTING_LIVES - lives) / STARTING_LIVES);
     const alpha = Math.min(0.34, danger * 0.16 + hitT * 0.28);
     if(alpha <= 0.01) return;
@@ -7640,6 +7685,7 @@ let comets = [], splitters = [], waves = [];
 function nhReset(){ comets = []; splitters = []; waves = []; }
 function nhClear(){ comets = []; splitters = []; waves = []; }
 function _nhSfx(kind){
+    if(szSfx(kind)) return;   /* P5 — SZ3 엔진 한 벌 (공유 잡음 버퍼) */
     try{
         if(kind === 'warn'){ LPAudio.beep({freq:940, dur:0.07, vol:0.07, type:'square', decay:0.5}); setTimeout(()=>{ try{LPAudio.beep({freq:940, dur:0.07, vol:0.07, type:'square', decay:0.5})}catch(_){} }, 130); }
         else if(kind === 'comet'){ LPAudio.noise({dur:0.45, vol:0.13}); LPAudio.beep({freq:1400, dur:0.5, vol:0.08, type:'sawtooth', slide:180, decay:0.9}); }
@@ -8257,12 +8303,12 @@ const MISSION_TITLES_EN = {
     13:'✨ Vega · Altair Comm Satellite', 15:'🟥 Betelgeuse Comm Satellite', 19:'⚫ Sgr A* Special Mission'
 };
 const MISSION_SUBTITLES_KO = {
-    default: '궤도에서 SAT 2초 유지 → 위성 설치',
+    default: '궤도에 BEAM 1.5초 → 위성 설치',
     13: 'Lyra & Aquila — 한국 문화권의 견우(Altair)와 직녀(Vega)',
     19: '⚠ 사상의 지평선 근처 — 보상 3개'
 };
 const MISSION_SUBTITLES_EN = {
-    default: 'Hold SAT on orbit ring for 2 seconds',
+    default: 'BEAM the orbit ring for 1.5 seconds',
     13: 'Lyra & Aquila — the cowherd & weaver girl of East Asian myth',
     19: '⚠ Near event horizon — 3× reward'
 };
@@ -8287,12 +8333,12 @@ function _szSoloRun(){
     try{ return !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing(); }catch(_){ return true; }
 }
 const SZ_COMM_TXT = {
-    ko:{ lost:'📡 통신 두절 — 보급 중단', lostSub:'다음 위성을 설치하면 복구돼요', back:'📡 통신 복구 — 보급 재개', backSub:'보상 획득 · 슬롯을 눌러 사용', intro:'궤도에서 SAT 2초 → 위성 설치 · 보급 유지', hud:'통신 두절' },
-    en:{ lost:'📡 Comms Lost — Supplies Cut', lostSub:'Install the next satellite to restore', back:'📡 Comms Restored — Supplies Back', backSub:'Reward granted · tap slot to use', intro:'Hold SAT on orbit 2s — keeps supplies coming', hud:'NO LINK' },
-    ja:{ lost:'📡 通信途絶 — 補給停止', lostSub:'次の衛星を設置すると復旧', back:'📡 通信復旧 — 補給再開', backSub:'報酬獲得 · スロットをタップ', intro:'軌道でSATを2秒 → 衛星設置で補給維持', hud:'通信途絶' },
-    zh:{ lost:'📡 通信中断 — 补给停止', lostSub:'安装下一颗卫星即可恢复', back:'📡 通信恢复 — 补给重启', backSub:'获得奖励 · 点击槽位使用', intro:'在轨道上按住SAT 2秒 → 安装卫星 · 保持补给', hud:'通信中断' },
-    es:{ lost:'📡 Sin enlace — Suministros cortados', lostSub:'Instala el próximo satélite para recuperarlo', back:'📡 Enlace restablecido — Vuelven los suministros', backSub:'Recompensa obtenida · toca la ranura', intro:'Mantén SAT 2 s en la órbita — mantiene los suministros', hud:'SIN ENLACE' },
-    pt:{ lost:'📡 Sem sinal — Suprimentos cortados', lostSub:'Instale o próximo satélite para restaurar', back:'📡 Sinal restaurado — Suprimentos de volta', backSub:'Recompensa obtida · toque no slot', intro:'Segure SAT 2 s na órbita — mantém os suprimentos', hud:'SEM SINAL' }
+    ko:{ lost:'📡 통신 두절 — 보급 중단', lostSub:'다음 위성을 설치하면 복구돼요', back:'📡 통신 복구 — 보급 재개', backSub:'보상 획득 · 슬롯을 눌러 사용', intro:'궤도에 BEAM 1.5초 → 위성 설치 · 보급 유지', hud:'통신 두절' },
+    en:{ lost:'📡 Comms Lost — Supplies Cut', lostSub:'Install the next satellite to restore', back:'📡 Comms Restored — Supplies Back', backSub:'Reward granted · tap slot to use', intro:'BEAM the orbit 1.5s — keeps supplies coming', hud:'NO LINK' },
+    ja:{ lost:'📡 通信途絶 — 補給停止', lostSub:'次の衛星を設置すると復旧', back:'📡 通信復旧 — 補給再開', backSub:'報酬獲得 · スロットをタップ', intro:'軌道にBEAMを1.5秒 → 衛星設置で補給維持', hud:'通信途絶' },
+    zh:{ lost:'📡 通信中断 — 补给停止', lostSub:'安装下一颗卫星即可恢复', back:'📡 通信恢复 — 补给重启', backSub:'获得奖励 · 点击槽位使用', intro:'BEAM 照住轨道 1.5 秒 → 安装卫星 · 保持补给', hud:'通信中断' },
+    es:{ lost:'📡 Sin enlace — Suministros cortados', lostSub:'Instala el próximo satélite para recuperarlo', back:'📡 Enlace restablecido — Vuelven los suministros', backSub:'Recompensa obtenida · toca la ranura', intro:'BEAM sobre la órbita 1,5 s — mantiene los suministros', hud:'SIN ENLACE' },
+    pt:{ lost:'📡 Sem sinal — Suprimentos cortados', lostSub:'Instale o próximo satélite para restaurar', back:'📡 Sinal restaurado — Suprimentos de volta', backSub:'Recompensa obtida · toque no slot', intro:'BEAM na órbita 1,5 s — mantém os suprimentos', hud:'SEM SINAL' }
 };
 function _szCommT(k){
     let l = 'en';
@@ -8541,7 +8587,7 @@ function _activateMission(now){
     missionActiveUntil = now + MISSION_DURATION_MS;
     _showMissionBanner(missionZoneIdx, 'active');
     _setSatBtnState('armed');
-    sfxZone();   /* re-use zone sound for mission alert */
+    if(!szSfx('alert')) sfxZone();   /* P5 — 미션 알림은 짧은 무선 2음 (존 도착음과 구분) */
 }
 
 function _failMission(now){
@@ -9263,11 +9309,13 @@ function _consumeTimeAnchorIfArmed(now){
 let satelliteOrbiting = [];        /* 성공한 위성들 — 궤도 따라 영원히 회전 (시각용) */
 let satHeld = false;
 let satInstallProgress = 0;        /* 0 ~ SAT_INSTALL_MS */
-const SAT_INSTALL_MS = 2000;
+const SAT_INSTALL_MS = 1500;       /* P5 — 2000 → 1500 (BEAM 통합) */
 const SAT_FILL_RATE = 1.0;
 const SAT_DRAIN_RATE = 1.4;
 const SAT_ORBIT_TOL = 50;          /* ±tolerance px from orbit ring (관대하게) */
 
+/* P5 — BEAM 통합(SZ_FLAGS.beamMerge): 미션 중 BEAM 을 켜면 그것이 곧 위성 방출파다 */
+function _szSatHeld(){ return satHeld || (SZ_FLAGS.beamMerge && gravityFieldActive && missionState === 'active'); }
 function _isPlayerOnOrbit(){
     /* 위성 deployment 가 GRAV cone 과 똑같은 형태 (forward, ±45°, 180px).
        cone 내 임의 점이 궤도 ring tolerance 안에 있으면 'overlap' = true.
@@ -9302,7 +9350,7 @@ function updateSatelliteInstall(dt, now){
         return;
     }
     const onOrbit = _isPlayerOnOrbit();
-    if(satHeld && onOrbit){
+    if(_szSatHeld() && onOrbit){
         satInstallProgress = Math.min(SAT_INSTALL_MS, satInstallProgress + dt * 1000 * SAT_FILL_RATE);
         if(satInstallProgress >= SAT_INSTALL_MS){
             const orbit = _missionCurrentOrbit();
@@ -9317,6 +9365,7 @@ function updateSatelliteInstall(dt, now){
             }
             satInstallProgress = 0;
             satHeld = false;
+            szBeamTargetDone();   /* P5 — 위성 설치 = 대상 획득 */
             const _wasActive = (missionState === 'active');
             completeMission(now);
             if(_wasActive && missionState === 'success' && window.SZ3) try{ SZ3.satDone(_satX, _satY); }catch(_){}
@@ -9336,11 +9385,19 @@ function _updateSatProgressBar(){
        먹통 = 사용자 보고 버그). */
     const isActive = (missionState === 'active');
     const onOrbit = isActive && _isPlayerOnOrbit();
-    const inst = satHeld && onOrbit;
+    const inst = _szSatHeld() && onOrbit;
     /* P1 — 값이 바뀐 프레임에만, drawFrame 뒤(szDomFlush)에 쓴다 */
     const key = _sp + (isActive ? 'a' : '') + (onOrbit ? 'o' : '') + (inst ? 'i' : '');
     if(_updateSatProgressBar._k === key) return;
     _updateSatProgressBar._k = key;
+    /* P5 — BEAM 통합: 미션 중 BEAM 테두리 청록(궤도와 겹치면 진하게), 설치 진행률은 --sat-progress */
+    if(SZ_FLAGS.beamMerge) szDomQueue(() => {
+        const gb = document.getElementById('gravBtn');
+        if(!gb) return;
+        gb.classList.toggle('sz-sat', isActive);
+        gb.classList.toggle('sz-sat-on', onOrbit);
+        if(gb._sp !== _sp){ gb._sp = _sp; gb.style.setProperty('--sat-progress', _sp); }
+    });
     szDomQueue(() => {
         const sb = document.getElementById('satBtn');
         if(!sb) return;
@@ -9357,7 +9414,7 @@ function drawSatelliteInstall(now){
        GRAV 와 동일 형태 (forward -Y, ±45°, 180px), 색만 cyan/blue 톤.
        cone 이 궤도 ring 과 교차하면 progress 채워지는 mechanic. */
     if(missionState !== 'active') return;
-    if(!satHeld) return;
+    if(!_szSatHeld()) return;
     /* GRAV cone 과 같은 helper 재사용 — 색만 다른 톤. */
     _drawGravCone(player.x, player.y - 4,
         'rgba(93,193,255,',     /* main cyan */
@@ -9662,8 +9719,8 @@ const ZONE_DEPOT_MAP = [
     {zoneIdx:30, items:[ITEM.HEART,  ITEM.SHIELD]}    // ♾ Heat Death (endless)
 ];
 
-/* depot pickup hold 시간 (초). 3 초는 길어서 2 초로 완화. */
-const GRAV_PICKUP_TIME = 2.0;
+/* depot pickup hold 시간 (초). 3 초는 길어서 2 초로 완화. P5 — BEAM 한 손 조작에 맞춰 1.5 초 */
+const GRAV_PICKUP_TIME = 1.5;
 
 let depots = [];                /* active depots (floating downward) */
 let depotsSpawnedZones = new Set();  /* "zoneIdx-slotIdx" 들 중 이미 spawn 한 것 */
@@ -9932,22 +9989,22 @@ function _gravUpdateGauge(now){
         gravGauge = Math.max(0, gravGauge - dt);
         if(gravGauge <= 0){
             /* fuel 소진 → 강제 해제 */
-            gravityFieldActive = false;
-            const gb = document.getElementById('gravBtn');
-            if(gb) gb.classList.remove('active');
+            szBeamOff();
         }
     } else {
-        gravGauge = Math.min(GRAV_GAUGE_MAX, gravGauge + dt);
+        /* P5 — 저절로 차는 속도는 절반. 과감한 스치기(그레이즈)가 게이지를 채워 준다(szBeamGraze) */
+        gravGauge = Math.min(GRAV_GAUGE_MAX, gravGauge + dt * GRAV_REGEN);
     }
 }
 function _gravOnCooldown(now){
     _gravUpdateGauge(now);
-    return gravGauge < GRAV_GAUGE_MAX;     /* 풀 충전 전까진 사용 불가 */
+    return gravGauge < GRAV_REUSE;         /* 40% 미만이면 사용 불가 */
 }
 function _gravTryActivate(){
     const now = performance.now();
     _gravUpdateGauge(now);
-    if(gravGauge < GRAV_GAUGE_MAX) return false;
+    if(gravGauge < GRAV_REUSE) return false;
+    if(typeof szSpectating !== 'undefined' && szSpectating) return false;   /* 관전 중엔 BEAM 없음 */
     gravityFieldActive = true;
     gravPressedAt = now;
     return true;
@@ -9957,6 +10014,36 @@ function _gravRelease(){
         _gravUpdateGauge(performance.now());
     }
     gravityFieldActive = false;
+}
+/* ── P5 BEAM (구 GRAV·SAT 통합) ──
+   재사용 조건: 게이지 40% 이상. 탭 토글로 켠 것(latched)은 게이지 소진·대상 획득(보급·위성)·다시 탭에서 꺼진다.
+   버튼 클래스는 szDomQueue 로만 쓴다 */
+const GRAV_REUSE = GRAV_GAUGE_MAX * 0.4;
+const GRAV_REGEN = 0.5;
+let _szBeamLatched = false;
+function _szBeamBtn(on){
+    szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(gb) gb.classList.toggle('active', on); });
+}
+function szBeamOn(latch){
+    if(!_gravTryActivate()){
+        /* 게이지 부족 — 버튼이 짧게 '아직' 흔들림 대신 테두리 깜빡 (화면은 흔들지 않는다) */
+        szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(!gb) return; gb.classList.remove('sz-nope'); void gb.offsetWidth; gb.classList.add('sz-nope'); });
+        return false;
+    }
+    _szBeamLatched = !!latch;
+    _szBeamBtn(true);
+    return true;
+}
+function szBeamOff(){
+    _szBeamLatched = false;
+    _gravRelease();
+    _szBeamBtn(false);
+}
+/* 대상 획득(보급 픽업·위성 설치) — 탭 토글로 켠 BEAM 은 할 일을 끝냈으니 끈다 */
+function szBeamTargetDone(){ if(_szBeamLatched && gravityFieldActive) szBeamOff(); }
+/* 그레이즈 → BEAM 게이지. 스침 +250ms, 면도날 스침(razor) +500ms. 가득 차면 버린다. 표시·로컬 전용(시드 무관) */
+function szBeamGraze(razor){
+    gravGauge = Math.min(GRAV_GAUGE_MAX, gravGauge + (razor ? 500 : 250));
 }
 const GRAV_FIELD_LEN = 180;
 
@@ -10061,6 +10148,7 @@ function updateGravFieldCharge(dt){
             d.chargeTime += dt;
             if(d.chargeTime >= GRAV_PICKUP_TIME){
                 onDepotCollected(d);
+                szBeamTargetDone();
             }
         } else {
             d.chargeTime = Math.max(0, d.chargeTime - dt * 0.8);
@@ -10069,8 +10157,8 @@ function updateGravFieldCharge(dt){
 }
 
 function drawGravField(){
-    /* 본인 GRAV cone — 노랑 톤. */
-    if(gravityFieldActive){
+    /* 본인 GRAV cone — 노랑 톤. P5 — BEAM 통합 미션 중에는 위성 방출파(청록, drawSatelliteInstall)가 대신 그린다 */
+    if(gravityFieldActive && !(SZ_FLAGS.beamMerge && missionState === 'active')){
         _drawGravCone(player.x, player.y - 4, 'rgba(255,230,109,', 'rgba(255,200,60,', 'rgba(255,154,60,');
     }
     /* PvP 상대 GRAV cone — 위협을 인지할 수 있게 빨강 톤 + 강한 펄스. */
@@ -10184,8 +10272,7 @@ function onDepotCollected(d, fromPeer){
         /* SHIELD, WIPE, MINI 모두 보유형 — 슬롯에 적재. */
         inventoryAdd(d.item);
     }
-    if(window.SZ3){ try{ SZ3.pickup(d); }catch(_){} } else sfxStart();
-    if(navigator.vibrate) try{szVibrate(30)}catch(_){}
+    if(window.SZ3){ try{ SZ3.pickup(d); }catch(_){} } else { sfxStart(); if(navigator.vibrate) try{szVibrate(15)}catch(_){} }   /* P5 — 햅틱 표(보급 15)는 SZ3.pickup */
     try{ window.SZX && SZX.onTake(d); }catch(_){}   /* 동시 대결 — 먼저 먹은 사람이 임자 */
     /* PvP — 상대에게도 알려서 같은 depot 못 먹게. P2P + supabase 둘다 보냄
        (P2P 가 빠르지만 미연결 시 supabase fallback). 둘다 도달해도 onDepotCollected
@@ -10877,7 +10964,7 @@ function syncPauseUI(){
        PvP 면 PC 라도 숨김 (PvP 에선 pause 자체 차단). */
     const gc=$('gameCtrl'), btn=$('pauseBtn');
     if(gc && btn){
-        const showPause = _isPcViewport() && running && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing();
+        const showPause = _isPcViewport() && running && !szSpectating && !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing();
         if(showPause){
             gc.style.display = 'flex';
             gc.classList.add('on');
@@ -10911,7 +10998,14 @@ let flamePulse=0;
    hit = sharp impact (noise burst + saw downsweep + chord stab).
    over = explosion (long noise + low rumble) → descending dirge.
    zone = harmonic chime (stacked partials = bell). */
+/* P5 (2026-09-28) — 사건당 한 벌. 본체 효과음은 SZ3 엔진(공유 잡음 버퍼·보이스 상한 12·첫 손길에 만든 컨텍스트)으로
+   보낸다. LPAudio.noise 는 부를 때마다 버퍼를 새로 만들어(GC) 우회한다. SZ3 가 없을 때만 예전 LPAudio 소리 */
+function szSfx(kind){
+    try{ if(window.SZ3 && SZ3.sfx){ SZ3.sfx(kind); return true; } }catch(_){}
+    return false;
+}
 function sfxStart(){
+    if(szSfx('start')) return;
     /* Two-stage: low rocket rumble + ascending takeoff sweep. */
     LPAudio.noise({dur:0.35, vol:0.1});
     LPAudio.beep({freq:120, dur:0.45, vol:0.18, type:'sawtooth', slide:480, decay:0.85});
@@ -10920,11 +11014,13 @@ function sfxStart(){
     ], {vol:0.16, type:'square'});
 }
 function sfxHit(){
+    if(window.SZ3) return;   /* P5 — 피격음은 SZ3.hit 한 벌만 */
     LPAudio.noise({dur:0.14, vol:0.22});
     LPAudio.beep({freq:780, dur:0.2, vol:0.2, type:'sawtooth', slide:90, decay:0.8});
     LPAudio.chord([220, 277], {dur:0.18, vol:0.1, type:'square', decay:0.7});
 }
 function sfxOver(){
+    if(szSfx('over')) return;
     /* Hull breach: long noise burst + low rumble, then descending dirge. */
     LPAudio.noise({dur:0.5, vol:0.24});
     LPAudio.beep({freq:160, dur:0.6, vol:0.24, type:'sawtooth', slide:40, decay:0.9});
@@ -10935,6 +11031,7 @@ function sfxOver(){
     }, 280);
 }
 function sfxZone(){
+    if(window.SZ3) return;   /* P5 — 존 도착음은 SZ3.zone 의 막별 스팅어 한 벌만 */
     /* Bell-style chime — fundamental + perfect-5th + octave. */
     LPAudio.chord([784, 1175, 1568], {dur:0.32, vol:0.1, type:'triangle', decay:0.85});
     LPAudio.beep({freq:784, dur:0.08, vol:0.06, type:'square', decay:0.4});
@@ -10956,7 +11053,9 @@ function sfxZone(){
    Files missing → audio.error fires silently and the game still runs. */
 const BGM = (function(){
     const TRACKS = ['/assets/bgm/dodge/track1.mp3', '/assets/bgm/dodge/track2.mp3'];
-    const MAX_VOL = 0.35;
+    const MAX_VOL0 = 0.35;
+    /* P5 — 볼륨 설정(szx_vol, 첫 방문 70%)을 곱한다 */
+    let MAX_VOL = MAX_VOL0 * 0.7;
     const FADE_IN_MS = 1400;
     const FADE_OUT_MS = 600;
 
@@ -11043,7 +11142,21 @@ const BGM = (function(){
     }
     function toggle(){ enabled = !enabled; if(!enabled) stop(); return enabled; }
     function isOn(){ return enabled; }
-    return { start: start, stop: stop, pause: pause, resume: resume, toggle: toggle, isOn: isOn };
+    /* P5 — 피격·신기록 순간 -6dB(×0.5) 250ms. 페이드 중이면 건너뛴다 */
+    let duckT = 0, duckBase = -1;
+    function duck(ms){
+        const a = audios[cur];
+        if(!enabled || !a || a.paused || fadeTimer) return;
+        if(duckBase < 0){ duckBase = a.volume; a.volume = duckBase * 0.5; }
+        clearTimeout(duckT);
+        duckT = setTimeout(function(){ if(duckBase >= 0 && !fadeTimer){ try{ a.volume = Math.min(MAX_VOL, duckBase); }catch(_){} } duckBase = -1; }, ms || 250);
+    }
+    function setVol(v){
+        MAX_VOL = MAX_VOL0 * Math.max(0, Math.min(1, +v || 0));
+        const a = audios[cur];
+        if(a && !a.paused && !fadeTimer && duckBase < 0) try{ a.volume = MAX_VOL; }catch(_){}
+    }
+    return { start: start, stop: stop, pause: pause, resume: resume, toggle: toggle, isOn: isOn, duck: duck, setVol: setVol };
 })();
 
 function resetGame(){
@@ -11141,6 +11254,9 @@ function resetGame(){
     gravityFieldActive = false;
     gravGauge = GRAV_GAUGE_MAX;
     gravLastTick = 0;
+    _szBeamLatched = false;            /* P5 — BEAM 토글·관전·표시 상태 */
+    szSpectating = false; szKillMark = null; szHitboxHintAt = 0;
+    szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(gb){ gb.classList.remove('active', 'sz-sat', 'sz-sat-on', 'sz-gold'); gb._sp = null; gb._gk = null; } });
     wipeFlashUntil = 0;
     wipeSpawnBlockUntil = 0;
     wipeFragments = [];
@@ -11177,8 +11293,12 @@ async function startGame(){
     szDeathFx = null;
     szKickIdle();
     /* 인트로 스토리 + 3·2·1·GO 카운트다운 (~3.3초). 매번 6개 후보
-       중 랜덤 1개. lang 자동 적용. */
-    await runIntroCountdown();
+       중 랜덤 1개. lang 자동 적용.
+       P5 — 싱글 두 번째 판부터는 빠른 재시작(약 1.15초). 대결·도전장·오늘의 코스는 3·2·1 유지 */
+    let _szFast = false;
+    try{ _szFast = (startGame._runs | 0) > 0 && !(pvpState && pvpState.gameMode === 'pvp') && !(window.SZX && SZX.mode && SZX.mode()); }catch(_){}
+    startGame._runs = (startGame._runs | 0) + 1;
+    await runIntroCountdown(_szFast);
     /* 카운트다운 끝 → 실제 게임 시작.
        모든 판은 시드 코스(도전장·동시 대결이 같은 코스를 재현). PvP 는 방 시드를 이미 넣었다 */
     if(!(pvpState && pvpState.gameMode === 'pvp')){ try{ window.SZX && SZX.applySeed(); }catch(_){} }
@@ -11435,7 +11555,10 @@ document.addEventListener('keydown', (e) => {
 }, true);
 /*</sz:mod:meta>*/
 function triggerGameOver(kind){
+    if(szSpectating){ szExitSpectate(); return; }   /* P5 — 관전은 판이 아니다 */
     running=false;
+    /* P5 — 미션 배너가 결과(싱글·대결·1:1) 위에 남지 않게 모든 경로에서 먼저 내린다 */
+    try{ _szLooseBannerHideAt = 0; _hideMissionBanner(); }catch(_){}
     /* P3 — 판 기록(szx_log) 판당 1회 저장 + 결과 카드 한 줄 재료. kind = 충돌 원인(사인). 표시·저장 전용 */
     let _szRun = null;
     try{ if(typeof szMetaRunEnd === 'function') _szRun = szMetaRunEnd(Math.round(elapsedMs), kind); }catch(_){}
@@ -11797,6 +11920,11 @@ let szKeyVel = {x:0, y:0};
 let szHeartBreak = [];
 let szLastGrazeSfx = 0;
 let szNebulaY = 0;
+/* P5 (2026-09-28) — 손맛·사망 명확성·관전. 전부 표시·로컬 전용(시드 RNG 무관) */
+let szSpectating = false;     /* 동시 대결: 추락 뒤 가벼운 관전(기체 숨김·무적·입력 없음·세계 시뮬만) */
+let szKillMark = null;        /* 방금 부딪힌 운석 — 빨간 외곽선 300ms {x,y,vx,vy,t0} */
+let szHitboxHintAt = 0;       /* 첫 판 — 히트박스 원 1.5초 표시 시작 시각 */
+const SZ_KILLMARK_MS = 300, SZ_DEATH_HOLD_MS = 80;
 
 function szMakeGlow(r, g, b, size){
     const c = document.createElement('canvas');
@@ -12021,11 +12149,19 @@ function szOnHit(now, x, y){
 /* 스침(니어미스) — 작은 링 + 틱 소리 + 10콤보마다 팝업 */
 function szOnGraze(now, b, dist){
     szRings.push({x:player.x, y:player.y, t:0, dur:0.22, r0:10, r1:26, rgb:'255,230,109', w:1.4});
-    if(now - szLastGrazeSfx > 70 && typeof LPAudio !== 'undefined'){
+    /* P5 — 스침 소리는 SZ3 whoosh/razor 한 벌만 (예전 LPAudio 삑 제거) */
+    if(!window.SZ3 && now - szLastGrazeSfx > 70 && typeof LPAudio !== 'undefined'){
         szLastGrazeSfx = now;
         try{ LPAudio.beep({freq: 900 + Math.min(40, comboCount) * 22, dur:0.035, vol:0.035, type:'triangle', decay:0.5}); }catch(_){}
     }
+    /* P5 — 과감한 스침이 BEAM 게이지를 채운다 (면도날 스침은 두 배) */
+    const _razor = dist != null && dist < HIT_RADIUS + 11;
+    szBeamGraze(_razor);
+    if(!szHitboxHintAt && elapsedMs < 30000 && _szFirstRun()) szHitboxHintAt = now;   /* 첫 판 — '여기까지 괜찮다' 히트박스 */
     if(comboCount > 0 && comboCount % 10 === 0){
+        /* 10콤보마다 BEAM 황금 링 펄스 + 조종사 집중 */
+        szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(!gb) return; gb.classList.remove('sz-gold'); void gb.offsetWidth; gb.classList.add('sz-gold'); });
+        try{ if(window.SZ3 && SZ3.mood) SZ3.mood('focus', 700, 1, '★', '255,214,90'); }catch(_){}
         const big = comboCount % 50 === 0;
         const col = comboCount >= 50 ? '#FF6688' : comboCount >= 25 ? '#FF9A3C' : '#FFE66D';
         szPopup('×' + comboCount + ' COMBO', player.x, player.y - 34, col, big ? 19 : 15, big ? 1.2 : 0.9);
@@ -12034,20 +12170,90 @@ function szOnGraze(now, b, dist){
     if(window.SZ3 && b) try{ SZ3.graze(b, dist); }catch(_){}
 }
 
-/* 사망 — 슬로모션 속에서 기체가 터지고, 0.85초 뒤 결과 카드 */
+/* P5 — 첫 판인가 (szx_log.runs === 0). 도전장·대결 판은 아니어도 된다 */
+function _szFirstRun(){ try{ return typeof szLog === 'function' && szLog().runs === 0; }catch(_){ return false; } }
+/* P5 — 부딪힌 운석 빨간 외곽선(300ms) · 첫 판 히트박스 원(1.5초). 판 안에서만, 그리기 전용 */
+function szDrawP5Marks(now){
+    const m = szKillMark;
+    if(m){
+        const e = (now - m.t0) / SZ_KILLMARK_MS;
+        if(e >= 1 && !(szDeathFx && szDeathFx.hold)) szKillMark = null;
+        else {
+            const k = Math.max(0, Math.min(1, e)), a = szDeathFx && szDeathFx.hold ? 1 : 1 - k * k;
+            const R = 13 + 5 * k;
+            ctx.save();
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.pink, m.x, m.y, R * 1.8, a * 0.35);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = a;
+            /* 들어온 길 — 운석이 어디서 날아와 박혔는지 빨간 꼬리로 (속도 0.18초어치) */
+            const sp = Math.hypot(m.vx, m.vy);
+            if(sp > 1){
+                const ux = m.vx / sp, uy = m.vy / sp, L = Math.max(52, Math.min(96, sp * 0.22));
+                const tx = m.x - ux * (R + L), ty = m.y - uy * (R + L), hx = m.x - ux * R, hy = m.y - uy * R;
+                const g = ctx.createLinearGradient(tx, ty, hx, hy);
+                g.addColorStop(0, 'rgba(255,45,85,0)'); g.addColorStop(1, 'rgba(255,45,85,.95)');
+                ctx.strokeStyle = g; ctx.lineWidth = 5; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(hx, hy); ctx.stroke();
+                ctx.fillStyle = '#FF2D55';
+                ctx.beginPath(); ctx.moveTo(hx + ux * 2, hy + uy * 2); ctx.lineTo(hx - ux * 9 - uy * 6, hy - uy * 9 + ux * 6); ctx.lineTo(hx - ux * 9 + uy * 6, hy - uy * 9 - ux * 6); ctx.closePath(); ctx.fill();
+                /* 운석 몸통 — 부딪힌 순간 지워졌으니 어두운 돌로 한 번 더 */
+                ctx.fillStyle = 'rgba(70,58,52,.95)';
+                ctx.beginPath(); ctx.arc(m.x, m.y, 7.5, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.lineWidth = 3; ctx.strokeStyle = '#FF2D55';
+            ctx.beginPath(); ctx.arc(m.x, m.y, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(255,255,255,.85)';
+            ctx.beginPath(); ctx.arc(m.x, m.y, R + 3.5, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
+    }
+    if(szHitboxHintAt && running && !szShipHidden){
+        const e = (now - szHitboxHintAt) / 1500;
+        if(e >= 1) szHitboxHintAt = -1;
+        else if(e >= 0){
+            const a = e < 0.15 ? e / 0.15 : e > 0.8 ? (1 - e) / 0.2 : 1;
+            const R = HIT_RADIUS + 6;
+            ctx.save();
+            ctx.globalAlpha = a * 0.95;
+            ctx.setLineDash([3, 3]);
+            ctx.lineWidth = 1.5; ctx.strokeStyle = '#7CFFB2';
+            ctx.beginPath(); ctx.arc(player.x, player.y, R, 0, Math.PI * 2); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = a * 0.5; ctx.strokeStyle = '#FFE66D';
+            ctx.beginPath(); ctx.arc(player.x, player.y, COMBO_NEAR_OUTER, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
+    }
+}
+/* 사망 — 슬로모션 속에서 기체가 터지고, 0.85초 뒤 결과 카드.
+   P5 — 터지기 전 80ms 정지: 기체와 부딪힌 운석(빨간 외곽선)을 그대로 보여 '무엇에 맞았는지' 먼저 읽히게 한다(흔들림 없음) */
 function szStartDeathFx(now){
-    szDeathFx = {t0: now, x: player.x, y: player.y};
-    szShipHidden = true;
+    szDeathFx = {t0: now, x: player.x, y: player.y, hold: true};
     szHitStopUntil = 0;
     try{ gravityFieldActive = false; }catch(_){}
-    szFlash('255,200,150', 0.12, 260);
-    szBurst(player.x, player.y, {shards:22, sparks:34, rocks:6, power:230, ring:120, ringRGB:'255,190,110', ringDur:0.7, ringW:4});
-    szRings.push({x:player.x, y:player.y, t:-0.12, dur:0.9, r0:10, r1:190, rgb:'0,217,255', w:2});
-    if(window.SZ3) try{ SZ3.death(player.x, player.y); }catch(_){}
+    if(!szKillMark) szKillMark = {x: player.x, y: player.y - 10, vx: 0, vy: 0, t0: now};
     szKickIdle();
+}
+function _szDeathBoom(now){
+    const d = szDeathFx;
+    d.hold = false;
+    szShipHidden = true;
+    if(szKillMark) szKillMark.t0 = now;   /* 외곽선은 터지는 순간부터 300ms 동안 사라진다 */
+    szFlash('255,200,150', 0.12, 260);
+    szBurst(d.x, d.y, {shards:22, sparks:34, rocks:6, power:230, ring:120, ringRGB:'255,190,110', ringDur:0.7, ringW:4});
+    szRings.push({x:d.x, y:d.y, t:-0.12, dur:0.9, r0:10, r1:190, rgb:'0,217,255', w:2});
+    if(window.SZ3) try{ SZ3.death(d.x, d.y); }catch(_){}
 }
 function szDrawDeathFx(now, dt){
     const d = szDeathFx;
+    if(d.hold){
+        if(now - d.t0 < SZ_DEATH_HOLD_MS){ drawFrame(now, 0); return; }
+        _szDeathBoom(now);
+        d.t0 = now;   /* 슬로모션·캡슐 타이밍은 터진 순간부터 */
+    }
     const t = (now - d.t0) / 1000;
     const slow = t < 0.9 ? 0.25 : 0.6;          /* 첫 0.9초는 슬로모션 */
     for(const b of bullets){ b.x += b.vx * dt * slow; b.y += b.vy * dt * slow; }
@@ -12071,6 +12277,36 @@ function szDrawDeathFx(now, dt){
     if(window.SZ3) try{ SZ3.tick(now, dt); SZ3.drawPool(); SZ3.drawDeath(now, dt); }catch(_){}
     if(t > 3.2) szDeathFx = null;   /* 이후엔 평상시 대기 배경 */
 }
+
+/* P5 — 동시 대결 가벼운 관전 (SZ_FLAGS.spectate). 추락 1.1초 뒤 결과 패널 대신 같은 하늘을 계속 본다.
+   기체 숨김·무적·입력 없음·보급 못 먹음. 운석은 공유 조준이라 기체와 무관 → 시드 소비는 비행 중과 같다.
+   기록·엽서·미션·말풍선은 건드리지 않는다(판 기록은 triggerGameOver 에서 이미 끝났다) */
+function szEnterSpectate(){
+    if(running || szSpectating || _introRunning) return false;
+    szSpectating = true;
+    szDeathFx = null; szShipHidden = true; szKillMark = null; szHitboxHintAt = -1;
+    try{ szBeamOff(); }catch(_){}
+    invincibleUntil = 1e15;
+    player.x = CW / 2; player.y = CH + 400;    /* 화면 밖 — 스침·충돌·블랙홀 판정에서 빠진다 */
+    try{ pointer.active = false; pendingTp.active = false; }catch(_){}
+    for(const k in keys) keys[k] = false;
+    if(missionState !== 'idle'){ missionState = 'idle'; missionZoneIdx = -1; missionOrbit = null; _szLooseBannerHideAt = 0; _hideMissionBanner(); _setSatBtnState('disabled'); }
+    running = true; paused = false;
+    lastFrame = performance.now();
+    try{ document.body.classList.add('sz-spectating'); syncPauseUI(); }catch(_){}
+    requestAnimationFrame(gameLoop);
+    return true;
+}
+function szExitSpectate(){
+    if(!szSpectating) return false;
+    szSpectating = false;
+    running = false;
+    try{ document.body.classList.remove('sz-spectating'); syncPauseUI(); }catch(_){}
+    szKickIdle();
+    return true;
+}
+window.szEnterSpectate = szEnterSpectate;
+window.szExitSpectate = szExitSpectate;
 
 /* ---- 그리기 ---- */
 function szDrawExhaust(){
@@ -12545,7 +12781,7 @@ function gameLoop(now){
     /* 피격 순간 짧은 정지(hitstop) — 화면 흔들림 대신 쓰는 타격감. 싱글만.
        세상만 멈춘다 — 기체 조종은 계속 받는다(입력 지연 0) */
     if(now < szHitStopUntil){
-        szMovePlayer(rawDt);
+        if(!szSpectating) szMovePlayer(rawDt);
         drawFrame(now, 0);
         szDomFlush();
         requestAnimationFrame(gameLoop);
@@ -12574,7 +12810,7 @@ function gameLoop(now){
         resetParticles(newIdx);
         sfxZone();
         triggerZoneWarpFx(now);
-        if(window.SZ3) try{ SZ3.zone(newIdx); }catch(_){}
+        if(window.SZ3 && !szSpectating) try{ SZ3.zone(newIdx); }catch(_){}   /* P5 — 관전 중엔 도착 대사·엽서 기록 없음 */
         zoneEnteredAt = performance.now();   /* (보급 타이밍은 결정성 v2 부터 논리시간 — 이 값은 참고용) */
         /* 소행성 무리 첫 등장(존 진입 5s 뒤)은 szBaseZoneEvents 의 격자가 맡는다 */
         /* Satellite mission trigger (Phase B) — eligible zones only.
@@ -12601,11 +12837,11 @@ function gameLoop(now){
             missionOrbit = null;
             _setSatBtnState('disabled');
         }
-        startMissionForZone(newIdx, now);
+        if(!szSpectating) startMissionForZone(newIdx, now);
     }
     zoneTransitionT=Math.min(1, zoneTransitionT+dt/1.5);
 
-    szMovePlayer(dt);
+    if(!szSpectating) szMovePlayer(dt);   /* P5 — 관전: 입력 없음(기체는 화면 밖, 세계 시뮬만) */
 
     /* ---- Spawn bullets ----
        WIPE 직후 5 초간 spawn 차단 — lastSpawn 을 now 로 계속 끌어올려서
@@ -12757,6 +12993,7 @@ function gameLoop(now){
             const dx = b.x - player.x, dy = b.y - player.y;
             if(dx*dx + dy*dy < HR2){
                 hitX = (b.x + player.x) / 2; hitY = (b.y + player.y) / 2;
+                szKillMark = {x: b.x, y: b.y, vx: b.vx, vy: b.vy, t0: now};   /* P5 — 무엇에 맞았는지 */
                 bullets.splice(i, 1);
                 hit = true;
                 break;
@@ -12776,13 +13013,15 @@ function gameLoop(now){
         if(hit){
             triggerHitFx(now);
             lives--;
+            if(!szKillMark || szKillMark.t0 !== now) szKillMark = {x: hitX, y: hitY, vx: 0, vy: 0, t0: now};   /* 위험물 충돌은 부딪힌 자리 */
+            if(!szHitboxHintAt && elapsedMs < 30000 && _szFirstRun()) szHitboxHintAt = now + SZ_HITSTOP_MS;
             szOnHit(now, hitX, hitY);
             invincibleUntil = now + INVINCIBLE_MS;
             flashVisible = true;
             lastFlashToggle = now;
             comboCount = 0;            /* Stage 7: hit breaks the chain */
             comboFlashUntil = 0;
-            if(navigator.vibrate) try{szVibrate(40)}catch(_){}
+            if(!window.SZ3 && navigator.vibrate) try{szVibrate(40)}catch(_){}   /* P5 — 햅틱은 SZ3.hit 의 표 한 줄 */
             if(lives <= 0){
                 /* Phase D: Time Anchor saves player from death once */
                 if(_consumeTimeAnchorIfArmed(now)){
@@ -12832,27 +13071,31 @@ function gameLoop(now){
     {
         const gb = $('gravBtn');
         if(gb){
-            if(gb.classList.contains('disabled')) gb.classList.remove('disabled');
             _gravUpdateGauge(now);
             const ratio = gravGauge / GRAV_GAUGE_MAX;
             const _gp = ratio.toFixed(2);
             if(gb._gp !== _gp){ gb._gp = _gp; szDomQueue(() => gb.style.setProperty('--grav-progress', _gp)); }
-
+            /* P5 — 클래스는 값이 바뀐 프레임에만, szDomQueue 로. 재사용 조건 = 게이지 40% (그 아래가 cooldown) */
             const draining = gravityFieldActive;
-            const wasDraining = gb.classList.contains('draining');
-            if(draining !== wasDraining) gb.classList.toggle('draining', draining);
-
-            const cooling = !gravityFieldActive && gravGauge < GRAV_GAUGE_MAX;
-            const wasCooling = gb.classList.contains('cooldown');
-            if(cooling !== wasCooling){
-                gb.classList.toggle('cooldown', cooling);
-                if(!cooling && wasCooling){
-                    /* gauge 가 MAX 에 도달 — 사용 가능 신호 1회 */
-                    gb.classList.remove('ready-flash');
-                    void gb.offsetWidth;
-                    gb.classList.add('ready-flash');
-                    setTimeout(()=>gb.classList.remove('ready-flash'),600);
-                }
+            const cooling = !gravityFieldActive && gravGauge < GRAV_REUSE;
+            const partial = !gravityFieldActive && !cooling && gravGauge < GRAV_GAUGE_MAX;
+            const _gk = (draining ? 'd' : '') + (cooling ? 'c' : '') + (partial ? 'p' : '');
+            if(gb._gk !== _gk){
+                const wasCooling = gb._gk != null && gb._gk.indexOf('c') >= 0;
+                gb._gk = _gk;
+                szDomQueue(() => {
+                    gb.classList.remove('disabled');
+                    gb.classList.toggle('draining', draining);
+                    gb.classList.toggle('cooldown', cooling);
+                    gb.classList.toggle('sz-partial', partial);
+                    if(!cooling && wasCooling && !draining){
+                        /* 다시 쓸 수 있게 됨 — 사용 가능 신호 1회 */
+                        gb.classList.remove('ready-flash');
+                        void gb.offsetWidth;
+                        gb.classList.add('ready-flash');
+                        setTimeout(()=>gb.classList.remove('ready-flash'),600);
+                    }
+                });
             }
         }
     }
@@ -12864,7 +13107,7 @@ function gameLoop(now){
        increment for tactile feedback. */
     /* 시간 글자는 30Hz — 매 프레임 DOM 글자 교체는 스타일·배치 계산을 매번 일으킨다 */
     /* P1 — HUD 글자는 값이 바뀔 때만, 그리고 drawFrame 뒤(szDomFlush)에 쓴다 */
-    if(now - (gameLoop._hud || 0) > 32){
+    if(!szSpectating && now - (gameLoop._hud || 0) > 32){
         gameLoop._hud = now;
         const _tn = formatDuration(elapsedMs);
         if(gameLoop._tn !== _tn){ gameLoop._tn = _tn; szDomQueue(() => { $('timeNow').textContent = _tn; }); }
@@ -13003,6 +13246,7 @@ function drawFrame(now, dt){
     } else {
         szDrawExhaust();
     }
+    szDrawP5Marks(now);        /* P5 — 부딪힌 운석(들어온 길·외곽선)·첫 판 히트박스 — 기체 위 */
 
     /* ---- PvP 상대 우주선 ---- */
     _drawOpponentShip();
@@ -15453,30 +15697,58 @@ const tx = (k) => (TXT[lang()] || TXT.en)[k] || TXT.en[k];
 /* ─────────── 진동 (토글 존중) ─────────── */
 let vibOn = LSG('lp_spacez_vib', '1') !== '0';
 function vib(p){ if(!vibOn) return; try{ navigator.vibrate && navigator.vibrate(p); }catch(_){} }
+/* P5 — 햅틱 표 하나. 사건마다 한 가지 패턴만 */
+const HAP = {graze:8, razor:12, hit:[30, 20, 50], pickup:15, sat:[15, 30, 15, 30, 40], rec:[20, 40, 20, 40, 60]};
+let lastGrazeVib = 0;
 
-/* ─────────── 소리 — 자체 WebAudio. 잡음 버퍼는 한 번만 만든다(매번 new Buffer = GC) ─────────── */
+/* ─────────── 소리 — 자체 WebAudio. 잡음 버퍼는 한 번만 만든다(매번 new Buffer = GC) ───────────
+   P5 (2026-09-28): 컨텍스트는 사용자의 첫 손길(START 전 아무 탭)에서만 만든다. 예전엔 첫 효과음(존 도착 프레임)이
+   컨텍스트를 만들며 4x 에서 40~130ms 멈췄다. 손길 전에는 소리를 건너뛴다(어차피 브라우저가 막는 소리).
+   만들 때 무음 그래프를 한 번 돌려 노드 생성 경로를 데워 둔다. 동시 보이스 상한 12, 볼륨 기억(szx_vol, 첫 방문 70%) */
 let AC = null, MST = null, NB = null, hum = null;
-function ac(){
+let vol = (function(){ const v = +LSG('szx_vol', '0.7'); return (v > 0 && v <= 1) ? v : 0.7; })();
+function ac(){ return AC; }
+function mkAC(){
     if(AC) return AC;
     try{
         AC = new (window.AudioContext || window.webkitAudioContext)();
-        MST = AC.createGain(); MST.gain.value = 0.9; MST.connect(AC.destination);
+        MST = AC.createGain(); MST.gain.value = 0.9 * vol; MST.connect(AC.destination);
         const n = AC.sampleRate;
         NB = AC.createBuffer(1, n, n);
         const d = NB.getChannelData(0);
         for(let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+        /* 무음 예열 — 오실레이터·필터·패너·버퍼 소스 경로를 한 번씩 */
+        const t = AC.currentTime, g = AC.createGain(); g.gain.value = 0; g.connect(MST);
+        const f = AC.createBiquadFilter(); f.connect(g);
+        const o = AC.createOscillator(); o.connect(f); o.start(t); o.stop(t + 0.03);
+        const s = AC.createBufferSource(); s.buffer = NB; s.connect(f); s.start(t); s.stop(t + 0.03);
+        if(AC.createStereoPanner){ const p = AC.createStereoPanner(); p.connect(g); }
     }catch(_){ AC = null; }
     return AC;
 }
 function muted(){ try{ return !!(window.LPAudio && LPAudio.isMuted()); }catch(_){ return false; } }
-function unlockAudio(){ const c = ac(); if(c && c.state === 'suspended'){ try{ c.resume(); }catch(_){} } }
+function unlockAudio(){ const c = mkAC(); if(c && c.state === 'suspended'){ try{ c.resume(); }catch(_){} } }
 ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, {capture:true, passive:true}));
 function out(pan){
     if(pan && AC.createStereoPanner){ const p = AC.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); p.connect(MST); return p; }
     return MST;
 }
+/* 동시 보이스 — 끝나는 시각 고리. 상한을 넘으면 새 소리를 버린다(피격 같은 우선 소리는 예외) */
+const VEND = new Float64Array(32); let vI = 0;
+let VOICE_MAX = 12;
+function voice(dur, delay, prio){
+    const n0 = AC.currentTime; let n = 0;
+    for(let i = 0; i < VEND.length; i++) if(VEND[i] > n0) n++;
+    if(n >= VOICE_MAX && !prio) return false;
+    VEND[vI] = n0 + (delay || 0) + dur; vI = (vI + 1) % VEND.length;
+    VOICE.n++;
+    return true;
+}
+const VOICE = {n:0, active(){ if(!AC) return 0; const n0 = AC.currentTime; let n = 0; for(let i = 0; i < VEND.length; i++) if(VEND[i] > n0) n++; return n; }};
+let prioNext = false;
 function tone(f, dur, type, vol, slide, delay, pan){
-    if(muted() || !ac() || AC.state !== 'running') return;
+    if(muted() || !AC || AC.state !== 'running') return;
+    if(!voice(dur, delay, prioNext)) return;
     const t = AC.currentTime + (delay || 0);
     const o = AC.createOscillator(), g = AC.createGain();
     o.type = type || 'sine';
@@ -15489,7 +15761,8 @@ function tone(f, dur, type, vol, slide, delay, pan){
     o.start(t); o.stop(t + dur + 0.03);
 }
 function nz(dur, vol, f0, f1, q, ftype, delay, pan){
-    if(muted() || !ac() || AC.state !== 'running') return;
+    if(muted() || !AC || AC.state !== 'running') return;
+    if(!voice(dur, delay, prioNext)) return;
     const t = AC.currentTime + (delay || 0);
     const s = AC.createBufferSource(); s.buffer = NB;
     s.playbackRate.value = 0.8 + Math.random() * 0.4;
@@ -15502,18 +15775,32 @@ function nz(dur, vol, f0, f1, q, ftype, delay, pan){
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.03);
 }
 let lastWhoosh = 0, lastCrack = 0;
+/* 막별 스팅어 [첫 음, 둘째 음, 첫 음 음색] — 막 경계는 BOUNDARY_INFO(9·15·20·26) 와 같다 */
+const STING = [[523, 784, 'triangle'], [587, 880, 'triangle'], [440, 659, 'sine'], [392, 740, 'sine'], [349, 523, 'sine']];
+function zoneFam(i){ return i >= 26 ? 4 : i >= 20 ? 3 : i >= 15 ? 2 : i >= 9 ? 1 : 0; }
 const S = {
     whoosh(pan, k){ const n = now_(); if(n - lastWhoosh < 55) return; lastWhoosh = n;
         nz(0.2, 0.09 + 0.07 * k, 3400, 700, 1.4, 'bandpass', 0, pan); },
     razor(pan){ nz(0.26, 0.2, 5200, 500, 2.2, 'bandpass', 0, pan); tone(2600, 0.05, 'triangle', 0.05, 1900, 0, pan); },
     crack(pan){ const n = now_(); if(n - lastCrack < 45) return; lastCrack = n;
         nz(0.14, 0.2, 2600, 260, 0.8, 'lowpass', 0, pan); tone(170, 0.12, 'sine', 0.12, 55, 0, pan); },
-    hit(){ nz(0.35, 0.3, 1800, 90, 0.7, 'lowpass'); tone(95, 0.3, 'sine', 0.26, 38); },
+    hit(){ prioNext = true; nz(0.35, 0.3, 1800, 90, 0.7, 'lowpass'); tone(95, 0.3, 'sine', 0.26, 38); prioNext = false; },
+    /* P5 — 본체(LPAudio)가 따로 내던 소리를 이쪽 한 벌로. 잡음은 공유 버퍼(NB) */
+    over(){ prioNext = true; nz(0.7, 0.3, 1400, 50, 0.6, 'lowpass'); tone(130, 0.6, 'sine', 0.24, 36); prioNext = false;
+        [523, 392, 262].forEach((f, i) => tone(f, 0.22, 'triangle', 0.045, 0, 0.42 + i * 0.13)); },
+    start(){ nz(0.35, 0.08, 400, 2400, 0.8, 'bandpass'); tone(120, 0.45, 'sawtooth', 0.07, 480); },
+    alert(){ tone(1320, 0.07, 'square', 0.035, 0, 0); tone(1760, 0.1, 'square', 0.035, 0, 0.09); },
+    warn(){ tone(940, 0.07, 'square', 0.05, 0, 0); tone(940, 0.07, 'square', 0.05, 0, 0.13); },
+    comet(){ nz(0.45, 0.12, 5000, 400, 1, 'bandpass'); tone(1400, 0.5, 'sawtooth', 0.05, 180); },
+    split(){ nz(0.32, 0.18, 1200, 90, 0.8, 'lowpass'); tone(150, 0.35, 'sine', 0.16, 45); },
+    wave(){ [520, 660, 880].forEach((f, i) => tone(f, i === 2 ? 0.1 : 0.06, 'square', 0.04, 0, i * 0.06)); },
     pickup(){ [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 0.16, 'triangle', 0.07, 0, i * 0.055));
         nz(0.4, 0.05, 6000, 9000, 0.7, 'highpass', 0.12); },
     link(){ [784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'square', 0.035, 0, i * 0.08));
         [1568, 1976, 2349].forEach(f => tone(f, 0.9, 'sine', 0.045, 0, 0.26)); },
-    zone(){ [392, 494, 587].forEach(f => tone(f, 1.3, 'sine', 0.035, 0, 0)); tone(1175, 0.8, 'sine', 0.025, 0, 0.18); },
+    /* 존 도착 — 막(계열)마다 2음 스팅어 하나. 태양계·성간·은하·은하단·우주론 */
+    zone(fam){ const s = STING[Math.max(0, Math.min(STING.length - 1, fam | 0))];
+        tone(s[0], 0.45, s[2], 0.05, 0, 0); tone(s[1], 0.95, 'sine', 0.045, 0, 0.12); },
     mile(){ [880, 1109, 1319, 1760].forEach((f, i) => tone(f, 0.5, 'triangle', 0.05, 0, i * 0.045)); },
     rec(){ [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.18, 'square', 0.04, 0, i * 0.09));
         [1047, 1319, 1568].forEach(f => tone(f, 1.1, 'triangle', 0.05, 0, 0.36)); },
@@ -15723,7 +16010,7 @@ function portraitPos(){ return {x: 12 + PR + 2, y: CH - 60 - PR * pAsp - 8}; }
 function drawPortrait(n){
     try{ if(typeof szStoryWorld === 'function') szStoryWorld(n); }catch(_){}   /* P3 — 말풍선·부표·피날레(교신창 층, 운석 아래) */
     if(!bakes.length || !rimBake) return;
-    if(!running && !szDeathFx) return;
+    if((!running && !szDeathFx) || szSpectating) return;
     const f = curFrame(n);
     /* 가로·세로 배율 비 = (캔버스폭/CW)/(캔버스높이/CH) — getTransform() 은 매 프레임 DOMMatrix 를 새로 만든다(GC) */
     pAsp = canvas.height > 0 ? Math.max(0.6, Math.min(2.2, (canvas.width * CH) / (canvas.height * CW))) : 1;
@@ -15809,7 +16096,10 @@ function drawStamp(n){
     ctx.globalAlpha = a;
     ctx.translate(CW / 2, y); ctx.rotate(RM ? 0 : -0.06); ctx.scale(sc, sc);
     ctx.font = '900 28px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const w = Math.min(CW - 30, ctx.measureText(stamp.text).width + 34);
+    /* P5 — 긴 도장(추락 중계 등)은 글자를 줄여 상자 안에 */
+    const tw0 = ctx.measureText(stamp.text).width;
+    if(tw0 > CW - 64){ ctx.font = '900 ' + Math.max(14, 28 * (CW - 64) / tw0).toFixed(1) + 'px Orbitron, "Noto Sans KR", sans-serif'; }
+    const w = Math.min(CW - 30, Math.min(tw0, CW - 64) + 34);
     ctx.fillStyle = 'rgba(4,8,24,.72)';
     drawRR(-w / 2, -22, w, stamp.sub ? 54 : 44, 12); ctx.fill();
     ctx.lineWidth = 2.5; ctx.strokeStyle = stamp.color;
@@ -15949,7 +16239,7 @@ let slowUntil = 0;
 function slow(n){ return n < slowUntil ? 0.35 : 1; }
 function tick(n, dt){
     updPool(dt);
-    if(!running) return;
+    if(!running || szSpectating) return;   /* P5 — 관전 중엔 기록·분 도장·심장 박동 없음 */
     /* 좌우 자세 분사 — 빠르게 옆으로 틀 때 반대편 노즐에서 푸슉 */
     const vx = szPlayerVel.x;
     if(!szShipHidden && Math.abs(vx) > 140 && n - lastRcs > (tier ? 70 : 38)){
@@ -15988,7 +16278,8 @@ function tick(n, dt){
     if(!recDone && bestMs > 5000 && elapsedMs > bestMs){
         recDone = true;
         showStamp(tx('rec'), '#FF7FC0');
-        S.rec(); mood('cheer', 1800, 3, '★', '255,127,192'); vib([20, 40, 20, 40, 60]);
+        S.rec(); mood('cheer', 1800, 3, '★', '255,127,192'); vib(HAP.rec);
+        try{ BGM.duck(250); }catch(_){}
         for(let i = 0; i < 22; i++){ const a = Math.random() * 6.28; emit(K_STAR, CW / 2, CH * 0.34, Math.cos(a) * 210, Math.sin(a) * 150, 0.9, 7, 0); }
     }
     /* 마지막 목숨 — 낮은 심장 박동 */
@@ -16012,17 +16303,21 @@ function graze(b, dist){
         S.razor(pan);
         mood('scared', 520, 2, '!', '255,230,109');
         P.fogUntil = n + 700;
-        vib(10);
+        vib(HAP.razor); lastGrazeVib = n;
         szPopup('CLOSE!', player.x, player.y - 30, '#9FF3FF', 13, 0.6);
         /* 슬로모션 한 조각 — 혼자 할 때만, 모션 줄이기면 끔 */
         if(!RM && solo()) slowUntil = n + 120;
     } else {
         S.whoosh(pan, k);
+        if(n - lastGrazeVib > 90){ lastGrazeVib = n; vib(HAP.graze); }
     }
 }
 function hit(x, y){
     const n = now_();
-    S.hit();
+    /* P5 — 한 사건 한 벌: 마지막 목숨이면 추락음(S.over)만 울린다. BGM 은 250ms 동안 -6dB */
+    if(lives > 0) S.hit();
+    vib(HAP.hit);
+    try{ BGM.duck(250); }catch(_){}
     mood('ouch', 650, 3, '!', '255,70,110');
     P.crackUntil = n + 1500;
     for(let i = 0; i < (tier >= 2 ? 6 : 10); i++){
@@ -16042,7 +16337,7 @@ function pop(x, y){
 }
 function pickup(d){
     const n = now_();
-    S.pickup(); S.magnet(false); charging = false;
+    S.pickup(); S.magnet(false); charging = false; vib(HAP.pickup);
     const c = d.item === ITEM.HEART ? 2 : 1;
     mood('cheer', 900, 2, '♪', c === 2 ? '255,90,140' : '255,214,90');
     for(let i = 0; i < 16; i++){ const a = i / 16 * 6.28; emit(K_STAR, d.x, d.y, Math.cos(a) * 130, Math.sin(a) * 130, 0.55, 5 + Math.random() * 3, 0); }
@@ -16054,7 +16349,7 @@ function pickup(d){
     P.popT = n;
 }
 function satDone(x, y){
-    S.link(); vib([15, 30, 15, 30, 40]);
+    S.link(); vib(HAP.sat);
     mood('cheer', 1500, 3, '★', '0,217,255');
     showStamp(tx('link'), '#7CE7FF');
     try{ if(typeof szStoryEvent === 'function') szStoryEvent('link', missionZoneIdx); }catch(_){}   /* P3 — 첫 LINK 대사 + szx_log.sat */
@@ -16062,7 +16357,7 @@ function satDone(x, y){
     for(let i = 0; i < 18; i++){ const a = Math.random() * 6.28; emit(K_STAR, x, y, Math.cos(a) * 170, Math.sin(a) * 170, 0.7, 5 + Math.random() * 3, 0); }
 }
 function zone(i){
-    S.zone();
+    S.zone(zoneFam(i));
     mood('happy', 1300, 1, '★', '255,214,90');
     /* P3 — 존 i 도착: 엽서(seen) 기록 · 도착 한 줄 예약 · 다음 대사 미리 굽기 · 마지막 존이면 피날레 */
     try{ if(typeof szStoryZone === 'function') szStoryZone(i | 0); }catch(_){}
@@ -16105,28 +16400,46 @@ function death(x, y){
 }
 
 /* ─────────── 설정 칩 (소리·진동) — 시작·결과 카드 공통, 이벤트 위임 ─────────── */
+/* P5 — 소리 칩은 탭할 때마다 70% → 100% → 끔 → 40% → 70% (szx_vol 기억). BEAM 칩 = 탭 토글 / 누르고 있기 (szx_beam) */
+function sndIcon(){ return muted() ? '🔇' : vol < 0.55 ? '🔈' : vol < 0.85 ? '🔉' : '🔊'; }
+const BEAM_TX = {ko:['탭', '꾹'], en:['tap', 'hold'], ja:['タップ', '長押し'], zh:['点按', '按住'], es:['toque', 'mantener'], pt:['toque', 'segurar']};
+function beamLabel(){ const t = BEAM_TX[lang()] || BEAM_TX.en; return 'BEAM ' + (window.SZ_FLAGS && SZ_FLAGS.beamHold ? t[1] : t[0]); }
 function optsHtml(){
     const snd = !muted();
     let h = '<div class="sz-opts" role="group">'
-        + '<button type="button" class="sz-opt' + (snd ? ' on' : '') + '" data-szopt="snd" aria-pressed="' + snd + '" aria-label="' + tx('sound') + '">' + (snd ? '🔊' : '🔇') + '</button>';
+        + '<button type="button" class="sz-opt' + (snd ? ' on' : '') + '" data-szopt="snd" aria-pressed="' + snd + '" aria-label="' + tx('sound') + '">' + sndIcon() + '</button>';
     if(navigator.vibrate) h += '<button type="button" class="sz-opt' + (vibOn ? ' on' : '') + '" data-szopt="vib" aria-pressed="' + vibOn + '" aria-label="' + tx('vib') + '">📳</button>';
+    if(('ontouchstart' in window) || navigator.maxTouchPoints > 0) h += '<button type="button" class="sz-opt sz-opt-beam" data-szopt="beam">' + beamLabel() + '</button>';
     return h + '</div>';
 }
 function syncOpts(){
     document.querySelectorAll('[data-szopt]').forEach(b => {
+        if(b.dataset.szopt === 'beam'){ b.textContent = beamLabel(); return; }
         const on = b.dataset.szopt === 'snd' ? !muted() : vibOn;
         b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
-        if(b.dataset.szopt === 'snd') b.textContent = on ? '🔊' : '🔇';
+        if(b.dataset.szopt === 'snd') b.textContent = sndIcon();
     });
 }
+function setVol(v){
+    vol = v; LSS('szx_vol', String(v));
+    try{ if(MST) MST.gain.setTargetAtTime(0.9 * v, AC.currentTime, 0.02); }catch(_){}
+    try{ BGM.setVol && BGM.setVol(v); }catch(_){}
+}
+try{ BGM.setVol && BGM.setVol(vol); }catch(_){}
 document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('[data-szopt]');
     if(!b) return;
     e.preventDefault(); e.stopPropagation();
     if(b.dataset.szopt === 'snd'){
-        try{ LPAudio.toggleMuted(); }catch(_){}
+        /* 끔 → 40% → 70% → 100% → 끔 */
+        if(muted()){ try{ LPAudio.toggleMuted(); }catch(_){} setVol(0.4); }
+        else if(vol < 0.55) setVol(0.7);
+        else if(vol < 0.85) setVol(1);
+        else { try{ LPAudio.toggleMuted(); }catch(_){} }
         try{ if(muted() === BGM.isOn()) BGM.toggle(); }catch(_){}
         if(!muted()){ unlockAudio(); tone(880, 0.08, 'triangle', 0.06); }
+    } else if(b.dataset.szopt === 'beam'){
+        try{ SZ_FLAGS.beamHold = !SZ_FLAGS.beamHold; LSS('szx_beam', SZ_FLAGS.beamHold ? 'hold' : 'tap'); }catch(_){}
     } else {
         vibOn = !vibOn; LSS('lp_spacez_vib', vibOn ? '1' : '0');
         if(vibOn) try{ navigator.vibrate && navigator.vibrate(25); }catch(_){}
@@ -16200,6 +16513,14 @@ window.SZ3 = {
     _P: P
 };
 window.SZ3.say = say;          /* P3 — 조종사 한 줄 */
+/* P5 — 본체 효과음 한 벌 창구 · 볼륨 · 큰 도장 · 보이스 계측 */
+const SFX_OK = {start:1, over:1, alert:1, warn:1, comet:1, split:1, wave:1};
+window.SZ3.sfx = (k) => { if(SFX_OK[k] && S[k]) S[k](); };
+window.SZ3.vol = () => (muted() ? 0 : vol);
+window.SZ3.stamp = (text, color, sub) => showStamp(String(text || ''), color || '#FFE66D', sub);
+window.SZ3.mood = (f, ms, prio, emote, led) => mood(f, ms, prio, emote, led);
+window.SZ3.haptic = (k) => { if(HAP[k]) vib(HAP[k]); };
+window.SZ3._voice = () => ({made: VOICE.n, active: VOICE.active(), ctx: AC ? AC.state : 'none', max: VOICE_MAX});
 window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · salute */
 })();
 </script>
@@ -16343,6 +16664,86 @@ window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · 
 /* 플레이 중에는 좌상단 ? 버튼이 플레이필드 가장자리를 가리지 않게 숨긴다(정지·결과에서 다시 보인다) */
 body.lp-playing .lp-help-fab{display:none}
 </style>
+<style id="sz-p5-css">
+/* ===== P5 (2026-09-28) — BEAM 한 손 조작 · 그레이즈 보상 · 관전 · 대결 로비 · 레이아웃 보정 ===== */
+/* BEAM 통합: SAT 버튼은 DOM 에 두고 숨긴다(비상 스위치 szx_beammerge=0 이면 다시 보인다). BEAM 이 줄 폭을 다 쓴다 */
+html.sz-beam-merge #satBtn{display:none!important}
+html.sz-beam-merge .left-controls .grav-btn{flex:1 1 100%}
+/* 미션 중 BEAM — 청록 테두리(위성 방출 가능), 궤도와 겹치면 진하게 + 설치 진행률 막대 */
+.left-controls .grav-btn.sz-sat{box-shadow:inset 0 0 0 2px rgba(93,193,255,.75),0 0 14px -2px rgba(93,193,255,.7),0 3px 5px rgba(0,0,0,.55)}
+.left-controls .grav-btn.sz-sat .grav-label::after{content:' · 📡';font-size:.9em}
+.left-controls .grav-btn.sz-sat-on{box-shadow:inset 0 0 0 3px #7CE7FF,0 0 22px 0 rgba(124,231,255,.85),0 3px 5px rgba(0,0,0,.55);animation:szSatOn .6s ease-in-out infinite alternate}
+.left-controls .grav-btn.sz-sat-on::after{content:'';position:absolute;left:6px;right:6px;bottom:4px;height:4px;border-radius:2px;
+  background:linear-gradient(90deg,#7CE7FF,#FFE66D);transform:scaleX(var(--sat-progress,0));transform-origin:left center;pointer-events:none;z-index:2}
+@keyframes szSatOn{from{filter:brightness(1)}to{filter:brightness(1.25)}}
+/* 게이지 40%~100%: 쓸 수 있음(바가 차오르는 중) */
+.left-controls .grav-btn.sz-partial{position:relative;overflow:hidden}
+.left-controls .grav-btn.sz-partial::before{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,230,109,.28),rgba(255,154,60,.32));
+  transform:scaleX(var(--grav-progress,1));transform-origin:left center;transition:transform .08s linear;pointer-events:none;z-index:0}
+.left-controls .grav-btn.sz-partial > *{position:relative;z-index:1}
+/* 게이지 부족 탭 — 빨간 테두리 한 번 (흔들림 없음) */
+.left-controls .grav-btn.sz-nope{animation:szNope .32s ease-out 1}
+@keyframes szNope{0%,100%{outline:0 solid rgba(255,80,110,0)}30%{outline:2px solid rgba(255,80,110,.9);outline-offset:1px}}
+/* 10콤보 — 황금 링 펄스 */
+.left-controls .grav-btn.sz-gold{animation:szGold .7s ease-out 1}
+@keyframes szGold{0%{box-shadow:0 0 0 0 rgba(255,214,90,.95),0 0 10px 2px rgba(255,214,90,.7)}100%{box-shadow:0 0 0 14px rgba(255,214,90,0),0 0 30px 6px rgba(255,214,90,0)}}
+/* 설정 칩 — BEAM 탭/꾹 · 오늘의 코스 (글자 칩) */
+.sz-opt.sz-opt-beam,.sz-opt.sz-opt-daily{font:800 .74em 'Orbitron','Noto Sans KR',sans-serif;letter-spacing:.02em;opacity:.9;white-space:nowrap}
+.sz-opt.sz-opt-daily{color:#FFE66D;border-color:rgba(255,214,90,.5);background:rgba(255,214,90,.1)}
+.sz-opts{flex-wrap:wrap}
+/* 빠른 재시작 — GO! 와 목표 한 줄 */
+.intro-overlay.sz-fast .intro-story{animation:none;opacity:1}
+/* 관전 미니 카드 — 캔버스 아래쪽, 조작 없음 */
+.szx-spec{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);z-index:7;display:none;align-items:center;gap:8px;
+  padding:6px 6px 6px 12px;border-radius:14px;background:rgba(2,6,20,.78);border:1px solid rgba(0,217,255,.35);
+  font:800 12px 'Noto Sans KR',sans-serif;color:#fff;white-space:nowrap;box-shadow:0 6px 18px -6px rgba(0,0,0,.6)}
+.szx-spec.on{display:flex}
+.szx-spec .t{color:#9FF3FF}
+.szx-spec-b{min-height:44px;padding:0 14px;border-radius:11px;border:0;background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001828;
+  font:900 12px 'Orbitron','Noto Sans KR',sans-serif;cursor:pointer;touch-action:manipulation}
+/* 관전 중 — 조종판은 자리만 지키고 흐리게(입력 없음) */
+body.sz-spectating .control-row{opacity:.3;pointer-events:none;filter:grayscale(.6)}
+/* 대기실 — 로딩 중 N명 · 벌칙 */
+.szx-ld{color:#FFB86B}.szx-ld.ok{color:#7CFFB2}
+.szx-pen-in{font-size:.88em;padding:10px 12px;border-color:rgba(255,94,58,.45);background:rgba(255,94,58,.07)}
+.szx-penline{font-size:.86em;color:#FFB08A;max-width:300px;margin:0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.szx-penline b{color:#fff}
+.szx-penbig{display:flex;flex-direction:column;align-items:center;gap:2px;width:100%;max-width:300px;margin:4px auto 0;padding:9px 12px;border-radius:12px;
+  background:linear-gradient(135deg,rgba(255,60,90,.22),rgba(255,94,58,.12));border:1px solid rgba(255,80,110,.6)}
+.szx-penbig .who{font:900 1.05em 'Noto Sans KR',sans-serif;color:#FF9BB0}
+.szx-penbig .what{font:900 1.15em 'Noto Sans KR',sans-serif;color:#fff;word-break:break-all}
+.szx-b.szx-pulse:not(:disabled){animation:szxPulse 1.1s ease-in-out infinite}
+@keyframes szxPulse{0%,100%{box-shadow:0 10px 26px -8px rgba(255,60,90,.65)}50%{box-shadow:0 0 0 4px rgba(255,214,90,.55),0 12px 30px -6px rgba(255,60,90,.9)}}
+.szx-auto{align-self:center;min-height:44px;padding:0 14px;border-radius:999px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);
+  color:rgba(255,255,255,.6);font:800 .8em 'Noto Sans KR',sans-serif;cursor:pointer;touch-action:manipulation}
+.szx-auto.on{color:#FFE66D;border-color:rgba(255,214,90,.6);background:rgba(255,214,90,.1)}
+.szx-daily{font-size:.95em}
+/* ---- 레이아웃 보정 (게이트 G3) ---- */
+/* 다시하기·출발 버튼 44px 이상 */
+#ovBtn{min-height:44px}
+/* 데스크탑 일시정지 버튼 44px */
+#pauseBtn{min-height:44px}
+/* 좁은 캔버스(가로 폰 740×360 등) — 미션 배너가 캔버스 밖 조종판까지 넘치던 문제 */
+.mission-banner{min-width:min(240px,calc(100% - 12px));max-width:min(86%,440px,calc(100% - 12px))}
+@container (max-width:260px){
+    .mission-banner{padding:5px 8px;gap:6px}
+    .mission-banner .mb-icon{font-size:1.2em}
+    .mission-banner .mb-title{font-size:.7em}
+    .mission-banner .mb-subtitle{font-size:.58em}
+}
+/* 좁은 캔버스(가로 폰) — 칩을 작게 */
+@container (max-width:220px){
+    .sz-opts{gap:5px}
+    .sz-opt.sz-opt-beam,.sz-opt.sz-opt-daily{font-size:.64em;padding:0 8px}
+}
+/* 세로가 짧은 캔버스 — 시작 카드가 넘쳐 조향 토글이 화면 밖으로 잘렸다 */
+@container (max-height:300px){
+    .overlay .szx-duo{display:none}
+    .hand-toggle{margin:4px 0 0}
+    .sz-opts{margin:4px 0 0}
+    .intro-story{font-size:.74em;margin-top:10px}
+}
+</style>
 <script>
 /* =====================================================================
    SZX (2026-09-24) — 발사 사운드 · 도전장 · 동시 대결
@@ -16438,7 +16839,8 @@ function play(k,vol){
     const c=actx();if(!c||!SND[k]||muted())return null;
     if(c.state==='suspended')c.resume().catch(()=>{});
     const s=c.createBufferSource(),g=c.createGain();
-    s.buffer=SND[k];g.gain.value=vol;s.connect(g).connect(c.destination);s.start();
+    let vm=1;try{if(window.SZ3&&SZ3.vol)vm=SZ3.vol()/0.7}catch(_){}   /* P5 — 볼륨 설정(70% 기준) */
+    s.buffer=SND[k];g.gain.value=vol*Math.min(1.43,vm);s.connect(g).connect(c.destination);s.start();
     return {s,g};
 }
 function startRoar(){stopRoar(0);roar=play('roar',.95)}
@@ -16451,6 +16853,7 @@ function count(n){
     if(n===3)play('c3',.95);
     else if(n===2)play('c2',.95);
     else if(n===1){play('c1',.95);startRoar();}
+    else if(n===-1){startRoar();}   /* P5 — 빠른 재시작: 음성 없이 추진음만 */
     else if(n===0){
         play('go',1);
         if(roar){try{const c=actx(),x=c.currentTime;roar.g.gain.setTargetAtTime(.5,x,.04);roar.g.gain.setTargetAtTime(.95,x+.75,.25)}catch(_){}}
@@ -16462,6 +16865,7 @@ document.addEventListener('keydown',unlock,{capture:true});
 
 /* ══ 2. 시드 · 도전장 · 개인 기록 ══ */
 let curSeed=0,pendingSeed=0,challenge=null,runBest=0,recShown=false;
+let dailyPending=null,dailyRun=null;   /* P5 — 오늘의 코스 {date, seed} */
 const b36=n=>(n>>>0).toString(36);
 (function parseChallenge(){
     try{
@@ -16475,6 +16879,8 @@ const b36=n=>(n>>>0).toString(36);
     }catch(_){}
 })();
 function applySeed(){
+    /* P5 — 오늘의 코스: 버튼으로 무장한 날짜 시드가 가장 먼저 */
+    dailyRun=null;if(dailyPending){pendingSeed=dailyPending.seed;dailyRun=dailyPending;dailyPending=null}
     const s=pendingSeed||(challenge&&challenge.seed)||((Math.random()*0x7fffffff)|0)+1;
     pendingSeed=0;curSeed=s;
     if(typeof _setSeed==='function')_setSeed(s);
@@ -16514,6 +16920,7 @@ function decorateResult(ms){
     const ov=$('overlay'),big=ov&&ov.querySelector('.score-big');if(!big)return;
     const box=document.createElement('div');box.style.cssText='display:flex;flex-direction:column;align-items:center;width:100%';
     let html='';
+    if(dailyRun)html+=szDailyResult(dailyRun,ms);   /* P5 — 오늘의 코스 기록 (다시하기도 같은 코스) */
     if(challenge&&curSeed===challenge.seed&&(challenge.cv||1)<SZ_CV){
         html+='<div class="szx-vs">'+esc(szP2T('oldCourse'))+'</div>';
     }else if(challenge&&curSeed===challenge.seed){
@@ -16579,6 +16986,7 @@ function onSt(m){
     if(m.s==='left'){delete R.members[m.p];render();return}
     if(prev&&(prev.u||0)>(m.u||0))return;   /* 순서가 뒤바뀐 옛 소식 (보낸 기기 시계 기준) */
     R.members[m.p]=m;R.seenAt[m.p]=now;noteResult(m);
+    if(prev&&prev.s==='play'&&m.s==='done'&&m.r===R.round)szCrashRelay(m);   /* P5 — 추락 중계 */
     if(!prev)setTimeout(()=>track(true),80+Math.random()*420);
     hostCatchUp();render();
 }
@@ -16607,7 +17015,7 @@ function connect(code,creator){
     const ch=sb.channel('szx-race-'+code,{config:{broadcast:{self:false,ack:false}}});
     R.ch=ch;R.joined=false;R.subT=Date.now();
     ch.on('broadcast',{event:'st'},({payload})=>onSt(payload));
-    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0,payload.b)});
+    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0,payload.b,payload.pen)});
     ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload));
     ch.on('broadcast',{event:'pos'},({payload})=>{if(payload&&payload.p)ghostPt(payload.p,payload.x,payload.y,false)});
     ch.on('broadcast',{event:'tk'},({payload})=>onTakeMsg(payload));
@@ -16761,7 +17169,8 @@ function ghostColor(p){
     return GCOL[Math.max(0, ids.indexOf(p)) % GCOL.length];
 }
 function drawGhosts(c){
-    if(!R.racing && !R.spect) return;
+    if(!R.racing && !R.spect && !szSpectating) return;
+    const big = szSpectating ? 1.5 : 1;   /* P5 — 관전 중엔 유령을 크게 */
     const now = Date.now(), T = now - 120;
     for(const p of Object.keys(GH)){
         const g = GH[p], m = R.members[p];
@@ -16774,13 +17183,16 @@ function drawGhosts(c){
         c.save();
         if(m.s === 'done'){
             if(!g.deadAt) g.deadAt = now;
-            const e = (now - g.deadAt) / 700; if(e > 1){ c.restore(); continue; }
-            c.globalAlpha = 1 - e; c.strokeStyle = col; c.lineWidth = 2;
-            c.beginPath(); c.arc(x, y, 8 + e * 26, 0, 6.283); c.stroke();
+            /* P5 — 추락 링 2배(크기·시간) + 안쪽 번쩍 */
+            const e = (now - g.deadAt) / 1100; if(e > 1){ c.restore(); continue; }
+            c.globalAlpha = 1 - e; c.strokeStyle = col; c.lineWidth = 3;
+            c.beginPath(); c.arc(x, y, 16 + e * 52, 0, 6.283); c.stroke();
+            c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, 8 + e * 30, 0, 6.283); c.stroke();
             c.restore(); continue;
         }
         if(now - b.t > 4000){ c.restore(); continue; }
         c.translate(x, y);
+        if(big !== 1) c.scale(big, big);
         c.globalAlpha = 0.6;
         c.fillStyle = 'rgba(255,170,80,0.75)';
         c.beginPath(); c.moveTo(-3, 6); c.lineTo(0, 11 + Math.random() * 4); c.lineTo(3, 6); c.closePath(); c.fill();
@@ -16847,7 +17259,7 @@ function hostCatchUp(){
     if(!hm||hm.hr<=R.round)return;
     /* 기기 시계는 서로 다르니 방장 자신의 비행 시간으로 판단한다 — 막 출발했으면 합류 */
     const fresh=hm.s==='play'&&hm.r===hm.hr&&(hm.t||0)<2500;
-    if(fresh&&!running)onGo(hm.hr,hm.hs,hm.b);
+    if(fresh&&(!running||szSpectating))onGo(hm.hr,hm.hs,hm.b,hm.pen);
     else if(!R.racing){R.round=hm.hr;R.seed=hm.hs;R.spect=true;metaOut({r:R.round,s:'spec'});track(true);if(R.view==='lobby')setView('result')}
 }
 function noteResult(m){
@@ -16863,13 +17275,18 @@ function startRound(){
     const r=Math.max(R.round,...Object.values(R.members).map(m=>m.r||0))+1;
     const s=((Math.random()*0x7fffffff)|0)+1;
     const b=szBuildStamp();
+    const pen=szPenClean(R.pen);   /* P5 — 로비 벌칙 한 줄 */
+    R.autoAt=0;
     metaOut({hr:r,hs:s,ha:Date.now()});
-    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b}})}catch(_){}
-    onGo(r,s,b);
+    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b,pen}})}catch(_){}
+    onGo(r,s,b,pen);
 }
-function onGo(r,s,b){
+function onGo(r,s,b,pen){
     if(r<=R.round)return;
     if(!szBuildOk(b)){szBuildNote([]);return}   /* 방장과 빌드가 다르면 참가하지 않는다 → 새로고침 안내 */
+    if(szSpectating)szExitSpectate();   /* P5 — 관전 중이면 바로 다음 판에 합류 */
+    szSpecCard(false);R.autoAt=0;
+    (R.penR=R.penR||{})[r]=szPenClean(pen);
     if(running||(typeof _introRunning!=='undefined'&&_introRunning)){R.round=r;R.seed=s;R.spect=true;metaOut({r,s:'spec'});track(true);return}
     R.round=r;R.seed=s;R.spect=false;R.racing=true;R.taken={};
     for(const k of Object.keys(GH))delete GH[k];
@@ -16886,8 +17303,9 @@ setInterval(()=>{
         metaOut({t:Math.round(elapsedMs),z:(typeof currentZoneIdx==='number'?currentZoneIdx+1:0)});track(false);
         const rr=R.results[R.round];if(rr&&rr[pid]){rr[pid].t=Math.round(elapsedMs)}
     }
-    if(running&&!recShown&&runBest>5000&&elapsedMs>runBest){recShown=true;toast(t('newRec'))}
+    if(running&&!szSpectating&&!recShown&&runBest>5000&&elapsedMs>runBest){recShown=true;toast(t('newRec'))}
     renderLive();
+    szSpecTick();   /* P5 — 관전 카드 갱신·전원 완료 시 결과로 · 자동 다음 판 */
 },1000);
 function onGameOver(ms){
     stopRoar(.25);
@@ -16899,7 +17317,8 @@ function onGameOver(ms){
     metaOut({s:'done',t:Math.round(ms),z,c});track(true);
     if(ms>(+LS.get('szx_best_ms','0')||0))LS.set('szx_best_ms',String(Math.round(ms)));
     live.classList.remove('on');
-    setTimeout(()=>{openPanel();setView('result')},1100);
+    /* P5 — 아직 나는 사람이 있으면 결과 패널 대신 가벼운 관전(SZ_FLAGS.spectate) */
+    setTimeout(()=>{if(!szSpecStart()){openPanel();setView('result')}},1100);
     return true;
 }
 /* 이번 판 순위표 — 본 적 있는 기록을 전부 합친다. 비행 중인 사람은 받은 시각 기준으로 시간을 흘린다 */
@@ -16934,7 +17353,8 @@ function finalizeIfDone(r){
 }
 function renderLive(){
     if(!live)return;
-    if(!(R.racing&&running)){live.classList.remove('on');return}
+    if(!((R.racing||szSpectating)&&running)){live.classList.remove('on');return}
+    live.classList.add('on');
     const rows=standings(R.round);
     const alive=rows.filter(x=>x.s==='play').length;
     let h='<div class="h">'+esc(t('live'))+' · '+alive+'/'+rows.length+' '+esc(t('alive'))+'</div>';
@@ -16969,9 +17389,10 @@ function render(){
         B='<div class="szx-sub">'+esc(t('players'))+' '+n+'/'+MAXP+(R.joined?(others?' · '+esc(t('link'))+' '+pr+'/'+others:''):' · '+esc(t('conn')))+'</div><div class="szx-list">';
         ms.forEach(m=>{B+='<div class="szx-m'+(m.p===pid?' me':'')+'"><span class="szx-dot" style="background:'+ghostColor(m.p)+';box-shadow:0 0 8px '+ghostColor(m.p)+'"></span><span class="nm">'+esc(m.n)+'</span>'
             +(m.h?'<span class="szx-tag host">'+esc(t('host'))+'</span>':'')+(m.p===pid?'<span class="szx-tag">'+esc(t('me'))+'</span>':'')+'</div>'});
-        B+='</div>';
+        B+='</div>'+szLobbyExtra(ms);   /* P5 — 로딩 중 N명 · 벌칙 한 줄 */
+        const allRd=n>=2&&ms.every(m=>m.rd===1);
         C='<div class="szx-col">';
-        if(can)C+='<button class="szx-b hot" data-a="go" type="button"'+(n<2||!R.joined?' disabled':'')+'>'+esc(t('go'))+'</button>'+(n<2?'<div class="szx-sub">'+esc(t('need2'))+'</div>':'');
+        if(can)C+='<button class="szx-b hot'+(allRd&&R.joined?' szx-pulse':'')+'" data-a="go" type="button"'+(n<2||!R.joined?' disabled':'')+'>'+esc(t('go'))+'</button>'+(n<2?'<div class="szx-sub">'+esc(t('need2'))+'</div>':'');
         else C+='<div class="szx-wait">'+esc(t('waitHost'))+'</div>';
         C+='<button class="szx-b ghost" data-a="leave" type="button">'+esc(t('leave'))+'</button></div>';
     }else if(v==='result'){
@@ -16987,13 +17408,14 @@ function render(){
               +(x.s==='play'?'<span class="szx-tag">'+esc(t('flying'))+'</span>':x.s==='lost'?'<span class="szx-tag">'+esc(t('lost'))+'</span>':'')
               +'<span class="tm">'+esc(fmt(x.t))+'</span></div>';
         });
-        B+='</div>';
+        B+='</div>'+szResultPen(r,rows,done);   /* P5 — 꼴찌 벌칙 크게 */
         const tl=Object.values(R.tally).filter(x=>x.w).sort((a,b)=>b.w-a.w);
         if(tl.length)B+='<div class="szx-tally">'+esc(t('tally'))+' · '+tl.map(x=>esc(x.n)+' <b>'+x.w+'</b>').join(' · ')+'</div>';
         C='<div class="szx-col">';
         if(!done)C+='<div class="szx-wait">'+esc(t('waiting'))+'</div>';
-        if(actingHost())C+='<button class="szx-b hot" data-a="go" type="button"'+(done&&R.joined&&Object.keys(R.members).length>=2?'':' disabled')+'>'+esc(t('next'))+'</button>';
+        if(actingHost())C+='<button class="szx-b hot" data-a="go" type="button"'+(done&&R.joined&&Object.keys(R.members).length>=2?'':' disabled')+'>'+esc(t('next'))+szAutoLeft(done)+'</button>'+szAutoChip();
         else if(done)C+='<div class="szx-wait">'+esc(t('waitHost'))+'</div>';
+        if(done&&rows.length>1)C+='<button class="szx-b ghost" data-a="rshare" type="button">'+esc(szP5T('share'))+'</button>';
         C+='<button class="szx-b ghost" data-a="leave" type="button">'+esc(t('leave'))+'</button></div>';
     }
     /* 입력 중인 칸은 다시 그리지 않는다 — 폰 키보드가 닫히고 글자가 날아간다 */
@@ -17038,10 +17460,12 @@ function onPanelClick(e){
         R.round=0;R.results={};R.finalized={};R.tally={};R.joinedAt=Date.now();
         connect(code,a==='create');setView('lobby');return;
     }
-    if(a==='share'){shareLink(location.origin+'/games/dodge/?race='+R.code,t('shareTxt').replace('{c}',R.code)+((typeof szShareZoneSuffix==='function'&&szShareZoneSuffix())||''));return}   /* P3: 내 최고 도달 존 */
+    if(a==='share'){shareLink(location.origin+'/games/dodge/?race='+R.code,t('shareTxt').replace('{c}',R.code)+((typeof szShareZoneSuffix==='function'&&szShareZoneSuffix())||'')+szPenShareSuffix());return}   /* P3: 내 최고 도달 존 · P5: 벌칙 */
     if(a==='copy'){const u=location.origin+'/games/dodge/?race='+R.code;
         (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast(t('copied'))).catch(()=>{try{window.prompt('',u)}catch(_){}});return}
     if(a==='go'){startRound();return}
+    if(a==='auto'){szAutoToggle();return}          /* P5 */
+    if(a==='rshare'){szResultShare();return}      /* P5 */
     if(a==='leave'){disconnect(false);live.classList.remove('on');setView('entry');closePanel();if(typeof _showPvpOverlay==='function')_showPvpOverlay(null);return}
 }
 function openRace(){ensureDom();R.preCode=R.preCode||'';setView(R.code?(R.view==='result'?'result':'lobby'):'entry');openPanel()}
@@ -17052,6 +17476,7 @@ function addStartButton(){
     const b=document.createElement('button');b.className='btn btn-race';b.id='szxRaceBtn';b.type='button';b.textContent=t('race');
     b.addEventListener('click',e=>{e.stopPropagation();openRace()});
     row.insertBefore(b,row.children[1]||null);
+    setTimeout(szDailyMount,0);   /* P5 — 오늘의 코스 칩 (race 펜스) */
     /* 기존 1:1 실시간 PvP(로그인) 두 버튼은 작은 한 줄로 — 새 동시 대결과 헷갈리지 않게 */
     const c=$('ovCreateBtn'),j=$('ovJoinBtn');
     if(c&&j&&!$('szxDuo')){
@@ -17062,6 +17487,7 @@ function addStartButton(){
 }
 function boot(){
     ensureDom();addStartButton();decorateStart();showLocalBest();
+    try{panel.addEventListener('input',szPenInput)}catch(_){}   /* P5 — 벌칙 입력칸 (race 펜스) */
     let q=null;try{q=new URLSearchParams(location.search).get('race')}catch(_){}
     let sess=null;try{sess=JSON.parse(LS.get('szx_race','null'))}catch(_){}
     if(sess&&sess.code&&Date.now()-sess.at<3*3600e3&&(!q||q===sess.code)&&sess.nick){
@@ -17075,7 +17501,7 @@ function boot(){
     }
 }
 /* 결과 카드를 새로 그리면 시작 버튼 줄이 사라지므로 시작 화면이 다시 그려질 때마다 버튼을 붙인다 */
-const mo=new MutationObserver(()=>{addStartButton();decorateStart()});
+const mo=new MutationObserver(()=>{addStartButton();decorateStart();szDailyMount()});
 function watch(){const ov=$('overlay');if(ov)mo.observe(ov,{childList:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{boot();watch()});else{boot();watch()}
 document.addEventListener('lp:langchanged',()=>{const b=$('szxRaceBtn');if(b)b.textContent=t('race');const d=document.querySelector('#szxDuo .cap');if(d)d.textContent=t('duo');render()});
@@ -17131,11 +17557,159 @@ setInterval(()=>{
     if(bad.length)szBuildNote(bad);else szBuildNoteOff();
 },2500);
 window.__szxBuild=szBuildStamp;   /* 점검용 — 게이트·수동 테스트가 스탬프를 바꿔 불일치를 재현한다(.v) */
+/* ── P5 (2026-09-28) 대결 경험 · 오늘의 코스 ──
+   추락 중계 · 가벼운 관전 · 방장 '자동 다음 판' · 로비 벌칙 한 줄 · '로딩 중 N명' · 오늘의 코스(UTC 날짜 시드).
+   전부 함수 선언 — boot 가 이 구역보다 먼저 돈다(표도 함수 안에 둔다). 시드·코스는 건드리지 않는다 */
+function szP5Lang(){let l='en';try{l=(window.LpI18n&&LpI18n.getLang&&LpI18n.getLang())||'en'}catch(_){}return l}
+function szP5T(k){
+    const T={
+        ko:{crash:'{n} 추락! 남은 {k}명',spec:'👀 관전 중',alive:'생존 {k}',res:'결과 ▸',auto:'자동 다음 판',autoIn:'{s}초',penPh:'꼴찌 벌칙 (선택 · 20자)',pen:'😈 꼴찌 벌칙',loading:'로딩 중 {k}명',ready:'전원 준비 완료!',daily:'📅 오늘의 코스',dailyBest:'📅 오늘 최고 {t}',dailyNew:'📅 오늘의 코스 신기록!',penShare:' · 꼴찌 벌칙: {p}',share:'📤 결과 공유',resTxt:'🚀 스페이스-Z {r}판 — 🥇 {w} · 꼴찌 {l}'},
+        en:{crash:'{n} down! {k} left',spec:'👀 Spectating',alive:'{k} alive',res:'Results ▸',auto:'Auto next',autoIn:'{s}s',penPh:'Last-place penalty (optional)',pen:'😈 Penalty',loading:'{k} loading',ready:'Everyone ready!',daily:'📅 Daily course',dailyBest:'📅 Today best {t}',dailyNew:'📅 Daily course record!',penShare:' · Penalty: {p}',share:'📤 Share results',resTxt:'🚀 Space-Z round {r} — 🥇 {w} · last {l}'},
+        ja:{crash:'{n} 墜落！残り{k}人',spec:'👀 観戦中',alive:'生存 {k}',res:'結果 ▸',auto:'自動で次へ',autoIn:'{s}秒',penPh:'最下位の罰ゲーム（任意）',pen:'😈 罰ゲーム',loading:'読み込み中 {k}人',ready:'全員準備OK！',daily:'📅 今日のコース',dailyBest:'📅 今日の最高 {t}',dailyNew:'📅 今日のコース新記録！',penShare:' · 罰ゲーム: {p}',share:'📤 結果をシェア',resTxt:'🚀 スペースZ 第{r}戦 — 🥇 {w} · 最下位 {l}'},
+        zh:{crash:'{n} 坠毁！剩 {k} 人',spec:'👀 观战中',alive:'存活 {k}',res:'结果 ▸',auto:'自动下一局',autoIn:'{s}秒',penPh:'垫底惩罚（可选）',pen:'😈 惩罚',loading:'加载中 {k} 人',ready:'全员就绪！',daily:'📅 今日航线',dailyBest:'📅 今日最佳 {t}',dailyNew:'📅 今日航线新纪录！',penShare:' · 垫底惩罚：{p}',share:'📤 分享结果',resTxt:'🚀 Space-Z 第{r}局 — 🥇 {w} · 垫底 {l}'},
+        es:{crash:'¡{n} cayó! Quedan {k}',spec:'👀 Mirando',alive:'{k} vivos',res:'Resultados ▸',auto:'Siguiente auto',autoIn:'{s}s',penPh:'Castigo del último (opcional)',pen:'😈 Castigo',loading:'{k} cargando',ready:'¡Todos listos!',daily:'📅 Recorrido del día',dailyBest:'📅 Mejor de hoy {t}',dailyNew:'📅 ¡Récord del día!',penShare:' · Castigo: {p}',share:'📤 Compartir',resTxt:'🚀 Space-Z ronda {r} — 🥇 {w} · último {l}'},
+        pt:{crash:'{n} caiu! Restam {k}',spec:'👀 Assistindo',alive:'{k} vivos',res:'Resultado ▸',auto:'Próxima auto',autoIn:'{s}s',penPh:'Castigo do último (opcional)',pen:'😈 Castigo',loading:'{k} carregando',ready:'Todos prontos!',daily:'📅 Percurso do dia',dailyBest:'📅 Melhor de hoje {t}',dailyNew:'📅 Recorde do dia!',penShare:' · Castigo: {p}',share:'📤 Compartilhar',resTxt:'🚀 Space-Z rodada {r} — 🥇 {w} · último {l}'}
+    };
+    return (T[szP5Lang()]||T.en)[k]||T.en[k]||k;
+}
+/* 벌칙 한 줄 — 제어문자 제거·20자. 화면·공유에는 늘 esc() 를 거친다 */
+function szPenClean(v){return String(v==null?'':v).replace(/[\u0000-\u001f\u007f\u2028\u2029]/g,' ').replace(/\s+/g,' ').trim().slice(0,20)}
+function szPenOf(r){return (R.penR&&R.penR[r]!=null)?R.penR[r]:''}
+/* 대기실의 벌칙 = 방장이 입력(내가 방장이면 R.pen, 아니면 방장 메타의 pen) */
+function szLobbyPen(){
+    if(actingHost())return szPenClean(R.pen);
+    const h=Object.values(R.members).find(m=>m&&m.h)||null;
+    return szPenClean(h&&h.pen);
+}
+let _szPenT=0;
+function szPenInput(e){
+    const el=e.target;if(!el||el.id!=='szxPen')return;
+    R.pen=szPenClean(el.value);
+    clearTimeout(_szPenT);_szPenT=setTimeout(()=>{metaOut({pen:R.pen});track(true)},400);
+}
+function szLobbyExtra(ms){
+    let h='';
+    const ld=ms.filter(m=>m.rd!==1).length;
+    if(ms.length>=2)h+='<div class="szx-sub szx-ld'+(ld?'':' ok')+'">'+esc(ld?szP5T('loading').replace('{k}',ld):szP5T('ready'))+'</div>';
+    if(actingHost()){
+        h+='<div class="szx-col"><input class="szx-in szx-pen-in" id="szxPen" maxlength="20" autocomplete="off" placeholder="'+esc(szP5T('penPh'))+'" value="'+esc(R.pen||'')+'"></div>';
+    }else{
+        const p=szLobbyPen();
+        if(p)h+='<div class="szx-penline">'+esc(szP5T('pen'))+' · <b>'+esc(p)+'</b></div>';
+    }
+    return h;
+}
+function szResultPen(r,rows,done){
+    const p=szPenOf(r);
+    if(!p||!done||rows.length<2)return '';
+    const l=rows[rows.length-1];
+    return '<div class="szx-penbig"><span class="who">'+esc(l.n)+'</span><span class="what">'+esc(szP5T('pen'))+' · '+esc(p)+'</span></div>';
+}
+function szPenShareSuffix(){const p=szLobbyPen();return p?szP5T('penShare').replace('{p}',p):''}
+function szResultShare(){
+    const r=R.round,rows=standings(r);if(rows.length<2)return;
+    const p=szPenOf(r);
+    const txt=szP5T('resTxt').replace('{r}',r).replace('{w}',rows[0].n+' '+fmt(rows[0].t)).replace('{l}',rows[rows.length-1].n)+(p?szP5T('penShare').replace('{p}',p):'');
+    shareLink(location.origin+'/games/dodge/?race='+R.code,txt);
+}
+/* 방장 '자동 다음 판' — 전원 결과가 모이면 10초 뒤 출발 */
+function szAutoOn(){if(R.autoOn==null)R.autoOn=LS.get('szx_autonext','0')==='1';return R.autoOn}
+function szAutoToggle(){R.autoOn=!szAutoOn();LS.set('szx_autonext',R.autoOn?'1':'0');R.autoAt=0;render()}
+function szAutoChip(){return '<button class="szx-auto'+(szAutoOn()?' on':'')+'" data-a="auto" type="button" aria-pressed="'+szAutoOn()+'">⏱ '+esc(szP5T('auto'))+'</button>'}
+function szAutoLeft(done){if(!done||!R.autoAt)return '';return ' · '+esc(szP5T('autoIn').replace('{s}',Math.max(0,Math.ceil((R.autoAt-Date.now())/1000))))}
+/* 추락 중계 — 도장 '{닉} 추락! 남은 N명' (나는 중이거나 관전 중일 때) */
+function szCrashRelay(m){
+    if(!(running&&(R.racing||szSpectating)))return;
+    const k=standings(R.round).filter(x=>x.s==='play').length;
+    const txt=szP5T('crash').replace('{n}',String(m.n||'?').slice(0,8)).replace('{k}',k);
+    try{if(window.SZ3&&SZ3.stamp)SZ3.stamp(txt,ghostColor(m.p));else toast(txt)}catch(_){}
+}
+/* 가벼운 관전 */
+function szOthersFlying(){return standings(R.round).some(x=>x.s==='play'&&x.p!==pid)}
+function szSpecStart(){
+    if(!(window.SZ_FLAGS&&SZ_FLAGS.spectate)||!R.code||!szOthersFlying())return false;
+    if(typeof szEnterSpectate!=='function'||!szEnterSpectate())return false;
+    szSpecCard(true);renderLive();
+    return true;
+}
+function szSpecCard(on){
+    const w=$('canvasWrap');if(!w)return;
+    let el=$('szxSpec');
+    if(!on){if(el)el.classList.remove('on');return}
+    if(!el){
+        el=document.createElement('div');el.id='szxSpec';el.className='szx-spec';
+        el.innerHTML='<span class="t"></span><button type="button" class="szx-spec-b"></button>';
+        /* 캔버스 영역의 touchstart preventDefault 가 click 을 막는다 → pointerup 으로 받는다 */
+        el.querySelector('button').addEventListener('pointerup',e=>{e.stopPropagation();e.preventDefault();szSpecToResult()});
+        w.appendChild(el);
+    }
+    el.querySelector('button').textContent=szP5T('res');
+    szSpecText();
+    el.classList.add('on');
+}
+function szSpecText(){
+    const el=$('szxSpec');if(!el)return;
+    const k=standings(R.round).filter(x=>x.s==='play').length;
+    el.querySelector('.t').textContent=szP5T('spec')+' · '+szP5T('alive').replace('{k}',k);
+}
+function szSpecToResult(){
+    if(typeof szExitSpectate==='function')szExitSpectate();
+    szSpecCard(false);if(live)live.classList.remove('on');
+    openPanel();setView('result');
+}
+function szSpecTick(){
+    if(typeof szSpectating!=='undefined'&&szSpectating){
+        if(!szOthersFlying())szSpecToResult();else szSpecText();
+    }
+    /* 자동 다음 판 */
+    if(R.code&&R.view==='result'&&panel&&panel.classList.contains('on')&&szAutoOn()&&actingHost()&&R.joined
+       &&Object.keys(R.members).length>=2&&R.finalized[R.round]){
+        if(!R.autoAt)R.autoAt=Date.now()+10000;
+        else if(Date.now()>=R.autoAt){R.autoAt=0;startRound()}
+    }else if(R.autoAt)R.autoAt=0;
+}
+/* 로딩 끝(카운트 음성·글꼴 준비 또는 6초) → 메타 rd=1. 방장 화면의 '로딩 중 N명' 이 줄어든다 */
+setInterval(()=>{
+    if(!R.code||!R.joined||!R.myMeta||R.myMeta.rd===1)return;
+    const snd=!!(SND.c3&&SND.go),fonts=!document.fonts||document.fonts.status==='loaded';
+    if((snd&&fonts)||Date.now()-R.subT>6000){metaOut({rd:1});track(true);render()}
+},700);
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&typeof szSpectating!=='undefined'&&szSpectating)szSpecToResult()});
+/* 오늘의 코스 — 시드 = _szHash(UTC YYYYMMDD). 어느 기기든 같은 날짜면 같은 코스. 기록 szx_daily={date,best} */
+function szDailyDate(){const d=new Date();return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate()}
+function szDailySeed(date){
+    let h=0;try{h=_szHash(date,'daily',0,0)>>>0}catch(_){h=(Math.imul(date,2654435761)>>>0)}
+    return (h%0x7ffffffe)+1;
+}
+function szDailyGet(){try{const o=JSON.parse(LS.get('szx_daily','null'));if(o&&o.date===szDailyDate())return o}catch(_){}return {date:szDailyDate(),best:0}}
+function szDailyArm(){const date=szDailyDate();dailyPending={date,seed:szDailySeed(date)};return dailyPending}
+function szDailyMount(){
+    const ov=$('overlay');if(!ov||running||!ov.querySelector('#ovTitle'))return;
+    const opts=ov.querySelector('.sz-opts');if(!opts||opts.querySelector('.sz-opt-daily'))return;
+    const b=document.createElement('button');b.type='button';b.className='sz-opt sz-opt-daily';
+    const best=szDailyGet().best;
+    b.textContent=szP5T('daily')+(best?' · '+fmt(best).slice(0,-3):'');
+    b.addEventListener('click',e=>{e.stopPropagation();if(running||(typeof _introRunning!=='undefined'&&_introRunning))return;szDailyArm();try{startGame()}catch(_){}});
+    opts.insertBefore(b,opts.firstChild);
+}
+function szDailyResult(d,ms){
+    const o=szDailyGet();let nw=false;
+    if(ms>(o.best||0)){o.best=Math.round(ms);nw=true;LS.set('szx_daily',JSON.stringify({date:d.date,best:o.best}))}
+    dailyPending={date:d.date,seed:d.seed};   /* 다시하기 = 오늘의 코스 한 번 더 */
+    return '<div class="szx-vs win szx-daily">'+esc(nw?szP5T('dailyNew'):szP5T('dailyBest').replace('{t}',fmt(o.best)))+'</div>';
+}
+function szRunMode(){
+    if(R.racing)return 'race';
+    if(dailyPending)return 'daily';
+    if(challenge&&!pendingSeed)return 'challenge';
+    return '';
+}
 /*</sz:mod:race>*/
 
 window.SZX={
     count,unlock,applySeed,onGameOver,decorateResult,
     hasRoar:()=>!!SND.roar,
+    mode:()=>szRunMode(),   /* P5 — 'race'|'challenge'|'daily'|'' (빠른 재시작 판단) */
     onTake,drawGhosts,
     _gh:()=>GH,
     _mesh:()=>Object.fromEntries(Object.entries(MESH).map(([k,v])=>[k,v.ready])),
