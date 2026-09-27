@@ -5854,14 +5854,10 @@ function drawPillarsOfCreation(zoneT){
      7. 외곽 cyan halo + magnetic field line hint */
 function drawSagittariusA(zoneT){
     const now = performance.now();
-    const cx = CW * 0.5;
-    /* zone 50초 동안 천천히 흘러내려옴 — 항상 visible 하면서 ship 이동감 표현 */
-    const cy = CH * (0.22 + (zoneT||0.4) * 0.40);
-    const eventR = 32;
-    blackHole.cx = cx;
-    blackHole.cy = cy;
-    blackHole.r = eventR;
-    blackHole.zoneT = zoneT||0.4;     /* 충돌 체크에서 사용 */
+    /* P4 — 판정 기하(cx·cy·r·jetReach·jetHalfAngle)는 szUpdateBlackHoleGeom 이 계산한다(update 단계에서도 같은 zoneT 로).
+       zone 50초 동안 천천히 흘러내려옴: cy = CH*(0.22 + zoneT*0.40), eventR = 32 */
+    szUpdateBlackHoleGeom(zoneT);
+    const cx = blackHole.cx, cy = blackHole.cy, eventR = blackHole.r;
     ctx.save();
 
     /* 1. 외곽 spacetime distortion — radial dark gradient + 옅은 magnetic field
@@ -5878,12 +5874,9 @@ function drawSagittariusA(zoneT){
           plasma 코어 (밝은 cyan/white) + 외곽 halo (purple/blue) + helical
           knot 들이 spiral 그리며 위로 이동.
           데미지 영역 : 화면 cone. 그림은 먼저 halo, 나중에 core 순서로. */
-    const JET_REACH = Math.max(CW, CH) * 1.1;     /* 제트 도달 거리 (충돌 cap 과 일치) */
+    const JET_REACH = blackHole.jetReach;         /* 제트 도달 거리 (충돌 cap 과 일치 — szUpdateBlackHoleGeom) */
     const JET_HALF_WIDTH_BASE = 4;                /* BH 근처 좁음 */
     const JET_HALF_WIDTH_TIP = 26;                /* 멀어지며 flare out */
-    const JET_HALF_ANGLE = 0.14;                  /* 충돌 cone — ~8° */
-    blackHole.jetReach = JET_REACH;
-    blackHole.jetHalfAngle = JET_HALF_ANGLE;
     function drawJet(dir){      /* dir = -1 (up) or +1 (down) */
         const baseY = cy + dir * (eventR * 0.4);
         const tipY  = cy + dir * JET_REACH;
@@ -7849,14 +7842,1270 @@ function drawWaves(){
 /*<sz:mod:zonescript>*/
 /* 소유: P4 (존 시그니처·보스·난이도). P2 의 szZoneEvents(z, zH)·szDiffMod 확장점을 채운다.
    공유 공간에 나오는 것은 전부 시드 스트림(randH)에서 — Math.random 금지 */
-/* 확장점 기본값 (P2) — P4 가 이 두 함수의 본문을 채운다. 스케줄러·격자는 rng 펜스(P2) 소유.
+/* 확장점 (P2 가 정의, P4 가 채움) — 스케줄러·격자는 rng 펜스(P2) 소유.
    szZoneEvents(z, zH): 존 z 의 위험물 사건 목록. zH = 그 존의 시드 수열(randH 도 같은 수열).
      사건 {t: 존 시작 기준 ms, kind, every?, until?, params?, run?: (ev, z, tAbs) => void}
-     기본 = 현행 규칙을 격자로 옮긴 szBaseZoneEvents(z) — 목록을 받아 더하거나 빼서 돌려주면 된다.
-     논리시간만 쓸 것 — performance.now()·기체 위치로 사건을 정하면 대결 코스가 갈라진다
-   szDiffMod(d, eMs): 운석 스폰마다 _computeDiffAt 결과 d 를 논리시간 eMs 로 조정(d 는 매번 새 객체라 고쳐도 된다) */
-function szZoneEvents(z, zH){ return szBaseZoneEvents(z); }
-function szDiffMod(d, eMs){ return d; }
+   szDiffMod(d, eMs): 운석 스폰마다 _computeDiffAt 결과 d 를 논리시간 eMs 로 조정(d 는 매번 새 객체)
+
+   P4 (2026-09-28) 규칙 — 대결 코스가 갈라지지 않게:
+   · 수열(randH)은 스케줄러 사건(run) 안에서만 뽑는다. 프레임마다 도는 szZoneUpdate 는 수열을 안 쓴다
+     (프레임률에 따라 사건과 순서가 섞이면 수열이 어긋난다)
+   · 보스 모양(통로 위상·틈 위치·제트 쪽)은 수열 없는 해시 _szU('B', 존, k) — 예고 때 미리 알 수 있다
+   · 시각은 논리시간(elapsedMs)만. 기체 위치로 정하는 것 없음. 힘은 운석에만 — 기체에는 절대 안 건다
+   · 연출(불꽃·바람 줄·까치)은 Math.random. 1:1 PvP 는 위험물이 꺼져 있어 존 규칙도 끈다(szZoneOn) */
+
+/* ─────────── 보스 시간표 (논리 ms) ───────────
+   warn = WARNING 예고 시작 · t0 = 위험 시작(일반 운석 간격 ×k) · end = SURVIVED + 보스 보급(key z-'b').
+   k 는 봇 하네스(--course-seeds 200)로 맞춘 값 — 보스 구간 사망률 ≤ 인접 존 ×2 */
+const SZB_BOSS = [
+    {id:'canyon', z:3,  warn: 67000,  t0: 70000,  end: 85400,  k: 1.35},
+    {id:'shock',  z:9,  warn: 181000, t0: 184000, end: 194000, k: 1.6},
+    {id:'nova',   z:15, warn: 352000, t0: 355000, end: 362000, k: 1.35},
+    {id:'s2',     z:19, warn: 475000, t0: 478000, end: 525000, k: 1.35},
+    {id:'jet',    z:24, warn: 770000, t0: 773000, end: 841000, k: 1.35}
+];
+const SZB_WARN_MS = 3000;
+/* ① 소행성 협곡 — 줄(row) 단위로 내려오는 좌우 벽. 통로 중심 = CW/2 + amp·sin(2πt/period + φ) (처음 1.2s 는 곧게)
+   벽 돌 = 기존 bullets (충돌·폭탄·드론 공유). 줄 간격 21px(< 충돌 지름 22) 이라 벽 틈으로 못 지나간다.
+   가파른 곳은 이웃 줄 가장자리까지 채움 돌을 넣어 대각선 구멍을 막는다. BEAM 원뿔 안 돌은 바깥으로 밀려난다 */
+const SZ_CW = {v: 80, rowMs: 262, rows: 29, amp: CW * 0.25, period: 5000, half: 62, ease: 1200};
+/* ② 종단 충격파 — 화면 폭 빛 벽 2회, 틈 90px(판정점 기준), 2회차는 반대편 */
+const SZ_SH = {v: 170, gap: 90, step: 20, lead: 1600};
+/* ③ 베텔게우스 — 대감광 12s(운석 −20%) → 초신성 고리 1회(틈 3) → 파편 2파 (틈 방향은 비워 둔다) */
+const SZ_NV = {cx: CW * 0.5, cy: CH * 0.35, gh: 0.28, n: 18, v: 150};
+/* ④ 궁수자리 A* — S2 별 2개 타원 궤도(9s·13s), 마지막 10s 운석 인력 ×1.4 */
+const SZ_S2 = [{a: 128, b: 62, tilt: 0.35, per: 9000, r: 11}, {a: 158, b: 50, tilt: -0.55, per: 13000, r: 11}];
+/* ⑤ 퀘이사 — 폭 70px 수직 제트가 한쪽 띠를 갔다가 되돌아온다. 1.5s 예고, 나머지 폭은 안전 */
+const SZ_JT = {half: 35, warn: 1500, fire: 2200};
+/* 존 시그니처 */
+const SZ_VX = {x: CW * 0.3, y: CH * 0.35, r: 150, a: 120};            /* 목성 대적점 소용돌이 — 접선가속 */
+const SZ_TR = {x: CW * 0.5, y: CH * 0.32, a: 60};                      /* 오리온 트라페지움 — 방사 가속 */
+const SZ_BR = {y: CH * 0.40, x0: CW * 0.06, x1: CW * 0.94, t0: 12600, t1: 24600};   /* 견우직녀 오작교 */
+/* 협곡·충격파 돌은 꼬리를 그리지 않는다 — 업데이트 루프가 꼬리 칸에 쓰는 객체를 한 벌 공유(프레임마다 new 없음) */
+const SZ_ZTRAIL = [{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0},{x:0,y:0}];
+
+var SZB = null;            /* 판 상태 — szZS() 가 판이 바뀌면(startedAt) 새로 만든다 */
+var szZF = false;          /* 운석 업데이트 루프가 szZoneForce 를 부를지 (힘 존·협곡 중에만) */
+var szBossSlowUntil = 0;   /* SURVIVED 슬로모(싱글) — _worldDt 가 읽는다 */
+
+function szZoneOn(){ try{ return !(pvpState && pvpState.gameMode === 'pvp'); }catch(_){ return true; } }
+function szZS(){
+    let sa = 0; try{ sa = startedAt; }catch(_){}
+    if(!SZB || SZB.sa !== sa) szZoneReset(sa);
+    return SZB;
+}
+function szZoneReset(sa){
+    SZB = {sa: sa || 0, on: szZoneOn(), fc: 1, first: szFirstRunCalc(), boss: null, sfx: {}, surv: {}, survFx: null, warnT: -1,
+           cw: null, sh: [], ice: [], ps: [], jet: [], nova: null, fz: -1, wind: 0, windPrev: 0, streaks: null,
+           hurry: false, scrapeT: 0, brFx: 0, pre: false, pb: {}};
+    szZF = false; szBossSlowUntil = 0; SZT = null;
+    szInjectSigns();
+}
+/* 첫 판 — 혼자 하는 무작위 시드 판(도전장·데일리·대결 아님)이고 이 기기 szx_log.runs == 0 */
+function szFirstRunCalc(){
+    try{
+        if(!_szSoloRun()) return false;
+        if(/[?&](ch|daily)=/.test(location.search)) return false;
+        return (typeof szLog === 'function' ? szLog().runs : 1) === 0;
+    }catch(_){ return false; }
+}
+function szFirstRunNow(){ try{ return szZS().first; }catch(_){ return false; } }
+
+/* ─────────── 문구 (ko/en/ja/zh/es/pt, 그 밖은 en) — 짧게 ─────────── */
+const SZB_TXT = {
+    ko:{canyon:'소행성 협곡', shock:'종단 충격파', nova:'초신성 폭발', s2:'S2 별 궤도', jet:'상대론적 제트', safe:'안전', pre:'협곡 10초 전', dim:'대감광',
+        t2:'🔴 포보스 추적', d2:'포보스를 겨눠 0.6초 ×2', t5:'🪐 고리 시료', d5:'시료 3곳을 0.5초씩 겨누기', t19:'⚫ 포톤링 관측', d19:'빛 고리를 3초 겨누기'},
+    en:{canyon:'ASTEROID CANYON', shock:'TERMINATION SHOCK', nova:'SUPERNOVA', s2:'S2 ORBITS', jet:'RELATIVISTIC JET', safe:'SAFE', pre:'Canyon in 10s', dim:'GREAT DIMMING',
+        t2:'🔴 Track Phobos', d2:'Aim at Phobos 0.6s ×2', t5:'🪐 Ring Samples', d5:'Aim at 3 samples, 0.5s each', t19:'⚫ Photon Ring', d19:'Aim at the ring of light 3s'},
+    ja:{canyon:'小惑星の峡谷', shock:'末端衝撃波', nova:'超新星爆発', s2:'S2星の軌道', jet:'相対論的ジェット', safe:'安全', pre:'峡谷まで10秒', dim:'大減光',
+        t2:'🔴 フォボス追跡', d2:'フォボスを0.6秒ねらう ×2', t5:'🪐 環のサンプル', d5:'3か所を0.5秒ずつねらう', t19:'⚫ フォトンリング観測', d19:'光の輪を3秒ねらう'},
+    zh:{canyon:'小行星峡谷', shock:'终端激波', nova:'超新星爆发', s2:'S2恒星轨道', jet:'相对论性喷流', safe:'安全', pre:'峡谷还有10秒', dim:'大变暗',
+        t2:'🔴 追踪火卫一', d2:'瞄准火卫一0.6秒 ×2', t5:'🪐 光环样本', d5:'瞄准3处样本各0.5秒', t19:'⚫ 观测光子环', d19:'瞄准光环3秒'},
+    es:{canyon:'CAÑÓN DE ASTEROIDES', shock:'CHOQUE DE TERMINACIÓN', nova:'SUPERNOVA', s2:'ÓRBITAS S2', jet:'CHORRO RELATIVISTA', safe:'SEGURO', pre:'Cañón en 10 s', dim:'GRAN OSCURECIMIENTO',
+        t2:'🔴 Sigue a Fobos', d2:'Apunta a Fobos 0,6 s ×2', t5:'🪐 Muestras del anillo', d5:'Apunta a 3 muestras, 0,5 s', t19:'⚫ Anillo de fotones', d19:'Apunta al anillo de luz 3 s'},
+    pt:{canyon:'CÂNION DE ASTEROIDES', shock:'CHOQUE DE TERMINAÇÃO', nova:'SUPERNOVA', s2:'ÓRBITAS S2', jet:'JATO RELATIVÍSTICO', safe:'SEGURO', pre:'Cânion em 10 s', dim:'GRANDE ESCURECIMENTO',
+        t2:'🔴 Siga Fobos', d2:'Mire em Fobos 0,6 s ×2', t5:'🪐 Amostras do anel', d5:'Mire em 3 amostras, 0,5 s', t19:'⚫ Anel de fótons', d19:'Mire no anel de luz 3 s'}
+};
+/* 결과 카드 '사인' 한 줄 (P3 의 SZ_STORY_I18N.sign 에 판 시작 때 얹는다 — 표에 없을 때만) */
+const SZB_SIGN = {
+    ko:{canyon:'협곡 벽! 진짜 소행성대는 거의 텅 비었대', shock:'충격파! 태양풍이 여기서 음속 아래로 뚝', s2:'S2 별! 블랙홀 곁을 초속 7,700km로 돌아', jet:'제트! 거의 빛의 속도로 뿜어져', star:'초고속 별! 은하 밖으로 튕겨 나가는 중이야'},
+    en:{canyon:'Canyon wall! The real belt is mostly empty space', shock:'Shock front! The solar wind drops below sound speed here', s2:'Star S2! It whips past the black hole at 7,700 km/s', jet:'The jet! It blasts out at nearly light speed', star:'Hypervelocity star—flung out of the galaxy!'},
+    ja:{canyon:'峡谷の壁！本物の小惑星帯はほぼ空っぽ', shock:'衝撃波！太陽風はここで音速を下回る', s2:'S2星！秒速7,700kmでブラックホールをかすめる', jet:'ジェット！ほぼ光速で噴き出す', star:'超高速星！銀河の外へ飛ばされ中'},
+    zh:{canyon:'撞上峡谷壁！真正的小行星带几乎是空的', shock:'激波！太阳风在这里降到声速以下', s2:'S2星！以每秒7700公里掠过黑洞', jet:'喷流！以接近光速喷出', star:'超高速星！正被甩出银河系'},
+    es:{canyon:'¡Pared del cañón! El cinturón real está casi vacío', shock:'¡Frente de choque! Aquí el viento solar baja de la velocidad del sonido', s2:'¡Estrella S2! Roza el agujero negro a 7.700 km/s', jet:'¡El chorro! Sale casi a la velocidad de la luz', star:'¡Estrella hiperveloz, expulsada de la galaxia!'},
+    pt:{canyon:'Parede do cânion! O cinturão real é quase vazio', shock:'Frente de choque! Aqui o vento solar cai abaixo da velocidade do som', s2:'Estrela S2! Passa pelo buraco negro a 7.700 km/s', jet:'O jato! Sai quase à velocidade da luz', star:'Estrela hiperveloz, lançada para fora da galáxia!'}
+};
+function szZL(){ let l = 'en'; try{ l = _szLang() || 'en'; }catch(_){} return SZB_TXT[l] ? l : 'en'; }
+function szZT(k){ const t = SZB_TXT[szZL()]; return (t && t[k]) || SZB_TXT.en[k] || ''; }
+function szInjectSigns(){
+    if(szInjectSigns._ok) return;
+    try{
+        if(typeof SZ_STORY_I18N === 'undefined') return;
+        for(const l in SZB_SIGN){
+            const T = SZ_STORY_I18N[l]; if(!T) continue;
+            if(!T.sign) T.sign = {};
+            for(const k in SZB_SIGN[l]) if(!T.sign[k]) T.sign[k] = SZB_SIGN[l][k];
+        }
+        szInjectSigns._ok = true;
+    }catch(_){}
+}
+/* 성능 등급 2(저사양) — 장식(글로우 겹·스프라이트 회전·바람 줄·까치 빛)을 덜어 낸다. 판정·모양은 그대로 */
+function szLo(){ try{ return !!(window.SZ3 && SZ3.tier && SZ3.tier() >= 2); }catch(_){ return false; } }
+function szZFont(){ try{ return szStoryFont(); }catch(_){ return '"Noto Sans KR",sans-serif'; } }
+/* 조종사 표정 — SZ3 의 mood() 와 같은 규칙(우선순위)으로 SZ3._P 에 직접 (SZ3 본문은 건드리지 않는다) */
+function szPilot(face, ms, prio, emote, led){
+    try{
+        const P = window.SZ3 && SZ3._P; if(!P) return;
+        const n = performance.now();
+        if(P.ev && n < P.evUntil && (prio || 0) < P.evPrio) return;
+        P.ev = face; P.evUntil = n + ms; P.evPrio = prio || 0;
+        if(emote){ P.emote = emote; P.emoteUntil = n + Math.min(ms, 1300); P.emoteT = n; }
+        if(led){ P.led = led; P.ledUntil = n + ms; }
+        P.popT = n;
+    }catch(_){}
+}
+function szZSfx(kind){
+    if(typeof LPAudio === 'undefined') return;
+    try{
+        if(kind === 'warn') LPAudio.seq([{f:880,d:0.13},{f:622,d:0.13},{f:880,d:0.13},{f:622,d:0.13},{f:880,d:0.13},{f:622,d:0.2}], {vol:0.06, type:'square'});
+        else if(kind === 'surv') LPAudio.seq([{f:523,d:0.08},{f:659,d:0.08},{f:784,d:0.08},{f:1047,d:0.32}], {vol:0.08, type:'square'});
+        else if(kind === 'boom'){ LPAudio.noise({dur:0.9, vol:0.22}); LPAudio.beep({freq:120, dur:0.8, vol:0.2, type:'sine', slide:38, decay:0.9}); }
+        else if(kind === 'shock') LPAudio.beep({freq:220, dur:0.5, vol:0.1, type:'sawtooth', slide:880, decay:0.8});
+        else if(kind === 'jet') LPAudio.beep({freq:1800, dur:0.7, vol:0.05, type:'sawtooth', slide:300, decay:0.9});
+        else if(kind === 'tick') LPAudio.beep({freq:1320, dur:0.05, vol:0.05, type:'triangle', decay:0.5});
+        else if(kind === 'scrape') LPAudio.noise({dur:0.08, vol:0.06});
+    }catch(_){}
+}
+
+/* ─────────── 확장점 ─────────── */
+function szZoneEvents(z, zH){
+    let ev = szBaseZoneEvents(z);
+    const F = szZS();
+    if(!F.on) return ev;
+    const drop = (kind) => { ev = ev.filter(e => e.kind !== kind); };
+    switch(z){
+        case 3:   /* 보스① 협곡 — 소행성 무리 대신 */
+            drop('cluster');
+            ev.push({t: 0, every: SZ_CW.rowMs, until: SZ_CW.rows * SZ_CW.rowMs, kind: 'szcw', run: szCanyonRow});
+            break;
+        case 5:   /* 토성 고리면 — 얼음띠 3회(틈 2), 혜성 대신 */
+            drop('comet');
+            for(const t of [4000, 10000, 16000]) ev.push({t: t - 900, kind: 'szice', run: szIceWarn});
+            break;
+        case 9:   /* 보스② 종단 충격파 — 혜성은 충격파 뒤로 */
+            szShiftKind(ev, 'comet', 14000);
+            ev.push({t: 0, kind: 'szsh', params: {k: 0}, run: szShockEmit}, {t: 6000, kind: 'szsh', params: {k: 1}, run: szShockEmit});
+            break;
+        case 14:  /* 일곱 자매 — 7발 V편대 ×3, 분열암 대신 */
+            drop('split');
+            for(const t of [3500, 10500, 17500]) ev.push({t, kind: 'szvee', run: szVeeEmit});
+            break;
+        case 15:  /* 보스③ — 11.5s 반복 링 폐지, 초신성 1회 + 파편 2파 */
+            drop('nova');
+            ev.push({t: 12000, kind: 'sznova', run: szNovaBlast},
+                    {t: 14000, kind: 'szdeb', params: {k: 0}, run: szNovaDebris},
+                    {t: 16000, kind: 'szdeb', params: {k: 1}, run: szNovaDebris});
+            break;
+        case 21:  /* 숨 고르기 — 8s 마다 초고속 별 관통(1s 예고 줄) */
+            ev.push({t: 5000, every: 8000, until: 54000, kind: 'szps', run: szPierceWarn});
+            break;
+        case 22:  /* 은하 충돌 — X자 파편류 교차, 섞임 대신 */
+            drop('mix');
+            for(let s = 0; s < 10; s++){ const t = 4000 + 7000 * s; if(t > 70000) break; ev.push({t, every: 170, until: t + 170 * 7, kind: 'szx', params: {s}, run: szXStream}); }
+            break;
+        case 24:  /* 보스⑤ 상대론적 제트 */
+            for(let i = 0; i < 10; i++) ev.push({t: 3000 + 7000 * i, kind: 'szjet', params: {i}, run: szJetBurst});
+            break;
+        case 26:  /* 부츠 초공동 — 정적, 8s 뒤 '메아리' 편대 기습 1회 */
+            drop('mix');
+            ev.push({t: 8000, kind: 'szecho', params: {k: 0}, run: szEchoAmbush}, {t: 8900, kind: 'szecho', params: {k: 1}, run: szEchoAmbush});
+            break;
+    }
+    return ev;
+}
+function szShiftKind(ev, kind, minT){
+    for(const e of ev){
+        if(e.kind !== kind || !(e.t < minT)) continue;
+        e.t += e.every > 0 ? Math.ceil((minT - e.t) / e.every) * e.every : (minT - e.t);
+    }
+}
+/* 운석 스폰 난이도 조정 — 논리시간만. 보스 ×1.35 · 숨 고르기 ×1.4 · 대감광 ×1.25 · 바람 조준 −0.08 · 달 속도 ×0.9 · 적색편이 ×0.95 */
+/* 난이도 맞춤 값 — 봇 하네스 A/B 로 도달률 분포(184·343·475s)를 개편 전 ±5%p 안에 둔다 */
+const SZ_TUNE = {saturn: 0.8, windAim: 0, wind: 0.88, iceV: 140, outer: 0.77};
+function szDiffMod(d, eMs){
+    if(!szZS().on) return d;
+    const s = eMs / 1000;
+    let inBoss = false;
+    for(let i = 0; i < SZB_BOSS.length; i++){
+        const b = SZB_BOSS[i];
+        if(eMs >= b.t0 && eMs < b.end){ d.spawnInterval = Math.round(d.spawnInterval * b.k); inBoss = true; break; }
+    }
+    /* 태양계 바깥(목성~명왕성) — 혜성 대신 얼음띠·바람이 봇 기준으로 덜 위험해 운석 밀도로 되돌린다 */
+    if(!inBoss && s >= 86 && s < 184) d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.outer);
+    if(s >= 22 && s < 45) d.bulletSpeed = Math.round(d.bulletSpeed * 0.9);                  /* 1 달 — 저중력 */
+    else if(s >= 109 && s < 132) d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.saturn);   /* 5 토성 — 혜성을 뺀 만큼 운석을 조금 더 */
+    else if(s >= 152 && s < 170){                                                           /* 7 해왕성 — 바람이 조준을 흐리는 만큼 밀도로 */
+        d.aimedRatio = Math.max(0, d.aimedRatio - SZ_TUNE.windAim);
+        d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.wind);
+    }
+    else if(s >= 343 && s < 355) d.spawnInterval = Math.round(d.spawnInterval * 1.25);     /* 15 대감광 — 운석 −20% */
+    else if(s >= 565 && s < 620) d.spawnInterval = Math.round(d.spawnInterval * 1.4);      /* 21 은하간 — 숨 고르기 */
+    else if(s >= 920 && s < 985) d.spawnInterval = Math.round(d.spawnInterval * 1.4);      /* 26 부츠 초공동 — 정적 */
+    else if(s >= 985 && s < 1055) d.bulletSpeed = Math.round(d.bulletSpeed * 0.95);         /* 27 적색편이 — 위쪽 +25% 대신 전체 −5% */
+    return d;
+}
+/* 스폰 가장자리 구간표 — 기본 위 40·오른쪽 22·왼쪽 22·아래 16. 천왕성(98° 기울기)은 좌37·우37·위16·아래10.
+   rand() 는 호출부에서 한 번 뽑은 er 그대로 — 추가 소비 없음 */
+function szEdgePick(er){
+    if(_szMZ === 6 && szZS().on) return er < 0.16 ? 0 : er < 0.53 ? 1 : er < 0.90 ? 3 : 2;
+    return er < 0.40 ? 0 : er < 0.62 ? 1 : er < 0.84 ? 3 : 2;
+}
+/* 적색편이(27) — 위 가장자리에서 오는 운석 속도 배율 */
+function szEdgeSpeedK(edge){ return (edge === 0 && _szMZ === 27 && szZS().on) ? 1.25 : 1; }
+
+/* ─────────── ① 협곡 ─────────── */
+function szCwCenter(k){
+    const C = SZ_CW, F = SZB;
+    const t = k * C.rowMs;
+    const phi = (F && F.cw) ? F.cw.phi : 0;
+    return CW / 2 + C.amp * Math.min(1, t / C.ease) * Math.sin(6.28318 * t / C.period + phi);
+}
+function szCwRock(x, y, side, edge, k){
+    const b = {x, y, vx: 0, vy: SZ_CW.v, aimed: false, zk: 'cw', side, edge, trail: SZ_ZTRAIL, _trailInit: true, trailHead: 0, trailLen: 0,
+               creditedNearMiss: true, _mv: (k + (side > 0 ? 1 : 0)) % 3, _mr: ((k * 37 + (x | 0)) % 628) / 100, push: 0};
+    bullets.push(b);
+    return b;
+}
+function szCanyonRow(e, z, tAbs){
+    const F = szZS(), C = SZ_CW;
+    const k = Math.round((tAbs - _szZoneStartMs(3)) / C.rowMs);
+    if(!F.cw) F.cw = {rows: [], phi: _szU('B', 3, 0) * 6.28318, last: C.rows - 1};
+    const W = F.cw;
+    /* 늦게 불린 프레임만큼 미리 내려 둔다 — 줄 간격이 프레임률과 무관하게 21px */
+    const y = -SZ_SPAWN_OFF + C.v * Math.max(0, Math.min(0.2, (elapsedMs - tAbs) / 1000));
+    const c = szCwCenter(k), xl = c - C.half, xr = c + C.half;
+    const cap = (k === 0 || k === W.last);
+    const tl = cap ? 4 : Math.min(szCwCenter(k - 1), szCwCenter(k + 1)) - C.half;
+    const tr = cap ? CW - 4 : Math.max(szCwCenter(k - 1), szCwCenter(k + 1)) + C.half;
+    const row = {k, L: szCwRock(xl, y, -1, true, k), R: szCwRock(xr, y, 1, true, k)};
+    /* 채움 돌 — 이웃 줄 가장자리(또는 화면 끝)까지 18px 간격. 6px 이하 차이는 이미 막혀 있다 */
+    if(xl - tl > 6){ let x = xl; while(x - 18 > tl){ x -= 18; szCwRock(x, y, -1, false, k); } szCwRock(tl, y, -1, false, k); }
+    if(tr - xr > 6){ let x = xr; while(x + 18 < tr){ x += 18; szCwRock(x, y, 1, false, k); } szCwRock(tr, y, 1, false, k); }
+    W.rows.push(row);
+}
+
+/* ─────────── ② 충격파 ─────────── */
+function szShockGap(k){
+    /* 1회차 = 한쪽(70~125 또는 235~290), 2회차 = 거울 반대편 */
+    const u = _szU('B', 9, 1);
+    const g1 = u < 0.5 ? 70 + u * 110 : 235 + (u - 0.5) * 110;
+    return k === 0 ? g1 : CW - g1;
+}
+function szShockEmit(e, z, tAbs){
+    const F = szZS(), S = SZ_SH, k = (e.params && e.params.k) | 0;
+    const gx = szShockGap(k), y = -SZ_SPAWN_OFF + S.v * Math.max(0, Math.min(0.2, (elapsedMs - tAbs) / 1000));
+    const off = S.gap / 2 + HIT_RADIUS + 6;       /* 판정점이 지나갈 틈 = gap */
+    const nodes = [];
+    const add = (x) => { const b = {x, y, vx: 0, vy: S.v, aimed: false, zk: 'sh', trail: SZ_ZTRAIL, _trailInit: true, trailHead: 0, trailLen: 0, creditedNearMiss: true}; bullets.push(b); nodes.push(b); };
+    for(let x = gx - off; x > -S.step; x -= S.step) add(x);
+    for(let x = gx + off; x < CW + S.step; x += S.step) add(x);
+    F.sh.push({k, gx, nodes, t: tAbs, passed: false});
+    szZSfx('shock');
+}
+
+/* ─────────── ③ 베텔게우스 ─────────── */
+function szNovaGaps(){
+    const u = _szU('B', 15, 1);
+    const base = u * 6.28318;
+    return [base, base + 2.0944, base + 4.18879];
+}
+function szNovaBlast(e, z, tAbs){
+    const F = szZS();
+    F.nova = {t: tAbs, gaps: szNovaGaps()};
+    supernovaRings.push({cx: SZ_NV.cx, cy: SZ_NV.cy, r: 0, t: SUPERNOVA_TELEGRAPH_MS, gaps: F.nova.gaps, gh: SZ_NV.gh, boss: true});
+    szZSfx('boom');
+    try{ szBurst(SZ_NV.cx, SZ_NV.cy, {sparks: 40, shards: 16, power: 260, ring: 140, ringRGB: '255,170,90', ringDur: 0.7, ringW: 4}); }catch(_){}
+    try{ szFlash('255,200,150', 0.12, 260); }catch(_){}
+}
+function szNovaInGap(gaps, ang, gh){
+    for(let i = 0; i < gaps.length; i++){
+        let d = ang - gaps[i];
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        if(Math.abs(d) < gh) return true;
+    }
+    return false;
+}
+function szNovaDebris(e, z, tAbs){
+    const F = szZS(), N = SZ_NV, k = (e.params && e.params.k) | 0;
+    const gaps = (F.nova && F.nova.gaps) || szNovaGaps();
+    const late = Math.max(0, Math.min(0.2, (elapsedMs - tAbs) / 1000));
+    const off = k ? Math.PI / N.n : 0;
+    for(let i = 0; i < N.n; i++){
+        const a = off + i * 6.28318 / N.n;
+        if(szNovaInGap(gaps, a, N.gh + 0.08)) continue;      /* 안전 통로는 파편도 비운다 */
+        const r0 = 26 + N.v * late;
+        bullets.push({x: N.cx + Math.cos(a) * r0, y: N.cy + Math.sin(a) * r0, vx: Math.cos(a) * N.v, vy: Math.sin(a) * N.v, aimed: false, trail: [], frag: true});
+    }
+    szZSfx('shock');
+}
+
+/* ─────────── ④ S2 별 — 위치는 논리시간의 식 (수열·프레임과 무관) ─────────── */
+function szS2Pos(i, eMs, out){
+    const S = SZ_S2[i];
+    const ph = _szU('B', 19, 1 + i) * 6.28318;
+    const th = ph + 6.28318 * (eMs - SZB_BOSS[3].t0) / S.per * (i ? -1 : 1);
+    const ex = S.a * Math.cos(th), ey = S.b * Math.sin(th), ct = Math.cos(S.tilt), st = Math.sin(S.tilt);
+    out.x = blackHole.cx + ex * ct - ey * st;
+    out.y = blackHole.cy + ex * st + ey * ct;
+    return out;
+}
+const _szS2P = {x: 0, y: 0};
+function szS2On(eMs){ return currentZoneIdx === 19 && eMs >= SZB_BOSS[3].t0 && eMs < SZB_BOSS[3].end; }
+
+/* ─────────── ⑤ 퀘이사 제트 ─────────── */
+function szJetBurst(e, z, tAbs){
+    const F = szZS(), i = (e.params && e.params.i) | 0;
+    const s0 = _szU('B', 24, 0) < 0.5 ? -1 : 1;
+    const side = (i % 2) ? -s0 : s0;
+    const w = CW * (0.45 + 0.13 * _szU('B', 24, 1 + i));
+    const L = side < 0 ? 0 : CW - w, R = side < 0 ? w : CW;
+    F.jet.push({i, side, L, R, tW: tAbs, tF: tAbs + SZ_JT.warn, tE: tAbs + SZ_JT.warn + SZ_JT.fire, sfx: false});
+}
+/* 논리시각 eMs 에서 제트 중심 x (발사 중이 아니면 null) — 바깥 끝 → 안쪽 끝 → 되돌아옴 */
+function szJetX(j, eMs){
+    if(eMs < j.tF || eMs >= j.tE) return null;
+    const k = (eMs - j.tF) / (j.tE - j.tF), p = k < 0.5 ? k * 2 : (1 - k) * 2;
+    const outer = j.side < 0 ? j.L + SZ_JT.half : j.R - SZ_JT.half;
+    const inner = j.side < 0 ? j.R - SZ_JT.half : j.L + SZ_JT.half;
+    return outer + (inner - outer) * (p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+}
+
+/* ─────────── 존 시그니처 사건 ─────────── */
+function szIceWarn(e, z, tAbs){
+    const F = szZS();
+    /* 틈 2개(각 110px) — 왼쪽 반과 오른쪽 반에 하나씩 */
+    const g1 = 70 + randH() * 100, g2 = 200 + randH() * 90;
+    F.ice.push({gaps: [g1, g2], tW: tAbs, tE: tAbs + 900, emitted: false, v: SZ_TUNE.iceV});
+    _nhSfx('warn');
+}
+function szIceEmit(I, eMs){
+    const late = Math.max(0, Math.min(0.2, (eMs - I.tE) / 1000));
+    const y = -SZ_SPAWN_OFF + I.v * late, off = 55 + HIT_RADIUS + 6;
+    for(let x = 6; x < CW; x += 19){
+        if(Math.abs(x - I.gaps[0]) < off || Math.abs(x - I.gaps[1]) < off) continue;
+        bullets.push({x, y, vx: 0, vy: I.v, aimed: false, zk: 'ice', trail: SZ_ZTRAIL, _trailInit: true, trailHead: 0, trailLen: 0, creditedNearMiss: true, _mr: x * 0.13});
+    }
+    I.emitted = true;
+}
+function szVeeEmit(e, z, tAbs){
+    waves.push({kind: 'vee', t: 0, phase: 'warn', speed: Math.round(_computeDiffAt(tAbs).bulletSpeed * 0.9), gap: 0, side: 1, emitted: 0, cx: 70 + randH() * (CW - 140), rot: 0});
+    _nhSfx('wave');
+}
+function szPierceWarn(e, z, tAbs){
+    const F = szZS();
+    const lr = randH() < 0.5 ? -1 : 1;
+    const y0 = CH * (0.18 + 0.6 * randH()), y1 = CH * (0.18 + 0.6 * randH());
+    const x0 = lr < 0 ? -SZ_SPAWN_OFF : CW + SZ_SPAWN_OFF, x1 = lr < 0 ? CW + 40 : -40;
+    F.ps.push({x0, y0, x1, y1, tW: tAbs, tF: tAbs + 1000, fired: false});
+    _nhSfx('warn');
+}
+function szXStream(e, z, tAbs){
+    const s = (e.params && e.params.s) | 0, dir = (s % 2) ? -1 : 1;
+    const late = Math.max(0, Math.min(0.2, (elapsedMs - tAbs) / 1000));
+    const x = dir > 0 ? -20 + randH() * CW * 0.4 : CW + 20 - randH() * CW * 0.4;
+    const vx = dir * (125 + randH() * 30), vy = 175 + randH() * 30;
+    bullets.push({x: x + vx * late, y: -SZ_SPAWN_OFF + vy * late, vx, vy, aimed: false, trail: [], frag: true});
+}
+function szEchoAmbush(e, z, tAbs){
+    /* 1회차 틈 = 해시, 2회차(0.9s 뒤) = 거울 자리 — '메아리' */
+    const g = 1 + Math.floor(_szU('B', 26, 0) * 7), k = (e.params && e.params.k) | 0;
+    waves.push({kind: 'wall', t: 0, phase: 'warn', speed: Math.round(_computeDiffAt(tAbs).bulletSpeed * 0.82), gap: k ? 8 - g : g, side: 1, emitted: 0, cx: CW / 2, rot: 0});
+    _nhSfx('wave');
+}
+
+/* ─────────── 바람(해왕성) — 7s 마다 방향이 바뀌는 돌풍. 운석 속도에 ±90px/s 를 얹는다 ─────────── */
+function szWindAt(eMs){
+    const t = (eMs - ZONES[7].s * 1000) / 7000;
+    if(t < 0) return 0;
+    const k = Math.floor(t), s0 = _szU('B', 7, 0) < 0.5 ? -1 : 1;
+    const dir = (k % 2) ? -s0 : s0;
+    const tail = Math.max(0, Math.min(1, (ZONES[8].s * 1000 - eMs) / 1500));   /* 존 끝 1.5s 에 잦아든다(다음 존에 바람이 남지 않게) */
+    return dir * 90 * Math.sin(Math.PI * (t - k)) * tail;
+}
+
+/* ─────────── 운석 힘 훅 — 업데이트 루프가 szZF 일 때 운석마다 (위치 적분 직전) ───────────
+   기체에는 아무 힘도 안 건다. 협곡·충격파·얼음 돌(zk)은 모양을 지키도록 존 힘에서 뺀다 */
+const SZ_ZK_SIGN = {cw: 'canyon', sh: 'shock', ps: 'star'};
+function szZoneForce(b, dt){
+    const F = SZB;
+    if(!F) return;
+    const first = b._zf === undefined;
+    b._zf = F.fc;
+    if(b.zk){
+        if(b.zk === 'cw'){
+            /* BEAM 반발 — 원뿔 안 벽 돌을 통로 바깥쪽으로 밀어낸다(클러스터 가속과 같은 820px/s²) */
+            if(gravityFieldActive && _inGravCone(b.x, b.y)){
+                b.vx += b.side * CLUSTER_GRAV_ACCEL * dt;
+                if(b.vx * b.side > 420) b.vx = 420 * b.side;
+                b.push = 0.45;
+            } else if(b.push > 0) b.push -= dt;
+        }
+        /* 사인 — 이 돌에 닿으면 결과 카드 한 줄 (판정은 본체 충돌 루프가 한다) */
+        const sk = SZ_ZK_SIGN[b.zk];
+        if(sk){ const dx = b.x - player.x, dy = b.y - player.y; if(dx * dx + dy * dy < 170) try{ SZM.hitKind = sk; SZM.hitAt = performance.now(); }catch(_){} }
+        return;
+    }
+    /* 스폰된 첫 프레임은 힘 없이 — 스폰 순간 속도가 프레임률과 무관하게 같다(게이트 det 가 비교). 힘은 다음 프레임부터 */
+    if(first) return;
+    switch(F.fz){
+        case 4: {   /* 대적점 — 반경 안 운석에 접선가속 (화면에서 시계 방향) */
+            const dx = b.x - SZ_VX.x, dy = b.y - SZ_VX.y, d2 = dx * dx + dy * dy;
+            if(d2 < SZ_VX.r * SZ_VX.r && d2 > 36){ const d = Math.sqrt(d2), a = SZ_VX.a * dt / d; b.vx -= dy * a; b.vy += dx * a; }
+            break;
+        }
+        case 7: {   /* 초음속 바람 — 속도에 바람을 얹고(이전 몫은 뺀다) */
+            const w = F.wind, cur = b._wv || 0;
+            if(w !== cur){ b.vx += w - cur; b._wv = w; }
+            break;
+        }
+        case 13: {  /* 오작교 — 위에서 다리를 넘는 운석은 까치가 받아 낸다 */
+            if(b.vy > 0 && b.y <= SZ_BR.y && b.y + b.vy * dt > SZ_BR.y && b.x > SZ_BR.x0 && b.x < SZ_BR.x1){
+                try{ _pushFxSpark(grazeSparks, b.x, SZ_BR.y, '#FFFFFF', 70, 0.35); _pushFxSpark(grazeSparks, b.x, SZ_BR.y, '#9FD3FF', 50, 0.3); }catch(_){}
+                F.brFx++;
+                b.x = -9999; b.vx = 0; b.vy = 0;
+            }
+            break;
+        }
+        case 16: {  /* 트라페지움 항성풍 — 중심에서 바깥으로 */
+            const dx = b.x - SZ_TR.x, dy = b.y - SZ_TR.y, d = Math.sqrt(dx * dx + dy * dy);
+            if(d > 6){ const a = SZ_TR.a * dt / d; b.vx += dx * a; b.vy += dy * a; }
+            break;
+        }
+    }
+}
+
+/* ─────────── 매 프레임 (세상 업데이트 뒤, 충돌 앞) — 수열을 쓰지 않는다 ─────────── */
+function szZoneUpdate(wDt, dt, now){
+    const F = szZS();
+    F.fc++;
+    if(!F.on){ szZF = false; return; }
+    const e = elapsedMs, z = currentZoneIdx;
+    /* 힘 존 */
+    F.fz = -1;
+    if(z === 4 && e >= 85500) F.fz = 4;
+    else if(z === 7){ F.fz = 7; F.windPrev = F.wind; F.wind = szWindAt(e); }
+    else if(z === 13){ const t = e - ZONES[13].s * 1000; if(t >= SZ_BR.t0 && t < SZ_BR.t1) F.fz = 13; }
+    else if(z === 16) F.fz = 16;
+    /* 협곡 — 다 지나가면 정리 (폭탄으로 돌이 지워져 멈춘 줄이 있어도 시간으로 끝낸다) */
+    if(F.cw && F.cw.rows.length){
+        const rows = F.cw.rows, last = rows[rows.length - 1];
+        if((rows.length >= SZ_CW.rows && last.L.y > CH + 40 && last.R.y > CH + 40) || e > SZB_BOSS[0].end + 1500) F.cw.rows.length = 0;
+    }
+    szZF = F.fz >= 0 || !!(F.cw && F.cw.rows.length) || F.sh.length > 0;
+    /* 충격파 — 다 지나간 벽은 정리. 기체가 틈으로 통과한 순간 작은 보상 연출 */
+    for(let i = F.sh.length - 1; i >= 0; i--){
+        const W = F.sh[i], y = W.nodes.length ? W.nodes[0].y : CH + 99;
+        if(!W.passed && y > player.y + 12 && running){
+            W.passed = true;
+            if(Math.abs(player.x - W.gx) < SZ_SH.gap / 2 + 4){
+                try{ szRings.push({x: player.x, y: player.y, t: 0, dur: 0.4, r0: 10, r1: 52, rgb: '120,255,190', w: 2.4}); }catch(_){}
+                szZSfx('tick');
+            }
+        }
+        if(y > CH + 60 || e > W.t + 5000) F.sh.splice(i, 1);
+    }
+    /* 얼음띠 발사 · 초고속 별 발사 — 예고 사건이 정해 둔 값으로, 논리시각에 */
+    for(let i = F.ice.length - 1; i >= 0; i--){
+        const I = F.ice[i];
+        if(!I.emitted && e >= I.tE) szIceEmit(I, e);
+        if(I.emitted && e > I.tE + 8000) F.ice.splice(i, 1);
+    }
+    for(let i = F.ps.length - 1; i >= 0; i--){
+        const P = F.ps[i];
+        if(!P.fired && e >= P.tF){
+            P.fired = true;
+            const dx = P.x1 - P.x0, dy = P.y1 - P.y0, d = Math.hypot(dx, dy) || 1, v = 820;
+            const late = Math.max(0, Math.min(0.2, (e - P.tF) / 1000));
+            bullets.push({x: P.x0 + dx / d * v * late, y: P.y0 + dy / d * v * late, vx: dx / d * v, vy: dy / d * v, aimed: false, zk: 'ps', trail: SZ_ZTRAIL, _trailInit: true, trailHead: 0, trailLen: 0});
+            szZSfx('jet');
+        }
+        if(e > P.tF + 1500) F.ps.splice(i, 1);
+    }
+    for(let i = F.jet.length - 1; i >= 0; i--){
+        const J = F.jet[i];
+        if(!J.sfx && e >= J.tF){ J.sfx = true; szZSfx('jet'); }
+        if(e > J.tE + 400) F.jet.splice(i, 1);
+    }
+    /* 보스 진행 — WARNING · SURVIVED · 보스 보급 */
+    szBossTick(now, e);
+    /* 협곡 벽 스침 불꽃 — 연출만 */
+    if(F.cw && F.cw.rows.length && running && now - F.scrapeT > 90){
+        const rows = F.cw.rows;
+        for(let i = 0; i < rows.length; i++){
+            const r = rows[i];
+            if(Math.abs(r.L.y - player.y) > 14) continue;
+            for(const b of [r.L, r.R]){
+                if(b._zf !== F.fc - 1 && b._zf !== F.fc) continue;
+                const dx = player.x - b.x;
+                if(Math.abs(dx) < 26 && Math.abs(dx) > 11){
+                    F.scrapeT = now;
+                    try{ _pushFxSpark(grazeSparks, (b.x + player.x) / 2, player.y, '#FFB86B', 110, 0.3); _pushFxSpark(grazeSparks, (b.x + player.x) / 2, player.y, '#FFE6A8', 80, 0.25); }catch(_){}
+                    szZSfx('scrape');
+                }
+            }
+        }
+    }
+    /* 미션 3초 전 — SAT 버튼 테두리 깜빡 + 조종사 걱정 */
+    const hurry = missionState === 'active' && (missionActiveUntil - now) < 3000;
+    if(hurry !== F.hurry){
+        F.hurry = hurry;
+        szZStyle();
+        szDomQueue(() => { const sb = document.getElementById('satBtn'); if(sb) sb.classList.toggle('sz-hurry', hurry); });
+        if(hurry) szPilot('worry', 1600, 2, '!', '255,180,60');
+    }
+    /* 보스 글자는 10초 전에 한가할 때 미리 굽는다 (예고·도장 첫 프레임이 굽기를 떠안지 않게) */
+    for(let i = 0; i < SZB_BOSS.length; i++){
+        const b = SZB_BOSS[i];
+        if(e >= b.warn - 10000 && e < b.warn && !F.pb[b.id]){ F.pb[b.id] = 1; szWarnBake(b.id, true); szSurvBake(b.id, true); }
+    }
+    if(e >= 50000 && e < 60000 && !F.pb.pre){ F.pb.pre = 1; if(F.first) szChipBake('pre', '☄ ' + szZT('pre'), '#FFB86B', true); }
+    if(e >= 333000 && e < 343000 && !F.pb.dim){ F.pb.dim = 1; szChipBake('dim', szZT('dim'), '#FF8C6B', true); }
+    /* 첫 판 — 60s 에 '협곡 10초 전' */
+    if(F.first && !F.pre && e >= 60000 && e < 63000){ F.pre = true; F.preT = now; }
+}
+/* 보스 한 개 진행 */
+function szBossTick(now, e){
+    const F = SZB;
+    let B = null;
+    for(let i = 0; i < SZB_BOSS.length; i++){ const b = SZB_BOSS[i]; if(e >= b.warn && e < b.end + 1800){ B = b; break; } }
+    F.boss = B;
+    if(!B) return;
+    if(!F.sfx[B.id] && e < B.warn + SZB_WARN_MS){
+        F.sfx[B.id] = true; F.warnT = now;
+        /* 끝난 미션 결과 배너는 바로 접고, 진행 중인 미션 배너가 있으면 그 아래에 WARNING (보스당 한 번만 잰다) */
+        if(missionState === 'success' || missionState === 'failed') missionBannerHideAt = Math.min(missionBannerHideAt, now);
+        if(_szLooseBannerHideAt) _szLooseBannerHideAt = Math.min(_szLooseBannerHideAt, now);
+        F.warnY = CH * 0.27;
+        if(missionState === 'active'){
+            try{
+                const bn = document.getElementById('missionBanner'), a = bn && bn.getBoundingClientRect(), c = canvas.getBoundingClientRect();
+                if(a && a.height > 0 && c.height > 0) F.warnY = Math.max(F.warnY, Math.min(CH * 0.5, (a.bottom - c.top) / c.height * CH + 34));
+            }catch(_){}
+        }
+        szZSfx('warn');
+        szPilot('focus', SZB_WARN_MS, 3, '!', '255,70,90');
+        try{ if(navigator.vibrate) szVibrate([30, 60, 30]); }catch(_){}
+    }
+    if(!F.surv[B.id] && e >= B.end){
+        F.surv[B.id] = true;
+        /* 보스 보급 1개 — 해시 좌표(P2 szDropDepot, key z-'b'). 논리시각 고정이라 대결 전원이 같은 순간·같은 자리 */
+        try{ szDropDepot(B.z, 'b', ITEM.HEART, now); }catch(_){}
+        if(running && lives > 0){
+            F.survFx = {id: B.id, t0: now};
+            szZSfx('surv');
+            szPilot('cheer', 1800, 3, '★', '255,214,90');
+            try{ if(_szSoloRun()) szBossSlowUntil = now + 120; }catch(_){}
+            try{
+                szBurst(CW / 2, CH * 0.30, {sparks: 30, power: 240, ring: 110, ringRGB: '255,214,90', ringDur: 0.6, ringW: 3});
+                szRings.push({x: player.x, y: player.y, t: 0, dur: 0.55, r0: 12, r1: 70, rgb: '255,230,140', w: 2.6});
+            }catch(_){}
+            try{ if(navigator.vibrate) szVibrate([15, 30, 15, 30, 40]); }catch(_){}
+        }
+    }
+}
+function szBossActive(){
+    try{
+        const F = SZB; if(!F || !F.on || !running) return false;
+        const e = elapsedMs;
+        for(let i = 0; i < SZB_BOSS.length; i++){ const b = SZB_BOSS[i]; if(e >= b.warn && e < b.end + 1600) return true; }
+    }catch(_){}
+    return false;
+}
+window.SZ = window.SZ || {};
+window.SZ.bossActive = szBossActive;
+/* SURVIVED 슬로모 — _worldDt 가 곱한다(세상만 느려진다, 조종은 그대로) */
+function szBossSlowK(now){ return now < szBossSlowUntil ? 0.35 : 1; }
+
+/* ─────────── 충돌 — S2 별·제트 (벽 돌은 bullets 라 본체 루프가 판정) ─────────── */
+function checkZoneBossCollision(now){
+    const F = SZB;
+    if(!F || !F.on) return false;
+    const e = elapsedMs;
+    if(szS2On(e)){
+        for(let i = 0; i < SZ_S2.length; i++){
+            const p = szS2Pos(i, e, _szS2P), R = SZ_S2[i].r + HIT_RADIUS;
+            const dx = p.x - player.x, dy = p.y - player.y;
+            if(dx * dx + dy * dy < R * R){ try{ SZM.hitKind = 's2'; SZM.hitAt = performance.now(); }catch(_){} return true; }
+        }
+    }
+    for(let i = 0; i < F.jet.length; i++){
+        const x = szJetX(F.jet[i], e);
+        if(x != null && Math.abs(player.x - x) < SZ_JT.half + HIT_RADIUS - 2){ try{ SZM.hitKind = 'jet'; SZM.hitAt = performance.now(); }catch(_){} return true; }
+    }
+    return false;
+}
+
+/* ─────────── 과제 3종 (화성 포보스 추적 · 토성 고리 시료 · Sgr A* 포톤링) ───────────
+   위성 설치와 같은 손동작(SAT 누른 채 원뿔로 겨누기). 목표 자리 = 해시 _szHash(seed,'T',z,k) — 대결 전원이 같다.
+   보상은 기존 completeMission → _szRewardPick 그대로 */
+var SZT = null;
+function szTaskStart(z, now){
+    SZT = null;
+    if(!szZS().on || !(z === 2 || z === 5 || z === 19)) return;
+    SZT = {z, k: 0, hold: 0, on: false, x: 0, y: 0, r: 14, ring: false, need: z === 2 ? 2 : z === 5 ? 3 : 1, per: z === 2 ? 600 : z === 5 ? 500 : 3000,
+           cum: z === 19, t0: elapsedMs, flash: 0};
+}
+function szTaskU(z, k){ return _rngSeed ? _szHash(_rngSeed, 'T', z, k) / 4294967296 : 0.37 + 0.21 * k; }
+function szTaskTarget(T){
+    const zt = _missionZoneT(T.z), py = CH * (zt * 2.0 - 0.4);
+    if(T.z === 2){
+        /* 포보스 — 화성(0.65CW, py) 둘레 104px, 원근으로 납작한 궤도. 한 번 잡으면 반대편으로 */
+        const a = szTaskU(2, T.k) * 6.28318 + (elapsedMs - T.t0) * 0.0009;
+        T.x = CW * 0.65 + Math.cos(a) * 92; T.y = py + Math.sin(a) * 48; T.r = 14; T.ring = false;
+    } else if(T.z === 5){
+        /* 토성 고리 위 시료 — 고리(120×16) 따라 천천히 돈다 */
+        const a = szTaskU(5, T.k) * 6.28318 + (elapsedMs - T.t0) * 0.00025;
+        T.x = CW * 0.5 + Math.cos(a) * 120; T.y = py + Math.sin(a) * 16; T.r = 13; T.ring = false;
+    } else {
+        T.x = blackHole.cx; T.y = blackHole.cy; T.r = blackHole.r + 6; T.ring = true;
+    }
+    return T;
+}
+/* 원뿔(기체 위 ±45°, 180px)이 점(반경 r)이나 고리(반경 r ±tol)에 닿는가 */
+function szConeHits(T){
+    const px = player.x, py = player.y - 4;
+    if(!T.ring){
+        const dx = T.x - px, dy = T.y - py, d = Math.sqrt(dx * dx + dy * dy);
+        if(d > GRAV_FIELD_LEN + T.r || d < 4) return false;
+        const ang = Math.abs(Math.atan2(dx, -dy));
+        return ang < Math.PI / 4 + Math.asin(Math.min(1, T.r / Math.max(d, T.r)));
+    }
+    for(let ai = 0; ai < 7; ai++){
+        const a = -Math.PI / 2 + ((ai / 6) - 0.5) * (Math.PI / 2), ca = Math.cos(a), sa = Math.sin(a);
+        for(let ri = 1; ri <= 9; ri++){
+            const r = ri / 9 * GRAV_FIELD_LEN, dx = px + ca * r - T.x, dy = py + sa * r - T.y;
+            if(Math.abs(Math.sqrt(dx * dx + dy * dy) - T.r) < 12) return true;
+        }
+    }
+    return false;
+}
+/* updateSatelliteInstall 이 과제 존에서 대신 부른다 — true 면 기본 설치 로직을 건너뛴다 */
+function szTaskUpdate(dt, now){
+    const T = SZT;
+    if(!T || missionState !== 'active' || missionZoneIdx !== T.z) return false;
+    szTaskTarget(T);
+    T.on = (T.y > -10 && T.y < CH - 40) && szConeHits(T);
+    if(satHeld && T.on) T.hold += dt * 1000;
+    else if(!T.cum) T.hold = Math.max(0, T.hold - dt * 1000 * 1.4);
+    if(T.hold >= T.per){
+        T.k++; T.hold = 0; T.flash = now;
+        try{ szRings.push({x: T.x, y: T.y, t: 0, dur: 0.45, r0: 6, r1: 40, rgb: '124,231,255', w: 2.2}); }catch(_){}
+        szZSfx('tick');
+        if(T.k >= T.need){
+            const x = T.x, y = T.y;
+            satHeld = false;
+            SZT = null;
+            satInstallProgress = 0;
+            completeMission(now);
+            if(missionState === 'success' && window.SZ3) try{ SZ3.satDone(x, y); }catch(_){}
+            _updateSatProgressBar();
+            return true;
+        }
+    }
+    satInstallProgress = Math.min(SAT_INSTALL_MS, ((T.k + T.hold / T.per) / T.need) * SAT_INSTALL_MS);
+    _updateSatProgressBar();
+    return true;
+}
+function szTaskOnTarget(){ return !!(SZT && missionState === 'active' && missionZoneIdx === SZT.z && SZT.on); }
+function szTaskBanner(z){
+    if(!SZT || SZT.z !== z) return;
+    const t = szZT('t' + z), d = szZT('d' + z);
+    szDomQueue(() => { const a = document.getElementById('mbTitle'), b = document.getElementById('mbSubtitle'); if(a && t) a.textContent = t; if(b && d) b.textContent = d; });
+}
+/* drawMissionOrbit 이 과제 존에서 대신 부른다 — true 면 기본 궤도 그림 생략 */
+function szTaskDraw(now){
+    const T = SZT;
+    if(!T || missionState !== 'active' || missionZoneIdx !== T.z) return false;
+    szTaskTarget(T);
+    const k = T.need > 1 ? (T.k + T.hold / T.per) / T.need : T.hold / T.per;
+    ctx.save();
+    if(T.ring){
+        const pulse = 0.5 + 0.5 * Math.sin(now * 0.008);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(124,231,255,' + (0.35 + 0.35 * pulse).toFixed(3) + ')';
+        ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(T.x, T.y, T.r, 0, 6.28318); ctx.stroke();
+        ctx.strokeStyle = '#FFE66D'; ctx.lineWidth = 3.5;
+        ctx.beginPath(); ctx.arc(T.x, T.y, T.r + 9, -Math.PI / 2, -Math.PI / 2 + k * 6.28318); ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+    } else {
+        if(T.z === 2){
+            /* 포보스 — 감자 모양 작은 달 (행성 앞에서도 보이게 어두운 테 + 옅은 빛) */
+            ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.gold, T.x, T.y, 20, 0.35); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            ctx.fillStyle = '#9c8a78'; ctx.strokeStyle = 'rgba(10,6,4,0.8)'; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.ellipse(T.x, T.y, 11.5, 8, 0.5, 0, 6.28318); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(40,30,24,0.6)'; ctx.beginPath(); ctx.arc(T.x + 3, T.y - 1, 2.6, 0, 6.28318); ctx.fill();
+            ctx.beginPath(); ctx.arc(T.x - 4, T.y + 2, 1.6, 0, 6.28318); ctx.fill();
+        } else {
+            /* 고리 시료 — 밝은 행성 앞에서도 보이게 어두운 받침 + 청록 결정 */
+            ctx.fillStyle = 'rgba(4,10,24,0.72)'; ctx.beginPath(); ctx.arc(T.x, T.y, 11, 0, 6.28318); ctx.fill();
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.cyan, T.x, T.y, 20, 0.85);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            ctx.fillStyle = '#E8FBFF'; ctx.strokeStyle = '#2fb6e8'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(T.x, T.y - 9); ctx.lineTo(T.x + 6, T.y); ctx.lineTo(T.x, T.y + 9); ctx.lineTo(T.x - 6, T.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+        }
+        /* 조준 틀 — 네 모서리 괄호가 돌며 좁혀 온다. 겨누는 중이면 노랑 */
+        const on = T.on && satHeld, rr = T.r + 8 + (on ? 0 : 3 * Math.sin(now * 0.01));
+        ctx.save(); ctx.translate(T.x, T.y); ctx.rotate(now * 0.0015);
+        ctx.strokeStyle = on ? '#FFE66D' : 'rgba(124,231,255,0.95)'; ctx.lineWidth = 2;
+        for(let i = 0; i < 4; i++){ ctx.rotate(Math.PI / 2); ctx.beginPath(); ctx.moveTo(rr, rr - 6); ctx.lineTo(rr, rr); ctx.lineTo(rr - 6, rr); ctx.stroke(); }
+        ctx.restore();
+        if(k > 0.01){ ctx.strokeStyle = '#FFE66D'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(T.x, T.y, T.r + 13, -Math.PI / 2, -Math.PI / 2 + k * 6.28318); ctx.stroke(); }
+        /* 기체 → 목표 점선 (가까운 길) */
+        ctx.strokeStyle = 'rgba(255,230,109,0.25)'; ctx.lineWidth = 1; ctx.setLineDash([3, 5]);
+        ctx.beginPath(); ctx.moveTo(player.x, player.y - 14); ctx.lineTo(T.x, T.y); ctx.stroke(); ctx.setLineDash([]);
+    }
+    /* 남은 개수 */
+    if(T.need > 1){
+        const e = szBakeText('sztk|' + T.k + '/' + T.need, '900 11px Orbitron,sans-serif', (T.k) + '/' + T.need, 40, '#FFE66D', T.z);
+        szDrawBaked(e, T.x, T.y - T.r - 20);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return true;
+}
+
+/* ─────────── 그리기 — 위험물 층 (운석 위, 기체 아래) ─────────── */
+function szZoneDraw(now){
+    const F = SZB;
+    if(!F || !F.on || (!running && !szDeathFx)) return;
+    const e = elapsedMs;
+    const z = currentZoneIdx;
+    ctx.save();
+    if(z === 4 && e >= 85500) szDrawVortex(now);
+    else if(z === 7) szDrawWind(now, e);
+    else if(z === 13) szDrawBridge(now, e);
+    else if(z === 16) szDrawRadial(now);
+    else if(z === 15) szDrawBetel(now, e);
+    else if(z === 27) szDrawRedshift();
+    if(F.cw && F.cw.rows.length) szDrawCanyon(now);
+    if(F.boss && F.boss.id === 'canyon' && e < SZB_BOSS[0].t0 + 1800) szDrawCanyonLane(now, e);
+    if(F.sh.length || (F.boss && F.boss.id === 'shock')) szDrawShock(now, e);
+    if(F.ice.length) szDrawIce(now, e);
+    szDrawZk(now);
+    if(F.ps.length) szDrawPierce(now, e);
+    if(F.jet.length) szDrawJet(now, e);
+    if(szS2On(e) || (z === 19 && e >= SZB_BOSS[3].warn)) szDrawS2(now, e);
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+/* 협곡 벽 — 줄마다 가장자리 돌을 이어 만든 바위 벽 + 통로 쪽 달아오른 테두리 */
+let _szCwGrad = null;
+function szDrawCanyon(now){
+    const F = SZB, rows = F.cw.rows, fc = F.fc - 1, lo = szLo();
+    const alive = (b) => b._zf === fc || b._zf === fc + 1;
+    if(!_szCwGrad){
+        _szCwGrad = [ctx.createLinearGradient(0, 0, CW * 0.5, 0), ctx.createLinearGradient(CW, 0, CW * 0.5, 0)];
+        for(const g of _szCwGrad){ g.addColorStop(0, '#0d0a0a'); g.addColorStop(0.55, '#2a1f19'); g.addColorStop(1, '#4a3526'); }
+    }
+    for(let s = 0; s < 2; s++){
+        const side = s ? 1 : -1, xe = side < 0 ? -12 : CW + 12;
+        let first = null, lastY = 0, n = 0;
+        ctx.beginPath();
+        for(let i = 0; i < rows.length; i++){
+            const b = side < 0 ? rows[i].L : rows[i].R;
+            if(!alive(b) || b.y < -60 || b.y > CH + 60) continue;
+            const x = b.x + side * -9;      /* 돌 반지름만큼 통로 쪽으로 */
+            if(!first){ first = b; ctx.moveTo(xe, b.y + 12); ctx.lineTo(x, b.y + 12); }
+            ctx.lineTo(x, b.y); lastY = b.y; n++;
+        }
+        if(!first) continue;
+        ctx.lineTo(xe, lastY - 12);
+        ctx.closePath();
+        ctx.fillStyle = _szCwGrad[s];
+        ctx.globalAlpha = 0.96;
+        ctx.fill();
+        /* 달아오른 테두리 — 넓고 옅게 + 좁고 밝게 (shadowBlur 대신). 저사양은 좁은 선만 */
+        ctx.globalCompositeOperation = 'lighter';
+        if(!lo){ ctx.strokeStyle = 'rgba(255,120,50,0.22)'; ctx.lineWidth = 9; ctx.stroke(); }
+        ctx.strokeStyle = 'rgba(255,170,90,0.55)'; ctx.lineWidth = 2.2; ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+    }
+    /* 가장자리 바위 — 운석 스프라이트를 돌려 붙인다(밀린 돌은 금빛) */
+    const spr = szReady('meteor_a');
+    for(let i = 0; i < bullets.length; i++){
+        const b = bullets[i];
+        if(b.zk !== 'cw' || b.y < -30 || b.y > CH + 30) continue;
+        if(b.push > 0){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.gold, b.x, b.y, 22, Math.min(1, b.push * 2)); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
+        if(!b.edge && !(b.push > 0)) continue;
+        if(spr && !lo){
+            const im = SZ_SPRITES[SZ_METEOR_KEYS[b._mv | 0]];
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b._mr + now * 0.0004 * (b.side));
+            ctx.drawImage(im, -13, -13, 26, 26); ctx.restore();
+        } else if(spr){
+            ctx.drawImage(SZ_SPRITES[SZ_METEOR_KEYS[b._mv | 0]], b.x - 13, b.y - 13, 26, 26);
+        } else {
+            ctx.fillStyle = '#6b5646'; ctx.beginPath(); ctx.arc(b.x, b.y, 11, 0, 6.28318); ctx.fill();
+        }
+    }
+}
+/* 협곡 예고 — 입구 통로(가운데)를 초록 띠로, 양옆은 붉은 벽 그림자 */
+function szDrawCanyonLane(now, e){
+    const B = SZB_BOSS[0];
+    const k = Math.min(1, (e - B.warn) / 600), fade = e > B.t0 ? Math.max(0, 1 - (e - B.t0) / 1800) : 1;
+    const a = k * fade, blink = 0.6 + 0.4 * Math.sin(now * 0.012);
+    const x0 = CW / 2 - SZ_CW.half + 12, x1 = CW / 2 + SZ_CW.half - 12, h = CH * 0.34;
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, 'rgba(90,255,160,' + (0.26 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(90,255,160,0)');
+    ctx.fillStyle = g; ctx.fillRect(x0, 0, x1 - x0, h);
+    ctx.fillStyle = 'rgba(255,70,60,' + (0.16 * a * blink).toFixed(3) + ')';
+    ctx.fillRect(0, 0, x0 - 6, 16); ctx.fillRect(x1 + 6, 0, CW - x1 - 6, 16);
+    ctx.fillStyle = 'rgba(120,255,180,' + (a * blink).toFixed(3) + ')';
+    for(let i = 0; i < 3; i++){
+        const y = 70 + ((now * 0.06 + i * 26) % 78);
+        ctx.beginPath(); ctx.moveTo(CW / 2 - 10, y); ctx.lineTo(CW / 2 + 10, y); ctx.lineTo(CW / 2, y + 9); ctx.closePath(); ctx.fill();
+    }
+}
+/* 충격파 — 예고 띠(틈 = 초록 기둥) + 빛 벽 */
+function szDrawShock(now, e){
+    const F = SZB, S = SZ_SH, fc = F.fc - 1, B = SZB_BOSS[1];
+    /* 예고 — 발사 1.6s 전부터 그 벽이 기체를 지날 때까지 틈 기둥 */
+    for(let k = 0; k < 2; k++){
+        const tE = B.t0 + k * 6000;
+        if(e < tE - S.lead || e > tE + 3800) continue;
+        const W = F.sh.find(w => w.k === k);
+        const wy = W && W.nodes.length ? W.nodes[0].y : -40;
+        const gx = szShockGap(k), a = Math.min(1, (e - (tE - S.lead)) / 400), blink = 0.55 + 0.45 * Math.sin(now * 0.014);
+        const top = Math.max(0, wy);
+        const g = ctx.createLinearGradient(0, top, 0, CH);
+        g.addColorStop(0, 'rgba(90,255,160,' + (0.22 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(90,255,160,0.05)');
+        ctx.fillStyle = g; ctx.fillRect(gx - S.gap / 2, top, S.gap, CH - top);
+        ctx.strokeStyle = 'rgba(120,255,190,' + (0.6 * a * blink).toFixed(3) + ')'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
+        ctx.beginPath(); ctx.moveTo(gx - S.gap / 2, top); ctx.lineTo(gx - S.gap / 2, CH); ctx.moveTo(gx + S.gap / 2, top); ctx.lineTo(gx + S.gap / 2, CH); ctx.stroke(); ctx.setLineDash([]);
+        if(!W){
+            /* 아직 안 온 벽 — 위 가장자리 붉은 선 + 틈 위 초록 화살표 */
+            ctx.fillStyle = 'rgba(255,80,80,' + (0.5 * a * blink).toFixed(3) + ')';
+            ctx.fillRect(0, 0, gx - S.gap / 2, 5); ctx.fillRect(gx + S.gap / 2, 0, CW - gx - S.gap / 2, 5);
+            ctx.fillStyle = 'rgba(140,255,200,' + (a * blink).toFixed(3) + ')';
+            for(let i = 0; i < 3; i++){ const y = 64 + i * 16; ctx.beginPath(); ctx.moveTo(gx - 11, y); ctx.lineTo(gx + 11, y); ctx.lineTo(gx, y + 10); ctx.closePath(); ctx.fill(); }
+        }
+    }
+    /* 빛 벽 — 살아 있는 마디를 이어 굵은 빛 띠로 (틈·부서진 마디에서 끊긴다) */
+    ctx.globalCompositeOperation = 'lighter';
+    for(const W of F.sh){
+        const ns = W.nodes;
+        if(!ns.length) continue;
+        const y = ns[0].y;
+        if(y < -30 || y > CH + 30) continue;
+        const wake = ctx.createLinearGradient(0, y - 70, 0, y);
+        wake.addColorStop(0, 'rgba(120,200,255,0)'); wake.addColorStop(1, 'rgba(160,220,255,0.22)');
+        ctx.fillStyle = wake;
+        const segs = [];
+        let s0 = null, prev = null;
+        const sorted = ns.filter(b => b._zf === fc || b._zf === fc + 1).sort((p, q) => p.x - q.x);
+        for(const b of sorted){
+            if(prev && b.x - prev.x > S.step + 2){ segs.push([s0.x, prev.x]); s0 = null; }
+            if(!s0) s0 = b;
+            prev = b;
+        }
+        if(s0) segs.push([s0.x, prev.x]);
+        for(const sg of segs) ctx.fillRect(sg[0] - 8, y - 70, sg[1] - sg[0] + 16, 70);
+        for(const [w, a, c] of (szLo() ? [[13, 0.5, '190,230,255'], [5, 0.95, '255,255,255']] : [[26, 0.2, '120,190,255'], [13, 0.5, '190,230,255'], [5, 0.95, '255,255,255']])){
+            ctx.strokeStyle = 'rgba(' + c + ',' + a + ')'; ctx.lineWidth = w; ctx.lineCap = 'round';
+            ctx.beginPath();
+            for(const sg of segs){ ctx.moveTo(sg[0] - 6, y); ctx.lineTo(sg[1] + 6, y); }
+            ctx.stroke();
+        }
+        /* 틈 가장자리 — 자홍 불꽃 */
+        for(const sg of segs){ szGlow(SZ_GLOW.pink, sg[0] - 6, y, 14, 0.8); szGlow(SZ_GLOW.pink, sg[1] + 6, y, 14, 0.8); }
+        ctx.globalAlpha = 1;
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineCap = 'butt';
+}
+/* 토성 얼음띠 — 예고(틈 위 초록 괄호) */
+function szDrawIce(now, e){
+    for(const I of SZB.ice){
+        if(I.emitted) continue;
+        const a = Math.min(1, (e - I.tW) / 300), blink = 0.5 + 0.5 * Math.sin(now * 0.02);
+        ctx.fillStyle = 'rgba(255,90,80,' + (0.8 * a * blink).toFixed(3) + ')';
+        ctx.font = '900 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for(let x = 18; x < CW; x += 38){
+            if(Math.abs(x - I.gaps[0]) < 60 || Math.abs(x - I.gaps[1]) < 60) continue;
+            ctx.fillText('▼', x, NH_WARN_TOP);
+        }
+        for(const gx of I.gaps){
+            const g = ctx.createLinearGradient(0, 0, 0, CH * 0.3);
+            g.addColorStop(0, 'rgba(90,255,160,' + (0.25 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(90,255,160,0)');
+            ctx.fillStyle = g; ctx.fillRect(gx - 50, 0, 100, CH * 0.3);
+        }
+    }
+}
+/* zk 돌 — 얼음·초고속 별 (협곡·충격파는 따로 그린다) */
+function szDrawZk(now){
+    for(let i = 0; i < bullets.length; i++){
+        const b = bullets[i];
+        if(b.zk === 'ice'){
+            if(b.y < -20 || b.y > CH + 20) continue;
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.cyan, b.x, b.y, 16, 0.35);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b._mr);
+            ctx.fillStyle = '#D8F6FF'; ctx.strokeStyle = '#6FC8F0'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(7, -2); ctx.lineTo(4, 9); ctx.lineTo(-5, 8); ctx.lineTo(-8, -3); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.moveTo(-1, -7); ctx.lineTo(3, -2); ctx.lineTo(-2, 0); ctx.closePath(); ctx.fill();
+            ctx.restore();
+        } else if(b.zk === 'ps'){
+            const sp = Math.hypot(b.vx, b.vy) || 1, tx = b.x - b.vx / sp * 70, ty = b.y - b.vy / sp * 70;
+            ctx.globalCompositeOperation = 'lighter';
+            const g = ctx.createLinearGradient(tx, ty, b.x, b.y);
+            g.addColorStop(0, 'rgba(160,200,255,0)'); g.addColorStop(1, 'rgba(230,245,255,0.95)');
+            ctx.strokeStyle = g; ctx.lineWidth = 6; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
+            szGlow(SZ_GLOW.white, b.x, b.y, 22, 1);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+        }
+    }
+}
+/* 초고속 별 예고 줄 — 1s 동안 가늘게 → 굵고 붉게 */
+function szDrawPierce(now, e){
+    for(const P of SZB.ps){
+        if(P.fired) continue;
+        const k = Math.max(0, Math.min(1, (e - P.tW) / (P.tF - P.tW))), blink = 0.6 + 0.4 * Math.sin(now * 0.03);
+        ctx.strokeStyle = 'rgba(255,' + Math.round(200 - 140 * k) + ',' + Math.round(200 - 150 * k) + ',' + (0.3 + 0.6 * k * blink).toFixed(3) + ')';
+        ctx.lineWidth = 1 + 3 * k; ctx.setLineDash([10, 7]); ctx.lineDashOffset = -now * 0.12;
+        ctx.beginPath(); ctx.moveTo(P.x0, P.y0); ctx.lineTo(P.x1, P.y1); ctx.stroke(); ctx.setLineDash([]);
+        const sx = Math.max(8, Math.min(CW - 8, P.x0)), sy = P.y0;
+        ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.hot, sx, sy, 16 + 10 * k, 0.9); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    }
+}
+/* 퀘이사 제트 — 예고(위험 띠 붉게·나머지 안전 초록 테두리) → 발사(흰 심 + 자홍·청록 외피) */
+function szDrawJet(now, e){
+    for(const J of SZB.jet){
+        if(e < J.tF){
+            const k = (e - J.tW) / SZ_JT.warn, blink = 0.55 + 0.45 * Math.sin(now * 0.02);
+            ctx.fillStyle = 'rgba(255,40,90,' + (0.16 + 0.16 * k * blink).toFixed(3) + ')';
+            ctx.fillRect(J.L, 0, J.R - J.L, CH);
+            /* 위험 띠 사선 무늬 — 배경색과 상관없이 '여기는 위험' */
+            ctx.save(); ctx.beginPath(); ctx.rect(J.L, 0, J.R - J.L, CH); ctx.clip();
+            ctx.strokeStyle = 'rgba(255,90,130,' + (0.12 + 0.1 * blink).toFixed(3) + ')'; ctx.lineWidth = 6;
+            ctx.beginPath(); for(let y = -CW; y < CH + CW; y += 26){ ctx.moveTo(J.L - 10, y); ctx.lineTo(J.R + 10, y + (J.R - J.L) * 0.6); } ctx.stroke();
+            ctx.restore();
+            /* 안전 쪽 — 옅은 초록 */
+            ctx.fillStyle = 'rgba(90,255,160,' + (0.05 + 0.04 * blink).toFixed(3) + ')';
+            if(J.side < 0) ctx.fillRect(J.R, 0, CW - J.R, CH); else ctx.fillRect(0, 0, J.L, CH);
+            const x0 = J.side < 0 ? J.L + SZ_JT.half : J.R - SZ_JT.half;
+            ctx.strokeStyle = 'rgba(255,120,170,' + (0.5 + 0.5 * k).toFixed(3) + ')'; ctx.lineWidth = 1.5 + 2 * k; ctx.setLineDash([8, 6]);
+            ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, CH); ctx.stroke(); ctx.setLineDash([]);
+            const sx = J.side < 0 ? J.R + 4 : J.L - 4;
+            ctx.strokeStyle = 'rgba(120,255,190,' + (0.55 * blink).toFixed(3) + ')'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, CH); ctx.stroke();
+            /* 쓸고 갈 방향 화살표 */
+            ctx.fillStyle = 'rgba(255,200,220,' + (0.7 * blink).toFixed(3) + ')';
+            const dir = J.side < 0 ? 1 : -1, cy = CH * 0.5;
+            for(let i = 0; i < 3; i++){ const ax = x0 + dir * (18 + i * 16); ctx.beginPath(); ctx.moveTo(ax + dir * 8, cy); ctx.lineTo(ax - dir * 4, cy - 9); ctx.lineTo(ax - dir * 4, cy + 9); ctx.closePath(); ctx.fill(); }
+            continue;
+        }
+        const x = szJetX(J, e);
+        if(x == null) continue;
+        ctx.fillStyle = 'rgba(255,40,90,0.10)'; ctx.fillRect(J.L, 0, J.R - J.L, CH);   /* 되돌아올 띠 */
+        ctx.globalCompositeOperation = 'lighter';
+        const g = ctx.createLinearGradient(x - SZ_JT.half - 14, 0, x + SZ_JT.half + 14, 0);
+        g.addColorStop(0, 'rgba(255,60,180,0)'); g.addColorStop(0.25, 'rgba(255,80,200,0.55)'); g.addColorStop(0.45, 'rgba(180,240,255,0.9)');
+        g.addColorStop(0.5, 'rgba(255,255,255,1)'); g.addColorStop(0.55, 'rgba(180,240,255,0.9)'); g.addColorStop(0.75, 'rgba(80,220,255,0.55)'); g.addColorStop(1, 'rgba(60,200,255,0)');
+        ctx.fillStyle = g; ctx.fillRect(x - SZ_JT.half - 14, 0, SZ_JT.half * 2 + 28, CH);
+        for(let i = 0; i < 6; i++){ const ky = ((now * 0.9 + i * 110) % (CH + 60)) - 30; szGlow(SZ_GLOW.white, x + Math.sin(ky * 0.05 + now * 0.01) * 12, ky, 16, 0.8); }
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+    }
+}
+/* S2 별 — 궤도 타원(옅은 점선 = 갈 길) + 푸른 별 + 꼬리 */
+function szDrawS2(now, e){
+    const on = szS2On(e), B = SZB_BOSS[3];
+    const a = on ? 1 : Math.max(0, Math.min(1, (e - B.warn) / SZB_WARN_MS));
+    for(let i = 0; i < SZ_S2.length; i++){
+        const S = SZ_S2[i];
+        ctx.save(); ctx.translate(blackHole.cx, blackHole.cy); ctx.rotate(S.tilt);
+        ctx.strokeStyle = 'rgba(160,200,255,' + (0.28 * a).toFixed(3) + ')'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 6]);
+        ctx.beginPath(); ctx.ellipse(0, 0, S.a, S.b, 0, 0, 6.28318); ctx.stroke(); ctx.setLineDash([]);
+        ctx.restore();
+        if(!on) continue;
+        ctx.globalCompositeOperation = 'lighter';
+        for(let j = 5; j >= 1; j--){ const p = szS2Pos(i, e - j * 70, _szS2P); szGlow(SZ_GLOW.cold, p.x, p.y, 12 - j, 0.18 * (6 - j)); }
+        const p = szS2Pos(i, e, _szS2P);
+        szGlow(SZ_GLOW.cold, p.x, p.y, 30, 0.9);
+        szGlow(SZ_GLOW.white, p.x, p.y, 14, 1);
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, 6.28318); ctx.fill();
+    }
+}
+/* 목성 대적점 소용돌이 — 회전 방향을 보여 주는 나선 팔 3개 */
+function szDrawVortex(now){
+    const rot = now * 0.0011;
+    ctx.globalCompositeOperation = 'lighter';
+    for(let i = 0; i < 3; i++){
+        ctx.beginPath();
+        for(let r = 18; r <= SZ_VX.r; r += 8){
+            const th = rot + i * 2.0944 - r * 0.022;
+            const x = SZ_VX.x + Math.cos(th) * r, y = SZ_VX.y + Math.sin(th) * r * 0.82;
+            r === 18 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = 'rgba(255,170,110,0.13)'; ctx.lineWidth = 7; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,210,160,0.22)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.strokeStyle = 'rgba(255,190,140,0.12)'; ctx.lineWidth = 1; ctx.setLineDash([3, 7]);
+    ctx.beginPath(); ctx.ellipse(SZ_VX.x, SZ_VX.y, SZ_VX.r, SZ_VX.r * 0.82, 0, 0, 6.28318); ctx.stroke(); ctx.setLineDash([]);
+}
+/* 해왕성 바람 — 바람 줄 + 방향 바뀌기 1초 전 가장자리 화살표 */
+function szDrawWind(now, e){
+    const F = SZB;
+    if(!F.streaks){ F.streaks = []; for(let i = 0; i < 16; i++) F.streaks.push({x: Math.random() * CW, y: Math.random() * CH, l: 20 + Math.random() * 40, k: 0.6 + Math.random() * 0.8}); }
+    const w = F.wind, dt = 1 / 60, nS = szLo() ? 8 : 16;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = 'rgba(150,200,255,' + (0.05 + 0.25 * Math.abs(w) / 90).toFixed(3) + ')'; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for(let i = 0; i < nS; i++){
+        const s = F.streaks[i];
+        s.x += w * 4 * s.k * dt; if(s.x > CW + 60) s.x = -60; if(s.x < -60) s.x = CW + 60;
+        ctx.moveTo(s.x, s.y); ctx.lineTo(s.x - Math.sign(w || 1) * s.l * (0.3 + Math.abs(w) / 90), s.y);
+    }
+    ctx.stroke();
+    ctx.globalCompositeOperation = 'source-over';
+    /* 다음 돌풍 방향 — 1초 전부터 바람이 불어올 가장자리에 큰 화살표 */
+    const t = (e - ZONES[7].s * 1000) / 7000, f = t - Math.floor(t);
+    if(t > 0 && f > 1 - 1 / 7){
+        const nx = szWindAt(e + 1400), dir = Math.sign(nx) || 1, blink = 0.5 + 0.5 * Math.sin(now * 0.025);
+        const x = dir > 0 ? 14 : CW - 14;
+        ctx.fillStyle = 'rgba(160,215,255,' + (0.9 * blink).toFixed(3) + ')';
+        for(let j = 0; j < 3; j++){
+            const cy = CH * (0.3 + j * 0.2);
+            for(let i = 0; i < 2; i++){ const ax = x + dir * i * 11; ctx.beginPath(); ctx.moveTo(ax + dir * 9, cy); ctx.lineTo(ax - dir * 3, cy - 10); ctx.lineTo(ax - dir * 3, cy + 10); ctx.closePath(); ctx.fill(); }
+        }
+    }
+}
+/* 오작교 — 까치 떼가 이은 다리 (활성 12s). 시작·끝 0.6s 에 모였다 흩어진다 */
+function szDrawBridge(now, e){
+    const t = e - ZONES[13].s * 1000;
+    if(t < SZ_BR.t0 - 1500 || t > SZ_BR.t1 + 800) return;
+    const on = t >= SZ_BR.t0 && t < SZ_BR.t1;
+    const a = t < SZ_BR.t0 ? (t - (SZ_BR.t0 - 1500)) / 1500 * 0.35 : t > SZ_BR.t1 ? 1 - (t - SZ_BR.t1) / 800 : Math.min(1, (t - SZ_BR.t0) / 500);
+    const n = 20, x0 = SZ_BR.x0, x1 = SZ_BR.x1;
+    /* 은하수 빛 다리 — 넓은 은빛 띠 + 흰 심 */
+    ctx.globalCompositeOperation = 'lighter';
+    for(const [w, al, c] of [[26, 0.16, '140,190,255'], [12, 0.3, '190,220,255'], [2.5, 0.75, '255,255,255']]){
+        ctx.strokeStyle = 'rgba(' + c + ',' + (al * a).toFixed(3) + ')'; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(x0, SZ_BR.y); ctx.quadraticCurveTo(CW / 2, SZ_BR.y - 26, x1, SZ_BR.y); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    const ba = Math.max(0, Math.min(1, a * (on ? 1 : 0.6))), lo = szLo();
+    for(let i = 0; i <= n; i++){
+        const u = i / n, x = x0 + (x1 - x0) * u, y = SZ_BR.y - 26 * 4 * u * (1 - u) * 0.5 + Math.sin(now * 0.012 + i) * 1.5;
+        const flap = Math.sin(now * 0.02 + i * 1.7) * 5;
+        ctx.globalAlpha = ba;
+        if(!lo){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.cold, x, y, 11, 0.5 * ba); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = ba; }
+        /* 까치 — 검은 날개 + 흰 배 + 흰 날개 끝 */
+        ctx.fillStyle = '#10152a';
+        ctx.beginPath(); ctx.moveTo(x - 10, y - flap); ctx.quadraticCurveTo(x - 4, y - 3, x, y + 2); ctx.quadraticCurveTo(x + 4, y - 3, x + 10, y - flap); ctx.lineTo(x, y - 1); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#F4F8FF';
+        ctx.beginPath(); ctx.ellipse(x, y + 0.5, 2.2, 1.6, 0, 0, 6.28318); ctx.fill();
+        ctx.fillRect(x - 10, y - flap - 0.8, 2.4, 1.6); ctx.fillRect(x + 7.6, y - flap - 0.8, 2.4, 1.6);
+    }
+    ctx.globalAlpha = 1;
+}
+/* 트라페지움 — 중심에서 바깥으로 퍼지는 바람 고리 */
+function szDrawRadial(now){
+    ctx.globalCompositeOperation = 'lighter';
+    for(let i = 0; i < 3; i++){
+        const k = ((now * 0.0005) + i / 3) % 1, r = 20 + k * 230;
+        ctx.strokeStyle = 'rgba(255,190,230,' + (0.16 * (1 - k)).toFixed(3) + ')'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(SZ_TR.x, SZ_TR.y, r, 0, 6.28318); ctx.stroke();
+    }
+    for(let i = 0; i < 4; i++){ const a = i * 1.57 + 0.4; szGlow(SZ_GLOW.white, SZ_TR.x + Math.cos(a) * 9, SZ_TR.y + Math.sin(a) * 7, 9, 0.8); }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+/* 베텔게우스 — 대감광(어두워짐) + 초신성 틈 방향(안전 광선) 예고 */
+function szDrawBetel(now, e){
+    const B = SZB_BOSS[2];
+    if(e >= B.warn + 500 && e < B.t0 + 2500){
+        const gaps = szNovaGaps(), a = Math.min(1, (e - B.warn - 500) / 400) * (e > B.t0 + 1500 ? Math.max(0, 1 - (e - B.t0 - 1500) / 1000) : 1);
+        const blink = 0.6 + 0.4 * Math.sin(now * 0.016);
+        for(const g of gaps){
+            const ca = Math.cos(g), sa = Math.sin(g), L = 700;
+            ctx.fillStyle = 'rgba(90,255,160,' + (0.13 * a).toFixed(3) + ')';
+            ctx.beginPath(); ctx.moveTo(SZ_NV.cx, SZ_NV.cy);
+            ctx.lineTo(SZ_NV.cx + Math.cos(g - SZ_NV.gh) * L, SZ_NV.cy + Math.sin(g - SZ_NV.gh) * L);
+            ctx.lineTo(SZ_NV.cx + Math.cos(g + SZ_NV.gh) * L, SZ_NV.cy + Math.sin(g + SZ_NV.gh) * L);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = 'rgba(140,255,200,' + (0.75 * a * blink).toFixed(3) + ')'; ctx.lineWidth = 1.5; ctx.setLineDash([7, 7]); ctx.lineDashOffset = -now * 0.08;
+            ctx.beginPath(); ctx.moveTo(SZ_NV.cx + ca * 40, SZ_NV.cy + sa * 40); ctx.lineTo(SZ_NV.cx + ca * L, SZ_NV.cy + sa * L); ctx.stroke(); ctx.setLineDash([]);
+        }
+        if(e < B.t0){
+            const k = (e - B.warn) / SZB_WARN_MS;
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.hot, SZ_NV.cx, SZ_NV.cy, 40 + 50 * k + 8 * Math.sin(now * 0.03), 0.5 + 0.5 * k);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        }
+    }
+}
+/* 적색편이 — 위에서 오는 빠른 운석에 붉은 빛 */
+function szDrawRedshift(){
+    ctx.globalCompositeOperation = 'lighter';
+    for(let i = 0; i < bullets.length; i++){ const b = bullets[i]; if(b.red) szGlow(SZ_GLOW.pink, b.x, b.y, 20, 0.55); }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+
+/* ─────────── 맨 위 층 — WARNING 띠 · SURVIVED 도장 · 첫 판 예고 · 대감광 자막 (글자는 구워서 drawImage) ─────────── */
+function szWarnBake(id, lazy){
+    const L = szZL(), name = szZT(id), f2 = '800 11px ' + szZFont();
+    return szBake('szwarn|' + id + '|' + L, 300, 60, (x, w, h) => {
+        x.fillStyle = 'rgba(38,0,10,0.82)'; szRR(x, 1, 6, w - 2, h - 12, 9); x.fill();
+        x.save(); szRR(x, 1, 6, w - 2, h - 12, 9); x.clip();
+        x.fillStyle = 'rgba(255,70,70,0.85)';
+        for(let i = -2; i < w / 12 + 2; i++){
+            x.beginPath(); x.moveTo(i * 12, 6); x.lineTo(i * 12 + 6, 6); x.lineTo(i * 12 + 2, 10); x.lineTo(i * 12 - 4, 10); x.closePath(); x.fill();
+            x.beginPath(); x.moveTo(i * 12, h - 10); x.lineTo(i * 12 + 6, h - 10); x.lineTo(i * 12 + 2, h - 6); x.lineTo(i * 12 - 4, h - 6); x.closePath(); x.fill();
+        }
+        x.restore();
+        x.strokeStyle = 'rgba(255,100,100,0.95)'; x.lineWidth = 1.4; szRR(x, 1, 6, w - 2, h - 12, 9); x.stroke();
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.font = '900 20px Orbitron,sans-serif';
+        x.lineWidth = 4; x.strokeStyle = 'rgba(0,0,0,0.6)'; x.strokeText('WARNING', w / 2, 24);
+        x.fillStyle = '#FF4D5E'; x.fillText('WARNING', w / 2, 24);
+        const tw = x.measureText('WARNING').width;
+        for(const s of [-1, 1]){
+            const cx = w / 2 + s * (tw / 2 + 17);
+            x.fillStyle = '#FFCC33'; x.beginPath(); x.moveTo(cx, 15); x.lineTo(cx + 9, 32); x.lineTo(cx - 9, 32); x.closePath(); x.fill();
+            x.fillStyle = '#2a0008'; x.fillRect(cx - 1.2, 20, 2.4, 6.5); x.fillRect(cx - 1.2, 28, 2.4, 2.2);
+        }
+        x.font = f2; x.fillStyle = '#FFD7A8';
+        x.fillText(_szEllipsize(x, name, w - 30), w / 2, 42);
+    }, -1, [['900 20px Orbitron,sans-serif', 'WARNING'], [f2, name]], lazy);
+}
+function szSurvBake(id, lazy){
+    const L = szZL(), name = szZT(id), f2 = '800 11px ' + szZFont();
+    return szBake('szsurv|' + id + '|' + L, 300, 64, (x, w, h) => {
+        x.fillStyle = 'rgba(20,14,0,0.72)'; szRR(x, 20, 4, w - 40, h - 8, 12); x.fill();
+        x.strokeStyle = '#FFD86B'; x.lineWidth = 2.5; szRR(x, 20, 4, w - 40, h - 8, 12); x.stroke();
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.font = '900 26px Orbitron,sans-serif';
+        x.lineWidth = 5; x.strokeStyle = 'rgba(0,0,0,0.55)'; x.strokeText('SURVIVED!', w / 2, 26);
+        const g = x.createLinearGradient(0, 12, 0, 40); g.addColorStop(0, '#FFF3B0'); g.addColorStop(0.5, '#FFD24A'); g.addColorStop(1, '#FF9A2E');
+        x.fillStyle = g; x.fillText('SURVIVED!', w / 2, 26);
+        x.font = f2; x.fillStyle = 'rgba(255,240,200,0.9)';
+        x.fillText(_szEllipsize(x, name, w - 60), w / 2, 48);
+    }, -1, [['900 26px Orbitron,sans-serif', 'SURVIVED!'], [f2, name]], lazy);
+}
+function szChipBake(key, text, color, lazy){
+    const f = '800 11px ' + szZFont();
+    return szBake('szchip|' + key + '|' + szZL(), 200, 26, (x, w, h) => {
+        x.font = f; const tw = Math.min(w - 8, x.measureText(text).width + 22);
+        x.fillStyle = 'rgba(4,8,24,0.72)'; szRR(x, (w - tw) / 2, 2, tw, h - 4, 11); x.fill();
+        x.strokeStyle = color; x.lineWidth = 1.2; szRR(x, (w - tw) / 2, 2, tw, h - 4, 11); x.stroke();
+        x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(_szEllipsize(x, text, w - 24), w / 2, h / 2 + 0.5);
+    }, -1, [[f, text]], lazy);
+}
+function szZoneDrawTop(now){
+    const F = SZB;
+    if(!F || !F.on) return;
+    const e = elapsedMs;
+    const RM = !!(window.SZ3 && SZ3.RM);
+    /* WARNING — 예고 3s: 0.18s 펼쳐지고, 5Hz 로 깜빡이다 마지막 0.3s 접힌다 */
+    if(running && F.boss && e >= F.boss.warn && e < F.boss.warn + SZB_WARN_MS){
+        const t = e - F.boss.warn, open = RM ? 1 : Math.min(1, t / 180), close = Math.min(1, (SZB_WARN_MS - t) / 300);
+        const img = szWarnBake(F.boss.id);
+        if(img){
+            ctx.save();
+            ctx.globalAlpha = Math.min(open, close) * (t < 1500 ? 0.72 + 0.28 * Math.sign(Math.sin(t * 0.0314)) : 1);
+            ctx.translate(CW / 2, F.warnY || CH * 0.27); ctx.scale(1, open);   /* 미션 배너(DOM, 위쪽) 아래 */
+            szDrawBaked(img, 0, 0);
+            ctx.restore();
+            /* 화면 가장자리 붉은 기운 — 깜빡임과 같은 박자 */
+            const p = 0.5 + 0.5 * Math.sin(t * 0.0126);
+            ctx.save();
+            ctx.globalAlpha = 0.16 * p * close;
+            ctx.fillStyle = '#FF1030';
+            ctx.fillRect(0, 0, CW, 6); ctx.fillRect(0, CH - 6, CW, 6); ctx.fillRect(0, 0, 6, CH); ctx.fillRect(CW - 6, 0, 6, CH);
+            ctx.restore();
+        }
+    }
+    /* SURVIVED — 1.7s: 1.8배에서 쾅 찍히고, 빛줄기가 한 번 쓸고 간다 */
+    if(F.survFx){
+        const t = (now - F.survFx.t0) / 1700;
+        if(t >= 1 || t < 0) F.survFx = null;
+        else {
+            const img = szSurvBake(F.survFx.id);
+            if(img){
+                const inK = Math.min(1, t / 0.08);
+                const sc = RM ? 1 : (t < 0.08 ? 1.8 - 0.8 * (1 - Math.pow(1 - inK, 3)) : 1 + 0.025 * Math.sin((t - 0.08) * 9));
+                ctx.save();
+                ctx.globalAlpha = t < 0.82 ? Math.min(1, inK * 1.3) : (1 - t) / 0.18;
+                ctx.translate(CW / 2, CH * 0.30); ctx.rotate(RM ? 0 : -0.05); ctx.scale(sc, sc);
+                szDrawBaked(img, 0, 0);
+                if(!RM && t < 0.55){
+                    const sx = -130 + 260 * (t / 0.55);
+                    ctx.beginPath(); szRR(ctx, -130, -28, 260, 56, 12); ctx.clip();
+                    ctx.globalCompositeOperation = 'lighter';
+                    const g = ctx.createLinearGradient(sx - 16, 0, sx + 16, 0);
+                    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,0.55)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+                    ctx.fillStyle = g; ctx.fillRect(sx - 16, -30, 32, 60);
+                }
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+        }
+    }
+    /* 첫 판 — '협곡 10초 전' 3초 */
+    if(F.pre && running && F.preT && now - F.preT < 3000){
+        const img = szChipBake('pre', '☄ ' + szZT('pre'), '#FFB86B');
+        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3000 - (now - F.preT)) / 400) * 0.95; szDrawBaked(img, CW / 2, 86); ctx.restore(); }
+    }
+    /* 대감광 자막 — 베텔게우스 도착 뒤 2.5s */
+    const t15 = e - ZONES[15].s * 1000;
+    if(running && t15 >= 600 && t15 < 3600){
+        const img = szChipBake('dim', szZT('dim'), '#FF8C6B');
+        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3600 - t15) / 500, (t15 - 600) / 300) * 0.9; szDrawBaked(img, CW / 2, 86); ctx.restore(); }
+    }
+    ctx.globalAlpha = 1;
+}
+/* SAT 버튼 '3초 남음' 깜빡임 — 스타일은 한 번만 넣는다 */
+function szZStyle(){
+    if(szZStyle._ok) return;
+    szZStyle._ok = true;
+    try{
+        const st = document.createElement('style');
+        st.textContent = '@keyframes szHurry{0%,100%{box-shadow:0 0 0 2px rgba(255,90,90,.95),0 0 14px rgba(255,60,60,.7)}50%{box-shadow:0 0 0 2px rgba(255,210,90,.35),0 0 4px rgba(255,160,60,.2)}}'
+            + '#satBtn.sz-hurry{animation:szHurry .42s steps(2,jump-none) infinite}';
+        document.head.appendChild(st);
+    }catch(_){}
+}
+
+/* ─────────── Sgr A* 판정 기하 — 그리기와 분리 (P4). 식·수치는 예전 drawSagittariusA 와 한 글자도 다르지 않다 ───────────
+   update 단계(updateBlackHolePull)와 그리기가 같은 zoneT 로 부르므로 값이 같다. 그리기를 꺼도(봇·게이트) 판정이 산다 */
+function szUpdateBlackHoleGeom(zoneT){
+    const cx = CW * 0.5;
+    const cy = CH * (0.22 + (zoneT||0.4) * 0.40);
+    const eventR = 32;
+    blackHole.cx = cx;
+    blackHole.cy = cy;
+    blackHole.r = eventR;
+    blackHole.zoneT = zoneT||0.4;
+    blackHole.jetReach = Math.max(CW, CH) * 1.1;
+    blackHole.jetHalfAngle = 0.14;
+}
+/* 마지막 10s(515~525s) 운석 인력 ×1.4 — 기체에는 인력 없음 */
+function szBhPullMul(){ return (elapsedMs >= 515000 && szZS().on) ? 1.4 : 1; }
+
+/* ─────────── 보급 — 존30 slot0 25s 주기 반복(key 30-k, 해시 좌표) ─────────── */
+function szZ30Repeat(sinceZone, now){
+    if(sinceZone < 31.25) return;
+    const k = Math.floor((sinceZone - 6.25) / 25);     /* 6.25s(slot0) + 25s·k */
+    for(let j = 1; j <= k; j++){
+        const key = '30-' + (1 + j);
+        if(depotsSpawnedZones.has(key)) continue;
+        try{ szDropDepot(30, 1 + j, (j % 2) ? ITEM.HEART : ITEM.SHIELD, now); }catch(_){}
+    }
+}
 /*</sz:mod:zonescript>*/
 
 /* 구간별 스폰(혜성 6.2s · 분열암 6.8s · 편대 8.5s, 섞임 구간 9s 마다 하나)은 결정성 v2 에서
@@ -7985,7 +9234,10 @@ function checkSupernovaRingCollision(){
         if(s.t > SUPERNOVA_EXPAND_MS) continue;
         const dx = px - s.cx, dy = py - s.cy;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if(dist > s.r - SUPERNOVA_BAND_W && dist < s.r + SUPERNOVA_BAND_W) return true;
+        if(dist > s.r - SUPERNOVA_BAND_W && dist < s.r + SUPERNOVA_BAND_W){
+            if(s.gaps && szNovaInGap(s.gaps, Math.atan2(dy, dx), s.gh - HIT_RADIUS / Math.max(dist, 40))) continue;   /* P4 — 틈(안전 광선) */
+            return true;
+        }
     }
     return false;
 }
@@ -8005,10 +9257,12 @@ function drawSupernovaRings(){
             ctx.shadowBlur = 22;
             ctx.strokeStyle = `rgba(255, 90, 60, ${0.7 * fade})`;
             ctx.lineWidth = SUPERNOVA_BAND_W * 2.2;
-            ctx.beginPath(); ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2); ctx.stroke();
+            /* P4 — 보스 고리는 틈(안전 광선)을 비우고 호 3개로 */
+            const _arcs = (w) => { ctx.beginPath(); if(s.gaps){ const g = s.gaps.slice().sort((p, q) => p - q); for(let i = 0; i < g.length; i++){ const a0 = g[i] + s.gh, a1 = (i + 1 < g.length ? g[i + 1] : g[0] + Math.PI * 2) - s.gh; ctx.moveTo(s.cx + Math.cos(a0) * s.r, s.cy + Math.sin(a0) * s.r); ctx.arc(s.cx, s.cy, s.r, a0, a1); } } else ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2); ctx.stroke(); };
+            _arcs();
             ctx.strokeStyle = `rgba(255, 230, 190, ${fade})`;
             ctx.lineWidth = SUPERNOVA_BAND_W;
-            ctx.beginPath(); ctx.arc(s.cx, s.cy, s.r, 0, Math.PI*2); ctx.stroke();
+            _arcs();
             ctx.shadowBlur = 0;
         }
         ctx.restore();
@@ -8223,8 +9477,16 @@ function drawPulsarBeam(now){
    Phase D 에서 보상 3종 효과 구현.
    ===================================================================== */
 const MISSION_ZONES = new Set([0,1,2,4,5,6,7,11,12,13,15,19]);
-const MISSION_DELAY_MS = 8000;       /* zone 진입 후 미션 발생까지 대기 */
-const MISSION_DURATION_MS = 25000;   /* 미션 시작 후 timeout */
+const MISSION_DELAY_MS = 4000;       /* zone 진입 후 미션 발생까지 대기 (P4: 8s → 4s) */
+const MISSION_DURATION_MS = 18000;   /* 미션 제한 상한 — 실제 = min(18s, 존 끝 − 활성 − 1.5s) (P4 szMissionDur) */
+const MISSION_EARTH_AT_MS = 12000;   /* 존 0(지구) 미션은 12s (튜토리얼 비트 — 0~10s 는 운석만) */
+/* P4 — 정직한 미션: 제한 시간이 존 끝 1.5s 전에 끝나도록 → 타이머 숫자 = 실제 강제 종료. 존이 바뀌어 잘리는 일 없음 */
+function szMissionDur(z){
+    const endMs = (typeof _szZoneEndMs === 'function') ? _szZoneEndMs(z) : Infinity;
+    const left = endMs - elapsedMs - 1500;
+    /* 정수 초로 내림 — 배너 숫자(올림)와 실제 남은 시간이 처음부터 같다 */
+    return Math.max(3000, Math.floor(Math.min(MISSION_DURATION_MS, isFinite(left) ? left : MISSION_DURATION_MS) / 1000) * 1000);
+}
 const MISSION_BLACKHOLE_ZONE = 19;   /* 블랙홀 = 레어 미션 (3개 보상) */
 
 /* 궤도 위치 LIVE 추적 (2026-05-08 수정) — 이전엔 zone 시작 시점에
@@ -8334,6 +9596,7 @@ function szDrawCommHud(now){
 }
 function _szCommLose(){
     if(!_szSoloRun()) return false;
+    if(szFirstRunNow()) return false;   /* P4 — 첫 판은 통신 두절 없음 (배우는 판) */
     commLinkLost = true;
     return true;
 }
@@ -8525,7 +9788,7 @@ function startMissionForZone(zIdx, now){
     missionZoneIdx = zIdx;
     missionOrbit = _missionResolveOrbit(zIdx);   /* 초기 lookup, 매 frame re-resolve */
     missionState = 'pending';
-    missionPendingUntil = now + MISSION_DELAY_MS;
+    missionPendingUntil = now + (zIdx === 0 ? MISSION_EARTH_AT_MS : MISSION_DELAY_MS);
 }
 
 /* Live 좌표 lookup helper — orbit 좌표·반지름이 매 frame 행성과 함께
@@ -8538,8 +9801,15 @@ function _missionCurrentOrbit(){
 function _activateMission(now){
     _szLooseBannerHideAt = 0;
     missionState = 'active';
-    missionActiveUntil = now + MISSION_DURATION_MS;
+    const _dur = szMissionDur(missionZoneIdx);
+    missionActiveUntil = now + _dur;
     _showMissionBanner(missionZoneIdx, 'active');
+    /* P4 — 배너 숫자는 실제 제한(초, 올림). 과제 존(화성·토성·Sgr A*)은 과제 문구로 */
+    const _t0 = String(Math.ceil(_dur / 1000));
+    updateMissionState._left = _t0;
+    szDomQueue(() => { const el = document.getElementById('mbTimer'); if(el) el.textContent = _t0; });
+    szTaskStart(missionZoneIdx, now);
+    szTaskBanner(missionZoneIdx);
     _setSatBtnState('armed');
     sfxZone();   /* re-use zone sound for mission alert */
 }
@@ -8565,7 +9835,11 @@ function completeMission(now){
     missionBannerHideAt = now + 3500;
     /* 끊겼던 통신망은 위성 설치 성공으로 복구 → 이 순간부터 보급 재개 */
     const _restored = commLinkLost && !opponentWonThisZone;
-    if(_restored) commLinkLost = false;
+    if(_restored){
+        commLinkLost = false;
+        /* P4 — 복구 보급 1개 (key z-'r', 해시 좌표) */
+        try{ szDropDepot(z, 'r', ITEM.HEART, now); }catch(_){}
+    }
     _showMissionBanner(z, opponentWonThisZone ? 'opp_won' : (_restored ? 'restored' : 'success'));
     _setSatBtnState('disabled');
     if(opponentWonThisZone){
@@ -8645,6 +9919,7 @@ function updateMissionState(now){
 
 function drawMissionOrbit(now){
     if(missionState !== 'active') return;
+    if(szTaskDraw(now)) return;          /* P4 — 과제 존은 목표 조준 틀 */
     const o = _missionCurrentOrbit();    /* live re-lookup */
     if(!o) return;
     /* Target marker = orbit ring 위 점 중 player 와 가장 가까운 곳.
@@ -8722,14 +9997,14 @@ let rewardCounts = {warp: 0, storm: 0, drone: 0};
 /* Time Warp 상태 */
 let timeWarpUntil = 0;
 let timeWarpStartedAt = 0;          /* 발동 임팩트 플래시 (300ms) 용 */
-const TIME_WARP_MS = 30000;
+const TIME_WARP_MS = 12000;         /* P4 (운영자 확정): 30s → 12s, 감속 0.35 유지 */
 const TIME_WARP_FACTOR = 0.35;      /* world 속도 = 35% */
 function _isTimeWarpActive(now){ return now < timeWarpUntil; }
 /* 적/총알/펄사 회전 dt 에 적용. player 이동·zone 진행은 그대로.
    _worldDt(dt, now) 는 warp 활성 시 dt × 0.35, 평소엔 dt 그대로. */
 function _worldDt(dt, now){
     /* SZ3.slow — 아슬아슬 스침 순간 0.12초만 세상이 느려진다(혼자 할 때만). 기체 조종은 그대로 */
-    const _s = window.SZ3 ? SZ3.slow(now) : 1;
+    const _s = Math.min(window.SZ3 ? SZ3.slow(now) : 1, szBossSlowK(now));   /* P4 — SURVIVED 120ms 슬로모(싱글) */
     return ((now < timeWarpUntil) ? dt * TIME_WARP_FACTOR : dt) * _s;
 }
 /* Aegis Drone 상태.
@@ -9188,7 +10463,7 @@ function _activateTimeWarp(now){
     timeWarpUntil = now + TIME_WARP_MS;
     timeWarpStartedAt = now;
     const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
-    _showRewardToast(lang === 'ko' ? '⏱ 시간 왜곡 — 30초간 슬로우' : '⏱ TIME WARP — 30s slow motion', '#80C8FF', 1800);
+    _showRewardToast(lang === 'ko' ? '⏱ 시간 왜곡 — 12초간 슬로우' : '⏱ TIME WARP — 12s slow motion', '#80C8FF', 1800);
     sfxStart();
     if(navigator.vibrate) try{szVibrate([15, 30, 50])}catch(_){}
 }
@@ -9273,6 +10548,7 @@ function _isPlayerOnOrbit(){
        cone 내 임의 점이 궤도 ring tolerance 안에 있으면 'overlap' = true.
        7×8 = 56 점 sampling 으로 cone-orbit 교차 판정. 매 frame 호출되지만
        sample 갯수 작아서 부담 없음. */
+    if(SZT && missionZoneIdx === SZT.z) return szTaskOnTarget();   /* P4 — 과제 존: 목표를 겨누는 중인가 */
     const orbit = _missionCurrentOrbit();
     if(!orbit) return false;
     const STEPS_R = 8;
@@ -9301,6 +10577,7 @@ function updateSatelliteInstall(dt, now){
         _updateSatProgressBar();
         return;
     }
+    if(szTaskUpdate(dt, now)) return;   /* P4 — 과제 존(포보스·고리 시료·포톤링)은 과제로 */
     const onOrbit = _isPlayerOnOrbit();
     if(satHeld && onOrbit){
         satInstallProgress = Math.min(SAT_INSTALL_MS, satInstallProgress + dt * 1000 * SAT_FILL_RATE);
@@ -9672,7 +10949,7 @@ let zoneEnteredAt = 0;         /* ms 현재 zone 진입 시각 */
 function maybeSpawnDepot(zoneIdx, now){
     /* 통신 두절(싱글) — 보급선이 위치를 못 잡는다. 이번 존 슬롯은 '안 떨어진 채' 남겨 두어
        같은 존에서 위성 설치에 성공하면 바로 떨어진다 (key 를 소모하지 않음) */
-    if(commLinkLost) return;
+    /* P4 — 두절 중에도 slot0 은 온다(아래 루프에서 slot1+ 만 막는다) */
     const def = ZONE_DEPOT_MAP.find(d => d.zoneIdx === zoneIdx);
     if(!def) return;
     /* PvP guest 는 spawn 결정 안 함 — host 의 'depot_spawn' broadcast 만 신뢰.
@@ -9703,7 +10980,9 @@ function maybeSpawnDepot(zoneIdx, now){
     for(let slot = 0; slot < itemCount; slot++){
         const key = zoneIdx + '-' + slot;
         if(depotsSpawnedZones.has(key)) continue;
-        const targetSec = Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
+        if(commLinkLost && slot >= 1) continue;
+        /* P4 — 첫 보급은 6s (튜토리얼 비트) */
+        const targetSec = (zoneIdx === 0 && slot === 0) ? 6 : Math.max(slot === 0 ? minFirst : minFirst + slot * 2.5, ratios[slot] * zd);
         if(sinceZone < targetSec) continue;
         /* slot 1 이상이면서 미션 가능 zone 인데 아직 위성 설치 안 됐으면
            이번 spawn skip. 차단 표시는 안 남김 — 나중 미션 완료하면
@@ -9713,8 +10992,11 @@ function maybeSpawnDepot(zoneIdx, now){
         }
         /* 위치 — 해시 (시드, 'D', 존, 슬롯). 미션 존은 목표 시각(targetSec)의 궤도 위, 기타 존은 화면 위에서.
            수열을 소비하지 않아 미션 성패·출현 지연과 무관하게 같은 자리. 1:1 PvP 호스트는 좌표를 방송한다 */
-        szDropDepot(zoneIdx, slot, def.items[slot], now, targetSec);
+        const _d = szDropDepot(zoneIdx, slot, def.items[slot], now, targetSec);
+        /* P4 — 첫 판의 첫 보급은 기체 바로 위 (x 만 — 혼자 하는 판이라 대결 코스와 무관) */
+        if(_d && zoneIdx === 0 && slot === 0 && szFirstRunNow()) _d.x = Math.max(60, Math.min(CW - 60, player.x));
     }
+    if(zoneIdx === 30) szZ30Repeat(sinceZone, now);   /* P4 — 열적 죽음: slot0 25s 주기 반복 */
 }
 /* PvP guest — host 의 depot_spawn broadcast 받아 local depot push.
    key 가 이미 spawnedZones 에 있으면 (P2P + supabase 둘 다 도착) 무시 (멱등). */
@@ -9980,6 +11262,7 @@ function isBlackHoleZone(){
 /* 매 frame 호출 — bullets/player 에 끌어당김 가속도 적용. */
 function updateBlackHolePull(dt){
     if(!isBlackHoleZone()) return;
+    szUpdateBlackHoleGeom(getZoneT(BLACK_HOLE_ZONE_IDX));   /* P4 — 판정 기하를 그리기 전에(그리기를 꺼도 산다) */
     const cx = blackHole.cx, cy = blackHole.cy;
     /* event horizon — player 가 들어오면 즉사 (lives=0 트리거). */
     const phx = player.x - cx, phy = player.y - cy;
@@ -9999,15 +11282,10 @@ function updateBlackHolePull(dt){
         triggerGameOver('bh');   /* 사인(P3 결과 카드) — 사상의 지평선 */
         return;
     }
-    /* player pull (mild) — 거리 inverse-square + 안전한 deadzone. */
-    if(phd < BH_PULL_RADIUS && phd > blackHole.r){
-        const ax = -phx / phd;
-        const ay = -phy / phd;
-        const f = BH_PULL_STRENGTH_PLAYER / (phd * phd);
-        player.x += ax * f * dt;
-        player.y += ay * f * dt;
-    }
-    /* bullets pull (strong) — 메테오가 휘어 들어가는 시각. event horizon 닿으면 제거. */
+    /* P4 (2026-09-28) — 기체 인력 제거. 기체에 가하는 힘은 입력 지연으로 체감된다(힘은 운석에만).
+       예전 값(1400/d²)은 체감 0.1~1px/s 로 효과도 없었다 */
+    /* bullets pull (strong) — 메테오가 휘어 들어가는 시각. event horizon 닿으면 제거. 마지막 10s ×1.4 (P4 보스④) */
+    const _bhK = szBhPullMul();
     let w = 0;
     const len = bullets.length;
     for(let i = 0; i < len; i++){
@@ -10019,7 +11297,7 @@ function updateBlackHolePull(dt){
         if(bd < BH_PULL_RADIUS){
             const ax = -bdx / bd;
             const ay = -bdy / bd;
-            const f = BH_PULL_STRENGTH_BULLET / Math.max(bd2, 100);  /* 너무 가까우면 무한대 막기 */
+            const f = BH_PULL_STRENGTH_BULLET * _bhK / Math.max(bd2, 100);  /* 너무 가까우면 무한대 막기 */
             b.vx += ax * f * dt;
             b.vy += ay * f * dt;
         }
@@ -10673,7 +11951,7 @@ function spawnBullet(now, speed, aimedRatio, multi){
            기체는 위를 보고 있어 아래·옆에서 튀어나오는 운석이 가장 억울하다.
            rand() 호출 수·순서는 예전과 같다 (edge → aimed → [PvP aim] → 위치 → [목표]). */
         const er=rand();
-        const edge = er<0.40 ? 0 : er<0.62 ? 1 : er<0.84 ? 3 : 2;
+        const edge = szEdgePick(er);   /* P4 — 존별 구간표(천왕성 좌37·우37·위16·아래10). 기본 위40·우22·좌22·아래16 */
         const aimed=rand()<aimedRatio;
         const spread=(m-Math.floor(multi/2))*14;
 
@@ -10717,8 +11995,11 @@ function spawnBullet(now, speed, aimedRatio, multi){
         else { tx=CW*0.6+rand()*CW*0.4; ty=CH*0.2+rand()*CH*0.6+spread; }
         const ddx2=tx-bx, ddy2=ty-by;
         const dd=Math.sqrt(ddx2*ddx2+ddy2*ddy2)||1;
-        const vx=ddx2/dd*speed, vy=ddy2/dd*speed;
-        bullets.push({x:bx, y:by, vx, vy, aimed, trail:[]});
+        const _ek = szEdgeSpeedK(edge);   /* P4 — 적색편이(27): 위 가장자리 운석 +25% */
+        const vx=ddx2/dd*speed*_ek, vy=ddy2/dd*speed*_ek;
+        const _nb = {x:bx, y:by, vx, vy, aimed, trail:[]};
+        if(_ek > 1) _nb.red = 1;
+        bullets.push(_nb);
         if(hostBroadcast){
             hostBroadcast.push({x:bx, y:by, vx, vy, aimed});
         }
@@ -12192,6 +13473,7 @@ function szDrawEdgeWarnings(){
     if(!bullets.length) return;
     ctx.save();
     for(const b of bullets){
+        if(b.zk) continue;   /* P4 — 협곡·충격파 돌은 벽 자체가 예고 */
         const out = b.x < 0 || b.x > CW || b.y < 0 || b.y > CH;
         if(!out) continue;
         /* 들어오는 중인 것만 */
@@ -12225,6 +13507,7 @@ function szDrawBullets(now){
     ctx.save();
     ctx.lineCap = 'round';
     for(const b of bullets){
+        if(b.zk) continue;   /* P4 — 협곡·충격파·얼음·초고속 별은 szZoneDraw 가 그린다 */
         const aimed = b.aimed;
         const N = b.trailLen || 0;
         if(N > 1){
@@ -12673,6 +13956,7 @@ function gameLoop(now){
             if(b.trailLen < TRAIL_CAP) b.trailLen++;
             /* Time Warp 시 dt × 0.35 — bullet 만 슬로우, player 는 정상. */
             const wdt = _worldDt(dt, now);
+            if(szZF) szZoneForce(b, wdt);   /* P4 — 존 힘(소용돌이·바람·오작교·항성풍·BEAM 반발)은 운석에만 */
             b.x += b.vx * wdt;
             b.y += b.vy * wdt;
             /* Near-miss combo credit (Stage 7). Once per bullet via the
@@ -12723,6 +14007,7 @@ function gameLoop(now){
     updateSupernovaRings(wDt);
     updatePulsarTime(dt, now);          /* 내부에서 _worldDt 적용 */
     updateComets(wDt); updateSplitters(wDt); updateWaves(wDt);
+    szZoneUpdate(wDt, dt, now);         /* P4 — 보스·존 시그니처 (수열 없이 논리시간으로) */
     /* Satellite mission state machine (Phase B) — pending → active → success/failed → idle */
     updateMissionState(now);
     /* Satellite installation (Phase C v2) — hold-to-deploy progress (player 행동) */
@@ -12773,6 +14058,7 @@ function gameLoop(now){
         if(!hit && comets.length)          hit = checkCometCollision();
         if(!hit && splitters.length)       hit = checkSplitterCollision();
         if(!hit && isBlackHoleZone())      hit = checkBlackHoleJetCollision();
+        if(!hit)                           hit = checkZoneBossCollision(now);   /* P4 — S2 별·퀘이사 제트 */
         if(hit){
             triggerHitFx(now);
             lives--;
@@ -12957,6 +14243,7 @@ function drawFrame(now, dt){
     drawSplitters();           /* v3 — 달아오르는 분열암 */
     drawComets(now);           /* v3 — 혜성 예고선·머리·꼬리 */
     drawWaves();               /* v3 — 편대 예고(틈은 초록) */
+    szZoneDraw(now);           /* P4 — 협곡 벽·충격파·제트·S2·존 시그니처 */
     try{ window.SZX && SZX.drawGhosts(ctx); }catch(_){}   /* 동시 대결 — 같이 나는 사람들 */
     drawPulsarBeam(now);       /* Stage 6 — rotating lighthouse, on top */
     drawMissionOrbit(now);          /* Phase B — orbital ring during active mission */
@@ -13030,6 +14317,7 @@ function drawFrame(now, dt){
     /* 콤보 팝업 — 블룸 뒤에 그려 글자가 선명하게 */
     szDrawPopups();
     if(window.SZ3) SZ3.drawStamp(now);    /* 큰 순간 도장 — 분 단위·신기록·위성 연결 */
+    szZoneDrawTop(now);                   /* P4 — WARNING · SURVIVED */
 
     /* ---- HUD: lives (max MAX_LIVES, 현재 lives 만큼 채움) ----
        2026-05-11 v5 — score-strip HTML overlay (y=5-30) 와 안 겹치게 y=10→y=40.
