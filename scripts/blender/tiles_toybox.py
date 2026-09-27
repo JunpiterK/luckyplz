@@ -1590,7 +1590,36 @@ def bubble_toy():
     # 터지는 별 (오른쪽 매달린 붉은 버블 옆)
     star = mat('popstar', PAL['mustard'], emit=(1.0, 0.75, 0.2), estr=0.4, coat=0.6)
     prism(star_pts(0.2, 0.09), 0.05, (0.86, -0.1, 1.55), star, parent=g)
+    # 사이트 마스코트 레서판다(2026-09-27) — 대포 오른쪽에서 조이스틱으로 조준하는 조작수.
+    # 게임(public/games/bubble)과 같은 모델·같은 포즈(mascot_panda.build_frame 'aim1')
+    _mascot_operator((0.76, -0.02, 0.12), 0.48)
     return g
+
+
+def _mascot_operator(loc, s, rz=-0.1):
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import mascot_panda as mp
+    yp = mp.yp
+    yp._MATS = {}                          # 이 스튜디오에서 새로 만든 재질만 쓴다(팩토리 리셋 뒤 옛 재질 참조 방지)
+    before = set(bpy.data.objects)
+    mp.build_frame('aim1')
+    piv = mp.PIVOT
+    blue = yp.mat('js_base', PAL['cobalt'], rough=0.25, coat=0.8)
+    cream = yp.mat('js_top', PAL['cream'], rough=0.3, coat=0.6)
+    cable = yp.mat('js_cable', (0.95, 0.66, 0.2), rough=0.3, coat=0.5)
+    yp.cyl(0.2, 0.1, (piv.x, piv.y, 0.05), blue, bevel=0.03)
+    yp.cyl(0.13, 0.05, (piv.x, piv.y, 0.12), cream, bevel=0.015)
+    pts = [Vector((piv.x - 0.12, piv.y + 0.05, 0.04)), Vector((-0.55, -0.62, 0.03)), Vector((-0.95, -0.3, 0.05))]
+    for a0, a1 in zip(pts, pts[1:]):
+        yp.capsule(a0, a1, 0.04, cable)
+    bpy.ops.object.empty_add(location=loc)
+    e = bpy.context.object
+    e.scale = (s, s, s)
+    e.rotation_euler = (0, 0, rz)
+    for o in bpy.data.objects:
+        if o not in before and o is not e and o.parent is None:
+            o.parent = e
 
 
 TOYS['bubble'] = bubble_toy
