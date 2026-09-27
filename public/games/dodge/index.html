@@ -7257,8 +7257,7 @@ function drawDangerVignette(now){
    만드는 개념".
    ===================================================================== */
 let asteroidClusters = [];           /* active clusters (each = {rocks: [...]} ) */
-let lastClusterSpawnAt = 0;          /* ms timestamp of last spawn */
-const CLUSTER_SPAWN_INTERVAL = 26000;     /* spawn every ~26s in applicable zones */
+const CLUSTER_SPAWN_INTERVAL = 26000;     /* spawn every ~26s in applicable zones (존 진입 5s 뒤 첫 판 — 격자는 szBaseZoneEvents) */
 const CLUSTER_ROCK_VY = 62;          /* base downward speed (px/s) — much slower than meteors */
 const CLUSTER_ROCK_VY_VAR = 22;      /* per-rock variation */
 const CLUSTER_GRAV_ACCEL = 820;      /* px/s² downward when rock in GRAV cone */
@@ -7424,7 +7423,6 @@ function drawAsteroidClusters(){
    2026-05-08 Stage 3.
    ===================================================================== */
 let solarFlares = [];
-let lastFlareSpawnAt = 0;
 const FLARE_SPAWN_INTERVAL = 8500;
 const FLARE_WARN_MS = 1200;
 const FLARE_FIRE_MS = 450;
@@ -7514,8 +7512,7 @@ const SPLIT_R = 24, SPLIT_FRAGS = 8;
 const WAVE_WARN_MS = 800;
 const NH_WARN_TOP = 66;                /* 위 가장자리 경고는 HUD(시간·하트 줄) 아래에 그린다 */
 let comets = [], splitters = [], waves = [];
-let lastCometAt = 0, lastSplitAt = 0, lastWaveAt = 0, lastMixAt = 0;
-function nhReset(){ comets = []; splitters = []; waves = []; lastCometAt = lastSplitAt = lastWaveAt = lastMixAt = 0; }
+function nhReset(){ comets = []; splitters = []; waves = []; }
 function nhClear(){ comets = []; splitters = []; waves = []; }
 function _nhSfx(kind){
     try{
@@ -7727,22 +7724,18 @@ function drawWaves(){
 /*<sz:mod:zonescript>*/
 /* 소유: P4 (존 시그니처·보스·난이도). P2 의 szZoneEvents(z, zH)·szDiffMod 확장점을 채운다.
    공유 공간에 나오는 것은 전부 시드 스트림(randH)에서 — Math.random 금지 */
+/* 확장점 기본값 (P2) — P4 가 이 두 함수의 본문을 채운다. 스케줄러·격자는 rng 펜스(P2) 소유.
+   szZoneEvents(z, zH): 존 z 의 위험물 사건 목록. zH = 그 존의 시드 수열(randH 도 같은 수열).
+     사건 {t: 존 시작 기준 ms, kind, every?, until?, params?, run?: (ev, z, tAbs) => void}
+     기본 = 현행 규칙을 격자로 옮긴 szBaseZoneEvents(z) — 목록을 받아 더하거나 빼서 돌려주면 된다.
+     논리시간만 쓸 것 — performance.now()·기체 위치로 사건을 정하면 대결 코스가 갈라진다
+   szDiffMod(d, eMs): 운석 스폰마다 _computeDiffAt 결과 d 를 논리시간 eMs 로 조정(d 는 매번 새 객체라 고쳐도 된다) */
+function szZoneEvents(z, zH){ return szBaseZoneEvents(z); }
+function szDiffMod(d, eMs){ return d; }
 /*</sz:mod:zonescript>*/
 
-/* 구간별 스폰 — 게임 루프(비 PvP)에서 호출. 섞임 구간은 9초마다 하나를 뽑는다 */
-function nhSpawnTick(now, zone, diff){
-    if(zone >= NH_MIX_FROM){
-        if(now - lastMixAt > 9000){
-            lastMixAt = now;
-            const r = randH();
-            if(r < 0.34) spawnComet(); else if(r < 0.67) spawnSplitter(); else spawnWave(diff.bulletSpeed);
-        }
-        return;
-    }
-    if(COMET_ZONES.has(zone) && now - lastCometAt > 6200){ lastCometAt = now; spawnComet(); }
-    if(SPLIT_ZONES.has(zone) && now - lastSplitAt > 6800){ lastSplitAt = now; spawnSplitter(); }
-    if(WAVE_ZONES.has(zone)  && now - lastWaveAt  > 8500){ lastWaveAt  = now; spawnWave(diff.bulletSpeed); }
-}
+/* 구간별 스폰(혜성 6.2s · 분열암 6.8s · 편대 8.5s, 섞임 구간 9s 마다 하나)은 결정성 v2 에서
+   논리시간 격자로 옮겼다 — szBaseZoneEvents / szHazardTick (rng 펜스). 예전 nhSpawnTick 은 폐기 */
 
 /* =====================================================================
    MAGNETIC MINES (자기 기뢰) — Cosmic Filament / Galactic Rim.
@@ -7752,7 +7745,6 @@ function nhSpawnTick(now, zone, diff){
    2026-05-08 Stage 4.
    ===================================================================== */
 let magneticMines = [];
-let lastMineSpawnAt = 0;
 const MINE_SPAWN_INTERVAL = 14000;
 const MINE_HOMING_ACCEL = 50;
 const MINE_GRAV_REPEL_ACCEL = 360;
@@ -7841,7 +7833,6 @@ function drawMagneticMines(){
    2026-05-08 Stage 5.
    ===================================================================== */
 let supernovaRings = [];
-let lastSupernovaAt = 0;
 const SUPERNOVA_INTERVAL = 11500;
 const SUPERNOVA_EXPAND_MS = 1900;
 const SUPERNOVA_FINAL_R = Math.max(CW, CH) * 0.95;
@@ -8228,11 +8219,12 @@ function _missionLang(){
     return 'en';
 }
 
-function _missionResolveOrbit(zIdx){
+function _missionResolveOrbit(zIdx, ztAt){
     /* 각 zone 의 행성/항성 본체 좌표 + 본체 반지름 → 그 위로 ALT(고도)
-       만큼 더한 ring 반지름. drawXxx() 의 cx,py,r 정의와 동일. */
+       만큼 더한 ring 반지름. drawXxx() 의 cx,py,r 정의와 동일.
+       ztAt(선택) = 이 zoneT 에서의 궤도 — 보급 좌표를 스폰 프레임이 아니라 목표 시각으로 정할 때(P2) */
     if(!MISSION_ZONES.has(zIdx)) return null;
-    const zoneT = _missionZoneT(zIdx);
+    const zoneT = (ztAt != null) ? ztAt : _missionZoneT(zIdx);
     const py = CH * (zoneT * 2.0 - 0.4);    /* 행성류 공통 y */
     const ALT = 38;                         /* orbit 고도 (본체 위) */
     switch(zIdx){
@@ -9508,7 +9500,8 @@ function maybeSpawnDepot(zoneIdx, now){
         ? ZONES[zoneIdx].dur : 25;
     const zd = Math.min(25, rawDur);
     const ratios = [0.25, 0.65];
-    const sinceZone = (now - zoneEnteredAt) / 1000;
+    /* 결정성 v2 — 존 진입 프레임의 벽시계가 아니라 논리시간(일시정지 제외) 기준. 레이서 전원이 같은 논리 초에 본다 */
+    const sinceZone = (elapsedMs - ZONES[zoneIdx].s * 1000) / 1000;
     /* zone 라벨 페이드인 시간 보장 — 첫 spawn 은 최소 2.5 초 후. */
     const minFirst = 2.5;
     const itemCount = Math.min(def.items.length, ratios.length);
@@ -9528,48 +9521,9 @@ function maybeSpawnDepot(zoneIdx, now){
         if(slot >= 1 && isMissionZone && !missionsCompletedZones.has(zoneIdx)){
             continue;
         }
-        depotsSpawnedZones.add(key);
-        /* 위치 — mission zone 이면 행성 주변 (궤도 ring 위 임의 각도, 상부
-           hemisphere 위주). 기타 zone 은 기존처럼 화면 위에서 떨어짐. */
-        let x, y;
-        if(isMissionZone && typeof _missionResolveOrbit === 'function'){
-            const orbit = _missionResolveOrbit(zoneIdx);
-            if(orbit){
-                /* 상부 hemisphere — 각도 -π~0 (위쪽 호) 안 임의 */
-                const ang = -Math.PI + randD() * Math.PI;
-                let ox = orbit.cx + Math.cos(ang) * orbit.r;
-                let oy = orbit.cy + Math.sin(ang) * orbit.r;
-                /* 화면 안으로 clamp — 너무 위로 가면 안 보임 */
-                x = Math.max(40, Math.min(CW - 40, ox));
-                y = Math.max(40, Math.min(CH * 0.55, oy));
-            } else {
-                x = 60 + randD() * (CW - 120);
-                y = -50;
-            }
-        } else {
-            x = 60 + randD() * (CW - 120);
-            y = -50;
-        }
-        const item = def.items[slot];
-        depots.push({
-            x, y,
-            speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
-            item,
-            zoneIdx, slot,
-            key,                            /* stable id — PvP depot_take 동기화 */
-            chargeTime: 0,                 /* 0~GRAV_PICKUP_TIME sec */
-            collected: false,
-            collectedByPeer: false,         /* 상대가 먹은 거면 true — buff 안 줌, fade 만 */
-            spawnedAt: now,
-            radius: 19
-        });
-        /* PvP host: spawn 즉시 broadcast — guest 가 받아서 같은 좌표에 push.
-           P2P (낮은 latency) + supabase (안정 fallback) 둘 다 송신. 멱등 (중복은 무시). */
-        if(isPvp && pvpState.channel){
-            const payload = { key, x, item, zoneIdx, slot, gameId: pvpState.seed || 0 };
-            _rtcSend({ event: 'depot_spawn', payload });
-            try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
-        }
+        /* 위치 — 해시 (시드, 'D', 존, 슬롯). 미션 존은 목표 시각(targetSec)의 궤도 위, 기타 존은 화면 위에서.
+           수열을 소비하지 않아 미션 성패·출현 지연과 무관하게 같은 자리. 1:1 PvP 호스트는 좌표를 방송한다 */
+        szDropDepot(zoneIdx, slot, def.items[slot], now, targetSec);
     }
 }
 /* PvP guest — host 의 depot_spawn broadcast 받아 local depot push.
@@ -9580,10 +9534,10 @@ function _handleDepotSpawnPayload(p){
     if(depotsSpawnedZones.has(p.key)) return;
     depotsSpawnedZones.add(p.key);
     depots.push({
-        x: Number(p.x), y: -50,
+        x: Number(p.x), y: Number.isFinite(Number(p.y)) ? Number(p.y) : -50,   /* 궤도 보급 y (옛 호스트는 x 만 보낸다) */
         speed: 24,
         item: p.item,
-        zoneIdx: Number(p.zoneIdx), slot: Number(p.slot),
+        zoneIdx: Number(p.zoneIdx), slot: p.slot,
         key: p.key,
         chargeTime: 0,
         collected: false,
@@ -10539,8 +10493,9 @@ function spawnBullet(now, speed, aimedRatio, multi){
            rand() 로 매번 다른 target 선택 — 양쪽 player 공평하게 위협. */
         const isPvp = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp');
         const _shared = isPvp || _szRacing();   /* 동시 대결도 같은 운석장을 쓴다 */
-        const aimX = _shared ? (40 + rand() * (CW - 80)) : player.x;
-        const aimY = _shared ? (CH * 0.40 + rand() * CH * 0.45) : player.y;
+        /* 결정성 v2 — 공유 조준은 기체가 많이 머무는 하단 가운데(x 15~85%, y 50~85%)로 좁힌다. rand() 2회는 그대로 */
+        const aimX = _shared ? (CW * 0.15 + rand() * CW * 0.70) : player.x;
+        const aimY = _shared ? (CH * 0.50 + rand() * CH * 0.35) : player.y;
 
         /* 화면 밖 SZ_SPAWN_OFF(34px) 에서 출발 — 가장자리 경고 화살표가 보일 시간을 번다 */
         let bx, by;
@@ -10712,7 +10667,7 @@ function _lpMarkPause(isPaused){
         const d = t - pausedAt;
         totalPausedMs += d;
         pausedAt = 0;
-        try{ lastSpawn = t; }catch(_){}   /* 재개 순간 스폰 기준 재설정 */
+        try{ if(lastSpawn) lastSpawn += d; }catch(_){}   /* 멈춘 만큼 스폰 기준도 민다 — 몰아치기 없음 + 논리시간 격자 유지(결정성 v2) */
         /* 미션·보급 타이머도 멈춘 시간만큼 민다 — 자리 비움 일시정지 뒤 돌아왔는데
            미션이 시간 초과(= 통신 두절)로 끝나 있으면 억울하다 (2026-09-25) */
         try{
@@ -10907,13 +10862,10 @@ function resetGame(){
     comboMaxThisRun=0;
     comboFlashUntil=0;
     asteroidClusters=[];               /* Stage 2 reset */
-    lastClusterSpawnAt=0;
     solarFlares=[];                    /* Stage 3 reset */
-    lastFlareSpawnAt=0;
     magneticMines=[];                  /* Stage 4 reset */
-    lastMineSpawnAt=0;
     supernovaRings=[];                 /* Stage 5 reset */
-    lastSupernovaAt=0;
+    szDetReset();                      /* 결정성 v2 — 위험물 격자·존 수열 커서 (시드는 유지) */
     pulsarBeam=null;                   /* Stage 6 reset */
     nhReset();                         /* v3 혜성·분열암·편대 */
     pulsarElapsed=0;
@@ -12186,14 +12138,8 @@ function gameLoop(now){
         sfxZone();
         triggerZoneWarpFx(now);
         if(window.SZ3) try{ SZ3.zone(newIdx); }catch(_){}
-        zoneEnteredAt = performance.now();   /* depot spawn 타이밍 기준 */
-        /* Asteroid cluster onset — when entering a cluster zone, time the
-           first cluster ~5s after entry (instead of waiting full INTERVAL).
-           For short zones (Pluto dur=14s) this still gives one cluster
-           before the zone ends. */
-        if(_isClusterZone(newIdx)){
-            lastClusterSpawnAt = now - (CLUSTER_SPAWN_INTERVAL - 5000);
-        }
+        zoneEnteredAt = performance.now();   /* (보급 타이밍은 결정성 v2 부터 논리시간 — 이 값은 참고용) */
+        /* 소행성 무리 첫 등장(존 진입 5s 뒤)은 szBaseZoneEvents 의 격자가 맡는다 */
         /* Satellite mission trigger (Phase B) — eligible zones only.
            2026-05-11: PvP 에서도 미션 활성화. 양쪽 동일 zone 에 동시 진입 →
            동시 시작 → 먼저 완료한 사람만 reward 획득 (race system). */
@@ -12241,16 +12187,23 @@ function gameLoop(now){
     const _isPvpGuest = (pvpState && pvpState.gameMode === 'pvp' && pvpState.role !== 'host');
     if(_isPvpGuest){
         /* nothing — bullets 는 _handleBulletSpawnPayload 가 push */
-    } else if(now < wipeSpawnBlockUntil){
-        lastSpawn = now;
+    } else if(now < wipeSpawnBlockUntil && pvpState && pvpState.gameMode === 'pvp'){
+        lastSpawn = now;   /* 1:1 PvP 호스트는 예전대로 — 게스트에게 방송한 운석은 지울 수 없다 */
     } else {
+        /* 결정성 v2 — 폭탄 차단 중에도 루프는 그대로(수열 동일), 만든 운석만 바로 지운다(szDudMeteors).
+           운석 수열은 스폰 논리시각의 존 수열(szMeteorZone) — 루프 도중 존 경계를 넘어도 그 자리에서 바뀐다 */
+        const _szDud = now < wipeSpawnBlockUntil;
         while(true){
             const logicalElapsed = lastSpawn - startedAt - totalPausedMs;
-            const localDiff = _computeDiffAt(logicalElapsed);
+            const localDiff = szDiffMod(_computeDiffAt(logicalElapsed), logicalElapsed);
+            if(!(localDiff.spawnInterval >= 60)) localDiff.spawnInterval = 60;   /* 훅 안전장치 — 0 이면 무한 루프 */
             if(now - lastSpawn < localDiff.spawnInterval) break;
             lastSpawn += localDiff.spawnInterval;
+            szMeteorZone(logicalElapsed);
+            const _n0 = bullets.length;
             const multiShot = Math.min(3, localDiff.msFloor + (rand() < (localDiff.msRaw - localDiff.msFloor) ? 1 : 0));
             spawnBullet(now, localDiff.bulletSpeed, localDiff.aimedRatio, multiShot);
+            if(_szDud) szDudMeteors(_n0);
         }
     }
 
@@ -12318,36 +12271,9 @@ function gameLoop(now){
        require host→guest broadcast packets; deferred. */
     const _isPvpAny = pvpState && pvpState.gameMode === 'pvp';
     if(!_isPvpAny){
-        /* Asteroid cluster (Stage 2) */
-        if(_isClusterZone(currentZoneIdx)){
-            if(now - lastClusterSpawnAt > CLUSTER_SPAWN_INTERVAL){
-                spawnAsteroidCluster();
-                lastClusterSpawnAt = now;
-            }
-        }
-        /* Solar flare (Stage 3) */
-        if(_isFlareZone(currentZoneIdx)){
-            if(now - lastFlareSpawnAt > FLARE_SPAWN_INTERVAL){
-                spawnSolarFlare();
-                lastFlareSpawnAt = now;
-            }
-        }
-        /* Magnetic mine (Stage 4) */
-        if(_isMineZone(currentZoneIdx)){
-            if(now - lastMineSpawnAt > MINE_SPAWN_INTERVAL){
-                spawnMagneticMine();
-                lastMineSpawnAt = now;
-            }
-        }
-        /* Supernova ring (Stage 5) */
-        if(_isSupernovaZone(currentZoneIdx)){
-            if(now - lastSupernovaAt > SUPERNOVA_INTERVAL){
-                spawnSupernovaRing();
-                lastSupernovaAt = now;
-            }
-        }
-        /* v3 — 혜성·분열암·편대 (비어 있던 관광 구간 + 은하 가장자리 이후 섞임) */
-        nhSpawnTick(now, currentZoneIdx, _computeDiffAt(elapsedMs));
+        /* 소행성 무리·플레어·기뢰·초신성·혜성·분열암·편대 — 결정성 v2 논리시간 격자(szHazardTick, rng 펜스).
+           예전 now-last 판정은 프레임·일시정지에 따라 박자가 밀려 대결 코스가 갈라졌다 */
+        szHazardTick(elapsedMs);
         /* Pulsar beam (Stage 6) — single persistent beam, ensure exists in zone */
         if(_isPulsarZone(currentZoneIdx)) ensurePulsarBeam(now);
         else if(pulsarBeam) clearPulsarBeam();
@@ -13719,6 +13645,204 @@ function randD(){ return _rngD(); }
 /*<sz:mod:rng>*/
 /* 소유: P2 (결정성 v2 — 존 단위 서브스트림 szZoneEvents(z, zH)·szDiffMod·코스 버전 cv).
    이 구역의 수열은 프레임률·미션 성패·폭탄 사용과 무관해야 한다 (게이트 det 가 검사) */
+/* ── 결정성 v2 (2026-09-27, 코스 버전 cv=2) ─────────────────────────────────
+   예전엔 판 전체가 수열 하나(스트림별)를 이어 써서, 한 번 어긋나면(프레임률·폭탄·미션) 뒤가 전부 어긋났다.
+   · 운석(rand)·위험물(randH) = 존마다 (시드, 스트림, 존) 으로 새로 뽑은 수열 → 존이 바뀌면 모두 같은 자리에서 다시 시작
+   · 위험물 = 논리시간 격자(존 시작 + offset + k×간격). 프레임 사이 밀린 것은 순서대로 따라잡는다
+   · 보급 좌표 = 수열을 소비하지 않는 해시 (시드, 'D', 존, 태그) → 누가 언제 떨어뜨려도 같은 자리
+   · 논리시간 = elapsedMs (일시정지 제외). 히트스톱·니어미스 슬로모·TIME_WARP 는 세상 dt 만 바꾸고 스폰 시각은 안 바꾼다
+   · 옛 빌드와는 코스가 다르다 → 도전장 링크 &cv=2, 동시 대결은 빌드 스탬프 게이트(race 펜스)
+   이 구역의 상태는 var — resetGame·_setSeed 가 스크립트 평가 순서와 무관하게 부를 수 있게 */
+var SZ_CV = 2;
+function _szMix(a){
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return (t ^ (t >>> 14)) >>> 0;
+}
+function _szKey(v){
+    if(typeof v === 'number') return v | 0;
+    const s = String(v); let h = 0x811C9DC5 | 0;
+    for(let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+    return h | 0;
+}
+/* (시드, 스트림, 존, k) → 32비트. mulberry32 finalizer 를 세 번 — _szRewardPick 과 같은 '수열 없는 해시' 방식 */
+function _szHash(seed, stream, z, k){
+    let h = _szMix((seed | 0) ^ Math.imul(_szKey(stream), 0x9E3779B1));
+    h = _szMix(h ^ Math.imul((z | 0) + 1, 0x85EBCA77));
+    return _szMix(h ^ Math.imul(_szKey(k) + 1, 0xC2B2AE3D));
+}
+/* 존 서브스트림 — 시드 없는 판(1:1 PvP 종료 후 등)은 Math.random */
+function szZoneRng(seed, stream, z){ return seed ? _mb32(_szHash(seed, stream, z, 0)) : Math.random; }
+function _szU(stream, z, k){ return _rngSeed ? _szHash(_rngSeed, stream, z, k) / 4294967296 : Math.random(); }
+function _szZoneStartMs(z){ return ZONES[z].s * 1000; }
+function _szZoneEndMs(z){ return (z + 1 < ZONES.length) ? ZONES[z + 1].s * 1000 : Infinity; }
+/* 논리시간 ms → 존 번호. from 부터 앞으로만 본다(한 판 안에서 논리시간은 줄지 않는다) */
+function _szZoneAt(ms, from){
+    let z = from > 0 ? from : 0; const s = ms / 1000;
+    while(z + 1 < ZONES.length && s >= ZONES[z + 1].s) z++;
+    return z;
+}
+
+/* ── 운석 수열 — rand() 는 '지금 스폰하는 논리시각의 존' 수열에서 뽑는다 ── */
+var _szZM = null, _szMZ = -1;
+function szMeteorZone(eMs){
+    const z = _szZoneAt(eMs, _szMZ);
+    if(z !== _szMZ || !_szZM){ _szMZ = z; _szZM = szZoneRng(_rngSeed, 'M', z); }
+}
+function _szMDraw(){ _rngCalls++; if(!_szZM) szMeteorZone(0); return _szZM(); }
+
+/* 폭탄(WIPE·플라즈마 폭풍) 뒤 스폰 차단 — 루프는 그대로 돌아 수열을 똑같이 쓰고, 만든 운석만 바로 지운다.
+   그래서 폭탄 쓴 사람과 안 쓴 사람의 이후 운석이 같다. 가장자리에 작은 불꽃만(연출 = Math.random) */
+function szDudMeteors(n0){
+    for(let i = n0; i < bullets.length; i++){
+        const b = bullets[i];
+        const x = Math.max(3, Math.min(CW - 3, b.x)), y = Math.max(3, Math.min(CH - 3, b.y));
+        _pushFxSpark(grazeSparks, x, y, '#FFE6A8', 46, 0.22);
+        _pushFxSpark(grazeSparks, x, y, '#FFB86B', 34, 0.18);
+    }
+    if(bullets.length > n0) bullets.length = n0;
+}
+
+/* ── 위험물 스케줄러 ──
+   존에 들어갈 때 szZoneEvents(z, zH) 로 그 존의 사건 목록을 받고, 논리시간이 지나면 순서대로 터뜨린다.
+   사건 = {t: 존 시작 기준 ms, kind, every?: 반복 ms, until?: 존 기준 ms, params?, run?: (ev, z, tAbs) => void}
+   kind 기본값: cluster · flare · mine · nova · comet · split · wave · mix. run 이 있으면 run 을 부른다(P4 확장).
+   값은 전부 randH() = 그 존의 zH 에서 — 사건 순서가 고정이라 프레임률과 무관하게 같은 값 */
+var SZ_HZ = null;          /* {z, z0, z1, rng, ev[], firing, fz, ft} — 게이트가 fz/ft 를 읽는다 */
+var _szZH = null;
+const SZ_HZ_STALE = 1500;  /* 이보다 오래 밀린 사건은 건너뛴다(기기 멈춤·디버그 점프). 다음 존부터는 다시 같은 코스 */
+function _szHDraw(){ return _szZH ? _szZH() : Math.random(); }
+function szDetReset(){ _szZM = null; _szMZ = -1; _szZH = null; SZ_HZ = null; }
+/* 붙어 있는 존들이 같은 위험물을 쓰면(플레어 0·1·2) 한 줄 박자로 잇는다 — 존 경계에서 두 번 연달아 안 나오게 */
+function _szChain(z, inSet, first0, firstN, every, out, kind){
+    if(!inSet(z)) return;
+    let r = z; while(r > 0 && inSet(r - 1)) r--;
+    const anchor = _szZoneStartMs(r) + (r === 0 ? first0 : firstN);
+    const zs = _szZoneStartMs(z);
+    const t = anchor >= zs ? anchor : anchor + Math.ceil((zs - anchor) / every) * every;
+    out.push({t: t - zs, kind, every});
+}
+/* 현행 위험물 규칙을 격자로 옮긴 기본 목록. 존 0 첫 플레어 = 10.0s (예전엔 0초에 바로 나왔다) */
+function szBaseZoneEvents(z){
+    const ev = [], S = (set) => (i) => set.has(i);
+    _szChain(z, S(CLUSTER_ZONES), 5000, 5000, CLUSTER_SPAWN_INTERVAL, ev, 'cluster');
+    _szChain(z, S(FLARE_ZONES), 10000, 600, FLARE_SPAWN_INTERVAL, ev, 'flare');
+    _szChain(z, S(MINE_ZONES), 600, 600, MINE_SPAWN_INTERVAL, ev, 'mine');
+    _szChain(z, S(SUPERNOVA_ZONES), 600, 600, SUPERNOVA_INTERVAL, ev, 'nova');
+    if(z >= NH_MIX_FROM){
+        _szChain(z, (i) => i >= NH_MIX_FROM, 600, 600, 9000, ev, 'mix');
+    } else {
+        _szChain(z, S(COMET_ZONES), 600, 600, 6200, ev, 'comet');
+        _szChain(z, S(SPLIT_ZONES), 600, 600, 6800, ev, 'split');
+        _szChain(z, S(WAVE_ZONES), 600, 600, 8500, ev, 'wave');
+    }
+    return ev;
+}
+function _szHzEnter(z){
+    const H = SZ_HZ;
+    H.z = z; H.z0 = _szZoneStartMs(z); H.z1 = _szZoneEndMs(z);
+    H.rng = szZoneRng(_rngSeed, 'H', z);
+    _szZH = H.rng;
+    const src = szZoneEvents(z, H.rng) || [];
+    const ev = [];
+    for(let i = 0; i < src.length; i++){
+        const e = src[i]; if(!e) continue;
+        ev.push({t: +e.t || 0, kind: e.kind, every: e.every > 0 ? +e.every : 0, until: (e.until != null) ? +e.until : Infinity,
+                 params: e.params, run: e.run, o: i});
+    }
+    ev.sort((a, b) => (a.t - b.t) || (a.o - b.o));
+    H.ev = ev;
+}
+function _szHzFire(H, e, tAbs){
+    H.firing = true; H.fz = H.z; H.ft = tAbs;
+    try{
+        if(typeof e.run === 'function'){ e.run(e, H.z, tAbs); return; }
+        switch(e.kind){
+            case 'cluster': spawnAsteroidCluster(); break;
+            case 'flare':   spawnSolarFlare(); break;
+            case 'mine':    spawnMagneticMine(); break;
+            case 'nova':    spawnSupernovaRing(); break;
+            case 'comet':   spawnComet(); break;
+            case 'split':   spawnSplitter(); break;
+            case 'wave':    spawnWave(_computeDiffAt(tAbs).bulletSpeed); break;
+            case 'mix': {
+                const r = randH();
+                if(r < 0.34) spawnComet(); else if(r < 0.67) spawnSplitter(); else spawnWave(_computeDiffAt(tAbs).bulletSpeed);
+                break;
+            }
+        }
+    } finally { H.firing = false; }
+}
+/* 매 프레임(비 PvP) — eMs = 논리시간 elapsedMs */
+function szHazardTick(eMs){
+    let H = SZ_HZ;
+    if(!H){ H = SZ_HZ = {z: -1, ev: [], firing: false, fz: -1, ft: 0}; _szHzEnter(0); }
+    for(let n = 0; n < 400; n++){
+        const e = H.ev.length ? H.ev[0] : null;
+        const tAbs = e ? H.z0 + e.t : Infinity;
+        if(e && tAbs <= eMs && tAbs < H.z1){
+            H.ev.shift();
+            if(tAbs >= eMs - SZ_HZ_STALE) _szHzFire(H, e, tAbs);
+            if(e.every){
+                e.t += e.every;
+                if(e.t < e.until && H.z0 + e.t < H.z1){
+                    let i = 0; while(i < H.ev.length && ((H.ev[i].t < e.t) || (H.ev[i].t === e.t && H.ev[i].o < e.o))) i++;
+                    H.ev.splice(i, 0, e);
+                }
+            }
+            continue;
+        }
+        if(eMs >= H.z1 && H.z + 1 < ZONES.length){ _szHzEnter(H.z + 1); continue; }
+        break;
+    }
+}
+
+/* ── 보급 — 좌표는 해시, 출현 시각만 게이트(미션·통신 두절)로 늦어질 수 있다 ──
+   태그: 슬롯 번호(0,1) · 'r'(미션 복구 보급) · 'b'(보스 보급) · 존30 반복은 2,3,4… (key '30-k').
+   key 형식 'zoneIdx-태그' 는 그대로 — 동시 대결 쟁탈(onTakeMsg)·1:1 PvP 동기화가 key 로 한다.
+   atSec(존 기준 초)을 주면 미션 존은 그 시각의 궤도 위에 놓는다(스폰 프레임과 무관) */
+function szDepotPos(zoneIdx, tag, atSec){
+    const u = _szU('D', zoneIdx, tag);
+    const Z = ZONES[zoneIdx];
+    if(atSec != null && Z && typeof MISSION_ZONES !== 'undefined' && MISSION_ZONES.has(zoneIdx)){
+        const zt = (Z.dur > 0) ? Math.max(0, Math.min(1, atSec / Z.dur)) : 0.5;
+        const orbit = _missionResolveOrbit(zoneIdx, zt);
+        if(orbit){
+            /* 상부 반구 — 각도 -π~0 (위쪽 호). 화면 안으로 clamp */
+            const ang = -Math.PI + u * Math.PI;
+            return {x: Math.max(40, Math.min(CW - 40, orbit.cx + Math.cos(ang) * orbit.r)),
+                    y: Math.max(40, Math.min(CH * 0.55, orbit.cy + Math.sin(ang) * orbit.r))};
+        }
+    }
+    return {x: 60 + u * (CW - 120), y: -50};
+}
+/* 보급 하나 투하 — 이미 떨어진 key 면 null. 1:1 PvP 호스트는 좌표를 방송한다 */
+function szDropDepot(zoneIdx, tag, item, now, atSec){
+    const key = zoneIdx + '-' + tag;
+    if(depotsSpawnedZones.has(key)) return null;
+    depotsSpawnedZones.add(key);
+    const p = szDepotPos(zoneIdx, tag, atSec);
+    const d = {
+        x: p.x, y: p.y,
+        speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
+        item,
+        zoneIdx, slot: tag,
+        key,                            /* stable id — PvP depot_take · 동시 대결 쟁탈 */
+        chargeTime: 0,                 /* 0~GRAV_PICKUP_TIME sec */
+        collected: false,
+        collectedByPeer: false,         /* 상대가 먹은 거면 true — buff 안 줌, fade 만 */
+        spawnedAt: now,
+        radius: 19
+    };
+    depots.push(d);
+    if(pvpState && pvpState.gameMode === 'pvp' && pvpState.role === 'host' && pvpState.channel){
+        const payload = { key, x: p.x, y: p.y, item, zoneIdx, slot: tag, gameId: pvpState.seed || 0 };
+        _rtcSend({ event: 'depot_spawn', payload });
+        try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
+    }
+    return d;
+}
 /*</sz:mod:rng>*/
 /* 미션 보상 — 시드 게임이면 (시드, 존) 으로 정해져 모두 같은 보상. 아니면 무작위 */
 function _szRewardPick(z, n){
@@ -13729,8 +13853,10 @@ function _szRewardPick(z, n){
 }
 function _setSeed(s){
     _rngCalls = 0; _rngSeed = (s|0) || 1;
-    _seededRng = _mulberry32(_rngSeed);
-    _rngH = _mb32(_rngSeed ^ 0x5bd1e995);
+    /* 결정성 v2 — 운석·위험물은 존 서브스트림 디스패처(존이 바뀌면 새 수열), 보급은 해시(randD 미사용) */
+    szDetReset();
+    _seededRng = _szMDraw;
+    _rngH = _szHDraw;
     _rngD = _mb32(_rngSeed ^ 0x27d4eb2f);
 }
 function _resetRand(){ _seededRng = Math.random; _rngH = Math.random; _rngD = Math.random; _rngSeed = 0; _rngState = 0; _rngCalls = 0; }
@@ -15133,7 +15259,9 @@ const b36=n=>(n>>>0).toString(36);
         const m=q.match(/^([0-9a-z]{1,7})-([0-9a-z]{1,7})-(.{0,40})$/i);if(!m)return;
         const seed=parseInt(m[1],36),ms=parseInt(m[2],36);
         if(!seed||!ms||ms>3600000)return;
-        challenge={seed,ms,nick:decodeURIComponent(m[3]||'').slice(0,14)||t('anon')};
+        /* cv = 코스 버전. 없으면 결정성 v2 이전 링크 — 같은 시드라도 코스가 달라 기록 비교를 하지 않는다 */
+        const cv=parseInt(new URLSearchParams(location.search).get('cv')||'1',10)||1;
+        challenge={seed,ms,nick:decodeURIComponent(m[3]||'').slice(0,14)||t('anon'),cv};
     }catch(_){}
 })();
 function applySeed(){
@@ -15161,7 +15289,7 @@ async function shareLink(url,text){
     try{await navigator.clipboard.writeText(text+'\n'+url)}catch(_){try{window.prompt('',url)}catch(__){}}
     toast(t('copied'));
 }
-function chUrl(ms){return location.origin+'/games/dodge/?ch='+b36(curSeed)+'-'+b36(Math.round(ms))+'-'+encodeURIComponent(nickOrAsk())}
+function chUrl(ms){return location.origin+'/games/dodge/?ch='+b36(curSeed)+'-'+b36(Math.round(ms))+'-'+encodeURIComponent(nickOrAsk())+'&cv='+SZ_CV}
 function decorateStart(){
     const ov=$('overlay');if(!ov||!challenge||$('szxChBanner')||running||!ov.querySelector('#ovTitle'))return;
     const d=document.createElement('div');d.id='szxChBanner';d.className='szx-ch';
@@ -15176,7 +15304,9 @@ function decorateResult(ms){
     const ov=$('overlay'),big=ov&&ov.querySelector('.score-big');if(!big)return;
     const box=document.createElement('div');box.style.cssText='display:flex;flex-direction:column;align-items:center;width:100%';
     let html='';
-    if(challenge&&curSeed===challenge.seed){
+    if(challenge&&curSeed===challenge.seed&&(challenge.cv||1)<SZ_CV){
+        html+='<div class="szx-vs">'+esc(szP2T('oldCourse'))+'</div>';
+    }else if(challenge&&curSeed===challenge.seed){
         const diff=Math.abs(ms-challenge.ms)/1000,win=ms>challenge.ms;
         html+='<div class="szx-vs '+(win?'win':'lose')+'">'+esc((win?t('chWin'):t('chLose')).replace('{d}',diff.toFixed(2)))+'</div>';
     }
@@ -15210,7 +15340,7 @@ function actingHost(){
     return ms.length&&ms[0].p===pid;
 }
 function metaOut(extra){
-    const m=Object.assign({p:pid,n:R.nick,h:R.creator?1:0,j:R.joinedAt||Date.now(),r:R.round,s:'lobby',t:0,z:0,c:0},R.myMeta||{},extra||{});
+    const m=Object.assign({p:pid,n:R.nick,h:R.creator?1:0,j:R.joinedAt||Date.now(),r:R.round,s:'lobby',t:0,z:0,c:0,b:szBuildStamp()},R.myMeta||{},extra||{});
     R.myMeta=m;return m;
 }
 /* 상태 전달은 broadcast 로 한다 (2026-09-24 실측).
@@ -15267,7 +15397,7 @@ function connect(code,creator){
     const ch=sb.channel('szx-race-'+code,{config:{broadcast:{self:false,ack:false}}});
     R.ch=ch;R.joined=false;R.subT=Date.now();
     ch.on('broadcast',{event:'st'},({payload})=>onSt(payload));
-    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0)});
+    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0,payload.b)});
     ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload));
     ch.on('broadcast',{event:'pos'},({payload})=>{if(payload&&payload.p)ghostPt(payload.p,payload.x,payload.y,false)});
     ch.on('broadcast',{event:'tk'},({payload})=>onTakeMsg(payload));
@@ -15507,7 +15637,7 @@ function hostCatchUp(){
     if(!hm||hm.hr<=R.round)return;
     /* 기기 시계는 서로 다르니 방장 자신의 비행 시간으로 판단한다 — 막 출발했으면 합류 */
     const fresh=hm.s==='play'&&hm.r===hm.hr&&(hm.t||0)<2500;
-    if(fresh&&!running)onGo(hm.hr,hm.hs);
+    if(fresh&&!running)onGo(hm.hr,hm.hs,hm.b);
     else if(!R.racing){R.round=hm.hr;R.seed=hm.hs;R.spect=true;metaOut({r:R.round,s:'spec'});track(true);if(R.view==='lobby')setView('result')}
 }
 function noteResult(m){
@@ -15519,14 +15649,17 @@ function noteResult(m){
 }
 function startRound(){
     if(!actingHost())return;
+    if(szBuildBlocked())return;   /* 빌드가 다른 사람이 있으면 출발 불가 — 코스가 달라진다 */
     const r=Math.max(R.round,...Object.values(R.members).map(m=>m.r||0))+1;
     const s=((Math.random()*0x7fffffff)|0)+1;
+    const b=szBuildStamp();
     metaOut({hr:r,hs:s,ha:Date.now()});
-    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s}})}catch(_){}
-    onGo(r,s);
+    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b}})}catch(_){}
+    onGo(r,s,b);
 }
-function onGo(r,s){
+function onGo(r,s,b){
     if(r<=R.round)return;
+    if(!szBuildOk(b)){szBuildNote([]);return}   /* 방장과 빌드가 다르면 참가하지 않는다 → 새로고침 안내 */
     if(running||(typeof _introRunning!=='undefined'&&_introRunning)){R.round=r;R.seed=s;R.spect=true;metaOut({r,s:'spec'});track(true);return}
     R.round=r;R.seed=s;R.spect=false;R.racing=true;R.taken={};
     for(const k of Object.keys(GH))delete GH[k];
@@ -15740,6 +15873,54 @@ document.addEventListener('lp:langchanged',()=>{const b=$('szxRaceBtn');if(b)b.t
 /*<sz:mod:race>*/
 /* 소유: P5 (추락 중계·관전·데일리·로비 벌칙 문구·빌드 불일치 게이트). P2 = go 신호·코스 버전(cv) 부분만.
    다른 사람 화면과 공유되는 값은 시드·방송 페이로드로만 — 로컬 Math.random 금지 */
+/* ── P2 빌드 게이트 · 코스 버전 문구 ──
+   코스(운석·위험물·보급 규칙)는 빌드마다 달라질 수 있다. 캐시된 옛 HTML 과 새 HTML 이 한 방에서 같은 시드로
+   날면 '같은 코스'가 아니다 → 참가 메타·go 신호에 빌드 스탬프 b 를 싣고, 다르면 출발·참가를 막고 새로고침을 안내한다.
+   스탬프 = 이 HTML 에 구워진 ?v= (bump-cache 가 /build.json 과 함께 갱신). 함수 선언만 — boot 가 이 구역보다 먼저 돈다 */
+function szBuildStamp(){
+    if(szBuildStamp.v)return szBuildStamp.v;
+    let v='';
+    try{const s=document.querySelector('script[src*="/js/"][src*="v="]');const m=s&&/[?&]v=([^&#]+)/.exec(s.getAttribute('src')||'');if(m)v=m[1]}catch(_){}
+    return (szBuildStamp.v=v||'dev');
+}
+function szBuildOk(b){return b!=null&&String(b)===szBuildStamp()}
+function szP2T(k){
+    const T={
+        ko:{oldCourse:'구버전 코스 · 기록 비교 불가',reload:'⚠ 버전이 달라요 — 새로고침 필요',reloadBtn:'새로고침'},
+        en:{oldCourse:'Old course version · times not comparable',reload:'⚠ Different version — reload needed',reloadBtn:'Reload'},
+        ja:{oldCourse:'旧コース · 記録比較不可',reload:'⚠ バージョン違い — 再読み込みが必要',reloadBtn:'再読み込み'},
+        zh:{oldCourse:'旧版赛道 · 无法比较成绩',reload:'⚠ 版本不同 — 需要刷新',reloadBtn:'刷新'},
+        es:{oldCourse:'Recorrido antiguo · sin comparar tiempos',reload:'⚠ Versión distinta — hay que recargar',reloadBtn:'Recargar'},
+        pt:{oldCourse:'Percurso antigo · sem comparar tempos',reload:'⚠ Versão diferente — recarregue',reloadBtn:'Recarregar'}
+    };
+    let l='en';try{l=(window.LpI18n&&LpI18n.getLang&&LpI18n.getLang())||'en'}catch(_){}
+    return (T[l]||T.en)[k]||T.en[k];
+}
+/* 빌드가 다른 참가자(나 제외) 닉네임 */
+function szBuildMismatch(){return Object.values(R.members).filter(m=>m&&m.p!==pid&&m.s!=='left'&&!szBuildOk(m.b)).map(m=>String(m.n||'?').slice(0,8))}
+function szBuildBlocked(){const bad=szBuildMismatch();if(bad.length){szBuildNote(bad);return true}return false}
+/* 안내 한 줄 + 새로고침 버튼 — 패널 슬롯 밖(뷰가 바뀌면 render 가 지우고, 아래 점검이 다시 붙인다) */
+function szBuildNote(names){
+    ensureDom();
+    if(!panel.classList.contains('on')&&!running){openPanel();if(!R.view||R.view==='entry')setView(R.code?'lobby':'entry')}
+    let el=$('szxBld');
+    if(!el){
+        el=document.createElement('div');el.id='szxBld';el.className='szx-err';el.style.cssText='order:-1;flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;text-align:center;margin:0 0 4px;padding:0 40px';   /* 좌우 40px — 좌상단 ?·전체화면 버튼과 겹치지 않게 */
+        el.innerHTML='<span class="tx"></span><button class="szx-b ghost" type="button" style="flex:0 0 auto;width:auto;min-height:44px;padding:0 16px"></button>';
+        el.querySelector('button').addEventListener('click',e=>{e.stopPropagation();try{location.reload()}catch(_){}});
+        panel.appendChild(el);   /* DOM 은 맨 뒤(render 의 슬롯 순서 유지), 화면은 order:-1 로 맨 위 — 긴 대기실에서도 스크롤 없이 보인다 */
+    }
+    el.querySelector('.tx').textContent=szP2T('reload')+(names&&names.length?' ('+names.join(', ')+')':'');
+    el.querySelector('button').textContent=szP2T('reloadBtn');
+}
+function szBuildNoteOff(){const el=$('szxBld');if(el)el.remove()}
+/* 대기실·결과 화면에서 2.5초마다 확인 — 빌드가 다른 사람이 있으면 전원에게 안내가 보인다 */
+setInterval(()=>{
+    if(!R.code||!panel||!panel.classList.contains('on')||(R.view!=='lobby'&&R.view!=='result'))return;
+    const bad=szBuildMismatch();
+    if(bad.length)szBuildNote(bad);else szBuildNoteOff();
+},2500);
+window.__szxBuild=szBuildStamp;   /* 점검용 — 게이트·수동 테스트가 스탬프를 바꿔 불일치를 재현한다(.v) */
 /*</sz:mod:race>*/
 
 window.SZX={

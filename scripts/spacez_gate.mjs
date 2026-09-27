@@ -36,6 +36,8 @@
      --quick               det 180초·perf 존 5개·layout 4해상도·bot 100판 (빠른 확인용, 기준선 비교는 같은 조건끼리만)
      --zones 1,2,4         perf 존 목록 덮어쓰기
      --bot-runs <n>        bot 판 수 (fps 당, 기본 1000 — 약 3분)
+     --course-seeds <n>    bot 코스 시드 수 (기본 1 = 424242 한 코스). n>1 이면 판마다 n 개 코스를 돌려 쓴다 —
+                           코스(수열)를 의도적으로 바꾼 변경(P2)은 한 코스 도달률이 우연히 크게 변하므로 여러 코스 분포로 비교
      --soak-secs <n>       soak 합성 시간 (기본 1260)
      --edge <exe>          msedge.exe 경로
      --json <file>         결과 전체를 JSON 으로 저장
@@ -76,6 +78,7 @@ const JOBS = Math.max(1, +(A.jobs || 3));
 const QUICK = !!A.quick;
 const DET_SECS = +(A.secs || (QUICK ? 180 : 460));
 const BOT_RUNS = +(A['bot-runs'] || (QUICK ? 100 : 1000));
+const COURSE_SEEDS = Math.max(1, +(A['course-seeds'] || 1));
 const SOAK_SECS = +(A['soak-secs'] || 1260);
 const VERBOSE = !!A.verbose;
 const GAME_FILE = path.join(ROOT, 'public', 'games', 'dodge', 'index.html');
@@ -289,22 +292,39 @@ function pageLib(){
         if(P.noDraw) window.drawFrame = function(){};   /* 검증용 — 봇이 그리기를 끄고 돌려도 시뮬이 같은지 */
         G.synth();
         G.begin(0, P.racing, true);
+        /* 1:1 PvP 호스트 — 채널 없이 호스트 경로(공유 조준·위험물 끔·보급 결정)만 돈다 */
+        if(P.pvp){ pvpState.gameMode = 'pvp'; pvpState.role = 'host'; pvpState.channel = null; }
         _setSeed(P.seed);
         const gR = _seededRng, gH = _rngH, gD = _rngD;
+        /* 결정성 v2(P2) 이후엔 위험물 스케줄러(SZ_HZ)가 '어느 존의 몇 ms 사건'인지 안다 — 프레임과 무관한 기록 */
+        const hzOn = () => (typeof SZ_HZ !== 'undefined' && SZ_HZ && SZ_HZ.firing);
+        const hzZ = () => hzOn() ? SZ_HZ.fz : currentZoneIdx;
         let nR = 0, nH = 0, nD = 0; const H = [], D = [];
         _seededRng = function(){ nR++; return gR(); };
-        _rngH = function(){ const v = gH(); nH++; H.push([Math.round(elapsedMs), currentZoneIdx, v]); return v; };
+        /* 시각 = 스케줄러의 논리 사건 시각(있으면). 히트스톱 뒤 프레임 양자화로 관측 시각만 흔들리는 것을 빼고 본다 */
+        _rngH = function(){ const v = gH(); nH++; H.push([hzOn() ? Math.round(SZ_HZ.ft) : Math.round(elapsedMs), hzZ(), v]); return v; };
         _rngD = function(){ const v = gD(); nD++; D.push([Math.round(elapsedMs), currentZoneIdx, v]); return v; };
-        const haz = [];
+        const haz = [], hz2 = [];
         for(const n of HZ){ const o = window[n]; if(typeof o !== 'function') continue;
-            window[n] = function(){ const h0 = nH, t = elapsedMs, z = currentZoneIdx; const r = o.apply(this, arguments); if(nH !== h0 || n !== 'nhSpawnTick') haz.push([n, z, h0, nH, Math.round(t)]); return r; }; }
-        startedAt = G.VT; lastFrame = G.VT; lastSpawn = 0; startMissionForZone(0, startedAt);
+            window[n] = function(){ const h0 = nH, t = elapsedMs, z = hzZ(); const r = o.apply(this, arguments); if(nH !== h0 || n !== 'nhSpawnTick') haz.push([n, z, h0, nH, Math.round(t)]);
+                if(n !== 'nhSpawnTick') hz2.push([n, z, hzOn() ? Math.round(SZ_HZ.ft) : null, nH - h0]); return r; }; }
+        /* 운석 스폰 목록 — 스폰 순간 좌표(프레임 이동 전)·논리 스폰 시각. 폭탄으로 바로 지워지는 운석도 포함 */
+        const metS = []; const oSB = window.spawnBullet; let nS = 0;
+        window.spawnBullet = function(){ const n0 = bullets.length; const r = oSB.apply(this, arguments);
+            for(let i = n0; i < bullets.length; i++){ nS++; const b = bullets[i]; if(metS.length < (P.nMetS || 1500)) metS.push([Math.round(lastSpawn - startedAt - totalPausedMs), R2(b.x), R2(b.y), R2(b.vx), R2(b.vy)]); }
+            return r; };
+        startedAt = G.VT; lastFrame = G.VT; lastSpawn = 0; if(!P.pvp) startMissionForZone(0, startedAt);
         const seenB = new WeakSet(), seenD = new WeakSet(); const met = [], dep = {}, bh = [];
-        let nextBh = 0, bombI = 0, frames = 0; const t0 = realPN();
+        let nextBh = 0, bombI = 0, frames = 0, nextStop = 7000, nextWarp = 30000, nStop = 0, nWarp = 0; const t0 = realPN();
         const bombAt = P.bomb ? [40, 130, 260, 400] : [];
         while(G.VT - startedAt < P.secs * 1000 && running){
             G.VT += P.step; frames++;
             invincibleUntil = 1e15; player.x = 180; player.y = 390;
+            /* fx — 히트스톱(세상 정지)·TIME_WARP(세상 감속)을 일부러 건다. 스폰 시각·목록은 그대로여야 한다 */
+            if(P.fx){
+                if(elapsedMs >= nextStop){ nextStop += 7000; nStop++; try{ szHitStopUntil = G.VT + 140; }catch(_){} }
+                if(elapsedMs >= nextWarp){ nextWarp += 60000; nWarp++; try{ timeWarpUntil = G.VT + 12000; timeWarpStartedAt = G.VT; }catch(_){} }
+            }
             if(P.mission === 'success' && missionState === 'active') try{ completeMission(G.VT); }catch(e){ out.errs.push('completeMission ' + e.message); }
             if(bombI < bombAt.length && elapsedMs >= bombAt[bombI] * 1000){ bombI++; try{ triggerWipe(); }catch(e){ out.errs.push('wipe ' + e.message); } }
             try{ gameLoop(G.VT); }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); if(out.errs.length > 12) break; }
@@ -314,7 +334,10 @@ function pageLib(){
         }
         const endReason = running ? 'secs' : 'stopped';
         running = false; G.unsynth();
-        Object.assign(out, { frames, wall: Math.round(realPN() - t0), nR, nH, nD, endZone: currentZoneIdx, endSec: Math.round(elapsedMs / 100) / 10, endReason, H, D, haz, met, dep, bh, E: (window.__E || []).slice(0, 8) });
+        if(P.pvp){ pvpState.gameMode = null; pvpState.role = ''; }
+        const fl = hz2.find(x => x[0] === 'spawnSolarFlare');
+        Object.assign(out, { frames, wall: Math.round(realPN() - t0), nR, nH, nD, nS, nStop, nWarp, endZone: currentZoneIdx, endSec: Math.round(elapsedMs / 100) / 10, endReason, H, D, haz, hz2, met, metS, dep, bh,
+            flare0: fl ? (fl[2] != null ? fl[2] : null) : null, flare0Seen: haz.length ? (haz.find(x => x[0] === 'spawnSolarFlare') || [0, 0, 0, 0, null])[4] : null, E: (window.__E || []).slice(0, 8) });
         return out;
     };
     /* 실시간 성능 구간 — gameLoop 를 감싸 한 프레임 JS 시간을 잰다 */
@@ -399,10 +422,12 @@ function pageLib(){
         const pure = [['checkSolarFlareCollision', 0], ['checkSupernovaRingCollision', 0], ['checkPulsarBeamCollision', 1], ['checkCometCollision', 0], ['checkSplitterCollision', 0], ['checkBlackHoleJetCollision', 0]]
             .filter(([n]) => typeof window[n] === 'function');
         G.synth();
-        for(const bs of P.botSeeds){
+        for(let bi = 0; bi < P.botSeeds.length; bi++){
+            const bs = P.botSeeds[bi];
             const br = mb(bs);
             dead = false;
-            G.begin(P.seed, false);
+            /* 코스 시드 — 기본은 하나(P.seed). --course-seeds 면 판마다 다른 코스(코스를 바꾸는 변경의 분포 비교용) */
+            G.begin(P.courseSeeds ? P.courseSeeds[bi] : P.seed, false);
             invincibleUntil = 0;
             let nextDecide = 0, dir = DIRS[0], frames = 0; const lifeLost = [];
             let lv = lives;
@@ -473,13 +498,16 @@ function detConfigs(){
     const S = [1000 / 60, 21, 1000 / 30];
     return [
         { mode: 'solo', mission: 'fail', bomb: false, steps: S },
-        { mode: 'race', mission: 'fail', bomb: false, steps: S.slice(0, 2) },
+        { mode: 'race', mission: 'fail', bomb: false, steps: S },
         { mode: 'solo', mission: 'success', bomb: false, steps: S.slice(0, 2) },
         { mode: 'solo', mission: 'fail', bomb: true, steps: S.slice(0, 2) },
         { mode: 'race', mission: 'success', bomb: true, steps: S.slice(0, 2) },
+        /* P2 추가 — 히트스톱·TIME_WARP 를 건 판(스폰 시각 불변 확인), 1:1 PvP 호스트 */
+        { mode: 'solo', mission: 'fail', bomb: false, fx: true, steps: [S[0], S[2]] },
+        { mode: 'pvp', mission: 'fail', bomb: false, steps: S.slice(0, 2) },
     ];
 }
-const cfgKey = (c, st) => c.mode + '/' + c.mission + '/' + (c.bomb ? 'bomb' : 'nobomb') + '@' + st.toFixed(2);
+const cfgKey = (c, st) => c.mode + '/' + c.mission + '/' + (c.bomb ? 'bomb' : 'nobomb') + (c.fx ? '/fx' : '') + '@' + st.toFixed(2);
 async function runDet(base){
     const runs = [];
     for(const c of detConfigs()) for(const st of c.steps) runs.push({ ...c, step: st, key: cfgKey(c, st) });
@@ -487,7 +515,7 @@ async function runDet(base){
     const results = await pool(runs, JOBS, async (r) => withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
         await e.open(gameUrl(base, 'ko'), 1500);
         const t0 = Date.now();
-        const out = await e.ev('__G.det(' + JSON.stringify({ seed: 424242, racing: r.mode === 'race', step: r.step, secs: DET_SECS, mission: r.mission, bomb: r.bomb, nMet: 400, noDraw: !!A['det-nodraw'] }) + ')', 900000);
+        const out = await e.ev('__G.det(' + JSON.stringify({ seed: 424242, racing: r.mode === 'race', pvp: r.mode === 'pvp', fx: !!r.fx, step: r.step, secs: DET_SECS, mission: r.mission, bomb: r.bomb, nMet: 400, nMetS: 1500, noDraw: !!A['det-nodraw'] }) + ')', 900000);
         const pe = await e.ev('(window.__E||[]).slice(0,8)');
         collectErrs('det ' + r.key, e, pe.concat(out.errs));
         log('det', r.key, 'frames', out.frames, 'wall', Date.now() - t0, 'rand', out.nR, 'randH', out.nH, 'randD', out.nD, 'end', out.endZone, out.endSec, out.endReason);
@@ -500,9 +528,24 @@ async function runDet(base){
             frames: o.frames, nR: o.nR, nH: o.nH, nD: o.nD, endZone: o.endZone, endSec: o.endSec, endReason: o.endReason, errs: o.errs.length,
             hH: sha(o.H.map(x => [x[1], x[2]])), hHaz: sha(o.haz.map(x => [x[0], x[1], x[2], x[3]])), hMet: sha(o.met), hMetGeo: sha(o.met.map(m => [r1(m[1]), r1(m[2]), r1(m[3]), r1(m[4])])),
             hDep: sha(Object.keys(o.dep).sort().map(k => [k, o.dep[k][0], o.dep[k][1]])), hBh: sha(o.bh), nHaz: o.haz.length, nMet: o.met.length, nDep: Object.keys(o.dep).length, nBh: o.bh.length,
+            /* P2 — 프레임과 무관한 기록: 운석 스폰 목록(스폰 순간 좌표·논리시각)·위험물 사건(존·논리 ms·수열 소비 수) */
+            hMetS: sha(o.metS || []), nMetS: (o.metS || []).length, nS: o.nS, hHz2: sha(o.hz2 || []), nHz2: (o.hz2 || []).length,
+            flare0: o.flare0, flare0Seen: o.flare0Seen, step: r.step, mode: r.mode, nStop: o.nStop, nWarp: o.nWarp,
         };
         M[r.key]._raw = o;
     }
+    /* 스폰 목록 비교 — 같은 인덱스끼리 논리시각·좌표·속도가 모두 같아야 한다(허용 0.01) */
+    const metSDiff = (a, b, fromMs) => {
+        const A2 = (a.metS || []).filter(m => m[0] >= (fromMs || 0)), B2 = (b.metS || []).filter(m => m[0] >= (fromMs || 0));
+        const n = Math.min(A2.length, B2.length); let mis = 0, first = -1;
+        for(let i = 0; i < n; i++){ const p = A2[i], s = B2[i]; if(p[0] !== s[0] || Math.abs(p[1] - s[1]) > 0.011 || Math.abs(p[2] - s[2]) > 0.011 || Math.abs(p[3] - s[3]) > 0.011 || Math.abs(p[4] - s[4]) > 0.011){ mis++; if(first < 0) first = i; } }
+        return { n, mis, first, lenA: A2.length, lenB: B2.length };
+    };
+    const hz2Diff = (a, b) => {
+        const x = a.hz2 || [], y = b.hz2 || []; let mis = 0, first = -1;
+        for(let i = 0; i < Math.max(x.length, y.length); i++){ const p = x[i], s = y[i]; if(!p || !s || p[0] !== s[0] || p[1] !== s[1] || p[2] !== s[2] || p[3] !== s[3]){ mis++; if(first < 0) first = i; } }
+        return { n: Math.max(x.length, y.length), mis, first };
+    };
     /* 교차 비교 */
     const X = {};
     for(const c of detConfigs()){
@@ -516,7 +559,8 @@ async function runDet(base){
             let depMis = 0, depMax = 0; const keys = new Set(Object.keys(a.dep).concat(Object.keys(b.dep)));
             for(const k of keys){ const p = a.dep[k], s = b.dep[k]; if(!p || !s){ depMis++; continue; } const d = Math.hypot(p[0] - s[0], p[1] - s[1]); depMax = Math.max(depMax, d); if(d > 1.5) depMis++; }
             X[cfgKey(c, c.steps[0]) + ' vs ' + st.toFixed(2)] = { countsEq: a.nR === b.nR && a.nH === b.nH && a.nD === b.nD, counts: [[a.nR, b.nR], [a.nH, b.nH], [a.nD, b.nD]], metN: n, metMaxPos: r1(maxPos), metVelDiff: velDiff,
-                hFirstMismatch: hMis, hDriftMs: drift, hazMismatch: hazMis, hazDriftMs: hazDrift, depMismatch: depMis, depMaxPx: r1(depMax) };
+                hFirstMismatch: hMis, hDriftMs: drift, hazMismatch: hazMis, hazDriftMs: hazDrift, depMismatch: depMis, depMaxPx: r1(depMax),
+                metS: metSDiff(a, b), hz2: hz2Diff(a, b) };
         }
     }
     /* 미션 성패·폭탄과 무관해야 하는 것 */
@@ -526,14 +570,23 @@ async function runDet(base){
         let hMis = 0; for(let i = 0; i < Math.min(a.H.length, b.H.length); i++) if(a.H[i][2] !== b.H[i][2] || a.H[i][1] !== b.H[i][1]) hMis++;
         let hazMis = 0; for(let i = 0; i < Math.max(a.haz.length, b.haz.length); i++){ const p = a.haz[i], s = b.haz[i]; if(!p || !s || p[0] !== s[0] || p[1] !== s[1]) hazMis++; }
         let metMis = 0; const n = Math.min(a.met.length, b.met.length); for(let i = 0; i < n; i++){ const p = a.met[i], s = b.met[i]; if(Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5) metMis++; }
-        return { depCommon, depOnlyA: Object.keys(a.dep).filter(k => !b.dep[k]).length, depOnlyB: Object.keys(b.dep).filter(k => !a.dep[k]).length, depMis, hMis, hazMis, metVelMis: metMis };
+        /* P2 — 스폰 목록이 있으면 그걸로 센다(폭탄으로 바로 지운 운석은 화면 관측 목록에 안 잡혀 인덱스가 밀린다) */
+        if(a.metS && b.metS && a.metS.length && b.metS.length){ metMis = 0; const m2 = Math.min(400, a.metS.length, b.metS.length); for(let i = 0; i < m2; i++){ const p = a.metS[i], s = b.metS[i]; if(Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5) metMis++; } }
+        return { depCommon, depOnlyA: Object.keys(a.dep).filter(k => !b.dep[k]).length, depOnlyB: Object.keys(b.dep).filter(k => !a.dep[k]).length, depMis, hMis, hazMis, metVelMis: metMis,
+            metS: metSDiff(a, b), metS5: metSDiff(a, b, 45000), hz2: hz2Diff(a, b) };
     };
     const s0 = 1000 / 60;
     X['mission fail vs success (solo)'] = pairDiff(cfgKey({ mode: 'solo', mission: 'fail', bomb: false }, s0), cfgKey({ mode: 'solo', mission: 'success', bomb: false }, s0));
     X['nobomb vs bomb (solo)'] = pairDiff(cfgKey({ mode: 'solo', mission: 'fail', bomb: false }, s0), cfgKey({ mode: 'solo', mission: 'fail', bomb: true }, s0));
     X['race fail/nobomb vs success/bomb'] = pairDiff(cfgKey({ mode: 'race', mission: 'fail', bomb: false }, s0), cfgKey({ mode: 'race', mission: 'success', bomb: true }, s0));
+    /* P2 — 히트스톱·TIME_WARP 와 무관, 1:1 PvP 호스트 */
+    const fxK = cfgKey({ mode: 'solo', mission: 'fail', bomb: false, fx: true }, s0);
+    if(M[fxK]) X['plain vs hitstop/warp (solo)'] = pairDiff(cfgKey({ mode: 'solo', mission: 'fail', bomb: false }, s0), fxK);
+    /* 전 구성 위험물 사건 목록(존·논리 ms·수열 소비 수) — 1:1 PvP 는 위험물을 끈다 */
+    const hzH = {}; for(const [k, m] of Object.entries(M)){ if(m.mode === 'pvp') continue; (hzH[m.hHz2] = hzH[m.hHz2] || []).push(k); }
+    const flare = Object.entries(M).filter(([k, m]) => m.mode !== 'pvp').map(([k, m]) => ({ k, ft: m.flare0, seen: m.flare0Seen, step: m.step }));
     for(const k of Object.keys(M)) delete M[k]._raw;
-    return { secs: DET_SECS, runs: M, cross: X };
+    return { secs: DET_SECS, runs: M, cross: X, hzGroups: hzH, flare };
 }
 function judgeDet(cur, base){
     const B = base && base.secs === cur.secs ? base : null;
@@ -562,6 +615,21 @@ function judgeDet(cur, base){
             row('G1 det', k, 'dep ' + x.depMis + '/' + x.depCommon + ' 누락 ' + x.depOnlyA + '·' + x.depOnlyB + ' H ' + x.hMis + ' haz ' + x.hazMis + ' met ' + x.metVelMis,
                 b ? 'dep ' + b.depMis + ' H ' + b.hMis + ' haz ' + b.hazMis + ' met ' + b.metVelMis : null, '각 항목 ≤ 기준선 (목표 0)', worse.length ? 'FAIL' : ((x.depMis + x.hMis + x.hazMis + x.metVelMis) ? 'WARN' : 'PASS'), worse.length ? '악화: ' + worse.join(',') : '');
         }
+        /* P2 — 프레임과 무관한 목록(스폰 순간 기록)은 완전히 같아야 한다 */
+        if(x.metS){
+            const s = x.metS, bad = s.mis || s.lenA !== s.lenB;
+            row('G1 det', k + ' 운석 스폰 목록', s.mis + '/' + s.n + ' 다름' + (s.lenA !== s.lenB ? ' (길이 ' + s.lenA + '·' + s.lenB + ')' : ''), null, '0 (시각·좌표·속도)', bad ? 'FAIL' : 'PASS', s.first >= 0 ? '첫 차이 #' + s.first : '');
+        }
+        if(x.metS5) row('G1 det', k + ' 운석 스폰 목록 45s 이후', x.metS5.mis + '/' + x.metS5.n + ' 다름', null, '0', x.metS5.mis ? 'FAIL' : 'PASS');
+        if(x.hz2) row('G1 det', k + ' 위험물 사건', x.hz2.mis + '/' + x.hz2.n + ' 다름', null, '0 (종류·존·논리ms·소비 수)', x.hz2.mis ? 'FAIL' : 'PASS', x.hz2.first >= 0 ? '첫 차이 #' + x.hz2.first : '');
+    }
+    if(cur.hzGroups){
+        const g = Object.values(cur.hzGroups);
+        row('G1 det', '위험물 목록 전 구성 동일(솔로·레이스 × 성패 × 폭탄 × 프레임 × 히트스톱)', g.length === 1 ? '같음 (' + g[0].length + '구성)' : g.length + '갈래', null, '1갈래', g.length === 1 ? 'PASS' : 'FAIL', g.length > 1 ? g.map(x => x.join('|')).join(' ≠ ').slice(0, 200) : '');
+    }
+    for(const f of (cur.flare || [])){
+        const ok = f.ft === 10000 && f.seen != null && f.seen >= 10000 && f.seen <= 10000 + f.step + 1;
+        row('G1 det', f.k + ' 존0 첫 플레어', 'ft ' + f.ft + ' / 관측 ' + f.seen + 'ms', null, '10000 (+1프레임)', ok ? 'PASS' : 'FAIL');
     }
 }
 
@@ -870,7 +938,8 @@ async function runBot(base){
         const t0 = Date.now();
         const parts = await pool(chunks, JOBS, async (ch) => withEdge({ w: 412, h: 915, dsf: 1, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko'), 1200);
-            const r = await e.ev('__G.bot(' + JSON.stringify({ seed: 424242, botSeeds: ch, step: 1000 / fps, secs: 480 }) + ')', 3600000);
+            const cs = COURSE_SEEDS > 1 ? ch.map(b => 424242 + ((b - 1000) % COURSE_SEEDS) * 7919) : undefined;
+            const r = await e.ev('__G.bot(' + JSON.stringify({ seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: 480 }) + ')', 3600000);
             const pe = await e.ev('(window.__E||[]).slice(0,8)');
             collectErrs('bot ' + fps, e, pe.concat(r.filter(x => x.err).map(x => x.err)));
             return r;
