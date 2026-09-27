@@ -163,12 +163,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Space-Z', l:['Desvie dos asteroides: o tempo que você sobrevive é a pontuação','Arraste no celular, setas no PC; itens e GRAV te salvam','👥 Corrida ao vivo: até 8 voam no mesmo espaço por um link','Suprimento é de quem pega primeiro; o desafio envia sua rota']}
   },
   'tetris': {
-    ko: {t:'테트로미노 쌓기', l:['떨어지는 블록을 돌리고 옮겨 가로줄을 채우면 지워져요','폰: 아래 버튼으로 이동·회전·홀드, 낙하 두 번 탭 = 즉시','PC: ← → 이동 · ↑ 회전 · Space 즉시 낙하','한 열을 비워 두고 긴 막대로 4줄을 한 번에 지우세요']},
-    en: {t:'Tetromino Stack', l:['Rotate and move falling blocks; full rows clear','Phone: bottom buttons move, rotate, hold; double-tap drop to slam','PC: ← → move, ↑ rotate, ↓ soft drop, Space hard drop','Leave one column open and clear 4 rows at once with the long bar']},
-    ja: {t:'テトロミノ・スタック', l:['落ちてくるブロックを回して動かし、横一列そろうと消えます','スマホ：下のボタンで移動・回転・ホールド、落下2回タップで即落下','PC：← → 移動・↑ 回転・↓ 速く・Space 即落下','1列を空けておき、長い棒で4列を一気に消しましょう']},
-    zh: {t:'四格方块', l:['旋转、移动下落的方块，填满一整行就消除','手机：下方按钮移动、旋转、暂存，下落键双击＝直接落底','电脑：← → 移动，↑ 旋转，↓ 加速，Space 直接落底','留出一列，用长条一次消4行']},
-    es: {t:'Tetrominós', l:['Gira y mueve los bloques; las filas completas desaparecen','Móvil: botones abajo mueven, giran y guardan; doble toque = caída','PC: ← → mover, ↑ girar, ↓ bajar, Espacio caída instantánea','Deja una columna libre y borra 4 filas de golpe con la barra larga']},
-    pt: {t:'Tetraminós', l:['Gire e mova os blocos; linhas completas somem','Celular: botões embaixo movem, giram e guardam; toque duplo = queda','PC: ← → mover, ↑ girar, ↓ descer, Espaço queda instantânea','Deixe uma coluna livre e limpe 4 linhas de uma vez com a barra longa']}
+    ko: {t:'테트로미노 쌓기', l:['떨어지는 블록을 돌리고 옮겨 가로줄을 채우면 지워져요','폰: 아래 버튼으로 이동·회전·홀드, DROP = 즉시 낙하, SOFT(누르는 동안) = 천천히','PC: ← → 이동 · ↑ 회전 · Space 즉시 낙하','한 열을 비워 두고 긴 막대로 4줄을 한 번에 지우세요']},
+    en: {t:'Tetromino Stack', l:['Rotate and move falling blocks; full rows clear','Phone: bottom buttons move, rotate, hold; DROP slams instantly, hold SOFT to ease down','PC: ← → move, ↑ rotate, ↓ soft drop, Space hard drop','Leave one column open and clear 4 rows at once with the long bar']},
+    ja: {t:'テトロミノ・スタック', l:['落ちてくるブロックを回して動かし、横一列そろうと消えます','スマホ：下のボタンで移動・回転・ホールド、DROPで即落下、SOFT長押しでゆっくり','PC：← → 移動・↑ 回転・↓ 速く・Space 即落下','1列を空けておき、長い棒で4列を一気に消しましょう']},
+    zh: {t:'四格方块', l:['旋转、移动下落的方块，填满一整行就消除','手机：下方按钮移动、旋转、暂存，DROP 直接落底，按住 SOFT 缓慢下落','电脑：← → 移动，↑ 旋转，↓ 加速，Space 直接落底','留出一列，用长条一次消4行']},
+    es: {t:'Tetrominós', l:['Gira y mueve los bloques; las filas completas desaparecen','Móvil: botones abajo mueven, giran y guardan; DROP = caída instantánea, mantén SOFT para bajar','PC: ← → mover, ↑ girar, ↓ bajar, Espacio caída instantánea','Deja una columna libre y borra 4 filas de golpe con la barra larga']},
+    pt: {t:'Tetraminós', l:['Gire e mova os blocos; linhas completas somem','Celular: botões embaixo movem, giram e guardam; DROP = queda instantânea, segure SOFT para descer','PC: ← → mover, ↑ girar, ↓ descer, Espaço queda instantânea','Deixe uma coluna livre e limpe 4 linhas de uma vez com a barra longa']}
   },
   'starship-lander': {
     ko: {t:'스타십 착륙', l:['연료를 아끼며 착륙장에 느리고 똑바로 내려앉혀요','⟲ ⟳ 누르는 동안 회전, MAIN·화면 탭은 분사 (PC: 방향키)','늦게, 강하게: STOP 표시가 땅에 닿을 때 길게 분사','점선 끝 = 지금 분사를 멈추면 닿을 지점']},

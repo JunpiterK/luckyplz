@@ -61,6 +61,8 @@
     var lastCanvasAt = 0, lastCanvasEl = null;
     var lastPlaying = false, lastCompact = false, collide = false;
     var rafPending = false;
+    /* 플레이 중에는 elementsFromPoint 격자 검사(강제 레이아웃)를 1.5초에 한 번만 — 입력 지연·프레임 튐 방지 */
+    var ghost = false, ghostAt = 0;
 
     var HANDLE_LABEL = {
         ko: ['버튼 펼치기', '버튼 접기', '게임 버튼'], en: ['Show controls', 'Hide controls', 'Game controls'],
@@ -314,7 +316,9 @@
         if (!compactWanted) expandedUntil = 0;
 
         dock.classList.toggle('is-compact', compact);
-        dock.classList.toggle('is-ghost', compact && !scrolling && handleCollides());
+        if (!compact || scrolling) { ghost = false; ghostAt = 0; }
+        else if (!hard || Date.now() - ghostAt > 1500) { ghost = handleCollides(); ghostAt = Date.now(); }
+        dock.classList.toggle('is-ghost', ghost);
         dock.classList.toggle('is-scrolling', scrolling);
         handle.setAttribute('aria-expanded', compact ? 'false' : 'true');
         handle.setAttribute('aria-label', label(compact ? 0 : 1));
@@ -401,12 +405,14 @@
             if (r.width * r.height >= innerWidth * innerHeight * 0.2) { lastCanvasAt = Date.now(); lastCanvasEl = t; }
         }
         /* 펼쳐 둔 독 — 바깥을 누르면 바로 접는다 */
+        var wasOpen = !!expandedUntil;
         if (expandedUntil) expandedUntil = 0;
-        setTimeout(schedule, 60); /* 화면 전환(시작·결과) 직후 다시 판단 */
+        if (!lastPlaying || wasOpen) setTimeout(schedule, 60); /* 화면 전환(시작·결과) 직후 다시 판단 — 플레이 중 연타는 폴링에 맡긴다 */
     }
     document.addEventListener('pointerdown', onPointer, { capture: true, passive: true });
     if (!window.PointerEvent) document.addEventListener('touchstart', onPointer, { capture: true, passive: true });
-    document.addEventListener('keydown', function () { setTimeout(schedule, 60); }, true);
+    /* 플레이 중 키 입력마다 재판단하지 않는다(450ms 폴링이 맡음) — 연타 게임의 입력 경로를 가볍게 */
+    document.addEventListener('keydown', function () { if (!lastPlaying) setTimeout(schedule, 60); }, true);
     window.addEventListener('resize', schedule);
     window.addEventListener('orientationchange', function () { setTimeout(schedule, 250); });
     window.addEventListener('lp-fullscreen-change', schedule);
