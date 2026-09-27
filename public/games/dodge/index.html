@@ -27,7 +27,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1781415816">
-    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;800;900&family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
     <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
     <style>
@@ -616,6 +618,11 @@ body::after{
 @keyframes overlayRadar{to{transform:translate(-50%,-52%) rotate(360deg)}}
 .overlay > *{position:relative;z-index:1}
 .overlay.hidden{opacity:0;pointer-events:none}
+/* P1 — 게임 중 숨긴 시작 카드가 풀스크린 backdrop blur·무한 레이더 회전을 계속 돌리지 않게.
+   opacity 전환(.18s)이 끝난 뒤 visibility 를 끈다 */
+.overlay.hidden{visibility:hidden;backdrop-filter:none;-webkit-backdrop-filter:none;transition:opacity .18s,visibility 0s linear .18s}
+/* 멈춘 애니메이션도 살아 있는 것으로 남는다(getAnimations) — 숨긴 동안엔 아예 뗀다 */
+.overlay.hidden::after{animation:none}
 /* 2026-09-24 — 게임오버 카드: 캔버스 폭발 연출(0.85s) 뒤에 떠오른다 */
 .overlay.go-enter{animation:goEnter .5s cubic-bezier(.2,.9,.25,1.15) .85s both}
 .overlay.go-enter.go-lock{pointer-events:none}
@@ -958,18 +965,25 @@ body::after{
     /* 2026-09-27 — backdrop-filter 제거: 매 프레임 바뀌는 캔버스 위라 미션 25초 내내 GPU 가 블러를 다시 계산했다.
        배경이 이미 .85~.92 불투명이라 보이는 차이 없음 */
     opacity:0;
-    transition:opacity .25s, transform .3s cubic-bezier(.2,.8,.3,1);
+    /* P1 (2026-09-27) — hidden 속성(display:none) 대신 늘 배치된 채 visibility·opacity 로만 숨긴다.
+       미션이 켜지는 프레임에 배치·폰트 계산이 몰려 캔버스 font 세터가 그걸 동기로 떠안던 스파이크 제거.
+       contain 으로 글자 교체가 바깥 배치를 흔들지 않게 한다 */
+    visibility:hidden;
+    transition:opacity .25s, transform .3s cubic-bezier(.2,.8,.3,1), visibility 0s linear .3s;
+    contain:layout paint;
+    will-change:opacity,transform;
     pointer-events:none;
     z-index:25;
     max-width:min(86%,440px);
     min-width:240px;
 }
-.mission-banner.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+.mission-banner[hidden]{display:flex}
+.mission-banner.show{ opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); transition-delay:0s; }
 .mission-banner.success{ border-color:rgba(0,255,136,.85); box-shadow:0 4px 18px -2px rgba(0,255,136,.5); }
 .mission-banner.failed{ border-color:rgba(255,80,100,.7); box-shadow:0 4px 14px -2px rgba(255,80,100,.45); }
 .mission-banner .mb-icon{
     font-size:1.6em;line-height:1;flex-shrink:0;
-    filter:drop-shadow(0 0 6px rgba(93,193,255,.7));
+    text-shadow:0 0 6px rgba(93,193,255,.7);
 }
 .mission-banner .mb-text{flex:1;min-width:0;line-height:1.25}
 .mission-banner .mb-title{
@@ -991,10 +1005,10 @@ body::after{
     flex-shrink:0;min-width:24px;text-align:center;
     text-shadow:0 0 6px rgba(255,230,109,.5);
 }
-.mission-banner.success .mb-icon{filter:drop-shadow(0 0 8px rgba(0,255,136,.85))}
+.mission-banner.success .mb-icon{text-shadow:0 0 8px rgba(0,255,136,.85)}
 .mission-banner.success .mb-title{color:#9FFFC8}
 .mission-banner.success .mb-timer{color:#9FFFC8;text-shadow:0 0 6px rgba(0,255,136,.5)}
-.mission-banner.failed .mb-icon{filter:grayscale(.4) drop-shadow(0 0 4px rgba(255,80,100,.6))}
+.mission-banner.failed .mb-icon{opacity:.8;text-shadow:0 0 4px rgba(255,80,100,.6)}
 .mission-banner.failed .mb-title{color:#FF9FAF}
 .mission-banner.failed .mb-timer{color:#FF9FAF;text-shadow:none}
 @media(max-width:480px){
@@ -1035,9 +1049,20 @@ body::after{
     border:2.5px solid rgba(0,217,255,.92);
     background:rgba(0,217,255,.13);
     box-shadow:0 0 16px rgba(0,217,255,.6);
-    transform:translate(-50%,-50%);
+    /* P1 — 위치는 left/top(배치) 대신 transform 으로만 옮긴다(컴포지터) */
+    left:0;top:0;
+    transform:translate3d(74px,74px,0) translate(-50%,-50%);
+    will-change:transform;
     pointer-events:none;display:none
 }
+/* P1 — 조향 방향 빛: 매 프레임 바뀌던 가변 box-shadow(블러 16~32px 페인트) 대신
+   미리 그린 빛 한 장을 transform·opacity 로만 움직인다. 트랙패드 원 뒤에 깔린다 */
+.tp-glow{
+    position:absolute;left:50%;top:0;width:148px;height:148px;margin-left:-74px;border-radius:50%;
+    box-shadow:0 0 26px 8px rgba(0,217,255,.85);
+    opacity:0;pointer-events:none;will-change:transform,opacity
+}
+.tp-zone.on{box-shadow:0 0 0 2px rgba(0,217,255,.24)}
 .tp-zone.on .tp-ring{display:block}
 .tp-zone.on .tp-icon{opacity:0}
 
@@ -3096,7 +3121,9 @@ async function loadMyStats(){
    ====================================================== */
 const CW=360, CH=600;
 const canvas=$('dodge-canvas');
-const ctx=canvas.getContext('2d');
+/* P1 — alpha:false: 배경이 매 프레임 화면 전체를 채우므로 불투명 캔버스로 합성 비용을 줄인다.
+   desynchronized 는 티어링 위험이 있어 기본 off */
+const ctx=canvas.getContext('2d', {alpha:false});
 
 let dpr=1;
 function fitCanvas(){
@@ -3116,27 +3143,45 @@ window.addEventListener('resize', fitCanvas);
      v5: blur 8, bright 1.75, sat 1.50, alpha 0.62, screen
      v6: blur 6, bright 1.18, sat 1.10, alpha 0.30, lighten
    bloom 강도 ~50% 감소. dark void 의 신비감 보존. */
+/* P1 (2026-09-27) — ctx.filter(blur) 없이 다운샘플 체인으로 흉내 낸다.
+   filter 세터는 스타일 재계산을 강제하고 풀해상도 blur 는 4x 에서 4~12ms 였다.
+   화면 → 180×300 → 90×150(곱하기로 밝은 곳만 남김) → 180×300 으로 키움(부드럽게 번짐) →
+   원본 위에 'lighter' α0.3 으로 확대 합성. 어두운 우주는 곱하기에서 거의 0 이 되어 그대로 어둡다.
+   읽기는 프레임 '처음'(szBloomCapture — 직전 프레임, 이미 래스터가 끝난 화면)에 한다.
+   프레임 중간에 캔버스를 읽으면 그때까지 쌓인 그리기를 전부 강제로 래스터하고 백버퍼를 복사한다.
+   빛 번짐이 1프레임 늦는 차이는 눈에 띄지 않는다 */
+let _bloomReady = false;
+function szBloomCapture(){
+    if(window.SZ3 && !SZ3.bloom()){ _bloomReady = false; return; }
+    const B = _bloomCtx, M = _bloomSmCtx;
+    B.globalCompositeOperation = 'copy';
+    B.drawImage(canvas, 0, 0, 180, 300);
+    M.globalCompositeOperation = 'copy';
+    M.drawImage(_bloomCv, 0, 0, 90, 150);
+    M.globalCompositeOperation = 'multiply';     /* x² — 밝은 곳만 남기는 싼 밝기 통과 */
+    M.drawImage(_bloomSm, 0, 0);
+    B.globalCompositeOperation = 'copy';
+    B.drawImage(_bloomSm, 0, 0, 180, 300);
+    _bloomReady = true;
+}
 const _bloomCv = document.createElement('canvas');
-_bloomCv.width  = 270;
-_bloomCv.height = 450;
+_bloomCv.width  = 180;
+_bloomCv.height = 300;
 const _bloomCtx = _bloomCv.getContext('2d');
+const _bloomSm = document.createElement('canvas');
+_bloomSm.width  = 90;
+_bloomSm.height = 150;
+const _bloomSmCtx = _bloomSm.getContext('2d');
 function applyBloom(){
     if(window.SZ3 && !SZ3.bloom()) return;      /* 성능 등급 1+ 는 블룸 생략 */
-    _bloomCtx.globalCompositeOperation = 'source-over';
-    _bloomCtx.filter = 'none';
-    _bloomCtx.clearRect(0, 0, _bloomCv.width, _bloomCv.height);
-    _bloomCtx.drawImage(canvas, 0, 0, _bloomCv.width, _bloomCv.height);
+    if(!_bloomReady) return;
     ctx.save();
-    ctx.filter = 'blur(6px) brightness(1.18) saturate(1.10)';
-    /* 'lighten' blend: 두 픽셀 중 더 밝은 쪽만 사용. 어두운 영역은 영향 0,
-       밝은 영역만 살짝 보강. screen 보다 dark void 보존 우수. */
-    ctx.globalCompositeOperation = 'lighten';
+    ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.30;
     ctx.drawImage(_bloomCv, 0, 0, CW, CH);
-    ctx.filter = 'none';
+    ctx.restore();
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.restore();
 }
 
 /* ---- Rounded rect helper ---- */
@@ -3453,26 +3498,55 @@ function updateStars(dt){
         if(s.y>CH+6){ s.y=-6; s.x=Math.random()*CW; }
     }
 }
+/* P1 (2026-09-27) — 존 계열 팔레트. 예전엔 11번 이후 전부 분홍이라 성간·은하·우주론 구간이 한 색이었다 */
+const STAR_TINT=[
+    '255,255,255','255,255,255','255,250,245',   /* 0-2 지구·달·화성 */
+    '255,250,220','255,248,215','255,250,225',   /* 3-5 소행성대·목성·토성 (따뜻) */
+    '200,220,255','195,215,255',                 /* 6-7 천왕성·해왕성 (차가움) */
+    '180,185,200','180,185,200',                 /* 8-9 명왕성·태양권 (흐림) */
+    null,                                        /* 10 오르트 — 별마다 순환 */
+    '255,215,190','210,228,255','215,225,255',   /* 11 프록시마(적색왜성) 12 시리우스(청백) 13 견우직녀 */
+    '190,212,255','255,205,175','255,210,225',   /* 14 좀생이별(청) 15 베텔게우스(적) 16 오리온(분홍) */
+    '255,200,215','215,228,240','255,228,195',   /* 17 말머리 18 창조의 기둥(차가운 먼지) 19 은하 중심(늙은 별) */
+    '200,215,255','170,175,190',                 /* 20 은하 가장자리 21 은하간 공간 */
+    '228,210,255','180,200,255','232,200,255',   /* 22 안드로메다(보라) 23 필라멘트 24 퀘이사 */
+    '255,200,230','150,155,172','255,182,192',   /* 25 TON 618 26 부츠자리 초공동 27 대분열(적) */
+    '255,192,152','215,196,255','165,165,165'    /* 28 마지막 별 29 관측 끝(보라) 30 열적 죽음(회색) */
+];
 function getStarColor(zIdx, alpha){
-    if(zIdx<=2)  return 'rgba(255,255,255,'+alpha+')';
-    if(zIdx<=5)  return 'rgba(255,250,220,'+alpha+')'; // warm (Asteroid Belt + Jupiter + Saturn)
-    if(zIdx<=7)  return 'rgba(200,220,255,'+alpha+')'; // cool blue (Uranus + Neptune)
-    if(zIdx<=9)  return 'rgba(180,185,200,'+alpha+')'; // dim (Pluto + Heliosphere)
-    if(zIdx===10){
-        // Oort Cloud — varied: use star index cycle through warm/cool
-        return null; // handled per-star below
-    }
-    // zone 11+ Proxima/Sirius/nebulae — pinkish
-    return 'rgba(255,210,220,'+alpha+')';
+    const t=STAR_TINT[zIdx];
+    if(t===null) return null;   /* Oort Cloud — handled per-star below */
+    return 'rgba('+(t||'255,255,255')+','+alpha+')';
 }
 const _starColCache=new Map();
-function drawStars(){
+/* P1 — 가까운 층(2) 속도선은 흰 1px 선 대신 부팅 때 구운 4×16 테이퍼 스트릭(존 색별 1장).
+   길이 = speed×0.035 × szStreakMul (워프 연출 배율 — P7 이 쓴다) */
+var szStreakMul = 1;
+const _streakCache=new Map();
+function _streakSprite(zIdx){
+    const t=STAR_TINT[zIdx]||'255,255,255';
+    let c=_streakCache.get(t);
+    if(c) return c;
+    c=document.createElement('canvas'); c.width=4; c.height=16;
+    const x=c.getContext('2d');
+    const g=x.createLinearGradient(0,0,0,16);
+    g.addColorStop(0,'rgba('+t+',0)'); g.addColorStop(0.7,'rgba('+t+',0.55)'); g.addColorStop(1,'rgba('+t+',1)');
+    x.fillStyle=g;
+    x.beginPath(); x.moveTo(1.5,0); x.lineTo(2.5,0); x.lineTo(4,15); x.quadraticCurveTo(2,17,0,15); x.closePath(); x.fill();
+    _streakCache.set(t, c);
+    return c;
+}
+function drawStars(layerFrom, layerTo){
     const zIdx=currentZoneIdx;
     const pxOff=(typeof player!=='undefined' && player) ? (player.x-CW/2) : 0;
+    const lf=(layerFrom==null)?0:layerFrom, lt=(layerTo==null)?2:layerTo;
+    const streak=(lt>=2 && zIdx!==10) ? _streakSprite(zIdx) : null;
+    const smul=(typeof szStreakMul==='number' && szStreakMul>0) ? szStreakMul : 1;
     ctx.save();
     ctx.lineCap='round';
     for(let i=0;i<stars.length;i++){
         const s=stars[i];
+        if(s.layer<lf || s.layer>lt) continue;
         const L=STAR_LAYERS[s.layer]||STAR_LAYERS[0];
         let a=s.alpha;
         if(s.layer===0) a*=0.72+0.28*Math.sin(s.tw);
@@ -3494,14 +3568,13 @@ function drawStars(){
         let x=s.x-pxOff*L.par;
         if(x<-4) x+=CW+8; else if(x>CW+4) x-=CW+8;
         if(s.layer===2){
-            /* 가까운 층 — 속도선 */
-            const len=s.speed*0.075;
-            ctx.strokeStyle=col;
-            ctx.lineWidth=s.r;
-            ctx.beginPath();
-            ctx.moveTo(x, s.y-len);
-            ctx.lineTo(x, s.y);
-            ctx.stroke();
+            /* 가까운 층 — 테이퍼 스트릭 스프라이트 (오르트 구름은 별마다 색이 달라 스프라이트도 별마다) */
+            const len=Math.max(2, s.speed*0.035*smul);
+            const w=s.r*2.2;
+            const sp=streak || _streakSprite(i%3===0 ? 11 : i%3===1 ? 6 : 0);
+            ctx.globalAlpha=a;
+            ctx.drawImage(sp, x-w/2, s.y-len, w, len+w*0.5);
+            ctx.globalAlpha=1;
         } else if(s.r<0.9){
             ctx.fillStyle=col;
             ctx.fillRect(x-s.r, s.y-s.r, s.r*2, s.r*2);
@@ -3582,16 +3655,27 @@ function drawBackground(){
     const tMid = Math.min(t / 0.80, 1.0);          // 중간: 80%에 완료
     const tBot = Math.max((t - 0.35) / 0.65, 0.0); // 아래: 35% 이후 시작
 
+    /* P1 — 전환이 끝난 존은 그라디언트를 존별로 한 번만 만든다(매 프레임 hexToRgb·문자열·객체 생성 제거) */
+    if(t>=1){
+        let g=_bgGradCache[zi];
+        if(!g){ g=_bgGradCache[zi]=_bgMakeGrad(ZONE_BG[zi][0], ZONE_BG[zi][1], ZONE_BG[zi][2]); }
+        ctx.fillStyle=g;
+        ctx.fillRect(0,0,CW,CH);
+        return;
+    }
     const topC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][0]),hexToRgb(ZONE_BG[zi][0]),tTop));
     const midC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][1]),hexToRgb(ZONE_BG[zi][1]),tMid));
     const botC=rgbStr(lerpRgb(hexToRgb(ZONE_BG[pi][2]),hexToRgb(ZONE_BG[zi][2]),tBot));
 
-    const grad=ctx.createLinearGradient(0,0,0,CH);
-    grad.addColorStop(0,   topC);
-    grad.addColorStop(0.5, midC);
-    grad.addColorStop(1,   botC);
+    const grad=_bgMakeGrad(topC, midC, botC);
     ctx.fillStyle=grad;
     ctx.fillRect(0,0,CW,CH);
+}
+const _bgGradCache=[];
+function _bgMakeGrad(a, b, c){
+    const g=ctx.createLinearGradient(0,0,0,CH);
+    g.addColorStop(0, a); g.addColorStop(0.5, b); g.addColorStop(1, c);
+    return g;
 }
 
 /* ---- Zone planet/object drawing ---- */
@@ -3755,13 +3839,6 @@ function drawISS(now, zoneT){
         ctx.fill();
     }
 
-    /* 7. 라벨 (작게, 옅게) — "ISS" */
-    ctx.shadowBlur = 0;
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220, 230, 245, 0.45)';
-    ctx.textAlign = 'center';
-    ctx.fillText('ISS · 400 km', 0, 28);
-    ctx.textAlign = 'left';
 
     ctx.restore();
 }
@@ -3904,15 +3981,6 @@ function drawMoon(zoneT){
             ctx.arc(fx, fy, 0.4, 0, Math.PI*2);
             ctx.fill();
         }
-        /* 라벨 (옅게, 작게) */
-        ctx.font = '5.5px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(255, 245, 220, 0.55)';
-        ctx.textAlign = 'center';
-        ctx.fillText('Apollo 11', ax, ay + 8);
-        ctx.font = '4.5px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(255, 245, 220, 0.4)';
-        ctx.fillText('TRANQUILITY BASE · 1969', ax, ay + 13);
-        ctx.textAlign = 'left';
         /* 깜빡 marker — 사용자 시선 끌기 */
         const blink = Math.abs(Math.sin(performance.now() * 0.003));
         ctx.strokeStyle = `rgba(255, 230, 109, ${0.3 + blink * 0.4})`;
@@ -4014,14 +4082,6 @@ function drawMars(zoneT){
         ctx.beginPath();
         ctx.arc(omx, omy, r*0.20, 0, Math.PI*2);
         ctx.stroke();
-        ctx.font = '6px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(255, 235, 200, 0.7)';
-        ctx.textAlign = 'center';
-        ctx.fillText('Olympus Mons', omx, omy - r*0.22);
-        ctx.font = '4.5px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(255, 235, 200, 0.5)';
-        ctx.fillText('25 km · solar system\'s largest', omx, omy - r*0.16);
-        ctx.textAlign = 'left';
     }
 
     /* ---- Curiosity Rover @ Gale Crater (4.5°S 137.4°E) — 우측 적도 약간 남쪽 ----
@@ -4060,15 +4120,6 @@ function drawMars(zoneT){
         ctx.beginPath();
         ctx.arc(rx, ry, 7, 0, Math.PI*2);
         ctx.stroke();
-        /* 라벨 */
-        ctx.font = '5px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(220, 240, 255, 0.7)';
-        ctx.textAlign = 'center';
-        ctx.fillText('Curiosity', rx, ry + 9);
-        ctx.font = '4px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(220, 240, 255, 0.5)';
-        ctx.fillText('GALE CRATER · 2012', rx, ry + 14);
-        ctx.textAlign = 'left';
     }
 
     // 대기 헤이즈 (림 주변 주황빛 glow)
@@ -4191,22 +4242,9 @@ function drawAsteroidBelt(zoneT){
     /* 4. Ceres + Vesta 라벨 (큰 두 개 명명) */
     const ceresX = CW * 0.30, ceresY = bandCy + CH * 0.05;
     _drawAsteroid(ceresX, ceresY, 16, 0);
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220, 200, 170, 0.7)';
-    ctx.textAlign = 'center';
-    ctx.fillText('CERES', ceresX, ceresY + 26);
-    ctx.font = '5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200, 180, 150, 0.5)';
-    ctx.fillText('945 km · dwarf planet', ceresX, ceresY + 33);
 
     const vestaX = CW * 0.70, vestaY = bandCy + CH * 0.18;
     _drawAsteroid(vestaX, vestaY, 13, 2);
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220, 200, 170, 0.7)';
-    ctx.fillText('VESTA', vestaX, vestaY + 22);
-    ctx.font = '5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200, 180, 150, 0.5)';
-    ctx.fillText('525 km · S-type', vestaX, vestaY + 29);
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -4522,21 +4560,9 @@ function drawPluto(zoneT){
     ctx.fillStyle='rgba(240,210,180,0.55)';
     ctx.beginPath(); ctx.ellipse(cx+4,py+3,r*0.48,r*0.35,-0.2,0,Math.PI*2); ctx.fill();
     ctx.restore();
-    /* Tombaugh Regio 라벨 (heart 표시) */
-    ctx.font = '4.5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255, 245, 220, 0.55)';
-    ctx.textAlign = 'center';
-    ctx.fillText('♥ TOMBAUGH', cx + 4, py + 4);
-    ctx.textAlign = 'left';
     // Charon
     ctx.fillStyle='#888890';
     ctx.beginPath(); ctx.arc(cx+65,py-15,14,0,Math.PI*2); ctx.fill();
-    /* Charon 라벨 */
-    ctx.font = '5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220, 230, 245, 0.55)';
-    ctx.textAlign = 'center';
-    ctx.fillText('CHARON', cx + 65, py + 4);
-    ctx.textAlign = 'left';
     /* New Horizons 탐사선 — 2015 Pluto 플라이바이.
        작은 V자 모양 dish + 본체. */
     {
@@ -4577,15 +4603,6 @@ function drawPluto(zoneT){
         ctx.lineTo(cx - r * 0.7, py - r * 0.3);
         ctx.stroke();
         ctx.setLineDash([]);
-        /* 라벨 */
-        ctx.font = '5.5px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(180, 230, 255, 0.7)';
-        ctx.textAlign = 'center';
-        ctx.fillText('NEW HORIZONS', nx, ny + 14);
-        ctx.font = '4px Orbitron,sans-serif';
-        ctx.fillStyle = 'rgba(180, 230, 255, 0.5)';
-        ctx.fillText('2015 FLYBY', nx, ny + 19);
-        ctx.textAlign = 'left';
     }
     // Haze arc
     ctx.strokeStyle='rgba(140,180,220,0.18)';
@@ -4613,11 +4630,6 @@ function drawHelioEdge(zoneT){
     bandG.addColorStop(1,'rgba(0,0,0,0)');
     ctx.fillStyle=bandG;
     ctx.fillRect(0,bandY-18,CW,40);
-    // Faint label
-    ctx.font='9px Orbitron,sans-serif';
-    ctx.fillStyle='rgba(255,200,80,0.22)';
-    ctx.textAlign='center';
-    ctx.fillText('TERMINATION SHOCK',CW/2,bandY+4);
     /* Voyager probe + Golden Record (1977 발사, Carl Sagan 큐레이션).
        금빛 디스크 + 동심원 grooves + 우주인 메시지 다이어그램 hint.
        현재 Voyager 1 위치: ~163 AU (외계 진입). 디테일 강화. */
@@ -4696,17 +4708,6 @@ function drawHelioEdge(zoneT){
     ctx.beginPath(); ctx.moveTo(-4,7); ctx.lineTo(-8,18); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(4,7);  ctx.lineTo(10,18); ctx.stroke();
     ctx.restore();
-    /* 라벨 (rotation 밖) */
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255, 230, 130, 0.78)';
-    ctx.textAlign = 'center';
-    ctx.fillText('VOYAGER 1', vx, vy + 32);
-    ctx.font = '5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255, 230, 130, 0.5)';
-    ctx.fillText('GOLDEN RECORD · 1977 · CARL SAGAN', vx, vy + 40);
-    ctx.fillStyle = 'rgba(220, 230, 245, 0.4)';
-    ctx.fillText('163 AU · INTERSTELLAR', vx, vy + 47);
-    ctx.textAlign='left';
     // Undulating current sheet
     ctx.strokeStyle='rgba(100,140,200,0.15)';
     ctx.lineWidth=1;
@@ -5000,12 +5001,6 @@ function drawOortCloud(zoneT){
         ctx.lineTo(n[0]+8, ny-6);
         ctx.stroke();
     }
-    /* "100,000 AU" 라벨 (옅게) — 같이 흘러내림 */
-    ctx.font = '9px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(180,200,230,0.22)';
-    ctx.textAlign = 'center';
-    ctx.fillText('100,000 AU', CW/2, CH*0.18 + dy);
-    ctx.textAlign = 'left';
 
     /* ---- Halley's Comet (1P/Halley) ----
        76년 주기. 마지막 회귀 1986, 다음 2061. 길고 화려한 이중 꼬리:
@@ -5118,15 +5113,6 @@ function drawOortCloud(zoneT){
     ctx.arc(hx, hy, 5, 0, Math.PI*2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    /* (5) 라벨 — 핵 살짝 좌상단 */
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255, 240, 180, 0.85)';
-    ctx.textAlign = 'right';
-    ctx.fillText("Halley's Comet", hx - 8, hy - 18);
-    ctx.font = '5px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255, 240, 180, 0.55)';
-    ctx.fillText('1P · 76 yr orbit · last 1986', hx - 8, hy - 12);
-    ctx.textAlign = 'left';
     ctx.restore();
 
     ctx.restore();
@@ -5164,11 +5150,6 @@ function drawProximaCentauri(zoneT){
     ctx.beginPath();
     ctx.ellipse(sx, sy, 42, 22, 0.35, 0, Math.PI*2);
     ctx.stroke();
-    /* 라벨 */
-    ctx.font = '9px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255,160,100,0.45)';
-    ctx.textAlign = 'left';
-    ctx.fillText('PROXIMA b', px+6, py+3);
     ctx.restore();
 }
 
@@ -5206,10 +5187,6 @@ function drawSirius(zoneT){
     ctx.strokeStyle = 'rgba(140,180,255,0.10)';
     ctx.lineWidth = 1.2;
     ctx.beginPath(); ctx.moveTo(ax+10, ay+2); ctx.lineTo(bx-2, by); ctx.stroke();
-    ctx.font = '8px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(180,210,255,0.32)';
-    ctx.fillText('A', ax+13, ay-12);
-    ctx.fillText('B', bx+5, by-4);
     ctx.restore();
 }
 
@@ -5281,9 +5258,6 @@ function drawVegaAltair(zoneT){
     /* Deneb 흐릿한 점 */
     ctx.fillStyle = 'rgba(220,230,255,0.35)';
     ctx.beginPath(); ctx.arc(dnx, dny, 1.6, 0, Math.PI*2); ctx.fill();
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200,220,255,0.40)';
-    ctx.fillText('DENEB', dnx + 4, dny - 3);
     ctx.restore();
 
     /* 3) Vega — 큰 청백 별 (A0V) */
@@ -5354,18 +5328,6 @@ function drawVegaAltair(zoneT){
         ctx.restore();
     }
 
-    /* 6) 라벨 — 2026-05-11 lang-aware */
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200,220,255,0.55)';
-    ctx.textAlign = 'left';
-    const _vaLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
-    if(_vaLang === 'ko'){
-        ctx.fillText('VEGA · 직녀', vx + 14, vy - 14);
-        ctx.fillText('ALTAIR · 견우', ax + 12, ay - 12);
-    } else {
-        ctx.fillText('VEGA · Weaver', vx + 14, vy - 14);
-        ctx.fillText('ALTAIR · Cowherd', ax + 12, ay - 12);
-    }
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -5482,23 +5444,6 @@ function drawPleiades(zoneT){
         ctx.stroke();
     }
 
-    /* 5) 라벨 — 2026-05-11 lang-aware */
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200,220,255,0.55)';
-    ctx.textAlign = 'center';
-    ctx.fillText('PLEIADES · M45', cx, baseY - 56);
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(180,210,255,0.42)';
-    const _plLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
-    ctx.fillText(_plLang === 'ko' ? '昴 · 좀생이별 · Seven Sisters' : 'Seven Sisters · 昴 · Krittika',
-                 cx, baseY - 46);
-
-    /* Alcyone 작게 라벨 */
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(200,220,255,0.40)';
-    ctx.textAlign = 'left';
-    ctx.fillText('Alcyone', cx + 8, baseY + 4);
-    ctx.fillText('Atlas', cx + 38, baseY + 18);
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -5652,24 +5597,6 @@ function drawOrionNebula(zoneT){
         ctx.shadowBlur = 0;
     }
 
-    /* 8) 라벨 — 2026-05-11 lang-aware */
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255,210,225,0.62)';
-    ctx.textAlign = 'center';
-    ctx.fillText('ORION NEBULA · M42', cx, baseY - 70);
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(240,190,210,0.46)';
-    const _onLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
-    ctx.fillText(_onLang === 'ko'
-        ? '오리온의 검 · 사냥꾼의 칼날 · 1,344 ly'
-        : 'Heart of Orion\'s sword · 1,344 ly',
-        cx, baseY - 60);
-
-    /* Trapezium 작게 라벨 */
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(230,220,255,0.42)';
-    ctx.textAlign = 'left';
-    ctx.fillText('Trapezium', cx + 14, trapY - 4);
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -6163,12 +6090,6 @@ function drawIntergalacticVoid(zoneT){
     ctx.ellipse(0, 0, 4, 2, 0, 0, Math.PI*2);
     ctx.fill();
     ctx.restore();
-    /* 라벨 */
-    ctx.font = '8px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220,200,180,0.32)';
-    ctx.textAlign = 'center';
-    ctx.fillText('M31 · ANDROMEDA', ax, ay+22);
-    ctx.textAlign = 'left';
     /* 작은 점들 — 다른 멀리 있는 은하들 */
     const distantGalaxies = [
         [CW*0.70, CH*0.12, 1.5],
@@ -6428,48 +6349,8 @@ function drawTON618(zoneT){
     /* 8) 라벨 — main 'TON 618' Orbitron bold + 부속 sublabel.
           baseY 위쪽으로 살짝 띄움 (jet 위쪽에 가려지지 않게). */
     const labelTopY = baseY - diskRy - 60;
-    ctx.font = 'bold 14px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(255,220,235,0.78)';
-    ctx.textAlign = 'center';
-    ctx.fillText('TON 618', cx, labelTopY);
-
-    ctx.font = '7px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(240,200,225,0.62)';
-    ctx.fillText('ULTRAMASSIVE QUASAR · 66 BILLION M☉ · z=2.219', cx, labelTopY + 14);
-
-    /* 2026-05-11 lang-aware sub label */
-    const _tonLang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
-    if(_tonLang === 'ko'){
-        ctx.font = '8px Noto Sans KR,sans-serif';
-        ctx.fillStyle = 'rgba(230,190,225,0.55)';
-        ctx.fillText('66억 태양질량 · 우주 최대급 블랙홀', cx, labelTopY + 26);
-    }
-
-    /* 9) 거리 hint — 작게 라벨 아래 */
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220,180,210,0.45)';
-    ctx.fillText(_tonLang === 'ko'
-        ? '10.4 billion light-years from Earth · 지구로부터 104억 광년'
-        : '10.4 billion light-years from Earth',
-        cx, labelTopY + 38);
-
-    /* 10) Scale comparison label — disk 옆에 작게 (사상의 지평선 거대함) */
-    ctx.textAlign = 'left';
-    ctx.font = '6px Orbitron,sans-serif';
-    ctx.fillStyle = 'rgba(220,200,230,0.48)';
-    const scaleLabelX = cx + diskRx * 0.55;
-    const scaleLabelY = baseY + diskRy * 0.85 + 14;
-    if(scaleLabelX < CW - 40 && scaleLabelY < CH - 6){
-        ctx.fillText('∅ ~1300 AU', scaleLabelX, scaleLabelY);
-        ctx.fillText('= entire solar system', scaleLabelX, scaleLabelY + 8);
-        if(_tonLang === 'ko'){
-            ctx.font = '6px Noto Sans KR,sans-serif';
-            ctx.fillText('태양계 전체보다 큰 사상의 지평선', scaleLabelX, scaleLabelY + 18);
-        } else {
-            ctx.font = '6px Orbitron,sans-serif';
-            ctx.fillText('Event horizon larger than solar system', scaleLabelX, scaleLabelY + 18);
-        }
-    }
+    /* P1 — 14px 이름만 구운 글자로(첫 프레임 글리프 래스터 제거). 12px 미만 부속 라벨은 폰에서 읽히지 않아 삭제 */
+    szDrawBaked(szBakeText('ton618', 'bold 14px Orbitron,sans-serif', 'TON 618', 200, 'rgba(255,220,235,0.78)', 25), cx, labelTopY - 5);
 
     ctx.textAlign = 'left';
     ctx.restore();
@@ -6508,6 +6389,117 @@ function drawZonePlanet(zIdx, dt){
     }
 }
 
+/* ---- P1 (2026-09-27) 글자·패널 굽기 캐시 ----
+   존 도착 첫 프레임에 캔버스 글자(새 글꼴·새 크기·CJK 대체 글꼴) 래스터와 measureText 루프가 몰려
+   4x 에서 13~375ms 가 걸렸다. 정적인 글자·패널은 실제 캔버스와 같은 배율로 오프스크린에 한 번 굽고,
+   매 프레임은 drawImage 1회만 한다. 다음 존 것은 현재 존 60% 지점에서 한가할 때(rIC 6ms 조각) 미리 굽는다.
+   z 태그: 그 존을 벗어나면 width=0 으로 비트맵을 풀어 준다(-1 = 상주). */
+const SZ_BAKE = new Map();
+function szBakeScale(){ return Math.max(1, canvas.width / CW); }
+function _szFontReady(font, text){
+    try{ return !document.fonts || !document.fonts.check || document.fonts.check(font, text || 'A'); }catch(_){ return true; }
+}
+function szRR(x, rx, ry, w, h, r){
+    r = Math.min(r, w/2, h/2);
+    x.beginPath();
+    x.moveTo(rx+r, ry);
+    x.arcTo(rx+w, ry, rx+w, ry+h, r);
+    x.arcTo(rx+w, ry+h, rx, ry+h, r);
+    x.arcTo(rx, ry+h, rx, ry, r);
+    x.arcTo(rx, ry, rx+w, ry, r);
+    x.closePath();
+}
+/* key 별 오프스크린 한 장. draw(x, w, h) 는 논리 좌표(0..w, 0..h)로 그린다. fonts: 필요한 글꼴 목록(적재 확인용)
+   lazy: 아직 없으면 이 프레임에선 굽지 않고(null) 한가할 때 굽도록 예약한다 — 페이드인 첫 프레임처럼
+   어차피 거의 안 보이는 순간의 굽기 비용을 프레임 밖으로 뺀다 */
+const _szBakePending = new Set();
+function szBake(key, w, h, draw, z, fonts, lazy){
+    const S = szBakeScale();
+    const k = key + '@' + S.toFixed(3);
+    let e = SZ_BAKE.get(k);
+    if(e && !(e.tmp && performance.now() - e.t > 500)) return e;
+    if(lazy && !e){
+        if(!_szBakePending.has(k)){
+            _szBakePending.add(k);
+            const run = () => { _szBakePending.delete(k); if(!SZ_BAKE.has(k)) szBake(key, w, h, draw, z, fonts); };
+            if(window.requestIdleCallback) requestIdleCallback(run, {timeout: 120}); else setTimeout(run, 16);
+        }
+        return null;
+    }
+    let ready = true;
+    if(fonts) for(const f of fonts){ if(!_szFontReady(f[0], f[1])){ ready = false; break; } }
+    const c = (e && e.c) || document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil(w * S)); c.height = Math.max(1, Math.ceil(h * S));
+    const x = c.getContext('2d');
+    x.setTransform(S, 0, 0, S, 0, 0);
+    try{ draw(x, w, h); }catch(_){}
+    e = { c, w, h, S, z: (z == null ? -1 : z), tmp: !ready, t: performance.now() };
+    SZ_BAKE.set(k, e);
+    return e;
+}
+function _szEllipsize(x, raw, maxW){
+    raw = String(raw || '');
+    if(!(maxW > 0) || x.measureText(raw).width <= maxW) return raw;
+    let s = raw;
+    while(s.length > 2 && x.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
+}
+/* 한 줄 글자. (cx, cy) 가운데 기준으로 szDrawBaked 로 그린다 */
+function szBakeText(key, font, text, maxW, color, z){
+    const m = /(\d+(?:\.\d+)?)px/.exec(font), px = m ? +m[1] : 12;
+    const w = Math.ceil((maxW || 300) + px), h = Math.ceil(px * 1.8);
+    return szBake('t|' + key + '|' + font + '|' + text + '|' + (color || ''), w, h, (x) => {
+        x.font = font; x.fillStyle = color || '#fff'; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillText(_szEllipsize(x, text, maxW), w / 2, h / 2);
+    }, z, [[font, text]]);
+}
+function szDrawBaked(e, cx, cy){
+    if(!e || !e.c.width) return;   /* 풀린 비트맵(width 0)은 drawImage 가 예외를 던진다 */
+    /* 장치 픽셀에 맞춰 놓는다 — 소수점 위치의 이중선형 흐림 방지 */
+    const S = e.S || 1;
+    ctx.drawImage(e.c, Math.round((cx - e.w / 2) * S) / S, Math.round((cy - e.h / 2) * S) / S, e.w, e.h);
+}
+/* 존을 벗어나면 그 존 비트맵을 푼다 — 지금 존과 앞뒤 존·첫 두 존(재시작 즉시 필요)은 남긴다 */
+function szBakeRelease(cur){
+    for(const [k, e] of SZ_BAKE){
+        if(e.z < 0 || e.z <= 1 || (e.z >= cur - 1 && e.z <= cur + 1)) continue;
+        e.c.width = 0; e.c.height = 0; SZ_BAKE.delete(k);
+    }
+}
+/* 언어 조회는 URLSearchParams·localStorage 를 매번 읽는다 — 프레임마다 여러 번 부르지 않게 1초 캐시 */
+function _szLang(){
+    const n = performance.now();
+    if(_szLang._v === undefined || n - _szLang._t > 1000){
+        _szLang._t = n;
+        _szLang._v = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
+    }
+    return _szLang._v;
+}
+try{ document.addEventListener('lp:langchanged', () => { _szLang._v = undefined; }); }catch(_){}
+/* 존 라벨 글자 3줄(— ARRIVAL — / 영어 이름 / 현지 이름). 가운데 = (CW/2, CH*0.80-10) */
+function _szZoneLabelBake(idx, rgb, lazy){
+    const lang = _szLang();
+    const enName    = (ZONES[idx] && ZONES[idx].nameEn) || '';
+    const localName = _zoneName(idx);
+    const showLocal = (lang !== 'en' && lang !== 'gb' && localName && localName !== enName);
+    const W = 320, H = 66, c = H / 2 + 10;   /* c = 원래 y 에 해당하는 구운 캔버스 안 y */
+    return szBake('zl|' + idx + '|' + enName + '|' + (showLocal ? localName : '') + '|' + rgb, W, H, (x) => {
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillStyle = 'rgba(' + rgb + ',0.95)';
+        x.font = '800 7px Orbitron,sans-serif';
+        x.fillText('— ARRIVAL —', W / 2, c - 30);
+        x.fillStyle = '#fff';
+        x.font = 'bold 15px Orbitron,sans-serif';
+        x.fillText(enName, W / 2, showLocal ? c - 8 : c - 2);
+        if(showLocal){
+            x.fillStyle = '#00D9FF';
+            x.font = '11px Noto Sans KR,sans-serif';
+            x.fillText(localName, W / 2, c + 10);
+        }
+    }, idx, [['bold 15px Orbitron,sans-serif', enName], ['11px Noto Sans KR,sans-serif', showLocal ? localName : 'A']], lazy);
+}
+const _zlGradCache = {};
+
 /* ---- Zone label ----
    위 줄: 영어 (universal — 항상 표시).
    아래 줄: current lang 의 zone 이름. lang 가 en/gb 면 영어와 같으니 1 줄만 표시. */
@@ -6522,10 +6514,15 @@ function drawZoneLabel(dt){
     else if(t<FADE+HOLD+FADE) a=1-(t-FADE-HOLD)/FADE;
     else { zoneLabel.idx=-1; return; }
 
-    const lang = (window.LpI18n && window.LpI18n.getLang) ? window.LpI18n.getLang() : 'en';
-    const enName    = (ZONES[zoneLabel.idx] && ZONES[zoneLabel.idx].nameEn) || '';
-    const localName = _zoneName(zoneLabel.idx);
-    const showLocal = (lang !== 'en' && lang !== 'gb' && localName && localName !== enName);
+    const lang = _szLang();
+    const _m = drawZoneLabel._m;
+    const showLocal = (_m && _m.i === zoneLabel.idx && _m.l === lang) ? _m.s : (function(){
+        const enName    = (ZONES[zoneLabel.idx] && ZONES[zoneLabel.idx].nameEn) || '';
+        const localName = _zoneName(zoneLabel.idx);
+        const s = !!(lang !== 'en' && lang !== 'gb' && localName && localName !== enName);
+        drawZoneLabel._m = { i: zoneLabel.idx, l: lang, s };
+        return s;
+    })();
 
     const y=CH*0.80;
     const _bh = showLocal ? 44 : 30;
@@ -6536,8 +6533,8 @@ function drawZoneLabel(dt){
     const _w = 220 * (0.86 + 0.14 * (1 - Math.pow(1 - _in, 3)));
     ctx.save();
     ctx.globalAlpha=a;
-    const _bg = ctx.createLinearGradient(0, y-24, 0, y-24+_bh);
-    _bg.addColorStop(0, 'rgba(8,14,34,0.82)'); _bg.addColorStop(1, 'rgba(2,4,14,0.78)');
+    let _bg = _zlGradCache[_bh];
+    if(!_bg){ _bg = _zlGradCache[_bh] = ctx.createLinearGradient(0, y-24, 0, y-24+_bh); _bg.addColorStop(0, 'rgba(8,14,34,0.82)'); _bg.addColorStop(1, 'rgba(2,4,14,0.78)'); }
     ctx.fillStyle=_bg;
     drawRR(CW/2-_w/2, y-24, _w, _bh, 10);
     ctx.fill();
@@ -6554,20 +6551,12 @@ function drawZoneLabel(dt){
         ctx.fillStyle=_sg; ctx.fillRect(_sx-16, y-30, 32, _bh+12);
         ctx.restore();
     }
-    ctx.fillStyle='rgba('+_rgb+',0.95)';
-    ctx.font='800 7px Orbitron,sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('— ARRIVAL —', CW/2, y-30);
-    ctx.fillStyle='#fff';
-    ctx.font='bold 15px Orbitron,sans-serif';
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText(enName, CW/2, showLocal ? y-8 : y-2);
-    if(showLocal){
-        ctx.fillStyle='#00D9FF';
-        ctx.font='11px Noto Sans KR,sans-serif';
-        ctx.fillText(localName, CW/2, y+10);
-    }
+    /* P1 — 글자 3줄은 존·언어·색별로 한 번 구운 비트맵 1장 (구운 캔버스 가운데 = y-10) */
+    const _zm = drawZoneLabel._e;
+    let _ze = (_zm && _zm.i === zoneLabel.idx && _zm.l === lang && _zm.r === _rgb && _zm.S === szBakeScale() && !_zm.e.tmp) ? _zm.e : null;
+    /* 페이드인 앞부분(a<0.5)에 아직 못 구웠으면 한가할 때 굽고 이번 프레임은 글자 없이 */
+    if(!_ze){ _ze = _szZoneLabelBake(zoneLabel.idx, _rgb, a < 0.5); if(_ze) drawZoneLabel._e = { i: zoneLabel.idx, l: lang, r: _rgb, S: szBakeScale(), e: _ze }; }
+    szDrawBaked(_ze, CW/2, y-10);
     ctx.restore();
 }
 
@@ -6594,33 +6583,40 @@ function drawBoundaryLabel(dt){
     const headTitle = useKo ? '⚠ 경계 통과' : '⚠ BOUNDARY CROSSED';
 
     const cx = CW/2, cy = CH*0.30;
-    const W = 280, H = 70;
     ctx.save();
     ctx.globalAlpha = a;
-    /* 외곽 글로우 */
-    ctx.fillStyle = 'rgba(255,180,40,0.12)';
-    drawRR(cx-W/2-8, cy-H/2-8, W+16, H+16, 16);
-    ctx.fill();
-    /* 본 배경 */
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-    drawRR(cx-W/2, cy-H/2, W, H, 12);
-    ctx.fill();
-    /* 노란 테두리 */
-    ctx.strokeStyle = 'rgba(255,200,80,0.90)';
-    ctx.lineWidth = 1.6;
-    drawRR(cx-W/2, cy-H/2, W, H, 12);
-    ctx.stroke();
-    /* 헤더 */
-    ctx.fillStyle = 'rgba(255,200,80,0.95)';
-    ctx.font = 'bold 11px Orbitron,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(headTitle, cx, cy - 16);
-    /* 본문 */
-    ctx.fillStyle = '#fff';
-    ctx.font = useKo ? 'bold 13px "Noto Sans KR",sans-serif' : 'bold 11px Orbitron,sans-serif';
-    ctx.fillText(text, cx, cy + 8);
+    /* P1 — 패널 전체(글로우·배경·테두리·글자 2줄)를 한 번 구워 drawImage 1회 (페이드인 앞부분은 한가할 때 굽기) */
+    szDrawBaked(_szBoundaryBake(boundaryLabel.idx, headTitle, text, useKo, a < 0.5), cx, cy);
     ctx.restore();
+}
+function _szBoundaryBake(idx, headTitle, text, useKo, lazy){
+    const W = 280, H = 70, BW = W + 20, BH = H + 20, cx = BW / 2, cy = BH / 2;
+    const bodyFont = useKo ? 'bold 13px "Noto Sans KR",sans-serif' : 'bold 11px Orbitron,sans-serif';
+    return szBake('bd|' + idx + '|' + headTitle + '|' + text + '|' + bodyFont, BW, BH, (x) => {
+        /* 외곽 글로우 */
+        x.fillStyle = 'rgba(255,180,40,0.12)';
+        szRR(x, cx-W/2-8, cy-H/2-8, W+16, H+16, 16);
+        x.fill();
+        /* 본 배경 */
+        x.fillStyle = 'rgba(0,0,0,0.82)';
+        szRR(x, cx-W/2, cy-H/2, W, H, 12);
+        x.fill();
+        /* 노란 테두리 */
+        x.strokeStyle = 'rgba(255,200,80,0.90)';
+        x.lineWidth = 1.6;
+        szRR(x, cx-W/2, cy-H/2, W, H, 12);
+        x.stroke();
+        /* 헤더 */
+        x.fillStyle = 'rgba(255,200,80,0.95)';
+        x.font = 'bold 11px Orbitron,sans-serif';
+        x.textAlign = 'center';
+        x.textBaseline = 'middle';
+        x.fillText(headTitle, cx, cy - 16);
+        /* 본문 */
+        x.fillStyle = '#fff';
+        x.font = bodyFont;
+        x.fillText(text, cx, cy + 8);
+    }, idx, [['bold 11px Orbitron,sans-serif', headTitle], [bodyFont, text]], lazy);
 }
 
 /* ---- Player ---- */
@@ -6660,15 +6656,8 @@ function szZonePlanet(key, cx, cy, r, glow, over){
     if(!szReady(key)) return false;
     const im = SZ_SPRITES[key];
     const d = r * 2 * (over || 1.06);
-    if(glow){
-        ctx.save();
-        ctx.shadowColor = glow;
-        ctx.shadowBlur = Math.max(18, r * 0.34);
-        ctx.globalAlpha = 0.9;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 0.94, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.001)'; ctx.fill();
-        ctx.restore();
-    }
+    /* P1 — 투명 채움 + shadowBlur 글로우(목성 r=130 이면 blur 44px 를 매 프레임) 삭제.
+       glow 인자는 호출 호환을 위해 남긴다 */
     ctx.drawImage(im, cx - d / 2, cy - d / 2, d, d);
     return true;
 }
@@ -6752,21 +6741,35 @@ function tpSetRing(cx, cy){
     const d=Math.sqrt(dx*dx+dy*dy)||0.01;
     const maxR=tpR-27;
     const f=d>maxR?(maxR/d):1;
-    tpRing.style.left=(tpR+dx*f)+'px';
-    tpRing.style.top =(tpR+dy*f)+'px';
+    /* P1 — transform 만 바꾼다(배치 재계산 없음) */
+    tpRing.style.transform='translate3d('+(tpR+dx*f).toFixed(1)+'px,'+(tpR+dy*f).toFixed(1)+'px,0) translate(-50%,-50%)';
 }
 
+/* P1 — 조향 빛 요소(트랙패드 원의 형제, 원 뒤). JS 로 한 번 만든다 */
+const tpGlow=(function(){
+    try{
+        const g=document.createElement('div');
+        g.className='tp-glow';
+        tpZone.parentNode.insertBefore(g, tpZone);
+        return g;
+    }catch(_){ return null; }
+})();
+let _tpGlowOn=false;
 function tpSetGlow(dx, dy){
+    if(!tpGlow) return;
     const d=Math.sqrt(dx*dx+dy*dy);
-    if(d<0.8){ tpZone.style.boxShadow='none'; return; }
+    if(d<0.8){ if(_tpGlowOn){ _tpGlowOn=false; tpGlow.style.opacity='0'; } return; }
     const nx=dx/d, ny=dy/d;
     const s=Math.min(d/7, 1);
-    const ox=nx*24, oy=ny*24;
-    const blur=16+s*16, spread=3+s*7;
-    const aInner=0.12+s*0.22, aOuter=0.42+s*0.48;
-    tpZone.style.boxShadow=
-        `0 0 0 2px rgba(0,217,255,${aInner}),`+
-        `${ox}px ${oy}px ${blur}px ${spread}px rgba(0,217,255,${aOuter})`;
+    if(!_tpGlowOn && tpR > 10 && tpGlow._r !== tpR){
+        /* 켜질 때만 원 크기(화면별 128·148px)에 맞춘다 */
+        tpGlow._r = tpR;
+        tpGlow.style.width = tpGlow.style.height = (tpR*2)+'px';
+        tpGlow.style.marginLeft = (-tpR)+'px';
+    }
+    _tpGlowOn=true;
+    tpGlow.style.transform='translate3d('+(nx*24).toFixed(1)+'px,'+(ny*24).toFixed(1)+'px,0) scale('+(0.94+s*0.12).toFixed(3)+')';
+    tpGlow.style.opacity=(0.45+s*0.55).toFixed(2);
 }
 
 function tpApplyDelta(cx, cy){
@@ -6810,7 +6813,7 @@ function tpEnd(e){
     }
     tpTouchId = null;
     tpZone.classList.remove('on');
-    tpZone.style.boxShadow='none';
+    if(tpGlow){ _tpGlowOn=false; tpGlow.style.opacity='0'; }
     pendingTp.active = false;
     pendingTp.hasMove = false;
     pendingTp.dx = 0;
@@ -7167,58 +7170,133 @@ function _ellipsizeCanvasText(text, maxW, font){
     return s + '…';
 }
 
+/* 항로 패널 (P1 소유 — 2026-09-27 굽기 구조).
+   정적인 부분(배경·테두리·글자 4줄)은 존·언어별로 한 장 굽고, 매 프레임은 drawImage 1회 + 진행 막대만.
+   문구는 SZ_T(key) 조회(fdPath·fdNext·fdUnknown — P3 가 표를 채움), 없으면 아래 기본값.
+   szBestMarker() (P3 제공, 선택): 이 존 막대 위 BEST 금색 깃발 위치 0..1 (또는 {t}) — 없으면 null */
+function _szFdText(key, ko, en){
+    let v = null;
+    try{ if(typeof SZ_T === 'function') v = SZ_T(key); }catch(_){}
+    if(v && v !== key) return String(v);
+    return _szLang() === 'ko' ? ko : en;
+}
+function _szFdBake(zIdx, lazy){
+    const x = 12, y = CH - 52, w = CW - 24, h = 38;
+    const pathT = _szFdText('fdPath', '항로', 'FLIGHT PATH');
+    const nextT = _szFdText('fdNext', '다음', 'NEXT');
+    const curName = _zoneName(zIdx) || '';
+    const nextName = ZONES[zIdx + 1] ? _zoneName(zIdx + 1) : _szFdText('fdUnknown', '미지의 영역', 'UNKNOWN');
+    const nextOrdinal = Math.min(zIdx + 2, ZONES.length);
+    const nameFont = '800 10px Noto Sans KR, sans-serif', nextFont = '700 8px Noto Sans KR, sans-serif';
+    const P = 2;   /* 테두리 선이 잘리지 않게 여백 */
+    return szBake('fd|' + zIdx + '|' + pathT + '|' + nextT + '|' + curName + '|' + nextName, w + P * 2, h + P * 2, (c) => {
+        c.translate(P - x, P - y);
+        szRR(c, x, y, w, h, 11);
+        const bg = c.createLinearGradient(x, y, x + w, y + h);
+        bg.addColorStop(0, 'rgba(4,12,28,0.72)');
+        bg.addColorStop(0.55, 'rgba(0,42,78,0.48)');
+        bg.addColorStop(1, 'rgba(20,8,34,0.62)');
+        c.fillStyle = bg;
+        c.fill();
+        c.strokeStyle = 'rgba(116,226,255,0.28)';
+        c.lineWidth = 1;
+        c.stroke();
+        c.textBaseline = 'top';
+        c.textAlign = 'left';
+        c.fillStyle = 'rgba(156,223,255,.82)';
+        c.font = '800 7px Orbitron, sans-serif';
+        c.fillText(pathT, x + 11, y + 7);
+        c.fillStyle = 'rgba(255,255,255,.92)';
+        c.font = nameFont;
+        c.fillText(_szEllipsize(c, curName, w * 0.56), x + 11, y + 18);
+        c.textAlign = 'right';
+        c.fillStyle = 'rgba(255,255,255,.52)';
+        c.font = '700 7px Orbitron, sans-serif';
+        c.fillText(nextT + ' ' + nextOrdinal + '/' + ZONES.length, x + w - 11, y + 7);
+        c.fillStyle = 'rgba(255,230,109,.82)';
+        c.font = nextFont;
+        c.fillText(_szEllipsize(c, nextName, w * 0.34), x + w - 11, y + 20);
+        c.fillStyle = 'rgba(255,255,255,.12)';
+        c.fillRect(x + 11, y + h - 7, w - 22, 3);
+    }, zIdx, [[nameFont, curName], [nextFont, nextName], ['800 7px Orbitron, sans-serif', pathT]], lazy);
+}
+let _szFdGrad = null;
 function drawFlightDirector(now){
     if(!running) return;
     const z = ZONES[currentZoneIdx];
     if(!z) return;
-    const lang = (window.LpI18n && window.LpI18n.getLang && window.LpI18n.getLang() === 'ko') ? 'ko' : 'en';
-    const pct = Math.max(0, Math.min(1, getZoneT(currentZoneIdx)));
-    const nextName = ZONES[currentZoneIdx + 1] ? _zoneName(currentZoneIdx + 1) : (lang === 'ko' ? '미지의 영역' : 'UNKNOWN');
-    const nextOrdinal = Math.min(currentZoneIdx + 2, ZONES.length);
+    const zoneT = getZoneT(currentZoneIdx);
+    const pct = Math.max(0, Math.min(1, zoneT));
     const x = 12, y = CH - 52, w = CW - 24, h = 38;
     const playerOverlap = Math.max(0, Math.min(1, (player.y - (y - 32)) / 72));
     ctx.save();
     ctx.globalAlpha = 0.86 - playerOverlap * 0.52;
-    drawRR(x, y, w, h, 11);
-    const bg = ctx.createLinearGradient(x, y, x + w, y + h);
-    bg.addColorStop(0, 'rgba(4,12,28,0.72)');
-    bg.addColorStop(0.55, 'rgba(0,42,78,0.48)');
-    bg.addColorStop(1, 'rgba(20,8,34,0.62)');
-    ctx.fillStyle = bg;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(116,226,255,0.28)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = 'rgba(156,223,255,.82)';
-    ctx.font = '800 7px Orbitron, sans-serif';
-    ctx.fillText(lang === 'ko' ? '항로' : 'FLIGHT PATH', x + 11, y + 7);
-
-    const nameFont = '800 10px Noto Sans KR, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,.92)';
-    ctx.fillText(_ellipsizeCanvasText(_zoneName(currentZoneIdx), w * 0.56, nameFont), x + 11, y + 18);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = 'rgba(255,255,255,.52)';
-    ctx.font = '700 7px Orbitron, sans-serif';
-    ctx.fillText((lang === 'ko' ? '다음 ' : 'NEXT ') + nextOrdinal + '/' + ZONES.length, x + w - 11, y + 7);
-    const nextFont = '700 8px Noto Sans KR, sans-serif';
-    ctx.fillStyle = 'rgba(255,230,109,.82)';
-    ctx.fillText(_ellipsizeCanvasText(nextName, w * 0.34, nextFont), x + w - 11, y + 20);
+    /* 존·언어가 그대로면 지난 프레임 비트맵 (문구 조회·키 조립도 건너뛴다) */
+    const L = _szLang(), fm = drawFlightDirector._m;
+    let e = (fm && fm.z === currentZoneIdx && fm.l === L && fm.S === szBakeScale() && !fm.e.tmp && fm.e.c.width) ? fm.e : null;
+    if(!e){
+        /* 새 존인데 아직 못 구웠으면 한두 프레임은 직전 패널을 그대로 보여 주고 한가할 때 굽는다 */
+        const prev = (fm && fm.e && fm.e.c.width && fm.S === szBakeScale()) ? fm.e : null;
+        e = _szFdBake(currentZoneIdx, !!prev);
+        if(e) drawFlightDirector._m = { z: currentZoneIdx, l: L, S: szBakeScale(), e }; else e = prev;
+    }
+    szDrawBaked(e, x + w / 2, y + h / 2);
 
     const bx = x + 11, by = y + h - 7, bw = w - 22;
-    ctx.fillStyle = 'rgba(255,255,255,.12)';
-    ctx.fillRect(bx, by, bw, 3);
-    const pg = ctx.createLinearGradient(bx, by, bx + bw, by);
-    pg.addColorStop(0, '#00D9FF');
-    pg.addColorStop(0.65, '#FFE66D');
-    pg.addColorStop(1, '#FF3366');
-    ctx.fillStyle = pg;
+    if(!_szFdGrad){
+        _szFdGrad = ctx.createLinearGradient(bx, by, bx + bw, by);
+        _szFdGrad.addColorStop(0, '#00D9FF');
+        _szFdGrad.addColorStop(0.65, '#FFE66D');
+        _szFdGrad.addColorStop(1, '#FF3366');
+    }
+    ctx.fillStyle = _szFdGrad;
     ctx.fillRect(bx, by, Math.max(4, bw * pct), 3);
+    /* BEST 깃발 (P3 szBestMarker) */
+    let bm = null;
+    try{ if(typeof szBestMarker === 'function') bm = szBestMarker(); }catch(_){}
+    if(bm != null && typeof bm === 'object') bm = bm.t;
+    if(typeof bm === 'number' && bm >= 0 && bm <= 1){
+        const fx = bx + bw * bm;
+        ctx.fillStyle = '#FFD24A';
+        ctx.fillRect(fx - 0.75, by - 5, 1.5, 8);
+        ctx.beginPath(); ctx.moveTo(fx + 0.75, by - 5); ctx.lineTo(fx + 5, by - 3.5); ctx.lineTo(fx + 0.75, by - 2); ctx.closePath(); ctx.fill();
+    }
     ctx.restore();
     ctx.globalAlpha = 1;
+    /* 다음 존 굽기 예약 — 현재 존 60% 지점부터 한가할 때 */
+    if(zoneT >= 0.6) szPrepZone(currentZoneIdx + 1);
+    else if(szPrepZone._cur !== currentZoneIdx){ szPrepZone._cur = currentZoneIdx; szBakeRelease(currentZoneIdx); }
+}
+
+/* 다음 존 준비 — 글자·패널 굽기와 배경 그라디언트를 rIC 6ms 조각으로 나눠 미리 만든다 */
+function szPrepZone(zIdx){
+    if(zIdx < 0 || zIdx >= ZONES.length || szPrepZone._done === zIdx + '|' + _szLang() + '|' + szBakeScale()) return;
+    szPrepZone._done = zIdx + '|' + _szLang() + '|' + szBakeScale();
+    const jobs = [
+        () => { if(!_bgGradCache[zIdx]) _bgGradCache[zIdx] = _bgMakeGrad(ZONE_BG[zIdx][0], ZONE_BG[zIdx][1], ZONE_BG[zIdx][2]); },
+        () => _szZoneLabelBake(zIdx, (typeof _zoneAccentRGB === 'function') ? _zoneAccentRGB(zIdx) : zoneWarpRGB),
+        () => _szFdBake(zIdx),
+        () => { try{ _streakSprite(zIdx); }catch(_){} },
+    ];
+    const bi = BOUNDARY_INFO[zIdx];
+    if(bi){
+        /* 추정 문구로 미리 굽는다 — 실제 문구가 다르면 도착 때 한 번 더 굽지만 글꼴은 이미 데워져 있다 */
+        const ko = _szLang() === 'ko';
+        jobs.push(() => _szBoundaryBake(zIdx, ko ? '⚠ 경계 통과' : '⚠ BOUNDARY CROSSED', ko ? bi.ko : bi.en, ko));
+    }
+    if(zIdx === 25) jobs.push(() => szBakeText('ton618', 'bold 14px Orbitron,sans-serif', 'TON 618', 200, 'rgba(255,220,235,0.78)', 25));
+    szIdleJobs(jobs);
+}
+/* 한가할 때 6ms 조각으로 작업을 나눠 돌린다 */
+function szIdleJobs(jobs){
+    let j = 0;
+    const later = (f) => window.requestIdleCallback ? requestIdleCallback(f, {timeout: 800}) : setTimeout(f, 40);
+    const step = (dl) => {
+        const end = performance.now() + 6;
+        while(j < jobs.length && performance.now() < end){ try{ jobs[j](); }catch(_){} j++; }
+        if(j < jobs.length) later(step);
+    };
+    later(step);
 }
 
 function drawDangerVignette(now){
@@ -8193,15 +8271,17 @@ function szDrawCommHud(now){
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.font = '11px sans-serif';
+    /* P1 — 컬러 이모지 fillText(첫 사용 4x 19ms)를 매 프레임 하지 않고 한 번 구운 비트맵으로 */
+    const _ant = szBakeText('commHud', '11px sans-serif', '📡', 14, '#fff', -1);
     if(!commLinkLost){
         ctx.globalAlpha = 0.5;
-        ctx.fillText('📡', x, y);
+        szDrawBaked(_ant, x + 6.5, y);
         ctx.globalAlpha = 0.85;
         ctx.fillStyle = '#3dff9a';
         ctx.beginPath(); ctx.arc(x + 14, y + 4, 2, 0, Math.PI * 2); ctx.fill();
     } else {
         ctx.globalAlpha = 0.45;
-        ctx.fillText('📡', x, y);
+        szDrawBaked(_ant, x + 6.5, y);
         ctx.globalAlpha = 0.95;
         ctx.strokeStyle = '#ff5a6e';
         ctx.lineWidth = 1.8;
@@ -8266,7 +8346,27 @@ function _missionResolveOrbit(zIdx){
     return null;
 }
 
+/* P1 (2026-09-27) — 프레임 안 DOM 쓰기 큐.
+   게임 로직 도중 DOM 을 바꾸면 같은 프레임 뒤의 캔버스 ctx.font/filter 세터가 스타일·배치 재계산을
+   동기로 떠안는다(미션이 켜지는 프레임 4x 75~260ms). 쓰기는 모아 두었다가 gameLoop 가 drawFrame 을
+   끝낸 뒤 szDomFlush() 로 한 번에 적용한다. 게임이 돌지 않을 때(메뉴·리셋)는 바로 적용 */
+var szDomQ = [];
+function szDomQueue(fn){
+    let run = false; try{ run = running; }catch(_){}   /* running 선언 전(스크립트 평가 중) 호출 대비 */
+    if(!szDomQ || !run || szDomQ.length > 96){ try{ fn(); }catch(_){} return; }
+    szDomQ.push(fn);
+}
+function szDomFlush(){
+    if(!szDomQ || !szDomQ.length) return;
+    const q = szDomQ; szDomQ = [];
+    for(let i = 0; i < q.length; i++){ try{ q[i](); }catch(_){} }
+}
+
 function _showMissionBanner(zIdx, kind){
+    const _lost = commLinkLost;
+    szDomQueue(() => _showMissionBannerNow(zIdx, kind, _lost));
+}
+function _showMissionBannerNow(zIdx, kind, _lostAtCall){
     const banner = document.getElementById('missionBanner');
     if(!banner) return;
     const lang = _missionLang();
@@ -8297,7 +8397,7 @@ function _showMissionBanner(zIdx, kind){
         if(timerEl) timerEl.textContent = '✓';
         banner.classList.remove('failed');
         banner.classList.add('success');
-    } else if(kind === 'failed' && commLinkLost){
+    } else if(kind === 'failed' && _lostAtCall){
         if(titleEl) titleEl.textContent = _szCommT('lost');
         if(subEl) subEl.textContent = _szCommT('lostSub');
         if(iconEl) iconEl.textContent = '✗';
@@ -8320,22 +8420,49 @@ function _showMissionBanner(zIdx, kind){
         banner.classList.remove('success');
         banner.classList.add('failed');
     }
-    banner.hidden = false;
-    /* trigger transition by adding .show on next frame */
-    requestAnimationFrame(() => banner.classList.add('show'));
+    /* P1 — 배너는 늘 배치된 채(visibility) 있어 .show 만 붙이면 전환이 바로 걸린다 */
+    banner.classList.add('show');
 }
 
 function _hideMissionBanner(){
+    szDomQueue(_hideMissionBannerNow);
+}
+function _hideMissionBannerNow(){
     const banner = document.getElementById('missionBanner');
     if(!banner) return;
+    /* success/failed 클래스는 다음 _showMissionBanner 가 다시 정한다 — 350ms 뒤 지우던 타이머가
+       그 사이 새로 뜬 배너의 클래스를 지우던 경합도 함께 없앤다 */
     banner.classList.remove('show');
-    setTimeout(() => { banner.hidden = true; banner.classList.remove('success','failed'); }, 350);
+}
+
+/* P1 — 로드 뒤 한가할 때 배너에 6개 언어 문구·이모지를 한 번 넣어 글꼴·글리프를 미리 준비한다
+   (보이지 않는 상태). 첫 미션 프레임이 폰트 적재·글자 배치를 떠안지 않게 */
+function _szPrewarmMissionBanner(){
+    try{
+        const t = document.getElementById('mbTitle'), sub = document.getElementById('mbSubtitle'), ic = document.getElementById('mbIcon'), tm = document.getElementById('mbTimer');
+        if(!t || !sub) return;
+        const parts = [];
+        try{ for(const L in SZ_COMM_TXT){ const o = SZ_COMM_TXT[L]; for(const k in o) parts.push(String(o[k])); } }catch(_){}
+        try{ parts.push(...Object.values(MISSION_TITLES_KO), ...Object.values(MISSION_TITLES_EN)); }catch(_){}
+        try{ parts.push(...Object.values(MISSION_SUBTITLES_KO), ...Object.values(MISSION_SUBTITLES_EN)); }catch(_){}
+        const o0 = [t.textContent, sub.textContent, ic ? ic.textContent : '', tm ? tm.textContent : ''];
+        t.textContent = parts.join(' ') + ' ✓ ✗ ⚡ —';
+        sub.textContent = parts.slice().reverse().join(' ');
+        if(ic) ic.textContent = '📡✨✗🏃';
+        if(tm) tm.textContent = '25✓—';
+        void t.offsetWidth;   /* 여기서 한 번 배치(한가한 때) */
+        t.textContent = o0[0]; sub.textContent = o0[1]; if(ic) ic.textContent = o0[2]; if(tm) tm.textContent = o0[3];
+    }catch(_){}
 }
 
 function _setSatBtnState(state){
+    szDomQueue(() => _setSatBtnStateNow(state));
+}
+function _setSatBtnStateNow(state){
     /* state: 'disabled' | 'armed' | 'firing' (transient on click) */
     const sb = document.getElementById('satBtn');
     if(!sb) return;
+    _updateSatProgressBar._k = null;   /* 다음 프레임 진행 막대가 클래스를 다시 맞추게 */
     sb.classList.remove('disabled','armed','firing');
     if(state === 'disabled') sb.classList.add('disabled');
     else if(state === 'armed') sb.classList.add('armed');
@@ -8451,10 +8578,10 @@ function updateMissionState(now){
     }
     if(missionState === 'active'){
         /* update timer countdown */
-        const timerEl = document.getElementById('mbTimer');
-        if(timerEl){
-            const left = String(Math.max(0, Math.ceil((missionActiveUntil - now) / 1000)));
-            if(timerEl.textContent !== left) timerEl.textContent = left;
+        const left = String(Math.max(0, Math.ceil((missionActiveUntil - now) / 1000)));
+        if(updateMissionState._left !== left){
+            updateMissionState._left = left;
+            szDomQueue(() => { const timerEl = document.getElementById('mbTimer'); if(timerEl && timerEl.textContent !== left) timerEl.textContent = left; });
         }
         if(now >= missionActiveUntil) _failMission(now);
         return;
@@ -9153,21 +9280,28 @@ function updateSatelliteInstall(dt, now){
 }
 
 function _updateSatProgressBar(){
-    const sb = document.getElementById('satBtn');
-    if(!sb) return;
     const ratio = satInstallProgress / SAT_INSTALL_MS;
     const _sp = ratio.toFixed(2);
-    if(sb._sp !== _sp){ sb._sp = _sp; sb.style.setProperty('--sat-progress', _sp); }
     /* 매 frame 버튼 클래스 동기화 — _setSatBtnState 호출 누락이 있어도
        항상 정합. mission active 중엔 절대 .disabled 못 들어가게 (그게
        있으면 pointer-events:none 으로 click 자체가 안 됨 = 위성 방출
        먹통 = 사용자 보고 버그). */
     const isActive = (missionState === 'active');
     const onOrbit = isActive && _isPlayerOnOrbit();
-    sb.classList.toggle('disabled', !isActive);
-    sb.classList.toggle('armed', isActive && !onOrbit);
-    sb.classList.toggle('engaged', onOrbit);
-    sb.classList.toggle('installing', satHeld && onOrbit);
+    const inst = satHeld && onOrbit;
+    /* P1 — 값이 바뀐 프레임에만, drawFrame 뒤(szDomFlush)에 쓴다 */
+    const key = _sp + (isActive ? 'a' : '') + (onOrbit ? 'o' : '') + (inst ? 'i' : '');
+    if(_updateSatProgressBar._k === key) return;
+    _updateSatProgressBar._k = key;
+    szDomQueue(() => {
+        const sb = document.getElementById('satBtn');
+        if(!sb) return;
+        if(sb._sp !== _sp){ sb._sp = _sp; sb.style.setProperty('--sat-progress', _sp); }
+        sb.classList.toggle('disabled', !isActive);
+        sb.classList.toggle('armed', isActive && !onOrbit);
+        sb.classList.toggle('engaged', onOrbit);
+        sb.classList.toggle('installing', inst);
+    });
 }
 
 function drawSatelliteInstall(now){
@@ -10815,11 +10949,15 @@ const BGM = (function(){
     const FADE_IN_MS = 1400;
     const FADE_OUT_MS = 600;
 
-    const audios = TRACKS.map(function(src){
-        const a = new Audio(src);
+    /* P1 (2026-09-27) — 첫 방문에 두 곡(4.8MB)을 통째로 받던 것을 멈춤.
+       1번 곡은 길이 정보만(metadata), 2번 곡은 받지 않다가(none) 게임을 시작하면 그때 받는다.
+       파일도 96kbps 로 다시 인코딩(4.9MB → 2.5MB, 표지 그림 제거) */
+    const audios = TRACKS.map(function(src, i){
+        const a = new Audio();
+        a.preload = i === 0 ? 'metadata' : 'none';
+        a.src = src;
         a.loop = false;       /* queue handles the loop, not the element */
         a.volume = 0;
-        a.preload = 'auto';
         a.addEventListener('error', function(){ /* silent — file may not exist yet */ });
         return a;
     });
@@ -10872,6 +11010,8 @@ const BGM = (function(){
         const a = audios[cur];
         a.volume = 0;
         safePlay(a);
+        /* 다음 곡은 이제서야 길이 정보만 — 1번 곡이 끝나면 그때 이어서 받는다 */
+        try{ if(audios[1] && audios[1].preload === 'none') audios[1].preload = 'metadata'; }catch(_){}
         fadeTo(a, MAX_VOL, FADE_IN_MS);
     }
     function stop(){
@@ -10943,6 +11083,7 @@ function resetGame(){
     rewardToastUntil=0;
     rewardToastText='';
     {
+        szDomFlush();   /* P1 — 지난 판에 남은 DOM 쓰기를 먼저 비우고 아래에서 덮는다 */
         const banner=document.getElementById('missionBanner');
         if(banner){ banner.hidden=true; banner.classList.remove('show','success','failed'); }
         for(let i=0;i<3;i++){
@@ -11967,7 +12108,8 @@ function szDrawShip(px, py, now, alpha, guestTint){
     } else {
         szDrawShipFallback();
     }
-    try { ctx.filter = 'none'; } catch(_){}
+    /* P1 — filter 세터는 스타일 재계산을 동기로 강제한다. 설정한 경우(게스트 색조)에만 되돌린다 */
+    if(guestTint){ try { ctx.filter = 'none'; } catch(_){} }
     ctx.restore();
     ctx.globalAlpha = 1;
 
@@ -12151,6 +12293,8 @@ function gameLoop(now){
 
     if(paused){
         drawFrame(now, 0);
+        szDomFlush();
+        if(window.SZ3 && SZ3.applyFit) try{ SZ3.applyFit(); }catch(_){}   /* P1 — 미뤄 둔 해상도 변경은 멈춘 동안 */
         requestAnimationFrame(gameLoop);
         return;
     }
@@ -12159,6 +12303,7 @@ function gameLoop(now){
     if(now < szHitStopUntil){
         szMovePlayer(rawDt);
         drawFrame(now, 0);
+        szDomFlush();
         requestAnimationFrame(gameLoop);
         return;
     }
@@ -12473,7 +12618,7 @@ function gameLoop(now){
             _gravUpdateGauge(now);
             const ratio = gravGauge / GRAV_GAUGE_MAX;
             const _gp = ratio.toFixed(2);
-            if(gb._gp !== _gp){ gb._gp = _gp; gb.style.setProperty('--grav-progress', _gp); }
+            if(gb._gp !== _gp){ gb._gp = _gp; szDomQueue(() => gb.style.setProperty('--grav-progress', _gp)); }
 
             const draining = gravityFieldActive;
             const wasDraining = gb.classList.contains('draining');
@@ -12500,16 +12645,28 @@ function gameLoop(now){
        climbs (10/25/50). flash class triggered briefly on each
        increment for tactile feedback. */
     /* 시간 글자는 30Hz — 매 프레임 DOM 글자 교체는 스타일·배치 계산을 매번 일으킨다 */
-    if(now - (gameLoop._hud || 0) > 32){ gameLoop._hud = now; $('timeNow').textContent=formatDuration(elapsedMs); }
+    /* P1 — HUD 글자는 값이 바뀔 때만, 그리고 drawFrame 뒤(szDomFlush)에 쓴다 */
+    if(now - (gameLoop._hud || 0) > 32){
+        gameLoop._hud = now;
+        const _tn = formatDuration(elapsedMs);
+        if(gameLoop._tn !== _tn){ gameLoop._tn = _tn; szDomQueue(() => { $('timeNow').textContent = _tn; }); }
+    }
     {
-        const cn = $('comboNow');
-        if(cn){
-            cn.textContent = comboCount > 0 ? String(comboCount) : '0';
-            const flashing = now < comboFlashUntil;
-            cn.classList.toggle('flash', flashing);
-            cn.classList.toggle('tier-2', comboCount >= 10 && comboCount < 25);
-            cn.classList.toggle('tier-3', comboCount >= 25 && comboCount < 50);
-            cn.classList.toggle('tier-4', comboCount >= 50);
+        const _cv = comboCount > 0 ? String(comboCount) : '0';
+        const _cf = now < comboFlashUntil;
+        const _ck = _cv + (_cf ? 'f' : '');
+        if(gameLoop._ck !== _ck){
+            gameLoop._ck = _ck;
+            szDomQueue(() => {
+                const cn = $('comboNow');
+                if(!cn) return;
+                if(cn.textContent !== _cv) cn.textContent = _cv;
+                const n = +_cv;
+                cn.classList.toggle('flash', _cf);
+                cn.classList.toggle('tier-2', n >= 10 && n < 25);
+                cn.classList.toggle('tier-3', n >= 25 && n < 50);
+                cn.classList.toggle('tier-4', n >= 50);
+            });
         }
     }
 
@@ -12534,22 +12691,28 @@ function gameLoop(now){
 
     if(window.SZ3) try{ SZ3.tick(now, dt); }catch(_){}
     drawFrame(now, dt);
+    szDomFlush();   /* P1 — 이 프레임의 DOM 쓰기를 그리기 뒤에 한 번에 */
     if(window.SZ3) SZ3.frame(_szT0, now);
     requestAnimationFrame(gameLoop);
 }
 
 function drawFrame(now, dt){
+    /* P1 — 블룸 원본은 직전 프레임에서 (그리기 전에 읽어야 강제 래스터·복사가 없다) */
+    szBloomCapture();
     /* ---- Background ---- */
     drawBackground();
     /* 성운 층 — 천천히 흐르는 색 구름 (2026-09-24) */
     szDrawNebula(dt);
 
+    /* ---- Stars 먼 층(0·1) — 행성 뒤 (P1: 먼 별이 행성 앞에 떠 보이던 층 순서 교정) ---- */
+    drawStars(0, 1);
+
     /* ---- Zone planet/object ---- */
     drawZonePlanet(currentZoneIdx, dt);
-    if(running){ ctx.fillStyle = 'rgba(3,5,18,0.34)'; ctx.fillRect(0, 0, CW, CH); }
+    if(running){ ctx.fillStyle = 'rgba(3,5,18,0.2)'; ctx.fillRect(0, 0, CW, CH); }
 
-    /* ---- Stars (on top of planet, under everything else) ---- */
-    drawStars();
+    /* ---- Stars 가까운 층(2) — 행성 앞, 속도선 스트릭 ---- */
+    drawStars(2, 2);
 
     /* ---- Ambient particles ---- */
     drawParticles();
@@ -14603,11 +14766,34 @@ const FT = new Float32Array(120), JT = new Float32Array(120);
 let fi = 0, lastNow = 0, evalAt = 0, goodSince = 0, fitPending = false;
 const TIERS = [{dpr:3, bloom:true, nebula:true}, {dpr:2, bloom:false, nebula:true}, {dpr:1.5, bloom:false, nebula:false}];
 function pct(arr, p){ const a = Array.prototype.slice.call(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * p))]; }
-function setTier(t){
+/* P1 (2026-09-27) — 등급 기억. 매 판 가장 무거운 설정(DPR 3·블룸)에서 다시 배우느라 첫 2초가 끊겼다.
+   szx_tier = 마지막 안정 등급(새 키). 첫 방문은 코어·메모리가 적으면 1 에서 시작.
+   판 도중에는 블룸·성운·그림자만 바로 바뀌고, 캔버스 해상도(fitCanvas = 백버퍼 재할당)는
+   일시정지·판 사이에서만 적용한다. 강등은 평가 2회 연속 초과일 때만, 상향은 판 사이에서만 */
+let overRun = 0, upReady = false;
+(function(){
+    const v = LSG('szx_tier', null);
+    if(v != null && /^[012]$/.test(v)){ tier = +v; return; }
+    try{
+        const hc = navigator.hardwareConcurrency || 8, dm = navigator.deviceMemory || 8;
+        if(hc <= 4 || dm <= 4) tier = 1;
+    }catch(_){}
+})();
+function applyFit(){ if(!fitPending) return; fitPending = false; try{ fitCanvas(); }catch(_){} }
+function setTier(t, now){
     t = Math.max(0, Math.min(2, t));
     if(t === tier) return;
     tier = t;
-    try{ fitCanvas(); }catch(_){}
+    LSS('szx_tier', String(t));
+    /* 판 도중(움직이는 중)엔 해상도를 바꾸지 않는다 — 블룸·성운·그림자만 즉시 */
+    if(!now && typeof running !== 'undefined' && running && !paused){ fitPending = true; return; }
+    fitPending = true; applyFit();
+}
+/* 판 사이 — 미뤄 둔 해상도 적용 + 좋았으면 한 단계 올림 */
+function tierBetweenRuns(){
+    if(upReady && tier > 0){ upReady = false; tier--; LSS('szx_tier', String(tier)); fitPending = true; }
+    upReady = false; overRun = 0; goodSince = 0;
+    applyFit();
 }
 function frame(t0, n){
     const js = now_() - t0;
@@ -14621,9 +14807,14 @@ function frame(t0, n){
     /* 60Hz 를 가끔 맞추다 놓치는 '들쭉날쭉' = 부하 때문. 꾸준한 33ms(저전력 모드·30Hz 화면)는 부하가 아니라 상한이라 등급을 안 내린다 */
     let fast = 0; for(let i = 0; i < FT.length; i++) if(FT[i] > 0 && FT[i] < 20) fast++;
     const jitterBound = p50i > 20 && fast / FT.length > 0.15;
-    if((p90j > 10 || jitterBound) && tier < 2){ setTier(tier + 1); goodSince = n; return; }
-    if(p90i < 18 && p90j < 4){ if(!goodSince) goodSince = n; if(n - goodSince > 10000 && tier > 0){ setTier(tier - 1); goodSince = n; } }
-    else goodSince = 0;
+    if((p90j > 10 || jitterBound) && tier < 2){
+        /* 단발 스파이크로 강등하지 않는다 — 2회 연속 초과일 때만 */
+        if(++overRun >= 2){ overRun = 0; upReady = false; setTier(tier + 1); goodSince = n; }
+        return;
+    }
+    overRun = 0;
+    if(p90i < 18 && p90j < 4){ if(!goodSince) goodSince = n; if(n - goodSince > 10000 && tier > 0) upReady = true; }
+    else { goodSince = 0; upReady = false; }
 }
 /* shadowBlur 조절기 — 행성·광선 그리기 56곳이 shadowBlur 를 쓴다(모바일 캔버스에서 가장 비싼 연산).
    등급 1+ 에서는 이 캔버스의 shadowBlur 를 0 으로 받아 넘긴다(각 그리기 함수는 그대로) */
@@ -14645,6 +14836,7 @@ function reset(){
     stamp = null; pod = null; slowUntil = 0; recDone = false; lastMin = 0; prevVx = 0;
     bestMs = +LSG('szx_best_ms', '0') || 0;
     S.magnet(false);
+    tierBetweenRuns();   /* P1 — 판 사이: 미뤄 둔 해상도·상향 적용 */
 }
 let slowUntil = 0;
 function slow(n){ return n < slowUntil ? 0.35 : 1; }
@@ -14834,21 +15026,36 @@ try{
    끊겼다(실측: 새 구간 진입 첫 프레임 13~41ms). 한가할 때 같은 글꼴·크기로 미리 한 번씩 그려 둔다 ─────────── */
 function prewarm(){
     try{
-        const c = mkCanvas(460, 40), x = c.getContext('2d');
+        /* P1 — 실제 캔버스와 같은 배율(dpr×rect.width/CW)로 그려야 글리프 캐시가 맞는다.
+           예전엔 변환 없이 15px 로 그려 실제 45px 글리프와 캐시가 달랐다 */
+        /* 캔버스가 아직 맞춰지지 않았으면(기본 300×150) 조금 뒤 다시 */
+        if(canvas.width === 300 && canvas.height === 150 && (prewarm._n = (prewarm._n || 0) + 1) < 20){ setTimeout(prewarm, 500); return; }
+        const tr = ctx.getTransform(), S = Math.max(1, Math.hypot(tr.a, tr.b));
+        const c = mkCanvas(Math.ceil(460 * S), Math.ceil(40 * S)), x = c.getContext('2d');
+        x.setTransform(S, 0, 0, S, 0, 0);
         const jobs = [];
         for(let i = 0; i < ZONES.length; i++){
             const en = ZONES[i].nameEn || '', lo = _zoneName(i) || '';
             jobs.push(['bold 15px Orbitron,sans-serif', en], ['11px Noto Sans KR,sans-serif', lo],
                       ['800 10px Noto Sans KR, sans-serif', lo], ['700 8px Noto Sans KR, sans-serif', lo]);
         }
-        for(const k in BOUNDARY_INFO){ const b = BOUNDARY_INFO[k]; jobs.push(['bold 13px "Noto Sans KR",sans-serif', b.ko], ['bold 11px Orbitron,sans-serif', b.en]); }
+        for(const k in BOUNDARY_INFO){ const b = BOUNDARY_INFO[k]; jobs.push(['bold 13px "Noto Sans KR",sans-serif', b.ko], ['bold 11px Orbitron,sans-serif', b.en + ' ⚠ BOUNDARY CROSSED ⚠ 경계 통과']); }
         jobs.push(['900 28px Orbitron, sans-serif', '★ 0123456789: ' + tx('rec') + ' ' + tx('link')], ['900 15px Orbitron, sans-serif', 'CLOSE! COMBO ×0123456789+'],
-                  ['800 7px Orbitron,sans-serif', '— ARRIVAL —'], ['900 12px Orbitron, sans-serif', '!♪★…']);
+                  ['800 7px Orbitron,sans-serif', '— ARRIVAL —'], ['900 12px Orbitron, sans-serif', '!♪★…'],
+                  ['800 7px Orbitron, sans-serif', 'FLIGHT PATH 항로'], ['700 7px Orbitron, sans-serif', 'NEXT 다음 0123456789/'],
+                  ['bold 11px Orbitron,sans-serif', 'LV 0123456789'], ['bold 8px Orbitron, sans-serif', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'],
+                  ['11px sans-serif', '📡✨✗🏃★♪'], ['bold 9px "Noto Sans KR",sans-serif', _szCommT('hud')]);
         let j = 0;
         const step = (dl) => {
             const end = performance.now() + 6;
             while(j < jobs.length && performance.now() < end){ x.clearRect(0, 0, 460, 40); x.font = jobs[j][0]; x.fillText(jobs[j][1], 2, 28); j++; }
             if(j < jobs.length) later(step);
+            else {
+                /* 글리프가 데워진 뒤: 미션 배너 글꼴 예열 + 첫 두 존 글자·패널·이모지 굽기 */
+                later(() => { try{ _szPrewarmMissionBanner(); }catch(_){} });
+                try{ szBakeText('commHud', '11px sans-serif', '📡', 14, '#fff', -1); }catch(_){}
+                try{ szPrepZone._done = null; szIdleJobs([() => _szZoneLabelBake(0, zoneWarpRGB), () => _szFdBake(0), () => _szFdBake(1), () => _szZoneLabelBake(1, _zoneAccentRGB(1))]); }catch(_){}
+            }
         };
         const later = (f) => window.requestIdleCallback ? requestIdleCallback(f, {timeout: 600}) : setTimeout(f, 60);
         later(step);
@@ -14861,7 +15068,7 @@ window.SZ3 = {
     RM, vib, tick, frame, drawPool, drawPortrait, drawStamp, drawDeath, slow, reset,
     graze, hit, pop, pickup, satDone, zone, useItem, death, optsHtml,
     dprCap: () => TIERS[tier].dpr, bloom: () => TIERS[tier].bloom, nebula: () => TIERS[tier].nebula,
-    tier: () => tier, setTier,
+    tier: () => tier, setTier: (t) => setTier(t, 1), applyFit,
     perf: () => ({tier, p50i: pct(FT, 0.5), p90i: pct(FT, 0.9), p99i: pct(FT, 0.99), p50j: pct(JT, 0.5), p95j: pct(JT, 0.95), p99j: pct(JT, 0.99)}),
     _P: P
 };
