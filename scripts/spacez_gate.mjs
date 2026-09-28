@@ -552,8 +552,20 @@ async function runDet(base){
         const A0 = M[cfgKey(c, c.steps[0])];
         for(const st of c.steps.slice(1)){
             const B = M[cfgKey(c, st)]; const a = A0._raw, b = B._raw;
+            /* 짝짓기는 순서 무관(2026-09-28 통합): 33ms 에선 서로 다른 논리 시각의 운석(협곡 줄 + 일반 운석)이 한 프레임에
+               함께 처음 관측돼 목록 순서가 16.67ms 와 달라질 수 있다 → 인덱스로 짝지으면 오탐(249px).
+               각 운석을 관측 시각 ±60ms 안에서 가장 가까운 미사용 운석과 짝짓고, 짝 없는 운석은 999px 로 센다 */
             const n = Math.min(a.met.length, b.met.length); let maxPos = 0, velDiff = 0;
-            for(let i = 0; i < n; i++){ const p = a.met[i], s = b.met[i]; maxPos = Math.max(maxPos, Math.hypot(p[1] - s[1], p[2] - s[2])); if(Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5) velDiff++; }
+            const usedB = new Uint8Array(b.met.length);
+            const tEnd = n ? Math.min(a.met[a.met.length - 1][0], b.met[b.met.length - 1][0]) - 60 : 0;   /* 관측 상한(nMet) 경계 근처는 짝이 잘릴 수 있어 제외 */
+            for(let i = 0; i < n; i++){
+                const p = a.met[i]; if(p[0] > tEnd) continue;
+                let bj = -1, bd = 1e9;
+                for(let j = 0; j < b.met.length; j++){ if(usedB[j]) continue; const s = b.met[j]; if(Math.abs(s[0] - p[0]) > 60) continue; const dd = Math.hypot(p[1] - s[1], p[2] - s[2]); if(dd < bd){ bd = dd; bj = j; } }
+                if(bj < 0 || bd > 60){ maxPos = Math.max(maxPos, 999); continue; }
+                usedB[bj] = 1; const s = b.met[bj];
+                maxPos = Math.max(maxPos, bd); if(Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5) velDiff++;
+            }
             let hMis = -1, drift = 0; for(let i = 0; i < Math.min(a.H.length, b.H.length); i++){ if(hMis < 0 && a.H[i][2] !== b.H[i][2]) hMis = i; drift = Math.max(drift, Math.abs(a.H[i][0] - b.H[i][0])); }
             let hazMis = 0, hazDrift = 0; for(let i = 0; i < Math.max(a.haz.length, b.haz.length); i++){ const p = a.haz[i], s = b.haz[i]; if(!p || !s || p[0] !== s[0] || p[1] !== s[1] || p[2] !== s[2]) hazMis++; else hazDrift = Math.max(hazDrift, Math.abs(p[4] - s[4])); }
             let depMis = 0, depMax = 0; const keys = new Set(Object.keys(a.dep).concat(Object.keys(b.dep)));
