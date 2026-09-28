@@ -131,8 +131,9 @@ body::after{
     text-shadow:0 0 3px rgba(0,0,0,0.7);
 }
 .ss .v.best{color:rgba(0,217,255,0.92)}
-.ss .v.combo{color:rgba(255,230,109,0.92);transition:transform .12s,color .12s,text-shadow .12s}
-.ss .v.combo.flash{transform:scale(1.18);color:#FFFFE0;text-shadow:0 0 10px rgba(255,230,109,.85)}
+.ss .v.combo{color:rgba(255,230,109,0.92);transition:transform .2s cubic-bezier(.34,1.9,.5,1),color .12s,text-shadow .12s}
+.ss .v.combo.flash{transform:scale(1.42);color:#FFFFE0;text-shadow:0 0 12px rgba(255,230,109,.95);transition:transform .07s ease-out,color .07s}
+@media (prefers-reduced-motion:reduce){.ss .v.combo.flash{transform:scale(1.1)}}
 .ss .v.combo.tier-2{color:rgba(255,154,60,0.95)}
 .ss .v.combo.tier-3{color:rgba(255,107,53,0.95);text-shadow:0 0 6px rgba(255,107,53,.6)}
 .ss .v.combo.tier-4{color:rgba(255,51,102,0.95);text-shadow:0 0 8px rgba(255,51,102,.7)}
@@ -956,12 +957,14 @@ body::after{
     /* 2026-05-11 v5: score-strip overlay (top:5-30) + lives 행 (y=40-53) 아래로 → top:60 */
     position:absolute;left:50%;top:60px;transform:translateX(-50%) translateY(-12px);
     display:flex;align-items:center;gap:10px;
-    background:linear-gradient(180deg,rgba(8,28,52,.92) 0%,rgba(4,14,30,.85) 100%);
-    border:1px solid rgba(93,193,255,.55);
+    /* P8a (2026-09-28) — 운영자: 불투명해서 지나가는 운석을 가린다. 판은 옅게(≤.3), 글자는 글로우로 읽힌다 */
+    background:linear-gradient(180deg,rgba(8,28,52,.30) 0%,rgba(4,14,30,.22) 100%);
+    border:1px solid rgba(93,193,255,.38);
     border-radius:12px;
     padding:8px 14px 8px 12px;
     color:#fff;
-    box-shadow:0 4px 14px -2px rgba(0,0,0,.55), 0 0 18px -4px rgba(93,193,255,.5);
+    box-shadow:0 0 14px -4px rgba(93,193,255,.35);
+    text-shadow:0 0 3px rgba(0,0,0,.95),0 0 7px rgba(0,0,0,.7);
     /* 2026-09-27 — backdrop-filter 제거: 매 프레임 바뀌는 캔버스 위라 미션 25초 내내 GPU 가 블러를 다시 계산했다.
        배경이 이미 .85~.92 불투명이라 보이는 차이 없음 */
     opacity:0;
@@ -978,9 +981,11 @@ body::after{
     min-width:240px;
 }
 .mission-banner[hidden]{display:flex}
-.mission-banner.show{ opacity:1; visibility:visible; transform:translateX(-50%) translateY(0); transition-delay:0s; }
-.mission-banner.success{ border-color:rgba(0,255,136,.85); box-shadow:0 4px 18px -2px rgba(0,255,136,.5); }
-.mission-banner.failed{ border-color:rgba(255,80,100,.7); box-shadow:0 4px 14px -2px rgba(255,80,100,.45); }
+.mission-banner.show{ opacity:.88; visibility:visible; transform:translateX(-50%) translateY(0); transition-delay:0s; }
+/* P8a — 운석·위험물이 배너 70px 안에 오면 비켜 준다 */
+.mission-banner.show.sz-ovnear{ opacity:.16; transition:opacity .12s, transform .3s cubic-bezier(.2,.8,.3,1), visibility 0s linear .3s; }
+.mission-banner.success{ border-color:rgba(0,255,136,.6); box-shadow:0 0 14px -4px rgba(0,255,136,.4); }
+.mission-banner.failed{ border-color:rgba(255,80,100,.55); box-shadow:0 0 12px -4px rgba(255,80,100,.35); }
 .mission-banner .mb-icon{
     font-size:1.6em;line-height:1;flex-shrink:0;
     text-shadow:0 0 6px rgba(93,193,255,.7);
@@ -6463,6 +6468,90 @@ function drawZonePlanet(zIdx, dt){
     if(SZ_FLAGS.fx) szHeroPreview(zIdx, zoneT);
 }
 
+/*<sz:mod:p8a-ov>*/
+/* 소유: P8a (2026-09-28 운영자: "조종사 창·알림 글자가 너무 불투명해서 지나가는 유닛을 가린다").
+   판 위에 뜨는 모든 겹침 표시(교신창·말풍선·도장·도착 카드·WARNING·항로 패널·토스트·미션 배너)는
+   ① 평소에도 옅게(배경 판 ≤0.35) ② 운석·위험물·보급·다른 기체·내 기체가 그 사각형 70px 안에 오면 ≈0.15 까지 비켜 준다.
+   위험물 좌표는 프레임당 한 번만 모은다(부르는 겹침이 있을 때만). 표시 전용 — 시드 RNG·게임 상태를 건드리지 않는다 */
+const SZ_OV_R = 70, SZ_OV_LO = 0.15;
+const _szOvP = new Float32Array(1024);   /* x,y 쌍 — 최대 512점 */
+let _szOvN = 0, _szOvFid = 0, _szOvBuilt = -1, _szOvPl = 0;   /* _szOvPl = 1 이면 0번 점이 내 기체 */
+const _szOvV = new Float32Array(24);     /* 칸별 부드러운 근접도 0..1 */
+function szOvFrame(){ _szOvFid++; try{ _szOvBanner(); }catch(_){} }
+function _szOvAdd(x, y){ if(_szOvN < 512 && x === x && y === y){ _szOvP[_szOvN * 2] = x; _szOvP[_szOvN * 2 + 1] = y; _szOvN++; } }
+function _szOvBuild(){
+    if(_szOvBuilt === _szOvFid) return;
+    _szOvBuilt = _szOvFid; _szOvN = 0; _szOvPl = 0;
+    try{ if(!szShipHidden){ _szOvAdd(player.x, player.y); _szOvPl = _szOvN; } }catch(_){}
+    try{ for(let i = 0; i < bullets.length; i++){ const b = bullets[i]; if(b.x > -40 && b.x < CW + 40 && b.y > -40 && b.y < CH + 40) _szOvAdd(b.x, b.y); } }catch(_){}
+    try{ for(const c of asteroidClusters){ if(c && c.rocks) for(const r of c.rocks){ if(!r.dead) _szOvAdd(r.x, r.y); } } }catch(_){}
+    try{ for(const m of magneticMines) _szOvAdd(m.x, m.y); }catch(_){}
+    try{ for(const c of comets) if(c.phase === 'fly') _szOvAdd(c.x, c.y); }catch(_){}
+    try{ for(const s of splitters) _szOvAdd(s.x, s.y); }catch(_){}
+    try{ for(const d of depots) if(!d.collected) _szOvAdd(d.x, d.y); }catch(_){}
+    try{ const op = pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent; if(op && op.alive) _szOvAdd(op.x, op.y); }catch(_){}
+    try{ if(window.SZX && SZX._gh){ const G = SZX._gh(); for(const k in G){ const p = G[k].pts; if(p && p.length) _szOvAdd(p[p.length - 1].x, p[p.length - 1].y); } } }catch(_){}
+}
+/* 사각형(논리 좌표)까지 가장 가까운 점의 거리 → 근접도 0(멀다)..1(겹친다) */
+function szOvNear(x0, y0, x1, y1, noShip){
+    _szOvBuild();
+    const R = SZ_OV_R;
+    let best = R;
+    for(let i = noShip ? _szOvPl : 0; i < _szOvN; i++){
+        const px = _szOvP[i * 2], py = _szOvP[i * 2 + 1];
+        const dx = px < x0 ? x0 - px : px > x1 ? px - x1 : 0;
+        if(dx >= best) continue;
+        const dy = py < y0 ? y0 - py : py > y1 ? py - y1 : 0;
+        if(dy >= best) continue;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if(d < best){ best = d; if(d <= 0) break; }
+    }
+    return best >= R ? 0 : Math.min(1, 1.25 * (1 - best / R));
+}
+/* 기본 알파 a0 인 겹침의 이번 프레임 알파. slot 이 있으면 부드럽게(비킬 땐 빨리, 돌아올 땐 천천히) */
+function szOvA(a0, x0, y0, x1, y1, slot, lo0, noShip){
+    let k = szOvNear(x0, y0, x1, y1, noShip);
+    if(slot != null){
+        const v = _szOvV[slot];
+        k = k > v ? Math.min(k, v + 0.34) : Math.max(k, v - 0.07);
+        _szOvV[slot] = k;
+    }
+    const lo = Math.min(a0, lo0 != null ? lo0 : SZ_OV_LO);
+    return a0 + (lo - a0) * k;
+}
+/* 미션 배너(DOM) — 위험물이 가까우면 .sz-ovnear (쓰기는 szDomQueue).
+   자리는 레이아웃을 읽지 않고 계산한다: 크기는 ResizeObserver(비동기, 강제 배치 없음), 위치는 CSS 규칙(가운데·top 60px) */
+let _szOvBrOn = false, _szOvBW = 0, _szOvBH = 0, _szOvCW = 0, _szOvCH = 0, _szOvRO = null, _szOvBEl = null;
+function _szOvBanner(){
+    if(!running) return;
+    const b = _szOvBEl || (_szOvBEl = document.getElementById('missionBanner'));
+    if(!b) return;
+    if(!_szOvRO && window.ResizeObserver){
+        try{
+            _szOvRO = new ResizeObserver((es) => { for(const e of es){ const bb = e.borderBoxSize && e.borderBoxSize[0];
+                const w = bb ? bb.inlineSize : e.contentRect.width, h = bb ? bb.blockSize : e.contentRect.height;
+                if(e.target === canvas){ _szOvCW = w; _szOvCH = h; } else { _szOvBW = w; _szOvBH = h; } } });
+            _szOvRO.observe(b); _szOvRO.observe(canvas);
+        }catch(_){ _szOvRO = 1; }
+    }
+    if(!b.classList.contains('show')){ if(_szOvBrOn){ _szOvBrOn = false; szDomQueue(() => b.classList.remove('sz-ovnear')); } return; }
+    if(!(_szOvCW > 0 && _szOvCH > 0 && _szOvBW > 0)) return;
+    const sx = CW / _szOvCW, sy = CH / _szOvCH, hw = _szOvBW / 2 * sx;
+    const near = szOvNear(CW / 2 - hw, 60 * sy, CW / 2 + hw, (60 + _szOvBH) * sy) > 0.2;
+    if(near !== _szOvBrOn){ _szOvBrOn = near; szDomQueue(() => b.classList.toggle('sz-ovnear', near)); }
+}
+/* 구운 글자에 어두운 외곽선 — 판 대신 가독성. shadowBlur(소프트웨어 캔버스에서 굽기 한 장 수 ms)는 쓰지 않는다.
+   굽는 오프스크린 컨텍스트의 fillText 만 이 자리에서 바꿔 끼운다 */
+function szOutlineText(x, lw){
+    const ft = x.fillText;
+    x.fillText = function(t, a, b, m){
+        this.save(); this.lineJoin = 'round'; this.lineWidth = lw || 3; this.strokeStyle = 'rgba(0,0,8,0.72)';
+        if(m != null) this.strokeText(t, a, b, m); else this.strokeText(t, a, b);
+        this.restore();
+        return m != null ? ft.call(this, t, a, b, m) : ft.call(this, t, a, b);
+    };
+}
+/*</sz:mod:p8a-ov>*/
 /* ---- P1 (2026-09-27) 글자·패널 굽기 캐시 ----
    존 도착 첫 프레임에 캔버스 글자(새 글꼴·새 크기·CJK 대체 글꼴) 래스터와 measureText 루프가 몰려
    4x 에서 13~375ms 가 걸렸다. 정적인 글자·패널은 실제 캔버스와 같은 배율로 오프스크린에 한 번 굽고,
@@ -6559,6 +6648,7 @@ function _szZoneLabelBake(idx, rgb, lazy){
     const W = 320, H = 66, c = H / 2 + 10;   /* c = 원래 y 에 해당하는 구운 캔버스 안 y */
     return szBake('zl|' + idx + '|' + enName + '|' + (showLocal ? localName : '') + '|' + rgb, W, H, (x) => {
         x.textAlign = 'center'; x.textBaseline = 'middle';
+        szOutlineText(x, 3);   /* P8a — 판 대신 글자 외곽선 */
         x.fillStyle = 'rgba(' + rgb + ',0.95)';
         x.font = '800 7px Orbitron,sans-serif';
         x.fillText('— ARRIVAL —', W / 2, c - 30);
@@ -6606,9 +6696,9 @@ function drawZoneLabel(dt){
     const _in = Math.min(1, t / 0.35);
     const _w = 220 * (0.86 + 0.14 * (1 - Math.pow(1 - _in, 3)));
     ctx.save();
-    ctx.globalAlpha=a;
+    ctx.globalAlpha=a*((typeof szOvA === 'function') ? szOvA(0.92, CW/2-_w/2, y-34, CW/2+_w/2, y-24+_bh, 3) : 0.92);   /* P8a — 근접 비킴 */
     let _bg = _zlGradCache[_bh];
-    if(!_bg){ _bg = _zlGradCache[_bh] = ctx.createLinearGradient(0, y-24, 0, y-24+_bh); _bg.addColorStop(0, 'rgba(8,14,34,0.82)'); _bg.addColorStop(1, 'rgba(2,4,14,0.78)'); }
+    if(!_bg){ _bg = _zlGradCache[_bh] = ctx.createLinearGradient(0, y-24, 0, y-24+_bh); _bg.addColorStop(0, 'rgba(8,14,34,0.3)'); _bg.addColorStop(1, 'rgba(2,4,14,0.24)'); }   /* P8a — 옅은 판 */
     ctx.fillStyle=_bg;
     drawRR(CW/2-_w/2, y-24, _w, _bh, 10);
     ctx.fill();
@@ -6650,7 +6740,7 @@ function drawBoundaryLabel(dt){
         boundaryLabel.txt = (typeof szChapterText === 'function') ? szChapterText(info.ch) : { head:'CHAPTER ' + info.ch, sub:'', font:'sans-serif' };
     }
     const _big = boundaryLabel.big, _ct = boundaryLabel.txt;
-    const FADE = _big ? 0.8 : 0.3, HOLD = _big ? 4.0 : 0.9;
+    const FADE = _big ? 0.6 : 0.3, HOLD = _big ? 2.4 : 0.9;   /* P8a — 큰 막 도장 5.6s → 3.6s */
     const t = boundaryLabel.timer;
     let a;
     if(t < FADE)               a = t/FADE;
@@ -6665,8 +6755,8 @@ function drawBoundaryLabel(dt){
         /* 이미 본 막 — 제목 한 줄 작은 알약 */
         const pw = Math.min(CW - 40, (_ct.headW || 180) + 28), ph = 26, px = CW/2, py = CH*0.30;
         ctx.save();
-        ctx.globalAlpha = a * 0.92;
-        ctx.fillStyle = 'rgba(0,0,0,0.72)';
+        ctx.globalAlpha = a * ((typeof szOvA === 'function') ? szOvA(0.9, px - pw/2, py - ph/2, px + pw/2, py + ph/2, 4) : 0.9);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';   /* P8a — 옅은 판 */
         drawRR(px - pw/2, py - ph/2, pw, ph, 13); ctx.fill();
         ctx.strokeStyle = 'rgba(255,200,80,0.7)'; ctx.lineWidth = 1.2;
         drawRR(px - pw/2, py - ph/2, pw, ph, 13); ctx.stroke();
@@ -6680,7 +6770,7 @@ function drawBoundaryLabel(dt){
 
     const cx = CW/2, cy = CH*0.30;
     ctx.save();
-    ctx.globalAlpha = a;
+    ctx.globalAlpha = a * ((typeof szOvA === 'function') ? szOvA(0.92, cx - 150, cy - 45, cx + 150, cy + 45, 4) : 0.92);   /* P8a — 근접 비킴 */
     /* P1 — 패널 전체(글로우·배경·테두리·글자 2줄)를 한 번 구워 drawImage 1회 (페이드인 앞부분은 한가할 때 굽기).
        통합: 글꼴·크기·폭 맞춤은 P3 막 도장(_ct.font·_ct.subPx)을 따른다 */
     szDrawBaked(_szBoundaryBake(boundaryLabel.idx, _ct, a < 0.5), cx, cy);
@@ -6693,15 +6783,16 @@ function _szBoundaryBake(idx, ct, lazy){
     const headFont = 'bold 12px ' + ct.font, bodyFont = 'bold ' + (ct.subPx || 13) + 'px ' + ct.font;
     return szBake('bd|' + idx + '|' + headTitle + '|' + text + '|' + bodyFont, BW, BH, (x) => {
         /* 외곽 글로우 */
-        x.fillStyle = 'rgba(255,180,40,0.12)';
+        x.fillStyle = 'rgba(255,180,40,0.07)';
         szRR(x, cx-W/2-8, cy-H/2-8, W+16, H+16, 16);
         x.fill();
-        /* 본 배경 */
-        x.fillStyle = 'rgba(0,0,0,0.82)';
+        /* 본 배경 — P8a: 옅게(.3). 글자는 어두운 번짐으로 읽힌다 */
+        x.fillStyle = 'rgba(0,0,0,0.3)';
         szRR(x, cx-W/2, cy-H/2, W, H, 12);
         x.fill();
+        szOutlineText(x, 3);
         /* 노란 테두리 */
-        x.strokeStyle = 'rgba(255,200,80,0.90)';
+        x.strokeStyle = 'rgba(255,200,80,0.75)';
         x.lineWidth = 1.6;
         szRR(x, cx-W/2, cy-H/2, W, H, 12);
         x.stroke();
@@ -7536,14 +7627,16 @@ function _szFdBake(zIdx, lazy){
         c.translate(P - x, P - y);
         szRR(c, x, y, w, h, 11);
         const bg = c.createLinearGradient(x, y, x + w, y + h);
-        bg.addColorStop(0, 'rgba(4,12,28,0.72)');
-        bg.addColorStop(0.55, 'rgba(0,42,78,0.48)');
-        bg.addColorStop(1, 'rgba(20,8,34,0.62)');
+        /* P8a — 늘 떠 있는 패널이라 가장 옅게(≤.26). 글자는 어두운 번짐으로 */
+        bg.addColorStop(0, 'rgba(4,12,28,0.26)');
+        bg.addColorStop(0.55, 'rgba(0,42,78,0.16)');
+        bg.addColorStop(1, 'rgba(20,8,34,0.22)');
         c.fillStyle = bg;
         c.fill();
-        c.strokeStyle = 'rgba(116,226,255,0.28)';
+        c.strokeStyle = 'rgba(116,226,255,0.2)';
         c.lineWidth = 1;
         c.stroke();
+        szOutlineText(c, 2.4);
         c.textBaseline = 'top';
         c.textAlign = 'left';
         c.fillStyle = 'rgba(156,223,255,.82)';
@@ -7571,9 +7664,11 @@ function drawFlightDirector(now){
     const zoneT = getZoneT(currentZoneIdx);
     const pct = Math.max(0, Math.min(1, zoneT));
     const x = 12, y = CH - 52, w = CW - 24, h = 38;
-    const playerOverlap = Math.max(0, Math.min(1, (player.y - (y - 32)) / 72));
+    /* P8a — 기체만이 아니라 운석·위험물·보급이 패널 70px 안이면 0.15 까지 비켜 준다 */
     ctx.save();
-    ctx.globalAlpha = 0.86 - playerOverlap * 0.52;
+    /* 기체는 늘 아래쪽을 날아 패널에 붙어 있으므로 기체는 예전처럼 높이로만(→0.3), 나머지는 근접 비킴(→0.15) */
+    const playerOverlap = Math.max(0, Math.min(1, (player.y - (y - 32)) / 72));
+    ctx.globalAlpha = ((typeof szOvA === 'function') ? szOvA(0.8, x, y, x + w, y + h, 5, null, 1) : 0.8) * (1 - playerOverlap * 0.62);
     /* 존·언어가 그대로면 지난 프레임 비트맵 (문구 조회·키 조립도 건너뛴다) */
     const L = _szLang(), fm = drawFlightDirector._m;
     let e = (fm && fm.z === currentZoneIdx && fm.l === L && fm.S === szBakeScale() && !fm.e.tmp && fm.e.c.width) ? fm.e : null;
@@ -9263,9 +9358,9 @@ function szDrawRedshift(){
 function szWarnBake(id, lazy){
     const L = szZL(), name = szZT(id), f2 = '800 11px ' + szZFont();
     return szBake('szwarn|' + id + '|' + L, 300, 60, (x, w, h) => {
-        x.fillStyle = 'rgba(38,0,10,0.82)'; szRR(x, 1, 6, w - 2, h - 12, 9); x.fill();
+        x.fillStyle = 'rgba(38,0,10,0.3)'; szRR(x, 1, 6, w - 2, h - 12, 9); x.fill();   /* P8a — 옅은 판 */
         x.save(); szRR(x, 1, 6, w - 2, h - 12, 9); x.clip();
-        x.fillStyle = 'rgba(255,70,70,0.85)';
+        x.fillStyle = 'rgba(255,70,70,0.55)';
         for(let i = -2; i < w / 12 + 2; i++){
             x.beginPath(); x.moveTo(i * 12, 6); x.lineTo(i * 12 + 6, 6); x.lineTo(i * 12 + 2, 10); x.lineTo(i * 12 - 4, 10); x.closePath(); x.fill();
             x.beginPath(); x.moveTo(i * 12, h - 10); x.lineTo(i * 12 + 6, h - 10); x.lineTo(i * 12 + 2, h - 6); x.lineTo(i * 12 - 4, h - 6); x.closePath(); x.fill();
@@ -9289,7 +9384,7 @@ function szWarnBake(id, lazy){
 function szSurvBake(id, lazy){
     const L = szZL(), name = szZT(id), f2 = '800 11px ' + szZFont();
     return szBake('szsurv|' + id + '|' + L, 300, 64, (x, w, h) => {
-        x.fillStyle = 'rgba(20,14,0,0.72)'; szRR(x, 20, 4, w - 40, h - 8, 12); x.fill();
+        x.fillStyle = 'rgba(20,14,0,0.26)'; szRR(x, 20, 4, w - 40, h - 8, 12); x.fill();   /* P8a — 옅은 판 */
         x.strokeStyle = '#FFD86B'; x.lineWidth = 2.5; szRR(x, 20, 4, w - 40, h - 8, 12); x.stroke();
         x.textAlign = 'center'; x.textBaseline = 'middle';
         x.font = '900 26px Orbitron,sans-serif';
@@ -9304,7 +9399,7 @@ function szChipBake(key, text, color, lazy){
     const f = '800 11px ' + szZFont();
     return szBake('szchip|' + key + '|' + szZL(), 200, 26, (x, w, h) => {
         x.font = f; const tw = Math.min(w - 8, x.measureText(text).width + 22);
-        x.fillStyle = 'rgba(4,8,24,0.72)'; szRR(x, (w - tw) / 2, 2, tw, h - 4, 11); x.fill();
+        x.fillStyle = 'rgba(4,8,24,0.3)'; szRR(x, (w - tw) / 2, 2, tw, h - 4, 11); x.fill();   /* P8a — 옅은 판 */
         x.strokeStyle = color; x.lineWidth = 1.2; szRR(x, (w - tw) / 2, 2, tw, h - 4, 11); x.stroke();
         x.fillStyle = color; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(_szEllipsize(x, text, w - 24), w / 2, h / 2 + 0.5);
     }, -1, [[f, text]], lazy);
@@ -9320,8 +9415,10 @@ function szZoneDrawTop(now){
         const img = szWarnBake(F.boss.id);
         if(img){
             ctx.save();
-            ctx.globalAlpha = Math.min(open, close) * (t < 1500 ? 0.72 + 0.28 * Math.sign(Math.sin(t * 0.0314)) : 1);
-            ctx.translate(CW / 2, F.warnY || CH * 0.27); ctx.scale(1, open);   /* 미션 배너(DOM, 위쪽) 아래 */
+            const _wy = F.warnY || CH * 0.27;
+            ctx.globalAlpha = Math.min(open, close) * (t < 1500 ? 0.72 + 0.28 * Math.sign(Math.sin(t * 0.0314)) : 1)
+                * ((typeof szOvA === 'function') ? szOvA(0.85, CW / 2 - 150, _wy - 24, CW / 2 + 150, _wy + 24, 6) : 0.85);   /* P8a — 근접 비킴 */
+            ctx.translate(CW / 2, _wy); ctx.scale(1, open);   /* 미션 배너(DOM, 위쪽) 아래 */
             szDrawBaked(img, 0, 0);
             ctx.restore();
             /* 화면 가장자리 붉은 기운 — 깜빡임과 같은 박자 */
@@ -9335,7 +9432,7 @@ function szZoneDrawTop(now){
     }
     /* SURVIVED — 1.7s: 1.8배에서 쾅 찍히고, 빛줄기가 한 번 쓸고 간다 */
     if(F.survFx){
-        const t = (now - F.survFx.t0) / 1700;
+        const t = (now - F.survFx.t0) / 1200;   /* P8a — 1.7s → 1.2s (큰 도장은 짧게) */
         if(t >= 1 || t < 0) F.survFx = null;
         else {
             const img = szSurvBake(F.survFx.id);
@@ -9343,7 +9440,8 @@ function szZoneDrawTop(now){
                 const inK = Math.min(1, t / 0.08);
                 const sc = RM ? 1 : (t < 0.08 ? 1.8 - 0.8 * (1 - Math.pow(1 - inK, 3)) : 1 + 0.025 * Math.sin((t - 0.08) * 9));
                 ctx.save();
-                ctx.globalAlpha = t < 0.82 ? Math.min(1, inK * 1.3) : (1 - t) / 0.18;
+                ctx.globalAlpha = (t < 0.7 ? Math.min(1, inK * 1.3) : (1 - t) / 0.3)
+                    * ((typeof szOvA === 'function') ? szOvA(0.92, CW / 2 - 130, CH * 0.30 - 30, CW / 2 + 130, CH * 0.30 + 30, 7) : 0.92);
                 ctx.translate(CW / 2, CH * 0.30); ctx.rotate(RM ? 0 : -0.05); ctx.scale(sc, sc);
                 szDrawBaked(img, 0, 0);
                 if(!RM && t < 0.55){
@@ -9362,13 +9460,13 @@ function szZoneDrawTop(now){
     /* 첫 판 — '협곡 10초 전' 3초 */
     if(F.pre && running && F.preT && now - F.preT < 3000){
         const img = szChipBake('pre', '☄ ' + szZT('pre'), '#FFB86B');
-        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3000 - (now - F.preT)) / 400) * 0.95; szDrawBaked(img, CW / 2, 86); ctx.restore(); }
+        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3000 - (now - F.preT)) / 400) * ((typeof szOvA === 'function') ? szOvA(0.9, CW / 2 - 100, 73, CW / 2 + 100, 99, 8) : 0.9); szDrawBaked(img, CW / 2, 86); ctx.restore(); }
     }
     /* 대감광 자막 — 베텔게우스 도착 뒤 2.5s */
     const t15 = e - ZONES[15].s * 1000;
     if(running && t15 >= 600 && t15 < 3600){
         const img = szChipBake('dim', szZT('dim'), '#FF8C6B');
-        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3600 - t15) / 500, (t15 - 600) / 300) * 0.9; szDrawBaked(img, CW / 2, 86); ctx.restore(); }
+        if(img){ ctx.save(); ctx.globalAlpha = Math.min(1, (3600 - t15) / 500, (t15 - 600) / 300) * ((typeof szOvA === 'function') ? szOvA(0.88, CW / 2 - 100, 73, CW / 2 + 100, 99, 8) : 0.88); szDrawBaked(img, CW / 2, 86); ctx.restore(); }
     }
     ctx.globalAlpha = 1;
 }
@@ -10369,7 +10467,7 @@ let rewardToastColor = '#FFE66D';
 function _showRewardToast(text, color, durMs){
     rewardToastText = text;
     rewardToastColor = color || '#FFE66D';
-    rewardToastUntil = performance.now() + (durMs || 1400);
+    rewardToastUntil = performance.now() + Math.min(1200, durMs || 1200);   /* P8a — 1.2s 이하 */
 }
 
 function _activatePlasmaStorm(now){
@@ -11005,7 +11103,7 @@ function drawPlasmaStormFlash(now){
     const k = Math.min(1, remain / 1100);
     /* 첫 200ms 는 0.85 alpha 강한 흰색 → 점차 fade */
     const burst = remain > 900 ? 1 : (remain - 100) / 800;
-    const alpha = Math.max(0, burst) * 0.85;
+    const alpha = Math.max(0, burst) * ((window.SZ3 && SZ3.RM) ? 0.12 : 0.32);   /* P8a — 0.85 흰 화면이 1초 가까이 운석을 가렸다 */
     ctx.save();
     ctx.fillStyle = `rgba(255, 240, 245, ${alpha})`;
     ctx.fillRect(0, 0, CW, CH);
@@ -11013,8 +11111,8 @@ function drawPlasmaStormFlash(now){
     const grad = ctx.createRadialGradient(CW/2, CH/2, Math.min(CW,CH)*0.2,
                                           CW/2, CH/2, Math.max(CW,CH));
     grad.addColorStop(0, 'rgba(255,80,140,0)');
-    grad.addColorStop(0.7, `rgba(255,60,120,${k * 0.5})`);
-    grad.addColorStop(1, `rgba(200,40,90,${k * 0.7})`);
+    grad.addColorStop(0.7, `rgba(255,60,120,${k * 0.3})`);
+    grad.addColorStop(1, `rgba(200,40,90,${k * 0.45})`);
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CW, CH);
     /* 외곽 spike rays — 폭발 느낌 */
@@ -11091,26 +11189,24 @@ function drawRewardToast(now){
     /* 보상 발동 시 화면 중앙 큰 텍스트 토스트 — 발동 확실히 알리기 */
     if(now >= rewardToastUntil) return;
     const remain = rewardToastUntil - now;
-    const total = 1500;
+    /* P8a — 화면 폭 검은 띠·그림자 번짐 제거(운석을 가렸다). 글자 + 얇은 외곽선만, 1.2s, 근접 비킴 */
+    const total = 1200;
     const k = Math.min(1, remain / total);
-    /* 첫 100ms 는 빠른 페이드인 */
-    const fadeIn = (rewardToastUntil - now) > (total - 100) ? (total - (rewardToastUntil - now)) / 100 : 1;
-    const alpha = Math.min(fadeIn, k);
+    const fadeIn = remain > (total - 100) ? (total - remain) / 100 : 1;
+    const alpha = Math.min(fadeIn, k < 0.4 ? k / 0.4 : 1);
     const yOff = (1 - k) * 18;     /* 위로 살짝 올라가며 사라짐 */
+    const ty = CH * 0.42 - yOff;
+    const ak = (typeof szOvA === 'function') ? szOvA(0.9, CW * 0.12, ty - 18, CW * 0.88, ty + 18, 9) : 0.9;
+    const sc = k > 0.9 ? 1 + (k - 0.9) * 3 : 1;   /* 첫 순간 1.3 → 1 로 튀어 들어온다 */
     ctx.save();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    /* 외곽 strong 그림자 */
-    ctx.shadowColor = 'rgba(0,0,0,.85)';
-    ctx.shadowBlur = 14;
-    ctx.font = 'bold 22px "Orbitron","Noto Sans KR",sans-serif';
-    ctx.fillStyle = `rgba(0,0,0,${alpha * 0.55})`;
-    ctx.fillRect(CW * 0.05, CH * 0.42 - 28 - yOff, CW * 0.9, 56);
-    ctx.shadowBlur = 0;
-    /* main text */
-    ctx.fillStyle = rewardToastColor + ((rewardToastColor.length === 7) ? '' : '');
-    ctx.globalAlpha = alpha;
-    ctx.fillText(rewardToastText, CW/2, CH * 0.42 - yOff);
+    ctx.font = 'bold ' + (22 * sc).toFixed(1) + 'px "Orbitron","Noto Sans KR",sans-serif';
+    ctx.globalAlpha = alpha * ak;
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,8,0.55)';
+    ctx.strokeText(rewardToastText, CW/2, ty);
+    ctx.fillStyle = rewardToastColor;
+    ctx.fillText(rewardToastText, CW/2, ty);
     ctx.restore();
     ctx.globalAlpha = 1;
 }
@@ -13446,6 +13542,7 @@ const SZ_KB_DEC = 1e7;
 let szHitStopUntil = 0;
 let szFlashUntil = 0, szFlashDur = 140, szFlashRGB = '255,255,255', szFlashPeak = 0.12;
 let szSquashUntil = 0;
+let szP8Sq = null;   /* P8a — 스침 찌그러짐 {until, dir, k} (표시 전용) */
 let szShipHidden = false;
 let szDeathFx = null;
 let szDebris = [];
@@ -13937,13 +14034,16 @@ function szDrawPopups(){
     ctx.textBaseline = 'middle';
     for(const p of szPopups){
         const k = p.t / p.dur;
-        const pop = k < 0.15 ? 0.6 + (k / 0.15) * 0.55 : k < 0.28 ? 1.15 - ((k - 0.15) / 0.13) * 0.15 : 1;
+        /* P8a — 탄성 튐: 0.5 → 1.38 → 0.92 → 1 */
+        const pop = k < 0.12 ? 0.5 + (k / 0.12) * 0.88 : k < 0.24 ? 1.38 - ((k - 0.12) / 0.12) * 0.46 : k < 0.34 ? 0.92 + ((k - 0.24) / 0.1) * 0.08 : 1;
         const y = p.y - 26 * (1 - Math.pow(1 - k, 2));
         const x = Math.max(60, Math.min(CW - 60, p.x));
-        ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+        /* P8a — 글자 둘레 운석이 있으면 비켜 준다(0.9 → 0.15) */
+        const _hw = p.size * 3.2;
+        ctx.globalAlpha = (k > 0.6 ? (1 - k) / 0.4 : 1) * ((typeof szOvA === 'function') ? szOvA(0.9, x - _hw, y - p.size * 0.7, x + _hw, y + p.size * 0.7, null, 0.35, 1) : 0.9);
         ctx.font = '900 ' + Math.round(p.size * pop) + 'px Orbitron, sans-serif';
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
         ctx.strokeText(p.text, x, y);
         ctx.fillStyle = p.color;
         ctx.fillText(p.text, x, y);
@@ -14080,6 +14180,13 @@ function szDrawShip(px, py, now, alpha, guestTint){
     if(now < szSquashUntil){
         const k = (szSquashUntil - now) / 240;
         sx *= 1 + 0.28 * k; sy *= 1 - 0.22 * k;
+    }
+    /* P8a — 스침: 운석 반대쪽으로 살짝 눌렸다 튕겨 돌아온다(탄성) */
+    if(szP8Sq && now < szP8Sq.until){
+        const q = 1 - (szP8Sq.until - now) / (szP8Sq.k >= 1 ? 200 : 120);
+        const e = Math.sin(q * Math.PI) * (1 - q * 0.5) * 0.16 * szP8Sq.k;
+        sx *= 1 - e; sy *= 1 + e * 0.7;
+        ctx.translate(szP8Sq.dir * e * 18, 0);
     }
     ctx.scale(sx, sy);
     if(guestTint){
@@ -14705,6 +14812,7 @@ function gameLoop(now){
 function drawFrame(now, dt){
     /* P1 — 블룸 원본은 직전 프레임에서 (그리기 전에 읽어야 강제 래스터·복사가 없다) */
     szBloomCapture();
+    szOvFrame();   /* P8a — 겹침 표시 근접 비킴: 이 프레임 위험물 좌표 (필요할 때만 모음) */
     /* ---- Background ---- */
     drawBackground();
     /* 성운 층 — 천천히 흐르는 색 구름 (2026-09-24) */
@@ -16987,8 +17095,8 @@ function szBakeBubble(text){
     c.width = Math.ceil(W * s); c.height = Math.ceil(H * s);
     x.scale(s, s);
     /* 말풍선 몸통 + 아래 꼬리(교신창 쪽, 왼쪽에서 28px) */
-    x.fillStyle = 'rgba(6,14,36,0.9)';
-    x.strokeStyle = 'rgba(124,231,255,0.75)'; x.lineWidth = 1.2;
+    x.fillStyle = 'rgba(6,14,36,0.3)';          /* P8a — 옅은 판. 글자는 아래 어두운 글로우로 읽힌다 */
+    x.strokeStyle = 'rgba(124,231,255,0.5)'; x.lineWidth = 1.1;
     const r = 9, bx = 0.6, by = 0.6, bw = W - 1.2, bh = BH - 1.2, tx0 = 22;
     x.beginPath();
     x.moveTo(bx + r, by); x.lineTo(bx + bw - r, by); x.quadraticCurveTo(bx + bw, by, bx + bw, by + r);
@@ -17000,8 +17108,11 @@ function szBakeBubble(text){
     x.fillStyle = '#FFFFFF';
     x.font = '700 ' + fs + 'px ' + font;
     x.textAlign = 'left'; x.textBaseline = 'middle';
-    if(lines.length === 1) x.fillText(lines[0], bx + PADX, BH / 2 + 0.5);
-    else { x.fillText(lines[0], bx + PADX, BH / 2 - 7); x.fillText(lines[1], bx + PADX, BH / 2 + 7.5); }
+    const _tl = () => { if(lines.length === 1) x.fillText(lines[0], bx + PADX, BH / 2 + 0.5);
+        else { x.fillText(lines[0], bx + PADX, BH / 2 - 7); x.fillText(lines[1], bx + PADX, BH / 2 + 7.5); } };
+    /* P8a — 판 대신 글자 어두운 외곽선(한 번 구움)으로 가독성 */
+    if(typeof szOutlineText === 'function') szOutlineText(x, 3);
+    _tl();
     const out = {cv: c, w: W, h: H};
     SZS.bake.set(key, out);
     return out;
@@ -17087,11 +17198,11 @@ function szDrawSay(n){
     const ptop = CH - 60 - 26 * asp * 2 - 8;        /* SZ3 portraitPos 의 위 끝 (PR=26) */
     const w = c.b.w, h = c.b.h * asp;
     const yb = Math.min(ptop - 3, CH * 0.80 - 40), x0 = 14;
-    const dp = Math.hypot(player.x - (x0 + w / 2), player.y - (yb - h / 2));
-    if(dp < 70) a *= 0.3 + 0.55 * (dp / 70);
+    /* P8a — 평소 0.85, 운석·위험물·기체가 말풍선 70px 안이면 0.15 까지 비켜 준다 */
+    const ak = (typeof szOvA === 'function') ? szOvA(0.85, x0, yb - h, x0 + w, yb, 1) : 0.85;
     const pop = (!RM && t < 0.18) ? 0.9 + 0.1 * (t / 0.18) : 1;
     ctx.save();
-    ctx.globalAlpha = Math.max(0, Math.min(1, a)) * 0.95;
+    ctx.globalAlpha = Math.max(0, Math.min(1, a)) * ak;
     ctx.translate(x0 + 24, yb);
     ctx.scale(pop, pop);
     ctx.drawImage(c.b.cv, -24, -h, w, h);
@@ -17189,7 +17300,7 @@ function szFinaleTop(n){
     /* ① 관제 배너 */
     const b1 = fa(0, 3.8);
     if(b1 > 0){
-        ctx.save(); ctx.globalAlpha = b1 * 0.85; ctx.fillStyle = 'rgba(0,10,30,0.8)';
+        ctx.save(); ctx.globalAlpha = b1 * 0.85; ctx.fillStyle = 'rgba(0,10,30,0.3)';   /* P8a — 옅은 판 */
         drawRR(18, CH * 0.16 - 16, CW - 36, 32, 10); ctx.fill();
         ctx.strokeStyle = 'rgba(124,231,255,0.7)'; ctx.lineWidth = 1.2; drawRR(18, CH * 0.16 - 16, CW - 36, 32, 10); ctx.stroke();
         ctx.restore();
@@ -17342,6 +17453,7 @@ const S = {
     split(){ nz(0.32, 0.18, 1200, 90, 0.8, 'lowpass'); tone(150, 0.35, 'sine', 0.16, 45); },
     wave(){ [520, 660, 880].forEach((f, i) => tone(f, i === 2 ? 0.1 : 0.06, 'square', 0.04, 0, i * 0.06)); },
     pickup(){ [1047, 1319, 1568, 2093].forEach((f, i) => tone(f, 0.16, 'triangle', 0.07, 0, i * 0.055));
+        tone(1568, 0.34, 'sine', 0.035, 3136, 0.2);   /* P8a — 끝에 위로 솟는 반짝 한 줄 */
         nz(0.4, 0.05, 6000, 9000, 0.7, 'highpass', 0.12); },
     link(){ [784, 1047, 1319].forEach((f, i) => tone(f, 0.22, 'square', 0.035, 0, i * 0.08));
         [1568, 1976, 2349].forEach(f => tone(f, 0.9, 'sine', 0.045, 0, 0.26)); },
@@ -17488,11 +17600,12 @@ function bakePortraits(){
         x.save();
         x.beginPath(); x.arc(h, h, h, 0, Math.PI * 2); x.clip();
         const bg = x.createRadialGradient(h * 0.8, h * 0.6, 4, h, h, h);
-        bg.addColorStop(0, '#20406e'); bg.addColorStop(0.7, '#0b1834'); bg.addColorStop(1, '#040814');
+        /* P8a — 창 배경은 옅은 유리(뒤 운석·행성이 비친다). 얼굴만 또렷하게 */
+        bg.addColorStop(0, 'rgba(32,64,110,.42)'); bg.addColorStop(0.7, 'rgba(11,24,52,.34)'); bg.addColorStop(1, 'rgba(4,8,20,.5)');
         x.fillStyle = bg; x.fillRect(0, 0, BAKE, BAKE);
         /* 계기판 불빛 — 아래쪽 은은한 시안 */
         const gl = x.createLinearGradient(0, BAKE * 0.6, 0, BAKE);
-        gl.addColorStop(0, 'rgba(0,217,255,0)'); gl.addColorStop(1, 'rgba(0,217,255,.22)');
+        gl.addColorStop(0, 'rgba(0,217,255,0)'); gl.addColorStop(1, 'rgba(0,217,255,.14)');
         x.fillStyle = gl; x.fillRect(0, 0, BAKE, BAKE);
         /* 흉상 — 셀 폭의 104% 를 창 지름에 맞춘다(머리가 창을 가득) */
         const sc = BAKE * 1.04 / cell;
@@ -17500,7 +17613,7 @@ function bakePortraits(){
         x.drawImage(PIMG, sx, sy, cell, cell, h - cell * sc / 2, h - cell * sc * 0.47, cell * sc, cell * sc);
         /* 안쪽 그림자 — 유리 속 깊이 */
         const sh = x.createRadialGradient(h, h, h * 0.62, h, h, h);
-        sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,10,.55)');
+        sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,10,.3)');
         x.fillStyle = sh; x.fillRect(0, 0, BAKE, BAKE);
         x.restore();
         bakes[i] = c;
@@ -17562,9 +17675,9 @@ function drawPortrait(n){
     /* 가로·세로 배율 비 = (캔버스폭/CW)/(캔버스높이/CH) — getTransform() 은 매 프레임 DOMMatrix 를 새로 만든다(GC) */
     pAsp = canvas.height > 0 ? Math.max(0.6, Math.min(2.2, (canvas.width * CH) / (canvas.height * CW))) : 1;
     const pp = portraitPos();
-    /* 기체가 창 가까이 오면 비켜 준다(반투명) — 조종을 가리지 않게 */
-    const dp = Math.hypot(player.x - pp.x, player.y - pp.y);
-    const a = dp < 70 ? 0.3 + 0.62 * (dp / 70) : 0.92;
+    /* P8a — 평소 0.5(얼굴은 읽히고 뒤가 비친다). 운석·위험물·기체가 창 70px 안이면 0.15 까지 비켜 준다 */
+    const _pr = PR + 5, _ph = (PR + 5) * pAsp;
+    const a = (typeof szOvA === 'function') ? szOvA(0.5, pp.x - _pr, pp.y - _ph, pp.x + _pr, pp.y + _ph, 0) : 0.5;
     const pk = (n - P.popT) / 260;
     const pop = (!RM && pk < 1) ? 1 + 0.12 * Math.sin(pk * Math.PI) : 1;
     const tilt = RM ? 0 : szBank * 0.18;
@@ -17598,7 +17711,9 @@ function drawPortrait(n){
         ctx.globalAlpha = a;
     }
     const rs = PR * 160 / (160 - 18);
+    ctx.globalAlpha = a * 0.7;               /* P8a — 금속 테는 얼굴보다 옅게 */
     ctx.drawImage(rimBake, -rs, -rs, rs * 2, rs * 2);
+    ctx.globalAlpha = a;
     /* 상태등 — 아래쪽 작은 호. 평소 시안, 피격·위기 빨강, 환호 금색 */
     const led = n < P.ledUntil ? P.led : (lives <= 1 ? '255,70,110' : '0,217,255');
     const lp = 0.55 + 0.45 * Math.sin(n * (lives <= 1 ? 0.012 : 0.004));
@@ -17616,7 +17731,7 @@ function drawPortrait(n){
         ctx.save();
         ctx.globalAlpha = Math.min(1, (P.emoteUntil - n) / 200) * a;
         ctx.translate(ex, ey); ctx.scale(es, es * pAsp);
-        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#0a1024'; ctx.lineWidth = 1.6;
+        ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.strokeStyle = 'rgba(10,16,36,.7)'; ctx.lineWidth = 1.4;
         ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-5, 6); ctx.lineTo(-9, 11); ctx.lineTo(-1, 8); ctx.closePath(); ctx.fill();
         ctx.fillStyle = P.emote === '!' ? '#FF3366' : P.emote === '♪' ? '#00A8D8' : P.emote === '★' ? '#E0A800' : '#445';
@@ -17629,29 +17744,31 @@ function drawPortrait(n){
 
 /* ─────────── 큰 순간 도장 (기록·분 단위·위성) ─────────── */
 let stamp = null;
-function showStamp(text, color, sub){ stamp = {text, color, sub: sub || '', t0: now_(), dur: 1500}; }
+/* P8a — 큰 도장은 짧게(1.1s): 쾅 찍히고, 0.55s 부터 작아지며 빠르게 사라진다 */
+function showStamp(text, color, sub){ stamp = {text, color, sub: sub || '', t0: now_(), dur: 1100}; }
 function drawStamp(n){
     try{ if(typeof szFinaleTop === 'function') szFinaleTop(n); }catch(_){}    /* P3 — 피날레 관제 배너·자막(선명 층) */
     if(!stamp) return;
     const t = (n - stamp.t0) / stamp.dur;
     if(t >= 1){ stamp = null; return; }
     const inK = Math.min(1, t / 0.12);
-    const sc = RM ? 1 : (t < 0.12 ? 1.7 - 0.7 * (1 - Math.pow(1 - inK, 3)) : 1 + 0.03 * Math.sin((t - 0.12) * 6));
-    const a = t < 0.8 ? Math.min(1, inK * 1.2) : (1 - t) / 0.2;
+    const sc = RM ? 1 : (t < 0.12 ? 1.7 - 0.7 * (1 - Math.pow(1 - inK, 3)) : t < 0.55 ? 1 + 0.03 * Math.sin((t - 0.12) * 6) : 1 - 0.3 * Math.pow((t - 0.55) / 0.45, 2));
+    const a0 = t < 0.55 ? Math.min(1, inK * 1.2) : Math.max(0, 1 - (t - 0.55) / 0.45);
     const y = CH * 0.34;
+    const ak = (typeof szOvA === 'function') ? szOvA(0.9, CW / 2 - 130, y - 26, CW / 2 + 130, y + 34, 2) : 0.9;
     ctx.save();
-    ctx.globalAlpha = a;
+    ctx.globalAlpha = a0 * ak;
     ctx.translate(CW / 2, y); ctx.rotate(RM ? 0 : -0.06); ctx.scale(sc, sc);
     ctx.font = '900 28px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     /* P5 — 긴 도장(추락 중계 등)은 글자를 줄여 상자 안에 */
     const tw0 = ctx.measureText(stamp.text).width;
     if(tw0 > CW - 64){ ctx.font = '900 ' + Math.max(14, 28 * (CW - 64) / tw0).toFixed(1) + 'px Orbitron, "Noto Sans KR", sans-serif'; }
     const w = Math.min(CW - 30, Math.min(tw0, CW - 64) + 34);
-    ctx.fillStyle = 'rgba(4,8,24,.72)';
+    ctx.fillStyle = 'rgba(4,8,24,.26)';        /* P8a — 옅은 판 */
     drawRR(-w / 2, -22, w, stamp.sub ? 54 : 44, 12); ctx.fill();
     ctx.lineWidth = 2.5; ctx.strokeStyle = stamp.color;
     drawRR(-w / 2, -22, w, stamp.sub ? 54 : 44, 12); ctx.stroke();
-    ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.strokeText(stamp.text, 0, 0);
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.strokeText(stamp.text, 0, 0);
     ctx.fillStyle = stamp.color; ctx.fillText(stamp.text, 0, 0);
     /* 번쩍 지나가는 빛줄기 */
     if(!RM && t < 0.6){
@@ -18071,6 +18188,318 @@ window.SZ3._voice = () => ({made: VOICE.n, active: VOICE.active(), ctx: AC ? AC.
 window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · salute */
 })();
 </script>
+<script>
+/*<sz:mod:p8a-fx>*/
+/* =====================================================================
+   P8a (2026-09-28) — 손맛·화려함 2차. 운영자: "전체적인 효과나 이팩트도 더 손맛이 느껴지게, 효과도 더 화려하게"
+   SZ3 훅(hit·graze·pop·pickup·satDone·zone·tick·drawPool·drawStamp)을 감싸 얹는다 — SZ3 가 없거나 이 블록이 죽어도 게임은 그대로.
+   - 전부 표시 전용: Math.random 만, 게임 상태·시드 RNG·히트스톱/슬로모 시간은 건드리지 않는다(결정성 유지)
+   - 화면 흔들림 없음. 번쩍임은 국소(기체·운석 둘레) 가산 글로우뿐, 전체 화면 번쩍임 없음
+   - 고정 풀(입자 320·링 28) + 미리 구운 스프라이트. 아무 효과도 없으면 프레임당 비용 0
+   - 성능 등급 2(저사양)는 입자 절반·글로우 생략, ?fx=0 은 이 블록 전체 끔, 모션 줄이기면 쓸기·빛기둥·폭죽 끔
+   ===================================================================== */
+(function(){
+'use strict';
+if(!window.SZ3) return;
+if(window.SZ_FLAGS && SZ_FLAGS.fx === false) return;
+const S3 = window.SZ3, RM = !!S3.RM;
+const lo = () => { try{ return S3.tier() >= 2; }catch(_){ return false; } };
+const now_ = () => performance.now();
+function mk(w, h){ const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+/* ── 미리 구운 스프라이트 ── */
+/* 운석 덩어리 3종 — 울퉁불퉁 다각형 + 위쪽 밝은 면 + 달아오른 테 */
+const CHUNK = [0, 1, 2].map(v => {
+    const c = mk(40, 40), x = c.getContext('2d'), n = 7 + v;
+    x.translate(20, 20);
+    x.beginPath();
+    for(let i = 0; i < n; i++){ const a = i / n * 6.283, r = 13 + Math.random() * 6; i ? x.lineTo(Math.cos(a) * r, Math.sin(a) * r) : x.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    x.closePath();
+    const g = x.createLinearGradient(-14, -14, 14, 14);
+    g.addColorStop(0, '#a89a8c'); g.addColorStop(0.5, '#62574e'); g.addColorStop(1, '#2c2622');
+    x.fillStyle = g; x.fill();
+    x.lineWidth = 3; x.strokeStyle = 'rgba(255,150,60,.85)'; x.stroke();
+    x.lineWidth = 1.2; x.strokeStyle = 'rgba(255,235,190,.9)'; x.stroke();
+    x.fillStyle = 'rgba(40,30,26,.55)'; x.beginPath(); x.arc(-3, 3, 3.5, 0, 6.283); x.fill();
+    return c;
+});
+/* 동그란 가산 글로우 (흰 속 → 색 테) */
+function glowSprite(r, g, b){
+    const c = mk(64, 64), x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(' + r + ',' + g + ',' + b + ',.9)');
+    gr.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',.28)'); gr.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+    x.fillStyle = gr; x.fillRect(0, 0, 64, 64); return c;
+}
+const GL = [glowSprite(255, 190, 90), glowSprite(124, 231, 255), glowSprite(255, 90, 140), glowSprite(255, 230, 110), glowSprite(170, 255, 160), glowSprite(200, 150, 255)];
+const GL_RGB = ['255,190,90', '124,231,255', '255,90,140', '255,230,110', '170,255,160', '200,150,255'];
+/* 빛기둥 — 가로 단면이 가운데 흰 심 + 양옆 번짐 */
+const BEAM = (function(){
+    const c = mk(48, 8), x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 48, 0);
+    g.addColorStop(0, 'rgba(124,231,255,0)'); g.addColorStop(0.35, 'rgba(124,231,255,.45)'); g.addColorStop(0.5, 'rgba(255,255,255,1)');
+    g.addColorStop(0.65, 'rgba(124,231,255,.45)'); g.addColorStop(1, 'rgba(124,231,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 48, 8); return c;
+})();
+/* 존 도착 쓸기 — 세로 단면. 존 색마다 한 장(처음 쓸 때 굽고 재사용) */
+const SWEEPS = new Map();
+function sweepSprite(rgb){
+    let c = SWEEPS.get(rgb);
+    if(c) return c;
+    c = mk(4, 96); const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 96);
+    g.addColorStop(0, 'rgba(' + rgb + ',0)'); g.addColorStop(0.7, 'rgba(' + rgb + ',.5)'); g.addColorStop(0.86, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    x.fillStyle = g; x.fillRect(0, 0, 4, 96);
+    if(SWEEPS.size > 40) SWEEPS.clear();
+    SWEEPS.set(rgb, c); return c;
+}
+
+/* ── 입자 풀 ── */
+const K_CHUNK = 1, K_EMBER = 2, K_FW = 3, K_GLOW = 4, K_SPRAY = 5;
+const NP = 320, PP = new Array(NP);
+for(let i = 0; i < NP; i++) PP[i] = {on:false, k:0, x:0, y:0, vx:0, vy:0, life:0, max:1, r:1, rot:0, spin:0, g:0, drag:1, c:0, v:0, px:0, py:0};
+let pI = 0, live = 0;
+function P(k, x, y, vx, vy, life, r, c, g, drag){
+    const p = PP[pI]; pI = (pI + 1) % NP;
+    if(!p.on) live++;
+    p.on = true; p.k = k; p.x = p.px = x; p.y = p.py = y; p.vx = vx; p.vy = vy; p.life = p.max = life; p.r = r; p.c = c | 0;
+    p.g = g || 0; p.drag = drag == null ? 1 : drag; p.rot = Math.random() * 6.283; p.spin = (Math.random() - 0.5) * 14; p.v = (Math.random() * 3) | 0;
+    return p;
+}
+/* 링 — 굵기·색·색수차(chroma: R/G/B 세 겹이 살짝 어긋나 퍼진다) */
+const NR = 28, RR = new Array(NR);
+for(let i = 0; i < NR; i++) RR[i] = {on:false, x:0, y:0, t:0, dur:1, r0:0, r1:1, w:1, rgb:'255,255,255', chroma:false};
+let rI = 0, rLive = 0;
+function ring(x, y, r0, r1, dur, w, rgb, delay, chroma){
+    const r = RR[rI]; rI = (rI + 1) % NR;
+    if(!r.on) rLive++;
+    r.on = true; r.x = x; r.y = y; r.t = -(delay || 0); r.dur = dur; r.r0 = r0; r.r1 = r1; r.w = w; r.rgb = rgb; r.chroma = !!chroma;
+}
+/* 상태 효과 */
+let beam = null, sweep = null, fwQ = [], lastSurv = 0, popsThisFrame = 0, popFrameT = 0;
+
+/* ── 사건별 연출 ── */
+function burstGlow(x, y, r, life, c){ if(!lo() && !RM) P(K_GLOW, x, y, 0, 0, life, r, c); }   /* 모션 줄이기면 번쩍 없음 */
+function embers(x, y, n, sp, c, up){
+    if(lo()) n = Math.ceil(n / 2);
+    for(let i = 0; i < n; i++){
+        const a = Math.random() * 6.283, s = sp * (0.35 + Math.random() * 0.8);
+        P(K_EMBER, x, y, Math.cos(a) * s, Math.sin(a) * s - (up || 0), 0.35 + Math.random() * 0.45, 1 + Math.random() * 1.4, c, 160, 0.5);
+    }
+}
+function onPop(x, y){
+    const n = now_();
+    if(n - popFrameT > 12){ popFrameT = n; popsThisFrame = 0; }
+    popsThisFrame++;
+    /* 한 프레임에 여러 개(폭탄·플라스마) 부서지면 앞 5개만 풀 연출, 나머지는 글로우 한 점 */
+    burstGlow(x, y, 26, 0.2, 0);
+    if(popsThisFrame > 5) return;
+    const m = lo() ? 2 : 4;
+    for(let i = 0; i < m; i++){
+        const a = Math.random() * 6.283, s = 70 + Math.random() * 120;
+        P(K_CHUNK, x + Math.cos(a) * 3, y + Math.sin(a) * 3, Math.cos(a) * s, Math.sin(a) * s, 0.7 + Math.random() * 0.4, 3.2 + Math.random() * 2.6, 0, 90, 0.55);
+    }
+    embers(x, y, 9, 230, 0, 20);
+    ring(x, y, 5, 30, 0.28, 2.2, '255,200,120');
+}
+function onHit(x, y){
+    /* 임팩트 프레임 — 기체 자리에 흰 섬광 + 붉은 코어, 이중 충격파, 불티 분수 */
+    burstGlow(x, y, 54, 0.22, 2);
+    burstGlow(x, y, 30, 0.14, 3);
+    ring(x, y, 8, 70, 0.42, 4.5, '255,110,90');
+    ring(x, y, 4, 110, 0.6, 1.6, '255,255,255', 0.06);
+    embers(x, y, 18, 300, 2, 40);
+    try{ szSquashUntil = now_() + 300; }catch(_){}   /* 표시 전용 — 기체 찌그러짐 조금 더 길게 */
+}
+function onGraze(b, dist){
+    const razor = dist != null && dist < HIT_RADIUS + COMBO_NEAR_INNER_PAD + 7;
+    const sp = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / sp, uy = b.vy / sp;
+    /* 스친 지점 — 기체와 운석 사이. 운석 진행 방향으로 불꽃이 튄다 */
+    const cx = (player.x + b.x) / 2, cy = (player.y + b.y) / 2;
+    const n = razor ? 8 : 3;
+    for(let i = 0; i < n; i++){
+        const s = 180 + Math.random() * 260, j = (Math.random() - 0.5) * 0.9;
+        P(K_SPRAY, cx, cy, (ux + -uy * j) * s, (uy + ux * j) * s, 0.16 + Math.random() * 0.14, 1.1 + Math.random(), razor ? 1 : 3, 0, 0.2);
+    }
+    try{ szP8Sq = {until: now_() + (razor ? 200 : 120), dir: (b.x > player.x ? -1 : 1), k: razor ? 1 : 0.5}; }catch(_){}
+    if(razor){
+        burstGlow(cx, cy, 20, 0.14, 1);
+        ring(player.x, player.y, 10, 44, 0.3, 2, '159,243,255');
+    }
+    /* 콤보 5단위 — 기체 둘레 황금 고리가 튀며 퍼진다 */
+    try{
+        if(comboCount > 0 && comboCount % 5 === 0){
+            const big = comboCount % 25 === 0;
+            ring(player.x, player.y, 12, big ? 90 : 52, big ? 0.55 : 0.36, big ? 3.2 : 2.2, big ? '255,102,136' : '255,214,90', 0, big);
+            if(big) embers(player.x, player.y, 14, 220, 3, 30);
+        }
+    }catch(_){}
+}
+function onPickup(d){
+    const x = d.x, y = d.y;
+    burstGlow(x, y, 64, 0.26, 1);
+    burstGlow(player.x, player.y, 34, 0.2, 3);
+    ring(x, y, 6, 62, 0.45, 3, '255,255,255', 0, true);     /* 색수차 고리 */
+    ring(x, y, 4, 96, 0.6, 1.4, '124,231,255', 0.08);
+    const m = lo() ? 6 : 12;
+    for(let i = 0; i < m; i++){
+        const a = i / m * 6.283;
+        P(K_FW, x, y, Math.cos(a) * 210, Math.sin(a) * 210, 0.45, 1.6, (i & 1) ? 1 : 3, 0, 0.18);
+    }
+}
+function onSat(x, y){
+    if(!RM) beam = {x, y, t0: now_()};
+    burstGlow(x, y, 72, 0.3, 1);
+    ring(x, y, 8, 140, 0.8, 2.4, '255,255,255', 0.1, true);
+}
+function onZone(){
+    if(RM) return;
+    let rgb = '160,200,255';
+    try{ if(typeof zoneWarpRGB === 'string') rgb = zoneWarpRGB; }catch(_){}
+    sweep = {t0: now_(), rgb, img: sweepSprite(rgb)};
+}
+function firework(x, y, c){
+    const m = lo() ? 10 : 22;
+    burstGlow(x, y, 40, 0.24, c);
+    for(let i = 0; i < m; i++){
+        const a = i / m * 6.283 + Math.random() * 0.2, s = 150 + Math.random() * 70;
+        P(K_FW, x, y, Math.cos(a) * s, Math.sin(a) * s, 0.8 + Math.random() * 0.4, 1.5, c, 70, 0.35);
+    }
+    ring(x, y, 4, 60, 0.4, 1.6, GL_RGB[c]);
+}
+
+/* ── 갱신 ── */
+function upd(dt){
+    if(!(dt > 0)) return;
+    const n = now_();
+    /* 보스 SURVIVED → 폭죽 5발 (1.1s 안) */
+    try{
+        const F = window.SZB;
+        if(F && F.survFx && F.survFx.t0 !== lastSurv){
+            lastSurv = F.survFx.t0;
+            if(!RM) for(let i = 0; i < 5; i++) fwQ.push({at: n + i * 210, x: CW * (0.18 + Math.random() * 0.64), y: CH * (0.12 + Math.random() * 0.32), c: [3, 1, 2, 5, 4][i]});
+        }
+    }catch(_){}
+    if(fwQ.length){ for(let i = fwQ.length - 1; i >= 0; i--) if(n >= fwQ[i].at){ const f = fwQ[i]; fwQ.splice(i, 1); firework(f.x, f.y, f.c); } }
+    if(live){
+        let c = 0;
+        for(let i = 0; i < NP; i++){
+            const p = PP[i]; if(!p.on) continue;
+            p.life -= dt;
+            if(p.life <= 0){ p.on = false; continue; }
+            c++;
+            p.px = p.x; p.py = p.y;
+            if(p.drag !== 1){ const d = Math.pow(p.drag, dt); p.vx *= d; p.vy *= d; }
+            p.vy += p.g * dt;
+            p.x += p.vx * dt; p.y += p.vy * dt;
+            p.rot += p.spin * dt;
+        }
+        live = c;
+    }
+    if(rLive){
+        let c = 0;
+        for(let i = 0; i < NR; i++){ const r = RR[i]; if(!r.on) continue; r.t += dt; if(r.t >= r.dur){ r.on = false; continue; } c++; }
+        rLive = c;
+    }
+}
+
+/* ── 그리기 (세계 층: 운석 위·기체 아래) ── */
+function drawWorld(){
+    if(!live && !rLive && !beam) return;
+    const L = lo();
+    ctx.save();
+    if(beam){
+        const t = (now_() - beam.t0) / 900;
+        if(t >= 1) beam = null;
+        else {
+            /* 위성 → 아래(관제소 쪽)로 내리꽂는 빛기둥 + 따라 내려가는 빛 알갱이 3개 */
+            const a = t < 0.12 ? t / 0.12 : 1 - (t - 0.12) / 0.88, w = 22 * (1 - t * 0.6);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = a * 0.75;
+            ctx.drawImage(BEAM, beam.x - w / 2, beam.y, w, CH - beam.y + 10);
+            ctx.globalAlpha = a * 0.35;
+            ctx.drawImage(BEAM, beam.x - w * 0.3, -10, w * 0.6, beam.y + 10);
+            if(!L) for(let i = 0; i < 3; i++){
+                const k = ((t * 2.2 + i / 3) % 1), py = beam.y + (CH - beam.y) * k;
+                ctx.globalAlpha = a * (1 - k * 0.5);
+                ctx.drawImage(GL[1], beam.x - 12, py - 12, 24, 24);
+            }
+        }
+    }
+    for(let i = 0; i < NP; i++){
+        const p = PP[i]; if(!p.on) continue;
+        const k = p.life / p.max;
+        if(p.k === K_CHUNK){
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = Math.min(1, k * 2);
+            const s = p.r * 2;
+            ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.drawImage(CHUNK[p.v], -s / 2, -s / 2, s, s); ctx.restore();
+        } else if(p.k === K_EMBER || p.k === K_SPRAY || p.k === K_FW){
+            ctx.globalCompositeOperation = 'lighter';
+            const fl = p.k === K_FW && k < 0.35 ? (Math.random() < 0.5 ? 0.3 : 1) : 1;   /* 폭죽 꼬리 반짝임 */
+            ctx.globalAlpha = Math.min(1, k * 1.6) * fl;
+            ctx.strokeStyle = 'rgb(' + GL_RGB[p.c] + ')';
+            ctx.lineWidth = p.r * (0.5 + k * 0.6);
+            const tl = p.k === K_SPRAY ? 0.045 : 0.03;
+            ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx * tl, p.y - p.vy * tl); ctx.stroke();
+            if(!L && p.k !== K_SPRAY){ const g = p.r * 4.5; ctx.globalAlpha *= 0.7; ctx.drawImage(GL[p.c], p.x - g, p.y - g, g * 2, g * 2); }
+        } else if(p.k === K_GLOW){
+            ctx.globalCompositeOperation = 'lighter';
+            const e = 1 - k, s = p.r * (0.45 + 0.75 * (1 - Math.pow(1 - e, 3)));
+            ctx.globalAlpha = k * 0.95;
+            ctx.drawImage(GL[p.c], p.x - s, p.y - s, s * 2, s * 2);
+        }
+    }
+    if(rLive){
+        ctx.globalCompositeOperation = 'lighter';
+        for(let i = 0; i < NR; i++){
+            const r = RR[i]; if(!r.on || r.t < 0) continue;
+            const k = r.t / r.dur, e = 1 - Math.pow(1 - k, 3), rad = r.r0 + (r.r1 - r.r0) * e;
+            ctx.lineWidth = r.w * (1 - k * 0.7);
+            if(r.chroma && !L){
+                const o = 2 + 4 * e;
+                ctx.globalAlpha = (1 - k) * 0.8;
+                ctx.strokeStyle = 'rgb(255,60,90)'; ctx.beginPath(); ctx.arc(r.x - o, r.y, rad, 0, 6.283); ctx.stroke();
+                ctx.strokeStyle = 'rgb(80,255,160)'; ctx.beginPath(); ctx.arc(r.x, r.y - o * 0.5, rad, 0, 6.283); ctx.stroke();
+                ctx.strokeStyle = 'rgb(90,140,255)'; ctx.beginPath(); ctx.arc(r.x + o, r.y, rad, 0, 6.283); ctx.stroke();
+            } else {
+                ctx.globalAlpha = (1 - k) * 0.85;
+                ctx.strokeStyle = 'rgb(' + r.rgb + ')';
+                ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, 6.283); ctx.stroke();
+            }
+        }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+/* ── 위 층(블룸 뒤): 존 도착 빛 쓸기 ── */
+function drawTop(){
+    if(!sweep) return;
+    const t = (now_() - sweep.t0) / 750;
+    if(t >= 1 || t < 0){ sweep = null; return; }
+    const y = -96 + (CH + 96) * (1 - Math.pow(1 - t, 2));
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.16 * Math.sin(t * Math.PI);
+    ctx.drawImage(sweep.img, 0, y, CW, 96);
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+function reset(){ for(let i = 0; i < NP; i++) PP[i].on = false; for(let i = 0; i < NR; i++) RR[i].on = false; live = 0; rLive = 0; beam = null; sweep = null; fwQ.length = 0; try{ szP8Sq = null; }catch(_){} }
+
+/* ── SZ3 훅에 얹기 (원래 동작 먼저, 우리 연출은 실패해도 삼킨다) ── */
+const wrap = (name, after) => { const o = S3[name]; if(typeof o !== 'function') return; S3[name] = function(){ const r = o.apply(this, arguments); try{ after.apply(this, arguments); }catch(_){} return r; }; };
+wrap('tick', (n, dt) => upd(dt));
+wrap('drawPool', drawWorld);
+wrap('drawStamp', drawTop);
+wrap('hit', onHit);
+wrap('graze', onGraze);
+wrap('pop', onPop);
+wrap('pickup', onPickup);
+wrap('satDone', onSat);
+wrap('zone', onZone);
+wrap('reset', reset);
+S3._p8a = () => ({live, rLive, beam: !!beam, sweep: !!sweep});
+})();
+/*</sz:mod:p8a-fx>*/
+</script>
 <script>if(navigator.serviceWorker)navigator.serviceWorker.getRegistrations().then(r=>r.forEach(w=>w.unregister()));</script>
 <style>
 /* ===== SZX — 동시 대결 · 도전장 · 기록 (2026-09-24) ===== */
@@ -18125,7 +18554,7 @@ window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · 
 @keyframes szxDots{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}
 /* 비행 중 실시간 순위 — 조작을 가리지 않게 작고 반투명, 터치 통과 */
 .szx-live{position:absolute;right:6px;top:46px;z-index:3;pointer-events:none;display:none;
-  background:rgba(2,6,20,.55);border:1px solid rgba(0,217,255,.22);border-radius:10px;padding:5px 7px;min-width:108px;
+  background:rgba(2,6,20,.22);border:1px solid rgba(0,217,255,.16);opacity:.85;text-shadow:0 0 3px #000,0 0 6px rgba(0,0,0,.8);border-radius:10px;padding:5px 7px;min-width:108px;
   font:700 10.5px/1.45 'Noto Sans KR',sans-serif;color:#fff}
 .szx-live.on{display:block}
 .szx-live .h{font:900 9px 'Orbitron',sans-serif;letter-spacing:.14em;color:rgba(0,217,255,.8);margin-bottom:2px}
@@ -18145,8 +18574,8 @@ window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · 
   color:#FFB08A;font:800 .84em 'Noto Sans KR',sans-serif;cursor:pointer;touch-action:manipulation}
 .szx-toast{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);z-index:6;pointer-events:none;opacity:0;
   font:900 1.2em 'Orbitron','Noto Sans KR',sans-serif;letter-spacing:.08em;color:#FFE66D;text-shadow:0 0 18px rgba(255,230,109,.7);white-space:nowrap}
-.szx-toast.on{animation:szxToast 1.6s ease-out}
-@keyframes szxToast{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}15%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}75%{opacity:1}100%{opacity:0;transform:translate(-50%,-70%) scale(1)}}
+.szx-toast.on{animation:szxToast 1.2s ease-out}
+@keyframes szxToast{0%{opacity:0;transform:translate(-50%,-30%) scale(.8)}15%{opacity:.85;transform:translate(-50%,-50%) scale(1.06)}60%{opacity:.8}100%{opacity:0;transform:translate(-50%,-70%) scale(.9)}}
 .szx-duo{display:flex;flex-direction:column;gap:4px;margin-top:2px}
 .szx-duo .cap{font-size:.66em;letter-spacing:.08em;color:rgba(255,255,255,.4)}
 .szx-duo .bt{display:flex;gap:6px}
