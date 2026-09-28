@@ -155,12 +155,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'DELTA-V', l:['Pilote seis missões, da primeira ignição à captura na torre','Celular: botões na tela. PC: setas, SHIFT e ESPAÇO','Até 3 estrelas por missão; elas liberam em ordem','Se falhar, a causa aparece em números: leia antes os objetivos']}
   },
   'dodge': {
-    ko: {t:'스페이스-Z', l:['쏟아지는 소행성을 피해 버틴 시간이 곧 점수','폰은 드래그, PC는 방향키 · 아이템과 GRAV로 위기 탈출','👥 친구와 동시 대결: 메신저 링크로 최대 8명이 같은 우주를','보급은 먼저 먹은 사람 차지 · 도전장은 내 코스 그대로 전송']},
-    en: {t:'Space-Z', l:['Dodge asteroids; the time you survive is your score','Drag on phone, arrow keys on PC; items and GRAV get you out','👥 Race friends live: up to 8 fly the same space via a chat link','First to grab a supply keeps it; challenge links send your course']},
-    ja: {t:'スペース-Z', l:['降りそそぐ小惑星をよけ、生き残った時間がスコア','スマホはドラッグ、PCは矢印キー。アイテムとGRAVで危機脱出','👥 友だちと同時対戦：リンクで最大8人が同じ宇宙を飛びます','補給は先に取った人のもの。挑戦状は自分のコースをそのまま送信']},
-    zh: {t:'太空-Z', l:['躲开密集的小行星，存活时间就是分数','手机拖动，电脑用方向键；道具和 GRAV 帮你脱险','和朋友同时对战：发链接，最多8人飞同一片太空','补给谁先拿到归谁；挑战链接会发出你的同一条航线']},
-    es: {t:'Space-Z', l:['Esquiva asteroides: el tiempo que aguantas es tu puntuación','Arrastra en el móvil, flechas en PC; objetos y GRAV te salvan','👥 Carrera en vivo: hasta 8 vuelan el mismo espacio con un enlace','El suministro es de quien lo toma primero; el reto envía tu ruta']},
-    pt: {t:'Space-Z', l:['Desvie dos asteroides: o tempo que você sobrevive é a pontuação','Arraste no celular, setas no PC; itens e GRAV te salvam','👥 Corrida ao vivo: até 8 voam no mesmo espaço por um link','Suprimento é de quem pega primeiro; o desafio envia sua rota']}
+    ko: {t:'스페이스-Z', l:['운석을 피해 버틴 시간이 점수 · 👥 링크로 최대 8명 동시 대결','폰: 아래 패드 드래그·BEAM 탭 / PC: 방향키, F 누르기 = BEAM','BEAM으로 보급을 끌어오고, 궤도를 1.5초 비추면 위성 설치','별가루·스침으로 고리가 차면 🌈 피버 — 닿는 운석이 부서져요']},
+    en: {t:'Space-Z', l:['Dodge meteors; survival time is your score · 👥 up to 8 race via a link','Phone: drag the pad, tap BEAM. PC: arrow keys, hold F for BEAM','BEAM pulls in supplies; hold it on an orbit 1.5 s to place a satellite','Stardust and grazes fill the ring: 🌈 FEVER smashes meteors you touch']},
+    ja: {t:'スペース-Z', l:['隕石をよけ、生き残った時間がスコア · 👥 リンクで最大8人対戦','スマホ：下のパッドをドラッグ・BEAMタップ／PC：矢印キー、F長押しでBEAM','BEAMで補給を引き寄せ、軌道を1.5秒照らすと衛星設置','星くずとかすりでリングが満ちると🌈フィーバー：触れた隕石が砕けます']},
+    zh: {t:'太空-Z', l:['躲开陨石，存活时间就是分数 · 👥 发链接最多8人对战','手机：拖动下方圆盘、点 BEAM；电脑：方向键，按住 F 开 BEAM','BEAM 可拉来补给；照住轨道 1.5 秒即可安装卫星','收集星尘、擦边飞过填满光环 → 🌈 狂热：碰到的陨石会碎掉']},
+    es: {t:'Space-Z', l:['Esquiva meteoritos: aguantar es puntuar · 👥 hasta 8 con un enlace','Móvil: arrastra el panel y toca BEAM. PC: flechas, mantén F para BEAM','BEAM atrae suministros; 1,5 s sobre una órbita instala un satélite','Polvo estelar y roces llenan el anillo: 🌈 FIEBRE rompe los meteoritos que tocas']},
+    pt: {t:'Space-Z', l:['Desvie dos meteoros: sobreviver é pontuar · 👥 até 8 por um link','Celular: arraste o painel e toque em BEAM. PC: setas, segure F para BEAM','BEAM puxa suprimentos; 1,5 s sobre uma órbita instala um satélite','Poeira estelar e raspões enchem o anel: 🌈 FEBRE quebra os meteoros que você toca']}
   },
   'tetris': {
     ko: {t:'테트로미노 쌓기', l:['떨어지는 블록을 돌리고 옮겨 가로줄을 채우면 지워져요','폰: 아래 버튼으로 이동·회전·홀드, DROP = 즉시 낙하, SOFT(누르는 동안) = 천천히','PC: ← → 이동 · ↑ 회전 · Space 즉시 낙하','한 열을 비워 두고 긴 막대로 4줄을 한 번에 지우세요']},

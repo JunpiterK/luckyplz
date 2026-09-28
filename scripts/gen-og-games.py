@@ -237,22 +237,41 @@ def m_glory(d, img):
     img.paste(scene, (MCX - w // 2 - 6, MCY - h // 2 + 10), scene)
 
 def m_dodge(d, img):
+    """2026-09-29 — 새 이야기(레서판다 럭키 · 운석 · 지구에서 우주 끝까지)에 맞춘 판.
+    게임 실제 자산을 그대로 쓴다: 지구(zone_earth) · 운석(meteor_*_rim) · 기체(ship) · 조종사(pilot 시트 환호 칸)"""
+    A = ROOT / "public" / "assets"
     rnd = random.Random(9)
-    for _ in range(26):
-        x, y = MX + rnd.randint(0, MW), MY + rnd.randint(0, MH)
-        r = rnd.choice([1, 1, 2])
-        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, rnd.randint(60, 160)))
-    for ax, ay, ar in [(MX + 90, MY + 70, 34), (MX + 320, MY + 120, 26), (MX + 200, MY + 40, 18)]:
-        d.ellipse([ax - ar, ay - ar, ax + ar, ay + ar], fill=(120, 110, 130))
-        d.ellipse([ax - ar // 2, ay - ar // 2, ax, ay], fill=(90, 82, 100))
-    for bx, by in [(MX + 150, MY + 180), (MX + 290, MY + 230), (MX + 110, MY + 280)]:
-        d.rounded_rectangle([bx - 4, by, bx + 4, by + 36], 4, fill=(0, 217, 255))
-    sx, sy = MCX, MY + MH - 90
-    glow(img, sx, sy + 64, 50, (255, 160, 60), 150)
-    d.polygon([(sx, sy - 64), (sx - 44, sy + 44), (sx + 44, sy + 44)], fill=(230, 238, 250))
-    d.polygon([(sx, sy - 64), (sx + 44, sy + 44), (sx + 8, sy + 44)], fill=(190, 200, 218))
-    d.ellipse([sx - 14, sy - 16, sx + 14, sy + 12], fill=(20, 30, 50), outline=(0, 217, 255), width=4)
-    d.polygon([(sx - 16, sy + 44), (sx + 16, sy + 44), (sx, sy + 86)], fill=(255, 200, 120))
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0)); d = ImageDraw.Draw(lay)
+    for _ in range(40):
+        x, y = MX - 40 + rnd.randint(0, MW + 60), MY - 40 + rnd.randint(0, MH + 60)
+        r = rnd.choice([1, 1, 1, 2])
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(255, 255, 255, rnd.randint(70, 190)))
+    img.alpha_composite(lay)
+    def put(path, size, cx, cy, box=None):
+        im = Image.open(path).convert("RGBA")
+        if box:
+            im = im.crop(box)
+        im = im.resize((size, round(im.height * size / im.width)), Image.LANCZOS)
+        img.alpha_composite(im, (int(cx - im.width / 2), int(cy - im.height / 2)))
+    # 출발점 지구 — 오른쪽 아래에 크게 걸친다
+    glow(img, MX + MW - 30, MY + MH + 10, 190, (80, 170, 255), 70)
+    put(A / "spacez" / "zone_earth.webp", 330, MX + MW - 20, MY + MH + 40)
+    # 쏟아지는 운석 (진행 방향 꼬리)
+    for i, (mx, my, ms, nm) in enumerate([(MX + 70, MY + 40, 70, "a"), (MX + 250, MY + 10, 50, "b"), (MX + 360, MY + 150, 58, "c"), (MX + 150, MY + 190, 40, "b")]):
+        lay = Image.new("RGBA", (W, H), (0, 0, 0, 0)); dl = ImageDraw.Draw(lay)
+        for k in range(1, 7):
+            rr = ms * (0.36 - k * 0.04)
+            tx, ty = mx - k * ms * 0.18, my - k * ms * 0.34
+            dl.ellipse([tx - rr, ty - rr, tx + rr, ty + rr], fill=(150, 200, 255, 90 - k * 12))
+        img.alpha_composite(lay.filter(ImageFilter.GaussianBlur(3)))
+        put(A / "spacez" / "z" / ("meteor_%s_rim.webp" % nm), ms, mx, my)
+    # 기체 + 분사 빛
+    sx, sy = MX + 250, MY + 300
+    glow(img, sx, sy + 70, 60, (255, 160, 60), 170)
+    put(A / "spacez" / "ship.webp", 150, sx, sy)
+    # 조종사 럭키 (환호 칸 — 시트 256px 격자, 2행 2열)
+    glow(img, MX + 60, MY + MH - 70, 120, (255, 150, 80), 60)
+    put(A / "dodge" / "pilot.webp", 230, MX + 60, MY + MH - 80, box=(256, 256, 512, 512))
 
 
 def m_lander(d, img):
@@ -692,7 +711,7 @@ GAMES = {
     "burger":          dict(title="BURGER CHEF", sub="버거 셰프 — 주문 폭주 스택 쌓기", cat="RETRO", top=(24, 14, 8), bot=(10, 6, 3), accent=(240, 178, 92), motif=m_burger),
     "car-racing":      dict(title="CAR RACE", sub="카레이싱 — 랜덤 레이스 내기", cat="RETRO", top=(20, 8, 12), bot=(8, 3, 5), accent=(235, 64, 84), motif=m_car),
     "glory-racing":    dict(title="BRAWL RUN", sub="Brawl Run — 달리고 빼앗는 내기", cat="RETRO", top=(20, 16, 6), bot=(8, 7, 3), accent=(255, 206, 92), motif=m_glory),
-    "dodge":           dict(title="SPACE-Z", sub="스페이스-Z — 총알 피하기 생존전", cat="RETRO", top=(6, 10, 24), bot=(3, 4, 10), accent=(0, 217, 255), motif=m_dodge),
+    "dodge":           dict(title="SPACE-Z", sub="스페이스-Z — 레서판다 럭키와 우주 끝까지", cat="ARCADE", top=(6, 10, 24), bot=(3, 4, 10), accent=(0, 217, 255), motif=m_dodge),
     "starship-lander": dict(title="STARSHIP LANDER", sub="우주선 착륙 — 추력 조절의 미학", cat="RETRO", top=(8, 12, 24), bot=(3, 5, 10), accent=(255, 160, 60), motif=m_lander),
     "lucky-merge":     dict(title="LUCKY MERGE", sub="행성 합체 — 우주 2048 퍼즐", cat="PUZZLE", top=(14, 10, 28), bot=(6, 4, 12), accent=(167, 139, 250), motif=m_merge),
     "orbit":           dict(title="DELTA-V", sub="델타-브이 — 우주기업 연구원 시뮬레이션", cat="SIM", top=(4, 6, 14), bot=(1, 2, 5), accent=(56, 232, 200), motif=m_orbit),
