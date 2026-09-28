@@ -552,16 +552,20 @@ async function runDet(base){
         const A0 = M[cfgKey(c, c.steps[0])];
         for(const st of c.steps.slice(1)){
             const B = M[cfgKey(c, st)]; const a = A0._raw, b = B._raw;
-            /* 짝짓기는 순서 무관(2026-09-28 통합): 33ms 에선 서로 다른 논리 시각의 운석(협곡 줄 + 일반 운석)이 한 프레임에
-               함께 처음 관측돼 목록 순서가 16.67ms 와 달라질 수 있다 → 인덱스로 짝지으면 오탐(249px).
-               각 운석을 관측 시각 ±60ms 안에서 가장 가까운 미사용 운석과 짝짓고, 짝 없는 운석은 999px 로 센다 */
+            /* 짝짓기는 순서에 느슨하게(2026-09-28 통합): 33ms 에선 서로 다른 논리 시각의 운석(협곡 줄 + 일반 운석)이 한 프레임에
+               함께 처음 관측돼 목록 순서가 16.67ms 와 달라질 수 있다 → 같은 인덱스끼리 짝지으면 오탐(249px).
+               각 운석을 인덱스 ±8 안의 미사용 운석 중 '속도가 같은 것 우선, 그다음 좌표 거리 + 0.1×관측 시각차(ms)' 가 가장 작은 것과 짝짓는다.
+               관측 시각은 창이 아니라 가중치로만 쓴다(fx 모드는 히트스톱 때문에 첫 관측 시각이 프레임률마다 수십 ms 어긋난다).
+               같은 x 열이 반복되는 협곡 줄끼리 엇갈려 짝지어지지 않게 하는 게 시각 가중치의 몫. 짝 없는 운석은 999px */
             const n = Math.min(a.met.length, b.met.length); let maxPos = 0, velDiff = 0;
-            const usedB = new Uint8Array(b.met.length);
-            const tEnd = n ? Math.min(a.met[a.met.length - 1][0], b.met[b.met.length - 1][0]) - 60 : 0;   /* 관측 상한(nMet) 경계 근처는 짝이 잘릴 수 있어 제외 */
-            for(let i = 0; i < n; i++){
-                const p = a.met[i]; if(p[0] > tEnd) continue;
-                let bj = -1, bd = 1e9;
-                for(let j = 0; j < b.met.length; j++){ if(usedB[j]) continue; const s = b.met[j]; if(Math.abs(s[0] - p[0]) > 60) continue; const dd = Math.hypot(p[1] - s[1], p[2] - s[2]); if(dd < bd){ bd = dd; bj = j; } }
+            const usedB = new Uint8Array(b.met.length), WIN = 8;
+            for(let i = 0; i < n - WIN; i++){   /* 목록 끝(관측 상한 400) 근처는 짝이 목록 밖에 있을 수 있어 제외 */
+                const p = a.met[i]; let bj = -1, bc = 1e18, bd = 0;
+                for(let j = Math.max(0, i - WIN); j <= Math.min(b.met.length - 1, i + WIN); j++){
+                    if(usedB[j]) continue; const s = b.met[j];
+                    const dd = Math.hypot(p[1] - s[1], p[2] - s[2]), vd = Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5 ? 1 : 0;
+                    const cost = vd * 1e6 + dd + 0.1 * Math.abs(s[0] - p[0]); if(cost < bc){ bc = cost; bj = j; bd = dd; }
+                }
                 if(bj < 0 || bd > 60){ maxPos = Math.max(maxPos, 999); continue; }
                 usedB[bj] = 1; const s = b.met[bj];
                 maxPos = Math.max(maxPos, bd); if(Math.hypot(p[3] - s[3], p[4] - s[4]) > 0.5) velDiff++;
