@@ -788,7 +788,9 @@ POSTCARD_NOTES = {
 # 위험 색(달군 황색) — 존 무관 동일. 밝기가 중요하다: 어두운~중간 배경(휘도 ≤0.11)은 이 림이,
 # 밝은 배경(≥0.10)은 바깥 검은 윤곽이 3:1 을 맡아 어떤 배경에서도 둘 중 하나가 실루엣을 지킨다.
 # (1차: 진한 주황 #FF7329 1.5px — 게임 크기 30px 로 줄면 0.7px 로 뭉개져 중간 톤 행성 위 대비 1.7:1)
-RIM_COLOR = (1.0, 0.86, 0.48)     # 상대휘도 ≈0.74
+# (2차: 금빛 #FFDB7A — 게임 안에서 보급 캡슐·금빛 아이템과 같은 색이라 운석이 '줍는 것'처럼 읽혔다.
+#  2026-09-28 P6 런타임 통합: 일반 운석 꼬리·글로우(#DDE8FF 계열)와 같은 얼음빛으로. 폭·검은 윤곽·휘도는 거의 같아 대비 유지)
+RIM_COLOR = (0.80, 0.89, 1.0)     # 상대휘도 ≈0.87
 
 
 def _maxfilter(np, a, r):
@@ -801,7 +803,7 @@ def _maxfilter(np, a, r):
     return out
 
 
-def build_meteor_rims(out_dir, report, r_rim=4, r_out=9, out_alpha=1.0):
+def build_meteor_rims(out_dir, report, r_rim=4, r_out=9, out_alpha=1.0, rim_alpha=1.0, soft=0):
     """기존 운석 렌더(512) → 128 + 바깥 4px 위험색 림 + 그 밖 5px 검은 윤곽 (게임 30 CSS px·DPR2 에서 각각 ≈1.9px·2.3px).
     균일 배경 휘도 0~0.5 전 구간에서 최악 대비 3.19:1 (DPR2) / 3.4:1 (DPR3) — 스윕으로 정한 값.
     밝은 행성(목성 띠·토성) 위에서는 어두운 윤곽이, 어두운 우주에서는 주황 림이 실루엣을 지킨다.
@@ -815,6 +817,11 @@ def build_meteor_rims(out_dir, report, r_rim=4, r_out=9, out_alpha=1.0):
         A1 = _maxfilter(np, A, r_rim)        # 림 바깥 경계
         A2 = _maxfilter(np, A, r_out)        # 검은 윤곽 바깥 경계
         rim = np.clip(A1 - A * 0.85, 0, 1)
+        if soft:   # 바깥쪽 soft px 는 선형으로 옅어진다 — 선(스티커)이 아니라 가장자리 빛으로 읽히게
+            Ain = _maxfilter(np, A, max(1, r_rim - soft))
+            rim = np.clip(np.clip(Ain - A * 0.85, 0, 1) + (rim - np.clip(Ain - A * 0.85, 0, 1)) * 0.45, 0, 1)
+        rim_m = rim > 0.4
+        rim = rim * rim_alpha
         dark = np.clip(A2 - A1, 0, 1)
         base = np.zeros_like(a)
         base = over(base, np.dstack([np.full_like(A, 0.02), np.full_like(A, 0.012), np.full_like(A, 0.008), dark * out_alpha]), 0, 0)
@@ -828,12 +835,12 @@ def build_meteor_rims(out_dir, report, r_rim=4, r_out=9, out_alpha=1.0):
         name = "meteor_%s_rim" % k
         p = os.path.join(out_dir, name + ".webp")
         q, sz = save_webp(clean_alpha(base), p, 6, q0=85)
-        res[name] = dict(img=base, body=A > 0.5, rim=(rim > 0.5) & (A < 0.5), dark=(dark > 0.5) & (rim < 0.3))
+        res[name] = dict(img=base, body=A > 0.5, rim=rim_m & (A < 0.5), dark=(dark > 0.5) & ~rim_m)
         report.append(dict(path="public/assets/spacez/z/%s.webp" % name, px=[128, 128], kb=round(sz / 1024, 1),
                            quality=q, anchor="center(64,64) — 기존 meteor_%s.webp 와 같은 프레임·같은 R" % k,
                            draw="기존과 동일: drawImage(im,-R,-R,2R,2R), R=15 (30 CSS px)",
                            alpha_bbox=list(bb),
-                           notes="기존 meteor_%s 에 위험색(#FFDB7A) 4px 림 + 바깥 5px 검은 윤곽을 구움(128px 기준). "
+                           notes="기존 meteor_%s 에 얼음빛(#CCE3FF) 4px 림(바깥 1px 옅게) + 바깥 5px 검은 윤곽을 구움(128px 기준). "
                                  "참조만 바꾸면 됨(추가 draw call 0). 원본 meteor_%s.webp 는 덮어쓰지 않음" % (k, k)))
     return res
 
@@ -879,7 +886,7 @@ def post(shots=None, manifest=None):
                                notes="%s 의 절반 해상도 (tier2 또는 deviceMemory<=3). 좌표·비율 동일 — 모든 px 값 x0.5" % name))
         print("  %-16s %4dx%-4d q%-2d %6.1fKB (예산 %d)" % (name, spec["w"], spec["h"], q, sz / 1024, spec["kb"]))
     pcs = build_postcards(finals, PUB_DIR, report)
-    rims = build_meteor_rims(PUB_DIR, report)
+    rims = build_meteor_rims(PUB_DIR, report, soft=1)   # P6 런타임: 바깥 1px 를 옅게 — 스티커 선이 아니라 가장자리 빛으로 (최소 대비 3.16:1)
     tot = sum(os.path.getsize(os.path.join(PUB_DIR, f)) for f in os.listdir(PUB_DIR) if f.endswith(".webp"))
     boot = sum(os.path.getsize(os.path.join(PUB_DIR, n + ".webp")) for n in
                ("z00_earth_limb", "z00_clouds", "zone_moon", "earth_small", "zone_mars", "phobos"))
