@@ -677,7 +677,15 @@ body::after{
         rgba(2,4,16,0)   55%,
         rgba(2,4,16,.25) 100%);
     backdrop-filter:none;-webkit-backdrop-filter:none;
+    /* D (S13) — 숫자·관제 줄을 상단 1/3(로켓 코 위 여백)으로 — 주인공(점화·상승)을 글자가 가리지 않게 */
+    justify-content:flex-start;padding-top:max(40px,8%);
 }
+/* D (S13) — 발사 → 궤도 컷 순간 0.22s 청백 플래시(흔들림 없음). 입력은 그대로 캔버스로 간다(pointer-events:none) */
+.intro-overlay.sz-cut{display:flex;pointer-events:none;background:radial-gradient(ellipse at 50% 42%,rgba(236,246,255,.92) 0%,rgba(150,200,255,.5) 45%,rgba(90,150,255,0) 82%);
+    backdrop-filter:none;-webkit-backdrop-filter:none;animation:szCut .22s ease-out forwards}
+.intro-overlay.sz-cut>*{visibility:hidden}
+@keyframes szCut{from{opacity:1}to{opacity:0}}
+@media (prefers-reduced-motion:reduce){.intro-overlay.sz-cut{display:none}}
 .intro-count{
     font-family:'Orbitron','Noto Sans KR',sans-serif;
     font-size:5.2em;font-weight:900;line-height:1;color:#00D9FF;
@@ -2772,6 +2780,7 @@ function runIntroCountdown(fast){
                     overlay.classList.remove('on');
                     overlay.setAttribute('aria-hidden', 'true');
                     _stopIntroLaunch();
+                    _szIntroCut(overlay);
                     _introRunning = false;
                     resolve();
                 }, 600);
@@ -2810,10 +2819,20 @@ function _runIntroFast(){
             overlay.classList.remove('on', 'sz-fast');
             overlay.setAttribute('aria-hidden', 'true');
             _stopIntroLaunch();
+            _szIntroCut(overlay);
             _introRunning = false;
             resolve();
         }, 1150);
     });
+}
+/* D (S13) — 발사대 → 궤도 하드 컷을 0.22s 청백 플래시 + 워프 속도선(szIntroWarp, 캔버스 배경층)으로 잇는다. 흔들림 없음 */
+function _szIntroCut(ov){
+    try{
+        if(window.SZ3 && SZ3.RM) return;
+        ov.classList.remove('sz-cut'); void ov.offsetWidth; ov.classList.add('sz-cut');
+        clearTimeout(_szIntroCut._t); _szIntroCut._t = setTimeout(() => ov.classList.remove('sz-cut'), 260);
+        if(typeof szIntroWarp === 'function') szIntroWarp();
+    }catch(_){}
 }
 
 /* MECHAZILLA 발사 장면 — idle loop 에서 호출. t = launch start 부터 경과 초.
@@ -3272,7 +3291,10 @@ const SZ_FLAGS = (function(){
     try{ if(localStorage.getItem('szx_fx') === '0') fx = false; }catch(_){}
     /* 2026-09-29 운영자: SAT 위성 버튼은 유지·고도화 — BEAM 통합(beamMerge)은 코드에서 삭제했다(입력 하나 = 결과 하나).
        지구돋이는 '달 위에 지구가 붙은' 장면이라 재설계 전까지 끔 */
-    return { fx: fx, spectate: true, earthrise: false };
+    /* D — 재설계한 지구돋이(먼 층 시차)는 운영자 확인 전까지 끔. ?earthrise=1 로 미리 본다(표시 전용 — 결정성 무관) */
+    let er = false;
+    try{ er = /[?&]earthrise=1(?:&|$)/.test(location.search); }catch(_){}
+    return { fx: fx, spectate: true, earthrise: er };
 })();
 window.SZ_FLAGS = SZ_FLAGS;
 /* BEAM 조작 설정. szx_beam = 'hold'(기본: 누르는 동안만) | 'tap'(터치 탭 토글 — 설정 칩으로 고른 사람만).
@@ -3636,6 +3658,7 @@ function drawStars(layerFrom, layerTo){
     const streak=(lt>=2 && zIdx!==10) ? _streakSprite(zIdx) : null;
     const smul=(typeof szStreakMul==='number' && szStreakMul>0) ? szStreakMul : 1;
     const skz=szP7StarK();   /* P7 — 은하간 공간 ×0.35 · 부츠 초공동 ×0.1 */
+    const hd=(lt>=2 && typeof _szHeroDisk!=='undefined') ? _szHeroDisk : null;   /* D — 가까운 층은 행성 원반 위에 찍지 않는다(원근) */
     ctx.save();
     ctx.lineCap='round';
     for(let i=0;i<stars.length;i++){
@@ -3663,6 +3686,7 @@ function drawStars(layerFrom, layerTo){
         let x=s.x-pxOff*L.par;
         if(x<-4) x+=CW+8; else if(x>CW+4) x-=CW+8;
         if(s.layer===2){
+            if(hd){ const dx=x-hd.x, dy=(s.y-hd.y)/hd.asp; if(dx*dx+dy*dy<hd.r*hd.r) continue; }
             /* 가까운 층 — 테이퍼 스트릭 스프라이트 (오르트 구름은 별마다 색이 달라 스프라이트도 별마다) */
             const len=Math.max(2, s.speed*0.035*smul);
             const w=s.r*2.2;
@@ -6455,6 +6479,7 @@ function drawTON618(zoneT){
 function drawZonePlanet(zIdx, dt){
     if(SZ_FLAGS.fx){ const _wn = performance.now(); szP7WarpTick(_wn); szP7WarpDraw(_wn); }   /* P7 — 워프(별 속도선 배율·막 경계 방사선, 배경층) */
     const zoneT=getZoneT(zIdx);
+    _szHeroDisk = null;   /* D — 이번 프레임 히어로 원반(szHero 가 채움 → drawStars 가까운 층) */
     if(zoneT<0||zoneT>1.1) return;
     /* P6 — 존 아트 로더(진입 때 한 번) · 존 경계 1.5s 동안 직전 히어로를 이어 그려 팝 제거(블랙홀 존 제외) */
     if(SZ_FLAGS.fx){
@@ -6907,7 +6932,9 @@ function szArtFree(key){
 function szArtZone(z){
     if(!SZ_FLAGS.fx) return;
     const want = new Set();
-    for(let i = z; i <= z + 2; i++) (SZ_ZONE_ART[i] || []).forEach(k => want.add(k));
+    /* D — 직전 존(z-1) 키도 지킨다: 경계 1.5s 동안 직전 판·히어로를 이어 그리는데, 인접 존과 공유하는 키
+       (milkyway_back·andromeda 등)를 여기서 풀면 교차 페이드가 한 프레임에 증발했다(R21-02) */
+    for(let i = z - 1; i <= z + 2; i++) (SZ_ZONE_ART[i] || []).forEach(k => want.add(k));
     for(let i = 0; i <= SZ_ART_BOOT; i++) (SZ_ZONE_ART[i] || []).forEach(k => want.add(k));
     for(const i in SZ_ZONE_ART){
         /* 지난 존(≤ i-2) + 재시작으로 되돌아왔을 때 창 밖 앞쪽 존(> i+2) */
@@ -6953,7 +6980,7 @@ const SZ_HERO = {
     4: { key:'zone_jupiter', rMax:150, side:0.22, frac:0.909, glow:'gold', halo:0.35,
          moon:{ key:'io', frac:0.94, k:0.07, orb:1.5, tilt:0.14, spd:1.1, a0:0.6 } },
     5: { key:'zone_saturn', rMax:84, side:0.78, pr:181.1, fw:896, fh:560, glow:'gold', halo:0.3,
-         moon:{ key:'titan', frac:0.94, k:0.13, orb:2.75, tilt:0.22, spd:0.7, a0:0.9, front:1 } },
+         moon:{ key:'titan', frac:0.94, k:0.13, orb:2.75, tilt:0.22, spd:0.7, a0:0.9 } },
     6: { key:'zone_uranus', rMax:84, side:0.22, pr:105.3, fw:448, fh:448, glow:'cyan', halo:0.5 },
     7: { key:'zone_neptune', rMax:94, side:0.78, frac:0.94, glow:'cold', halo:0.6 },
     8: { key:'zone_pluto', rMax:80, side:0.22, frac:0.94, glow:'white',
@@ -7038,6 +7065,8 @@ function _szDrawDisk(im, x, y, r, frac, asp){
     ctx.drawImage(im, x - d / 2, y - h / 2, d, h);
 }
 let _szEarthriseRun = null;
+/* D — 이번 프레임 현재 존 히어로 원반(가까운 별 층이 원반 위에 별을 찍지 않게 drawStars 가 읽는다). drawZonePlanet 이 매 프레임 비운다 */
+var _szHeroDisk = null;
 /* 존 zIdx 의 히어로를 그리면 true. 자산이 아직이면 false (호출부가 기존 그림으로 폴백) */
 function szHero(zIdx, zoneT){
     if(zIdx === 0) return szHeroEarth(zoneT);
@@ -7050,60 +7079,133 @@ function szHero(zIdx, zoneT){
     const asp = _szAsp(), r = asp > 1 ? f.r / Math.sqrt(asp) : f.r;
     /* 화면 밖이면 그리지 않는다(고리 천체는 프레임이 넓다) */
     const ext = H.pr ? r * H.fw / H.pr / 2 : r / (H.frac || 0.94);
-    const extUp = (zIdx === 1 && zoneT >= 0.55) ? (r + 70) * asp : 0;   /* 지구돋이 지구는 달 위로 솟아 있다 */
-    if(f.a <= 0.01 || f.y - Math.max(ext * asp, extUp) > CH + 4 || f.x + ext < -4 || f.x - ext > CW + 4) return true;
+    /* 지구돋이 — 먼 층이라 달보다 먼저 그린다(달 원반이 가린다). 달이 화면을 떠나도 존 끝까지 남으니 화면 밖 판정보다 앞 */
+    if(zIdx === 1 && SZ_FLAGS.earthrise) szEarthrise(zoneT, asp);
+    if(f.y - ext * asp > CH + 4 || f.x + ext < -4 || f.x - ext > CW + 4) return true;
+    /* D — 입장은 알파 대신 '예고 빛점 → 원반'. 원반은 늘 불투명(뒤 별·HUD 비침 없음), 크기 0.3→1 과 어둠 덮개로 밝아진다.
+       (szFlyby 의 a 는 쓰지 않는다 — s>1 반투명도 없앴다. 행성은 어차피 운석 아래 배경층) */
+    let ea = zoneT < 0.15 ? Math.max(0, zoneT / 0.15) : 1; ea = ea * ea * (3 - 2 * ea);
+    const rd = r * (0.3 + 0.7 * ea);
+    if(zoneT <= 1) _szHeroDisk = {x: f.x, y: f.y, r: rd * 0.97, asp: asp};
     ctx.save();
-    ctx.globalAlpha = f.a;
-    /* 위성 — 궤도 뒤쪽이면 행성 뒤에, 앞쪽이면 앞에 */
+    /* 위성 — 궤도 뒤쪽이면 행성 뒤에, 앞쪽이면 앞에. 뒤쪽이면서 원반과 겹치면 행성이 가린다(그리지 않음) */
     let mo = null;
     if(H.moon){
         const M = H.moon, mim = szArt(M.key);
         if(mim){
-            const P = szHeroMoonAt(zIdx, zoneT, asp);   /* 과제 목표(포보스)와 같은 식 — szBodyAt 절 */
-            mo = { im: mim, x: P.x, y: P.y, r: P.r, frac: M.frac, front: P.front };
-            if(!mo.front) _szDrawDisk(mo.im, mo.x, mo.y, mo.r, mo.frac, asp);
+            /* B 좌표(과제 목표 포보스와 같은 식 — szBodyAt 절) + D 입장 크기(rd/r 로 원반 중심 기준 축소 — 모든 항이 r 에 비례라 정확).
+               입장(zoneT<0.15)은 미션 창(≥0.20)과 겹치지 않아 과제 판정과 그림이 어긋나는 순간은 없다 */
+            const P = szHeroMoonAt(zIdx, zoneT, asp), kk = r > 0 ? rd / r : 1;
+            mo = { im: mim, x: f.x + (P.x - f.x) * kk, y: f.y + (P.y - f.y) * kk, r: Math.max(1.4, P.r * kk), frac: M.frac, front: P.front };
+            const hid = !mo.front && Math.hypot(mo.x - f.x, (mo.y - f.y) / asp) < rd - mo.r * 0.5;
+            ctx.globalAlpha = ea;
+            if(!mo.front && !hid) _szDrawDisk(mo.im, mo.x, mo.y, mo.r, mo.frac, asp);
         }
     }
     /* 대기 헤일로 — 가스·대기 천체만, 가산 1장(굽힌 방사 그라데이션). 등급 2 에선 뺀다 */
     if(H.halo && !(window.SZ3 && SZ3.tier && SZ3.tier() >= 2)){
         ctx.globalCompositeOperation = 'lighter';
-        ctx.globalAlpha = f.a * H.halo;
-        const hr = r * 1.3;
+        ctx.globalAlpha = ea * H.halo;
+        const hr = rd * 1.3;
         ctx.drawImage(SZ_GLOW[H.glow] || SZ_GLOW.white, f.x - hr, f.y - hr * asp, hr * 2, hr * 2 * asp);
         ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = f.a;
     }
+    /* 입장 중 어둠 덮개 — 원반 자리를 먼저 불투명하게 막아(별 비침 0) 그 위에 밝기 ea 로 */
+    if(ea < 1){
+        ctx.globalAlpha = 1; ctx.fillStyle = '#04060f';
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, rd * 0.985, rd * 0.985 * asp, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = ea;
     if(H.pr){
-        const w = r * H.fw / H.pr, h = w * H.fh / H.fw * asp;
+        const w = rd * H.fw / H.pr, h = w * H.fh / H.fw * asp;
         ctx.drawImage(im, f.x - w / 2, f.y - h / 2, w, h);
     } else {
-        _szDrawDisk(im, f.x, f.y, r, H.frac, asp);
-    }
-    if(zIdx === 1 && zoneT >= 0.55 && SZ_FLAGS.earthrise){
-        /* 지구돋이 (zoneT 0.55~0.8) — 달 윗 림 뒤에서 40px 떠오른다. 달 원반 바깥만 그리는 클립(구간 안에서만)이라
-           달이 반투명(s>1, α0.85)이어도 지구가 비쳐 보이지 않는다 */
-        const e = szArt('earth_small');
-        const k = Math.min(1, (zoneT - 0.55) / 0.25), kk = k * k * (3 - 2 * k);
-        if(e && kk > 0){
-            const re = Math.max(10, Math.min(30, r * 0.24));
-            const ex = f.x + r * 0.28, top = f.y - asp * Math.sqrt(Math.max(0, r * r - (r * 0.28) * (r * 0.28)));
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(ex - re - 3, top - 70 * asp, re * 2 + 6, (72 + re * 2) * asp);
-            ctx.ellipse(f.x, f.y, r * 0.975, r * 0.975 * asp, 0, 0, Math.PI * 2, true);
-            ctx.clip('evenodd');
-            _szDrawDisk(e, ex, top + (re + 2 - kk * 42) * asp, re, 0.859, asp);
-            ctx.restore();
-        }
-        if(running && _szEarthriseRun !== startedAt){
-            _szEarthriseRun = startedAt;
-            try{ window.SZ3 && SZ3.beat && SZ3.beat('earthrise'); }catch(_){}
-        }
+        _szDrawDisk(im, f.x, f.y, rd, H.frac, asp);
     }
     if(mo && mo.front) _szDrawDisk(mo.im, mo.x, mo.y, mo.r, mo.frac, asp);
     ctx.restore();
     ctx.globalAlpha = 1;
     return true;
+}
+/* ── 지구돋이 (D, 2026-09-29 재설계 — SZ_FLAGS.earthrise, 운영자 승인 전 기본 끔 · ?earthrise=1 로 켜 본다) ──
+   '달 위에 붙은 작은 지구'(달 좌표로 지구를 계산 → 달과 함께 끌려 다님)를 버리고 진짜 시차로 바꾼다.
+   · 지구 = 먼 층. 화면의 거의 고정점(존 동안 달 이동량의 3%, ≤10px 드리프트)에 반지름 10(9~11) 고정 — 달이 커져도 지구는 그대로
+   · 자리는 달의 szFlyby 경로에서 계산: zt≈0.45 에는 달 원반 뒤에 완전히 숨어 있고, 달이 좌하단으로 지나가며
+     뒤쪽 윗 림 위로 드러난다(50% = 'earthrise' 비트, ≈0.62 에 완전히). 숨어 있는 동안에만 나타나므로 팝이 없다
+   · 달보다 먼저 그리고 달 원반은 불투명 — 사각 클립 없이 자연 가림. 명암선은 달과 같은 방향(왼쪽 위 햇빛), 얇은 청색 대기 테
+   · 달이 떠난 뒤 존 끝까지 남았다가 존 2 첫 1.5s 에 흐려진다(drawZonePlanet 의 직전 히어로 이어 그리기) */
+let _szErGeo = null, _szErSpr = null, _szErDbg = null;
+function _szErMoon(zt, asp){ const H = SZ_HERO[1], f = szFlyby(zt, H.side, H.rMax); return {x: f.x, y: f.y, r: asp > 1 ? f.r / Math.sqrt(asp) : f.r}; }
+function _szErAt(G, zt, asp){
+    const c = _szErMoon(zt, asp);
+    let dx = (c.x - G.c0.x) * 0.03, dy = (c.y - G.c0.y) * 0.03;
+    const m = Math.hypot(dx, dy); if(m > 10){ dx *= 10 / m; dy *= 10 / m; }
+    return {x: G.ex + dx, y: G.ey + dy, c};
+}
+function _szErGeom(asp){
+    const key = CW + '|' + CH + '|' + asp.toFixed(3);
+    if(_szErGeo && _szErGeo.key === key) return _szErGeo;
+    const re = Math.max(9, Math.min(11, 10 / Math.sqrt(Math.max(1, asp)))), rg = re * 1.35;   /* rg = 대기 테까지 */
+    const TH = 0.555, c0 = _szErMoon(TH, asp);
+    const g = (G, t) => { const P = _szErAt(G, t, asp); return Math.hypot(P.x - P.c.x, (P.y - P.c.y) / asp) - P.c.r; };
+    let best = null;
+    for(let deg = 186; deg <= 290; deg += 2){
+        const th = deg * Math.PI / 180;
+        const G = {c0, ex: c0.x + Math.cos(th) * c0.r, ey: c0.y + Math.sin(th) * c0.r * asp};
+        if(G.ex < CW * 0.08 || G.ex > CW * 0.5 || G.ey < CH * 0.17 || G.ey > CH * 0.5) continue;
+        let tc = -1, tr = -1, ok = true;
+        for(let t = TH; t >= 0.3; t -= 0.0025) if(g(G, t) <= -rg){ tc = t; break; }
+        for(let t = TH; t <= 1.0; t += 0.0025) if(g(G, t) >= rg){ tr = t; break; }
+        if(tc < 0 || tr < 0) continue;
+        for(let t = tr; t <= 1.08; t += 0.01) if(g(G, t) < rg){ ok = false; break; }   /* 드러난 뒤 다시 가려지면 안 된다 */
+        if(!ok) continue;
+        const sc = Math.abs(tr - tc - 0.13) + 0.25 * Math.abs(G.ex / CW - 0.28);
+        if(!best || sc < best.sc) best = {sc, ex: G.ex, ey: G.ey, tc, tr};
+    }
+    if(!best){ const P0 = {x: CW * 0.28, y: CH * 0.3}; best = {ex: P0.x, ey: P0.y, tc: 2, tr: 2}; }   /* 못 찾으면 그리지 않는다 */
+    _szErGeo = {key, re, c0, ex: best.ex, ey: best.ey, tc: best.tc, tr: best.tr, th: TH};
+    return _szErGeo;
+}
+/* 지구 한 장 굽기 — 원반 + 밤 쪽 그늘(부드러운 명암선) + 빛 쪽 림 + 뒤에 청색 대기 테 */
+function _szErSprite(img){
+    if(_szErSpr && _szErSpr.src === img) return _szErSpr;
+    const S = 96, R = 30, cv = document.createElement('canvas'); cv.width = cv.height = S;
+    const x = cv.getContext('2d'), c = S / 2, d = 2 * R / 0.859;
+    x.drawImage(img, c - d / 2, c - d / 2, d, d);
+    x.save();
+    x.globalCompositeOperation = 'source-atop';
+    x.translate(c, c); x.rotate(Math.PI / 4);          /* 지역 +x = 밤 쪽(오른쪽 아래) — 햇빛은 왼쪽 위, 달과 같다 */
+    for(const a of [0.08, 0.2, 0.32]){
+        x.fillStyle = 'rgba(2,4,12,0.42)';
+        x.beginPath(); x.arc(0, 0, R + 2, -Math.PI / 2, Math.PI / 2); x.ellipse(0, 0, R * a, R + 2, 0, Math.PI / 2, -Math.PI / 2, true); x.fill();
+    }
+    x.strokeStyle = 'rgba(170,215,255,0.55)'; x.lineWidth = 2.2;
+    x.beginPath(); x.arc(0, 0, R - 1, Math.PI * 0.62, Math.PI * 1.38); x.stroke();
+    x.restore();
+    x.globalCompositeOperation = 'destination-over';
+    const gr = x.createRadialGradient(c - 1.5, c - 1.5, R * 0.9, c - 1.5, c - 1.5, R * 1.4);
+    gr.addColorStop(0, 'rgba(120,180,255,0.5)'); gr.addColorStop(0.3, 'rgba(90,150,255,0.2)'); gr.addColorStop(1, 'rgba(60,120,255,0)');
+    x.fillStyle = gr; x.beginPath(); x.arc(c - 1.5, c - 1.5, R * 1.4, 0, Math.PI * 2); x.fill();
+    _szErSpr = {src: img, cv, R, S};
+    return _szErSpr;
+}
+function szEarthrise(zoneT, asp){
+    const e = szArt('earth_small');
+    if(!e) return;
+    const G = _szErGeom(asp);
+    if(zoneT < G.tc) return;                                   /* 달 뒤에 완전히 숨은 뒤에만 존재 — 나타나는 순간이 보이지 않는다 */
+    const a = zoneT > 1 ? Math.max(0, 1 - (zoneT - 1) * ZONES[1].dur / 1.5) : 1;
+    if(a <= 0.01) return;
+    const P = _szErAt(G, Math.min(1, zoneT), asp), sp = _szErSprite(e);
+    const w = G.re * sp.S / sp.R, h = w * asp;
+    ctx.globalAlpha = a;
+    ctx.drawImage(sp.cv, P.x - w / 2, P.y - h / 2, w, h);
+    ctx.globalAlpha = 1;
+    _szErDbg = {x: Math.round(P.x * 10) / 10, y: Math.round(P.y * 10) / 10, r: G.re, tc: G.tc, tr: G.tr, zt: Math.round(zoneT * 1000) / 1000};
+    if(zoneT >= G.th && zoneT < 1 && running && _szEarthriseRun !== startedAt){
+        _szEarthriseRun = startedAt;
+        try{ window.SZ3 && SZ3.beat && SZ3.beat('earthrise'); }catch(_){}
+    }
 }
 /* 존 0 — 지구 림. 폭 = CW×k 로 아래 가장자리에 붙이고, 존이 흐를수록 작아지며(곡률↑) 아래로 가라앉는다.
    구름층은 같은 사각형에 천천히 흘리고, 오른쪽 림(일출 쪽)에 햇빛 글린트 1장 */
@@ -7115,9 +7217,12 @@ function szHeroEarth(zoneT){
     const asp = _szAsp();                                /* 납작한 캔버스에서도 곡률이 같게 세로를 되돌린다 */
     const W = CW * k, H = W * 560 / 1080 * asp;
     const need = CH - W * (560 - 150) / 1080 * asp;     /* 아래 가장자리가 화면 바닥보다 위로 뜨지 않게 */
-    const apex = Math.max(need, CH * (0.75 + 0.30 * e * e));
+    const apex = Math.max(need, CH * (0.75 + 0.18 * e * e));   /* D — 0.30→0.18: 지구 림이 존 끝까지 남아 달 예고점과 이어진다(첫 30초 빈 화면 제거) */
     const top = apex - W * 150 / 1080 * asp, x0 = (CW - W) / 2;
-    if(top - 20 < CH){
+    /* D — 존 1 로 넘어간 뒤 이어 그리는 1.5s 동안 서서히 흐려진다(예전엔 1.5s 에 한 프레임에 사라졌다) */
+    const fa = zoneT > 1 ? Math.max(0, 1 - (zoneT - 1) * ZONES[0].dur / 1.5) : 1;
+    if(top - 20 < CH && fa > 0.01){
+        ctx.globalAlpha = fa;
         ctx.drawImage(L, x0, top, W, H);
         const C = szArt('z00_clouds');
         if(C){
@@ -7130,20 +7235,34 @@ function szHeroEarth(zoneT){
             const dx = gx - cxp, gy = cyp - asp * Math.sqrt(Math.max(0, R * R - dx * dx));
             const pulse = 0.78 + 0.22 * Math.sin(e * 22 * 0.9);
             ctx.globalCompositeOperation = 'lighter';
-            szGlow(SZ_GLOW.white, gx, gy, 46, 0.5 * pulse);
-            szGlow(SZ_GLOW.gold, gx, gy, 20, 0.55 * pulse);
+            szGlow(SZ_GLOW.white, gx, gy, 46, 0.5 * pulse * fa);
+            szGlow(SZ_GLOW.gold, gx, gy, 20, 0.55 * pulse * fa);
             ctx.globalCompositeOperation = 'source-over';
             ctx.globalAlpha = 1;
         }
+        ctx.globalAlpha = 1;
     }
     if(zoneT <= 1) drawISS(performance.now(), zoneT);
     return true;
 }
 /* 다음 존 예고 — zoneT>0.7 이면 다음 히어로를 상단 가운데 2~4px 빛점으로 */
 function szHeroPreview(zIdx, zoneT){
+    if(typeof SZ_GLOW === 'undefined') return;
+    /* D — 새 존 입장: 직전 존 끝의 예고 빛점(k=1)을 히어로 원반이 반쯤 밝아질 때(zoneT 0.075)까지 교차 페이드로 이어 그린다 — 경계 깜빡임 제거 */
+    const Hc = SZ_HERO[zIdx];
+    if(Hc && zoneT < 0.075){
+        let ea = zoneT / 0.15; ea = ea * ea * (3 - 2 * ea);
+        const q = Math.max(0, 1 - ea / 0.5);
+        ctx.globalCompositeOperation = 'lighter';
+        szGlow(SZ_GLOW[Hc.glow] || SZ_GLOW.white, CW * 0.5, CH * 0.12, 10, 0.85 * q);
+        szGlow(SZ_GLOW.white, CW * 0.5, CH * 0.12, 4, 0.9 * q);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1;
+    }
     const H = SZ_HERO[zIdx + 1];
-    if(!H || zoneT < 0.7 || typeof SZ_GLOW === 'undefined') return;
-    const k = Math.min(1, (zoneT - 0.7) / 0.3);
+    const th = zIdx === 0 ? 0.6 : 0.7;   /* 존 0 은 0.6 부터 — 지구를 떠나며 달을 미리 본다 */
+    if(!H || zoneT < th) return;
+    const k = Math.min(1, (zoneT - th) / (1 - th));
     ctx.globalCompositeOperation = 'lighter';
     szGlow(SZ_GLOW[H.glow] || SZ_GLOW.white, CW * 0.5, CH * 0.12, 5 + 5 * k, 0.35 + 0.5 * k);
     szGlow(SZ_GLOW.white, CW * 0.5, CH * 0.12, 2 + 2 * k, 0.5 + 0.4 * k);
@@ -7188,7 +7307,10 @@ function _p7St(keys){
 }
 /* 판 한 장 — (cx, cy) 중심, 폭 w(논리). 세로는 원본 비율 × 세로 보정 */
 function _p7Plate(im, cx, cy, w, a, blend){
-    if(!im || a <= 0.008) return;
+    if(!im) return;
+    if(_p7Skip && _p7Skip.has(im)) return;             /* D — 직전 존이 새 존과 공유하는 판은 새 존 쪽만 그린다 */
+    if(_p7Keep && _p7Keep.has(im)) a = a / _p7KeepK;   /* D — 새 존의 공유 판은 페이드 없이 (k 로 나눠 되돌림) */
+    if(a <= 0.008) return;
     const h = w * im.height / im.width * _p7A;
     if(cy - h / 2 > CH || cy + h / 2 < 0 || cx + w / 2 < 0 || cx - w / 2 > CW) return;
     ctx.globalAlpha = a > 1 ? 1 : a;
@@ -7213,19 +7335,17 @@ P7Z[9] = function(zoneT, k){
         const p = Math.max(0, sec) / 2.2, e = p * p;
         const w = CW * 1.1, h = w * im.height / im.width * _p7A;
         _p7Plate(im, CW / 2, -h * 0.6 + (CH + h * 1.2) * e, w, 1, 'lighter');
-    } else {
-        /* 지나온 벽 — 아래쪽에 옅게 남아 멀어진다 */
-        const w = CW * (1.1 - 0.35 * _p7E((sec - 2.2) / 14));
-        _p7Plate(im, CW / 2, CH + 20 - 60 * _p7E((sec - 2.2) / 14), w, 0.55 * k, 'lighter');
     }
-    /* 태양 — 뒤(아래)에 밝은 별 하나 */
+    /* 지나온 벽은 아래로 완전히 빠져나간다. D: 예전엔 다시 바닥에 폭 0.75CW 로 붙어 판 좌우 끝이 사각 이음새로 보이고
+       존 내내 회색 '행성 림'처럼 남았다(S11·R10) */
+    /* 태양 — 뒤(아래)에 밝은 별 하나. D: HUD(조종사 초상·항로 패널)가 없는 오른쪽 아래로 */
     const sa = _p7E((sec - 1.4) / 2.5) * k;
     ctx.globalCompositeOperation = 'lighter';
-    _p7Glow(SZ_GLOW.gold, CW * 0.3, CH * 0.9, 26, 0.55 * sa);
-    _p7Glow(SZ_GLOW.white, CW * 0.3, CH * 0.9, 7, 0.95 * sa);
+    _p7Glow(SZ_GLOW.gold, CW * 0.62, CH * 0.82, 26, 0.55 * sa);
+    _p7Glow(SZ_GLOW.white, CW * 0.62, CH * 0.82, 7, 0.95 * sa);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    _p7Voyager(CW * 0.72 - _p7Px * 0.04, CH * (0.06 + 0.5 * zoneT), k);
+    _p7Voyager(CW * 0.72 - _p7Px * 0.04, CH * (0.15 + 0.45 * zoneT), k);   /* D — 시작 y 0.15CH(HUD 줄 아래) */
     return true;
 };
 /* 보이저 — 절차 그림에서 shadowBlur 를 빼고 구운 글로우로 */
@@ -7275,16 +7395,44 @@ P7Z[11] = function(zoneT, k){
     if(y > -r * 3 && y < CH + r * 3){ ctx.globalAlpha = k; _szDrawDisk(im, x, y, r * (1 + 0.012 * Math.sin(_p7Now * 0.003)), 0.52, _p7A); ctx.globalAlpha = 1; }
     const b = szArt('proxima_b');
     if(b){
-        const f = szFlyby(zoneT, 0.8, 58), rr = f.r / Math.sqrt(Math.max(1, _p7A));
-        if(f.a > 0.01 && f.y - rr * 2 < CH){
-            ctx.save(); ctx.globalAlpha = f.a * k;
+        /* D (S11-14) — 밤면이 순검정 원이라 '구멍'처럼 보였다. 입장은 히어로처럼 빛점→원반(불투명), 청회색 대기 림,
+           작을 때(r<22)는 반달 쪽으로 위상을 보정한 구운 판을 겹친다 */
+        const f = szFlyby(zoneT, 0.8, 58);
+        let ea = zoneT < 0.15 ? Math.max(0, zoneT / 0.15) : 1; ea = ea * ea * (3 - 2 * ea);
+        const rr = f.r / Math.sqrt(Math.max(1, _p7A)) * (0.3 + 0.7 * ea);
+        if(f.y - rr * 2 < CH){
+            ctx.save();
             ctx.translate(f.x, f.y); ctx.scale(-1, 1);   /* 빛 받는 쪽이 별(왼쪽)을 향하게 */
+            if(ea < 1){ ctx.globalAlpha = k; ctx.fillStyle = '#04060f'; ctx.beginPath(); ctx.ellipse(0, 0, rr * 0.98, rr * 0.98 * _p7A, 0, 0, 6.283); ctx.fill(); }
+            ctx.globalAlpha = ea * k;
             _szDrawDisk(b, 0, 0, rr, 0.9, _p7A);
-            ctx.restore(); ctx.globalAlpha = 1;
+            const hw = Math.max(0, Math.min(1, (22 - rr) / 8));
+            if(hw > 0.01){ ctx.globalAlpha = ea * k * hw; _szDrawDisk(_p7PbHalf(b), 0, 0, rr, 0.9, _p7A); }
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.55 * ea * k; ctx.strokeStyle = '#8FA8D0'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.ellipse(0, 0, rr * 1.02, rr * 1.02 * _p7A, 0, 0, 6.283); ctx.stroke();
+            ctx.restore(); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
         }
     }
     return true;
 };
+/* 프록시마 b 반달 판 — 원본(오른쪽 초승달) 밤면에 별빛 쪽 따뜻한 반사광을 'lighten' 으로 한 번 굽는다(질감은 초승달 그대로) */
+let _p7PbH = null;
+function _p7PbHalf(im){
+    if(_p7PbH && _p7PbH.src === im) return _p7PbH.cv;
+    const S = 160, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d'), t = document.createElement('canvas'); t.width = t.height = S;
+    const y = t.getContext('2d');
+    x.drawImage(im, 0, 0, S, S);
+    y.drawImage(im, 0, 0, S, S);
+    y.globalCompositeOperation = 'source-in';
+    const g = y.createLinearGradient(S * 0.46, 0, S * 0.95, 0);
+    g.addColorStop(0, 'rgba(150,80,50,0)'); g.addColorStop(0.3, 'rgba(165,92,58,0.9)'); g.addColorStop(1, 'rgba(205,125,80,1)');
+    y.fillStyle = g; y.fillRect(0, 0, S, S);
+    x.globalCompositeOperation = 'lighten'; x.drawImage(t, 0, 0);
+    _p7PbH = {src: im, cv: c};
+    return c;
+}
 /* 12 시리우스 — 청백 A(펄서 빔 중심과 같은 자리) + 백색왜성 B */
 P7Z[12] = function(zoneT, k){
     const st = _p7St(['star_sirius']); if(st < 0) return false; if(st === 0) return true;
@@ -7354,34 +7502,68 @@ P7Z[15] = function(zoneT, k, prev){
     const x0 = CW * 0.25 - depth - (1 - Math.min(inK, outK)) * (depth + 30) + Math.sin(_p7Now * 0.0007) * 3;
     const cy = CH * 0.5 + (zoneT - 0.5) * 20;
     /* 대감광 343~355s → 초신성(355s) 섬광 → 식은 불꽃 */
-    const e = elapsedMs, B = SZB_BOSS[2];
-    let a = 1, hot = 0;
+    /* D — 원인·결과를 잇는다(S11-05, 판정 좌표 SZ_NV 는 그대로·그림만):
+       예고 3s = 불벽 림에서 SZ_NV 로 흐르는 플라스마 줄기 + 모이는 핵 → t0 섬광과 함께 불벽이 왼쪽(별 중심)으로 수축·소멸
+       → 폭발 뒤엔 SZ_NV 둘레에 적·청 필라멘트 잔해 성운이 천천히 퍼진다. 흔들림 없음 */
+    const e = elapsedMs, B = SZB_BOSS[2], d = (e - B.t0) / 1000;
+    let a = 1, hot = 0, shr = 0;
     if(e < B.t0) a = 1 - 0.4 * _p7E((e - ZONES[15].s * 1000) / 9000);
-    else { const d = (e - B.t0) / 1000; hot = d < 2.5 ? Math.max(0, 1 - d / 2.5) : 0; a = 0.6 + 0.3 * _p7E(d / 3); }
-    ctx.save();
-    ctx.translate(x0, cy); ctx.scale(1, _p7A); ctx.rotate(Math.PI / 2);
-    ctx.globalAlpha = a * k * 0.78;   /* 불벽이 운석을 가리지 않게 — 운영자 '겹침 표시 불투명' 피드백 (2026-09-29) */
-    ctx.drawImage(im, -W / 2 * s, -H * s, W * s, H * s);
-    if(hot > 0.01){ ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = hot * k; ctx.drawImage(im, -W / 2 * s, -H * s, W * s, H * s); }
-    ctx.restore();
-    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    else { hot = d < 1.6 ? Math.max(0, 1 - d / 1.6) : 0; shr = _p7E(d / 1.4); a = 0.75 * (1 - _p7E(d / 2.2)); }
+    const xw = x0 - shr * (depth * 0.7 + 40);
+    if(a * k > 0.01 || hot > 0.01){
+        ctx.save();
+        ctx.translate(xw, cy); ctx.scale(1, _p7A); ctx.rotate(Math.PI / 2);
+        ctx.globalAlpha = a * k * 0.78;   /* 불벽이 운석을 가리지 않게 — 운영자 '겹침 표시 불투명' 피드백 (2026-09-29) */
+        if(a * k > 0.01) ctx.drawImage(im, -W / 2 * s, -H * s, W * s, H * s);
+        if(hot > 0.01){ ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = hot * k; ctx.drawImage(im, -W / 2 * s, -H * s, W * s, H * s); }
+        ctx.restore();
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
+    const rimX = xw + depth, nx = SZ_NV.cx, ny = SZ_NV.cy;
+    ctx.globalCompositeOperation = 'lighter';
     /* 림에서 피어오르는 불티(글로우 몇 알) — 저사양은 생략 */
     if(_p7Tier < 2 && a > 0.5){
-        ctx.globalCompositeOperation = 'lighter';
         for(let i = 0; i < 5; i++){
             const ph = ((_p7Now * 0.00018 + i / 5) % 1), yy = CH * (0.12 + 0.19 * i) + Math.sin(i * 7.1) * 20;
-            _p7Glow(SZ_GLOW.hot, CW * 0.25 + 4 + ph * 34, yy - ph * 26, 10 * (1 - ph) + 3, 0.45 * (1 - ph) * a * k);
+            _p7Glow(SZ_GLOW.hot, rimX + 4 + ph * 34, yy - ph * 26, 10 * (1 - ph) + 3, 0.45 * (1 - ph) * a * k);
         }
-        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     }
+    /* 예고 — 코어 붕괴: 림의 플라스마가 휘어진 줄기로 SZ_NV 에 빨려 들고 핵이 달아오른다 */
+    const pre = e >= B.warn && e < B.t0 ? (e - B.warn) / (B.t0 - B.warn) : 0;
+    if(pre > 0){
+        const ns = _p7Tier >= 2 ? 3 : 6, m = 6, pa = Math.min(1, 0.25 + pre) * k;
+        for(let i = 0; i < ns; i++){
+            const sy = CH * (0.12 + 0.52 * i / (ns - 1)), sx = rimX - 2, bx = (sx + nx) / 2 - 10, by = (sy + ny) / 2 + (i % 2 ? 26 : -26);
+            for(let j = 0; j < m; j++){
+                const u = ((_p7Now * (0.0007 + 0.0005 * pre) + i * 0.37 + j / m) % 1), v = 1 - u;
+                const px = v * v * sx + 2 * v * u * bx + u * u * nx, py = v * v * sy + 2 * v * u * by + u * u * ny;
+                _p7Glow(j & 1 ? SZ_GLOW.hot : SZ_GLOW.gold, px, py, 9 + 7 * u, 0.9 * Math.sin(u * Math.PI) * pa);
+            }
+        }
+        _p7Glow(SZ_GLOW.hot, nx, ny, 14 + 34 * pre, (0.25 + 0.6 * pre) * k);
+        _p7Glow(SZ_GLOW.white, nx, ny, 4 + 10 * pre, (0.4 + 0.6 * pre) * k);
+    }
+    /* 폭발 뒤 — 잔해 성운(적·청 필라멘트 껍질)이 SZ_NV 둘레로 천천히 퍼진다 */
+    if(d > 0){
+        if(!_P7_SNR){ _P7_SNR = []; for(let i = 0; i < 30; i++) _P7_SNR.push([i / 30 * 6.283 + Math.random() * 0.25, 0.8 + Math.random() * 0.4, Math.random(), 10 + Math.random() * 14]); }
+        const R = 26 + 118 * _p7E(d / 9), ra = Math.min(1, d / 0.7) * (0.7 - 0.25 * _p7E(d / 18)) * k, n = _p7Tier >= 2 ? 15 : 30;
+        for(let i = 0; i < n; i++){
+            const g = _P7_SNR[i], rr = R * g[1];
+            _p7Glow(g[2] < 0.55 ? SZ_GLOW.hot : g[2] < 0.8 ? SZ_GLOW.pink : SZ_GLOW.cold, nx + Math.cos(g[0]) * rr, ny + Math.sin(g[0]) * rr * 0.9, g[3], ra * (0.55 + 0.45 * Math.sin(_p7Now * 0.0012 + i)));
+        }
+        if(d < 0.5) _p7Glow(SZ_GLOW.white, nx, ny, 30 + 120 * d, 0.9 * (1 - d / 0.5) * k);
+    }
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     return true;
 };
+let _P7_SNR = null;
 /* 16 오리온 성운 — m42 원경(lighter) + 앞 먼지(source-over, 등급0만). 트라페지움이 존 한가운데 SZ_TR 에 온다 */
 P7Z[16] = function(zoneT, k){
     const st = _p7St(['m42_far']); if(st < 0) return false; if(st === 0) return true;
     const im = szArt('m42_far'), w = CW * 1.06, h = w * im.height / im.width * _p7A;
-    const cy = SZ_TR.y - 0.02 * h + _p7Far(zoneT);
-    _p7Plate(im, CW / 2 - _p7Px * 0.02, cy, w, k, 'lighter');
+    /* D — 판 핵을 힘 중심 SZ_TR 에 고정(흐름·패럴랙스 없음). 예전엔 _p7Far 로 흘러 바람 고리가 핵에서 최대 100px 어긋났다(S11-19). 먼지 near 층만 흐른다 */
+    const cy = SZ_TR.y - 0.02 * h;
+    _p7Plate(im, CW / 2, cy, w, k, 'lighter');
     const d = szArt('m42_dust');
     if(d && _p7Tier < 1) _p7Plate(d, CW / 2 - _p7Px * 0.06, CH * 0.5 + _p7Near(zoneT), w, 0.9 * k, null);
     return true;
@@ -7398,7 +7580,7 @@ P7Z[18] = function(zoneT, k){
     const st = _p7St(['pillars_plate']); if(st < 0) return false; if(st === 0) return true;
     const im = szArt('pillars_plate'), w = CW * 1.04, h = w * im.height / im.width * _p7A;
     const cx = CW / 2 - _p7Px * 0.02, cy = CH * 0.5 + (zoneT - 0.5) * 0.28 * CH;
-    _p7Plate(im, cx, cy, w, k, null);
+    _p7Plate(im, cx, cy, w, 0.85 * k, null);   /* D — 알파 0.85(판은 10% 어둡게 재굽기) — 갈색 기둥 위 운석이 묻히지 않게(S11-17) */
     /* 기둥 끝 증발 가스 — 림라이트가 숨 쉰다 */
     ctx.globalCompositeOperation = 'lighter';
     for(let i = 0; i < 3; i++){
@@ -7447,10 +7629,25 @@ function _p7Shimmer(cx, cy, dOut, cosI, a, rot){
     ctx.restore();
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
 }
+let _p7BhLast = null;
 P7Z[19] = function(zoneT, k, prev){
-    if(prev) return true;                                   /* 판정이 끝난 뒤 검은 원을 남기지 않는다 */
+    if(prev){
+        /* D — 판정이 끝난 뒤 0.6s 수축·빛 고리 소멸(판정 없음, 그림만). 예전엔 한 프레임에 증발했다(S11-13) */
+        const L = _p7BhLast, im = szArt('bh_sgra'), s = _p7Sec(20);
+        if(!L || !im || s < 0 || s >= 0.6) return true;
+        const u = s / 0.6, e = u * u, w = 640 * L.sc * (1 - 0.85 * e);
+        ctx.globalAlpha = 1 - e;
+        ctx.drawImage(im, L.cx - w / 2, L.cy - w / 2, w, w);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = 0.7 * (1 - u); ctx.strokeStyle = '#BFE3FF'; ctx.lineWidth = 2.5 * (1 - u) + 0.5;
+        ctx.beginPath(); ctx.arc(L.cx, L.cy, L.er * (1 + 2.2 * Math.sqrt(u)), 0, 6.283); ctx.stroke();
+        _p7Glow(SZ_GLOW.white, L.cx, L.cy, 20 + 40 * u, 0.8 * (1 - u));
+        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+        return true;
+    }
     const st = _p7St(['bh_sgra', 'bh_jet', 'bh_shimmer']); if(st !== 1) return false;   /* 위험물 — 로딩 중엔 절차 그림 */
     const cx = blackHole.cx, cy = blackHole.cy, R = blackHole.jetReach, sc = blackHole.r / 69.3;
+    _p7BhLast = {cx, cy, sc, er: blackHole.r};
     _p7Jets(cx, cy, R, blackHole.jetHalfAngle, 1);
     const im = szArt('bh_sgra'), w = 640 * sc;
     ctx.drawImage(im, cx - w / 2, cy - w / 2, w, w);
@@ -7461,9 +7658,11 @@ P7Z[19] = function(zoneT, k, prev){
 let _p7LeaveRun = null;
 P7Z[20] = function(zoneT, k, prev){
     const st = _p7St(['milkyway_back']); if(st < 0) return false; if(st === 0) return true;
-    const im = szArt('milkyway_back'), w = CW * 1.3 * (1 - 0.4 * _p7E(zoneT));
-    ctx.save(); ctx.translate(CW / 2 - _p7Px * 0.02, CH * (0.4 + 0.1 * zoneT)); ctx.rotate(-0.18);
-    _p7Plate(im, 0, 0, w, k, 'lighter');
+    /* D — 마지막 20%(zt 0.8→1) 동안 존 21 시작 포즈(CW*0.3, CH*0.8, 폭 0.55CW, α0.85)로 내려가며 작아진다 — 경계에서 은하가 한 장으로 이어진다 */
+    const u = _p7E((zoneT - 0.8) / 0.2), L = (a, b) => a + (b - a) * u;
+    const im = szArt('milkyway_back'), w = L(CW * 1.3 * (1 - 0.4 * _p7E(zoneT)), CW * 0.55);
+    ctx.save(); ctx.translate(L(CW / 2 - _p7Px * 0.02, CW * 0.3 - _p7Px * 0.01), L(CH * (0.4 + 0.1 * zoneT), CH * 0.8)); ctx.rotate(-0.18);
+    _p7Plate(im, 0, 0, w, k * L(1, 0.85), 'lighter');
     ctx.restore();
     if(!prev && running && zoneT > 0.25 && _p7LeaveRun !== startedAt){ _p7LeaveRun = startedAt; try{ window.SZ3 && SZ3.beat && SZ3.beat('leave_galaxy'); }catch(_){} }
     return true;
@@ -7475,8 +7674,9 @@ P7Z[21] = function(zoneT, k){
     ctx.save(); ctx.translate(CW * 0.3 - _p7Px * 0.01, CH * (0.8 + 0.06 * zoneT)); ctx.rotate(-0.18);
     _p7Plate(szArt('milkyway_back'), 0, 0, CW * (0.55 - 0.3 * e), 0.85 * k, 'lighter');
     ctx.restore();
-    ctx.save(); ctx.translate(CW * 0.62 - _p7Px * 0.015, CH * (0.2 + 0.04 * zoneT)); ctx.rotate(-0.3);
-    _p7Plate(szArt('andromeda'), 0, 0, CW * (0.07 + 0.2 * zoneT * zoneT), 0.9 * k, 'lighter');
+    /* D — 끝 포즈 = 존 22 시작 포즈(CW*0.6, CH*0.22, 폭 0.27CW, α1) */
+    ctx.save(); ctx.translate(CW * (0.62 - 0.02 * zoneT) - _p7Px * (0.015 + 0.015 * zoneT), CH * (0.2 + 0.02 * zoneT)); ctx.rotate(-0.3);
+    _p7Plate(szArt('andromeda'), 0, 0, CW * (0.07 + 0.2 * zoneT * zoneT), (0.9 + 0.1 * zoneT) * k, 'lighter');
     ctx.restore();
     return true;
 };
@@ -7500,13 +7700,33 @@ P7Z[23] = function(zoneT, k){
 /* 24 퀘이사 — 점광원 + 사선 제트(보스의 수직 빔과 구분), 숨 쉬는 광도 */
 P7Z[24] = function(zoneT, k){
     const st = _p7St(['quasar']); if(st < 0) return false; if(st === 0) return true;
-    const x = CW * 0.64 - _p7Px * 0.02, y = CH * (0.16 + 0.22 * zoneT), br = 0.82 + 0.18 * Math.sin(_p7Now * 0.0017) * Math.sin(_p7Now * 0.0031);
-    _p7Plate(szArt('quasar'), x, y, CW * 0.95, br * k, 'lighter');
+    /* D (R21-13) — 우상단 구석에 작게. 보스 예고·제트 발사 중엔 0.35 로 물러나고 제트는 청백색 판으로 —
+       보스 빔(분홍·흰 수직)과 배경 제트가 헷갈리지 않게, WARNING 뒤를 지나가지 않게 */
+    const x = CW * 0.82 - _p7Px * 0.01, y = CH * (0.07 + 0.03 * zoneT), br = 0.82 + 0.18 * Math.sin(_p7Now * 0.0017) * Math.sin(_p7Now * 0.0031);
+    let dim = false;
+    try{ const e = elapsedMs, B = SZB_BOSS[4]; dim = (e >= B.warn && e < B.t0) || !!(SZB && SZB.jet && SZB.jet.length); }catch(_){}
+    const dt = Math.min(0.1, Math.max(0, (_p7Now - _p7QT) / 1000)); _p7QT = _p7Now;
+    _p7QD += ((dim ? 1 : 0) - _p7QD) * Math.min(1, dt * 3);
+    const q = szArt('quasar'), w = CW * 0.62;
+    if(_p7QD < 0.99) _p7Plate(q, x, y, w, br * k * (1 - _p7QD), 'lighter');
+    if(_p7QD > 0.01) _p7Plate(_p7QuasarCold(q), x, y, w, 0.35 * br * k * _p7QD, 'lighter');
     ctx.globalCompositeOperation = 'lighter';
-    _p7Glow(SZ_GLOW.white, x, y, 10 + 6 * br, 0.8 * k);
+    _p7Glow(SZ_GLOW.white, x, y, 8 + 5 * br, (0.8 - 0.45 * _p7QD) * k);
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     return true;
 };
+let _p7QD = 0, _p7QT = 0, _p7QC = null;
+/* 퀘이사 청백 판 — 채도를 빼고 청백으로 한 번 굽는다(보스 중 배경 제트) */
+function _p7QuasarCold(im){
+    if(_p7QC && _p7QC.src === im) return _p7QC.cv;
+    const S = 384, c = document.createElement('canvas'); c.width = c.height = S;
+    const x = c.getContext('2d');
+    x.drawImage(im, 0, 0, S, S);
+    x.globalCompositeOperation = 'saturation'; x.fillStyle = '#808080'; x.fillRect(0, 0, S, S);
+    x.globalCompositeOperation = 'multiply'; x.fillStyle = '#CFE2FF'; x.fillRect(0, 0, S, S);
+    _p7QC = {src: im, cv: c};
+    return c;
+}
 /* 25 TON 618 — 거대한 자홍 강착원반(판정 없음 · 기체 인력 없음). 반짝임 층은 원반 기울기에 맞춰 돈다 */
 P7Z[25] = function(zoneT, k){
     const st = _p7St(['bh_ton', 'bh_shimmer']); if(st < 0) return false; if(st === 0) return true;
@@ -7518,13 +7738,28 @@ P7Z[25] = function(zoneT, k){
     return true;
 };
 /* 26 부츠 초공동 — 거의 빈 화면. 빈터를 두른 흐린 은하 고리만(성운 0 · 별 ×0.1) */
-const _P7_RING = (function(){ const a = []; for(let i = 0; i < 16; i++) a.push([i / 16 * 6.283 + Math.random() * 0.3, 0.9 + Math.random() * 0.2, Math.random() * 6.283]); return a; })();
+const _P7_RING = (function(){ const a = []; for(let i = 0; i < 16; i++) a.push([i / 16 * 6.283 + Math.random() * 0.3, 0.9 + Math.random() * 0.2, Math.random() * 6.283, 8 + Math.random() * 6, Math.random() * 3.14, Math.random()]); return a; })();
 P7Z[26] = function(zoneT, k){
-    const cx = CW / 2, cy = CH * (0.42 + 0.1 * zoneT), R = 250 + 40 * zoneT;
+    /* D (R21-11) — 고리가 화면 밖(R 250)이라 65초가 검은 화면이었다. 화면 안 고리(R≈0.44CW)에 기울어진 은하 얼룩 16개(r 8~14, α0.45~0.6)가
+       천천히 돌고, 존 한가운데(zt 0.35~0.7) 먼 은하 하나가 빈터를 가로지른다 */
+    const cx = CW / 2, cy = CH * (0.4 + 0.08 * zoneT), R = CW * 0.44 + 10 * zoneT;
     ctx.globalCompositeOperation = 'lighter';
     for(let i = 0; i < _P7_RING.length; i++){
-        const g = _P7_RING[i], a = g[0] + zoneT * 0.12;
-        _p7Glow(SZ_GLOW.white, cx + Math.cos(a) * R * g[1], cy + Math.sin(a) * R * g[1] * 0.9, 5, (0.25 + 0.12 * Math.sin(_p7Now * 0.002 + g[2])) * k);
+        const g = _P7_RING[i], a = g[0] + zoneT * 0.45, gx = cx + Math.cos(a) * R * g[1], gy = cy + Math.sin(a) * R * g[1] * 1.15 * _p7A;
+        const al = (0.45 + 0.15 * Math.sin(_p7Now * 0.0015 + g[2])) * k;
+        if(al < 0.01) continue;
+        ctx.save(); ctx.translate(gx, gy); ctx.rotate(g[4]); ctx.scale(1, 0.42);
+        ctx.globalAlpha = al; ctx.drawImage(g[5] < 0.7 ? SZ_GLOW.white : SZ_GLOW.gold, -g[3] * 1.9, -g[3] * 1.9, g[3] * 3.8, g[3] * 3.8);   /* 글로우 스프라이트는 가장자리가 옅어 보이는 반지름 ≈ 절반 */
+        ctx.restore();
+        _p7Glow(SZ_GLOW.white, gx, gy, 3.2, al);
+    }
+    const u = (zoneT - 0.35) / 0.35;
+    if(u > 0 && u < 1){
+        const pa = Math.sin(u * Math.PI) * 0.9 * k, gx = CW * (-0.1 + 1.2 * u), gy = CH * (0.3 + 0.1 * u);
+        ctx.save(); ctx.translate(gx, gy); ctx.rotate(-0.5); ctx.scale(1, 0.34);
+        ctx.globalAlpha = pa; ctx.drawImage(SZ_GLOW.cold, -48, -48, 96, 96); ctx.drawImage(SZ_GLOW.white, -20, -20, 40, 40);
+        ctx.restore();
+        _p7Glow(SZ_GLOW.white, gx, gy, 7, pa);
     }
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
     return true;
@@ -7532,7 +7767,8 @@ P7Z[26] = function(zoneT, k){
 /* 27 관측 가능 우주 끝 — 우주배경복사 빛의 벽이 scale 0.6 → 1.4 로 다가온다 */
 P7Z[27] = function(zoneT, k){
     const st = _p7St(['cmb_plate']); if(st < 0) return false; if(st === 0) return true;
-    _p7Plate(szArt('cmb_plate'), CW / 2 - _p7Px * 0.02, CH * 0.45, CW * (0.6 + 0.8 * zoneT) * 1.04, (0.28 + 0.2 * zoneT) * k, 'lighter');
+    /* D (R21-10) — 판은 타원 마스크로 재굽기(세로 띠 가장자리 없음), 알파 상한 0.3 — 운석·기체 대비 */
+    _p7Plate(szArt('cmb_plate'), CW / 2 - _p7Px * 0.02, CH * 0.45, CW * (0.6 + 0.8 * zoneT) * 1.04, (0.2 + 0.1 * zoneT) * k, 'lighter');
     return true;
 };
 /* 28 마지막 별 — 프록시마 판을 호박빛으로 한 번 재그레이드(캔버스 1장)해 유일한 광원으로 */
@@ -7600,20 +7836,33 @@ P7Z[30] = function(zoneT, k){
     return true;
 };
 /* drawZonePlanet 의 각 존 함수 맨 앞에서 부른다 — true 면 그 존 그림 끝(절차 그림 생략) */
+/* D — 인접 존이 같은 자산을 쓰면(20·21 우리 은하, 21·22 안드로메다) 교차 페이드가 같은 천체를 두 장 그렸다(S11-02).
+   공유 판은 직전 존 쪽에서 건너뛰고(_p7Skip), 새 존 쪽은 페이드 없이 제 알파 그대로(_p7Keep) — 포즈는 두 존 함수가 이어지게 맞췄다 */
+var _p7Skip = null, _p7Keep = null, _p7KeepK = 1;
 function szP7(z, zoneT){
     if(!SZ_FLAGS.fx) return false;
     const f = P7Z[z];
     if(!f) return false;
     _p7Frame();
     let k = 1;
-    if(zoneTransitionT < 1 && z !== 19){
-        k = _p7E(zoneTransitionT);
-        /* 직전 존 판을 이어 그리며 교차 페이드(팝 제거). 블랙홀은 판정이 끝나면 바로 지운다 */
+    if(zoneTransitionT < 1){
+        const kt = _p7E(zoneTransitionT);
+        /* 블랙홀(19)은 위험물이라 판정과 함께 바로 그린다 — 직전 판(기둥)만 1-k 로 흐려진다 */
+        if(z !== 19) k = kt;
+        /* 직전 존 판을 이어 그리며 교차 페이드(팝 제거). 19 퇴장은 P7Z[19](prev) 의 0.6s 수축 연출 */
         const pz = prevZoneIdx, pf = P7Z[pz];
-        if(pz === z - 1 && pf){ try{ ctx.save(); pf(_szZoneTRaw(pz), 1 - k, true); ctx.restore(); }catch(_){} ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+        if(pz === z - 1 && pf){
+            const sh = (SZ_ZONE_ART[pz] || []).filter(q => (SZ_ZONE_ART[z] || []).indexOf(q) >= 0);
+            if(sh.length){ _p7Skip = new Set(sh.map(szArt)); _p7Keep = _p7Skip; }
+            try{ ctx.save(); pf(_szZoneTRaw(pz), 1 - kt, true); ctx.restore(); }catch(_){}
+            _p7Skip = null;
+            ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        }
+        if(_p7Keep){ k = Math.max(k, 0.001); _p7KeepK = k; }
     }
     let r = false;
     try{ ctx.save(); r = f(zoneT, k, false); ctx.restore(); }catch(_){ r = false; }
+    _p7Keep = null;
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     return r;
 }
@@ -7688,6 +7937,12 @@ function szP7Warp(now){
     const big = !!BOUNDARY_INFO[currentZoneIdx];
     SZ_WARP.t0 = now; SZ_WARP.big = big; SZ_WARP.dur = big ? 900 : 400;
 }
+/* D (S13) — 인트로 컷 직후 0.7s 하이퍼 스트레치(발사의 속도감을 궤도 첫 화면으로 잇는다) */
+function szIntroWarp(){
+    if(!SZ_FLAGS.fx || (window.SZ3 && SZ3.RM)) return;
+    try{ zoneWarpRGB = '200,225,255'; }catch(_){}
+    SZ_WARP.t0 = performance.now(); SZ_WARP.big = true; SZ_WARP.dur = 700;
+}
 /* 매 프레임 — 별 속도선 배율 (drawStars 가 읽는다) */
 function szP7WarpTick(now){
     const u = (now - SZ_WARP.t0) / SZ_WARP.dur;
@@ -7733,52 +7988,66 @@ function szP7WarpDraw(now){
 
 /* ── 피날레 'LAST LIGHT' 그림 — P3 폴백 교체. 이번 판 위성 수만큼 빛 점(≤12)이 기체에서 지구 쪽으로 날아가 줄을 잇고,
    흩어진 햇빛 띠 속 1~2px 푸른 점(창백한 푸른 점) → 새벽 청색. 등급1 이상은 글로우 없음. 흔들림·백색 섬광 없음 ── */
-let _p7DawnG = null, _p7BeamG = null;
+let _p7DawnG = null, _p7BeamG = null, _p7FinP = null;
 window.szFinaleDraw = function(t, st){
-    const tier = st.tier || 0, bx = CW / 2, by = CH - 66;
+    /* D (R21-05) — ① 빛 줄의 시작점(기체 좌표)은 피날레 첫 프레임에 한 번만 고정(기체에 끈처럼 매달려 따라다니던 것)
+       ② 마지막 점이 푸른 점에 닿는다(kk=(i+1)/n) ③ 16~20s 에 빛점·햇빛 띠를 0 으로, 새벽 틴트는 옅게만 남긴다
+       ④ 푸른 점 r 2.6 + 청색 글로우·반짝임, 0.78CH(항로 패널·교신창과 떨어짐) */
+    if(!_p7FinP || t < _p7FinP.t) _p7FinP = {px: st.px, py: st.py, t: t};
+    _p7FinP.t = t;
+    const tier = st.tier || 0, bx = CW / 2, by = CH * 0.78, spx = _p7FinP.px, spy = _p7FinP.py;
+    const out = 1 - _p7E((t - 16) / 4);
     if(st.dawn > 0){
         if(!_p7DawnG){ _p7DawnG = ctx.createLinearGradient(0, 0, 0, CH); _p7DawnG.addColorStop(0, 'rgba(20,36,90,0)'); _p7DawnG.addColorStop(0.55, 'rgba(40,80,160,0.45)'); _p7DawnG.addColorStop(1, 'rgba(120,170,235,0.8)'); }
-        ctx.save(); ctx.globalAlpha = 0.34 * st.dawn; ctx.fillStyle = _p7DawnG; ctx.fillRect(0, 0, CW, CH); ctx.restore();
+        ctx.save(); ctx.globalAlpha = 0.34 * st.dawn * (0.3 + 0.7 * out); ctx.fillStyle = _p7DawnG; ctx.fillRect(0, 0, CW, CH); ctx.restore();
     }
     /* 흩어진 햇빛 띠 — 푸른 점을 지나는 옅은 사선 빛줄기 */
-    if(t > 3.8){
-        const ba = Math.min(1, (t - 3.8) / 2) * (tier >= 2 ? 0.6 : 1);
+    if(t > 3.8 && out > 0.005){
+        const ba = Math.min(1, (t - 3.8) / 2) * (tier >= 2 ? 0.6 : 1) * out;
         if(!_p7BeamG){ _p7BeamG = ctx.createLinearGradient(-22, 0, 22, 0); _p7BeamG.addColorStop(0, 'rgba(255,220,170,0)'); _p7BeamG.addColorStop(0.5, 'rgba(255,225,185,0.16)'); _p7BeamG.addColorStop(1, 'rgba(255,220,170,0)'); }
         ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = ba;
         ctx.translate(bx + 6, by); ctx.rotate(0.22); ctx.fillStyle = _p7BeamG; ctx.fillRect(-22, -CH, 44, CH * 2);
         ctx.restore();
     }
     const n = Math.min(12, st.sats | 0);
-    if(t > 1.5 && n > 0){
+    if(t > 1.5 && n > 0 && out > 0.005){
         const gap = 4 / n;
         ctx.save();
         for(let i = 0; i < n; i++){
             const t0 = 1.5 + i * gap, u = (t - t0) / 1.1;
             if(u < 0) break;
-            const kk = (i + 1) / (n + 1);
-            const tx = st.px + (bx - st.px) * kk, ty = st.py + (by - st.py) * kk;
+            const kk = (i + 1) / n;
+            const tx = spx + (bx - spx) * kk, ty = spy + (by - spy) * kk;
             const e = u >= 1 ? 1 : 1 - Math.pow(1 - u, 3);
             /* 기체에서 튀어나가 살짝 휜 길로 자기 자리에 */
             const bend = Math.sin(e * Math.PI) * (i % 2 ? 26 : -26);
-            const x = st.px + (tx - st.px) * e + bend, y = st.py + (ty - st.py) * e;
-            const fade = t < 12 ? 0.95 : Math.max(0.35, 1 - (t - 12) / 20);
+            const x = spx + (tx - spx) * e + bend, y = spy + (ty - spy) * e;
+            const fade = (t < 12 ? 0.95 : Math.max(0.35, 1 - (t - 12) / 20)) * out;
             const land = u >= 1 && u < 1.6 ? 1 - (u - 1) / 0.6 : 0;
             ctx.globalAlpha = fade;
             if(!tier){
                 ctx.globalCompositeOperation = 'lighter';
                 ctx.drawImage(SZ_GLOW.cyan, x - 9 - 10 * land, y - 9 - 10 * land, 18 + 20 * land, 18 + 20 * land);
-                if(u < 1){ for(let j = 1; j <= 3; j++){ const e2 = Math.max(0, e - j * 0.06), b2 = Math.sin(e2 * Math.PI) * (i % 2 ? 26 : -26); ctx.globalAlpha = fade * (0.5 - j * 0.12); ctx.drawImage(SZ_GLOW.cyan, st.px + (tx - st.px) * e2 + b2 - 5, st.py + (ty - st.py) * e2 - 5, 10, 10); } ctx.globalAlpha = fade; }
+                if(u < 1){ for(let j = 1; j <= 3; j++){ const e2 = Math.max(0, e - j * 0.06), b2 = Math.sin(e2 * Math.PI) * (i % 2 ? 26 : -26); ctx.globalAlpha = fade * (0.5 - j * 0.12); ctx.drawImage(SZ_GLOW.cyan, spx + (tx - spx) * e2 + b2 - 5, spy + (ty - spy) * e2 - 5, 10, 10); } ctx.globalAlpha = fade; }
                 ctx.globalCompositeOperation = 'source-over';
             }
             ctx.fillStyle = '#DFFAFF'; ctx.beginPath(); ctx.arc(x, y, 1.7, 0, 6.283); ctx.fill();
         }
         ctx.restore();
     }
-    if(t > 4.5){
-        const a = Math.min(1, (t - 4.5) / 1.2), tw = 0.85 + 0.15 * Math.sin(t * 2.6);
+    /* 창백한 푸른 점 — 햇빛 띠 속 도착점. 띠·빛점보다 4s 늦게(20~24s) 사라진다 */
+    const out2 = 1 - _p7E((t - 20) / 4);
+    if(t > 4.5 && out2 > 0.005){
+        const a = Math.min(1, (t - 4.5) / 1.2) * out2, tw = 0.8 + 0.2 * Math.sin(t * 2.6), sp = Math.max(0, Math.sin(t * 1.3)) ** 6;
         ctx.save();
-        if(!tier){ ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a * 0.5 * tw; ctx.drawImage(SZ_GLOW.cold, bx - 7, by - 7, 14, 14); ctx.globalCompositeOperation = 'source-over'; }
-        ctx.globalAlpha = a; ctx.fillStyle = '#7FC0FF'; ctx.beginPath(); ctx.arc(bx, by, 1.5, 0, 6.283); ctx.fill();
+        ctx.globalCompositeOperation = 'lighter';
+        if(!tier){ ctx.globalAlpha = a * 0.75 * tw; ctx.drawImage(SZ_GLOW.cold, bx - 13, by - 13, 26, 26); }
+        ctx.globalAlpha = a * (0.35 + 0.65 * sp); ctx.strokeStyle = '#CFE8FF'; ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(bx - 7, by); ctx.lineTo(bx + 7, by); ctx.moveTo(bx, by - 7); ctx.lineTo(bx, by + 7); ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = a * 0.6; ctx.strokeStyle = '#7FC0FF'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(bx, by, 4.6, 0, 6.283); ctx.stroke();
+        ctx.globalAlpha = a; ctx.fillStyle = '#8CCBFF'; ctx.beginPath(); ctx.arc(bx, by, 2.6, 0, 6.283); ctx.fill();
         ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -8987,32 +9256,69 @@ function updateWaves(dt){
         if(w.emitted >= 12) waves.splice(i, 1);
     }
 }
+/* D (S11-15) — 예고 표시를 미리 구운 스프라이트로. 예전엔 shadowBlur 를 켠 채 초록 틈을 fillRect 해 빨간 번짐이 섞인
+   올리브색 평면 사각형(디버그 상자처럼)이 됐고, 매 프레임 shadowBlur 비용도 들었다.
+   틈 = 가장자리가 0 으로 사라지는 초록 빛기둥 + 초록 ▲ 글로우, 경고 = 붉은 글로우를 구운 ▼·▶·◀ */
+function _szWaveGlyph(ch, green){
+    const f = '900 16px sans-serif';
+    return szBake('wv|' + ch + (green ? '|g' : ''), 26, 26, (x) => {
+        x.font = f; x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.shadowColor = green ? 'rgba(60,255,150,.9)' : 'rgba(255,60,60,.8)'; x.shadowBlur = 8;
+        x.fillStyle = green ? 'rgb(120,255,180)' : 'rgb(255,90,80)'; x.fillText(ch, 13, 13);
+    }, -1, [[f, ch]]);
+}
+let _szGapV = null, _szGapH = null;
+function _szGapSprite(horiz){
+    if(horiz ? _szGapH : _szGapV) return horiz ? _szGapH : _szGapV;
+    const c = document.createElement('canvas'); c.width = horiz ? 64 : 24; c.height = horiz ? 24 : 64;
+    const x = c.getContext('2d');
+    /* 길이 방향: 위험이 오는 쪽(0)이 밝고 끝으로 0. 폭 방향: 가운데 1, 가장자리 0 */
+    const g = horiz ? x.createLinearGradient(0, 0, 64, 0) : x.createLinearGradient(0, 0, 0, 64);
+    g.addColorStop(0, 'rgba(110,255,175,0.75)'); g.addColorStop(0.6, 'rgba(90,255,160,0.35)'); g.addColorStop(1, 'rgba(90,255,160,0)');
+    x.fillStyle = g; x.fillRect(0, 0, c.width, c.height);
+    const m = horiz ? x.createLinearGradient(0, 0, 0, 24) : x.createLinearGradient(0, 0, 24, 0);
+    m.addColorStop(0, 'rgba(0,0,0,0)'); m.addColorStop(0.3, 'rgba(0,0,0,1)'); m.addColorStop(0.7, 'rgba(0,0,0,1)'); m.addColorStop(1, 'rgba(0,0,0,0)');
+    x.globalCompositeOperation = 'destination-in'; x.fillStyle = m; x.fillRect(0, 0, c.width, c.height);
+    if(horiz) _szGapH = c; else _szGapV = c;
+    return c;
+}
 function drawWaves(){
     for(const w of waves){
         if(w.phase !== 'warn') continue;
         const p = w.t / WAVE_WARN_MS, blink = 0.45 + 0.55 * Math.abs(Math.sin(w.t * 0.018));
         ctx.save();
-        ctx.font = '900 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'rgba(255,60,60,.8)'; ctx.shadowBlur = 8;
         if(w.kind === 'wall'){
-            const n = 9, step = CW / n;
+            const n = 9, step = CW / n, gw = _szWaveGlyph('▼');
             for(let k = 0; k < n; k++){
-                if(k === w.gap){ ctx.fillStyle = `rgba(90,255,160,${0.12 + 0.14 * blink})`; ctx.fillRect(step * k + 3, 0, step - 6, CH * 0.22 * p + 10); continue; }
-                ctx.fillStyle = `rgba(255,90,80,${blink})`; ctx.fillText('▼', step * (k + 0.5), NH_WARN_TOP);
+                if(k === w.gap){
+                    const hh = CH * 0.22 * p + 10;
+                    ctx.globalAlpha = 0.45 + 0.4 * blink; ctx.drawImage(_szGapSprite(false), step * k + 1, 0, step - 2, hh);
+                    ctx.globalAlpha = blink; szDrawBaked(_szWaveGlyph('▲', true), step * (k + 0.5), NH_WARN_TOP);
+                    continue;
+                }
+                ctx.globalAlpha = blink; szDrawBaked(gw, step * (k + 0.5), NH_WARN_TOP);
             }
         } else if(w.kind === 'side'){
-            const n = 11, step = CH * 0.8 / n, x = w.side < 0 ? 10 : CW - 10;
+            const n = 11, step = CH * 0.8 / n, x = w.side < 0 ? 10 : CW - 10, gw = _szWaveGlyph(w.side < 0 ? '▶' : '◀');
             for(let k = 0; k < n; k++){
                 const y = CH * 0.1 + step * (k + 0.5);
-                if(k === w.gap || k === w.gap + 1){ ctx.fillStyle = `rgba(90,255,160,${0.12 + 0.14 * blink})`; ctx.fillRect(w.side < 0 ? 0 : CW - CW * 0.25 * p - 10, y - step / 2 + 2, CW * 0.25 * p + 10, step - 4); continue; }
-                ctx.fillStyle = `rgba(255,90,80,${blink})`; ctx.fillText(w.side < 0 ? '▶' : '◀', x, y);
+                if(k === w.gap || k === w.gap + 1){
+                    const ww = CW * 0.25 * p + 10;
+                    ctx.globalAlpha = 0.45 + 0.4 * blink;
+                    if(w.side < 0) ctx.drawImage(_szGapSprite(true), 0, y - step / 2 + 1, ww, step - 2);
+                    else { ctx.save(); ctx.translate(CW, 0); ctx.scale(-1, 1); ctx.drawImage(_szGapSprite(true), 0, y - step / 2 + 1, ww, step - 2); ctx.restore(); }
+                    continue;
+                }
+                ctx.globalAlpha = blink; szDrawBaked(gw, x, y);
             }
         } else {
-            ctx.fillStyle = `rgba(255,90,80,${blink})`;
-            for(let k = -2; k <= 2; k++) ctx.fillText('▼', w.cx + k * 18, NH_WARN_TOP + Math.abs(k) * 5);
+            const gw = _szWaveGlyph('▼');
+            ctx.globalAlpha = blink;
+            for(let k = -2; k <= 2; k++) szDrawBaked(gw, w.cx + k * 18, NH_WARN_TOP + Math.abs(k) * 5);
         }
         ctx.restore();
     }
+    ctx.globalAlpha = 1;
 }
 
 /*<sz:mod:zonescript>*/
@@ -19776,7 +20082,8 @@ function sweepSprite(rgb){
     let c = SWEEPS.get(rgb);
     if(c) return c;
     c = mk(4, 96); const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 96);
-    g.addColorStop(0, 'rgba(' + rgb + ',0)'); g.addColorStop(0.7, 'rgba(' + rgb + ',.5)'); g.addColorStop(0.86, 'rgba(255,255,255,1)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    /* D (S11-18) — 위아래 모두 0 으로 부드럽게 사라지는 띠(경계가 화면 찢김 줄처럼 보이던 것) */
+    g.addColorStop(0, 'rgba(' + rgb + ',0)'); g.addColorStop(0.45, 'rgba(' + rgb + ',.28)'); g.addColorStop(0.7, 'rgba(235,245,255,.75)'); g.addColorStop(0.82, 'rgba(' + rgb + ',.3)'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
     x.fillStyle = g; x.fillRect(0, 0, 4, 96);
     if(SWEEPS.size > 40) SWEEPS.clear();
     SWEEPS.set(rgb, c); return c;
@@ -19882,6 +20189,8 @@ function onSat(x, y){
 }
 function onZone(){
     if(RM) return;
+    /* D (S11-18) — 일반 존은 퍼지는 고리(drawCinematicFx)만, 막 경계에서만 빛 쓸기 띠도 */
+    try{ if(!BOUNDARY_INFO[currentZoneIdx]) return; }catch(_){}
     let rgb = '160,200,255';
     try{ if(typeof zoneWarpRGB === 'string') rgb = zoneWarpRGB; }catch(_){}
     sweep = {t0: now_(), rgb, img: sweepSprite(rgb)};
@@ -20008,7 +20317,7 @@ function drawTop(){
     const y = -96 + (CH + 96) * (1 - Math.pow(1 - t, 2));
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.16 * Math.sin(t * Math.PI);
+    ctx.globalAlpha = 0.1 * Math.sin(t * Math.PI);   /* D — 0.16 → 0.1 */
     ctx.drawImage(sweep.img, 0, y, CW, 96);
     ctx.restore();
     ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';

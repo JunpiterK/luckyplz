@@ -302,7 +302,7 @@ def envelope_alpha(C, dust_op=None, r=5, s=2.5, boost=3.0):
 
 def compose(gas_E, star_E=None, tau=None, dust_col=(0.0, 0.0, 0.0), dust_op=None, exposure=1.0,
             gas_cap=(0.40, 0.52), star_cap=(0.70, 0.90), fade=None, star_behind=True, soft=1.0 * SS,
-            gamma=1.0, mode="add"):
+            gamma=1.0, mode="add", star_env=True):
     """가스 방출 + 별 + 먼지 흡수 → 판.
     mode='add'  : 불투명 RGB(검정 = 투명). 런타임은 globalCompositeOperation='lighter' 로 그린다 — 알파 채널이 없어 가장 싸다
     mode='over' : 스트레이트 RGBA(매끈한 알파). 뒤 배경·별을 가려야 하는 암흑 성운용, source-over
@@ -319,18 +319,26 @@ def compose(gas_E, star_E=None, tau=None, dust_col=(0.0, 0.0, 0.0), dust_op=None
     if star_E is not None:
         Cs = cap_luma(tone(star_E * (T if star_behind else 1.0), 1.0), *star_cap)
         C = screen(Cg, Cs)
+    Cgd = Cg
     if dust_op is not None:
         # 먼지 자체 색(아주 어두운 갈색 — 뒤에서 새는 산란광). 방출보다 앞에 있는 몸통
         dc = col(dust_col)
         C = C + dc * dust_op[..., None] * (1 - C.max(axis=2, keepdims=True))
+        Cgd = Cg + dc * dust_op[..., None] * (1 - Cg.max(axis=2, keepdims=True))
     if fade is not None:
         C = C * fade[..., None]
+        Cgd = Cgd * fade[..., None]
         if dust_op is not None:
             dust_op = dust_op * fade
     C = np.clip(C, 0, 1)
     if mode == "add":
         return np.dstack([C, np.ones(C.shape[:2], np.float32)]).astype(np.float32)
-    a = envelope_alpha(C, dust_op)
+    if star_env or star_E is None:
+        a = envelope_alpha(C, dust_op)
+    else:
+        # 2026-09-29 (D) 별은 알파 팽창(max filter)에서 뺀다 — 별 둘레까지 불투명해져 뒤 게임 배경(남색·성운)이 빠지면서
+        # 가스 위에 '검은 고리 점'이 수십 개 생겼다(S11-08). 별은 제 픽셀 밝기만 알파로(C/a ≤ 1 이 되게 C 최대값)
+        a = np.maximum(envelope_alpha(np.clip(Cgd, 0, 1), dust_op), C.max(axis=2))
     rgb = np.where(a[..., None] > 1e-4, C / np.maximum(a[..., None], 1e-4), 0)
     out = np.dstack([np.clip(rgb, 0, 1), a]).astype(np.float32)
     out[..., 3][out[..., 3] < 2.5 / 255] = 0
@@ -568,7 +576,7 @@ def plate_horsehead():
         add_star(S, rng.uniform(0.05, 0.95) * W, rng.uniform(0.12, 0.58) * H, rng.uniform(2, 4.5), (0.9, 0.93, 1.0),
                  sig=1.1 * SS, spikes=4, spike_len=7 * SS, spike_w=0.5 * SS, spike_amp=0.15)
     base = compose(E * 0.62, S * 0.85, tau=mask * 6.0, dust_col=(0.030, 0.012, 0.016), dust_op=mask * 0.94,
-                   exposure=1.0, gamma=1.15, mode="over", soft=0.8 * SS)
+                   exposure=1.0, gamma=1.15, mode="over", soft=0.8 * SS, star_env=False)
     # NGC 2023 — 암흑운 안(앞)의 청백 반사성운 + 비추는 별. 흡수 뒤에 더한다
     nx, ny = 0.24 * W, 0.86 * H
     nr = np.sqrt((xx - nx) ** 2 + ((yy - ny) * 1.2) ** 2) / W
@@ -579,9 +587,11 @@ def plate_horsehead():
              spike_amp=0.15)
     add = cap_luma(tone(E2, 1.0), 0.32, 0.46)
     Cn = screen(base[..., :3] * base[..., 3:4], add)
-    fade = edge_fade(H, W, 0.10, 0.06)
+    # D — 위 가장자리를 더 길게(0.10→0.16) 페이드: 맨 위 5% 가 들쭉날쭉한 검은 띠로 보였다(S11-08)
+    fade = edge_fade(H, W, 0.16, 0.06)
     Cn = Cn * fade[..., None]
-    a = np.maximum(base[..., 3] * fade, envelope_alpha(Cn))
+    # D — 별이 든 Cn 전체를 팽창하지 않는다(별 둘레 검은 고리). 반사성운(add)만 팽창, 나머지는 제 밝기
+    a = np.maximum(base[..., 3] * fade, np.maximum(envelope_alpha(add * fade[..., None]), Cn.max(axis=2)))
     rgb = np.where(a[..., None] > 1e-4, Cn / np.maximum(a[..., None], 1e-4), 0)
     out = np.dstack([np.clip(rgb, 0, 1), a]).astype(np.float32)
     out[..., 3][out[..., 3] < 2.5 / 255] = 0
@@ -671,7 +681,9 @@ def plate_pillars():
     op = np.clip(mask * 0.96, 0, 0.96)
     fade = edge_fade(H, W, 0.14, 0.04)
     out = compose(Eg, S * (1 - op)[..., None], tau=None, dust_col=(0.035, 0.02, 0.012), dust_op=op, exposure=1.0,
-                  gamma=1.1, fade=fade, mode="over", soft=0.8 * SS)
+                  gamma=1.1, fade=fade, mode="over", soft=0.8 * SS, star_env=False)
+    # D — 10% 어둡게: 갈색 기둥 위 운석(몸통 색이 비슷)이 묻히지 않게(S11-17). 런타임은 알파 0.85
+    out[..., :3] *= 0.9
     return out, dict(tips=[[round(x / SS), round(y / SS)] for x, y in tips])
 
 
@@ -946,8 +958,9 @@ def plate_cmb():
     C = cap_luma(C, 0.32, 0.42)
     yy, xx = grid(H, W)
     ex = (xx / W - 0.5) / 0.5; ey = (yy / H - 0.5) / 0.5
-    rr = (np.abs(ex) ** 4 + np.abs(ey) ** 4) ** 0.25          # 초타원 — 모서리가 둥근 직사각형
-    feather = sstep(1.0, 0.70, rr)
+    # D (R21-10) — 초타원(둥근 직사각형)은 화면에서 세로 띠의 좌우 가장자리가 드러났다 → 부드러운 타원 마스크
+    rr = np.sqrt(ex ** 2 + ey ** 2)
+    feather = sstep(1.0, 0.45, rr)
     C = np.clip(C * feather[..., None], 0, 1)
     return np.dstack([C, np.ones(C.shape[:2], np.float32)]).astype(np.float32)
 
@@ -972,7 +985,8 @@ def plate_helio_ribbon():
     # IBEX 리본 — 벽 한 구간이 더 밝은 좁은 띠
     rib = np.exp(-((t - 0.62) / 0.10) ** 2) * np.exp(-((dw + 6 * SS) / (5 * SS)) ** 2)
     E += (rib * 1.1)[..., None] * col((0.85, 0.9, 1.0))
-    fade = sstep(0.0, 0.10, yy / H) * sstep(0.0, 0.30, 1 - yy / H)
+    # D — 네 변 모두 검정으로 페더(좌우 끝의 사각 이음새 제거)
+    fade = sstep(0.0, 0.10, yy / H) * sstep(0.0, 0.30, 1 - yy / H) * sstep(0.0, 0.10, xx / W) * sstep(0.0, 0.10, 1 - xx / W)
     return compose(E * 0.8, None, exposure=1.0, gas_cap=(0.40, 0.55), fade=fade), dict(
         arc_apex=[round(cx / SS), round((cy - R) / SS)], arc_radius=round(R / SS))
 
@@ -1215,15 +1229,19 @@ def build_cards():
     E = (np.exp(-(rr / 30) ** 2) * 0.12 + 0.02 * np.clip(pnoise(H, W, 3.0, 301), -1, 1))[..., None] * col((0.8, 0.8, 0.8))
     cards["pc_30"] = _glow_card(np.clip(E, 0, None)); notes["pc_30"] = "존30 열적 죽음 — 회색 평형"
     # 황금 엽서 — '창백한 푸른 점' 오마주(저작권 사진 미사용, 구성만 오마주): 흩어진 햇빛 띠 속 1.5px 푸른 점
+    # 2026-09-29 (D, R21-14) — 예전 판은 배경(선형 0.035 → 인코딩 ≈0.2)과 넓은 띠가 베이지·갈색 세로 줄무늬 흐림으로 보였고
+    # 푸른 점이 1.5px 라 안 보였다. 거의 검은 우주 + 가는 사선 햇빛 띠(가운데만 밝게) + 가운데 띠 속 또렷한 푸른 점(글로우)
     c = np.zeros((H, W, 3), np.float32)
-    ang = math.radians(-12)
-    along = (xx - W / 2) * math.cos(ang) + (yy - H / 2) * math.sin(ang)
-    perp = -(xx - W / 2) * math.sin(ang) + (yy - H / 2) * math.cos(ang)
-    for off, wd, amp in ((-22, 6.5, 0.20), (6, 9.0, 0.30), (30, 5.0, 0.16)):
-        c += (np.exp(-((xx - W / 2 - off - 0.18 * (yy - H / 2)) / wd) ** 2) * amp)[..., None] * col((1.0, 0.72, 0.36))
-    c += (0.035 + 0.02 * pnoise(H, W, 2.0, 302))[..., None] * col((0.5, 0.35, 0.22))
-    dot_x, dot_y = W / 2 + 8, H / 2 + 14
-    add_star(c, dot_x, dot_y, 0.9, (0.55, 0.78, 1.0), sig=0.75)
+    c += (0.0016 + 0.0010 * np.clip(pnoise(H, W, 2.0, 302), -1, 1))[..., None] * col((0.6, 0.55, 0.7))
+    sl = 0.32                                              # 띠 기울기(가로 이동 / 세로 1px)
+    for off, wd, amp in ((-26, 2.6, 0.05), (2, 4.2, 0.11), (27, 2.2, 0.04)):
+        core = np.exp(-((xx - W / 2 - off - sl * (yy - H / 2)) / wd) ** 2)
+        wide = np.exp(-((xx - W / 2 - off - sl * (yy - H / 2)) / (wd * 3.2)) ** 2)
+        c += ((core * amp + wide * amp * 0.25) * (0.75 + 0.25 * np.clip(pnoise(H, W, 2.4, 303 + off), -1, 1)))[..., None] * col((1.0, 0.80, 0.55))
+    dot_y = H / 2 + 12
+    dot_x = W / 2 + 2 + sl * (dot_y - H / 2)
+    add_star(c, dot_x, dot_y, 0.10, (0.25, 0.55, 1.0), sig=5.0)            # 청색 글로우
+    add_star(c, dot_x, dot_y, 0.9, (0.30, 0.62, 1.0), sig=1.3)             # 점 본체(지름 ≈3px, 청색)
     frame = sstep(3.5, 1.5, np.minimum.reduce([xx, yy, W - 1 - xx, H - 1 - yy]))
     C = np.clip(tone(c, 1.0), 0, 1)
     C = C * (1 - frame[..., None]) + col((0.96, 0.78, 0.38))[0, 0] * frame[..., None]
