@@ -390,14 +390,14 @@ function pageLib(){
     /* 레이아웃 검사 */
     G.layout = function(){
         const vw = innerWidth, vh = innerHeight;
-        const SEL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#pauseBtn', '#ovBtn', '#missionBanner', '.control-row', '.topbar', '.score-strip', '.szx-live', '.sz-pilot', '#rewardRow', '#introStory', '#tpRing', '#handToggle', '#overlay .ov-btn-row'];
+        const SEL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#pauseBtn', '#ovBtn', '#missionBanner', '.control-row', '.topbar', '.score-strip', '.szx-live', '.sz-pilot', '#rewardRow', '#introStory', '#tpRing', '#handToggle', '#overlay .ov-btn-row', '#dodge-canvas', '.dodge-kbd-ref'];
         const CTRL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#pauseBtn', '#ovBtn'];
         const vis = (el) => { if(!el || !el.getClientRects().length || el.closest('.hidden')) return false; for(let p = el; p && p !== document.documentElement; p = p.parentElement){ const c = getComputedStyle(p); if(c.display === 'none' || c.visibility === 'hidden' || +c.opacity < 0.05) return false; } const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
         const rects = {};
         for(const s of SEL){ const el = document.querySelector(s); if(vis(el)){ const r = el.getBoundingClientRect(); rects[s] = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; } }
         const small = CTRL.filter(s => rects[s] && Math.min(rects[s][2], rects[s][3]) < 44).map(s => s + ' ' + rects[s][2] + 'x' + rects[s][3]);
         const clip = Object.entries(rects).filter(([s, r]) => r[0] < -1 || r[1] < -1 || r[0] + r[2] > vw + 1 || r[1] + r[3] > vh + 1).map(([s, r]) => s + ' ' + r.join(','));
-        const OV = ['#missionBanner', '.szx-live', '.control-row', '.topbar', '.score-strip', '.sz-pilot', '#rewardRow', '#tpRing'];
+        const OV = ['#missionBanner', '.szx-live', '.control-row', '.topbar', '.score-strip', '.sz-pilot', '#rewardRow', '#tpRing', '#dodge-canvas', '.dodge-kbd-ref'];
         const overlap = [];
         for(let i = 0; i < OV.length; i++) for(let j = i + 1; j < OV.length; j++){
             const a = rects[OV[i]], b = rects[OV[j]]; if(!a || !b) continue;
@@ -409,7 +409,11 @@ function pageLib(){
         let smallText = [];
         if(G.texts) smallText = [...G.texts.entries()].filter(([s, px]) => px != null && px < 9).map(([s, px]) => s.slice(0, 24) + '@' + px);
         const missing = ['#satBtn', '#gravBtn'].filter(s => !rects[s]);
-        return { vw, vh, hScroll, rects, small, clip, overlap, missing, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
+        /* E (2026-09-29) — 조종판·키 가이드가 캔버스(플레이필드)를 덮는 넓이(px). 0 이어야 한다 (PC 에서 56px 덮던 문제) */
+        const cov = {};
+        for(const s of ['.control-row', '.dodge-kbd-ref']){ const a = rects[s], b = rects['#dodge-canvas']; if(!a || !b) continue;
+            const ix = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), iy = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]); cov[s] = (ix > 0 && iy > 0) ? ix : 0; }
+        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
     };
     /* 자동 조종봇 — 같은 시드, 봇 난수만 다르게. 그리기는 끈다(시뮬만) */
     G.bot = function(P){
@@ -711,7 +715,7 @@ function judgePerf(cur, base, tag){
 }
 
 /* ================= layout ================= */
-const SIZES_FULL = [[320, 568, 2], [360, 640, 3], [375, 667, 2], [375, 812, 3], [412, 915, 2.625], [740, 360, 3], [768, 1024, 2], [1280, 800, 1]];
+const SIZES_FULL = [[320, 568, 2], [360, 640, 3], [375, 667, 2], [375, 812, 3], [412, 915, 2.625], [740, 360, 3], [768, 1024, 2], [1280, 800, 1], [1366, 768, 1]];
 const SIZES_QUICK = [[320, 568, 2], [375, 667, 2], [740, 360, 3], [1280, 800, 1]];
 async function runLayout(base){
     const langs = String(A['layout-langs'] || 'ko,en').split(',');
@@ -786,6 +790,15 @@ function judgeLayout(cur, base){
                 if(nw.length) row(G, id + ' 새 캔버스 글자<9px', nw.slice(0, 4).join(' | '), null, '0 (G3: ≥9 CSS px)', 'FAIL');
             }
             if(b && !sameGeo(m.rects, b.rects)) geoChanged++;
+            /* E (2026-09-29) — 조종판·키 가이드 × 캔버스 겹침 0px (PC) */
+            if(m.cov) for(const [s, px] of Object.entries(m.cov)) if(px > 0 || (st === 'play' && m.vw >= 1024)) row(G, id + ' ' + s + '×캔버스 겹침', px + 'px', b && b.cov && b.cov[s] != null ? b.cov[s] + 'px' : null, '0px', px > 0 ? 'FAIL' : 'PASS');
+            /* E — 세로 폰에서 캔버스가 눌리지 않게: 표시 세로/가로 ≥ 1.0 (목표 1.1) */
+            if(st === 'play' && m.vw < 900 && m.vh > m.vw && m.rects['#dodge-canvas']){
+                const c = m.rects['#dodge-canvas'], a = c[3] / c[2], bc = b && b.rects && b.rects['#dodge-canvas'];
+                row(G, id + ' 캔버스 세로/가로', a.toFixed(2), bc ? (bc[3] / bc[2]).toFixed(2) : null, '≥1.0 (목표 1.1)', a >= 1.0 ? 'PASS' : 'FAIL');
+            }
+            /* E — 결과 카드가 떠 있으면 HUD 줄(.score-strip)은 숨긴다 (카드 글자를 가렸다) */
+            if(st === 'result') row(G, id + ' 결과 카드 위 HUD 줄', m.rects['.score-strip'] ? '보임' : '숨김', b ? (b.rects['.score-strip'] ? '보임' : '숨김') : null, '숨김', m.rects['.score-strip'] ? 'FAIL' : 'PASS');
             /* 미션 중 SAT·BEAM 두 버튼이 모두 보이고 44px 이상 (2026-09-29 SAT 숨김 사고 재발 방지) */
             if(st === 'play'){
                 const bad = (m.missing || []).concat((m.small || []).filter(x => /^#(satBtn|gravBtn) /.test(x)));
