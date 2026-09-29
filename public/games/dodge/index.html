@@ -8266,6 +8266,7 @@ const SZ_SPRITES = {};
     const names = SZ_FLAGS.fx ? ['ship', 'stack']
                               : ['ship', 'stack', 'meteor_a', 'meteor_b', 'meteor_c', 'mine', 'zone_moon', 'zone_mars', 'zone_jupiter', 'zone_saturn'];
     const FILE = {ship: 'ship_steel', stack: 'launch_stack'};
+    window.SZ_ASSET_V = BV;   /* 2인 모드 금색 기체(ship_gold)는 필요할 때 szGoldImg() 가 같은 스탬프로 받는다 */
     for(const n of names){
         const im = new Image();
         im.decoding = 'async';
@@ -12468,6 +12469,8 @@ function completeMission(now){
     }
     szLinkBump();
     szSatDoneUntil = performance.now() + 600;
+    /* 2인 협동 — 내가 설치하면 파트너 미션도 완료(팀 위성). 파트너 소식으로 완료된 거면 다시 알리지 않는다 */
+    try{ if(window.SZX && SZX.onSat) SZX.onSat(z, _szTeamSatNow); }catch(_){}
     /* C — 주 미션 5연속 → 다음 존 도입에 하트 보급 1개 (솔로 — key z-'c', 해시 좌표) */
     szSatStreak++;
     if(szSatStreak >= 5){ szSatStreak = 0; if(_szSoloRun()) szSatStreakPend = true; }
@@ -12496,6 +12499,21 @@ function completeMission(now){
     }
     return true;
 }
+
+/* 2인 협동 (2026-09-29) — 파트너가 이 존의 주 위성을 설치했다 → 내 미션도 팀 성공(보상 포함, 게이지·시드 무관).
+   대기(pending) 중이면 바로 켜고 완료한다. 부표·다른 존 미션이면 무시 */
+let _szTeamSatNow = false;
+function szCoopTeamSat(z){
+    if(!running || szSpectating || missionKind !== 'main' || missionZoneIdx !== z) return false;
+    const now = performance.now();
+    if(missionState === 'pending'){ try{ _activateMission(now); }catch(_){ return false; } }
+    if(missionState !== 'active') return false;
+    _szTeamSatNow = true;
+    let ok = false;
+    try{ ok = completeMission(now); } finally { _szTeamSatNow = false; }
+    return ok;
+}
+window.szCoopTeamSat = szCoopTeamSat;
 
 /* 2026-05-11: 상대 mission_won broadcast 수신. 내 미션 진행 중이면 즉시 무효화 (race 패배).
    이미 내가 같은 zone 완료한 케이스는 무시. */
@@ -15449,6 +15467,7 @@ function resetGame(){
     gravLastTick = 0;
     _szBeamLatched = false;            /* P5 — BEAM 토글·관전·표시 상태 */
     szSpectating = false; szKillMark = null; szHitboxHintAt = 0;
+    szGrazeN = 0;                      /* 2인 협동 결과 카드 — 판당 스침 수 */
     szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(gb){ gb.classList.remove('active', 'sz-gold'); gb._sp = null; gb._gk = null; } });
     wipeFlashUntil = 0;
     wipeSpawnBlockUntil = 0;
@@ -15778,6 +15797,8 @@ document.addEventListener('keydown', (e) => {
 }, true);
 /*</sz:mod:meta>*/
 function triggerGameOver(kind){
+    /* 2인 협동 — 파트너가 아직 날고 있으면 끝내지 않고 구조 캡슐로 (SZX.coopPod). 캡슐 중 다시 불리면(앱 이탈) 그대로 종료 흐름 */
+    try{ if(window.SZX && SZX.coopPod && SZX.coopPod(kind)) return; }catch(_){}
     if(szSpectating){ szExitSpectate(); return; }   /* P5 — 관전은 판이 아니다 */
     running=false;
     /* P5 — 미션 배너가 결과(싱글·대결·1:1) 위에 남지 않게 모든 경로에서 먼저 내린다 */
@@ -16146,6 +16167,7 @@ let szHeartBreak = [];
 let szLastGrazeSfx = 0;
 let szNebulaY = 0;
 /* P5 (2026-09-28) — 손맛·사망 명확성·관전. 전부 표시·로컬 전용(시드 RNG 무관) */
+let szGrazeN = 0;              /* 판당 스침 수(표시 전용 — 2인 협동 기여) */
 let szSpectating = false;     /* 동시 대결: 추락 뒤 가벼운 관전(기체 숨김·무적·입력 없음·세계 시뮬만) */
 let szKillMark = null;        /* 방금 부딪힌 운석 — 빨간 외곽선 300ms {x,y,vx,vy,t0} */
 let szHitboxHintAt = 0;       /* 첫 판 — 히트박스 원 1.5초 표시 시작 시각 */
@@ -16807,7 +16829,7 @@ function szDrawBullets(now){
 }
 
 /* 기체 — 화염(3겹)·기울기·찌그러짐·무적 실드·히트박스 코어 */
-function szDrawShip(px, py, now, alpha, guestTint){
+function szDrawShip(px, py, now, alpha, livery){
     const inv = now < invincibleUntil;
     const up = Math.max(-1, Math.min(1, -szPlayerVel.y / 300));
     const thrust = 0.85 + up * 0.45;
@@ -16837,9 +16859,6 @@ function szDrawShip(px, py, now, alpha, guestTint){
         ctx.translate(szP8Sq.dir * e * 18, 0);
     }
     ctx.scale(sx, sy);
-    if(guestTint){
-        try { ctx.filter = 'sepia(0.6) hue-rotate(-25deg) saturate(1.4) brightness(1.05)'; } catch(_){}
-    }
 
     /* 엔진 화염 3겹 */
     ctx.globalCompositeOperation = 'lighter';
@@ -16877,7 +16896,7 @@ function szDrawShip(px, py, now, alpha, guestTint){
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = alpha;
 
-    const art = szShipArt();
+    const art = szShipArt(livery);   /* 2026-09-29 — 도장별 스프라이트(예전 게스트 sepia 필터 대신 금색 렌더) */
     if(art){
         /* 뱅크 프레임 — 이동 방향으로 축 롤(타일 띠·플랩이 다르게 빛을 받는다). 순수 스프라이트 교체라 지연 0.
            가로 찌그러짐(롤 흉내)은 프레임이 대신하므로 스프라이트에서는 거의 되돌린다 */
@@ -16888,8 +16907,6 @@ function szDrawShip(px, py, now, alpha, guestTint){
     } else {
         szDrawShipFallback();
     }
-    /* P1 — filter 세터는 스타일 재계산을 동기로 강제한다. 설정한 경우(게스트 색조)에만 되돌린다 */
-    if(guestTint){ try { ctx.filter = 'none'; } catch(_){} }
     ctx.restore();
     ctx.globalAlpha = 1;
 
@@ -16922,24 +16939,144 @@ function szDrawShip(px, py, now, alpha, guestTint){
 /* 기체 스프라이트 규격 — 프레임 56 m(z −2…54) · 기체 52 m. 기체 길이 46px(옛 기체 시각 높이 43px 과 같은 급),
    스커트(z 0) = +14.5(= 화염 시작 NZ·배기 입자 +16), 노즈 끝 −31.5. 판정 = 코어 점(HIT_RADIUS) — 변함없음 */
 const SZ_SHIP = {fh: 49.54, fw: 24.77, y0: -33.27};
-let _szShipBm = null, _szShipBmS = 0, _szShipBmP = false;
+/* 2026-09-29 — 도장(livery): 'steel' 은색(솔로·방장) / 'gold' 광택 금색(2인·대결 모드의 참가자).
+   같은 모델·카메라·뱅크 5프레임(scripts/blender/starship_scene.py gold → ship_gold.webp). 금색은 멀티에서만 늦게 받는다(14KB) */
+function szGoldImg(){
+    let im = SZ_SPRITES.ship_gold;
+    if(!im){ im = new Image(); im.decoding = 'async'; im.src = '/assets/spacez/ship_gold.webp' + (window.SZ_ASSET_V || ''); SZ_SPRITES.ship_gold = im; }
+    return im;
+}
+/* 내 기체 도장 — 1:1 PvP 는 게스트가, 같은 방 비행(동시 대결·2인 협동)은 방장이 아닌 사람이 금색. 솔로는 은색 */
+function szMyLivery(){
+    try{ if(pvpState && pvpState.gameMode === 'pvp') return pvpState.role === 'guest' ? 'gold' : 'steel'; }catch(_){}
+    try{ if(window.SZX && SZX.myLivery) return SZX.myLivery(); }catch(_){}
+    return 'steel';
+}
+const _szShipBk = {};   /* 도장별 미리 줄인 비트맵 {bm, s, p} */
 /* 캔버스 배율 1:1 로 미리 줄인 비트맵(가장 큰 축소·에일리어싱 제거). 배율이 바뀌면 다시 굽는다. 원본보다 키우지는 않는다 */
-function szShipArt(){
-    const im = SZ_SPRITES.ship;
+function szShipArt(livery){
+    let im = livery === 'gold' ? szGoldImg() : SZ_SPRITES.ship;
+    if(!(im && im.complete && im.naturalWidth)) im = SZ_SPRITES.ship;   /* 금색이 오기 전엔 은색으로 */
     if(!im || !im.complete || !im.naturalWidth) return null;
+    const key = im === SZ_SPRITES.ship ? 'steel' : 'gold';
+    const B = _szShipBk[key] || (_szShipBk[key] = {bm: null, s: 0, p: false});
     const S = szBakeScale();
-    if(_szShipBmS === S) return _szShipBm || im;
-    if(!_szShipBmP){
+    if(B.s === S) return B.bm || im;
+    if(!B.p){
         const th = Math.round(SZ_SHIP.fh * S);
-        if(!window.createImageBitmap || th >= im.naturalHeight * 0.95){ _szShipBm = null; _szShipBmS = S; return im; }
-        _szShipBmP = true;
+        if(!window.createImageBitmap || th >= im.naturalHeight * 0.95){ B.bm = null; B.s = S; return im; }
+        B.p = true;
         const tw = 5 * Math.round(im.naturalWidth / 5 * th / im.naturalHeight);
         createImageBitmap(im, {resizeWidth: tw, resizeHeight: th, resizeQuality: 'high'}).then((b) => {
-            try{ if(_szShipBm && _szShipBm.close) _szShipBm.close(); }catch(_){}
-            _szShipBm = b; _szShipBmS = S; _szShipBmP = false;
-        }, () => { _szShipBm = null; _szShipBmS = S; _szShipBmP = false; });
+            try{ if(B.bm && B.bm.close) B.bm.close(); }catch(_){}
+            B.bm = b; B.s = S; B.p = false;
+        }, () => { B.bm = null; B.s = S; B.p = false; });
     }
-    return _szShipBm || im;
+    return B.bm || im;
+}
+
+/* ── 다른 사람 기체 (2026-09-29) — 화살표·옛 벡터 대신 내 기체와 같은 스프라이트·뱅크 5프레임·엔진 화염.
+   뱅크는 받은 위치를 보간한 좌표의 옆 속도로 추정(szTrackPlayer 와 같은 식·같은 한계 ±0.34).
+   구분: 반투명 + 이름표(색 점). 내 기체는 불투명하게 그 위에 그린다. 판정·규칙과 무관한 표시 전용 */
+function szPeerTrack(st, x, y, now){
+    if(st.lt === undefined || now - st.lt > 1000){ st.lx = x; st.ly = y; st.lt = now; st.vx = 0; st.vy = 0; st.bank = st.bank || 0; return; }
+    const dt = (now - st.lt) / 1000;
+    if(dt < 0.004) return;
+    const k = Math.min(1, dt * 10);
+    st.vx += (Math.max(-900, Math.min(900, (x - st.lx) / dt)) - st.vx) * k;
+    st.vy += (Math.max(-900, Math.min(900, (y - st.ly) / dt)) - st.vy) * k;
+    const target = Math.max(-1, Math.min(1, st.vx / 420)) * 0.34;
+    st.bank += (target - st.bank) * Math.min(1, dt * 12);
+    st.lx = x; st.ly = y; st.lt = now;
+}
+function szDrawPeerShip(x, y, st, livery, alpha, now, name, col, scale){
+    const bank = (st && st.bank) || 0;
+    const up = Math.max(-1, Math.min(1, -((st && st.vy) || 0) / 300));
+    const L = (15 + Math.sin(now * 0.03 + x) * 3) * (0.85 + up * 0.45);
+    const NZ = 14.5;
+    ctx.save();
+    ctx.translate(x, y);
+    if(scale && scale !== 1) ctx.scale(scale, scale);
+    ctx.rotate(bank * 0.5);
+    ctx.scale(1 - Math.abs(bank) * 0.26, 1);
+    /* 화염 2겹 */
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = alpha;
+    let g = ctx.createLinearGradient(0, NZ, 0, NZ + L * 1.4);
+    g.addColorStop(0, 'rgba(255,150,60,0.55)'); g.addColorStop(1, 'rgba(255,40,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(-5, NZ); ctx.quadraticCurveTo(-6.5, NZ + L * 0.5, 0, NZ + L * 1.4); ctx.quadraticCurveTo(6.5, NZ + L * 0.5, 5, NZ); ctx.closePath(); ctx.fill();
+    g = ctx.createLinearGradient(0, NZ, 0, NZ + L * 0.8);
+    g.addColorStop(0, 'rgba(255,244,210,0.9)'); g.addColorStop(1, 'rgba(255,150,60,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(-3, NZ); ctx.quadraticCurveTo(-3.4, NZ + L * 0.4, 0, NZ + L * 0.8); ctx.quadraticCurveTo(3.4, NZ + L * 0.4, 3, NZ); ctx.closePath(); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    const art = szShipArt(livery);
+    if(art){
+        const fi = Math.max(0, Math.min(4, Math.round((bank / 0.34 + 1) * 2)));
+        const fw = art.width / 5, kx = (1 - Math.abs(bank) * 0.05) / (1 - Math.abs(bank) * 0.26);
+        const W = SZ_SHIP.fw * kx;
+        ctx.drawImage(art, fi * fw, 0, fw, art.height, -W / 2, SZ_SHIP.y0, W, SZ_SHIP.fh);
+    } else szDrawShipFallback();
+    ctx.restore();
+    /* 이름표 — 노즈 위, 색 점 + 이름 (어두운 알약 위라 운석 위에서도 읽힌다) */
+    if(name){
+        const sc = scale || 1, ty = y - 42 * sc;
+        ctx.save();
+        ctx.font = '700 10px "Noto Sans KR",sans-serif';
+        const nm = String(name).slice(0, 8), tw = ctx.measureText(nm).width + 18;
+        ctx.globalAlpha = Math.min(1, alpha + 0.2);
+        ctx.fillStyle = 'rgba(6,10,24,0.62)';
+        szRR(ctx, x - tw / 2, ty - 8, tw, 16, 8); ctx.fill();
+        ctx.fillStyle = col || '#fff';
+        ctx.beginPath(); ctx.arc(x - tw / 2 + 8, ty, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(255,255,255,0.94)';
+        ctx.fillText(nm, x + 4, ty + 0.5);
+        ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+}
+/* 2인 협동 — 구조 캡슐(표시 전용). mine = 내 캡슐 / 아니면 파트너 캡슐(구조 반경 점선). k = 남은 시간 0..1 */
+function szDrawPod(x, y, livery, k, now, mine, label){
+    const gold = livery === 'gold';
+    ctx.save();
+    ctx.translate(x, y);
+    /* 남은 시간 링 · 구조 반경 */
+    ctx.globalAlpha = 0.9;
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = k > 0.33 ? 'rgba(120,255,190,0.9)' : 'rgba(255,110,110,0.95)';
+    ctx.beginPath(); ctx.arc(0, 0, 30, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, Math.min(1, k))); ctx.stroke();
+    if(!mine){
+        ctx.setLineDash([4, 5]); ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+        ctx.beginPath(); ctx.arc(0, 0, 36, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
+    /* 캡슐 몸체 — 도장 색 원뿔 + 검은 방열판 + 창 */
+    ctx.globalAlpha = 1;
+    ctx.rotate(Math.sin(now * 0.002) * 0.25);
+    const bg = ctx.createLinearGradient(-10, 0, 10, 0);
+    if(gold){ bg.addColorStop(0, '#6b4a14'); bg.addColorStop(0.35, '#ffe39a'); bg.addColorStop(0.6, '#d9a441'); bg.addColorStop(1, '#5a3c10'); }
+    else { bg.addColorStop(0, '#4a525c'); bg.addColorStop(0.35, '#f4f7fa'); bg.addColorStop(0.6, '#a9b1ba'); bg.addColorStop(1, '#3a4048'); }
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.moveTo(-5, -10); ctx.lineTo(5, -10); ctx.lineTo(10, 7); ctx.quadraticCurveTo(0, 11, -10, 7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#15181d';
+    ctx.beginPath(); ctx.moveTo(-10, 7); ctx.quadraticCurveTo(0, 11, 10, 7); ctx.quadraticCurveTo(0, 14, -10, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(30,60,90,0.9)';
+    ctx.beginPath(); ctx.arc(0, -1, 3, 0, Math.PI * 2); ctx.fill();
+    /* 비컨 — 0.5초 깜빡임 */
+    const on = (now % 500) < 250;
+    ctx.fillStyle = on ? '#ff4d5e' : '#ffffff';
+    ctx.beginPath(); ctx.arc(0, -12, 2.2, 0, Math.PI * 2); ctx.fill();
+    if(on){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.hot, 0, -12, 12, 0.7); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.restore();
+    if(label){
+        ctx.save();
+        ctx.font = '800 11px "Noto Sans KR",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(label, x, y + 48);
+        ctx.fillStyle = mine ? '#FFD166' : '#7CFFB2'; ctx.fillText(label, x, y + 48);
+        ctx.restore();
+    }
+    ctx.globalAlpha = 1;
 }
 
 function szDrawShipFallback(){
@@ -17249,7 +17386,7 @@ function gameLoop(now){
                 const inner = HIT_RADIUS + COMBO_NEAR_INNER_PAD;
                 if(d2 < COMBO_NEAR_OUTER*COMBO_NEAR_OUTER && d2 > inner*inner){
                     b.creditedNearMiss = true;
-                    comboCount++;
+                    comboCount++; szGrazeN++;
                     if(comboCount > comboMaxThisRun) comboMaxThisRun = comboCount;
                     comboFlashUntil = now + 180;
                     spawnGrazeFx(b.x, b.y, now);
@@ -17563,23 +17700,25 @@ function drawFrame(now, dt){
     szDrawFxWorld();
     if(window.SZ3) SZ3.drawPool();        /* 스침 속도선·돌 조각·보급 빛 알갱이·자세 분사 */
 
+    /* ---- PvP 상대 우주선 — 내 기체 아래(내 것이 늘 불투명하게 위) ---- */
+    _drawOpponentShip();
+
     /* ---- Player ----
        2026-09-24 개편: 배기 입자 + 3겹 화염 + 이동 방향 기울기 + 피격 찌그러짐.
        무적 중에는 사라졌다 나타나는 깜빡임 대신 반투명 + 회전 실드 링 —
        피격 직후 기체 위치를 놓쳐 연속 피격되던 문제. */
     if(!szShipHidden){
         const px=player.x, py=player.y;
-        const _pvpGuestTint = (typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.role === 'guest');
         const invNow = now < invincibleUntil;
         szDrawExhaust();
-        szDrawShip(px, py, now, invNow ? (flashVisible ? 0.95 : 0.42) : 1, _pvpGuestTint);
+        szDrawShip(px, py, now, invNow ? (flashVisible ? 0.95 : 0.42) : 1, szMyLivery());
         /* PvP 모드 시 본인 닉네임 — 우주선 아래, 반투명. */
         if(typeof pvpState !== 'undefined' && pvpState.gameMode === 'pvp' && pvpState.me){
             ctx.save();
             ctx.fillStyle = 'rgba(255,255,255,0.42)';
             ctx.font = 'bold 8px Orbitron, sans-serif';
             ctx.textAlign = 'center';
-            ctx.fillText((pvpState.me.nickname || '').substring(0, 10), px, py + 22);
+            ctx.fillText((pvpState.me.nickname || '').substring(0, 10), px, py + 46);   /* 스프라이트 화염(≈+40) 아래 */
             ctx.restore();
         }
     } else {
@@ -17587,9 +17726,6 @@ function drawFrame(now, dt){
     }
     szDrawP5Marks(now);        /* P5 — 부딪힌 운석(들어온 길·외곽선)·첫 판 히트박스 — 기체 위 */
     szFunDrawShip(now);        /* P8b — 피버 무지개·별가루 게이지 고리 */
-
-    /* ---- PvP 상대 우주선 ---- */
-    _drawOpponentShip();
 
     /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
        player 본체 위에 그려져야 우주선이 막 안에 든 듯이 보임. */
@@ -18954,25 +19090,10 @@ function _stopOpponentSync(){
     if(_opPosBcastTimer){ clearInterval(_opPosBcastTimer); _opPosBcastTimer = null; }
     pvpState.opponent = null;
 }
-/* PvP role 별 ship palette:
-   - host  = silver/cyan (single-player 와 동일 — original)
-   - guest = gold (희미한 금색 톤 — 본인 색과 비슷하지만 명확히 구분).
-   양쪽 client 동일 — host 는 누가 봐도 cyan, guest 는 gold. */
-const PVP_PALETTE = {
-    silver: { body0:'#32404c', body1:'#7c8c9a', body2:'#c2ced8', body3:'#cad4de', body4:'#94a2ae', body5:'#42505c',
-              fin0:'#1a2028', fin1:'#50606c', fin2:'#44545e', fin3:'#181e26',
-              shadow:'rgba(170,188,210,0.50)' },
-    gold:   { body0:'#3c3018', body1:'#a08858', body2:'#e8c890', body3:'#f0d098', body4:'#b89870', body5:'#4c3c20',
-              fin0:'#2a2010', fin1:'#705820', fin2:'#5c4818', fin3:'#1c1408',
-              shadow:'rgba(220,180,100,0.50)' }
-};
-function _opponentPalette(){
-    const opRole = pvpState.role === 'host' ? 'guest' : 'host';
-    return opRole === 'guest' ? PVP_PALETTE.gold : PVP_PALETTE.silver;
-}
-function _myPalette(){
-    return pvpState.role === 'guest' ? PVP_PALETTE.gold : PVP_PALETTE.silver;
-}
+/* PvP 도장 (2026-09-29) — 양쪽 화면 동일: 호스트 = 은색 스테인리스, 게스트 = 광택 금색.
+   예전엔 상대를 옛 벡터 우주선(팔레트)으로, 게스트 본인은 sepia 필터로 칠했다 → 지금은 둘 다 같은 Blender 스프라이트 */
+function _opponentLivery(){ return pvpState.role === 'host' ? 'gold' : 'steel'; }
+const _pvpOpTrack = {};
 
 function _drawOpponentShip(){
     if(!(pvpState && pvpState.gameMode === 'pvp' && pvpState.opponent && pvpState.opponent.alive)) return;
@@ -18984,53 +19105,9 @@ function _drawOpponentShip(){
     /* canvas 범위 clamp (extreme cases) */
     op.x = Math.max(-20, Math.min(CW + 20, op.x));
     op.y = Math.max(-20, Math.min(CH + 20, op.y));
-    /* 같은 starship 모양 — palette 만 host/guest 따라 다름. */
-    _drawStarshipAt(op.x, op.y, _opponentPalette(), 0.92);
-    /* 닉네임 — 우주선 *아래* 에 투명. */
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,255,255,0.42)';
-    ctx.font = 'bold 8px Orbitron, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText((op.nickname || '').substring(0, 10), op.x, op.y + 22);
-    ctx.restore();
-}
-
-/* starship 본체 + fin + sheen (player.x, .y 위치 기준 상대 좌표 사용 안 함 — translate 후).
-   본인 player 의 인라인 draw 와 동일 시각, palette 만 변경. PvP 시 재사용 — 본인 ship
-   draw 도 이 함수 호출 가능 (다음 단계). 현재는 opponent 만. */
-function _drawStarshipAt(px, py, p, alpha){
-    ctx.save();
-    ctx.translate(px, py);
-    if(alpha !== undefined && alpha !== 1) ctx.globalAlpha = alpha;
-    /* Aft delta fins */
-    const finG = ctx.createLinearGradient(-16,5,16,5);
-    finG.addColorStop(0, p.fin0); finG.addColorStop(0.30, p.fin1);
-    finG.addColorStop(0.70, p.fin2); finG.addColorStop(1, p.fin3);
-    ctx.fillStyle = finG;
-    ctx.beginPath(); ctx.moveTo(5,2); ctx.lineTo(15,15); ctx.lineTo(6,9); ctx.lineTo(5,8); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(-5,2); ctx.lineTo(-15,15); ctx.lineTo(-6,9); ctx.lineTo(-5,8); ctx.closePath(); ctx.fill();
-    /* Body — ogive nose + cylinder */
-    const bG = ctx.createLinearGradient(-5,0,5,0);
-    bG.addColorStop(0, p.body0); bG.addColorStop(0.18, p.body1);
-    bG.addColorStop(0.44, p.body2); bG.addColorStop(0.64, p.body3);
-    bG.addColorStop(0.82, p.body4); bG.addColorStop(1, p.body5);
-    ctx.shadowColor = p.shadow; ctx.shadowBlur = 8;
-    ctx.fillStyle = bG;
-    ctx.beginPath();
-    ctx.moveTo(0,-19);
-    ctx.quadraticCurveTo(4,-13,5,-9);
-    ctx.lineTo(5,8); ctx.lineTo(-5,8); ctx.lineTo(-5,-9);
-    ctx.quadraticCurveTo(-4,-13,0,-19);
-    ctx.closePath(); ctx.fill();
-    ctx.shadowBlur = 0;
-    /* Specular sheen */
-    const spG = ctx.createLinearGradient(-2,-18,-2,8);
-    spG.addColorStop(0, 'rgba(255,255,255,0.32)');
-    spG.addColorStop(0.45, 'rgba(255,255,255,0.12)');
-    spG.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = spG;
-    ctx.beginPath(); ctx.ellipse(-1.5,-5,1.5,11,0,0,Math.PI*2); ctx.fill();
-    ctx.restore();
+    const now = performance.now(), lv = _opponentLivery();
+    szPeerTrack(_pvpOpTrack, op.x, op.y, now);   /* 보간 좌표의 옆 속도 → 뱅크 프레임 */
+    szDrawPeerShip(op.x, op.y, _pvpOpTrack, lv, 0.78, now, op.nickname || '', lv === 'gold' ? '#FFD166' : '#DDE6F0', 1);
 }
 
 /* ===== PvP game flow (Stage 1 — 단순 score 비교, state broadcast 없음) =====
@@ -21370,6 +21447,21 @@ S3._p8a = () => ({live, rLive, beam: !!beam, sweep: !!sweep});
 .overlay .szx-duo .btn{flex:1;padding:8px 6px!important;font-size:.74em!important;letter-spacing:.02em;box-shadow:none!important;
   background:rgba(30,144,255,.14)!important;border:1px solid rgba(123,91,255,.45)!important;color:#CFC4FF!important}
 .overlay .btn-race{background:linear-gradient(135deg,#FF5E3A,#FF2D6F)!important;color:#fff!important;box-shadow:0 10px 26px -8px rgba(255,60,90,.65)!important}
+/* 2026-09-29 — 친구와 같이: 동시 대결 · 2인 협동 (반폭 두 개) · 패널 모드 탭 · 협동 결과 */
+.szx-mp{display:flex;gap:8px}
+.overlay .szx-mp .btn{flex:1;min-width:0;padding-left:4px!important;padding-right:4px!important;letter-spacing:.02em;white-space:nowrap;font-size:.92em}
+.overlay .btn-coop{background:linear-gradient(135deg,#1FC8A0,#0E9C78)!important;color:#fff!important;box-shadow:0 10px 26px -8px rgba(31,200,160,.6)!important}
+.szx-tabs{display:flex;gap:6px;width:100%;max-width:300px;margin:0 auto;padding:4px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1)}
+.szx-tabs button{flex:1;min-height:44px;border:0;border-radius:10px;background:none;color:rgba(255,255,255,.6);font:900 .88em 'Noto Sans KR',sans-serif;cursor:pointer;touch-action:manipulation}
+.szx-tabs button.on{background:rgba(255,94,58,.18);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,94,58,.55)}
+.szx-tabs button.co.on{background:rgba(31,200,160,.18);box-shadow:inset 0 0 0 1px rgba(31,200,160,.6)}
+.szx-mode{display:inline-block;font:900 .78em 'Noto Sans KR',sans-serif;padding:3px 10px;border-radius:999px;background:rgba(31,200,160,.16);color:#7CFFD8;border:1px solid rgba(31,200,160,.45);margin:0 auto 4px}
+.szx-b.co{color:#fff;background:linear-gradient(135deg,#1FC8A0,#0E9C78);box-shadow:0 10px 26px -8px rgba(31,200,160,.6)}
+.szx-team-l{font:900 .7em 'Orbitron','Noto Sans KR',sans-serif;letter-spacing:.16em;color:rgba(124,255,216,.75)}
+.szx-team{font:900 2.1em 'Orbitron',sans-serif;color:#7CFFD8;text-shadow:0 0 18px rgba(31,200,160,.5);line-height:1.1;font-variant-numeric:tabular-nums}
+.szx-cst{font-size:.72em;color:rgba(255,255,255,.72);white-space:nowrap;font-variant-numeric:tabular-nums}
+.szx-note{font-size:.76em;color:#FFB08A;max-width:300px;margin:0 auto}
+.szx-best{font-size:.78em;color:#FFE66D}
 /* ---- 폰 한 화면 맞춤 (2026-09-25 모바일 전수 점검) ----
    시작 화면 카드가 캔버스(폰 세로에선 조종판 자리를 빼고 256~355px)보다 길어 SPACE-Z 제목이 위로 잘리고,
    캔버스 안 HUD(시간·BEST·COMBO)가 제목을 덮었다 → 모든 카드: 넘치면 카드 안 스크롤 + 위부터 정렬,
@@ -21536,7 +21628,7 @@ body.sz-spectating .control-row{opacity:.3;pointer-events:none;filter:grayscale(
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TX={
-ko:{got:'획득',first:'먼저 먹었어요!',full:'방이 가득 찼어요 (최대 8명)',link:'직통',duo:'1:1 실시간 PvP · 로그인',race:'👥 친구와 동시 대결',raceT:'👥 동시 대결',raceSub:'최대 8명이 한 우주를 같이 날아요. 보급은 먼저 먹는 사람 것, 오래 버틴 순서대로 순위 — 꼴찌는 벌칙!',nick:'닉네임',create:'방 만들기',or:'또는',codePh:'6자리 코드',join:'입장',back:'← 돌아가기',
+ko:{got:'획득',first:'먼저 먹었어요!',full:'방이 가득 찼어요 (최대 8명)',link:'직통',duo:'⚔ 1:1 대결 · 로그인',race:'👥 친구와 동시 대결',raceT:'👥 동시 대결',raceSub:'최대 8명이 한 우주를 같이 날아요. 보급은 먼저 먹는 사람 것, 오래 버틴 순서대로 순위 — 꼴찌는 벌칙!',nick:'닉네임',create:'방 만들기',or:'또는',codePh:'6자리 코드',join:'입장',back:'← 돌아가기',
     needNick:'닉네임을 입력해 주세요',needCode:'6자리 코드를 입력해 주세요',conn:'연결 중…',connFail:'연결 실패 — 네트워크 확인 후 다시',
     room:'방 코드',share:'📤 카톡·메신저로 초대',copy:'복사',copied:'링크 복사됨!',players:'참가자',waitHost:'방장이 출발을 누르면 전원 동시에 발사해요',
     go:'🚀 전원 동시 출발',need2:'2명 이상 모이면 출발할 수 있어요',leave:'나가기',host:'방장',me:'나',
@@ -21546,7 +21638,7 @@ ko:{got:'획득',first:'먼저 먹었어요!',full:'방이 가득 찼어요 (최
     chBanner:'⚔ <b>{n}</b>님의 도전장 — <b>{t}</b> · 같은 코스',chWin:'🏆 도전 성공! {d}초 앞섰어요',chLose:'💀 {d}초 모자랐어요',
     chSend:'⚔ 이 코스로 도전장 보내기',chBackfire:'⚔ 되받아치기 — 내 기록으로 도전장',chTxt:'🚀 스페이스-Z 도전장 — 내 기록 {t}. 같은 코스로 이겨 봐!',
     askNick:'도전장에 쓸 닉네임',newRec:'NEW RECORD!',anon:'익명 파일럿',leftApp:'앱을 벗어나 비행 종료'},
-en:{got:'got it',first:'grabbed it first!',full:'Room is full (max 8)',link:'direct',duo:'1:1 real-time PvP · login',race:'👥 Race friends live',raceT:'👥 Live Race',raceSub:'Up to 8 pilots share one sky. Supplies go to whoever grabs them first; longest survivor wins — last place pays!',nick:'Nickname',create:'Create room',or:'or',codePh:'6-digit code',join:'Join',back:'← Back',
+en:{got:'got it',first:'grabbed it first!',full:'Room is full (max 8)',link:'direct',duo:'⚔ 1:1 duel · login',race:'👥 Race friends live',raceT:'👥 Live Race',raceSub:'Up to 8 pilots share one sky. Supplies go to whoever grabs them first; longest survivor wins — last place pays!',nick:'Nickname',create:'Create room',or:'or',codePh:'6-digit code',join:'Join',back:'← Back',
     needNick:'Enter a nickname',needCode:'Enter the 6-digit code',conn:'Connecting…',connFail:'Connection failed — check network and retry',
     room:'Room code',share:'📤 Invite via messenger',copy:'Copy',copied:'Link copied!',players:'Players',waitHost:'Launch starts for everyone when the host taps GO',
     go:'🚀 Launch everyone',need2:'Need 2+ players to launch',leave:'Leave',host:'HOST',me:'ME',
@@ -21556,7 +21648,7 @@ en:{got:'got it',first:'grabbed it first!',full:'Room is full (max 8)',link:'dir
     chBanner:'⚔ Challenge from <b>{n}</b> — <b>{t}</b> · same course',chWin:'🏆 You won by {d}s!',chLose:'💀 Short by {d}s',
     chSend:'⚔ Challenge a friend on this course',chBackfire:'⚔ Fire back with my time',chTxt:'🚀 Space-Z challenge — my time {t}. Beat it on the same course!',
     askNick:'Your nickname for the challenge',newRec:'NEW RECORD!',anon:'Anonymous pilot',leftApp:'Left the app — flight ended'},
-ja:{got:'ゲット',first:'が先に取った!',full:'満員です（最大8人）',link:'直結',duo:'1:1 リアルタイム対戦 · ログイン',race:'👥 友だちと同時対戦',raceT:'👥 同時対戦',raceSub:'全員が同じコースを同時に1回。長く生き残った順に順位、最下位は罰ゲーム！',nick:'ニックネーム',create:'部屋を作る',or:'または',codePh:'6桁コード',join:'参加',back:'← 戻る',
+ja:{got:'ゲット',first:'が先に取った!',full:'満員です（最大8人）',link:'直結',duo:'⚔ 1:1 対戦 · ログイン',race:'👥 友だちと同時対戦',raceT:'👥 同時対戦',raceSub:'全員が同じコースを同時に1回。長く生き残った順に順位、最下位は罰ゲーム！',nick:'ニックネーム',create:'部屋を作る',or:'または',codePh:'6桁コード',join:'参加',back:'← 戻る',
     needNick:'ニックネームを入力',needCode:'6桁コードを入力',conn:'接続中…',connFail:'接続失敗 — 通信を確認して再試行',
     room:'部屋コード',share:'📤 LINE・メッセンジャーで招待',copy:'コピー',copied:'コピーしました！',players:'参加者',waitHost:'ホストが出発を押すと全員同時に発射',
     go:'🚀 全員同時に出発',need2:'2人以上で出発できます',leave:'退出',host:'ホスト',me:'自分',
@@ -21566,7 +21658,7 @@ ja:{got:'ゲット',first:'が先に取った!',full:'満員です（最大8人�
     chBanner:'⚔ <b>{n}</b>さんの挑戦状 — <b>{t}</b> · 同じコース',chWin:'🏆 挑戦成功！{d}秒差で勝利',chLose:'💀 あと{d}秒足りず',
     chSend:'⚔ このコースで挑戦状を送る',chBackfire:'⚔ 自分の記録で挑戦し返す',chTxt:'🚀 スペースZ 挑戦状 — 記録 {t}。同じコースで勝てる？',
     askNick:'挑戦状に書くニックネーム',newRec:'NEW RECORD!',anon:'名無しパイロット',leftApp:'アプリを離れたため終了'},
-es:{got:'lo tomó',first:'lo tomó primero!',full:'Sala llena (máx. 8)',link:'directo',duo:'PvP 1:1 en tiempo real · login',race:'👥 Carrera en vivo',raceT:'👥 Carrera en vivo',raceSub:'Todos vuelan el mismo recorrido a la vez. Gana quien más aguante; el último paga.',nick:'Apodo',create:'Crear sala',or:'o',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Volver',
+es:{got:'lo tomó',first:'lo tomó primero!',full:'Sala llena (máx. 8)',link:'directo',duo:'⚔ Duelo 1:1 · login',race:'👥 Carrera en vivo',raceT:'👥 Carrera en vivo',raceSub:'Todos vuelan el mismo recorrido a la vez. Gana quien más aguante; el último paga.',nick:'Apodo',create:'Crear sala',or:'o',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Volver',
     needNick:'Escribe un apodo',needCode:'Escribe el código de 6 dígitos',conn:'Conectando…',connFail:'Error de conexión — revisa la red',
     room:'Código',share:'📤 Invitar por mensajería',copy:'Copiar',copied:'¡Enlace copiado!',players:'Jugadores',waitHost:'Todos despegan cuando el anfitrión pulse salir',
     go:'🚀 Despegar todos',need2:'Se necesitan 2+ jugadores',leave:'Salir',host:'ANFITRIÓN',me:'YO',
@@ -21576,7 +21668,7 @@ es:{got:'lo tomó',first:'lo tomó primero!',full:'Sala llena (máx. 8)',link:'d
     chBanner:'⚔ Reto de <b>{n}</b> — <b>{t}</b> · mismo recorrido',chWin:'🏆 ¡Ganaste por {d}s!',chLose:'💀 Te faltaron {d}s',
     chSend:'⚔ Retar a un amigo en este recorrido',chBackfire:'⚔ Devolver el reto',chTxt:'🚀 Reto Space-Z — mi tiempo {t}. ¡Supéralo en el mismo recorrido!',
     askNick:'Tu apodo para el reto',newRec:'¡NUEVO RÉCORD!',anon:'Piloto anónimo',leftApp:'Saliste de la app — vuelo terminado'},
-pt:{got:'pegou',first:'pegou primeiro!',full:'Sala cheia (máx. 8)',link:'direto',duo:'PvP 1:1 em tempo real · login',race:'👥 Corrida ao vivo',raceT:'👥 Corrida ao vivo',raceSub:'Todos voam o mesmo percurso ao mesmo tempo. Vence quem durar mais; o último paga.',nick:'Apelido',create:'Criar sala',or:'ou',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Voltar',
+pt:{got:'pegou',first:'pegou primeiro!',full:'Sala cheia (máx. 8)',link:'direto',duo:'⚔ Duelo 1:1 · login',race:'👥 Corrida ao vivo',raceT:'👥 Corrida ao vivo',raceSub:'Todos voam o mesmo percurso ao mesmo tempo. Vence quem durar mais; o último paga.',nick:'Apelido',create:'Criar sala',or:'ou',codePh:'Código de 6 dígitos',join:'Entrar',back:'← Voltar',
     needNick:'Digite um apelido',needCode:'Digite o código de 6 dígitos',conn:'Conectando…',connFail:'Falha na conexão — verifique a rede',
     room:'Código',share:'📤 Convidar pelo mensageiro',copy:'Copiar',copied:'Link copiado!',players:'Jogadores',waitHost:'Todos decolam quando o anfitrião tocar em partir',
     go:'🚀 Decolar todos',need2:'Precisa de 2+ jogadores',leave:'Sair',host:'ANFITRIÃO',me:'EU',
@@ -21589,6 +21681,68 @@ pt:{got:'pegou',first:'pegou primeiro!',full:'Sala cheia (máx. 8)',link:'direto
 };
 function lang(){let l='en';try{l=(window.LpI18n&&LpI18n.getLang&&LpI18n.getLang())||'en'}catch(_){}return TX[l]?l:'en'}
 function t(k){return (TX[lang()]||TX.en)[k]||TX.en[k]||k}
+/* ── 2인 협동 '합심 비행' (2026-09-29) 문구 — 6개 언어. 버튼·도장은 짧게 ── */
+const CT={
+ko:{raceS:'👥 동시 대결',coop:'🤝 2인 협동',coopT:'🤝 2인 협동 · 합심 비행',coopSub:'둘이 같은 코스를 함께 날아 팀 기록을 늘려요. 격추되면 캡슐 — 파트너가 스치면 부활!',
+    go2:'🚀 같이 출발',need2c:'파트너가 들어오면 출발할 수 있어요',full2:'협동 방은 2명까지예요',silver:'은색',gold:'금색',
+    share2:'🚀 스페이스-Z 2인 협동! 링크 누르고 닉네임만 쓰면 같이 날아요 (코드 {c})',
+    sos:'🆘 {n} 캡슐 — 스쳐서 구조!',mySos:'SOS · 파트너를 기다려요',podTag:'구조!',needHeart:'❤ 2개부터 구조',
+    rescued:'🤝 {n} 구조!',revived:'💫 {n} 덕분에 부활!',partnerOut:'{n} 추락 — 혼자 계속!',partnerLost:'파트너 연결 끊김 — 혼자 계속!',
+    teamSat:'🛰 {n} 위성 설치 — 팀 성공!',team:'팀 기록',teamBest:'팀 최고 {t}',teamNew:'🏆 팀 신기록!',
+    colG:'스침',colS:'위성',colR:'구조',lostNote:'파트너 연결이 끊겨 혼자 비행했어요',resTitle:'🤝 {n}판 팀 기록',again:'🚀 다시 같이',
+    resShare:'🚀 스페이스-Z 2인 협동 — {a} & {b} 팀 기록 {t}!'},
+en:{raceS:'👥 Live race',coop:'🤝 2P co-op',coopT:'🤝 2-Player Co-op',coopSub:'Fly the same course together and push the team time. Shot down? You eject in a pod — your partner flies over it to revive you!',
+    go2:'🚀 Launch together',need2c:'Launch once your partner joins',full2:'Co-op rooms hold 2 players',silver:'SILVER',gold:'GOLD',
+    share2:'🚀 Space-Z co-op! Tap the link, type a nickname and fly with me (code {c})',
+    sos:'🆘 {n} ejected — fly over to rescue!',mySos:'SOS · waiting for partner',podTag:'RESCUE!',needHeart:'Need ❤×2 to rescue',
+    rescued:'🤝 Rescued {n}!',revived:'💫 Revived by {n}!',partnerOut:'{n} is down — keep flying!',partnerLost:'Partner disconnected — keep flying!',
+    teamSat:'🛰 {n} linked a satellite — team win!',team:'TEAM TIME',teamBest:'Team best {t}',teamNew:'🏆 New team record!',
+    colG:'grazes',colS:'satellites',colR:'rescues',lostNote:'Partner disconnected — you flew on solo',resTitle:'🤝 Round {n} team result',again:'🚀 Fly again',
+    resShare:'🚀 Space-Z co-op — {a} & {b} team time {t}!'},
+ja:{raceS:'👥 同時対戦',coop:'🤝 2人協力',coopT:'🤝 2人協力フライト',coopSub:'同じコースを2人で飛んでチーム記録を伸ばそう。撃墜されたらカプセルへ — 相棒がかすめれば復活！',
+    go2:'🚀 一緒に出発',need2c:'相棒が入ると出発できます',full2:'協力ルームは2人までです',silver:'シルバー',gold:'ゴールド',
+    share2:'🚀 スペースZ 2人協力！リンクを開いてニックネームを入れるだけで一緒に飛べます（コード {c}）',
+    sos:'🆘 {n} 脱出 — かすめて救助！',mySos:'SOS · 相棒を待っています',podTag:'救助！',needHeart:'救助には❤2つ必要',
+    rescued:'🤝 {n}を救助！',revived:'💫 {n}のおかげで復活！',partnerOut:'{n} 墜落 — 1人で続行！',partnerLost:'相棒の接続が切れました — 続行！',
+    teamSat:'🛰 {n}が衛星設置 — チーム成功！',team:'チーム記録',teamBest:'チーム最高 {t}',teamNew:'🏆 チーム新記録！',
+    colG:'かすり',colS:'衛星',colR:'救助',lostNote:'相棒の接続が切れ、1人で飛びました',resTitle:'🤝 第{n}戦 チーム記録',again:'🚀 もう一度一緒に',
+    resShare:'🚀 スペースZ 2人協力 — {a} & {b} チーム記録 {t}！'},
+zh:{raceS:'👥 同场对战',coop:'🤝 双人合作',coopT:'🤝 双人合作飞行',coopSub:'两人同飞一条航线，一起刷新团队纪录。被击落会弹出逃生舱——队友掠过即可复活！',
+    go2:'🚀 一起出发',need2c:'队友加入后即可出发',full2:'合作房间最多 2 人',silver:'银色',gold:'金色',
+    share2:'🚀 Space-Z 双人合作！点开链接输入昵称就能一起飞（房间码 {c}）',
+    sos:'🆘 {n} 弹射 — 掠过去救援！',mySos:'SOS · 等待队友',podTag:'救援！',needHeart:'需要 ❤×2 才能救援',
+    rescued:'🤝 救回 {n}！',revived:'💫 {n} 救了你！',partnerOut:'{n} 坠毁 — 继续飞！',partnerLost:'队友断线 — 继续飞！',
+    teamSat:'🛰 {n} 架好卫星 — 团队成功！',team:'团队纪录',teamBest:'团队最佳 {t}',teamNew:'🏆 团队新纪录！',
+    colG:'擦边',colS:'卫星',colR:'救援',lostNote:'队友断线，你独自飞完',resTitle:'🤝 第{n}局 团队纪录',again:'🚀 再飞一次',
+    resShare:'🚀 Space-Z 双人合作 — {a} & {b} 团队纪录 {t}！'},
+es:{raceS:'👥 Carrera',coop:'🤝 Cooperativo',coopT:'🤝 Cooperativo 2P',coopSub:'Volad juntos el mismo recorrido y alargad el tiempo del equipo. ¿Te derriban? Sales en cápsula — tu compañero te revive al pasar por encima.',
+    go2:'🚀 Despegar juntos',need2c:'Podréis despegar cuando entre tu compañero',full2:'Las salas cooperativas son de 2',silver:'PLATA',gold:'ORO',
+    share2:'🚀 ¡Space-Z cooperativo! Abre el enlace, pon tu apodo y volamos juntos (código {c})',
+    sos:'🆘 {n} en cápsula — ¡pasa por encima!',mySos:'SOS · esperando al compañero',podTag:'¡RESCATE!',needHeart:'Hacen falta ❤×2',
+    rescued:'🤝 ¡Rescataste a {n}!',revived:'💫 ¡{n} te revivió!',partnerOut:'{n} cayó — ¡sigue volando!',partnerLost:'Compañero desconectado — ¡sigue!',
+    teamSat:'🛰 {n} instaló el satélite — ¡equipo!',team:'TIEMPO DE EQUIPO',teamBest:'Mejor del equipo {t}',teamNew:'🏆 ¡Récord de equipo!',
+    colG:'roces',colS:'satélites',colR:'rescates',lostNote:'Tu compañero se desconectó y volaste solo',resTitle:'🤝 Ronda {n} · equipo',again:'🚀 Otra vez juntos',
+    resShare:'🚀 Space-Z cooperativo — {a} y {b}: {t} en equipo!'},
+pt:{raceS:'👥 Corrida',coop:'🤝 Cooperativo',coopT:'🤝 Cooperativo 2P',coopSub:'Voem juntos o mesmo percurso e aumentem o tempo da equipe. Abatido? Você ejeta numa cápsula — seu parceiro passa por cima e te revive!',
+    go2:'🚀 Decolar juntos',need2c:'Decolem quando o parceiro entrar',full2:'Salas cooperativas são para 2',silver:'PRATA',gold:'OURO',
+    share2:'🚀 Space-Z cooperativo! Abra o link, digite o apelido e vamos voar juntos (código {c})',
+    sos:'🆘 {n} ejetou — passe por cima!',mySos:'SOS · esperando o parceiro',podTag:'RESGATE!',needHeart:'Precisa de ❤×2',
+    rescued:'🤝 Você resgatou {n}!',revived:'💫 {n} te reviveu!',partnerOut:'{n} caiu — continue voando!',partnerLost:'Parceiro desconectou — continue!',
+    teamSat:'🛰 {n} instalou o satélite — equipe!',team:'TEMPO DA EQUIPE',teamBest:'Melhor da equipe {t}',teamNew:'🏆 Recorde da equipe!',
+    colG:'raspões',colS:'satélites',colR:'resgates',lostNote:'O parceiro desconectou e você voou sozinho',resTitle:'🤝 Rodada {n} · equipe',again:'🚀 De novo juntos',
+    resShare:'🚀 Space-Z cooperativo — {a} e {b}: {t} em equipe!'}
+};
+function ct(k){let l='en';try{l=(window.LpI18n&&LpI18n.getLang&&LpI18n.getLang())||'en'}catch(_){}return (CT[l]||CT.en)[k]||CT.en[k]||k}
+/* 협동 판 상태 — 캡슐(pod)·구조·팀 위성. 판마다 coopReset */
+const C={pod:null,podN:0,downT:0,finalT:0,final:false,rescues:0,revived:0,sats:0,rvDone:{},satPend:{},sosSeen:{},lostNoted:false,outNoted:false,hintAt:0};
+const POD_MS=6000,POD_GRACE=700,RESCUE_R=34,REVIVE_INV=2200;
+function cap(){return R.md==='coop'?2:MAXP}
+function roomUrl(){return location.origin+'/games/dodge/?'+(R.md==='coop'?'coop':'race')+'='+R.code}
+/* 도장 — 방장 은색, 나머지 금색 (양쪽 화면 같은 규칙) */
+function livOf(p){if(p===pid)return R.creator?'steel':'gold';const m=R.members[p];return m&&m.h?'steel':'gold'}
+function livCol(p){return livOf(p)==='gold'?'#FFD166':'#DDE6F0'}
+function myLivery(){return (R.code&&!R.creator&&(R.racing||R.spect||(typeof szSpectating!=='undefined'&&szSpectating)))?'gold':'steel'}
+function coopStamp(txt,col){try{if(window.SZ3&&SZ3.stamp)SZ3.stamp(txt,col||'#7CFFB2');else toast(txt)}catch(_){}}
 const fmt=ms=>(typeof formatDuration==='function'?formatDuration(ms):String(ms));
 const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:v}catch(_){return d}},set(k,v){try{localStorage.setItem(k,v)}catch(_){}},del(k){try{localStorage.removeItem(k)}catch(_){}}};
 let pid=LS.get('szx_pid','');if(!pid){pid=Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);LS.set('szx_pid',pid)}
@@ -21716,7 +21870,7 @@ function decorateResult(ms){
 }
 
 /* ══ 3. 동시 대결 방 ══ */
-const R={code:'',creator:false,nick:'',ch:null,joined:false,members:{},seenAt:{},round:0,seed:0,racing:false,spect:false,
+const R={md:'race',coop:false,entryMd:'race',code:'',creator:false,nick:'',ch:null,joined:false,members:{},seenAt:{},round:0,seed:0,racing:false,spect:false,
     results:{},finalized:{},tally:{},view:'',lastTrack:0,trackTimer:0,rebuildAt:0,liveTimer:0,subT:0};
 let panel=null,live=null;
 function ensureDom(){
@@ -21739,7 +21893,7 @@ function actingHost(){
     return ms.length&&ms[0].p===pid;
 }
 function metaOut(extra){
-    const m=Object.assign({p:pid,n:R.nick,h:R.creator?1:0,j:R.joinedAt||Date.now(),r:R.round,s:'lobby',t:0,z:0,c:0,b:szBuildStamp()},R.myMeta||{},extra||{});
+    const m=Object.assign({p:pid,n:R.nick,h:R.creator?1:0,md:R.md,j:R.joinedAt||Date.now(),r:R.round,s:'lobby',t:0,z:0,c:0,b:szBuildStamp()},R.myMeta||{},extra||{});
     R.myMeta=m;return m;
 }
 /* 상태 전달은 broadcast 로 한다 (2026-09-24 실측).
@@ -21768,6 +21922,8 @@ function onSt(m){
     if(m.s==='left'){delete R.members[m.p];render();return}
     if(prev&&(prev.u||0)>(m.u||0))return;   /* 순서가 뒤바뀐 옛 소식 (보낸 기기 시계 기준) */
     R.members[m.p]=m;R.seenAt[m.p]=now;noteResult(m);
+    /* 2인 협동 — 방 모드는 방장 메타가 정한다(링크 종류와 무관) */
+    if(m.h&&m.md&&!R.creator&&m.md!==R.md&&!R.racing){R.md=m.md;metaOut({md:R.md});saveSession()}
     if(prev&&prev.s==='play'&&m.s==='done'&&m.r===R.round)szCrashRelay(m);   /* P5 — 추락 중계 */
     if(!prev)setTimeout(()=>track(true),80+Math.random()*420);
     hostCatchUp();render();
@@ -21780,12 +21936,12 @@ setInterval(()=>{
     if(!R.fullChecked&&now-R.subT>3000&&R.view==='lobby'){
         R.fullChecked=true;
         const ord=Object.values(R.members).sort((a,b)=>(a.j-b.j)||(a.p<b.p?-1:1));
-        if(ord.findIndex(m=>m.p===pid)>=MAXP){disconnect(false);setView('entry');setTimeout(()=>setErr(t('full')),50);return}
+        if(ord.findIndex(m=>m.p===pid)>=cap()){const coop=R.md==='coop';disconnect(false);setView('entry');setTimeout(()=>setErr(coop?ct('full2'):t('full')),50);return}
     }
     Object.keys(R.members).forEach(p=>{if(p!==pid&&now-(R.seenAt[p]||0)>12000){delete R.members[p];gone=true}});
     if(gone)render();
 },2500);
-function saveSession(){LS.set('szx_race',JSON.stringify({code:R.code,creator:R.creator,nick:R.nick,at:Date.now()}))}
+function saveSession(){if(R.code)LS.set('szx_race',JSON.stringify({code:R.code,creator:R.creator,nick:R.nick,md:R.md,at:Date.now()}))}
 function clearSession(){LS.del('szx_race')}
 function connect(code,creator){
     const sb=typeof getSupabase==='function'&&getSupabase();
@@ -21797,10 +21953,13 @@ function connect(code,creator){
     const ch=sb.channel('szx-race-'+code,{config:{broadcast:{self:false,ack:false}}});
     R.ch=ch;R.joined=false;R.subT=Date.now();
     ch.on('broadcast',{event:'st'},({payload})=>onSt(payload));
-    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0,payload.b,payload.pen)});
+    ch.on('broadcast',{event:'go'},({payload})=>{if(payload)onGo(payload.r|0,payload.s|0,payload.b,payload.pen,payload.md)});
     ch.on('broadcast',{event:'sig'},({payload})=>onSig(payload));
-    ch.on('broadcast',{event:'pos'},({payload})=>{if(payload&&payload.p)ghostPt(payload.p,payload.x,payload.y,false)});
+    ch.on('broadcast',{event:'pos'},({payload})=>{if(payload&&payload.p)ghostPt(payload.p,payload.x,payload.y,false,payload.pd)});
     ch.on('broadcast',{event:'tk'},({payload})=>onTakeMsg(payload));
+    ch.on('broadcast',{event:'rv'},({payload})=>onRv(payload));      /* 2인 협동 — 구조 */
+    ch.on('broadcast',{event:'sat'},({payload})=>onSatMsg(payload)); /* 2인 협동 — 팀 위성 */
+    try{szGoldImg()}catch(_){}   /* 금색 기체 미리 받기 */
     ch.subscribe(status=>{
         if(status==='SUBSCRIBED'){R.joined=true;track(true);render()}
         else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT'||status==='CLOSED'){R.joined=false;render()}
@@ -21813,7 +21972,7 @@ function disconnect(keep){
         const c=R.ch;setTimeout(()=>{try{getSupabase().removeChannel(c)}catch(_){}},keep?0:300);
     }
     R.ch=null;R.joined=false;
-    if(!keep){meshCloseAll();for(const k of Object.keys(GH))delete GH[k];R.fullChecked=false;clearSession();R.code='';R.round=0;R.results={};R.finalized={};R.tally={};R.members={};R.racing=false;R.spect=false;R.myMeta=null;R.joinedAt=0}
+    if(!keep){meshCloseAll();for(const k of Object.keys(GH))delete GH[k];R.fullChecked=false;clearSession();R.code='';R.coop=false;R.round=0;R.results={};R.finalized={};R.tally={};R.members={};R.racing=false;R.spect=false;R.myMeta=null;R.joinedAt=0}
 }
 /* 연결 감시 — 모바일은 백그라운드에서 소켓이 자주 죽는다. 끊긴 채 8초면 채널을 새로 만든다 */
 setInterval(()=>{
@@ -21932,18 +22091,20 @@ function meshBroadcast(obj){
 function meshReadyCount(){ return Object.keys(R.members).filter(p=>p !== pid && MESH[p] && MESH[p].ready).length; }
 function onP2P(from, o){
     if(!o) return;
-    if(o.e === 'p') ghostPt(from, o.x, o.y, true);
+    if(o.e === 'p') ghostPt(from, o.x, o.y, true, o.pd);
     else if(o.e === 'st' && o.m) onSt(o.m);
     else if(o.e === 'tk') onTakeMsg(o);
+    else if(o.e === 'rv') onRv(o);
+    else if(o.e === 'sat') onSatMsg(o);
 }
 
 /* ── 다른 사람 기체(유령) — 120ms 늦게 보간해 그려 끊김을 숨긴다 ── */
-function ghostPt(p, x, y, viaP2P){
+function ghostPt(p, x, y, viaP2P, pd){
     if(p === pid) return;
     const g = GH[p] || (GH[p] = {pts:[], deadAt:0});
     if(!viaP2P && g.p2pAt && Date.now() - g.p2pAt < 3000) return;   /* 직통이 살아 있으면 서버 위치는 무시 */
     if(viaP2P) g.p2pAt = Date.now();
-    g.pts.push({t: Date.now(), x, y});
+    g.pts.push({t: Date.now(), x, y, pd: pd | 0});
     if(g.pts.length > 12) g.pts.shift();
 }
 function ghostColor(p){
@@ -21952,8 +22113,8 @@ function ghostColor(p){
 }
 function drawGhosts(c){
     if(!R.racing && !R.spect && !szSpectating) return;
-    const big = szSpectating ? 1.5 : 1;   /* P5 — 관전 중엔 유령을 크게 */
-    const now = Date.now(), T = now - 120;
+    const big = (szSpectating && !C.pod) ? 1.5 : 1;   /* P5 — 관전 중엔 유령을 크게 (내 캡슐 대기 중은 제외) */
+    const now = Date.now(), T = now - 120, pn = performance.now();
     for(const p of Object.keys(GH)){
         const g = GH[p], m = R.members[p];
         if(!g.pts.length || !m || m.r !== R.round) continue;
@@ -21961,9 +22122,10 @@ function drawGhosts(c){
         for(let i = g.pts.length - 1; i > 0; i--){ if(g.pts[i - 1].t <= T){ a = g.pts[i - 1]; b = g.pts[i]; break; } }
         const k = b.t > a.t ? Math.max(0, Math.min(1, (T - a.t) / (b.t - a.t))) : 1;
         const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k;
-        const col = ghostColor(p);
-        c.save();
+        /* 태그·점 색 — 동시 대결은 사람별 색(ghostColor), 2인 협동은 도장 색(은·금) */
+        const col = R.coop ? livCol(p) : ghostColor(p);
         if(m.s === 'done'){
+            c.save();
             if(!g.deadAt) g.deadAt = now;
             /* P5 — 추락 링 2배(크기·시간) + 안쪽 번쩍 */
             const e = (now - g.deadAt) / 1100; if(e > 1){ c.restore(); continue; }
@@ -21972,28 +22134,34 @@ function drawGhosts(c){
             c.lineWidth = 1.5; c.beginPath(); c.arc(x, y, 8 + e * 30, 0, 6.283); c.stroke();
             c.restore(); continue;
         }
-        if(now - b.t > 4000){ c.restore(); continue; }
-        c.translate(x, y);
-        if(big !== 1) c.scale(big, big);
-        c.globalAlpha = 0.6;
-        c.fillStyle = 'rgba(255,170,80,0.75)';
-        c.beginPath(); c.moveTo(-3, 6); c.lineTo(0, 11 + Math.random() * 4); c.lineTo(3, 6); c.closePath(); c.fill();
-        c.fillStyle = col; c.strokeStyle = 'rgba(0,0,0,0.55)'; c.lineWidth = 1;
-        c.beginPath(); c.moveTo(0, -11); c.lineTo(7, 8); c.lineTo(0, 4); c.lineTo(-7, 8); c.closePath(); c.fill(); c.stroke();
-        c.globalAlpha = 0.85; c.font = '700 9px "Noto Sans KR",sans-serif'; c.textAlign = 'center'; c.textBaseline = 'top';
-        c.fillStyle = col; c.fillText(String(m.n || '').slice(0, 8), 0, 13);
-        c.restore();
+        if(now - b.t > 4000) continue;
+        /* 2인 협동 — 파트너 구조 캡슐(마지막 점의 pd = 캡슐 번호) */
+        const pd = R.coop ? (g.pts[g.pts.length - 1].pd | 0) : 0;
+        if(pd){
+            if(g.podId !== pd){ g.podId = pd; g.podAt = pn; coopSos(p, m); }
+            const kk = 1 - (pn - g.podAt) / POD_MS;
+            szDrawPod(x, y, livOf(p), kk, pn, false, kk > 0 && C.rvDone[p] !== pd ? ct('podTag') : '');
+            coopTryRescue(p, g, x, y, pn);
+            g.lt = undefined;   /* 부활하면 뱅크 추정을 새로 */
+            continue;
+        }
+        /* 같은 스타십 스프라이트 — 뱅크는 보간 좌표의 옆 속도, 반투명 + 이름표. 내 기체는 이 위에 불투명 */
+        szPeerTrack(g, x, y, pn);
+        szDrawPeerShip(x, y, g, livOf(p), 0.74, pn, m.n, col, big);
     }
+    if(C.pod) podStep(pn);
 }
 /* 비행 중 위치 — 직통 초당 10번, 직통이 안 되는 짝이 있으면 서버로 2초에 1번 */
 let posSupaAt = 0;
 setInterval(()=>{
     if(!(R.racing && running && typeof player !== 'undefined')) return;
-    const x = Math.round(player.x), y = Math.round(player.y);
-    const r = meshBroadcast({e:'p', x, y});
-    if(!r.all && R.ch && R.joined && Date.now() - posSupaAt > 2000){
+    /* 2인 협동 — 캡슐이면 캡슐 위치 + pd(캡슐 번호). 캡슐은 느려서 서버 폴백도 0.7초면 충분 */
+    const P = C.pod || player, pd = C.pod ? C.pod.id : 0;
+    const x = Math.round(P.x), y = Math.round(P.y);
+    const r = meshBroadcast(pd ? {e:'p', x, y, pd} : {e:'p', x, y});
+    if(!r.all && R.ch && R.joined && Date.now() - posSupaAt > (pd ? 700 : 2000)){
         posSupaAt = Date.now();
-        try{ R.ch.send({type:'broadcast', event:'pos', payload:{p:pid, x, y}}); }catch(_){}
+        try{ R.ch.send({type:'broadcast', event:'pos', payload: pd ? {p:pid, x, y, pd} : {p:pid, x, y}}); }catch(_){}
     }
 }, 100);
 
@@ -22041,7 +22209,7 @@ function hostCatchUp(){
     if(!hm||hm.hr<=R.round)return;
     /* 기기 시계는 서로 다르니 방장 자신의 비행 시간으로 판단한다 — 막 출발했으면 합류 */
     const fresh=hm.s==='play'&&hm.r===hm.hr&&(hm.t||0)<2500;
-    if(fresh&&(!running||szSpectating))onGo(hm.hr,hm.hs,hm.b,hm.pen);
+    if(fresh&&(!running||szSpectating))onGo(hm.hr,hm.hs,hm.b,hm.pen,hm.md);
     else if(!R.racing){R.round=hm.hr;R.seed=hm.hs;R.spect=true;metaOut({r:R.round,s:'spec'});track(true);if(R.view==='lobby')setView('result')}
 }
 function noteResult(m){
@@ -22049,7 +22217,7 @@ function noteResult(m){
     const rr=R.results[m.r]||(R.results[m.r]={});
     const prev=rr[m.p];
     if(prev&&prev.s==='done'&&m.s!=='done')return;
-    rr[m.p]={p:m.p,n:m.n,s:m.s,t:m.t||0,z:m.z||0,c:m.c||0,at:Date.now()};
+    rr[m.p]={p:m.p,n:m.n,s:m.s,t:m.t||0,z:m.z||0,c:m.c||0,gz:m.gz|0,sa:m.sa|0,rs:m.rs|0,at:Date.now()};
 }
 function startRound(){
     if(!actingHost())return;
@@ -22057,14 +22225,17 @@ function startRound(){
     const r=Math.max(R.round,...Object.values(R.members).map(m=>m.r||0))+1;
     const s=((Math.random()*0x7fffffff)|0)+1;
     const b=szBuildStamp();
-    const pen=szPenClean(R.pen);   /* P5 — 로비 벌칙 한 줄 */
+    const md=R.md==='coop'?'coop':'race';
+    const pen=md==='coop'?'':szPenClean(R.pen);   /* P5 — 로비 벌칙 한 줄 (협동엔 꼴찌가 없다) */
     R.autoAt=0;
-    metaOut({hr:r,hs:s,ha:Date.now()});
-    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b,pen}})}catch(_){}
-    onGo(r,s,b,pen);
+    metaOut({hr:r,hs:s,ha:Date.now(),md});
+    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b,pen,md}})}catch(_){}
+    onGo(r,s,b,pen,md);
 }
-function onGo(r,s,b,pen){
+function onGo(r,s,b,pen,md){
     if(r<=R.round)return;
+    if(md==='coop'||md==='race')R.md=md;
+    R.coop=R.md==='coop';
     if(!szBuildOk(b)){szBuildNote([]);return}   /* 방장과 빌드가 다르면 참가하지 않는다 → 새로고침 안내 */
     if(szSpectating)szExitSpectate();   /* P5 — 관전 중이면 바로 다음 판에 합류 */
     szSpecCard(false);R.autoAt=0;
@@ -22072,8 +22243,9 @@ function onGo(r,s,b,pen){
     if(running||(typeof _introRunning!=='undefined'&&_introRunning)){R.round=r;R.seed=s;R.spect=true;metaOut({r,s:'spec'});track(true);return}
     R.round=r;R.seed=s;R.spect=false;R.racing=true;R.taken={};
     for(const k of Object.keys(GH))delete GH[k];
+    coopReset();
     (R.results[r]=R.results[r]||{})[pid]={p:pid,n:R.nick,s:'play',t:0,z:0,c:0,at:Date.now()};
-    metaOut({r,s:'play',t:0,z:0,c:0});track(true);
+    metaOut({r,s:'play',t:0,z:0,c:0,pd:0,gz:0,sa:0,rs:0,rv:0});track(true);
     pendingSeed=s;
     closePanel();
     try{startGame()}catch(e){console.warn('[szx] startGame',e)}
@@ -22082,7 +22254,9 @@ function onGo(r,s,b,pen){
 /* 비행 중 1초마다 내 기록을 내보내고 실시간 순위를 그린다 */
 setInterval(()=>{
     if(R.racing&&running){
-        metaOut({t:Math.round(elapsedMs),z:(typeof currentZoneIdx==='number'?currentZoneIdx+1:0)});track(false);
+        /* 캡슐 중엔 비행 시간이 멈춘 채(격추 시각) — 팀 기록은 둘 중 늦은 시각이다 */
+        metaOut({t:C.pod?C.downT:Math.round(elapsedMs),z:(typeof currentZoneIdx==='number'?currentZoneIdx+1:0),gz:typeof szGrazeN==='number'?szGrazeN:0});track(false);
+        coopTick();
         const rr=R.results[R.round];if(rr&&rr[pid]){rr[pid].t=Math.round(elapsedMs)}
     }
     if(running&&!szSpectating&&!recShown&&runBest>5000&&elapsedMs>runBest){recShown=true;toast(t('newRec'))}
@@ -22093,10 +22267,13 @@ function onGameOver(ms){
     stopRoar(.25);
     if(!R.racing)return false;
     R.racing=false;
+    if(R.coop&&C.finalT)ms=C.finalT;   /* 2인 협동 — 캡슐이 회수되지 못했으면 기록은 격추 시각 */
+    C.pod=null;C.final=true;
     const c=typeof comboMaxThisRun==='number'?comboMaxThisRun:0,z=typeof currentZoneIdx==='number'?currentZoneIdx+1:0;
+    const gz=typeof szGrazeN==='number'?szGrazeN:0;
     const rr=R.results[R.round]||(R.results[R.round]={});
-    rr[pid]={p:pid,n:R.nick,s:'done',t:Math.round(ms),z,c,at:Date.now()};
-    metaOut({s:'done',t:Math.round(ms),z,c});track(true);
+    rr[pid]={p:pid,n:R.nick,s:'done',t:Math.round(ms),z,c,gz,sa:C.sats,rs:C.rescues,at:Date.now()};
+    metaOut({s:'done',t:Math.round(ms),z,c,pd:0,gz,sa:C.sats,rs:C.rescues,rv:C.revived});track(true);
     if(ms>(+LS.get('szx_best_ms','0')||0))LS.set('szx_best_ms',String(Math.round(ms)));
     live.classList.remove('on');
     /* P5 — 아직 나는 사람이 있으면 결과 패널 대신 가벼운 관전(SZ_FLAGS.spectate) */
@@ -22117,7 +22294,7 @@ function standings(r){
             else if(e.p!==pid)tm=tm+Math.min(2500,now-(R.seenAt[e.p]||now));
             else if(running)tm=Math.round(elapsedMs);
         }
-        rows.push({p:e.p,n:e.n,s,t:tm,z:e.z,c:e.c});
+        rows.push({p:e.p,n:e.n,s,t:tm,z:e.z,c:e.c,gz:e.gz|0,sa:e.sa|0,rs:e.rs|0});
     });
     rows.sort((a,b)=>b.t-a.t||b.c-a.c);
     return rows;
@@ -22127,7 +22304,7 @@ function finalizeIfDone(r){
     const rows=standings(r);
     if(!rows.length||rows.some(x=>x.s==='play'))return false;
     R.finalized[r]=rows.map(x=>x.p);
-    if(rows.length<2)return true;
+    if(rows.length<2||R.coop)return true;   /* 협동엔 승자·꼴찌가 없다 */
     const w=rows[0],l=rows[rows.length-1];
     (R.tally[w.p]=R.tally[w.p]||{n:w.n,w:0,l:0}).w++;
     (R.tally[l.p]=R.tally[l.p]||{n:l.n,w:0,l:0}).l++;
@@ -22138,6 +22315,7 @@ function renderLive(){
     if(!((R.racing||szSpectating)&&running)){live.classList.remove('on');return}
     live.classList.add('on');
     const rows=standings(R.round);
+    if(R.coop){live.innerHTML=coopLive(rows);return}
     const alive=rows.filter(x=>x.s==='play').length;
     let h='<div class="h">'+esc(t('live'))+' · '+alive+'/'+rows.length+' '+esc(t('alive'))+'</div>';
     const myIdx=rows.findIndex(x=>x.p===pid);
@@ -22152,31 +22330,37 @@ function render(){
     if(!panel)return;
     const v=R.view;let A='',B='',C='';
     if(v==='entry'){
-        A='<h3>'+esc(t('raceT'))+'</h3><p class="szx-sub">'+esc(t('raceSub'))+'</p>';
+        const co=R.entryMd==='coop';
+        A='<div class="szx-tabs" role="tablist"><button type="button" role="tab" data-a="md" data-m="race" aria-selected="'+!co+'" class="'+(co?'':'on')+'">'+esc(ct('raceS'))+'</button>'
+          +'<button type="button" role="tab" data-a="md" data-m="coop" aria-selected="'+co+'" class="co'+(co?' on':'')+'">'+esc(ct('coop'))+'</button></div>'
+          +'<h3>'+esc(co?ct('coopT'):t('raceT'))+'</h3><p class="szx-sub">'+esc(co?ct('coopSub'):t('raceSub'))+'</p>';
         C='<div class="szx-col"><input class="szx-in" id="szxNick" maxlength="14" autocomplete="off" placeholder="'+esc(t('nick'))+'" value="'+esc(LS.get('szx_nick',''))+'">'
-          +'<button class="szx-b hot" data-a="create" type="button">'+esc(t('create'))+'</button>'
+          +'<button class="szx-b '+(R.entryMd==='coop'?'co':'hot')+'" data-a="create" type="button">'+esc(t('create'))+'</button>'
           +'<div class="szx-or">— '+esc(t('or'))+' —</div>'
           +'<div class="szx-row"><input class="szx-in code" id="szxCode" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="······" value="'+esc(R.preCode||'')+'">'
           +'<button class="szx-b" data-a="join" type="button" style="flex:.55">'+esc(t('join'))+'</button></div>'
           +'<div class="szx-err"></div><button class="szx-b ghost" data-a="back" type="button">'+esc(t('back'))+'</button></div>';
     }else if(v==='lobby'){
         const ms=Object.values(R.members).sort((a,b)=>a.j-b.j);
-        const can=actingHost(),n=ms.length;
-        const link=location.host+'/games/dodge/?race='+R.code;
-        A='<div class="szx-sub">'+esc(t('room'))+'</div><div class="szx-code">'+esc(R.code)+'</div>'
+        const can=actingHost(),n=ms.length,co=R.md==='coop';
+        const link=roomUrl().replace(/^https?:\/\//,'');
+        A=(co?'<div class="szx-mode">'+esc(ct('coop'))+'</div>':'')+'<div class="szx-sub">'+esc(t('room'))+'</div><div class="szx-code">'+esc(R.code)+'</div>'
           +'<div class="szx-col"><button class="szx-b hot" data-a="share" type="button">'+esc(t('share'))+'</button>'
           +'<div class="szx-link"><span>'+esc(link)+'</span><button type="button" data-a="copy">'+esc(t('copy'))+'</button></div></div>'
           +'<div class="szx-qr" id="szxQr"></div>';
         const pr=meshReadyCount(),others=Math.max(0,n-1);
-        B='<div class="szx-sub">'+esc(t('players'))+' '+n+'/'+MAXP+(R.joined?(others?' · '+esc(t('link'))+' '+pr+'/'+others:''):' · '+esc(t('conn')))+'</div><div class="szx-list">';
-        ms.forEach(m=>{B+='<div class="szx-m'+(m.p===pid?' me':'')+'"><span class="szx-dot" style="background:'+ghostColor(m.p)+';box-shadow:0 0 8px '+ghostColor(m.p)+'"></span><span class="nm">'+esc(m.n)+'</span>'
+        B='<div class="szx-sub">'+esc(t('players'))+' '+n+'/'+cap()+(R.joined?(others?' · '+esc(t('link'))+' '+pr+'/'+others:''):' · '+esc(t('conn')))+'</div><div class="szx-list">';
+        ms.forEach(m=>{const dc=co?livCol(m.p):ghostColor(m.p);B+='<div class="szx-m'+(m.p===pid?' me':'')+'"><span class="szx-dot" style="background:'+dc+';box-shadow:0 0 8px '+dc+'"></span><span class="nm">'+esc(m.n)+'</span>'
+            +(co?'<span class="szx-tag" style="color:'+dc+'">'+esc(ct(m.h?'silver':'gold'))+'</span>':'')
             +(m.h?'<span class="szx-tag host">'+esc(t('host'))+'</span>':'')+(m.p===pid?'<span class="szx-tag">'+esc(t('me'))+'</span>':'')+'</div>'});
         B+='</div>'+szLobbyExtra(ms);   /* P5 — 로딩 중 N명 · 벌칙 한 줄 */
         const allRd=n>=2&&ms.every(m=>m.rd===1);
         C='<div class="szx-col">';
-        if(can)C+='<button class="szx-b hot'+(allRd&&R.joined?' szx-pulse':'')+'" data-a="go" type="button"'+(n<2||!R.joined?' disabled':'')+'>'+esc(t('go'))+'</button>'+(n<2?'<div class="szx-sub">'+esc(t('need2'))+'</div>':'');
+        if(can)C+='<button class="szx-b '+(co?'co':'hot')+(allRd&&R.joined?' szx-pulse':'')+'" data-a="go" type="button"'+(n<2||!R.joined?' disabled':'')+'>'+esc(co?ct('go2'):t('go'))+'</button>'+(n<2?'<div class="szx-sub">'+esc(co?ct('need2c'):t('need2'))+'</div>':'');
         else C+='<div class="szx-wait">'+esc(t('waitHost'))+'</div>';
         C+='<button class="szx-b ghost" data-a="leave" type="button">'+esc(t('leave'))+'</button></div>';
+    }else if(v==='result'&&R.coop){
+        const o=coopResult();A=o.A;B=o.B;C=o.C;
     }else if(v==='result'){
         const r=R.round,rows=standings(r),done=finalizeIfDone(r);
         A='<h3>'+esc(t('roundN').replace('{n}',r))+'</h3>'+(R.spect?'<div class="szx-sub">'+esc(t('spectate'))+'</div>':'');
@@ -22221,7 +22405,7 @@ function raceHome(){disconnect(false);if(live)live.classList.remove('on');setTim
 ['pointerup','click'].forEach(ev=>addEventListener(ev,e=>{const b=e.target&&e.target.closest&&e.target.closest('[data-lp-nav="main"]');if(b&&R.code)disconnect(false)},true));
 function drawQr(){
     const box=$('szxQr');if(!box)return;
-    const url=location.origin+'/games/dodge/?race='+R.code;
+    const url=roomUrl();
     const go=()=>{try{const q=window.qrcode(0,'M');q.addData(url);q.make();box.innerHTML=q.createSvgTag({cellSize:3,margin:0})}catch(_){box.style.display='none'}};
     if(window.qrcode)go();
     else{const s=document.createElement('script');s.src='/vendor/qrcode.js';s.onload=go;s.onerror=()=>{box.style.display='none'};document.head.appendChild(s)}
@@ -22232,6 +22416,7 @@ function onPanelClick(e){
     e.stopPropagation();
     const a=b.dataset.a;
     if(a==='back'){closePanel();if(typeof _showPvpOverlay==='function')_showPvpOverlay(null);return}
+    if(a==='md'){const nk=$('szxNick'),cd=$('szxCode');if(nk)LS.set('szx_nick',(nk.value||'').trim().slice(0,14));if(cd)R.preCode=(cd.value||'').replace(/\D/g,'').slice(0,6);R.entryMd=b.dataset.m==='coop'?'coop':'race';panel.dataset.v='';render();return}
     if(a==='create'||a==='join'){
         const nick=($('szxNick').value||'').trim().slice(0,14);
         if(!nick){setErr(t('needNick'));return}
@@ -22240,24 +22425,31 @@ function onPanelClick(e){
         if(a==='join'){code=($('szxCode').value||'').replace(/\D/g,'');if(code.length!==6){setErr(t('needCode'));return}}
         else code=String(100000+Math.floor(Math.random()*900000));
         R.round=0;R.results={};R.finalized={};R.tally={};R.joinedAt=Date.now();
+        R.md=R.entryMd==='coop'?'coop':'race';R.coop=false;R.myMeta=null;   /* 참가자는 방장 메타의 모드를 따른다(onSt) */
         connect(code,a==='create');setView('lobby');return;
     }
-    if(a==='share'){shareLink(location.origin+'/games/dodge/?race='+R.code,t('shareTxt').replace('{c}',R.code)+((typeof szShareZoneSuffix==='function'&&szShareZoneSuffix())||'')+szPenShareSuffix());return}   /* P3: 내 최고 도달 존 · P5: 벌칙 */
-    if(a==='copy'){const u=location.origin+'/games/dodge/?race='+R.code;
+    if(a==='share'){if(R.md==='coop'){shareLink(roomUrl(),ct('share2').replace('{c}',R.code));return}
+        shareLink(roomUrl(),t('shareTxt').replace('{c}',R.code)+((typeof szShareZoneSuffix==='function'&&szShareZoneSuffix())||'')+szPenShareSuffix());return}   /* P3: 내 최고 도달 존 · P5: 벌칙 */
+    if(a==='copy'){const u=roomUrl();
         (navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast(t('copied'))).catch(()=>{try{window.prompt('',u)}catch(_){}});return}
     if(a==='go'){startRound();return}
     if(a==='auto'){szAutoToggle();return}          /* P5 */
-    if(a==='rshare'){szResultShare();return}      /* P5 */
+    if(a==='rshare'){if(R.coop)coopShare();else szResultShare();return}      /* P5 */
     if(a==='leave'){disconnect(false);live.classList.remove('on');setView('entry');closePanel();if(typeof _showPvpOverlay==='function')_showPvpOverlay(null);return}
 }
-function openRace(){ensureDom();R.preCode=R.preCode||'';setView(R.code?(R.view==='result'?'result':'lobby'):'entry');openPanel()}
+function openRace(md){ensureDom();if(md&&!R.code)R.entryMd=md;R.preCode=R.preCode||'';setView(R.code?(R.view==='result'?'result':'lobby'):'entry');openPanel()}
 /* 시작 화면에 버튼 + 링크 진입(?race=) + 새로고침 복귀 */
 function addStartButton(){
     const row=document.querySelector('#overlay .ov-btn-row');
     if(!row||$('szxRaceBtn'))return;
-    const b=document.createElement('button');b.className='btn btn-race';b.id='szxRaceBtn';b.type='button';b.textContent=t('race');
-    b.addEventListener('click',e=>{e.stopPropagation();openRace()});
-    row.insertBefore(b,row.children[1]||null);
+    /* 2026-09-29 — 친구와 같이: 동시 대결(최대 8) · 2인 협동 을 반폭 두 버튼으로 (높이 그대로). 1:1 대결은 아래 줄 */
+    const w=document.createElement('div');w.className='szx-mp';w.id='szxMp';
+    const b=document.createElement('button');b.className='btn btn-race';b.id='szxRaceBtn';b.type='button';b.textContent=ct('raceS');
+    b.addEventListener('click',e=>{e.stopPropagation();openRace('race')});
+    const b2=document.createElement('button');b2.className='btn btn-coop';b2.id='szxCoopBtn';b2.type='button';b2.textContent=ct('coop');
+    b2.addEventListener('click',e=>{e.stopPropagation();openRace('coop')});
+    w.appendChild(b);w.appendChild(b2);
+    row.insertBefore(w,row.children[1]||null);
     setTimeout(szDailyMount,0);   /* P5 — 오늘의 코스 칩 (race 펜스) */
     /* 기존 1:1 실시간 PvP(로그인) 두 버튼은 작은 한 줄로 — 새 동시 대결과 헷갈리지 않게 */
     const c=$('ovCreateBtn'),j=$('ovJoinBtn');
@@ -22272,8 +22464,10 @@ function boot(){
     try{panel.addEventListener('input',szPenInput)}catch(_){}   /* P5 — 벌칙 입력칸 (race 펜스) */
     let q=null;try{q=new URLSearchParams(location.search).get('race')}catch(_){}
     let sess=null;try{sess=JSON.parse(LS.get('szx_race','null'))}catch(_){}
+    let qc=null;try{qc=new URLSearchParams(location.search).get('coop')}catch(_){}
+    if(!q&&qc){q=qc;R.md='coop';R.entryMd='coop'}   /* 2인 협동 초대 링크 ?coop= (같은 방 채널 — 모드는 방장 메타가 최종) */
     if(sess&&sess.code&&Date.now()-sess.at<3*3600e3&&(!q||q===sess.code)&&sess.nick){
-        R.nick=sess.nick;R.joinedAt=Date.now();connect(sess.code,!!sess.creator);openRace();return;
+        R.nick=sess.nick;R.joinedAt=Date.now();R.md=sess.md==='coop'?'coop':(qc?'coop':'race');R.entryMd=R.md;connect(sess.code,!!sess.creator);openRace();return;
     }
     if(q&&/^\d{6}$/.test(q)){
         const nk=LS.get('szx_nick','');
@@ -22286,7 +22480,7 @@ function boot(){
 const mo=new MutationObserver(()=>{addStartButton();decorateStart();szDailyMount()});
 function watch(){const ov=$('overlay');if(ov)mo.observe(ov,{childList:true})}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{boot();watch()});else{boot();watch()}
-document.addEventListener('lp:langchanged',()=>{const b=$('szxRaceBtn');if(b)b.textContent=t('race');const d=document.querySelector('#szxDuo .cap');if(d)d.textContent=t('duo');render()});
+document.addEventListener('lp:langchanged',()=>{const b=$('szxRaceBtn');if(b)b.textContent=ct('raceS');const b2=$('szxCoopBtn');if(b2)b2.textContent=ct('coop');if(panel)panel.dataset.v='';const d=document.querySelector('#szxDuo .cap');if(d)d.textContent=t('duo');render()});
 
 /*<sz:mod:race>*/
 /* 소유: P5 (추락 중계·관전·데일리·로비 벌칙 문구·빌드 불일치 게이트). P2 = go 신호·코스 버전(cv) 부분만.
@@ -22373,6 +22567,7 @@ function szLobbyExtra(ms){
     let h='';
     const ld=ms.filter(m=>m.rd!==1).length;
     if(ms.length>=2)h+='<div class="szx-sub szx-ld'+(ld?'':' ok')+'">'+esc(ld?szP5T('loading').replace('{k}',ld):szP5T('ready'))+'</div>';
+    if(R.md==='coop')return h;
     if(actingHost()){
         h+='<div class="szx-col"><input class="szx-in szx-pen-in" id="szxPen" maxlength="20" autocomplete="off" placeholder="'+esc(szP5T('penPh'))+'" value="'+esc(R.pen||'')+'"></div>';
     }else{
@@ -22387,7 +22582,7 @@ function szResultPen(r,rows,done){
     const l=rows[rows.length-1];
     return '<div class="szx-penbig"><span class="who">'+esc(l.n)+'</span><span class="what">'+esc(szP5T('pen'))+' · '+esc(p)+'</span></div>';
 }
-function szPenShareSuffix(){const p=szLobbyPen();return p?szP5T('penShare').replace('{p}',p):''}
+function szPenShareSuffix(){if(R.md==='coop')return '';const p=szLobbyPen();return p?szP5T('penShare').replace('{p}',p):''}
 function szResultShare(){
     const r=R.round,rows=standings(r);if(rows.length<2)return;
     const p=szPenOf(r);
@@ -22402,6 +22597,7 @@ function szAutoLeft(done){if(!done||!R.autoAt)return '';return ' · '+esc(szP5T(
 /* 추락 중계 — 도장 '{닉} 추락! 남은 N명' (나는 중이거나 관전 중일 때) */
 function szCrashRelay(m){
     if(!(running&&(R.racing||szSpectating)))return;
+    if(R.coop){if(!C.outNoted&&m.p!==pid){C.outNoted=true;coopStamp(ct('partnerOut').replace('{n}',String(m.n||'?').slice(0,8)),livCol(m.p))}return}   /* 2인 협동 — 혼자 계속 */
     const k=standings(R.round).filter(x=>x.s==='play').length;
     const txt=szP5T('crash').replace('{n}',String(m.n||'?').slice(0,8)).replace('{k}',k);
     try{if(window.SZ3&&SZ3.stamp)SZ3.stamp(txt,ghostColor(m.p));else toast(txt)}catch(_){}
@@ -22456,7 +22652,7 @@ setInterval(()=>{
     const snd=!!(SND.c3&&SND.go),fonts=!document.fonts||document.fonts.status==='loaded';
     if((snd&&fonts)||Date.now()-R.subT>6000){metaOut({rd:1});track(true);render()}
 },700);
-document.addEventListener('visibilitychange',()=>{if(document.hidden&&typeof szSpectating!=='undefined'&&szSpectating)szSpecToResult()});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&typeof szSpectating!=='undefined'&&szSpectating&&!C.pod)szSpecToResult()});
 /* 오늘의 코스 — 시드 = _szHash(UTC YYYYMMDD). 어느 기기든 같은 날짜면 같은 코스. 기록 szx_daily={date,best} */
 function szDailyDate(){const d=new Date();return d.getUTCFullYear()*10000+(d.getUTCMonth()+1)*100+d.getUTCDate()}
 function szDailySeed(date){
@@ -22488,11 +22684,186 @@ function szRunMode(){
 }
 /*</sz:mod:race>*/
 
+/*<sz:mod:coop>*/
+/* ── 2인 협동 '합심 비행' (2026-09-29) ──
+   운영자: "1:1 대결만 있는데, 둘이 합심해서 더 멀리 가는 모드도 — 고를 수 있게".
+   · 방·채널·P2P 위치·하트비트는 동시 대결(SZX) 그대로. 방 모드 md='coop' 은 방장 메타·go 신호가 정한다. 정원 2
+   · 코스는 동시 대결과 똑같은 시드 공간(운석·위험물·보급·조준 가상 표적) — 협동이라고 코스를 바꾸지 않는다
+   · 격추(하트 0) → 파트너가 날고 있으면 구조 캡슐(6초). 캡슐은 천천히 가라앉고, 파트너가 스치면(34px) 부활:
+     구조한 쪽 하트 -1(하트 2개 이상일 때만), 둘 다 2.2초 무적. 못 구하면 격추 시각이 내 기록 → 파트너 관전
+   · 판정 권한: 구조 판정은 구조하는 쪽(자기 위치를 정확히 안다), 부활은 캡슐 주인(캡슐 번호가 맞을 때만) — 중복·유령 부활 없음
+   · 팀 기록 = 둘 중 늦게 떨어진 시각(같은 시계로 출발). 보급은 동시 대결 규칙(먼저 먹은 사람), FEVER·별가루는 각자
+   · 위성: 둘 중 누가 설치해도 이 존 주 미션은 팀 성공(szCoopTeamSat) — 보상은 각자 받는다
+   · 파트너가 나가거나 끊기면(9초 무소식) 혼자 계속, 결과에 한 줄 남긴다 */
+function coopReset(){
+    Object.assign(C,{pod:null,downT:0,finalT:0,final:false,rescues:0,revived:0,sats:0,rvDone:{},satPend:{},sosSeen:{},lostNoted:false,outNoted:false,hintAt:0});
+}
+function partner(){const k=Object.keys(R.members).find(p=>p!==pid);return k?R.members[k]:null}
+function partnerFlying(){
+    const m=partner();if(!m||m.r!==R.round||m.s!=='play'||m.pd)return false;
+    if(Date.now()-(R.seenAt[m.p]||0)>9000)return false;
+    const g=GH[m.p],lp=g&&g.pts.length?g.pts[g.pts.length-1]:null;
+    return !(lp&&lp.pd);
+}
+/* triggerGameOver 첫 줄에서 부른다. true = 판을 끝내지 않고 캡슐로 */
+function coopPod(kind){
+    if(!(R.coop&&R.racing))return false;
+    if(C.pod){C.final=true;C.finalT=C.downT;endPod();return false}   /* 캡슐 중 앱 이탈 등 → 격추 시각으로 종료 */
+    if(C.final||!running||szSpectating)return false;
+    if(!partnerFlying())return false;
+    const now=performance.now();
+    C.pod={x:Math.max(24,Math.min(CW-24,player.x)),y:Math.max(110,Math.min(CH-80,player.y)),t0:now,lt:now,id:++C.podN,kind:kind||''};
+    C.downT=Math.round(elapsedMs);
+    /* 관전과 같은 방어막 — 입력·BEAM·미션 시작·줍기 없음, 기체는 화면 밖(판정 밖). 세계 시뮬은 계속(파트너와 같은 시계) */
+    szSpectating=true;szShipHidden=true;invincibleUntil=1e15;
+    try{szBeamOff()}catch(_){}
+    try{pointer.active=false;pendingTp.active=false}catch(_){}
+    try{for(const k in keys)keys[k]=false}catch(_){}
+    player.x=CW/2;player.y=CH+400;
+    metaOut({pd:C.pod.id,t:C.downT});track(true);
+    coopStamp(ct('mySos'),'#FFD166');
+    try{szVibrate([30,40,30])}catch(_){}
+    return true;
+}
+function endPod(){if(!C.pod)return;C.pod=null;szSpectating=false;metaOut({pd:0})}
+function podStep(pn){
+    const P=C.pod;if(!P)return;
+    const dt=Math.min(0.1,Math.max(0,(pn-P.lt)/1000));P.lt=pn;
+    P.y=Math.min(CH-80,P.y+22*dt);
+    P.x=Math.max(24,Math.min(CW-24,P.x+Math.sin(pn*0.0011+P.id)*10*dt));
+    const age=pn-P.t0,pm=partner();
+    const gone=!pm||pm.r!==R.round||pm.s!=='play'||!!pm.pd||Date.now()-(R.seenAt[pm.p]||0)>9000;
+    if(age>POD_MS+POD_GRACE||(gone&&age>400)){podExpire();return}
+    szDrawPod(P.x,P.y,myLivery(),1-age/POD_MS,pn,true,ct('mySos'));
+}
+function podExpire(){
+    if(!C.pod)return;
+    const k=C.pod.kind;
+    C.final=true;C.finalT=C.downT;endPod();
+    setTimeout(()=>{try{if(running)triggerGameOver(k||undefined)}catch(_){}},0);
+}
+/* 구조 — 구조하는 쪽이 판정(내 위치는 정확, 캡슐은 느리다). 하트 2개 이상일 때만 */
+function coopTryRescue(p,g,x,y,pn){
+    if(!(R.coop&&R.racing&&running)||szSpectating||C.pod||C.final)return;
+    if(C.rvDone[p]===g.podId||pn-g.podAt>POD_MS)return;
+    const dx=player.x-x,dy=player.y-y;
+    if(dx*dx+dy*dy>RESCUE_R*RESCUE_R)return;
+    if(lives<2){if(pn-C.hintAt>1600){C.hintAt=pn;try{szPopup(ct('needHeart'),x,y-40,'#FF8FA3',12,1.2)}catch(_){}}return}
+    C.rvDone[p]=g.podId;
+    lives--;invincibleUntil=pn+REVIVE_INV;flashVisible=true;lastFlashToggle=pn;
+    C.rescues++;
+    const m=R.members[p],o={e:'rv',to:p,pk:g.podId,p:pid,n:R.nick};
+    const send=()=>{meshBroadcast(o);try{R.ch&&R.ch.send({type:'broadcast',event:'rv',payload:o})}catch(_){}};
+    send();
+    /* 직통은 재전송이 없다 — 캡슐이 아직 보이면 두 번 더 */
+    [300,900].forEach(ms=>setTimeout(()=>{const gg=GH[p],lp=gg&&gg.pts.length?gg.pts[gg.pts.length-1]:null;if(lp&&lp.pd===o.pk)send()},ms));
+    coopStamp(ct('rescued').replace('{n}',String(m&&m.n||'').slice(0,8)),'#7CFFB2');
+    try{szPopup('-❤',player.x,player.y-30,'#FF8FA3',14,1.0)}catch(_){}
+    try{szVibrate(25)}catch(_){}
+    metaOut({rs:C.rescues});track(true);
+}
+function onRv(o){
+    if(!o||o.to!==pid||!C.pod||o.pk!==C.pod.id)return;
+    const P=C.pod;C.pod=null;
+    szSpectating=false;szShipHidden=false;
+    lives=1;
+    const pn=performance.now();invincibleUntil=pn+REVIVE_INV;flashVisible=true;lastFlashToggle=pn;
+    player.x=P.x;player.y=P.y;
+    try{pointer.x=P.x;pointer.y=P.y;pointer.active=false;pendingTp.active=false}catch(_){}
+    try{szPrevPos=null}catch(_){}
+    C.revived++;
+    metaOut({pd:0,rv:C.revived});track(true);
+    coopStamp(ct('revived').replace('{n}',String(o.n||'').slice(0,8)),'#7CFFB2');
+    try{szVibrate([20,30,20])}catch(_){}
+}
+/* 파트너 캡슐 첫 목격 — 도장 한 번 */
+function coopSos(p,m){
+    const k=p+':'+(GH[p]&&GH[p].podId);if(C.sosSeen[k])return;C.sosSeen[k]=1;
+    if(C.pod||C.final||!running)return;
+    coopStamp(ct('sos').replace('{n}',String(m&&m.n||'').slice(0,8)),'#FF8FA3');
+}
+/* 팀 위성 — completeMission 훅. team=true 면 파트너 소식으로 완료된 것(다시 알리지 않음) */
+function onSat(z,team){
+    if(!(R.coop&&R.racing)||team)return;
+    C.sats++;
+    const o={e:'sat',z,p:pid,n:R.nick};
+    meshBroadcast(o);try{R.ch&&R.ch.send({type:'broadcast',event:'sat',payload:o})}catch(_){}
+    metaOut({sa:C.sats});
+}
+function onSatMsg(o){
+    if(!o||o.p===pid||!(R.coop&&R.racing))return;
+    const z=o.z|0;if(C.satPend[z]&&C.satPend[z].done)return;
+    C.satPend[z]={n:o.n,at:Date.now(),done:false};
+    coopSatTry();
+}
+/* 존 전환이 두 기기에서 수십 ms 어긋날 수 있다 — 내 미션이 켜질 때까지 잠깐 다시 시도 */
+function coopSatTry(){
+    for(const zs of Object.keys(C.satPend)){
+        const q=C.satPend[zs],z=+zs;if(q.done)continue;
+        if(Date.now()-q.at>20000||(typeof currentZoneIdx==='number'&&currentZoneIdx>z)){q.done=true;continue}
+        let ok=false;try{ok=!!(window.szCoopTeamSat&&szCoopTeamSat(z))}catch(_){}
+        if(ok){q.done=true;coopStamp(ct('teamSat').replace('{n}',String(q.n||'').slice(0,8)),'#FFD166')}
+    }
+}
+setInterval(()=>{if(R.coop&&R.racing&&running)coopSatTry()},250);
+/* 1초마다 — 파트너 끊김 알림 */
+function coopTick(){
+    if(!(R.coop&&R.racing&&running)||C.lostNoted)return;
+    const m=partner();
+    const lost=!m?Object.values(R.results[R.round]||{}).some(e=>e.p!==pid):(Date.now()-(R.seenAt[m.p]||0)>12000);
+    if(lost){C.lostNoted=true;coopStamp(ct('partnerLost'),'#FFB08A')}
+}
+function coopLive(rows){
+    const tt=rows.reduce((a,x)=>Math.max(a,x.t||0),0);
+    let h='<div class="h">🤝 TEAM · '+esc(fmt(tt).slice(0,-3))+'</div>';
+    rows.forEach(x=>{
+        const m=R.members[x.p],pod=x.p===pid?!!C.pod:!!(m&&m.pd&&x.s==='play');
+        h+='<div class="r'+(x.s!=='play'?' x':'')+(x.p===pid?' me':'')+'"><span class="n">'+esc(x.n)+'</span><span class="t">'+(pod?'🆘':esc(fmt(x.t).slice(0,-3)))+'</span></div>';
+    });
+    return h;
+}
+function coopTeam(rows){return {t:rows.reduce((a,x)=>Math.max(a,x.t||0),0),z:rows.reduce((a,x)=>Math.max(a,x.z||0),0)}}
+function coopResult(){
+    const r=R.round,rows=standings(r),done=finalizeIfDone(r),T=coopTeam(rows);
+    R.coopSaved=R.coopSaved||{};
+    let best=+LS.get('szx_coop_best','0')||0;
+    if(done&&R.coopSaved[r]==null&&!R.spect){R.coopSaved[r]=T.t>best;if(T.t>best){best=T.t;LS.set('szx_coop_best',String(Math.round(T.t)))}}
+    const nw=!!R.coopSaved[r];
+    const A='<h3>'+esc(ct('resTitle').replace('{n}',r))+'</h3>'+(R.spect?'<div class="szx-sub">'+esc(t('spectate'))+'</div>':'')
+      +'<div class="szx-team-l">'+esc(ct('team'))+'</div><div class="szx-team">'+esc(fmt(T.t))+'</div>'
+      +(T.z?'<div class="szx-sub">'+esc(typeof szZoneShort==='function'?szZoneShort(T.z-1):'Z'+T.z)+'</div>':'')
+      +(done?'<div class="szx-best">'+esc(nw?ct('teamNew'):ct('teamBest').replace('{t}',fmt(Math.max(best,T.t))))+'</div>':'');
+    let B='<div class="szx-list">';
+    rows.forEach(x=>{
+        const dc=livCol(x.p);
+        B+='<div class="szx-m'+(x.p===pid?' me':'')+(x.s==='play'?' fly':' dead')+'"><span class="szx-dot" style="background:'+dc+';box-shadow:0 0 8px '+dc+'"></span>'
+          +'<span class="nm">'+esc(x.n)+(x.s==='play'?' <span class="szx-tag">'+esc(t('flying'))+'</span>':x.s==='lost'?' <span class="szx-tag">'+esc(t('lost'))+'</span>':'')+'</span>'
+          +'<span class="szx-cst">✦'+(x.gz|0)+' 🛰'+(x.sa|0)+' 🤝'+(x.rs|0)+'</span><span class="tm">'+esc(fmt(x.t))+'</span></div>';
+    });
+    B+='</div><div class="szx-tally">✦ '+esc(ct('colG'))+' · 🛰 '+esc(ct('colS'))+' · 🤝 '+esc(ct('colR'))+'</div>';
+    if(rows.some(x=>x.s==='lost')||(rows.length<2&&done))B+='<div class="szx-note">'+esc(ct('lostNote'))+'</div>';
+    let Cc='<div class="szx-col">';
+    if(!done)Cc+='<div class="szx-wait">'+esc(t('waiting'))+'</div>';
+    if(actingHost())Cc+='<button class="szx-b co" data-a="go" type="button"'+(done&&R.joined&&Object.keys(R.members).length>=2?'':' disabled')+'>'+esc(ct('again'))+szAutoLeft(done)+'</button>'+szAutoChip();
+    else if(done)Cc+='<div class="szx-wait">'+esc(t('waitHost'))+'</div>';
+    if(done&&rows.length>1)Cc+='<button class="szx-b ghost" data-a="rshare" type="button">'+esc(szP5T('share'))+'</button>';
+    Cc+='<button class="szx-b ghost" data-a="leave" type="button">'+esc(t('leave'))+'</button></div>';
+    return {A,B,C:Cc};
+}
+function coopShare(){
+    const rows=standings(R.round);if(rows.length<2)return;
+    const T=coopTeam(rows);
+    shareLink(roomUrl(),ct('resShare').replace('{a}',rows[0].n).replace('{b}',rows[1].n).replace('{t}',fmt(T.t)));
+}
+/*</sz:mod:coop>*/
+
 window.SZX={
     count,unlock,applySeed,onGameOver,decorateResult,
     hasRoar:()=>!!SND.roar,
     mode:()=>szRunMode(),   /* P5 — 'race'|'challenge'|'daily'|'' (빠른 재시작 판단) */
     onTake,drawGhosts,
+    coopPod,onSat,myLivery,   /* 2인 협동 (2026-09-29) — 캡슐·팀 위성·도장 */
+    _C:()=>C,
     _gh:()=>GH,
     _mesh:()=>Object.fromEntries(Object.entries(MESH).map(([k,v])=>[k,v.ready])),
     _snd:()=>({ctx:AC&&AC.state,loaded:Object.keys(SND),roar:!!roar,seed:curSeed}),

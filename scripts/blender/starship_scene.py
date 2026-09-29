@@ -16,6 +16,9 @@
 실행:
   Blender : C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/starship_scene.py -- ship stack
   굽기    : python scripts/blender/starship_scene.py post     → public/assets/spacez/ship_steel.webp · launch_stack.webp
+  금 도장 : python scripts/blender/starship_scene.py gold     → public/assets/spacez/ship_gold.webp (2인 모드 참가자 기체)
+            (Blender 만: -- shipgold / 굽기만: post gold). 같은 모델·카메라·5 뱅크, 스틸 재질만 광택 금으로 바꾼다.
+            검은 내열타일·엔진은 그대로. 은색 = 방장, 금색 = 참가자(2026-09-29 운영자 결정).
 중간 PNG: scripts/og-assets/spacez_ship/ (git 미추적)
 """
 import math
@@ -169,8 +172,19 @@ def hex_texture(path, px=512):
     return px, H, w
 
 
-def materials():
+# 기체 도장 — 'steel'(기본·방장) / 'gold'(2인 모드 참가자). 형상·조명·타일은 공통, 스틸 판재 재질만 다르다
+LIVERY = {
+    # base = 금속 반사율(F0, 선형), rough = 기본 거칠기, rr = 결 노이즈 거칠기 범위
+    'steel': dict(base=(0.64, 0.655, 0.68), rr=(0.22, 0.34)),
+    # 광택 금 — 금 F0(1.0, 0.77, 0.34). 거칠기는 스틸과 같은 급(넓은 하이라이트 = 같은 밝기),
+    # 위에 얇은 클리어코트를 올려 흰 스페큘러 줄이 또렷하다(광택). 푸른 월드를 반사해 올리브로 죽는 건 굽기에서 살짝 올린다
+    'gold': dict(base=(1.0, 0.77, 0.34), rr=(0.19, 0.29), coat=0.55),
+}
+
+
+def materials(livery='steel'):
     import bpy
+    LV = LIVERY[livery]
     os.makedirs(REN, exist_ok=True)
     hp = os.path.join(REN, "hex_tiles.png")
     assert os.path.exists(hp), "먼저 python starship_scene.py hex (Blender 파이썬엔 PIL 이 없다)"
@@ -182,9 +196,12 @@ def materials():
     # 스테인리스 — 은색 금속, 약간 거칠고(롤링 결) 1.83 m 링 용접선이 아주 옅게
     st = bpy.data.materials.new("steel"); st.use_nodes = True
     nt = st.node_tree; b = nt.nodes["Principled BSDF"]
-    b.inputs["Base Color"].default_value = (0.64, 0.655, 0.68, 1)
+    b.inputs["Base Color"].default_value = (*LV['base'], 1)
     b.inputs["Metallic"].default_value = 1.0
     b.inputs["Roughness"].default_value = 0.20
+    if LV.get('coat'):
+        b.inputs["Coat Weight"].default_value = LV['coat']
+        b.inputs["Coat Roughness"].default_value = 0.06
     tc = nt.nodes.new("ShaderNodeTexCoord")
     sep = nt.nodes.new("ShaderNodeSeparateXYZ")
     nt.links.new(tc.outputs["Object"], sep.inputs[0])
@@ -195,7 +212,7 @@ def materials():
     nz = nt.nodes.new("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 0.35; nz.inputs["Detail"].default_value = 6.0
     nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
     rr = nt.nodes.new("ShaderNodeMapRange")
-    rr.inputs[3].default_value = 0.22; rr.inputs[4].default_value = 0.34
+    rr.inputs[3].default_value = LV['rr'][0]; rr.inputs[4].default_value = LV['rr'][1]
     nt.links.new(nz.outputs["Fac"], rr.inputs[0])
     add = nt.nodes.new("ShaderNodeMath"); add.operation = 'MULTIPLY_ADD'
     add.inputs[1].default_value = 0.025
@@ -414,18 +431,19 @@ def render(path):
     print("  rendered", path, flush=True)
 
 
-def do_ship(banks=BANKS):
+def do_ship(banks=BANKS, livery='steel'):
     import bpy
     cz = (FR_Z0 + FR_Z1) / 2
+    pre = "ship" if livery == 'steel' else "ship_" + livery
     for bi in banks:
         sc = scene(FR_PX, FR_Z1 - FR_Z0, cz)
-        M = materials()
+        M = materials(livery)
         lights(cz, 0.5)
         root = bpy.data.objects.new("ship", None); sc.collection.objects.link(root)
         build_ship(M, root)
         # 배 방위: 카메라 쪽(−Y) 기준 ALPHA → 월드각 = −90° + ALPHA. 뱅크 +는 CCW(위에서 본 +Z 회전)
         root.rotation_euler = (0, 0, math.radians(-90 + ALPHA + bi * BANK_DEG))
-        render(os.path.join(REN, "ship_b%+d.png" % bi))
+        render(os.path.join(REN, pre + "_b%+d.png" % bi))
 
 
 def do_stack():
@@ -472,6 +490,9 @@ def do_stack():
 
 def main_blender(args):
     os.makedirs(REN, exist_ok=True)
+    if 'shipgold' in args:
+        do_ship(livery='gold')
+        return
     if not args or 'ship' in args:
         do_ship()
     elif 'ship0' in args:
@@ -504,6 +525,27 @@ def bbox(a):
     m = a[..., 3] > 0.02
     ys, xs = np.nonzero(m)
     return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+
+def post_gold():
+    """금 도장 아틀라스만 굽는다 — 은색·스택 산출물은 건드리지 않는다."""
+    import numpy as np
+    sp = _sp()
+    fw, fh = FR_PX[0] // 4, FR_PX[1] // 4
+    cells = []
+    for bi in BANKS:
+        a = sp.load_rgba(os.path.join(REN, "ship_gold_b%+d.png" % bi))
+        x0, y0, x1, y1 = bbox(a)
+        assert x0 > 2 and y0 > 2 and x1 < a.shape[1] - 3 and y1 < a.shape[0] - 3, ("잘림", bi, (x0, y0, x1, y1))
+        c = sharpen(sp.resize_premul(a, fw, fh), 0.35)
+        # 따뜻하게 한 번 — 푸른 월드 반사로 탁해진 금을 살린다(검은 타일은 거의 그대로: 곱셈이라 어두운 곳은 안 변한다)
+        c[..., 0] = np.clip(c[..., 0] * 1.10, 0, 1)
+        c[..., 1] = np.clip(c[..., 1] * 1.04, 0, 1)
+        c[..., 2] = np.clip(c[..., 2] * 0.90, 0, 1)
+        cells.append(c)
+    A = sp.clean_alpha(np.concatenate(cells, axis=1))
+    q, sz = sp.save_webp(A, os.path.join(PUB, "ship_gold.webp"), 40, q0=88, qmin=60, qmax=95, aq=90)
+    print(dict(ship_gold=dict(w=A.shape[1], h=A.shape[0], q=q, kb=round(sz / 1024, 1))))
 
 
 def post():
@@ -545,8 +587,18 @@ if IN_BLENDER:
     argv = sys.argv
     main_blender(argv[argv.index("--") + 1:] if "--" in argv else [])
 elif __name__ == "__main__":
-    if sys.argv[1:2] == ["post"]:
+    if sys.argv[1:3] == ["post", "gold"]:
+        post_gold()
+    elif sys.argv[1:2] == ["post"]:
         post()
+    elif sys.argv[1:2] == ["gold"]:
+        import subprocess
+        os.makedirs(REN, exist_ok=True)
+        if not os.path.exists(os.path.join(REN, "hex_tiles.png")):
+            hex_texture(os.path.join(REN, "hex_tiles.png"))
+        exe = "C:/tools/blender-4.2.5-windows-x64/blender.exe"
+        subprocess.check_call([exe, "-b", "-P", os.path.abspath(__file__), "--", "shipgold"])
+        post_gold()
     elif sys.argv[1:2] == ["hex"]:
         os.makedirs(REN, exist_ok=True)
         print(hex_texture(os.path.join(REN, "hex_tiles.png")))
