@@ -156,7 +156,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.09.25-presence';
+    const LP_ROOM_VERSION='2026.09.29-kick';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Diagnostic log — console-only. The visible floating panel was
@@ -232,7 +232,15 @@
            in a background tab that hit a network blip stayed offline
            (and an invite-link join in a background tab failed) until
            the user looked at the tab. While any room is active we
-           reconnect it ourselves. */
+           reconnect it ourselves.
+       19. Kick + ban (opt-in, 2026-09-29) — room.kick(gid|{gid,pid},opts)
+           sends host:kicked (3x, _id-deduped) to that guest, drops it from
+           the roster (onGuestLeave reason:'kicked') and, unless
+           opts.ban===false, refuses that pid's join / rejoin for the rest
+           of the room (join_ack reason:'kicked'; survives a host reload via
+           the roster blob). room.ban/unban/banned manage the list. The
+           kicked guest tears down its channel and emits 'room:kicked'.
+           Games that never call kick() see no behaviour change. */
     const GUEST_HB_MS=4000;
     const GUEST_STALE_MS=15000;
     const GUEST_HIDDEN_GRACE_MS=40000;
@@ -375,15 +383,30 @@
            returning guest back in even after lock(), and keeps their
            nickname. Survives a host reload via sessionStorage. */
         const _knownPids=new Map();
+        /* pid → nickname of guests the host kicked with a ban (item 19) */
+        const _banned=new Map();
         if(resumed){
             const rr=_ssGet(SS_ROSTER);
             if(rr&&rr.code===code&&Array.isArray(rr.list)){
                 rr.list.forEach(function(e){if(e&&e.pid)_knownPids.set(e.pid,e.nickname||'')});
             }
+            if(rr&&rr.code===code&&Array.isArray(rr.banned)){
+                rr.banned.forEach(function(e){if(e&&e.pid)_banned.set(e.pid,e.nickname||'')});
+            }
         }
         function _persistRoster(){
             const list=[];_knownPids.forEach(function(n,p){list.push({pid:p,nickname:n})});
-            _ssSet(SS_ROSTER,{code:code,list:list.slice(-60),t:Date.now()});
+            const banned=[];_banned.forEach(function(n,p){banned.push({pid:p,nickname:n})});
+            _ssSet(SS_ROSTER,{code:code,list:list.slice(-60),banned:banned.slice(-60),t:Date.now()});
+        }
+        /* Tell a kicked guest (by gid and/or pid) it's out — 3 copies, one _id. */
+        function _sendKicked(gid,pid,reason){
+            const id=shortId();let n=0;
+            (function fire(){
+                if(!subscribed||closing)return;
+                roomApi.broadcast('host:kicked',{gid:gid||null,pid:pid||null,reason:reason||'kicked',_id:id});
+                if(++n<3)setTimeout(fire,200);
+            })();
         }
         /* host-private restore blob from before the reload (item 17) */
         let _restoredSnap=null;
@@ -443,6 +466,11 @@
             const p=msg.payload||{};
             if(!p||!p.gid)return;
             dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin)+(p.rejoin?' [rejoin]':''));
+            /* Kicked with a ban (item 19) — refuse join and rejoin alike. */
+            if(p.pid&&_banned.has(p.pid)){
+                chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'kicked'}});
+                return;
+            }
             /* A rejoin from someone already accepted into this room
                (same gid still listed, or a pid we've seen) bypasses the
                lock — they were here before the game started. */
@@ -584,6 +612,7 @@
         /* Guest liveness beacon (item 13) — {gid,pid,vis}. */
         chan.on('broadcast',{event:'guest:hb'},function(msg){
             const p=msg.payload||{};
+            if(p.pid&&_banned.has(p.pid)){if(!guests.has(p.gid))_sendKicked(p.gid,p.pid);return}
             _touch(p.gid,p.vis);
         });
 
@@ -938,6 +967,26 @@
             onGuestAction:function(cb){if(typeof cb==='function')guestActionCbs.push(cb)},
             /* Called by game code when the host clicks Start. After this
                point, new guest:join_requests get reason:'locked'. */
+            /* Kick (item 19, opt-in). target = gid string or {gid,pid}.
+               opts.ban (default true) keeps that pid out of this room;
+               opts.reason is passed to the guest. Returns guests dropped. */
+            kick:function(target,opts){
+                opts=opts||{};
+                let gid=null,pid=null;
+                if(typeof target==='string')gid=target;
+                else if(target){gid=target.gid||null;pid=target.pid||null}
+                if(gid&&!pid&&guests.has(gid))pid=guests.get(gid).pid||null;
+                const drop=[];let nick=opts.nickname||'';
+                guests.forEach(function(g,k){if(k===gid||(pid&&g.pid===pid)){drop.push(k);if(!nick)nick=g.nickname||''}});
+                if(opts.ban!==false&&pid){_banned.set(pid,nick);_knownPids.delete(pid);_persistRoster()}
+                dbgLog('host: kick '+(gid||'').slice(0,6)+' pid='+(pid||'').slice(0,8)+(opts.ban!==false?' +ban':''));
+                _sendKicked(gid||drop[0]||null,pid,opts.reason);
+                drop.forEach(function(k){_dropGuest(k,'kicked')});
+                return drop.length;
+            },
+            ban:function(pid,nickname){if(!pid)return;_banned.set(pid,nickname||_banned.get(pid)||'');_knownPids.delete(pid);_persistRoster()},
+            unban:function(pid){if(_banned.delete(pid))_persistRoster()},
+            banned:function(){const a=[];_banned.forEach(function(n,p){a.push({pid:p,nickname:n})});return a},
             lock:function(){locked=true;dbgLog('host: room LOCKED')},
             unlock:function(){locked=false},
             isLocked:function(){return locked},
@@ -1078,7 +1127,9 @@
         'host:paused','host:resumed','host:ended','host:resume_countdown',
         /* "please re-register" — host reloaded, or dropped us as stale
            and then heard from us again (items 14/15). */
-        'host:rejoin'
+        'host:rejoin',
+        /* host removed a guest (item 19) — only games that call room.kick() send it */
+        'host:kicked'
     ];
 
     /* Look up a room without actually joining. Used by the home-page
@@ -1366,6 +1417,24 @@
                than once. Suppress repeats so render-once semantics
                (location.href='/' on host_closed, ended overlay, etc) hold. */
             if(p._id&&_markSeenId(p._id))return;
+
+            /* Kicked by the host (item 19) — leave for good. */
+            if(ev==='host:kicked'){
+                const mine=(p.gid&&p.gid===gid)||(p.pid&&_pid&&p.pid===_pid);
+                if(!mine||guestClosing)return;
+                dbgLog('guest: kicked by host');
+                guestClosing=true;
+                _guestTeardown();
+                try{
+                    var lk=JSON.parse(localStorage.getItem('lp_lastRoom')||'null');
+                    if(lk&&lk.code===code)localStorage.removeItem('lp_lastRoom');
+                }catch(_){}
+                emit('room:kicked',{reason:p.reason||'kicked'});
+                try{sb.removeChannel(chan)}catch(_){}
+                try{if(window.LpRoom_currentGuestRoom===guestApi)window.LpRoom_currentGuestRoom=null}catch(_){}
+                try{window.dispatchEvent(new CustomEvent('lp-room-closed',{detail:{mode:'guest',reason:'kicked'}}))}catch(_){}
+                return;
+            }
 
             if(ev==='host:join_ack'){
                 if(p.gid!==gid)return; /* not for us */
@@ -1655,6 +1724,8 @@
             code:code,
             pin:pin,
             gid:gid,
+            /* persistent device id the host knows us by (kick/ban key) */
+            pid:_pid,
             hostName:result.hostName,
             gameId:result.gameId,
             nickname:finalNick,
@@ -2421,6 +2492,7 @@
         return (err==='bad_pin')?_t('비밀번호가 틀렸어요','Wrong PIN')
             :(err==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
             :(err==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
+            :(err==='kicked')?_t('방장이 내보내서 이 방에는 다시 들어갈 수 없어요','The host removed you from this room')
             :(err==='subscribe_timeout'||err==='channel_error')
                 ?_t('연결 지연 · 인터넷 확인 후 다시 시도','Connection failed — check your network and try again')
             :_t('입장 실패. 다시 시도해주세요','Join failed — please try again');
