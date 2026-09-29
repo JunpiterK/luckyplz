@@ -51,12 +51,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Reversi', l:['Cerque peças rivais entre as suas e todas viram','Só dá para jogar nas casas com ponto; sem jogada, passa','Cantos nunca viram: evite a casa diagonal ao lado deles']}
   },
   'yut': {
-    ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모는 한 번 더, 도·개·걸로 잡아도 한 번 더 · 모서리·방에 멈추면 지름길']},
-    en: {t:'Yut Nori', l:['2–4 teams race to bring all their pieces home','Throw the sticks, tap a piece, then tap a glowing spot','Yut/Mo = throw again; a capture with Do/Gae/Geol too · corners give shortcuts']},
-    ja: {t:'ユンノリ', l:['2〜4チームで、先に全部のコマをゴールさせたら勝ち','棒を投げる → コマをタップ → 光るマスをタップ','ユッ・モはもう一回、ト・ケ・コルで取ってももう一回。角で止まると近道']},
-    zh: {t:'掷柶(尤茨)', l:['2–4队比赛，先让所有棋子走完一圈的队获胜','掷柶 → 点棋子 → 点发光的格子移动','掷出4步、5步再掷一次；用1-3步吃子也再掷；停在角上可抄近路']},
-    es: {t:'Yut Nori', l:['2–4 equipos: gana quien saque primero todas sus fichas','Lanza los palos, toca una ficha y luego la casilla brillante','Yut/Mo = otro tiro; capturar con Do/Gae/Geol también · esquina = atajo']},
-    pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut/Mo = joga de novo; capturar com Do/Gae/Geol também · canto = atalho']}
+    ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모는 한 번 더, 도·개·걸로 잡아도 한 번 더 · 모서리·방에 멈추면 지름길','온라인: 초대 링크 → 각자 캐릭터 고르고 「준비」 → 방장이 시작 · 시간을 넘기면 자동으로 둬요']},
+    en: {t:'Yut Nori', l:['2–4 teams race to bring all their pieces home','Throw the sticks, tap a piece, then tap a glowing spot','Yut/Mo = throw again; a capture with Do/Gae/Geol too · corners give shortcuts','Online: share the link → each picks a character and taps Ready → host starts; slow turns auto-play']},
+    ja: {t:'ユンノリ', l:['2〜4チームで、先に全部のコマをゴールさせたら勝ち','棒を投げる → コマをタップ → 光るマスをタップ','ユッ・モはもう一回、ト・ケ・コルで取ってももう一回。角で止まると近道','オンライン：リンクを送る → 各自キャラを選んで「準備OK」→ ホストが開始・時間切れは自動で進行']},
+    zh: {t:'掷柶(尤茨)', l:['2–4队比赛，先让所有棋子走完一圈的队获胜','掷柶 → 点棋子 → 点发光的格子移动','掷出4步、5步再掷一次；用1-3步吃子也再掷；停在角上可抄近路','在线：发送链接 → 各自选角色并点“准备” → 房主开始；超时会自动走棋']},
+    es: {t:'Yut Nori', l:['2–4 equipos: gana quien saque primero todas sus fichas','Lanza los palos, toca una ficha y luego la casilla brillante','Yut/Mo = otro tiro; capturar con Do/Gae/Geol también · esquina = atajo','Online: comparte el enlace → cada uno elige personaje y pulsa Listo → empieza el anfitrión; si se acaba el tiempo, juega solo']},
+    pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut/Mo = joga de novo; capturar com Do/Gae/Geol também · canto = atalho','Online: envie o link → cada um escolhe o personagem e toca em Pronto → o anfitrião começa; tempo esgotado joga sozinho']}
   },
   'prism-hex': {
     ko: {t:'프리즘 헥스', l:['보석 블록 18개를 판에 최대한 많이 놓으면 승리 — 남은 칸이 적은 순','첫 블록은 ★ 시작 칸, 같은 색은 변이 닿으면 안 되고 꼭짓점 다리로만 연결','블록 고르기 → 판 누르기(착지) → 한 번 더 누르면 놓기 · 두 손가락으로 확대']},
