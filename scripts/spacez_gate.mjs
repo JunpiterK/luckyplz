@@ -971,12 +971,14 @@ async function runBeamDrain(base){
             let sat = null;
             if(mode === 'key'){
                 /* SAT — R 키 꾹. 존 1 로 건너뛰어 미션을 켜고 기체를 궤도 아래(원뿔 끝이 궤도에 닿는 자리)에 고정 */
-                await e.ev('(function(){ startedAt = performance.now() - (ZONES[1].s * 1000 + 400) - totalPausedMs; return 1; })()');
+                /* C (2026-09-29) — 달 미션 시각표의 활성 시각으로 건너뛴다(링이 화면에 들어온 뒤). 기체는 이동 슬롯 바로 아래에 고정 */
+                await e.ev('(function(){ var W = (typeof szMissionWin === "function") ? szMissionWin(1) : null; startedAt = performance.now() - (W ? W.on - 300 : ZONES[1].s * 1000 + 400) - totalPausedMs; return 1; })()');
                 await sleep(700);
                 await e.ev('(function(){ if(missionState === "pending") missionPendingUntil = performance.now() + 20; return 1; })()');
                 await sleep(400);
                 sat = await e.ev('(function(){ var o = _missionCurrentOrbit(); if(!o || missionState !== "active") return { err: "no orbit/mission " + missionState };'
-                    + ' window.__pin = setInterval(function(){ var oo = _missionCurrentOrbit(); if(oo){ player.x = Math.max(20, Math.min(CW - 20, oo.cx)); player.y = Math.min(CH - 30, oo.cy + oo.r + 90); } }, 4);'
+                    + ' window.__pin = setInterval(function(){ var M = (typeof SZM2 !== "undefined") ? SZM2 : null; if(M && M.vis){ player.x = Math.max(20, Math.min(CW - 20, M.x)); player.y = Math.min(CH - 30, M.y + 90); return; }'
+                    + ' var oo = _missionCurrentOrbit(); if(oo){ player.x = Math.max(20, Math.min(CW - 20, oo.cx)); player.y = Math.min(CH - 30, oo.cy + oo.r + 90); } }, 4);'
                     + ' return { st: missionState, g0: Math.round(gravGauge), on0: gravityFieldActive }; })()');
                 await sleep(150);
                 await e.ev('(document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true })), 1)');
