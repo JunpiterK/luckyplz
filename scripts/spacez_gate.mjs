@@ -8,7 +8,7 @@
      node scripts/spacez_gate.mjs [명령...] --root <체크아웃 경로> --port <n> [옵션]
 
    명령 (생략 시 기본 = all):
-     all     det perf layout tm i18n fx0            (기본 게이트 묶음)
+     all     det perf layout tm i18n fx0 beamdrain  (기본 게이트 묶음)
      full    all + sweep + bot + soak + assets
      det     합성 시계 결정성 — 16.67/21/33.33ms × 솔로/레이스 × 미션 성공/실패 × 폭탄
      perf    프레임 JS 시간 p50/p95/p99 — CPU 1x·4x, 고정 존 구간(구간마다 Edge 새로 띄움)
@@ -21,6 +21,8 @@
      bot     자동 조종봇 몬테카를로 — 같은 시드 N판, 30/60fps, 184·343·475초 도달률
      soak    합성 시계 1260초 무작위 입력 — 에러 0·힙 톱니
      assets  첫 로드·존 순회 전송량
+     beamdrain  BEAM 게이지 소진 회귀(탭·꾹·PC F 키 — 4초 방치 뒤 시계가 계속 가는가) + SAT R 키 설치
+                (존 1 궤도에서 R 꾹 → 설치, BEAM 게이지·상태 불변, 설치 중 보급 획득이 진행률을 깎지 않음)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -89,9 +91,9 @@ const BRAND_RE = /SPACEX|SpaceX|Space X|STARSHIP|Starship|STAR FOX|Star Fox|Star
 const HANGUL_RE = /[\uAC00-\uD7A3]/;
 
 let CMDS = A._.length ? A._ : ['all'];
-if(CMDS.includes('all')) CMDS = [...new Set(CMDS.filter(c => c !== 'all').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0']))];
-if(CMDS.includes('full')) CMDS = [...new Set(CMDS.filter(c => c !== 'full').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'sweep', 'bot', 'soak', 'assets']))];
-const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets'];
+if(CMDS.includes('all')) CMDS = [...new Set(CMDS.filter(c => c !== 'all').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain']))];
+if(CMDS.includes('full')) CMDS = [...new Set(CMDS.filter(c => c !== 'full').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'sweep', 'bot', 'soak', 'assets']))];
+const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets', 'beamdrain'];
 for(const c of CMDS) if(!KNOWN.includes(c)){ console.error('알 수 없는 명령: ' + c); process.exit(2); }
 
 const log = (...a) => { if(VERBOSE) console.log('[gate]', ...a); };
@@ -406,7 +408,8 @@ function pageLib(){
         const hScroll = Math.max(se.scrollWidth, document.body.scrollWidth) - vw;
         let smallText = [];
         if(G.texts) smallText = [...G.texts.entries()].filter(([s, px]) => px != null && px < 9).map(([s, px]) => s.slice(0, 24) + '@' + px);
-        return { vw, vh, hScroll, rects, small, clip, overlap, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
+        const missing = ['#satBtn', '#gravBtn'].filter(s => !rects[s]);
+        return { vw, vh, hScroll, rects, small, clip, overlap, missing, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
     };
     /* 자동 조종봇 — 같은 시드, 봇 난수만 다르게. 그리기는 끈다(시뮬만) */
     G.bot = function(P){
@@ -783,6 +786,11 @@ function judgeLayout(cur, base){
                 if(nw.length) row(G, id + ' 새 캔버스 글자<9px', nw.slice(0, 4).join(' | '), null, '0 (G3: ≥9 CSS px)', 'FAIL');
             }
             if(b && !sameGeo(m.rects, b.rects)) geoChanged++;
+            /* 미션 중 SAT·BEAM 두 버튼이 모두 보이고 44px 이상 (2026-09-29 SAT 숨김 사고 재발 방지) */
+            if(st === 'play'){
+                const bad = (m.missing || []).concat((m.small || []).filter(x => /^#(satBtn|gravBtn) /.test(x)));
+                row(G, id + ' 미션 중 SAT·BEAM 버튼 (' + (m.mission || '?') + ')', bad.length ? bad.join(' | ') : ['#satBtn', '#gravBtn'].map(s => m.rects[s] ? m.rects[s][2] + 'x' + m.rects[s][3] : '-').join(' / '), null, '둘 다 보임 · ≥44px', bad.length || m.mission !== 'active' ? 'FAIL' : 'PASS');
+            }
         }
         if(k.endsWith('360x640') && states.result){
             const ov = states.result.rects['#ovBtn'];
@@ -925,6 +933,77 @@ async function runText(base){
         };
     }
     return out;
+}
+
+/* ================= beamdrain (2026-09-29 BEAM 소진 무한 재귀 회귀 + SAT 전용 조작) ================= */
+async function runBeamDrain(base){
+    const out = {};
+    for(const mode of ['tap', 'hold', 'key']){
+        out[mode] = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: mode !== 'key' }, async (e) => {
+            await e.open(gameUrl(base, 'ko'), 1800);
+            /* 실시간 rAF 로 돈다 (합성 시계 아님) — 멈춤은 rAF 가 끊겨 elapsedMs 가 서는 것으로 드러난다 */
+            await e.ev('(function(){ __G.begin(424242, false, true); requestAnimationFrame(gameLoop); if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; lives = 5; }, 50);'
+                + ' gravGauge = GRAV_GAUGE_MAX; SZ_FLAGS.beamHold = ' + (mode === 'hold' ? 'true' : 'false') + '; return 1; })()');
+            await sleep(1200);
+            const on = await e.ev('(function(){ var m = ' + JSON.stringify(mode) + ';'
+                + ' if(m === "tap") szBeamOn(true);'                  /* 터치 탭 토글 경로 */
+                + ' else if(m === "hold") szBeamOn(false);'           /* 손가락을 누른 채 둔다(떼지 않음) */
+                + ' else document.dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));'   /* PC F 누른 채 */
+                + ' return { el: Math.round(elapsedMs), on: gravityFieldActive, g: Math.round(gravGauge) }; })()');
+            await sleep(4000);
+            const a = await e.ev('({ el: Math.round(elapsedMs), on: gravityFieldActive, g: Math.round(gravGauge), run: running })');
+            await sleep(1200);
+            const b = await e.ev('({ el: Math.round(elapsedMs), on: gravityFieldActive, g: Math.round(gravGauge), run: running })');
+            if(mode === 'key') await e.ev('(document.dispatchEvent(new KeyboardEvent("keyup", { key: "f", bubbles: true })), 1)');
+            let sat = null;
+            if(mode === 'key'){
+                /* SAT — R 키 꾹. 존 1 로 건너뛰어 미션을 켜고 기체를 궤도 아래(원뿔 끝이 궤도에 닿는 자리)에 고정 */
+                await e.ev('(function(){ startedAt = performance.now() - (ZONES[1].s * 1000 + 400) - totalPausedMs; return 1; })()');
+                await sleep(700);
+                await e.ev('(function(){ if(missionState === "pending") missionPendingUntil = performance.now() + 20; return 1; })()');
+                await sleep(400);
+                sat = await e.ev('(function(){ var o = _missionCurrentOrbit(); if(!o || missionState !== "active") return { err: "no orbit/mission " + missionState };'
+                    + ' window.__pin = setInterval(function(){ var oo = _missionCurrentOrbit(); if(oo){ player.x = Math.max(20, Math.min(CW - 20, oo.cx)); player.y = Math.min(CH - 30, oo.cy + oo.r + 90); } }, 4);'
+                    + ' return { st: missionState, g0: Math.round(gravGauge), on0: gravityFieldActive }; })()');
+                await sleep(150);
+                await e.ev('(document.dispatchEvent(new KeyboardEvent("keydown", { key: "r", bubbles: true })), 1)');
+                await sleep(700);
+                const mid = await e.ev('(function(){ var p0 = satInstallProgress; szBeamOn(true); try{ szBeamTargetDone(); }catch(_){}'
+                    + ' return { p0: Math.round(p0), held: satHeld, beamOn: gravityFieldActive, cls: (document.getElementById("satBtn") || {}).className }; })()');
+                await sleep(120);
+                const mid2 = await e.ev('({ p1: Math.round(satInstallProgress), st: missionState })');
+                await e.ev('(function(){ szBeamOff(); gravGauge = GRAV_GAUGE_MAX; return 1; })()');
+                const gA = await e.ev('Math.round(gravGauge)');
+                await sleep(1500);
+                const end = await e.ev('({ st: missionState, g: Math.round(gravGauge), on: gravityFieldActive, held: satHeld, sats: satelliteOrbiting.length })');
+                await e.ev('(document.dispatchEvent(new KeyboardEvent("keyup", { key: "r", bubbles: true })), clearInterval(window.__pin), 1)');
+                sat = sat && sat.err ? sat : { ...sat, mid, mid2, gA, end };
+            }
+            await e.ev('(function(){ clearInterval(window.__inv); running = false; return 1; })()');
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            const x = e.errors();
+            collectErrs('beamdrain ' + mode, e, pe);
+            return { on, a, b, sat, exc: x.exc.length + pe.length, sample: x.exc.concat(pe).slice(0, 3) };
+        });
+    }
+    return out;
+}
+function judgeBeamDrain(cur){
+    const G = 'G12 beam';
+    for(const [mode, r] of Object.entries(cur)){
+        const moving = r.a.el > r.on.el + 3000 && r.b.el > r.a.el + 800;
+        row(G, mode + ' BEAM 켜고 방치 → 시계 계속', r.on.el + '→' + r.a.el + '→' + r.b.el + 'ms (게이지 ' + r.a.g + '→' + r.b.g + ')', null, '4s 뒤 +3000 이상 · 이후 계속 증가', moving && r.on.on ? 'PASS' : 'FAIL');
+        row(G, mode + ' 소진 뒤 BEAM 해제·재충전', 'on=' + r.a.on + ' g ' + r.a.g + '→' + r.b.g, null, 'on=false · 게이지 증가', !r.a.on && r.b.g > r.a.g ? 'PASS' : 'FAIL');
+        row(G, mode + ' 예외', r.exc, null, '0', r.exc ? 'FAIL' : 'PASS', r.sample.join(' | ').slice(0, 120));
+        if(r.sat){
+            const s = r.sat;
+            if(s.err){ row(G, 'SAT R 키 설치', s.err, null, 'success', 'FAIL'); continue; }
+            row(G, 'SAT R 키 꾹 → 존 1 위성 설치', s.end.st + ' (위성 ' + s.end.sats + ')', null, 'success', s.end.st === 'success' ? 'PASS' : 'FAIL');
+            row(G, 'SAT 가 BEAM 게이지·상태를 안 건드림', 'g ' + s.g0 + ' → ' + s.gA + ' → ' + s.end.g + ' · beam ' + s.on0 + '/' + s.end.on, null, '게이지 ±1 · beam off', Math.abs(s.end.g - s.gA) <= 1 && !s.end.on && !s.on0 ? 'PASS' : 'FAIL');
+            row(G, '설치 중 BEAM 보급 획득 → 진행률 유지', s.mid.p0 + ' → ' + s.mid2.p1 + ' (held ' + s.mid.held + ')', null, '감소 없음', s.mid.held && (s.mid2.p1 >= s.mid.p0 || s.mid2.st === 'success') ? 'PASS' : 'FAIL');
+            row(G, 'R 키 누름 → SAT 버튼 눌림 표시', String(s.mid.cls || '').replace(/sat-btn ?/, ''), null, 'firing 포함', /\bfiring\b/.test(s.mid.cls || '') ? 'PASS' : 'WARN');
+        }
+    }
 }
 
 /* ================= fx0 ================= */
@@ -1082,7 +1161,7 @@ try{
         row('G10 site', '금지 문자열', bad.length ? bad.join(' ') : 0, null, '0', bad.length ? (bad.every(s => s === '말머리 성운까지') ? 'WARN' : 'FAIL') : 'PASS', bad.includes('말머리 성운까지') ? '말머리 문구는 P3 과제' : '');
     }
 
-    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets'].includes(c));
+    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets', 'beamdrain'].includes(c));
     if(needServer){
         const base = await startServer();
         say('서버 ' + base + ' (cwd ' + ROOT + ')');
@@ -1110,6 +1189,7 @@ try{
             row('G8 fx0', '?fx=0 31존 순회 에러', f.errs, null, '0', f.errs ? 'FAIL' : 'PASS', f.sample.join(' | ').slice(0, 120));
             row('G8 fx0', 'SZ_FLAGS (fx0 / 기본)', JSON.stringify(f.flags) + ' / ' + JSON.stringify(CUR.fx0.fx1.flags), null, 'fx:false / fx:true', (f.flags && f.flags.fx === false && CUR.fx0.fx1.flags && CUR.fx0.fx1.flags.fx === true) ? 'PASS' : 'FAIL');
         }
+        if(CMDS.includes('beamdrain')){ CUR.beamdrain = await runBeamDrain(base); judgeBeamDrain(CUR.beamdrain); }
         if(CMDS.includes('bot')){ CUR.bot = await runBot(base); judgeBot(CUR.bot, BASE && BASE.bot); }
         if(CMDS.includes('soak')){
             CUR.soak = await runSoak(base);
