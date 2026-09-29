@@ -554,10 +554,12 @@ def sharpen(a, amount=0.45, sigma=0.7):
     return out
 
 
-HALO_A = float(os.environ.get("RK_HALO_A", "0.92"))
+# 2026-09-29 운영자 "운석 둘레를 검정이 감싼 것처럼 부자연스럽다" — 0.92/2px 검은 테가 푸른 우주에서 스티커 선으로 읽혔다.
+# 밝은 배경 대비는 이제 런타임 szRkShade('darken' 합성, 밝은 곳에서만 작동)가 맡으므로 구운 테는 1px 옅은 남색 접지만 남긴다.
+HALO_A = float(os.environ.get("RK_HALO_A", "0.38"))
 HALO_PX = float(os.environ.get("RK_HALO_PX", "1.6"))
 GAIN = float(os.environ.get("RK_GAIN", "1.0"))
-HALO_W = int(os.environ.get("RK_HALO_W", "5"))     # MaxFilter 크기 (3 = 1px, 5 = 2px 을 꽉 채워 키움)
+HALO_W = int(os.environ.get("RK_HALO_W", "3"))     # MaxFilter 크기 (3 = 1px, 5 = 2px 을 꽉 채워 키움)
 
 
 def edge_shade(a, px=None, alpha=None):
@@ -574,7 +576,7 @@ def edge_shade(a, px=None, alpha=None):
     # 합성: 돌(스트레이트) over 검은 그늘
     ao = A + halo * (1 - A)
     rgb = np.where(ao[..., None] > 1e-4, a[..., :3] * (A / np.maximum(ao, 1e-4))[..., None], 0)
-    tint = np.array([0.02, 0.025, 0.04], np.float32)
+    tint = np.array([0.05, 0.07, 0.13], np.float32)   # 순검정 대신 우주색 남색
     rgb = rgb + tint * ((halo * (1 - A)) / np.maximum(ao, 1e-4))[..., None]
     return np.dstack([np.clip(rgb, 0, 1), ao])
 

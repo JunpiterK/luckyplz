@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Space-Z 우주선 + 위협 오브젝트 스프라이트 — Blender Cycles (2026-08-21).
 
+※ 2026-09-29: 게임 속 플레이어 기체·발사 스택은 starship_scene.py(실측 비율·육각 타일·뱅크 5프레임)로 교체됐다.
+   여기 ship.png(→ public/assets/spacez/ship.webp)는 OG 이미지(gen-og-games.py)에만 남아 있다.
+
 행성 키우기에서 검증한 파이프라인을 Space-Z 에 적용한다.
 게임은 탑다운(위에서 내려다봄)이고 우주선은 항상 화면 위쪽을 향한다.
 따라서 카메라를 기체 바로 위에 두고 정면(노즈가 위)으로 렌더한다.
