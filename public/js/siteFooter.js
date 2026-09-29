@@ -43,7 +43,7 @@ try{
             ||('TelegramWebview' in window)||('TelegramWebviewProxy' in window));
         if(!hit&&!/[?&]openExternalBrowser=1/.test(location.search))return;
         var s=document.createElement('script');
-        s.src='/js/lpInApp.js?v=1790639497';
+        s.src='/js/lpInApp.js?v=1790641834';
         (document.head||document.documentElement).appendChild(s);
     })();
 }catch(_){}
@@ -271,7 +271,7 @@ try{
        and is idempotent across multiple loads. */
     if(!window.LpFullscreen){
         var fs=document.createElement('script');
-        fs.src='/js/lpFullscreen.js?v=1790639497';
+        fs.src='/js/lpFullscreen.js?v=1790641834';
         document.body.appendChild(fs);
     }
 
@@ -279,7 +279,7 @@ try{
        🎮(topNav) 도 플레이·스크롤·주 버튼 겹침 때 숨긴다. 버튼 모듈보다 늦게 와도 붙어 있는 버튼을 옮긴다. */
     if(isGamePage && !window.LpChrome){
         var ch=document.createElement('script');
-        ch.src='/js/lpChrome.js?v=1790639497';
+        ch.src='/js/lpChrome.js?v=1790641834';
         document.body.appendChild(ch);
     }
 
@@ -293,7 +293,7 @@ try{
             if(!isGamePage || window.LpHelp || document.getElementById('lpHelpJs') || !document.querySelector('.lp-game-about'))return;
             var hp=document.createElement('script');
             hp.id='lpHelpJs';
-            hp.src='/js/lpHelp.js?v=1790639497';
+            hp.src='/js/lpHelp.js?v=1790641834';
             document.body.appendChild(hp);
         }
         if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addHelp);else addHelp();
@@ -302,13 +302,13 @@ try{
     /* 정지·종료 화면 공통 이동 버튼(🎮 게임 홈 · 🏠 전체 홈) — 각 게임이 LpNav.mount() 로 붙인다 */
     if(isGamePage && !window.LpNav){
         var gn=document.createElement('script');
-        gn.src='/js/lpGameNav.js?v=1790639497';
+        gn.src='/js/lpGameNav.js?v=1790641834';
         document.body.appendChild(gn);
     }
     /* 자리 비움 자동 일시정지 + 계속하기/그만하기 — 조작형 게임이 LpAutoPauseQ 에 등록한다 */
     if(isGamePage && !window.LpAutoPause){
         var ap=document.createElement('script');
-        ap.src='/js/lpAutoPause.js?v=1790639497';
+        ap.src='/js/lpAutoPause.js?v=1790641834';
         document.body.appendChild(ap);
     }
 
@@ -324,7 +324,7 @@ try{
        재생 시작. */
     if(isGamePage&&!window.LpBgm){
         var bgm=document.createElement('script');
-        bgm.src='/js/lpBgm.js?v=1790639497';
+        bgm.src='/js/lpBgm.js?v=1790641834';
         bgm.defer=true;
         document.body.appendChild(bgm);
     }
@@ -337,12 +337,12 @@ try{
        without waiting on script-load. */
     if(isGamePage&&!window.LpWakeLock){
         var wl=document.createElement('script');
-        wl.src='/js/lpWakeLock.js?v=1790639497';
+        wl.src='/js/lpWakeLock.js?v=1790641834';
         document.body.appendChild(wl);
     }
     if(isGamePage&&!window.LpPhaseTimer){
         var pt=document.createElement('script');
-        pt.src='/js/lpPhaseTimer.js?v=1790639497';
+        pt.src='/js/lpPhaseTimer.js?v=1790641834';
         document.body.appendChild(pt);
     }
 
@@ -356,7 +356,7 @@ try{
     var robotsNoindex=robotsMeta&&/noindex/i.test(robotsMeta.content||'');
     if(!adPolicyOff&&!robotsNoindex&&document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1790639497';
+        s.src='/js/adSlots.js?v=1790641834';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -365,7 +365,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1790639497';
+        rr.src='/js/recentResults.js?v=1790641834';
         document.body.appendChild(rr);
     }
 
@@ -373,20 +373,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1790639497';
+        pwa.src='/js/pwaInstall.js?v=1790641834';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1790639497';
+    tr.src='/js/lpTrack.js?v=1790641834';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1790639497';
+    sh.src='/js/lpShare.js?v=1790641834';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -399,7 +399,7 @@ try{
        dynamically-injected scripts. Bump this on breaking changes. */
     if(window.supabase){
         var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1790639497';
+        rr2.src='/js/lpRoom.js?v=1790641834';
         rr2.defer=true;
         document.body.appendChild(rr2);
 
@@ -408,7 +408,7 @@ try{
            every online game can `LpHostCtl.install({role,room,...})`
            without per-game script tag bookkeeping. */
         var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1790639497';
+        hc.src='/js/lpHostCtl.js?v=1790641834';
         hc.defer=true;
         document.body.appendChild(hc);
 
@@ -416,7 +416,7 @@ try{
            `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
            fired by lpRoom; auto-mounts without any per-game wiring. */
         var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1790639497';
+        mp.src='/js/lpMultiplayer.js?v=1790641834';
         mp.defer=true;
         document.body.appendChild(mp);
     }
@@ -426,7 +426,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1790639497';
+        ls.src='/js/lpSocial.js?v=1790641834';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -437,7 +437,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1790639497';
+        la.src='/js/lpActivity.js?v=1790641834';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -452,7 +452,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1790639497';
+        lp.src='/js/lpPresence.js?v=1790641834';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -462,7 +462,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1790639497';
+        li.src='/js/lpInvite.js?v=1790641834';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -472,7 +472,7 @@ try{
        here just saves a network request on non-game pages. */
     if(window.supabase&&isGamePage&&!window.LpInviteButton){
         var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1790639497';
+        lib.src='/js/lpInviteButton.js?v=1790641834';
         lib.defer=true;
         document.body.appendChild(lib);
     }
@@ -481,7 +481,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1790639497';
+        ln.src='/js/lpNotify.js?v=1790641834';
         ln.defer=true;
         document.body.appendChild(ln);
     }
@@ -496,7 +496,7 @@ try{
        i18n 이 있어 필요 없고, 불필요한 요청을 만들지 않기 위해서다. */
     if (isGamePage && !window.LpGameText) {
         var gt = document.createElement('script');
-        gt.src = '/js/lpGameText.js?v=1790639497';
+        gt.src = '/js/lpGameText.js?v=1790641834';
         gt.defer = true;
         document.body.appendChild(gt);
     }
