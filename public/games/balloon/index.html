@@ -199,6 +199,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .stats .l{font-size:.62em;letter-spacing:.14em;color:rgba(255,255,255,.4);font-family:'Orbitron',sans-serif}
 .stats .v{font-size:1.3em;font-weight:900;margin-top:2px}
 .btn-col{display:flex;flex-direction:column;gap:9px}
+.lp-v2-badge{margin:-6px auto 14px;display:inline-block;padding:6px 12px;border-radius:999px;font-weight:800;font-size:.85em;background:rgba(76,217,100,.12);border:1px solid rgba(76,217,100,.45);color:#8ff0a4}
+.lp-v2-badge.bad,.lp-v2-badge.lpf-mismatch{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.5);color:#ff9a9a}
+.lp-v2-badge[hidden]{display:none}
 .btn-col .btn{width:100%}
 #btnShare{background:rgba(255,230,109,.1);border:1.5px solid rgba(255,230,109,.4);color:var(--accent)}
 #btnShare:hover{background:rgba(255,230,109,.18)}
@@ -285,6 +288,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
             <div class="item"><div class="l" id="stPumpsL">TOTAL PUMPS</div><div class="v" id="stPumps">0</div></div>
             <div class="item"><div class="l" id="stMineL">THEIR PUMPS</div><div class="v" id="stMine">0</div></div>
         </div>
+        <div id="lpBadge" class="lp-v2-badge" hidden></div>
         <div class="btn-col">
             <button class="btn primary" id="btnAgain" type="button">🔁 한판 더</button>
             <button class="btn" id="btnShare" type="button">📋 결과 공유</button>
@@ -959,10 +963,12 @@ const ST=(()=>{
 
     return {
         start,stop,frac:fillFrac,
-        reset(first){
-            if(!first){let i;do{i=Math.floor(Math.random()*COLORS.length)}while(i===colIdx);colIdx=i;}
+        reset(first,o){
+            /* o = 같이 하기 방: 방장 상태에서 온 색·부푸는 속도 — 모든 화면이 같은 풍선 */
+            if(o&&o.col!=null){colIdx=((o.col|0)%COLORS.length+COLORS.length)%COLORS.length;}
+            else if(!first){let i;do{i=Math.floor(Math.random()*COLORS.length)}while(i===colIdx);colIdx=i;}
             else colIdx=0;
-            col=COLORS[colIdx];growth=.8+Math.random()*.4;
+            col=COLORS[colIdx];growth=(o&&o.growth)?o.growth:.8+Math.random()*.4;
             tp=0;alive=true;B.r=0;B.rv=0;B.sq=0;B.sqv=0;B.ang=0;B.angv=0;
             shreds=[];dust=[];ring=null;ghost=null;stubAng=0;stubV=0;danger=0;handle=0;hv=0;pulse=-1;
         },
@@ -1043,6 +1049,7 @@ function setGauge(){
 }
 
 function pump(){
+    if(V2.room){V2.pump();return;}
     if(popped||busy||!onGame())return;
     busy=true;
     pumps++;turnPumps++;perPlayer[turn]++;
@@ -1062,6 +1069,7 @@ function pump(){
     },150);
 }
 function pass(){
+    if(V2.room){V2.pass();return;}
     if(popped||busy||turnPumps<1)return;
     turnPumps=0;
     turn=(turn+1)%players.length;
@@ -1093,12 +1101,14 @@ function doPop(){
         $('loserName').textContent=players[turn];
         $('stPumps').textContent=pumps;
         $('stMine').textContent=perPlayer[turn];
+        V2.onResult();
         $('resultOv').classList.add('on');
         mountNav();
     },1150);
 }
 
 $('btnAgain').addEventListener('click',()=>{
+    if(V2.room){V2.again();return;}
     jingleStop();bgmPlay();
     $('resultOv').classList.remove('on');
     /* 진 사람이 다음 판 첫 펌프 — 파티 관례 */
@@ -1111,7 +1121,7 @@ function toSetup(){
     $('setupScreen').classList.remove('off');
     ST.stop();
 }
-$('btnEdit').addEventListener('click',toSetup);
+$('btnEdit').addEventListener('click',()=>{if(V2.room){V2.edit();return;}toSetup();});
 /* ── 게임 홈 · 전체 홈 (2026-09-24 운영자: "정지·종료 화면엔 게임 홈과 전체 홈 둘 다") ──
    게임 홈 = 참가자 설정 화면(toSetup). '참가자 수정'과 같은 일이라 짝이 붙으면 그 버튼은 숨긴다(같은 버튼 둘 금지).
    LpNav(lpGameNav.js)는 siteFooter 가 늦게 주입하므로 없으면 잠깐 기다렸다 붙인다 */
@@ -1126,7 +1136,7 @@ function mountNav(tries){
 
 $('btnShare').addEventListener('click',async()=>{
     const txt=T('shareTxt').replace('{name}',players[turn]).replace('{n}',pumps)
-        +'\nhttps://luckyplz.com/games/balloon/';
+        +'\n'+(V2.certUrl||'https://luckyplz.com/games/balloon/');
     try{
         if(navigator.share){await navigator.share({text:txt});return;}
         await navigator.clipboard.writeText(txt);
@@ -1134,6 +1144,292 @@ $('btnShare').addEventListener('click',async()=>{
         setTimeout(()=>{b.textContent=o},1600);
     }catch(_){}
 });
+
+/* ══ LuckyPlz Rooms v2 — 같이 하기 (턴제 파티, 2026-09-30 · DESIGN §6.2.5) ══
+   방이 없던 게임에 처음 붙는 방이다. siteFooter 의 v2 로더가 lpRooms* 를 실었을 때만 아래 LpRoomsQ 가 불리고,
+   혼자 하기(폰 돌려가며)는 한 줄도 바뀌지 않는다 — pump/pass/again/edit 는 V2.room 이 있을 때만 여기로 온다.
+   · 좌석 2~8(대기실은 공통 lpRoomsUI), 방장 권위 상태 S.game, 차례인 사람만 펌프·넘기기(의도 intent)
+   · 공정: 풍선마다 방장이 해시체인 s_30…s_0 을 만들고 s_0 만 먼저 공개(LpFair.chain).
+     k번째 펌프 난수 = H(s_k | n_k), n_k = 그 순간 s_k 를 모르는 사람의 새 엔트로피 —
+     게스트가 누르면 그 게스트가 의도에 싣고, 방장 차례면 방장이 먼저 '펌프'를 선언(pend)한 뒤 다른 기기가 자동으로 낸다.
+     그래서 방장도 다음 펌프가 터질지 미리 알 수 없다.
+   · 터짐 = u32(난수) < THR[k], THR = 기존 drawBurst() 분포의 위험률 h(k)=p(k)/(1-F(k-1)) →
+     분포가 그대로다(평균 12.4·SD 6.4·첫 펌프 2%, 크기·게이지는 여전히 단서가 아님).
+   · 라운드가 끝나면 방장이 기록 전체를 LpFair.draw 로 서명 공표 → 모든 기기가 재검증·목격 배지, #cert= 링크로 누구나 재검증 */
+const V2=(()=>{
+    const I={
+        ko:{yt:'🎈 내 차례!',wt:'{n} 차례',wh:'⏳ 방장이 시작해요',ok:'✓ 검증된 결과',bad:'✗ 위조된 결과',edit:'👥 대기실로'},
+        en:{yt:'🎈 Your turn!',wt:"{n}'s turn",wh:'⏳ Host starts next',ok:'✓ Verified result',bad:'✗ Forged result',edit:'👥 Back to lobby'},
+        ja:{yt:'🎈 あなたの番！',wt:'{n} の番',wh:'⏳ ホストが開始',ok:'✓ 検証済みの結果',bad:'✗ 改ざんされた結果',edit:'👥 ロビーへ'},
+        es:{yt:'🎈 ¡Tu turno!',wt:'Turno de {n}',wh:'⏳ Empieza el anfitrión',ok:'✓ Resultado verificado',bad:'✗ Resultado falso',edit:'👥 A la sala'},
+        pt:{yt:'🎈 Sua vez!',wt:'Vez de {n}',wh:'⏳ O anfitrião começa',ok:'✓ Resultado verificado',bad:'✗ Resultado falso',edit:'👥 Para a sala'}
+    };
+    const t=(k,n)=>((I[lang()]||I.en)[k]||I.en[k]).replace('{n}',n==null?'':n);
+    /* 위험률 표 — drawBurst() 와 같은 분포(8% 1~4 균등 · 72% 2+round(9U+9U) · 20% 13~30 균등).
+       사칙연산만 쓰므로 모든 기기에서 같은 값이 나온다 */
+    const BP=(()=>{
+        const F=x=>x<=0?0:x>=18?1:x<=9?x*x/162:1-(18-x)*(18-x)/162;
+        const p=new Array(31).fill(0),thr=new Array(31).fill(0);
+        for(let k=1;k<=4;k++)p[k]+=.08/4;
+        for(let m=0;m<=18;m++)p[m+2]+=.72*(F(m+.5)-F(m-.5));
+        for(let k=13;k<=30;k++)p[k]+=.2/18;
+        let cum=0;
+        for(let k=1;k<=30;k++){const h=k===30?1:Math.min(1,p[k]/(1-cum));thr[k]=h>=1?4294967296:Math.floor(h*4294967296);cum+=p[k];}
+        return {p,thr};
+    })();
+    const HEXN=/^[0-9a-f]{32}$/,HEXS=/^[0-9a-f]{64}$/;
+    const u32=b=>((b[0]<<24)|(b[1]<<16)|(b[2]<<8)|b[3])>>>0;
+    const popOf=(k,sI,n)=>u32(LpFair.chain.value(sI,n))<BP.thr[k];
+    const rndHex=()=>{const u=new Uint8Array(16);crypto.getRandomValues(u);return Array.from(u,x=>(x<16?'0':'')+x.toString(16)).join('')};
+    const up=s=>LpFair.hex(LpFair.H(LpFair.unhex(s)));
+    /* 기록 검증(모든 기기·인증서 공용): 체인 연결 · 펌프 번호 · 터짐 재계산. 결과 = 터뜨린 사람 */
+    function outcome(p){
+        if(!p||p.k!=='balloon'||!Array.isArray(p.log)||!Array.isArray(p.pl)||!HEXS.test(p.s0))throw new Error('format');
+        let prev=p.s0;
+        p.log.forEach((e,j)=>{
+            if(!Array.isArray(e)||e[0]!==j+1||!HEXS.test(e[1])||typeof e[2]!=='string'||up(e[1])!==prev)throw new Error('chain');
+            const pop=popOf(e[0],e[1],e[2]);
+            if(pop!==!!e[3]||(pop&&j!==p.log.length-1))throw new Error('pop');
+            prev=e[1];
+        });
+        const last=p.log[p.log.length-1];
+        if(!last||!last[3]||!p.pl[last[4]])throw new Error('end');
+        return {loser:p.pl[last[4]].n,k:last[0]};
+    }
+    let room=null,UI=null,offs=[],vr={rd:-1},pendT=0,pendTried=[],botT=0,offSince={},answered={};
+    const me=()=>room?room.me.pid:null;
+    const cur=()=>{const S=room&&room.state();return S&&S.game&&S.game.b===1?S.game:null};
+    const onlineOthers=()=>room.roster().filter(m=>m.p!==me()&&m.r!=='bot'&&m.c!=='off');
+
+    /* ── 방장 ── */
+    let newing=false;
+    async function hNew(){
+        if(!room||!room.isHost||newing)return;
+        newing=true;
+        try{
+            const S=room.state(),prev=cur();
+            const pl=S.roster.filter(m=>m.seat!=null&&(m.r==='host'||m.r==='player')).sort((a,b)=>a.seat-b.seat).map(m=>({p:m.p,n:m.n}));
+            let tt=0;
+            if(prev&&prev.pop){const lp=prev.pl[prev.pop.i];const i=lp?pl.findIndex(x=>x.p===lp.p):-1;if(i>=0)tt=i;}   /* 진 사람이 다음 판 첫 펌프 */
+            const c=await LpFair.chain.create(room,30);
+            const v=LpFair.H('lpb-vis|'+c.s0);   /* 색·부푸는 속도 — 공개값(s0)에서. 파열점과 무관 */
+            room.setState(S=>{S.game={b:1,rd:(prev?prev.rd:0)+1,sa:S.startAt,pl,t:tt,k:0,tp:0,pp:pl.map(()=>0),s0:c.s0,log:[],pend:null,pop:null,col:v[0]%6,gr:.8+v[1]/255*.4,cert:null};});
+        }finally{newing=false;}
+    }
+    function hResolve(n){
+        clearTimeout(pendT);pendT=0;pendTried=[];
+        let popped_=false;
+        room.setState(S=>{
+            const g=S.game;if(!g||g.pop)return;
+            const k=g.k+1,sI=LpFair.chain.reveal(k),pop=popOf(k,sI,n);
+            g.k=k;g.tp++;g.pp[g.t]++;g.log.push([k,sI,n,pop?1:0,g.t]);g.pend=null;
+            if(pop){g.pop={i:g.t,k};popped_=true;}
+        });
+        if(popped_)hAttest();
+    }
+    function hPass(){room.setState(S=>{const g=S.game;if(!g||g.pop||g.tp<1)return;g.t=(g.t+1)%g.pl.length;g.tp=0;});}
+    /* 방장이 누르는 펌프(방장 차례·끊긴 사람 대행): 먼저 선언하고 다른 기기의 엔트로피를 받는다 */
+    function hDeclare(){
+        const g=cur();if(!g||g.pop||g.pend)return;
+        const cand=onlineOthers().map(m=>m.p).filter(p=>pendTried.indexOf(p)<0);
+        const nxt=[];for(let j=1;j<=g.pl.length;j++){const q=g.pl[(g.t+j)%g.pl.length];if(q&&cand.indexOf(q.p)>=0&&nxt.indexOf(q.p)<0)nxt.push(q.p);}
+        cand.forEach(p=>{if(nxt.indexOf(p)<0)nxt.push(p)});
+        if(!nxt.length){hResolve('');return;}   /* 다른 기기가 없으면(모두 끊김) 방장 단독 — 기록에 빈 n 으로 남는다 */
+        const nb=nxt[0];pendTried.push(nb);
+        room.setState(S=>{S.game.pend={k:S.game.k+1,nb,by:S.game.t};});
+        clearTimeout(pendT);
+        pendT=setTimeout(()=>{const g2=cur();if(!g2||!g2.pend)return;room.setState(S=>{S.game.pend=null});if(pendTried.length<3)hDeclare();else hResolve('');},2500);
+    }
+    function hAttest(){
+        const g=cur();if(!g||!g.pop)return;
+        const params={k:'balloon',rd:g.rd,s0:g.s0,pl:g.pl,log:g.log};
+        LpFair.draw(room,{params,window:900}).then(r=>{
+            r.cert.res=outcome(params);
+            room.setState(S=>{if(S.game&&S.game.rd===g.rd)S.game.cert=r.cert;});
+        }).catch(e=>console.warn('[balloon] attest',e));
+    }
+    function hBot(){
+        if(!room||!room.isHost)return;
+        const S=room.state(),g=cur();if(!g||g.pop||g.pend||S.phase!=='playing')return;
+        const who=g.pl[g.t];if(!who||who.p===me())return;
+        const m=S.roster.filter(x=>x.p===who.p)[0];
+        if(m&&m.c!=='off'){delete offSince[who.p];return;}
+        offSince[who.p]=offSince[who.p]||Date.now();
+        if(Date.now()-offSince[who.p]<8000)return;
+        if(g.tp<1)hDeclare();else hPass();   /* 끊긴 사람 차례 — 8초 뒤 한 번 펌프하고 넘긴다 */
+    }
+
+    /* ── 모든 기기: 상태 → 화면 ── */
+    function enterRound(g){
+        players=g.pl.map(x=>x.n);turn=g.t;pumps=0;turnPumps=0;perPlayer=g.pl.map(()=>0);popped=false;busy=false;
+        jingleStop();$('resultOv').classList.remove('on');
+        $('setupScreen').classList.add('off');$('gameScreen').classList.add('on');
+        ST.reset(g.rd===1,{col:g.col,growth:g.gr});ST.start();ST.inflate(0);
+        vr={rd:g.rd,k:0,s:g.s0,ok:true,q:[],anim:false,certOk:null,cert:null,opt:0};
+        bgmPlay();setGauge();
+    }
+    function verifyEntry(e){
+        try{
+            if(!Array.isArray(e)||!HEXS.test(e[1])||up(e[1])!==vr.s||popOf(e[0],e[1],e[2])!==!!e[3])vr.ok=false;
+            vr.s=e[1];
+        }catch(_){vr.ok=false;}
+    }
+    function applySilent(e){
+        verifyEntry(e);
+        pumps=e[0];perPlayer[e[4]]=(perPlayer[e[4]]||0)+1;
+        ST.inflate(e[0]);
+        if(e[3]){turn=e[4];doPop();}
+    }
+    function playNext(){
+        if(vr.anim||!vr.q.length)return;
+        const e=vr.q.shift();verifyEntry(e);
+        vr.anim=true;
+        const k=e[0],pop=!!e[3],i=e[4];
+        pumps=k;perPlayer[i]=(perPlayer[i]||0)+1;
+        if(vr.opt!==k){const b=$('btnPump');b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash');sPump(k);ST.stroke();}
+        $('pumpCount').textContent=T('pumps').replace('{n}',pumps);
+        setTimeout(()=>{
+            if(!room)return;
+            ST.inflate(k);
+            if(pop){turn=i;setTimeout(()=>{doPop();vr.anim=false;},100);return;}
+            setGauge();vr.anim=false;playNext();syncUi();
+        },150);
+    }
+    function syncUi(){
+        const g=cur();if(!g||!room)return;
+        const myI=g.pl.findIndex(x=>x.p===me());
+        const mine=myI>=0&&myI===g.t&&!g.pop&&!popped;
+        if(!popped)turn=g.t;
+        $('turnName').textContent=players[g.t]||'—';
+        $('turnLabel').textContent=mine?t('yt'):T('turn');
+        const nx=players[(g.t+1)%players.length];
+        $('upNext').innerHTML=mine?T('next')+': <b>'+esc(nx)+'</b>':esc(t('wt',players[g.t]));
+        $('btnPump').disabled=!mine||!!g.pend||vr.anim||vr.opt>g.k;
+        $('btnPass').disabled=!mine||g.tp<1||!!g.pend||vr.anim;
+    }
+    function render(S){
+        if(!room||!S)return;
+        const g=S.game&&S.game.b===1?S.game:null;
+        if(S.phase==='lobby'||!g){if(vr.rd!==-1){toSetup();vr={rd:-1};}return;}
+        if(g.rd!==vr.rd){
+            const late=g.log.length>0;   /* 라운드 중간에 들어옴(늦참·새로고침) → 지금 장면부터 */
+            enterRound(g);
+            if(late)g.log.forEach(e=>{vr.k=e[0];applySilent(e);});
+        }
+        g.log.forEach(e=>{if(e[0]>vr.k){vr.k=e[0];vr.q.push(e);}});
+        playNext();
+        syncUi();
+        /* 방장이 펌프를 선언했고 내가 엔트로피 담당이면 자동으로 낸다(1통) */
+        if(!room.isHost&&g.pend&&g.pend.nb===me()){const key=g.rd+':'+g.pend.k;if(!answered[key]){answered[key]=1;room.x('bn',{k:g.pend.k,n:rndHex()});}}
+        if(g.cert&&vr.cert!==g.cert.rsig){
+            vr.cert=g.cert.rsig;
+            const c=g.cert;
+            LpFair.cert.verify(c,p=>outcome(p)).then(r=>{
+                vr.certOk=!!(r.ok&&vr.ok);V2.lastVerify=r;
+                if(r.ok)LpFair.witness(room,c.round,r.res);
+                LpFair.cert.encode(c).then(s=>{V2.certUrl=location.origin+'/games/balloon/#cert='+s;}).catch(()=>{});
+                if(!vr.certOk)badge('mismatch',1);
+            });
+        }
+    }
+    function badge(kind,n){
+        const el=$('lpBadge'),g=cur();if(!el)return;
+        el.hidden=false;
+        const info={kind:kind||'verified',n:n||1,round:g&&g.cert?g.cert.round:undefined,cert:g&&g.cert};
+        if(UI&&UI.badge)UI.badge(el,info);else if(window.LpFair)LpFair.badge(el,info);
+    }
+    function bind(r){
+        if(room===r)return;unbind();room=r;V2.room=r;
+        offs.push(r.on('state',S=>render(S)));
+        offs.push(r.on('phase',()=>render(r.state())));
+        offs.push(r.on('fair',ev=>{const g=cur();if(ev&&ev.k==='witness'&&g&&g.cert&&ev.round===g.cert.round&&vr.certOk)badge(ev.bad?'mismatch':'verified',ev.bad?ev.bad:ev.ok);}));
+        if(r.isHost){
+            r.onIntent((from,a,x)=>{
+                const g=cur();if(!g||g.pop||r.state().phase!=='playing')return {reject:'state'};
+                const i=g.pl.findIndex(p=>p.p===from.p);
+                if(a==='pump'){if(i!==g.t||g.pend)return {reject:'turn'};if(!x||x.k!==g.k+1||!HEXN.test(x.n||''))return {reject:'bad'};hResolve(x.n);return;}
+                if(a==='pass'){if(i!==g.t||g.tp<1||g.pend)return {reject:'turn'};hPass();return;}
+                return {reject:'unknown'};
+            });
+            offs.push(r.on('x',(k,d,from)=>{const g=cur();if(k==='bn'&&g&&g.pend&&g.pend.nb===from&&d&&d.k===g.pend.k&&HEXN.test(d.n||''))hResolve(d.n);}));
+            offs.push(r.on('phase',ph=>{const S=r.state(),g=cur();if(ph==='playing'&&(!g||g.sa!==S.startAt))hNew();}));
+            botT=setInterval(hBot,1000);
+            const S=r.state(),g=cur();
+            if(S.phase==='playing'&&(!g||g.sa!==S.startAt))hNew();
+            else if(g&&g.pend){pendTried=[];r.setState(S=>{S.game.pend=null});hDeclare();}   /* 새로고침 복귀 — 선언을 다시 */
+            else if(g&&g.pop&&!g.cert)hAttest();
+        }
+        render(r.state());
+    }
+    function unbind(){offs.forEach(f=>{try{f()}catch(_){}});offs=[];clearInterval(botT);clearTimeout(pendT);room=null;V2.room=null;vr={rd:-1};}
+    const V2={room:null,certUrl:null,BP,outcome,popOf,
+        pump(){
+            const g=cur();if(!g||g.pop||g.pend||vr.anim||popped)return;
+            const myI=g.pl.findIndex(x=>x.p===me());if(myI!==g.t||vr.opt>g.k)return;
+            /* 손맛: 누르는 순간 손잡이·소리(결과는 방장 상태가 오면) */
+            const k=g.k+1;vr.opt=k;vib(12);const b=$('btnPump');b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash');sPump(k);ST.stroke();
+            syncUi();
+            if(room.isHost)hDeclare();
+            else room.intent('pump',{k,n:rndHex()}).then(res=>{if(!res.ok){vr.opt=0;syncUi();}});
+        },
+        pass(){
+            const g=cur();if(!g||g.pop||g.pend||g.tp<1)return;
+            const myI=g.pl.findIndex(x=>x.p===me());if(myI!==g.t)return;
+            if(room.isHost)hPass();else room.intent('pass');
+        },
+        again(){
+            if(!room.isHost)return;
+            jingleStop();
+            if(room.roster().some(m=>m.r==='spec'&&m.wq))room.toLobby();   /* 기다리던 사람이 있으면 대기실에서 자리 받고 */
+            else hNew();
+        },
+        edit(){if(room.isHost)room.toLobby();},
+        onResult(){
+            if(!room){$('btnAgain').disabled=false;$('btnAgain').textContent=T('again');$('btnEdit').style.display='';return;}
+            const h=room.isHost;
+            $('btnAgain').disabled=!h;$('btnAgain').textContent=h?T('again'):t('wh');
+            $('btnEdit').textContent=t('edit');$('btnEdit').style.display=h?'':'none';
+            if(vr.certOk==null)$('lpBadge').hidden=true;
+        }
+    };
+    window.LpRoomsQ=window.LpRoomsQ||[];
+    window.LpRoomsQ.push(function(LR,ui){
+        UI=ui;
+        LR.adapter({gameId:'balloon',kind:'turn',seats:[2,8],max:12,lateJoin:'nextRound',hiddenInfo:true,migratable:false,bots:false});
+        ui.config({lobby:'full',minPlayers:2});
+        ui.on('room',bind);
+        ui.on('left',()=>{unbind();toSetup();});
+    });
+
+    /* ── #cert= 자가검증 링크: 서버 없이 이 페이지가 서명·체인·터짐을 다시 계산한다 ── */
+    function certMode(){
+        const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
+        const show=(ok)=>{const el=$('lpBadge');el.hidden=false;el.className='lp-v2-badge '+(ok?'ok':'bad');el.textContent=ok?t('ok'):t('bad');V2.certView=ok?'ok':'bad';};
+        const go=()=>LpFair.cert.decode(m[1]).then(c=>LpFair.cert.verify(c,p=>outcome(p)).then(r=>{
+            const p=c.params||{},ok=!!(r.ok&&c.res&&r.res&&r.res.loser===c.res.loser&&r.res.k===c.res.k);
+            players=(Array.isArray(p.pl)?p.pl:[]).map(x=>String((x&&x.n)||'?'));while(players.length<2)players.push(defName(players.length));
+            turn=0;pumps=0;turnPumps=0;perPlayer=players.map(()=>0);popped=false;busy=true;
+            $('setupScreen').classList.add('off');$('gameScreen').classList.add('on');
+            ST.reset(true);ST.start();ST.inflate(0);renderTurn();
+            $('btnPump').disabled=true;
+            const log=ok&&Array.isArray(p.log)?p.log:[];let j=0;
+            const step=()=>{
+                const e=log[j++];if(!e){busy=false;return;}
+                turn=e[4]|0;pumps=e[0];perPlayer[turn]=(perPlayer[turn]||0)+1;
+                $('turnName').textContent=players[turn]||'—';sPump(pumps);ST.stroke();
+                setTimeout(()=>{ST.inflate(pumps);if(e[3]){setTimeout(()=>{doPop();setTimeout(()=>show(ok),1200);},100);return;}setGauge();setTimeout(step,260);},150);
+            };
+            show(ok);
+            if(log.length)setTimeout(step,500);
+        })).catch(()=>show(false));
+        if(window.LpFair)go();
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1790759059';s.onload=go;s.onerror=()=>show(false);document.head.appendChild(s);}
+    }
+    setTimeout(certMode,0);
+    V2.dbg=()=>({vr:Object.assign({},vr,{q:vr.q?vr.q.length:0}),g:cur(),popped,pumps,turn,players:players.slice()});
+    window.__lpv2=V2;   /* 디버그·하네스 손잡이 */
+    return V2;
+})();
 
 applyI18n();
 })();

@@ -137,6 +137,9 @@ body.prepared #setupWrap .floating-home{display:none}
 .opt-chip{padding:7px 14px;border-radius:12px;background:rgba(255,255,255,.04);border:2px solid rgba(255,255,255,.08);cursor:pointer;transition:all .3s;font-size:.8em;font-weight:700}
 .opt-chip:hover{border-color:rgba(255,230,109,.3)}
 .opt-chip.selected{border-color:var(--accent);background:rgba(255,230,109,.1)}
+.lp-v2-badge{display:block;margin:10px auto;width:max-content;max-width:100%;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.85em;background:rgba(76,217,100,.12);border:1px solid rgba(76,217,100,.45);color:#8ff0a4;text-align:center}
+.lp-v2-badge.bad,.lp-v2-badge.lpf-mismatch{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.5);color:#ff9a9a}
+.lp-v2-badge[hidden]{display:none}
 
 .btn-group{display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap}
 .btn{padding:10px 18px;font-size:.85em;font-weight:700;color:#fff;border:none;border-radius:20px;cursor:pointer;transition:all .3s;position:relative;overflow:hidden}
@@ -1262,6 +1265,13 @@ function applyWindForces(){
             if(d<bd){bd=d;best=b}}
         if(best&&(bd<capR||t-LOT.waitT>2.4)){LOT.waitT=0;captureBall(best)}
     }else LOT.waitT=0;
+    /* Rooms v2: 결과가 정한 공(LOT.tgt)만 튜브 입구로 끌어당긴다 — 흡입 시각은 일정표가 정한다 */
+    const tg=LOT.tgt;
+    if(tg&&tg.body&&!tg.drawn&&!tg.extracting){
+        const p=tg.body.position,v=tg.body.velocity,sx=machineX-p.x,sy=LOT.mouthY-p.y,d=Math.hypot(sx,sy)||1;
+        if(d<BALL_R*1.2){Body.setPosition(tg.body,{x:machineX,y:LOT.mouthY});Body.setVelocity(tg.body,{x:0,y:0})}
+        else{const sp=Math.min(d,machineR*0.9)/14;Body.setVelocity(tg.body,{x:v.x+(sx/d*sp-v.x)*0.14,y:v.y+(sy/d*sp-v.y)*0.14})}
+    }
 }
 
 
@@ -1628,6 +1638,7 @@ function startLottoDraw(){
     try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}
     try{window.LpTrack&&window.LpTrack('game_start',{game:'lotto'})}catch(_){}
     if(typeof _lpBroadcastStart==='function')_lpBroadcastStart();
+    if(window.__lpV2L&&__lpV2L.room&&__lpV2L.room.isHost)__lpV2L.setView('machine');
     prepareLottoMachine();
 }
 
@@ -1719,6 +1730,8 @@ function prepareLottoMachine(){
 }
 
 function beginDrawing(){
+    /* Rooms v2: 방장 START = 공정 추첨(LpFair.draw) → 모든 기기가 같은 일정표로 같은 공을 뽑는다 */
+    if(window.__lpV2L&&__lpV2L.room){if(__lpV2L.room.isHost)__lpV2L.hostDraw();return}
     if(!_pendingDraw){return}
     /* BGM — 머신 안 START 버튼 경로도 게임 시작으로 간주 */
     try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}
@@ -2698,6 +2711,7 @@ function init(){
     };
 
     document.getElementById('replayBtn').addEventListener('click',()=>{
+        if(window.__lpV2L){__lpV2L.stop();if(__lpV2L.room&&__lpV2L.room.isHost)__lpV2L.setView('setup');}
         SFX.stopWind();
         try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
         confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
@@ -2741,6 +2755,314 @@ function init(){
 
     /* Boot the blurred machine preview. No audio — just ambient
        physics so the setup modal sits over a living backdrop. */
+
+    /* ===== LuckyPlz Rooms v2 — 같이 보기 + 공정 추첨 (2026-09-30 · DESIGN §6.1.8 lotto) =====
+       v1(위 lpRoom 배선)은 그대로 두고, siteFooter 의 v2 로더가 lpRooms* 를 실었을 때만 아래가 붙는다.
+       · 결과 먼저: 방장 [START] → LpFair.draw(방장 커밋 → 참가자 엔트로피 → 공개) → seed.
+         번호 = sample(seed) 순수 함수(정수 연산만) — 모든 기기가 스스로 같은 번호를 계산한다
+       · 연출은 결과로 향한다: 드럼 물리는 각자 로컬 장식, 밸브가 열리면 '그 번호 공'을 튜브로 끌어당기고
+         흡입·공개 시각은 startAt(방장 시계) 기준의 고정 일정표 → 모든 화면이 같은 순간 같은 공.
+         늦게 온 사람·백그라운드 복귀는 일정표에서 지난 사건을 즉시 적용하고 그 장면부터 이어 본다
+       · capture 스트림(v1 의 공마다 방송)이 없다 — 추첨 1회 = 커밋/공개 메시지뿐
+       · 결과 배지(목격 집계) + #cert= 자가검증 링크 */
+    const V2L=(()=>{
+        const TX={
+            ko:{abort:'⚠ 추첨 #{n} 취소됨',wait:'⏳ 방장 대기',mix:'🎲 모두의 행운 섞는 중…',ok:'✓ 검증된 추첨',bad:'✗ 위조된 결과'},
+            en:{abort:'⚠ Draw #{n} cancelled',wait:'⏳ Host draws',mix:'🎲 Mixing everyone’s luck…',ok:'✓ Verified draw',bad:'✗ Forged result'},
+            ja:{abort:'⚠ 抽選 #{n} 取り消し',wait:'⏳ ホスト待ち',mix:'🎲 みんなの運を混ぜています…',ok:'✓ 検証済みの抽選',bad:'✗ 改ざんされた結果'},
+            zh:{abort:'⚠ 抽奖 #{n} 已取消',wait:'⏳ 等房主',mix:'🎲 正在混合大家的运气…',ok:'✓ 已验证的抽奖',bad:'✗ 伪造的结果'},
+            es:{abort:'⚠ Sorteo #{n} cancelado',wait:'⏳ Sortea el anfitrión',mix:'🎲 Mezclando la suerte de todos…',ok:'✓ Sorteo verificado',bad:'✗ Resultado falso'},
+            pt:{abort:'⚠ Sorteio #{n} cancelado',wait:'⏳ O anfitrião sorteia',mix:'🎲 Misturando a sorte de todos…',ok:'✓ Sorteio verificado',bad:'✗ Resultado falso'}
+        };
+        const tx=k=>{const l=(typeof lang==='string'?lang:'en').replace('gb','en');return ((TX[l]||TX.en)[k])||TX.en[k]};
+        let room=null,UI=null,offs=[],RUN=null,lastRound=-1,busy=false,cfgT=0,appliedCfg='',view='';
+        const $i=id=>document.getElementById(id);
+        /* 순수 결과 함수 — 세트마다 본 번호 k개(부분 Fisher–Yates) + 보너스(같은 통이면 남은 공에서) */
+        function outcome(p,r){
+            if(!p||p.g!=='lotto'||!Array.isArray(p.main))throw new Error('format');
+            const sets=[];
+            for(let s=0;s<Math.max(1,Math.min(10,p.sets|0));s++){
+                const pool=p.main.slice(),out=[],k=Math.min(p.count|0,pool.length);
+                for(let i=0;i<k;i++){const j=i+r.int(pool.length-i);const x=pool[i];pool[i]=pool[j];pool[j]=x;out.push([pool[i],0]);}
+                if((p.bd|0)>0){
+                    const bp=p.same?pool.slice(k):(p.bonus||[]).slice(),kb=Math.min(p.bd|0,bp.length);
+                    for(let i=0;i<kb;i++){const j=i+r.int(bp.length-i);const x=bp[i];bp[i]=bp[j];bp[j]=x;out.push([bp[i],1]);}
+                }
+                sets.push(out);
+            }
+            return sets;
+        }
+        /* 일정표(ms, startAt 기준) — 원래 연출 박자(굴림 drawSpeed 초 · 보너스 1.5배 · 흡입 · 레일 · 팡파르)를 고정값으로 */
+        function sched(p,sets){
+            const ev=[],sp=p.speed|0;let t=0;
+            if(sp===0){ev.push({t:0,k:'inst'});return ev;}
+            sets.forEach((set,si)=>{
+                ev.push({t,k:'set',si});
+                const nMain=set.filter(b=>!b[1]).length;
+                set.forEach((b,bi)=>{
+                    if(p.sep&&bi===nMain&&bi>0){ev.push({t,k:'trans'});t+=1200;ev.push({t,k:'pool2'});t+=800;}
+                    const roll=b[1]?sp*1500:sp*1000,to=t+roll;
+                    ev.push({t:t+Math.max(0,roll-1600),k:'drum'});
+                    ev.push({t:to,k:'open',b});
+                    ev.push({t:to+1400,k:'cap',b});
+                    ev.push({t:to+2400,k:'app',b,si});
+                    ev.push({t:to+2900,k:'land'});
+                    t=to+3800;
+                });
+                ev.push({t:t+500,k:'fan'});
+                t+=2000;ev.push({t,k:'hist',si});
+                if(si<sets.length-1)t+=1400;else ev.push({t,k:'result'});
+            });
+            return ev.map((e,i)=>Object.assign(e,{o:i})).sort((a,b)=>a.t-b.t||a.o-b.o);
+        }
+        function findBall(p,b){
+            return balls.find(x=>!x.drawn&&!x.extracting&&x.label===b[0]&&(p.same?true:(!!x.isBonus===!!b[1])))||null;
+        }
+        function colorOf(p,b){const i=(b[1]&&!p.same?p.bonus:p.main).indexOf(b[0]);return ((b[1]&&!p.same?p.bc:p.mc)||[])[i]||'#FFE66D';}
+        function stop(){if(RUN){clearInterval(RUN.iv);RUN=null;}LOT.tgt=null;}
+        /* 결과를 향해 달리는 무대 — 방장·게스트·인증서 다시 보기 공용 */
+        function run(p,sets,st,clock,o){
+            stop();
+            o=o||{};
+            const gs=$i('gameScreen');if(gs&&gs.style.display==='none')gs.style.display='';
+            $i('resultScreen').style.display='none';
+            if(!ctx)initCanvas();else resizeCanvas();
+            if(p.preset)usePreset(p.preset);
+            const cfg={allNums:p.main,mainColors:p.mc,count:p.count,bonusNums:p.bonus||[],bonusColors:p.bc||[],isSeparatePool:!!p.sep,samePoolBonus:!!p.same};
+            bonusConfig=(p.bd|0)>0?{start:Math.min(...((p.same?p.main:p.bonus)||[1])),end:Math.max(...((p.same?p.main:p.bonus)||[1])),draw:p.bd|0,label:String(p.bl||'')}:null;
+            _loadMachineForSet(cfg);
+            _pendingDraw=null;currentSet=0;
+            blowerStartTime=performance.now()*.001;lastTime=0;
+            if(animId)cancelAnimationFrame(animId);
+            animId=requestAnimationFrame(loop);
+            document.body.classList.add('prepared');
+            const lsb=$i('lottoSidebar');if(lsb)lsb.classList.add('gc-locked');
+            const sb=$i('gcStartBtn');if(sb)sb.disabled=true;
+            const cs=document.querySelector('.ls-section.ls-controls');if(cs&&(p.speed|0)!==0)cs.classList.add('collapsed');
+            try{if(window.LpWakeLock)LpWakeLock.acquire('lotto');}catch(_){}
+            RUN={p,sets,cfg,ev:sched(p,sets),i:0,st,clock,o,ball:null};
+            RUN.iv=setInterval(tick,40);tick();
+        }
+        function tick(){
+            const R=RUN;if(!R)return;
+            const now=R.clock();
+            while(RUN===R&&R.i<R.ev.length&&R.st+R.ev[R.i].t<=now){const e=R.ev[R.i++];try{fire(R,e,now-(R.st+e.t)>900);}catch(err){console.warn('[lotto v2]',e.k,err);}}
+            if(RUN===R&&R.i>=R.ev.length)stop();
+        }
+        function fire(R,e,late){
+            const p=R.p;
+            switch(e.k){
+            case 'set':{
+                if(e.si>0){_loadMachineForSet(R.cfg);blowerStartTime=performance.now()*.001;}
+                else{V2L.firedAt=R.clock()-R.st;V2L.firedWall=Date.now();}
+                const set=R.sets[e.si];
+                drawnBalls=[];drawnResults=[];drawing=true;currentSet=e.si+1;separatePhase=0;
+                drawnMainCount=0;drawnBonusCount=0;mainToDraw=set.filter(b=>!b[1]).length;bonusToDraw=set.length-mainToDraw;totalSlots=set.length;
+                suctionActive=false;waitingForCapture=false;
+                if(!late)SFX.startWind();
+                break;}
+            case 'drum':if(!late)SFX.drumRoll(1.5);break;
+            case 'open':gateOpen=true;LOT.tgt=findBall(p,e.b);break;
+            case 'cap':{
+                const b=LOT.tgt&&LOT.tgt.label===e.b[0]?LOT.tgt:findBall(p,e.b);LOT.tgt=null;
+                R.ball=b;
+                if(b){if(b.body)Composite.remove(world,b.body);b.body=null;b.extracting=!late;b.extractStart=performance.now();b.extractDur=1000;if(late)b.drawn=true;}
+                if(!late)SFX.tubeExtract();
+                break;}
+            case 'app':{
+                const b=R.ball&&R.ball.label===e.b[0]?R.ball:null;R.ball=null;
+                if(b){b.drawn=true;b.extracting=false;}
+                const col=b?b.color:colorOf(p,e.b),isB=!!e.b[1];
+                drawnBalls.push({label:e.b[0],color:col,exitAnim:late?1:0,dispX:machineX,dispY:LOT.portY,isBonus:isB,d:b&&b.d});
+                drawnResults.push({label:e.b[0],color:col,isBonus:isB});
+                if(isB)drawnBonusCount++;else drawnMainCount++;
+                if(!late)SFX.pop();
+                break;}
+            case 'land':gateOpen=false;if(!late)SFX.trayLand();break;
+            case 'trans':balls.forEach(b=>{b.drawn=true;if(b.body)Composite.remove(world,b.body)});separatePhase=1;if(!late)SFX.stopWind();break;
+            case 'pool2':createBalls(p.bonus||[],p.bc||[],(p.bonus||[]).map(()=>true));blowerStartTime=performance.now()*.001;separatePhase=2;if(!late)SFX.startWind();break;
+            case 'fan':drawing=false;gateOpen=false;SFX.stopWind();if(!late)SFX.fanfare();break;
+            case 'hist':{
+                const mb=drawnResults.filter(b=>!b.isBonus).sort((a,b)=>a.label-b.label),bb=drawnResults.filter(b=>b.isBonus).sort((a,b)=>a.label-b.label);
+                saveHistoryEntry(mb,bb,(activePreset&&activePreset.bonus&&activePreset.bonus.color)||'#2980b9');renderHistory();
+                break;}
+            case 'result':showResult();afterResult(R);break;
+            case 'inst':{
+                V2L.firedAt=R.clock()-R.st;V2L.firedWall=Date.now();
+                const bc=(activePreset&&activePreset.bonus&&activePreset.bonus.color)||'#2980b9';
+                R.sets.forEach(set=>{
+                    const mb=set.filter(b=>!b[1]).map(b=>({label:b[0],color:colorOf(p,b)})).sort((a,b)=>a.label-b.label);
+                    const bb=set.filter(b=>b[1]).map(b=>({label:b[0]})).sort((a,b)=>a.label-b.label);
+                    saveHistoryEntry(mb,bb,bc);
+                });
+                renderHistory(R.sets.length);
+                const hl=$i('historyList');if(hl)hl.scrollTop=0;
+                if(!late)SFX.fanfare();
+                try{if(window.LpWakeLock)LpWakeLock.release();}catch(_){}
+                const lsb=$i('lottoSidebar');if(lsb)lsb.classList.remove('gc-locked');
+                afterResult(R);
+                break;}
+            }
+        }
+        /* 결과 배지 — 결과 화면(연출) 또는 사이드바(즉시 모드) */
+        function badgeEl(inst){
+            let el=$i('lpV2Badge');
+            if(!el){el=document.createElement('div');el.id='lpV2Badge';el.className='lp-v2-badge';}
+            const host=inst?document.querySelector('.ls-controls .ls-body'):document.querySelector('#resultScreen .result-card');
+            const before=host&&host.querySelector(inst?'#gcStartBtn':'.share-panel');
+            if(host&&el.parentNode!==host){if(before)host.insertBefore(el,before);else host.appendChild(el);}
+            return el;
+        }
+        function afterResult(R){
+            const o=R.o||{},inst=(R.p.speed|0)===0;
+            if(o.cert){const el=badgeEl(inst);el.hidden=false;el.className='lp-v2-badge '+(o.cert==='ok'?'ok':'bad');el.textContent=tx(o.cert==='ok'?'ok':'bad');return;}
+            if(!room)return;
+            const sb=$i('gcStartBtn');if(sb)sb.disabled=!room.isHost;
+            if(V2L.wit&&V2L.wit.round===o.round)setBadge(V2L.wit);
+        }
+        function setBadge(info){
+            const el=badgeEl(!!info.inst);el.hidden=false;
+            if(UI&&UI.badge)UI.badge(el,info);else LpFair.badge(el,info);
+        }
+        /* ── 설정 동기화(방장 → 게스트) ── */
+        /* 프리셋은 언어별로 칩이 달라(게스트 언어엔 없을 수 있다) 칩 클릭 대신 직접 적용 */
+        function usePreset(id){
+            const pr=LOTTO_PRESETS.find(x=>x.id===id);if(!pr||activePreset===pr)return;
+            applyLottoPreset(pr);
+            const row=$i('lottoPresetRow');if(row)row.querySelectorAll('.opt-chip').forEach(c=>c.classList.toggle('selected',c.dataset.preset===pr.id));
+        }
+        function readCfg(){const p=_lpReadLottoConfig();p.speed=drawSpeed;p.sets=setCount;return p;}
+        function applyCfg(p){
+            if(!p)return;
+            const key=JSON.stringify(p);if(key===appliedCfg)return;appliedCfg=key;
+            if(p.presetId)usePreset(p.presetId);
+            ['numStart','numEnd','drawCount','bonusStart','bonusEnd','bonusCount'].forEach(id=>{if(p[id]!=null){const el=$i(id);if(el&&el.value!==String(p[id])){el.value=p[id];el.dispatchEvent(new Event('input',{bubbles:true}));}}});
+            const bs=$i('bonusSection');if(bs&&typeof p.bonusOn==='boolean')bs.style.display=p.bonusOn?'':'none';
+            if(typeof p.speed==='number'){const c=document.querySelector('#gcSpeedRow .opt-chip[data-speed="'+p.speed+'"]');if(c&&!c.classList.contains('selected'))c.click();}
+            if(typeof p.sets==='number'&&p.sets!==setCount)_syncSetCount(p.sets);
+        }
+        function pushCfg(){
+            if(!room||!room.isHost)return;
+            clearTimeout(cfgT);
+            cfgT=setTimeout(()=>{const c=readCfg();c.bonusOn=$i('bonusSection').style.display!=='none';room.setState(S=>{S.game=S.game||{};S.game.cfg=c;S.game.view=view||S.game.view||'setup';});},150);
+        }
+        function setView(v){view=v;if(room&&room.isHost)room.setState(S=>{S.game=S.game||{};S.game.view=v;});}
+        function lockGuest(on){
+            const sb=$i('startBtn');if(sb){sb.disabled=on;sb.style.opacity=on?'.45':'';sb.textContent=on?tx('wait'):(T('prepare')||'PREPARE');}
+            const gs=$i('gcStartBtn');if(gs)gs.disabled=on;
+            const lsb=$i('lottoSidebar');if(lsb)lsb.classList.toggle('gc-locked',on);
+        }
+        /* ── 추첨(방장) ── */
+        async function hostDraw(){
+            if(!room||!room.isHost||busy||RUN)return;
+            busy=true;
+            const cfg=_buildPoolConfig();
+            const p={v:1,g:'lotto',preset:activePreset?activePreset.id:null,main:cfg.allNums,mc:cfg.mainColors,bonus:cfg.bonusNums,bc:cfg.bonusColors,
+                count:cfg.count,bd:bonusConfig?bonusConfig.draw:0,bl:bonusConfig?bonusConfig.label:'',sep:cfg.isSeparatePool,same:cfg.samePoolBonus,sets:setCount,speed:drawSpeed};
+            const txt=$i('gcStartText'),old=txt?txt.textContent:'';if(txt)txt.textContent=tx('mix');
+            const sb=$i('gcStartBtn');if(sb)sb.disabled=true;
+            try{
+                const r=await LpFair.draw(room,{params:p});
+                room.setState(S=>{S.game=S.game||{};S.game.last={round:r.round,cert:r.cert,st:r.startAt};S.game.view='draw';});
+            }catch(e){console.warn('[lotto v2] draw',e);if(sb)sb.disabled=false;}
+            finally{busy=false;if(txt)txt.textContent=old;}
+        }
+        function startRound(round,p,sets,st,cert){
+            if(round===lastRound)return;
+            lastRound=round;
+            RUN&&stop();
+            V2L.last={round,cert,sets};V2L.wit=null;
+            const el=$i('lpV2Badge');if(el)el.hidden=true;
+            run(p,sets,st,()=>room?room.clock():Date.now(),{round,cert:null});
+            LpFair.witness(room,round,sets);
+        }
+        function render(S){
+            if(!room||!S||!S.game)return;
+            const g=S.game;
+            if(!room.isHost){
+                if(g.cfg&&!RUN)applyCfg(g.cfg);
+                if(g.view&&g.view!==view&&!RUN){
+                    view=g.view;
+                    if(g.view==='machine'&&!document.body.classList.contains('prepared'))prepareLottoMachine();
+                    if(g.view==='setup'&&($i('resultScreen').style.display==='flex'||document.body.classList.contains('prepared')))$i('replayBtn').click();
+                }
+                /* 늦게 온 사람: 이미 공개된 추첨 → 인증서로 검증 후 그 장면부터 */
+                if(g.last&&g.last.round!==lastRound&&g.last.cert){
+                    const L=g.last,c=L.cert;lastRound=L.round;
+                    LpFair.cert.verify(c,(pp,r)=>outcome(pp,r)).then(v=>{
+                        if(!v.ok){setBadge({kind:'mismatch',n:1});return;}
+                        lastRound=-2;startRound(L.round,c.params,v.res,L.st,c);
+                    });
+                }
+            }
+        }
+        function bind(r){
+            if(room===r)return;unbind();room=r;V2L.room=r;
+            if(!r.isHost)lockGuest(true);
+            offs.push(r.on('state',S=>render(S)));
+            offs.push(r.on('fair',ev=>{
+                if(!ev)return;
+                if(ev.k==='reveal'){
+                    const c=ev.cert,p=c&&c.params;if(!p||p.g!=='lotto')return;
+                    if(!ev.ok){setBadge({kind:'mismatch',n:1});return;}
+                    startRound(ev.round,p,outcome(p,LpFair.rng(ev.seed,'main')),ev.startAt,c);
+                }else if(ev.k==='witness'&&V2L.last&&ev.round===V2L.last.round){
+                    const inst=!!(V2L.last.cert&&(V2L.last.cert.params.speed|0)===0);
+                    V2L.wit={kind:ev.bad?'mismatch':'verified',n:ev.bad?ev.bad:ev.ok,round:ev.round,cert:V2L.last.cert,inst};
+                    if(!RUN)setBadge(V2L.wit);
+                }else if(ev.k==='abort'){
+                    /* 커밋 후 공개가 없으면(결과 보고 버리기 시도) 모든 화면에 남긴다 — 인증서 stats.aborts 에도 기록 */
+                    V2L.aborts=(V2L.aborts||0)+1;V2L.lastAbort=ev;
+                    const m=tx('abort').replace('{n}',ev.round);
+                    if(UI&&UI.toast)UI.toast(m,3500);
+                    const sb=$i('gcStartBtn');if(sb&&r.isHost&&!RUN&&ev.by==='host')sb.disabled=false;
+                }
+            }));
+            if(r.isHost){
+                const setup=$i('setupWrap'),side=$i('lottoSidebar');
+                const on=()=>pushCfg();
+                [setup,side].forEach(el=>{if(!el)return;el.addEventListener('input',on);el.addEventListener('change',on);el.addEventListener('click',()=>setTimeout(on,0));});
+                offs.push(()=>[setup,side].forEach(el=>{if(!el)return;el.removeEventListener('input',on);el.removeEventListener('change',on);}));
+                view=document.body.classList.contains('prepared')?'machine':'setup';
+                pushCfg();
+            }
+            render(r.state());
+        }
+        function unbind(){offs.forEach(f=>{try{f()}catch(_){}});offs=[];room=null;V2L.room=null;lockGuest(false);view='';appliedCfg='';}
+        const V2L={room:null,last:null,outcome,sched,hostDraw,setView,stop,run,
+            isRunning:()=>!!RUN,
+            dbg:()=>({run:!!RUN,i:RUN&&RUN.i,n:RUN&&RUN.ev.length,drawn:drawnResults.map(b=>b.label+(b.isBonus?'b':'')).join(','),lastRound,view,res:$i('resultScreen').style.display})};
+        window.LpRoomsQ=window.LpRoomsQ||[];
+        window.LpRoomsQ.push(function(LR,ui){
+            UI=ui;
+            LR.adapter({gameId:'lotto',kind:'draw',seats:null,lateJoin:'anytime',migratable:true});
+            ui.config({lobby:'strip',stripEl:()=>$i('setupScreen'),replay:c=>certPlay(c,true)});
+            ui.on('room',bind);
+            ui.on('left',()=>unbind());
+        });
+        /* ── #cert= / 다시 보기: 인증서를 검증하고 같은 추첨을 이 기기에서 다시 돌린다 ── */
+        function certPlay(c,fromSheet){
+            return LpFair.cert.verify(c,(p,r)=>outcome(p,r)).then(v=>{
+                const ok=v.ok&&(!c.res||JSON.stringify(v.res)===JSON.stringify(c.res));
+                const p=c.params||{};
+                if(!ok){V2L.certView='bad';stop();const el=badgeEl(false);el.hidden=false;el.className='lp-v2-badge bad';el.textContent=tx('bad');$i('resultScreen').style.display='flex';if(!fromSheet){document.body.classList.add('prepared');}return 'bad';}
+                V2L.certView='ok';
+                run(Object.assign({},p,{speed:Math.min(p.speed|0||1,1)||1}),v.res,Date.now()+600,Date.now,{cert:'ok'});
+                return 'ok';
+            });
+        }
+        function certMode(){
+            const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
+            const go=()=>LpFair.cert.decode(m[1]).then(c=>certPlay(c,false)).catch(()=>{V2L.certView='bad';const el=badgeEl(false);el.hidden=false;el.className='lp-v2-badge bad';el.textContent=tx('bad');$i('resultScreen').style.display='flex';document.body.classList.add('prepared');});
+            if(window.LpFair)go();
+            else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1790759059';s.onload=go;document.head.appendChild(s);}
+        }
+        setTimeout(certMode,300);
+        window.__lpv2=V2L;   /* 디버그·하네스 손잡이 */
+        return V2L;
+    })();
+    window.__lpV2L=V2L;
+
     _initBackgroundMachine();
 }
 init();

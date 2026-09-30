@@ -390,6 +390,12 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 }
 
 /* Responsive setup and game layout */
+
+.lp-v2-badge{display:block;margin:10px auto;width:max-content;max-width:100%;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.85em;background:rgba(76,217,100,.12);border:1px solid rgba(76,217,100,.45);color:#8ff0a4;text-align:center}
+.lp-v2-badge.bad,.lp-v2-badge.lpf-mismatch{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.5);color:#ff9a9a}
+.lp-v2-badge[hidden],.lp-v2-note[hidden]{display:none}
+.lp-v2-note{margin:6px auto;text-align:center;font-size:.85em;color:rgba(255,255,255,.65)}
+.setup-card.lp-v2-ro .variant-chip,.setup-card.lp-v2-ro .mode-chip,.setup-card.lp-v2-ro .step-btn,.setup-card.lp-v2-ro [data-hostplay],.setup-card.lp-v2-ro input{pointer-events:none;opacity:.7}
 </style>
 </head>
 <body>
@@ -652,6 +658,7 @@ document.querySelectorAll('.variant-chip').forEach(btn=>{
    or guest+host+others). Used to AUTO-BUMP totalParticipants upward
    when new people join — never overrides a host-set higher value. */
 function liveRoomCount(){
+    if(window.__bv2&&__bv2.room)return __bv2.room.roster().filter(m=>m.r!=='bot').length;
     if(window._lpHost)return 1+(window._lpHost.guests()||[]).length;
     if(window._lpGuest)return 2; /* defensive — guest setup UI is hidden anyway */
     return 1;
@@ -1268,6 +1275,8 @@ function performDraw(numberOverride){
     /* Only one extraction in flight at a time — guards against rapid
        auto-ticks overlapping with the suction animation. */
     if(waitingForCapture)return;
+    /* Rooms v2: 방장 레버·자동 = 체인의 다음 호출을 공표 → 모든 기기가 상태를 받아 같은 번호를 뽑는다 */
+    if(typeof numberOverride!=='number'&&window.__bv2&&__bv2.room){if(__bv2.room.isHost)__bv2.hostCall();return;}
     let n;
     if(typeof numberOverride==='number'){
         n=numberOverride;
@@ -1299,7 +1308,7 @@ function performDraw(numberOverride){
        extracted + announced. Prevents rapid spam that would stack
        suctions on the same frame. Guest's lever is already disabled
        from startGame, so we only toggle on host. */
-    if(!window._lpGuest){
+    if(!_isG()){
         const lever=document.getElementById('drawLever');
         if(lever)lever.disabled=true;
     }
@@ -1325,7 +1334,7 @@ function _completeDraw(n){
     /* Re-enable DRAW now that the ball has been announced. Guest's
        lever stays disabled; for host, manual mode unlocks immediately
        and auto mode is managed by scheduleAuto so no re-click needed. */
-    if(!window._lpGuest){
+    if(!_isG()){
         const lever=document.getElementById('drawLever');
         if(lever)lever.disabled=false;
     }
@@ -1336,13 +1345,14 @@ function _completeDraw(n){
        caller-only hosts would otherwise sit in a frozen game. Call
        time! End the game and show whatever winners we do have (may
        be empty if everyone missed). */
+    if(window.__bv2&&__bv2.room)__bv2.afterDraw(n);   /* v2: 끝은 방장 상태가 정한다 */
     if(drawn.length>=variant.max&&!gameEnded){
-        setTimeout(()=>{if(!gameEnded)endGame()},1500);
+        if(!(window.__bv2&&__bv2.room))setTimeout(()=>{if(!gameEnded)endGame()},1500);
         return;
     }
     /* Auto-mode reschedules AFTER extraction so short intervals
        never overlap the suction animation. */
-    if(drawn.length<variant.max&&gameActive&&drawMode==='auto'&&!window._lpGuest){
+    if(drawn.length<variant.max&&gameActive&&drawMode==='auto'&&!_isG()){
         scheduleAuto();
     }
 }
@@ -1583,6 +1593,7 @@ let _winnersChannel=null; /* Supabase Realtime channel — lives as long as the 
 
 /* Returns the current room code (host or guest) or null if solo. */
 function _currentRoomCode(){
+    if(window.__bv2&&__bv2.room)return 'v2-'+__bv2.room.code;
     if(window._lpHost&&window._lpHost.code)return window._lpHost.code;
     if(window._lpGuest&&window._lpGuest.code)return window._lpGuest.code;
     return null;
@@ -1653,6 +1664,7 @@ function subscribeWinners(code){
    another 진희 get renamed to 진희2 etc., and that final name is
    what the card key, DB claim, and result screen should all use. */
 function _effectiveNick(){
+    if(window.__bv2&&__bv2.room){const r=__bv2.room,m=r.roster().filter(x=>x.p===r.me.pid)[0];if(m)return m.n;}
     if(window._lpGuest&&window._lpGuest.nickname)return window._lpGuest.nickname;
     return localStorage.getItem('luckyplz_nick')||T('host');
 }
@@ -1738,6 +1750,8 @@ function silentReplayDraws(list){
 }
 
 function claimWin(linesCount){
+    /* v2: DB 없음 — 서명된 의도로 방장에게 클레임, 방장이 카드·호출 기록으로 검증 */
+    if(window.__bv2&&__bv2.room){SFX.bingoShout();__bv2.claim(linesCount);return;}
     const myNick=_effectiveNick();
     const payload={nickname:myNick,atDraw:drawn.length,atMs:Date.now(),lines:linesCount};
     SFX.bingoShout();
@@ -1776,7 +1790,7 @@ function registerWinner(w){
     /* Auto-end: every client independently hits the threshold at
        the same time because they all receive the same DB events
        in order. No host-authoritative broadcast needed. */
-    if(winners.length>=targetWinnerCount){
+    if(winners.length>=targetWinnerCount&&!(window.__bv2&&__bv2.room)){
         setTimeout(endGame,900);
     }
 }
@@ -1833,13 +1847,16 @@ function startGame(isFromHostBroadcast){
     const selfNick=_effectiveNick();
     /* Host-as-pure-caller: no card, no marking, just drum + history.
        Guests always generate a card. */
-    const iAmHost=!!window._lpHost;
-    const iAmGuest=!!window._lpGuest;
+    const iAmHost=_isH();
+    const iAmGuest=_isG();
     /* Offline mode: host is a pure number-caller (physical paper
        cards in the room). Force no card + no winner tracking
        regardless of hostPlays toggle. */
     const isOffline=drawMode==='offline';
-    const shouldHaveCard=!isOffline&&(iAmGuest||!iAmHost||hostPlays);
+    let shouldHaveCard=!isOffline&&(iAmGuest||!iAmHost||hostPlays);
+    /* v2: 카드는 공동 키 G 와 내 pid 에서 — 시작 명단에 없으면(늦참) 이번 판은 관전 */
+    const v2card=(window.__bv2&&__bv2.room)?__bv2.myCard():undefined;
+    if(v2card!==undefined)shouldHaveCard=!!v2card;
     const cardBox=document.querySelector('.card-box');
     const gameScreen=document.getElementById('gameScreen');
     if(shouldHaveCard){
@@ -1847,8 +1864,10 @@ function startGame(isFromHostBroadcast){
            in localStorage — and it's from the same running game —
            restore it so the player keeps their original numbers +
            whatever marks they had. Falls back to fresh generation. */
-        const saved=_restoreCard();
-        if(saved){
+        const saved=v2card?null:_restoreCard();
+        if(v2card){
+            myCard=v2card;myCardSerial=__bv2.serial();
+        }else if(saved){
             myCard={grid:saved.grid,marks:saved.marks};
             myCardSerial=saved.serial||String(Math.floor(Math.random()*900+100));
         }else{
@@ -1874,7 +1893,7 @@ function startGame(isFromHostBroadcast){
     document.getElementById('resultScreen').classList.remove('active');
     /* Host: setup-back to reconfigure. Guest: leave-room to go home.
        Only one of the two shows at a time. */
-    if(window._lpGuest){
+    if(_isG()){
         document.getElementById('setupBackBtn').style.display='none';
         document.getElementById('leaveBtn').style.display='inline-flex';
     }else{
@@ -1888,7 +1907,7 @@ function startGame(isFromHostBroadcast){
     /* Host controls the draw lever. Guests see it disabled. */
     const lever=document.getElementById('drawLever');
     const autoBadge=document.getElementById('autoBadge');
-    if(window._lpGuest){
+    if(_isG()){
         lever.disabled=true;
         autoBadge.classList.toggle('show',drawMode==='auto');
     }else{
@@ -1914,7 +1933,7 @@ function startGame(isFromHostBroadcast){
 }
 function scheduleAuto(){
     if(autoTimerId){clearTimeout(autoTimerId);autoTimerId=null}
-    if(!gameActive||drawMode!=='auto'||window._lpGuest)return;
+    if(!gameActive||drawMode!=='auto'||_isG())return;
     /* Next tick fires `interval` seconds from now. Reschedule happens
        inside _completeDraw so the timer never overlaps suction. */
     autoTimerId=setTimeout(()=>{performDraw()},Math.max(1,autoIntervalSec)*1000);
@@ -1977,6 +1996,7 @@ function showResult(){
     }
     /* Share panel wiring. */
     buildBingoShareButtons(ranked);
+    if(window.__bv2)__bv2.onResult();
 }
 
 function buildBingoShareButtons(ranked){
@@ -2055,6 +2075,7 @@ function launchConfetti(count){
 
 /* ===== Buttons ===== */
 document.getElementById('startBtn').addEventListener('click',()=>{
+    if(window.__bv2&&__bv2.room){if(__bv2.room.isHost)__bv2.hostStart();return;}
     if(window._lpHost&&(window._lpHost.guests()||[]).length<1){
         const t=document.getElementById('shareToast');
         t.textContent=lang.startsWith('ko')?'게스트가 최소 1명 있어야 시작할 수 있어요':'Need at least 1 guest to start';
@@ -2065,7 +2086,7 @@ document.getElementById('startBtn').addEventListener('click',()=>{
     startGame(false);
 });
 document.getElementById('drawLever').addEventListener('click',()=>{
-    if(window._lpGuest)return;
+    if(_isG())return;
     performDraw();
     if(drawMode==='auto')scheduleAuto();
 });
@@ -2087,6 +2108,7 @@ document.getElementById('replayBtn').addEventListener('click',()=>{
 });
 document.getElementById('setupBackBtn').addEventListener('click',e=>{
     e.preventDefault();
+    if(window.__bv2&&__bv2.room&&__bv2.room.isHost)__bv2.hostBack();
     stopGame();
     try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
     /* Mark the snapshot as not-running so a guest joining during
@@ -2116,6 +2138,7 @@ document.getElementById('leaveBtn').addEventListener('click',e=>{
     try{if(_winnersChannel&&window.getSupabase){window.getSupabase().removeChannel(_winnersChannel);_winnersChannel=null;}}catch(_){}
     try{if(window._lpGuest&&window._lpGuest.close)window._lpGuest.close();}catch(_){}
     window._lpGuest=null;
+    try{if(window.__bv2&&__bv2.room)__bv2.room.leave();}catch(_){}
     location.href='/';
 });
 
@@ -2341,6 +2364,303 @@ function _wireSetupSync(){
     setup.addEventListener('click',()=>setTimeout(window._lpBroadcastConfig,0));
 }
 
+
+/* ===== LuckyPlz Rooms v2 — 세션형 공정 빙고 (2026-09-30 · DESIGN §6.1.8 bingo · §6.2.5 chain) =====
+   v1(위 lpRoom + bingo_winners DB) 은 그대로 두고, siteFooter 의 v2 로더가 lpRooms* 를 실었을 때만 붙는다.
+   v2 는 DB 에 아무것도 쓰지 않는다(bingo_winners INSERT 없음 · 전용 채널 없음).
+   · 시작: 방장이 해시체인 s_75…s_0 을 만들고 s_0 을 커밋(LpFair.chain) → 그 s_0 을 params 에 넣어 LpFair.draw →
+     참가자 엔트로피가 섞인 공동 키 G. 방장은 G 를 보기 전에 체인을 정했으므로 호출 순서를 고를 수 없다
+   · 카드 = rng(G,'card:'+pid) — 누구나 모든 카드를 계산할 수 있다(빙고는 선택이 없는 게임이라 무해)
+   · 호출 i = 남은 공 중 int(H(s_i|G)) — 방장만 다음 번호를 알고, 공개된 s_i 는 H(s_i)=s_{i-1} 로 즉시 검증
+   · 승자: 방장이 매 호출마다 전원 카드를 재계산해 확정(끊긴 사람도 놓치지 않음). 게스트 클레임은 서명된 의도로
+     방장이 검증(가짜 클레임은 거절). 모든 기기가 같은 계산으로 승자를 다시 검증하고, 결과 링크 #cert= 로 누구나 재검증 */
+function _isG(){return !!window._lpGuest||!!(window.__bv2&&__bv2.room&&!__bv2.room.isHost)}
+function _isH(){return !!window._lpHost||!!(window.__bv2&&__bv2.room&&__bv2.room.isHost)}
+window.__bv2=(function(){
+    const TX={
+        ko:{wait:'⏳ 방장이 시작해요',mix:'🎲 모두의 행운 섞는 중…',spec:'👀 관전 중 — 다음 판부터 카드',ok:'✓ 검증된 결과',bad:'✗ 위조된 결과',abort:'⚠ 추첨 #{n} 취소됨',calls:'호출 {n}개'},
+        en:{wait:'⏳ Host starts',mix:'🎲 Mixing everyone’s luck…',spec:'👀 Watching — card next game',ok:'✓ Verified result',bad:'✗ Forged result',abort:'⚠ Draw #{n} cancelled',calls:'{n} calls'},
+        ja:{wait:'⏳ ホストが開始',mix:'🎲 みんなの運を混ぜています…',spec:'👀 観戦中 — 次からカード',ok:'✓ 検証済みの結果',bad:'✗ 改ざんされた結果',abort:'⚠ 抽選 #{n} 取り消し',calls:'{n}回コール'},
+        zh:{wait:'⏳ 等房主开始',mix:'🎲 正在混合大家的运气…',spec:'👀 观战中 — 下一局发卡',ok:'✓ 已验证的结果',bad:'✗ 伪造的结果',abort:'⚠ 抽奖 #{n} 已取消',calls:'已叫 {n} 个'},
+        es:{wait:'⏳ Empieza el anfitrión',mix:'🎲 Mezclando la suerte de todos…',spec:'👀 Mirando — cartón en la próxima',ok:'✓ Resultado verificado',bad:'✗ Resultado falso',abort:'⚠ Sorteo #{n} cancelado',calls:'{n} bolas'},
+        pt:{wait:'⏳ O anfitrião começa',mix:'🎲 Misturando a sorte de todos…',spec:'👀 Assistindo — cartela na próxima',ok:'✓ Resultado verificado',bad:'✗ Resultado falso',abort:'⚠ Sorteio #{n} cancelado',calls:'{n} bolas'}
+    };
+    const tx=k=>{const l=String(typeof lang==='string'?lang:'en').slice(0,2);return ((TX[l]||TX.en)[k])||TX.en[k]};
+    const HEXS=/^[0-9a-f]{64}$/;
+    const up=s=>LpFair.hex(LpFair.H(LpFair.unhex(s)));
+    let room=null,UI=null,offs=[],run=null,q=[],cfgT=0,appliedCfg='',busy=false,lastView='';
+    const me=()=>room?room.me.pid:null;
+    const S_=()=>room&&room.state();
+    const R_=()=>{const S=S_();return S&&S.game&&S.game.run||null};
+
+    /* ── 순수 계산(모든 기기·인증서 공용) ── */
+    function outcome(p,r){
+        if(!p||p.g!=='bingo'||!HEXS.test(p.s0)||!Array.isArray(p.pl)||!(p.size>=3&&p.size<=6)||!(p.max>=9&&p.max<=99))throw new Error('format');
+        let k='';for(let i=0;i<8;i++)k+=('0000000'+r.u32().toString(16)).slice(-8);
+        return k;   /* 공동 키 G */
+    }
+    function cardOf(Gk,pid,size,max){
+        const r=LpFair.rng(Gk,'card:'+pid),perCol=Math.ceil(max/size),grid=[],marks=[];
+        for(let i=0;i<size;i++){grid.push(new Array(size).fill(0));marks.push(new Array(size).fill(false));}
+        for(let c=0;c<size;c++){
+            const lo=c*perCol+1,hi=Math.min(max,(c+1)*perCol),pool=[];
+            for(let v=lo;v<=hi;v++)pool.push(v);
+            for(let i=pool.length-1;i>0;i--){const j=r.int(i+1);const x=pool[i];pool[i]=pool[j];pool[j]=x;}
+            for(let rr=0;rr<size;rr++)grid[rr][c]=pool[rr]||0;
+        }
+        if(size%2===1){const m=(size-1)/2;grid[m][m]=0;marks[m][m]=true;}
+        return {grid,marks};
+    }
+    function callOf(sI,Gk,set,max){
+        const rem=[];for(let v=1;v<=max;v++)if(!set.has(v))rem.push(v);
+        if(!rem.length)return 0;
+        return rem[LpFair.rng(LpFair.chain.value(sI,Gk),'call').int(rem.length)];
+    }
+    function linesOf(card,set,size){
+        const on=(r,c)=>card.grid[r][c]===0||set.has(card.grid[r][c]);
+        let n=0,d1=true,d2=true;
+        for(let r=0;r<size;r++){let ok=true;for(let c=0;c<size;c++)if(!on(r,c)){ok=false;break}if(ok)n++;}
+        for(let c=0;c<size;c++){let ok=true;for(let r=0;r<size;r++)if(!on(r,c)){ok=false;break}if(ok)n++;}
+        for(let i=0;i<size;i++){if(!on(i,i))d1=false;if(!on(i,size-1-i))d2=false;}
+        return n+(d1?1:0)+(d2?1:0);
+    }
+    /* 승자 = 호출 순서대로 처음 wl 줄을 채운 사람들(같은 호출이면 공동), tw 명 차면 그 호출에서 끝 */
+    function winnersOf(p,Gk,calls){
+        const cards=p.pl.map(x=>cardOf(Gk,x.p,p.size,p.max)),set=new Set(),w=[];
+        for(let i=0;i<calls.length&&w.length<p.tw;i++){
+            set.add(calls[i]);
+            p.pl.forEach((x,j)=>{if(w.some(y=>y.p===x.p))return;const l=linesOf(cards[j],set,p.size);if(l>=p.wl)w.push({p:x.p,n:x.n,at:i+1,l});});
+        }
+        return w;
+    }
+    function callsOf(p,Gk,cs){
+        const set=new Set(),out=[];let prev=p.s0;
+        for(const sI of cs){if(!HEXS.test(sI)||up(sI)!==prev)throw new Error('chain');const n=callOf(sI,Gk,set,p.max);set.add(n);out.push(n);prev=sI;}
+        return out;
+    }
+    /* 인증서(=시작 draw 인증서 + x:{cs,w,ab}) 전체 검증 */
+    async function verifyCert(c){
+        const v=await LpFair.cert.verify(c,(p,r)=>outcome(p,r));
+        if(!v.ok)return {ok:false,why:v.why};
+        const p=c.params,x=c.x||{};
+        try{
+            const calls=callsOf(p,v.res,Array.isArray(x.cs)?x.cs:[]),w=winnersOf(p,v.res,calls);
+            const same=JSON.stringify(w.map(y=>[y.p,y.at]))===JSON.stringify((x.w||[]).map(y=>[y.p,y.at]));
+            const ended=w.length>=p.tw||calls.length>=p.max||!!x.ab;
+            return {ok:same&&ended,why:same?(ended?null:'unfinished'):'winners',calls,w,p,Gk:v.res};
+        }catch(e){return {ok:false,why:e.message};}
+    }
+
+    /* ── 설정 동기화 ── */
+    function readCfg(){return {size:variant.size,max:variant.max,drawMode,autoIntervalSec,hostPlays,winLines,targetWinnerCount,totalParticipants};}
+    function applyCfg(p){
+        if(!p)return;const k=JSON.stringify(p);if(k===appliedCfg)return;appliedCfg=k;
+        variant={size:p.size,max:p.max};
+        document.querySelectorAll('.variant-chip').forEach(b=>b.classList.toggle('selected',parseInt(b.dataset.size)===p.size));
+        drawMode=p.drawMode;
+        document.querySelectorAll('.draw-mode-row .mode-chip').forEach(b=>b.classList.toggle('selected',b.dataset.mode===p.drawMode));
+        document.getElementById('intervalRow').classList.toggle('show',p.drawMode==='auto');
+        autoIntervalSec=p.autoIntervalSec;document.getElementById('autoInterval').value=p.autoIntervalSec;
+        document.getElementById('autoBadgeLabel').textContent=T('autoBadge').replace('{n}',p.autoIntervalSec);
+        hostPlays=!!p.hostPlays;document.querySelectorAll('[data-hostplay]').forEach(b=>b.classList.toggle('selected',(b.dataset.hostplay==='1')===hostPlays));
+        totalParticipants=p.totalParticipants;winLines=p.winLines;targetWinnerCount=p.targetWinnerCount;
+        refreshSteppers();applyDrawModeVisibility();
+    }
+    function pushCfg(){
+        if(!room||!room.isHost)return;
+        clearTimeout(cfgT);
+        cfgT=setTimeout(()=>room.setState(S=>{S.game=S.game||{b:1};S.game.cfg=readCfg();}),150);
+    }
+    function lockGuest(on){
+        const sb=document.getElementById('startBtn');if(!sb)return;
+        sb.disabled=on;sb.style.opacity=on?'.45':'';sb.textContent=on?tx('wait'):(T('start')||'START');
+        document.querySelectorAll('#setupWrap .setup-card').forEach(c=>c.classList.toggle('lp-v2-ro',on));
+    }
+
+    /* ── 방장 ── */
+    async function hostStart(){
+        if(!room||!room.isHost||busy)return;
+        busy=true;
+        const sb=document.getElementById('startBtn'),old=sb.textContent;sb.textContent=tx('mix');sb.disabled=true;
+        try{
+            const ros=room.roster();
+            const off=drawMode==='offline';
+            const pl=off?[]:ros.filter(m=>(m.r==='player'||(m.r==='host'&&hostPlays))&&m.c!=='off').map(m=>({p:m.p,n:m.n}));
+            const c=await LpFair.chain.create(room,variant.max);
+            const params={g:'bingo',s0:c.s0,size:variant.size,max:variant.max,pl,wl:winLines,tw:Math.max(1,Math.min(targetWinnerCount,pl.length||1)),mode:drawMode,iv:autoIntervalSec};
+            const r=await LpFair.draw(room,{params});
+            room.setState(S=>{S.game=S.game||{b:1};S.game.cfg=readCfg();S.game.run={id:r.round,cert:r.cert,cs:[],w:[],end:0,ab:0};S.game.view='game';});
+        }catch(e){console.warn('[bingo v2] start',e);}
+        finally{busy=false;sb.textContent=old;sb.disabled=false;}
+    }
+    function hostCall(){
+        const R=R_();if(!R||R.end||!run||!run.ready||run.id!==R.id||run.bad)return;
+        const i=R.cs.length+1;if(i>run.p.max)return;
+        const sI=LpFair.chain.reveal(i);
+        const calls=callsOf(run.p,run.Gk,R.cs.concat([sI])),w=winnersOf(run.p,run.Gk,calls);
+        room.setState(S=>{const X=S.game.run;X.cs.push(sI);X.w=w;if(w.length>=run.p.tw||i>=run.p.max)X.end=1;});
+    }
+    function hostBack(){
+        const R=R_();
+        room.setState(S=>{S.game.view='setup';if(S.game.run&&!S.game.run.end){S.game.run.end=1;S.game.run.ab=1;}});
+        if(R)run=null;
+    }
+
+    /* ── 모든 기기 ── */
+    async function beginRun(R){
+        const id=R.id;run={id,ready:false};
+        const v=await LpFair.cert.verify(R.cert,(p,r)=>outcome(p,r));
+        if(!run||run.id!==id)return;
+        const p=R.cert.params;
+        run={id,ready:true,p,Gk:v.ok?v.res:null,bad:!v.ok,calls:[],set:new Set(),prev:p.s0,ok:v.ok,shown:0,reg:{},ended:false,cert:R.cert};
+        if(!v.ok){badge({kind:'mismatch',n:1});return;}
+        variant={size:p.size,max:p.max};drawMode=p.mode;autoIntervalSec=p.iv;winLines=p.wl;targetWinnerCount=p.tw;
+        q=[];
+        stopGame();
+        startGame(true);
+        const mine=p.pl.some(x=>x.p===me());
+        const note=document.getElementById('lpV2Note');if(note){note.hidden=mine||p.mode==='offline';note.textContent=tx('spec');}
+        ingest(R_(),true);
+    }
+    function ingest(R,first){
+        if(!run||!run.ready||run.bad||!R||R.id!==run.id)return;
+        const fresh=[];
+        for(let i=run.calls.length;i<R.cs.length;i++){
+            const sI=R.cs[i];
+            if(!HEXS.test(sI)||up(sI)!==run.prev){run.ok=false;badge({kind:'mismatch',n:1});return;}
+            const n=callOf(sI,run.Gk,run.set,run.p.max);run.set.add(n);run.calls.push(n);run.prev=sI;fresh.push(n);
+        }
+        if(!fresh.length){flushWinners(R);maybeEnd(R);return;}
+        /* 늦참·복귀로 밀린 호출은 조용히, 마지막 한 개만 연출 */
+        const silent=first?fresh.slice(0,fresh.length-(R.end?0:1)):fresh.slice(0,-1);
+        const anim=fresh.slice(silent.length);
+        if(silent.length){silentReplayDraws(silent);run.shown+=silent.length;}
+        anim.forEach(n=>q.push(n));
+        pump();
+        flushWinners(R);maybeEnd(R);
+    }
+    function pump(){if(!q.length||waitingForCapture||!gameActive)return;performDraw(q.shift());}
+    function afterDraw(){
+        if(!run||!run.ready)return;
+        run.shown++;
+        const R=R_();flushWinners(R);maybeEnd(R);
+        setTimeout(pump,250);
+    }
+    function flushWinners(R){
+        if(!R||!run||!run.ready||run.bad)return;
+        const mine=winnersOf(run.p,run.Gk,run.calls);
+        (R.w||[]).forEach((w,i)=>{
+            if(run.reg[w.p]||w.at>run.shown)return;
+            const ok=mine.some(y=>y.p===w.p&&y.at===w.at);
+            if(!ok){run.ok=false;badge({kind:'mismatch',n:1});}
+            run.reg[w.p]=1;
+            registerWinner({nickname:w.n+(ok?'':' ✗'),atDraw:w.at,atMs:i,lines:w.l});
+        });
+    }
+    function maybeEnd(R){
+        if(!R||!run||!run.ready||run.ended||!R.end)return;
+        if(run.shown<Math.min(R.cs.length,run.calls.length))return;
+        run.ended=true;
+        setTimeout(()=>{if(!gameEnded)endGame();},900);
+    }
+    function onResult(){
+        if(!room||!run||!run.ready)return;
+        const R=R_();
+        const el=badgeEl();el.hidden=true;
+        if(run.bad||!run.ok){badge({kind:'mismatch',n:1});return;}
+        const res={calls:run.calls,w:(R&&R.w||[]).map(y=>[y.p,y.at])};
+        run.res=res;
+        LpFair.witness(room,run.id,res);
+        run.cert=Object.assign({},run.cert,{x:{cs:(R&&R.cs||[]).slice(),w:(R&&R.w||[]).map(y=>({p:y.p,n:y.n,at:y.at,l:y.l})),ab:R&&R.ab?1:0}});
+        V.lastCert=run.cert;
+    }
+    function badgeEl(){
+        let el=document.getElementById('lpV2Badge');
+        if(!el){el=document.createElement('div');el.id='lpV2Badge';el.className='lp-v2-badge';el.hidden=true;const rs=document.getElementById('resultScreen'),rb=document.getElementById('replayBtn');if(rs)rs.insertBefore(el,rb||null);}
+        return el;
+    }
+    function badge(info){const el=badgeEl();el.hidden=false;if(UI&&UI.badge)UI.badge(el,info);else LpFair.badge(el,info);}
+    function render(S){
+        if(!room||!S||!S.game)return;
+        const g=S.game;
+        if(!room.isHost&&g.cfg&&!gameActive)applyCfg(g.cfg);
+        const R=g.run;
+        if(g.view==='setup'&&lastView!=='setup'&&!room.isHost){
+            lastView='setup';
+            if(gameActive||document.getElementById('gameScreen').classList.contains('active')){stopGame();q=[];}
+            document.getElementById('gameScreen').classList.remove('active');
+            if(!document.getElementById('resultScreen').classList.contains('active'))document.getElementById('setupWrap').style.display='flex';
+            run=null;
+        }
+        if(g.view==='game')lastView='game';
+        if(R&&g.view==='game'&&(!run||run.id!==R.id))beginRun(R);
+        else if(R&&run&&run.id===R.id)ingest(R,false);
+    }
+    function bind(r){
+        if(room===r)return;unbind();room=r;V.room=r;
+        if(!r.isHost)lockGuest(true);
+        let note=document.getElementById('lpV2Note');
+        if(!note){note=document.createElement('div');note.id='lpV2Note';note.className='lp-v2-note';note.hidden=true;const cb=document.querySelector('.card-box');if(cb&&cb.parentNode)cb.parentNode.insertBefore(note,cb);}
+        offs.push(r.on('state',S=>render(S)));
+        offs.push(r.on('fair',ev=>{
+            if(!ev)return;
+            if(ev.k==='witness'&&run&&ev.round===run.id&&run.ok&&!run.bad)badge({kind:ev.bad?'mismatch':'verified',n:ev.bad?ev.bad:ev.ok,round:ev.round,cert:run.cert});
+            else if(ev.k==='abort'){V.aborts=(V.aborts||0)+1;if(UI&&UI.toast)UI.toast(tx('abort').replace('{n}',ev.round),3500);}
+        }));
+        if(r.isHost){
+            r.onIntent((from,a,x)=>{
+                if(a!=='claim')return {reject:'unknown'};
+                const R=R_();if(!R||!run||!run.ready||run.id!==R.id)return {reject:'state'};
+                const at=x&&x.at|0,i=run.p.pl.findIndex(y=>y.p===from.p);
+                if(i<0||!(at>=1&&at<=run.calls.length))return {reject:'bad_claim'};
+                const set=new Set(run.calls.slice(0,at));
+                const l=linesOf(cardOf(run.Gk,from.p,run.p.size,run.p.max),set,run.p.size);
+                if(l<run.p.wl)return {reject:'not_bingo'};   /* 가짜 클레임 — 카드·호출 기록으로 재계산해 거절 */
+                if(!(R.w||[]).some(y=>y.p===from.p))return {reject:'not_first'};   /* 이미 끝난 판·목표 인원 밖 */
+            });
+            const setup=document.getElementById('setupWrap');
+            const on=()=>pushCfg();
+            setup.addEventListener('input',on);setup.addEventListener('click',()=>setTimeout(on,0));
+            offs.push(()=>{setup.removeEventListener('input',on);});
+            pushCfg();
+        }
+        render(r.state());
+    }
+    function unbind(){offs.forEach(f=>{try{f()}catch(_){}});offs=[];room=null;V.room=null;run=null;q=[];lockGuest(false);appliedCfg='';lastView='';}
+    const V={room:null,lastCert:null,outcome,cardOf,callOf,linesOf,winnersOf,verifyCert,hostStart,hostCall,hostBack,afterDraw,onResult,
+        myCard(){if(!run||!run.ready||run.bad)return null;return run.p.pl.some(x=>x.p===me())?cardOf(run.Gk,me(),run.p.size,run.p.max):null;},
+        serial(){return run&&run.Gk?String(100+parseInt(LpFair.hex(LpFair.H(run.Gk+'|'+me())).slice(0,6),16)%900):'100';},
+        claim(lines){if(!room||room.isHost||!run||!run.ready)return;room.intent('claim',{at:drawn.length,l:lines});},
+        dbg(){const R=R_();return {run:run&&{id:run.id,ready:run.ready,ok:run.ok,bad:run.bad,calls:run.calls&&run.calls.join(','),shown:run.shown,ended:run.ended},cs:R&&R.cs.length,w:R&&R.w,end:R&&R.end,drawn:drawn.join(','),active:gameActive,ended:gameEnded,q:q.length};}
+    };
+    window.LpRoomsQ=window.LpRoomsQ||[];
+    window.LpRoomsQ.push(function(LR,ui){
+        UI=ui;
+        LR.adapter({gameId:'bingo',kind:'draw',seats:null,lateJoin:'anytime',migratable:false});
+        ui.config({lobby:'strip',stripEl:()=>document.querySelector('#setupWrap .setup-card'),replay:c=>certShow(c)});
+        ui.on('room',bind);
+        ui.on('left',()=>unbind());
+    });
+    /* ── #cert= 자가검증: 카드·호출·승자를 이 기기에서 전부 다시 계산 ── */
+    function certShow(c){
+        return verifyCert(c).then(v=>{
+            V.certView=v.ok?'ok':'bad';
+            document.getElementById('setupWrap').style.display='none';
+            if(v.p){variant={size:v.p.size,max:v.p.max};winners=(v.w||[]).map((w,i)=>({nickname:w.n,atDraw:w.at,atMs:i,lines:w.l}));drawn=v.calls||[];renderHistory();}
+            showResult();
+            const el=badgeEl();el.hidden=false;el.className='lp-v2-badge '+(v.ok?'ok':'bad');el.textContent=(v.ok?tx('ok'):tx('bad'))+(v.calls?' · '+tx('calls').replace('{n}',v.calls.length):'');
+        });
+    }
+    function certMode(){
+        const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
+        const go=()=>LpFair.cert.decode(m[1]).then(certShow).catch(()=>{V.certView='bad';document.getElementById('setupWrap').style.display='none';showResult();const el=badgeEl();el.hidden=false;el.className='lp-v2-badge bad';el.textContent=tx('bad');});
+        if(window.LpFair)go();
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1790759059';s.onload=go;document.head.appendChild(s);}
+    }
+    setTimeout(certMode,200);
+    return V;
+})();
+
 /* ===== Init ===== */
 applyLang();
 applyDrawModeVisibility();
@@ -2370,7 +2690,7 @@ function _onVisibilityRestore(){
        scheduleAuto was broken while the tab was hidden. Restart
        if the game is still running + no extraction in flight.
        scheduleAuto itself no-ops if one is already scheduled. */
-    if(!window._lpGuest&&drawMode==='auto'&&!waitingForCapture&&drawn.length<variant.max){
+    if(!_isG()&&drawMode==='auto'&&!waitingForCapture&&drawn.length<variant.max){
         try{scheduleAuto()}catch(_){}
     }
     /* Guest path: pull the latest snapshot from host so we catch
