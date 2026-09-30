@@ -991,7 +991,7 @@ function layout(){
     if(GL.on) GL.relayout();
 }
 /* 말랑 젤리 스프라이트 — 색·크기별로 한 번만 그려 두고 drawImage 로 늘였다 줄였다 한다 */
-function rrect(g,x,y,w,h,r){ r=Math.min(r,w/2,h/2); g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
+function rrect(g,x,y,w,h,r){ w=Math.max(0,w); h=Math.max(0,h); r=Math.max(0,Math.min(r,w/2,h/2)); g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
 function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=Math.max(1,Math.ceil(w)); c.height=Math.max(1,Math.ceil(h)); return c; }
 function spriteSet(c){
     const key=c+'@'+DPR; if(SPR[key]) return SPR[key];
@@ -2546,6 +2546,7 @@ function guestWire(g){
     enterLobby();
     netSend({t:'hello',n:g.nickname||myNick()});
 }
+const FORFEIT_MS=25000;
 function netLeave(){
     if(!NET.on) return;
     try{ netSend({t:'bye'}); netFlush(); }catch(_){}
@@ -2560,7 +2561,8 @@ setInterval(()=>{
     const n=now();
     if(NET.oq.length&&n-NET.lastSend>450) netFlush();
     else if(n-NET.lastSend>1500||NET.dirty) netFlush();
-    if(NET.peerSid&&(G.state==='play'||G.state==='count')&&n-NET.lastRecv>9000){
+    /* 상대 무소식 → 기권승. 9초는 카톡 답장 한 번에 지는 길이라(감사 재현 10) 25초로 (P0 2026-09-30) */
+    if(NET.peerSid&&(G.state==='play'||G.state==='count')&&n-NET.lastRecv>FORFEIT_MS){
         NET.peerSid=null; forfeitWin(t('forfeit'));
         if(NET.role==='host'){ NET.hello=false; NET.oppGid=null; try{ NET.room.unlock(); }catch(_){} }
         renderNet();

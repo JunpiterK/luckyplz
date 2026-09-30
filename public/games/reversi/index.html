@@ -1278,7 +1278,7 @@ function hostWire(room,restored){
             if(rec&&rec.code===room.code&&rec.st&&(Date.now()-rec.t)<864e5){
                 const st=rec.st;parseBoard(st.b,G.board);G.turn=st.t;G.moveNo=st.n;G.last=st.last;G.over=st.ph==='over';G.shownOver=G.over;
                 O.phase=st.ph;O.seats={b:st.seats.b,w:st.seats.w};
-                ['b','w'].forEach(k=>{if(O.seats[k]&&O.seats[k].cid!==MYCID)O.seats[k].on=false});
+                ['b','w'].forEach(k=>{if(O.seats[k]&&O.seats[k].cid!==MYCID)seatOff(O.seats[k])});
                 /* 새로고침으로 탭 cid 가 바뀌지 않았다면 그대로, 바뀌었다면 호스트 자리를 이 탭으로 */
                 ['b','w'].forEach(k=>{if(O.seats[k]&&O.seats[k].cid===st.host)O.seats[k].cid=MYCID,O.seats[k].on=true});
                 resumed=true;
@@ -1290,44 +1290,54 @@ function hostWire(room,restored){
     room.onGuestAction(onGuestAction);
     room.onGuestLeave(info=>{
         const cid=O&&O.gid2cid[info.id];if(!cid)return;
-        ['b','w'].forEach(k=>{if(O.seats[k]&&O.seats[k].cid===cid)O.seats[k].on=false});
+        ['b','w'].forEach(k=>{if(O.seats[k]&&O.seats[k].cid===cid)seatOff(O.seats[k])});
         pushState(null);
     });
     showGame();refreshHints();pushState(null);foldMpPanel();
     /* 탭 닫기·앱 종료는 lpRoom 이 알려 주지 않는다(guest:leave 는 명시적 close 때만).
-       게스트가 5초마다 ping — 16초 조용하면 그 자리를 '연결 끊김'으로 표시해
-       관전자가 이어받을 수 있게 한다. */
+       게스트가 5초마다 ping — 16초 조용하면 그 자리를 '연결 끊김'으로 표시한다.
+       2026-09-30 P0: 끊긴 자리는 SEAT_HOLD_MS(120초) 동안 원래 주인 몫으로 잡아 둔다 —
+       폰을 잠깐 내려놓은 사이 관전자가 '앉기' 한 번으로 자리를 가져가던 문제(감사 재현 8).
+       유예가 끝나야 free 표시가 붙고, 그때만 관전자가 앉을 수 있다. */
     const liveT=setInterval(()=>{
         if(!O||O.role!=='host'||O.room!==room){clearInterval(liveT);return}
         const now=Date.now();let ch=false;
-        ['b','w'].forEach(k=>{const s=O.seats[k];if(s&&s.cid!==MYCID&&s.on!==false&&now-(O.seen[s.cid]||0)>16000){s.on=false;ch=true}});
+        ['b','w'].forEach(k=>{const s=O.seats[k];if(!s||s.cid===MYCID)return;
+            if(s.on!==false&&now-(O.seen[s.cid]||0)>16000){seatOff(s);ch=true}
+            else if(s.on===false){if(!s.offAt){s.offAt=now;ch=true}else if(!s.free&&now-s.offAt>=SEAT_HOLD_MS){s.free=1;ch=true}}});
         if(ch)pushState(null);
     },4000);
 }
 function seatOf(cid){return['b','w'].find(k=>O.seats[k]&&O.seats[k].cid===cid)}
+/* 끊긴 자리 보호(P0) — offAt 은 방장 시계. 돌아오면 seatOn 으로 유예 기록을 지운다 */
+const SEAT_HOLD_MS=120000;
+function seatOff(s){if(!s)return;if(s.on!==false||!s.offAt){s.offAt=Date.now();delete s.free}s.on=false}
+function seatOn(s){if(!s)return;s.on=true;delete s.offAt;delete s.free}
+function seatTakeable(s){return !s||(s.on===false&&(!!s.free||(!!s.offAt&&Date.now()-s.offAt>=SEAT_HOLD_MS)))}
 function onGuestAction(p){
     if(!O||O.role!=='host'||!p)return;
     if(p.cid){O.gid2cid[p.gid]=p.cid;O.seen[p.cid]=Date.now()}
     const nick=String(p.nickname||'Guest').slice(0,18);
     if(p.type==='ping'){
         const k=seatOf(p.cid);
-        if(k&&O.seats[k].on===false){O.seats[k].on=true;pushState(null)}
+        if(k&&O.seats[k].on===false){seatOn(O.seats[k]);pushState(null)}
         return;
     }
     if(p.type==='bye'){
         const k=seatOf(p.cid);
-        if(k&&O.seats[k].on!==false){O.seats[k].on=false;pushState(null)}
+        if(k&&O.seats[k].on!==false){seatOff(O.seats[k]);pushState(null)}
         return;
     }
     if(p.type==='hello'){
         const k=seatOf(p.cid);
-        if(k){O.seats[k].on=true;O.seats[k].name=nick}
+        if(k){seatOn(O.seats[k]);O.seats[k].name=nick}
         else if(O.phase==='lobby'){const free=['w','b'].find(s=>!O.seats[s]);if(free)O.seats[free]={cid:p.cid,name:nick,on:true}}
         if(!maybeStart())pushState(null);
     }else if(p.type==='sit'){
         if(seatOf(p.cid))return;
         const k=p.color==='b'?'b':'w',s=O.seats[k];
-        if(!s||s.on===false){O.seats[k]={cid:p.cid,name:nick,on:true};if(!maybeStart())pushState(null)}
+        if(seatTakeable(s)){O.seats[k]={cid:p.cid,name:nick,on:true};if(!maybeStart())pushState(null)}
+        else pushState(null);   /* 아직 원래 주인 자리 — 거절하고 최신 상태로 관전자 화면을 바로잡는다 */
     }else if(p.type==='move'){
         const k=seatOf(p.cid);
         if(!k||O.phase!=='play'||G.over)return;
@@ -1396,7 +1406,7 @@ function renderNet(){
     let h='';
     if(O.role==='host'&&O.room)h+='<span class="chip">'+esc(T('room',{code:O.room.code}))+' · PIN '+esc(O.room.pin)+'</span>';
     if(O.role==='guest'&&O.got&&!mySeatColor()){
-        ['b','w'].forEach(k=>{const s=O.seats[k];if(!s||s.on===false)h+='<span class="chip gold" data-sit="'+k+'">'+esc(T(k==='b'?'sitB':'sitW'))+'</span>'});
+        ['b','w'].forEach(k=>{const s=O.seats[k];if(!s||(s.on===false&&s.free))h+='<span class="chip gold" data-sit="'+k+'">'+esc(T(k==='b'?'sitB':'sitW'))+'</span>'});
         if(!h)h='<span class="chip">👀 '+esc(T('spectating'))+'</span>';
     }
     row.innerHTML=h;row.classList.toggle('on',!!h);

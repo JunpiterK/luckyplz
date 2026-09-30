@@ -47,7 +47,7 @@
      Centralised in roomApi.broadcast so games can naively tick at
      60Hz without flooding the channel.
 
-  5. RTT measurement via host:ping / guest:pong (4s cadence) —
+  5. RTT measurement via host:ping / guest:pong (8s cadence since P0) —
      RFC 4585 RTCP feedback timing. Median across guests is exposed
      as room.rtt(); adaptive UI / tick rate can key off it.
 
@@ -156,7 +156,7 @@
        status bar still says "Watching Host's room" (old label) or the
        version tag is missing, their browser is serving a stale copy
        from a legacy service-worker cache. */
-    const LP_ROOM_VERSION='2026.09.29-kick';
+    const LP_ROOM_VERSION='2026.09.30-p0';
     try{console.log('[LpRoom] version',LP_ROOM_VERSION)}catch(_){}
 
     /* Diagnostic log — console-only. The visible floating panel was
@@ -242,6 +242,56 @@
            kicked guest tears down its channel and emits 'room:kicked'.
            Games that never call kick() see no behaviour change. */
     const GUEST_HB_MS=4000;
+    /* RTT probe period (P0 2026-09-30: 4s → 8s). Liveness does NOT depend
+       on it — guest:hb (4s) and host:heartbeat (5s) carry that — so the
+       stale thresholds below and the guest's 12s snapshot / 15s host-lost
+       watchdogs are unchanged; only the pending-ping cleanup scales. */
+    const HOST_PING_MS=8000;
+    /* Guest-side "host is gone" threshold: 3 missed host heartbeats (5s). */
+    const HOST_LOST_MS=15000;
+    /* games that already draw their own host-lost band (no shared banner) */
+    const OWN_HOST_LOST_UI=['yut'];
+    const HOST_LOST_TXT={
+        en:'Host disconnected · waiting…',
+        ko:'방장 연결 끊김 · 기다리는 중…',
+        ja:'ホストとの接続が切れました · 待機中…',
+        zh:'房主连接中断 · 等待中…',
+        es:'Anfitrión desconectado · esperando…',
+        pt:'Anfitrião desconectado · aguardando…',
+        de:'Host getrennt · warte…',
+        fr:'Hôte déconnecté · en attente…',
+        ru:'Связь с хостом потеряна · ждём…',
+        ar:'انقطع اتصال المضيف · بانتظار…',
+        hi:'होस्ट डिस्कनेक्ट · इंतज़ार…',
+        th:'โฮสต์หลุดการเชื่อมต่อ · กำลังรอ…',
+        id:'Host terputus · menunggu…',
+        vi:'Chủ phòng mất kết nối · đang chờ…',
+        tr:'Oda sahibinin bağlantısı koptu · bekleniyor…'
+    };
+    function _uiLang(){
+        let l='en';try{l=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase().split('-')[0]}catch(_){}
+        return l==='gb'?'en':l;
+    }
+    function _hostLostBanner(on){
+        const id='lpRoomHostLost';
+        let el=document.getElementById(id);
+        if(!on){if(el)try{el.remove()}catch(_){};return}
+        if(!document.body)return;
+        if(!el){
+            el=document.createElement('div');
+            el.id=id;
+            el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+            el.style.cssText='position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 10px);transform:translateX(-50%);'
+                +'z-index:9150;max-width:calc(100vw - 24px);box-sizing:border-box;padding:8px 14px;border-radius:999px;'
+                +'background:rgba(120,20,30,.92);border:1px solid rgba(255,140,140,.55);color:#fff;'
+                +'font:700 13px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif;'
+                +'box-shadow:0 8px 22px rgba(0,0,0,.45);pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+            document.body.appendChild(el);
+        }
+        const l=_uiLang();
+        el.dir=l==='ar'?'rtl':'ltr';
+        el.textContent='📡 '+(HOST_LOST_TXT[l]||HOST_LOST_TXT.en);
+    }
     const GUEST_STALE_MS=15000;
     const GUEST_HIDDEN_GRACE_MS=40000;
     const SS_HOST='lp_hostTab';       /* this tab hosts/hosted: {code,pin,hostName,gameId,t} */
@@ -385,6 +435,10 @@
         const _knownPids=new Map();
         /* pid → nickname of guests the host kicked with a ban (item 19) */
         const _banned=new Map();
+        /* game-level id claims (see guest:action): 'field:value' → device key */
+        const _idClaims=new Map();
+        /* this host tab's own device pid — no guest may act under it */
+        let _hostPid='';try{_hostPid=(window.getLpPlayerId&&window.getLpPlayerId())||''}catch(_){}
         if(resumed){
             const rr=_ssGet(SS_ROSTER);
             if(rr&&rr.code===code&&Array.isArray(rr.list)){
@@ -393,11 +447,15 @@
             if(rr&&rr.code===code&&Array.isArray(rr.banned)){
                 rr.banned.forEach(function(e){if(e&&e.pid)_banned.set(e.pid,e.nickname||'')});
             }
+            if(rr&&rr.code===code&&Array.isArray(rr.claims)){
+                rr.claims.forEach(function(e){if(e&&e[0]&&e[1])_idClaims.set(String(e[0]),String(e[1]))});
+            }
         }
         function _persistRoster(){
             const list=[];_knownPids.forEach(function(n,p){list.push({pid:p,nickname:n})});
             const banned=[];_banned.forEach(function(n,p){banned.push({pid:p,nickname:n})});
-            _ssSet(SS_ROSTER,{code:code,list:list.slice(-60),banned:banned.slice(-60),t:Date.now()});
+            const claims=[];_idClaims.forEach(function(d,k){claims.push([k,d])});
+            _ssSet(SS_ROSTER,{code:code,list:list.slice(-60),banned:banned.slice(-60),claims:claims.slice(-120),t:Date.now()});
         }
         /* Tell a kicked guest (by gid and/or pid) it's out — 3 copies, one _id. */
         function _sendKicked(gid,pid,reason){
@@ -462,26 +520,72 @@
             }});
         }
 
+        /* ---- join_request throttling (P0 2026-09-30) ----
+           • Throughput: at most JOIN_RATE_MAX requests/probes handled per
+             second per room; the excess is ignored (no reply) — honest
+             clients retry on their own (silent join 3s→6s→8s).
+           • Wrong PINs: BAD_PIN_MAX within BAD_PIN_WIN_MS → the room
+             refuses new PIN attempts for BAD_PIN_COOL_MS (reason 'rate').
+             Guests the room already knows (pid seen before) are not
+             locked out by someone else's brute force, but each such pid
+             has its own small budget (PID_BAD_MAX per window) so a
+             leaked pid can't be used to keep guessing. */
+        const JOIN_RATE_MAX=20,BAD_PIN_MAX=10,BAD_PIN_WIN_MS=60000,BAD_PIN_COOL_MS=60000,PID_BAD_MAX=3;
+        let _joinWinT=0,_joinWinN=0;
+        const _badPinT=[];
+        let _coolUntil=0;
+        const _pidBad=new Map(); /* pid → [t,…] wrong-PIN times */
+        function _joinBudgetOk(){
+            const now=Date.now();
+            if(now-_joinWinT>=1000){_joinWinT=now;_joinWinN=0}
+            return ++_joinWinN<=JOIN_RATE_MAX;
+        }
+        function _pidBlocked(pid,now){
+            const a=pid&&_pidBad.get(pid);
+            if(!a)return false;
+            while(a.length&&now-a[0]>BAD_PIN_WIN_MS)a.shift();
+            if(!a.length){_pidBad.delete(pid);return false}
+            return a.length>=PID_BAD_MAX;
+        }
+        function _noteBadPin(pid,now){
+            _badPinT.push(now);
+            while(_badPinT.length&&now-_badPinT[0]>BAD_PIN_WIN_MS)_badPinT.shift();
+            if(_badPinT.length>=BAD_PIN_MAX){
+                _coolUntil=now+BAD_PIN_COOL_MS;_badPinT.length=0;
+                dbgLog('host: too many wrong PINs → cooldown '+(BAD_PIN_COOL_MS/1000)+'s');
+            }
+            if(pid){const a=_pidBad.get(pid)||[];a.push(now);if(a.length>8)a.shift();_pidBad.set(pid,a);
+                if(_pidBad.size>200){_pidBad.delete(_pidBad.keys().next().value)}}
+        }
         chan.on('broadcast',{event:'guest:join_request'},function(msg){
             const p=msg.payload||{};
             if(!p||!p.gid)return;
-            dbgLog('host: join_request gid='+p.gid.slice(0,6)+' pin_ok='+(p.pin===pin)+(p.rejoin?' [rejoin]':''));
+            if(!_joinBudgetOk()){dbgLog('host: join_request over '+JOIN_RATE_MAX+'/s — ignored');return}
+            dbgLog('host: join_request gid='+String(p.gid).slice(0,6)+' pin_ok='+(p.pin===pin)+(p.rejoin?' [rejoin]':''));
             /* Kicked with a ban (item 19) — refuse join and rejoin alike. */
             if(p.pid&&_banned.has(p.pid)){
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'kicked'}});
                 return;
             }
-            /* A rejoin from someone already accepted into this room
-               (same gid still listed, or a pid we've seen) bypasses the
-               lock — they were here before the game started. */
+            /* Someone already accepted into this room (same gid still
+               listed, or a pid we've seen) gets back in even after lock() —
+               with or without the rejoin flag: a page refresh is a brand-
+               new document whose first join_request says rejoin:false,
+               and that used to bounce the player to solo (P0). */
             const wasPresent=guests.has(p.gid);
             const isKnown=wasPresent||!!(p.pid&&_knownPids.has(p.pid));
-            if(locked&&!(p.rejoin&&isKnown)){
+            const now=Date.now();
+            if(isKnown?_pidBlocked(p.pid,now):now<_coolUntil){
+                chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'rate',retryIn:Math.max(1,Math.ceil(((isKnown?BAD_PIN_WIN_MS:_coolUntil-now))/1000))}});
+                return;
+            }
+            if(locked&&!isKnown){
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'locked'}});
                 return;
             }
             if(p.pin!==pin){
                 /* wrong PIN */
+                _noteBadPin(p.pid||'',now);
                 chan.send({type:'broadcast',event:'host:join_ack',payload:{gid:p.gid,ok:false,reason:'bad_pin'}});
                 return;
             }
@@ -548,7 +652,7 @@
             }
             /* replay last snapshot so the newcomer catches up */
             if(currentSnapshot){
-                chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
+                chan.send({type:'broadcast',event:'host:snapshot',payload:_snapReplay(p.gid)});
                 dbgLog('host: sent snapshot ('+Object.keys(currentSnapshot).length+' keys)');
             }else{
                 dbgLog('host: NO snapshot to send (currentSnapshot null)');
@@ -627,7 +731,7 @@
             _touch(p.gid);
             dbgLog('host: snapshot requested by '+p.gid.slice(0,6));
             if(currentSnapshot){
-                chan.send({type:'broadcast',event:'host:snapshot',payload:Object.assign({gid:p.gid},currentSnapshot)});
+                chan.send({type:'broadcast',event:'host:snapshot',payload:_snapReplay(p.gid)});
             }
             /* Also re-push the guest roster so they know who's here. */
             broadcastGuestList();
@@ -641,14 +745,68 @@
            floods from a buggy/malicious client without affecting normal
            play (most games send <5 actions/min per guest). */
         const guestActionCbs=[];
+        /* ---- Sender identity (P0 2026-09-30) ----
+           The payload is guest-controlled, so `nickname` / `pid` in it
+           used to let anyone act as anyone (ludo seat by nickname, yut /
+           prism-hex by pid — reproduced). Now:
+             • nickname = the name the host assigned at join (roster).
+             • devPid   = the device pid the host recorded at join.
+             • pid (and the game-level ids cid / kid that reversi and
+               mahjong-tw use) — a value equal to devPid passes; any other
+               value is bound to the sender's device on first use
+               (_idClaims) and rejected afterwards from a different device.
+               A value that IS another guest's device pid is rejected
+               outright. Game-level per-tab ids (prism-hex ph_pid, yut's
+               same-browser test tab id) therefore keep working, but can't
+               be borrowed by another phone.
+             • no pid in the payload → devPid is filled in.
+           Rejected actions are dropped (never delivered to the game). */
+        const _ID_FIELDS=['pid','cid','kid'];
+        function _isOtherDevicePid(v,devKey){
+            if(!v)return false;
+            if(_hostPid&&v===_hostPid)return true;
+            let hit=false;
+            guests.forEach(function(g){if(g.pid&&g.pid===v&&g.pid!==devKey)hit=true});
+            if(!hit&&_knownPids.has(v)&&v!==devKey)hit=true;
+            return hit;
+        }
+        function _bindIdentity(p,g){
+            const devKey=g.pid||('gid:'+p.gid);
+            let changed=false;
+            for(let i=0;i<_ID_FIELDS.length;i++){
+                const f=_ID_FIELDS[i];
+                const v=p[f];
+                if(v===undefined||v===null||v==='')continue;
+                const s=String(v);
+                if(g.pid&&s===g.pid)continue;
+                if(_isOtherDevicePid(s,devKey))return false;
+                const k=f+':'+s;
+                const owner=_idClaims.get(k);
+                if(owner&&owner!==devKey)return false;
+                if(!owner){_idClaims.set(k,devKey);changed=true;
+                    if(_idClaims.size>240){const first=_idClaims.keys().next().value;_idClaims.delete(first)}}
+            }
+            if(changed)_persistRoster();
+            return true;
+        }
         chan.on('broadcast',{event:'guest:action'},function(msg){
-            const p=msg.payload||{};
+            const raw=msg.payload||{};
             /* ignore spoof — and an unknown gid gets asked to rejoin */
-            if(!p.gid||!_touch(p.gid))return;
-            if(!_guestActionAllowed(p.gid)){
-                dbgLog('host: rate-limited guest:action from '+p.gid.slice(0,6));
+            if(!raw.gid||!_touch(raw.gid))return;
+            if(!_guestActionAllowed(raw.gid)){
+                dbgLog('host: rate-limited guest:action from '+raw.gid.slice(0,6));
                 return;
             }
+            const g=guests.get(raw.gid);
+            if(!g)return;
+            const p=Object.assign({},raw);
+            if(!_bindIdentity(p,g)){
+                dbgLog('host: dropped guest:action with a foreign identity from '+raw.gid.slice(0,6));
+                return;
+            }
+            p.nickname=g.nickname;
+            p.devPid=g.pid||'';
+            if(p.pid===undefined||p.pid===null||p.pid==='')p.pid=g.pid||'';
             guestActionCbs.forEach(function(cb){try{cb(p)}catch(_){}});
         });
 
@@ -660,10 +818,23 @@
         chan.on('broadcast',{event:'guest:probe'},function(msg){
             const p=msg.payload||{};
             if(!p.pid)return;
+            if(!_joinBudgetOk())return; /* shares the 20/s join budget */
             chan.send({type:'broadcast',event:'host:probe_ack',payload:{pid:p.pid,gameId:gameId,hostName:hostName,locked:locked,guestCount:guests.size}});
         });
 
         let currentSnapshot=null;
+        /* Snapshot replay (join / request_snapshot) is stamped with the seq
+           at SEND time (P0 2026-09-30). The snapshot is the only recovery a
+           guest has, so it stands for "everything up to now": games call
+           room.snapshot(x) and then room.broadcast('host:config',x), which
+           left the snapshot one seq behind its own twin broadcast — every
+           late joiner then saw a phantom 1-event gap and asked again for
+           the very same snapshot. A replay arriving after a newer event is
+           still dropped as stale by the guest (seq comparison unchanged). */
+        function _snapReplay(toGid){
+            let bs=0;try{bs=_bcastSeq}catch(_){} /* declared further down (after subscribe) */
+            return Object.assign({gid:toGid},currentSnapshot,{_seqAtSnap:Math.max(currentSnapshot._seqAtSnap||0,bs)});
+        }
 
         try{await new Promise(function(resolve,reject){
             const to=setTimeout(function(){reject(new Error('subscribe_timeout'))},10000);
@@ -725,6 +896,16 @@
            snapshot was set, so guests can drop stale snapshots whose
            generation is older than their current state. */
         let _bcastSeq=0;
+        /* P0 2026-09-30 — two counters. Ticks (host:tick/frame, best-effort
+           20 Hz) used to burn _bcastSeq too, but guests don't track seq for
+           ticks, so the first state event after a spin looked like "40
+           missed" → every guest asked for a snapshot (E7 storm: N requests
+           + N snapshots + N rosters per spin). Ticks now carry their own
+           _tseq and leave _seq alone. Retransmits of one logical event
+           (same _id: broadcastReliable, host:close, host:kicked) reuse the
+           seq of the first copy instead of taking a fresh one. */
+        let _tickSeq=0;
+        const _idSeq=new Map(); /* _id → _seq of its first copy */
 
         /* ---- Per-guest rate limit on guest:action ----
            Token bucket: 10 actions/sec sustained, burst up to 20.
@@ -744,7 +925,8 @@
         }
 
         /* RTT measurement via a lightweight ping/pong loop. The host
-           sends host:ping every 4s with a unique pingId + monotonic
+           sends host:ping every HOST_PING_MS (8s since P0 — was 4s; the
+           ping + N pongs were ~45% of an idle room's traffic) with a unique pingId + monotonic
            timestamp; each guest replies guest:pong{pingId,gid}; the
            host computes RTT = now - sentAt for each pong. The latest
            sample per guest is exposed via room.rtt({gid}) and the
@@ -761,12 +943,12 @@
                 if(!subscribed||guests.size===0)return;
                 const pingId=shortId();
                 _pendingPings.set(pingId,performance.now());
-                /* Stale ping cleanup — anything older than 12s is a lost
-                   pong, drop it so the map doesn't grow unbounded. */
-                const cutoff=performance.now()-12000;
+                /* Stale ping cleanup — anything older than 2 ping periods
+                   is a lost pong, drop it so the map doesn't grow unbounded. */
+                const cutoff=performance.now()-HOST_PING_MS*2;
                 _pendingPings.forEach(function(t,k){if(t<cutoff)_pendingPings.delete(k)});
                 try{chan.send({type:'broadcast',event:'host:ping',payload:{pingId:pingId,t:Date.now()}})}catch(_){}
-            },4000);
+            },HOST_PING_MS);
         }
         chan.on('broadcast',{event:'guest:pong'},function(msg){
             const p=msg.payload||{};
@@ -897,10 +1079,22 @@
                    wrap into a fresh object rather than mutating the
                    caller's payload — game code may reuse the same
                    payload reference (e.g. saved as snapshot input). */
-                const wrapped=Object.assign({},payload||{},{_seq:++_bcastSeq,_ep:epoch});
+                let stamp;
+                if(TICK_EVENT.test(event)){
+                    stamp={_tseq:++_tickSeq,_ep:epoch};
+                }else{
+                    const id=payload&&payload._id;
+                    let sq=id?_idSeq.get(id):undefined;
+                    if(sq===undefined){
+                        sq=++_bcastSeq;
+                        if(id){_idSeq.set(id,sq);if(_idSeq.size>64)_idSeq.delete(_idSeq.keys().next().value)}
+                    }
+                    stamp={_seq:sq,_ep:epoch};
+                }
+                const wrapped=Object.assign({},payload||{},stamp);
                 try{chan.send({type:'broadcast',event:event,payload:wrapped})}
                 catch(e){dbgLog('host: broadcast '+event+' THREW '+e.message);_setConn('reconnecting');return false}
-                if(event!=='host:tick')dbgLog('host: broadcast '+event+' (seq='+_bcastSeq+')');
+                if(!TICK_EVENT.test(event))dbgLog('host: broadcast '+event+' (seq='+stamp._seq+')');
                 return true;
             },
             /* Reliable variant — stamp an _id and re-emit `attempts`
@@ -920,9 +1114,10 @@
                 const id=shortId();
                 let i=0;
                 const fire=function(){
-                    /* Wrap onto a NEW object each retry so _seq increments
-                       and we don't mutate the caller's payload. _id stays
-                       constant so the guest dedupes. */
+                    /* Wrap onto a NEW object each retry so we don't mutate
+                       the caller's payload. _id stays constant so the guest
+                       dedupes, and broadcast() gives every copy the SAME
+                       _seq (P0) — a retransmit is not a new event. */
                     const p=Object.assign({},payload||{},{_id:id});
                     roomApi.broadcast(event,p);
                     i++;
@@ -1111,7 +1306,7 @@
         'host:config','host:state','host:start','host:spin_start',
         'host:tick','host:stop','host:result','host:reset','host:action',
         'host:guests','host:bingo_winners','host:heartbeat','host:navigate',
-        /* RTT probe — host fires every 4s, guest replies guest:pong
+        /* RTT probe — host fires every 8s, guest replies guest:pong
            with the matching pingId so the host can compute round-trip
            latency per guest. Must be registered or supabase silently
            drops it (same wildcard-flakiness reason as the rest). */
@@ -1256,6 +1451,7 @@
         /* Stop every timer/listener this guest session owns (close, or a
            join that never completed). */
         function _guestTeardown(){
+            if(_hostLost){_hostLost=false;_hostLostBanner(false)}
             if(_guestHbTimer){clearInterval(_guestHbTimer);_guestHbTimer=null}
             if(_watchdogTimer){clearInterval(_watchdogTimer);_watchdogTimer=null}
             try{document.removeEventListener('visibilitychange',_onVisibilityChange)}catch(_){}
@@ -1326,7 +1522,36 @@
            via guest:pong, broadcast back in heartbeat.rtts[gid]. Used by
            lpMultiplayer panel to surface "ping: 23ms" on the guest. */
         let _myRtt=null;
-        function _noteHostSignal(){_lastHostSignalT=Date.now()}
+        /* ---- Host-lost watchdog (P0 2026-09-30) ----
+           A host that dies without host:close (app killed, phone locked,
+           network gone) used to leave guests on a frozen "connected"
+           screen forever (E5 / ludo 40s freeze). After HOST_LOST_MS with no
+           host message while OUR socket is up and the page is visible:
+             • window 'lp-room-host-lost' CustomEvent (cancelable —
+               preventDefault() suppresses the shared banner) + g.on('room:host_lost')
+             • a small shared banner (16 languages), unless the game draws
+               its own (yut) or opts.hostBanner===false
+           The first host message afterwards → 'lp-room-host-back' +
+           g.on('room:host_back') and the banner goes away. */
+        let _hostLost=false;
+        function _noteHostSignal(){
+            if(_hostLost)_setHostLost(false);
+            _lastHostSignalT=Date.now();
+        }
+        function _setHostLost(v){
+            if(_hostLost===v)return;
+            _hostLost=v;
+            const det={code:code,mode:'guest',since:Date.now()-_lastHostSignalT};
+            dbgLog('guest: host '+(v?'LOST ('+det.since+'ms silent)':'back'));
+            let banner=v&&opts.hostBanner!==false&&OWN_HOST_LOST_UI.indexOf(gameId||(guestApi&&guestApi.gameId)||'')<0;
+            try{
+                const ce=new CustomEvent(v?'lp-room-host-lost':'lp-room-host-back',{detail:det,cancelable:true});
+                window.dispatchEvent(ce);
+                if(v&&ce.defaultPrevented)banner=false;
+            }catch(_){}
+            try{emit(v?'room:host_lost':'room:host_back',det)}catch(_){}
+            if(banner)_hostLostBanner(true);else if(!v)_hostLostBanner(false);
+        }
         function _recordSkew(hostT){
             if(typeof hostT!=='number')return;
             const sample=hostT-Date.now();
@@ -1340,6 +1565,7 @@
             _watchdogTimer=setInterval(function(){
                 if(guestClosing||!accepted)return;
                 const since=Date.now()-_lastHostSignalT;
+                if(!_hostLost&&since>HOST_LOST_MS&&guestSubscribed&&!_navigating&&!document.hidden)_setHostLost(true);
                 if(since>12000){
                     /* Throttle to one resync per 8s so a long outage
                        doesn't spam guest:request_snapshot. */
@@ -1348,7 +1574,7 @@
                     try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid}})}catch(_){}
                     dbgLog('guest: watchdog fired ('+since+'ms silent) → request_snapshot');
                 }
-            },5000);
+            },2500);
         }
 
         /* Visibility-restore auto-resync. Mobile browsers suspend the
@@ -1392,24 +1618,53 @@
             }
             return false;
         }
+        /* P0 2026-09-30: wait GAP_WAIT_MS before asking — broadcasts sent
+           back-to-back by the host were measured arriving swapped (config
+           seq 4 after start seq 5), so a "gap" is often just a late packet.
+           Only seqs still missing (and not covered by a snapshot applied
+           meanwhile) trigger the request. */
+        const GAP_WAIT_MS=250;
+        const _seqSeen=new Set(),_seqSeenList=[];
+        let _gapWant=[];
+        function _markSeq(sq){
+            if(_seqSeen.has(sq))return;
+            _seqSeen.add(sq);_seqSeenList.push(sq);
+            if(_seqSeenList.length>256)_seqSeen.delete(_seqSeenList.shift());
+        }
+        function _resetSeqTracking(){
+            _lastSeenSeq=0;_lastSnapApplied=0;
+            _seqSeen.clear();_seqSeenList.length=0;_gapWant=[];
+        }
         function _maybeRequestSnapshotForGap(){
             if(_gapPending)return;
             const now=Date.now();
             if(now-_lastGapRequestT<1000)return; /* throttle to 1/s */
             _gapPending=true;
-            _lastGapRequestT=now;
-            /* 50ms debounce so a burst of close-by gaps coalesces into
-               one snapshot request. */
             setTimeout(function(){
                 _gapPending=false;
                 /* hostCreate 쪽 지역변수 `subscribed` 를 잘못 참조하면
                    ReferenceError 로 gap 복구가 통째로 죽는다(2026-08-20). */
-                if(!guestSubscribed||guestClosing||!accepted)return;
+                if(!guestSubscribed||guestClosing||!accepted){_gapWant=[];return}
+                const still=_gapWant.filter(function(sq){return sq>_lastSnapApplied&&!_seqSeen.has(sq)});
+                _gapWant=[];
+                if(!still.length){dbgLog('guest: seq gap filled by late arrival — no snapshot needed');return}
+                _lastGapRequestT=Date.now();
                 try{chan.send({type:'broadcast',event:'guest:request_snapshot',payload:{gid:gid,reason:'seq_gap'}})}catch(_){}
-                dbgLog('guest: seq gap → request_snapshot');
-            },50);
+                dbgLog('guest: seq gap ('+still.length+' still missing) → request_snapshot');
+            },GAP_WAIT_MS);
         }
 
+        function _trackSeq(ev,p){
+            if(typeof p._seq!=='number'||/^host:(tick|frame)$/.test(ev))return;
+            _markSeq(p._seq);
+            if(_lastSeenSeq>0&&p._seq>_lastSeenSeq+1){
+                const missed=p._seq-_lastSeenSeq-1;
+                dbgLog('guest: seq gap detected ('+missed+' missed, current='+p._seq+', lastSeen='+_lastSeenSeq+')');
+                for(let sq=_lastSeenSeq+1;sq<p._seq&&_gapWant.length<64;sq++)_gapWant.push(sq);
+                _maybeRequestSnapshotForGap();
+            }
+            if(p._seq>_lastSeenSeq)_lastSeenSeq=p._seq;
+        }
         function dispatch(ev,p){
             p=p||{};
             /* Critical-event dedupe: host:close (and any other event the
@@ -1421,7 +1676,10 @@
             /* Kicked by the host (item 19) — leave for good. */
             if(ev==='host:kicked'){
                 const mine=(p.gid&&p.gid===gid)||(p.pid&&_pid&&p.pid===_pid);
-                if(!mine||guestClosing)return;
+                /* someone else's kick still consumed a seq — track it or the
+                   next event would look like a gap */
+                if(!mine){if(accepted&&(!p._ep||p._ep===hostEpoch))_trackSeq(ev,p);return}
+                if(guestClosing)return;
                 dbgLog('guest: kicked by host');
                 guestClosing=true;
                 _guestTeardown();
@@ -1444,7 +1702,7 @@
                     _noteHostSignal();
                     if(p.ep){
                         /* New host page → its seq counter restarted at 0. */
-                        if(hostEpoch&&p.ep!==hostEpoch){_lastSeenSeq=0;_lastSnapApplied=0}
+                        if(hostEpoch&&p.ep!==hostEpoch)_resetSeqTracking();
                         hostEpoch=p.ep;
                     }
                     if(p.nickname)_myNick=p.nickname;
@@ -1483,7 +1741,7 @@
                 else if(_ep!==hostEpoch){
                     dbgLog('guest: host epoch '+hostEpoch+' → '+_ep+' (host restarted)');
                     hostEpoch=_ep;
-                    _lastSeenSeq=0;_lastSnapApplied=0;
+                    _resetSeqTracking();
                     _rejoin('host_epoch');
                 }
             }
@@ -1546,14 +1804,7 @@
                style best-effort) and the next tick re-establishes
                position; we don't want to spam request_snapshot for the
                20Hz physics stream. */
-            if(typeof p._seq==='number'&&!/^host:(tick|frame)$/.test(ev)){
-                if(_lastSeenSeq>0&&p._seq>_lastSeenSeq+1){
-                    const missed=p._seq-_lastSeenSeq-1;
-                    dbgLog('guest: seq gap detected ('+missed+' missed, current='+p._seq+', lastSeen='+_lastSeenSeq+')');
-                    _maybeRequestSnapshotForGap();
-                }
-                if(p._seq>_lastSeenSeq)_lastSeenSeq=p._seq;
-            }
+            _trackSeq(ev,p);
             /* Host transferring the room to a new page — follow them
                there with our own nickname appended so we auto-join on
                arrival. The delay here is calibrated against the host's
@@ -2499,6 +2750,7 @@
             :(err==='host_unreachable')?_t('방장이 없어요. 방 코드 확인.','Host not responding. Check the room code.')
             :(err==='locked')?_t('이미 게임이 시작되어 참가할 수 없어요','Game already started — no more joiners')
             :(err==='kicked')?_t('방장이 내보내서 이 방에는 다시 들어갈 수 없어요','The host removed you from this room')
+            :(err==='rate')?_t('비밀번호 시도가 너무 많아요 · 1분 뒤 다시','Too many PIN attempts — try again in a minute')
             :(err==='subscribe_timeout'||err==='channel_error')
                 ?_t('연결 지연 · 인터넷 확인 후 다시 시도','Connection failed — check your network and try again')
             :_t('입장 실패. 다시 시도해주세요','Join failed — please try again');
@@ -3317,7 +3569,8 @@
             }
             /* Validate gameId — 'unknown' is truthy so the old fallback
                never fired; now we whitelist valid ids explicitly. */
-            const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz','ludo','yut','reversi','gummy','bubble','prism-hex','mahjong-tw'];
+            /* games with an lpRoom multiplayer mode ('bubble' removed — it has none) */
+            const _validGames=['roulette','ladder','team','lotto','bingo','car-racing','quiz','ludo','yut','reversi','gummy','prism-hex','mahjong-tw'];
             const _gid=_validGames.includes(probe.gameId)?probe.gameId:'roulette';
             const target='/games/'+encodeURIComponent(_gid)+'/?room='+encodeURIComponent(code);
             location.href=target;

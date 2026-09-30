@@ -88,23 +88,110 @@
   const Z_PAUSE = 9200;
   const Z_ENDED = 9300;
 
-  const DEFAULT_TEXTS = {
-    pause:          '일시정지',
-    resume:         '재개',
-    end:            '게임 종료',
-    endConfirm:     '정말 게임을 종료할까요?\n모든 참가자가 방에서 나갑니다.',
-    pausedTitle:    '일시정지 중',
-    hostPausedSub:  '참가자 전원의 화면이 멈춰있어요',
-    guestPausedSub: '호스트가 잠시 멈췄어요',
-    endedTitle:     '게임 종료',
-    endedHostSub:   '게임을 종료했어요. 참가자는 모두 방에서 나갔어요.',
-    endedGuestSub:  '호스트가 게임을 종료했어요. 파티는 해제되었습니다.',
-    homeBtn:        '🏠 홈으로',
-    /* {n} 은 남은 초로 치환. 게임이 texts 로 다른 언어를 넘기면 그대로 따른다 —
-       하드코딩하면 영어 UI 게스트도 카운트다운 5초 동안 한국어를 본다. */
-    resumeCountHost:  '{n}초 후 참가자 전원 화면이 다시 움직여요',
-    resumeCountGuest: '{n}초 후 게임이 다시 시작돼요'
+  /* Default copy in the site's 16 UI languages (luckyplz_lang; gb → en).
+     Before P0 (2026-09-30) this was Korean only and no game passed
+     `texts`, so a non-Korean guest saw Korean on every pause / resume
+     countdown / end overlay. `opts.texts` still overrides per key.
+     {n} = seconds left. */
+  const TEXTS = {
+    ko: { pause:'일시정지', resume:'재개', end:'게임 종료',
+      endConfirm:'정말 게임을 종료할까요?\n모든 참가자가 방에서 나갑니다.',
+      pausedTitle:'일시정지 중', hostPausedSub:'참가자 전원의 화면이 멈춰있어요', guestPausedSub:'호스트가 잠시 멈췄어요',
+      endedTitle:'게임 종료', endedHostSub:'게임을 종료했어요. 참가자는 모두 방에서 나갔어요.',
+      endedGuestSub:'호스트가 게임을 종료했어요. 파티는 해제되었습니다.', homeBtn:'🏠 홈으로',
+      resumeCountHost:'{n}초 후 참가자 전원 화면이 다시 움직여요', resumeCountGuest:'{n}초 후 게임이 다시 시작돼요' },
+    en: { pause:'Pause', resume:'Resume', end:'End game',
+      endConfirm:'End the game?\nEveryone will leave the room.',
+      pausedTitle:'Paused', hostPausedSub:'Everyone\u2019s screen is paused', guestPausedSub:'The host paused the game',
+      endedTitle:'Game over', endedHostSub:'You ended the game. Everyone has left the room.',
+      endedGuestSub:'The host ended the game. The party is over.', homeBtn:'🏠 Home',
+      resumeCountHost:'Everyone resumes in {n}s', resumeCountGuest:'Resuming in {n}s' },
+    ja: { pause:'一時停止', resume:'再開', end:'ゲーム終了',
+      endConfirm:'ゲームを終了しますか？\n全員がルームから退出します。',
+      pausedTitle:'一時停止中', hostPausedSub:'参加者全員の画面が止まっています', guestPausedSub:'ホストが一時停止しました',
+      endedTitle:'ゲーム終了', endedHostSub:'ゲームを終了しました。参加者は全員退出しました。',
+      endedGuestSub:'ホストがゲームを終了しました。パーティーは解散です。', homeBtn:'🏠 ホームへ',
+      resumeCountHost:'{n}秒後に全員の画面が再開します', resumeCountGuest:'{n}秒後に再開します' },
+    zh: { pause:'暂停', resume:'继续', end:'结束游戏',
+      endConfirm:'确定结束游戏吗？\n所有人都会离开房间。',
+      pausedTitle:'已暂停', hostPausedSub:'所有人的画面已暂停', guestPausedSub:'房主暂停了游戏',
+      endedTitle:'游戏结束', endedHostSub:'你结束了游戏，所有人已离开房间。',
+      endedGuestSub:'房主结束了游戏，队伍已解散。', homeBtn:'🏠 首页',
+      resumeCountHost:'{n}秒后所有人继续', resumeCountGuest:'{n}秒后继续' },
+    es: { pause:'Pausa', resume:'Reanudar', end:'Terminar',
+      endConfirm:'¿Terminar la partida?\nTodos saldrán de la sala.',
+      pausedTitle:'En pausa', hostPausedSub:'La pantalla de todos está en pausa', guestPausedSub:'El anfitrión pausó el juego',
+      endedTitle:'Fin del juego', endedHostSub:'Terminaste la partida. Todos salieron de la sala.',
+      endedGuestSub:'El anfitrión terminó la partida. La sala se cerró.', homeBtn:'🏠 Inicio',
+      resumeCountHost:'Todos siguen en {n} s', resumeCountGuest:'Se reanuda en {n} s' },
+    pt: { pause:'Pausar', resume:'Retomar', end:'Encerrar',
+      endConfirm:'Encerrar o jogo?\nTodos sairão da sala.',
+      pausedTitle:'Pausado', hostPausedSub:'A tela de todos está pausada', guestPausedSub:'O anfitrião pausou o jogo',
+      endedTitle:'Fim de jogo', endedHostSub:'Você encerrou o jogo. Todos saíram da sala.',
+      endedGuestSub:'O anfitrião encerrou o jogo. A sala foi fechada.', homeBtn:'🏠 Início',
+      resumeCountHost:'Todos voltam em {n} s', resumeCountGuest:'Retomando em {n} s' },
+    de: { pause:'Pause', resume:'Weiter', end:'Spiel beenden',
+      endConfirm:'Spiel beenden?\nAlle verlassen den Raum.',
+      pausedTitle:'Pausiert', hostPausedSub:'Alle Bildschirme sind pausiert', guestPausedSub:'Der Host hat pausiert',
+      endedTitle:'Spielende', endedHostSub:'Du hast das Spiel beendet. Alle haben den Raum verlassen.',
+      endedGuestSub:'Der Host hat das Spiel beendet. Die Runde ist vorbei.', homeBtn:'🏠 Start',
+      resumeCountHost:'Weiter für alle in {n} s', resumeCountGuest:'Weiter in {n} s' },
+    fr: { pause:'Pause', resume:'Reprendre', end:'Terminer',
+      endConfirm:'Terminer la partie ?\nTout le monde quittera le salon.',
+      pausedTitle:'En pause', hostPausedSub:'L\u2019écran de tous est en pause', guestPausedSub:'L\u2019hôte a mis en pause',
+      endedTitle:'Partie terminée', endedHostSub:'Vous avez terminé la partie. Tout le monde est parti.',
+      endedGuestSub:'L\u2019hôte a terminé la partie. Le salon est fermé.', homeBtn:'🏠 Accueil',
+      resumeCountHost:'Reprise pour tous dans {n} s', resumeCountGuest:'Reprise dans {n} s' },
+    ru: { pause:'Пауза', resume:'Продолжить', end:'Завершить',
+      endConfirm:'Завершить игру?\nВсе выйдут из комнаты.',
+      pausedTitle:'Пауза', hostPausedSub:'Экраны всех игроков на паузе', guestPausedSub:'Хост поставил паузу',
+      endedTitle:'Игра окончена', endedHostSub:'Вы завершили игру. Все вышли из комнаты.',
+      endedGuestSub:'Хост завершил игру. Комната закрыта.', homeBtn:'🏠 Главная',
+      resumeCountHost:'Продолжение для всех через {n} с', resumeCountGuest:'Продолжение через {n} с' },
+    ar: { pause:'إيقاف مؤقت', resume:'استئناف', end:'إنهاء اللعبة',
+      endConfirm:'هل تريد إنهاء اللعبة؟\nسيغادر الجميع الغرفة.',
+      pausedTitle:'متوقف مؤقتًا', hostPausedSub:'شاشات الجميع متوقفة', guestPausedSub:'أوقف المضيف اللعبة مؤقتًا',
+      endedTitle:'انتهت اللعبة', endedHostSub:'أنهيت اللعبة. غادر الجميع الغرفة.',
+      endedGuestSub:'أنهى المضيف اللعبة. أُغلقت الغرفة.', homeBtn:'🏠 الرئيسية',
+      resumeCountHost:'يستأنف الجميع بعد {n} ث', resumeCountGuest:'الاستئناف بعد {n} ث' },
+    hi: { pause:'रोकें', resume:'फिर शुरू', end:'गेम खत्म',
+      endConfirm:'गेम खत्म करें?\nसभी रूम से बाहर हो जाएंगे।',
+      pausedTitle:'रुका हुआ', hostPausedSub:'सभी की स्क्रीन रुकी है', guestPausedSub:'होस्ट ने गेम रोका',
+      endedTitle:'गेम खत्म', endedHostSub:'आपने गेम खत्म किया। सभी रूम से बाहर हो गए।',
+      endedGuestSub:'होस्ट ने गेम खत्म किया। रूम बंद हो गया।', homeBtn:'🏠 होम',
+      resumeCountHost:'{n} सेकंड में सभी के लिए फिर शुरू', resumeCountGuest:'{n} सेकंड में फिर शुरू' },
+    th: { pause:'หยุดชั่วคราว', resume:'เล่นต่อ', end:'จบเกม',
+      endConfirm:'จบเกมเลยไหม?\nทุกคนจะออกจากห้อง',
+      pausedTitle:'หยุดชั่วคราว', hostPausedSub:'หน้าจอของทุกคนหยุดอยู่', guestPausedSub:'โฮสต์หยุดเกมชั่วคราว',
+      endedTitle:'จบเกม', endedHostSub:'คุณจบเกมแล้ว ทุกคนออกจากห้องแล้ว',
+      endedGuestSub:'โฮสต์จบเกมแล้ว ห้องถูกปิด', homeBtn:'🏠 หน้าแรก',
+      resumeCountHost:'ทุกคนเล่นต่อใน {n} วิ', resumeCountGuest:'เล่นต่อใน {n} วิ' },
+    id: { pause:'Jeda', resume:'Lanjut', end:'Akhiri',
+      endConfirm:'Akhiri permainan?\nSemua orang akan keluar dari room.',
+      pausedTitle:'Dijeda', hostPausedSub:'Layar semua pemain dijeda', guestPausedSub:'Host menjeda permainan',
+      endedTitle:'Permainan selesai', endedHostSub:'Kamu mengakhiri permainan. Semua sudah keluar.',
+      endedGuestSub:'Host mengakhiri permainan. Room ditutup.', homeBtn:'🏠 Beranda',
+      resumeCountHost:'Semua lanjut dalam {n} dtk', resumeCountGuest:'Lanjut dalam {n} dtk' },
+    vi: { pause:'Tạm dừng', resume:'Tiếp tục', end:'Kết thúc',
+      endConfirm:'Kết thúc trò chơi?\nMọi người sẽ rời phòng.',
+      pausedTitle:'Đang tạm dừng', hostPausedSub:'Màn hình của mọi người đang dừng', guestPausedSub:'Chủ phòng đã tạm dừng',
+      endedTitle:'Kết thúc', endedHostSub:'Bạn đã kết thúc trò chơi. Mọi người đã rời phòng.',
+      endedGuestSub:'Chủ phòng đã kết thúc trò chơi. Phòng đã đóng.', homeBtn:'🏠 Trang chủ',
+      resumeCountHost:'Mọi người tiếp tục sau {n} giây', resumeCountGuest:'Tiếp tục sau {n} giây' },
+    tr: { pause:'Duraklat', resume:'Devam', end:'Oyunu bitir',
+      endConfirm:'Oyun bitirilsin mi?\nHerkes odadan çıkacak.',
+      pausedTitle:'Duraklatıldı', hostPausedSub:'Herkesin ekranı duraklatıldı', guestPausedSub:'Oda sahibi oyunu duraklattı',
+      endedTitle:'Oyun bitti', endedHostSub:'Oyunu bitirdin. Herkes odadan çıktı.',
+      endedGuestSub:'Oda sahibi oyunu bitirdi. Oda kapandı.', homeBtn:'🏠 Ana sayfa',
+      resumeCountHost:'Herkes {n} sn sonra devam ediyor', resumeCountGuest:'{n} sn sonra devam' }
   };
+  function _lang(){
+    let l = 'en';
+    try { l = (localStorage.getItem('luckyplz_lang') || 'en').toLowerCase().split('-')[0]; } catch(_){}
+    return l === 'gb' ? 'en' : l;
+  }
+  /* Resolved at install() time (the language can change between rooms). */
+  function defaultTexts(){ return Object.assign({}, TEXTS.en, TEXTS[_lang()] || {}); }
 
   function esc(s){
     return String(s == null ? '' : s)
@@ -180,7 +267,7 @@
     opts = opts || {};
     const role  = opts.role === 'guest' ? 'guest' : 'host';
     const room  = opts.room || null;
-    const texts = Object.assign({}, DEFAULT_TEXTS, opts.texts || {});
+    const texts = Object.assign(defaultTexts(), opts.texts || {});
 
     let endable = opts.canEnd !== false;
     let isPaused = false;
@@ -518,5 +605,5 @@
     return ctl;
   }
 
-  window.LpHostCtl = { install: install };
+  window.LpHostCtl = { install: install, texts: defaultTexts };
 })();
