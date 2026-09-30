@@ -46,7 +46,8 @@
      있으면 주소창에서만 조용히 지운다
 
    공개 API: window.LpInApp = { info, detect(ua,env), escapeUrl(info,url),
-     open(), copy(), show(), dismiss() }  (+ 구 이름 window.LpInAppExit 별칭)
+     open(), copy(), show(), dismiss(), willEscape() }  (+ 구 이름 window.LpInAppExit 별칭)
+     willEscape(): 외부 브라우저로 탈출 중·탈출 뒤면 true (Rooms v2 가 이 창에서 참가를 미룬다, 2026-09-30)
    테스트 훅: 이 파일보다 먼저 window.__LP_IAB_UA = '<UA>' 를 두면 그 UA 로 판정.
 */
 (function(){
@@ -197,10 +198,11 @@
         history.replaceState(history.state, '', delParam(location.pathname + location.search + location.hash, 'openExternalBrowser'));
       }
     } catch(_){}
-    window.LpInApp = {info: INFO, detect: detect, escapeUrl: escapeUrl, open: noop, copy: noop, show: noop, dismiss: noop};
+    window.LpInApp = {info: INFO, detect: detect, escapeUrl: escapeUrl, open: noop, copy: noop, show: noop, dismiss: noop, willEscape: no};
     return;
   }
   function noop(){}
+  function no(){ return false; }
 
   var P = qs();
   var isAuth = /^\/auth(\/|$)/.test(location.pathname) || (P.get('code') && P.get('state'));
@@ -208,7 +210,7 @@
 
   /* iframe(랜딩의 게임 임베드) 안이거나 OAuth 경로면 아무것도 안 한다 */
   if (!inTop || isAuth) {
-    window.LpInApp = {info: INFO, detect: detect, escapeUrl: escapeUrl, open: noop, copy: noop, show: noop, dismiss: noop};
+    window.LpInApp = {info: INFO, detect: detect, escapeUrl: escapeUrl, open: noop, copy: noop, show: noop, dismiss: noop, willEscape: no};
     return;
   }
 
@@ -276,7 +278,8 @@
      '열었어요' 시트(카톡은 인앱 창 닫기 버튼 포함). */
   var wentHidden = false, attemptAt = 0, gen = 0;   /* gen: '열었어요' 이후 묵은 실패 타이머 무효화 */
   function recent(){ return attemptAt && Date.now() - attemptAt < 8000; }
-  function back(){ if (!wentHidden || document.hidden) return; wentHidden = false; attemptAt = 0; gen++; showDone(); }
+  var escaped = false;   /* 외부 브라우저로 한 번 넘어갔다 돌아옴 — 이 창에서는 방 참가를 시작하지 않는다(Rooms v2 willEscape) */
+  function back(){ if (!wentHidden || document.hidden) return; escaped = true; wentHidden = false; attemptAt = 0; gen++; showDone(); }
   document.addEventListener('visibilitychange', function(){ if (document.hidden) { if (recent()) wentHidden = true; } else back(); });
   window.addEventListener('blur', function(){ if (recent()) wentHidden = true; });
   window.addEventListener('focus', function(){ setTimeout(back, 60); });
@@ -519,6 +522,8 @@
 
   var API = {
     info: INFO, detect: detect, escapeUrl: escapeUrl,
+    /* Rooms v2(§2.3): 탈출 시도 중(8초)·탈출 성공 뒤면 true → LpRooms 가 신원·핸드셰이크를 미룬다. '여기서 계속'을 누르면 false */
+    willEscape: function(){ return !ss(KEY_STAY) && (escaped || wentHidden || !!recent()); },
     open: openExternal, copy: copyLink, show: function(){ try { sessionStorage.removeItem(KEY_STAY); } catch(_){} showSheet(false); }, dismiss: dismiss,
     /* 구 lpInAppExit.js 호환 */
     openExternal: openExternal, isInAppBrowser: true, detected: INFO.app

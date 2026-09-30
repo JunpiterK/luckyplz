@@ -1733,7 +1733,26 @@ function init() {
 
     const joinBtn = document.getElementById('lpHomeJoinBtn');
     if (joinBtn) {
+        /* Rooms v2 (2026-09-30): 코드·링크 하나로 어느 방이든 — LpRooms.resolve 가 v2·v1·퀴즈·스페이스-Z 를 가려
+           그 게임으로 보낸다. v2 모듈은 누르는 순간에만 싣고(홈 무게 0), 4초 안에 못 오면 예전 v1 참가 창. */
+        const v2Pre = () => { try { if (typeof window.lpRoomsLoad === 'function') window.lpRoomsLoad().catch(() => {}); } catch (_) {} };
+        joinBtn.addEventListener('pointerdown', v2Pre, { once: true });
         joinBtn.addEventListener('click', () => {
+            if (typeof window.lpRoomsLoad === 'function') {
+                let done = false;
+                const fb = () => { if (done) return; done = true; v1Join(); };
+                const to = setTimeout(fb, 4000);
+                window.lpRoomsLoad().then((UI) => {
+                    if (done) return;
+                    clearTimeout(to);
+                    if (UI && typeof UI.openJoin === 'function' && !/stub/.test(UI.version || '')) { done = true; UI.openJoin(); }
+                    else fb();
+                }, () => { clearTimeout(to); fb(); });
+                return;
+            }
+            v1Join();
+        });
+        function v1Join() {
             console.log('[LpHome] join button clicked, LpRoom ready:', !!window.LpRoom);
             let tries = 0;
             (function wait(){
@@ -1748,7 +1767,7 @@ function init() {
                         : 'Connection module failed to load. Please refresh the page — your browser may be serving a cached copy.');
                 }
             })();
-        });
+        }
     }
 
     /* If someone shares a plain /?room=XXX link (e.g. from a messaging

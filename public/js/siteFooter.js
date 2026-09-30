@@ -61,7 +61,61 @@ try{
        waiting room (not browseable content), so the global footer
        would just push the lobby card around, and the lp-fs-btn
        toggle should appear there for symmetry with /games/*. */
-    var isGamePage=/^\/games\//.test(location.pathname)||/^\/lobby\/?/.test(location.pathname);
+    var isGamePage=/^\/games\//.test(location.pathname)||/^\/lobby\/?/.test(location.pathname)||/^\/r\//.test(location.pathname);
+
+    /* ── LuckyPlz Rooms v2 로더 (2026-09-30, DESIGN §1·§12) ─────────────────────
+       게임별 기능 플래그는 레지스트리(lpGames.js mp.v) 한 곳. 판정:
+         v1(기존 lpRoom·lpHostCtl·lpMultiplayer·lpInviteButton) — 홈·일반 페이지, ?rooms=v1, localStorage lpRoomsV='1',
+                                                                   옛 링크 ?room=(새 ?r= 없음)
+         v2(supabase → lpGames → lpRoomsCore → lpFair → lpRoomsUI) — /r/*, /lobby/, ?r=, ?lpr=, ?rooms=v2(이 탭 유지),
+                                                                   lpRoomsV='2', 이 탭이 이 게임의 v2 방에 있음
+         그 밖의 게임 페이지 — lpGames.js 를 먼저 싣고 LpGames.v(id)==='v2' 면 v2, 아니면 v1
+       v2 페이지에는 v1 부유 UI(lpMultiplayer·lpHostCtl·lpInviteButton)와 lpRoom 을 싣지 않는다.
+       스크립트는 async=false 로 한꺼번에 붙여 병렬로 받고 순서대로 실행한다. */
+    window.__lprHref=location.href;
+    var lprMode=(function(){
+        var P=location.pathname,q;
+        try{q=new URLSearchParams(location.search)}catch(_){q={get:function(){return null}}}
+        function ls(k){try{return localStorage.getItem(k)}catch(_){return null}}
+        function ss(k){try{return sessionStorage.getItem(k)}catch(_){return null}}
+        try{
+            if(q.get('rooms')==='v2')sessionStorage.setItem('lpr_v2','1');
+            if(q.get('rooms')==='v1')sessionStorage.removeItem('lpr_v2');
+        }catch(_){}
+        var isR=/^\/r\//.test(P),isLobby=/^\/lobby(\/|$)/.test(P);
+        var gm=/^\/games\/([a-z0-9-]+)\//.exec(P),gid=gm?gm[1]:((isR||isLobby)?'lobby':null);
+        if(!gid)return {mode:'v1',gid:null};
+        if(isR)return {mode:'v2',gid:gid};
+        var legacy=!!q.get('room')&&!q.get('r');
+        if(legacy||q.get('rooms')==='v1'||ls('lpRoomsV')==='1')return {mode:'v1',gid:gid};
+        var act=null;try{act=JSON.parse(ss('lpr_active')||'null')}catch(_){}
+        if(isLobby||q.get('r')||q.get('lpr')||ss('lpr_v2')==='1'||ls('lpRoomsV')==='2'||(act&&act.gameId===gid))return {mode:'v2',gid:gid};
+        return {mode:'ask',gid:gid};
+    })();
+    function lprAdd(src,async){
+        var s=document.createElement('script');s.src=src;if(!async)s.async=false;
+        (document.body||document.head).appendChild(s);return s;
+    }
+    var lprP=null;
+    function lprLoadV2(){
+        if(lprP)return lprP;
+        lprP=new Promise(function(res,rej){
+            var list=[];
+            if(!window.supabase)list.push('/vendor/supabase.min.js');
+            if(!window.LpGames)list.push('/js/lpGames.js?v=1790753735');
+            if(!(window.LpRooms&&window.LpRooms.version&&window.LpRooms.version.indexOf('stub')<0))list.push('/js/lpRoomsCore.js?v=1790753735');
+            if(!(window.LpFair&&window.LpFair.version&&window.LpFair.version.indexOf('stub')<0))list.push('/js/lpFair.js?v=1790753735');
+            if(!(window.LpRoomsUI&&window.LpRoomsUI.version&&window.LpRoomsUI.version.indexOf('stub')<0))list.push('/js/lpRoomsUI.js?v=1790753735');
+            if(!list.length){res(window.LpRoomsUI);return}
+            var last=null,failed=false;
+            list.forEach(function(u){last=lprAdd(u);last.onerror=function(){failed=true;rej(new Error('load '+u))}});
+            last.onload=function(){if(!failed)res(window.LpRoomsUI)};
+        });
+        lprP.catch(function(){lprP=null});
+        return lprP;
+    }
+    /* 홈의 '방 참가'·허브 등에서 필요할 때만 v2 를 싣는다 */
+    window.lpRoomsLoad=lprLoadV2;
     if(isGamePage)document.body.classList.add('lp-game-page');
 
     var style=document.createElement('style');
@@ -397,28 +451,55 @@ try{
        Query-string version is a defensive cache-bust — mobile browsers
        have been observed to ignore the no-cache header on /js/* for
        dynamically-injected scripts. Bump this on breaking changes. */
-    if(window.supabase){
-        var rr2=document.createElement('script');
-        rr2.src='/js/lpRoom.js?v=1790753735';
-        rr2.defer=true;
-        document.body.appendChild(rr2);
+    function lprLoadV1(){
+        if(window.supabase){
+            var rr2=document.createElement('script');
+            rr2.src='/js/lpRoom.js?v=1790753735';
+            rr2.defer=true;
+            document.body.appendChild(rr2);
 
-        /* Shared host-control bar (pause/end/paused-overlay/ended-overlay)
-           piggybacks on lpRoom — loaded everywhere lpRoom is loaded so
-           every online game can `LpHostCtl.install({role,room,...})`
-           without per-game script tag bookkeeping. */
-        var hc=document.createElement('script');
-        hc.src='/js/lpHostCtl.js?v=1790753735';
-        hc.defer=true;
-        document.body.appendChild(hc);
+            /* Shared host-control bar (pause/end/paused-overlay/ended-overlay)
+               piggybacks on lpRoom — loaded everywhere lpRoom is loaded so
+               every online game can `LpHostCtl.install({role,room,...})`
+               without per-game script tag bookkeeping. */
+            var hc=document.createElement('script');
+            hc.src='/js/lpHostCtl.js?v=1790753735';
+            hc.defer=true;
+            document.body.appendChild(hc);
 
-        /* Battle.net-style floating multiplayer panel. Listens for
-           `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
-           fired by lpRoom; auto-mounts without any per-game wiring. */
-        var mp=document.createElement('script');
-        mp.src='/js/lpMultiplayer.js?v=1790753735';
-        mp.defer=true;
-        document.body.appendChild(mp);
+            /* Battle.net-style floating multiplayer panel. Listens for
+               `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
+               fired by lpRoom; auto-mounts without any per-game wiring. */
+            var mp=document.createElement('script');
+            mp.src='/js/lpMultiplayer.js?v=1790753735';
+            mp.defer=true;
+            document.body.appendChild(mp);
+        }
+    }
+    /* Game-page invite button — the floating "친구 초대" pill + modal
+       that lives ONLY on /games/*. The module itself self-gates by
+       pathname, so loading it everywhere is harmless; restricting
+       here just saves a network request on non-game pages.
+       (v1 전용 — v2 페이지는 HUD 알약 1개만. v1 페이지에서는 예전과 같은 자리·순서로 싣는다) */
+    function lprLoadInviteBtn(){
+        if(window.supabase&&isGamePage&&!window.LpInviteButton){
+            var lib=document.createElement('script');
+            lib.src='/js/lpInviteButton.js?v=1790753735';
+            lib.defer=true;
+            document.body.appendChild(lib);
+        }
+    }
+    if(lprMode.mode==='v1')lprLoadV1();
+    else if(lprMode.mode==='v2')lprLoadV2();
+    else{
+        /* 레지스트리 판정 — lpGames.js 하나만 먼저 */
+        var lg=lprAdd('/js/lpGames.js?v=1790753735',true);
+        var lgDone=false;
+        var lgGo=function(){if(lgDone)return;lgDone=true;
+            var v='v1';try{v=window.LpGames.v(lprMode.gid)}catch(_){}
+            if(v==='v2')lprLoadV2();else{lprLoadV1();lprLoadInviteBtn();}
+        };
+        lg.onload=lgGo;lg.onerror=lgGo;
     }
 
     /* Social layer (friends + DM) — loaded EVERYWHERE including game
@@ -466,16 +547,7 @@ try{
         li.defer=true;
         document.body.appendChild(li);
     }
-    /* Game-page invite button — the floating "친구 초대" pill + modal
-       that lives ONLY on /games/*. The module itself self-gates by
-       pathname, so loading it everywhere is harmless; restricting
-       here just saves a network request on non-game pages. */
-    if(window.supabase&&isGamePage&&!window.LpInviteButton){
-        var lib=document.createElement('script');
-        lib.src='/js/lpInviteButton.js?v=1790753735';
-        lib.defer=true;
-        document.body.appendChild(lib);
-    }
+    if(lprMode.mode==='v1')lprLoadInviteBtn();
     /* Notifications (in-page toast + foreground OS Notification API,
        no Service Worker — see CLAUDE.md SW policy). Skipped on game
        pages — a toast sliding in mid-race would be jarring. */

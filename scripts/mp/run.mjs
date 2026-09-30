@@ -1,6 +1,7 @@
 /* LuckyPlz Rooms v2 — 하네스 실행기
    node scripts/mp/run.mjs [suite…] [--live]
-     suite: fair | smoke | core | spoof | budget | all (기본 all)
+     suite: fair | smoke | core | spoof | budget | ui | all (기본 all)
+     ui: MP_SHOTS=<폴더> 스크린샷 시트, MP_NOSHOTS=1 이면 U10 생략
    결과: 표 형식 PASS/FAIL + 예산 리포트. 스크래치: MP_SCRATCH (기본 %TEMP%/lp-mp)
    포트: MP_PORT (기본 8411) */
 import { startRelay } from './relay.mjs';
@@ -15,7 +16,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const live = args.includes('--live');
 let want = args.filter(a => !a.startsWith('--'));
-if (!want.length || want.includes('all')) want = ['fair', 'core', 'spoof', 'budget'];
+if (!want.length || want.includes('all')) want = ['fair', 'core', 'spoof', 'budget', 'ui'];
 if (live) want = ['live'];   /* --live: 실제 supabase Realtime 에 ZZ 코드 방 1개만 (DB 쓰기 없음) */
 const only = (process.env.MP_ONLY || '').split(',').filter(Boolean);
 
