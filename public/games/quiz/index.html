@@ -585,6 +585,76 @@ function boot(){const bg=$('#qbg');if(bg){const sh=['▲','◆','★','●','?',
   if(c.length===6){viewHome(c);setTimeout(()=>{const n=$('#qnick');if(n&&!n.value)n.focus()},200);return}
   viewHome(c)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+
+/*<qlive:rooms> Rooms v2 브리지 (P5, DESIGN §6.4) — DB 진행 엔진(qlive_* RPC·폴링·nudge·멱등 답안)은 그대로.
+  Rooms 방 방장이 [시작] → 방장 화면은 평소 설정 화면 → 평소처럼 qlive_create → 숫자 코드를 Rooms 상태(S.game.qcode)·x('qlive')로
+  → 멤버 페이지가 Rooms 닉으로 qlive_join 을 스스로 호출(재참가 경로와 같은 RPC). 200명 교실형 단독 경로(QR·숫자 코드)는 그대로.
+  LpRoomsQ 는 v2 로더가 lpRoomsUI 를 실었을 때만 불린다 → 단독 퀴즈 경로 불변 */
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(function(LpRooms,UI){
+  LpRooms.adapter({gameId:'quiz',kind:'db',seats:null,max:12,lateJoin:'spectate',migratable:true});
+  const st=document.createElement('style');
+  st.textContent='.lpr-hud{top:calc(62px + env(safe-area-inset-top,0px))!important}body.qlive-in .lp-rooms-btn{display:none!important}';
+  document.head.appendChild(st);
+  let bound=null,joining='',busy=false,announced='';
+  function myNick(room){const m=room.roster().find(x=>x.p===room.me.pid);return (m&&m.n)||LS.get('lp_qlive_nick','Player')}
+  function myAv(room){const m=room.roster().find(x=>x.p===room.me.pid);const a=UI.avatars||[];return (m&&a[m.av])||LS.get('lp_qlive_avatar',AVS[0])}
+  async function autoJoin(room,qcode){
+    if(joining===qcode||(S.code===qcode&&S.role))return;
+    joining=qcode;
+    try{
+      const r=await rpc('qlive_join',{p_code:qcode,p_pid:S.pid,p_nick:myNick(room),p_avatar:myAv(room)});
+      if(!r||!r.ok){toast(T({no_room:'noRoom',ended:'ended',locked:'locked',full:'full',kicked:'kicked',bad_nick:'badNick'}[r&&r.err]||'noRoom'));joining='';return}
+      SFX.join();enterRoom('player',qcode);
+    }catch(e){joining='';toast(e.message==='not_ready'?T('notReady'):T('netErr'))}
+  }
+  function sync(room){
+    const R0=room.state(),g=R0&&R0.game;
+    if(!g||g.k!=='qlive')return;
+    if(room.isHost){
+      if(g.st==='setup'&&!S.code&&!busy){busy=true;viewSetup()}
+      return;
+    }
+    if(g.qcode&&(R0.phase==='playing'||R0.phase==='result'))autoJoin(room,g.qcode);
+  }
+  /* 방장: 평소 설정 화면에서 방을 열면(qlive_create → enterRoom) 그 코드를 Rooms 에 알린다 · 마지막 문제 뒤 결과 */
+  setInterval(()=>{
+    const room=bound;if(!room||room._left||!room.isHost)return;
+    const R0=room.state(),g=R0&&R0.game;
+    if(!g||g.k!=='qlive')return;
+    if(S.role==='host'&&S.code&&announced!==S.code){
+      announced=S.code;busy=false;
+      room.setState(S2=>{S2.game={k:'qlive',st:'run',qcode:S.code}});
+      room.x('qlive',{qcode:S.code});
+    }
+    if(g.st==='run'&&S.st&&S.st.phase==='final'&&R0.phase==='playing'){
+      const top=(S.st.top||[]).slice(0,12).map(x=>({n:x.nick,v:x.score,r:x.rank}));
+      room.setState(S2=>{S2.game.st='res';S2.game.res=top});
+      try{room.end()}catch(_){}
+    }
+  },500);
+  UI.config({onStart(room){
+    if(!room.isHost)return false;
+    busy=false;announced='';
+    room.setState(S2=>{S2.game={k:'qlive',st:'setup'}});
+    room.start({countdownMs:0});
+    return false;
+  }});
+  function bind(room){
+    if(!room||bound===room||room.gameId!=='quiz')return;
+    bound=room;
+    room.on('state',()=>sync(room));
+    room.on('x',(k,d,from)=>{if(k==='qlive'&&!from&&d&&/^\d{6}$/.test(String(d.qcode))&&!room.isHost)autoJoin(room,String(d.qcode))});
+    room.on('phase',ph=>{
+      if(ph==='lobby'){joining='';announced='';busy=false;if(S.code)leaveRoom()}
+      else if(ph==='playing'&&!room.isHost&&!S.code)toast('🎤 ⏳',2600);
+      sync(room);
+    });
+    sync(room);
+  }
+  LpRooms.on('room',bind);
+  const cur=LpRooms.current&&LpRooms.current();if(cur)bind(cur);
+});
+/*</qlive:rooms>*/
 window.QLIVE={S,poll,rpc,useClient(c){SB=c}};   /* useClient: 로컬 검증 서버를 꽂는 훅 */
 })();
 

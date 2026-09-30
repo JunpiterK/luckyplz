@@ -1049,6 +1049,7 @@ let state='title', paused=false;
 let LAY=null, T=null, faces=[], alive=null, freeA=null, order=[];
 let layId=load(LS_LAY,'fortress'); if(!MJ.LAYOUTS.some(l=>l.id===layId)) layId='fortress';
 let seed=0, daily=null;
+let lpRaceRng=null;   /* Rooms v2 레이스 — 섞기 난수도 같은 시드 스트림(null = 솔로 Math.random 그대로) */
 let playT=0, score=0, combo=0, lastMatchT=-99, hints=0, shuffles=0, matches=0, penalty=0;
 let sel=-1, selT=1, hintPair=null, hintT=0;
 let undoSt=[];
@@ -1473,7 +1474,7 @@ function ensureVisible(pr){
 function shuffle(fromStuck){
     if(state!=='play'||paused) return;
     if(flights.length){ flights.forEach(f=>{ if(!f.hit) impact(f); }); flights=[]; }
-    const r=MJ.rng((Math.random()*4294967296)>>>0);
+    const r=MJ.rng(((lpRaceRng?lpRaceRng():Math.random())*4294967296)>>>0);
     const d=MJ.deal(T,MJ.remainingPairs(faces,alive),r,alive);
     if(!d){ toast(t('cantShuffle')); SND.stuck(); return; }
     const prevFaces=faces.slice();
@@ -1819,6 +1820,50 @@ LAY=MJ.layout(layId); T=MJ.prep(LAY.pos);
 fit(); logo(); hud();
 /* 패 글꼴(번체 명조 부분집합)이 늦게 오면 스프라이트를 다시 굽는다 */
 try{ MJArt.loadFont().then(()=>{ MJArt.clear(); if(geo) buildSprites(); logo(); dirty(); }); }catch(_){}
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — 훅과 어댑터 등록만. 판 규칙은 그대로.
+  같은 시드 = 같은 배치·같은 패(돌리지 않음) → 완성 시간으로 순위. 레이스 판은 솔로 이어하기 저장을 건드리지 않는다 */
+{
+    let lpRace=null, prevLay=null;
+    const _save=save, _clearSave=clearSave;
+    save=function(){ if(lpRace) return; return _save.apply(this,arguments); };
+    clearSave=function(){ if(lpRace) return; return _clearSave.apply(this,arguments); };
+    const RACE={
+        gameId:'mahjong-solitaire', metric:'time', durationS:600,
+        options:[{key:'lay',values:['garden','butterfly','fortress'],def:'butterfly'}],
+        labels:{lay:{ko:'배치',en:'Layout',ja:'配置',zh:'牌阵',es:'Tablero',pt:'Formato'},'lay.garden':'🌷','lay.butterfly':'🦋','lay.fortress':'🏯'},
+        start(ctx){
+            if(prevLay===null) prevLay=layId;
+            lpRace=ctx; lpRaceRng=ctx.rng('shuffle');
+            const lay=MJ.layout((ctx.opts&&ctx.opts.lay)||'butterfly');
+            const sd=(ctx.rng('deal')()*4294967296)>>>0;
+            ['clearOv','stuckOv','pauseOv'].forEach(id=>show(id,false));
+            newDeal(lay.id,sd,false,false);
+            beginPlay();
+        },
+        progress(){ return matches; },
+        over(){ return state==='won'; },
+        done(){ return state==='won'; },
+        final(){ return {v:score}; },
+        stop(){ if(state==='play'){ state='race'; paused=false; sel=-1; hintPair=null; ['pauseOv','stuckOv'].forEach(id=>show(id,false)); dirty(); } },
+        end(){
+            lpRace=null; lpRaceRng=null;
+            if(prevLay!==null){ layId=prevLay; store(LS_LAY,layId); prevLay=null; }
+            if(state==='race') goTitle();
+        },
+        unlock(){ try{ SND.tock(); }catch(_){} },
+        fmtProg:g=>g+'/'+(LAY?LAY.n/2:'?'),
+        probe(n){ return faces.slice(0,n); }
+    };
+    (window.LpRoomsQ=window.LpRoomsQ||[]).push(function(LpRooms,UI){
+        LpRooms.adapter({gameId:RACE.gameId,kind:'race',seats:[2,8],max:12,lateJoin:'nextRound',migratable:true,options:RACE.options,race:RACE});
+        UI.config({onStart:function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; }});
+        if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+        const sc=document.createElement('script'); sc.src='/js/lpRoomsRace.js?v=1790759059';
+        sc.onload=function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+        document.body.appendChild(sc);
+    });
+}
+/*</lp-race:hook>*/
 })();
 </script>
 <script>

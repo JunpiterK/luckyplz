@@ -22871,6 +22871,124 @@ window.SZX={
     busy:()=>!!(panel&&panel.classList.contains('on')),
     _R:R
 };
+/*<sz:mod:rooms> Rooms v2 브리지 (P5, DESIGN §6.3.2) — SZX 엔진·시드 결정론·WebRTC 메시·도전장·SAT·로그인 1:1 은 그대로.
+  SZX 에 공개 함수만 더한다(기존 함수·흐름은 한 줄도 바꾸지 않음):
+    SZX.joinSilent({code, nick, mode, creator})  Rooms 대기실이 넘긴 6자리 SZX 방에 패널 없이 합류 (기존 connect 재사용)
+    SZX.goSilent(seed)                            (Rooms 방장) 이 시드로 출발 — startRound 와 같은 go 신호, 시드만 공정 추첨 값
+    SZX.onFinish(cb)                              이번 판 전원 끝(완료·끊김) → cb({round, mode, rows}) 1회. 처음 부를 때만 1초 점검 타이머
+    SZX.leaveSilent()                             Rooms 대기실로 돌아갈 때 SZX 방을 조용히 나간다
+  Rooms 어댑터 등록은 LpRoomsQ 안 — v2 로더가 lpRoomsUI 를 실었을 때만 돈다(단독 SZX·솔로 경로 불변) */
+function szxJoinSilent(o){
+    o=o||{};
+    const code=String(o.code||'').replace(/\D/g,'').slice(0,6);
+    if(code.length!==6)return false;
+    const nick=String(o.nick||LS.get('szx_nick','')||'Pilot').trim().slice(0,14)||'Pilot';
+    if(R.code===code&&R.ch){R.nick=nick;return true}
+    R.nick=nick;R.round=0;R.results={};R.finalized={};R.tally={};R.joinedAt=Date.now();
+    R.md=o.mode==='coop'?'coop':'race';R.entryMd=R.md;R.coop=false;R.myMeta=null;
+    connect(code,!!o.creator);R.view='lobby';
+    return true;
+}
+function szxGoSilent(seed){
+    if(!R.code||!R.joined||!actingHost())return 0;
+    if(szBuildBlocked())return 0;
+    const r=Math.max(R.round,...Object.values(R.members).map(m=>m.r||0))+1;
+    const n=Math.floor(+seed||0),s=n>0&&n<0x7fffffff?n:(Math.abs(n)%0x7ffffffe)+1;   /* SZX 시드 범위(1..2^31-1) */
+    const b=szBuildStamp(),md=R.md==='coop'?'coop':'race';
+    R.autoAt=0;
+    metaOut({hr:r,hs:s,ha:Date.now(),md});
+    try{R.ch.send({type:'broadcast',event:'go',payload:{r,s,b,pen:'',md}})}catch(_){}
+    onGo(r,s,b,'',md);
+    return r;
+}
+const szxFinCbs=[];let szxFinRound=0,szxFinT=0;
+function szxOnFinish(cb){
+    if(typeof cb!=='function')return()=>{};
+    szxFinCbs.push(cb);
+    if(!szxFinT)szxFinT=setInterval(()=>{
+        if(!szxFinCbs.length||!R.code||!R.round||szxFinRound===R.round||R.racing)return;
+        const rows=standings(R.round);
+        if(!rows.length||rows.some(x=>x.s==='play'))return;
+        szxFinRound=R.round;
+        const out={round:R.round,mode:R.md,rows:rows.map(x=>({p:x.p,n:x.n,s:x.s,t:x.t|0,z:x.z|0}))};
+        szxFinCbs.slice().forEach(f=>{try{f(out)}catch(e){console.warn('[szx] onFinish',e)}});
+    },1000);
+    return()=>{const i=szxFinCbs.indexOf(cb);if(i>=0)szxFinCbs.splice(i,1)};
+}
+function szxLeaveSilent(){
+    if(!R.code)return;
+    disconnect(false);
+    if(live)live.classList.remove('on');
+    closePanel();
+}
+Object.assign(window.SZX,{joinSilent:szxJoinSilent,goSilent:szxGoSilent,onFinish:szxOnFinish,leaveSilent:szxLeaveSilent});
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(function(LpRooms,UI){
+    const OPT=[{key:'mode',values:['race','coop'],def:'race'}];
+    LpRooms.adapter({gameId:'dodge',kind:'realtime',seats:[1,8],max:12,lateJoin:'nextRound',migratable:true,options:OPT,
+        canStart(roster,S){
+            const pl=roster.filter(m=>m.r==='host'||m.r==='player');
+            if(((S&&S.opts&&S.opts.mode)||'race')==='coop'&&pl.length!==2)return false;
+            return pl.length>=1&&pl.every(m=>m.r!=='player'||(m.rd&&m.c==='on'));
+        }});
+    let bound=null,joinedRound=0,busy=false;
+    async function hostGo(room){
+        if(busy||!room.isHost||room.state().phase!=='lobby')return;
+        busy=true;
+        try{
+            const S=room.state(),mode=(S.opts&&S.opts.mode)==='coop'?'coop':'race';
+            const ent=S.roster.filter(m=>(m.r==='host'||m.r==='player')&&m.c!=='off').map(m=>m.p).sort();
+            const nm={};S.roster.forEach(m=>{if(ent.includes(m.p))nm[m.p]=m.n});
+            const d=await LpFair.draw(room,{params:{g:'dodge',mode,ent}});
+            const h=LpFair.H('lpr5-szx|'+room.code+'|'+d.round);
+            const code6=String(((h[0]<<16|h[1]<<8|h[2])>>>0)%900000+100000);
+            const s=(LpFair.rng(d.seed,'szx').u32()%0x7ffffffe)+1;
+            room.setState(S2=>{S2.game={k:'szx',st:'run',round:d.round,code6,s,mode,ent,nm,seed:LpFair.hex(d.seed)}});
+            room.start({countdownMs:0});
+        }catch(e){console.warn('[szx] rooms start',e)}
+        finally{busy=false}
+    }
+    UI.config({choices:{options:OPT},onStart(room){hostGo(room);return false},
+        labels:{mode:{ko:'모드',en:'Mode',ja:'モード',zh:'模式',es:'Modo',pt:'Modo'},'mode.race':'🏁','mode.coop':'🤝'}});
+    function waitAndGo(g){
+        const t0=Date.now();
+        const iv=setInterval(()=>{
+            const n=Object.keys(R.members).length,late=Date.now()-t0;
+            if(!(R.joined&&n>=g.ent.length)&&late<8000)return;
+            if(!R.joined&&late<20000)return;
+            clearInterval(iv);
+            if(R.code===g.code6)szxGoSilent(g.s);
+        },250);
+    }
+    function sync(room){
+        const S=room.state(),g=S&&S.game;
+        if(!g||g.k!=='szx')return;
+        if(g.st==='run'&&g.round!==joinedRound&&g.ent.includes(room.me.pid)&&(S.phase==='playing'||S.phase==='starting')){
+            joinedRound=g.round;
+            const me=room.roster().find(m=>m.p===room.me.pid);
+            szxJoinSilent({code:g.code6,nick:me?me.n:'',mode:g.mode,creator:room.isHost});
+            if(room.isHost)waitAndGo(g);
+        }
+    }
+    function bind(room){
+        if(!room||bound===room||room.gameId!=='dodge')return;
+        bound=room;
+        room.on('state',()=>sync(room));
+        room.on('phase',ph=>{if(ph==='lobby'){joinedRound=0;szxLeaveSilent()}sync(room)});
+        sync(room);
+    }
+    szxOnFinish(out=>{
+        const room=bound;if(!room||!room.isHost||room._left)return;
+        const S=room.state(),g=S&&S.game;
+        if(!g||g.k!=='szx'||g.st!=='run'||R.code!==g.code6)return;
+        const rows=out.rows.slice(0,12);
+        room.setState(S2=>{S2.game.st='res';S2.game.res=rows;S2.game.szr=out.round});
+        room.x('result',{round:g.round,rows});
+        try{room.end()}catch(_){}
+    });
+    LpRooms.on('room',bind);
+    const cur=LpRooms.current&&LpRooms.current();if(cur)bind(cur);
+});
+/*</sz:mod:rooms>*/
 })();
 </script>
 

@@ -3574,6 +3574,39 @@ try{
         navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>r.unregister()));
     }
 }catch(_){}
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — 이 블록만 추가(그리기·규칙 코드는 건드리지 않음).
+  같은 시드 = 같은 주문서 순서: 레이스 판 동안만 generateSample 안의 난수를 시드 스트림으로 돌린다. 솔로 = 원래 함수 그대로 */
+{
+    let lpRaceRng = null;
+    if (typeof generateSample === 'function') {
+        const _gen = generateSample;
+        generateSample = function(){
+            if (!lpRaceRng) return _gen.apply(this, arguments);
+            const mr = Math.random; Math.random = lpRaceRng;
+            try { return _gen.apply(this, arguments); } finally { Math.random = mr; }
+        };
+    }
+    const RACE = {
+        gameId: 'burger', metric: 'score', durationS: 180,
+        start(ctx){ lpRaceRng = ctx.rng('orders'); startGame(); },
+        progress(){ return score || 0; },
+        over(){ return !running; },
+        final(){ return { v: score || 0 }; },
+        stop(){ if (running){ paused = false; gameOver(); } },
+        end(){ lpRaceRng = null; },
+        /* 하네스 R1: 시드 스트림의 주문서(레벨 1~) 재료 — 첫 n 개 */
+        probe(n){ const out = (sample || []).slice(); let lv = level || 1; while (out.length < n){ out.push.apply(out, generateSample(lv)); lv++; } return out.slice(0, n); }
+    };
+    (window.LpRoomsQ = window.LpRoomsQ || []).push(function(LpRooms, UI){
+        LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: [], race: RACE });
+        UI.config({ onStart: function(room){ if (window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
+        if (window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+        const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1790759059';
+        sc.onload = function(){ if (window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+        document.body.appendChild(sc);
+    });
+}
+/*</lp-race:hook>*/
 </script>
 <script src="/js/siteFooter.js?v=1790766598"></script>
 <!--lp-game-about:start-->
