@@ -990,10 +990,12 @@ function nameOf(p){
     const s=O&&O.seats&&O.seats[sk(p)];
     return s?s.name:T(p===1?'black':'white');
 }
+function myCid(){return (O&&O.v2&&K&&K.me)?K.me.pid:MYCID}
 function mySeatColor(){
     if(!O||!O.seats)return 0;
-    if(O.seats.b&&O.seats.b.cid===MYCID)return 1;
-    if(O.seats.w&&O.seats.w.cid===MYCID)return -1;
+    const me=myCid();
+    if(O.seats.b&&O.seats.b.cid===me)return 1;
+    if(O.seats.w&&O.seats.w.cid===me)return -1;
     return 0;
 }
 function canHumanAct(){
@@ -1037,8 +1039,9 @@ function onTap(i){
     if(!E.canMove(G.board,i,G.turn)){if(!G.board[i]){toast(T('illegal'),1500);sfx('bad')}return}
     if(G.mode==='online'&&O&&O.role==='guest'){
         O.pendingMove=true;view.V.pending=i;view.V.ghost=G.turn;view.V.hints=null;view.kick();sfx('tap');
-        try{O.g.action('move',{cid:MYCID,i:i,n:G.moveNo})}catch(_){}
         const n0=G.moveNo;
+        if(O.v2){K.act({i:i,n:n0}).then(r=>{if(r&&!r.ok&&O&&O.pendingMove&&G.moveNo===n0){O.pendingMove=false;view.V.pending=-1;refreshHints();updateHUD()}});return}
+        try{O.g.action('move',{cid:MYCID,i:i,n:G.moveNo})}catch(_){}
         clearTimeout(O.pendT);
         O.pendT=setTimeout(()=>{if(O&&O.pendingMove&&G.moveNo===n0){O.pendingMove=false;view.V.pending=-1;refreshHints();try{O.g.requestSnapshot()}catch(_){}}},4500);
         return;
@@ -1090,7 +1093,7 @@ function updateHUD(){
             const s=O.seats&&O.seats[sk(p)];
             if(!s)return '';
             if(s.on===false)return '⚠ '+T('offline');
-            const parts=[];if(s.cid===MYCID)parts.push(T('you'));if(O.hostCid&&s.cid===O.hostCid)parts.push(T('host'));
+            const parts=[];if(s.cid===myCid())parts.push(T('you'));if(O.hostCid&&s.cid===O.hostCid)parts.push(T('host'));if(s.bot)parts.push('🤖');
             return parts.join(' · ');
         }
         return '';
@@ -1119,10 +1122,10 @@ function updateHUD(){
     else st=T('turnName',{name:nameOf(G.turn)});
     $('status').innerHTML=esc(st)+(dots?'<span class="dots"></span>':'');
     /* 버튼 */
-    const on=G.mode==='online',host=on&&O&&O.role==='host';
+    const on=G.mode==='online',v2h=!!(on&&O&&O.v2&&K&&K.isHost),host=on&&O&&(O.role==='host'||v2h);
     $('bUndo').hidden=on;$('bInvite').hidden=!host;
-    $('bSwap').hidden=!(host&&O.phase!=='play');
-    $('bNew').hidden=on&&!host;
+    $('bSwap').hidden=!(host&&O.phase!=='play')||!!(O&&O.v2);
+    $('bNew').hidden=on&&(!host||(O&&O.v2&&O.phase!=='over'));
     let canUndo=false;
     if(G.mode==='ai')canUndo=G.hist.some(h=>h.turn===G.human);else if(G.mode==='local')canUndo=G.hist.length>0;
     $('bUndo').disabled=!canUndo;
@@ -1164,7 +1167,7 @@ function finish(){
     $('endSB').classList.toggle('win',win===1);$('endSW').classList.toggle('win',win===-1);
     /* 버튼 */
     const on=G.mode==='online';
-    const canRematch=on&&O&&(O.role==='host'||mySeatColor()!==0);
+    const canRematch=on&&O&&(O.v2?!!(K&&K.isHost):(O.role==='host'||mySeatColor()!==0));
     $('bAgain').textContent=on?T('rematch'):T('again');
     $('bAgain').hidden=on&&!canRematch;
     if(win)view.V.flash={p:win,t0:performance.now(),dur:1300};
@@ -1228,10 +1231,11 @@ function undo(){
     sfx('tap');refreshHints();updateHUD();
     if(G.mode==='ai'&&G.turn!==G.human)aiThink(200);
 }
-function toMenu(fromNav){
-    if(!fromNav&&G.mode!=='online'&&G.moveNo>2&&!G.over&&!confirm(T('confirmNew')))return;
+async function toMenu(fromNav){
+    if(!fromNav&&G.mode!=='online'&&G.moveNo>2&&!G.over&&!await askLocal(T('confirmNew')))return;
+    if(O&&O.v2){v2Self=true;if(K&&K.room)await K.leave(!!fromNav);else{O=null}if(K&&K.room)return;O=null;G.aiTok++;G.thinking=false;view.skip();hideEnd();G.mode=PREF.mode==='online'?'online':PREF.mode;showSetup();return}
     if(O){
-        if(O.role==='host'){if(!fromNav&&O.phase==='play'&&!confirm(T('confirmNew')))return;try{O.room.close()}catch(_){}try{localStorage.removeItem('lp_rv_online');sessionStorage.removeItem('lp_rv_host')}catch(_){}}
+        if(O.role==='host'){if(!fromNav&&O.phase==='play'&&!await askLocal(T('confirmNew')))return;try{O.room.close()}catch(_){}try{localStorage.removeItem('lp_rv_online');sessionStorage.removeItem('lp_rv_host')}catch(_){}}
         else{try{O.g.close()}catch(_){}}
         O=null;window._lpHost=null;window._lpGuest=null;
         try{const u=new URL(location.href);['room','pin','nick'].forEach(k=>u.searchParams.delete(k));history.replaceState(null,'',u.pathname+u.search+u.hash)}catch(_){}
@@ -1405,6 +1409,7 @@ function renderNet(){
     if(G.mode!=='online'||!O){row.classList.remove('on');row.innerHTML='';return}
     let h='';
     if(O.role==='host'&&O.room)h+='<span class="chip">'+esc(T('room',{code:O.room.code}))+' · PIN '+esc(O.room.pin)+'</span>';
+    if(O.v2){const m=K&&K.S()&&!mySeatColor()&&O.phase!=='lobby';if(m)h='<span class="chip">👀 '+esc(T('spectating'))+'</span>';row.innerHTML=h;row.classList.toggle('on',!!h);return}
     if(O.role==='guest'&&O.got&&!mySeatColor()){
         ['b','w'].forEach(k=>{const s=O.seats[k];if(!s||(s.on===false&&s.free))h+='<span class="chip gold" data-sit="'+k+'">'+esc(T(k==='b'?'sitB':'sitW'))+'</span>'});
         if(!h)h='<span class="chip">👀 '+esc(T('spectating'))+'</span>';
@@ -1434,6 +1439,75 @@ function startHosting(){
     });
 }
 
+/* ══ Rooms v2 (P4, 2026-09-30) ══════════════════════════════════
+   공용 턴제 커널(lpRoomsTurn.js) 위의 온라인. v1 경로는 그대로(플래그로 고름).
+   좌석 = 기기 pid(서명) — 탭별 lp_rv_cid 신원 폐지. 흑/백은 대기실에서 고르고(고유) 준비→시작 게이트.
+   자리 보호: 폰을 내려놓아도 자리는 그 사람 것(관전자는 게임 중 못 앉는다 · lateJoin 'spectate').
+   턴 시간(끔/30/60초, 방장 시계) 추가 — 넘기면 방장이 대신 둔다. 리매치 = 방장 '한 판 더'(대기실 합의). */
+const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get('rooms')==='v1')return false;
+  if(q.get('rooms')==='v2'||/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||''))return true;
+  const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId==='reversi'&&Date.now()-(a.t||0)<864e5)return true;
+  if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('reversi')==='v2')}catch(_){return false}})();
+let K=null,v2P=null,v2Self=false;
+function V2on(){return !!(K&&K.room)}
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
+  let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
+    const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
+function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
+  if(window.LpGames)return cb(LpGames.v('reversi')==='v2');
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1790753735';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('reversi')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
+  if(!K){K=LpRoomsTurn.mount(rvSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 150px)');ds.setProperty('--lpt-hud-right','auto');ds.setProperty('--lpt-hud-left','8px')}res(K)})))}
+function askLocal(q){return new Promise(res=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9080;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML='<div style="background:#1a1d33;color:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%;font:15px system-ui,sans-serif"><p style="margin:0 0 14px"></p><div style="display:flex;gap:8px"><button type="button" data-v="0" style="flex:1;padding:10px;border-radius:10px;border:0;background:#333;color:#fff;font-weight:700">✕</button><button type="button" data-v="1" style="flex:1;padding:10px;border-radius:10px;border:0;background:#2a8a55;color:#fff;font-weight:700">✓</button></div></div>';
+  ov.querySelector('p').textContent=q;document.body.appendChild(ov);ov.addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b&&e.target!==ov)return;ov.remove();res(!!b&&b.dataset.v==='1')})})}
+function rvSpec(){return {gameId:'reversi',name:()=>T('name'),seats:[2,2],max:12,lateJoin:'spectate',needGuest:true,migratable:true,bots:false,
+  picks:[{key:'side',options:['b','w'],unique:true,botYield:false,title:()=>T('black')+' / '+T('white'),label:v=>v==='b'?'⚫ '+esc(T('black')):'⚪ '+esc(T('white'))}],
+  options:[{key:'turnSec',values:[0,30,60],def:0}],
+  botName:()=>T('ai'),
+  host:{init:v2Init,apply:v2Apply,next:g=>g.over?null:g.sides.indexOf(g.t===1?'b':'w'),result:g=>{const b=new Int8Array(64);parseBoard(g.b,b);return {b:E.count(b,1),w:E.count(b,-1)}},
+    bot:(g,seat)=>v2Bot(g,seat,'normal'),timeout:(g,seat)=>v2Bot(g,seat,'easy')},
+  client:{render:v2Render,onLeave:v2OnLeave}}}
+function v2Init(seats){const b=new Int8Array(64);initBoard(b);const sides=seats.map((s,i)=>(s.pick&&s.pick.side)||(i?'w':'b'));if(sides[0]===sides[1])sides[1]=sides[0]==='b'?'w':'b';
+  return {b:boardStr(b),t:1,n:0,last:-1,pass:0,over:false,sides,ev:{type:'start'}}}
+function v2Apply(g,seat,a){
+  const col=g.sides[seat]==='b'?1:-1;
+  if(g.over||!a)return {reject:'over'};if(g.t!==col)return {reject:'turn'};if(a.n!==g.n)return {reject:'stale'};
+  const i=a.i|0;if(i<0||i>63)return {reject:'illegal'};
+  const b=new Int8Array(64);parseBoard(g.b,b);const fl=E.flipsDetailed(b,i,col);if(!fl)return {reject:'illegal'};
+  b[i]=col;fl.forEach(f=>{b[f.i]=col});
+  const q=-col;g.pass=0;
+  if(E.hasMove(b,q))g.t=q;else if(E.hasMove(b,col)){g.t=col;g.pass=q}else{g.over=true;g.t=q}
+  g.b=boardStr(b);g.n++;g.last=i;g.ev={type:'move',i,by:col};
+  return {game:g,anim:700+fl.length*60}}
+function v2Bot(g,seat,lv){const col=g.sides[seat]==='b'?1:-1;const b=new Int8Array(64);parseBoard(g.b,b);let m=E.choose(b,col,lv);
+  if(m<0||!E.canMove(b,m,col)){const ms=E.moves(b,col);if(!ms.length)return null;m=ms[0]}return {i:m,n:g.n}}
+function v2Render(Sk){
+  G.mode='online';G.hist=[];G.aiTok++;G.thinking=false;
+  if(!O||!O.v2)O={role:'guest',v2:true,phase:'lobby',seats:{b:null,w:null},got:true,pendingMove:false};
+  if($('game').classList.contains('off'))showGame();
+  const lobby=Sk.phase==='lobby'||!Sk.game;
+  K.lobbyOv(lobby);
+  const hm=Sk.roster.find(m=>m.r==='host');O.hostCid=hm?hm.p:null;
+  if(lobby){O.phase='lobby';hideEnd();updateHUD();return}
+  const g=Sk.game,seats={b:null,w:null};
+  ['b','w'].forEach(k=>{const i=g.sides.indexOf(k),si=i>=0?K.seatInfo(i,Sk):null;if(si)seats[k]={cid:si.p,name:si.bot?T('ai'):si.n,on:!si.off,bot:si.bot||si.afk}});
+  const st={k:'rv',b:g.b,t:g.t,n:g.n,ph:g.over?'over':'play',last:g.last,pass:g.pass,seats,host:O.hostCid,ev:g.ev};
+  O.phase=st.ph;applyNet(st);v2Tick()}
+function v2OnLeave(why){const self=v2Self;v2Self=false;O=null;G.aiTok++;view.skip();hideEnd();
+  try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
+  G.mode=PREF.mode==='online'?'online':PREF.mode;showSetup();
+  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(T('hostClosed'),2400)}
+/* 턴 시간 — 상태 줄 끝에 남은 초 */
+function v2Tick(){const el=$('status');if(!el)return;let tm=$('rvTm');if(!tm){tm=document.createElement('span');tm.id='rvTm';tm.style.cssText='margin-left:6px;font-weight:800;font-variant-numeric:tabular-nums'}
+  if(tm.parentNode!==el)el.appendChild(tm);
+  const r=V2on()&&O&&O.phase==='play'&&!G.busy?K.remain():null,n=r==null?'':Math.max(0,Math.ceil(r/1000));
+  const t=n===''?'':' ⏱'+n;if(tm.textContent!==t)tm.textContent=t;tm.style.color=n!==''&&n<=5?'#ff7a7a':''}
+setInterval(()=>{if(V2on())v2Tick()},500);
+async function v2Create(){try{await v2Ready();G.mode='online';const r=await K.create();if(r)showGame()}catch(e){toast(T('noNet'),2600)}}
+function v2Boot(){G.mode='online';showGame();updateHUD();v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){O=null;G.mode=PREF.mode==='online'?'online':PREF.mode;showSetup()}}).catch(()=>{toast(T('noNet'),2600);showSetup()})}
+window.__reversiV2={get K(){return K},get on(){return V2on()},get G(){return G},get O(){return O},tap:i=>onTap(i),canAct:()=>canHumanAct(),E,parseBoard,v2Ready,v2Create};
+
 /* ══ 설정 화면 ══ */
 function renderSetup(){
     document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('on',b.dataset.mode===PREF.mode));
@@ -1455,7 +1529,7 @@ $('nameB').addEventListener('input',()=>{PREF.nb=$('nameB').value;save('lp_rv_pr
 $('nameW').addEventListener('input',()=>{PREF.nw=$('nameW').value;save('lp_rv_prefs',PREF)});
 $('startBtn').addEventListener('click',()=>{
     actx();
-    if(PREF.mode==='online'){startHosting();return}
+    if(PREF.mode==='online'){lpV2Want(v=>v?v2Create():startHosting());return}
     G.mode=PREF.mode;G.level=PREF.level;
     G.human=PREF.color==='w'?-1:PREF.color==='r'?(Math.random()<.5?1:-1):1;
     showGame();newLocalGame();
@@ -1464,24 +1538,26 @@ $('startBtn').addEventListener('click',()=>{
 /* ══ 게임 버튼 ══ */
 $('bUndo').addEventListener('click',undo);
 $('bHint').addEventListener('click',()=>{G.hints=!G.hints;save('lp_rv_hints',G.hints?1:0);sfx('tap');refreshHints();updateHUD()});
-$('bNew').addEventListener('click',()=>{
+$('bNew').addEventListener('click',async()=>{
     if(G.mode==='online'){
+        if(O&&O.v2){if(K&&K.isHost&&O.phase==='over')K.rematch();return}
         if(!O||O.role!=='host')return;
         if(O.phase==='over'){rematch();return}
-        if(O.phase==='play'&&G.moveNo>0&&!confirm(T('confirmNew')))return;
+        if(O.phase==='play'&&G.moveNo>0&&!await askLocal(T('confirmNew')))return;
         if(O.seats.b&&O.seats.w)startOnline();
         return;
     }
-    if(G.moveNo>2&&!G.over&&!confirm(T('confirmNew')))return;
+    if(G.moveNo>2&&!G.over&&!await askLocal(T('confirmNew')))return;
     newLocalGame();
 });
 $('bSwap').addEventListener('click',()=>{if(!O||O.role!=='host'||O.phase==='play')return;const b=O.seats.b;O.seats.b=O.seats.w;O.seats.w=b;sfx('tap');refreshHints();pushState(null)});
-$('bInvite').addEventListener('click',inviteLink);
+$('bInvite').addEventListener('click',()=>{if(O&&O.v2&&K){K.invite();return}inviteLink()});
 $('bMenu').addEventListener('click',()=>toMenu(false));
 $('bAgain').addEventListener('click',()=>{
     hideEnd();
     if(G.mode==='online'){
         if(!O)return;
+        if(O.v2){if(K&&K.isHost)K.rematch();return}
         if(O.role==='host')rematch();
         else if(mySeatColor()){try{O.g.action('rematch',{cid:MYCID})}catch(_){}}
         return;
@@ -1557,6 +1633,7 @@ try{if(localStorage.getItem('lpDebug')==='1')window.__rv={G:G,view:view,E:E,doMo
 applyI18n();
 refreshHints();
 (function boot(){
+    if(LPV2){v2Boot();return}
     let auto=null;
     try{const q=new URLSearchParams(location.search);if(q.get('room'))auto={code:q.get('room'),pin:q.get('pin'),nick:q.get('nick')}}catch(_){}
     if(auto){

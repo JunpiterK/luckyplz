@@ -1157,8 +1157,9 @@ function mkOpt(S,t,pi,from,v,n){
   return o;
 }
 function flatProb(){return 0.6}
-function doThrow(S){
-  const faces=[0,1,2,3].map(()=>Math.random()<flatProb());
+function doThrow(S,rf){
+  const R=rf||Math.random;   /* Rooms v2: 방장이 LpFair.chain 난수를 넣는다(모든 기기가 검증) */
+  const faces=[0,1,2,3].map(()=>R()<flatProb());
   const f=faces.filter(Boolean).length;
   let v=f===0?5:f;
   if(f===1&&S.cfg.backdo&&faces[0])v=-1;   /* 0번 윷가락 = 빽도 표시 */
@@ -1252,6 +1253,7 @@ function myName(){try{return (guest&&guest.nickname)||localStorage.getItem('luck
 function clone(o){return JSON.parse(JSON.stringify(o))}
 function teamName(st,t){const tm=st.teams[t];return tm.name||spName(tm.sp)}
 function isMine(st,t){const tm=st&&st.teams[t];if(!tm)return false;
+  if(V2on()){const si=K.seatInfo(t);return !!(si&&si.me)}
   if(ROLE==='local')return tm.ctrl==='local';
   if(ROLE==='host')return tm.ctrl==='host';
   return tm.ctrl==='guest'&&tm.owner&&tm.owner.pid===myPid}
@@ -1308,8 +1310,9 @@ $('btnModeOnline').addEventListener('click',()=>{ac();show('scrOnline')});
 function savedGame(){try{const g=JSON.parse(sessionStorage.getItem('yut_save')||'null');if(g&&g.S&&g.S.phase==='play'&&Date.now()-g.t<6*3600e3)return g}catch(_){}return null}
 $('btnResumeGame').addEventListener('click',()=>{ac();const g=savedGame();if(!g)return;ROLE='local';S=g.S;seqN=g.seqN;V=null;enqueue({st:clone(S),ev:null})});
 $('btnOnBack').addEventListener('click',()=>show('scrMode'));
-$('btnCreate').addEventListener('click',()=>{ac();hostCreate()});
-$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}goJoin(c,{})});
+$('btnCreate').addEventListener('click',()=>{ac();lpV2Want(v=>v?v2Create():hostCreate())});
+$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}
+  if(/^[2-9A-HJKMNP-TV-Z]{6}$/.test(c)&&/[A-Z]/.test(c)){v2Resolve(c,()=>goJoin(c,{}));return}goJoin(c,{})});
 $('codeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnJoin').click()});
 
 /* ════════════════════════ 설정 / 로비 ════════════════════════ */
@@ -1447,7 +1450,7 @@ function afterIdle(){
     const os=options(V,V.turn);const froms=[...new Set(os.map(o=>o.from))];
     if(froms.length===1){sel={from:froms[0]};renderHUD()}
   }
-  if(ROLE==='guest'||!S||S.phase!=='play')return;
+  if(V2on()||ROLE==='guest'||!S||S.phase!=='play')return;
   const t=S.turn,tm=S.teams[t];
   if(botDrives(t)){
     botT=setTimeout(()=>{if(playing||Q.length||S.phase!=='play'||S.turn!==t)return;
@@ -1521,13 +1524,15 @@ function renderHUD(){
 }
 /* 자동(afk)으로 넘어간 내 팀 — '내가 할게요' */
 $('msg').addEventListener('click',e=>{if(!e.target.closest('[data-back]'))return;ac();
+  if(V2on()){intentAt=0;K.back();return}
   if(ROLE==='guest'&&guest){intentAt=0;guest.action('yut',{a:'back',pid:myPid})}
   else if(ROLE==='host'&&S&&S.teams){S.teams.forEach(t=>{if(t.ctrl==='host')t.afk=0});publish({k:'info'})}});
 const chipEx={};
 $('strip').addEventListener('click',e=>{
-  const c=e.target.closest('[data-chip]');if(!c||ROLE!=='guest'||!V||V.phase!=='play'||!guest)return;
+  const c=e.target.closest('[data-chip]');if(!c||ROLE!=='guest'||!V||V.phase!=='play'||!(guest||V2on()))return;
   if(V.teams.some((_,i)=>isMine(V,i)))return;
   const t=+c.dataset.chip,tm=V.teams[t];
+  if(V2on()){if(tm.ctrl==='bot'){K.claim(t);Sfx.pick()}return}
   if(tm.ctrl==='bot'||(tm.ctrl==='guest'&&tm.owner&&tm.owner.off)){guest.action('yut',{a:'claim',team:t,pid:myPid});Sfx.pick()}
 });
 /* 던지기 — 꾹 누르면 힘이 모이고(버튼 둘레 고리 + 판 아래 윷가락 달그락 + 진동 톡톡), 떼면 던진다.
@@ -1535,6 +1540,7 @@ $('strip').addEventListener('click',e=>{
    pointerup 으로 던진 뒤 따라오는 click 은 chargeEndAt 으로 거른다(두 번 던지기 방지) */
 const CHARGE_MS=1100;let chargeRAF=0,chargeEndAt=0,chargeBuzz=0;
 function throwIntent(pow){ac();if(!canInput()||V.throws<=0)return;
+  if(V2on()){intentAt=Date.now();K.act({k:'throw',pow:Math.round(pow*100)/100}).then(r=>{if(r&&!r.ok){intentAt=0;renderHUD()}});renderHUD();return}
   if(ROLE==='guest'){intentAt=Date.now();guest.action('yut',{a:'throw',pid:myPid,pow});renderHUD()}
   else{if(ROLE==='host'&&S&&S.teams[S.turn])S.teams[S.turn].afk=0;act('throw',{pow})}}
 function chargeLoop(){if(!charge)return;const now=performance.now(),e=now-charge.t0,tb=$('btnThrow');
@@ -1564,6 +1570,7 @@ document.addEventListener('keydown',e=>{if($('scrGame').classList.contains('hide
   if((e.key===' '||e.key==='Enter')&&!$('btnThrow').disabled&&document.activeElement.tagName!=='INPUT'){e.preventDefault();$('btnThrow').click()}});
 function chooseMove(o){
   sel=null;
+  if(V2on()){intentAt=Date.now();K.act({k:'move',from:o.from,v:o.v}).then(r=>{if(r&&!r.ok){intentAt=0;renderHUD()}});renderHUD();return}
   if(ROLE==='guest'){intentAt=Date.now();guest.action('yut',{a:'move',from:o.from,v:o.v,pid:myPid});renderHUD();return}
   if(ROLE==='host'&&S&&S.teams[S.turn])S.teams[S.turn].afk=0;
   act('move',o);
@@ -2340,6 +2347,7 @@ function legacyDance(D,now){
 }
 function gameHome(){
   $('ovResult').classList.remove('on');$('ovPause').classList.remove('on');
+  if(V2on()){if(K.isHost)K.rematch();else exitRoom(true);return}
   if(ROLE==='host'){toLobby();return}
   if(ROLE==='guest'){exitRoom(true);return}
   try{sessionStorage.removeItem('yut_save')}catch(_){}
@@ -2349,7 +2357,7 @@ function mountNav(box,tries){
   if(!window.LpNav){if((tries|0)<50)setTimeout(()=>mountNav(box,(tries|0)+1),200);return}
   window.LpNav.mount(box,ROLE==='guest'?{}:{gameHome});
 }
-$('btnAgain').addEventListener('click',()=>{ac();$('ovResult').classList.remove('on');if(ROLE==='host')toLobby();else startGame()});
+$('btnAgain').addEventListener('click',()=>{ac();$('ovResult').classList.remove('on');if(V2on()){if(K.isHost)K.rematch();return}if(ROLE==='host')toLobby();else startGame()});
 $('btnResExit').addEventListener('click',()=>exitRoom());
 $('btnShare').addEventListener('click',async()=>{
   if(!V||V.winner<0)return;const txt=T('shareTxt',{t:teamName(V,V.winner)})+' https://luckyplz.com/games/yut/';
@@ -2382,11 +2390,11 @@ const lastSeen={};
 try{const ts=+localStorage.getItem('yut_turnsec');if(TURN_SECS.includes(ts))LB.turnSec=ts}catch(_){}
 
 function waitRoom(cb,fail,quiet){let t=0;(function go(){if(window.LpRoom)return cb();if(++t>80){if(!quiet)toast2(T('errNet'));fail&&fail();return}setTimeout(go,100)})()}
-function urlStrip(){try{const u=new URL(location.href);let d=false;['room','pin','nick'].forEach(k=>{if(u.searchParams.has(k)){u.searchParams.delete(k);d=true}});if(d)history.replaceState(null,'',u.toString())}catch(_){}}
+function urlStrip(){try{const u=new URL(location.href);let d=false;['room','pin','nick','r'].forEach(k=>{if(u.searchParams.has(k)){u.searchParams.delete(k);d=true}});if(d)history.replaceState(null,'',u.toString())}catch(_){}}
 let ftT=null;
 function toast2(s,ms){const el=$('ftoast');el.textContent=s;el.classList.add('on');clearTimeout(ftT);ftT=setTimeout(()=>el.classList.remove('on'),ms||1800)}
-function roomCode(){return room?room.code:guest?guest.code:''}
-function roomPin(){return room?room.pin:guest?guest.pin:''}
+function roomCode(){if(V2on())return LpRooms.util.fmtCode(K.room.code);return room?room.code:guest?guest.code:''}
+function roomPin(){if(V2on())return '';return room?room.pin:guest?guest.pin:''}
 
 /* ── 확인 창(window.confirm 대신 — 인앱 브라우저가 막기도 한다) · 알림 창 ── */
 let askRes=null;
@@ -2578,6 +2586,8 @@ function toLobby(){
 }
 /* 내보내기 — 방장만. lpRoom.kick(+ban) 로 채널에서 떼고, 상태의 ban 목록으로 한 번 더 알린다(둘 중 하나만 닿아도 나간다) */
 async function kickPlayer(pid){
+  if(V2on()){if(!K.isHost||!pid||pid===myPid)return;const m=(K.S().roster||[]).find(x=>x.p===pid);
+    if(!await ask(T('kickQ',{n:(m&&m.n)||'?'}),T('kickB'),true))return;K.kick(pid,true);Sfx.pick();renderRoomSheet();return}
   if(ROLE!=='host'||!pid||pid===myPid)return;
   const t=teamOf(pid),p=lbGet(pid);
   const nm=(p&&p.name)||(t>=0&&S.teams[t].owner&&S.teams[t].owner.name)||'?';
@@ -2591,6 +2601,7 @@ async function kickPlayer(pid){
   Sfx.pick();publishInfo();renderRoomSheet();
 }
 function unbanPlayer(pid){
+  if(V2on()){K.unban(pid);return}
   if(ROLE!=='host')return;LB.banned=LB.banned.filter(b=>b.pid!==pid);
   try{room.unban&&room.unban(pid)}catch(_){}publishInfo();renderRoomSheet();
 }
@@ -2604,6 +2615,9 @@ document.addEventListener('visibilitychange',()=>{if(ROLE!=='host'||!S)return;co
 function humanTurn(st){const tm=st&&st.teams&&st.teams[st.turn];if(!tm||tm.ctrl==='bot'||tm.ctrl==='local')return false;
   if(tm.owner&&tm.owner.off)return false;return (tm.afk|0)<2}
 function clockArm(){
+  if(V2on()){clearTimeout(turnT);const Sk=K.S();
+    if(!V||V.phase!=='play'||!Sk||!Sk.turn||!Sk.turn.deadline||!humanTurn(V)){clock=null;return}
+    const key=V.game+':'+(V.dp|0);if(!clock||clock.key!==key)clock={key,sec:(Sk.opts&&Sk.opts.turnSec)||30,t:V.turn,v2:1};return}
   if(ROLE==='local'||!V||V.phase!=='play'||!(V.cfg&&V.cfg.turnSec)||!humanTurn(V)){clock=null;clearTimeout(turnT);return}
   const key=V.game+':'+(V.dp|0);if(!clock||clock.key!==key)clock={key,t0:Date.now(),sec:V.cfg.turnSec,t:V.turn};
   if(ROLE==='host'){clearTimeout(turnT);const c=clock;turnT=setTimeout(()=>turnTimeout(c.key,c.t),Math.max(0,c.t0+c.sec*1000+1200-Date.now()))}
@@ -2618,7 +2632,7 @@ function turnTimeout(key,t){
 setInterval(()=>{
   const el=$('tbar');
   if(!clock||!V||V.phase!=='play'||playing||Q.length||$('scrGame').classList.contains('hide')||(V.game+':'+(V.dp|0))!==clock.key){el.classList.add('hide');tmrBadge(null);return}
-  const left=Math.max(0,clock.sec-(Date.now()-clock.t0)/1000),n=Math.ceil(left);
+  const left=clock.v2?Math.max(0,Math.min(clock.sec,(K&&K.remain()||0)/1000)):Math.max(0,clock.sec-(Date.now()-clock.t0)/1000),n=Math.ceil(left);
   el.classList.remove('hide');el.classList.toggle('low',left<=5);$('tbarI').style.transform='scaleX('+(left/clock.sec).toFixed(3)+')';
   tmrBadge(n);
   if(n<=5&&n>0&&clock.beep!==n&&isMine(V,V.turn)){clock.beep=n;Sfx.tick(1);if(n===5)vib(25)}
@@ -2719,13 +2733,14 @@ function kicked(g){
   resetOnline();notice('🚫',T('kickedT'));
 }
 async function exitRoom(noAsk){
+  if(V2on()){if(!noAsk&&!await ask(K.isHost?T('closeQ'):T('exitQ'),K.isHost?T('closeR'):T('exit'),true))return;v2Self=true;await K.leave(true);resetOnline();return}
   if(ROLE==='host'){if(!noAsk&&!await ask(T('closeQ'),T('closeR'),true))return;if(ROLE!=='host')return;try{room.close()}catch(_){}resetOnline()}
   else if(ROLE==='guest'){if(!noAsk&&!await ask(T('exitQ'),T('exit'),true))return;const g=guest;if(!g)return;
     try{g.action('yut',{a:'leave',pid:myPid})}catch(_){}setTimeout(()=>{try{g.close()}catch(_){}},250);resetOnline()}
 }
 
 /* ════ 대기실 화면 (방장·게스트 공통 — 방장은 원장, 게스트는 받은 상태로 그린다) ════ */
-function lbView(){return ROLE==='host'?lobbyState():(V&&V.phase==='lobby'?V:null)}
+function lbView(){if(V2on())return v2Lobby();return ROLE==='host'?lobbyState():(V&&V.phase==='lobby'?V:null)}
 let lbPend={sp:null,spAt:0,ready:null,rdAt:0};
 function prowHtml(p,o){
   o=o||{};const host=ROLE==='host',self=p.pid===myPid;
@@ -2749,12 +2764,14 @@ function prowHtml(p,o){
     '<div class="pn">'+nm+(self?' <em>('+T('you')+')</em>':'')+(o.game&&!p.bot&&p.sp?' <em>· '+esc(spName(p.sp))+'</em>':'')+'</div><span class="pst '+cls+'">'+st+'</span>'+kb+'</div>';
 }
 function bannedHtml(){
+  if(V2on()){const b=(K.isHost&&K.S()&&K.S().bans)||[];if(!b.length)return '';
+    return '<div class="banned"><span>'+T('bannedL')+'</span>'+b.map(p=>'<span class="bchip">'+esc(p.slice(1,7))+'<button type="button" data-unban="'+esc(p)+'">'+T('unban')+'</button></span>').join('')+'</div>'}
   if(ROLE!=='host'||!LB.banned.length)return '';
   return '<div class="banned"><span>'+T('bannedL')+'</span>'+LB.banned.map(b=>'<span class="bchip">'+esc(b.name||'?')+'<button type="button" data-unban="'+esc(b.pid)+'">'+T('unban')+'</button></span>').join('')+'</div>';
 }
 function renderLobby(){
   const L=lbView(),host=ROLE==='host';
-  $('lbCodeL').textContent=T('roomL');$('lbCode').textContent=roomCode();$('lbPin').textContent='PIN '+roomPin();
+  $('lbCodeL').textContent=T('roomL');$('lbCode').textContent=roomCode();$('lbPin').textContent=V2on()?(K.room.seal||''):'PIN '+roomPin();
   $('btnInv').textContent=T('invB');$('lbCharT').textContent=T('charT');$('lbNameL').textContent=T('nickL');
   $('lbKL').textContent=T('pieces');$('lbBL').textContent=T('backdo');$('lbBD').textContent=T('backdoD');$('lbTL').textContent=T('turnT');
   $('btnLbExit').textContent=host?T('closeR'):T('exit');
@@ -2770,7 +2787,7 @@ function renderLobby(){
     const lock=tk||!me||me.spec;
     return '<button type="button" class="chb'+(mine?' me':'')+(tk?' tk':'')+(mine&&lbPend.sp===sp?' wait':'')+'" data-pick="'+sp+'" style="--rgb:'+rgbS(sp)+'"'+(lock&&!mine?' disabled':'')+'>'+
       sprHtml(sp,mine?'h':tk?'s':'n')+'<span class="cn">'+esc(spName(sp))+'</span><span class="ow">'+(mine?'✓ '+T('you'):o?(o.bot?'🤖':esc(o.name||'?')):'&nbsp;')+'</span></button>'}).join('');
-  const ni=$('lbName');if(document.activeElement!==ni)ni.value=(me&&me.name)||myName();ni.placeholder=T('nickPh');
+  const ni=$('lbName');if(document.activeElement!==ni)ni.value=(me&&me.name)||myName();ni.placeholder=T('nickPh');ni.readOnly=V2on();
   $('lbPlT').textContent=T('players')+' · '+seats.length+'/4';
   $('lbList').innerHTML=L.players.map(p=>prowHtml(p)).join('')+(host&&seats.length<4?'<button type="button" class="addbot" data-addbot="1">'+T('addBot')+'</button>':'');
   $('lbBanned').innerHTML=bannedHtml();
@@ -2786,13 +2803,14 @@ function renderLobby(){
   else stat='<b>'+esc(T('rCount',{a:rd,b:gs.length}))+'</b>'+(host?(rd<gs.length?' · '+esc(T('rNeedAll')):''):' · '+esc(T('rGuest')));
   $('lbStat').innerHTML=stat;
   const go=$('btnLbGo');
-  if(host){go.textContent=T('start');go.disabled=!lbCanStart();go.classList.remove('rdy')}
+  if(host){go.textContent=T('start');go.disabled=!(V2on()?K.canStart():lbCanStart());go.classList.remove('rdy')}
   else{const r=!!(me&&me.ready);go.textContent=r?T('readyOn'):T('readyB');go.classList.toggle('rdy',r);go.disabled=!me||!!me.spec||!me.sp}
   roomPillUi();
   if($('ovRoom').classList.contains('on'))renderRoomSheet();
 }
 $('scrLobby').addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b||b.disabled)return;
+  if(V2on()){v2LobbyClick(b);return}
   if(b.dataset.pick){const sp=b.dataset.pick;ac();Sfx.pick();
     if(ROLE==='host'){if(lbPick(lbGet(myPid),sp))publishLobby()}
     else if(guest){lbPend.sp=sp;lbPend.spAt=Date.now();guest.action('yut',{a:'pick',sp,pid:myPid});renderLobby();setTimeout(()=>{if(ROLE==='guest')renderLobby()},2600)}
@@ -2804,15 +2822,17 @@ $('scrLobby').addEventListener('click',e=>{
   if(ROLE==='host'&&b.dataset.k){setup.k=+b.dataset.k;saveSetupRaw();publishLobby();return}
   if(ROLE==='host'&&b.dataset.ts){LB.turnSec=+b.dataset.ts;try{localStorage.setItem('yut_turnsec',String(LB.turnSec))}catch(_){}publishLobby();return}
 });
-$('lbSwB').addEventListener('click',()=>{if(ROLE!=='host')return;setup.backdo=!setup.backdo;saveSetupRaw();publishLobby()});
+$('lbSwB').addEventListener('click',()=>{if(V2on()){if(K.isHost){const o=K.opts();K.setOpt('backdo',!o.backdo)}return}if(ROLE!=='host')return;setup.backdo=!setup.backdo;saveSetupRaw();publishLobby()});
 $('btnLbGo').addEventListener('click',()=>{ac();
+  if(V2on()){if(K.isHost){K.start();return}const L=lbView(),me=L&&L.players.find(p=>p.pid===myPid);if(!me||me.spec)return;
+    const v=!me.ready;lbPend.ready=v;lbPend.rdAt=Date.now();Sfx.pick();vib(10);K.ready(v);renderLobby();setTimeout(()=>{if(V2on())renderLobby()},2600);return}
   if(ROLE==='host'){startOnline();return}
   const L=lbView(),me=L&&L.players.find(p=>p.pid===myPid);if(!guest||!me||me.spec)return;
   const v=!me.ready;lbPend.ready=v;lbPend.rdAt=Date.now();Sfx.pick();vib(10);guest.action('yut',{a:'ready',v,pid:myPid});renderLobby();setTimeout(()=>{if(ROLE==='guest')renderLobby()},2600)});
 $('btnLbExit').addEventListener('click',()=>exitRoom());
 $('btnInv').addEventListener('click',()=>invite());
 $('btnQR').addEventListener('click',()=>showQR());
-$('lbName').addEventListener('change',()=>{const n=$('lbName').value.trim().slice(0,12);if(!n)return;try{localStorage.setItem('luckyplz_nick',n)}catch(_){}
+$('lbName').addEventListener('change',()=>{if(V2on())return;const n=$('lbName').value.trim().slice(0,12);if(!n)return;try{localStorage.setItem('luckyplz_nick',n)}catch(_){}
   if(ROLE==='host'){const me=lbGet(myPid);if(me){me.name=n;publishLobby()}}else if(guest)guest.action('yut',{a:'name',name:n,pid:myPid})});
 $('lbName').addEventListener('keydown',e=>{if(e.key==='Enter')$('lbName').blur()});
 function saveSetupRaw(){try{const o=JSON.parse(localStorage.getItem('yut_setup')||'null')||{};o.k=setup.k;o.backdo=setup.backdo;if(!o.teams)o.teams=setup.teams.map(t=>({sp:t.sp,name:t.name,ctrl:'local'}));if(!o.n)o.n=setup.n;localStorage.setItem('yut_setup',JSON.stringify(o))}catch(_){}}
@@ -2820,6 +2840,7 @@ function saveSetupRaw(){try{const o=JSON.parse(localStorage.getItem('yut_setup')
 /* ── 초대 · QR ── */
 function inviteUrl(){return location.origin+'/games/yut/?room='+encodeURIComponent(roomCode())+'&pin='+encodeURIComponent(roomPin())}
 async function invite(){
+  if(V2on())return K.invite();
   const url=inviteUrl(),txt='🎲 '+T('invTxt')+' ('+roomCode()+')';
   try{if(navigator.share){await navigator.share({text:txt,url});return}}catch(e){if(e&&e.name==='AbortError')return}
   try{await navigator.clipboard.writeText(txt+' '+url);toast2('✓ '+T('copied'))}catch(_){showQR()}
@@ -2828,6 +2849,7 @@ function loadQr(){if(window.qrcode)return Promise.resolve();if(window._lpQrPromi
   return (window._lpQrPromise=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js';s.onload=res;
     s.onerror=()=>{window._lpQrPromise=null;rej()};document.head.appendChild(s)}))}
 function showQR(){
+  if(V2on())return K.qr();
   const url=inviteUrl();$('qrT').textContent=T('qrT');$('qrClose').textContent=T('close');
   $('qrCode').innerHTML=esc(roomCode())+'<small>PIN '+esc(roomPin())+'</small>';$('qrBox').textContent='…';$('ovQR').classList.add('on');
   loadQr().then(()=>{const q=qrcode(0,'M');q.addData(url);q.make();$('qrBox').innerHTML=q.createImgTag(6,0);const im=$('qrBox').querySelector('img');if(im)im.alt='QR'})
@@ -2845,7 +2867,7 @@ function sheetRows(){
 function renderRoomSheet(){
   if(!$('ovRoom').classList.contains('on'))return;
   const game=!!(V&&V.phase!=='lobby');
-  $('rmT').textContent=T('players');$('rmCode').textContent=roomCode()+' · PIN '+roomPin();
+  $('rmT').textContent=T('players');$('rmCode').textContent=V2on()?roomCode()+' '+(K.room.seal||''):roomCode()+' · PIN '+roomPin();
   $('rmList').innerHTML=sheetRows().map(p=>prowHtml(p,{game})).join('');
   $('rmBanned').innerHTML=bannedHtml();
   $('rmInv').textContent=T('invB');$('rmExit').textContent=ROLE==='host'?T('closeR'):T('exit');$('rmClose').textContent=T('close');
@@ -2867,10 +2889,11 @@ $('ovRoom').addEventListener('click',e=>{const b=e.target.closest('button');if(!
   else if(e.target===$('ovRoom'))$('ovRoom').classList.remove('on')});
 
 /* ── 연결 알림 띠 — 내 연결 · 방장 연결 · 방장 자리 비움 ── */
-function netWarn(){if(ROLE==='guest')return guestNet==='bad'||Date.now()-hostSig>14000;if(ROLE==='host')return hostNet==='bad';return false}
+function netWarn(){if(V2on())return K.hostLost()>=2;if(ROLE==='guest')return guestNet==='bad'||Date.now()-hostSig>14000;if(ROLE==='host')return hostNet==='bad';return false}
 function netUi(){
   let msg='',btn='';
-  if(ROLE==='guest'){
+  if(V2on()){const lv=K.hostLost();if(lv>=1&&!K.isHost){msg=T('hostLost');if(lv>=2)btn=T('exit')}else if(V&&V.away&&!K.isHost)msg=T('hostAway')}
+  else if(ROLE==='guest'){
     if(guestNet==='bad')msg=T('reconn');
     else if(Date.now()-hostSig>14000){msg=T('hostLost');if(Date.now()-hostSig>45000)btn=T('exit')}
     else if(V&&V.away)msg=T('hostAway');
@@ -2882,13 +2905,106 @@ function netUi(){
 setInterval(netUi,1000);
 $('netBanB').addEventListener('click',()=>exitRoom(true));
 
+/* ════════════════════════ Rooms v2 (P4, 2026-09-30) ════════════════════════
+   공용 턴제 커널(lpRoomsTurn.js) 위로 옮긴 온라인. v1(lpRoom) 경로는 그대로 두고 플래그로 고른다:
+   ?rooms=v2 · 초대 링크 ?r=CODE · 이 탭이 v2 방에 있던 중(lpr_active) · localStorage.lpRoomsV='2' · 레지스트리 mp.v='v2'.
+   보존: 캐릭터 고르기(잠금·봇 양보) · 준비→시작 게이트 · 내보내기/차단 · 턴 시간 · afk 봇 + '내가 할게요' ·
+         게임 중 봇 자리 이어받기 · 재접속 · 방장 끊김 띠 · 한 판 더(대기실). 게임 자체 하트비트는 없다(커널 hb 1종).
+   던지기 난수 = LpFair.chain (방장도 결과를 못 고른다, 모든 기기가 검증). 방장이 사라지면 승계(숨은 정보 없음). */
+const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get('rooms')==='v1')return false;
+  if(q.get('rooms')==='v2'||/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||''))return true;
+  const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId==='yut'&&Date.now()-(a.t||0)<864e5)return true;
+  if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('yut')==='v2')}catch(_){return false}})();
+let K=null,v2P=null,v2Self=false;
+function V2on(){return !!(K&&K.room)}
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
+  let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
+    const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
+/* 방 만들기 버튼 — 레지스트리 플래그는 누를 때 확인한다(v1 이 기본) */
+function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
+  if(window.LpGames)return cb(LpGames.v('yut')==='v2');
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1790753735';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('yut')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
+  if(!K)K=LpRoomsTurn.mount(yutSpec());res(K)})))}
+function yutSpec(){return {gameId:'yut',name:()=>T('title'),seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:true,noHud:true,noBanner:true,
+  picks:[{key:'char',options:SP.slice(),unique:true,botYield:true,label:sp=>sprHtml(sp,'n'),title:()=>T('charT')}],
+  options:[{key:'turnSec',values:TURN_SECS.slice(),def:30},{key:'k',values:[1,2,3,4],def:4},{key:'backdo',values:[true,false],def:true}],
+  botName:(i,pk)=>spName((pk&&pk.char)||SP[i%4]),
+  host:{init:v2Init,apply:v2Apply,next:g=>g.phase==='over'?null:g.turn,result:g=>({winner:g.winner,rank:g.rank}),
+    bot:v2Bot,timeout:v2Bot,rolls:a=>!!a&&a.k==='throw',busy:()=>playing||Q.length>0,onSeats:v2OnSeats},
+  client:{render:v2Render,onLeave:v2OnLeave,hostLost:()=>netUi(),fair:ev=>{if(!ev.ok)toast('⚠ '+LpRoomsTurn.tt('fairBad'),2400)}}}}
+function v2Init(seats,opts){
+  const teams=seats.map(s=>({sp:(s.pick&&s.pick.char)||SP[s.seat%4],name:'',ctrl:s.bot?'bot':'guest',owner:s.bot?null:{pid:s.p,name:s.n}}));
+  const g=newGame({k:+opts.k||4,backdo:opts.backdo!==false},teams,0);
+  g.cfg.turnSec=+opts.turnSec||0;g.dp=0;g.seq=1;g.ev={k:'start',first:g.turn,n:1};return g}
+function v2Apply(g,seat,a,fx){
+  if(!a||g.phase!=='play'||g.turn!==seat)return {reject:'turn'};
+  let ev,anim=0;
+  if(a.k==='throw'){if(g.throws<=0)return {reject:'illegal'};
+    ev=doThrow(g,fx&&fx.rand?()=>fx.rand.float():null);ev.pow=Math.round(Math.max(0,Math.min(1,typeof a.pow==='number'?a.pow:0.6))*100)/100;anim=2600}
+  else if(a.k==='move'){if(g.throws>0)return {reject:'illegal'};
+    const ok=options(g,g.turn).find(x=>x.from===a.from&&x.v===a.v);if(!ok)return {reject:'illegal'};ev=doMove(g,ok);anim=Math.min(4000,ev.path.length*200+1500)}
+  else return {reject:'bad'};
+  if(fx&&fx.auto==='timeout')ev.to=1;
+  g.dp=(g.dp|0)+1;g.seq=(g.seq|0)+1;ev.n=g.seq;g.ev=ev;
+  return {game:g,anim}}
+function v2Bot(g,seat){if(g.throws>0)return {k:'throw',pow:Math.round((0.35+Math.random()*0.6)*100)/100};const o=botChoose(g,seat);return o?{k:'move',from:o.from,v:o.v}:null}
+function v2OnSeats(g,seats){seats.forEach(s=>{const tm=g.teams[s.seat];if(!tm)return;tm.ctrl=s.bot?'bot':'guest';tm.owner=s.bot?null:{pid:s.p,name:s.n}});return g}
+/* 표시용 — 좌석 주인·연결·자동 여부는 커널 명단에서 매번 다시 입힌다(게임 상태엔 규칙만) */
+function v2Deco(st,Sk){if(!st||!st.teams)return st;
+  st.teams.forEach((tm,t)=>{const si=K.seatInfo(t,Sk);if(!si)return;tm.ctrl=si.bot?'bot':si.host?'host':'guest';
+    tm.owner=si.bot?null:{pid:si.p,name:si.n,off:si.off,offAt:0,vis:si.away?'hidden':'visible'};tm.afk=si.afk?2:0});
+  const hm=Sk.roster.find(m=>m.r==='host');st.away=!!(hm&&hm.c==='away');return st}
+function v2Lobby(){const Sk=K&&K.S();if(!Sk)return null;const o=K.opts();
+  const pl=Sk.roster.map(m=>({pid:m.p,name:m.r==='bot'?'':m.n,sp:(m.pick&&m.pick.char)||null,ready:!!m.rd||m.r==='host'||m.r==='bot',host:m.r==='host',bot:m.r==='bot',spec:m.seat==null,on:m.c!=='off',vis:m.c==='away'?'hidden':'visible',t:m.j,seat:m.seat}));
+  pl.sort((a,b)=>lbRank(a)-lbRank(b)||(a.seat==null?99:a.seat)-(b.seat==null?99:b.seat)||a.t-b.t);
+  return {phase:'lobby',seq:Sk.seq,cfg:{n:pl.filter(p=>!p.spec).length,k:+o.k||4,backdo:o.backdo!==false,turnSec:+o.turnSec||30},players:pl,ban:Sk.bans||[]}}
+function v2Render(Sk){
+  ROLE=K.isHost?'host':'guest';myPid=K.me.pid;document.body.classList.add('online');
+  if(Sk.phase==='lobby'||!Sk.game){
+    const L=v2Lobby();
+    if(!V||V.phase!=='lobby'){if(!Q.length||Q[Q.length-1].st.phase!=='lobby')enqueue({st:L,ev:null})}
+    else{V=L;renderLobby();if($('scrLobby').classList.contains('hide')&&!playing)show('scrLobby')}
+    netUi();return}
+  const st=v2Deco(clone(Sk.game),Sk);
+  const newGame_=!V||V.phase==='lobby'||V.game!==st.game;
+  if(newGame_&&(!Q.length||Q[Q.length-1].st.game!==st.game))lastSeq=-1;
+  if(st.seq<=lastSeq){if(V&&V.phase!=='lobby'&&V.game===st.game){v2Deco(V,Sk);renderHUD();clockArm()}netUi();return}
+  const animOk=!newGame_&&st.seq===lastSeq+1;
+  lastSeq=st.seq;intentAt=0;
+  enqueue({st,ev:animOk?st.ev:(newGame_&&st.ev&&st.ev.k==='start'?st.ev:null)});netUi()}
+function v2OnLeave(why){const self=v2Self;v2Self=false;lastSeq=0;resetOnline();
+  if(why==='kicked')notice('🚫',T('kickedT'));else if(why==='closed'&&!self)notice('🚪',T('closedT'))}
+function v2LobbyClick(b){
+  if(b.dataset.pick){const sp=b.dataset.pick;ac();Sfx.pick();lbPend.sp=sp;lbPend.spAt=Date.now();K.pick('char',sp);renderLobby();setTimeout(()=>{if(V2on())renderLobby()},2600);return}
+  if(b.dataset.kick){kickPlayer(b.dataset.kick);return}
+  if(b.dataset.unban){K.unban(b.dataset.unban);return}
+  if(!K.isHost)return;
+  if(b.dataset.rmbot){K.rmBot(b.dataset.rmbot);return}
+  if(b.dataset.addbot){K.addBot();Sfx.pick();return}
+  if(b.dataset.k){K.setOpt('k',+b.dataset.k);return}
+  if(b.dataset.ts){const v=+b.dataset.ts;try{localStorage.setItem('yut_turnsec',String(v))}catch(_){}K.setOpt('turnSec',v);return}}
+async function v2Create(){const b=$('btnCreate');if(b.dataset.busy)return;b.dataset.busy='1';$('crD').textContent=T('conn');
+  try{await v2Ready();const r=await K.create({opts:{k:setup.k,backdo:setup.backdo,turnSec:LB.turnSec||30}});
+    if(r){const pref=setup.teams[0]&&setup.teams[0].sp;if(pref)K.pick('char',pref)}}
+  catch(e){toast2(T('errNet'),2400)}finally{delete b.dataset.busy;$('crD').textContent=T('createD')}}
+/* 코드 입력 — v2 코드 모양이면 v2/v1 둘 다 찾아본다 */
+function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then(r=>{
+  if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}
+  if(r&&r.kind==='rooms-v1'&&r.gameId==='yut'){fallback();return}
+  if(r&&r.url&&r.kind!=='none'){location.href=r.url;return}fallback()}).catch(fallback)}
+function v2Boot(){let arr=false;try{arr=!!new URLSearchParams(location.search).get('r')||!!sessionStorage.getItem('lpr_active')}catch(_){}
+  renderJoinTexts();if(arr){show('scrLobby');renderLobby()}else show('scrMode');
+  v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){resetOnline()}}).catch(()=>{resetOnline();toast2(T('errNet'),2400)})}
+window.__yutV2={get K(){return K},get on(){return V2on()},get V(){return V},get lastSeq(){return lastSeq},v2Lobby,v2Ready,v2Create};
+
 /* 링크로 들어온 사람은 바로 참가 화면(첫 페인트부터) — 이 탭에서 이미 들어왔던 방이면(새로고침) 자동 재참가 */
-(function(){try{const q=new URLSearchParams(location.search),cr=curRoom();let c=q.get('room'),pin=q.get('pin');
+(function(){if(LPV2)return;try{const q=new URLSearchParams(location.search),cr=curRoom();let c=q.get('room'),pin=q.get('pin');
   if(!c&&cr){c=cr.code;pin=cr.pin}
   if(!c)return;
   if(!pin&&cr&&cr.code===String(c).toUpperCase())pin=cr.pin;
   const nick=q.get('nick')||rememberedNick(c);goJoin(c,{pin,nick,auto:!!nick})}catch(_){}})();
-waitRoom(()=>{try{
+if(!LPV2)waitRoom(()=>{try{
   const a=window.LpRoom.detectAutoJoinParams();
   if(a&&a.code){   /* 홈 화면 참가 흐름은 PIN·이름을 세션으로 넘긴다 */
     if(joinCtx&&!joinCtx.busy&&!guest&&joinCtx.code===String(a.code).toUpperCase()&&a.pin&&!joinCtx.pin){
@@ -2913,7 +3029,7 @@ function applyLang(){renderMode();if(!$('scrSetup').classList.contains('hide'))r
 document.addEventListener('lp:langchanged',applyLang);
 window.addEventListener('storage',e=>{if(e&&e.key==='luckyplz_lang')applyLang()});
 ATLAS.onload=()=>{renderMode()};
-sndUi();renderMode();if(!joinCtx)show('scrMode');   /* 초대 링크로 들어왔으면 참가 화면이 이미 떠 있다 */
+sndUi();renderMode();if(LPV2&&!joinCtx)v2Boot();else if(!joinCtx)show('scrMode');   /* 초대 링크로 들어왔으면 참가 화면이 이미 떠 있다 */
 /* 규칙 자가 검사 — 콘솔에서 __yut.selfTest() . 화면 동작에는 쓰지 않는다.
    판을 직접 꾸미고 doMove 를 불러 '잡기 보너스' 가 규칙대로 붙는지 본다 */
 function selfTest(){

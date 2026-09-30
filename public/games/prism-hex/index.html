@@ -925,10 +925,12 @@ function seatName(st,s){const sp=st.seats[s];if(!sp)return '?';
   return (sp.name||'').trim()||seatColors(st.np,s).map(gemName).join('·')}
 function colorLabel(st,c){const s=seatOfC(st,c);const nm=seatName(st,s);return st.np===2?nm+' ('+gemName(c)+')':nm}
 function isMineSeat(st,s){const sp=st&&st.seats&&st.seats[s];if(!sp)return false;
+  if(V2on()){const si=K.seatInfo(s);return !!(si&&si.me)}
   if(ROLE==='local')return sp.ctrl==='local';
   if(ROLE==='host')return sp.ctrl==='host';
   return sp.ctrl==='guest'&&sp.owner&&sp.owner.pid===myPid}
 function botDrivesSeat(st,s){const sp=st.seats[s];if(sp.ctrl==='bot')return true;
+  if(V2on()){const si=K.seatInfo(s);return !!(si&&si.botDrive)}
   return sp.ctrl==='guest'&&sp.owner&&sp.owner.off&&Date.now()-(sp.owner.offAt||0)>5000}
 
 /* 로컬 설정 — 마지막 설정을 기억 */
@@ -1005,8 +1007,9 @@ $('btnModeOnline').addEventListener('click',()=>{ac();show('scrOnline')});
 function savedGame(){try{const g=JSON.parse(sessionStorage.getItem('ph_save')||'null');if(g&&g.S&&g.S.phase==='play'&&Date.now()-g.t<6*3600e3)return g}catch(_){}return null}
 $('btnResumeGame').addEventListener('click',()=>{ac();const g=savedGame();if(!g)return;ROLE='local';S=g.S;seqN=g.seqN;V=null;dlKey='';publish({k:'resume'})});
 $('btnOnBack').addEventListener('click',()=>show('scrMode'));
-$('btnCreate').addEventListener('click',()=>{ac();hostCreate()});
-$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase();if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}joinRoom(c,{})});
+$('btnCreate').addEventListener('click',()=>{ac();lpV2Want(v=>v?v2Create():hostCreate())});
+$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}
+  if(/^[2-9A-HJKMNP-TV-Z]{6}$/.test(c)&&/[A-Z]/.test(c)){v2Resolve(c,()=>joinRoom(c,{}));return}joinRoom(c,{})});
 $('codeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnJoin').click()});
 
 /* 첫 화면 보석 무더기 */
@@ -1170,7 +1173,7 @@ function afterIdle(){
   if(isMyTurn()){computeHints();
     if(tk!==lastTurnKey){lastTurnKey=tk;focusMine(false);Sfx.turn();if(ROLE!=='local')vib(18)}}
   renderHUD();
-  if(ROLE==='guest'||!S||S.phase!=='play')return;
+  if(V2on()||ROLE==='guest'||!S||S.phase!=='play')return;
   const c=S.turn,s=seatOfC(S,c),sp=S.seats[s];
   if(botDrivesSeat(S,s)){
     botT=setTimeout(()=>{if(playing||Q.length||!S||S.phase!=='play'||S.turn!==c||paused)return;
@@ -1251,6 +1254,8 @@ function confirmPlace(){
   if(!canInput()||!sel||!ghost)return;
   if(ghost.why){Sfx.bad();vib(30);showReason(true);return}
   const c=V.turn,p=sel.p,idx=ghost.idx.slice();
+  if(V2on()){intentAt=Date.now();pendingPlace={c,qr:ghost.qr.slice(),t:Date.now()};const tn=V.tn;
+    K.act({p,idx,tn}).then(r=>{if(r&&!r.ok){intentAt=0;pendingPlace=null;renderHUD();renderCtl()}});sel=null;ghost=null;showReason();renderHUD();return}
   if(ROLE==='guest'){intentAt=Date.now();pendingPlace={c,qr:ghost.qr.slice(),t:Date.now()};
     guest.action(GID,{a:'place',pid:myPid,tn:V.tn,c,p,idx});sel=null;ghost=null;showReason();renderHUD();return}
   if(!S||S.phase!=='play'||S.turn!==c)return;
@@ -1325,6 +1330,7 @@ $('tray').addEventListener('click',e=>{const b=e.target.closest('[data-p]');if(!
   if(!canInput()){openInv(trayColor());return}pickPiece(p)});
 $('strip').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b||!V)return;const c=+b.dataset.c;
   /* 게임 중에 들어온 게스트 — 봇·끊긴 자리를 눌러 이어받기 */
+  if(V2on()&&V.phase==='play'&&!V.seats.some((_,i)=>isMineSeat(V,i))){const s=seatOfC(V,c),si=K.seatInfo(s);if(si&&si.bot){K.claim(s);Sfx.pick();return}}
   if(ROLE==='guest'&&V.phase==='play'&&guest&&!V.seats.some((_,i)=>isMineSeat(V,i))){const s=seatOfC(V,c),sp=V.seats[s];
     if(sp.ctrl==='bot'||(sp.ctrl==='guest'&&sp.owner&&sp.owner.off)){guest.action(GID,{a:'claim',seat:s,pid:myPid});Sfx.pick();return}}
   openInv(c)});
@@ -1702,7 +1708,7 @@ function frame(now){
 let lastTickSec=-1;
 function drawTimer(now){
   const ring=$('ring'),rf=$('ringF'),rt=$('ringT'),tb=document.getElementById('chipTb');
-  let dl=0;if(V.phase==='play'){dl=ROLE==='guest'?gDeadline:deadline}
+  let dl=0;if(V.phase==='play'){if(V2on()){const r=K.remain();dl=r==null?0:Date.now()+r}else dl=ROLE==='guest'?gDeadline:deadline}
   const bot=V.phase==='play'&&botDrivesSeat(V,seatOfC(V,V.turn));
   if(!dl||!V.timer||bot){ring.classList.remove('timed','warn');rf.style.strokeDashoffset='0';rt.textContent='';if(tb)tb.style.width='0';return}
   const ms=Math.max(0,dl-(paused&&ROLE!=='guest'?pausedAt:Date.now())),tot=V.timer*1000,f=Math.min(1,ms/tot);
@@ -1831,6 +1837,7 @@ function showResult(){
 }
 function gameHome(){
   $('ovResult').classList.remove('on');$('ovPause').classList.remove('on');
+  if(V2on()){if(K.isHost)K.rematch();else K.leave(true);return}
   if(ROLE==='host'){publishLobby();return}
   if(ROLE==='guest'){location.href='/games/'+GID+'/';return}
   try{sessionStorage.removeItem('ph_save')}catch(_){}
@@ -1841,7 +1848,7 @@ function mountNav(box,tries){
   if(!window.LpNav){if((tries|0)<50)setTimeout(()=>mountNav(box,(tries|0)+1),200);return}
   window.LpNav.mount(box,ROLE==='guest'?{}:{gameHome});
 }
-$('btnAgain').addEventListener('click',()=>{ac();$('ovResult').classList.remove('on');startGame()});
+$('btnAgain').addEventListener('click',()=>{ac();$('ovResult').classList.remove('on');if(V2on()){if(K.isHost)K.rematch();return}startGame()});
 $('btnShare').addEventListener('click',async()=>{
   if(!V||!V.res)return;const txt=T('shareTxt',{t:seatName(V,V.res[0].s)})+' https://luckyplz.com/games/'+GID+'/';
   try{if(navigator.share){await navigator.share({text:txt});return}await navigator.clipboard.writeText(txt);toast(T('copied'))}catch(_){}
@@ -1854,6 +1861,11 @@ $('btnPause').addEventListener('click',()=>{
 $('btnResume').addEventListener('click',()=>{$('ovPause').classList.remove('on');
   if(paused){paused=false;if(deadline)deadline+=Date.now()-pausedAt;armTimer();afterIdle()}});
 
+/* Rooms v2 플래그 — 아래 v1 부트가 먼저 읽는다(정의는 여기, 나머지 v2 코드는 아래 'Rooms v2' 절) */
+const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get('rooms')==='v1')return false;
+  if(q.get('rooms')==='v2'||/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||''))return true;
+  const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId===GID&&Date.now()-(a.t||0)<864e5)return true;
+  if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v(GID)==='v2')}catch(_){return false}})();
 /* ════════════════════════ 온라인 (lpRoom — 방장이 권위, 게스트는 의도만 보낸다) ════════════════════════ */
 function waitRoom(cb,t){t=t||0;if(window.LpRoom)return cb();if(t>80){toast('Online unavailable');return}setTimeout(()=>waitRoom(cb,t+1),100)}
 function hostCreate(){
@@ -1941,6 +1953,7 @@ function onIntent(p){
     publish(doPlace(S,c,pc,idx,''));
   }
 }
+let gHbT=0,gPH=null;
 function joinRoom(code,pre){
   waitRoom(()=>{window.LpRoom.showGuestJoinModal(code,{gameId:GID,prefillPin:pre.pin,prefillNick:pre.nick,onJoined:wireGuest})});
 }
@@ -1952,8 +1965,9 @@ function wireGuest(g){
     enqueue({st,ev:st.ev,anim:!!animOk,rcv:Date.now()})};
   g.on('host:state',on);g.on('host:snapshot',on);
   g.action(GID,{a:'hello',pid:myPid});
-  setInterval(()=>{if(guest===g)try{g.action(GID,{a:'hb',pid:myPid})}catch(_){}},4000);
-  window.addEventListener('pagehide',()=>{try{g.action(GID,{a:'bye',pid:myPid})}catch(_){}});
+  /* 누수 수정(P4): 방에 들어올 때마다 interval·pagehide 리스너가 쌓이던 것 — 하나만 두고, 방이 바뀌면 스스로 멈춘다 */
+  clearInterval(gHbT);gHbT=setInterval(()=>{if(guest!==g){clearInterval(gHbT);gHbT=0;return}try{g.action(GID,{a:'hb',pid:myPid})}catch(_){}},4000);
+  if(!gPH){gPH=()=>{if(guest)try{guest.action(GID,{a:'bye',pid:myPid})}catch(_){}};window.addEventListener('pagehide',gPH)}
   setTimeout(()=>{if(!V)try{g.requestSnapshot()}catch(_){}},1500);
   renderSetup();show('scrSetup');$('setupNote').textContent=T('waitHost');
   if(window.LpHostCtl){try{window.LpHostCtl.install({role:'guest',room:g,canPause:false});navHostCtl()}catch(_){}}
@@ -1964,9 +1978,73 @@ function navHostCtl(tries){
   document.querySelectorAll('.lp-hc-ehome').forEach(b=>{b.style.display='none'});
 }
 /* 링크로 들어온 사람은 바로 참가 창 */
-waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname});return}
+if(!LPV2)waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname});return}
   /* 방장이 새로고침/탭 복원 — 이 탭이 방장이던 방만 lpRoom 이 되살린다(다른 탭은 게스트 참가 제안) */
   if(window.LpRoom.tryResumeHost)window.LpRoom.tryResumeHost({gameId:GID}).then(r=>{if(r&&ROLE==='local'&&!room)wireHost(r)}).catch(()=>{})}catch(_){}});
+
+/* ════════════════════════ Rooms v2 (P4, 2026-09-30) ════════════════════════
+   공용 턴제 커널(lpRoomsTurn.js) 위의 온라인. v1 경로는 그대로(플래그로 고름).
+   좌석 = 기기 pid(서명) · 준비→시작 게이트 · 턴 마감 = 방장 시계(S.turn.deadline) · 끊긴 자리 8초 뒤 봇 · 게임 중 봇 자리 이어받기.
+   게임 자체 hb·리스너 없음(커널 hb 1종) — v1 의 interval·pagehide 누수 문제도 이 경로엔 없다. 방장이 사라지면 승계. */
+let K=null,v2P=null,v2Self=false;
+function V2on(){return !!(K&&K.room)}
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
+  let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
+    const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
+function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
+  if(window.LpGames)return cb(LpGames.v(GID)==='v2');
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1790753735';s.onload=()=>cb(!!(window.LpGames&&LpGames.v(GID)==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
+  if(!K){K=LpRoomsTurn.mount(phSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 150px)');ds.setProperty('--lpt-hud-right','auto');ds.setProperty('--lpt-hud-left','8px')}res(K)})))}
+function phSpec(){return {gameId:GID,name:()=>T('title'),seats:[2,6],max:12,lateJoin:'takeBot',needGuest:true,migratable:true,
+  options:[{key:'turnSec',values:[30,45,60,90,0],def:45}],
+  botName:()=>T('bot'),
+  host:{init:v2Init,apply:v2Apply,next:g=>g.phase==='over'?null:seatOfC(g,g.turn),result:g=>g.res,
+    bot:(g,seat)=>{const m=botMove(g,g.turn);return m?{p:m.p,idx:m.idx,tn:g.tn}:null},timeout:(g,seat)=>{const m=randomMove(g,g.turn);return m?{p:m.p,idx:m.idx,tn:g.tn}:null},
+    busy:()=>playing||Q.length>0,onSeats:(g,seats)=>{seats.forEach(x=>{const sp=g.seats[x.seat];if(!sp)return;sp.ctrl=x.bot?'bot':'guest';sp.owner=x.bot?null:{pid:x.p,name:x.n}});return g}},
+  client:{render:v2Render,onLeave:v2OnLeave}}}
+function v2Init(seats,opts){
+  const np=seats.length,B=boardFor(np);
+  const g={phase:'play',seq:1,game:rid(),np,timer:+opts.turnSec||0,
+    seats:seats.map(x=>({name:x.bot?'':x.n,ctrl:x.bot?'bot':'guest',owner:x.bot?null:{pid:x.p,name:x.n}})),
+    pl:[],left:Array(B.colors).fill(FULL),done:Array(B.colors).fill(false),turn:Math.floor(Math.random()*B.colors),tn:0,last:null,res:null,ev:null,tl:0};
+  g.ev={k:'start',first:g.turn};return g}
+function v2Apply(g,seat,a,fx){
+  if(!a||g.phase!=='play')return {reject:'phase'};
+  const c=g.turn;if(seatOfC(g,c)!==seat)return {reject:'turn'};
+  if(a.tn!==g.tn)return {reject:'stale'};
+  const pc=a.p|0,idx=Array.isArray(a.idx)?a.idx.map(x=>x|0):[],B=boardFor(g.np);
+  if(pc<0||pc>=NP||!(g.left[c]>>pc&1)||idx.length!==SIZE[pc]||idx.some(i=>i<0||i>=B.N))return {reject:'illegal'};
+  if(!ORIKEY[pc].has(keyOf(idx.map(i=>[B.Q[i],B.R[i]]))))return {reject:'illegal'};
+  if(checkPlace(B,decode(g.pl,B),c,idx,isFirst(g.pl,c))!=='')return {reject:'illegal'};
+  const ev=doPlace(g,c,pc,idx,fx&&fx.auto==='timeout'?'auto':fx&&fx.auto?'bot':'');
+  g.seq=(g.seq|0)+1;g.ev=ev;
+  return {game:g,anim:DROP_MS+100+(ev.passes?ev.passes.length*700:0)}}
+function v2Deco(st,Sk){if(!st||!st.seats)return st;st.seats.forEach((sp,i)=>{const si=K.seatInfo(i,Sk);if(!si)return;
+  sp.ctrl=si.bot?'bot':si.host?'host':'guest';sp.owner=si.bot?null:{pid:si.p,name:si.n,off:si.off}});return st}
+function v2Render(Sk){
+  ROLE=K.isHost?'host':'guest';
+  const lobby=Sk.phase==='lobby'||!Sk.game;
+  K.lobbyOv(lobby);
+  if(lobby){$('ovResult').classList.remove('on');return}
+  const st=v2Deco(clone(Sk.game),Sk);
+  const fresh=!V||V.phase==='lobby'||V.game!==st.game;
+  if(fresh&&(!Q.length||Q[Q.length-1].st.game!==st.game))lastSeq=-1;
+  if(st.seq<=lastSeq){if(V&&V.phase!=='lobby'&&V.game===st.game){v2Deco(V,Sk);renderHUD()}return}
+  const animOk=!fresh&&st.seq===lastSeq+1;
+  lastSeq=st.seq;intentAt=0;pendingPlace=null;
+  enqueue({st,ev:animOk?st.ev:(fresh&&st.ev&&st.ev.k==='start'?st.ev:null),anim:animOk,rcv:Date.now()})}
+function v2OnLeave(why){const self=v2Self;v2Self=false;lastSeq=0;ROLE='local';V=null;S=null;Q.length=0;
+  try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
+  $('ovResult').classList.remove('on');show('scrMode');
+  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
+async function v2Create(){try{await v2Ready();await K.create()}catch(e){toast('Online unavailable')}}
+function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then(r=>{
+  if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}fallback()}).catch(fallback)}
+function v2Boot(){v2Ready().then(k=>k.boot()).catch(()=>{})}
+window.__prismhexV2={get K(){return K},get on(){return V2on()},get V(){return V},get lastSeq(){return lastSeq},v2Ready,v2Create,
+  /* 테스트: 내 차례면 봇 수로 둔다(사람 입력 경로 = K.act) */
+  playMine(){if(!V2on()||!canInput())return 0;const m=botMove(V,V.turn);if(!m)return -1;intentAt=Date.now();K.act({p:m.p,idx:m.idx,tn:V.tn});return 1}};
 
 /* ════════════════════════ 소리 버튼 · 언어 · 시작 ════════════════════════ */
 function sndUi(){$('btnSnd').textContent=muted()?'🔇':'🔊'}
@@ -1984,7 +2062,7 @@ window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(()=>{resi
 if(window.ResizeObserver){new ResizeObserver(()=>{resize()}).observe($('stage'))}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){renderHUD();if(ROLE!=='guest')armTimer()}});
 setInterval(()=>{if(pendingPlace&&Date.now()-pendingPlace.t>3600){pendingPlace=null;renderCtl()}},1000);
-sndUi();applyLang();show('scrMode');
+sndUi();applyLang();show('scrMode');if(LPV2)v2Boot();
 requestAnimationFrame(frame);
 
 /* 테스트·디버그용 훅 — 화면 동작에는 쓰지 않는다 */
