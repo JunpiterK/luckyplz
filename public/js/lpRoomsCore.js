@@ -1336,6 +1336,7 @@
             });
             var mine = this._view(this.me.pid); if (mine && mine.priv !== undefined) this.emit('priv', mine.priv, '_view');
         }
+        this._syncMe();   /* 방장이 자기 좌석·역할을 바꾼 setState(턴 커널 시작·자리 넘기기) 도 me 에 바로 반영 */
         this._lastLocal = clone(this._S);
         this.emit('state', this._S, prevLocal);
         if (!prevLocal || prevLocal.phase !== this._S.phase) this.emit('phase', this._S.phase, this._S);
@@ -1943,6 +1944,7 @@
         try { await idbPut('room:' + code, { sig: keys.sig, dh: keys.dh, rpk: rpk, t: now() }); } catch (_) {}
         hl.lost = null; sl.lost = function () { room._detach(); };
         room._hostLoops();
+        room._syncMe();   /* 방장 me.role/seat = 명단 값('host', 좌석) — 예전엔 첫 roster 방송 전까지 'player' 로 남았다 */
         room._lastRoster = clone(room._S.roster);
         room.setState(null);
         room._save();
@@ -2290,6 +2292,9 @@
                fair 리스너 3번째 인자 rx(도착 시각), room._io.clockSample [+].
                게스트 봉투 재생 방지 = 최근 64개 창(순서 바뀐 늦은 도착 수용, 중복·창 밖은 거절) — 예전 엄격 단조(c>lastC)는
                지터 30~150ms 에서 hb 편승 w·fair c/r 을 버려 추첨 재시도·목격 누락을 냈다.
+   2026-09-30  통합 2차(턴제↔공통 UI): 방장 room.me 동기화 — create 직후와 방장 state 방송마다 _syncMe().
+               예전엔 방장 me.role 이 첫 roster 방송(명단 변화) 전까지 'player', me.seat 는 시작 때 재배치돼도 옛 값이었다.
+               영향: UI '내 차례' 알림(me.seat) · 게스트 hb 주기(_hbInterval 은 게스트 전용이라 무관).
    결정: supabase realtime {worker:true} 는 채택 보류 — 방 페이지는 getSupabase() 공용 클라이언트(소켓 1개)를
          재사용하고, 워커 옵션은 클라이언트 생성 시점에만 줄 수 있어 공용 클라이언트와 충돌한다. 헤드리스 하네스로는
          백그라운드 스로틀을 재현할 수 없어 실기기 확인 항목으로 넘긴다(§6.0.3 소켓 항목).

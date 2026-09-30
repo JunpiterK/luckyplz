@@ -1988,6 +1988,8 @@ if(!LPV2)waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.
    게임 자체 hb·리스너 없음(커널 hb 1종) — v1 의 interval·pagehide 누수 문제도 이 경로엔 없다. 방장이 사라지면 승계. */
 let K=null,v2P=null,v2Self=false;
 function V2on(){return !!(K&&K.room)}
+/* 공통 UI(lpRoomsUI)가 부팅할 때 커널을 먼저 세운다(UI 👥 로 방을 만들어도 이 게임이 그린다) — v1 페이지에선 아무도 안 부른다 */
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
 function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
@@ -2034,14 +2036,15 @@ function v2Render(Sk){
   const animOk=!fresh&&st.seq===lastSeq+1;
   lastSeq=st.seq;intentAt=0;pendingPlace=null;
   enqueue({st,ev:animOk?st.ev:(fresh&&st.ev&&st.ev.k==='start'?st.ev:null),anim:animOk,rcv:Date.now()})}
-function v2OnLeave(why){const self=v2Self;v2Self=false;lastSeq=0;ROLE='local';V=null;S=null;Q.length=0;
+function v2OnLeave(why,o){const self=v2Self;v2Self=false;lastSeq=0;ROLE='local';V=null;S=null;Q.length=0;
   try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
   $('ovResult').classList.remove('on');show('scrMode');
-  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
+  if(o&&o.shown){/* 공통 UI 가 떠남 카드를 이미 띄웠다 */}else if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
 async function v2Create(){try{await v2Ready();await K.create()}catch(e){toast('Online unavailable')}}
 function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then(r=>{
   if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}fallback()}).catch(fallback)}
-function v2Boot(){v2Ready().then(k=>k.boot()).catch(()=>{})}
+function v2Boot(){window.__lprBoot=window.__lprBoot||'turn';   /* 자동 참가·resume 은 커널 한 곳(공통 UI 는 건너뛴다) */
+  v2Ready().then(k=>k.boot()).catch(()=>{})}
 window.__prismhexV2={get K(){return K},get on(){return V2on()},get V(){return V},get lastSeq(){return lastSeq},v2Ready,v2Create,
   /* 테스트: 내 차례면 봇 수로 둔다(사람 입력 경로 = K.act) */
   playMine(){if(!V2on()||!canInput())return 0;const m=botMove(V,V.turn);if(!m)return -1;intentAt=Date.now();K.act({p:m.p,idx:m.idx,tn:V.tn});return 1}};

@@ -34,6 +34,12 @@
       commit(fn(game)→game, ev?) (drive:'game' 방장) · deal() · dealReveal() · fairState()
       ui: { lobby(el), hud(), sheet(), ask(q, ok, danger), toast(s), invite(), nick() }
       inviteUrl()
+   공통 UI(lpRoomsUI.js, P2) 연동 [통합 2차]: UI 가 있으면 대기실(풀)·HUD 알약·방 시트·초대·확인창·토스트·방장 끊김 띠는
+      전부 UI 것을 쓰고, 이 파일의 UI 는 UI 가 없을 때만(폴백). mount 가 LpRoomsQ 로 UI.config 를 건다:
+      choices(picks·options 의 label/title 함수 그대로) · onStart(→ start/onStart) · bots · kick · setOpt · play(봇 자리 이어받기) ·
+      leave · roomExtra(봇 자리 이어받기·내가 할게요·자리 넘기기·차단 풀기) · createOpts · botName · lobbyNote · hudPos/hudInto.
+      자동 참가·resume 은 window.__lprBoot 한 곳만: 게임 v2Boot 가 동기적으로 'turn' 을 세우면 커널이, 'ui' 면 UI 가 한다.
+      spec [+] hudPos?:{top,right,left} · hudInto?:()=>el · lobbyNote?:()=>string. client.onLeave(why, {shown}) — shown=UI 가 이미 알림
    상태: S.game(어댑터) · S.turn{seat,n,deadline(방장 시계)} · S.tk{seats[{p,bot,n,pick,was}], to{}, c0, ci, fe, ev, evn, res}
    ===================================================================== */
 (function (G) {
@@ -98,8 +104,10 @@
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
     function el(tag, cls, html) { var e = G.document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
     /* P2 공통 UI(lpRoomsUI.js)가 떠 있으면 그쪽을 쓴다 — 이 파일의 UI 는 폴백. API 는 병렬 작업 중이라 있는 함수만 부른다 */
-    function UI() { return G.LpRoomsUI || (G.LpRooms && G.LpRooms.UI) || null; }
-    function uiFn(name) { var u = UI(); return u && typeof u[name] === 'function' ? u[name].bind(u) : null; }
+    function UI() {
+        var u = G.LpRoomsUI || (G.LpRooms && G.LpRooms.UI) || null;
+        return u && typeof u.mountLobby === 'function' && typeof u.openRoom === 'function' && String(u.version || '').indexOf('stub') < 0 ? u : null;
+    }
     function member(S, p) { if (!S || !S.roster) return null; for (var i = 0; i < S.roster.length; i++) if (S.roster[i].p === p) return S.roster[i]; return null; }
     var AV = ['🐼', '🦊', '🐰', '🐯', '🐨', '🐶', '🐱', '🐸', '🐧', '🦉', '🐙', '🐢', '🦄', '🐝', '🐳', '🦖'];
 
@@ -220,10 +228,10 @@
         this._banner(); this.hud();
     };
     P._left = function (why) {
-        var cb = this.spec.client && this.spec.client.onLeave;
+        var cb = this.spec.client && this.spec.client.onLeave, shown = !!UI();   /* 공통 UI 가 떠남 카드를 이미 띄운다 */
         this._unbind();
-        if (why === 'kicked') this.toast(tt('kicked'), 2600); else if (why === 'closed') this.toast(tt('closed'), 2400); else if (why === 'detached') this.toast(tt('other'), 2600);
-        if (cb) { try { cb(why); } catch (e) { dbg(e); } }
+        if (!shown) { if (why === 'kicked') this.toast(tt('kicked'), 2600); else if (why === 'closed') this.toast(tt('closed'), 2400); else if (why === 'detached') this.toast(tt('other'), 2600); }
+        if (cb) { try { cb(why, { shown: shown }); } catch (e) { dbg(e); } }
     };
 
     /* ── 수신 ────────────────────────────────────────────────────── */
@@ -652,15 +660,24 @@
         var path = (G.LpGames && G.LpGames.path && G.LpGames.path(this.spec.gameId)) || ('/games/' + this.spec.gameId + '/');
         return G.location.origin + path + '?r=' + this.room.code + h;
     };
-    P.create = async function (o) {
-        var LR = G.LpRooms; if (!LR) throw new Error('no LpRooms');
-        await LR.ready();
-        var nick = LR.profile.get().nick;
-        if (!nick) { nick = await this.nick(); if (!nick) return null; }
+    P._createOpts = function (o) {
         var opts = {}, spec = this.spec;
         (spec.options || []).forEach(function (op) { var v = op.def; try { var s = G.localStorage.getItem('lpt_' + spec.gameId + '_' + op.key); if (s != null) { var pv = JSON.parse(s); if (op.values.indexOf(pv) >= 0) v = pv; } } catch (_) {} opts[op.key] = v; });
         if (o && o.opts) for (var k in o.opts) opts[k] = o.opts[k];
-        var r = await LR.create({ gameId: spec.gameId, opts: opts, max: spec.max || 12 });
+        return opts;
+    };
+    P.create = async function (o) {
+        var LR = G.LpRooms; if (!LR) throw new Error('no LpRooms');
+        await LR.ready();
+        var spec = this.spec, u = UI();
+        if (this.room && !this.room._left) return this.room;
+        var nick = LR.profile.get().nick;
+        if (!nick) {
+            /* 공통 UI: 닉·아바타·PIN 이 있는 만들기 시트(옵션은 createOpts 훅으로 실린다) */
+            if (u) { this._pendOpts = o && o.opts ? o.opts : null; var r0 = await u.openCreate({ gameId: spec.gameId }); this._pendOpts = null; if (r0 && !r0._left) this._bind(r0); return this.room; }
+            nick = await this.nick(); if (!nick) return null;
+        }
+        var r = await LR.create({ gameId: spec.gameId, opts: this._createOpts(o), max: spec.max || 12 });
         this._bind(r);
         return r;
     };
@@ -669,6 +686,16 @@
         o = o || {};
         var LR = G.LpRooms; if (!LR) return null;
         var self = this, code = null, inv = null;
+        /* 자동 참가·resume 은 한 곳만 — 공통 UI 가 이미 맡았으면(__lprBoot='ui') 그 결과 방에 붙기만 한다 */
+        if (G.__lprBoot && G.__lprBoot !== 'turn') {
+            await this._waitUI(4000);
+            var u0 = UI(); if (u0 && u0.ready) { try { await u0.ready(); } catch (_) {} }
+            var c0 = LR.current && LR.current(); if (c0 && !c0._left) this._bind(c0);
+            return this.room;
+        }
+        G.__lprBoot = 'turn';
+        /* siteFooter 의 v2 로더가 공통 UI 를 싣는 중이면 잠깐 기다린다(참가 시트·오류 카드를 공통 것으로) */
+        await this._waitUI(3000);
         try {
             var p = LR.parseInvite(G.location.href);
             if (p && p.hint === 'v2') { code = p.code; inv = p.inv || null; }
@@ -683,6 +710,14 @@
         }
         if (r) { this._bind(r); return r; }
         if (!code) return null;
+        var u = UI();
+        if (u) {
+            /* 공통 참가 흐름: 저장된 닉이면 바로(상태 카드), 없으면 참가 시트 — PIN·승인 대기·다른 탭·인앱·오류 전부 UI 가 */
+            try { await u.openJoin({ code: code, inv: inv, gameId: this.spec.gameId }); } catch (e) { dbg('ui join', e); }
+            var cj = LR.current && LR.current();
+            if (cj && !cj._left && cj.code === code) { this._bind(cj); return cj; }
+            return null;
+        }
         if (!LR.profile.get().nick) { var nk = await this.nick(); if (!nk) return null; }
         if (o.onStatus) o.onStatus({ st: 'joining' });
         try {
@@ -702,6 +737,85 @@
             return null;
         }
     };
+    /* 공통 UI 기다리기 — siteFooter 로더(window.lpRoomsLoad)가 있으면 그걸로 싣고, 최대 ms 만 기다린다 */
+    P._waitUI = function (ms) {
+        if (UI()) return Promise.resolve(UI());
+        var p = null;
+        try { if (typeof G.lpRoomsLoad === 'function') p = G.lpRoomsLoad(); } catch (_) {}
+        if (!p || typeof p.then !== 'function') return Promise.resolve(null);
+        return Promise.race([p.then(function () { return UI(); }, function () { return null; }), new Promise(function (r) { setTimeout(function () { r(null); }, ms || 3000); })]);
+    };
+    /* 공통 UI 설정 — mount 가 LpRoomsQ 로 한 번 건다(UI 가 나중에 실려도 부팅 때 불린다) */
+    P._p2 = function (u) {
+        if (!u || typeof u.config !== 'function' || this._p2on === u) return;
+        this._p2on = u;
+        var self = this, spec = this.spec;
+        var cfg = {
+            gameId: spec.gameId, lobby: 'full', minPlayers: spec.seats[0], watchInPlay: false,
+            choices: { picks: spec.picks || [], options: spec.options || [] },
+            onStart: function () { if (spec.onStart) spec.onStart(); else self.start(); return false; },
+            kick: function (room, p, o) { self.kick(p, !!(o && o.ban)); },
+            setOpt: function (room, k, v) { self.setOpt(k, v); },
+            play: function () { return self._play(); },
+            leave: function () { self.leave(true); },
+            roomExtra: function (room, close) { return self._roomExtra(close); },
+            createOpts: function () { return { opts: self._createOpts(self._pendOpts ? { opts: self._pendOpts } : null), max: Math.min(12, spec.max || 12) }; },
+            botName: function (m) { return spec.botName ? spec.botName(m.seat, m.pick || {}) : ''; },
+            hudPos: spec.hudPos || { top: 'var(--lpt-hud-top, calc(10px + env(safe-area-inset-top, 0px)))', right: 'var(--lpt-hud-right, calc(10px + env(safe-area-inset-right, 0px)))', left: 'var(--lpt-hud-left, auto)' }
+        };
+        if (spec.hudInto) cfg.hudInto = spec.hudInto;
+        if (spec.lobbyNote) cfg.lobbyNote = function () { return spec.lobbyNote(); };
+        cfg.bots = spec.bots !== false ? {
+            add: function () { self.addBot(); }, remove: function (room, p) { self.rmBot(p); },
+            can: function () { var S = self.S(); return !!S && S.roster.filter(function (m) { return m.seat != null; }).length < spec.seats[1]; }
+        } : null;
+        try { u.config(cfg); } catch (e) { dbg('ui config', e); }
+        /* 폴백 UI 정리 — 겹창 대기실·알약·띠·시트 */
+        if (this._ui.lov) this._ui.lov.classList.add('hide');
+        if (this._ui.hud) this._ui.hud.classList.add('hide');
+        if (this._ui.ban) this._ui.ban.classList.add('hide');
+        if (this._ui.sheet) { this._ui.sheet.classList.add('hide'); this._ui.sheetOn = false; }
+        if (this.room) this._render('ui');
+    };
+    /* 관전 → 참가: 빈자리면 코어 기본('role play'), 꽉 찼으면 봇 자리 하나를 이어받는다(대기실) */
+    P._play = function () {
+        var S = this.S(); if (!S || !this.room) return false;
+        var seated = S.roster.filter(function (m) { return m.seat != null; });
+        if (seated.length < this.spec.seats[1]) return false;
+        var bot = seated.filter(function (m) { return m.r === 'bot'; }).sort(function (a, b) { return b.seat - a.seat; })[0];
+        return bot ? this.claim(bot.seat) : false;
+    };
+    /* 방 시트(공통 UI)에 얹는 턴제 전용 줄 */
+    P._roomExtra = function (close) {
+        var S = this.S(), r = this.room, self = this; if (!S || !r || !G.document) return null;
+        var inPlay = S.phase !== 'lobby' && S.phase !== 'result' && S.tk && S.tk.seats && S.game, me = this.me && this.me.pid;
+        var box = el('div', 'lpr-col'), n = 0;
+        function btn(cls, txt, fn) { var b = el('button', 'lpr-btn ' + cls); b.type = 'button'; b.textContent = txt; b.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); fn(); }); return b; }
+        function row() { var w = el('div', 'lpr-row'); w.style.flexWrap = 'wrap'; box.appendChild(w); return w; }
+        if (inPlay && (this.spec.lateJoin || 'takeBot') === 'takeBot' && this.seatOf(me, S) == null) {
+            var w1 = null;
+            S.tk.seats.forEach(function (sp, i) {
+                if (!sp.bot) return;
+                var si = self.seatInfo(i, S); w1 = w1 || row(); n++;
+                w1.appendChild(btn('pri', '🙋 ' + tt('claim') + ' · ' + (si ? si.n : '#' + (i + 1)), function () { self.claim(i); close(); }));
+            });
+        }
+        var mm = member(S, me);
+        if (inPlay && mm && mm.afk) { n++; row().appendChild(btn('go wide', '🙋 ' + tt('back'), function () { self.back(); close(); })); }
+        if (this.isHost && inPlay) {
+            var w2 = null;
+            S.tk.seats.forEach(function (sp, i) {
+                var si = self.seatInfo(i, S); if (!si || si.bot || !si.off || si.offMs < TM.release) return;
+                w2 = w2 || row(); n++;
+                w2.appendChild(btn('', '🔓 ' + tt('release') + ' · ' + si.n, function () { self.release(i); close(); }));
+            });
+        }
+        if (this.isHost && S.bans && S.bans.length) {
+            var w3 = row(); w3.appendChild(el('span', 'lpr-hint', '⛔'));
+            S.bans.forEach(function (p) { n++; w3.appendChild(btn('', tt('unban') + ' ' + p.slice(1, 7), function () { self.unban(p); close(); })); });
+        }
+        return n ? box : null;
+    };
     P.leave = async function (noAsk) {
         var r = this.room; if (!r) return;
         if (!noAsk && !(await this.ask(r.isHost ? tt('closeQ') : tt('exitQ'), r.isHost ? tt('close') : tt('exit'), true))) return false;
@@ -715,12 +829,15 @@
        lpRoomsUI.js(P2)가 있으면 게임은 그쪽을 먼저 쓴다(여기는 폴백).
        ================================================================ */
     P.toast = function (s, ms) {
-        if (!G.document) return; injectCss();
+        if (!G.document) return;
+        var u = UI(); if (u && u.toast) { u.toast(s, ms); return; }
+        injectCss();
         var t = this._ui.toast; if (!t) { t = this._ui.toast = el('div', 'lpt-toast'); t.setAttribute('role', 'status'); G.document.body.appendChild(t); }
         t.textContent = s; t.classList.add('on'); clearTimeout(this._ui.toastT);
         this._ui.toastT = setTimeout(function () { t.classList.remove('on'); }, ms || 1600);
     };
     P.ask = function (q, okLbl, danger) {
+        var u = UI(); if (u && u.confirm) return u.confirm(q, { ok: okLbl || undefined, danger: !!danger });
         injectCss();
         var self = this;
         return new Promise(function (res) {
@@ -761,7 +878,7 @@
         });
     };
     P.invite = async function () {
-        var f = uiFn('invite') || uiFn('openInvite'); if (f && this.room) { try { f(this.room, { url: this.inviteUrl() }); return; } catch (e) { dbg('ui invite', e); } }
+        var u = UI(); if (u && this.room) { try { u.openInvite(this.room); return; } catch (e) { dbg('ui invite', e); } }
         var url = this.inviteUrl(); if (!url) return;
         var nm = this.spec.name ? this.spec.name() : this.spec.gameId;
         var txt = '🎲 ' + nm + ' · ' + (G.LpRooms ? G.LpRooms.util.fmtCode(this.room.code) : this.room.code);
@@ -769,6 +886,7 @@
         try { await G.navigator.clipboard.writeText(txt + '\n' + url); this.toast('✓ ' + tt('copied')); } catch (_) { this.qr(); }
     };
     P.qr = function () {
+        var u = UI(); if (u && this.room) { try { u.openInvite(this.room, { qr: true }); return; } catch (e) { dbg('ui qr', e); } }
         var url = this.inviteUrl(), self = this; injectCss();
         var ov = el('div', 'lpt-ov'), sh = el('div', 'lpt-sheet');
         sh.innerHTML = '<h4 style="text-align:center"></h4><div class="lpt-qr">…</div><div style="word-break:break-all;font-size:11px;opacity:.6;text-align:center"></div><div class="lpt-foot"><button type="button" class="lpt-btn pri" data-v="1">OK</button></div>';
@@ -821,7 +939,7 @@
 
     /* 방 시트 — 명단 · 초대 · (방장) 내보내기/차단/자리 넘기기/방 닫기 · (게스트) 나가기 */
     P.sheet = function () {
-        var f = uiFn('sheet') || uiFn('openSheet'); if (f && this.room) { try { f(this.room, { turn: this }); return; } catch (e) { dbg('ui sheet', e); } }
+        var u = UI(); if (u && this.room) { try { u.openRoom(this.room); return; } catch (e) { dbg('ui room', e); } }
         injectCss(); if (!this.room) return;
         var self = this;
         if (!this._ui.sheet) {
@@ -880,7 +998,9 @@
 
     /* 대기실 겹창 — 게임 화면 위에 기본 대기실을 띄운다(게임 HTML 을 고치지 않고) */
     P.lobbyOv = function (show) {
-        if (!G.document) return; injectCss();
+        if (!G.document) return;
+        if (UI()) { if (this._ui.lov) this._ui.lov.classList.add('hide'); return; }   /* 공통 풀 대기실이 phase='lobby' 에 자동으로 뜬다 */
+        injectCss();
         var o = this._ui.lov;
         if (!o) { o = this._ui.lov = el('div', 'lpt-lov hide'); var box = el('div'); o.appendChild(box); G.document.body.appendChild(o); this.lobby(box); }
         var on = !!show && !!this.room;
@@ -891,11 +1011,8 @@
     /* 기본 대기실 — el 안에 그린다(게임은 대기실 단계에서 이 칸을 보여 주기만 하면 된다) */
     P.lobby = function (host) {
         injectCss();
-        var self = this, uf = uiFn('lobby');
-        if (uf && this.room && !this._ui.p2lobby) {   /* P2 대기실: 명단·준비·시작 게이트를 그쪽이 그리고, 시작은 커널에 맡긴다 */
-            try { var ok = uf(host, { room: this.room, turn: this, spec: this.spec, start: function () { return self.spec.onStart ? self.spec.onStart() : self.start(); } }); if (ok !== false) { this._ui.p2lobby = host; this._ui.lobbyEl = null; return; } } catch (e) { dbg('ui lobby', e); }
-        }
-        if (this._ui.p2lobby === host) return;
+        var self = this;
+        if (UI()) return;   /* 공통 풀 대기실(UI.config lobby:'full')이 대신한다 — 명단·선택·준비·시작 게이트 */
         if (this._ui.lobbyEl === host) { this._paintLobby(); return; }
         this._ui.lobbyEl = host;
         host.classList.add('lpt-lobby');
@@ -1003,9 +1120,12 @@
                 return spec.host.view(game, seat, pid);
             };
             LR.adapter(reg);
-            LR.on('room', function (r) { K._bind(r); });
-            var cur = LR.current && LR.current(); if (cur) K._bind(cur);
+            LR.on('room', function (r) { if (!r._left) K._bind(r); });
+            var cur = LR.current && LR.current(); if (cur && !cur._left) K._bind(cur);
         }
+        /* 공통 UI 설정 — UI 가 이미 부팅했으면 LpRoomsQ.push 가 즉시 실행, 아니면 부팅 때 */
+        try { (G.LpRoomsQ = G.LpRoomsQ || []).push(function (LR2, U) { K._p2(U || UI()); }); } catch (e) { dbg('q', e); }
+        if (UI()) K._p2(UI());
         return K;
     }
 
@@ -1020,4 +1140,9 @@
                '내가 할게요' 뒤 초과 횟수 0부터, 판 좌석표(tk.seats)는 판이 있을 때만(게임 전환 뒤 옛 표 무시).
                P2 연동 지점: window.LpRoomsUI(또는 LpRooms.UI)가 있으면 HUD·방장 끊김 띠는 그쪽에 맡기고,
                lobby(el,{room,turn,spec,start}) · sheet(room,{turn}) · invite(room,{url}) 함수가 있으면 호출(없으면 이 파일 폴백).
+   2026-09-30  통합 2차 — 실제 P2 API 로 맞춤(추측 API 제거: UI.sheet 는 범용 바텀시트라 방 시트가 깨졌다).
+               UI.config(lobby:'full', choices+label/title, onStart, bots, kick, setOpt, play, leave, roomExtra, createOpts,
+               botName, lobbyNote, hudPos|hudInto, watchInPlay:false) 를 LpRoomsQ 로 건다. 대기실 겹창·알약·띠·시트·초대·확인창·토스트는
+               UI 가 있으면 UI 것(폴백은 UI 없을 때만). boot 는 __lprBoot 한 곳 규칙(이중 참가 → '다른 탭에서 계속 중' 버그 수정),
+               참가는 UI.openJoin(PIN·승인·인앱·오류 카드), 닉 없으면 만들기는 UI.openCreate. onLeave(why,{shown}).
 */

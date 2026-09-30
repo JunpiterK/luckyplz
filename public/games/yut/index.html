@@ -394,6 +394,13 @@ html body{padding:0}
 .chip .cd{position:absolute;top:3px;left:3px;width:8px;height:8px;border-radius:50%;background:#8ff0b8;box-shadow:0 0 0 1.5px rgba(0,0,0,.4)}
 .chip .cd.away{background:#FFC85A}.chip .cd.off{background:#ff6b6b}
 .msg .mini{min-height:40px;margin-left:6px;padding:0 10px;border-radius:9px;border:0;background:#8ff0b8;color:#10321f;font-weight:900;font-size:12.5px;cursor:pointer;font-family:inherit;vertical-align:middle}
+/* Rooms v2 공통 대기실(lpRoomsUI) 안의 캐릭터 칩·명단 — 같은 스프라이트 */
+.lpr-chip .spr{width:40px;height:40px;display:inline-block;flex:0 0 auto}.lpr-chip .lpr-spn{font-size:12.5px;font-weight:800}
+.lpr-pk .spr{width:30px;height:30px;display:inline-block}
+body.lpr2 #roomPill{display:none!important}   /* 공통 HUD 알약이 그 자리(#lprSlot)에 앉는다 */
+#lprSlot{display:flex;flex:0 1 auto;min-width:0;justify-content:center}
+#tbDock .lp-rooms-btn{position:relative!important;left:auto!important;top:auto!important}
+body.lpr2 #tbDock .lp-rooms-btn.in{display:none!important}   /* 방 안에선 머리줄 HUD 알약이 같은 방 시트를 연다 */
 </style>
 </head>
 <body>
@@ -1416,7 +1423,7 @@ async function pump(){
 }
 async function present(it){
   const prev=V,st=it.st,ev=it.ev;
-  if(st.phase==='lobby'){V=st;clock=null;$('ovResult').classList.remove('on');if(ROLE!=='local'){renderLobby();if($('scrLobby').classList.contains('hide'))show('scrLobby')}return}
+  if(st.phase==='lobby'){V=st;clock=null;$('ovResult').classList.remove('on');if(ROLE!=='local'){renderLobby();if($(lbScr()).classList.contains('hide'))show(lbScr())}return}
   if($('scrGame').classList.contains('hide')){show('scrGame');$('ovResult').classList.remove('on')}
   if(ev&&ev.to&&!document.hidden)toast(T('timeoutT'),1500);   /* 턴 시간 초과 — 자동으로 둔 수 */
   if(ev&&ev.k==='start'){V=st;resetFx();renderHUD();
@@ -1934,7 +1941,7 @@ window.addEventListener('resize',()=>{if(!$('scrGame').classList.contains('hide'
 /* 공용 ⛶·? 버튼을 상단 바로 — 두 버튼은 늦게(defer·지연 로드) 붙으므로 주기적으로 확인한다 */
 function dockShared(){
   const dock=$('tbDock');if(!dock)return;
-  ['.lp-fs-btn','.lp-help-fab'].forEach(q=>{const b=document.querySelector(q);if(b&&b.parentNode!==dock)dock.appendChild(b)});
+  ['.lp-fs-btn','.lp-help-fab','.lp-rooms-btn'].forEach(q=>{const b=document.querySelector(q);if(b&&b.parentNode!==dock)dock.appendChild(b)});
 }
 
 /* ── 캔버스 탭 ── */
@@ -2873,7 +2880,7 @@ function renderRoomSheet(){
   $('rmInv').textContent=T('invB');$('rmExit').textContent=ROLE==='host'?T('closeR'):T('exit');$('rmClose').textContent=T('close');
 }
 function roomPillUi(){
-  const b=$('roomPill');if(ROLE==='local')return;
+  const b=$('roomPill');document.body.classList.toggle('lpr2',V2on()&&P2on());if(ROLE==='local')return;
   let n=0,tot=0;
   if(V&&V.phase!=='lobby'&&V.teams){V.teams.forEach(t=>{if(t.ctrl!=='bot'){tot++;if(!(t.owner&&t.owner.off))n++}})}
   else{const L=lbView();if(L)L.players.forEach(p=>{if(!p.bot){tot++;if(p.on!==false)n++}})}
@@ -2892,7 +2899,7 @@ $('ovRoom').addEventListener('click',e=>{const b=e.target.closest('button');if(!
 function netWarn(){if(V2on())return K.hostLost()>=2;if(ROLE==='guest')return guestNet==='bad'||Date.now()-hostSig>14000;if(ROLE==='host')return hostNet==='bad';return false}
 function netUi(){
   let msg='',btn='';
-  if(V2on()){const lv=K.hostLost();if(lv>=1&&!K.isHost){msg=T('hostLost');if(lv>=2)btn=T('exit')}else if(V&&V.away&&!K.isHost)msg=T('hostAway')}
+  if(V2on()){const lv=K.hostLost();if(lv>=1&&!K.isHost){if(!P2on()){msg=T('hostLost');if(lv>=2)btn=T('exit')}}else if(V&&V.away&&!K.isHost)msg=T('hostAway')}
   else if(ROLE==='guest'){
     if(guestNet==='bad')msg=T('reconn');
     else if(Date.now()-hostSig>14000){msg=T('hostLost');if(Date.now()-hostSig>45000)btn=T('exit')}
@@ -2917,6 +2924,10 @@ const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get
   if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('yut')==='v2')}catch(_){return false}})();
 let K=null,v2P=null,v2Self=false;
 function V2on(){return !!(K&&K.room)}
+/* 공통 UI(lpRoomsUI) — 있으면 대기실·HUD·방장 끊김 띠·방 시트를 그쪽이 그린다(이 게임의 scrLobby·#roomPill 은 v1·폴백용) */
+function P2on(){return !!(window.LpRoomsUI&&LpRoomsUI.mountLobby&&!String(LpRoomsUI.version||'').includes('stub'))}
+function lbScr(){return V2on()&&P2on()?'scrMode':'scrLobby'}
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>{document.body.classList.add('lpr2');setTimeout(dockShared,120);setTimeout(dockShared,900);return v2Ready().catch(()=>{})});
 function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
@@ -2927,8 +2938,10 @@ function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoo
 function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
   if(!K)K=LpRoomsTurn.mount(yutSpec());res(K)})))}
 function yutSpec(){return {gameId:'yut',name:()=>T('title'),seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:true,noHud:true,noBanner:true,
-  picks:[{key:'char',options:SP.slice(),unique:true,botYield:true,label:sp=>sprHtml(sp,'n'),title:()=>T('charT')}],
-  options:[{key:'turnSec',values:TURN_SECS.slice(),def:30},{key:'k',values:[1,2,3,4],def:4},{key:'backdo',values:[true,false],def:true}],
+  picks:[{key:'char',options:SP.slice(),unique:true,botYield:true,label:(sp,w)=>sprHtml(sp,'n')+(w==='chip'?'<span class="lpr-spn">'+esc(spName(sp))+'</span>':''),title:()=>T('charT')}],
+  options:[{key:'turnSec',values:TURN_SECS.slice(),def:30,label:v=>T('secs',{n:v}),title:()=>T('turnT')},{key:'k',values:[1,2,3,4],def:4,title:()=>T('pieces')},
+    {key:'backdo',values:[true,false],def:true,label:v=>v?'ON':'OFF',title:()=>T('backdo')}],
+  hudInto:()=>{let s=$('lprSlot');if(!s){s=document.createElement('span');s.id='lprSlot';$('roomPill').after(s)}return s},
   botName:(i,pk)=>spName((pk&&pk.char)||SP[i%4]),
   host:{init:v2Init,apply:v2Apply,next:g=>g.phase==='over'?null:g.turn,result:g=>({winner:g.winner,rank:g.rank}),
     bot:v2Bot,timeout:v2Bot,rolls:a=>!!a&&a.k==='throw',busy:()=>playing||Q.length>0,onSeats:v2OnSeats},
@@ -2964,7 +2977,7 @@ function v2Render(Sk){
   if(Sk.phase==='lobby'||!Sk.game){
     const L=v2Lobby();
     if(!V||V.phase!=='lobby'){if(!Q.length||Q[Q.length-1].st.phase!=='lobby')enqueue({st:L,ev:null})}
-    else{V=L;renderLobby();if($('scrLobby').classList.contains('hide')&&!playing)show('scrLobby')}
+    else{V=L;renderLobby();if($(lbScr()).classList.contains('hide')&&!playing)show(lbScr())}
     netUi();return}
   const st=v2Deco(clone(Sk.game),Sk);
   const newGame_=!V||V.phase==='lobby'||V.game!==st.game;
@@ -2973,7 +2986,7 @@ function v2Render(Sk){
   const animOk=!newGame_&&st.seq===lastSeq+1;
   lastSeq=st.seq;intentAt=0;
   enqueue({st,ev:animOk?st.ev:(newGame_&&st.ev&&st.ev.k==='start'?st.ev:null)});netUi()}
-function v2OnLeave(why){const self=v2Self;v2Self=false;lastSeq=0;resetOnline();
+function v2OnLeave(why,o){const self=v2Self;v2Self=false;lastSeq=0;resetOnline();if(o&&o.shown)return;
   if(why==='kicked')notice('🚫',T('kickedT'));else if(why==='closed'&&!self)notice('🚪',T('closedT'))}
 function v2LobbyClick(b){
   if(b.dataset.pick){const sp=b.dataset.pick;ac();Sfx.pick();lbPend.sp=sp;lbPend.spAt=Date.now();K.pick('char',sp);renderLobby();setTimeout(()=>{if(V2on())renderLobby()},2600);return}
@@ -2993,7 +3006,8 @@ function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then
   if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}
   if(r&&r.kind==='rooms-v1'&&r.gameId==='yut'){fallback();return}
   if(r&&r.url&&r.kind!=='none'){location.href=r.url;return}fallback()}).catch(fallback)}
-function v2Boot(){let arr=false;try{arr=!!new URLSearchParams(location.search).get('r')||!!sessionStorage.getItem('lpr_active')}catch(_){}
+function v2Boot(){window.__lprBoot=window.__lprBoot||'turn';   /* 자동 참가·resume 은 커널 한 곳(공통 UI 는 건너뛴다) */
+  let arr=false;try{arr=!!new URLSearchParams(location.search).get('r')||!!sessionStorage.getItem('lpr_active')}catch(_){}
   renderJoinTexts();if(arr){show('scrLobby');renderLobby()}else show('scrMode');
   v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){resetOnline()}}).catch(()=>{resetOnline();toast2(T('errNet'),2400)})}
 window.__yutV2={get K(){return K},get on(){return V2on()},get V(){return V},get lastSeq(){return lastSeq},v2Lobby,v2Ready,v2Create};

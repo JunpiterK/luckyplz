@@ -63,6 +63,7 @@ header.top h1{flex:1;min-width:0;text-align:center;font-family:'Fredoka','Jua','
 .ib[hidden]{display:none}
 .netbar{display:none;align-items:center;gap:6px;padding:0 10px 0 60px;height:30px;flex-shrink:0;overflow:hidden}
 .netbar.on{display:flex}
+#lprSlot .lpr-hud{height:26px}
 .chip{font-size:11.5px;font-weight:700;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.05);white-space:nowrap;color:var(--dim)}
 .chip.act{cursor:pointer;color:#1b0c1c;border:0;background:linear-gradient(135deg,#FFD76A,#FF8FB8)}
 .chip.st{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;border:0;background:none;padding:4px 2px}
@@ -2579,7 +2580,7 @@ function renderNet(){
     const on=NET.on&&G.mode==='online'&&G.state!=='menu';
     bar.classList.toggle('on',on);
     if(!on) return;
-    if(V2on()){ $('netRoom').hidden=false; $('netInvite').hidden=false; $('netRoom').textContent=LpRooms.util.fmtCode(K.room.code)+' '+(K.room.seal||'');
+    if(V2on()){ const p2=P2on(); $('netRoom').hidden=p2; $('netInvite').hidden=p2;   /* 공통 UI 가 있으면 방 코드·초대는 HUD 알약(이 줄 맨 앞 #lprSlot) → 방 시트 */ $('netRoom').textContent=LpRooms.util.fmtCode(K.room.code)+' '+(K.room.seal||'');
         $('netStatus').textContent=v2IsPlayer()?(NET.oppName?t('vsWho',{n:NET.oppName}):t('waitOpp')):'👀 '+v2Players().map(v2NameOf).join(' vs '); return; }
     $('netRoom').hidden=NET.role!=='host'; $('netInvite').hidden=NET.role!=='host';
     if(NET.role==='host'&&NET.room) $('netRoom').textContent=t('room',{code:NET.room.code,pin:NET.room.pin});
@@ -2608,6 +2609,9 @@ const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get
 let v2BgT=0,v2PzLocal=0;
 let K=null,v2P=null,v2Self=false,v2Round=0,v2Starting=false,v2Res=null,v2KoT=0,v2Bound=null,v2PzT=0;const v2LastPk={};
 function V2on(){ return !!(K&&K.room); }
+function P2on(){ return !!(window.LpRoomsUI&&LpRoomsUI.mountLobby&&!String(LpRoomsUI.version||'').includes('stub')); }
+/* 공통 UI(lpRoomsUI)가 부팅할 때 커널을 먼저 세운다(UI 👥 로 방을 만들어도 이 게임이 그린다) — v1 페이지에선 아무도 안 부른다 */
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
 function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
@@ -2621,6 +2625,7 @@ function askLocal(q){return new Promise(res=>{const ov=document.createElement('d
   ov.querySelector('p').textContent=q;document.body.appendChild(ov);ov.addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b&&e.target!==ov)return;ov.remove();res(!!b&&b.dataset.v==='1')})})}
 function gmSpec(){return {gameId:GAME_ID,kind:'realtime',name:()=>t('title'),seats:[2,2],max:12,lateJoin:'nextRound',needGuest:true,migratable:false,bots:false,drive:'game',
   options:[{key:'nc',values:[3,4,5],def:4,title:()=>'🍬',label:n=>String(n)}],onStart:()=>v2StartRound(),
+  hudInto:()=>{let s=$('lprSlot');if(!s){s=document.createElement('span');s.id='lprSlot';s.style.cssText='display:flex;flex:0 0 auto;align-items:center';$('netRoom').before(s)}return s},
   host:{},client:{render:v2Render,x:v2X,onLeave:v2OnLeave}}}
 function seed32(u8){return u8&&u8.length>=4?(((u8[0]<<24)|(u8[1]<<16)|(u8[2]<<8)|u8[3])>>>0):newSeed()}
 function v2Players(){const S=K&&K.S();return (S&&S.game&&S.game.a)||[]}
@@ -2724,12 +2729,13 @@ function v2PzUi(pz,resumeMs){
   const draw=()=>{if(pz){const sec=Math.max(0,Math.ceil((pz.dl-K.room.clock())/1000));const mine=pz.who===K.me.pid;
       v2PzEl.textContent=(mine?'⏸ ':'📶 ')+(mine?'…':(v2NameOf(pz.who)||t('opp')))+' · '+sec+'s'}else v2PzEl.textContent='▶ '+Math.max(1,Math.ceil(resumeMs/1000))};
   draw();if(pz)v2PzEl._t=setInterval(draw,500)}
-function v2OnLeave(why){const self=v2Self;v2Self=false;v2Bound=null;v2Round=0;v2Res=null;NET.on=false;v2PzUi(null);clearTimeout(v2PzT);
+function v2OnLeave(why,o){const self=v2Self;v2Self=false;v2Bound=null;v2Round=0;v2Res=null;NET.on=false;v2PzUi(null);clearTimeout(v2PzT);
   try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
   G.mode='online';G.state='menu';G.paused=false;G.players=[];G.bots=[];showOv('menuOv');renderMenu();renderNet();layout();
-  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(t('hostClosed'),2400)}
+  if(o&&o.shown){/* 공통 UI 가 떠남 카드를 이미 띄웠다 */}else if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(t('hostClosed'),2400)}
 async function v2Create(){try{await v2Ready();const r=await K.create({opts:{nc:G.nc}});if(r){enterLobby()}}catch(e){toast(t('noNet'),2600)}}
-function v2Boot(){G.mode='online';showOv(null);G.state='lobby';v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){G.state='menu';showOv('menuOv');renderMenu()}}).catch(()=>{G.state='menu';showOv('menuOv')})}
+function v2Boot(){window.__lprBoot=window.__lprBoot||'turn';   /* 자동 참가·resume 은 커널 한 곳(공통 UI 는 건너뛴다) */
+  G.mode='online';showOv(null);G.state='lobby';v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){G.state='menu';showOv('menuOv');renderMenu()}}).catch(()=>{G.state='menu';showOv('menuOv')})}
 window.__gummyV2={get K(){return K},get on(){return V2on()},get G(){return G},get NET(){return NET},get res(){return v2Res},v2Ready,v2Create,v2StartRound,isPlayer:()=>V2on()&&v2IsPlayer()};
 
 /* ════════════ 크기 · 시작 ════════════ */

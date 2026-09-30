@@ -2212,6 +2212,8 @@ const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get
   if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('mahjong-tw')==='v2')}catch(_){return false}})();
 let K=null,v2P=null,v2Self=false,v2Gid=null,v2Pub=null,v2Prv=null,v2Key='',v2FbT=0,v2Dealing=false,v2RevealFor=null,v2Init0=null;const v2DealLog=[];
 function V2on(){return !!(K&&K.room)}
+/* 공통 UI(lpRoomsUI)가 부팅할 때 커널을 먼저 세운다(UI 👥 로 방을 만들어도 이 게임이 그린다) — v1 페이지에선 아무도 안 부른다 */
+(window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
 function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
@@ -2292,13 +2294,14 @@ function v2Fair(ev){
     rec.mine=T2.hands[v2Init0.seat].slice().sort((a,b)=>a-b).join(',')===v2Init0.hand.slice().sort((a,b)=>a-b).join(',')}}catch(e){rec.err=String(e)}
   rec.ok=rec.commit&&rec.mine!==false;v2DealLog.push(rec);
   if(!K.isHost)toast(rec.ok?'🀄 ✓':'⚠ '+LpRoomsTurn.tt('fairBad'),1600)}
-function v2OnLeave(why){const self=v2Self;v2Self=false;ROLE='local';G=null;V=null;P=null;v2Pub=null;v2Prv=null;v2Key='';clearTimeout(planT);
+function v2OnLeave(why,o){const self=v2Self;v2Self=false;ROLE='local';G=null;V=null;P=null;v2Pub=null;v2Prv=null;v2Key='';clearTimeout(planT);
   try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
   document.body.classList.remove('online');resetView();show('scrMode');
-  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
+  if(o&&o.shown){/* 공통 UI 가 떠남 카드를 이미 띄웠다 */}else if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
 async function v2Create(){try{await v2Ready();const r=await K.create({opts:{rounds:setupCfg.rounds,speed:setupCfg.speed}});if(r)hideScreens()}catch(e){toast(T('offline'))}}
 function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then(r=>{if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}fallback()}).catch(fallback)}
-function v2Boot(){v2Ready().then(k=>k.boot()).then(r=>{if(r)hideScreens()}).catch(()=>{})}
+function v2Boot(){window.__lprBoot=window.__lprBoot||'turn';   /* 자동 참가·resume 은 커널 한 곳(공통 UI 는 건너뛴다) */
+  v2Ready().then(k=>k.boot()).then(r=>{if(r)hideScreens()}).catch(()=>{})}
 /* 끊긴 좌석은 8초 뒤 봇 — 명단이 바뀌면 plan 을 다시 본다 */
 setInterval(()=>{if(V2on()&&K.isHost&&G&&G.phase==='play')plan()},2000);
 window.__mahjongtwV2={get K(){return K},get on(){return V2on()},get G(){return G},get V(){return V},get P(){return P},get mySeat(){return mySeat},get dealLog(){return v2DealLog.slice()},get init0(){return v2Init0},

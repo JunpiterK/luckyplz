@@ -450,7 +450,8 @@ async function mahjong(ctx) {
             if (lv >= 1 && !l1) l1 = Date.now() - tP; if (lv >= 2 && !l2) l2 = Date.now() - tP; if (lv >= 3 && !l3) l3 = Date.now() - tP;
             await sleep(500);
         }
-        const ban = await g1.ev(`(()=>{const b=document.querySelector('.lpt-ban');return b&&!b.classList.contains('hide')?b.textContent:''})()`);
+        /* 방장 끊김 띠: 공통 UI(.lpr-band) 가 있으면 그것, 없으면 커널 폴백(.lpt-ban) */
+        const ban = await g1.ev(`(()=>{const u=document.querySelector('.lpr-band');if(u)return u.textContent;const b=document.querySelector('.lpt-ban');return b&&!b.classList.contains('hide')?b.textContent:''})()`);
         ok('T8', !took && l1 && l2 && l3 && l2 - l1 >= 6500 && l3 - l1 >= 16500 && /방장|host/i.test(ban), '방장 크래시(마작, 숨은 정보) → 승계 없음 · 12s/20s/30s 대기 안내', { l1, l2, l3, took, ban });
         relay.partition('mH', false);
         const exc = all.map(p => p.exc.slice(0, 3)).filter(x => x.length);
