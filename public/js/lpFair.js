@@ -22,9 +22,10 @@
      S:{[pid:string]:string} (*게스트 커밋 서명*); K:{[pid:string]:string} (*게스트 서명 공개키*);
      rpk:{sig:string, dh:string}; chain?:any[]; rsig:string (*방장 reveal 서명*); st:number (*startAt*);
      res?:any; t:number; stats:{draws:number, aborts:number};
+     X?:string[];                     // [+] 이 추첨에서 제외된 미공개자(앞 시도에서 커밋 후 공개 안 함). 있으면 rsig 서명 대상
    }
    type FairEvent =                   // room.on('fair', ev) — 방장·멤버 모두 받는다
-       {k:'commit', round, params, C}
+       {k:'commit', round, params, C, X?:string[] (*[+]*), excluded?:true (*[+] 멤버: 나는 이번에 빠짐*)}
      | {k:'lock', round, L:string[]}
      | {k:'reveal', round, seed:Uint8Array, startAt:number, cert:Cert, ok:boolean, why?:string, mine:boolean, solo:boolean}
      | {k:'abort', round, by:'host'|'guest', reason:string, who?:string[]}
@@ -72,7 +73,7 @@
    C    = hex(H("lpf1-c|"+code+"|"+round+"|"+ph+"|"+hex(hostSeed)))
    h_i  = hex(H("lpf1-n|"+round+"|"+pid+"|"+hex(n_i)))          zs_i = ECDSA(dsk, "lpf1-gc|"+code+"|"+round+"|"+h_i)
    seed = H("lpf1-s|"+C+"|"+hex(hostSeed)+"|"+ sort(pid).map(p=>p+":"+hex(n_p)).join(","))
-   rsig = ECDSA(rsk, "lpf1-rv|"+canon({code,round,C,ph,hs,L,N,st}))
+   rsig = ECDSA(rsk, "lpf1-rv|"+canon({code,round,C,ph,hs,L,N,st}))        (X 가 비어 있지 않으면 {…,X} — 제외된 미공개자)
    rng(seed,label) = sfc32( H(seed ‖ UTF8(label))[0..15] ), 12회 예열
    ===================================================================== */
 (function (G) {
@@ -218,7 +219,8 @@
     function seedOf(C, hsHex, N) { return H('lpf1-s|' + C + '|' + hsHex + '|' + pairs(N)); }
     function gOf(N) { return Hx('lpf1-g|' + pairs(N)); }
     function dealSeed(hsHex, G_) { return H('lpf1-d|' + hsHex + '|' + G_); }
-    function revealBody(o) { return 'lpf1-rv|' + canon({ code: o.code, round: o.round, C: o.C, ph: o.ph, hs: o.hs, L: o.L, N: o.N, st: o.st }); }
+    /* X(이 추첨에서 제외된 미공개자)는 있을 때만 서명 대상에 들어간다 — X 없는 옛 인증서도 그대로 검증된다 */
+    function revealBody(o) { return 'lpf1-rv|' + canon({ code: o.code, round: o.round, C: o.C, ph: o.ph, hs: o.hs, L: o.L, N: o.N, st: o.st, X: o.X && o.X.length ? o.X : undefined }); }
     function gcMsg(code, round, h) { return 'lpf1-gc|' + code + '|' + round + '|' + h; }
     function resHash(res) { return Hx(canon(res)).slice(0, 8); }
 
@@ -276,37 +278,45 @@
     function fstats(room) { var io = room._io; var st = io.isHost ? io.store() : (room._fst || (room._fst = {})); st.draws = st.draws || 0; st.aborts = st.aborts || 0; return st; }
 
     /* 방장 쪽 공통: 커밋 → 참가자 커밋 → 잠금 → 참가자 공개 */
-    async function collect(room, round, C, ph, params, win, kind) {
-        var io = room._io, me = room.me.pid;
-        var want = room.roster().filter(function (m) { return isMember(m, me); }).map(function (m) { return m.p; });
+    /* exclude = 이 draw() 호출의 앞 시도에서 커밋 후 공개하지 않은 사람 — want 에서 빼고, 다시 커밋해도 무시한다(D4).
+       [+] 시계: 게스트 c·r 에 실린 t0 와 방장 도착 시각을 lock·reveal 의 ec 로 되돌려 NTP 표본을 만든다(추가 메시지 0, §6.1.4). */
+    async function collect(room, round, C, ph, params, win, kind, exclude) {
+        var io = room._io, me = room.me.pid, X = (exclude || []).slice().sort();
+        var want = room.roster().filter(function (m) { return isMember(m, me) && X.indexOf(m.p) < 0; }).map(function (m) { return m.p; });
         var st = io.store(); st.pend = st.pend || {};
-        var commits = {}, reveals = {};
-        var off = io.on('fair', function (from, d) {
+        var commits = {}, reveals = {}, ecC = {}, ecR = {};
+        var off = io.on('fair', function (from, d, rx) {
             if (!from || !d || d.round !== round) return;
             if (d.k === 'c' && want.indexOf(from) >= 0 && typeof d.h === 'string' && !commits[from]) {
                 var m = room.roster().filter(function (x) { return x.p === from; })[0];
                 if (!m || !m.k) return;
+                if (typeof d.t0 === 'number' && !ecC[from]) ecC[from] = [d.t0, typeof rx === 'number' ? rx : Date.now()];
                 verifySig(m.k.sig, gcMsg(room.code, round, d.h), d.zs).then(function (ok) { if (ok && !commits[from]) commits[from] = { h: d.h, zs: d.zs, pk: m.k.sig }; });
             } else if (d.k === 'r' && commits[from] && typeof d.n === 'string' && !reveals[from]) {
-                if (nHash(round, from, d.n) === commits[from].h) reveals[from] = d.n;
+                if (nHash(round, from, d.n) === commits[from].h) {
+                    reveals[from] = d.n;
+                    if (typeof d.t0 === 'number') ecR[from] = [d.t0, typeof rx === 'number' ? rx : Date.now()];
+                }
             }
         });
+        function ecOf(src, L) { var o = {}, any = false; L.forEach(function (p) { if (src[p]) { o[p] = src[p]; any = true; } }); return any ? o : undefined; }
         try {
-            await io.sendH('fair', { k: kind || 'commit', round: round, C: C, ph: ph, params: params, win: win }, { reliable: true });
-            io.emit('fair', { k: 'commit', round: round, params: params, C: C });
-            if (!want.length) return { L: [], N: {}, Hh: {}, S: {}, K: {}, missing: [] };
+            await io.sendH('fair', { k: kind || 'commit', round: round, C: C, ph: ph, params: params, win: win, X: X.length ? X : undefined }, { reliable: true });
+            io.emit('fair', { k: 'commit', round: round, params: params, C: C, X: X.length ? X : undefined });
+            if (!want.length) return { L: [], N: {}, Hh: {}, S: {}, K: {}, missing: [], X: X };
             var t0 = Date.now();
             while (Date.now() - t0 < win && Object.keys(commits).length < want.length) await sleep(40);
             await sleep(60);   /* 서명 검증 비동기 마무리 */
-            var L = Object.keys(commits).sort();
-            if (!L.length) return { L: [], N: {}, Hh: {}, S: {}, K: {}, missing: [] };
-            await io.sendH('fair', { k: 'lock', round: round, L: L }, {});
+            var L = Object.keys(commits).filter(function (p) { return X.indexOf(p) < 0; }).sort();
+            if (!L.length) return { L: [], N: {}, Hh: {}, S: {}, K: {}, missing: [], X: X };
+            var ecL = ecOf(ecC, L);
+            await io.sendH('fair', { k: 'lock', round: round, L: L, ec: ecL, t: ecL ? Date.now() : undefined }, {});
             io.emit('fair', { k: 'lock', round: round, L: L });
             var t1 = Date.now();
             while (Date.now() - t1 < 1500 && Object.keys(reveals).length < L.length) await sleep(40);
             var N = {}, Hh = {}, S = {}, K = {}, missing = [];
             L.forEach(function (p) { if (reveals[p]) { N[p] = reveals[p]; Hh[p] = commits[p].h; S[p] = commits[p].zs; K[p] = commits[p].pk; } else missing.push(p); });
-            return { L: L, N: N, Hh: Hh, S: S, K: K, missing: missing };
+            return { L: L, N: N, Hh: Hh, S: S, K: K, missing: missing.filter(function (p) { return X.indexOf(p) < 0; }), X: X, ec: ecOf(ecR, L) };
         } finally { off(); }
     }
 
@@ -314,7 +324,7 @@
         var io = room._io;
         return { v: 1, g: room.gameId, code: room.code, round: o.round, params: o.params, C: o.C, hs: o.hs, ph: o.ph,
             L: o.L, N: o.N, H: o.Hh, S: o.S, K: o.K, rpk: io.rpk(), chain: io.chain() || undefined, rsig: o.rsig, st: o.st,
-            t: Date.now(), stats: { draws: o.draws, aborts: o.aborts } };
+            X: o.X && o.X.length ? o.X : undefined, t: Date.now(), stats: { draws: o.draws, aborts: o.aborts } };
     }
 
     async function draw(room, o) {
@@ -329,31 +339,32 @@
             var hs = rand(32), hsHex = hex(hs), ph = phOf(params), C = commitOf(room.code, round, ph, hsHex);
             fs.pend = { round: round, hs: hsHex, C: C, ph: ph, params: params, hidden: !!o.hidden, t: Date.now() };
             io.save && io.save();
-            var r = await collect(room, round, C, ph, params, win, o.hidden ? 'deal0' : 'commit');
-            r.L = r.L.filter(function (p) { return exclude.indexOf(p) < 0 || r.N[p]; });
+            var r = await collect(room, round, C, ph, params, win, o.hidden ? 'deal0' : 'commit', exclude);
+            r.L = r.L.filter(function (p) { return exclude.indexOf(p) < 0; });
             if (r.missing.length) {
                 fs.aborts++;
                 await io.sendH('fair', { k: 'abort', round: round, by: 'guest', reason: 'no_reveal', who: r.missing }, { reliable: true });
                 io.emit('fair', { k: 'abort', round: round, by: 'guest', reason: 'no_reveal', who: r.missing });
-                exclude = exclude.concat(r.missing);
+                exclude = exclude.concat(r.missing.filter(function (p) { return exclude.indexOf(p) < 0; }));
                 continue;
             }
             var solo = !r.L.length;
             var st = solo ? room.clock() : room.clock() + 900;
-            var body = { code: room.code, round: round, C: C, ph: ph, hs: o.hidden ? '' : hsHex, L: r.L, N: r.N, st: st };
+            var Xs = exclude.slice().sort();   /* [+] 이번 추첨에서 뺀 미공개자 — 서명·인증서에 남는다 */
+            var body = { code: room.code, round: round, C: C, ph: ph, hs: o.hidden ? '' : hsHex, L: r.L, N: r.N, st: st, X: Xs };
             var rsig = await io.sign(revealBody(body));
             fs.draws++;
-            var certO = makeCert(room, { round: round, params: params, C: C, hs: body.hs, ph: ph, L: r.L, N: r.N, Hh: r.Hh, S: r.S, K: r.K, rsig: rsig, st: st, draws: fs.draws, aborts: fs.aborts });
+            var certO = makeCert(room, { round: round, params: params, C: C, hs: body.hs, ph: ph, L: r.L, N: r.N, Hh: r.Hh, S: r.S, K: r.K, rsig: rsig, st: st, X: Xs, draws: fs.draws, aborts: fs.aborts });
             if (o.hidden) {
                 var Gs = gOf(r.N);
                 fs.deal = { round: round, hs: hsHex, C: C, ph: ph, G: Gs };
                 delete fs.pend; io.save && io.save();
-                await io.sendH('fair', { k: 'deal', round: round, C: C, ph: ph, L: r.L, N: r.N, H: r.Hh, S: r.S, K: r.K, st: st, rsig: rsig, G: Gs }, { reliable: true });
+                await io.sendH('fair', { k: 'deal', round: round, C: C, ph: ph, L: r.L, N: r.N, H: r.Hh, S: r.S, K: r.K, st: st, rsig: rsig, G: Gs, X: Xs.length ? Xs : undefined, ec: r.ec, t: r.ec ? Date.now() : undefined }, { reliable: true });
                 io.emit('fair', { k: 'deal', round: round, G: Gs });
                 return { seed: dealSeed(hsHex, Gs), round: round, cert: certO, startAt: st, hostSeed: hs, G: Gs };
             }
             delete fs.pend; io.save && io.save();
-            await io.sendH('fair', { k: 'reveal', round: round, hs: hsHex, L: r.L, N: r.N, H: r.Hh, S: r.S, K: r.K, st: st, rsig: rsig }, { reliable: true });
+            await io.sendH('fair', { k: 'reveal', round: round, hs: hsHex, L: r.L, N: r.N, H: r.Hh, S: r.S, K: r.K, st: st, rsig: rsig, X: Xs.length ? Xs : undefined, ec: r.ec, t: r.ec ? Date.now() : undefined }, { reliable: true });
             var seed = seedOf(C, hsHex, r.N);
             io.emit('fair', { k: 'reveal', round: round, seed: seed, startAt: st, cert: certO, ok: true, mine: true, solo: solo });
             fs.last = { round: round };
@@ -367,9 +378,9 @@
         if (!room || !room._io || room._lpfAttached) return;
         room._lpfAttached = true;
         var io = room._io, rounds = {};
-        io.on('fair', function (from, d) {
+        io.on('fair', function (from, d, rx) {
             if (io.isHost || from !== null || !d || typeof d.round !== 'number' && d.k !== 'chain0') return;
-            handleGuest(room, rounds, d);
+            handleGuest(room, rounds, d, typeof rx === 'number' ? rx : Date.now());
         });
         /* 방장: 목격 집계 — 게스트 hb 의 w:{r,h} */
         room.on('hb', function (from, d) {
@@ -394,20 +405,27 @@
         room._io.emit('fair', { k: 'witness', round: round, ok: ok, bad: bad });
     }
 
-    async function handleGuest(room, rounds, d) {
+    /* 방장이 lock·reveal 에 되돌려 준 내 t0·도착 시각 → 시계 표본(코어 NTP 필터가 저-RTT 표본만 쓴다) */
+    function clockEcho(io, me, d, rx) {
+        if (!d || !d.ec || typeof d.t !== 'number' || typeof io.clockSample !== 'function') return;
+        var e = d.ec[me];
+        if (Array.isArray(e) && typeof e[0] === 'number' && typeof e[1] === 'number') io.clockSample(e[0], e[1], d.t, rx);
+    }
+    async function handleGuest(room, rounds, d, rx) {
         var io = room._io, me = room.me.pid, R = rounds[d.round] || (rounds[d.round] = {}), fs = fstats(room);
         if (d.k === 'commit' || d.k === 'deal0') {
             if (R.commit) return;
             R.commit = d; R.t = Date.now();
             if (typeof d.C !== 'string' || phOf(d.params) !== d.ph) { R.bad = 'params'; }
             var mem = room.roster().filter(function (m) { return m.p === me; })[0];
-            if (mem && mem.r !== 'bot' && !R.bad) {
+            var excluded = Array.isArray(d.X) && d.X.indexOf(me) >= 0;   /* 앞 시도에서 공개를 안 해 이번 추첨에서 빠짐 */
+            if (mem && mem.r !== 'bot' && !R.bad && !excluded) {
                 var n = hex(rand(16)), h = nHash(d.round, me, n);
                 R.n = n; R.h = h;
                 var zs = await io.sign(gcMsg(room.code, d.round, h));
-                io.sendG('fair', { k: 'c', round: d.round, h: h, zs: zs });
+                io.sendG('fair', { k: 'c', round: d.round, h: h, zs: zs, t0: Date.now() });
             }
-            io.emit('fair', { k: 'commit', round: d.round, params: d.params, C: d.C });
+            io.emit('fair', { k: 'commit', round: d.round, params: d.params, C: d.C, X: Array.isArray(d.X) ? d.X : undefined, excluded: excluded || undefined });
             /* 방장이 공개를 보류하면(결과 보고 버리기) — 모든 화면에 취소 표시 */
             var lim = (d.win || 1500) + 1500 + 3000;
             R.timer = setTimeout(function () {
@@ -417,7 +435,8 @@
         } else if (d.k === 'lock') {
             if (!Array.isArray(d.L)) return;
             R.L = d.L;
-            if (R.n && d.L.indexOf(me) >= 0) io.sendG('fair', { k: 'r', round: d.round, n: R.n });
+            clockEcho(io, me, d, rx);
+            if (R.n && d.L.indexOf(me) >= 0) io.sendG('fair', { k: 'r', round: d.round, n: R.n, t0: Date.now() });
             io.emit('fair', { k: 'lock', round: d.round, L: d.L });
         } else if (d.k === 'abort') {
             if (R.done) return; R.done = true; clearTimeout(R.timer);
@@ -426,8 +445,9 @@
             io.emit('fair', { k: 'abort', round: d.round, by: d.by === 'guest' ? 'guest' : 'host', reason: String(d.reason || ''), who: Array.isArray(d.who) ? d.who : undefined });
         } else if (d.k === 'reveal' || d.k === 'deal') {
             if (R.done) return; R.done = true; clearTimeout(R.timer);
+            clockEcho(io, me, d, rx);
             var c = R.commit || {};
-            var o = { code: room.code, round: d.round, C: c.C, ph: c.ph, hs: d.k === 'deal' ? '' : d.hs, L: d.L || [], N: d.N || {}, st: d.st };
+            var o = { code: room.code, round: d.round, C: c.C, ph: c.ph, hs: d.k === 'deal' ? '' : d.hs, L: d.L || [], N: d.N || {}, st: d.st, X: Array.isArray(d.X) && d.X.length ? d.X : undefined };
             var why = null;
             if (!R.commit) why = 'no_commit';
             else if (R.bad) why = R.bad;
@@ -444,7 +464,7 @@
             if (!why && R.n && R.L && R.L.indexOf(me) >= 0 && !mine) why = 'my_nonce';
             fs.draws++;
             var certO = { v: 1, g: room.gameId, code: room.code, round: d.round, params: c.params, C: c.C, hs: o.hs, ph: c.ph, L: o.L, N: o.N,
-                H: d.H || {}, S: d.S || {}, K: d.K || {}, rpk: io.rpk(), chain: io.chain() || undefined, rsig: d.rsig, st: d.st, t: Date.now(),
+                H: d.H || {}, S: d.S || {}, K: d.K || {}, rpk: io.rpk(), chain: io.chain() || undefined, rsig: d.rsig, st: d.st, X: o.X, t: Date.now(),
                 stats: { draws: fs.draws, aborts: fs.aborts } };
             if (d.k === 'deal') {
                 R.G = d.G;
@@ -567,4 +587,11 @@
    2026-09-30  구현: 동기 SHA-256·sfc32·draw(커밋-공개, 참가자 엔트로피, 게스트 미공개 재시도, 방장 보류 취소 표시)·
                chain·deal·cert(deflate-raw)·witness(hb 편승)·badge(최소 DOM)·beacon(drand, 기본 OFF).
                [+] outcomes·H·hex·canon·witness·chain.reveal/value 추가(기존 항목 불변).
+   2026-09-30  통합 수정(하위 호환):
+               · D4 버그 — 게스트가 커밋 후 공개를 안 하면 재시도에서 빼야 하는데, 재시도 때 그 사람이 다시 커밋해 L 에 들어가고
+                 missing 도 exclude 로 걸러지지 않아 3회 모두 취소됐다. collect(…, exclude) 가 want 에서 빼고 그 사람의 커밋을 무시한다.
+                 [+] 제외 목록 X 를 commit·reveal·deal 와이어와 인증서(Cert.X)에 싣고, 있을 때만 rsig 서명 대상(revealBody)에 넣는다.
+                 제외된 게스트는 commit 의 X 를 보고 커밋하지 않는다(메시지 절약). FairEvent commit 에 [+] X·excluded.
+               · [+] 시계 표본: 게스트 c·r 에 t0, 방장 lock·reveal·deal 에 ec:{pid:[t0,t1]}·t — 추첨마다 NTP 표본 2개(추가 메시지 0).
+                 room._io.clockSample(t0,t1,t2,t3) 이 있을 때만 쓴다.
 */

@@ -341,6 +341,65 @@ export async function core(ctx) {
             'chain: s0 published, s_i verifies, event value reproducible · deal: G shared, host seed hidden until dealR, then verified', { chain: gv, deal: { G: d.G.slice(0, 10), okG: gG.map(x => x.ok), rev: gR.map(x => x.ok && x.seed === d.seed) } });
     });
 
+    /* D4 (2026-09-30 통합): 게스트가 커밋 후 공개 안 함 → 그 라운드 취소, 재시도는 그 사람 없이 완료, 인증서 X 에 제외 기록.
+       (수정 전: 재시도 때 그 사람이 다시 커밋해 L 에 들어가고 missing 이 exclude 로 안 걸러져 3회 모두 취소 → "aborted 3 times") */
+    if (run1(only, 'D4')) await withSetup(E, 3, 'roulette', async (H, G) => {
+        const c = await create(H); for (const g of G) await join(g, c.url);
+        await sleep(600);
+        const bad = await G[0].ev(`(()=>{const r=T.room;r.__gs=r._gsend;r._gsend=function(e,d){if(e==='fair'&&d&&d.k==='r')return Promise.resolve(null);return r.__gs.apply(this,arguments)};return r.me.pid})()`);
+        const t0 = Date.now();
+        const d = await H.ev(`LpFair.draw(T.room,{params:{names:['a','b','c','d']}}).then(r=>({ok:true,round:r.round,seed:LpFair.hex(r.seed),X:r.cert.X||null,L:r.cert.L,stats:r.cert.stats})).catch(e=>({ok:false,err:String(e&&e.message)}))`, 30000);
+        const ms = Date.now() - t0;
+        if (!d.ok) { ok('D4', false, 'guest commits but never reveals → retry completes without them', d); return; }
+        await Promise.all(G.map(g => g.wait(`T.seeds[${d.round}]`, 8000).catch(() => null)));
+        const seeds = await Promise.all(G.map(g => g.ev(`T.seeds[${d.round}]||null`)));
+        const aborts = await Promise.all(G.map(g => g.ev(`T.ev.filter(v=>v.e==='fair'&&v.x.k==='abort'&&v.x.by==='guest').map(v=>(v.x.who||[]).join(','))`)));
+        const excl = await G[0].ev(`T.ev.filter(v=>v.e==='fair'&&v.x.k==='commit'&&v.x.round===${d.round}).map(v=>!!v.x.excluded)`);
+        const v = await G[1].ev(`LpFair.cert.verify(T.certs[${d.round}],null).then(x=>({ok:x.ok,why:x.why||null,X:T.certs[${d.round}].X||null}))`);
+        const vHost = await G[1].ev(`(async()=>{const c=JSON.parse(JSON.stringify(T.certs[${d.round}]));delete c.X;const a=await LpFair.cert.verify(c,null);const c2=JSON.parse(JSON.stringify(T.certs[${d.round}]));c2.X=[];const b=await LpFair.cert.verify(c2,null);return [a.ok,a.why,b.ok]})()`);
+        const good = d.round === 2 && d.X && d.X.length === 1 && d.X[0] === bad && !d.L.includes(bad) && d.L.length === 2 && d.stats.aborts >= 1
+            && seeds.every(s => s === d.seed) && aborts.every(a => a.length === 1 && a[0] === bad) && excl[0] === true && v.ok && J(v.X) === J([bad])
+            && vHost[0] === false && vHost[1] === 'host_sig' && vHost[2] === false;
+        ok('D4', good, 'guest commits but never reveals → round aborted, retry (round 2) completes without them; cert.X records exclusion (signed: dropping X → host_sig)',
+            { round: d.round, ms, L: d.L.length, X: d.X && d.X.map(p => p === bad ? 'bad' : p), aborts: d.stats.aborts, seedsEqual: seeds.every(s => s === d.seed), excludedSawCommit: excl, verify: v.ok, forgedNoX: vHost });
+        /* 다음 draw() 는 새로 시작 — 그 사람을 다시 부른다(여전히 미공개면 또 한 번 취소 후 제외) */
+        await G[0].ev(`(()=>{const r=T.room;r._gsend=r.__gs})()`);
+        const d2 = await H.ev(`LpFair.draw(T.room,{params:{names:['a','b']}}).then(r=>({round:r.round,L:r.cert.L.length,X:r.cert.X||null}))`, 30000);
+        ok('D4b', d2.L === 3 && !d2.X, 'next draw() includes the guest again once they reveal (no sticky exclusion, no X in cert)', d2);
+    });
+
+    /* 시계 정밀도 (2026-09-30 통합): 지연 30~150ms 무작위(D2 조건) — 합류 표본 + 추첨 에코 표본(lock/reveal) → 오프셋 ≈ 0 */
+    if (run1(only, 'CX3b')) await withSetup(E, 3, 'roulette', async (H, G) => {
+        relay.setFault({ lat: [30, 150] });
+        try {
+            const c = await create(H); for (const g of G) await join(g, c.url);
+            await sleep(3500);
+            const pre = await Promise.all(G.map(g => g.ev(`({off:Math.round(T.room._off),n:T.room._clk.length})`)));
+            for (let i = 0; i < 8; i++) { await H.ev(`LpFair.draw(T.room,{params:{names:['a','b']}}).then(()=>1)`, 30000); await sleep(250); }
+            const offs = await Promise.all(G.map(g => g.ev(`({off:Math.round(T.room._off*10)/10,rtt:T.room._rtt,n:T.room._clk.length,N:T.room._clkN})`)));
+            const spread = Math.max(...offs.map(o => o.off)) - Math.min(...offs.map(o => o.off));
+            ok('CX3b', offs.every(o => Math.abs(o.off) <= 20 && o.N >= 15) && spread <= 25, 'clock under 30–150ms jitter: join + draw-echo samples (2/draw, 0 extra msgs) → |offset| ≤ 20ms, spread ≤ 25ms', { afterJoin: pre, after8draws: offs, spread });
+        } finally { relay.setFault({}); }
+    });
+
+    /* 방장 도구 공개 API (2026-09-30 통합): setPin / setApproval — UI 가 room._H 를 만지지 않는다 */
+    if (run1(only, 'CX6')) await withSetup(E, 3, 'roulette', async (H, G) => {
+        const c = await create(H);
+        const pin = await H.ev(`T.room.setPin(true)`);
+        const pinReq = await H.ev(`T.room.state().pinReq&&T.room.pin===${JSON.stringify(pin)}`);
+        const j0 = await join(G[0], c.code);
+        const j1 = await join(G[0], c.code, { pin });
+        const keep = await H.ev(`T.room.setPin(true)`);
+        const own = await H.ev(`T.room.setPin(true,'4321')`);
+        const off = await H.ev(`T.room.setPin(false)===null&&!T.room.state().pinReq&&T.room.pin===undefined`);
+        const j2 = await join(G[1], c.code);
+        const ap = await H.ev(`T.room.setApproval(true)===true&&T.room.state().appr===true`);
+        const j3 = await Promise.race([join(G[2], c.code), new Promise(r => setTimeout(() => r({ pendingStill: true }), 2500))]);
+        const pend = await H.ev(`T.room.pending().length`);
+        ok('CX6', /^\d{4}$/.test(pin) && pinReq && j0.reason === 'pin_required' && j1.ok && keep === pin && own === '4321' && off && j2.ok && ap && j3.pendingStill && pend === 1,
+            'setPin(on,pin?) / setApproval(on): PIN on → code-only join needs PIN, keeps PIN on re-enable, custom PIN, off → open; approval on → new joiner waits', { pin: !!pin, j0: j0.reason, j1: j1.ok, keep: keep === pin, own, off, j2: j2.ok, ap, pend });
+    });
+
     /* Node ↔ Edge 교차 (D6·D7 교차 컨텍스트) */
     if (run1(only, 'FX')) {
         const { makeCert, loadFair } = await import('./fairlib.mjs');

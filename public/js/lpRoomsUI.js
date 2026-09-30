@@ -35,14 +35,21 @@
           // room(Room) 방이 붙음 · left({reason}) 방을 떠남 · lobby() 대기실 표시 · play(phase) 대기실이 닫히고 게임 화면으로
      openCreate(o?: { gameId?: string, pick?: boolean }): Promise<Room | null>;
           // 닉·아바타 확인 후 방 생성. pick=true → 게임 그리드부터(허브). 이미 방이면 그 방
-     openJoin(o?: { code?: string }): Promise<void>;
+     openJoin(o?: { code?: string, gameId?: string, inv?: {fp, tok?}, sheet?: boolean }): Promise<void>;
           // 코드/링크 입력 → LpRooms.resolve → 같은 게임이면 여기서 참가, 아니면 그 게임 페이지로 이동
+          // [+] 올바른 code + 저장된 닉네임이면 시트 없이 바로 참가(링크로 온 게임의 자동 참가 — sheet:true 면 항상 시트).
+          //     inv 가 있으면 sessionStorage lpr_inv 로 옮겨 fp 고정 참가. gameId 는 참고용(페이지 게임과 다르면 resolve 가 이동)
      openInvite(room?): void;                 // 초대 시트: 💬 메신저로 초대(1순위) · 링크+복사 · QR · 코드 · 🔄 링크 새로(방장)
      openRoom(room?): void;                   // 방 시트(= HUD 탭): 명단 · 초대 · 방장 도구 · 나가기
      openSwitch(room?): void;                 // 방장: 게임 바꾸기 그리드 → room.switchGame(id)
      mountLobby(room, o?: { into?: HTMLElement }): Handle;   // 풀 대기실(기본 화면 전체). 보통 자동 — 수동은 lobby:'none' 일 때
      mountHud(room): Handle;                  // HUD 알약 `K7M-2QX · 👥5 · ●` — 보통 자동
      strip(room, el?: HTMLElement): Handle;   // 띠형 대기실: 명단 1줄 + [초대] (+ 준비/시작은 게임 버튼이 맡는다)
+     drawStrip(o: { room: Room | null, gameId?: string, allow?: boolean,
+                    onEntry?(): void, onAllow?(): void, onFill?(): void }): Handle | null;
+          // [+] 추첨 게임(draw) 계약 — strip() 위에 추첨 버튼을 얹는다. 게임은 명단·상태가 바뀔 때마다 불러도 된다(멱등, 다시 그리기만).
+          //     방장: [✋ allow 토글 → onAllow] [👥 → onFill(멤버 이름으로 채우기)]  게스트: allow 일 때 [✋ → onEntry(내 이름 넣기)]
+          //     room=null → 띠 정리(UI 가 붙든 방이 없을 때). UI 가 아직 그 방을 안 붙였으면 붙인다(bind).
      badge(el: HTMLElement, info: {kind:'verified'|'seed'|'solo'|'mismatch', n?, round?, cert?}): void;
           // LpFair.badge + 스타일 + 현지화("✓ 공정 · 5명 확인") + 탭 → 검증 시트. LpFair.badge 를 직접 불러도 같은 모양(후크)
      confirm(msg: string, o?: { ok?: string, cancel?: string, danger?: boolean }): Promise<boolean>;   // window.confirm 대체(인앱 안전)
@@ -60,6 +67,8 @@
      LpRoomsQ.push(function (LpRooms, UI) { LpRooms.adapter({...}); UI.config({...}); });
    UI 가 부팅하면서(자동 참가·resume 전에) 차례로 부르고, 이후 push 는 즉시 실행된다(LpAutoPauseQ 와 같은 패턴).
    URL: ?r=CODE(참가) · ?lpr=new(이 게임으로 방 만들기 시트) · #k=<fp>.<tok>(초대 — sessionStorage lpr_inv 로 옮긴 뒤 주소창에서 지움)
+   [+] window.__lprBoot — 자동 참가·resume 을 한 곳만 하도록 하는 깃발. UI 가 부팅하며 그 일을 맡으면 'ui' 로 세우고,
+       이미 다른 값(게임 어댑터가 먼저 맡음, 예 'p3a')이면 UI 는 자동 참가·resume 을 건너뛴다. 게임도 같은 규칙으로 확인한다.
 
    자동 동작(v2 로더가 이 파일을 실으면): URL(?r= · /r/CODE · #k=) → sessionStorage lpr_inv 로 옮기고 주소창에서 지움 →
    LpRooms.resume() → (없으면) ?r= 코드로 참가(저장된 닉 있으면 묻지 않음) → 방이 붙으면 HUD 1개 +
@@ -242,6 +251,17 @@
         es: [['Feliz', 'Veloz', 'Valiente', 'Amable', 'Audaz', 'Genial', 'Alegre', 'Fuerte', 'Ágil', 'Libre', 'Dulce', 'Leal'], ['Panda', 'Zorro', 'Tigre', 'Conejo', 'Perrito', 'Gatito', 'Koala', 'Búho', 'Nutria', 'Pato', 'Rana', 'Oso']],
         pt: [['Feliz', 'Veloz', 'Valente', 'Gentil', 'Audaz', 'Legal', 'Alegre', 'Forte', 'Ágil', 'Livre', 'Doce', 'Leal'], ['Panda', 'Raposa', 'Tigre', 'Coelho', 'Cachorro', 'Gatinho', 'Coala', 'Coruja', 'Lontra', 'Pato', 'Sapo', 'Urso']]
     };
+
+    /* [+] 추첨 띠(drawStrip) 문구 — 빠진 언어는 en */
+    var I2 = {
+        allowIn: { ko: '참가자 이름 넣기 허용', en: 'Let guests add names', ja: '参加者の名前追加を許可', zh: '允许加入名单', es: 'Permitir añadir nombres', pt: 'Permitir incluir nomes',
+            de: 'Namen hinzufügen erlauben', fr: 'Autoriser l’ajout de noms', ru: 'Разрешить добавлять имена', tr: 'İsim eklemeye izin ver', id: 'Izinkan tambah nama',
+            vi: 'Cho phép thêm tên', th: 'ให้เพิ่มชื่อได้', hi: 'नाम जोड़ने दें', ar: 'السماح بإضافة الأسماء' },
+        fillIn: { ko: '멤버로 채우기', en: 'Fill with members', ja: 'メンバーで埋める', zh: '用成员填充', es: 'Llenar con miembros', pt: 'Preencher com membros',
+            de: 'Mit Mitgliedern füllen', fr: 'Remplir avec les membres', ru: 'Заполнить участниками', tr: 'Üyelerle doldur', id: 'Isi dengan anggota',
+            vi: 'Điền bằng thành viên', th: 'เติมด้วยสมาชิก', hi: 'सदस्यों से भरें', ar: 'املأ بالأعضاء' }
+    };
+    Object.keys(I2).forEach(function (k) { Object.keys(I2[k]).forEach(function (l) { if (I[l] && I[l][k] == null) I[l][k] = I2[k][l]; }); });
 
     function lsGet(k) { try { return G.localStorage.getItem(k); } catch (_) { return null; } }
     function lsSet(k, v) { try { if (v == null) G.localStorage.removeItem(k); else G.localStorage.setItem(k, v); } catch (_) {} }
@@ -706,6 +726,15 @@
     function openJoin(o) {
         o = o || {};
         if (!G.LpRooms) return Promise.resolve();
+        /* [+] 링크로 온 게임의 자동 참가(추첨 게임 계약) — 코드가 온전하고 닉이 저장돼 있으면 시트 없이 바로 */
+        var oc = o.code && G.LpRooms.util && G.LpRooms.util.normCode ? G.LpRooms.util.normCode(o.code) : null;
+        if (oc && o.inv && o.inv.fp) saveInv({ code: oc, inv: o.inv });
+        if (oc && !o.sheet && G.LpRooms.profile.get().nick) {
+            if (cur && cur.code === oc && !cur._left) return Promise.resolve();
+            var pg0 = pageGid();
+            if (pg0 && pg0 !== 'lobby') return joinHere(oc, { inv: (o.inv && o.inv.fp ? o.inv : null) || invFor(oc) }).then(function () {});
+            return route(oc, {}, statusCard()).then(function () {});
+        }
         var body = E('div', 'lpr-col'), msg = E('div', 'lpr-msg'), extra = E('div', 'lpr-row');
         var needProf = !G.LpRooms.profile.get().nick && pageGid();
         var prof = needProf ? profEditor() : null;
@@ -1145,14 +1174,45 @@
             who.appendChild(E('b', null, '👥' + hs.length + (hs.length > 8 ? '+' : '')));
             who.addEventListener('click', function () { openRoom(room); });
             w.appendChild(who);
-            if (!room.isHost && CFG.addMe) w.appendChild(B('', '✋', function () { try { CFG.addMe(room); } catch (_) {} }, t('addMe')));
+            var ds = DS && DS.room === room ? DS : null;       /* 추첨 게임 계약(drawStrip) */
+            if (room.isHost && ds) {
+                if (ds.onAllow) {
+                    var al = B(ds.allow ? 'on' : '', '✋', function () { try { ds.onAllow(); } catch (_) {} }, t('allowIn'));
+                    al.setAttribute('aria-pressed', ds.allow ? 'true' : 'false'); al.setAttribute('data-k', 'allow'); w.appendChild(al);
+                }
+                if (ds.onFill) { var fb = B('', '👥', function () { try { ds.onFill(); } catch (_) {} }, t('fillIn')); fb.setAttribute('data-k', 'fill'); w.appendChild(fb); }
+            } else if (!room.isHost) {
+                var entry = ds && ds.onEntry ? (ds.allow ? function () { try { ds.onEntry(); } catch (_) {} } : null)
+                    : (CFG.addMe ? function () { try { CFG.addMe(room); } catch (_) {} } : null);
+                if (entry) { var eb = B('', '✋', entry, t('addMe')); eb.setAttribute('data-k', 'entry'); w.appendChild(eb); }
+            }
             w.appendChild(B('pri', '💬', function () { openInvite(room); }, t('invite')));
         }
         render();
         if (host) host.insertBefore(w, host.firstChild); else D.body.appendChild(w);
-        var hdl = { el: w, refresh: render, remove: function () { w.remove(); if (H.strip === hdl) H.strip = null; } };
+        var hdl = { el: w, room: room, refresh: render, remove: function () { w.remove(); if (H.strip === hdl) H.strip = null; } };
         H.strip = hdl;
         return hdl;
+    }
+
+    /* ── 추첨 게임 띠 (P3a 계약 — strip() 위에 추첨 버튼) ─────────────── */
+    var DS = null;
+    function drawStrip(o) {
+        o = o || {};
+        var room = o.room && !o.room._left ? o.room : null;
+        if (!room) {
+            DS = null;
+            if (H.strip && (!cur || cur._left)) H.strip.remove(); else if (H.strip) H.strip.refresh();
+            return null;
+        }
+        DS = { room: room, gameId: o.gameId || room.gameId, allow: o.allow !== false,
+            onEntry: typeof o.onEntry === 'function' ? o.onEntry : null, onAllow: typeof o.onAllow === 'function' ? o.onAllow : null,
+            onFill: typeof o.onFill === 'function' ? o.onFill : null };
+        if (!cur || cur._left) bind(room);                  /* 게임이 직접 붙인 방도 공통 UI 가 맡는다 */
+        if (cur !== room) return null;
+        if (!H.strip || H.strip.room !== room || !H.strip.el.isConnected) strip(room);
+        else H.strip.refresh();
+        return H.strip;
     }
 
     /* ── 초대 시트 ─────────────────────────────────────────────── */
@@ -1203,17 +1263,9 @@
     }
 
     /* ── 방 시트(HUD 탭) ───────────────────────────────────────── */
-    function setPin(room, on) {
-        if (typeof room.setPin === 'function') { room.setPin(on); return; }
-        /* 코어에 공개 PIN 토글이 없어(동결 API: create 때만) 방장 내부 상태를 직접 켠다 — 메인 에이전트에 API 추가 요청 */
-        var Hh = room._H; if (!Hh) return;
-        Hh.pinReq = !!on;
-        if (on && !/^\d{4}$/.test(String(Hh.pin || ''))) { var u = new Uint32Array(1); G.crypto.getRandomValues(u); Hh.pin = String(u[0] % 10000).padStart(4, '0'); }
-        if (!on) Hh.pin = null;
-        room.pin = Hh.pin || undefined;
-        room.setState(function (S) { S.pinReq = !!on; });
-        if (room._dirty) room._dirty();
-    }
+    /* 방장 도구 — 코어 공개 API(room.setPin · room.setApproval, 2026-09-30 추가)만 쓴다 */
+    function setPin(room, on) { if (typeof room.setPin === 'function') room.setPin(on); }
+    function setAppr(room, on) { if (typeof room.setApproval === 'function') room.setApproval(on); else room.approval(on); }
     function openRoom(room) {
         room = room || cur; if (!room) return;
         var body = E('div', 'lpr-col'), s;
@@ -1229,7 +1281,7 @@
                 var g = E('div', 'lpr-row'); g.style.flexWrap = 'wrap';
                 function tg(icon, key, onv, fn) { var b = B(onv ? 'on' : '', icon + ' ' + t(key), function () { fn(!onv); setTimeout(render, 30); }); b.setAttribute('aria-pressed', onv ? 'true' : 'false'); b.style.flex = '1 1 30%'; return b; }
                 g.appendChild(tg('🔒', 'lock', !!S.lock, function (v) { room.lock(v); }));
-                g.appendChild(tg('✋', 'appr', !!S.appr, function (v) { room.approval(v); }));
+                g.appendChild(tg('✋', 'appr', !!S.appr, function (v) { setAppr(room, v); }));
                 g.appendChild(tg('🔑', 'pin', !!S.pinReq, function (v) { setPin(room, v); if (v && room.pin) toast(t('pinOnly', { p: room.pin }), 2600); }));
                 body.appendChild(g);
                 var g2 = E('div', 'lpr-row'); g2.style.flexWrap = 'wrap';
@@ -1521,6 +1573,9 @@
             if (pg === 'lobby' && !(G.LpRooms.getAdapter && G.LpRooms.getAdapter())) G.LpRooms.adapter({ gameId: 'lobby', kind: 'lobby', seats: null });
             if (CFG.auto === false) return null;
             if (/^\/r\//.test(location.pathname)) return null;      /* /r/CODE — 허브 페이지가 route() */
+            /* 자동 참가·resume 은 한 곳만 — 게임 어댑터가 먼저 맡았으면(__lprBoot) 건너뛰고, 아니면 UI 가 맡았다고 표시 */
+            if (G.__lprBoot && G.__lprBoot !== 'ui') return null;
+            G.__lprBoot = 'ui';
             var room = null, act = jparse(ssGet('lpr_active'), null);
             /* 허브에서는 '먼저 모이기' 방만 이어받는다 — 다른 게임 방은 HUD·최근 방으로 돌아간다 */
             var skipResume = pg === 'lobby' && act && act.gameId && act.gameId !== 'lobby' && !/[?&]r=/.test(location.search);
@@ -1568,7 +1623,7 @@
         room: function () { return cur; },
         on: on,
         openCreate: openCreate, openJoin: openJoin, openInvite: openInvite, openRoom: openRoom, openSwitch: openSwitch,
-        mountLobby: mountLobby, mountHud: mountHud, strip: strip, badge: badge,
+        mountLobby: mountLobby, mountHud: mountHud, strip: strip, drawStrip: drawStrip, badge: badge,
         confirm: confirmBox, sheet: sheet, toast: toast, say: say, t: t, lang: lang, avatars: AV.slice(),
         hub: hub,
         route: function (input, el) {
@@ -1586,3 +1641,11 @@
     function start() { if (G.LpRooms) boot(); }
     if (D.readyState === 'loading') D.addEventListener('DOMContentLoaded', start); else start();
 })(typeof window !== 'undefined' ? window : globalThis);
+/* CHANGE LOG
+   2026-09-30  P2 — 참가·대기실·HUD·초대·전환·허브·배지.
+   2026-09-30  통합 수정(P3a 추첨 게임 계약, 하위 호환 추가만):
+               [+] drawStrip({room, gameId, allow, onEntry, onAllow, onFill}) — strip() 위 추첨 버튼(방장 ✋허용·👥채우기, 게스트 ✋내 이름).
+               [+] openJoin({code, gameId, inv, sheet}) — 온전한 코드 + 저장된 닉이면 시트 없이 바로 참가, inv 는 lpr_inv 로.
+               [+] window.__lprBoot — UI 가 자동 참가·resume 을 맡으면 'ui', 게임이 먼저 맡았으면 UI 는 건너뜀(이중 참가 방지).
+               방장 도구 PIN·승인은 코어 공개 API(room.setPin · room.setApproval)만 쓴다(room._H 직접 접근 제거).
+*/

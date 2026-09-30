@@ -35,7 +35,10 @@
      get(id:string): GameEntry | null;
      has(id:string): boolean;
      mp(ver?: MpVer): GameEntry[];            // 인자 없음 = 멀티 가능(유효 v ≠ 'off', later 아님), 있으면 그 버전만
-     v(id:string): MpVer;                     // 유효 버전 — 오버라이드 ?rooms=v1 > localStorage.lpRoomsV('1'|'2') > 표
+     v(id:string): MpVer;                     // 유효 버전 — 우선순위: 링크 ?rooms=v1|v2 > 이 탭 고정(sessionStorage lpr_v2='1',
+                                              //   ?rooms=v2 를 본 탭) > 개인 localStorage.lpRoomsV('1'|'2'|'v1'|'v2') > 표(mp.v)
+                                              //   v1 강제는 mp.v1 없으면 'off', v2 강제는 later 게임이면 표 값. mp=null 은 항상 'off'
+     override(): { v: 'v1' | 'v2', src: 'query' | 'tab' | 'storage' } | null;   // [+] 지금 걸린 오버라이드(없으면 null)
      name(id:string, lang?:string): string;   // lang 생략 = localStorage.luckyplz_lang
      path(id:string): string | null;
      url(id:string, code?:string): string | null;   // 방 이동 경로 '/games/<id>/?r=<code>' — 표에 없는 id 는 null(오픈 리다이렉트 방지)
@@ -134,17 +137,30 @@
 
     function lsGet(k) { try { return G.localStorage ? G.localStorage.getItem(k) : null; } catch (_) { return null; } }
     function qsGet(k) { try { return new URLSearchParams(G.location.search).get(k); } catch (_) { return null; } }
+    function ssGet(k) { try { return G.sessionStorage ? G.sessionStorage.getItem(k) : null; } catch (_) { return null; } }
+    function ssSet(k, v) { try { if (!G.sessionStorage) return; if (v == null) G.sessionStorage.removeItem(k); else G.sessionStorage.setItem(k, v); } catch (_) {} }
     function get(id) { return (typeof id === 'string' && ID_RE.test(id) && Object.prototype.hasOwnProperty.call(byId, id)) ? byId[id] : null; }
+    function verOf(s) { s = String(s == null ? '' : s).toLowerCase(); return s === 'v1' || s === '1' ? 'v1' : s === 'v2' || s === '2' ? 'v2' : null; }
+    /* 오버라이드 판정 한 곳 — siteFooter 로더·게임 어댑터·UI 가 같은 답을 얻는다(각자 다시 구현하지 말 것).
+       링크 ?rooms= > 이 탭 고정 lpr_v2(로더·이 파일이 ?rooms=v2 를 보면 켜고 ?rooms=v1 이면 끔) > 개인 localStorage.lpRoomsV */
+    function override() {
+        var q = verOf(qsGet('rooms'));
+        if (q) return { v: q, src: 'query' };
+        if (ssGet('lpr_v2') === '1') return { v: 'v2', src: 'tab' };
+        var o = verOf(lsGet('lpRoomsV'));
+        if (o) return { v: o, src: 'storage' };
+        return null;
+    }
     function eff(id) {
         var e = get(id);
         if (!e || !e.mp) return 'off';
-        var q = qsGet('rooms');
-        if (q === 'v1') return e.mp.v1 ? 'v1' : 'off';
-        var o = lsGet('lpRoomsV');
-        if (o === '1') return e.mp.v1 ? 'v1' : 'off';
-        if (o === '2' && !e.mp.later) return 'v2';
+        var o = override();
+        if (o && o.v === 'v1') return e.mp.v1 ? 'v1' : 'off';
+        if (o && o.v === 'v2' && !e.mp.later) return 'v2';
         return e.mp.v;
     }
+    /* 이 탭 고정 플래그 동기화(siteFooter 로더와 같은 규칙 — 로더 없이 게임이 직접 실어도 같게) */
+    (function () { var q = verOf(qsGet('rooms')); if (q === 'v2') ssSet('lpr_v2', '1'); else if (q === 'v1') ssSet('lpr_v2', null); })();
     function lang(l) {
         l = l || lsGet('luckyplz_lang') || 'en';
         l = String(l).toLowerCase().slice(0, 2);
@@ -166,6 +182,7 @@
             });
         },
         v: eff,
+        override: override,
         name: function (id, l) { var e = get(id); if (!e) return String(id || ''); var L = lang(l); return e.name[L] || e.name.en || id; },
         path: function (id) { var e = get(id); return e ? e.path : null; },
         url: function (id, code) {
@@ -178,4 +195,6 @@
 })(typeof window !== 'undefined' ? window : globalThis);
 /* CHANGE LOG
    2026-09-30  API freeze — 전 게임 mp.v 는 기존 방식('v1') 또는 'off'. 어떤 페이지도 아직 로드하지 않음.
+   2026-09-30  v() 오버라이드 통일 — ?rooms=v2 를 인식(전에는 v1 만), 이 탭 고정 sessionStorage lpr_v2, localStorage 값 'v1'/'v2' 도 인정.
+               우선순위 링크 > 탭 > 개인 저장 > 표. [+] override(). 로드 시 ?rooms= 를 보고 lpr_v2 를 로더와 같게 맞춘다.
 */

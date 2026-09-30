@@ -334,6 +334,7 @@ LpGames.get(id) · LpGames.mp() (mp 가능 목록) · LpGames.name(id, lang)
 ```
 - `lpRoom.js` 의 `_LP_PICKER_GAMES`·`_validGames`·`_v`, `lpMultiplayer.js` `GAMES`, `lpInvite*.js` `_humanGame` 은 P6 에서 전부 이 레지스트리를 읽게 바꾼다. 새 게임 체크리스트에 "lpGames.js 1줄"만 남는다.
 - 기능 플래그도 여기(`mp.v`). 긴급 오버라이드: `localStorage.lpRoomsV='1'|'2'`(개인), `?rooms=v1`(링크 단위).
+  - (2026-09-30 통합) 판정은 `LpGames.v(id)` / `LpGames.override()` 한 곳 — 우선순위 링크 `?rooms=v1|v2` > 이 탭 고정 `sessionStorage.lpr_v2`(?rooms=v2 를 본 탭) > 개인 `lpRoomsV`('1'|'2'|'v1'|'v2') > 표. siteFooter 로더도 같은 순서. 게임·UI 는 다시 구현하지 말 것.
 
 ---
 
@@ -653,6 +654,7 @@ start(o?:{countdownMs?:number}): void;  toLobby(): void;  switchGame(gameId): vo
 pause(): void;  resume(): void;  end(): void;  close(): void
 kick(pid, o?:{ban?:boolean}): void;  unban(pid): void
 lock(on:boolean): void;  approval(on:boolean): void;  approve(pid, ok:boolean): void
+setPin(on:boolean, pin?:string): string|null;  setApproval(on:boolean): boolean   /* [+] 2026-09-30 — UI 방장 도구는 이것만 쓴다 */
 transferHost(pid): void   /* 대기실·migratable 만 */;  rotateLink(): void
 ```
 ### 8.3 `window.LpFair` (lpFair.js)

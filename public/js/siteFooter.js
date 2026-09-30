@@ -71,6 +71,7 @@ try{
                                                                    lpRoomsV='2', 이 탭이 이 게임의 v2 방에 있음
          그 밖의 게임 페이지 — lpGames.js 를 먼저 싣고 LpGames.v(id)==='v2' 면 v2, 아니면 v1
        v2 페이지에는 v1 부유 UI(lpMultiplayer·lpHostCtl·lpInviteButton)와 lpRoom 을 싣지 않는다.
+       오버라이드 우선순위는 LpGames.v()/override() 와 같다: 링크 ?rooms= > 이 탭 lpr_v2 > 개인 lpRoomsV > 표.
        스크립트는 async=false 로 한꺼번에 붙여 병렬로 받고 순서대로 실행한다. */
     window.__lprHref=location.href;
     var lprMode=(function(){
@@ -78,18 +79,21 @@ try{
         try{q=new URLSearchParams(location.search)}catch(_){q={get:function(){return null}}}
         function ls(k){try{return localStorage.getItem(k)}catch(_){return null}}
         function ss(k){try{return sessionStorage.getItem(k)}catch(_){return null}}
+        function ver(s){s=String(s==null?'':s).toLowerCase();return s==='v1'||s==='1'?'v1':s==='v2'||s==='2'?'v2':null}
+        var qv=ver(q.get('rooms')),lv=ver(ls('lpRoomsV'));
         try{
-            if(q.get('rooms')==='v2')sessionStorage.setItem('lpr_v2','1');
-            if(q.get('rooms')==='v1')sessionStorage.removeItem('lpr_v2');
+            if(qv==='v2')sessionStorage.setItem('lpr_v2','1');
+            if(qv==='v1')sessionStorage.removeItem('lpr_v2');
         }catch(_){}
+        var tab=ss('lpr_v2')==='1';
         var isR=/^\/r\//.test(P),isLobby=/^\/lobby(\/|$)/.test(P);
         var gm=/^\/games\/([a-z0-9-]+)\//.exec(P),gid=gm?gm[1]:((isR||isLobby)?'lobby':null);
         if(!gid)return {mode:'v1',gid:null};
         if(isR)return {mode:'v2',gid:gid};
         var legacy=!!q.get('room')&&!q.get('r');
-        if(legacy||q.get('rooms')==='v1'||ls('lpRoomsV')==='1')return {mode:'v1',gid:gid};
+        if(legacy||qv==='v1'||(!qv&&!tab&&lv==='v1'))return {mode:'v1',gid:gid};
         var act=null;try{act=JSON.parse(ss('lpr_active')||'null')}catch(_){}
-        if(isLobby||q.get('r')||q.get('lpr')||ss('lpr_v2')==='1'||ls('lpRoomsV')==='2'||(act&&act.gameId===gid))return {mode:'v2',gid:gid};
+        if(isLobby||q.get('r')||q.get('lpr')||qv==='v2'||tab||lv==='v2'||(act&&act.gameId===gid))return {mode:'v2',gid:gid};
         return {mode:'ask',gid:gid};
     })();
     function lprAdd(src,async){

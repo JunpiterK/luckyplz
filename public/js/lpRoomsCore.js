@@ -135,6 +135,8 @@
      kick(pid:string, o?:{ban?:boolean}): void;  unban(pid:string): void;
      lock(on:boolean): void;  approval(on:boolean): void;  approve(pid:string, ok:boolean): void;
      transferHost(pid:string): void;  rotateLink(): void;
+     setPin(on:boolean, pin?:string): string | null;   // [+] 방장: PIN 켜기/끄기(pin 생략 = 기존 PIN 유지 또는 새 4자리) → 현재 PIN
+     setApproval(on:boolean): boolean;            // [+] 방장: approval(on) 과 같음(이름 통일용)
      pin?: string;                                // [+] 방장: 현재 PIN(pinReq 일 때)
      pending(): {p:string, n:string, av:number, flag?:'banned_nick'}[];   // [+] 승인 대기
    }
@@ -543,10 +545,11 @@
             rpk: function () { return self._rpk; },
             chain: function () { return self._chain && self._chain.length ? self._chain : null; },
             store: function () { if (!self._H) return self._fst || (self._fst = {}); return self._H.fs || (self._H.fs = {}); },
-            save: function () { if (self.isHost) self._dirty(); }
+            save: function () { if (self.isHost) self._dirty(); },
+            clockSample: function (t0, t1, t2, t3) { if (!self.isHost) self._clockSample(t0, t1, t2, t3); }   /* [+] 추첨 에코 표본 */
         };
     };
-    Room.prototype._fair = function (from, d) { this._fl.slice().forEach(function (f) { try { f(from, d); } catch (e) { dbg('fair listener', e); } }); };
+    Room.prototype._fair = function (from, d, rx) { this._fl.slice().forEach(function (f) { try { f(from, d, rx); } catch (e) { dbg('fair listener', e); } }); };
 
     /* ================================================================
        송신 — 방장 'h' 봉투 (서명 직렬 큐, §3.2)
@@ -606,6 +609,10 @@
         return ['lpr2', 'h', code, env.ep, env.t != null ? 't' + env.t : String(env.s), env.e, tos, hBody(env)].join('|');
     }
     function gSigStr(code, env) { return ['lpr2', 'g', code, env.p, env.c, env.e, env.y ? env.y.iv + '.' + env.y.ct : env.j].join('|'); }
+    /* 수신 콜백 진입 시각(서명 검증·복호 큐 대기 전) — 시계 표본의 t1·t3 은 이 값을 쓴다(큐 지연이 오프셋을 비틀지 않게) */
+    var RXT = typeof WeakMap === 'function' ? new WeakMap() : null;
+    function rxMark(env) { if (RXT && env && typeof env === 'object' && !RXT.has(env)) RXT.set(env, now()); }
+    function rxOf(env) { var v = RXT && env && typeof env === 'object' ? RXT.get(env) : undefined; return typeof v === 'number' ? v : now(); }
     function okH(env) {
         return env && typeof env === 'object' && env.v === 2 && typeof env.e === 'string' && HOST_EV[env.e] && typeof env.z === 'string' && typeof env.ep === 'number'
             && (typeof env.s === 'number' || typeof env.t === 'number') && (typeof env.j === 'string' || (env.c && typeof env.c.ct === 'string' && typeof env.c.iv === 'string')) && envSize(env) <= MAXJ;
@@ -635,12 +642,14 @@
         });
     };
     Room.prototype._rxH = function (env) {
+        rxMark(env);
         if (this._left) return;
         if (!okH(env)) { STATS.bad++; return; }
         var self = this;
         this._vq = this._vq.then(function () { return self.isHost ? self._hostSeesH(env) : self._guestH(env); }).catch(function (e) { STATS.bad++; dbg('rxH', e); });
     };
     Room.prototype._rxG = function (env) {
+        rxMark(env);
         if (this._left) return;
         if (env && env.e === 'hello_req' && env.v === 2) { if (this.isHost) this._helloReq(env); return; }
         if (!okG(env)) { STATS.bad++; return; }
@@ -778,7 +787,7 @@
             case 'hb':
                 if (!d) break;
                 this._hostHidden = d.vis === 'hidden';
-                if (d.ec && d.ec[this.me.pid]) this._clockSample(d.ec[this.me.pid][0], d.ec[this.me.pid][1], d.t, now());
+                if (d.ec && d.ec[this.me.pid]) this._clockSample(d.ec[this.me.pid][0], d.ec[this.me.pid][1], d.t, rxOf(env));
                 if (typeof d.hs === 'number' && this._lastS !== null && d.hs > this._lastS) this._gapCheck2(d.hs);
                 this.emit('hb', null, d);
                 break;
@@ -796,7 +805,7 @@
                 break;
             case 'close': this._closedBy('host'); break;
             case 'switch': if (d) this._onSwitch(d.gameId); break;
-            case 'fair': this._fair(null, d); break;
+            case 'fair': this._fair(null, d, rxOf(env)); break;
             case 'x': if (d && typeof d.k === 'string') this.emit('x', d.k, d.d, null); break;
             case 'react': if (d) { var hm = this._hostMember(); this.emit('react', d.i | 0, hm ? hm.p : null); } break;
             case 'th': if (me && d) this._becomeHost({ transfer: d }); break;
@@ -811,15 +820,37 @@
         var self = this;
         setTimeout(function () { if (self._lastS !== null && self._lastS < hs) self._snapReq(false); }, TM.snapWait);
     };
-    /* NTP 식 시계 (§6.0.3): 최근 7 샘플 중 RTT 하위 3개의 오프셋 중앙값 */
+    /* NTP 식 시계 (§6.0.3, 2026-09-30 정밀화): 표본 창 최근 24개·10분(최소 3개 유지), RTT 하위 N(=min(5,⌈n/2⌉))개의
+       오프셋 중앙값. 표본 출처 = 합류 welcome · hb 에코(ec) · 추첨 lock/reveal 에코(lpFair, 추첨마다 2개, 추가 메시지 0).
+       t1·t3 은 수신 콜백 진입 시각(rxOf) — 서명 검증·복호 큐 대기와 긴 작업으로 늦게 처리된 표본은 RTT 가 커져 자동 배제된다. */
+    var CLK = { win: 24, age: 600000, keep: 3, best: 5 };
     Room.prototype._clockSample = function (t0, t1, t2, t3) {
         if (typeof t0 !== 'number' || typeof t1 !== 'number' || typeof t2 !== 'number') return;
+        if (typeof t3 !== 'number') t3 = now();
         var rtt = (t3 - t0) - (t2 - t1), off = ((t1 - t0) + (t2 - t3)) / 2;
-        if (rtt < 0 || rtt > 30000) return;
-        this._clk.push({ rtt: rtt, off: off }); if (this._clk.length > 7) this._clk.shift();
-        var best = this._clk.slice().sort(function (a, b) { return a.rtt - b.rtt; }).slice(0, 3).map(function (x) { return x.off; }).sort(function (a, b) { return a - b; });
-        this._off = best[Math.floor(best.length / 2)];
-        this._rtt = this._clk.slice().sort(function (a, b) { return a.rtt - b.rtt; })[0].rtt;
+        if (!(rtt >= 0) || rtt > 30000 || !isFinite(off)) return;
+        var t = now(), c = this._clk;
+        c.push({ rtt: rtt, off: off, t: t });
+        while (c.length > CLK.win || (c.length > CLK.keep && t - c[0].t > CLK.age)) c.shift();
+        var by = c.slice().sort(function (a, b) { return a.rtt - b.rtt; });
+        var k = Math.max(1, Math.min(CLK.best, Math.ceil(c.length / 2)));
+        var best = by.slice(0, k).map(function (x) { return x.off; }).sort(function (a, b) { return a - b; });
+        var mid = best.length >> 1;
+        this._off = best.length % 2 ? best[mid] : (best[mid - 1] + best[mid]) / 2;
+        this._rtt = by[0].rtt;
+        this._clkN = (this._clkN || 0) + 1;
+    };
+    /* 다시 맞추기 — 화면 복귀(visibilitychange→visible) 때 빠른 에코 hb 3개(fs:1 → 방장이 250ms 안에 hb 로 되돌림).
+       30초에 한 번까지. 60초 넘게 숨어 있었으면(기기 시계 보정 가능) 그 전 표본은 버린다. */
+    Room.prototype._resync = function (hiddenMs) {
+        if (this.isHost || this._left || this._state !== 'member') return;
+        var t = now(), self = this;
+        if (hiddenMs > 60000 && this._clk.length) this._clk = this._clk.filter(function (x) { return t - x.t < hiddenMs; });
+        if (this._resyncAt && t - this._resyncAt < 30000) { this._sendGHb(); return; }
+        this._resyncAt = t; this._fsUntil = t + 4000;
+        this._sendGHb();
+        this._timer(function () { self._sendGHb(); }, 700);
+        this._timer(function () { self._sendGHb(); }, 1900);
     };
 
     /* 멤버: 다른 게스트의 'g' (연결 추적·리액션·x·승계) */
@@ -827,9 +858,9 @@
         var m = this._member(env.p);
         if (!m || !m.k || env.p === this.me.pid) return;
         if (!(await verifyStr(m.k.sig, gSigStr(this.code, env), env.z))) { STATS.bad++; return; }
-        var pc = this._peerC[env.p] || 0;
-        if (env.c <= pc) return;
-        this._peerC[env.p] = env.c;
+        var pc = this._peerC[env.p];
+        if (!pc || typeof pc !== 'object') pc = this._peerC[env.p] = { lastC: pc || 0 };
+        if (!replayOk(pc, env.c)) return;
         var pr = this._peer[env.p] || (this._peer[env.p] = { b: new Bucket(15, 30) });
         pr.t = now(); if (env.e === 'bye') pr.t = 0;
         var d; try { d = await this._openBody(env, 'y'); } catch (_) { return; }
@@ -865,6 +896,7 @@
     Room.prototype._sendGHb = function () {
         if (this.isHost || this._left || this._state !== 'member') return;
         var d = { t0: now(), vis: (G.document && G.document.visibilityState) || 'visible' };
+        if (this._fsUntil && now() < this._fsUntil) d.fs = 1;            /* 빠른 에코 요청(다시 맞추기) */
         for (var k in this._hbX) d[k] = this._hbX[k];
         this._hbX = {}; this._hbSoon = 0; this._lastGHb = now();
         this._gsend('hb', d);
@@ -1005,6 +1037,21 @@
         };
     }
     function memRec(k, lastC) { return { k: k, lastC: lastC || 0, seen: now(), vis: 'visible', t0: null, t1: 0, bk: new Bucket(30, 40), ib: new Bucket(10, 20), ic: {}, icN: [], bye: false, offAt: 0 }; }
+    /* 재생 방지 창 (2026-09-30 통합): 릴레이 지연 편차로 같은 게스트의 봉투 순서가 바뀌면 예전엔 c ≤ lastC 로 버려져
+       hb 편승(w 목격·sc 점수)·fair c/r 이 유실됐다(추첨 재시도·목격 누락 — 30~150ms 지터 하네스에서 실측).
+       이제 최근 RWIN 개 창 안에서 처음 보는 c 는 받는다(서명된 진짜 봉투의 늦은 도착). 창 밖·이미 본 c 는 여전히 버린다. */
+    var RWIN = 64;
+    function replayOk(rec, c) {
+        var w = rec.win || (rec.win = {});
+        if (c > rec.lastC) {
+            rec.lastC = c; w[c] = 1;
+            if (++rec.winN > RWIN * 2 || !rec.winN) { rec.winN = 0; for (var k in w) { if (+k <= c - RWIN) delete w[k]; else rec.winN++; } }
+            return true;
+        }
+        if (c <= rec.lastC - RWIN || w[c]) return false;
+        w[c] = 1; rec.winN = (rec.winN || 0) + 1;
+        return true;
+    }
 
     Room.prototype._helloReq = function (env) {
         var H = this._H;
@@ -1032,11 +1079,10 @@
         var mb = H.members[env.p];
         if (!mb) return;
         if (!(await verifyStr(mb.k.sig, gSigStr(this.code, env), env.z))) { STATS.bad++; return; }
-        if (env.c <= mb.lastC) {
+        if (!replayOk(mb, env.c)) {
             if (env.e === 'intent' && mb.ic[env.c]) this._replyIntent(env.p, env.c, mb.ic[env.c]);
             return;
         }
-        mb.lastC = env.c;
         var d;
         try { d = await this._openBody(env, 'y'); } catch (e) { if (e && e.nokey) this._resendRekey(env.p); return; }
         mb.seen = now(); mb.bye = false;
@@ -1046,9 +1092,11 @@
             case 'hb':
                 if (!d) break;
                 if (typeof d.t0 === 'number') {
-                    mb.t0 = d.t0; mb.t1 = now();
-                    /* 합류 직후 15초는 에코를 빨리 돌려 시계 표본 3개를 금방 채운다(동시 출발 §6.1.4) */
-                    if (now() < (mb.fastUntil || 0)) { var soon = now() + 250; if (!this._hbSoon || this._hbSoon > soon) this._hbSoon = soon; }
+                    mb.t0 = d.t0; mb.t1 = rxOf(env);
+                    /* 합류 직후 15초 · 게스트 다시 맞추기(fs, 10초에 4번까지) → 에코를 빨리 돌려 시계 표본을 금방 채운다(동시 출발 §6.1.4) */
+                    var fast = now() < (mb.fastUntil || 0);
+                    if (!fast && d.fs) { mb.fsT = (mb.fsT || []).filter(function (x) { return now() - x < 10000; }); if (mb.fsT.length < 4) { mb.fsT.push(now()); fast = true; } }
+                    if (fast) { var soon = now() + 250; if (!this._hbSoon || this._hbSoon > soon) this._hbSoon = soon; }
                 }
                 if (d.vis === 'hidden' || d.vis === 'visible') {
                     mb.vis = d.vis;
@@ -1064,7 +1112,7 @@
             case 'snap_req':
                 if (d && d.kv) this._resendRekey(env.p);
                 this._snapFrom(env.p); break;
-            case 'fair': this._fair(env.p, d); break;
+            case 'fair': this._fair(env.p, d, rxOf(env)); break;
             case 'x': if (d && typeof d.k === 'string') this.emit('x', d.k, d.d, env.p); break;
             case 'react': if (d && this._reactOk(env.p)) this.emit('react', d.i | 0, env.p); break;
             case 'takeover': this._onTakeover(env.p, d); break;
@@ -1149,7 +1197,7 @@
         return name;
     };
     Room.prototype._admit = async function (p, d, x, env) {
-        var H = this._H, S = this._S, t = now();
+        var H = this._H, S = this._S, t = now(), rx = env ? rxOf(env) : t;
         delete H.pending[p];
         var m = this._member(p), back = !!m, wasOff = m && m.c === 'off';
         var nick = this._uniqNick(cleanNick(x.nick) || (m && m.n) || 'Guest', p);
@@ -1177,7 +1225,7 @@
         var st = this._pubState();
         var stj = JSON.stringify(st);
         var inner = { ok: true, role: m.r, seat: m.seat, nick: m.n, mk: this.sealed ? b64u(H.mkRaw[this._kv]) : undefined, kv: this._kv,
-            st: stj.length <= MAXJ ? st : undefined, ec: typeof d.t0 === 'number' ? [d.t0, t] : undefined, t2: now() };
+            st: stj.length <= MAXJ ? st : undefined, ec: typeof d.t0 === 'number' ? [d.t0, rx] : undefined, t2: now() };
         var blob = await eciesEnc(d.dpk.dh, this.code, 'welcome', inner);
         this._hsend('welcome', { x: blob }, { to: p, reliable: true });
         this._rosterDirty();
@@ -1547,6 +1595,20 @@
     };
     Room.prototype.lock = function (on) { hostOnly(this); this._S.lock = !!on; this.setState(null); };
     Room.prototype.approval = function (on) { hostOnly(this); this._S.appr = !!on; if (!on) this._H.apprAuto = 0; this.setState(null); };
+    /* [+] 방장 도구 공개 API — UI 가 room._H 를 직접 만지지 않게 (2026-09-30 통합) */
+    Room.prototype.setApproval = function (on) { this.approval(on); return !!this._S.appr; };
+    Room.prototype.setPin = function (on, pin) {
+        hostOnly(this);
+        var H = this._H;
+        H.pinReq = !!on;
+        if (on) H.pin = /^\d{4}$/.test(String(pin == null ? '' : pin)) ? String(pin) : (/^\d{4}$/.test(String(H.pin || '')) ? String(H.pin) : pin4());
+        else H.pin = null;
+        this.pin = H.pin || undefined;
+        this._S.pinReq = !!on;
+        this.setState(null);
+        this._dirty();
+        return H.pin || null;
+    };
     Room.prototype.approve = function (pid, ok) {
         hostOnly(this);
         var P = this._H.pending[pid]; if (!P) return;
@@ -1594,7 +1656,7 @@
         S.roster.forEach(function (m) {
             if (m.r === 'host') { m.r = 'player'; m.c = 'off'; }
             if (m.p === self.me.pid) { m.r = 'host'; m.c = 'on'; }
-            if (m.r !== 'bot' && m.p !== self.me.pid && m.k) { H.members[m.p] = memRec(m.k, self._peerC[m.p] || 0); H.known[m.p] = 1; if (!self._peerAlive(m.p)) m.c = 'off'; }
+            if (m.r !== 'bot' && m.p !== self.me.pid && m.k) { H.members[m.p] = memRec(m.k, self._peerC[m.p] ? (self._peerC[m.p].lastC || 0) : 0); H.known[m.p] = 1; if (!self._peerAlive(m.p)) m.c = 'off'; }
         });
         this.me.role = 'host';
         this._clearTimers(); this._hostLoops();
@@ -1725,7 +1787,7 @@
             this._mk[kv] = await aesKey(raw); if (kv > this._kv) this._kv = kv;
             this.sealed = true;
         } else if (!this._kv) this.sealed = false;
-        if (inner.ec && typeof inner.t2 === 'number') this._clockSample(inner.ec[0], inner.ec[1], inner.t2, now());
+        if (inner.ec && typeof inner.t2 === 'number') this._clockSample(inner.ec[0], inner.ec[1], inner.t2, rxOf(env));
         this._lastHostAt = now(); this._wd = 0;
         if (inner.st) this._applyS(inner.st); else this._snapReq(true);
         this._syncMe();
@@ -2044,9 +2106,14 @@
     var _wired = false;
     function wireLifecycle() {
         if (_wired || !G.document) return; _wired = true;
+        var hidAt = 0;
         G.document.addEventListener('visibilitychange', function () {
+            var vis = G.document.visibilityState !== 'hidden';
+            if (!vis) hidAt = now();
             var r = _current; if (!r || r._left || r._state !== 'member') return;
-            if (r.isHost) { r._sendHostHb(); r._save(); } else r._sendGHb();
+            if (r.isHost) { r._sendHostHb(); r._save(); }
+            else if (vis) r._resync(hidAt ? now() - hidAt : 0);   /* 복귀 = 시계 다시 맞추기(§6.0.3) */
+            else r._sendGHb();
         });
         G.addEventListener('pagehide', function () {
             var r = _current; if (!r || r._left) return;
@@ -2215,6 +2282,14 @@
                (3) 의도 수락 응답을 state/roster 방송에 싣기(별도 ack 제거). (4) hello·deny 증폭 제한,
                같은 join 재전송엔 캐시된 거절(PIN 오답 재계수 없음). (5) 합류 직후 15초 시계 에코 가속.
                (6) 인앱 탈출 예정이면 create/join/resume 보류(reason 'inapp'). (7) 추첨 시청 중 리액션 허용.
+   2026-09-30  통합 수정(P3a 보고 반영, 전부 하위 호환 추가):
+               [+] Room.setPin(on, pin?) → 현재 PIN|null · Room.setApproval(on) — 방장 도구 공개 API(UI 가 _H 를 만지지 않게).
+               시계 정밀화 — 표본 창 24개·10분, RTT 하위 min(5,⌈n/2⌉)개 오프셋 중앙값(이전: 7개 중 3개),
+               t1·t3 = 수신 콜백 진입 시각(검증·복호 큐 대기 제외), 화면 복귀 시 빠른 에코 hb 3개(fs:1, 30초에 1번,
+               방장은 게스트당 10초 4번까지 응답), 추첨 lock/reveal 에코 표본(lpFair, 추가 메시지 0).
+               fair 리스너 3번째 인자 rx(도착 시각), room._io.clockSample [+].
+               게스트 봉투 재생 방지 = 최근 64개 창(순서 바뀐 늦은 도착 수용, 중복·창 밖은 거절) — 예전 엄격 단조(c>lastC)는
+               지터 30~150ms 에서 hb 편승 w·fair c/r 을 버려 추첨 재시도·목격 누락을 냈다.
    결정: supabase realtime {worker:true} 는 채택 보류 — 방 페이지는 getSupabase() 공용 클라이언트(소켓 1개)를
          재사용하고, 워커 옵션은 클라이언트 생성 시점에만 줄 수 있어 공용 클라이언트와 충돌한다. 헤드리스 하네스로는
          백그라운드 스로틀을 재현할 수 없어 실기기 확인 항목으로 넘긴다(§6.0.3 소켓 항목).
