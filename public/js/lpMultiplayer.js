@@ -79,6 +79,8 @@
         homeConfirm:'Ir para o início fechará a sala multijogador.\nContinuar?',
         nextHint:'👥 Escolha o próximo jogo no painel multijogador'}
   };
+  /* guest: host silent (see lpRoom HOST_LOST_MS) — drives the RTT pill */
+  var _mpHostLost=false,_mpRttRefresh=null;
   function MT(k){
     var l;try{l=localStorage.getItem('luckyplz_lang')||'en'}catch(_){l='en'}
     if(l==='gb')l='en';
@@ -717,6 +719,10 @@
     var rttElG=panel.querySelector('.lp-mp-rtt');
     function _updateGuestRtt(){
       if(!rttElG||!g)return;
+      /* host silent 15s+ (lpRoom 'lp-room-host-lost') — don't keep showing
+         the last good ping as if the host were fine (audit: ludo 40s freeze
+         showed "154ms" the whole time). */
+      if(_mpHostLost){rttElG.hidden=false;rttElG.textContent='📡 ✕';rttElG.setAttribute('data-tier','bad');return}
       var rtt=null;
       try{rtt=(typeof g.myRtt==='function')?g.myRtt():null}catch(_){}
       if(typeof rtt!=='number'){rttElG.hidden=true;return}
@@ -725,6 +731,7 @@
       rttElG.setAttribute('data-tier',rtt<=60?'good':rtt<=150?'ok':'bad');
     }
     _updateGuestRtt();
+    _mpRttRefresh=_updateGuestRtt;
     panel._lpMpRttTimer=setInterval(_updateGuestRtt,2000);
 
     /* host:guests carries the canonical roster. Some hosts re-broadcast
@@ -803,8 +810,10 @@
     var g=e&&e.detail&&e.detail.guest;
     if(g)mountGuest(g);
   }
-  function onRoomClosed(){unmount()}
+  function onRoomClosed(){_mpHostLost=false;_mpRttRefresh=null;unmount()}
 
+  window.addEventListener('lp-room-host-lost',function(){_mpHostLost=true;try{_mpRttRefresh&&_mpRttRefresh()}catch(_){}});
+  window.addEventListener('lp-room-host-back',function(){_mpHostLost=false;try{_mpRttRefresh&&_mpRttRefresh()}catch(_){}});
   window.addEventListener('lp-room-host-ready',onHostReady);
   window.addEventListener('lp-room-guest-ready',onGuestReady);
   window.addEventListener('lp-room-closed',onRoomClosed);
