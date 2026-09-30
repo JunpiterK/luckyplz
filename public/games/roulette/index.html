@@ -306,9 +306,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <script src="/js/langBar.js?v=1790759059"></script>
 <script src="/js/participantPresets.js?v=1790759059"></script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1790759059"></script>
-<script src="/js/groups.js?v=1790759059"></script>
-<script src="/js/nextGames.js?v=1790759059"></script>
+<script src="/js/supabase-config.js?v=1790753735"></script>
+<script src="/js/lpGames.js?v=1790753735"></script>
+<script src="/js/groups.js?v=1790753735"></script>
+<script src="/js/nextGames.js?v=1790753735"></script>
 <script>
 /* ========================================
    Lucky Please - Roulette
@@ -592,6 +593,7 @@ function resize(){
 
 /* ============ 물리 ============ */
 let _contact=false,_contactPeg=-1,_contactGap=1,_stallT=0;
+let _v2Quiet=null;   /* Rooms v2(P3a): 궤적을 미리 계산하는 동안엔 소리·반짝임 대신 기록만 한다 */
 let dragTarget=null;
 /* 한 프레임 전진. 페그 속도에 비례해 서브스텝을 나눠(페그가 한 스텝에
    2.2 REF 이상 못 움직이게) 고속에서도 팁을 관통하지 않는다.
@@ -665,8 +667,9 @@ function stepPhysics(frameDt){
     if(hitSpeed>=0){
         /* 세기: 상대 충돌 속도 기준. 최고속 ≈ 3300 REF/s, 막판 ≈ 60~150 */
         const I=Math.max(.06,Math.min(1,Math.sqrt(hitSpeed/2600)));
-        try{SFX.clack(I)}catch(e){}
-        _clackVisual(I,velocity>=0?1:-1);
+        if(_v2Quiet){_v2Quiet.push({i:_v2Quiet.i,I:I,d:velocity>=0?1:-1})}
+        else{try{SFX.clack(I)}catch(e){}
+        _clackVisual(I,velocity>=0?1:-1)}
     }
 }
 /* 고정 스텝 누산기. 긴 공백(탭 복귀·프레임 끊김)은 0.25초까지만 따라잡는다. */
@@ -1156,7 +1159,7 @@ function drawWheel(){
     ctx.drawImage(SPR.hinge,-11,-RG.pivot-11,22,22);
 
     /* 허브 'SPIN' — 누르면 돌아간다는 표시 (대기 중에만) */
-    const idle=!spinActive&&selectedIdx===-1&&!window._lpGuest&&n>1;
+    const idle=!spinActive&&selectedIdx===-1&&!window._lpGuest&&!(window.LPV2&&LPV2.guest())&&n>1;
     _hubLabelA+=((idle?1:0)-_hubLabelA)*Math.min(1,dt*8);
     if(_hubLabelA>.02){
         const p=.5+.5*Math.sin(t*3.2);
@@ -1280,7 +1283,7 @@ function _beginSpinState(){
    당첨이 확정됐는데 카드 예약이 사라졌으면 바로 띄운다. (게스트는 호스트가 진행) */
 setInterval(function(){
     try{
-        if(!spinActive||window._lpGuest||document.visibilityState!=='visible')return;
+        if(!spinActive||window._lpGuest||document.visibilityState!=='visible'||(window.LPV2&&LPV2.playing()))return;
         const gs=document.getElementById('gameScreen');
         if(gs&&gs.style.display!=='block'&&!isPCLayout())return;
         if(performance.now()-_mainLoopTs>1500){lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop)}
@@ -1290,6 +1293,7 @@ setInterval(function(){
 
 /* Spin — 초기 속도 19–23 rad/s, 처음 2.8–4.0초는 저마찰 구간 (기존 분포 유지) */
 function doSpin(){
+    if(window.LPV2&&LPV2.hook('spin'))return;   /* Rooms v2: 방장은 공정 추첨으로, 게스트는 못 돌린다 */
     if(spinActive)return;
     spinActive=true;
     SFX.g();SFX.whoosh();
@@ -1312,6 +1316,7 @@ function doSpin(){
    - 허브(가운데 보석)를 톡 누르면 바로 돌린다 (모바일에 SPIN 버튼이 없어서). */
 let dragStart=null,dragAngle=0,dragSamples=[],hubPress=null;
 function onPointerDown(e){
+    if(window.LPV2){if(LPV2.playing()){if(selectedIdx!==-1&&window._v2RouFire)window._v2RouFire();return}if(LPV2.hook('pointer'))return}
     if(spinActive){if(_resultTimer&&selectedIdx!==-1)_fireResult();return}
     const r=canvas.getBoundingClientRect();
     const x=(e.clientX||e.touches?.[0]?.clientX)-r.left-cx;
@@ -1381,6 +1386,7 @@ function onPointerUp(e){
     /* Gate: drag must have covered ~15° total AND the last-150ms
        release velocity must clear 3 rad/s. */
     if(Math.abs(totalDa)>Math.PI/12&&Math.abs(releaseVel)>3){
+        if(window.LPV2&&LPV2.hook('spin')){velocity=0;return}
         spinActive=true;
         SFX.g();SFX.whoosh();
         try { if(window.LpWakeLock) LpWakeLock.acquire('roulette'); } catch(_){}
@@ -1469,6 +1475,7 @@ function renderPreview(){
 }
 
 function startGame(){
+    if(window.LPV2&&LPV2.hook('start'))return;   /* Rooms v2 방: 방장 = 공정 추첨 시작, 게스트 = 안내만 */
     /* BGM 은 게임 시작 시점에만 — 제스처 콜스택 안에서 SYNC 호출 */
     try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}
     try{window.LpTrack&&window.LpTrack('game_start',{game:'roulette'})}catch(_){}
@@ -1499,6 +1506,7 @@ function startGame(){
 }
 
 function backToSetup(){
+    if(window.LPV2)LPV2.hook('setup');
     spinActive=false;
     _cancelPendingResult();   /* 연출 중 설정으로 돌아가면 지난 판 카드가 뒤늦게 뜨지 않게 */
     try { if(window.LpWakeLock) LpWakeLock.release(); } catch(_){}
@@ -1579,7 +1587,7 @@ function init(){
     document.getElementById('addPlayerBtn').addEventListener('click',()=>{if(playerCount>=12)return;playerCount++;renderPlayers();renderPreview()});
     document.getElementById('startBtn').addEventListener('click',startGame);
     document.getElementById('backBtn').addEventListener('click',backToSetup);
-    document.getElementById('replayBtn').addEventListener('click',()=>{spinActive=false;confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;flapperAngle=0;flapperVel=0;lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);if(isPCLayout())setTimeout(doSpin,80)});
+    document.getElementById('replayBtn').addEventListener('click',()=>{if(window.LPV2&&LPV2.hook('replay'))return;spinActive=false;confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);document.getElementById('resultScreen').style.display='none';document.getElementById('gameScreen').style.display='block';velocity=0;selectedIdx=-1;flapperAngle=0;flapperVel=0;lastTime=0;if(animId)cancelAnimationFrame(animId);animId=requestAnimationFrame(loop);if(isPCLayout())setTimeout(doSpin,80)});
     document.getElementById('backToSetupBtn').addEventListener('click',backToSetup);
 
     // Canvas events
@@ -1920,6 +1928,620 @@ function _stopGuestRenderLoop(){
     _lpTickBuf.length=0;
     _lpGuestLastPegSlot=-1;
 }
+</script>
+<style id="lpv2-game-css">/* Rooms v2 게스트: 방장 설정은 읽기 전용 (P3a) */body.lpv2-guest #startBtn,body.lpv2-guest #pabStart,body.lpv2-guest #replayBtn,body.lpv2-guest #addPlayerBtn,body.lpv2-guest #pabAdd,body.lpv2-guest #pabShuffle,body.lpv2-guest #pabSort,body.lpv2-guest #groupsWidget,body.lpv2-guest #presetsMount,body.lpv2-guest #playerInputs .remove-btn,body.lpv2-guest .lp-room-online-btn{display:none!important}body.lpv2-guest #playerInputs input{pointer-events:none}</style>
+<script>/* ═══════════ LuckyPlz Rooms v2 — draw 어댑터 공용부 (P3a · 2026-09-30) ═══════════
+   이 블록은 roulette · team · ladder · dice 네 파일에 **같은 내용**으로 들어 있다
+   (게임 간 import 금지 규칙 — 복붙이 의도된 패턴). 게임별 부분은 바로 아래 LPV2.register({...}) 블록.
+   설계: docs/multiplayer/DESIGN.md §6.1 (결과 먼저 · 결정적 연출 · 동시 출발 · 배지 · #cert=)
+
+   켜짐(v2): ?rooms=v2 · ?r=<방 코드> · localStorage.lpRoomsV='2' · 레지스트리 LpGames.v(id)==='v2'.  ?rooms=v1 이 최우선 끔.
+   꺼져 있으면 이 블록은 #cert= 검증 모드 말고는 아무것도 하지 않는다 → 솔로·v1 경로 그대로(v1 코드는 P6 에서 삭제).
+   흐름: 방장 [시작] → LpFair.draw(커밋·참가자 엔트로피·공개) → 모두 같은 seed 로 outcome(순수 함수) →
+         startAt(방장 시계)에 연출 시작, 연출은 경과 시간의 함수(늦게 온 사람도 그 장면부터) →
+         결과 해시는 hb 에 편승(목격) → 배지 "✓ 공정 · N명 확인" + 자가검증 링크 #cert=.
+   공통 UI(lpRoomsUI.js, P2)가 있으면 그쪽(openCreate·openJoin·openInvite·drawStrip)을 쓰고, 없으면 아래 최소 폴백
+   (명단 띠 한 줄 + 배지 글자)으로 동작한다. */
+(function(){
+'use strict';
+if(window.LPV2)return;
+const SRC={core:'/js/lpRoomsCore.js?v=1790753735',fair:'/js/lpFair.js?v=1790753735',games:'/js/lpGames.js?v=1790753735',sb:'/vendor/supabase.min.js'};
+const TX={
+ko:{fair:'✓ 공정 · {n}명 확인',fair0:'✓ 공정',solo:'🎲 혼자 뽑기',diff:'⚠ {n}명 화면 다름',mix:'모두의 행운 섞는 중',cancel:'⚠ 추첨 #{r} 취소됨',retry:'↻ 다시 섞는 중',vChk:'🔍 검증 중…',vOk:'✓ 검증됨',vBad:'✗ 위조된 결과',link:'🔗 결과 링크',copied:'✓ 복사됨',replay:'▶ 다시 보기',addMe:'✋ 내 이름 넣기',added:'✓ 들어갔어요',allow:'✋ 참가',fill:'👥 멤버로 채우기',invite:'💬 초대',nick:'닉네임',enter:'입장',hostTurn:'방장이 시작해요',left:'방이 끝났어요',joinFail:'방을 찾지 못했어요',again:'다시',here:'여기서 계속',otherTab:'다른 탭에서 열려 있어요',joining:'들어가는 중…',badSig:'⚠ 검증 실패',drawFail:'추첨 실패 · 다시',full:'자리가 없어요',dup:'이미 있어요',closed:'방장이 닫아 둠',hostLost:'방장 연결 확인 중…',pin:'PIN'},
+en:{fair:'✓ Fair · {n} verified',fair0:'✓ Fair',solo:'🎲 Solo draw',diff:'⚠ {n} screen differs',mix:'Mixing everyone’s luck',cancel:'⚠ Draw #{r} cancelled',retry:'↻ Re-mixing',vChk:'🔍 Verifying…',vOk:'✓ Verified',vBad:'✗ Forged result',link:'🔗 Result link',copied:'✓ Copied',replay:'▶ Replay',addMe:'✋ Add my name',added:'✓ You’re in',allow:'✋ Join list',fill:'👥 Fill with members',invite:'💬 Invite',nick:'Nickname',enter:'Join',hostTurn:'The host starts it',left:'Room ended',joinFail:'Room not found',again:'Retry',here:'Continue here',otherTab:'Open in another tab',joining:'Joining…',badSig:'⚠ Verification failed',drawFail:'Draw failed · retry',full:'List is full',dup:'Already listed',closed:'Host turned it off',hostLost:'Checking host…',pin:'PIN'},
+ja:{fair:'✓ 公正 · {n}人確認',fair0:'✓ 公正',solo:'🎲 ひとり抽選',diff:'⚠ {n}人の画面が違う',mix:'みんなの運を混ぜています',cancel:'⚠ 抽選 #{r} 取消',retry:'↻ 混ぜ直し中',vChk:'🔍 検証中…',vOk:'✓ 検証済み',vBad:'✗ 改ざんされた結果',link:'🔗 結果リンク',copied:'✓ コピー済み',replay:'▶ もう一度見る',addMe:'✋ 自分を追加',added:'✓ 追加しました',allow:'✋ 参加',fill:'👥 メンバーで埋める',invite:'💬 招待',nick:'ニックネーム',enter:'入室',hostTurn:'ホストが始めます',left:'ルーム終了',joinFail:'ルームが見つかりません',again:'再試行',here:'ここで続ける',otherTab:'別のタブで開いています',joining:'入室中…',badSig:'⚠ 検証失敗',drawFail:'抽選失敗 · 再試行',full:'満員です',dup:'登録済み',closed:'ホストが締切',hostLost:'ホスト確認中…',pin:'PIN'},
+zh:{fair:'✓ 公平 · {n}人确认',fair0:'✓ 公平',solo:'🎲 单人抽取',diff:'⚠ {n}人画面不同',mix:'正在混合大家的运气',cancel:'⚠ 抽签 #{r} 已取消',retry:'↻ 重新混合',vChk:'🔍 验证中…',vOk:'✓ 已验证',vBad:'✗ 伪造的结果',link:'🔗 结果链接',copied:'✓ 已复制',replay:'▶ 重播',addMe:'✋ 加入我的名字',added:'✓ 已加入',allow:'✋ 可加入',fill:'👥 用成员填充',invite:'💬 邀请',nick:'昵称',enter:'进入',hostTurn:'由房主开始',left:'房间已结束',joinFail:'找不到房间',again:'重试',here:'在此继续',otherTab:'已在其他标签页打开',joining:'进入中…',badSig:'⚠ 验证失败',drawFail:'抽签失败 · 重试',full:'名单已满',dup:'已在名单中',closed:'房主已关闭',hostLost:'正在确认房主…',pin:'PIN'},
+es:{fair:'✓ Justo · {n} verificados',fair0:'✓ Justo',solo:'🎲 Sorteo solo',diff:'⚠ {n} pantalla distinta',mix:'Mezclando la suerte de todos',cancel:'⚠ Sorteo #{r} cancelado',retry:'↻ Mezclando de nuevo',vChk:'🔍 Verificando…',vOk:'✓ Verificado',vBad:'✗ Resultado falso',link:'🔗 Enlace',copied:'✓ Copiado',replay:'▶ Repetir',addMe:'✋ Añadir mi nombre',added:'✓ Estás dentro',allow:'✋ Unirse',fill:'👥 Llenar con miembros',invite:'💬 Invitar',nick:'Apodo',enter:'Entrar',hostTurn:'Lo inicia el anfitrión',left:'Sala cerrada',joinFail:'Sala no encontrada',again:'Reintentar',here:'Seguir aquí',otherTab:'Abierta en otra pestaña',joining:'Entrando…',badSig:'⚠ Verificación fallida',drawFail:'Falló · reintentar',full:'Lista llena',dup:'Ya está',closed:'Cerrado por el anfitrión',hostLost:'Comprobando anfitrión…',pin:'PIN'},
+pt:{fair:'✓ Justo · {n} verificados',fair0:'✓ Justo',solo:'🎲 Sorteio solo',diff:'⚠ {n} tela diferente',mix:'Misturando a sorte de todos',cancel:'⚠ Sorteio #{r} cancelado',retry:'↻ Misturando de novo',vChk:'🔍 Verificando…',vOk:'✓ Verificado',vBad:'✗ Resultado falso',link:'🔗 Link',copied:'✓ Copiado',replay:'▶ Rever',addMe:'✋ Pôr meu nome',added:'✓ Você entrou',allow:'✋ Entrar',fill:'👥 Preencher com membros',invite:'💬 Convidar',nick:'Apelido',enter:'Entrar',hostTurn:'O anfitrião inicia',left:'Sala encerrada',joinFail:'Sala não encontrada',again:'Tentar de novo',here:'Continuar aqui',otherTab:'Aberta em outra aba',joining:'Entrando…',badSig:'⚠ Falha na verificação',drawFail:'Falhou · tentar',full:'Lista cheia',dup:'Já está',closed:'Fechado pelo anfitrião',hostLost:'Verificando anfitrião…',pin:'PIN'},
+de:{fair:'✓ Fair · {n} bestätigt',fair0:'✓ Fair',solo:'🎲 Solo-Ziehung',diff:'⚠ {n} Bildschirm anders',mix:'Das Glück aller wird gemischt',cancel:'⚠ Ziehung #{r} abgebrochen',retry:'↻ Neu mischen',vChk:'🔍 Prüfe…',vOk:'✓ Geprüft',vBad:'✗ Gefälschtes Ergebnis',link:'🔗 Ergebnislink',copied:'✓ Kopiert',replay:'▶ Nochmal ansehen',addMe:'✋ Meinen Namen',added:'✓ Du bist dabei',allow:'✋ Beitreten',fill:'👥 Mit Mitgliedern füllen',invite:'💬 Einladen',nick:'Spitzname',enter:'Beitreten',hostTurn:'Der Host startet',left:'Raum beendet',joinFail:'Raum nicht gefunden',again:'Erneut',here:'Hier weiter',otherTab:'In anderem Tab offen',joining:'Trete bei…',badSig:'⚠ Prüfung fehlgeschlagen',drawFail:'Fehlgeschlagen · erneut',full:'Liste voll',dup:'Schon drin',closed:'Vom Host geschlossen',hostLost:'Prüfe Host…',pin:'PIN'},
+fr:{fair:'✓ Équitable · {n} vérifiés',fair0:'✓ Équitable',solo:'🎲 Tirage solo',diff:'⚠ {n} écran différent',mix:'On mélange la chance de tous',cancel:'⚠ Tirage #{r} annulé',retry:'↻ Nouveau mélange',vChk:'🔍 Vérification…',vOk:'✓ Vérifié',vBad:'✗ Résultat falsifié',link:'🔗 Lien du résultat',copied:'✓ Copié',replay:'▶ Revoir',addMe:'✋ Ajouter mon nom',added:'✓ Ajouté',allow:'✋ Rejoindre',fill:'👥 Remplir avec les membres',invite:'💬 Inviter',nick:'Pseudo',enter:'Entrer',hostTurn:'L’hôte lance',left:'Salon terminé',joinFail:'Salon introuvable',again:'Réessayer',here:'Continuer ici',otherTab:'Ouvert dans un autre onglet',joining:'Connexion…',badSig:'⚠ Vérification échouée',drawFail:'Échec · réessayer',full:'Liste pleine',dup:'Déjà présent',closed:'Fermé par l’hôte',hostLost:'Vérification de l’hôte…',pin:'PIN'},
+ru:{fair:'✓ Честно · {n} подтвердили',fair0:'✓ Честно',solo:'🎲 Одиночный',diff:'⚠ У {n} экран другой',mix:'Смешиваем удачу всех',cancel:'⚠ Жребий #{r} отменён',retry:'↻ Перемешиваем',vChk:'🔍 Проверка…',vOk:'✓ Проверено',vBad:'✗ Подделка',link:'🔗 Ссылка',copied:'✓ Скопировано',replay:'▶ Повтор',addMe:'✋ Добавить себя',added:'✓ Вы в списке',allow:'✋ Вход',fill:'👥 Заполнить участниками',invite:'💬 Пригласить',nick:'Ник',enter:'Войти',hostTurn:'Запускает хост',left:'Комната закрыта',joinFail:'Комната не найдена',again:'Ещё раз',here:'Продолжить здесь',otherTab:'Открыто в другой вкладке',joining:'Вход…',badSig:'⚠ Проверка не пройдена',drawFail:'Ошибка · ещё раз',full:'Список полон',dup:'Уже есть',closed:'Хост закрыл',hostLost:'Проверка хоста…',pin:'PIN'},
+ar:{fair:'✓ عادل · تحقق {n}',fair0:'✓ عادل',solo:'🎲 سحب فردي',diff:'⚠ شاشة {n} مختلفة',mix:'نمزج حظ الجميع',cancel:'⚠ أُلغي السحب #{r}',retry:'↻ إعادة المزج',vChk:'🔍 جارٍ التحقق…',vOk:'✓ تم التحقق',vBad:'✗ نتيجة مزوّرة',link:'🔗 رابط النتيجة',copied:'✓ تم النسخ',replay:'▶ إعادة',addMe:'✋ أضف اسمي',added:'✓ تمت الإضافة',allow:'✋ انضمام',fill:'👥 املأ بالأعضاء',invite:'💬 دعوة',nick:'الاسم',enter:'دخول',hostTurn:'المضيف يبدأ',left:'انتهت الغرفة',joinFail:'الغرفة غير موجودة',again:'إعادة',here:'تابع هنا',otherTab:'مفتوحة في تبويب آخر',joining:'جارٍ الدخول…',badSig:'⚠ فشل التحقق',drawFail:'فشل · إعادة',full:'القائمة ممتلئة',dup:'موجود',closed:'أغلقه المضيف',hostLost:'التحقق من المضيف…',pin:'PIN'},
+hi:{fair:'✓ निष्पक्ष · {n} पुष्टि',fair0:'✓ निष्पक्ष',solo:'🎲 अकेला ड्रॉ',diff:'⚠ {n} स्क्रीन अलग',mix:'सबकी किस्मत मिला रहे हैं',cancel:'⚠ ड्रॉ #{r} रद्द',retry:'↻ फिर से मिला रहे',vChk:'🔍 जाँच…',vOk:'✓ सत्यापित',vBad:'✗ नकली परिणाम',link:'🔗 परिणाम लिंक',copied:'✓ कॉपी हुआ',replay:'▶ फिर देखें',addMe:'✋ मेरा नाम जोड़ें',added:'✓ जुड़ गए',allow:'✋ जुड़ें',fill:'👥 सदस्यों से भरें',invite:'💬 आमंत्रण',nick:'उपनाम',enter:'प्रवेश',hostTurn:'होस्ट शुरू करेगा',left:'रूम खत्म',joinFail:'रूम नहीं मिला',again:'फिर',here:'यहीं जारी',otherTab:'दूसरे टैब में खुला',joining:'जुड़ रहे…',badSig:'⚠ सत्यापन विफल',drawFail:'विफल · फिर',full:'सूची भरी',dup:'पहले से है',closed:'होस्ट ने बंद किया',hostLost:'होस्ट जाँच…',pin:'PIN'},
+th:{fair:'✓ ยุติธรรม · ยืนยัน {n} คน',fair0:'✓ ยุติธรรม',solo:'🎲 สุ่มคนเดียว',diff:'⚠ {n} จอไม่ตรง',mix:'กำลังผสมโชคของทุกคน',cancel:'⚠ ยกเลิกการสุ่ม #{r}',retry:'↻ ผสมใหม่',vChk:'🔍 กำลังตรวจ…',vOk:'✓ ตรวจแล้ว',vBad:'✗ ผลปลอม',link:'🔗 ลิงก์ผล',copied:'✓ คัดลอกแล้ว',replay:'▶ ดูอีกครั้ง',addMe:'✋ ใส่ชื่อฉัน',added:'✓ ใส่แล้ว',allow:'✋ เข้าร่วม',fill:'👥 เติมด้วยสมาชิก',invite:'💬 เชิญ',nick:'ชื่อเล่น',enter:'เข้า',hostTurn:'โฮสต์เป็นคนเริ่ม',left:'ห้องจบแล้ว',joinFail:'ไม่พบห้อง',again:'ลองใหม่',here:'ใช้ที่นี่',otherTab:'เปิดในแท็บอื่น',joining:'กำลังเข้า…',badSig:'⚠ ตรวจไม่ผ่าน',drawFail:'ล้มเหลว · ลองใหม่',full:'รายชื่อเต็ม',dup:'มีแล้ว',closed:'โฮสต์ปิดไว้',hostLost:'ตรวจสอบโฮสต์…',pin:'PIN'},
+id:{fair:'✓ Adil · {n} terverifikasi',fair0:'✓ Adil',solo:'🎲 Undian sendiri',diff:'⚠ {n} layar beda',mix:'Mencampur keberuntungan semua',cancel:'⚠ Undian #{r} batal',retry:'↻ Mencampur ulang',vChk:'🔍 Memverifikasi…',vOk:'✓ Terverifikasi',vBad:'✗ Hasil palsu',link:'🔗 Tautan hasil',copied:'✓ Disalin',replay:'▶ Putar ulang',addMe:'✋ Tambah namaku',added:'✓ Kamu masuk',allow:'✋ Gabung',fill:'👥 Isi dengan anggota',invite:'💬 Undang',nick:'Nama',enter:'Masuk',hostTurn:'Host yang memulai',left:'Room selesai',joinFail:'Room tidak ditemukan',again:'Ulangi',here:'Lanjut di sini',otherTab:'Terbuka di tab lain',joining:'Masuk…',badSig:'⚠ Verifikasi gagal',drawFail:'Gagal · ulangi',full:'Daftar penuh',dup:'Sudah ada',closed:'Ditutup host',hostLost:'Memeriksa host…',pin:'PIN'},
+vi:{fair:'✓ Công bằng · {n} xác nhận',fair0:'✓ Công bằng',solo:'🎲 Bốc một mình',diff:'⚠ {n} màn hình khác',mix:'Đang trộn vận may của mọi người',cancel:'⚠ Đã hủy lượt #{r}',retry:'↻ Trộn lại',vChk:'🔍 Đang kiểm tra…',vOk:'✓ Đã xác minh',vBad:'✗ Kết quả giả',link:'🔗 Link kết quả',copied:'✓ Đã chép',replay:'▶ Xem lại',addMe:'✋ Thêm tên tôi',added:'✓ Đã vào',allow:'✋ Tham gia',fill:'👥 Điền bằng thành viên',invite:'💬 Mời',nick:'Biệt danh',enter:'Vào',hostTurn:'Chủ phòng bắt đầu',left:'Phòng đã kết thúc',joinFail:'Không thấy phòng',again:'Thử lại',here:'Tiếp tục ở đây',otherTab:'Đang mở ở tab khác',joining:'Đang vào…',badSig:'⚠ Xác minh thất bại',drawFail:'Lỗi · thử lại',full:'Danh sách đầy',dup:'Đã có',closed:'Chủ phòng đã khóa',hostLost:'Đang kiểm tra chủ phòng…',pin:'PIN'},
+tr:{fair:'✓ Adil · {n} doğruladı',fair0:'✓ Adil',solo:'🎲 Tek kişilik',diff:'⚠ {n} ekran farklı',mix:'Herkesin şansı karışıyor',cancel:'⚠ Çekiliş #{r} iptal',retry:'↻ Yeniden karışıyor',vChk:'🔍 Doğrulanıyor…',vOk:'✓ Doğrulandı',vBad:'✗ Sahte sonuç',link:'🔗 Sonuç bağlantısı',copied:'✓ Kopyalandı',replay:'▶ Tekrar izle',addMe:'✋ Adımı ekle',added:'✓ Eklendin',allow:'✋ Katıl',fill:'👥 Üyelerle doldur',invite:'💬 Davet',nick:'Takma ad',enter:'Gir',hostTurn:'Ev sahibi başlatır',left:'Oda bitti',joinFail:'Oda bulunamadı',again:'Tekrar',here:'Burada devam',otherTab:'Başka sekmede açık',joining:'Giriliyor…',badSig:'⚠ Doğrulama başarısız',drawFail:'Başarısız · tekrar',full:'Liste dolu',dup:'Zaten var',closed:'Ev sahibi kapattı',hostLost:'Ev sahibi kontrol ediliyor…',pin:'PIN'}
+};
+function L(){let l='en';try{l=(typeof lang==='string'&&lang)||localStorage.getItem('luckyplz_lang')||'en'}catch(_){}l=String(l).slice(0,2).toLowerCase();if(l==='gb')l='en';return TX[l]?l:'en'}
+function t(k,v){let s=(TX[L()]||TX.en)[k]||TX.en[k]||k;if(v)for(const x in v)s=s.split('{'+x+'}').join(String(v[x]));return s}
+function qs(k){try{return new URLSearchParams(location.search).get(k)}catch(_){return null}}
+const CODE_RE=/^(?=.*[A-Z])[2-9A-HJKMNP-TV-Z]{6}$/;
+function urlCode(){const c=String(qs('r')||'').toUpperCase().replace(/[\s\-]/g,'');return CODE_RE.test(c)?c:null}
+function canon(o){if(window.LpFair&&LpFair.canon)return LpFair.canon(o);return JSON.stringify(o)}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e}
+
+const V={G:null,on:false,booted:false,room:null,offs:[],hostWired:false,guestFlag:null,played:{},pend:{},certs:{},wit:{},cur:null,busy:false,allow:true,aborts:0,cfgKey:'',cfgPend:null,lastPush:'',lj:null,
+    dbg:{starts:{},res:{},events:[],cert:null}};
+function dlog(e,x){V.dbg.events.push([Date.now(),e,x===undefined?null:x]);if(V.dbg.events.length>400)V.dbg.events.shift()}
+
+/* ── 켜짐 판정 · 스크립트 지연 로드 ── */
+function enabled(id){
+    if(qs('rooms')==='v1')return false;
+    if(qs('rooms')==='v2'||urlCode())return true;
+    try{if(window.LpGames&&LpGames.v)return LpGames.v(id)==='v2'}catch(_){}
+    try{return localStorage.getItem('lpRoomsV')==='2'}catch(_){return false}
+}
+const _loading={};
+function loadJs(src,ok){
+    if(ok())return Promise.resolve(true);
+    if(_loading[src])return _loading[src];
+    return(_loading[src]=new Promise(res=>{const s=document.createElement('script');s.src=src;s.onload=()=>res(ok());s.onerror=()=>{delete _loading[src];res(false)};document.head.appendChild(s)}));
+}
+async function ensure(full){
+    if(full){
+        if(!window.supabase)await loadJs(SRC.sb,()=>!!window.supabase);
+        await loadJs(SRC.games,()=>!!window.LpGames);
+        await loadJs(SRC.core,()=>!!(window.LpRooms&&LpRooms.version&&LpRooms.version.indexOf('stub')<0));
+    }
+    const ok=await loadJs(SRC.fair,()=>!!(window.LpFair&&LpFair.version&&LpFair.version.indexOf('stub')<0));
+    if(!ok||(full&&!window.LpRooms))throw new Error('lpv2 load');
+    if(full&&!V.adapterSet)regAdapter();
+}
+function ui(){return window.LpRoomsUI||(window.LpRooms&&window.LpRooms.UI)||null}
+function room(){const r=V.room;return r&&!r._left?r:null}
+function isHost(){const r=room();return !!(r&&r.isHost)}
+function isGuest(){const r=room();return !!(r&&!r.isHost)}
+function safeParams(){try{return V.G.params()}catch(e){dlog('params_err',String(e));return null}}
+
+function regAdapter(){
+    if(!window.LpRooms||V.adapterSet)return;V.adapterSet=true;
+    LpRooms.adapter({gameId:V.G.id,kind:'draw',seats:null,max:12,lateJoin:'anytime',migratable:true,
+        initGame:function(){return{stage:'setup',cfg:safeParams(),allow:V.allow,draw:null}}});
+    LpRooms.on('room',bind);
+}
+
+/* ── 부팅 ── */
+async function boot(){
+    if(V.booted)return;V.booted=true;
+    const h=location.hash||'';
+    if(/^#cert=/.test(h))certMode(h.slice(6));
+    V.on=enabled(V.G.id);
+    if(!V.on)return;
+    document.documentElement.classList.add('lpv2');
+    /* 방 열기 버튼(게임마다 다름) — 문서 캡처 단계에서 가로채 v1 모달 대신 v2 로 */
+    document.addEventListener('click',function(e){
+        const sel=V.G.online;if(!sel||!V.on)return;
+        const b=e.target&&e.target.closest&&e.target.closest(sel);if(!b)return;
+        e.preventDefault();e.stopPropagation();e.stopImmediatePropagation&&e.stopImmediatePropagation();openRoom();
+    },true);
+    try{if(V.G.showOnline)V.G.showOnline(true)}catch(_){}
+    const code=urlCode();let act=null;try{act=JSON.parse(sessionStorage.getItem('lpr_active')||'null')}catch(_){}
+    if(!code&&!(act&&act.code))return;          /* 이어갈 방이 없으면 버튼을 누를 때 로드 */
+    try{await ensure(true)}catch(e){dlog('load_fail');return}
+    const cur=LpRooms.current();if(cur)return bind(cur);
+    await sleep(350);                             /* 공통 UI(P2) 로더가 먼저 잡았으면 그것을 쓴다 */
+    if(LpRooms.current())return bind(LpRooms.current());
+    if(window.__lprBoot)return;window.__lprBoot='p3a';
+    let r=null;try{r=await LpRooms.resume()}catch(_){}
+    if(r)return bind(r);
+    if(code)joinFlow(code);
+}
+
+/* ── 방 만들기 · 초대 · 참가 ── */
+async function openRoom(){
+    if(room()){showInvite();return}
+    stripMsg(t('joining'));
+    try{await ensure(true)}catch(_){stripMsg(t('joinFail'),t('again'),openRoom);return}
+    const U=ui();
+    if(U&&typeof U.openCreate==='function'){try{U.openCreate({gameId:V.G.id});stripMsg(null);return}catch(_){}}
+    try{const r=await LpRooms.create({gameId:V.G.id});bind(r);showInvite()}
+    catch(e){dlog('create_fail',e&&e.reason);stripMsg(t('joinFail')+(e&&e.reason?' · '+e.reason:''),t('again'),openRoom)}
+}
+function inviteLink(r){
+    const u=r.inviteUrl();const U=ui();
+    if(U)return u;                                 /* 공통 UI 가 있으면 /r/ 허브가 받는다 */
+    const i=u.indexOf('#');                        /* 없으면 게임 페이지로 바로(허브 없이도 동작) */
+    return location.origin+V.G.path+'?r='+r.code+(i>=0?u.slice(i):'');
+}
+function showInvite(){
+    const r=room();if(!r)return;
+    const U=ui();if(U&&typeof U.openInvite==='function'){try{U.openInvite(r);return}catch(_){}}
+    const url=inviteLink(r),msg='🎲 '+(document.title.split(/[|·—-]/)[0]||'').trim()+' · '+fmt(r.code);
+    const mobile=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent||'');
+    if(mobile&&typeof navigator.share==='function'){navigator.share({title:document.title,text:msg,url:url}).catch(function(err){if(!err||err.name!=='AbortError')copy(msg+'\n'+url)});return}
+    copy(msg+'\n'+url);
+}
+function copy(txt){
+    const done=()=>toast(t('copied'));
+    const fb=()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;opacity:0;left:0;top:0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch(_){}ta.remove();done()};
+    try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(done,fb);else fb()}catch(_){fb()}
+}
+function fmt(c){c=String(c||'');return c.length===6?c.slice(0,3)+'-'+c.slice(3):c}
+async function joinFlow(code,o){
+    o=o||{};
+    const U=ui();if(U&&typeof U.openJoin==='function'&&!o.steal){try{U.openJoin({code:code,gameId:V.G.id});return}catch(_){}}
+    let inv=o.inv;if(!inv){try{const p=LpRooms.parseInvite(location.href);inv=p&&p.code===code?p.inv:undefined}catch(_){}}
+    if(inv){try{sessionStorage.setItem('lpr_inv',JSON.stringify({code:code,fp:inv.fp,tok:inv.tok}))}catch(_){}}
+    if(/k=/.test(location.hash||'')){try{history.replaceState(history.state,'',location.pathname+location.search)}catch(_){}}
+    let nick=LpRooms.profile.get().nick;
+    if(!nick){nick=await ask(t('nick'),false);if(!nick)return;LpRooms.profile.set({nick:nick})}
+    stripMsg(t('joining'));
+    try{const r=await LpRooms.join({code:code,inv:inv,steal:!!o.steal,pin:o.pin});bind(r)}
+    catch(e){
+        const rs=e&&e.reason;dlog('join_fail',rs);
+        if(rs==='wrong_game'&&e.url){location.replace(e.url);return}
+        if(rs==='other_tab'){stripMsg(t('otherTab'),t('here'),()=>joinFlow(code,{steal:true}));return}
+        if(rs==='pin_required'||rs==='bad_proof'){const pin=await ask(t('pin'),true);if(pin)joinFlow(code,{pin:pin,inv:inv});return}
+        stripMsg(t('joinFail')+(rs?' · '+rs:''),t('again'),()=>joinFlow(code,{inv:inv}));
+    }
+}
+function ask(label,num){
+    return new Promise(res=>{
+        const bg=el('div','lpv2-ask'),card=el('div','lpv2-ask-card'),inp=el('input'),go=el('button','lpv2-btn',t('enter'));
+        inp.placeholder=label;inp.maxLength=num?4:12;if(num){inp.inputMode='numeric'}inp.autocomplete='off';
+        card.append(el('div','lpv2-ask-t','👥 '+label),inp,go);bg.appendChild(card);document.body.appendChild(bg);
+        const done=v=>{bg.remove();res(v)};
+        go.onclick=()=>{const v=inp.value.trim();if(v)done(v)};
+        inp.onkeydown=e=>{if(e.key==='Enter')go.onclick()};
+        bg.onclick=e=>{if(e.target===bg)done(null)};
+        setTimeout(()=>{try{inp.focus()}catch(_){}},30);
+    });
+}
+
+/* ── 방 연결 ── */
+function bind(r){
+    if(!r||V.room===r)return;
+    if(r.gameId&&r.gameId!==V.G.id&&r.gameId!=='lobby')return;
+    unbind();
+    V.room=r;V.played={};V.pend={};V.hostWired=false;V.lastPush='';
+    try{LpFair._attach&&LpFair._attach(r)}catch(_){}
+    const on=(e,f)=>{try{V.offs.push(r.on(e,f))}catch(_){}};
+    on('state',S=>{if(!r.isHost)onState(S)});
+    on('roster',()=>{syncRole();renderStrip()});
+    on('fair',onFair);
+    on('takeover',()=>{syncRole();renderStrip()});
+    on('hostlost',x=>{if(x&&x.level>=1)stripWarn(t('hostLost'))});
+    on('hostback',()=>stripWarn(null));
+    ['closed','kicked','detached'].forEach(e=>on(e,x=>gone(e,x)));
+    syncRole();renderStrip();stripMsg(null);
+    const S=r.state();if(S&&!r.isHost)onState(S);
+    /* 방장 새로고침·게임 복귀: 진행 중이던 추첨이 있으면 인증서로 검증해 그 장면부터 이어 본다 */
+    if(S&&r.isHost){const g=S.game||{};if(g.stage==='draw'&&g.draw&&g.draw.round&&!V.played[g.draw.round])lateJoin(g.draw)}
+    dlog('bind',{code:r.code,host:r.isHost});
+}
+function unbind(){V.offs.forEach(f=>{try{f()}catch(_){}});V.offs=[];V.room=null}
+function gone(e,x){
+    dlog('gone',e);unbind();setGuest(false);renderStrip();
+    stripMsg(t('left'));setTimeout(()=>{if(!room())stripMsg(null)},4000);
+}
+function setGuest(on){if(V.guestFlag===on)return;V.guestFlag=on;document.body.classList.toggle('lpv2-guest',!!on);try{V.G.setGuest(!!on)}catch(e){dlog('setGuest_err',String(e))}}
+function syncRole(){
+    const r=room();if(!r)return;
+    if(r.isHost&&!V.hostWired){V.hostWired=true;r.onIntent(onIntent);watchSetup();pushCfg(true)}
+    setGuest(!r.isHost);
+}
+let _cfgT=0,_watched=false;
+function watchSetup(){
+    if(_watched)return;_watched=true;
+    const root=V.G.setupRoot&&V.G.setupRoot();if(!root)return;
+    const sched=()=>{clearTimeout(_cfgT);_cfgT=setTimeout(()=>pushCfg(false),220)};
+    root.addEventListener('input',sched);root.addEventListener('change',sched);root.addEventListener('click',()=>setTimeout(sched,0));
+}
+function pushCfg(force){
+    const r=room();if(!r||!r.isHost)return;
+    const S=r.state();const g=S&&S.game||{};
+    if(g.stage&&g.stage!=='setup'&&!force)return;
+    const cfg=safeParams();if(!cfg)return;
+    const key=canon({c:cfg,a:V.allow});if(!force&&key===V.lastPush)return;V.lastPush=key;
+    r.setState(St=>{St.game=St.game||{};St.game.cfg=cfg;St.game.allow=V.allow;if(!St.game.stage||force&&St.game.stage==='setup')St.game.stage='setup'});
+}
+function onIntent(from,a,x){
+    if(a==='entry'){
+        if(!V.allow)return{reject:'closed'};
+        const S=room().state(),g=S&&S.game||{};if(g.stage&&g.stage!=='setup')return{reject:'busy'};
+        let res=false;try{res=V.G.addEntry(String(from&&from.n||'').slice(0,20))}catch(_){}
+        if(res==='dup')return{reject:'dup'};if(!res)return{reject:'full'};
+        pushCfg(true);return;
+    }
+    return{reject:'unknown'};
+}
+
+/* ── 게스트: 방장 상태 반영 ── */
+function onState(S){
+    const g=S&&S.game||{};
+    V.allow=g.allow!==false;
+    if(g.cfg){const k=canon(g.cfg);if(k!==V.cfgKey){if(!V.cur||V.cur.ended){V.cfgKey=k;V.cfgPend=null;try{V.G.applyCfg(g.cfg)}catch(e){dlog('applyCfg_err',String(e))}}else V.cfgPend=g.cfg}}
+    if(g.stage==='setup'&&(V.cur||inResult())){stopPlay();try{V.G.toSetup()}catch(_){}if(V.cfgPend){const c=V.cfgPend;V.cfgPend=null;V.cfgKey=canon(c);try{V.G.applyCfg(c)}catch(_){}}}
+    if(g.draw&&g.draw.round&&!V.played[g.draw.round]){
+        /* 커밋을 본 판이면 공개 이벤트가 곧 온다(검증이 비동기라 state 가 먼저 닿을 수 있다) — 그쪽을 기다리고, 안 오면 늦참 경로 */
+        const d=g.draw;if(V.pend[d.round]!==undefined)setTimeout(()=>{if(!V.played[d.round])lateJoin(d)},2500);else lateJoin(d);
+    }
+    renderStrip();
+}
+function inResult(){try{return !!V.G.inResult()}catch(_){return false}}
+function seedOfCert(c){return LpFair.H('lpf1-s|'+c.C+'|'+c.hs+'|'+Object.keys(c.N||{}).sort().map(p=>p+':'+c.N[p]).join(','))}
+async function lateJoin(d){
+    const round=d.round;if(V.played[round]||V.lj===round)return;V.lj=round;
+    const c=d.cert;if(!c||!c.params)return;
+    let v;try{v=await LpFair.cert.verify(c,(p,rng)=>V.G.outcome(p,rng))}catch(_){v={ok:false,why:'error'}}
+    if(V.played[round])return;
+    if(!v.ok){dlog('late_bad',v.why);toast(t('badSig'));return}
+    V.played[round]=true;V.certs[round]=c;
+    try{LpFair.witness(room(),round,v.res)}catch(_){}
+    dlog('late_play',{round:round,e:room()?room().clock()-d.st:null});
+    startPlay({round:round,params:c.params,res:v.res,seed:seedOfCert(c),startAt:d.st,cert:c,solo:!(c.L&&c.L.length),late:true});
+}
+
+/* ── 공정 추첨 이벤트 (방장·게스트 공통) ── */
+function onFair(ev){
+    if(!ev)return;dlog('fair',ev.k+'#'+ev.round);
+    switch(ev.k){
+    case 'commit':V.pend[ev.round]=ev.params;mixing(true);break;
+    case 'reveal':{
+        if(V.played[ev.round]){mixing(false);return}
+        if(!ev.ok){mixing(false);if(ev.why==='no_commit')return;dlog('reveal_bad',ev.why);toast(t('badSig'));return}
+        const params=V.pend[ev.round]||(ev.cert&&ev.cert.params);if(!params){mixing(false);return}
+        let res;try{res=V.G.outcome(params,LpFair.rng(ev.seed,'main'))}catch(e){dlog('outcome_err',String(e));mixing(false);return}
+        const cert=Object.assign({},ev.cert,{params:params,res:res});
+        V.certs[ev.round]=cert;V.played[ev.round]=true;
+        try{LpFair.witness(room(),ev.round,res)}catch(_){}
+        startPlay({round:ev.round,params:params,res:res,seed:ev.seed,startAt:ev.startAt,cert:cert,solo:!!ev.solo});
+        break}
+    case 'abort':
+        mixing(false);
+        if(ev.by==='host'){V.aborts++;banner(t('cancel',{r:ev.round}));if(!isHost()){stopPlay();try{V.G.toSetup()}catch(_){}}}
+        else toast(t('retry'));
+        break;
+    case 'witness':V.wit[ev.round]={ok:ev.ok,bad:ev.bad};refreshBadge();break;
+    }
+}
+
+/* ── 방장: 추첨 · 설정 복귀 ── */
+async function hostDraw(){
+    const r=room();if(!r||!r.isHost||V.busy)return;
+    const params=safeParams();if(!params){toast('⚠');return}
+    V.busy=true;stopPlay();
+    try{
+        const d=await LpFair.draw(r,{params:params});
+        let cert=V.certs[d.round];
+        if(!cert){const res=V.G.outcome(params,LpFair.rng(d.seed,'main'));cert=Object.assign({},d.cert,{params:params,res:res})}
+        r.setState(St=>{St.game=St.game||{};St.game.stage='draw';St.game.cfg=params;St.game.draw={round:d.round,st:d.startAt,cert:cert}});
+        dlog('drawn',d.round);
+    }catch(e){dlog('draw_fail',String(e&&e.message));mixing(false);toast(t('drawFail'));try{V.G.toSetup()}catch(_){}}
+    finally{V.busy=false}
+}
+function hostSetup(){
+    const r=room();if(!r||!r.isHost)return;
+    stopPlay();
+    r.setState(St=>{St.game=St.game||{};St.game.stage='setup';St.game.draw=null;const c=safeParams();if(c)St.game.cfg=c;St.game.allow=V.allow});
+    V.lastPush='';
+}
+
+/* ── 재생 ── */
+function startPlay(o){
+    stopPlay();if(!o.local)mixing(true);
+    const r=room();
+    const clock=o.local?(()=>performance.now()-o.t0):(r?(()=>r.clock()-o.startAt):(()=>Date.now()-o.startAt));
+    const cur=V.cur={round:o.round,o:o,ended:false,first:false};
+    V.dbg.res[o.round]=canon(o.res);
+    V.dbg.starts[o.round]={intended:o.local?null:Date.now()-clock(),first:null,e0:null,late:!!o.late};
+    const elapsed=()=>{const e=clock();if(e>=0&&!cur.first&&V.cur===cur){cur.first=true;mixing(false);const s=V.dbg.starts[o.round];s.first=Date.now()-e;s.e0=e;s.at=Date.now()}return e};
+    const hide=()=>{if(V.cur===cur&&!cur.first)mixing(false)};
+    setTimeout(hide,Math.max(0,Math.min(4000,-clock()+60)));
+    try{
+        cur.ctl=V.G.play({params:o.params,res:o.res,seed:o.seed,elapsed:elapsed,rng:label=>LpFair.rng(o.seed,label),
+            onEnd:()=>{if(V.cur===cur){cur.ended=true;decorate();renderStrip()}}});
+        renderStrip();
+    }catch(e){dlog('play_err',String(e&&e.stack||e));mixing(false)}
+}
+function stopPlay(){const c=V.cur;V.cur=null;if(c&&c.ctl&&c.ctl.stop){try{c.ctl.stop()}catch(_){}}}
+
+/* ── 결과 카드: 배지 · 결과 링크 · 다시 보기 ── */
+function badgeInfo(round){
+    const c=V.certs[round];if(!c)return null;
+    const w=V.wit[round],solo=!(c.L&&c.L.length);
+    if(w&&w.bad>0)return{kind:'mismatch',n:w.bad,txt:t('diff',{n:w.bad})};
+    if(solo&&!(w&&w.ok>1))return{kind:'solo',n:1,txt:t('solo')};
+    if(w&&w.ok)return{kind:'verified',n:w.ok,txt:t('fair',{n:w.ok})};
+    return{kind:'verified',n:null,txt:t('fair0')};
+}
+function refreshBadge(){
+    document.querySelectorAll('.lpv2-badge[data-round]').forEach(b=>{
+        const round=+b.getAttribute('data-round')||b.getAttribute('data-round');const bi=badgeInfo(round);if(!bi)return;
+        try{if(window.LpFair&&LpFair.badge)LpFair.badge(b,{kind:bi.kind,n:bi.n,round:round,cert:V.certs[round]})}catch(_){}
+        b.textContent=bi.txt;b.classList.add('lpv2-badge');
+    });
+}
+function decorate(){
+    const cur=V.cur;if(!cur)return;const round=cur.round,c=cur.o.cert;
+    let card=null;try{card=V.G.resultCard()}catch(_){}if(!card)return;
+    let box=card.querySelector('.lpv2-res');if(box)box.remove();
+    box=el('div','lpv2-res');
+    const b=el('button','lpv2-badge');b.type='button';b.setAttribute('data-round',String(round));
+    const info=el('div','lpv2-info');info.hidden=true;
+    b.onclick=()=>{info.hidden=!info.hidden};
+    const seedHex=cur.o.seed?LpFair.hex(cur.o.seed).slice(0,8):'';
+    info.textContent='#'+round+' · 🎲 '+seedHex+' · 👥 '+((c&&c.L?c.L.length:0)+1)+(c&&c.stats?' · '+c.stats.draws+'/'+c.stats.aborts:'');
+    const lk=el('button','lpv2-mini',t('link'));lk.type='button';lk.onclick=()=>certLink(c).then(u=>copy(u));
+    const rp=el('button','lpv2-mini',t('replay'));rp.type='button';rp.onclick=()=>replay(cur.o);
+    box.append(b,lk,rp,info);
+    if(cur.o.verifyText){const vt=el('div','lpv2-vtxt',cur.o.verifyText);box.prepend(vt)}
+    let anc=null;try{anc=V.G.resultAnchor&&V.G.resultAnchor()}catch(_){}
+    if(anc&&anc.parentNode)anc.parentNode.insertBefore(box,anc.nextSibling);else card.insertBefore(box,card.firstChild&&card.firstChild.nextSibling||null);
+    refreshBadge();
+    if(cur.o.certView)b.textContent=t('vOk');
+}
+async function certLink(c){const s=await LpFair.cert.encode(c);return location.origin+V.G.path+'#cert='+s}
+function replay(o){
+    const q=Object.assign({},o,{local:true,t0:performance.now()+300,round:o.round});
+    startPlay(q);
+}
+
+/* ── #cert= 자가검증 모드 ── */
+async function certMode(s){
+    const bn=banner(t('vChk'),true);
+    try{await ensure(false)}catch(_){bn.textContent=t('vBad');V.dbg.cert={ok:false,why:'load'};return}
+    let c=null;try{c=await LpFair.cert.decode(decodeURIComponent(s))}catch(_){c=null}
+    if(!c||c.g!==V.G.id){bn.textContent=t('vBad');bn.classList.add('bad');V.dbg.cert={ok:false,why:c?'game':'decode'};return}
+    const v=await LpFair.cert.verify(c,(p,rng)=>V.G.outcome(p,rng));
+    if(!v.ok){bn.textContent=t('vBad');bn.classList.add('bad');V.dbg.cert={ok:false,why:v.why};return}
+    let sum='';try{sum=V.G.resText(c.params,v.res)}catch(_){}
+    bn.textContent=t('vOk')+(sum?' · '+sum:'');bn.classList.add('ok');
+    V.dbg.cert={ok:true,res:canon(v.res)};
+    const round=c.round;V.certs[round]=c;V.wit[round]={ok:(c.L?c.L.length:0)+1,bad:0};
+    const o={round:round,params:c.params,res:v.res,seed:seedOfCert(c),cert:c,local:true,t0:performance.now()+700,certView:true,verifyText:bn.textContent};
+    const rp=el('button','lpv2-mini',t('replay'));rp.type='button';rp.onclick=()=>replay(o);bn.appendChild(rp);
+    setTimeout(()=>startPlay(o),60);
+}
+
+/* ── 최소 폴백 UI: 명단 띠 · 섞는 중 · 토스트 · 배너 ── */
+let strip=null,stripMsgEl=null,stripWarnEl=null;
+function css(){
+    if(document.getElementById('lpv2-css'))return;
+    const s=el('style');s.id='lpv2-css';
+    s.textContent='.lpv2-strip{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 6px);z-index:9060;display:flex;align-items:center;gap:6px;max-width:calc(100vw - 150px);padding:4px 6px 4px 10px;border-radius:999px;background:rgba(8,10,30,.86);border:1px solid rgba(0,217,255,.35);color:#e8f6ff;font:700 12px/1.2 "Noto Sans KR",system-ui,sans-serif;box-shadow:0 6px 18px -8px rgba(0,0,0,.7);white-space:nowrap}'
+    +'.lpv2-strip .lpv2-who{overflow:hidden;text-overflow:ellipsis;min-width:0}.lpv2-strip .lpv2-code{color:#7fe8ff;letter-spacing:.06em}.lpv2-dot{width:7px;height:7px;border-radius:50%;background:#3ee07a;flex:none}.lpv2-strip.warn .lpv2-dot{background:#ffc43a}'
+    +'.lpv2-btn,.lpv2-mini{font:800 12px "Noto Sans KR",system-ui,sans-serif;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#fff;border-radius:999px;padding:5px 10px;cursor:pointer;flex:none}.lpv2-btn.on{background:#00D9FF;color:#001c22;border-color:transparent}'
+    +'.lpv2-msg{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 44px);z-index:9061;display:flex;gap:8px;align-items:center;padding:6px 12px;border-radius:12px;background:rgba(8,10,30,.9);color:#fff;font:700 12px "Noto Sans KR",system-ui,sans-serif}'
+    +'.lpv2-mix{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:9070;display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:999px;background:rgba(10,12,34,.9);border:1px solid rgba(255,230,109,.45);color:#fff3c4;font:800 14px "Noto Sans KR",system-ui,sans-serif;box-shadow:0 10px 40px -10px rgba(255,200,80,.5);pointer-events:none;opacity:0;transition:opacity .18s}.lpv2-mix.on{opacity:1}'
+    +'.lpv2-mix .lpv2-coins{position:relative;width:34px;height:22px}.lpv2-mix .lpv2-coins i{position:absolute;left:12px;top:4px;width:12px;height:12px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#fff6c8,#ffc63a 55%,#b8860b);animation:lpv2c 0.9s ease-in-out infinite}.lpv2-mix .lpv2-coins i:nth-child(2){animation-delay:.3s}.lpv2-mix .lpv2-coins i:nth-child(3){animation-delay:.6s}'
+    +'@keyframes lpv2c{0%{transform:translate(-14px,6px) scale(.6);opacity:0}40%{opacity:1}100%{transform:translate(12px,-2px) scale(1);opacity:0}}'
+    +'.lpv2-toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);z-index:9080;padding:8px 14px;border-radius:12px;background:rgba(8,10,30,.92);color:#fff;font:700 13px "Noto Sans KR",system-ui,sans-serif;pointer-events:none}'
+    +'.lpv2-banner{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 50px);z-index:9075;display:flex;gap:8px;align-items:center;max-width:calc(100vw - 24px);padding:8px 14px;border-radius:14px;background:rgba(40,20,10,.92);border:1px solid rgba(255,190,90,.5);color:#ffe3b0;font:800 13px "Noto Sans KR",system-ui,sans-serif}.lpv2-banner.ok{background:rgba(6,40,24,.92);border-color:rgba(62,224,122,.6);color:#c8ffd9}.lpv2-banner.bad{background:rgba(50,8,14,.94);border-color:rgba(255,80,100,.7);color:#ffd0d6}'
+    +'.lpv2-res{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;align-items:center;margin:6px 0 10px}.lpv2-badge{font:800 13px "Noto Sans KR",system-ui,sans-serif;padding:6px 12px;border-radius:999px;border:1px solid rgba(62,224,122,.6);background:rgba(62,224,122,.12);color:#9dffc0;cursor:pointer}.lpv2-badge.lpf-mismatch{border-color:rgba(255,180,60,.7);background:rgba(255,180,60,.12);color:#ffd48a}.lpv2-badge.lpf-solo{border-color:rgba(255,255,255,.25);background:rgba(255,255,255,.06);color:#ddd}'
+    +'.lpv2-info{flex-basis:100%;text-align:center;font:600 11px ui-monospace,monospace;color:rgba(255,255,255,.55)}.lpv2-vtxt{flex-basis:100%;text-align:center;font:800 13px "Noto Sans KR",system-ui,sans-serif;color:#9dffc0}'
+    +'.lpv2-ask{position:fixed;inset:0;z-index:9200;background:rgba(3,4,16,.62);display:flex;align-items:center;justify-content:center}.lpv2-ask-card{display:flex;flex-direction:column;gap:10px;min-width:240px;padding:18px;border-radius:18px;background:#141735;border:1px solid rgba(0,217,255,.35)}.lpv2-ask-t{color:#fff;font:800 15px "Noto Sans KR",system-ui,sans-serif}.lpv2-ask input{font:700 16px "Noto Sans KR",system-ui,sans-serif;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff}.lpv2-ask .lpv2-btn{padding:10px;font-size:14px;background:#00D9FF;color:#001c22;border:0}'
+    +'.lpv2-strip .lpv2-x{padding:5px 8px;opacity:.7}.lpv2-strip .lpv2-x.arm{background:#ff4d6a;opacity:1;border-color:transparent}.lpv2-strip .lpv2-lbl{margin-left:4px}.lpv2-strip.play .lpv2-btn,.lpv2-strip.play .lpv2-who{display:none}'
+    +'@media(max-width:599px){.lpv2-strip{max-width:calc(100vw - 150px)}.lpv2-strip .lpv2-who,.lpv2-strip .lpv2-lbl{display:none}.lpv2-strip .lpv2-btn{padding:5px 8px}}';
+    document.head.appendChild(s);
+}
+function renderStrip(){
+    const r=room();
+    document.body.classList.toggle('lpv2-room',!!r);
+    const U=ui();
+    if(U&&typeof U.drawStrip==='function'){
+        try{U.drawStrip({room:r,gameId:V.G.id,allow:V.allow,onEntry:addMe,onAllow:toggleAllow,onFill:fillMembers});if(strip){strip.remove();strip=null}return}catch(_){}
+    }
+    if(!r){if(strip){strip.remove();strip=null}return}
+    css();
+    if(!strip){strip=el('div','lpv2-strip');strip.setAttribute('role','status');document.body.appendChild(strip)}
+    const ros=r.roster().filter(m=>m.r!=='bot');
+    strip.textContent='';
+    const dot=el('span','lpv2-dot');dot.setAttribute('aria-label',r.isHost?'host':'guest');
+    const code=el('span','lpv2-code',fmt(r.code));
+    const who=el('span','lpv2-who','👥'+ros.length+' '+ros.slice(0,4).map(m=>(m.r==='host'?'👑':'')+m.n).join(' · ')+(ros.length>4?' …':''));
+    const inv=btn('lpv2-btn',t('invite'));inv.onclick=showInvite;
+    strip.append(dot,code,who,inv);
+    if(r.isHost){
+        const al=btn('lpv2-btn'+(V.allow?' on':''),t('allow'));al.title=t('addMe');al.setAttribute('aria-pressed',V.allow?'true':'false');al.onclick=toggleAllow;
+        strip.append(al);
+    }else if(V.allow){
+        const am=btn('lpv2-btn',t('addMe'));am.onclick=addMe;strip.append(am);
+    }
+    /* ✕ — 게스트는 나가기, 방장은 두 번 눌러 방 닫기(인앱에서 confirm 금지) */
+    const x=btn('lpv2-btn lpv2-x','✕');x.onclick=()=>{
+        if(!r.isHost){try{r.leave()}catch(_){}return}
+        if(x.classList.contains('arm')){try{r.close()}catch(_){}return}
+        x.classList.add('arm');x.firstChild.textContent='✕?';setTimeout(()=>{x.classList.remove('arm');if(x.firstChild)x.firstChild.textContent='✕'},2200);
+    };
+    strip.append(x);
+    strip.classList.toggle('play',!!(V.cur&&!V.cur.ended));
+}
+/* 버튼 = 아이콘 + (넓은 화면에서만) 글자. 좁은 폰에선 아이콘만 — 글자는 title·aria-label 로 */
+function btn(cls,txt){
+    const b=el('button',cls);b.type='button';const i=String(txt).indexOf(' ');
+    const ico=i>0?txt.slice(0,i):txt,lbl=i>0?txt.slice(i+1):'';
+    b.append(el('span','lpv2-ico',ico));if(lbl)b.append(el('span','lpv2-lbl',lbl));
+    b.title=lbl||txt;b.setAttribute('aria-label',lbl||txt);return b;
+}
+function toggleAllow(){V.allow=!V.allow;pushCfg(true);renderStrip()}
+async function addMe(){
+    const r=room();if(!r||r.isHost)return;
+    const x=await r.intent('entry',{});
+    toast(x&&x.ok?t('added'):t(x&&x.reason==='dup'?'dup':x&&x.reason==='closed'?'closed':'full'));
+}
+function fillMembers(){
+    const r=room();if(!r||!r.isHost)return;
+    r.roster().filter(m=>m.r!=='bot').forEach(m=>{try{V.G.addEntry(m.n)}catch(_){}});pushCfg(true);
+}
+function stripMsg(txt,btn,fn){
+    css();
+    if(!txt){if(stripMsgEl){stripMsgEl.remove();stripMsgEl=null}return}
+    if(!stripMsgEl){stripMsgEl=el('div','lpv2-msg');document.body.appendChild(stripMsgEl)}
+    stripMsgEl.textContent='';stripMsgEl.append(el('span',null,txt));
+    if(btn&&fn){const b=el('button','lpv2-btn',btn);b.type='button';b.onclick=()=>{stripMsg(null);fn()};stripMsgEl.append(b)}
+}
+function stripWarn(txt){if(strip)strip.classList.toggle('warn',!!txt);if(txt)stripMsg(txt);else stripMsg(null)}
+let mixEl=null,mixT=0;
+function mixing(on){
+    css();
+    if(!mixEl){mixEl=el('div','lpv2-mix');const c=el('span','lpv2-coins');c.append(el('i'),el('i'),el('i'));mixEl.append(el('span',null,'🍀'),c,el('span','lpv2-mix-t',''));document.body.appendChild(mixEl)}
+    mixEl.querySelector('.lpv2-mix-t').textContent=t('mix');
+    mixEl.classList.toggle('on',!!on);
+    clearTimeout(mixT);if(on)mixT=setTimeout(()=>mixEl.classList.remove('on'),8000);
+}
+let toastEl=null,toastT=0;
+function toast(txt){css();if(!toastEl){toastEl=el('div','lpv2-toast');document.body.appendChild(toastEl)}toastEl.textContent=txt;toastEl.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>{toastEl.style.display='none'},2200)}
+function banner(txt,sticky){
+    css();const b=el('div','lpv2-banner',txt);b.setAttribute('role','status');document.body.appendChild(b);
+    if(!sticky)setTimeout(()=>b.remove(),6000);
+    return b;
+}
+
+/* ── 게임 쪽 훅 ── */
+window.LPV2={
+    register:function(g){V.G=g;boot()},
+    /* 게임의 시작·돌리기·다시 버튼이 먼저 묻는다: true 면 게임은 자기 동작을 멈춘다 */
+    hook:function(kind){
+        if(!V.on||!room())return false;
+        if(kind==='setup'){if(isHost())hostSetup();return false}
+        if(kind==='pointer')return isGuest();
+        if(isHost()){hostDraw();return true}
+        toast(t('hostTurn'));return true;
+    },
+    active:function(){return !!(V.on&&room())},
+    guest:isGuest, host:isHost,
+    playing:function(){return !!(V.cur&&!V.cur.ended)},
+    hostDraw:hostDraw, openRoom:openRoom,
+    join:function(code,o){return ensure(true).then(()=>joinFlow(code,o||{}))},
+    _v:V, _t:{canon:canon,seedOfCert:seedOfCert,certLink:certLink,enabled:enabled}
+};
+})();
+</script>
+<script>/* ── Rooms v2 · 룰렛 draw 어댑터 (P3a · 2026-09-30) ─────────────────────────
+   outcome = 당첨 칸 w (정수 거부 샘플링, rng 'main').
+   연출 = 기존 물리(stepPhysics)를 fx 스트림 초기값(시작각·초속·밀어주기)으로 '미리' 고정 스텝 적분해 궤적 배열을 만들고,
+          화면은 그 배열을 경과 시간으로 읽는다(frameAt). 페그 배치는 칸 단위로 대칭이라 궤적을 칸 수의 배수만큼 돌려 그리면
+          물리 장면은 그대로 두고 멈추는 칸만 w 로 옮길 수 있다 → 모든 기기가 같은 궤적, 늦게 온 사람은 그 순간부터.
+   20Hz 틱 방송 없음(v1 의 _lpBroadcastTick 은 v1 방에서만 돈다). */
+(function(){
+if(!window.LPV2)return;
+const TAU=Math.PI*2;
+function names(){return _currentRoulettePlayers().slice(0,12).map(s=>String(s||'').slice(0,20))}
+function setNames(arr){
+    playerCount=Math.max(2,Math.min(12,arr.length));renderPlayers();
+    const ins=document.querySelectorAll('#playerInputs input');arr.forEach((n,i)=>{if(ins[i])ins[i].value=n});
+}
+/* 궤적 미리 계산 — 전역 물리 상태를 잠시 빌려 쓰고 돌려놓는다. 소리·반짝임은 _v2Quiet 에 기록만 */
+function sim(a0,v0,hold){
+    const keep={angle,velocity,flapperAngle,flapperVel,spinning,spinHoldLeft,_contact,_contactPeg,_contactGap,_stallT,_restLocked,dragTarget,_spinDir,_lastGoodA};
+    angle=a0;velocity=v0;flapperAngle=0;flapperVel=0;spinning=true;spinHoldLeft=hold;_contact=false;_contactPeg=-1;_contactGap=1;_stallT=0;_restLocked=false;dragTarget=null;_spinDir=1;_lastGoodA=a0;
+    const A=[angle],F=[flapperAngle],hits=[];_v2Quiet=hits;
+    let dStep=-1,sSim=0,end=-1,t=0,holdEnd=-1;
+    try{
+        for(let i=1;i<=7200;i++){
+            hits.i=i;stepPhysics(PHYS_DT);A.push(angle);F.push(flapperAngle);
+            if(holdEnd<0&&!spinning)holdEnd=i;
+            if(dStep<0){t+=PHYS_DT;if(outcomeDecided()||t>25){dStep=i;sSim=tipSegmentIndex()}}
+            else if(physicsSettled(PHYS_DT)){end=i;break}
+        }
+    }finally{
+        _v2Quiet=null;
+        angle=keep.angle;velocity=keep.velocity;flapperAngle=keep.flapperAngle;flapperVel=keep.flapperVel;spinning=keep.spinning;spinHoldLeft=keep.spinHoldLeft;
+        _contact=keep._contact;_contactPeg=keep._contactPeg;_contactGap=keep._contactGap;_stallT=keep._stallT;_restLocked=keep._restLocked;dragTarget=keep.dragTarget;_spinDir=keep._spinDir;_lastGoodA=keep._lastGoodA;
+    }
+    if(dStep<0){dStep=A.length-1;sSim=0}
+    if(end<0)end=A.length-1;
+    return{A:Float64Array.from(A),F:Float64Array.from(F),hits:hits.slice(),dStep,sSim,end,holdEnd:holdEnd<0?end:holdEnd};
+}
+let cur=null;
+LPV2.register({
+    id:'roulette',path:'/games/roulette/',online:'.lp-room-online-btn',
+    showOnline(on){document.querySelectorAll('.lp-room-online-btn').forEach(b=>{b.style.display=on?'':'none'})},
+    setupRoot(){return document.getElementById('setupWrap')},
+    params(){const n=names();return n.length>=2?{names:n}:null},
+    applyCfg(c){if(!c||!Array.isArray(c.names)||c.names.length<2)return;setNames(c.names.map(String));renderPreview()},
+    setGuest(on){document.querySelectorAll('#playerInputs input').forEach(i=>{i.readOnly=!!on})},
+    addEntry(name){
+        name=String(name||'').trim().slice(0,20);if(!name)return false;
+        let ins=[...document.querySelectorAll('#playerInputs input')];
+        if(ins.some(i=>i.value.trim()===name))return'dup';
+        const empty=ins.find(i=>!i.value.trim());
+        if(empty){empty.value=name}else{if(playerCount>=12)return false;playerCount++;renderPlayers();ins=[...document.querySelectorAll('#playerInputs input')];ins[ins.length-1].value=name}
+        renderPreview();return true;
+    },
+    outcome(p,rng){
+        const n=p&&Array.isArray(p.names)?p.names.length:0;
+        if(n<2||n>12)throw new Error('roulette: 2..12 names');
+        return{w:rng.int(n)};
+    },
+    resText(p,r){return String(p.names[r.w])},
+    inResult(){return document.getElementById('resultScreen').style.display==='flex'},
+    resultCard(){return document.querySelector('#resultScreen .result-card')},
+    resultAnchor(){return document.querySelector('#resultScreen .winner-display')},
+    toSetup(){if(cur){cur.stop();cur=null}backToSetup()},
+    play(o){
+        if(cur){cur.stop();cur=null}
+        const p=o.params,n=p.names.length,w=o.res.w,name=p.names[w];
+        _cancelPendingResult();if(animId){cancelAnimationFrame(animId);animId=0}
+        if(typeof _stopGuestRenderLoop==='function')_stopGuestRenderLoop();
+        setNames(p.names);collectData();
+        const rs=document.getElementById('resultScreen');rs.style.display='none';
+        confetti=[];if(confCtx)confCtx.clearRect(0,0,confCanvas.width,confCanvas.height);
+        if(!isPCLayout())document.getElementById('setupWrap').style.display='none';
+        document.getElementById('gameScreen').style.display='block';
+        if(!ctx)initCanvas();else resize();
+        const fx=o.rng('fx');
+        const a0=fx.float()*TAU,v0=19+fx.float()*4,hold=2.8+fx.float()*1.2;
+        const S=sim(a0,v0,hold);
+        const slice=TAU/n,off=(((S.sSim-w)%n)+n)%n*slice;
+        const dT=S.dStep*PHYS_DT*1000,resT=dT+2000;
+        let raf=0,lastI=-1,hi=0,decided=false,rest=null,stopped=false,resTimer=0;
+        spinActive=true;selectedIdx=-1;winFx=null;parts=[];_restLocked=false;velocity=0;flapperVel=0;spinning=false;dragTarget=null;
+        try{SFX.g()}catch(_){}
+        try{if(window.LpWakeLock)LpWakeLock.acquire('roulette')}catch(_){}
+        const scene=e=>{const i=e<0?0:Math.min(S.end,Math.floor(e/1000/PHYS_DT));return{i:i,a:+(((S.A[i]+off)%TAU+TAU)%TAU).toFixed(9),f:+S.F[i].toFixed(9)}};
+        function fire(){
+            if(stopped)return;stopped=true;cancelAnimationFrame(raf);clearTimeout(resTimer);
+            if(!decided){selectedIdx=w}
+            velocity=0;flapperVel=0;spinning=false;
+            showResult(name);
+            try{o.onEnd&&o.onEnd()}catch(_){}
+        }
+        function frame(){
+            if(stopped)return;
+            const e=o.elapsed();
+            const i=e<0?0:Math.min(S.end,Math.floor(e/1000/PHYS_DT));
+            if(rest){angle=rest}else{angle=((S.A[i]+off)%TAU+TAU)%TAU}
+            flapperAngle=S.F[i];
+            if(e>=0){
+                spinning=i<S.holdEnd;
+                if(lastI<0){if(e<500){try{SFX.whoosh()}catch(_){}}while(hi<S.hits.length&&S.hits[hi].i<=i)hi++}
+                else{const burst=i-lastI<40;while(hi<S.hits.length&&S.hits[hi].i<=i){const h=S.hits[hi++];if(burst){try{SFX.clack(h.I)}catch(_){}try{_clackVisual(h.I,h.d)}catch(_){}}}}
+                lastI=i;
+                if(!decided&&i>=S.dStep){
+                    decided=true;selectedIdx=w;const late=e-dT>400;
+                    winFx={idx:w,t0:performance.now()+(late?0:140),burst:false};
+                    if(!late){try{SFX.settle()}catch(_){}setTimeout(()=>{try{SFX.win()}catch(_){}},140)}
+                    try{if(window.LpWakeLock)LpWakeLock.release()}catch(_){}
+                }
+                if(!rest&&i>=S.end){selectedIdx=w;_restLocked=true;_snapIntoWinner();rest=angle;velocity=0}
+            }
+            _mainLoopTs=performance.now();
+            drawWheel();
+            raf=requestAnimationFrame(frame);
+        }
+        /* 결과 카드는 타이머로(백그라운드 탭에서도 같은 시각) — 연출은 rAF */
+        resTimer=setTimeout(fire,Math.max(0,resT-o.elapsed()));
+        raf=requestAnimationFrame(frame);
+        window._v2RouFire=()=>{if(decided)fire()};
+        cur={stop(){stopped=true;cancelAnimationFrame(raf);clearTimeout(resTimer);spinActive=false;spinning=false;velocity=0;flapperVel=0;window._v2RouFire=null},scene:scene,sim:S,off:off};
+        return cur;
+    }
+});
+})();
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
