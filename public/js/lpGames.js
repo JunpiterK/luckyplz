@@ -95,14 +95,14 @@
     var LP_GAMES = [
         /* 추첨(draw) — §6.1.8 */
         g('roulette', 'random', mp('draw', 'v2', { v1: true })),
-        g('car-racing', 'random', mp('draw', 'v1', { v1: true, adapter: 'draw-tick', migr: false })),
-        g('glory-racing', 'random', mp('draw', 'off', { adapter: 'draw-tick', migr: false })),
+        g('car-racing', 'random', mp('draw', 'v2', { v1: true, adapter: 'draw-tick', migr: false })),
+        g('glory-racing', 'random', mp('draw', 'v2', { adapter: 'draw-tick', migr: false })),
         g('dice', 'random', mp('draw', 'v2')),
         g('ladder', 'random', mp('draw', 'v2', { v1: true })),
         g('team', 'random', mp('draw', 'v2', { v1: true })),
-        g('balloon', 'random', mp('turn', 'off', { seats: [2, 8], late: 'nextRound', migr: false, hidden: true })),
-        g('bingo', 'draw', mp('draw', 'v1', { v1: true, adapter: 'draw-session', migr: false })),
-        g('lotto', 'draw', mp('draw', 'v1', { v1: true })),
+        g('balloon', 'random', mp('turn', 'v2', { seats: [2, 8], late: 'nextRound', migr: false, hidden: true })),
+        g('bingo', 'draw', mp('draw', 'v2', { v1: true, adapter: 'draw-session', migr: false })),
+        g('lotto', 'draw', mp('draw', 'v2', { v1: true })),
         /* 아케이드 — race(같은 시드 대결) · realtime */
         g('lucky-merge', 'arcade', mp('race', 'off', { seats: [2, 8], late: 'nextRound' })),
         g('dodge', 'arcade', mp('realtime', 'v1', { v1: true, adapter: 'szx', seats: [1, 8], late: 'nextRound' })),
