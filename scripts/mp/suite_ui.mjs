@@ -110,6 +110,11 @@ async function sheetPng(E, files, out, cols, title) {
 }
 
 export async function ui(ctx) {
+    /* pageFor(게임 경로 → UI 픽스처)는 이 스위트 동안만 — 끝나면 되돌린다(뒤 스위트가 하네스 페이지를 못 받아 죽던 순서 의존) */
+    const prevPageFor = ctx.relay.pageFor;
+    try { return await uiRun(ctx); } finally { ctx.relay.pageFor = prevPageFor || null; }
+}
+async function uiRun(ctx) {
     const { E, relay, ok, only } = ctx;
     relay.pageFor = pageFor;
     const SHOTS = process.env.MP_SHOTS || path.join(SCR, 'shots');
@@ -201,6 +206,7 @@ export async function ui(ctx) {
             const ia = await G.ev(`({ia:!!window.LpInApp,we:window.LpInApp&&typeof LpInApp.willEscape==='function'?LpInApp.willEscape():'n/a',app:window.LpInApp&&LpInApp.info&&LpInApp.info.app})`);
             await H.wait(`LpRoomsUI.room().roster().length===2`, 6000);
             /* 방장: 명단 행 → 내보내기 → 자체 확인창 → 확인 */
+            const rowInfo = await H.wait(`(()=>{const r=[...document.querySelectorAll('.lpr-lobby .lpr-m')];const t=document.querySelector('.lpr-lobby .lpr-m.tap');return t?{rows:r.length,tap:true}:null})()`, 6000).catch(async e => { console.log('U3 rows', await H.ev(`[...document.querySelectorAll('.lpr-lobby .lpr-m')].map(e=>e.className+'|'+e.textContent.slice(0,20)).join(' ;; ')+' // sheets='+document.querySelectorAll('.lpr-sheet').length`)); throw e; });
             await H.click('.lpr-lobby .lpr-m.tap');
             await H.wait(`!!document.querySelector('.lpr-sheet')`, 3000);
             await H.clickText('.lpr-sheet .lpr-btn', '내보내기');
