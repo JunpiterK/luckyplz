@@ -505,6 +505,11 @@
         .player-name-input .btn-remove-player:active{transform:scale(.9)}
         .player-name-input .btn-remove-player:focus-visible{outline:2px solid rgba(255,138,151,.9);outline-offset:2px}
         .player-name-input .btn-remove-player:disabled{opacity:.25;cursor:not-allowed;transform:none}
+
+.lp-v2-badge{display:block;margin:6px auto 10px;width:max-content;max-width:100%;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.85em;background:rgba(76,217,100,.12);border:1px solid rgba(76,217,100,.45);color:#8ff0a4;text-align:center}
+.lp-v2-badge.bad,.lp-v2-badge.lpf-mismatch{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.5);color:#ff9a9a}
+.lp-v2-badge[hidden]{display:none}
+#setupScreen.lp-v2-ro .course-card,#setupScreen.lp-v2-ro input,#setupScreen.lp-v2-ro .btn-remove-player{pointer-events:none;opacity:.75}
 </style>
 </head>
 <body>
@@ -2528,6 +2533,12 @@ function lerp(a,b,t){return a+(b-a)*t}
 function clamp(v,min,max){return Math.min(Math.max(v,min),max)}
 function randomRange(min,max){return min+Math.random()*(max-min)}
 function randomInt(min,max){return Math.floor(randomRange(min,max+1))}
+/* Rooms v2 (2026-09-30): 레이스 결과에 영향을 주는 난수는 전부 _lpR() 를 거친다 — 방에서는 공정 시드
+   LpFair.rng(seed,'sim'), 혼자 하기는 Math.random 그대로(동작 불변). 그리기용 난수(randomRange·Math.random)는 따로 둔다 */
+let _lpSimRng=null;
+function _lpR(){return _lpSimRng?_lpSimRng():Math.random()}
+function _lpRR(min,max){return min+_lpR()*(max-min)}
+function _lpRI(min,max){return Math.floor(_lpRR(min,max+1))}
 function distance(x1,y1,x2,y2){return Math.sqrt((x2-x1)**2+(y2-y1)**2)}
 
 function catmullRom(p0,p1,p2,p3,t){const t2=t*t,t3=t2*t;return{x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)}}
@@ -2770,7 +2781,7 @@ function generateZones(){
         let start=Math.floor(baseLen*slot.pos);
         switch(slot.type){
             case 'water':if(!isOverlappingAnyZone(start,start+waterLen))waterZones.push({start,end:start+waterLen,width:TRACK_WIDTH+25});break;
-            case 'hill':if(!isOverlappingAnyZone(start,start+hillLen))hillZones.push({start,end:start+hillLen,height:35+Math.random()*15});break;
+            case 'hill':if(!isOverlappingAnyZone(start,start+hillLen))hillZones.push({start,end:start+hillLen,height:35+_lpR()*15});break;
             case 'mud':if(!isOverlappingAnyZone(start,start+mudLen))mudZones.push({start,end:start+mudLen});break;
             case 'ice':if(!isOverlappingAnyZone(start,start+iceLen))iceZones.push({start,end:start+iceLen});break;
         }
@@ -2842,7 +2853,7 @@ function respawnItems(){
             if(!box.fastRespawn&&activeCount>=20)return;
             box.collected=false;
             /* Randomize new lane offset on respawn (keep fast-respawn boxes tighter) */
-            box.laneOff=box.fastRespawn?((Math.random()-0.5)*TRACK_WIDTH*0.4):(Math.random()-0.5)*TRACK_WIDTH*0.7;
+            box.laneOff=box.fastRespawn?((_lpR()-0.5)*TRACK_WIDTH*0.4):(_lpR()-0.5)*TRACK_WIDTH*0.7;
             const tidx=box.trackIndex;
             if(tidx<track.length-1){
                 const tp=track[tidx],tn=track[Math.min(tidx+1,track.length-1)];
@@ -2858,9 +2869,9 @@ function generateScenery(){
     sceneryObjects=[];
     for(let i=0;i<60;i++){
         sceneryObjects.push({
-            x:Math.random()*WIDTH,y:Math.random()*HEIGHT,
-            type:['tree','bush','rock','flower'][randomInt(0,3)],
-            size:randomRange(8,20),color:`hsl(${randomInt(80,160)},${randomInt(30,60)}%,${randomInt(20,45)}%)`
+            x:_lpR()*WIDTH,y:_lpR()*HEIGHT,
+            type:['tree','bush','rock','flower'][_lpRI(0,3)],
+            size:_lpRR(8,20),color:`hsl(${_lpRI(80,160)},${_lpRI(30,60)}%,${_lpRI(20,45)}%)`
         });
     }
 }
@@ -2870,18 +2881,18 @@ const STARTLINE_IDX=40; /* start line position on basePath — 그리드 배치 
 
 function createCar(index,name,gridPosition){
     /* === CORE STATS: speed vs physical (inverse, ratio 3:7 ~ 7:3) === */
-    const physicalRatio=randomRange(0.3,0.7); /* 0.3=speedy/fragile, 0.7=slow/tank */
+    const physicalRatio=_lpRR(0.3,0.7); /* 0.3=speedy/fragile, 0.7=slow/tank */
     const speedRatio=1-physicalRatio;          /* inverse */
     /* Map to actual multipliers – wider gap between fastest and slowest */
     const baseSpeed=0.72+speedRatio*0.56;     /* 0.68~1.32 — 0.60~1.40 은 스탯이 결과를 지배 (스탯1위 승률 2.5배, 시뮬 실측) */
     const physical=physicalRatio;              /* 0.3~0.7 used in collision */
 
     /* === TERRAIN SKILLS: fully random & independent === */
-    const driftSkill=randomRange(0.1,1.0);
-    const waterSkill=randomRange(0.1,1.0);
-    const mudSkill=randomRange(0.1,1.0);
-    const iceSkill=randomRange(0.1,1.0);
-    const hillSkill=randomRange(0.1,1.0);
+    const driftSkill=_lpRR(0.1,1.0);
+    const waterSkill=_lpRR(0.1,1.0);
+    const mudSkill=_lpRR(0.1,1.0);
+    const iceSkill=_lpRR(0.1,1.0);
+    const hillSkill=_lpRR(0.1,1.0);
 
     const totalCars=parseInt(document.getElementById('playerCount').value)||6;
     const laneSlot=((index/(totalCars-1||1))-0.5)*TRACK_WIDTH*0.85;
@@ -2970,7 +2981,7 @@ function getRandomPlayerAhead(player){
         return diff>0&&diff<80; /* wider range */
     });
     if(ahead.length===0)return null;
-    return ahead[randomInt(0,ahead.length-1)];
+    return ahead[_lpRI(0,ahead.length-1)];
 }
 function getRandomPlayerBehind(player){
     const behind=players.filter(p=>{
@@ -2980,7 +2991,7 @@ function getRandomPlayerBehind(player){
         return diff>0&&diff<80;
     });
     if(behind.length===0)return null;
-    return behind[randomInt(0,behind.length-1)];
+    return behind[_lpRI(0,behind.length-1)];
 }
 
 /* ===== ZONE CHECKS ===== */
@@ -3001,7 +3012,7 @@ function updatePlayers(dt){
        충돌 선처리가 낮은 번호에 누적되어 슬롯 승률이 22.7% vs 11.5% 로
        기울었다 (600판 시뮬 실측). 셔플로 평균적으로 공평해진다 */
     const iterOrder=[...activePlayers];
-    for(let _i=iterOrder.length-1;_i>0;_i--){const _j=Math.floor(Math.random()*(_i+1));[iterOrder[_i],iterOrder[_j]]=[iterOrder[_j],iterOrder[_i]];}
+    for(let _i=iterOrder.length-1;_i>0;_i--){const _j=Math.floor(_lpR()*(_i+1));[iterOrder[_i],iterOrder[_j]]=[iterOrder[_j],iterOrder[_i]];}
     iterOrder.forEach(car=>{
         if(car.finished)return;
         car.stateTimer+=dt;
@@ -3070,16 +3081,16 @@ function updatePlayers(dt){
             const hazardPenalty=0.7+car.speedRatio*0.6;
             if(isInWater(baseIdx)){
                 speed*=(0.4+car.waterSkill*0.4)/hazardPenalty;
-                if(Math.random()<0.02*car.speedRatio*eventFrequency*dt*60){
+                if(_lpR()<0.02*car.speedRatio*eventFrequency*dt*60){
                     car.state=CarState.SPINNING;car.stateTimer=0;car.spinAngle=0;
-                    car.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
+                    car.spinSpeed=_lpRR(6,12)*(_lpR()>0.5?1:-1);
                     car.ghostTimer=0; AudioEngine.sfx.splash();
                 }
             }else if(isInMud(baseIdx)){
                 speed*=(0.35+car.mudSkill*0.45)/hazardPenalty;
-                if(Math.random()<0.025*car.speedRatio*eventFrequency*dt*60){
+                if(_lpR()<0.025*car.speedRatio*eventFrequency*dt*60){
                     car.state=CarState.SPINNING;car.stateTimer=0;car.spinAngle=0;
-                    car.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
+                    car.spinSpeed=_lpRR(6,12)*(_lpR()>0.5?1:-1);
                     car.ghostTimer=0; AudioEngine.sfx.slip();
                 }
             }else if(isOnIce(baseIdx)){
@@ -3087,15 +3098,15 @@ function updatePlayers(dt){
                 const iceDrift=Math.sin(frameNow*0.003+car.index*5)*TRACK_WIDTH*0.15*(1-car.iceSkill*0.6)*hazardPenalty;
                 car.targetLaneOffset+=iceDrift;
                 car.targetLaneOffset=clamp(car.targetLaneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
-                if(Math.random()<(0.04+car.speedRatio*0.03)*(1-car.iceSkill*0.7)*eventFrequency*dt*60){
+                if(_lpR()<(0.04+car.speedRatio*0.03)*(1-car.iceSkill*0.7)*eventFrequency*dt*60){
                     car.state=CarState.SPINNING;car.stateTimer=0;car.spinAngle=0;
-                    car.spinSpeed=randomRange(8,15)*(Math.random()>0.5?1:-1);
+                    car.spinSpeed=_lpRR(8,15)*(_lpR()>0.5?1:-1);
                     car.ghostTimer=0; AudioEngine.sfx.slip();
                     addCommentary('iceSlip',{name:car.name});
                 }
-                if(car.state===CarState.GHOST&&Math.random()<(0.06+car.speedRatio*0.04)*(1-car.iceSkill*0.5)*eventFrequency*dt*60){
+                if(car.state===CarState.GHOST&&_lpR()<(0.06+car.speedRatio*0.04)*(1-car.iceSkill*0.5)*eventFrequency*dt*60){
                     car.state=CarState.SLIPPING;car.stateTimer=0;
-                    car.slipOffset=car.laneOffset+randomRange(-80,80);
+                    car.slipOffset=car.laneOffset+_lpRR(-80,80);
                     car.slipOffset=clamp(car.slipOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
                     car.ghostTimer=0; AudioEngine.sfx.slip();
                 }
@@ -3109,20 +3120,20 @@ function updatePlayers(dt){
             car.state=CarState.IN_WATER;
             speed*=(0.4+car.waterSkill*0.4)/hazardPenalty;
             /* Fast cars can spin out in water */
-            if(Math.random()<0.02*car.speedRatio*eventFrequency*dt*60){
+            if(_lpR()<0.02*car.speedRatio*eventFrequency*dt*60){
                 car.state=CarState.SPINNING;
                 car.stateTimer=0;car.spinAngle=0;
-                car.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
+                car.spinSpeed=_lpRR(6,12)*(_lpR()>0.5?1:-1);
                 AudioEngine.sfx.splash();
             }
         }else if(isInMud(baseIdx)){
             car.state=CarState.IN_MUD;
             speed*=(0.35+car.mudSkill*0.45)/hazardPenalty;
             /* Fast cars can slip in mud */
-            if(car.state!==CarState.SPINNING&&Math.random()<0.025*car.speedRatio*eventFrequency*dt*60){
+            if(car.state!==CarState.SPINNING&&_lpR()<0.025*car.speedRatio*eventFrequency*dt*60){
                 car.state=CarState.SLIPPING;
                 car.stateTimer=0;
-                car.slipOffset=car.laneOffset+randomRange(-60,60);
+                car.slipOffset=car.laneOffset+_lpRR(-60,60);
                 car.slipOffset=clamp(car.slipOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
                 AudioEngine.sfx.slip();
             }
@@ -3134,18 +3145,18 @@ function updatePlayers(dt){
             car.targetLaneOffset+=iceDrift;
             car.targetLaneOffset=clamp(car.targetLaneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
             /* Spin-outs on ice – fast cars spin more often */
-            if(Math.random()<(0.04+car.speedRatio*0.03)*(1-car.iceSkill*0.7)*eventFrequency*dt*60){
+            if(_lpR()<(0.04+car.speedRatio*0.03)*(1-car.iceSkill*0.7)*eventFrequency*dt*60){
                 car.state=CarState.SPINNING;
                 car.stateTimer=0;car.spinAngle=0;
-                car.spinSpeed=randomRange(8,15)*(Math.random()>0.5?1:-1);
+                car.spinSpeed=_lpRR(8,15)*(_lpR()>0.5?1:-1);
                 AudioEngine.sfx.slip();
                 addCommentary('iceSlip',{name:car.name});
             }
             /* Lateral slides */
-            if(car.state!==CarState.SPINNING&&car.state!==CarState.SLIPPING&&Math.random()<(0.06+car.speedRatio*0.04)*(1-car.iceSkill*0.5)*eventFrequency*dt*60){
+            if(car.state!==CarState.SPINNING&&car.state!==CarState.SLIPPING&&_lpR()<(0.06+car.speedRatio*0.04)*(1-car.iceSkill*0.5)*eventFrequency*dt*60){
                 car.state=CarState.SLIPPING;
                 car.stateTimer=0;
-                car.slipOffset=car.laneOffset+randomRange(-80,80);
+                car.slipOffset=car.laneOffset+_lpRR(-80,80);
                 car.slipOffset=clamp(car.slipOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
                 AudioEngine.sfx.slip();
             }
@@ -3167,9 +3178,9 @@ function updatePlayers(dt){
             speed*=boostMult;
             if(car.boostTimer<=0){car.state=CarState.RACING;car.stateTimer=0}
             /* Thruster particles during boost */
-            if(Math.random()<0.7){
-                sparkEffects.push({x:DX(car)+randomRange(-6,6),y:DY(car)+randomRange(3,12),
-                    vx:randomRange(-1.5,1.5),vy:randomRange(1,5),life:0.35,color:Math.random()>0.5?'#FF6600':'#FFD700'});
+            if(_lpR()<0.7){
+                sparkEffects.push({x:DX(car)+_lpRR(-6,6),y:DY(car)+_lpRR(3,12),
+                    vx:_lpRR(-1.5,1.5),vy:_lpRR(1,5),life:0.35,color:_lpR()>0.5?'#FF6600':'#FFD700'});
             }
         }
         if(car.slowTimer>0){car.slowTimer-=dt;speed*=0.4}
@@ -3205,15 +3216,15 @@ function updatePlayers(dt){
                     if(car.bounceVel>80){car.bounceVel*=-0.3}
                     else{car.bounceY=0;car.bounceVel=0}
                     for(let s=0;s<4;s++){
-                        dustEffects.push({x:DX(car)+randomRange(-12,12),y:DY(car)+randomRange(-5,5),
-                            vx:randomRange(-2,2),vy:randomRange(-1,1),
-                            size:randomRange(5,10),life:0.6,color:'rgba(80,80,80,0.6)'});
+                        dustEffects.push({x:DX(car)+_lpRR(-12,12),y:DY(car)+_lpRR(-5,5),
+                            vx:_lpRR(-2,2),vy:_lpRR(-1,1),
+                            size:_lpRR(5,10),life:0.6,color:'rgba(80,80,80,0.6)'});
                     }
                 }
-                if(car.bounceY<-5&&Math.random()<0.6){
-                    sparkEffects.push({x:DX(car)+randomRange(-8,8),y:DY(car)+randomRange(-8,8),
-                        vx:randomRange(-2,2),vy:randomRange(1,3),life:0.4,
-                        color:Math.random()>0.5?'#FF4500':'#FFD700'});
+                if(car.bounceY<-5&&_lpR()<0.6){
+                    sparkEffects.push({x:DX(car)+_lpRR(-8,8),y:DY(car)+_lpRR(-8,8),
+                        vx:_lpRR(-2,2),vy:_lpRR(1,3),life:0.4,
+                        color:_lpR()>0.5?'#FF4500':'#FFD700'});
                 }
             }else{
                 car.bounceY=0;car.bounceVel=0;
@@ -3282,28 +3293,28 @@ function updatePlayers(dt){
             }
 
             /* 파티클: 초록 슬라임 (감속 단계) */
-            if(t<=3&&Math.random()<0.3+t*0.15){
+            if(t<=3&&_lpR()<0.3+t*0.15){
                 const px=car.displayX!=null?car.displayX:car.x, py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-12,12),y:py+randomRange(-5,10),
-                    vx:randomRange(-0.5,0.5),vy:randomRange(0.5,2),life:0.5,color:'#00FF66'});
+                sparkEffects.push({x:px+_lpRR(-12,12),y:py+_lpRR(-5,10),
+                    vx:_lpRR(-0.5,0.5),vy:_lpRR(0.5,2),life:0.5,color:'#00FF66'});
             }
             /* 파티클: 역주행 시 빨간 경고 + 연기 */
-            if(t>3&&Math.random()<0.5){
+            if(t>3&&_lpR()<0.5){
                 const px=car.displayX!=null?car.displayX:car.x, py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-10,10),y:py+randomRange(-10,10),
-                    vx:randomRange(-1,1),vy:randomRange(-3,-1),life:0.4,color:'#FF4444'});
-                if(Math.random()<0.4){
-                    dustEffects.push({x:px+randomRange(-8,8),y:py+randomRange(-5,5),
-                        vx:randomRange(-1,1),vy:randomRange(-2,0),
-                        size:randomRange(4,8),life:0.5,color:'rgba(255,80,80,0.5)'});
+                sparkEffects.push({x:px+_lpRR(-10,10),y:py+_lpRR(-10,10),
+                    vx:_lpRR(-1,1),vy:_lpRR(-3,-1),life:0.4,color:'#FF4444'});
+                if(_lpR()<0.4){
+                    dustEffects.push({x:px+_lpRR(-8,8),y:py+_lpRR(-5,5),
+                        vx:_lpRR(-1,1),vy:_lpRR(-2,0),
+                        size:_lpRR(4,8),life:0.5,color:'rgba(255,80,80,0.5)'});
                 }
             }
             /* 파티클: 에너지 드레인 (source 방향) */
-            if(car.stickySource&&Math.random()<0.25){
+            if(car.stickySource&&_lpR()<0.25){
                 const sx=car.stickySource.displayX!=null?car.stickySource.displayX:car.stickySource.x;
                 const sy=car.stickySource.displayY!=null?car.stickySource.displayY:car.stickySource.y;
                 const cx=car.displayX!=null?car.displayX:car.x, cy=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:cx+randomRange(-8,8),y:cy+randomRange(-8,8),
+                sparkEffects.push({x:cx+_lpRR(-8,8),y:cy+_lpRR(-8,8),
                     vx:(sx-cx)*0.06,vy:(sy-cy)*0.06,life:0.6,color:'#88FF88'});
             }
             /* progress가 음수가 되지 않도록 방어 (역주행 하한) */
@@ -3373,14 +3384,14 @@ function updatePlayers(dt){
             _reposFromTrack(car);
 
             /* 파티클: 초록 추진 */
-            if(Math.random()<0.7){
+            if(_lpR()<0.7){
                 const px=car.displayX!=null?car.displayX:car.x, py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-6,6),y:py+randomRange(3,12),
-                    vx:randomRange(-1.5,1.5),vy:randomRange(1,5),life:0.4,color:'#00FF88'});
+                sparkEffects.push({x:px+_lpRR(-6,6),y:py+_lpRR(3,12),
+                    vx:_lpRR(-1.5,1.5),vy:_lpRR(1,5),life:0.4,color:'#00FF88'});
             }
-            if(Math.random()<0.5){
+            if(_lpR()<0.5){
                 const px=car.displayX!=null?car.displayX:car.x, py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-3,3),y:py+randomRange(-15,-5),
+                sparkEffects.push({x:px+_lpRR(-3,3),y:py+_lpRR(-15,-5),
                     vx:0,vy:-8,life:0.15,color:'rgba(200,255,200,0.8)'});
             }
             /* 7초 만료 — 안전하게 트랙 중앙 복귀 */
@@ -3397,11 +3408,11 @@ function updatePlayers(dt){
         if(car.state===CarState.GHOST){
             car.ghostTimer-=dt;
             /* 파티클: 유령 잔상 (반투명 흰색 파편) */
-            if(Math.random()<0.4){
+            if(_lpR()<0.4){
                 const px=car.displayX!=null?car.displayX:car.x;
                 const py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-12,12),y:py+randomRange(-12,12),
-                    vx:randomRange(-1,1),vy:randomRange(-2,0),life:0.5,color:'rgba(200,200,255,0.5)'});
+                sparkEffects.push({x:px+_lpRR(-12,12),y:py+_lpRR(-12,12),
+                    vx:_lpRR(-1,1),vy:_lpRR(-2,0),life:0.5,color:'rgba(200,200,255,0.5)'});
             }
             /* 9초 만료 → RACING 복귀 */
             if(car.ghostTimer<=0){
@@ -3431,12 +3442,12 @@ function updatePlayers(dt){
             }
             car.bounceY+=car.bounceVel*dt;
             /* 비행 파티클: 하늘색 날개 깃털 + 바람 이펙트 */
-            if(Math.random()<0.6){
+            if(_lpR()<0.6){
                 const px=car.displayX!=null?car.displayX:car.x;
                 const py=car.displayY!=null?car.displayY:car.y;
-                sparkEffects.push({x:px+randomRange(-15,15),y:py+randomRange(5,20),
-                    vx:randomRange(-2,2),vy:randomRange(2,6),life:0.5,
-                    color:Math.random()>0.5?'rgba(100,200,255,0.7)':'rgba(255,255,255,0.6)'});
+                sparkEffects.push({x:px+_lpRR(-15,15),y:py+_lpRR(5,20),
+                    vx:_lpRR(-2,2),vy:_lpRR(2,6),life:0.5,
+                    color:_lpR()>0.5?'rgba(100,200,255,0.7)':'rgba(255,255,255,0.6)'});
             }
             /* 5초 만료 → 착지 → RACING 복귀 */
             if(car.wingTimer<=0){
@@ -3474,16 +3485,16 @@ function updatePlayers(dt){
                 addCommentary('wingEnd',{name:car.name});
                 /* 착지 먼지 이펙트 */
                 for(let s=0;s<6;s++){
-                    dustEffects.push({x:DX(car)+randomRange(-12,12),y:DY(car)+randomRange(-5,5),
-                        vx:randomRange(-2,2),vy:randomRange(-1,1),
-                        size:randomRange(5,10),life:0.6,color:'rgba(80,80,80,0.5)'});
+                    dustEffects.push({x:DX(car)+_lpRR(-12,12),y:DY(car)+_lpRR(-5,5),
+                        vx:_lpRR(-2,2),vy:_lpRR(-1,1),
+                        size:_lpRR(5,10),life:0.6,color:'rgba(80,80,80,0.5)'});
                 }
                 shockwaveEffects.push({x:DX(car),y:DY(car),radius:5,maxRadius:40,life:0.4,color:'rgba(100,200,255,0.5)'});
             }
         }
 
         /* Per-frame random variance (wider range = natural spread over laps) */
-        speed*=randomRange(0.95,1.05);
+        speed*=_lpRR(0.95,1.05);
         if(isNaN(speed)||!isFinite(speed))speed=100; /* safety */
 
         /* Along-track separation: gentle nudge only to avoid pixel-overlap */
@@ -3693,11 +3704,11 @@ function updatePlayers(dt){
                 }
             }
             if(car.guardrailTimer<=0){
-                car.guardrailPenalty=randomRange(0.4,0.6);
-                car.guardrailTimer=randomRange(1.5,3);
+                car.guardrailPenalty=_lpRR(0.4,0.6);
+                car.guardrailTimer=_lpRR(1.5,3);
                 for(let s=0;s<5;s++){
-                    sparkEffects.push({x:DX(car)+randomRange(-5,5),y:DY(car)+randomRange(-5,5),
-                        vx:randomRange(-3,3)*-sign,vy:randomRange(-2,2),life:0.6,color:'#FFD700'});
+                    sparkEffects.push({x:DX(car)+_lpRR(-5,5),y:DY(car)+_lpRR(-5,5),
+                        vx:_lpRR(-3,3)*-sign,vy:_lpRR(-2,2),life:0.6,color:'#FFD700'});
                 }
                 addCommentary('guardrail',{name:car.name});
             }
@@ -3709,13 +3720,13 @@ function updatePlayers(dt){
         }
 
         /* Drift visuals */
-        if(absCurve>0.25&&car.driftSkill<0.5&&Math.random()<0.3){
-            dustEffects.push({x:DX(car)+randomRange(-10,10),y:DY(car)+randomRange(5,15),vx:randomRange(-1,1),vy:randomRange(-0.5,0.5),size:randomRange(3,6),life:0.6});
+        if(absCurve>0.25&&car.driftSkill<0.5&&_lpR()<0.3){
+            dustEffects.push({x:DX(car)+_lpRR(-10,10),y:DY(car)+_lpRR(5,15),vx:_lpRR(-1,1),vy:_lpRR(-0.5,0.5),size:_lpRR(3,6),life:0.6});
         }
-        if(absCurve>0.3&&car.driftSkill>0.7&&Math.random()<0.2){
-            sparkEffects.push({x:DX(car)+randomRange(-8,8),y:DY(car)+randomRange(5,12),vx:randomRange(-2,2),vy:randomRange(-1,1),life:0.5,color:'#FFA500'});
+        if(absCurve>0.3&&car.driftSkill>0.7&&_lpR()<0.2){
+            sparkEffects.push({x:DX(car)+_lpRR(-8,8),y:DY(car)+_lpRR(5,12),vx:_lpRR(-2,2),vy:_lpRR(-1,1),life:0.5,color:'#FFA500'});
         }
-        if(absCurve>0.35&&Math.random()<0.001){
+        if(absCurve>0.35&&_lpR()<0.001){
             if(car.driftSkill>0.75)addCommentary('driftGood',{name:car.name});
             else if(car.driftSkill<0.35)addCommentary('driftBad',{name:car.name});
         }
@@ -3751,7 +3762,7 @@ function updatePlayers(dt){
                     }else{ /* 하위권: 역전 화력, 지뢰 없음 */
                         items=[ItemType.MISSILE,ItemType.MISSILE,ItemType.BOOSTER,ItemType.WING,ItemType.WING,ItemType.STICKY,ItemType.STICKY,ItemType.GHOST,ItemType.NET,ItemType.BANANA];
                     }
-                    const selectedItem=items[randomInt(0,items.length-1)];
+                    const selectedItem=items[_lpRI(0,items.length-1)];
                     /* 차당 판정(2026-08-21): 박스는 사라지지 않고 차마다 독립
                        쿨다운(일반 5초/막판 1초)을 가진다. 공유 collected 방식은
                        선두 팩이 지나간 구간을 비워 뒷차 아이템 격차(+34%)와
@@ -3772,17 +3783,17 @@ function updatePlayers(dt){
                         car.bounceY=0;
                         car.bounceVel=-250;
                         car.spinAngle=0;
-                        car.spinSpeed=randomRange(12,20)*(Math.random()>0.5?1:-1);
+                        car.spinSpeed=_lpRR(12,20)*(_lpR()>0.5?1:-1);
                         for(let e=0;e<15;e++){
-                            collisionEffects.push({x:DX(car)+randomRange(-20,20),y:DY(car)+randomRange(-20,20),life:1.2,
-                                color:['#FF4500','#FF6600','#FFD700','#FF0000'][randomInt(0,3)],
-                                particles:Array.from({length:4},()=>({x:0,y:0,vx:randomRange(-6,6),vy:randomRange(-8,2),size:randomRange(3,8)}))});
+                            collisionEffects.push({x:DX(car)+_lpRR(-20,20),y:DY(car)+_lpRR(-20,20),life:1.2,
+                                color:['#FF4500','#FF6600','#FFD700','#FF0000'][_lpRI(0,3)],
+                                particles:Array.from({length:4},()=>({x:0,y:0,vx:_lpRR(-6,6),vy:_lpRR(-8,2),size:_lpRR(3,8)}))});
                         }
                         shockwaveEffects.push({x:DX(car),y:DY(car),radius:5,maxRadius:100,life:1,color:'#FF4500'});
                         for(let s=0;s<12;s++){
-                            dustEffects.push({x:DX(car)+randomRange(-15,15),y:DY(car)+randomRange(-15,15),
-                                vx:randomRange(-3,3),vy:randomRange(-4,1),
-                                size:randomRange(8,16),life:1.5,color:'rgba(60,60,60,0.8)'});
+                            dustEffects.push({x:DX(car)+_lpRR(-15,15),y:DY(car)+_lpRR(-15,15),
+                                vx:_lpRR(-3,3),vy:_lpRR(-4,1),
+                                size:_lpRR(8,16),life:1.5,color:'rgba(60,60,60,0.8)'});
                         }
                     }else{
                         car.heldItem=selectedItem;
@@ -3799,7 +3810,7 @@ function updatePlayers(dt){
            가드 없던 시절엔 그물(5초 정지) 안에서 부스터를 써서 즉시 탈출하는
            식의 부자연스러운 조합이 가능했다 (2026-08-21) */
         const _incap=car.state===CarState.MISSILE_HIT||car.state===CarState.NETTED||car.state===CarState.SPINNING||car.state===CarState.SLIPPING||car.state===CarState.STICKY_ATTACHED||car.stunTimer>0;
-        if(car.heldItem&&!_incap&&car.state!==CarState.FLYING&&Math.random()<0.008*eventFrequency*dt*60){
+        if(car.heldItem&&!_incap&&car.state!==CarState.FLYING&&_lpR()<0.008*eventFrequency*dt*60){
             if(car.heldItem===ItemType.BOOSTER){
                 /* BOOSTER: self-use — 꼴찌는 2배(10초), 그 외 5초 */
                 const myRankBoost=sorted.indexOf(car)+1;
@@ -3853,12 +3864,12 @@ function updatePlayers(dt){
                     const twoAbove=sorted[myRankNet-3]||null; /* 2단계 위 */
                     const candidates=[oneAbove,twoAbove].filter(p=>p&&p!==car&&!p.finished);
                     if(candidates.length>0){
-                        netTarget=candidates[randomInt(0,candidates.length-1)];
+                        netTarget=candidates[_lpRI(0,candidates.length-1)];
                     }
                 }
                 if(!netTarget){
                     /* 일반 NET: 50% 앞, 50% 뒤 */
-                    if(Math.random()<0.5){
+                    if(_lpR()<0.5){
                         netTarget=getRandomPlayerAhead(car);
                     }else{
                         netTarget=getRandomPlayerBehind(car);
@@ -3878,7 +3889,7 @@ function updatePlayers(dt){
 
                 if(isLastAtk&&car.heldItem===ItemType.MISSILE){
                     /* 미사일: 80% 1등에게, 20% 바로 앞 등수에게 */
-                    if(Math.random()<0.8&&leader&&leader!==car&&!leader.finished&&leader.state!==CarState.GHOST){
+                    if(_lpR()<0.8&&leader&&leader!==car&&!leader.finished&&leader.state!==CarState.GHOST){
                         target=leader;
                     }else{
                         const oneAbove=sorted[myRankAtk-2]||null;
@@ -3891,7 +3902,7 @@ function updatePlayers(dt){
                     const twoAbove=sorted[myRankAtk-3]||null;
                     const candidates=[oneAbove,twoAbove].filter(p=>p&&p!==car&&!p.finished);
                     if(candidates.length>0){
-                        target=candidates[randomInt(0,candidates.length-1)];
+                        target=candidates[_lpRI(0,candidates.length-1)];
                     }
                 }
 
@@ -3899,7 +3910,7 @@ function updatePlayers(dt){
                     /* 일반 타겟팅 (꼴찌가 아니거나 fallback) */
                     if(car.heldItem===ItemType.MISSILE){
                         /* Míssile: 50% targets 1st place, 50% random ahead (excluding 1st) */
-                        if(Math.random()<0.5&&leader&&leader!==car&&!leader.finished&&leader.state!==CarState.GHOST){
+                        if(_lpR()<0.5&&leader&&leader!==car&&!leader.finished&&leader.state!==CarState.GHOST){
                             target=leader;
                         }else{
                             /* Pick random car ahead of me, excluding 1st place */
@@ -3908,7 +3919,7 @@ function updatePlayers(dt){
                                 return p.progress>car.progress;
                             });
                             if(aheadNonLeader.length>0){
-                                target=aheadNonLeader[randomInt(0,aheadNonLeader.length-1)];
+                                target=aheadNonLeader[_lpRI(0,aheadNonLeader.length-1)];
                             }else{
                                 /* Fallback: if no one else ahead, target leader anyway */
                                 if(leader&&leader!==car&&!leader.finished)target=leader;
@@ -3949,14 +3960,14 @@ function updatePlayers(dt){
                             /* 4등 이하: 앞에 있는 차 중에서 상위 3대 랜덤 */
                             const aheadTop=aheadCars.slice(0,3);
                             if(aheadTop.length>0){
-                                target=aheadTop[randomInt(0,aheadTop.length-1)];
+                                target=aheadTop[_lpRI(0,aheadTop.length-1)];
                             }
                         }
 
                         /* Fallback: 앞에 있는 차 중 아무나 (뒤 차 절대 불가) */
                         if(!target||target.finished){
                             if(aheadCars.length>0){
-                                target=aheadCars[randomInt(0,aheadCars.length-1)];
+                                target=aheadCars[_lpRI(0,aheadCars.length-1)];
                             }
                         }
                         /* 앞에 차가 하나도 없으면 사용 안 함 (끈적이 제1원리) */
@@ -4001,7 +4012,7 @@ function updatePlayers(dt){
             const dist=distance(car.x,car.y,other.x,other.y);
             if(dist<50&&dist>=25&&car.index<other.index){
                 /* 2026-09-23: 연출 난사 억제 — 판정과 무관 */
-                if(raceElapsedTime>4&&raceElapsedTime>=(window._lpNmT||0)&&Math.random()<0.02*dt*60){
+                if(raceElapsedTime>4&&raceElapsedTime>=(window._lpNmT||0)&&_lpR()<0.02*dt*60){
                     window._lpNmT=raceElapsedTime+0.9;
                     nearMissEffects.push({x:(DX(car)+DX(other))/2,y:(DY(car)+DY(other))/2-20,life:1.2,text:T('nearMissText')});
                     addCommentary('nearMiss',{name1:car.name,name2:other.name});
@@ -4031,9 +4042,9 @@ function updatePlayers(dt){
             const fIdx=clamp(STARTLINE_IDX,0,track.length-1);
             shockwaveEffects.push({x:track[fIdx].x,y:track[fIdx].y,radius:0,maxRadius:80,life:0.8,color:car.color});
             for(let s=0;s<10;s++){
-                const px=track[fIdx].x+randomRange(-30,30),py=track[fIdx].y+randomRange(-20,20);
+                const px=track[fIdx].x+_lpRR(-30,30),py=track[fIdx].y+_lpRR(-20,20);
                 collisionEffects.push({x:px,y:py,life:1,color:car.color,
-                    particles:Array.from({length:3},()=>({x:0,y:0,vx:randomRange(-4,4),vy:randomRange(-4,4),size:randomRange(3,6)}))});
+                    particles:Array.from({length:3},()=>({x:0,y:0,vx:_lpRR(-4,4),vy:_lpRR(-4,4),size:_lpRR(3,6)}))});
             }
             /* Delayed removal: let the car be visible on the finish line */
             setTimeout(()=>{
@@ -4203,14 +4214,14 @@ function updatePlayers(dt){
         /* Míssile smoke trail */
         if(p.type===ItemType.MISSILE){
             for(let s=0;s<2;s++){
-                dustEffects.push({x:p.x+randomRange(-4,4),y:p.y+randomRange(-4,4),
-                    vx:randomRange(-1.5,1.5),vy:randomRange(-1.5,1.5),
-                    size:randomRange(4,9),life:0.6+Math.random()*0.4,
+                dustEffects.push({x:p.x+_lpRR(-4,4),y:p.y+_lpRR(-4,4),
+                    vx:_lpRR(-1.5,1.5),vy:_lpRR(-1.5,1.5),
+                    size:_lpRR(4,9),life:0.6+_lpR()*0.4,
                     color:'rgba(100,100,100,0.7)'});
             }
-            if(Math.random()<0.5){
-                sparkEffects.push({x:p.x+randomRange(-3,3),y:p.y+randomRange(-3,3),
-                    vx:randomRange(-2,2),vy:randomRange(-2,2),life:0.3,color:'#FF6600'});
+            if(_lpR()<0.5){
+                sparkEffects.push({x:p.x+_lpRR(-3,3),y:p.y+_lpRR(-3,3),
+                    vx:_lpRR(-2,2),vy:_lpRR(-2,2),life:0.3,color:'#FF6600'});
             }
         }
 
@@ -4229,21 +4240,21 @@ function updatePlayers(dt){
 
             if(isFlying){
                 /* Flying: 공중 비행 중 — 모든 투사체 회피 (날개 이펙트) */
-                sparkEffects.push({x:targetX+randomRange(-10,10),y:targetY+randomRange(-10,10),
-                    vx:randomRange(-3,3),vy:randomRange(-3,3),life:0.4,color:'rgba(100,200,255,0.7)'});
+                sparkEffects.push({x:targetX+_lpRR(-10,10),y:targetY+_lpRR(-10,10),
+                    vx:_lpRR(-3,3),vy:_lpRR(-3,3),life:0.4,color:'rgba(100,200,255,0.7)'});
                 addCommentary('wingDodge',{name:p.target.name,item:getItemName(p.type)});
                 return false;
             }
             if(isGhost){
                 /* Ghost: 모든 투사체 관통 (유령 이펙트) */
-                sparkEffects.push({x:targetX+randomRange(-10,10),y:targetY+randomRange(-10,10),
-                    vx:randomRange(-3,3),vy:randomRange(-3,3),life:0.4,color:'rgba(200,200,255,0.7)'});
+                sparkEffects.push({x:targetX+_lpRR(-10,10),y:targetY+_lpRR(-10,10),
+                    vx:_lpRR(-3,3),vy:_lpRR(-3,3),life:0.4,color:'rgba(200,200,255,0.7)'});
                 addCommentary('ghostDodge',{name:p.target.name,item:getItemName(p.type)});
                 return false;
             }
             if(isBoosted||(isStickyBoosted&&!stickyBypass)){
-                sparkEffects.push({x:targetX+randomRange(-10,10),y:targetY+randomRange(-10,10),
-                    vx:randomRange(-4,4),vy:randomRange(-4,4),life:0.4,color:'#FFD700'});
+                sparkEffects.push({x:targetX+_lpRR(-10,10),y:targetY+_lpRR(-10,10),
+                    vx:_lpRR(-4,4),vy:_lpRR(-4,4),life:0.4,color:'#FFD700'});
                 addCommentary('boostDodge',{name:p.target.name,item:getItemName(p.type)});
                 return false;
             }
@@ -4276,8 +4287,8 @@ function updatePlayers(dt){
             if(!tgt||tgt.finished){return false;}
             /* BOOSTED/STICKY_BOOST targets dodge the net */
             if(tgt.state===CarState.BOOSTED||tgt.state===CarState.STICKY_BOOST){
-                sparkEffects.push({x:DX(tgt)+randomRange(-10,10),y:DY(tgt)+randomRange(-10,10),
-                    vx:randomRange(-4,4),vy:randomRange(-4,4),life:0.4,color:'#FFD700'});
+                sparkEffects.push({x:DX(tgt)+_lpRR(-10,10),y:DY(tgt)+_lpRR(-10,10),
+                    vx:_lpRR(-4,4),vy:_lpRR(-4,4),life:0.4,color:'#FFD700'});
                 addCommentary('boostDodge',{name:tgt.name,item:getItemName('net')});
                 return false;
             }
@@ -4321,8 +4332,8 @@ function updatePlayers(dt){
                         net.caughtCars.add(car.index);
                         addCommentary('netCatch',{name:car.name});
                         for(let i=0;i<6;i++){
-                            sparkEffects.push({x:DX(car)+randomRange(-15,15),y:DY(car)+randomRange(-15,15),
-                                vx:randomRange(-2,2),vy:randomRange(-2,2),life:0.6,color:'#FFFFFF'});
+                            sparkEffects.push({x:DX(car)+_lpRR(-15,15),y:DY(car)+_lpRR(-15,15),
+                                vx:_lpRR(-2,2),vy:_lpRR(-2,2),life:0.6,color:'#FFFFFF'});
                         }
                     }
                 });
@@ -4347,17 +4358,17 @@ function updatePlayers(dt){
                 /* === Homing flight particles: web-silk strands + glow sparks === */
                 for(let s=0;s<3;s++){
                     sparkEffects.push({
-                        x:net.x+randomRange(-6,6),y:net.y+randomRange(-6,6),
-                        vx:randomRange(-3,3),vy:randomRange(-3,3),
-                        life:0.35+Math.random()*0.25,
+                        x:net.x+_lpRR(-6,6),y:net.y+_lpRR(-6,6),
+                        vx:_lpRR(-3,3),vy:_lpRR(-3,3),
+                        life:0.35+_lpR()*0.25,
                         color:'rgba(255,255,255,0.8)'
                     });
                 }
-                if(Math.random()<0.6){
+                if(_lpR()<0.6){
                     dustEffects.push({
-                        x:net.x+randomRange(-5,5),y:net.y+randomRange(-5,5),
-                        vx:-dx/dist*2+randomRange(-1,1),vy:-dy/dist*2+randomRange(-1,1),
-                        size:randomRange(2,5),life:0.4+Math.random()*0.3,
+                        x:net.x+_lpRR(-5,5),y:net.y+_lpRR(-5,5),
+                        vx:-dx/dist*2+_lpRR(-1,1),vy:-dy/dist*2+_lpRR(-1,1),
+                        size:_lpRR(2,5),life:0.4+_lpR()*0.3,
                         color:'rgba(200,220,255,0.5)'
                     });
                 }
@@ -4485,7 +4496,7 @@ function applyItemEffect(type,target,source){
             }
             AudioEngine.sfx.splash();
             addCommentary('itemHit',{name:target.name,item:getItemName('water_balloon'),itemKey:'water_balloon'});
-            splashEffects.push(...Array.from({length:10},()=>({x:target.x+randomRange(-20,20),y:target.y+randomRange(-20,20),vx:randomRange(-3,3),vy:randomRange(-5,-1),size:randomRange(3,6),life:1})));
+            splashEffects.push(...Array.from({length:10},()=>({x:target.x+_lpRR(-20,20),y:target.y+_lpRR(-20,20),vx:_lpRR(-3,3),vy:_lpRR(-5,-1),size:_lpRR(3,6),life:1})));
             break;
         case ItemType.MISSILE:
             /* Míssile: explosion → car bounces up → falls → 3s freeze */
@@ -4495,21 +4506,21 @@ function applyItemEffect(type,target,source){
             target.bounceY=0;
             target.bounceVel=-250; /* strong upward velocity */
             target.spinAngle=0;
-            target.spinSpeed=randomRange(12,20)*(Math.random()>0.5?1:-1);
+            target.spinSpeed=_lpRR(12,20)*(_lpR()>0.5?1:-1);
             AudioEngine.sfx.crash();
             addCommentary('itemHit',{name:target.name,item:getItemName('missile'),itemKey:'missile'});
             /* Large explosion effects */
             for(let e=0;e<15;e++){
-                collisionEffects.push({x:DX(target)+randomRange(-20,20),y:DY(target)+randomRange(-20,20),life:1.2,
-                    color:['#FF4500','#FF6600','#FFD700','#FF0000'][randomInt(0,3)],
-                    particles:Array.from({length:4},()=>({x:0,y:0,vx:randomRange(-6,6),vy:randomRange(-8,2),size:randomRange(3,8)}))});
+                collisionEffects.push({x:DX(target)+_lpRR(-20,20),y:DY(target)+_lpRR(-20,20),life:1.2,
+                    color:['#FF4500','#FF6600','#FFD700','#FF0000'][_lpRI(0,3)],
+                    particles:Array.from({length:4},()=>({x:0,y:0,vx:_lpRR(-6,6),vy:_lpRR(-8,2),size:_lpRR(3,8)}))});
             }
             shockwaveEffects.push({x:DX(target),y:DY(target),radius:5,maxRadius:100,life:1,color:'#FF4500'});
             /* Smoke cloud */
             for(let s=0;s<12;s++){
-                dustEffects.push({x:DX(target)+randomRange(-15,15),y:DY(target)+randomRange(-15,15),
-                    vx:randomRange(-3,3),vy:randomRange(-4,1),
-                    size:randomRange(8,16),life:1.5,color:'rgba(60,60,60,0.8)'});
+                dustEffects.push({x:DX(target)+_lpRR(-15,15),y:DY(target)+_lpRR(-15,15),
+                    vx:_lpRR(-3,3),vy:_lpRR(-4,1),
+                    size:_lpRR(8,16),life:1.5,color:'rgba(60,60,60,0.8)'});
             }
             break;
         case ItemType.BANANA:
@@ -4521,8 +4532,8 @@ function applyItemEffect(type,target,source){
                 target.state=CarState.SPINNING;
                 target.stateTimer=0;
                 target.spinAngle=0;
-                target.spinSpeed=randomRange(6,12)*(Math.random()>0.5?1:-1);
-                target.targetLaneOffset+=randomRange(-50,50);
+                target.spinSpeed=_lpRR(6,12)*(_lpR()>0.5?1:-1);
+                target.targetLaneOffset+=_lpRR(-50,50);
                 target.targetLaneOffset=clamp(target.targetLaneOffset,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
             }
             AudioEngine.sfx.slip();
@@ -4530,11 +4541,11 @@ function applyItemEffect(type,target,source){
             addCommentary('itemHit',{name:target.name,item:getItemName('banana'),itemKey:'banana'});
             /* Banana peel visual + spark effects */
             for(let i=0;i<8;i++){
-                sparkEffects.push({x:DX(target)+randomRange(-15,15),y:DY(target)+randomRange(-15,15),
-                    vx:randomRange(-4,4),vy:randomRange(-4,4),life:0.8,color:'#FFD700'});
+                sparkEffects.push({x:DX(target)+_lpRR(-15,15),y:DY(target)+_lpRR(-15,15),
+                    vx:_lpRR(-4,4),vy:_lpRR(-4,4),life:0.8,color:'#FFD700'});
             }
             collisionEffects.push({x:DX(target),y:DY(target),life:1,color:'#FFD700',
-                particles:Array.from({length:6},()=>({x:0,y:0,vx:randomRange(-3,3),vy:randomRange(-3,3),size:randomRange(2,5)}))});
+                particles:Array.from({length:6},()=>({x:0,y:0,vx:_lpRR(-3,3),vy:_lpRR(-3,3),size:_lpRR(2,5)}))});
             shockwaveEffects.push({x:DX(target),y:DY(target),radius:5,maxRadius:50,life:0.6,color:'#FFD700'});
             break;
         case ItemType.STICKY:
@@ -4567,8 +4578,8 @@ function applyItemEffect(type,target,source){
                 addCommentary('sticky',{name:source.name,target:target.name});
                 shockwaveEffects.push({x:DX(target),y:DY(target),radius:5,maxRadius:40,life:0.5,color:'#00FF88'});
                 for(let i=0;i<6;i++){
-                    sparkEffects.push({x:DX(target)+randomRange(-10,10),y:DY(target)+randomRange(-10,10),
-                        vx:randomRange(-2,2),vy:randomRange(-3,0),life:0.6,color:'#00FF88'});
+                    sparkEffects.push({x:DX(target)+_lpRR(-10,10),y:DY(target)+_lpRR(-10,10),
+                        vx:_lpRR(-2,2),vy:_lpRR(-3,0),life:0.6,color:'#00FF88'});
                 }
                 break;
             }
@@ -4600,8 +4611,8 @@ function applyItemEffect(type,target,source){
             /* Impact visual on target */
             shockwaveEffects.push({x:DX(target),y:DY(target),radius:5,maxRadius:40,life:0.5,color:'#00FF88'});
             for(let i=0;i<6;i++){
-                sparkEffects.push({x:DX(target)+randomRange(-10,10),y:DY(target)+randomRange(-10,10),
-                    vx:randomRange(-2,2),vy:randomRange(-3,0),life:0.6,color:'#00FF88'});
+                sparkEffects.push({x:DX(target)+_lpRR(-10,10),y:DY(target)+_lpRR(-10,10),
+                    vx:_lpRR(-2,2),vy:_lpRR(-3,0),life:0.6,color:'#00FF88'});
             }
             break;
     }
@@ -4632,7 +4643,7 @@ function handleCollision(car1,car2){
     /* Weaker car: 부드러운 스핀 + 점진적 밀림 */
     weaker.state=CarState.SPINNING;
     weaker.stateTimer=0;
-    weaker.spinSpeed=randomRange(4,8)*(0.5+diffNorm*0.5)*(Math.random()>0.5?1:-1);
+    weaker.spinSpeed=_lpRR(4,8)*(0.5+diffNorm*0.5)*(_lpR()>0.5?1:-1);
     /* 목표 레인으로 부드럽게 밀림 (즉시 점프 대신 targetLaneOffset 변경) */
     const pushAmount=TRACK_WIDTH*(0.10+diffNorm*0.15);
     weaker.targetLaneOffset=clamp(weaker.laneOffset+pushDir*pushAmount,-GUARDRAIL_LIMIT,GUARDRAIL_LIMIT);
@@ -4658,9 +4669,9 @@ function handleCollision(car1,car2){
     addCommentary('collision',{strong:stronger.name,weak:weaker.name});
 
     const mx=(car1.x+car2.x)/2,my=(car1.y+car2.y)/2;
-    collisionEffects.push({x:mx,y:my,life:0.8,particles:Array.from({length:6},()=>({x:0,y:0,vx:randomRange(-2,2),vy:randomRange(-2,2),size:randomRange(2,4)}))});
+    collisionEffects.push({x:mx,y:my,life:0.8,particles:Array.from({length:6},()=>({x:0,y:0,vx:_lpRR(-2,2),vy:_lpRR(-2,2),size:_lpRR(2,4)}))});
     shockwaveEffects.push({x:mx,y:my,radius:5,maxRadius:40,life:0.5});
-    sparkEffects.push(...Array.from({length:4},()=>({x:mx+randomRange(-8,8),y:my+randomRange(-8,8),vx:randomRange(-2,2),vy:randomRange(-3,-1),life:0.8,color:'#FFD700'})));
+    sparkEffects.push(...Array.from({length:4},()=>({x:mx+_lpRR(-8,8),y:my+_lpRR(-8,8),vx:_lpRR(-2,2),vy:_lpRR(-3,-1),life:0.8,color:'#FFD700'})));
 }
 
 /* ===== COMMENTARY ===== */
@@ -5629,6 +5640,7 @@ function gameLoop(currentTime){
     /* Broadcast car state to guests at 20 Hz (throttle is inside
        _lpBroadcastTick). No-op if we're not hosting. */
     if(window._lpHost&&typeof _lpBroadcastTick==='function')_lpBroadcastTick();
+    else if(window.__crv2&&__crv2.room)__crv2.tick();   /* v2: 10Hz 틱 */
     animationId=requestAnimationFrame(gameLoop);
 }
 
@@ -5714,7 +5726,8 @@ window.LPFX=(function(){
     const c=S.bgc,W=WIDTH,H=HEIGHT;
     c.setTransform(DPR,0,0,DPR,0,0);
     const p0=track[0];
-    const R=rng(((p0.x*73856093)^(p0.y*19349663)^(track.length*83492791))>>>0);
+    /* 방(v2)에서는 공정 시드의 'scene' 스트림 — 기기마다 트랙 크기가 달라도 같은 풍경 */
+    const R=rng(window._lpSceneSeed!=null?(window._lpSceneSeed>>>0):(((p0.x*73856093)^(p0.y*19349663)^(track.length*83492791))>>>0));
     paintGround(c,W,H,R);
     paintTrack(c);
     paintDecor(c,R);
@@ -6808,6 +6821,8 @@ function exitMobileFullscreen(){
     }catch(e){}
 }
 function startGame(){
+    /* Rooms v2: 방장 시작 = 공정 시드 추첨 먼저(__crv2.hostStart 가 시드를 넣고 다시 부른다). 게스트는 방장 틱을 본다 */
+    if(window.__crv2&&__crv2.room&&!__crv2.go){if(__crv2.room.isHost)__crv2.hostStart();return;}
     if(window.LPFX)try{LPFX.reset()}catch(_){}
     AudioEngine.getCtx();
     recordCurrentAsPreset();
@@ -6834,7 +6849,7 @@ function startGame(){
     COURSES[selectedCourse].generator();
     /* Shuffle player order completely: names, numbers, colors, grid positions all randomized */
     const order=[...Array(playerCount).keys()];
-    for(let i=order.length-1;i>0;i--){const j=randomInt(0,i);[order[i],order[j]]=[order[j],order[i]];}
+    for(let i=order.length-1;i>0;i--){const j=_lpRI(0,i);[order[i],order[j]]=[order[j],order[i]];}
     players=[];for(let i=0;i<playerCount;i++)players.push(createCar(i,names[order[i]],i));
     /* Initialize car world positions from track */
     syncCarsToTrack();
@@ -6900,6 +6915,7 @@ function endGame(){
             window._lpHost.broadcast('host:result',{game:'car-racing',finishOrder:fo});
         }catch(_){}
     }
+    if(window.__crv2&&__crv2.room)__crv2.onEnd();
     showResults();
 }
 
@@ -6990,9 +7006,11 @@ function showResults(){
         const summary=(currentLang==='ko')?`🥇 ${winner} · 꼴등 ${loser}`:`🥇 ${winner} · last ${loser}`;
         window.LpRecent.save('car-racing',summary,'/games/car-racing/');
     }
+    if(window.__crv2)__crv2.onResults();
 }
 
 function resetGame(){
+    if(window.__crv2&&__crv2.room&&__crv2.room.isHost)__crv2.onReset();
     gameRunning=false;gamePaused=false;AudioEngine.stopBGM();
     if(animationId)cancelAnimationFrame(animationId);
     players=[];track=[];trackNormals=[];trackBorderLeft=[];trackBorderRight=[];waterZones=[];hillZones=[];mudZones=[];iceZones=[];itemBoxes=[];sceneryObjects=[];
@@ -7516,7 +7534,7 @@ function checkOrientation(){
            track at the new (landscape) scale. Without this rebuild,
            a track scaled for portrait stays portrait-shaped when the
            user rotates, putting cars visibly off the road. */
-        if(wasPortraitBefore&&window._lpGuest&&_lpLastRaceStartPayload&&typeof _lpApplyRaceStartOnGuest==='function'){
+        if(wasPortraitBefore&&(window._lpGuest||_crIsV2G())&&_lpLastRaceStartPayload&&typeof _lpApplyRaceStartOnGuest==='function'){
             try{_lpApplyRaceStartOnGuest(_lpLastRaceStartPayload)}catch(_){}
         }
         /* 솔로·호스트: 트랙이 생성될 때의 치수와 지금 치수가 의미 있게
@@ -7688,6 +7706,10 @@ function _lpBroadcastTick(){
     const now=performance.now();
     if(now-_lpLastTickMs<50)return;
     _lpLastTickMs=now;
+    try{window._lpHost.broadcast('host:tick',_lpBuildTick(now))}catch(_){}
+}
+/* 틱 묶음 만들기 — v1(20Hz lpRoom) 과 v2(10Hz room.tick) 공용 */
+function _lpBuildTick(now){
     const refIdx=r=>{
         if(!r)return -1;
         const i=players.indexOf(r);
@@ -7745,7 +7767,7 @@ function _lpBroadcastTick(){
             ?{m:currentCommentary.message,d:currentCommentary.duration}:null,
         rem:remainingTime,fin:finishedCount(),tot:players.length
     };
-    try{window._lpHost.broadcast('host:tick',payload)}catch(_){}
+    return payload;
 }
 function finishedCount(){return players.filter(p=>p.finished).length}
 
@@ -7758,7 +7780,7 @@ function _lpStartGuestRender(){
     if(_lpGuestRafId)return;
     _lpGuestLbLast=0;
     function loop(){
-        if(!window._lpGuest){_lpGuestRafId=null;return}
+        if(!window._lpGuest&&!_crIsV2G()){_lpGuestRafId=null;return}
         /* Interpolate car state to renderTime before painting so
            motion looks 60Hz-smooth even though ticks arrive at
            ~20Hz. Event-shaped state (effects / items / commentary)
@@ -7940,7 +7962,7 @@ function _lpApplyRaceStartOnGuest(p){
    Only cars' x/y/angle/timers need the smoothing. */
 let _lpHostWidthCache=0,_lpHostHeightCache=0;
 const _lpTickBuf=[];
-const _LP_BUFFER_MS=100;
+let _LP_BUFFER_MS=100;   /* v2 는 10Hz 틱이라 220ms */
 const _LP_MAX_BUFFER=8;
 /* Shortest-path angle lerp — avoids a 359°→1° transition spinning
    the car 358° backward. */
@@ -8196,6 +8218,231 @@ _waitForLpRoom(()=>{
         /* host:close / host:ended are handled by LpHostCtl (installed above). */
     }});
 });
+
+/* ===== LuckyPlz Rooms v2 — 카레이싱 같이 보기 (틱 모드 + 공정 시드, 2026-09-30 · DESIGN §6.1.8 · 운영자 결정 #10) =====
+   v1(위 lpRoom 배선)은 그대로. v2 로더가 lpRooms* 를 실었을 때만 붙는다.
+   · 공정 시드: 방장 [레이스 시작] → LpFair.draw(참가자 엔트로피) → seed. 레이스에 영향을 주는 모든 난수
+     (트랙 구역·스탯·출발 순서·아이템·충돌·이벤트 — _lpR()/_lpRR()/_lpRI())가 rng(seed,'sim') 하나에서 나온다.
+     LPFX 풍경도 rng(seed,'scene') 으로 구워 모든 화면이 같은 풍경. 방장은 결과를 보고 다시 뽑을 수 없다
+   · 물리는 방장 기기 그대로(LPFX·밸런스·되돌리기 금지 항목 불변) — 트랙이 화면 크기를 따라가므로 기기마다 재시뮬하면
+     결과가 달라진다. 그래서 게스트는 방장 틱을 그린다: 20Hz → 10Hz + 보간 버퍼 220ms(메시지 절반)
+   · 출발 시각은 방장 시계(room.clock) 기준 — 게스트 카운트다운이 같은 순간 GO. 늦게 온 사람은 상태의 출발 묶음 + 다음 틱부터
+   · 결과: 방장 서명 상태 + 끝나면 순위를 LpFair.draw 로 서명 공표(출발 시드 커밋 C 에 묶음) → 배지 '✓ 공정 시드'(재현이 아니라
+     시드 공정성만 보장함을 정직하게), #cert= 링크로 시드·순위 서명을 누구나 재검증 */
+function _crIsV2G(){return !!(window.__crv2&&__crv2.room&&!__crv2.room.isHost)}
+window.__crv2=(function(){
+    const TX={
+        ko:{wait:'⏳ 방장이 시작해요',mix:'🎲 모두의 행운 섞는 중…',ok:'✓ 공정 시드 · 방장 기록 서명',bad:'✗ 위조된 결과',abort:'⚠ 추첨 #{n} 취소됨'},
+        en:{wait:'⏳ Host starts',mix:'🎲 Mixing everyone’s luck…',ok:'✓ Fair seed · host-signed result',bad:'✗ Forged result',abort:'⚠ Draw #{n} cancelled'},
+        ja:{wait:'⏳ ホストが開始',mix:'🎲 みんなの運を混ぜています…',ok:'✓ 公正シード · ホスト署名',bad:'✗ 改ざんされた結果',abort:'⚠ 抽選 #{n} 取り消し'},
+        zh:{wait:'⏳ 等房主开始',mix:'🎲 正在混合大家的运气…',ok:'✓ 公平种子 · 房主签名',bad:'✗ 伪造的结果',abort:'⚠ 抽奖 #{n} 已取消'},
+        es:{wait:'⏳ Empieza el anfitrión',mix:'🎲 Mezclando la suerte de todos…',ok:'✓ Semilla justa · firmado',bad:'✗ Resultado falso',abort:'⚠ Sorteo #{n} cancelado'},
+        pt:{wait:'⏳ O anfitrião começa',mix:'🎲 Misturando a sorte de todos…',ok:'✓ Semente justa · assinado',bad:'✗ Resultado falso',abort:'⚠ Sorteio #{n} cancelado'}
+    };
+    const tx=k=>{const l=String(typeof currentLang==='string'?currentLang:'en').slice(0,2);return ((TX[l]||TX.en)[k])||TX.en[k]};
+    let room=null,UI=null,offs=[],busy=false,cfgT=0,appliedCfg='',race=null,lastTick=0,cdT=[],cert=null,attC=null,appliedEnd=false;
+    const $i=id=>document.getElementById(id);
+    const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100,r3=v=>Math.round(v*1000)/1000;
+    /* 틱 숫자 줄이기 — 좌표 0.01px·타이머 0.01s 면 화면에 차이가 없다(메시지 크기 ~절반) */
+    function round(o){
+        if(typeof o==='number')return Number.isInteger(o)?o:r2(o);
+        if(Array.isArray(o))return o.map(round);
+        if(o&&typeof o==='object'){const x={};for(const k in o)x[k]=round(o[k]);return x;}
+        return o;
+    }
+    /* ── 출발 묶음(상태에 실어 늦참도 받는다, 32KB 미만): 한 바퀴 기준점만 보내고 게스트가 바퀴 수만큼 반복 ── */
+    function packStart(){
+        const L=lapLength,flat=(a,f,n)=>{const o=[];for(let i=0;i<n;i++){o.push(f(a[i].x!==undefined?a[i].x:a[i].nx),f(a[i].y!==undefined?a[i].y:a[i].ny));}return o;};
+        return {course:selectedCourse,raceTime,gameSpeed,ev:eventFrequency,laps:totalLaps,W:WIDTH,H:HEIGHT,tw:TRACK_WIDTH,L,
+            tr:flat(track,r1,L),nr:flat(trackNormals,r3,trackNormals.length),bl:flat(trackBorderLeft,Math.round,trackBorderLeft.length),br:flat(trackBorderRight,Math.round,trackBorderRight.length),
+            cross:CROSS?{fB:CROSS.fB,fA:CROSS.fA,D:CROSS.D,N:CROSS.N,z:Array.from(CROSS.z,r3)}:null,
+            zw:waterZones,zh:hillZones,zm:mudZones,zi:iceZones,
+            items:itemBoxes.map(b=>[b.trackIndex,r1(b.laneOff),b.collected?1:0,r2(b.respawnTimer||0),b.fastRespawn?1:0]),
+            sc:sceneryObjects.map(s=>[s.type,r1(s.x),r1(s.y),r1(s.size),s.color]),
+            cars:players.map(c=>round({index:c.index,name:c.name,color:c.color,accentColor:c.accentColor,numberPlate:c.numberPlate,driftSkill:c.driftSkill,
+                speedRatio:c.speedRatio,physical:c.physical,laneSlot:c.laneSlot,laneOffset:c.laneOffset,progress:c.progress,x:c.x,y:c.y,angle:c.angle}))};
+    }
+    function unpackStart(q){
+        const pts=(a,k1,k2)=>{const o=[];for(let i=0;i+1<a.length;i+=2){const p={};p[k1]=a[i];p[k2]=a[i+1];o.push(p);}return o;};
+        const base=pts(q.tr,'x','y'),full=[];
+        for(let lap=0;lap<q.laps+1;lap++)base.forEach(p=>full.push({x:p.x,y:p.y}));
+        return {game:'car-racing',course:q.course,raceTime:q.raceTime,gameSpeed:q.gameSpeed,eventFrequency:q.ev,totalLaps:q.laps,hostW:q.W,hostH:q.H,
+            trackWidth:q.tw,lapLength:q.L,track:full,trackNormals:pts(q.nr,'nx','ny'),trackBorderLeft:pts(q.bl,'x','y'),trackBorderRight:pts(q.br,'x','y'),
+            waterZones:q.zw,hillZones:q.zh,mudZones:q.zm,iceZones:q.zi,
+            itemBoxes:q.items.map(b=>({ti:b[0],lo:b[1],c:!!b[2],r:b[3],fr:!!b[4]})),
+            sceneryObjects:q.sc.map(s=>({type:s[0],x:s[1],y:s[2],size:s[3],color:s[4]})),cars:q.cars};
+    }
+    function applyStart(q){
+        const p=unpackStart(q);
+        _lpHostWidthCache=p.hostW;_lpHostHeightCache=p.hostH;
+        _LP_BUFFER_MS=220;_lpTickBuf.length=0;
+        _lpApplyRaceStartOnGuest(p);
+        /* 인피니트 코스 입체 교차: 다리·지하차도 높이(z)와 교차 정보도 같이 */
+        if(q.cross){const z=new Float32Array(q.cross.z);CROSS={fB:q.cross.fB,fA:q.cross.fA,D:q.cross.D,N:q.cross.N,z};for(let i=0;i<track.length;i++)track[i].z=z[i%q.L];}
+        else CROSS=null;
+        lapLength=q.L;
+        if(window.LPFX)try{LPFX.invalidate()}catch(_){}
+    }
+    /* 게스트 카운트다운 — 방장 시계로 3·2·1·GO 가 같은 순간 */
+    function guestCountdown(cd0){
+        cdT.forEach(clearTimeout);cdT=[];
+        const el=$i('countdown'),counts=['3','2','1',T('countdownGo')];
+        counts.forEach((c,i)=>{
+            const at=cd0+i*800-room.clock();
+            if(at<-700)return;
+            cdT.push(setTimeout(()=>{el.style.display='flex';el.textContent=c;el.style.animation='none';el.offsetHeight;el.style.animation='countdownPop 0.8s ease-out';try{if(i<3)AudioEngine.sfx.countdown();else AudioEngine.sfx.go();}catch(_){}},Math.max(0,at)));
+        });
+        cdT.push(setTimeout(()=>{el.style.display='none';},Math.max(0,cd0+3200-room.clock())));
+    }
+    /* ── 설정 동기화 ── */
+    function readCfg(){
+        const names=[...document.querySelectorAll('#playerNameInputs input[type="text"]')].map(i=>i.value.trim()||i.placeholder||'');
+        return {course:selectedCourse,raceTime:parseInt($i('raceTime').value),gameSpeed:parseFloat($i('gameSpeed').value),ev:parseInt($i('eventFrequency').value),laps:parseInt($i('lapCount').value)||2,names};
+    }
+    function applyCfg(p){
+        if(!p)return;const k=JSON.stringify(p);if(k===appliedCfg)return;appliedCfg=k;
+        if(COURSES[p.course]){selectedCourse=p.course;document.querySelectorAll('.course-card').forEach(c=>c.classList.toggle('selected',c.dataset.course===selectedCourse));}
+        const set=(id,v)=>{const el=$i(id);if(el&&v!=null&&!isNaN(v)){el.value=v;const lb=$i(id+'Value');if(lb)lb.textContent=v;}};
+        set('raceTime',p.raceTime);set('gameSpeed',p.gameSpeed);set('eventFrequency',p.ev);set('lapCount',p.laps);
+        if(Array.isArray(p.names)){
+            set('playerCount',p.names.length);
+            if(document.querySelectorAll('#playerNameInputs input[type="text"]').length!==p.names.length)generatePlayerNameInputs();
+            document.querySelectorAll('#playerNameInputs input[type="text"]').forEach((inp,i)=>{if(p.names[i]!=null)inp.value=p.names[i];});
+        }
+    }
+    function pushCfg(){if(!room||!room.isHost)return;clearTimeout(cfgT);cfgT=setTimeout(()=>room.setState(S=>{S.game=S.game||{};S.game.cfg=readCfg();}),150);}
+    function lockGuest(on){
+        const sb=$i('startBtn');if(sb){sb.disabled=on;sb.style.opacity=on?'.45':'';sb.textContent=on?tx('wait'):T('startBtn');}
+        const rb=$i('resetBtn');if(rb)rb.disabled=on;
+        const sw=$i('setupScreen');if(sw)sw.classList.toggle('lp-v2-ro',on);
+    }
+    /* ── 방장 ── */
+    async function hostStart(){
+        if(!room||!room.isHost||busy||gameRunning)return;
+        busy=true;
+        const sb=$i('startBtn'),old=sb.textContent;sb.textContent=tx('mix');sb.disabled=true;
+        try{
+            const c=readCfg();
+            const params={g:'car-racing',course:c.course,raceTime:c.raceTime,gameSpeed:c.gameSpeed,ev:c.ev,laps:c.laps,names:c.names};
+            const r=await LpFair.draw(room,{params});
+            const sim=LpFair.rng(r.seed,'sim');
+            _lpSimRng=()=>sim.float();
+            window._lpSceneSeed=LpFair.rng(r.seed,'scene').u32();
+            cert=r.cert;attC=null;
+            V.go=true;try{startGame();}finally{V.go=false;}
+            const cd0=room.clock();
+            /* 출발 묶음은 압축(deflate-raw, ~1/3) — 상태 봉투 32KB 상한 안쪽 */
+            const z=await LpFair.cert.encode(packStart());
+            if(z.length>28000)console.warn('[car v2] start pack',z.length);
+            room.setState(S=>{S.game=S.game||{};S.game.race={id:r.round,cd0,z,cert:r.cert,fo:null,att:null};S.game.view='race';});
+        }catch(e){console.warn('[car v2] start',e);}
+        finally{busy=false;sb.textContent=old;sb.disabled=false;}
+    }
+    function tick(){
+        if(!room||!room.isHost||!gameRunning)return;
+        const now=performance.now();if(now-lastTick<100)return;lastTick=now;
+        room.tick(round(_lpBuildTick(now)));
+    }
+    function onEnd(){
+        if(!room||!room.isHost)return;
+        const fo=finishOrder.map(c=>({i:c.index,rank:c.finishRank,time:c.finished?r2(c.finishTime):null}));
+        const S=room.state(),R=S&&S.game&&S.game.race;if(!R)return;
+        room.setState(S=>{S.game.race.fo=fo;});
+        _lpSimRng=null;
+        /* 순위를 서명해 공표 — 출발 시드 커밋(C)에 묶는다 */
+        const params={g:'car-racing',k:'att',of:R.id,C:R.cert.C,fo:fo.map(f=>[f.i,players[f.i]?players[f.i].name:'',f.time])};
+        LpFair.draw(room,{params,window:900}).then(a=>{
+            a.cert.res=params.fo;a.cert.s=R.cert;
+            room.setState(S=>{if(S.game.race&&S.game.race.id===R.id)S.game.race.att=a.cert;});
+        }).catch(e=>console.warn('[car v2] attest',e));
+    }
+    function onReset(){if(room&&room.isHost)room.setState(S=>{S.game=S.game||{};S.game.race=null;S.game.view='setup';});_lpSimRng=null;window._lpSceneSeed=null;}
+    /* ── 모든 기기 ── */
+    async function verifyAtt(a){
+        if(!a||!a.s)return {ok:false,why:'format'};
+        const v1=await LpFair.cert.verify(a.s,p=>{if(!p||p.g!=='car-racing')throw new Error('g');return null;});
+        if(!v1.ok)return {ok:false,why:'start:'+v1.why};
+        const v2=await LpFair.cert.verify(a,p=>{if(!p||p.k!=='att'||p.C!==a.s.C||p.of!==a.s.round)throw new Error('bind');return p.fo;});
+        return {ok:v2.ok,why:v2.why,fo:v2.res};
+    }
+    function badgeEl(){
+        let el=$i('lpV2Badge');
+        if(!el){el=document.createElement('div');el.id='lpV2Badge';el.className='lp-v2-badge';el.hidden=true;const fr=$i('finalRankings');if(fr&&fr.parentNode)fr.parentNode.insertBefore(el,fr);}
+        return el;
+    }
+    function badge(info){const el=badgeEl();el.hidden=false;if(UI&&UI.badge)UI.badge(el,info);else LpFair.badge(el,info);}
+    function render(S){
+        if(!room||!S||!S.game)return;
+        const g=S.game,R=g.race;
+        if(!room.isHost){
+            if(g.cfg&&!race)applyCfg(g.cfg);
+            if(!R&&race){race=null;appliedEnd=false;cdT.forEach(clearTimeout);_lpStopGuestRender();try{resetGame();}catch(_){}}
+            if(R&&(!race||race.id!==R.id)){
+                race={id:R.id};appliedEnd=false;cert=R.cert;
+                LpFair.cert.verify(R.cert,p=>{if(!p||p.g!=='car-racing')throw new Error('g');return null;}).then(v=>{if(!v.ok)badge({kind:'mismatch',n:1});});
+                const id=R.id;
+                LpFair.cert.decode(R.z).then(q=>{if(!race||race.id!==id)return;applyStart(q);race.ready=true;if(!R.fo)guestCountdown(R.cd0);if(room)render(room.state());});
+            }
+            if(R&&race&&race.id===R.id&&race.ready&&R.fo&&!appliedEnd){appliedEnd=true;cdT.forEach(clearTimeout);$i('countdown').style.display='none';_lpApplyResultOnGuest({finishOrder:R.fo});}
+        }
+        if(R&&R.att&&attC!==R.att.rsig){
+            attC=R.att.rsig;
+            verifyAtt(R.att).then(v=>{
+                V.lastAtt=R.att;V.attOk=v.ok;
+                if(!v.ok){badge({kind:'mismatch',n:1});return;}
+                LpFair.witness(room,R.att.round,R.fo);
+                badge({kind:'seed',round:R.att.round,cert:R.att});
+            });
+        }
+    }
+    function bind(r){
+        if(room===r)return;unbind();room=r;V.room=r;
+        if(!r.isHost)lockGuest(true);
+        offs.push(r.on('state',S=>render(S)));
+        offs.push(r.on('tick',p=>{if(!r.isHost&&race&&p&&p.cars)_lpApplyTickOnGuest(p);}));
+        offs.push(r.on('fair',ev=>{
+            if(!ev)return;
+            if(ev.k==='witness'&&V.lastAtt&&ev.round===V.lastAtt.round&&V.attOk)badge({kind:ev.bad?'mismatch':'seed',n:ev.bad||ev.ok,round:ev.round,cert:V.lastAtt});
+            else if(ev.k==='abort'){V.aborts=(V.aborts||0)+1;if(UI&&UI.toast)UI.toast(tx('abort').replace('{n}',ev.round),3500);}
+        }));
+        if(r.isHost){
+            const setup=$i('setupWrap');const on=()=>pushCfg();
+            setup.addEventListener('input',on);setup.addEventListener('change',on);setup.addEventListener('click',()=>setTimeout(on,0));
+            offs.push(()=>{setup.removeEventListener('input',on);setup.removeEventListener('change',on);});
+            pushCfg();
+        }
+        render(r.state());
+    }
+    function unbind(){offs.forEach(f=>{try{f()}catch(_){}});offs=[];room=null;V.room=null;race=null;lockGuest(false);appliedCfg='';_lpSimRng=null;window._lpSceneSeed=null;_LP_BUFFER_MS=100;}
+    const V={room:null,go:false,hostStart,tick,onEnd,onReset,verifyAtt,packStart,unpackStart,
+        onResults(){const el=$i('lpV2Badge');if(el&&!room&&!V.certView)el.hidden=true;const rb=$i('restartBtn');if(rb)rb.disabled=_crIsV2G();},
+        dbg:()=>({race:(()=>{const S=room&&room.state(),R=S&&S.game&&S.game.race;return R?R.id:(race&&race.id)})(),fo:finishOrder.map(c=>c.name).join(','),running:gameRunning,guestRender:!!_lpGuestRafId,buf:_lpTickBuf.length,players:players.length})};
+    window.LpRoomsQ=window.LpRoomsQ||[];
+    window.LpRoomsQ.push(function(LR,ui){
+        UI=ui;
+        LR.adapter({gameId:'car-racing',kind:'draw',seats:null,lateJoin:'anytime',migratable:false});
+        ui.config({lobby:'strip',stripEl:()=>$i('setupScreen')});
+        ui.on('room',bind);
+        ui.on('left',()=>unbind());
+    });
+    /* ── #cert= : 출발 시드(참가자 엔트로피 포함)와 방장이 서명한 순위를 이 기기에서 재검증 ── */
+    function certMode(){
+        const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
+        const show=(ok,fo,names)=>{
+            V.certView=ok?'ok':'bad';
+            $i('setupWrap').style.display='none';
+            finishOrder=(fo||[]).map((f,i)=>({index:f[0],name:String(f[1]||'?'),color:carColors[(f[0]|0)%carColors.length],finished:f[2]!=null,finishTime:f[2]||0,finishRank:i+1}));
+            rewardData=null;
+            try{showResults();}catch(e){$i('resultScreen').style.display='flex';}
+            const el=badgeEl();el.hidden=false;el.className='lp-v2-badge '+(ok?'ok':'bad');el.textContent=ok?tx('ok'):tx('bad');
+        };
+        const go=()=>LpFair.cert.decode(m[1]).then(a=>verifyAtt(a).then(v=>show(v.ok,v.ok?v.fo:(a.params&&a.params.fo)))).catch(()=>show(false,[]));
+        if(window.LpFair)go();
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1790759059';s.onload=go;document.head.appendChild(s);}
+    }
+    setTimeout(certMode,300);
+    return V;
+})();
 </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
