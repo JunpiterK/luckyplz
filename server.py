@@ -25,6 +25,11 @@ def user_profile(nickname):
     Flask server needs an explicit route to mirror that behaviour."""
     return send_file(os.path.join(PUBLIC, 'u', 'index.html'))
 
+@app.route('/r/<path:code>')
+def room_invite(code):
+    """Rooms v2 초대 링크 /r/<CODE>#k=... → /lobby/index.html (public/_redirects 의 200 rewrite 를 흉내)."""
+    return send_file(os.path.join(PUBLIC, 'lobby', 'index.html'))
+
 @app.route('/<path:path>')
 def static_files(path):
     full = os.path.join(PUBLIC, path)

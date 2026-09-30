@@ -43,7 +43,7 @@ try{
             ||('TelegramWebview' in window)||('TelegramWebviewProxy' in window));
         if(!hit&&!/[?&]openExternalBrowser=1/.test(location.search))return;
         var s=document.createElement('script');
-        s.src='/js/lpInApp.js?v=1790753735';
+        s.src='/js/lpInApp.js?v=1790759059';
         (document.head||document.documentElement).appendChild(s);
     })();
 }catch(_){}
@@ -102,10 +102,10 @@ try{
         lprP=new Promise(function(res,rej){
             var list=[];
             if(!window.supabase)list.push('/vendor/supabase.min.js');
-            if(!window.LpGames)list.push('/js/lpGames.js?v=1790753735');
-            if(!(window.LpRooms&&window.LpRooms.version&&window.LpRooms.version.indexOf('stub')<0))list.push('/js/lpRoomsCore.js?v=1790753735');
-            if(!(window.LpFair&&window.LpFair.version&&window.LpFair.version.indexOf('stub')<0))list.push('/js/lpFair.js?v=1790753735');
-            if(!(window.LpRoomsUI&&window.LpRoomsUI.version&&window.LpRoomsUI.version.indexOf('stub')<0))list.push('/js/lpRoomsUI.js?v=1790753735');
+            if(!window.LpGames)list.push('/js/lpGames.js?v=1790759059');
+            if(!(window.LpRooms&&window.LpRooms.version&&window.LpRooms.version.indexOf('stub')<0))list.push('/js/lpRoomsCore.js?v=1790759059');
+            if(!(window.LpFair&&window.LpFair.version&&window.LpFair.version.indexOf('stub')<0))list.push('/js/lpFair.js?v=1790759059');
+            if(!(window.LpRoomsUI&&window.LpRoomsUI.version&&window.LpRoomsUI.version.indexOf('stub')<0))list.push('/js/lpRoomsUI.js?v=1790759059');
             if(!list.length){res(window.LpRoomsUI);return}
             var last=null,failed=false;
             list.forEach(function(u){last=lprAdd(u);last.onerror=function(){failed=true;rej(new Error('load '+u))}});
@@ -325,7 +325,7 @@ try{
        and is idempotent across multiple loads. */
     if(!window.LpFullscreen){
         var fs=document.createElement('script');
-        fs.src='/js/lpFullscreen.js?v=1790753735';
+        fs.src='/js/lpFullscreen.js?v=1790759059';
         document.body.appendChild(fs);
     }
 
@@ -333,7 +333,7 @@ try{
        🎮(topNav) 도 플레이·스크롤·주 버튼 겹침 때 숨긴다. 버튼 모듈보다 늦게 와도 붙어 있는 버튼을 옮긴다. */
     if(isGamePage && !window.LpChrome){
         var ch=document.createElement('script');
-        ch.src='/js/lpChrome.js?v=1790753735';
+        ch.src='/js/lpChrome.js?v=1790759059';
         document.body.appendChild(ch);
     }
 
@@ -347,7 +347,7 @@ try{
             if(!isGamePage || window.LpHelp || document.getElementById('lpHelpJs') || !document.querySelector('.lp-game-about'))return;
             var hp=document.createElement('script');
             hp.id='lpHelpJs';
-            hp.src='/js/lpHelp.js?v=1790753735';
+            hp.src='/js/lpHelp.js?v=1790759059';
             document.body.appendChild(hp);
         }
         if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',addHelp);else addHelp();
@@ -356,13 +356,13 @@ try{
     /* 정지·종료 화면 공통 이동 버튼(🎮 게임 홈 · 🏠 전체 홈) — 각 게임이 LpNav.mount() 로 붙인다 */
     if(isGamePage && !window.LpNav){
         var gn=document.createElement('script');
-        gn.src='/js/lpGameNav.js?v=1790753735';
+        gn.src='/js/lpGameNav.js?v=1790759059';
         document.body.appendChild(gn);
     }
     /* 자리 비움 자동 일시정지 + 계속하기/그만하기 — 조작형 게임이 LpAutoPauseQ 에 등록한다 */
     if(isGamePage && !window.LpAutoPause){
         var ap=document.createElement('script');
-        ap.src='/js/lpAutoPause.js?v=1790753735';
+        ap.src='/js/lpAutoPause.js?v=1790759059';
         document.body.appendChild(ap);
     }
 
@@ -378,7 +378,7 @@ try{
        재생 시작. */
     if(isGamePage&&!window.LpBgm){
         var bgm=document.createElement('script');
-        bgm.src='/js/lpBgm.js?v=1790753735';
+        bgm.src='/js/lpBgm.js?v=1790759059';
         bgm.defer=true;
         document.body.appendChild(bgm);
     }
@@ -391,12 +391,12 @@ try{
        without waiting on script-load. */
     if(isGamePage&&!window.LpWakeLock){
         var wl=document.createElement('script');
-        wl.src='/js/lpWakeLock.js?v=1790753735';
+        wl.src='/js/lpWakeLock.js?v=1790759059';
         document.body.appendChild(wl);
     }
     if(isGamePage&&!window.LpPhaseTimer){
         var pt=document.createElement('script');
-        pt.src='/js/lpPhaseTimer.js?v=1790753735';
+        pt.src='/js/lpPhaseTimer.js?v=1790759059';
         document.body.appendChild(pt);
     }
 
@@ -410,7 +410,7 @@ try{
     var robotsNoindex=robotsMeta&&/noindex/i.test(robotsMeta.content||'');
     if(!adPolicyOff&&!robotsNoindex&&document.querySelector('[data-lp-ad]')){
         var s=document.createElement('script');
-        s.src='/js/adSlots.js?v=1790753735';
+        s.src='/js/adSlots.js?v=1790759059';
         s.defer=true;
         document.body.appendChild(s);
     }
@@ -419,7 +419,7 @@ try{
        pages can write results on finish and home page can read them. */
     if(!window.LpRecent){
         var rr=document.createElement('script');
-        rr.src='/js/recentResults.js?v=1790753735';
+        rr.src='/js/recentResults.js?v=1790759059';
         document.body.appendChild(rr);
     }
 
@@ -427,20 +427,20 @@ try{
        and isn't useful mid-race anyway). Home/blog still get it. */
     if(!isGamePage){
         var pwa=document.createElement('script');
-        pwa.src='/js/pwaInstall.js?v=1790753735';
+        pwa.src='/js/pwaInstall.js?v=1790759059';
         pwa.defer=true;
         document.body.appendChild(pwa);
     }
 
     /* Analytics event helper — delegated listeners + LpRecent bridge. */
     var tr=document.createElement('script');
-    tr.src='/js/lpTrack.js?v=1790753735';
+    tr.src='/js/lpTrack.js?v=1790759059';
     tr.defer=true;
     document.body.appendChild(tr);
 
     /* Share helper — Web Share API + clipboard fallback for Kakao. */
     var sh=document.createElement('script');
-    sh.src='/js/lpShare.js?v=1790753735';
+    sh.src='/js/lpShare.js?v=1790759059';
     sh.defer=true;
     document.body.appendChild(sh);
 
@@ -454,7 +454,7 @@ try{
     function lprLoadV1(){
         if(window.supabase){
             var rr2=document.createElement('script');
-            rr2.src='/js/lpRoom.js?v=1790753735';
+            rr2.src='/js/lpRoom.js?v=1790759059';
             rr2.defer=true;
             document.body.appendChild(rr2);
 
@@ -463,7 +463,7 @@ try{
                every online game can `LpHostCtl.install({role,room,...})`
                without per-game script tag bookkeeping. */
             var hc=document.createElement('script');
-            hc.src='/js/lpHostCtl.js?v=1790753735';
+            hc.src='/js/lpHostCtl.js?v=1790759059';
             hc.defer=true;
             document.body.appendChild(hc);
 
@@ -471,7 +471,7 @@ try{
                `lp-room-host-ready` / `lp-room-guest-ready` CustomEvents
                fired by lpRoom; auto-mounts without any per-game wiring. */
             var mp=document.createElement('script');
-            mp.src='/js/lpMultiplayer.js?v=1790753735';
+            mp.src='/js/lpMultiplayer.js?v=1790759059';
             mp.defer=true;
             document.body.appendChild(mp);
         }
@@ -484,7 +484,7 @@ try{
     function lprLoadInviteBtn(){
         if(window.supabase&&isGamePage&&!window.LpInviteButton){
             var lib=document.createElement('script');
-            lib.src='/js/lpInviteButton.js?v=1790753735';
+            lib.src='/js/lpInviteButton.js?v=1790759059';
             lib.defer=true;
             document.body.appendChild(lib);
         }
@@ -493,7 +493,7 @@ try{
     else if(lprMode.mode==='v2')lprLoadV2();
     else{
         /* 레지스트리 판정 — lpGames.js 하나만 먼저 */
-        var lg=lprAdd('/js/lpGames.js?v=1790753735',true);
+        var lg=lprAdd('/js/lpGames.js?v=1790759059',true);
         var lgDone=false;
         var lgGo=function(){if(lgDone)return;lgDone=true;
             var v='v1';try{v=window.LpGames.v(lprMode.gid)}catch(_){}
@@ -507,7 +507,7 @@ try{
        LpSocial.sendFriendRequest(). Bundle is ~8 KB gzipped. */
     if(window.supabase&&!window.LpSocial){
         var ls=document.createElement('script');
-        ls.src='/js/lpSocial.js?v=1790753735';
+        ls.src='/js/lpSocial.js?v=1790759059';
         ls.defer=true;
         document.body.appendChild(ls);
     }
@@ -518,7 +518,7 @@ try{
        index.html's own script. */
     if(window.supabase&&!window.LpActivity){
         var la=document.createElement('script');
-        la.src='/js/lpActivity.js?v=1790753735';
+        la.src='/js/lpActivity.js?v=1790759059';
         la.defer=true;
         la.onload=function(){
             if(isGamePage&&window.LpActivity){
@@ -533,7 +533,7 @@ try{
        for online-only friends. Requires Supabase. */
     if(window.supabase&&!window.LpPresence){
         var lp=document.createElement('script');
-        lp.src='/js/lpPresence.js?v=1790753735';
+        lp.src='/js/lpPresence.js?v=1790759059';
         lp.defer=true;
         document.body.appendChild(lp);
     }
@@ -543,7 +543,7 @@ try{
        sees their friend's invite. Requires Supabase + LpPresence. */
     if(window.supabase&&!window.LpInvite){
         var li=document.createElement('script');
-        li.src='/js/lpInvite.js?v=1790753735';
+        li.src='/js/lpInvite.js?v=1790759059';
         li.defer=true;
         document.body.appendChild(li);
     }
@@ -553,7 +553,7 @@ try{
        pages — a toast sliding in mid-race would be jarring. */
     if(window.supabase&&!isGamePage&&!window.LpNotify){
         var ln=document.createElement('script');
-        ln.src='/js/lpNotify.js?v=1790753735';
+        ln.src='/js/lpNotify.js?v=1790759059';
         ln.defer=true;
         document.body.appendChild(ln);
     }
@@ -568,7 +568,7 @@ try{
        i18n 이 있어 필요 없고, 불필요한 요청을 만들지 않기 위해서다. */
     if (isGamePage && !window.LpGameText) {
         var gt = document.createElement('script');
-        gt.src = '/js/lpGameText.js?v=1790753735';
+        gt.src = '/js/lpGameText.js?v=1790759059';
         gt.defer = true;
         document.body.appendChild(gt);
     }
