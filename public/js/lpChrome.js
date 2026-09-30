@@ -39,14 +39,17 @@
  *   - 게임별 숨김 규칙(body.cr-ingame .lp-fs-btn{display:none!important} 등)은 그대로 먹는다 —
  *     보이는 버튼이 하나도 없으면 손잡이도 뜨지 않는다.
  *
+ * 👥(.lp-rooms-btn, 2026-09-30) — Rooms v2 페이지에서 lpRoomsUI 가 붙이는 방 버튼. 독의 4번째 칸(⛶ → 🔊 → ? → 👥).
+ *   방 HUD 알약(.lpr-hud)은 우상단 따로 — 'lp-chrome-change'(playing) 를 듣고 점 하나로 접힌다.
  * API: LpChrome.setPlaying(v) · isPlaying() · expand() · collapse() · refresh() · state()
  */
 (function () {
     'use strict';
     if (window.LpChrome) return;
 
-    var isGamePage = /^\/games\//.test(location.pathname) || /^\/lobby\/?/.test(location.pathname);
-    var MEMBER_SEL = '.lp-fs-btn,.lp-bgm-btn,.lp-help-fab';
+    var isGamePage = /^\/games\//.test(location.pathname) || /^\/lobby\/?/.test(location.pathname) || /^\/r\//.test(location.pathname);
+    var MEMBER_SEL = '.lp-fs-btn,.lp-bgm-btn,.lp-help-fab,.lp-rooms-btn';   /* 👥 = Rooms v2 방 버튼(lpRoomsUI, v2 페이지만) */
+    var KIDS_SEL = ':scope>.lp-fs-btn,:scope>.lp-bgm-btn,:scope>.lp-help-fab,:scope>.lp-rooms-btn';
     var HOME_SEL = '#homeBtn,#homeLink,.floating-home,a.home';
     var PLAY_CLASSES = ['lp-chrome-play', 'lp-playing', 'cr-ingame', 'race-active'];
     var EXPAND_MS = 2500;      /* 펼친 독이 다시 접히기까지 */
@@ -92,13 +95,13 @@
         'transition:opacity .16s ease}' +
         '.lp-dock>*{pointer-events:auto}' +
         /* 게임 CSS 의 고정 좌표(top:56/102px, 인라인 top)를 독 안에서는 무효로 — 흐름이 자리를 정한다 */
-        '.lp-dock>.lp-fs-btn,.lp-dock>.lp-bgm-btn,.lp-dock>.lp-help-fab{position:relative!important;top:auto!important;' +
+        '.lp-dock>.lp-fs-btn,.lp-dock>.lp-bgm-btn,.lp-dock>.lp-help-fab,.lp-dock>.lp-rooms-btn{position:relative!important;top:auto!important;' +
         'left:auto!important;right:auto!important;bottom:auto!important;margin:0!important;z-index:auto!important;' +
         'width:38px;height:38px;flex:0 0 auto;box-sizing:border-box;' +
         'transition:opacity .16s ease,transform .16s ease,visibility 0s linear 0s,background .15s,border-color .15s}' +
-        '.lp-dock>.lp-fs-btn{order:1}.lp-dock>.lp-bgm-btn{order:2}.lp-dock>.lp-help-fab{order:3}' +
+        '.lp-dock>.lp-fs-btn{order:1}.lp-dock>.lp-bgm-btn{order:2}.lp-dock>.lp-help-fab{order:3}.lp-dock>.lp-rooms-btn{order:4}' +
         /* 접힘 — 자리(레이아웃)는 남기고 안 보이게. visibility:hidden 이라 포커스·탭도 안 된다 */
-        '.lp-dock.is-compact>.lp-fs-btn,.lp-dock.is-compact>.lp-bgm-btn,.lp-dock.is-compact>.lp-help-fab{' +
+        '.lp-dock.is-compact>.lp-fs-btn,.lp-dock.is-compact>.lp-bgm-btn,.lp-dock.is-compact>.lp-help-fab,.lp-dock.is-compact>.lp-rooms-btn{' +
         'visibility:hidden;opacity:0;transform:scale(.6);pointer-events:none;' +
         'transition:opacity .16s ease,transform .16s ease,visibility 0s linear .16s}' +
         '.lp-dock-handle{display:none;position:absolute;left:6px;top:5px;z-index:1;width:28px;height:28px;padding:0;margin:0;' +
@@ -264,7 +267,7 @@
         return false;
     }
     function dockCollides() {
-        var kids = dock.querySelectorAll(':scope>.lp-fs-btn,:scope>.lp-bgm-btn,:scope>.lp-help-fab');
+        var kids = dock.querySelectorAll(KIDS_SEL);
         for (var i = 0; i < kids.length; i++) {
             if (getComputedStyle(kids[i]).display === 'none') continue;
             /* 접힘 상태의 scale(.6) 이 섞이지 않게 변형 전 자리로 잰다(안 그러면 접힘↔펼침이 깜박인다) */
@@ -304,7 +307,7 @@
         adopt();
         placeTop();
 
-        var kids = dock.querySelectorAll(':scope>.lp-fs-btn,:scope>.lp-bgm-btn,:scope>.lp-help-fab'), any = false;
+        var kids = dock.querySelectorAll(KIDS_SEL), any = false;
         for (var i = 0; i < kids.length; i++) if (getComputedStyle(kids[i]).display !== 'none') { any = true; break; }
         dock.classList.toggle('is-empty', !any);
 
@@ -361,7 +364,7 @@
         armCollapse(); evaluate();
         /* 키보드로 펼쳤으면 사라진 손잡이 대신 첫 버튼으로 초점을 넘긴다 */
         if (hadFocus) {
-            var kids = dock.querySelectorAll(':scope>.lp-fs-btn,:scope>.lp-bgm-btn,:scope>.lp-help-fab'), first = null;
+            var kids = dock.querySelectorAll(KIDS_SEL), first = null;
             for (var i = 0; i < kids.length; i++) {
                 if (getComputedStyle(kids[i]).display === 'none') continue;
                 if (!first || getComputedStyle(kids[i]).order < getComputedStyle(first).order) first = kids[i];

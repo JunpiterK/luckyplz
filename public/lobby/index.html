@@ -11,8 +11,8 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <title>Lobby - Waiting for host | Lucky Please</title>
-    <meta name="description" content="Lucky Please multiplayer lobby — waiting for the host to pick a game.">
+    <title>Play together | Lucky Please</title>
+    <meta name="description" content="Lucky Please rooms — join by code or link, or open a room for any game.">
     <meta name="robots" content="noindex, nofollow">
     <link rel="canonical" href="https://luckyplz.com/lobby/">
     <link rel="manifest" href="/manifest.json">
@@ -40,10 +40,23 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 .lobby-tip{margin-top:18px;font-size:.78em;color:rgba(255,255,255,.4);line-height:1.6}
 .floating-home{position:fixed;bottom:14px;left:14px;z-index:1000;width:44px;height:44px;border-radius:50%;background:rgba(0,0,0,.5);border:2px solid rgba(0,217,255,.4);color:#fff;font-size:1.2em;display:flex;align-items:center;justify-content:center;text-decoration:none;backdrop-filter:blur(10px);transition:all .3s;box-shadow:0 4px 15px rgba(0,0,0,.3)}
 .floating-home:hover{background:rgba(0,217,255,.3);border-color:var(--secondary);transform:scale(1.1)}
+/* Rooms v2 허브 (2026-09-30) — 옛 v1 대기 카드는 ?room= 링크에서만 보인다 */
+.lobby-card{display:none}
+body.lp-legacy .lobby-card{display:block}
+body.lp-legacy #lprHub{display:none}
+#lprHub{max-width:520px;margin:0 auto;padding:calc(52px + env(safe-area-inset-top,0px)) 16px 32px;min-height:100vh}
+/* 허브에서는 좌상단 텍스트 홈 링크 하나만 — 동그란 🏠·⛶ 독은 옛 v1 대기 카드 전용 */
+body:not(.lp-legacy) .floating-home,body:not(.lp-legacy) .lp-dock{display:none!important}
+.lpr-homel{position:fixed;left:calc(8px + env(safe-area-inset-left,0px));top:calc(6px + env(safe-area-inset-top,0px));z-index:50;color:rgba(255,255,255,.85);text-decoration:none;font-weight:700;font-size:15px;min-height:44px;display:flex;align-items:center;padding:0 8px}
+body.lp-legacy .lpr-homel{display:none}
+#lprHub .lpr-wait{text-align:center;margin-top:30vh;font-weight:700;color:rgba(255,255,255,.8)}
     </style>
 </head>
 <body>
 <div id="bg"></div>
+
+<a href="/" id="homeLink" class="lpr-homel">← Home</a>
+<main id="lprHub"><div class="lpr-wait"><span class="lpr-spin"></span></div></main>
 
 <main class="lobby-card">
     <div class="lobby-icon" aria-hidden="true">🎲</div>
@@ -67,11 +80,49 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 <script src="/vendor/supabase.min.js"></script>
 <script src="/js/supabase-config.js?v=1790753735"></script>
 <script>
+/* ── 분기 (2026-09-30) ─────────────────────────────────────────
+   ?room=CODE (옛 v1 "먼저 모이기" 링크) → 아래 v1 대기 카드 + lpRoom 자동 참가 (예전 그대로)
+   그 밖(/lobby/ · /lobby/?r=CODE · /r/CODE#k=…) → Rooms v2 허브 — siteFooter 로더가 lpRoomsUI 를 싣는다 */
+window.__lpLegacyLobby=/[?&]room=[A-Z0-9]+/i.test(location.search)&&!/[?&]r=/.test(location.search);
+if(window.__lpLegacyLobby)document.body.classList.add('lp-legacy');
+(function(){
+    if(window.__lpLegacyLobby)return;
+    var hub=document.getElementById('lprHub');
+    var href0=location.href;
+    function go(){
+        var UI=window.LpRoomsUI;
+        if(!UI||!UI.hub||/stub/.test(UI.version||''))return false;
+        if(/^\/r\//.test(location.pathname)){
+            /* /r/CODE#k=… — 화면 없이 바로 찾아서 이동 */
+            hub.innerHTML='<div class="lpr-wait"><span class="lpr-spin"></span></div>';
+            UI.route(window.__lprHref||href0,hub).then(function(){
+                /* 이동하지 못했으면(없는 방·선택) 메시지 아래에 허브를 붙인다 */
+                setTimeout(function(){
+                    if(UI.room()||hub.querySelector('.lpr-hubt'))return;
+                    var w=hub.querySelector('.lpr-wait');if(w)w.remove();
+                    var box=document.createElement('div');hub.appendChild(box);UI.hub(box);
+                },1200);
+            });
+            return true;
+        }
+        UI.ready().then(function(room){
+            if(room||UI.room())return;
+            if(/[?&]r=/.test(location.search))return;   /* 참가 시트가 떠 있다 */
+            hub.innerHTML='';UI.hub(hub);
+        });
+        UI.on('left',function(){hub.innerHTML='';UI.hub(hub);});
+        return true;
+    }
+    var n=0;(function wait(){if(go())return;if(n++<120)setTimeout(wait,50);else hub.innerHTML='<div class="lpr-wait">⚠</div>';})();
+})();
+</script>
+<script>
 /* Locale-aware text. Lobby is intentionally minimal — only Korean and
    English are first-class; other locales fall through to English. The
    page is short-lived (host clicks a game and everyone navigates away),
    so an aggressive i18n investment isn't justified. */
 (function(){
+    if(!window.__lpLegacyLobby)return;
     const lang=(localStorage.getItem('luckyplz_lang')||navigator.language||'en').toLowerCase().split('-')[0];
     const ko=lang==='ko';
     const set=function(id,t){const el=document.getElementById(id);if(el)el.textContent=t};
@@ -107,7 +158,7 @@ function _waitForLpRoom(cb,tries){
     if(tries>60)return;
     setTimeout(function(){_waitForLpRoom(cb,tries+1)},100);
 }
-_waitForLpRoom(function(){
+if(window.__lpLegacyLobby)_waitForLpRoom(function(){
     const auto=window.LpRoom.detectAutoJoinParams();
     if(!auto.code){
         /* Direct visit with no room code — bounce home. The lobby has

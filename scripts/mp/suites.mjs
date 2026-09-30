@@ -44,6 +44,7 @@ export async function smoke({ E, ok, sleep }) {
 export { core } from './suite_core.mjs';
 export { spoof } from './suite_spoof.mjs';
 export { budget } from './suite_budget.mjs';
+export { ui } from './suite_ui.mjs';
 
 /* ── live: 실제 vendored supabase-js + 운영 Realtime (브로드캐스트만, REST 차단). 코드는 ZZ 로 시작하게 키를 골라 만든다 ── */
 export async function live({ E, ok, sleep }) {

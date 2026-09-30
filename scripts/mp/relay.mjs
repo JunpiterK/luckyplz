@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(HERE, '..', '..');
 const PUB = path.join(ROOT, 'public');
-const MIME = { '.js': 'application/javascript; charset=utf-8', '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const MIME = { '.mjs': 'application/javascript; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.svg': 'image/svg+xml' };
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 
 function wsAccept(key) { return crypto.createHash('sha1').update(key + GUID).digest('base64'); }
@@ -64,7 +64,10 @@ export async function startRelay(opt = {}) {
         const u = new URL(req.url, 'http://x');
         let p = decodeURIComponent(u.pathname);
         let file = null;
-        if (p === '/vendor/supabase.min.js') file = opt.live ? path.join(PUB, 'vendor', 'supabase.min.js') : path.join(HERE, 'shim.js');
+        /* U 스위트: 실제 페이지(홈·/lobby/·/r/)와 픽스처 게임 페이지를 서빙하는 훅 — 없으면 예전 그대로 */
+        const pf = api && api.pageFor ? api.pageFor(p) : null;
+        if (pf) file = pf;
+        else if (p === '/vendor/supabase.min.js') file = opt.live ? path.join(PUB, 'vendor', 'supabase.min.js') : path.join(HERE, 'shim.js');
         else if (p.startsWith('/__mp/')) file = path.join(HERE, p.slice(6));
         else if (/\.[a-z0-9]+$/i.test(p)) file = path.join(PUB, p);
         else file = path.join(HERE, 'page.html');
@@ -126,6 +129,7 @@ export async function startRelay(opt = {}) {
 
     const api = {
         dropIf: null,   /* (topic, event, payload, fromLabel, toLabel) => true 면 그 수신자에게 버림 */
+        pageFor: null,  /* (pathname) => 절대 파일 경로 | null — 페이지 매핑 훅(U 스위트) */
         port, base: 'http://127.0.0.1:' + port, stats: S, fault, part, rpcMocks, tap,
         setFault(o) { Object.assign(fault, { lat: [2, 12], loss: 0, dup: 0 }, o || {}); },
         partition(label, on = true) { on ? part.add(label) : part.delete(label); },
