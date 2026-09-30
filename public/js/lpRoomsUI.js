@@ -21,6 +21,7 @@
      onStart?(room): void | false;            // 방장 [시작 ▶] 직전. false 면 room.start() 를 부르지 않는다(게임이 직접 시작)
      bots?: { add(room): void; remove(room, pid: string): void };   // 있으면 [+ 봇]·봇 [✕] 표시(방장)
      addMe?: (room) => void;                  // 띠형: [✋ 내 이름 넣기] (게스트) — 게임이 이름 목록 반영
+     replay?: (cert) => void;                 // [+] 검증 시트의 [↻ 다시 보기] — 게임이 인증서로 연출을 다시 튼다
      hud?: boolean;                           // 기본 true — 플레이 중 알약 1개
      auto?: boolean;                          // 기본 true — ?r= 링크·새로고침 복귀 자동 참가
    }
@@ -96,7 +97,7 @@
             inapp: '브라우저로 여는 중…', otherTab: '다른 탭에서 열려 있어요', here: '여기서 계속', retry: '다시', finding: '방 찾는 중…',
             joining: '들어가는 중…', creating: '방 만드는 중…', recent: '최근 방', gather: '먼저 모이기', moving: '게임으로 이동…',
             fairN: '✓ 공정 · {n}명 확인', fairSeed: '✓ 공정 시드', solo: '🎲 혼자 뽑기', mismatch: '⚠ {n}명 화면 다름', certCopy: '결과 링크 복사',
-            fairT: '공정 추첨', sealHint: '모두 같은 그림이면 같은 방', paused: '일시정지', myTurn: '내 차례', pinFlood: 'PIN 시도 많음',
+            fairT: '공정 추첨', replay: '다시 보기', sealHint: '모두 같은 그림이면 같은 방', paused: '일시정지', myTurn: '내 차례', pinFlood: 'PIN 시도 많음',
             askIn: '{n} 입장 요청', players: '{n}명', addMe: '내 이름 넣기', choose: '고르기', taken: '이미 골랐어요', rooms: '같이 하기',
             shareTxt: '🎲 {g} 같이 해요 · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: '코드 입력자만',
             char: '캐릭터', color: '색', side: '자리', turnSec: '턴 시간', mode: '모드', seat: '자리'
@@ -120,7 +121,7 @@
             inapp: 'Opening in browser…', otherTab: 'Open in another tab', here: 'Continue here', retry: 'Retry', finding: 'Finding room…',
             joining: 'Joining…', creating: 'Creating…', recent: 'Recent', gather: 'Gather first', moving: 'Going to game…',
             fairN: '✓ Fair · {n} verified', fairSeed: '✓ Fair seed', solo: '🎲 Solo draw', mismatch: '⚠ {n} saw different', certCopy: 'Copy result link',
-            fairT: 'Fair draw', sealHint: 'Same pictures = same room', paused: 'Paused', myTurn: 'Your turn', pinFlood: 'Many PIN tries',
+            fairT: 'Fair draw', replay: 'Replay', sealHint: 'Same pictures = same room', paused: 'Paused', myTurn: 'Your turn', pinFlood: 'Many PIN tries',
             askIn: '{n} wants in', players: '{n}', addMe: 'Add me', choose: 'Pick', taken: 'Already taken', rooms: 'Play together',
             shareTxt: '🎲 Play {g} with me · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: 'code only',
             char: 'Character', color: 'Color', side: 'Side', turnSec: 'Turn time', mode: 'Mode', seat: 'Seat'
@@ -144,7 +145,7 @@
             inapp: 'ブラウザで開いています…', otherTab: '別のタブで開いています', here: 'ここで続ける', retry: '再試行', finding: 'ルーム検索中…',
             joining: '参加中…', creating: '作成中…', recent: '最近のルーム', gather: '先に集合', moving: 'ゲームへ移動…',
             fairN: '✓ 公正 · {n}人確認', fairSeed: '✓ 公正シード', solo: '🎲 ひとり抽選', mismatch: '⚠ {n}人の画面が違う', certCopy: '結果リンクをコピー',
-            fairT: '公正抽選', sealHint: '同じ絵なら同じルーム', paused: '一時停止中', myTurn: 'あなたの番', pinFlood: 'PIN 試行多数',
+            fairT: '公正抽選', replay: 'もう一度見る', sealHint: '同じ絵なら同じルーム', paused: '一時停止中', myTurn: 'あなたの番', pinFlood: 'PIN 試行多数',
             askIn: '{n} が参加希望', players: '{n}人', addMe: '自分を追加', choose: '選ぶ', taken: '選択済み', rooms: 'みんなで遊ぶ',
             shareTxt: '🎲 {g} 一緒にやろう · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: 'コード入力のみ',
             char: 'キャラ', color: '色', side: '手番', turnSec: '持ち時間', mode: 'モード', seat: '席'
@@ -168,7 +169,7 @@
             inapp: '正在用浏览器打开…', otherTab: '已在其他标签页打开', here: '在这里继续', retry: '重试', finding: '寻找房间…',
             joining: '加入中…', creating: '创建中…', recent: '最近房间', gather: '先集合', moving: '前往游戏…',
             fairN: '✓ 公平 · {n}人确认', fairSeed: '✓ 公平种子', solo: '🎲 单人抽签', mismatch: '⚠ {n}人画面不同', certCopy: '复制结果链接',
-            fairT: '公平抽签', sealHint: '图案相同=同一房间', paused: '已暂停', myTurn: '轮到你了', pinFlood: 'PIN 尝试过多',
+            fairT: '公平抽签', replay: '重播', sealHint: '图案相同=同一房间', paused: '已暂停', myTurn: '轮到你了', pinFlood: 'PIN 尝试过多',
             askIn: '{n} 请求加入', players: '{n}人', addMe: '加上我', choose: '选择', taken: '已被选', rooms: '一起玩',
             shareTxt: '🎲 一起玩{g} · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: '仅输入码时',
             char: '角色', color: '颜色', side: '执子', turnSec: '回合时间', mode: '模式', seat: '座位'
@@ -192,7 +193,7 @@
             inapp: 'Abriendo en el navegador…', otherTab: 'Abierta en otra pestaña', here: 'Seguir aquí', retry: 'Reintentar', finding: 'Buscando sala…',
             joining: 'Entrando…', creating: 'Creando…', recent: 'Recientes', gather: 'Reunirse primero', moving: 'Yendo al juego…',
             fairN: '✓ Justo · {n} verificados', fairSeed: '✓ Semilla justa', solo: '🎲 Sorteo solo', mismatch: '⚠ {n} vieron otro', certCopy: 'Copiar enlace',
-            fairT: 'Sorteo justo', sealHint: 'Mismos dibujos = misma sala', paused: 'En pausa', myTurn: 'Tu turno', pinFlood: 'Muchos intentos de PIN',
+            fairT: 'Sorteo justo', replay: 'Ver de nuevo', sealHint: 'Mismos dibujos = misma sala', paused: 'En pausa', myTurn: 'Tu turno', pinFlood: 'Muchos intentos de PIN',
             askIn: '{n} quiere entrar', players: '{n}', addMe: 'Añadirme', choose: 'Elegir', taken: 'Ya elegido', rooms: 'Jugar juntos',
             shareTxt: '🎲 Juguemos {g} · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: 'solo con código',
             char: 'Personaje', color: 'Color', side: 'Lado', turnSec: 'Tiempo', mode: 'Modo', seat: 'Asiento'
@@ -216,7 +217,7 @@
             inapp: 'Abrindo no navegador…', otherTab: 'Aberta em outra aba', here: 'Continuar aqui', retry: 'Tentar de novo', finding: 'Procurando sala…',
             joining: 'Entrando…', creating: 'Criando…', recent: 'Recentes', gather: 'Reunir primeiro', moving: 'Indo ao jogo…',
             fairN: '✓ Justo · {n} conferiram', fairSeed: '✓ Semente justa', solo: '🎲 Sorteio solo', mismatch: '⚠ {n} viram diferente', certCopy: 'Copiar link',
-            fairT: 'Sorteio justo', sealHint: 'Mesmos desenhos = mesma sala', paused: 'Pausado', myTurn: 'Sua vez', pinFlood: 'Muitas tentativas de PIN',
+            fairT: 'Sorteio justo', replay: 'Ver de novo', sealHint: 'Mesmos desenhos = mesma sala', paused: 'Pausado', myTurn: 'Sua vez', pinFlood: 'Muitas tentativas de PIN',
             askIn: '{n} quer entrar', players: '{n}', addMe: 'Me incluir', choose: 'Escolher', taken: 'Já escolhido', rooms: 'Jogar juntos',
             shareTxt: '🎲 Bora jogar {g} · {c}', pinOnly: 'PIN {p}', inviteOnlyHint: 'só com código',
             char: 'Personagem', color: 'Cor', side: 'Lado', turnSec: 'Tempo', mode: 'Modo', seat: 'Lugar'
@@ -432,6 +433,7 @@
         '.lpr-bigcode{font:900 30px "Orbitron",ui-monospace,monospace;letter-spacing:.08em;color:#00D9FF;text-align:center;margin:2px 0}' +
         '.lpr-link{display:flex;gap:6px}.lpr-link .lpr-in{font-size:13px;font-weight:400;min-height:44px}' +
         '.lpr-pause{position:fixed;inset:0;z-index:9150;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:rgba(3,3,12,.66);font-weight:900;font-size:22px}' +
+        '.lpr-m .lpr-code{min-height:0;line-height:1;align-self:center;padding:0 4px}' +
         '.lpr-hubt{font:900 22px "Noto Sans KR",system-ui,sans-serif;text-align:center;margin:6px 0 10px}' +
         '.lpr-rect{margin:14px 0 4px}' +
         '.lpr-sr{position:absolute!important;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}' +
@@ -601,16 +603,18 @@
         return G.LpRooms.join({ code: code, inv: o.inv || invFor(code), pin: o.pin, want: o.want, steal: o.steal,
             onStatus: function (s) { if (s.st === 'pending') ui.msg('✋ ' + t('pending')); else if (s.st === 'probing') ui.msg(t('finding')); else if (s.st === 'joining') ui.msg(t('joining')); }
         }).then(function (room) {
-            ui.done && ui.done();
             var pg = pageGid();
             if (pg && room.gameId !== pg && pg !== 'lobby' && G.LpGames && G.LpGames.url(room.gameId, room.code)) {
+                ui.done && ui.done();
                 toast(t('moving')); setTimeout(function () { location.assign(G.LpGames.url(room.gameId, room.code)); }, 250);
                 return room;
             }
             if (pg === 'lobby' && room.gameId !== 'lobby' && G.LpGames && G.LpGames.url(room.gameId, room.code)) {
+                ui.done && ui.done();
                 location.assign(G.LpGames.url(room.gameId, room.code)); return room;
             }
             bind(room);
+            ui.done && ui.done();
             return room;
         }, function (e) {
             var r = e && e.reason || 'error';
@@ -626,6 +630,7 @@
             }
             if (r === 'inapp') {
                 ui.msg(t('inapp'));
+                ui.action && ui.action(t('here'), function () { try { if (G.LpInApp && G.LpInApp.dismiss) G.LpInApp.dismiss(); } catch (_) {} joinHere(code, o, ui); });
                 var retry = function () { if (D.visibilityState === 'visible') { D.removeEventListener('visibilitychange', retry); setTimeout(function () { joinHere(code, o, ui); }, 400); } };
                 D.addEventListener('visibilitychange', retry);
                 setTimeout(function () { D.removeEventListener('visibilitychange', retry); if (!cur) joinHere(code, o, ui); }, 9000);
@@ -690,7 +695,6 @@
             }
             var pg = pageGid();
             if (r.kind === 'rooms' && o.here !== false && pg && (r.gameId === pg || (pg === 'lobby' && r.gameId === 'lobby'))) {
-                ui.done && ui.done();
                 return joinHere(r.code, { inv: p && p.inv }, ui);
             }
             ui.msg(t('moving'));
@@ -729,8 +733,8 @@
         var ui = o.ui;
         if (ui) { ui.busy(true); ui.msg(t('creating')); }
         return G.LpRooms.create({ gameId: gid, pinReq: !!o.pinReq }).then(function (room) {
-            if (ui && ui.done) ui.done();
             bind(room);
+            if (ui && ui.done) ui.done();
             return room;
         }, function (e) {
             var r = e && e.reason || 'error';
@@ -756,7 +760,7 @@
             body.appendChild(prof.el);
             var row = E('div', 'lpr-row'); row.appendChild(pinB); row.appendChild(go); body.appendChild(row); body.appendChild(msg);
             var jr = E('div', 'lpr-row'); jr.appendChild(B('ghost', '🔑 ' + t('joinCode'), function () { s.close(); openJoin(); })); body.appendChild(jr);
-            var s = sheet({ title: gname(gid), icon: iconEl(gid), body: body, onClose: function () { res(null); } });
+            var s = sheet({ title: gname(gid), icon: iconEl(gid), body: body, onClose: function () { res(cur); } });
             ui.done = function () { s.close(); };
         });
     }
@@ -803,7 +807,7 @@
         }
         function paint() {
             grid.innerHTML = '';
-            if (o.withGather) grid.appendChild(tile('lobby', '👥 ' + gname('lobby')));
+            if (o.withGather && gameList(true).length) grid.appendChild(tile('lobby', '👥 ' + gname('lobby')));
             list.filter(function (e) { return e.cat === sel; }).forEach(function (e) { grid.appendChild(tile(e.id)); });
         }
         paint();
@@ -1290,6 +1294,7 @@
             body.appendChild(l);
             var info = E('div', 'lpr-mut', '#' + cert.round + ' · seed ' + String(cert.hs || cert.C || '').slice(0, 8) + (cert.stats ? ' · ' + cert.stats.draws + '/' + (cert.stats.aborts || 0) : ''));
             info.style.textAlign = 'center'; info.style.fontFamily = 'ui-monospace,monospace'; body.appendChild(info);
+            if (typeof CFG.replay === 'function') body.appendChild(B('wide', '↻ ' + t('replay'), function () { closeSheets(); try { CFG.replay(cert); } catch (_) {} }));
             if (G.LpFair && G.LpFair.cert) body.appendChild(B('pri wide', '🔗 ' + t('certCopy'), function () {
                 G.LpFair.cert.encode(cert).then(function (s) { var u = location.origin + (G.LpGames && G.LpGames.path(cert.g) || location.pathname) + '#cert=' + s; return copyText(u); }).then(function (ok) { toast(ok ? t('copied') : '✗'); });
             }));
@@ -1413,7 +1418,15 @@
         }));
         roomBtnState();
         onPhase(room.state() ? room.state().phase : 'lobby');
-        var iv = setInterval(function () { if (cur !== room) { clearInterval(iv); return; } if (H.hud && D.visibilityState !== 'hidden') H.hud.refresh(); }, 700);
+        var anyShown = false;
+        var iv = setInterval(function () {
+            if (cur !== room) { clearInterval(iv); return; }
+            if (D.visibilityState === 'hidden') return;
+            if (H.hud) H.hud.refresh();
+            /* 20초 넘게 시작이 막히면 [준비한 사람만 시작] 을 띄우려고 한 번 다시 그린다 */
+            var late = !!(room.isHost && blockSince && Date.now() - blockSince > 20000);
+            if (late !== anyShown) { anyShown = late; if (H.lobby) H.lobby.refresh(); }
+        }, 700);
         offs.push(function () { clearInterval(iv); });
         emit('room', room);
     }
@@ -1423,6 +1436,7 @@
     function roomBtnState() { if (roomBtn) { roomBtn.classList.toggle('in', !!cur); roomBtn.setAttribute('aria-label', cur ? fmtCode(cur.code) : t('rooms')); } }
     function ensureRoomBtn() {
         if (roomBtn || !/^\/games\//.test(location.pathname)) return;
+        var e0 = reg(pageGid()); if (!e0 || !e0.mp) return;          /* 멀티 없는 게임엔 👥 없음 */
         roomBtn = E('button', 'lp-rooms-btn', '👥'); roomBtn.type = 'button'; roomBtn.title = t('rooms');
         roomBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); if (cur) openRoom(cur); else entrySheet(); });
         roomBtnState();
@@ -1528,7 +1542,7 @@
                     prof.input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); go.click(); } });
                     body.appendChild(go); body.appendChild(msg); body.appendChild(extra);
                     var ui = sheetUI(msg, go, extra);
-                    var s = sheet({ title: gname(pg === 'lobby' ? 'lobby' : pg), icon: iconEl(pg), body: body, dismiss: false, onClose: function () { res(null); } });
+                    var s = sheet({ title: gname(pg === 'lobby' ? 'lobby' : pg), icon: iconEl(pg), body: body, dismiss: false, onClose: function () { res(cur); } });
                     prof.input.setAttribute('data-focus', '');
                 });
             }
@@ -1543,7 +1557,13 @@
 
     G.LpRoomsUI = {
         version: VER,
-        config: function (o) { o = o || {}; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) CFG[k] = o[k]; if (cur) { var ph = cur.state() && cur.state().phase; if (ph === 'lobby') { if (H.lobby && layout(cur) !== 'full') H.lobby.remove(); if (H.strip && layout(cur) !== 'strip') H.strip.remove(); onPhase(ph); } } },
+        config: function (o) {
+            o = o || {}; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) CFG[k] = o[k];
+            if (!cur) return;
+            var ph = cur.state() && cur.state().phase;
+            if (H.strip && (layout(cur) !== 'strip' || (o.stripEl && H.strip.el.classList.contains('fixed')))) H.strip.remove();
+            if (ph === 'lobby') { if (H.lobby && layout(cur) !== 'full') H.lobby.remove(); onPhase(ph); }
+        },
         ready: function () { return boot(); },
         room: function () { return cur; },
         on: on,

@@ -39,6 +39,8 @@
  *   - 게임별 숨김 규칙(body.cr-ingame .lp-fs-btn{display:none!important} 등)은 그대로 먹는다 —
  *     보이는 버튼이 하나도 없으면 손잡이도 뜨지 않는다.
  *
+ * 👥(.lp-rooms-btn, 2026-09-30) — Rooms v2 페이지에서 lpRoomsUI 가 붙이는 방 버튼. 독의 4번째 칸(⛶ → 🔊 → ? → 👥).
+ *   방 HUD 알약(.lpr-hud)은 우상단 따로 — 'lp-chrome-change'(playing) 를 듣고 점 하나로 접힌다.
  * API: LpChrome.setPlaying(v) · isPlaying() · expand() · collapse() · refresh() · state()
  */
 (function () {
