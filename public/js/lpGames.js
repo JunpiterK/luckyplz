@@ -94,12 +94,12 @@
 
     var LP_GAMES = [
         /* 추첨(draw) — §6.1.8 */
-        g('roulette', 'random', mp('draw', 'v1', { v1: true })),
+        g('roulette', 'random', mp('draw', 'v2', { v1: true })),
         g('car-racing', 'random', mp('draw', 'v1', { v1: true, adapter: 'draw-tick', migr: false })),
         g('glory-racing', 'random', mp('draw', 'off', { adapter: 'draw-tick', migr: false })),
-        g('dice', 'random', mp('draw', 'off')),
-        g('ladder', 'random', mp('draw', 'v1', { v1: true })),
-        g('team', 'random', mp('draw', 'v1', { v1: true })),
+        g('dice', 'random', mp('draw', 'v2')),
+        g('ladder', 'random', mp('draw', 'v2', { v1: true })),
+        g('team', 'random', mp('draw', 'v2', { v1: true })),
         g('balloon', 'random', mp('turn', 'off', { seats: [2, 8], late: 'nextRound', migr: false, hidden: true })),
         g('bingo', 'draw', mp('draw', 'v1', { v1: true, adapter: 'draw-session', migr: false })),
         g('lotto', 'draw', mp('draw', 'v1', { v1: true })),
