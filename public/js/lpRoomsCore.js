@@ -80,7 +80,7 @@
           //  | 'inapp'(인앱 브라우저 탈출 예정 — 탈출 뒤 다시) | 'network' | 'error'      [+]
           //  create 거절: 'bad_game'(레지스트리에 없음) | 'collision'(5회 충돌) | 'network' | 'inapp'  [+]
           //  'pending'(승인 대기)은 거절이 아니다 — onStatus({st:'pending'}) 후 방장 결정까지 promise 유지(최대 3분)
-     resolve(input:string): Promise<{kind:'rooms'|'rooms-v1'|'qlive'|'szx'|'choice'|'none', code:string,
+     resolve(input:string, o?:{v2Only?:boolean, ms?:number} (*[+] v2 방인지만 빨리 — 옛 ?room= 링크 판별용*)): Promise<{kind:'rooms'|'rooms-v1'|'qlive'|'szx'|'choice'|'none', code:string,
              gameId?:string, url?:string, hello?:object, options?:{kind:string, url:string}[] (*[+] kind='choice'*)}>;
      parseInvite(hrefOrText:string): {code:string, inv?:{fp:string, tok?:string}, hint?:'v2'|'v1'|'qlive'|'szx'} | null;
      resume(): Promise<Room|null>;
@@ -2297,11 +2297,11 @@
         return null;
     }
     function withTimeout(p, ms, v) { return Promise.race([p, sleep(ms).then(function () { return v; })]); }
-    async function probeV2(code, inv) {
+    async function probeV2(code, inv, ms) {
         var T = await openTopic(PFX + code);
         try {
             if (!(await withTimeout(T.ready, 3000, false))) return null;
-            var r = await probeHello(T, code, inv, 3500);
+            var r = await probeHello(T, code, inv, ms || 3500);
             if (r.conflict) return { conflict: true };
             return r.h ? r : null;
         } finally { T.close(); }
@@ -2358,10 +2358,22 @@
         return rawProbe('szx-race-' + code, ms, function (ch, end) { ch.on('broadcast', { event: 'st' }, function () { end(true); }); return null; }).then(function (v) { return !!v; });
     }
     var V1_GAMES = ['roulette', 'ladder', 'team', 'lotto', 'bingo', 'car-racing', 'quiz', 'ludo', 'yut', 'reversi', 'gummy', 'prism-hex', 'mahjong-tw'];
-    async function resolve(input) {
+    /* o(선택) [+ 2026-10-01]: {v2Only:true, ms?:number} — v2(lpr-*) 방인지 만 빨리 확인(레거시 v1·퀴즈·SZX 탐색 생략, 기본 2초).
+       로더가 옛 ?room= 링크를 받았을 때 "살아 있는 v2 방 코드인가"를 먼저 물어볼 수 있게: kind 'rooms'(+url) 아니면 'none'. */
+    async function resolve(input, o) {
+        o = o || {};
         var p = parseInvite(input);
         if (!p) return { kind: 'none', code: '' };
         var code = p.code;
+        if (o.v2Only) {
+            if (!(CODE_RE.test(code) && hasLetter(code))) return { kind: 'none', code: code };
+            await ready();
+            var r2 = null; try { r2 = await probeV2(code, p.inv, Math.max(600, Math.min(4000, o.ms || 2000))); } catch (_) { r2 = null; }
+            if (!r2 || r2.conflict || !r2.h) return { kind: 'none', code: code, reason: r2 && r2.conflict ? 'host_conflict' : undefined };
+            var u2 = urlFor(r2.h.gameId, code); if (!u2) return { kind: 'none', code: code };
+            if (p.inv) u2 += '#k=' + p.inv.fp + (p.inv.tok ? '.' + p.inv.tok : '');
+            return { kind: 'rooms', code: code, gameId: r2.h.gameId, url: u2, hello: { gameId: r2.h.gameId, kind: r2.h.kind, phase: r2.h.phase, count: r2.h.count, max: r2.h.max, lock: r2.h.lock, pinReq: r2.h.pinReq, appr: r2.h.appr } };
+        }
         if (p.hint === 'qlive') return { kind: 'qlive', code: code, gameId: 'quiz', url: '/games/quiz/?c=' + code };
         if (p.hint === 'szx') return { kind: 'szx', code: code, gameId: 'dodge', url: '/games/dodge/?race=' + code };
         await ready();
