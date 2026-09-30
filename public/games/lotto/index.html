@@ -2819,7 +2819,7 @@ function init(){
             return balls.find(x=>!x.drawn&&!x.extracting&&x.label===b[0]&&(p.same?true:(!!x.isBonus===!!b[1])))||null;
         }
         function colorOf(p,b){const i=(b[1]&&!p.same?p.bonus:p.main).indexOf(b[0]);return ((b[1]&&!p.same?p.bc:p.mc)||[])[i]||'#FFE66D';}
-        function stop(){if(RUN){clearInterval(RUN.iv);RUN=null;}LOT.tgt=null;}
+        function stop(){if(RUN){clearTimeout(RUN.iv);RUN=null;}LOT.tgt=null;}
         /* 결과를 향해 달리는 무대 — 방장·게스트·인증서 다시 보기 공용 */
         function run(p,sets,st,clock,o){
             stop();
@@ -2841,13 +2841,15 @@ function init(){
             const cs=document.querySelector('.ls-section.ls-controls');if(cs&&(p.speed|0)!==0)cs.classList.add('collapsed');
             try{if(window.LpWakeLock)LpWakeLock.acquire('lotto');}catch(_){}
             RUN={p,sets,cfg,ev:sched(p,sets),i:0,st,clock,o,ball:null};
-            RUN.iv=setInterval(tick,40);tick();
+            tick();
         }
         function tick(){
             const R=RUN;if(!R)return;
             const now=R.clock();
             while(RUN===R&&R.i<R.ev.length&&R.st+R.ev[R.i].t<=now){const e=R.ev[R.i++];try{fire(R,e,now-(R.st+e.t)>900);}catch(err){console.warn('[lotto v2]',e.k,err);}}
-            if(RUN===R&&R.i>=R.ev.length)stop();
+            if(RUN===R&&R.i>=R.ev.length){stop();return;}
+            /* 다음 사건 시각에 정확히 깨어난다(폴링 간격만큼 늦지 않게) — 백그라운드 스로틀은 늦게 깨도 일정표가 따라잡는다 */
+            if(RUN===R){clearTimeout(R.iv);const nx=R.ev[R.i];R.iv=setTimeout(tick,Math.max(0,Math.min(250,R.st+nx.t-R.clock())));}
         }
         function fire(R,e,late){
             const p=R.p;

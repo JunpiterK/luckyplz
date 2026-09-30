@@ -310,6 +310,11 @@
 body.race-active .lp-sw-fab,body.race-active #homeBtn,body.race-active .floating-home,
 body.race-active .lp-help-fab,body.race-active .lp-fs-btn,body.race-active .lp-bgm-btn,
 body.race-active #soundToggle{display:none!important}
+
+.lp-v2-badge{display:block;margin:6px auto 10px;width:max-content;max-width:100%;padding:6px 14px;border-radius:999px;font-weight:800;font-size:.85em;background:rgba(76,217,100,.12);border:1px solid rgba(76,217,100,.45);color:#8ff0a4;text-align:center}
+.lp-v2-badge.bad,.lp-v2-badge.lpf-mismatch{background:rgba(255,77,77,.12);border-color:rgba(255,77,77,.5);color:#ff9a9a}
+.lp-v2-badge[hidden]{display:none}
+#setupScreen.lp-v2-ro input,#setupScreen.lp-v2-ro .btn-remove-player,#setupScreen.lp-v2-ro #addPlayerBtn{pointer-events:none;opacity:.75}
 </style>
 </head>
 <body>
@@ -855,6 +860,12 @@ function lerp(a,b,t){return a+(b-a)*t}
 function clamp(v,min,max){return Math.min(Math.max(v,min),max)}
 function randomRange(min,max){return min+Math.random()*(max-min)}
 function randomInt(min,max){return Math.floor(randomRange(min,max+1))}
+/* Rooms v2 (2026-09-30): 레이스 결과에 영향을 주는 난수(트랙·구역·스탯·싸움·아이템·BRG)는 전부 _grR() —
+   방에서는 공정 시드 LpFair.rng(seed,'sim'), 혼자 하기는 Math.random 그대로. 그림(BRFX·BRFIELD)은 그대로 둔다 */
+let _grSimRng=null;
+function _grR(){return _grSimRng?_grSimRng():Math.random()}
+function _grRR(min,max){return min+_grR()*(max-min)}
+function _grRI(min,max){return Math.floor(_grRR(min,max+1))}
 function distance(x1,y1,x2,y2){return Math.sqrt((x2-x1)**2+(y2-y1)**2)}
 function catmullRom(p0,p1,p2,p3,t){const t2=t*t,t3=t2*t;return{x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)}}
 function computeLayout(){
@@ -865,7 +876,7 @@ function computeLayout(){
 /* DPR-aware sizing: backing store is innerWidth/Height * devicePixelRatio so
    characters/course stay crisp on retina phones; the 2D context is scaled by
    DPR once so all draw code keeps using CSS-pixel (WIDTH/HEIGHT) coordinates. */
-function fitCanvas(){WIDTH=window.innerWidth;HEIGHT=window.innerHeight;DPR=Math.min(window.devicePixelRatio||1,(window.BRQ?BRQ.cap():2.5));canvas.style.width=WIDTH+'px';canvas.style.height=HEIGHT+'px';canvas.width=Math.max(1,Math.round(WIDTH*DPR));canvas.height=Math.max(1,Math.round(HEIGHT*DPR));ctx.setTransform(DPR,0,0,DPR,0,0);computeLayout();if(window.BRFX)BRFX.invalidate();}
+function fitCanvas(){if(window.__grv2&&__grv2.gview){__grv2.fitGuest();return;}WIDTH=window.innerWidth;HEIGHT=window.innerHeight;DPR=Math.min(window.devicePixelRatio||1,(window.BRQ?BRQ.cap():2.5));canvas.style.width=WIDTH+'px';canvas.style.height=HEIGHT+'px';canvas.width=Math.max(1,Math.round(WIDTH*DPR));canvas.height=Math.max(1,Math.round(HEIGHT*DPR));ctx.setTransform(DPR,0,0,DPR,0,0);computeLayout();if(window.BRFX)BRFX.invalidate();}
 /* A phone held vertically (shorter side < 560 AND taller than wide). The live
    race needs landscape; the setup/result screens do not. */
 function isPortraitPhone(){return Math.min(window.innerWidth,window.innerHeight)<560 && window.innerHeight>window.innerWidth;}
@@ -879,7 +890,7 @@ resize();
 function isNearFinish(player){return player.progress >= track.length - 1 - FINISH_NO_FIGHT_ZONE;}
 function canFight(player){if(player.finished) return false;if(isNearFinish(player)) return false;if(isOnIce(player.progress)) return false;if(player.state === PlayerState.ATTACKING) return false;if(player.state === PlayerState.ICE_FALLEN) return false;if(player.fightTimer > 0) return false;if(player.shieldActive || player.starActive) return false;return true;}
 function isFightNearby(x,y,threshold){return fightPairs.some(pair=>{const mx=(pair.player1.x+pair.player2.x)/2,my=(pair.player1.y+pair.player2.y)/2;return distance(x,y,mx,my)<threshold})}
-function createStars(){const c=document.getElementById('starsContainer');c.innerHTML='';for(let i=0;i<100;i++){const s=document.createElement('div');s.className='star';s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';s.style.animationDelay=Math.random()*2+'s';s.style.opacity=Math.random()*0.5+0.3;c.appendChild(s)}}
+function createStars(){const c=document.getElementById('starsContainer');c.innerHTML='';for(let i=0;i<100;i++){const s=document.createElement('div');s.className='star';s.style.left=_grR()*100+'%';s.style.top=_grR()*100+'%';s.style.animationDelay=_grR()*2+'s';s.style.opacity=_grR()*0.5+0.3;c.appendChild(s)}}
 function generateSnakeTrack(){track=[];const rows=5,usableHeight=HEIGHT-MARGIN*2,rowHeight=usableHeight/(rows-1);let points=[];for(let row=0;row<rows;row++){const y=MARGIN+row*rowHeight,goingRight=row%2===0;if(goingRight){points.push({x:MARGIN,y:y});points.push({x:WIDTH-RIGHT_MARGIN,y:y})}else{points.push({x:WIDTH-RIGHT_MARGIN,y:y});points.push({x:MARGIN,y:y})}}const segments=250;for(let i=0;i<segments;i++){const t=i/(segments-1),totalLength=points.length-1,segment=Math.min(Math.floor(t*totalLength),totalLength-1),localT=(t*totalLength)-segment;const p0=points[Math.max(0,segment-1)],p1=points[segment],p2=points[Math.min(totalLength,segment+1)],p3=points[Math.min(totalLength,segment+2)];const point=catmullRom(p0,p1,p2,p3,localT);point.x=clamp(point.x,MARGIN,WIDTH-RIGHT_MARGIN);point.y=clamp(point.y,MARGIN,HEIGHT-MARGIN);track.push({x:point.x,y:point.y,index:i})}generateZones();generateTrackObstacles();generateItemBoxes();generateScenery()}
 
 /* ===== [FIX v3.0] 존 배치 - 교대 균등 배치 (Hill/Water/Mud 각 2회) ===== */
@@ -912,7 +923,7 @@ function generateZones(){
                 break;
             case 'hill':
                 if(!isOverlappingAnyZone(start, start+hillLength))
-                    hillZones.push({start:start, end:start+hillLength, height:35+Math.random()*15});
+                    hillZones.push({start:start, end:start+hillLength, height:35+_grR()*15});
                 break;
             case 'mud':
                 if(isOverlappingAnyZone(start, start+mudLength)){
@@ -951,13 +962,13 @@ function generateZones(){
 function isOverlappingWater(start,end){return deepWaterZones.some(z=>start<z.end+20&&end>z.start-20)}
 function isOverlappingAnyZone(start,end){return isOverlappingWater(start,end)||hillZones.some(z=>start<z.end+15&&end>z.start-15)||mudZones.some(z=>start<z.end+15&&end>z.start-15)||iceZones.some(z=>start<z.end+15&&end>z.start-15)||boostZones.some(z=>start<z.end+15&&end>z.start-15)}
 
-function generateTrackObstacles(){trackObstacles=[];const numObstacles=25;for(let i=0;i<numObstacles;i++){const trackPos=Math.floor(35+(i/numObstacles)*(track.length-70));if(isOverlappingAnyZone(trackPos-3,trackPos+3))continue;const types=['rock','cone','barrel','hurdle','hurdle','tire'];const type=types[randomInt(0,types.length-1)];trackObstacles.push({trackPos:trackPos,type:type,size:type==='hurdle'?40:22+Math.random()*20,offsetX:(Math.random()-0.5)*70,offsetY:(Math.random()-0.5)*15,rotation:Math.random()*Math.PI*2})}}
+function generateTrackObstacles(){trackObstacles=[];const numObstacles=25;for(let i=0;i<numObstacles;i++){const trackPos=Math.floor(35+(i/numObstacles)*(track.length-70));if(isOverlappingAnyZone(trackPos-3,trackPos+3))continue;const types=['rock','cone','barrel','hurdle','hurdle','tire'];const type=types[_grRI(0,types.length-1)];trackObstacles.push({trackPos:trackPos,type:type,size:type==='hurdle'?40:22+_grR()*20,offsetX:(_grR()-0.5)*70,offsetY:(_grR()-0.5)*15,rotation:_grR()*Math.PI*2})}}
 
-function generateItemBoxes(){if(window.BRG&&BRG.layoutBoxes){itemBoxes=BRG.layoutBoxes();return}itemBoxes=[];const count=8;for(let i=0;i<count;i++){const pos=0.08+i*(0.84/(count-1));const trackPos=Math.floor(track.length*pos)+(Math.floor(Math.random()*10)-5);itemBoxes.push({trackPos:clamp(trackPos,20,track.length-20),offsetX:(Math.random()-0.5)*50,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2})}}
+function generateItemBoxes(){if(window.BRG&&BRG.layoutBoxes){itemBoxes=BRG.layoutBoxes();return}itemBoxes=[];const count=8;for(let i=0;i<count;i++){const pos=0.08+i*(0.84/(count-1));const trackPos=Math.floor(track.length*pos)+(Math.floor(_grR()*10)-5);itemBoxes.push({trackPos:clamp(trackPos,20,track.length-20),offsetX:(_grR()-0.5)*50,active:true,respawnTimer:0,floatPhase:_grR()*Math.PI*2})}}
 
-function generateScenery(){sceneryObjects=[];for(let i=0;i<track.length;i+=35){if(Math.random()>0.4){const point=track[i],side=Math.random()>0.5?1:-1,dist=TRACK_WIDTH/2+50+Math.random()*100;let perpX=0,perpY=side;if(i<track.length-1){const dx=track[i+1].x-track[i].x,dy=track[i+1].y-track[i].y,len=Math.sqrt(dx*dx+dy*dy);if(len>0){perpX=-dy/len*side;perpY=dx/len*side}}const objX=point.x+perpX*dist,objY=point.y+perpY*dist;if(objX>40&&objX<WIDTH-RIGHT_MARGIN+20&&objY>40&&objY<HEIGHT-40){const types=['tree','pine','rock','bush','flower','mushroom'];sceneryObjects.push({type:types[randomInt(0,types.length-1)],x:objX,y:objY,scale:0.5+Math.random()*0.5,variation:randomInt(0,2)})}}}}
-function createPlayer(id,name,displayNumber){const mudBehaviors=['slip','slow','pass'];return{id:id,displayNumber:displayNumber,name:name||T('runner',{n:displayNumber}),progress:0,speed:0.24+Math.random()*0.08,baseSpeed:0.24+Math.random()*0.08,x:0,y:0,laneOffset:(Math.random()-0.5)*70*DRAW_SCALE,targetLaneOffset:(Math.random()-0.5)*70*DRAW_SCALE,laneChangeTimer:0,laneChangeSpeed:45+Math.random()*35,dodgeTimer:0,finished:false,finishTime:null,finishRank:0,state:PlayerState.RUNNING,stateTimer:0,animation:0,jumpHeight:0,swimAnim:0,attackType:null,attackFrame:0,attackTarget:null,fightPartner:null,currentAction:0,actionPhase:0,knockdownAngle:0,knockdownProgress:0,skinTone:skinTones[randomInt(0,skinTones.length-1)],hairColor:hairColors[randomInt(0,hairColors.length-1)],shirtColor:shirtColors[id%shirtColors.length],pantsColor:pantsColors[randomInt(0,pantsColors.length-1)],hasHat:Math.random()>0.5,hatStyle:randomInt(0,2),hatColor:shirtColors[randomInt(0,shirtColors.length-1)],facingRight:true,inDeepWater:false,fightTimer:0,fightCount:0,winnerBoostTimer:0,mudBehavior:mudBehaviors[randomInt(0,2)],inMudZone:false,onIce:false,iceSlipChecked:false,iceVelocity:0,windResistance:1.0,catchUpBoost:1.0,isLeader:false,leaderDelayFactor:1.0,shakingEffect:0,hitFlash:0,movementStyle:Math.random(),avoidingObstacle:false,heldItem:null,itemTimer:0,shieldActive:false,shieldTimer:0,boostActive:false,boostTimer:0,starActive:false,starTimer:0,stunTimer:0,slowTimer:0,trail:[],lastTrailTime:0,expression:'normal',expressionTimer:0}}
-function initGame(playerCount,time,speed,freq,names){raceTime=time;remainingTime=time;gameSpeed=speed;eventFrequency=freq;players=[];finishOrder=[];hitEffects=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];itemPopups=[];fightPairs=[];commentaryQueue=[];currentCommentary=null;raceElapsedTime=0;totalFightsRequired=1+randomInt(0,2)+Math.floor(eventFrequency/2);fightsOccurred=0;generateSnakeTrack();const numbers=Array.from({length:playerCount},(_,i)=>i+1);for(let i=numbers.length-1;i>0;i--){const j=randomInt(0,i);[numbers[i],numbers[j]]=[numbers[j],numbers[i]]}for(let i=0;i<playerCount;i++){const player=createPlayer(i,names[i],numbers[i]);player.progress=-6-i*3.5;players.push(player)}document.getElementById('totalCount').textContent=playerCount;document.getElementById('finishedCount').textContent='0';document.getElementById('centerTimer').style.display='block';updateCenterTimer()}
+function generateScenery(){sceneryObjects=[];for(let i=0;i<track.length;i+=35){if(_grR()>0.4){const point=track[i],side=_grR()>0.5?1:-1,dist=TRACK_WIDTH/2+50+_grR()*100;let perpX=0,perpY=side;if(i<track.length-1){const dx=track[i+1].x-track[i].x,dy=track[i+1].y-track[i].y,len=Math.sqrt(dx*dx+dy*dy);if(len>0){perpX=-dy/len*side;perpY=dx/len*side}}const objX=point.x+perpX*dist,objY=point.y+perpY*dist;if(objX>40&&objX<WIDTH-RIGHT_MARGIN+20&&objY>40&&objY<HEIGHT-40){const types=['tree','pine','rock','bush','flower','mushroom'];sceneryObjects.push({type:types[_grRI(0,types.length-1)],x:objX,y:objY,scale:0.5+_grR()*0.5,variation:_grRI(0,2)})}}}}
+function createPlayer(id,name,displayNumber){const mudBehaviors=['slip','slow','pass'];return{id:id,displayNumber:displayNumber,name:name||T('runner',{n:displayNumber}),progress:0,speed:0.24+_grR()*0.08,baseSpeed:0.24+_grR()*0.08,x:0,y:0,laneOffset:(_grR()-0.5)*70*DRAW_SCALE,targetLaneOffset:(_grR()-0.5)*70*DRAW_SCALE,laneChangeTimer:0,laneChangeSpeed:45+_grR()*35,dodgeTimer:0,finished:false,finishTime:null,finishRank:0,state:PlayerState.RUNNING,stateTimer:0,animation:0,jumpHeight:0,swimAnim:0,attackType:null,attackFrame:0,attackTarget:null,fightPartner:null,currentAction:0,actionPhase:0,knockdownAngle:0,knockdownProgress:0,skinTone:skinTones[_grRI(0,skinTones.length-1)],hairColor:hairColors[_grRI(0,hairColors.length-1)],shirtColor:shirtColors[id%shirtColors.length],pantsColor:pantsColors[_grRI(0,pantsColors.length-1)],hasHat:_grR()>0.5,hatStyle:_grRI(0,2),hatColor:shirtColors[_grRI(0,shirtColors.length-1)],facingRight:true,inDeepWater:false,fightTimer:0,fightCount:0,winnerBoostTimer:0,mudBehavior:mudBehaviors[_grRI(0,2)],inMudZone:false,onIce:false,iceSlipChecked:false,iceVelocity:0,windResistance:1.0,catchUpBoost:1.0,isLeader:false,leaderDelayFactor:1.0,shakingEffect:0,hitFlash:0,movementStyle:_grR(),avoidingObstacle:false,heldItem:null,itemTimer:0,shieldActive:false,shieldTimer:0,boostActive:false,boostTimer:0,starActive:false,starTimer:0,stunTimer:0,slowTimer:0,trail:[],lastTrailTime:0,expression:'normal',expressionTimer:0}}
+function initGame(playerCount,time,speed,freq,names){raceTime=time;remainingTime=time;gameSpeed=speed;eventFrequency=freq;players=[];finishOrder=[];hitEffects=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];itemPopups=[];fightPairs=[];commentaryQueue=[];currentCommentary=null;raceElapsedTime=0;totalFightsRequired=1+_grRI(0,2)+Math.floor(eventFrequency/2);fightsOccurred=0;generateSnakeTrack();const numbers=Array.from({length:playerCount},(_,i)=>i+1);for(let i=numbers.length-1;i>0;i--){const j=_grRI(0,i);[numbers[i],numbers[j]]=[numbers[j],numbers[i]]}for(let i=0;i<playerCount;i++){const player=createPlayer(i,names[i],numbers[i]);player.progress=-6-i*3.5;players.push(player)}document.getElementById('totalCount').textContent=playerCount;document.getElementById('finishedCount').textContent='0';document.getElementById('centerTimer').style.display='block';updateCenterTimer()}
 function updateCenterTimer(){const ct=document.getElementById('centerTimer');ct.textContent=Math.max(0,remainingTime).toFixed(1);if(remainingTime<=10)ct.classList.add('warning');else ct.classList.remove('warning')}
 function getSavedLists(){try{const data=localStorage.getItem(STORAGE_KEY);return data?JSON.parse(data):[]}catch(e){return[]}}
 function saveLists(lists){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(lists))}catch(e){}}
@@ -975,35 +986,35 @@ function generatePlayerNameInputs(){const count=parseInt(document.getElementById
 function rebuildPlayerInputs(names){const newCount=names.length;document.getElementById('playerCount').value=newCount;document.getElementById('playerCountValue').textContent=newCount;const cont=document.getElementById('playerNameInputs');cont.innerHTML='';for(let i=0;i<newCount;i++){const div=document.createElement('div');div.className='player-name-input';const removeBtn=`<button class="btn-remove-player" type="button" data-index="${i}" tabindex="-1" title="${T('deleteBtnS')}" ${newCount<=2?'disabled':''}><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 2.5l7 7m0-7l-7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg></button>`;div.innerHTML=`<span class="player-number">#${i+1}</span><span class="color-preview" style="background:${shirtColors[i%shirtColors.length]}"></span><input type="text" id="playerName${i}" placeholder="${T('phName',{n:i+1})}" maxlength="10" enterkeyhint="next" autocomplete="off">${removeBtn}`;cont.appendChild(div);if(names[i])document.getElementById(`playerName${i}`).value=names[i]}const addBtn=document.getElementById('addPlayerBtn');if(addBtn){addBtn.disabled=newCount>=12;addBtn.style.display=newCount>=12?'none':'flex'}}
 function removePlayerAt(index){const container=document.getElementById('playerNameInputs');const inputs=container.querySelectorAll('input[type="text"]');const currentCount=inputs.length;if(currentCount<=2)return;const names=[];inputs.forEach(inp=>names.push(inp.value));names.splice(index,1);rebuildPlayerInputs(names)}
 function addPlayer(){const container=document.getElementById('playerNameInputs');const inputs=container.querySelectorAll('input[type="text"]');const currentCount=inputs.length;if(currentCount>=12)return;const names=[];inputs.forEach(inp=>names.push(inp.value));names.push('');rebuildPlayerInputs(names);const lastInput=document.getElementById(`playerName${names.length-1}`);if(lastInput){try{lastInput.focus({preventScroll:true})}catch(_){lastInput.focus()}}}
-function addCommentary(type,params={}){const messages=Tarr('c_'+type);if(!messages||!messages.length)return;let message=messages[randomInt(0,messages.length-1)];Object.keys(params).forEach(key=>{message=message.split(`{${key}}`).join(params[key])});commentaryQueue.push({message:message,priority:type==='finish'?2:(type==='fight'?1:0)})}
+function addCommentary(type,params={}){const messages=Tarr('c_'+type);if(!messages||!messages.length)return;let message=messages[_grRI(0,messages.length-1)];Object.keys(params).forEach(key=>{message=message.split(`{${key}}`).join(params[key])});commentaryQueue.push({message:message,priority:type==='finish'?2:(type==='fight'?1:0)})}
 function updateCommentary(deltaTime){commentaryTimer-=deltaTime;if(commentaryTimer<=0&&commentaryQueue.length>0){commentaryQueue.sort((a,b)=>b.priority-a.priority);currentCommentary=commentaryQueue.shift();commentaryTimer=3.5;const el=document.getElementById('commentary');el.textContent=currentCommentary.message;el.style.display='block'}if(commentaryTimer<=0&&currentCommentary){document.getElementById('commentary').style.display='none';currentCommentary=null}}
 function isInDeepWater(progress){return deepWaterZones.some(z=>progress>=z.start&&progress<=z.end)}
 function isOnHill(progress){return hillZones.find(z=>progress>=z.start&&progress<=z.end)||null}
 function isInMudZone(progress){return mudZones.find(z=>progress>=z.start&&progress<=z.end)||null}
 function isOnIce(progress){return iceZones.some(z=>progress>=z.start&&progress<=z.end)}
 function isInBoostZone(progress){return boostZones.some(z=>progress>=z.start&&progress<=z.end)}
-function checkItemBoxCollision(player){if(player.heldItem)return;if(!player.triedBoxes)player.triedBoxes=new Set();itemBoxes.forEach((box,idx)=>{if(!box.active)return;if(player.triedBoxes.has(idx))return;const trackDist=Math.abs(box.trackPos-player.progress);if(trackDist<8){if(trackDist>=3){return}const boxPoint=track[Math.floor(box.trackPos)];if(!boxPoint)return;const boxX=boxPoint.x+box.offsetX,boxY=boxPoint.y-15;const pixelDist=distance(player.x,player.y,boxX,boxY);if(pixelDist>45)return;player.triedBoxes.add(idx);if(Math.random()>(window.BRG?BRG.pickChance(player):ITEM_PICKUP_CHANCE)){return}box.active=false;box.respawnTimer=box.fast?7:12;player.heldItem=window.BRG?BRG.pick(player):[ItemType.BOOST,ItemType.STUN,ItemType.SLOW][randomInt(0,2)];createItemPopup(player.x,player.y-50,player.heldItem);AudioEngine.sfx.itemGet();addCommentary('itemGet',{player:player.name});useItem(player)}else if(trackDist>=12){player.triedBoxes.delete(idx)}})}
+function checkItemBoxCollision(player){if(player.heldItem)return;if(!player.triedBoxes)player.triedBoxes=new Set();itemBoxes.forEach((box,idx)=>{if(!box.active)return;if(player.triedBoxes.has(idx))return;const trackDist=Math.abs(box.trackPos-player.progress);if(trackDist<8){if(trackDist>=3){return}const boxPoint=track[Math.floor(box.trackPos)];if(!boxPoint)return;const boxX=boxPoint.x+box.offsetX,boxY=boxPoint.y-15;const pixelDist=distance(player.x,player.y,boxX,boxY);if(pixelDist>45)return;player.triedBoxes.add(idx);if(_grR()>(window.BRG?BRG.pickChance(player):ITEM_PICKUP_CHANCE)){return}box.active=false;box.respawnTimer=box.fast?7:12;player.heldItem=window.BRG?BRG.pick(player):[ItemType.BOOST,ItemType.STUN,ItemType.SLOW][_grRI(0,2)];createItemPopup(player.x,player.y-50,player.heldItem);AudioEngine.sfx.itemGet();addCommentary('itemGet',{player:player.name});useItem(player)}else if(trackDist>=12){player.triedBoxes.delete(idx)}})}
 function useItem(player){if(!player.heldItem)return;if(window.BRG&&BRG.use(player))return;switch(player.heldItem){case ItemType.BOOST:player.boostActive=true;player.boostTimer=3;player.expression='happy';player.expressionTimer=3;addCommentary('boost',{player:player.name});AudioEngine.sfx.boost();createSpark(player.x,player.y,'#FFD700');break;case ItemType.STUN:player.state=PlayerState.STUNNED;player.stunTimer=3;player.stateTimer=3;player.expression='hurt';player.expressionTimer=3.5;addCommentary('stun',{player:player.name});AudioEngine.sfx.stun();createShockwaveEffect(player.x,player.y-20);break;case ItemType.SLOW:player.slowTimer=3;player.expression='surprised';player.expressionTimer=3;addCommentary('slow',{player:player.name});AudioEngine.sfx.slow();break}player.heldItem=null}
-function updateItemBoxes(deltaTime){itemBoxes.forEach(box=>{if(!box.active){box.respawnTimer-=deltaTime*gameSpeed;if(box.respawnTimer<=0)box.active=true}box.floatPhase+=deltaTime*3});if(track.length>0&&!window.BRG&&Math.random()<0.008*gameSpeed*deltaTime*60){const lastQuarterStart=Math.floor(track.length*0.75);const activeInLastQuarter=itemBoxes.filter(b=>b.active&&b.trackPos>=lastQuarterStart).length;if(activeInLastQuarter<2){const numNew=randomInt(1,3);for(let i=0;i<numNew;i++){const trackPos=lastQuarterStart+randomInt(5,Math.floor(track.length*0.2));if(trackPos<track.length-10){const tooClose=itemBoxes.some(b=>Math.abs(b.trackPos-trackPos)<15);if(!tooClose){itemBoxes.push({trackPos:trackPos,offsetX:(Math.random()-0.5)*44*DRAW_SCALE,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2})}}}}}}
+function updateItemBoxes(deltaTime){itemBoxes.forEach(box=>{if(!box.active){box.respawnTimer-=deltaTime*gameSpeed;if(box.respawnTimer<=0)box.active=true}box.floatPhase+=deltaTime*3});if(track.length>0&&!window.BRG&&_grR()<0.008*gameSpeed*deltaTime*60){const lastQuarterStart=Math.floor(track.length*0.75);const activeInLastQuarter=itemBoxes.filter(b=>b.active&&b.trackPos>=lastQuarterStart).length;if(activeInLastQuarter<2){const numNew=_grRI(1,3);for(let i=0;i<numNew;i++){const trackPos=lastQuarterStart+_grRI(5,Math.floor(track.length*0.2));if(trackPos<track.length-10){const tooClose=itemBoxes.some(b=>Math.abs(b.trackPos-trackPos)<15);if(!tooClose){itemBoxes.push({trackPos:trackPos,offsetX:(_grR()-0.5)*44*DRAW_SCALE,active:true,respawnTimer:0,floatPhase:_grR()*Math.PI*2})}}}}}}
 function createItemPopup(x,y,itemType){const emojis={[ItemType.BOOST]:'⚡',[ItemType.STUN]:'💫',[ItemType.SLOW]:'🐢',[ItemType.CHILI]:'🌶️',[ItemType.BANANA]:'🍌',[ItemType.GLOVE]:'🥊',[ItemType.FART]:'💨',[ItemType.LID]:'🛡️',[ItemType.LASSO]:'🪢',[ItemType.BEES]:'🐝',[ItemType.BALLOON]:'🎈',[ItemType.SWAP]:'🌀',[ItemType.BOMB]:'💣',[ItemType.SKATES]:'⛸️',[ItemType.MEGA]:'📢',[ItemType.KICK]:'🦶',[ItemType.FREEZE]:'🧊',[ItemType.JET]:'🚀',[ItemType.TASER]:'⚡',[ItemType.EEL]:'🐍',[ItemType.HONEY]:'🍯',[ItemType.WALL]:'📦',[ItemType.ROCK]:'●',[ItemType.FLASH]:'✨'};itemPopups.push({x:x,y:y,emoji:emojis[itemType]||'📦',life:1})}
-function startFight(attacker,victim){if(!canFight(attacker) || !canFight(victim)) return;if(attacker.winnerBoostTimer>0||victim.winnerBoostTimer>0) return;const dx=Math.abs(attacker.x-victim.x),dy=Math.abs(attacker.y-victim.y),actualDist=Math.sqrt(dx*dx+dy*dy);if(actualDist>90)return;const midFX=(attacker.x+victim.x)/2,midFY=(attacker.y+victim.y)/2;if(isFightNearby(midFX,midFY,120))return;if(window.BRG&&BRG.preFight(attacker,victim)===false)return;fightsOccurred++;attacker.fightCount++;victim.fightCount++;AudioEngine.sfx.fightStart();attacker._lbShakeUntil=frameNow+600;victim._lbShakeUntil=frameNow+600;const midProgress=(attacker.progress+victim.progress)/2;attacker.progress=midProgress-0.25;victim.progress=midProgress+0.25;const midLane=(attacker.laneOffset+victim.laneOffset)/2;attacker.laneOffset=midLane-8;attacker.targetLaneOffset=midLane-8;victim.laneOffset=midLane+8;victim.targetLaneOffset=midLane+8;const midX=(attacker.x+victim.x)/2,midY=Math.min(attacker.y,victim.y)-20;createCollisionEffect(midX,midY,1.2);createShockwaveEffect(midX,midY);attacker.shakingEffect=1;victim.shakingEffect=1;attacker.expression='angry';victim.expression='angry';attacker.expressionTimer=5;victim.expressionTimer=5;attacker.state=PlayerState.ATTACKING;attacker.attackFrame=0;attacker.fightTimer=4.5;attacker.fightPartner=victim;attacker.facingRight=attacker.x<victim.x;attacker.currentAction=Math.floor(Math.random()*FightActions.length);attacker.actionPhase=0;victim.state=PlayerState.ATTACKING;victim.attackFrame=0;victim.fightTimer=4.5;victim.fightPartner=attacker;victim.facingRight=victim.x<attacker.x;victim.currentAction=Math.floor(Math.random()*FightActions.length);victim.actionPhase=0;fightPairs.push({player1:attacker,player2:victim,timer:4.5,hitTimer:0,currentAction:FightActions[Math.floor(Math.random()*FightActions.length)],actionChangeTimer:0});addCommentary('fight',{p1:attacker.name,p2:victim.name})}
-function endFight(player1,player2){let _bw=null;if(window.BRG){const _r=BRG.fightResult(player1,player2);if(_r==='draw'){BRG.doubleKO(player1,player2);return}_bw=_r}const winner=_bw||(Math.random()<0.5?player1:player2);const loser=winner===player1?player2:player1;createCollisionEffect(loser.x,loser.y-20,2);createShockwaveEffect(loser.x,loser.y-20);AudioEngine.sfx.fightEnd();winner.state=PlayerState.RUNNING;winner.winnerBoostTimer=4.5;winner.fightTimer=0;winner.fightPartner=null;winner.shakingEffect=0;winner.expression='happy';winner.expressionTimer=3;loser.state=PlayerState.KNOCKED_DOWN;loser.knockdownProgress=0;loser.stateTimer=2.8;loser.fightTimer=0;loser.fightPartner=null;loser.hitFlash=1;loser.expression='hurt';loser.expressionTimer=3;loser._lbLoseUntil=frameNow+900;winner._lbWinUntil=frameNow+500;hitEffects.push({x:loser.x,y:loser.y-20,life:1,type:randomInt(0,5)});fightPairs=fightPairs.filter(pair=>!(pair.player1===player1||pair.player1===player2||pair.player2===player1||pair.player2===player2));addCommentary('fightEnd',{winner:winner.name});if(window.BRG)BRG.onKO(winner,loser)}
+function startFight(attacker,victim){if(!canFight(attacker) || !canFight(victim)) return;if(attacker.winnerBoostTimer>0||victim.winnerBoostTimer>0) return;const dx=Math.abs(attacker.x-victim.x),dy=Math.abs(attacker.y-victim.y),actualDist=Math.sqrt(dx*dx+dy*dy);if(actualDist>90)return;const midFX=(attacker.x+victim.x)/2,midFY=(attacker.y+victim.y)/2;if(isFightNearby(midFX,midFY,120))return;if(window.BRG&&BRG.preFight(attacker,victim)===false)return;fightsOccurred++;attacker.fightCount++;victim.fightCount++;AudioEngine.sfx.fightStart();attacker._lbShakeUntil=frameNow+600;victim._lbShakeUntil=frameNow+600;const midProgress=(attacker.progress+victim.progress)/2;attacker.progress=midProgress-0.25;victim.progress=midProgress+0.25;const midLane=(attacker.laneOffset+victim.laneOffset)/2;attacker.laneOffset=midLane-8;attacker.targetLaneOffset=midLane-8;victim.laneOffset=midLane+8;victim.targetLaneOffset=midLane+8;const midX=(attacker.x+victim.x)/2,midY=Math.min(attacker.y,victim.y)-20;createCollisionEffect(midX,midY,1.2);createShockwaveEffect(midX,midY);attacker.shakingEffect=1;victim.shakingEffect=1;attacker.expression='angry';victim.expression='angry';attacker.expressionTimer=5;victim.expressionTimer=5;attacker.state=PlayerState.ATTACKING;attacker.attackFrame=0;attacker.fightTimer=4.5;attacker.fightPartner=victim;attacker.facingRight=attacker.x<victim.x;attacker.currentAction=Math.floor(_grR()*FightActions.length);attacker.actionPhase=0;victim.state=PlayerState.ATTACKING;victim.attackFrame=0;victim.fightTimer=4.5;victim.fightPartner=attacker;victim.facingRight=victim.x<attacker.x;victim.currentAction=Math.floor(_grR()*FightActions.length);victim.actionPhase=0;fightPairs.push({player1:attacker,player2:victim,timer:4.5,hitTimer:0,currentAction:FightActions[Math.floor(_grR()*FightActions.length)],actionChangeTimer:0});addCommentary('fight',{p1:attacker.name,p2:victim.name})}
+function endFight(player1,player2){let _bw=null;if(window.BRG){const _r=BRG.fightResult(player1,player2);if(_r==='draw'){BRG.doubleKO(player1,player2);return}_bw=_r}const winner=_bw||(_grR()<0.5?player1:player2);const loser=winner===player1?player2:player1;createCollisionEffect(loser.x,loser.y-20,2);createShockwaveEffect(loser.x,loser.y-20);AudioEngine.sfx.fightEnd();winner.state=PlayerState.RUNNING;winner.winnerBoostTimer=4.5;winner.fightTimer=0;winner.fightPartner=null;winner.shakingEffect=0;winner.expression='happy';winner.expressionTimer=3;loser.state=PlayerState.KNOCKED_DOWN;loser.knockdownProgress=0;loser.stateTimer=2.8;loser.fightTimer=0;loser.fightPartner=null;loser.hitFlash=1;loser.expression='hurt';loser.expressionTimer=3;loser._lbLoseUntil=frameNow+900;winner._lbWinUntil=frameNow+500;hitEffects.push({x:loser.x,y:loser.y-20,life:1,type:_grRI(0,5)});fightPairs=fightPairs.filter(pair=>!(pair.player1===player1||pair.player1===player2||pair.player2===player1||pair.player2===player2));addCommentary('fightEnd',{winner:winner.name});if(window.BRG)BRG.onKO(winner,loser)}
 function updateFightLabels(){_flCount++;if(_flCount<12)return;_flCount=0;const container=document.getElementById('fightLabelsContainer');container.innerHTML='';fightPairs.forEach(pair=>{const midX=(pair.player1.x+pair.player2.x)/2,midY=Math.min(pair.player1.y,pair.player2.y)-100;const label=document.createElement('div');label.className='fight-label';label.style.left=`${midX}px`;label.style.top=`${midY}px`;const action=pair.currentAction;label.innerHTML=`<span class="player-name">${pair.player1.name}</span><span class="vs-text">⚔️VS⚔️</span><span class="player-name">${pair.player2.name}</span><br><span class="action-row">${action.emoji} ${action.korean}</span>`;container.appendChild(label)})}
-function createDust(x,y,direction,color='rgba(210,180,140,0.8)'){for(let i=0;i<6;i++)dustEffects.push({x:x+(Math.random()-0.5)*12,y:y+5+Math.random()*5,vx:direction*(1.5+Math.random()*2.5),vy:-Math.random()*2.5,life:0.6+Math.random()*0.3,size:4+Math.random()*5,color:color})}
-function createSplash(x,y){AudioEngine.sfx.splash();for(let i=0;i<10;i++){const angle=Math.random()*Math.PI*2,speed=2+Math.random()*4;splashEffects.push({x:x,y:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-3,life:0.7+Math.random()*0.3,size:3+Math.random()*4})}}
-function createSpark(x,y,color='#FFD700'){for(let i=0;i<8;i++){const angle=Math.random()*Math.PI*2,speed=3+Math.random()*5;sparkEffects.push({x:x,y:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:0.5+Math.random()*0.3,size:2+Math.random()*3,color:color})}}
-function createCollisionEffect(x,y,intensity){const colors=['#FF6B6B','#FFD93D','#6BCB77','#4D96FF','#FF6B6B','#FF9F43'];const particles=[];for(let i=0;i<18;i++){const angle=Math.random()*Math.PI*2,speed=3+Math.random()*6;particles.push({x:0,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-4,size:3+Math.random()*5,color:colors[randomInt(0,colors.length-1)]})}collisionEffects.push({x:x,y:y,life:1,radius:35+intensity*25,color:'#FF6B6B',particles:particles})}
-function createShockwaveEffect(x,y){shockwaveEffects.push({x:x,y:y,life:1,maxRadius:70,color:'rgba(255,200,100,0.8)',rotation:Math.random()*Math.PI*2})}
+function createDust(x,y,direction,color='rgba(210,180,140,0.8)'){for(let i=0;i<6;i++)dustEffects.push({x:x+(_grR()-0.5)*12,y:y+5+_grR()*5,vx:direction*(1.5+_grR()*2.5),vy:-_grR()*2.5,life:0.6+_grR()*0.3,size:4+_grR()*5,color:color})}
+function createSplash(x,y){AudioEngine.sfx.splash();for(let i=0;i<10;i++){const angle=_grR()*Math.PI*2,speed=2+_grR()*4;splashEffects.push({x:x,y:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-3,life:0.7+_grR()*0.3,size:3+_grR()*4})}}
+function createSpark(x,y,color='#FFD700'){for(let i=0;i<8;i++){const angle=_grR()*Math.PI*2,speed=3+_grR()*5;sparkEffects.push({x:x,y:y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:0.5+_grR()*0.3,size:2+_grR()*3,color:color})}}
+function createCollisionEffect(x,y,intensity){const colors=['#FF6B6B','#FFD93D','#6BCB77','#4D96FF','#FF6B6B','#FF9F43'];const particles=[];for(let i=0;i<18;i++){const angle=_grR()*Math.PI*2,speed=3+_grR()*6;particles.push({x:0,y:0,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed-4,size:3+_grR()*5,color:colors[_grRI(0,colors.length-1)]})}collisionEffects.push({x:x,y:y,life:1,radius:35+intensity*25,color:'#FF6B6B',particles:particles})}
+function createShockwaveEffect(x,y){shockwaveEffects.push({x:x,y:y,life:1,maxRadius:70,color:'rgba(255,200,100,0.8)',rotation:_grR()*Math.PI*2})}
 function checkObstacleAhead(player,lookAhead){for(let obs of trackObstacles){const dist=obs.trackPos-player.progress;if(dist>0&&dist<lookAhead)return obs.offsetX>0?-1:1}return 0}
-function updatePlayers(deltaTime){raceElapsedTime+=deltaTime*gameSpeed;const activePlayers=players.filter(p=>!p.finished);const sortedByProgress=[...activePlayers].sort((a,b)=>b.progress-a.progress);activePlayers.forEach(p=>{p.isLeader=false;p.windResistance=1.0;p.catchUpBoost=1.0;p.leaderDelayFactor=1.0;if(p.shakingEffect>0)p.shakingEffect-=deltaTime*3;if(p.hitFlash>0)p.hitFlash-=deltaTime*2.5;if(p.expressionTimer>0)p.expressionTimer-=deltaTime;else p.expression='normal'});if(sortedByProgress.length>0){const leader=sortedByProgress[0];leader.isLeader=true;let delayPercent=0.10+Math.random()*0.20;leader.leaderDelayFactor=1.0-delayPercent;if(sortedByProgress.length>1){for(let i=1;i<sortedByProgress.length;i++){const player=sortedByProgress[i];const progressBehind=leader.progress-player.progress;if(progressBehind>25){player.catchUpBoost=Math.min(1.7,1.15+(progressBehind/120));if(progressBehind>40&&Math.random()<0.01)addCommentary('catchUp',{player:player.name})}}}}
+function updatePlayers(deltaTime){raceElapsedTime+=deltaTime*gameSpeed;const activePlayers=players.filter(p=>!p.finished);const sortedByProgress=[...activePlayers].sort((a,b)=>b.progress-a.progress);activePlayers.forEach(p=>{p.isLeader=false;p.windResistance=1.0;p.catchUpBoost=1.0;p.leaderDelayFactor=1.0;if(p.shakingEffect>0)p.shakingEffect-=deltaTime*3;if(p.hitFlash>0)p.hitFlash-=deltaTime*2.5;if(p.expressionTimer>0)p.expressionTimer-=deltaTime;else p.expression='normal'});if(sortedByProgress.length>0){const leader=sortedByProgress[0];leader.isLeader=true;let delayPercent=0.10+_grR()*0.20;leader.leaderDelayFactor=1.0-delayPercent;if(sortedByProgress.length>1){for(let i=1;i<sortedByProgress.length;i++){const player=sortedByProgress[i];const progressBehind=leader.progress-player.progress;if(progressBehind>25){player.catchUpBoost=Math.min(1.7,1.15+(progressBehind/120));if(progressBehind>40&&_grR()<0.01)addCommentary('catchUp',{player:player.name})}}}}
     fightPairs.forEach(pair=>{if(isNearFinish(pair.player1) || isNearFinish(pair.player2)){pair.timer = 0;}});
-    fightPairs.forEach(pair=>{pair.hitTimer+=deltaTime*gameSpeed;pair.actionChangeTimer+=deltaTime*gameSpeed;if(pair.actionChangeTimer>=0.5){pair.actionChangeTimer=0;pair.currentAction=FightActions[Math.floor(Math.random()*FightActions.length)];pair.player1.currentAction=Math.floor(Math.random()*FightActions.length);pair.player2.currentAction=Math.floor(Math.random()*FightActions.length)}pair.player1.actionPhase+=deltaTime*10;pair.player2.actionPhase+=deltaTime*10;const midProgress=(pair.player1.progress+pair.player2.progress)/2;pair.player1.progress=midProgress-0.25;pair.player2.progress=midProgress+0.25;const midLane=(pair.player1.laneOffset+pair.player2.laneOffset)/2;pair.player1.laneOffset=midLane-8;pair.player2.laneOffset=midLane+8;pair.player1.facingRight=pair.player1.x<pair.player2.x;pair.player2.facingRight=pair.player2.x<pair.player1.x;if(pair.hitTimer>=0.45){pair.hitTimer=0;if(window.BRG)BRG.fightHit(pair);const midX=(pair.player1.x+pair.player2.x)/2,midY=(pair.player1.y+pair.player2.y)/2-20;createCollisionEffect(midX,midY,0.6);hitEffects.push({x:midX+(Math.random()-0.5)*35,y:midY+(Math.random()-0.5)*25,life:0.7,type:randomInt(0,5)});pair.player1.shakingEffect=0.6;pair.player2.shakingEffect=0.6;if(Math.random()<0.3){AudioEngine.sfx.punch();}else if(Math.random()<0.5){AudioEngine.sfx.kick();}}});fightPairs=fightPairs.filter(pair=>{pair.timer-=deltaTime*gameSpeed;if(pair.timer<=0){endFight(pair.player1,pair.player2);return false}return true});updateFightLabels();
-    if(raceElapsedTime>12&&fightsOccurred<totalFightsRequired){const availablePlayers=players.filter(p=>canFight(p)&&p.state===PlayerState.RUNNING);if(availablePlayers.length>=2){for(let i=0;i<availablePlayers.length-1;i++){const p1=availablePlayers[i];for(let j=i+1;j<availablePlayers.length;j++){const p2=availablePlayers[j];const dist=distance(p1.x,p1.y,p2.x,p2.y);if(dist<110&&Math.random()<0.008*eventFrequency*deltaTime*60){startFight(p1,p2);break}}if(fightsOccurred>=totalFightsRequired)break}}}players.forEach(player=>{if(player.finished)return;updateSinglePlayer(player,deltaTime)});const newlyFinished=players.filter(p=>p._crossedThisFrame);if(newlyFinished.length>0){newlyFinished.sort((a,b)=>(a._crossT!==undefined?a._crossT:1e9)-(b._crossT!==undefined?b._crossT:1e9));newlyFinished.forEach(player=>{player._crossedThisFrame=false;player.finished=true;player.finishTime=player._crossT!==undefined?player._crossT:raceTime-remainingTime;player.finishRank=finishOrder.length+1;finishOrder.push(player);player.state=PlayerState.CELEBRATING;player.expression='happy';player.expressionTimer=10;addCommentary('finish',{player:player.name,rank:rankLabel(player.finishRank)});AudioEngine.sfx.finish();createShockwaveEffect(player.x,player.y-30);createSpark(player.x,player.y-30,'#FFD700');if(window.BRFX)try{BRFX.onFinish(player)}catch(_){}});document.getElementById('finishedCount').textContent=finishOrder.length;const unfinishedCount=players.filter(p=>!p.finished).length;if(unfinishedCount<=1&&!_endGameScheduled){_endGameScheduled=true;setTimeout(()=>endGame(),1500)}};updateItemBoxes(deltaTime);if(window.BRG)BRG.update(deltaTime*gameSpeed)}
-function updateSinglePlayer(player,deltaTime){player._pp0=player.progress;player.animation+=deltaTime*11*gameSpeed;if(player.boostTimer>0){player.boostTimer-=deltaTime*gameSpeed;if(player.boostTimer<=0)player.boostActive=false}if(player.shieldTimer>0){player.shieldTimer-=deltaTime*gameSpeed;if(player.shieldTimer<=0)player.shieldActive=false}if(player.starTimer>0){player.starTimer-=deltaTime*gameSpeed;if(player.starTimer<=0)player.starActive=false}if(player.stunTimer>0){player.stunTimer-=deltaTime*gameSpeed;if(player.stunTimer<=0&&player.state===PlayerState.STUNNED){player.state=PlayerState.RUNNING}}if(player.slowTimer>0){player.slowTimer-=deltaTime*gameSpeed}if(player.winnerBoostTimer>0)player.winnerBoostTimer-=deltaTime*gameSpeed;const inWater=isInDeepWater(player.progress),hillZone=isOnHill(player.progress),mudZone=isInMudZone(player.progress),onIce=isOnIce(player.progress),inBoost=isInBoostZone(player.progress);checkItemBoxCollision(player);if(player.state===PlayerState.RUNNING&&!player.avoidingObstacle){const avoidDir=checkObstacleAhead(player,18);if(avoidDir!==0){player.avoidingObstacle=true;player.targetLaneOffset=avoidDir*(30+Math.random()*25)*DRAW_SCALE;player.laneChangeTimer=0.35;createDust(player.x,player.y,-avoidDir)}}player.laneChangeTimer-=deltaTime*gameSpeed;if(player.laneChangeTimer<=0){player.avoidingObstacle=false;const changeFrequency=0.35+(1-player.movementStyle)*1.0;player.laneChangeTimer=changeFrequency+Math.random()*0.6;const moveRange=(35+player.movementStyle*35)*DRAW_SCALE;const newTarget=(Math.random()-0.5)*moveRange*2;if(Math.abs(newTarget-player.laneOffset)>25)createDust(player.x,player.y,player.targetLaneOffset>newTarget?1:-1);player.targetLaneOffset=newTarget}const laneSpeed=player.laneChangeSpeed*deltaTime*gameSpeed;if(Math.abs(player.targetLaneOffset-player.laneOffset)>laneSpeed)player.laneOffset+=Math.sign(player.targetLaneOffset-player.laneOffset)*laneSpeed;else player.laneOffset=player.targetLaneOffset;
-if(onIce&&!player.onIce){player.onIce=true;player.iceSlipChecked=false;player.iceVelocity=player.speed*1.5;createSpark(player.x,player.y,'#B3E5FC');if(player.state===PlayerState.RUNNING&&Math.random()<0.3){player.state=PlayerState.ICE_FALLEN;player.stateTimer=1.5;player.knockdownProgress=0;player.expression='surprised';player.expressionTimer=2;AudioEngine.sfx.iceSlip();createDust(player.x,player.y,player.facingRight?-1:1,'rgba(200,230,255,0.8)');createSpark(player.x,player.y,'#E3F2FD');addCommentary('iceSlip',{player:player.name})}}else if(!onIce){player.onIce=false;player.iceSlipChecked=false;player.iceVelocity=0}
+    fightPairs.forEach(pair=>{pair.hitTimer+=deltaTime*gameSpeed;pair.actionChangeTimer+=deltaTime*gameSpeed;if(pair.actionChangeTimer>=0.5){pair.actionChangeTimer=0;pair.currentAction=FightActions[Math.floor(_grR()*FightActions.length)];pair.player1.currentAction=Math.floor(_grR()*FightActions.length);pair.player2.currentAction=Math.floor(_grR()*FightActions.length)}pair.player1.actionPhase+=deltaTime*10;pair.player2.actionPhase+=deltaTime*10;const midProgress=(pair.player1.progress+pair.player2.progress)/2;pair.player1.progress=midProgress-0.25;pair.player2.progress=midProgress+0.25;const midLane=(pair.player1.laneOffset+pair.player2.laneOffset)/2;pair.player1.laneOffset=midLane-8;pair.player2.laneOffset=midLane+8;pair.player1.facingRight=pair.player1.x<pair.player2.x;pair.player2.facingRight=pair.player2.x<pair.player1.x;if(pair.hitTimer>=0.45){pair.hitTimer=0;if(window.BRG)BRG.fightHit(pair);const midX=(pair.player1.x+pair.player2.x)/2,midY=(pair.player1.y+pair.player2.y)/2-20;createCollisionEffect(midX,midY,0.6);hitEffects.push({x:midX+(_grR()-0.5)*35,y:midY+(_grR()-0.5)*25,life:0.7,type:_grRI(0,5)});pair.player1.shakingEffect=0.6;pair.player2.shakingEffect=0.6;if(_grR()<0.3){AudioEngine.sfx.punch();}else if(_grR()<0.5){AudioEngine.sfx.kick();}}});fightPairs=fightPairs.filter(pair=>{pair.timer-=deltaTime*gameSpeed;if(pair.timer<=0){endFight(pair.player1,pair.player2);return false}return true});updateFightLabels();
+    if(raceElapsedTime>12&&fightsOccurred<totalFightsRequired){const availablePlayers=players.filter(p=>canFight(p)&&p.state===PlayerState.RUNNING);if(availablePlayers.length>=2){for(let i=0;i<availablePlayers.length-1;i++){const p1=availablePlayers[i];for(let j=i+1;j<availablePlayers.length;j++){const p2=availablePlayers[j];const dist=distance(p1.x,p1.y,p2.x,p2.y);if(dist<110&&_grR()<0.008*eventFrequency*deltaTime*60){startFight(p1,p2);break}}if(fightsOccurred>=totalFightsRequired)break}}}players.forEach(player=>{if(player.finished)return;updateSinglePlayer(player,deltaTime)});const newlyFinished=players.filter(p=>p._crossedThisFrame);if(newlyFinished.length>0){newlyFinished.sort((a,b)=>(a._crossT!==undefined?a._crossT:1e9)-(b._crossT!==undefined?b._crossT:1e9));newlyFinished.forEach(player=>{player._crossedThisFrame=false;player.finished=true;player.finishTime=player._crossT!==undefined?player._crossT:raceTime-remainingTime;player.finishRank=finishOrder.length+1;finishOrder.push(player);player.state=PlayerState.CELEBRATING;player.expression='happy';player.expressionTimer=10;addCommentary('finish',{player:player.name,rank:rankLabel(player.finishRank)});AudioEngine.sfx.finish();createShockwaveEffect(player.x,player.y-30);createSpark(player.x,player.y-30,'#FFD700');if(window.BRFX)try{BRFX.onFinish(player)}catch(_){}});document.getElementById('finishedCount').textContent=finishOrder.length;const unfinishedCount=players.filter(p=>!p.finished).length;if(unfinishedCount<=1&&!_endGameScheduled){_endGameScheduled=true;setTimeout(()=>endGame(),1500)}};updateItemBoxes(deltaTime);if(window.BRG)BRG.update(deltaTime*gameSpeed)}
+function updateSinglePlayer(player,deltaTime){player._pp0=player.progress;player.animation+=deltaTime*11*gameSpeed;if(player.boostTimer>0){player.boostTimer-=deltaTime*gameSpeed;if(player.boostTimer<=0)player.boostActive=false}if(player.shieldTimer>0){player.shieldTimer-=deltaTime*gameSpeed;if(player.shieldTimer<=0)player.shieldActive=false}if(player.starTimer>0){player.starTimer-=deltaTime*gameSpeed;if(player.starTimer<=0)player.starActive=false}if(player.stunTimer>0){player.stunTimer-=deltaTime*gameSpeed;if(player.stunTimer<=0&&player.state===PlayerState.STUNNED){player.state=PlayerState.RUNNING}}if(player.slowTimer>0){player.slowTimer-=deltaTime*gameSpeed}if(player.winnerBoostTimer>0)player.winnerBoostTimer-=deltaTime*gameSpeed;const inWater=isInDeepWater(player.progress),hillZone=isOnHill(player.progress),mudZone=isInMudZone(player.progress),onIce=isOnIce(player.progress),inBoost=isInBoostZone(player.progress);checkItemBoxCollision(player);if(player.state===PlayerState.RUNNING&&!player.avoidingObstacle){const avoidDir=checkObstacleAhead(player,18);if(avoidDir!==0){player.avoidingObstacle=true;player.targetLaneOffset=avoidDir*(30+_grR()*25)*DRAW_SCALE;player.laneChangeTimer=0.35;createDust(player.x,player.y,-avoidDir)}}player.laneChangeTimer-=deltaTime*gameSpeed;if(player.laneChangeTimer<=0){player.avoidingObstacle=false;const changeFrequency=0.35+(1-player.movementStyle)*1.0;player.laneChangeTimer=changeFrequency+_grR()*0.6;const moveRange=(35+player.movementStyle*35)*DRAW_SCALE;const newTarget=(_grR()-0.5)*moveRange*2;if(Math.abs(newTarget-player.laneOffset)>25)createDust(player.x,player.y,player.targetLaneOffset>newTarget?1:-1);player.targetLaneOffset=newTarget}const laneSpeed=player.laneChangeSpeed*deltaTime*gameSpeed;if(Math.abs(player.targetLaneOffset-player.laneOffset)>laneSpeed)player.laneOffset+=Math.sign(player.targetLaneOffset-player.laneOffset)*laneSpeed;else player.laneOffset=player.targetLaneOffset;
+if(onIce&&!player.onIce){player.onIce=true;player.iceSlipChecked=false;player.iceVelocity=player.speed*1.5;createSpark(player.x,player.y,'#B3E5FC');if(player.state===PlayerState.RUNNING&&_grR()<0.3){player.state=PlayerState.ICE_FALLEN;player.stateTimer=1.5;player.knockdownProgress=0;player.expression='surprised';player.expressionTimer=2;AudioEngine.sfx.iceSlip();createDust(player.x,player.y,player.facingRight?-1:1,'rgba(200,230,255,0.8)');createSpark(player.x,player.y,'#E3F2FD');addCommentary('iceSlip',{player:player.name})}}else if(!onIce){player.onIce=false;player.iceSlipChecked=false;player.iceVelocity=0}
 if(inBoost&&player.state===PlayerState.RUNNING){player.boostActive=true;player.boostTimer=Math.max(player.boostTimer,1);createSpark(player.x,player.y,'#00FF88')}const baseMultiplier=(player.starActive?2.2:player.boostActive?1.8:player.winnerBoostTimer>0?1.7:1.0)*(window.BRG?BRG.mult(player):1);const slowFactor=player.slowTimer>0?0.5:1.0;const windFactor=player.windResistance,catchUpFactor=player.catchUpBoost,leaderFactor=player.isLeader?player.leaderDelayFactor:1.0;
-switch(player.state){case PlayerState.ICE_FALLEN:player.stateTimer-=deltaTime*gameSpeed;player.knockdownProgress+=deltaTime*3*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.GETTING_UP;player.stateTimer=0.4}break;case PlayerState.STUNNED:player.attackFrame+=deltaTime*10*gameSpeed;break;case PlayerState.ATTACKING:player.attackFrame+=deltaTime*30*gameSpeed;if(player.fightTimer>0){if(player.attackFrame>32)player.attackFrame=0;player.progress+=player.speed*deltaTime*2*gameSpeed}break;case PlayerState.KNOCKED_DOWN:player.knockdownProgress+=deltaTime*4*gameSpeed;player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.GETTING_UP;player.stateTimer=0.6}break;case PlayerState.GETTING_UP:player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.knockdownProgress=0}break;case PlayerState.JUMPING:player.stateTimer-=deltaTime*gameSpeed;const jumpProgress=1-(player.stateTimer/0.55);player.jumpHeight=Math.sin(jumpProgress*Math.PI)*50;player.progress+=player.speed*deltaTime*28*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.jumpHeight=0;player.baseSpeed=0.22+Math.random()*0.10}break;case PlayerState.SWIMMING:player.swimAnim+=deltaTime*11*gameSpeed;player.progress+=player.speed*deltaTime*13*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!inWater){player.state=PlayerState.EXITING_WATER;player.stateTimer=0.35;createSplash(player.x,player.y)}break;case PlayerState.EXITING_WATER:player.stateTimer-=deltaTime*gameSpeed;player.swimAnim+=deltaTime*6*gameSpeed;player.progress+=player.speed*deltaTime*11*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.inDeepWater=false;player.baseSpeed=0.22+Math.random()*0.10}break;case PlayerState.CLIMBING_HILL:player.progress+=player.speed*deltaTime*11*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!hillZone){player.state=PlayerState.RUNNING;player.baseSpeed=0.22+Math.random()*0.10}break;case PlayerState.IN_MUD:player.progress+=player.speed*deltaTime*9*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!mudZone){player.state=PlayerState.RUNNING;player.inMudZone=false;player.baseSpeed=0.22+Math.random()*0.10}else if(player.mudBehavior==='slip'&&Math.random()<0.008*deltaTime*60){player.state=PlayerState.SLIDING;player.stateTimer=0.45}break;case PlayerState.SLIDING:player.stateTimer-=deltaTime*gameSpeed;player.progress+=player.speed*deltaTime*3.5*gameSpeed;if(player.stateTimer<=0)player.state=mudZone?PlayerState.IN_MUD:PlayerState.RUNNING;break;case PlayerState.TRIPPED:player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0)player.state=PlayerState.RUNNING;break;case PlayerState.DODGING:player.stateTimer-=deltaTime*gameSpeed;player.progress+=player.speed*deltaTime*16*gameSpeed*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0)player.state=PlayerState.RUNNING;break;default:if(inWater&&!player.inDeepWater){player.state=PlayerState.SWIMMING;player.swimAnim=0;player.inDeepWater=true;createSplash(player.x,player.y);break}if(hillZone){player.state=PlayerState.CLIMBING_HILL;break}if(mudZone&&!player.inMudZone){player.inMudZone=true;if(player.mudBehavior==='slip'&&Math.random()<0.5){player.state=PlayerState.SLIDING;player.stateTimer=0.5}else player.state=PlayerState.IN_MUD;break}for(let obs of trackObstacles){const dist=Math.abs(obs.trackPos-player.progress);if(dist<4){if(obs.type==='hurdle'&&Math.random()<0.1*deltaTime*60){player.state=PlayerState.JUMPING;player.stateTimer=0.55;AudioEngine.sfx.jump();break}else if((obs.type==='rock'||obs.type==='barrel')&&Math.random()<0.04*deltaTime*60){if(Math.random()<0.5){player.state=PlayerState.JUMPING;player.stateTimer=0.5;AudioEngine.sfx.jump();}else if(Math.random()<0.6){player.state=PlayerState.DODGING;player.stateTimer=0.3}else{player.state=PlayerState.TRIPPED;player.stateTimer=0.5;player.expression='surprised';player.expressionTimer=1;AudioEngine.sfx.trip();}break}}}
-    if(player.state===PlayerState.RUNNING&&player.fightTimer<=0&&raceElapsedTime>3&&!player.shieldActive&&!player.starActive&&!isNearFinish(player)&&!isOnIce(player.progress)){for(let other of players){if(other.id!==player.id&&!other.finished&&other.state===PlayerState.RUNNING&&other.fightTimer<=0&&other.winnerBoostTimer<=0&&player.winnerBoostTimer<=0&&!other.shieldActive&&!other.starActive&&!isNearFinish(other)&&!isOnIce(other.progress)){const dist=distance(other.x,other.y,player.x,player.y);if(dist<70&&Math.random()<0.008*eventFrequency*deltaTime*60){startFight(player,other);break}}}}if(player.state===PlayerState.RUNNING){player.speed=player.baseSpeed*(0.88+Math.random()*0.28);const finalSpeed=player.speed*baseMultiplier*slowFactor*windFactor*catchUpFactor*leaderFactor;player.progress+=finalSpeed*deltaTime*27*gameSpeed;if(player.boostActive||player.starActive){if(frameNow-player.lastTrailTime>50){player.trail.push({x:player.x,y:player.y,life:0.5});player.lastTrailTime=frameNow}}}break}player.trail=player.trail.filter(t=>{t.life-=deltaTime*2;return t.life>0});{const _FL=track.length-6;if(player.progress>=_FL&&!player.finished&&!player._crossedThisFrame){const _pp=player._pp0!==undefined?player._pp0:player.progress,_d=player.progress-_pp,_f=_d>0?Math.max(0,Math.min(1,(_FL-_pp)/_d)):1;player._crossT=(raceTime-remainingTime)-(1-_f)*deltaTime*gameSpeed;player._crossedThisFrame=true}}if(player.progress<0||player.progress>=track.length){const startPoint=track[0];player.x=startPoint.x+player.laneOffset;player.y=startPoint.y+player.progress*5}else{const index=Math.floor(player.progress),nextIndex=Math.min(index+1,track.length-1),t=player.progress-index;player.x=lerp(track[index].x,track[nextIndex].x,t)+player.laneOffset;player.y=lerp(track[index].y,track[nextIndex].y,t);if(nextIndex>index)player.facingRight=track[nextIndex].x>track[index].x}}
+switch(player.state){case PlayerState.ICE_FALLEN:player.stateTimer-=deltaTime*gameSpeed;player.knockdownProgress+=deltaTime*3*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.GETTING_UP;player.stateTimer=0.4}break;case PlayerState.STUNNED:player.attackFrame+=deltaTime*10*gameSpeed;break;case PlayerState.ATTACKING:player.attackFrame+=deltaTime*30*gameSpeed;if(player.fightTimer>0){if(player.attackFrame>32)player.attackFrame=0;player.progress+=player.speed*deltaTime*2*gameSpeed}break;case PlayerState.KNOCKED_DOWN:player.knockdownProgress+=deltaTime*4*gameSpeed;player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.GETTING_UP;player.stateTimer=0.6}break;case PlayerState.GETTING_UP:player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.knockdownProgress=0}break;case PlayerState.JUMPING:player.stateTimer-=deltaTime*gameSpeed;const jumpProgress=1-(player.stateTimer/0.55);player.jumpHeight=Math.sin(jumpProgress*Math.PI)*50;player.progress+=player.speed*deltaTime*28*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.jumpHeight=0;player.baseSpeed=0.22+_grR()*0.10}break;case PlayerState.SWIMMING:player.swimAnim+=deltaTime*11*gameSpeed;player.progress+=player.speed*deltaTime*13*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!inWater){player.state=PlayerState.EXITING_WATER;player.stateTimer=0.35;createSplash(player.x,player.y)}break;case PlayerState.EXITING_WATER:player.stateTimer-=deltaTime*gameSpeed;player.swimAnim+=deltaTime*6*gameSpeed;player.progress+=player.speed*deltaTime*11*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0){player.state=PlayerState.RUNNING;player.inDeepWater=false;player.baseSpeed=0.22+_grR()*0.10}break;case PlayerState.CLIMBING_HILL:player.progress+=player.speed*deltaTime*11*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!hillZone){player.state=PlayerState.RUNNING;player.baseSpeed=0.22+_grR()*0.10}break;case PlayerState.IN_MUD:player.progress+=player.speed*deltaTime*9*gameSpeed*baseMultiplier*slowFactor*windFactor*catchUpFactor;if(!mudZone){player.state=PlayerState.RUNNING;player.inMudZone=false;player.baseSpeed=0.22+_grR()*0.10}else if(player.mudBehavior==='slip'&&_grR()<0.008*deltaTime*60){player.state=PlayerState.SLIDING;player.stateTimer=0.45}break;case PlayerState.SLIDING:player.stateTimer-=deltaTime*gameSpeed;player.progress+=player.speed*deltaTime*3.5*gameSpeed;if(player.stateTimer<=0)player.state=mudZone?PlayerState.IN_MUD:PlayerState.RUNNING;break;case PlayerState.TRIPPED:player.stateTimer-=deltaTime*gameSpeed;if(player.stateTimer<=0)player.state=PlayerState.RUNNING;break;case PlayerState.DODGING:player.stateTimer-=deltaTime*gameSpeed;player.progress+=player.speed*deltaTime*16*gameSpeed*slowFactor*windFactor*catchUpFactor;if(player.stateTimer<=0)player.state=PlayerState.RUNNING;break;default:if(inWater&&!player.inDeepWater){player.state=PlayerState.SWIMMING;player.swimAnim=0;player.inDeepWater=true;createSplash(player.x,player.y);break}if(hillZone){player.state=PlayerState.CLIMBING_HILL;break}if(mudZone&&!player.inMudZone){player.inMudZone=true;if(player.mudBehavior==='slip'&&_grR()<0.5){player.state=PlayerState.SLIDING;player.stateTimer=0.5}else player.state=PlayerState.IN_MUD;break}for(let obs of trackObstacles){const dist=Math.abs(obs.trackPos-player.progress);if(dist<4){if(obs.type==='hurdle'&&_grR()<0.1*deltaTime*60){player.state=PlayerState.JUMPING;player.stateTimer=0.55;AudioEngine.sfx.jump();break}else if((obs.type==='rock'||obs.type==='barrel')&&_grR()<0.04*deltaTime*60){if(_grR()<0.5){player.state=PlayerState.JUMPING;player.stateTimer=0.5;AudioEngine.sfx.jump();}else if(_grR()<0.6){player.state=PlayerState.DODGING;player.stateTimer=0.3}else{player.state=PlayerState.TRIPPED;player.stateTimer=0.5;player.expression='surprised';player.expressionTimer=1;AudioEngine.sfx.trip();}break}}}
+    if(player.state===PlayerState.RUNNING&&player.fightTimer<=0&&raceElapsedTime>3&&!player.shieldActive&&!player.starActive&&!isNearFinish(player)&&!isOnIce(player.progress)){for(let other of players){if(other.id!==player.id&&!other.finished&&other.state===PlayerState.RUNNING&&other.fightTimer<=0&&other.winnerBoostTimer<=0&&player.winnerBoostTimer<=0&&!other.shieldActive&&!other.starActive&&!isNearFinish(other)&&!isOnIce(other.progress)){const dist=distance(other.x,other.y,player.x,player.y);if(dist<70&&_grR()<0.008*eventFrequency*deltaTime*60){startFight(player,other);break}}}}if(player.state===PlayerState.RUNNING){player.speed=player.baseSpeed*(0.88+_grR()*0.28);const finalSpeed=player.speed*baseMultiplier*slowFactor*windFactor*catchUpFactor*leaderFactor;player.progress+=finalSpeed*deltaTime*27*gameSpeed;if(player.boostActive||player.starActive){if(frameNow-player.lastTrailTime>50){player.trail.push({x:player.x,y:player.y,life:0.5});player.lastTrailTime=frameNow}}}break}player.trail=player.trail.filter(t=>{t.life-=deltaTime*2;return t.life>0});{const _FL=track.length-6;if(player.progress>=_FL&&!player.finished&&!player._crossedThisFrame){const _pp=player._pp0!==undefined?player._pp0:player.progress,_d=player.progress-_pp,_f=_d>0?Math.max(0,Math.min(1,(_FL-_pp)/_d)):1;player._crossT=(raceTime-remainingTime)-(1-_f)*deltaTime*gameSpeed;player._crossedThisFrame=true}}if(player.progress<0||player.progress>=track.length){const startPoint=track[0];player.x=startPoint.x+player.laneOffset;player.y=startPoint.y+player.progress*5}else{const index=Math.floor(player.progress),nextIndex=Math.min(index+1,track.length-1),t=player.progress-index;player.x=lerp(track[index].x,track[nextIndex].x,t)+player.laneOffset;player.y=lerp(track[index].y,track[nextIndex].y,t);if(nextIndex>index)player.facingRight=track[nextIndex].x>track[index].x}}
 function drawBackground(){const gradient=ctx.createRadialGradient(WIDTH/2,HEIGHT/2,0,WIDTH/2,HEIGHT/2,WIDTH*0.7);gradient.addColorStop(0,'#5A9E4B');gradient.addColorStop(0.5,'#4A8E3B');gradient.addColorStop(1,'#3A7E2B');ctx.fillStyle=gradient;ctx.fillRect(0,0,WIDTH,HEIGHT);ctx.fillStyle='rgba(0,0,0,0.03)';for(let i=0;i<200;i++)ctx.fillRect(Math.random()*WIDTH,Math.random()*HEIGHT,2,8+Math.random()*6)}
 function drawScenery(){sceneryObjects.forEach(obj=>{ctx.save();ctx.translate(obj.x,obj.y);const s=obj.scale*DRAW_SCALE;switch(obj.type){case 'tree':ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(5,5,25*s,10*s,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#5D4037';ctx.fillRect(-6*s,-10*s,12*s,35*s);ctx.fillStyle='#388E3C';ctx.beginPath();ctx.arc(0,-30*s,28*s,0,Math.PI*2);ctx.fill();ctx.fillStyle='#4CAF50';ctx.beginPath();ctx.arc(-12*s,-22*s,18*s,0,Math.PI*2);ctx.fill();break;case 'pine':ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(3,5,18*s,8*s,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#4E342E';ctx.fillRect(-4*s,-5*s,8*s,30*s);ctx.fillStyle='#2E7D32';ctx.beginPath();ctx.moveTo(0,-50*s);ctx.lineTo(-22*s,-10*s);ctx.lineTo(22*s,-10*s);ctx.fill();break;case 'rock':ctx.fillStyle='rgba(0,0,0,0.2)';ctx.beginPath();ctx.ellipse(3,3,22*s,10*s,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#757575';ctx.beginPath();ctx.ellipse(0,0,20*s,14*s,0,0,Math.PI*2);ctx.fill();break;case 'bush':ctx.fillStyle='rgba(0,0,0,0.15)';ctx.beginPath();ctx.ellipse(2,4,20*s,8*s,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#43A047';ctx.beginPath();ctx.arc(0,0,18*s,0,Math.PI*2);ctx.fill();break;case 'flower':ctx.fillStyle='#2E7D32';ctx.fillRect(-2,-15*s,4,20*s);const flowerColors=['#E91E63','#FF9800','#FFEB3B','#9C27B0'];ctx.fillStyle=flowerColors[obj.variation%flowerColors.length];for(let i=0;i<5;i++){const angle=(i/5)*Math.PI*2;ctx.beginPath();ctx.arc(Math.cos(angle)*8*s,-20*s+Math.sin(angle)*8*s,6*s,0,Math.PI*2);ctx.fill()}ctx.fillStyle='#FFC107';ctx.beginPath();ctx.arc(0,-20*s,5*s,0,Math.PI*2);ctx.fill();break;case 'mushroom':ctx.fillStyle='#EFEBE9';ctx.fillRect(-5*s,-10*s,10*s,15*s);ctx.fillStyle='#E53935';ctx.beginPath();ctx.arc(0,-15*s,15*s,Math.PI,0);ctx.fill();ctx.fillStyle='#FFFFFF';ctx.beginPath();ctx.arc(-6*s,-18*s,3*s,0,Math.PI*2);ctx.arc(4*s,-20*s,2*s,0,Math.PI*2);ctx.fill();break}ctx.restore()})}
 function drawTrack(){if(track.length<2)return;ctx.strokeStyle='rgba(0,0,0,0.25)';ctx.lineWidth=TRACK_WIDTH+20;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(track[0].x+5,track[0].y+5);for(let i=1;i<track.length;i++)ctx.lineTo(track[i].x+5,track[i].y+5);ctx.stroke();const trackGradient=ctx.createLinearGradient(0,0,WIDTH,HEIGHT);trackGradient.addColorStop(0,'#C9A66B');trackGradient.addColorStop(0.5,'#D4B896');trackGradient.addColorStop(1,'#C9A66B');ctx.strokeStyle=trackGradient;ctx.lineWidth=TRACK_WIDTH;ctx.beginPath();ctx.moveTo(track[0].x,track[0].y);for(let i=1;i<track.length;i++)ctx.lineTo(track[i].x,track[i].y);ctx.stroke();ctx.strokeStyle='#8B4513';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(track[0].x,track[0].y);for(let i=1;i<track.length;i++)ctx.lineTo(track[i].x,track[i].y);ctx.stroke();ctx.strokeStyle='rgba(255,255,255,0.35)';ctx.lineWidth=3;ctx.setLineDash([15,20]);ctx.beginPath();ctx.moveTo(track[0].x,track[0].y);for(let i=1;i<track.length;i++)ctx.lineTo(track[i].x,track[i].y);ctx.stroke();ctx.setLineDash([]);drawWaterZones();drawHillZones();drawMudZones();drawIceZones();drawBoostZones();drawItemBoxes();drawObstacles();drawFinishLine()}
@@ -1178,7 +1189,7 @@ window.BRG=(function(){
     /* 결승 15% 구간에선 함정이 안 나온다 — 선두가 깐 함정이 추격자만 붙잡아 막판 선두 교체가
        2.1→1.5회로 줄었다. 막판은 '앞사람 끌어내리기' 싸움이 되게 */
     if(track.length&&p.progress>track.length*0.85)pool=pool.filter(e=>e[0]!==IT.BANANA&&e[0]!==IT.HONEY&&e[0]!==IT.WALL&&e[0]!==IT.FART&&e[0]!==IT.FREEZE);
-    let s=0;for(const e of pool)s+=e[1];let r=Math.random()*s;
+    let s=0;for(const e of pool)s+=e[1];let r=_grR()*s;
     for(const e of pool){r-=e[1];if(r<=0)return e[0]}return pool[0][0];
   }
   function blocked(t){
@@ -1296,8 +1307,8 @@ window.BRG=(function(){
         if(p.state===PlayerState.RUNNING){p.state=PlayerState.KNOCKED_DOWN;p.knockdownProgress=0;p.stateTimer=dn;p._dizzyT=dn;p._sq=1}
         else p._zapStallT=dn}}
       if(p._frozenT>0){p._frozenT-=dt;if(p._frozenT<=0){fx('thaw',p);snd('shatter')}}
-      if(p._jetT>0){p._jetT-=dt;if(p._jetT<=0&&p.state===PlayerState.RUNNING&&Math.random()<0.35){p.state=PlayerState.TRIPPED;p.stateTimer=0.35;p._sq=0.9;fx('word',p,'land')}}
-      if(p._skateT>0){p._skateT-=dt;if(p._skateT<=0&&Math.random()<0.45&&p.state===PlayerState.RUNNING){
+      if(p._jetT>0){p._jetT-=dt;if(p._jetT<=0&&p.state===PlayerState.RUNNING&&_grR()<0.35){p.state=PlayerState.TRIPPED;p.stateTimer=0.35;p._sq=0.9;fx('word',p,'land')}}
+      if(p._skateT>0){p._skateT-=dt;if(p._skateT<=0&&_grR()<0.45&&p.state===PlayerState.RUNNING){
         p.state=PlayerState.TRIPPED;p.stateTimer=1.3;p._spinT=p._spinT0=1.3;p.expression='surprised';p.expressionTimer=1.6;
         fx('word',p,'skateFall');addCommentary('skateFall',{player:p.name})}}
       const st=p.state;
@@ -1306,9 +1317,9 @@ window.BRG=(function(){
       /* 9차 단순화: 물 = 느려짐(원래 규칙) + 물 먹이기만, 진흙 = 무작위 미끄러짐만, 언덕 = 느려짐(원래 규칙)만.
          허우적·발 푹·데굴데굴은 뺐다 — 정신없고, 운영자가 원한 구역 성격과 달랐다 */
       if(st===PlayerState.IN_MUD){
-        if(Math.random()<0.1*dz){
+        if(_grR()<0.1*dz){
           p.state=PlayerState.SLIDING;p.stateTimer=1.2;p._plantT=1.2;p._muddyT=9;p._sq=0.8;
-          fx('word',p,'plant');fx('mudSplash',p);if(Math.random()<0.6)addCommentary('plant',{player:p.name});
+          fx('word',p,'plant');fx('mudSplash',p);if(_grR()<0.6)addCommentary('plant',{player:p.name});
         }
         if(!(p._muddyT>4))p._muddyT=4;
       }
@@ -1318,9 +1329,9 @@ window.BRG=(function(){
     for(let i=0;i<sw.length;i++)for(let j=i+1;j<sw.length;j++){
       const a=sw[i],b=sw[j];
       if(Math.abs(a.progress-b.progress)>4||distance(a.x,a.y,b.x,b.y)>52*DS)continue;
-      if(Math.random()>=3.4*ev*dt)continue;
+      if(_grR()>=3.4*ev*dt)continue;
       /* 앞선 쪽이 70% 로 당한다 */
-      const front=a.progress>=b.progress?a:b,back=front===a?b:a,r=Math.random()<0.7,vic=r?front:back,atk=r?back:front;
+      const front=a.progress>=b.progress?a:b,back=front===a?b:a,r=_grR()<0.7,vic=r?front:back,atk=r?back:front;
       if(vic._dunkCD>0||vic._dunkT>0||atk._dunkT>0)continue;
       /* 1차 구현은 누르자마자 가해자가 1.3배로 치고 나가는데 팔은 0.85초 동안 계속 이어 그려서
          팔이 수영장을 가로질러 늘어났다(운영자: "팔이 이상하게 길어지게 보여").
@@ -1329,7 +1340,7 @@ window.BRG=(function(){
       vic._dunkT=1.6;vic._dunkCD=4;vic._flailT=0;vic._dunkBy=atk;atk._holdT=0.5;atk._holdOn=vic;
       /* 엎드린 자유형은 몸이 길어 같은 줄에 두면 겹친다 — 누르는 사람을 옆(법선 방향)으로 붙이고
          어깨가 상대 머리 옆에 오도록 살짝 앞에 둔다 */
-      atk._latHold=(Math.random()<0.5?-1:1)*21*DS;holdBeside(atk,vic);atk.expression='smug';atk.expressionTimer=1;
+      atk._latHold=(_grR()<0.5?-1:1)*21*DS;holdBeside(atk,vic);atk.expression='smug';atk.expressionTimer=1;
       fx('dunk',atk,vic);addCommentary('dunk',{player:atk.name,target:vic.name});
     }
   }
@@ -1511,8 +1522,8 @@ window.BRG=(function(){
       if(lead<L*0.8)return;
       G.spurtOn=true;
       for(const p of players){
-        if(p.finished)continue;const r=Math.random();
-        p._spAt=Math.max(p.progress+2,L*(0.8+Math.random()*0.14));
+        if(p.finished)continue;const r=_grR();
+        p._spAt=Math.max(p.progress+2,L*(0.8+_grR()*0.14));
         p._spK=r<0.35?2.0:r<0.7?1.3:0.6;p._spDone=false;p._spT=0;
       }
     }
@@ -1532,7 +1543,7 @@ window.BRG=(function(){
       if(p._yankT>0)p._yankT-=dt;if(p._lassoT>0)p._lassoT-=dt;
       if(p._beeT>0){p._beeT-=dt;p._beeJ=(p._beeJ||0)-dt;
         /* 벌떼에 쫓기면 좌우로 허둥지둥 */
-        if(p._beeJ<=0&&p.state===PlayerState.RUNNING){p._beeJ=0.22;p.targetLaneOffset=(Math.random()-0.5)*90*DS;p.laneChangeTimer=0.3}}
+        if(p._beeJ<=0&&p.state===PlayerState.RUNNING){p._beeJ=0.22;p.targetLaneOffset=(_grR()-0.5)*90*DS;p.laneChangeTimer=0.3}}
       if(p._balloonT>0){p._balloonT-=dt;if(p._balloonT<=0||p.finished){p._balloonT=0.001;popBalloon(p,!p.finished)}}
       if(p._gagT>0)p._gagT-=dt;if(p._lumpT>0)p._lumpT-=dt;if(p._dizzyT>0)p._dizzyT-=dt;
       if(p._ouchT>0)p._ouchT-=dt;if(p._cryT>0)p._cryT-=dt;if(p._spinT>0)p._spinT-=dt;
@@ -1670,8 +1681,8 @@ window.BRG=(function(){
   function fightHit(pair){
     const a=pair.player1,b=pair.player2;if(pair.mom===undefined)pair.mom=0;
     const aUnder=(a._preProg||0)<(b._preProg||0);
-    const aHits=Math.random()<(aUnder?0.57:0.43);
-    const mag=0.1+Math.random()*0.18,prev=pair.mom;
+    const aHits=_grR()<(aUnder?0.57:0.43);
+    const mag=0.1+_grR()*0.18,prev=pair.mom;
     pair.mom=Math.max(-1,Math.min(1,prev+(aHits?mag:-mag)));
     const hitter=aHits?a:b,victim=aHits?b:a;
     victim._ouchT=0.32;victim._sq=0.9;
@@ -1764,14 +1775,14 @@ window.BRG=(function(){
            (구간이 바뀔 때마다 새로 뽑았더니 오가며 3~4번 넘어지는 사람이 나왔다) */
         if(!p._bzB)p._bzB={};
         if(p._bzB[b.zi]===undefined){
-          const rf=rankFrac(p),w=rf<0.34?[0.2,0.5,0.3]:rf>0.66?[0.42,0.48,0.1]:[0.3,0.5,0.2],u=Math.random();
+          const rf=rankFrac(p),w=rf<0.34?[0.2,0.5,0.3]:rf>0.66?[0.42,0.48,0.1]:[0.3,0.5,0.2],u=_grR();
           p._bzB[b.zi]=u<w[0]?0:u<w[0]+w[1]?1:2;
         }
         if(p._bzZ!==b.zi){p._bzZ=b.zi;p._bzCool=0}
         p._bzLeft=p._bzB[b.zi];
         if(p._bzCool>0)p._bzCool--;
         const canTrip=p._bzLeft>0&&p._bzCool<=0&&!isNearFinish(p);
-        if(canTrip&&Math.random()<0.34){
+        if(canTrip&&_grR()<0.34){
           p._bzLeft--;p._bzB[b.zi]=p._bzLeft;p._bzCool=2;
           /* 걸려 넘어짐 — 바위에 발이 걸려 앞으로 꽈당 */
           p.state=PlayerState.TRIPPED;p.stateTimer=1.1;p._plantT=1.1;p._sq=0.85;p.expression='hurt';p.expressionTimer=1.5;
@@ -1782,7 +1793,7 @@ window.BRG=(function(){
           if(Math.abs(tgt)>lim)tgt=b.lat+sg*(b.r+15*DS);   /* 그쪽이 트랙 밖이면 반대로 돌아간다 */
           p._latTo=Math.max(-lim,Math.min(lim,tgt))-p.laneOffset*b.nx;
           p._weaveT=0.75;p._sq=0.4;p.expression='surprised';p.expressionTimer=0.8;
-          if(Math.random()<0.55)fx('word',p,'wobble');
+          if(_grR()<0.55)fx('word',p,'wobble');
         }
         break;
       }
@@ -1813,7 +1824,7 @@ window.BRG=(function(){
       for(let j=0;j<n;j++){
         /* 쌍(같은 칸 좌우 두 개)은 없앴다 — 운영자: 두 개가 붙어 있지 말고 분산 */
         const i=idxAt(a+step*(j+0.5)),fast=s[i]>s[L-1]*0.65;
-        out.push({trackPos:i,offsetX:(k%2?1:-1)*(4+Math.random()*16)*DS,active:true,respawnTimer:0,floatPhase:Math.random()*Math.PI*2,fast});
+        out.push({trackPos:i,offsetX:(k%2?1:-1)*(4+_grR()*16)*DS,active:true,respawnTimer:0,floatPhase:_grR()*Math.PI*2,fast});
         k++;
       }
     }
@@ -3772,14 +3783,14 @@ window.BRFX=(function(){
 })();
 
 let lastTime=0;
-function gameLoop(currentTime){if(!gameRunning)return;if(gamePaused){animationId=requestAnimationFrame(gameLoop);lastTime=currentTime;return}const _rdt=Math.max(0,Math.min((currentTime-lastTime)/1000,0.1));let deltaTime=_rdt;if(window.BRFX){try{const _ts=+BRFX.tick(_rdt);deltaTime=_rdt*(_ts>=0.05&&_ts<=1?_ts:1)}catch(e){deltaTime=_rdt}}lastTime=currentTime;frameNow=Date.now();remainingTime-=deltaTime*gameSpeed;raceElapsedTime+=deltaTime*gameSpeed;_timerAccum+=deltaTime;if(_timerAccum>=0.1){_timerAccum=0;updateTimer()}if(remainingTime<=30&&remainingTime+deltaTime*gameSpeed>30){AudioEngine.sfx.warning();}if(remainingTime<=0){endGame();return}updatePlayers(deltaTime);updateEffects(deltaTime);updateCommentary(deltaTime);render();_lbAccum+=deltaTime;if(_lbAccum>=0.3){_lbAccum=0;updateLeaderboard()}animationId=requestAnimationFrame(gameLoop)}
+function gameLoop(currentTime){if(!gameRunning)return;if(gamePaused){animationId=requestAnimationFrame(gameLoop);lastTime=currentTime;return}const _rdt=Math.max(0,Math.min((currentTime-lastTime)/1000,0.1));let deltaTime=_rdt;if(window.BRFX){try{const _ts=+BRFX.tick(_rdt);deltaTime=_rdt*(_ts>=0.05&&_ts<=1?_ts:1)}catch(e){deltaTime=_rdt}}lastTime=currentTime;frameNow=Date.now();remainingTime-=deltaTime*gameSpeed;raceElapsedTime+=deltaTime*gameSpeed;_timerAccum+=deltaTime;if(_timerAccum>=0.1){_timerAccum=0;updateTimer()}if(remainingTime<=30&&remainingTime+deltaTime*gameSpeed>30){AudioEngine.sfx.warning();}if(remainingTime<=0){endGame();return}if(window.__grv2)__grv2.simOn=true;updatePlayers(deltaTime);updateEffects(deltaTime);updateCommentary(deltaTime);if(window.__grv2)__grv2.simOn=false;render();if(window.__grv2&&__grv2.room)__grv2.tick();_lbAccum+=deltaTime;if(_lbAccum>=0.3){_lbAccum=0;updateLeaderboard()}animationId=requestAnimationFrame(gameLoop)}
 function render(){const _fx=!!(window.BRFX&&BRFX.ok);if(_fx)BRFX.begin();ctx.clearRect(0,0,WIDTH,HEIGHT);if(!(_fx&&BRFX.drawStatic())){drawBackground();drawScenery();drawTrack();}const _fx2=!!(window.BRFX&&BRFX.ok);if(_fx2){BRFX.push();BRFX.drawDynamic();BRFX.drawUnder();}else if(window.BRFX)BRFX.drawWorldLite();const sortedPlayers=[...players].sort((a,b)=>a.y-b.y);sortedPlayers.forEach(player=>drawPlayer(player));drawEffects();if(_fx2){BRFX.drawTop();BRFX.pop();BRFX.drawOverlay()}displayCommentary()}
-function startGame(){AudioEngine.getCtx();try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}const nameInputs=document.getElementById('playerNameInputs').querySelectorAll('input[type="text"]');const playerCount=nameInputs.length;raceTime=parseInt(document.getElementById('raceTime').value);gameSpeed=parseFloat(document.getElementById('gameSpeed').value);eventFrequency=parseInt(document.getElementById('eventFrequency').value);remainingTime=raceTime;const names=[];nameInputs.forEach((input,i)=>{names.push(input.value.trim()||T('phName',{n:i+1}))});lastRaceNames=[...names];lastRaceCount=playerCount;lastRaceTime=raceTime;lastGameSpeed=gameSpeed;lastEventFreq=eventFrequency;gamePaused=false;document.getElementById('pauseBtn').textContent='⏸️ '+T('pause');document.getElementById('pauseBtn').classList.remove('resumed');document.getElementById('pauseOverlay').style.display='none';document.getElementById('setupScreen').style.display='none';document.body.classList.add('race-active');/* In portrait on a phone the race can't display correctly; show the rotate
+function startGame(){if(window.__grv2&&__grv2.room&&!__grv2.go){if(__grv2.room.isHost)__grv2.hostStart();return;}AudioEngine.getCtx();try{if(window.LpBgm){window.LpBgm.start();}else{window.__lpBgmWanted=true;}}catch(_){}const nameInputs=document.getElementById('playerNameInputs').querySelectorAll('input[type="text"]');const playerCount=nameInputs.length;raceTime=parseInt(document.getElementById('raceTime').value);gameSpeed=parseFloat(document.getElementById('gameSpeed').value);eventFrequency=parseInt(document.getElementById('eventFrequency').value);remainingTime=raceTime;const names=[];nameInputs.forEach((input,i)=>{names.push(input.value.trim()||T('phName',{n:i+1}))});lastRaceNames=[...names];lastRaceCount=playerCount;lastRaceTime=raceTime;lastGameSpeed=gameSpeed;lastEventFreq=eventFrequency;gamePaused=false;document.getElementById('pauseBtn').textContent='⏸️ '+T('pause');document.getElementById('pauseBtn').classList.remove('resumed');document.getElementById('pauseOverlay').style.display='none';document.getElementById('setupScreen').style.display='none';document.body.classList.add('race-active');/* In portrait on a phone the race can't display correctly; show the rotate
    prompt (via body.race-active) and defer the real init until landscape. */
 if(isPortraitPhone()){pendingStart=true;return;}beginRace();}
-function beginRace(){pendingStart=false;if(window.BRFX)try{BRFX.reset()}catch(_){}const names=lastRaceNames;const playerCount=lastRaceCount;fitCanvas();generateSnakeTrack();players=[];for(let i=0;i<playerCount;i++)players.push(createPlayer(i,names[i]));finishOrder=[];_endGameScheduled=false;fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];commentaryQueue=[];currentCommentary=null;fightsOccurred=0;totalFightsRequired=Math.ceil(playerCount*0.8);raceElapsedTime=0;document.getElementById('totalCount').textContent=playerCount;document.getElementById('finishedCount').textContent='0';document.getElementById('setupScreen').style.display='none';document.getElementById('infoPanel').style.display='flex';document.getElementById('resultScreen').style.display='none';document.getElementById('centerTimer').style.display='block';document.getElementById('centerTimer').textContent=raceTime.toFixed(1);document.getElementById('timer').textContent=raceTime.toFixed(1);document.getElementById('centerTimer').style.color='rgba(255,230,109,0.7)';document.getElementById('centerTimer').style.animation='titleGlow 2s ease-in-out infinite';showCountdown(()=>{gameRunning=true;lastTime=performance.now();addCommentary('raceStart',{});if(AudioEngine.isBGMEnabled()) AudioEngine.startBGM();animationId=requestAnimationFrame(gameLoop)})}
+function beginRace(){pendingStart=false;if(window.BRFX)try{BRFX.reset()}catch(_){}const names=lastRaceNames;const playerCount=lastRaceCount;fitCanvas();generateSnakeTrack();players=[];for(let i=0;i<playerCount;i++)players.push(createPlayer(i,names[i]));finishOrder=[];_endGameScheduled=false;fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];commentaryQueue=[];currentCommentary=null;fightsOccurred=0;totalFightsRequired=Math.ceil(playerCount*0.8);raceElapsedTime=0;document.getElementById('totalCount').textContent=playerCount;document.getElementById('finishedCount').textContent='0';document.getElementById('setupScreen').style.display='none';document.getElementById('infoPanel').style.display='flex';document.getElementById('resultScreen').style.display='none';document.getElementById('centerTimer').style.display='block';document.getElementById('centerTimer').textContent=raceTime.toFixed(1);document.getElementById('timer').textContent=raceTime.toFixed(1);document.getElementById('centerTimer').style.color='rgba(255,230,109,0.7)';document.getElementById('centerTimer').style.animation='titleGlow 2s ease-in-out infinite';if(window.__grv2&&__grv2.room&&__grv2.room.isHost)__grv2.onBuilt();showCountdown(()=>{gameRunning=true;lastTime=performance.now();addCommentary('raceStart',{});if(AudioEngine.isBGMEnabled()) AudioEngine.startBGM();animationId=requestAnimationFrame(gameLoop)})}
 function showCountdown(callback){const countdownEl=document.getElementById('countdown');countdownEl.style.display='flex';const counts=['3','2','1','🚀 GO!'];let index=0;render();function showNext(){if(index>=counts.length){countdownEl.style.display='none';callback();return}countdownEl.textContent=counts[index];countdownEl.style.animation='none';countdownEl.offsetHeight;countdownEl.style.animation='countdownPop 0.8s ease-out';if(index<3) AudioEngine.sfx.countdown(); else AudioEngine.sfx.go();index++;setTimeout(showNext,800)}showNext()}
-function endGame(){gameRunning=false;cancelAnimationFrame(animationId);AudioEngine.stopBGM();AudioEngine.sfx.gameEnd();const unfinished=players.filter(p=>!p.finished).sort((a,b)=>b.progress-a.progress);unfinished.forEach(player=>{player.finishRank=finishOrder.length+1;finishOrder.push(player)});showResults()}
+function endGame(){gameRunning=false;cancelAnimationFrame(animationId);AudioEngine.stopBGM();AudioEngine.sfx.gameEnd();const unfinished=players.filter(p=>!p.finished).sort((a,b)=>b.progress-a.progress);unfinished.forEach(player=>{player.finishRank=finishOrder.length+1;finishOrder.push(player)});if(window.__grv2&&__grv2.room)__grv2.onEnd();showResults()}
 
 /* 시상대 HTML (2026-08-19). 두 게임 공통 규격 — 클래스명·구조 동일.
    items: [{name,color,sub}] 순위순(1위가 [0]). 3명 미만이면 있는 만큼만.
@@ -3809,7 +3820,7 @@ function lpPodiumReveal(root){
     setTimeout(()=>slots.forEach(s=>s.classList.add('up')),1200);
 }
 
-function showResults(){document.body.classList.remove('race-active');document.getElementById('infoPanel').style.display='none';document.getElementById('centerTimer').style.display='none';document.getElementById('commentary').style.display='none';document.getElementById('fightLabelsContainer').innerHTML='';const resultScreen=document.getElementById('resultScreen');resultScreen.style.display='flex';try{window.lpMountAds&&window.lpMountAds()}catch(_){}const finalRankings=document.getElementById('finalRankings');
+function showResults(){if(window.__grv2)setTimeout(function(){__grv2.onResults()},0);document.body.classList.remove('race-active');document.getElementById('infoPanel').style.display='none';document.getElementById('centerTimer').style.display='none';document.getElementById('commentary').style.display='none';document.getElementById('fightLabelsContainer').innerHTML='';const resultScreen=document.getElementById('resultScreen');resultScreen.style.display='flex';try{window.lpMountAds&&window.lpMountAds()}catch(_){}const finalRankings=document.getElementById('finalRankings');
     /* 1·2·3위 = 시상대, 4위 이하 = 목록 (2026-08-19, 카레이싱과 동일 규격) */
     const top3=finishOrder.slice(0,3).map(p=>({name:p.name,color:p.shirtColor,sub:p.finished?T('finTime2',{t:p.finishTime.toFixed(3)}):T('dnf')}));
     const restLabel=finishOrder.length>3?`<div class="lp-rest-label">${rankLabel(4)}~</div>`:'';
@@ -3819,12 +3830,329 @@ function showResults(){document.body.classList.remove('race-active');document.ge
     const _rb=document.getElementById('restartBtn');if(window.LpNav&&_rb){_rb.style.display='none';lpNavMount(_rb.parentNode,resetGame)}}
 /* 정지·종료 화면 공통 버튼 — 🎮 게임 홈(= 설정 화면) · 🏠 전체 홈 (lpGameNav.js, siteFooter 가 defer 로 싣는다) */
 function lpNavMount(el,fn){try{window.LpNav&&window.LpNav.mount(el,{gameHome:fn})}catch(_){}}
-function resetGame(){document.body.classList.remove('race-active');pendingStart=false;gameRunning=false;gamePaused=false;AudioEngine.stopBGM();if(animationId)cancelAnimationFrame(animationId);players=[];track=[];trackObstacles=[];deepWaterZones=[];hillZones=[];mudZones=[];iceZones=[];boostZones=[];itemBoxes=[];sceneryObjects=[];finishOrder=[];fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];commentaryQueue=[];currentCommentary=null;fightsOccurred=0;raceElapsedTime=0;document.getElementById('resultScreen').style.display='none';document.getElementById('infoPanel').style.display='none';document.getElementById('centerTimer').style.display='none';document.getElementById('commentary').style.display='none';document.getElementById('fightLabelsContainer').innerHTML='';document.getElementById('pauseOverlay').style.display='none';ctx.clearRect(0,0,WIDTH,HEIGHT);if(lastRaceCount>0&&lastRaceNames.length>0){document.getElementById('playerCount').value=lastRaceCount;document.getElementById('playerCountValue').textContent=lastRaceCount;document.getElementById('raceTime').value=lastRaceTime;document.getElementById('raceTimeValue').textContent=lastRaceTime;document.getElementById('gameSpeed').value=lastGameSpeed;document.getElementById('gameSpeedValue').textContent=lastGameSpeed;document.getElementById('eventFrequency').value=lastEventFreq;document.getElementById('eventFrequencyValue').textContent=lastEventFreq;raceTime=lastRaceTime;remainingTime=lastRaceTime;gameSpeed=lastGameSpeed;eventFrequency=lastEventFreq;generatePlayerNameInputs();for(let i=0;i<lastRaceNames.length&&i<lastRaceCount;i++){const input=document.getElementById(`playerName${i}`);if(input)input.value=lastRaceNames[i]}}else{document.getElementById('playerCount').value=6;document.getElementById('playerCountValue').textContent='6';document.getElementById('raceTime').value=90;document.getElementById('raceTimeValue').textContent='90';document.getElementById('gameSpeed').value=1;document.getElementById('gameSpeedValue').textContent='1';document.getElementById('eventFrequency').value=3;document.getElementById('eventFrequencyValue').textContent='3';raceTime=90;remainingTime=90;gameSpeed=1;eventFrequency=3;generatePlayerNameInputs()}showSaveIndicator();document.getElementById('setupScreen').style.display='flex'}
+function resetGame(){if(window.__grv2&&__grv2.room&&__grv2.room.isHost)__grv2.onReset();document.body.classList.remove('race-active');pendingStart=false;gameRunning=false;gamePaused=false;AudioEngine.stopBGM();if(animationId)cancelAnimationFrame(animationId);players=[];track=[];trackObstacles=[];deepWaterZones=[];hillZones=[];mudZones=[];iceZones=[];boostZones=[];itemBoxes=[];sceneryObjects=[];finishOrder=[];fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];commentaryQueue=[];currentCommentary=null;fightsOccurred=0;raceElapsedTime=0;document.getElementById('resultScreen').style.display='none';document.getElementById('infoPanel').style.display='none';document.getElementById('centerTimer').style.display='none';document.getElementById('commentary').style.display='none';document.getElementById('fightLabelsContainer').innerHTML='';document.getElementById('pauseOverlay').style.display='none';ctx.clearRect(0,0,WIDTH,HEIGHT);if(lastRaceCount>0&&lastRaceNames.length>0){document.getElementById('playerCount').value=lastRaceCount;document.getElementById('playerCountValue').textContent=lastRaceCount;document.getElementById('raceTime').value=lastRaceTime;document.getElementById('raceTimeValue').textContent=lastRaceTime;document.getElementById('gameSpeed').value=lastGameSpeed;document.getElementById('gameSpeedValue').textContent=lastGameSpeed;document.getElementById('eventFrequency').value=lastEventFreq;document.getElementById('eventFrequencyValue').textContent=lastEventFreq;raceTime=lastRaceTime;remainingTime=lastRaceTime;gameSpeed=lastGameSpeed;eventFrequency=lastEventFreq;generatePlayerNameInputs();for(let i=0;i<lastRaceNames.length&&i<lastRaceCount;i++){const input=document.getElementById(`playerName${i}`);if(input)input.value=lastRaceNames[i]}}else{document.getElementById('playerCount').value=6;document.getElementById('playerCountValue').textContent='6';document.getElementById('raceTime').value=90;document.getElementById('raceTimeValue').textContent='90';document.getElementById('gameSpeed').value=1;document.getElementById('gameSpeedValue').textContent='1';document.getElementById('eventFrequency').value=3;document.getElementById('eventFrequencyValue').textContent='3';raceTime=90;remainingTime=90;gameSpeed=1;eventFrequency=3;generatePlayerNameInputs()}showSaveIndicator();document.getElementById('setupScreen').style.display='flex'}
 function exitGame(){document.body.classList.remove('race-active');pendingStart=false;gameRunning=false;gamePaused=false;AudioEngine.stopBGM();if(animationId)cancelAnimationFrame(animationId);players=[];track=[];trackObstacles=[];deepWaterZones=[];hillZones=[];mudZones=[];iceZones=[];boostZones=[];itemBoxes=[];sceneryObjects=[];finishOrder=[];fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];commentaryQueue=[];currentCommentary=null;fightsOccurred=0;raceElapsedTime=0;document.getElementById('resultScreen').style.display='none';document.getElementById('infoPanel').style.display='none';document.getElementById('centerTimer').style.display='none';document.getElementById('commentary').style.display='none';document.getElementById('fightLabelsContainer').innerHTML='';document.getElementById('pauseOverlay').style.display='none';ctx.clearRect(0,0,WIDTH,HEIGHT);if(lastRaceCount>0&&lastRaceNames.length>0){document.getElementById('playerCount').value=lastRaceCount;document.getElementById('playerCountValue').textContent=lastRaceCount;document.getElementById('raceTime').value=lastRaceTime;document.getElementById('raceTimeValue').textContent=lastRaceTime;document.getElementById('gameSpeed').value=lastGameSpeed;document.getElementById('gameSpeedValue').textContent=lastGameSpeed;document.getElementById('eventFrequency').value=lastEventFreq;document.getElementById('eventFrequencyValue').textContent=lastEventFreq;raceTime=lastRaceTime;remainingTime=lastRaceTime;gameSpeed=lastGameSpeed;eventFrequency=lastEventFreq;generatePlayerNameInputs();for(let i=0;i<lastRaceNames.length&&i<lastRaceCount;i++){const input=document.getElementById(`playerName${i}`);if(input)input.value=lastRaceNames[i]}}else{document.getElementById('playerCount').value=6;document.getElementById('playerCountValue').textContent='6';document.getElementById('raceTime').value=90;document.getElementById('raceTimeValue').textContent='90';document.getElementById('gameSpeed').value=1;document.getElementById('gameSpeedValue').textContent='1';document.getElementById('eventFrequency').value=3;document.getElementById('eventFrequencyValue').textContent='3';raceTime=90;remainingTime=90;gameSpeed=1;eventFrequency=3;generatePlayerNameInputs()}showSaveIndicator();document.getElementById('setupScreen').style.display='flex'}
 function togglePause(){if(!gameRunning)return;gamePaused=!gamePaused;const btn=document.getElementById('pauseBtn');const overlay=document.getElementById('pauseOverlay');if(gamePaused){btn.textContent='▶️ '+T('resume');btn.classList.add('resumed');overlay.style.display='flex';AudioEngine.stopBGM();lpNavMount(overlay,exitGame)}else{btn.textContent='⏸️ '+T('pause');btn.classList.remove('resumed');overlay.style.display='none';if(AudioEngine.isBGMEnabled()) AudioEngine.startBGM()}}
 function initEventListeners(){document.getElementById('playerCount').addEventListener('input',e=>{document.getElementById('playerCountValue').textContent=e.target.value;generatePlayerNameInputs()});document.getElementById('raceTime').addEventListener('input',e=>{document.getElementById('raceTimeValue').textContent=e.target.value});document.getElementById('gameSpeed').addEventListener('input',e=>{document.getElementById('gameSpeedValue').textContent=e.target.value});document.getElementById('eventFrequency').addEventListener('input',e=>{document.getElementById('eventFrequencyValue').textContent=e.target.value});document.getElementById('startBtn').addEventListener('click',startGame);document.getElementById('restartBtn').addEventListener('click',resetGame);document.getElementById('resetBtn').addEventListener('click',()=>{generatePlayerNameInputs()});document.getElementById('pauseBtn').addEventListener('click',togglePause);document.getElementById('exitBtn').addEventListener('click',()=>{if(confirm(T('exitConfirm')))exitGame()});document.getElementById('playerNameInputs').addEventListener('click',e=>{const btn=e.target.closest('.btn-remove-player');if(btn)removePlayerAt(parseInt(btn.dataset.index))});document.getElementById('playerNameInputs').addEventListener('keydown',e=>{if(e.key!=='Enter'||e.target.type!=='text')return;e.preventDefault();const inputs=[...document.querySelectorAll('#playerNameInputs input[type="text"]')];const i=inputs.indexOf(e.target);if(i>-1&&i<inputs.length-1)inputs[i+1].focus();else{const sb=document.getElementById('startBtn');if(sb)sb.focus()}});document.getElementById('playerNamesSection').addEventListener('click',e=>{if(e.target.id==='addPlayerBtn')addPlayer()});document.getElementById('saveNamesBtn').addEventListener('click',openSaveModal);document.getElementById('loadNamesBtn').addEventListener('click',quickLoad);document.getElementById('viewListsBtn').addEventListener('click',openListModal);document.getElementById('confirmSaveBtn').addEventListener('click',confirmSave);document.getElementById('saveModalCloseBtn').addEventListener('click',closeSaveModal);document.getElementById('listModalCloseBtn').addEventListener('click',closeListModal);document.getElementById('saveModal').addEventListener('click',e=>{if(e.target.id==='saveModal')closeSaveModal()});document.getElementById('listModal').addEventListener('click',e=>{if(e.target.id==='listModal')closeListModal()});document.getElementById('savedListsContainer').addEventListener('click',e=>{const btn=e.target.closest('.list-item-btn');if(!btn)return;const action=btn.dataset.action,index=parseInt(btn.dataset.index);if(action==='load')loadList(index);else if(action==='delete')deleteList(index)});document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeSaveModal();closeListModal()}});window.addEventListener('resize',()=>{fitCanvas()})}
 function init(){const savedLang=localStorage.getItem('luckyplz_lang');if(savedLang&&I18N[savedLang])currentLang=savedLang;else currentLang=detectBrowserLang();buildFightActions();createStars();generatePlayerNameInputs();showSaveIndicator();initEventListeners();applyLanguage()}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+</script>
+<script>
+/* ===== LuckyPlz Rooms v2 — Brawl Run 같이 보기 (첫 방 · 틱 모드 + 공정 시드, 2026-09-30 · DESIGN §6.1.8) =====
+   supabase 를 싣지 않던 게임 — v2 로더(siteFooter)가 방이 필요할 때만 supabase·lpRooms* 를 지연 로드한다. 혼자 하기는 불변.
+   · 공정 시드: 방장 [경주 시작] → LpFair.draw → seed. 트랙·구역·바위·상자·주자 스탯·싸움·아이템(BRG) 난수가 전부
+     _grR()(= rng(seed,'sim'))에서 나온다 — 같은 시드·같은 기기·같은 프레임 간격이면 같은 레이스(하네스 D12)
+   · 판정(BRG)·연출(BRFX·BRFIELD)·B급 표정·되돌리기 금지 항목은 한 줄도 안 바꿨다. 게스트는 방장 세계를 그대로 그린다:
+     출발 묶음(트랙·구역·바위·상자·풍경·주자)을 방장 좌표 그대로 받고 캔버스만 화면에 맞춰 줄인다(좌표 변환 0) →
+     굽는 경기장(BRFIELD)도 같은 그림. 10Hz 상태 스냅샷(압축) + 220ms 보간, 그 사이 방장이 일으킨 연출 호출
+     (BRFX 말풍선·아이템 이름표·K.O.·먼지·물보라·효과음)을 그대로 다시 재생 → 같은 장면·같은 웃긴 표정
+   · 결과: 방장 서명 상태 → 끝나면 순위를 LpFair.draw 로 서명 공표(출발 시드 커밋에 묶음), 배지 '✓ 공정 시드', #cert= */
+function _grIsV2G(){return !!(window.__grv2&&__grv2.room&&!__grv2.room.isHost)}
+window.__grv2=(function(){
+    const TX={
+        ko:{wait:'⏳ 방장이 시작해요',mix:'🎲 모두의 행운 섞는 중…',ok:'✓ 공정 시드 · 방장 기록 서명',bad:'✗ 위조된 결과',abort:'⚠ 추첨 #{n} 취소됨'},
+        en:{wait:'⏳ Host starts',mix:'🎲 Mixing everyone’s luck…',ok:'✓ Fair seed · host-signed result',bad:'✗ Forged result',abort:'⚠ Draw #{n} cancelled'},
+        ja:{wait:'⏳ ホストが開始',mix:'🎲 みんなの運を混ぜています…',ok:'✓ 公正シード · ホスト署名',bad:'✗ 改ざんされた結果',abort:'⚠ 抽選 #{n} 取り消し'},
+        zh:{wait:'⏳ 等房主开始',mix:'🎲 正在混合大家的运气…',ok:'✓ 公平种子 · 房主签名',bad:'✗ 伪造的结果',abort:'⚠ 抽奖 #{n} 已取消'},
+        es:{wait:'⏳ Empieza el anfitrión',mix:'🎲 Mezclando la suerte de todos…',ok:'✓ Semilla justa · firmado',bad:'✗ Resultado falso',abort:'⚠ Sorteo #{n} cancelado'},
+        pt:{wait:'⏳ O anfitrião começa',mix:'🎲 Misturando a sorte de todos…',ok:'✓ Semente justa · assinado',bad:'✗ Resultado falso',abort:'⚠ Sorteio #{n} cancelado'}
+    };
+    const tx=k=>{const l=String(typeof currentLang==='string'?currentLang:'en').slice(0,2);return ((TX[l]||TX.en)[k])||TX.en[k]};
+    const $i=id=>document.getElementById(id);
+    let room=null,UI=null,offs=[],busy=false,cfgT=0,appliedCfg='',race=null,lastTick=0,tseq=0,evq=[],hooked=false,attC=null,appliedEnd=false;
+    let buf=[],cur=null,raf=0,prevT=0,lbT=0,cdT=[],gs=1;
+    /* 방장 연출 호출 녹화 대상 — BRG 가 fx()/snd() 로 부르는 BRFX 메서드 + 입자 생성 + 효과음 */
+    const FXN=['word','itemTag','hit','fightHit','lassoHit','swapFx','dunk','mudSplash','iceKick','rockDust','boom','shout','freeze','thaw','zap','toss','eelDrop','wallHit','bonk','ko','doubleKO','onFinish','banner','snd'];
+    const CRN=['createDust','createSplash','createSpark','createCollisionEffect','createShockwaveEffect'];
+    /* ── 직렬화: 주자 참조는 {$p:i}, 숫자 0.01, 함수·Set·DOM 제외 ── */
+    function ser(v,d){
+        if(v==null)return v;
+        const t=typeof v;
+        if(t==='number')return Number.isInteger(v)||!isFinite(v)?(isFinite(v)?v:0):Math.round(v*100)/100;
+        if(t==='string'||t==='boolean')return v;
+        if(t!=='object')return undefined;
+        if(d>0){const pi=players.indexOf(v);if(pi>=0)return {$p:pi};}
+        if(d>5)return undefined;
+        if(Array.isArray(v)){const o=new Array(v.length);for(let i=0;i<v.length;i++){const x=ser(v[i],d+1);o[i]=x===undefined?null:x;}return o;}
+        if(v instanceof Set||v instanceof Map||v.nodeType||(typeof HTMLCanvasElement!=='undefined'&&v instanceof HTMLCanvasElement)||ArrayBuffer.isView(v))return undefined;
+        const o={};for(const k in v){if(k==='triedBoxes')continue;const x=ser(v[k],d+1);if(x!==undefined)o[k]=x;}
+        return o;
+    }
+    function rev(v){
+        if(v==null||typeof v!=='object')return v;
+        if(Array.isArray(v))return v.map(rev);
+        if(v.$p!=null&&Object.keys(v).length===1)return players[v.$p]||null;
+        const o={};for(const k in v)o[k]=rev(v[k]);return o;
+    }
+    function applyPlayer(p,s){
+        for(const k in p)if(!(k in s)&&k!=='triedBoxes'&&k!=='trail')delete p[k];
+        for(const k in s)p[k]=rev(s[k]);
+        if(!Array.isArray(p.trail))p.trail=[];
+    }
+    const Gs=()=>(window.BRG&&BRG._G)||{};
+    /* ── 출발 묶음(압축 → 상태) ── */
+    function packStart(){
+        const G=Gs();
+        return {W:WIDTH,H:HEIGHT,DS:DRAW_SCALE,TW:TRACK_WIDTH,M:MARGIN,RM:RIGHT_MARGIN,raceTime,gameSpeed,ev:eventFrequency,
+            track:ser(track,1),obs:ser(trackObstacles,1),dw:ser(deepWaterZones,1),hz:ser(hillZones,1),mz:ser(mudZones,1),iz:ser(iceZones,1),bz:ser(boostZones,1),
+            ib:ser(itemBoxes,1),sc:ser(sceneryObjects,1),bo:ser(G.boulders||[],1),pl:players.map(p=>ser(p,0)),tfr:totalFightsRequired};
+    }
+    function fitGuest(){
+        const vw=window.innerWidth,vh=window.innerHeight;
+        gs=Math.min(vw/WIDTH,vh/HEIGHT)||1;
+        DPR=Math.max(0.5,Math.min((window.devicePixelRatio||1)*gs,(window.BRQ?BRQ.cap():2.5)));
+        const cw=WIDTH*gs,ch=HEIGHT*gs;
+        canvas.style.width=cw+'px';canvas.style.height=ch+'px';canvas.style.left=Math.max(0,(vw-cw)/2)+'px';canvas.style.top=Math.max(0,(vh-ch)/2)+'px';
+        canvas.width=Math.max(1,Math.round(WIDTH*DPR));canvas.height=Math.max(1,Math.round(HEIGHT*DPR));
+        ctx.setTransform(DPR,0,0,DPR,0,0);
+        const fl=$i('fightLabelsContainer');if(fl){fl.style.transformOrigin='0 0';fl.style.transform='translate('+Math.max(0,(vw-cw)/2)+'px,'+Math.max(0,(vh-ch)/2)+'px) scale('+gs+')';}
+        if(window.BRFX)try{BRFX.invalidate()}catch(_){}
+    }
+    function leaveGuestView(){
+        if(!V.gview)return;V.gview=false;
+        canvas.style.left='';canvas.style.top='';
+        const fl=$i('fightLabelsContainer');if(fl)fl.style.transform='';
+        fitCanvas();
+    }
+    function applyStart(q){
+        V.gview=true;
+        WIDTH=q.W;HEIGHT=q.H;DRAW_SCALE=q.DS;TRACK_WIDTH=q.TW;MARGIN=q.M;RIGHT_MARGIN=q.RM;
+        raceTime=q.raceTime;remainingTime=q.raceTime;gameSpeed=q.gameSpeed;eventFrequency=q.ev;totalFightsRequired=q.tfr||2;
+        fitGuest();
+        players=q.pl.map(()=>({trail:[]}));
+        track=rev(q.track);trackObstacles=rev(q.obs);deepWaterZones=rev(q.dw);hillZones=rev(q.hz);mudZones=rev(q.mz);iceZones=rev(q.iz);boostZones=rev(q.bz);
+        itemBoxes=rev(q.ib);sceneryObjects=rev(q.sc);
+        q.pl.forEach((s,i)=>applyPlayer(players[i],s));
+        finishOrder=[];fightPairs=[];collisionEffects=[];shockwaveEffects=[];dustEffects=[];sparkEffects=[];splashEffects=[];hitEffects=[];itemPopups=[];
+        commentaryQueue=[];currentCommentary=null;raceElapsedTime=0;_endGameScheduled=false;
+        try{if(window.BRG)BRG.reset();}catch(_){}
+        Gs().boulders=rev(q.bo||[]);
+        try{if(window.BRFX)BRFX.reset();}catch(_){}
+        gameRunning=false;gamePaused=false;
+        $i('setupScreen').style.display='none';$i('infoPanel').style.display='flex';$i('resultScreen').style.display='none';
+        $i('centerTimer').style.display='block';$i('centerTimer').textContent=raceTime.toFixed(1);$i('timer').textContent=raceTime.toFixed(1);
+        $i('totalCount').textContent=players.length;$i('finishedCount').textContent='0';
+        document.body.classList.add('race-active');
+        try{if(AudioEngine.isBGMEnabled())AudioEngine.startBGM();}catch(_){}
+        buf=[];cur=null;
+        if(!raf){prevT=0;raf=requestAnimationFrame(gLoop);}
+    }
+    function applyTick(d){
+        (d.pl||[]).forEach((s,i)=>{if(players[i])applyPlayer(players[i],s);});
+        const G=Gs(),g=d.G||{};for(const k in g)G[k]=rev(g[k]);
+        fightPairs=rev(d.fp||[]);hitEffects=rev(d.he||[]);itemPopups=rev(d.ip||[]);
+        (d.ib||[]).forEach((a,i)=>{if(itemBoxes[i])itemBoxes[i].active=!!a;});
+        currentCommentary=d.cm?rev(d.cm):null;
+        remainingTime=d.rem;raceElapsedTime=d.el;
+        const fc=$i('finishedCount');if(fc)fc.textContent=d.fin;
+        /* 방장이 일으킨 연출을 같은 순서로 */
+        (d.ev||[]).forEach(e=>{try{
+            const a=rev(e[2]||[]);
+            if(e[0]==='f'){const B=window.BRFX;if(B&&B[e[1]]&&B.ok)B[e[1]].apply(B,a);}
+            else if(e[0]==='s'){AudioEngine.sfx[e[1]]&&AudioEngine.sfx[e[1]]();}
+            else if(e[0]==='c'){const f=V.orig[e[1]]||window[e[1]];if(typeof f==='function')f.apply(null,a);}
+        }catch(_){}});
+    }
+    function gLoop(ts){
+        if(!V.gview){raf=0;return;}
+        raf=requestAnimationFrame(gLoop);
+        const now=performance.now(),rt=now-220;
+        while(buf.length&&buf[0].at<=rt){const T=buf.shift();try{applyTick(T.d);}catch(e){console.warn('[glory v2] tick',e);}cur=T;}
+        const nx=buf[0];
+        if(cur&&nx&&nx.d.pl){
+            const f=Math.max(0,Math.min(1,(rt-cur.at)/Math.max(1,nx.at-cur.at)));
+            nx.d.pl.forEach((s,i)=>{const p=players[i],a=cur.d.pl[i];if(!p||!a||typeof s.x!=='number')return;p.x=a.x+(s.x-a.x)*f;p.y=a.y+(s.y-a.y)*f;});
+        }
+        const dt=prevT?Math.max(0,Math.min(0.05,(now-prevT)/1000)):0.016;prevT=now;
+        frameNow=Date.now();
+        try{if(window.BRFX)BRFX.tick(dt);}catch(_){}
+        try{updateEffects(dt);updateFightLabels();render();}catch(e){}
+        if(now-lbT>300){lbT=now;try{updateLeaderboard();updateTimer();}catch(_){}}
+    }
+    function stopGuest(){if(raf)cancelAnimationFrame(raf);raf=0;buf=[];cur=null;}
+    function guestCountdown(cd0){
+        cdT.forEach(clearTimeout);cdT=[];
+        const el=$i('countdown'),counts=['3','2','1','🚀 GO!'];
+        counts.forEach((c,i)=>{
+            const at=cd0+i*800-room.clock();if(at<-700)return;
+            cdT.push(setTimeout(()=>{el.style.display='flex';el.textContent=c;el.style.animation='none';el.offsetHeight;el.style.animation='countdownPop 0.8s ease-out';try{if(i<3)AudioEngine.sfx.countdown();else AudioEngine.sfx.go();}catch(_){}},Math.max(0,at)));
+        });
+        cdT.push(setTimeout(()=>{el.style.display='none';},Math.max(0,cd0+3200-room.clock())));
+    }
+    /* ── 방장: 연출 녹화 훅(시뮬 중에만) ── */
+    function hook(){
+        if(hooked)return;hooked=true;
+        const rec=(k,n,a)=>{if(V.simOn&&V.room&&V.room.isHost)evq.push([k,n,ser(Array.prototype.slice.call(a),1)]);};
+        if(window.BRFX)FXN.forEach(n=>{const o=BRFX[n];if(typeof o!=='function')return;BRFX[n]=function(){rec('f',n,arguments);return o.apply(this,arguments);};});
+        Object.keys(AudioEngine.sfx).forEach(n=>{const o=AudioEngine.sfx[n];if(typeof o!=='function')return;AudioEngine.sfx[n]=function(){rec('s',n,[]);return o.apply(this,arguments);};});
+        CRN.forEach(n=>{const o=window[n];if(typeof o!=='function')return;V.orig[n]=o;window[n]=function(){rec('c',n,arguments);return o.apply(this,arguments);};});
+    }
+    /* ── 설정 동기화 ── */
+    function readCfg(){
+        const names=[...document.querySelectorAll('#playerNameInputs input[type="text"]')].map((i,k)=>i.value.trim()||T('phName',{n:k+1}));
+        return {raceTime:parseInt($i('raceTime').value),gameSpeed:parseFloat($i('gameSpeed').value),ev:parseInt($i('eventFrequency').value),names};
+    }
+    function applyCfg(p){
+        if(!p)return;const k=JSON.stringify(p);if(k===appliedCfg)return;appliedCfg=k;
+        const set=(id,v)=>{const el=$i(id);if(el&&v!=null&&!isNaN(v)){el.value=v;const lb=$i(id+'Value');if(lb)lb.textContent=v;}};
+        set('raceTime',p.raceTime);set('gameSpeed',p.gameSpeed);set('eventFrequency',p.ev);
+        if(Array.isArray(p.names)){
+            set('playerCount',p.names.length);
+            if(document.querySelectorAll('#playerNameInputs input[type="text"]').length!==p.names.length)generatePlayerNameInputs();
+            document.querySelectorAll('#playerNameInputs input[type="text"]').forEach((inp,i)=>{if(p.names[i]!=null)inp.value=p.names[i];});
+        }
+    }
+    function pushCfg(){if(!room||!room.isHost)return;clearTimeout(cfgT);cfgT=setTimeout(()=>room.setState(S=>{S.game=S.game||{};S.game.cfg=readCfg();}),150);}
+    function lockGuest(on){
+        const sb=$i('startBtn');if(sb){sb.disabled=on;sb.style.opacity=on?'.45':'';if(on)sb.textContent=tx('wait');else if(typeof applyLanguage==='function')try{applyLanguage();}catch(_){}}
+        const rb=$i('resetBtn');if(rb)rb.disabled=on;
+        const ss=$i('setupScreen');if(ss)ss.classList.toggle('lp-v2-ro',on);
+    }
+    /* ── 방장 ── */
+    async function hostStart(){
+        if(!room||!room.isHost||busy||gameRunning||pendingStart)return;
+        busy=true;
+        const sb=$i('startBtn'),old=sb.textContent;sb.textContent=tx('mix');sb.disabled=true;
+        try{
+            const c=readCfg();
+            const params={g:'glory-racing',raceTime:c.raceTime,gameSpeed:c.gameSpeed,ev:c.ev,names:c.names};
+            const r=await LpFair.draw(room,{params});
+            const sim=LpFair.rng(r.seed,'sim');
+            _grSimRng=()=>sim.float();
+            V.cert=r.cert;attC=null;evq=[];tseq=0;
+            hook();
+            V.go=true;try{startGame();}finally{V.go=false;}
+        }catch(e){console.warn('[glory v2] start',e);}
+        finally{busy=false;sb.textContent=old;sb.disabled=false;}
+    }
+    function onBuilt(){
+        if(!room||!room.isHost||!V.cert)return;
+        const cd0=room.clock(),id=V.cert.round,cert=V.cert;
+        LpFair.cert.encode(packStart()).then(z=>{
+            if(z.length>30000)console.warn('[glory v2] start pack',z.length);
+            room.setState(S=>{S.game=S.game||{};S.game.race={id,cd0,z,cert,fo:null,att:null};S.game.view='race';});
+        });
+    }
+    function tick(){
+        if(!room||!room.isHost||!gameRunning)return;
+        const now=performance.now();if(now-lastTick<100)return;lastTick=now;
+        const G=Gs(),g={};for(const k in G)if(k!=='boulders')g[k]=ser(G[k],1);
+        const d={n:++tseq,pl:players.map(p=>ser(p,0)),G:g,fp:ser(fightPairs,1),he:ser(hitEffects,1),ip:ser(itemPopups,1),ib:itemBoxes.map(b=>b.active?1:0),
+            cm:currentCommentary?ser(currentCommentary,1):null,rem:Math.round(remainingTime*100)/100,el:Math.round(raceElapsedTime*100)/100,fin:players.filter(p=>p.finished).length,ev:evq.splice(0)};
+        const r=room;
+        LpFair.cert.encode(d).then(z=>{if(r===room&&r.isHost)r.tick({n:d.n,z});});
+    }
+    function onEnd(){
+        if(!room||!room.isHost)return;
+        _grSimRng=null;
+        const S=room.state(),R=S&&S.game&&S.game.race;if(!R)return;
+        const fo=finishOrder.map(p=>[players.indexOf(p),p.name,p.finished&&p.finishTime!=null?Math.round(p.finishTime*100)/100:null]);
+        room.setState(S=>{S.game.race.fo=fo;});
+        const params={g:'glory-racing',k:'att',of:R.id,C:R.cert.C,fo};
+        LpFair.draw(room,{params,window:900}).then(a=>{
+            a.cert.res=fo;a.cert.s=R.cert;
+            room.setState(S=>{if(S.game.race&&S.game.race.id===R.id)S.game.race.att=a.cert;});
+        }).catch(e=>console.warn('[glory v2] attest',e));
+    }
+    function onReset(){if(room&&room.isHost)room.setState(S=>{S.game=S.game||{};S.game.race=null;S.game.view='setup';});_grSimRng=null;}
+    /* ── 모든 기기 ── */
+    async function verifyAtt(a){
+        if(!a||!a.s)return {ok:false,why:'format'};
+        const v1=await LpFair.cert.verify(a.s,p=>{if(!p||p.g!=='glory-racing')throw new Error('g');return null;});
+        if(!v1.ok)return {ok:false,why:'start:'+v1.why};
+        const v2=await LpFair.cert.verify(a,p=>{if(!p||p.k!=='att'||p.C!==a.s.C||p.of!==a.s.round)throw new Error('bind');return p.fo;});
+        return {ok:v2.ok,why:v2.why,fo:v2.res};
+    }
+    function badgeEl(){
+        let el=$i('lpV2Badge');
+        if(!el){el=document.createElement('div');el.id='lpV2Badge';el.className='lp-v2-badge';el.hidden=true;const fr=$i('finalRankings');if(fr&&fr.parentNode)fr.parentNode.insertBefore(el,fr);}
+        return el;
+    }
+    function badge(info){const el=badgeEl();el.hidden=false;if(UI&&UI.badge)UI.badge(el,info);else LpFair.badge(el,info);}
+    function guestEnd(fo){
+        stopGuest();cdT.forEach(clearTimeout);$i('countdown').style.display='none';
+        finishOrder=fo.map((f,k)=>{const p=players[f[0]];if(!p)return null;p.finished=f[2]!=null;p.finishTime=f[2];p.finishRank=k+1;return p;}).filter(Boolean);
+        try{AudioEngine.stopBGM();AudioEngine.sfx.gameEnd();}catch(_){}
+        leaveGuestView();
+        showResults();
+    }
+    function render_(S){
+        if(!room||!S||!S.game)return;
+        const g=S.game,R=g.race;
+        if(!room.isHost){
+            if(g.cfg&&!race)applyCfg(g.cfg);
+            if(!R&&race){race=null;appliedEnd=false;stopGuest();cdT.forEach(clearTimeout);leaveGuestView();try{resetGame();}catch(_){}}
+            if(R&&(!race||race.id!==R.id)){
+                race={id:R.id};appliedEnd=false;V.cert=R.cert;
+                LpFair.cert.verify(R.cert,p=>{if(!p||p.g!=='glory-racing')throw new Error('g');return null;}).then(v=>{if(!v.ok)badge({kind:'mismatch',n:1});});
+                const id=R.id;
+                LpFair.cert.decode(R.z).then(q=>{if(!race||race.id!==id)return;applyStart(q);if(!R.fo)guestCountdown(R.cd0);if(room)render_(room.state());});
+            }
+            if(R&&race&&race.id===R.id&&R.fo&&!appliedEnd&&V.gview){appliedEnd=true;const fo=R.fo;setTimeout(()=>guestEnd(fo),300);}
+        }
+        if(R&&R.att&&attC!==R.att.rsig){
+            attC=R.att.rsig;
+            verifyAtt(R.att).then(v=>{
+                V.lastAtt=R.att;V.attOk=v.ok;
+                if(!v.ok){badge({kind:'mismatch',n:1});return;}
+                LpFair.witness(room,R.att.round,R.fo);
+                badge({kind:'seed',round:R.att.round,cert:R.att});
+            });
+        }
+    }
+    function bind(r){
+        if(room===r)return;unbind();room=r;V.room=r;
+        if(!r.isHost)lockGuest(true);
+        offs.push(r.on('state',S=>render_(S)));
+        offs.push(r.on('tick',p=>{
+            if(r.isHost||!race||!p||typeof p.z!=='string')return;
+            const at=performance.now(),n=p.n;
+            LpFair.cert.decode(p.z).then(d=>{if(!V.gview)return;buf.push({at,n,d});buf.sort((a,b)=>a.n-b.n);if(buf.length>12)buf.splice(0,buf.length-12);});
+        }));
+        offs.push(r.on('fair',ev=>{
+            if(!ev)return;
+            if(ev.k==='witness'&&V.lastAtt&&ev.round===V.lastAtt.round&&V.attOk)badge({kind:ev.bad?'mismatch':'seed',n:ev.bad||ev.ok,round:ev.round,cert:V.lastAtt});
+            else if(ev.k==='abort'){V.aborts=(V.aborts||0)+1;if(UI&&UI.toast)UI.toast(tx('abort').replace('{n}',ev.round),3500);}
+        }));
+        if(r.isHost){
+            const setup=$i('setupScreen');const on=()=>pushCfg();
+            setup.addEventListener('input',on);setup.addEventListener('change',on);setup.addEventListener('click',()=>setTimeout(on,0));
+            offs.push(()=>{setup.removeEventListener('input',on);setup.removeEventListener('change',on);});
+            pushCfg();
+        }
+        render_(r.state());
+    }
+    function unbind(){offs.forEach(f=>{try{f()}catch(_){}});offs=[];room=null;V.room=null;race=null;stopGuest();leaveGuestView();lockGuest(false);appliedCfg='';_grSimRng=null;}
+    const V={room:null,go:false,gview:false,simOn:false,orig:{},cert:null,hostStart,onBuilt,tick,onEnd,onReset,verifyAtt,fitGuest,packStart,ser,
+        onResults(){const rb=$i('restartBtn');if(rb&&_grIsV2G())rb.disabled=true;const el=$i('lpV2Badge');if(el&&!room&&!V.certView)el.hidden=true;},
+        dbg:()=>({race:(()=>{const S=room&&room.state(),R=S&&S.game&&S.game.race;return R?R.id:(race&&race.id)})(),fo:finishOrder.map(p=>p.name).join(','),running:gameRunning,gview:V.gview,buf:buf.length,players:players.length,rem:Math.round(remainingTime*10)/10,
+            pos:players.map(p=>Math.round(p.x)+':'+Math.round(p.y)).join(' ')})};
+    window.LpRoomsQ=window.LpRoomsQ||[];
+    window.LpRoomsQ.push(function(LR,ui){
+        UI=ui;
+        LR.adapter({gameId:'glory-racing',kind:'draw',seats:null,lateJoin:'anytime',migratable:false});
+        ui.config({lobby:'strip',stripEl:()=>$i('setupScreen')});
+        ui.on('room',bind);
+        ui.on('left',()=>unbind());
+    });
+    window.addEventListener('resize',()=>{if(V.gview)setTimeout(fitGuest,60);});
+    /* ── #cert= ── */
+    function certMode(){
+        const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
+        const show=(ok,fo)=>{
+            V.certView=ok?'ok':'bad';
+            $i('setupScreen').style.display='none';
+            finishOrder=(fo||[]).map((f,k)=>({id:f[0],name:String(f[1]||'?'),finished:f[2]!=null,finishTime:f[2],finishRank:k+1,shirtColor:shirtColors[(f[0]|0)%shirtColors.length],skinTone:skinTones[0],hairColor:hairColors[0],pantsColor:pantsColors[0],displayNumber:(f[0]|0)+1}));
+            try{showResults();}catch(e){$i('resultScreen').style.display='flex';}
+            const el=badgeEl();el.hidden=false;el.className='lp-v2-badge '+(ok?'ok':'bad');el.textContent=ok?tx('ok'):tx('bad');
+        };
+        const go=()=>LpFair.cert.decode(m[1]).then(a=>verifyAtt(a).then(v=>show(v.ok,v.ok?v.fo:(a.params&&a.params.fo)))).catch(()=>show(false,[]));
+        if(window.LpFair)go();
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1790759059';s.onload=go;document.head.appendChild(s);}
+    }
+    setTimeout(certMode,300);
+    return V;
+})();
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
