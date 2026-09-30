@@ -2,7 +2,7 @@
    모든 방 이벤트를 T.ev 에 기록, 방장이면 간단한 의도('inc'·'noop') 처리, 로드 시 resume(). */
 (function () {
     'use strict';
-    var T = window.T = { ev: [], room: null, nav: [], resumed: null, lag: 0, joins: {} };
+    var T = window.T = { ev: [], room: null, nav: [], resumed: null, lag: 0, joins: {}, seeds: {}, certs: {} };
     function sum(e, a) {
         try {
             switch (e) {
@@ -32,6 +32,8 @@
         ['roster', 'state', 'phase', 'fair', 'x', 'react', 'hostlost', 'hostback', 'takeover', 'kicked', 'closed', 'detached', 'switch', 'pending', 'priv', 'net', 'join'].forEach(function (e) {
             r.on(e, function () { T.log(e, sum(e, arguments)); if (e === 'join') T.joins[arguments[0].p] = (T.joins[arguments[0].p] || 0) + 1; });
         });
+        T.certs = T.certs || {};
+        r.on('fair', function (ev) { if (ev && ev.cert) T.certs[ev.round] = ev.cert; if (ev && ev.k === 'reveal') T.seeds[ev.round] = LpFair.hex(ev.seed); });
         r.onIntent(function (from, a, x) {
             if (a === 'inc') { r.setState(function (S) { S.game = S.game || {}; S.game.n = (S.game.n || 0) + ((x | 0) || 1); S.game.by = from.p; }); return; }
             if (a === 'noop') return;

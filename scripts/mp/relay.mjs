@@ -51,6 +51,7 @@ export async function startRelay(opt = {}) {
         const msg = JSON.stringify({ t: 'bc', topic, event, payload });
         for (const c of recips) {
             if (part.has(c.label)) continue;
+            if (api.dropIf && api.dropIf(topic, event, payload, from ? from.label : null, c.label)) { S.drops++; continue; }
             if (fault.loss && Math.random() < fault.loss) { S.drops++; S.dropsByE[e] = (S.dropsByE[e] || 0) + 1; continue; }
             const d = fault.lat[0] + Math.random() * (fault.lat[1] - fault.lat[0]);
             setTimeout(() => deliver(c, msg), d);
@@ -63,7 +64,7 @@ export async function startRelay(opt = {}) {
         const u = new URL(req.url, 'http://x');
         let p = decodeURIComponent(u.pathname);
         let file = null;
-        if (p === '/vendor/supabase.min.js') file = path.join(HERE, 'shim.js');
+        if (p === '/vendor/supabase.min.js') file = opt.live ? path.join(PUB, 'vendor', 'supabase.min.js') : path.join(HERE, 'shim.js');
         else if (p.startsWith('/__mp/')) file = path.join(HERE, p.slice(6));
         else if (/\.[a-z0-9]+$/i.test(p)) file = path.join(PUB, p);
         else file = path.join(HERE, 'page.html');
@@ -123,7 +124,8 @@ export async function startRelay(opt = {}) {
 
     await new Promise((res, rej) => { server.once('error', rej); server.listen(port, '127.0.0.1', res); });
 
-    return {
+    const api = {
+        dropIf: null,   /* (topic, event, payload, fromLabel, toLabel) => true 면 그 수신자에게 버림 */
         port, base: 'http://127.0.0.1:' + port, stats: S, fault, part, rpcMocks, tap,
         setFault(o) { Object.assign(fault, { lat: [2, 12], loss: 0, dup: 0 }, o || {}); },
         partition(label, on = true) { on ? part.add(label) : part.delete(label); },
@@ -135,4 +137,5 @@ export async function startRelay(opt = {}) {
         clients() { return [...clients.values()].map(c => ({ id: c.id, label: c.label, subs: [...c.subs] })); },
         stop() { for (const c of clients.values()) { try { c.sock.destroy(); } catch (_) {} } return new Promise(r => server.close(() => r())); }
     };
+    return api;
 }

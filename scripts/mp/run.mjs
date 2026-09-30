@@ -16,6 +16,7 @@ const args = process.argv.slice(2);
 const live = args.includes('--live');
 let want = args.filter(a => !a.startsWith('--'));
 if (!want.length || want.includes('all')) want = ['fair', 'core', 'spoof', 'budget'];
+if (live) want = ['live'];   /* --live: 실제 supabase Realtime 에 ZZ 코드 방 1개만 (DB 쓰기 없음) */
 const only = (process.env.MP_ONLY || '').split(',').filter(Boolean);
 
 async function main() {
@@ -26,7 +27,7 @@ async function main() {
         want = want.filter(w => w !== 'fair');
     }
     if (want.length) {
-        const relay = await startRelay({ port: +(process.env.MP_PORT || 8411) });
+        const relay = await startRelay({ port: +(process.env.MP_PORT || 8411), live });
         const E = new Edge(relay.base, { live });
         let exitCode = 0;
         try {
