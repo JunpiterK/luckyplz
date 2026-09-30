@@ -1567,14 +1567,20 @@
                as a backstop, so even pathologically slow page loads
                recover without showing a join error. */
             if(ev==='host:navigate'&&accepted&&p&&p.url){
+                /* 2026-09-30 보안: 채널이 공개라 코드만 알면 누구나 이 이벤트를 보낼 수 있다.
+                   같은 사이트의 /games/<id>/ 경로만 따라간다 — 외부 주소·javascript: 는 무시(오픈 리다이렉트·스크립트 실행 차단) */
                 try{
                     const u=new URL(p.url,location.href);
-                    if(nickname&&!u.searchParams.get('nick')){
-                        u.searchParams.set('nick',nickname);
+                    const okNav=u.origin===location.origin&&(u.protocol==='https:'||u.protocol==='http:')&&/^\/games\/[a-z0-9-]+\/?$/.test(u.pathname);
+                    if(!okNav){dbgLog('guest: navigate rejected '+String(p.url).slice(0,120));}
+                    else{
+                        if(nickname&&!u.searchParams.get('nick')){
+                            u.searchParams.set('nick',nickname);
+                        }
+                        dbgLog('guest: following host to '+u.toString());
+                        setTimeout(function(){location.href=u.toString()},600);
                     }
-                    dbgLog('guest: following host to '+u.toString());
-                    setTimeout(function(){location.href=u.toString()},600);
-                }catch(_){location.href=p.url}
+                }catch(_){ /* 해석할 수 없는 주소는 따라가지 않는다 */ }
                 /* Fall through to emit so game code can hook too. */
             }
             /* Regular host events after acceptance */
