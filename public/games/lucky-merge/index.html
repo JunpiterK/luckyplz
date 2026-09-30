@@ -3207,6 +3207,8 @@ function tryDrop(){
   updateNextUI();
 }
 
+/* Rooms v2 레이스 — 떨어질 천체 순서를 같은 시드 스트림으로(모두 같은 순서). null = 솔로(Math.random 그대로) */
+let lpRaceRng = null;
 function pickRandomDropTier(){
   /* 시작 몇 수는 운석·소행성·달만 — 첫 수부터 금성이 떨어지는 불운 방지 */
   const opening = S.dropCount + 1 < C.OPENING_DROPS;
@@ -3214,7 +3216,7 @@ function pickRandomDropTier(){
   const top = opening ? 3 : ws.length - 1;
   let total = 0;
   for(let i = 1; i <= top; i++) total += ws[i];
-  let r = Math.random() * total;
+  let r = (lpRaceRng ? lpRaceRng() : Math.random()) * total;
   for(let i = 1; i <= top; i++){
     r -= ws[i];
     if(r <= 0) return i;
@@ -3709,6 +3711,29 @@ if(navigator.serviceWorker){
     rs.forEach(r => { try { r.unregister(); } catch(e) {} });
   }).catch(()=>{});
 }
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — 훅과 어댑터 등록만. 물리·합체 규칙은 그대로 */
+{
+  const RACE = {
+    gameId: 'lucky-merge', metric: 'score', durationS: 180,
+    start(ctx){ lpRaceRng = ctx.rng('drop'); startGame(); },
+    progress(){ return S.score; },
+    over(){ return !!S.gameOver; },
+    final(){ return { v: S.score }; },
+    stop(){ if(!S.gameOver){ S.paused = false; onGameOver(); } },
+    end(){ lpRaceRng = null; },
+    /* 하네스 R1: 지금 판의 떨어질 천체 순서(현재 + 다음 + 시드 스트림) — 첫 n 개 */
+    probe(n){ const out = [S.dropTier, S.nextTier]; const dc = S.dropCount; while(out.length < n){ out.push(pickRandomDropTier()); S.dropCount++; } S.dropCount = dc; return out.slice(0, n); }
+  };
+  (window.LpRoomsQ = window.LpRoomsQ || []).push(function(LpRooms, UI){
+    LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: [], race: RACE });
+    UI.config({ onStart: function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
+    if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+    const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1790759059';
+    sc.onload = function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+    document.body.appendChild(sc);
+  });
+}
+/*</lp-race:hook>*/
 </script>
 <script src="/js/siteFooter.js?v=1790759059"></script>
 <!--lp-game-about:start-->

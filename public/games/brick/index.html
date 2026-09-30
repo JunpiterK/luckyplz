@@ -662,6 +662,9 @@ const S = {
   banner:null, callout:null, sweep:null, uiDirty:true,
   _levelCleared:false,
 };
+/* Rooms v2 레이스 — 게임 판정 난수(공 각도 보정·파워업 낙하·종류)를 같은 시드 스트림으로. null = 솔로(Math.random 그대로) */
+let lpRaceRng = null;
+const lpR = () => lpRaceRng ? lpRaceRng() : Math.random();
 
 // ======== DOM ========
 const cv = document.getElementById('g');
@@ -1107,7 +1110,7 @@ function paddleBounceAngle(offset){
   ang += clamp(S.paddleVel/10, -1, 1) * C.PADDLE_ENGLISH;
   ang = clamp(ang, -C.MAX_BOUNCE, C.MAX_BOUNCE);
   if(Math.abs(ang) < C.MIN_BOUNCE){
-    const sgn = ang < 0 ? -1 : (ang > 0 ? 1 : (Math.random() < 0.5 ? -1 : 1));
+    const sgn = ang < 0 ? -1 : (ang > 0 ? 1 : (lpR() < 0.5 ? -1 : 1));
     ang = sgn * C.MIN_BOUNCE;
   }
   return ang;
@@ -1140,7 +1143,7 @@ function clampMinAngle(b){
   if(b.attached) return;
   const minVx = b.speed * 0.09;
   if(Math.abs(b.vx) < minVx){
-    const sx = Math.sign(b.vx) || (Math.random() < 0.5 ? -1 : 1);
+    const sx = Math.sign(b.vx) || (lpR() < 0.5 ? -1 : 1);
     b.vx = sx * minVx;
     const sy = Math.sign(b.vy) || -1;
     b.vy = sy * Math.sqrt(Math.max(0.01, b.speed*b.speed - b.vx*b.vx));
@@ -1149,14 +1152,14 @@ function clampMinAngle(b){
   if(Math.abs(b.vy) < minVy){
     const dir = b.vy >= 0 ? 1 : -1;
     b.vy = dir * minVy;
-    const sx = Math.sign(b.vx) || (Math.random()<0.5 ? -1 : 1);
+    const sx = Math.sign(b.vx) || (lpR()<0.5 ? -1 : 1);
     b.vx = sx * Math.sqrt(Math.max(0.01, b.speed*b.speed - b.vy*b.vy));
   }
 }
 /* 무한 루프 방지 — 강철 벽돌·벽 사이만 오가며 20회 넘게 아무것도 못
    부수면 각도를 살짝 비튼다. */
 function unstick(b){
-  const rot = (Math.random() < 0.5 ? -1 : 1) * (10 + Math.random()*8) * DEG;
+  const rot = (lpR() < 0.5 ? -1 : 1) * (10 + lpR()*8) * DEG;
   const c = Math.cos(rot), s = Math.sin(rot);
   const vx = b.vx*c - b.vy*s, vy = b.vx*s + b.vy*c;
   b.vx = vx; b.vy = vy;
@@ -1193,7 +1196,7 @@ function powerWeight(t){
 function pickPowerType(){
   let total = 0;
   for(const t of POWER_TYPES) total += powerWeight(t);
-  let r = Math.random()*total;
+  let r = lpR()*total;
   for(const t of POWER_TYPES){
     r -= powerWeight(t);
     if(r <= 0) return t;
@@ -1776,7 +1779,7 @@ function hitBrick(br, hx, hy, opt){
     spawnSparks(br.x + br.w/2, br.y + br.h/2, t.rgb, 8, 2.8, 26);
     spawnRing(br.x + br.w/2, br.y + br.h/2, t.rgb, 4, 2.4, 16, 2);
     if(t.gold) sfxGold(); else sfxBrickBreak(t.tier || 3);
-    if(t.gold || Math.random() < C.POWER_DROP_RATE){
+    if(t.gold || lpR() < C.POWER_DROP_RATE){
       spawnPowerUp(br.x + br.w/2, br.y + br.h/2);
     }
     spawnText('+' + pts, br.x + br.w/2, br.y + 4, S.combo >= 2 ? '#FFE66D' : '#FFFFFF', S.combo >= 2 ? 13 : 11, 48);
@@ -3305,6 +3308,38 @@ requestAnimationFrame(loop);
 if(window.__LP_BRICK_SIM__){
   window.__LP_BRICK_SIM__.api = {S, C, update, render, updateUI, startGame, nextLevel, handleAction, currentTargetSpeed, LEVELS};
 }
+
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — 훅과 어댑터 등록만. 스테이지·물리는 그대로 */
+{
+  const RACE = {
+    gameId: 'brick', metric: 'score', durationS: 180,
+    start(ctx){ lpRaceRng = ctx.rng('play'); try{ resumeAudio(); }catch(_){} startGame(true); },
+    progress(){ return S.score; },
+    over(){ return gameOv.classList.contains('show'); },
+    done(){ return S.level >= C.MAX_LEVEL && document.getElementById('goTitle').className === 'win'; },
+    final(){ return { v: S.score }; },
+    stop(){
+      if(gameOv.classList.contains('show')) return;
+      levelOv.classList.remove('show');
+      S.paused = false; S.running = true; S.phase = 'over';
+      try{ Music.stop(); }catch(_){}
+      onGameOver();
+    },
+    end(){ lpRaceRng = null; },
+    unlock(){ try{ resumeAudio(); }catch(_){} },
+    /* 하네스 R1: 1스테이지 벽돌 배치 + 시드 스트림의 파워업 종류 — 첫 n 개 */
+    probe(n){ const out = S.bricks.map(b => b.type + '@' + b.x + ',' + b.y); while(out.length < n) out.push(pickPowerType()); return out.slice(0, n); }
+  };
+  (window.LpRoomsQ = window.LpRoomsQ || []).push(function(LpRooms, UI){
+    LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: [], race: RACE });
+    UI.config({ onStart: function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
+    if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+    const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1790759059';
+    sc.onload = function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+    document.body.appendChild(sc);
+  });
+}
+/*</lp-race:hook>*/
 })();
 </script>
 <script>

@@ -1933,6 +1933,7 @@ const nqCanvases = Array.from(document.querySelectorAll('.nq-canvas'));
 
 let board = null;     /* 20x10 array of color strings or null */
 let bag = [];         /* 7-bag random generator */
+let lpRaceRng = null; /* Rooms v2 레이스 — 같은 시드 7-백(모두 같은 조각 순서). null = 솔로(Math.random 그대로) */
 let current = null;   /* {type, rot, x, y} */
 /* NEXT queue — 항상 길이 ≥ 5 유지. queue[0] 가 다음에 spawn 될
    piece, queue[4] 가 5번째 후 piece. spawnPiece() 가 shift() 로
@@ -2108,7 +2109,7 @@ if (typeof ResizeObserver !== 'undefined') {
 function refillBag(){
     bag = PIECE_TYPES.slice();
     for(let i=bag.length-1;i>0;i--){
-        const j=Math.floor(Math.random()*(i+1));
+        const j=Math.floor((lpRaceRng ? lpRaceRng() : Math.random())*(i+1));
         [bag[i],bag[j]]=[bag[j],bag[i]];
     }
 }
@@ -5231,6 +5232,48 @@ async function loadLeaderboard(scope){
 
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — start/progress/final 훅과 어댑터 등록만.
+  LpRoomsQ 는 v2 로더(?rooms=v2 · ?r= · 방 복귀)가 lpRoomsUI 를 실었을 때만 불린다 → 솔로 경로는 그대로 */
+(function(){
+    let prevMode = null;
+    const RACE = {
+        gameId: 'tetris', metric: 'score', durationS: 120,
+        metricFor: (o) => o && o.mode === 'sprint40' ? 'time' : 'score',
+        durFor: (o) => o && o.mode === 'sprint40' ? 300 : 120,
+        options: [{ key: 'mode', values: ['score120', 'sprint40'], def: 'score120' }],
+        labels: { 'mode.score120': '⏱ 2:00', 'mode.sprint40': '🏁 40' },
+        start(ctx){
+            if(prevMode === null) prevMode = gameMode;
+            lpRaceRng = ctx.rng('bag');
+            gameMode = (ctx.opts && ctx.opts.mode === 'sprint40') ? 'sprint' : 'marathon';
+            startGame();
+        },
+        progress(){ return gameMode === 'sprint' ? lines : score; },
+        over(){ return !!gameOverFlag; },
+        done(){ return gameMode === 'sprint' && lines >= SPRINT_TARGET; },
+        final(){ return { v: score }; },
+        stop(reason){
+            if(gameOverFlag) return;
+            paused = false;
+            gameOver();
+            if(reason === 'time' && spinAnnouncement) spinAnnouncement.text = 'TIME UP';
+        },
+        end(){ lpRaceRng = null; if(prevMode !== null){ gameMode = prevMode; prevMode = null; } },
+        unlock(){ try{ Sfx.getCtx(); }catch(_){} },
+        fmtProg: (g) => g + '/' + SPRINT_TARGET,
+        /* 하네스 R1: 시드 스트림으로 뽑히는 첫 n 조각(현재 + NEXT 5 + 이어서 bag) */
+        probe(n){ const out = [current && current.type].concat(nextQueue.slice()); while(out.length < n) out.push(drawFromBag()); return out.slice(0, n); }
+    };
+    (window.LpRoomsQ = window.LpRoomsQ || []).push(function(LpRooms, UI){
+        LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: RACE.options, race: RACE });
+        UI.config({ onStart: function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
+        if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+        const s = document.createElement('script'); s.src = '/js/lpRoomsRace.js?v=1790759059';
+        s.onload = function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+        document.body.appendChild(s);
+    });
+})();
+/*</lp-race:hook>*/
 </script>
 <script src="/js/siteFooter.js?v=1790759059" defer></script>
 <!--lp-game-about:start-->

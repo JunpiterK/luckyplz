@@ -575,6 +575,7 @@ const winOv = document.getElementById('winOv');
 const loseOv = document.getElementById('loseOv');
 const completeOv = document.getElementById('completeOv');
 const pauseOv = document.getElementById('pauseOv');
+let lpRace = null;   /* Rooms v2 레이스 컨텍스트(시드) — null = 솔로 */
 
 // ============ CANVAS FIT (DPR) ============
 /* 캔버스를 홀더에 3:5 로 꽉 맞추고, 백킹스토어는 CSS 크기 × DPR.
@@ -1748,7 +1749,8 @@ function startStage(stage){
   S.canvasThrust = false;
   document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('pressed', 'cue'));
   S.terrain = buildTerrain(stage);
-  S.windPh = [Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28];
+  /* Rooms v2 레이스 — 바람 위상은 (시드, 스테이지) 로 정한다: 같은 방 모두 같은 바람, 다시 해도 같은 바람. 솔로 = 그대로 */
+  S.windPh = lpRace ? (r => [r() * 6.28, r() * 6.28, r() * 6.28])(lpRace.rng('wind:' + stage)) : [Math.random() * 6.28, Math.random() * 6.28, Math.random() * 6.28];
   S.t = 0; S.acc = 0; S.boom = null; S.result = null; S.endShown = true;
   S.lowFuelWarned = false;
   resetImpact();
@@ -2299,6 +2301,45 @@ S.phase = 'intro';
 requestAnimationFrame(loop);
 setTimeout(fitCanvas, 300);
 
+/*<lp-race:hook> Rooms v2 같은 시드 레이스 (P5, DESIGN §6.5) — 훅과 어댑터 등록만. 물리·지형·채점은 그대로.
+  제한 시간 안에 5단계를 얼마나 잘 내리나(총점). 실패 → 다시(RETRY) 는 평소처럼 허용 */
+{
+  let stopped = false;
+  const RACE = {
+    gameId: 'starship-lander', metric: 'score', durationS: 150,
+    start(ctx){ lpRace = ctx; stopped = false; startGame(); },
+    progress(){ return S.totalScore || 0; },
+    over(){ return completeOv.classList.contains('show'); },
+    done(){ return completeOv.classList.contains('show'); },
+    final(){ return { v: S.totalScore || 0 }; },
+    stop(){
+      stopped = true;
+      S.running = false; S.paused = false;
+      S.thrust = { left:false, right:false, main:false }; S.canvasThrust = false;
+      try{ SND.engine(0, false); }catch(_){}
+      pauseOv.classList.remove('show');
+    },
+    end(){ lpRace = null; if(stopped){ stopped = false; goIntro(); } },
+    unlock(){ try{ SND.unlock(); }catch(_){} },
+    /* 하네스 R1: 5단계 바람 위상(시드) + 1단계 지형 높이 — 첫 n 개 */
+    probe(n){
+      const out = [];
+      for(let k = 0; k < STAGES.length; k++){ const r = lpRace ? lpRace.rng('wind:' + k) : Math.random; out.push(+(r() * 6.28).toFixed(9), +(r() * 6.28).toFixed(9), +(r() * 6.28).toFixed(9)); }
+      const h = S.terrain && S.terrain.h ? Array.from(S.terrain.h) : [];
+      for(let i = 0; out.length < n && i < h.length; i++) out.push(+h[i].toFixed(3));
+      return out.slice(0, n);
+    }
+  };
+  (window.LpRoomsQ = window.LpRoomsQ || []).push(function(LpRooms, UI){
+    LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: [], race: RACE });
+    UI.config({ onStart: function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
+    if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
+    const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1790759059';
+    sc.onload = function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
+    document.body.appendChild(sc);
+  });
+}
+/*</lp-race:hook>*/
 })();
 </script>
 <script>
