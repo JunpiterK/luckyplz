@@ -1877,6 +1877,7 @@ const CT={claimAt:0,claimDl:{},actDl:0,endDl:0,cid:0};
 let planT=0,paused=false,hiddenAt=0;
 function spd(){return SPEED[G&&G.cfg.speed==='f'?'f':'n']}
 function isAuto(s){
+  if(V2on()){const si=K.seatInfo(s);return !si||!!si.botDrive}
   const st=G.seats[s];if(st.ctrl==='bot')return true;
   if(st.ctrl==='guest')return !!st.off&&Date.now()-(st.offAt||0)>5000;
   return false;
@@ -1904,14 +1905,15 @@ function makePriv(s){
   if(!G||s==null||s<0||!G.hands)return {seat:s==null?-1:s};
   const p={seat:s,hand:G.hands[s].slice(),drawn:G.lastDraw?G.lastDraw[s]:null,melds:G.melds[s]};
   if(G.phase==='play'){
-    if(G.step==='claim'&&G.claim&&G.claim.opts[s]&&!G.claim.resp[s]){p.opts=G.claim.opts[s];p.rem=Math.max(500,(CT.claimDl[s]||Date.now()+CLAIM_MS)-Date.now());p.cid=CT.cid}
-    if(G.step==='act'&&G.turn===s){p.act={tsumo:G.lastDraw[s]!=null&&MJ.canWin(G,s,null,'tsumo'),kans:MJ.kanOpts(G,s)};if(CT.actDl)p.actRem=CT.actDl-Date.now()}
+    if(G.step==='claim'&&G.claim&&G.claim.opts[s]&&!G.claim.resp[s]){p.opts=G.claim.opts[s];p.rem=Math.max(500,(CT.claimDl[s]||Date.now()+CLAIM_MS)-Date.now());p.dl=CT.claimDl[s]||0;p.cid=CT.cid}
+    if(G.step==='act'&&G.turn===s){p.act={tsumo:G.lastDraw[s]!=null&&MJ.canWin(G,s,null,'tsumo'),kans:MJ.kanOpts(G,s)};if(CT.actDl){p.actRem=CT.actDl-Date.now();p.adl=CT.actDl}}
   }
   return p;
 }
 function publish(ev){
   seqN++;if(G)G.seq=seqN;
   if(G)ensureTimers();
+  if(V2on()&&K.isHost){v2Publish(ev);plan();return}
   const pub=makePub(ev);
   onView(pub,makePriv(ROLE==='host'?0:0));
   if(ROLE==='host')netPush(pub);
@@ -1959,22 +1961,25 @@ function doRespond(o,ch){
   if(!G||G.step!=='claim')return;
   const r=MJ.respond(G,o,ch);
   if(r){CT.claimAt=0;CT.claimDl={};if(r.k==='call')CT.pause=spd().after;publish(r)}
-  else{if(ROLE==='host'&&G.seats[o].ctrl==='guest')netPushQuiet();plan()}
+  else{if(ROLE==='host'&&!V2on()&&G.seats[o].ctrl==='guest')netPushQuiet();plan()}
 }
 function nextHandNow(){
   if(!G||G.phase!=='end')return;
   CT.endDl=0;
+  if(V2on()){v2NextHand();return}
   const ev=MJ.nextHand(G,seedNew());
   publish(ev||{k:'deal'});
 }
 /* 사람 입력 — 혼자·방장은 바로, 게스트는 방장에게 */
 function humanAct(a){
+  if(V2on()){if(a.a==='next'){if(K.isHost)nextHandNow();return}K.room.intent('g',Object.assign({cid:P&&P.cid},a));return}
   if(ROLE==='guest'){sendIntent(Object.assign({cid:P&&P.cid},a));return}
   if(!G)return;
   if(a.a==='next'){nextHandNow();return}
   doAct(0,a);
 }
 function humanClaim(ch){
+  if(V2on()){K.room.intent('g',{a:'claim',cid:P&&P.cid,c:ch});return}
   if(ROLE==='guest'){sendIntent(Object.assign({a:'claim',cid:P&&P.cid},{c:ch}));return}
   doRespond(0,ch);
 }
@@ -2193,6 +2198,116 @@ function navHostCtl(tries){
   document.querySelectorAll('.lp-hc-ehome').forEach(b=>{b.style.display='none'});
 }
 
+/* ════════════════════════ Rooms v2 (P4, 2026-09-30) ════════════════════════
+   공용 턴제 커널(lpRoomsTurn.js, drive:'game') 위의 온라인. v1(좌석별 ECDH) 경로는 그대로(플래그로 고름).
+   · 진행·타이머·울기 창(CLAIM_MS)은 이 파일의 plan() 이 그대로 돈다(방장 기기).
+   · 숨은 정보: 공개 상태는 커널 방송(봉인), 손패는 커널 view/priv — 좌석마다 그 기기의 공개키로 ECIES(다른 좌석·청취자 복호화 불가).
+   · 신원·의도는 커널 서명 봉투(평문 bye 사칭 문제 해소). 끊긴 좌석은 8초 뒤 봇(isAuto).
+   · 배분 검증: 판마다 LpFair.deal(방장 커밋 → 게스트 엔트로피 → 공동 시드) 로 패산을 섞고, 판이 끝나면 방장 시드를 공개 →
+     각 기기가 같은 시드로 패산을 다시 섞어 내 첫 손패가 같은지 확인한다. 한계: 방장 기기는 진행 중 모든 패를 볼 수 있다(대기실 고지).
+   · 방장 승계 없음(숨은 정보) — 방장이 사라지면 '방장을 기다리는 중'. */
+const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get('rooms')==='v1')return false;
+  if(q.get('rooms')==='v2'||/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||''))return true;
+  const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId==='mahjong-tw'&&Date.now()-(a.t||0)<864e5)return true;
+  if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('mahjong-tw')==='v2')}catch(_){return false}})();
+let K=null,v2P=null,v2Self=false,v2Gid=null,v2Pub=null,v2Prv=null,v2Key='',v2FbT=0,v2Dealing=false,v2RevealFor=null,v2Init0=null;const v2DealLog=[];
+function V2on(){return !!(K&&K.room)}
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
+  let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
+    const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
+function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
+  if(window.LpGames)return cb(LpGames.v('mahjong-tw')==='v2');
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1790753735';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('mahjong-tw')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
+  if(!K){K=LpRoomsTurn.mount(mjSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 52px)');ds.setProperty('--lpt-hud-right','8px');ds.setProperty('--lpt-hud-left','auto')}res(K)})))}
+const V2NOTE={tw:'🀄 房主的裝置負責洗牌發牌 · 每局結束後大家都能驗證',ko:'🀄 방장 기기가 패를 섞어 나눠요 · 판이 끝나면 모두 배분을 검증해요',en:'🀄 The host device shuffles and deals · everyone verifies the deal after each hand',ja:'🀄 ホストの端末が配牌します · 各局の後に全員が配牌を検証'};
+function mjSpec(){return {gameId:'mahjong-tw',name:()=>T('title'),seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:false,hiddenInfo:true,drive:'game',
+  options:[{key:'rounds',values:[1,2,4],def:1,title:()=>T('rounds'),label:n=>T('r'+n)},{key:'speed',values:['n','f'],def:'n',title:()=>T('speed'),label:v=>T(v==='n'?'spN':'spF')}],
+  lobbyNote:()=>V2NOTE[LG]||V2NOTE.en,onStart:()=>v2Start(),botName:i=>T('botN',{n:'ABCD'[i]||''}),
+  host:{view:v2View,intent:v2Intent,onSeats:(g,seats)=>{seats.forEach(x=>{const st=g&&g.seats&&g.seats[x.seat];if(!st)return;st.ctrl=x.bot?'bot':'guest';st.name=x.bot?'':x.n});return g}},
+  client:{render:v2Render,priv:v2OnPriv,onLeave:v2OnLeave,fairEv:v2Fair}}}
+/* 공개/비공개 나누기 — 방장 기기에서만 불린다(g === G) */
+function v2View(g,seat){if(g&&g.hands&&G!==g)G=g;
+  if(!g||!g.hands)return {pub:g?Object.assign(makePub(g.ev),{seq:g.seq|0,gid:g.gid}):g};
+  const pub=Object.assign(makePub(g.ev),{seq:g.seq|0,gid:g.gid});
+  const priv=(seat!=null&&seat>=0)?Object.assign(makePriv(seat),{q:g.seq|0}):undefined;return {pub,priv}}
+function v2Publish(ev){G.ev=ev||null;K.commit(()=>G);
+  if((G.phase==='end'||G.phase==='over')&&v2RevealFor!==G.handNo&&G.handNo){v2RevealFor=G.handNo;K.dealReveal()}
+  if(G.phase==='over')setTimeout(()=>{if(V2on()&&K.isHost&&G&&G.phase==='over'&&K.S().phase==='playing')K.finish({scores:G.seats.map(x=>x.score)})},1200)}
+/* 의도 — 신원은 커널이 서명으로 확인한 좌석(seat). 손패 행동·울기만 받는다 */
+function v2Intent(from,a,x,seat){
+  if(a!=='g'||!G||seat==null||seat<0||!x)return {reject:'seat'};
+  if(x.a==='claim'){if(G.step==='claim'&&x.cid===CT.cid){doRespond(seat,x.c||{a:'pass'});return}return {reject:'stale'}}
+  if(x.a==='disc'||x.a==='tsumo'||x.a==='kan'){if(!doAct(seat,{a:x.a,k:x.k|0}))return {reject:'illegal'};return}
+  return {reject:'bad'}}
+function seed32(u8){return u8&&u8.length>=4?(((u8[0]<<24)|(u8[1]<<16)|(u8[2]<<8)|u8[3])>>>0):seedNew()}
+async function v2Deal(){let s32=null;try{const d=await K.deal();s32=seed32(d&&d.seed)}catch(e){console.warn('[mjtw] deal',e)}return s32==null?seedNew():s32}
+async function v2Start(){
+  if(!V2on()||!K.isHost||v2Dealing)return;const S0=K.S();if(!S0||!(S0.phase==='lobby'||S0.phase==='result')||!K.canStart())return;
+  v2Dealing=true;
+  try{
+    while(K.seatList().length<4){const n=K.seatList().length;K.addBot();if(K.seatList().length===n)break}
+    const o=K.opts(),seats=K.seatList();
+    const s32=await v2Deal();
+    G=MJ.newGame({rounds:+o.rounds||1,speed:o.speed==='f'?'f':'n',base:300,tai:100},seats.map(x=>({name:x.bot?'':x.n,ctrl:x.bot?'bot':x.host?'host':'guest'})),Math.floor(Math.random()*4));
+    seqN=0;resetView();v2Key='';v2Gid=null;G.gid=Math.random().toString(36).slice(2,10);CT.claimAt=0;CT.actDl=0;CT.endDl=0;v2RevealFor=null;
+    const ev=MJ.startHand(G,s32);seqN++;G.seq=seqN;G.ev=ev;ensureTimers();
+    await K.startGame(G);plan();
+  }finally{v2Dealing=false}}
+async function v2NextHand(){if(v2Dealing)return;v2Dealing=true;let s32;try{s32=await v2Deal()}finally{v2Dealing=false}
+  if(!G||G.phase!=='end')return;const ev=MJ.nextHand(G,s32);publish(ev||{k:'deal'})}
+function v2PrivFix(d){const p=Object.assign({},d);if(p.dl)p.rem=Math.max(500,p.dl-K.room.clock());if(p.adl)p.actRem=p.adl-K.room.clock();return p}
+function v2Show(){
+  if(!v2Pub)return;const mine=K.seat();
+  let prv=null;if(mine==null)prv={seat:-1};else if(v2Prv&&v2Prv.q===v2Pub.seq)prv=v2Prv;
+  if(!prv){clearTimeout(v2FbT);v2FbT=setTimeout(()=>{if(!v2Pub)return;const p=v2Prv||{seat:K.seat()==null?-1:K.seat()};v2Emit(v2Pub,p)},500);return}
+  clearTimeout(v2FbT);v2Emit(v2Pub,prv)}
+function v2Emit(pub,prv){
+  if(pub.gid&&pub.gid!==v2Gid){v2Gid=pub.gid;resetView();v2Key=''}
+  const key=pub.seq+':'+(prv&&prv.q);if(key===v2Key)return;v2Key=key;
+  const p=JSON.parse(JSON.stringify(pub));
+  if(!(p.seq===lastSeq+1))p.ev=null;
+  if(p.seq<lastSeq)return;
+  lastSeq=Math.max(lastSeq,p.seq);
+  onView(p,v2PrivFix(prv))}
+function v2Render(Sk){
+  ROLE=K.isHost?'host':'guest';document.body.classList.add('online');
+  const lobby=Sk.phase==='lobby'||!Sk.game;
+  K.lobbyOv(lobby);
+  if(lobby){['ovEnd','ovOver'].forEach(id=>$(id).classList.remove('on'));v2Pub=null;v2Key='';return}
+  if(K.isHost){if(G!==Sk.game&&Sk.game&&Sk.game.hands){G=Sk.game;seqN=G.seq|0;plan()}v2Pub=Object.assign(makePub(G.ev),{seq:G.seq|0,gid:G.gid})}
+  else v2Pub=Sk.game;
+  if(v2Pub&&v2Pub.ev&&v2Pub.ev.k==='deal'&&(!v2DealPub||v2DealPub.seq!==v2Pub.seq))v2DealPub={seq:v2Pub.seq,handNo:v2Pub.handNo,dealer:v2Pub.dealer,cfg:v2Pub.cfg};
+  v2TryInit();v2Show()}
+/* 배분 직후 내 손패 기록(검증용) — 공개 상태와 비공개 손패가 따로 오므로 판 번호(seq)로 짝을 맞춘다 */
+let v2DealPub=null;const v2PrivQ={};
+function v2TryInit(){const D=v2DealPub;if(!D||(v2Init0&&v2Init0.handNo===D.handNo))return;const pv=v2PrivQ[D.seq];
+  if(pv&&pv.hand&&pv.seat>=0)v2Init0={handNo:D.handNo,dealer:D.dealer,seat:pv.seat,hand:pv.hand.slice(),cfg:D.cfg}}
+function v2OnPriv(d){v2Prv=d;if(d&&typeof d.q==='number'){v2PrivQ[d.q]=d;const ks=Object.keys(v2PrivQ);if(ks.length>12)delete v2PrivQ[ks.sort((a,b)=>a-b)[0]]}v2TryInit();v2Show()}
+/* 배분 검증 — 방장 시드 공개(dealR) → 같은 시드로 다시 섞어 내 첫 손패 비교 */
+function v2Fair(ev){
+  if(!ev||ev.k!=='dealR')return;
+  const rec={hand:v2Init0&&v2Init0.handNo,commit:!!ev.ok,mine:null};
+  try{if(ev.ok&&ev.seed&&v2Init0){const T2=MJ.newGame(v2Init0.cfg||{},[{},{},{},{}],v2Init0.dealer);T2.handNo=v2Init0.handNo-1;MJ.startHand(T2,seed32(ev.seed));
+    rec.mine=T2.hands[v2Init0.seat].slice().sort((a,b)=>a-b).join(',')===v2Init0.hand.slice().sort((a,b)=>a-b).join(',')}}catch(e){rec.err=String(e)}
+  rec.ok=rec.commit&&rec.mine!==false;v2DealLog.push(rec);
+  if(!K.isHost)toast(rec.ok?'🀄 ✓':'⚠ '+LpRoomsTurn.tt('fairBad'),1600)}
+function v2OnLeave(why){const self=v2Self;v2Self=false;ROLE='local';G=null;V=null;P=null;v2Pub=null;v2Prv=null;v2Key='';clearTimeout(planT);
+  try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
+  document.body.classList.remove('online');resetView();show('scrMode');
+  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),2400);else if(why==='closed'&&!self)toast(LpRoomsTurn.tt('closed'),2400)}
+async function v2Create(){try{await v2Ready();const r=await K.create({opts:{rounds:setupCfg.rounds,speed:setupCfg.speed}});if(r)hideScreens()}catch(e){toast(T('offline'))}}
+function v2Resolve(code,fallback){v2Ready().then(()=>LpRooms.resolve(code)).then(r=>{if(r&&r.kind==='rooms'&&r.url){location.href=r.url;return}fallback()}).catch(fallback)}
+function v2Boot(){v2Ready().then(k=>k.boot()).then(r=>{if(r)hideScreens()}).catch(()=>{})}
+/* 끊긴 좌석은 8초 뒤 봇 — 명단이 바뀌면 plan 을 다시 본다 */
+setInterval(()=>{if(V2on()&&K.isHost&&G&&G.phase==='play')plan()},2000);
+window.__mahjongtwV2={get K(){return K},get on(){return V2on()},get G(){return G},get V(){return V},get P(){return P},get mySeat(){return mySeat},get dealLog(){return v2DealLog.slice()},get init0(){return v2Init0},
+  v2Ready,v2Create,v2Start,
+  /* 테스트: 내 차례면 방금 뽑은 패(없으면 첫 패)를 버리고, 울기 창이면 넘긴다 */
+  autoplay(){if(!V2on()||!V||V.phase!=='play'||!P)return 0;
+    if(P.opts&&V.claim&&P.cid){humanClaim(P.opts.hu?{a:'hu'}:{a:'pass'});return 2}
+    if(V.turn===mySeat&&V.step==='act'&&P.hand&&P.hand.length){if(P.act&&P.act.tsumo){humanAct({a:'tsumo'});return 3}const k=P.drawn!=null?P.drawn:P.hand[0];humanAct({a:'disc',k});return 1}return 0}};
+
 /* ════════════════════════ 화면 ════════════════════════ */
 const SCR=['scrMode','scrSolo','scrOnline','scrLobby'];
 function hideScreens(){SCR.forEach(s=>$(s).classList.add('hide'))}
@@ -2261,8 +2376,9 @@ function saveCfg(){try{localStorage.setItem('mjtw_cfg',JSON.stringify(setupCfg))
 $('btnSoloStart').addEventListener('click',()=>{ac();startSolo()});
 $('btnSoloBack').addEventListener('click',()=>show('scrMode'));
 $('btnOnBack').addEventListener('click',()=>show('scrMode'));
-$('btnCreate').addEventListener('click',()=>{ac();hostCreate()});
-$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase();if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}joinRoom(c,{})});
+$('btnCreate').addEventListener('click',()=>{ac();lpV2Want(v=>v?v2Create():hostCreate())});
+$('btnJoin').addEventListener('click',()=>{ac();const c=$('codeIn').value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');if(!c){$('codeIn').placeholder=T('needCode');$('codeIn').focus();return}
+  if(/^[2-9A-HJKMNP-TV-Z]{6}$/.test(c)&&/[A-Z]/.test(c)){v2Resolve(c,()=>joinRoom(c,{}));return}joinRoom(c,{})});
 $('codeIn').addEventListener('keydown',e=>{if(e.key==='Enter')$('btnJoin').click()});
 $('btnLobbyStart').addEventListener('click',()=>{ac();startOnline()});
 $('btnInvite').addEventListener('click',()=>showInvite());
@@ -2338,14 +2454,14 @@ function showOver(){
   const order=[0,1,2,3].sort((a,b)=>V.seats[b].score-V.seats[a].score);
   box.innerHTML='<div style="text-align:center;font-size:44px;line-height:1">🀄</div><h2>'+esc(T('final'))+'</h2><div class="sub2">'+esc(T('stakes'))+'</div>'+
     '<ul class="rank">'+order.map((s,i)=>'<li><span class="no">'+(i+1)+'</span><span class="nm">'+esc(seatName(s))+(s===mySeat?esc(T('youLbl')):'')+'</span><span class="sc" style="color:'+(V.seats[s].score>=0?'#9EE8B8':'#FFB0A2')+'">'+(V.seats[s].score>0?'+':'')+V.seats[s].score.toLocaleString()+'</span></li>').join('')+'</ul>';
-  if(ROLE!=='guest'){const b=document.createElement('button');b.className='btn pri';b.type='button';b.textContent='↻ '+T('rematch');b.addEventListener('click',()=>{ac();$('ovOver').classList.remove('on');if(ROLE==='host')rematchOnline();else startSolo()});box.appendChild(b)}
+  if(ROLE!=='guest'){const b=document.createElement('button');b.className='btn pri';b.type='button';b.textContent='↻ '+T('rematch');b.addEventListener('click',()=>{ac();$('ovOver').classList.remove('on');if(V2on()){K.rematch();return}if(ROLE==='host')rematchOnline();else startSolo()});box.appendChild(b)}
   const b2=document.createElement('button');b2.className='btn';b2.type='button';b2.textContent='📋 '+T('scoreT');b2.addEventListener('click',showScores);box.appendChild(b2);
   if(ROLE==='local'){const b3=document.createElement('button');b3.className='btn';b3.type='button';b3.textContent=T('toMenu');b3.addEventListener('click',()=>{$('ovOver').classList.remove('on');G=null;V=null;try{sessionStorage.removeItem('mjtw_save')}catch(_){}show('scrMode')});box.appendChild(b3)}
   const nav=document.createElement('div');box.appendChild(nav);mountNav(nav);
   $('ovOver').classList.add('on');Sfx.win();if(L)sparks();
 }
 function mountNav(el,tries){if(!window.LpNav){if((tries|0)<50)setTimeout(()=>mountNav(el,(tries|0)+1),200);return}
-  window.LpNav.mount(el,ROLE==='guest'?{}:{gameHome:()=>{if(ROLE==='host')endOnline();else{G=null;V=null;resetView();show('scrMode')}}})}
+  window.LpNav.mount(el,ROLE==='guest'?{}:{gameHome:()=>{if(V2on()){K.leave(true);return}if(ROLE==='host')endOnline();else{G=null;V=null;resetView();show('scrMode')}}})}
 function showScores(){
   if(!V||!V.seats)return;
   const box=$('scoreBox');const hist=V.hist||[];
@@ -2372,7 +2488,9 @@ function showMenu(){
   lg.addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');try{localStorage.setItem('mjtw_lang',LG)}catch(_){}applyLang();showMenu()});box.appendChild(lg);
   if(ROLE==='local')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
   else if(ROLE==='host')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
-  else add('🚪 '+T('leave'),'',()=>{closeOv('ovMenu');try{guestRoom&&guestRoom.close()}catch(_){}guestRoom=null;ROLE='local';V=null;P=null;document.body.classList.remove('online');show('scrMode')});
+  if(V2on())add('👥 '+(K.room.code?LpRooms.util.fmtCode(K.room.code):''),'',()=>{closeOv('ovMenu');K.sheet()});
+  if(V2on()&&!K.isHost)add('🚪 '+T('leave'),'',()=>{closeOv('ovMenu');K.leave(true)});
+  else if(ROLE==='guest')add('🚪 '+T('leave'),'',()=>{closeOv('ovMenu');try{guestRoom&&guestRoom.close()}catch(_){}guestRoom=null;ROLE='local';V=null;P=null;document.body.classList.remove('online');show('scrMode')});
   const nav=document.createElement('div');box.appendChild(nav);mountNav(nav);
   $('ovMenu').classList.add('on');
 }
@@ -2409,7 +2527,8 @@ window.addEventListener('resize',()=>{computeLayout()});
 window.addEventListener('orientationchange',()=>setTimeout(computeLayout,250));
 computeLayout();sndUi();show('scrMode');requestAnimationFrame(frame);
 MJArt.loadFont().then(()=>{MJArt.clear();bg=null;heroArt();req()});
-waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname});return}
+if(LPV2)v2Boot();
+else waitRoom(()=>{try{const a=window.LpRoom.detectAutoJoinParams();if(a&&a.code){joinRoom(a.code,{pin:a.pin,nick:a.nickname});return}
   if(window.LpRoom.tryResumeHost)window.LpRoom.tryResumeHost({gameId:'mahjong-tw'}).then(r=>{if(r&&ROLE==='local'&&!room)wireHost(r)}).catch(()=>{})}catch(_){}},0,true);
 
 /* 테스트·디버그 훅 — 화면 동작에는 쓰지 않는다 */

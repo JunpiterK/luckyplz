@@ -587,6 +587,7 @@ function seatName(s,i){
 }
 function canControl(i){
   const st=V&&V.seats[i];if(!st)return false;
+  if(V2on()){const ks=V.km?V.km.indexOf(i):-1;const si=ks>=0&&K.seatInfo(ks);return !!(si&&si.me)}
   if(NET.role==='guest')return st.kind==='remote'&&st.owner===NET.myNick;
   return st.kind==='human';
 }
@@ -695,6 +696,11 @@ function act(op,ti){
   SND.unlock();
   if(op==='roll'&&!canRoll())return;
   if(op==='move'&&(!canMove()||V.legal.indexOf(ti)<0))return;
+  if(V2on()){
+    NET.pending=Date.now();
+    K.act(op==='roll'?{op:'roll'}:{op:'move',ti:ti|0}).then(r=>{if(r&&!r.ok){NET.pending=0;refreshUI()}});
+    refreshUI();setTimeout(refreshUI,3600);return;
+  }
   if(NET.role==='guest'){
     NET.pending=Date.now();
     try{NET.g.action('ludo',{op,ti:ti|0,aid:G.aid,seat:V.turn})}catch(_){}
@@ -998,7 +1004,7 @@ function draw(now){
   }
   g.globalAlpha=1;
   for(let i=RINGS.length-1;i>=0;i--){
-    const r=RINGS[i],t=(now-r.t0)/520;if(t>=1){RINGS.splice(i,1);continue}
+    const r=RINGS[i],t=Math.max(0,(now-r.t0)/520);if(t>=1){RINGS.splice(i,1);continue}
     g.strokeStyle=r.c;g.globalAlpha=1-t;g.lineWidth=u*.14*(1-t);g.beginPath();g.arc(r.x*u,r.y*u,u*(.3+1.4*t),0,6.283);g.stroke();
   }
   g.globalAlpha=1;
@@ -1197,7 +1203,13 @@ function renderPanels(){
     el.querySelector('.pp-rank').textContent=rk>=0?String(rk+1):'';
     el.querySelector('.pp-name').textContent=on?seatName(s,i):'—';
     const st=s.seats[i];let sub='';
-    if(on){
+    if(on&&V2on()){
+      const ks=s.km?s.km.indexOf(i):-1,si=ks>=0?K.seatInfo(ks):null;
+      if(!si)sub='';else if(si.bot)sub='🤖 '+T('bot');else if(si.me)sub='⭐ '+T('me')+(si.afk?' · 🤖':'');
+      else sub=(si.off?'⚠ ':si.afk?'🤖 ':si.away?'◐ ':'📶 ')+T('remote');
+      const h=s.tok[i].filter(p=>p===56).length;
+      el.querySelectorAll('.pp-prog i').forEach((d,k)=>d.classList.toggle('on',k<h));
+    }else if(on){
       const mine=canControl(i)&&NET.role!=='local'&&!(NET.role==='host'&&mySeats().length>1);
       if(st.kind==='bot')sub='🤖 '+T('bot');
       else if(st.kind==='remote')sub=(NET.role==='guest'&&st.owner===NET.myNick?'⭐ '+T('me'):'📶 '+T('remote'))+(NET.role==='host'&&!remoteConnected(st.owner)?' · '+T('remoteLost'):'');
@@ -1214,7 +1226,7 @@ function refreshUI(){
   renderPanels();
   const s=V;
   document.body.classList.toggle('online',NET.role!=='local');
-  $('btnMenu').hidden=NET.role==='guest';
+  $('btnMenu').hidden=NET.role==='guest'&&!V2on();
   /* 주사위 */
   if(s.phase==='play'){
     placeDice(s.turn);
@@ -1237,13 +1249,13 @@ function refreshUI(){
       else if(s.legal.length)txt=canControl(s.turn)?T('pick',{n}):(s.seats[s.turn].kind==='bot'?T('turnWait',{n}):T('waitFor',{n}));
       else txt=s.last&&s.last.forfeit?T('triple'):T('noMove');
       if(NET.role==='guest'&&!mySeats().length)txt='👀 '+T('spectate')+' · '+txt;
-      setBanner(txt,s.turn);
+      setBanner(txt,s.turn);v2Tick();
     }else if(s.phase==='over'){
       setBanner(T('wins',{n:seatName(s,s.order[0])}),s.order[0]);
     }else setBanner('',null);
   }
   /* 오버레이 */
-  $('setup').classList.toggle('show',s.phase==='lobby');
+  $('setup').classList.toggle('show',s.phase==='lobby'&&!V2on());
   if(s.phase==='lobby')renderSetup();
   const showRes=s.phase==='over'&&!resultDismissed&&!anim&&!Q.length;
   if(showRes&&!$('result').classList.contains('show'))renderResult();
@@ -1357,15 +1369,15 @@ function renderResult(){
     li.querySelector('.pg').textContent=T('progress',{h});
     ol.appendChild(li);
   });
-  const guest=NET.role==='guest';
-  $('btnAgain').hidden=guest;$('btnEdit').hidden=guest;
+  const guest=V2on()?!K.isHost:NET.role==='guest';
+  $('btnAgain').hidden=guest;$('btnEdit').hidden=guest||V2on();
   $('resNote').textContent=guest?T('guestResult'):'';
   mountNav();
 }
 function mountNav(tries){
   if(!window.LpNav){if((tries|0)<50)setTimeout(()=>mountNav((tries|0)+1),200);return}
   const card=$('resCard'),btns=$('resBtns');
-  const row=window.LpNav.mount(card,NET.role==='guest'?{}:{gameHome:()=>{goLobby()}});
+  const row=window.LpNav.mount(card,V2on()?(K.isHost?{gameHome:()=>K.rematch()}:{}):NET.role==='guest'?{}:{gameHome:()=>{goLobby()}});
   if(row&&btns&&btns.nextElementSibling!==row)btns.insertAdjacentElement('afterend',row);
   if(row&&NET.role!=='guest')$('btnEdit').hidden=true;
 }
@@ -1481,6 +1493,92 @@ function backToLocal(reason){
 }
 window.addEventListener('lp-room-closed',e=>{const d=e.detail||{};if(NET.role!=='local')backToLocal(d.reason)});
 
+/* ───────────── Rooms v2 (P4, 2026-09-30) ─────────────
+   공용 턴제 커널(lpRoomsTurn.js) 위의 온라인. v1(lpRoom) 경로는 그대로(플래그로 고름).
+   좌석 = 기기 pid(서명) — 닉네임 소유 폐지(사칭 차단). 색 고르기(고유)·준비·시작 게이트·턴 시간·
+   끊긴 자리 8초 뒤 봇 대행(자리 유지·복귀)·게임 중 봇 자리 이어받기·내보내기. 주사위 = LpFair.chain(전원 검증). */
+const LPV2=(function(){try{const q=new URLSearchParams(location.search);if(q.get('rooms')==='v1')return false;
+  if(q.get('rooms')==='v2'||/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||''))return true;
+  const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId==='ludo'&&Date.now()-(a.t||0)<864e5)return true;
+  if(localStorage.getItem('lpRoomsV')==='2')return true;return !!(window.LpGames&&LpGames.v&&LpGames.v('ludo')==='v2')}catch(_){return false}})();
+let K=null,v2P=null,v2Self=false;
+function V2on(){return !!(K&&K.room)}
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1790753735'],['LpRooms','/js/lpRoomsCore.js?v=1790753735'],['LpFair','/js/lpFair.js?v=1790753735'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1790753735']];
+  let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
+    const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
+function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
+  if(window.LpGames)return cb(LpGames.v('ludo')==='v2');
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1790753735';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('ludo')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
+  if(!K){K=LpRoomsTurn.mount(ludoSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 58px)');ds.setProperty('--lpt-hud-right','8px');ds.setProperty('--lpt-hud-left','auto')}res(K)})))}
+/* 인앱 확인창 — window.confirm 대신(인앱 브라우저가 막는다) */
+function askLocal(q){return new Promise(res=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9080;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML='<div style="background:#1a1d33;color:#fff;border-radius:16px;padding:18px;max-width:340px;width:100%;font:15px system-ui,sans-serif"><p style="margin:0 0 14px"></p><div style="display:flex;gap:8px"><button type="button" class="btn sec" data-v="0" style="flex:1">✕</button><button type="button" class="btn pri" data-v="1" style="flex:1">✓</button></div></div>';
+  ov.querySelector('p').textContent=q;document.body.appendChild(ov);ov.addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(!b&&e.target!==ov)return;ov.remove();res(!!b&&b.dataset.v==='1')})})}
+const COLK=['r','g','y','b'];   /* 판 자리 0~3 = 빨·초·노·파 */
+function ludoSpec(){const onoff=v=>v?'ON':'OFF';return {gameId:'ludo',name:()=>'LUDO',seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:true,
+  picks:[{key:'color',options:COLK.slice(),unique:true,botYield:true,title:()=>T('seats'),label:c=>{const i=COLK.indexOf(c);return '<span style="display:inline-block;width:18px;height:18px;border-radius:50%;vertical-align:middle;background:'+(CLR[i]?CLR[i].h:'#888')+'"></span> '+esc((T('colors')||[])[i]||c)}}],
+  options:[{key:'turnSec',values:[15,30,60],def:30},{key:'triple',values:[true,false],def:true,title:()=>T('optTriple'),label:onoff},{key:'bonus',values:[true,false],def:true,title:()=>T('optBonus'),label:onoff},
+    {key:'full',values:[false,true],def:false,title:()=>T('optFull'),label:onoff},{key:'fast',values:[false,true],def:false,title:()=>T('optFast'),label:onoff}],
+  botName:(i,pk)=>T('botName',{c:(T('colors')||[])[COLK.indexOf(pk&&pk.color)]||''}),
+  host:{init:v2Init,apply:v2Apply,next:g=>g.phase==='over'?null:g.km.indexOf(g.turn),result:g=>({order:g.order}),bot:v2Bot,timeout:v2Bot,
+    rolls:a=>!!a&&a.op==='roll',forced:v2Forced,busy:()=>!!anim||Q.length>0},
+  client:{render:v2Render,onLeave:v2OnLeave,fair:ev=>{if(!ev.ok)toast('⚠ '+LpRoomsTurn.tt('fairBad'),'#ff8a8a')}}}}
+function esc(x){return String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function v2Init(seats,opts){
+  const bs=[0,1,2,3].map(()=>({kind:'off',name:'',owner:''})),km=[];
+  seats.forEach(s=>{let b=COLK.indexOf(s.pick&&s.pick.color);if(b<0||bs[b].kind!=='off')b=bs.findIndex(x=>x.kind==='off');km[s.seat]=b;bs[b]={kind:s.bot?'bot':'remote',name:s.bot?'':s.n,owner:s.bot?'':s.n}});
+  const g=newGame(bs,{triple:!!opts.triple,bonus:!!opts.bonus,full:!!opts.full,fast:!!opts.fast});g.km=km;g.aid=1;return g}
+function v2Apply(g,seat,a,fx){
+  if(!a||g.phase!=='play')return {reject:'phase'};
+  const b=g.km[seat];if(g.turn!==b)return {reject:'turn'};
+  if(a.op==='roll'){
+    if(g.rolled)return {reject:'illegal'};
+    const d=fx&&fx.rand?1+fx.rand.int(6):rnd6();
+    g.dice=d;g.rolled=true;g.sixes=d===6?g.sixes+1:0;let forfeit=false;
+    if(g.opts.triple&&g.sixes>=3){forfeit=true;g.legal=[]}else g.legal=legalMoves(g,b,d);
+    g.last={t:'roll',seat:b,v:d,forfeit};g.aid++;return {game:g,anim:g.opts.fast?500:1000}}
+  if(a.op==='move'){
+    const ti=a.ti|0;if(!g.rolled||g.legal.indexOf(ti)<0)return {reject:'illegal'};
+    const d=g.dice,from=g.tok[b][ti],to=from<0?0:from+d,cap=capturesAt(g,b,to);
+    cap.forEach(c=>{g.tok[c[0]][c[1]]=-1});g.tok[b][ti]=to;
+    let fin=false;if(to===56&&g.tok[b].every(p=>p===56)){g.ranks.push(b);fin=true}
+    const extra=!fin&&(d===6||(g.opts.bonus&&(cap.length>0||to===56)));
+    g.last={t:'move',seat:b,ti,from,to,d,cap,fin,extra};
+    const alive=activeSeats(g).filter(i=>g.ranks.indexOf(i)<0);
+    if(fin&&(!g.opts.full||alive.length<=1)){g.phase='over';g.order=finalOrder(g);g.rolled=false;g.legal=[]}else advance(g,extra);
+    g.aid++;return {game:g,anim:Math.min(3000,(from<0?1:Math.max(1,to-from))*(g.opts.fast?90:170)+500)}}
+  if(a.op==='pass'){if(!g.rolled||g.legal.length)return {reject:'illegal'};g.last={t:'pass',seat:b,forfeit:!!(g.last&&g.last.forfeit)};advance(g,false);g.aid++;return {game:g,anim:200}}
+  return {reject:'bad'}}
+function v2Bot(g,seat){if(!g.rolled)return {op:'roll'};if(g.legal.length){const s=clone(g);return {op:'move',ti:botPick(s)}}return {op:'pass'}}
+function v2Forced(g,seat){if(!g.rolled)return null;if(!g.legal.length)return {a:{op:'pass'},delay:g.last&&g.last.forfeit?1300:950};
+  if(distinctFroms(g)===1)return {a:{op:'move',ti:g.legal[0]},delay:g.opts.fast?200:380};return null}
+function v2Deco(s,Sk){if(!s||!s.km)return s;s.km.forEach((b,i)=>{const si=K.seatInfo(i,Sk);if(!si||!s.seats[b])return;
+  s.seats[b].kind=si.bot?'bot':'remote';s.seats[b].name=si.bot?'':si.n;s.seats[b].owner=si.bot?'':si.n});return s}
+function v2Render(Sk){
+  NET.role='guest';NET.myNick='';clearTimeout(pumpT);
+  const lobby=Sk.phase==='lobby'||!Sk.game;
+  K.lobbyOv(lobby);
+  if(lobby){$('setup').classList.remove('show');$('result').classList.remove('show');return}
+  const s=v2Deco(clone(Sk.game),Sk);
+  if(G&&s.sid===G.sid){
+    if(s.aid<=G.aid){if(V&&V.sid===s.sid)v2Deco(V,Sk);refreshUI();return}
+    if(s.aid>G.aid+1){Q.length=0;flushAnim()}
+  }else{Q.length=0;flushAnim();resultDismissed=false}
+  G=clone(s);NET.pending=0;enqueue(clone(s))}
+function v2OnLeave(why){const self=v2Self;v2Self=false;
+  NET.role='local';NET.pending=0;Q.length=0;flushAnim();const p=loadPrefs();G=lobbyState(p.seats,p.opts);V=clone(G);refreshUI();
+  try{const u=new URL(location.href);if(u.searchParams.has('r')){u.searchParams.delete('r');history.replaceState(null,'',u.pathname+u.search)}}catch(_){}
+  if(why==='kicked')toast(LpRoomsTurn.tt('kicked'),'#ff8a8a');else if(why==='closed'&&!self)toast(T('closed'))}
+/* 턴 표시 — 배너 끝에 남은 초(방장 시계) */
+function v2Tick(){const el=$('bnTm')||(()=>{const e=document.createElement('span');e.id='bnTm';e.style.cssText='margin-left:8px;font-weight:900;opacity:.9;font-variant-numeric:tabular-nums';$('banner').appendChild(e);return e})();
+  const r=V2on()&&V&&V.phase==='play'&&!anim&&!Q.length?K.remain():null;const n=r==null?'':Math.max(0,Math.ceil(r/1000));
+  const t=n===''?'':'⏱'+n;if(el.textContent!==t)el.textContent=t;el.style.color=n!==''&&n<=5?'#ff8a8a':''}
+setInterval(()=>{if(V2on())v2Tick()},500);
+async function v2Create(){try{await v2Ready();await K.create()}catch(e){toast(T('closed'))}}
+function v2Boot(){v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on())refreshUI()}).catch(()=>{})}
+window.__ludoV2={get K(){return K},get on(){return V2on()},get G(){return G},get V(){return V},v2Ready,v2Create,act:(op,ti)=>act(op,ti),canRoll:()=>canRoll(),canMove:()=>canMove()};
+
 /* ───────────── 초기화 ───────────── */
 function wireUI(){
   Dice.el.addEventListener('click',()=>act('roll'));
@@ -1492,14 +1590,14 @@ function wireUI(){
     if(/^[1-4]$/.test(e.key)&&canMove()){const t=(+e.key)-1;if(V.legal.indexOf(t)>=0)act('move',t)}
   });
   $('btnStart').addEventListener('click',startGame);
-  $('btnOnline').addEventListener('click',hostOnline);
+  $('btnOnline').addEventListener('click',()=>{SND.unlock();lpV2Want(v=>v?v2Create():hostOnline())});
   $('btnResume').addEventListener('click',()=>{
     const sv=readSave(12*3600e3);if(!sv||NET.role==='guest')return;
     sv.seats.forEach(st=>{if(st.kind==='remote'&&NET.role!=='host'){st.kind='bot';st.owner=''}});
     sv.sid=rid();sv.last={t:'resume'};commit(sv);
   });
   ['oTriple','oBonus','oFull','oFast'].forEach(id=>$(id).addEventListener('change',readOpts));
-  $('btnAgain').addEventListener('click',()=>{if(NET.role==='guest'||!G)return;resultDismissed=false;commit(newGame(G.seats,G.opts))});
+  $('btnAgain').addEventListener('click',()=>{if(V2on()){if(K.isHost){resultDismissed=false;K.rematch()}return}if(NET.role==='guest'||!G)return;resultDismissed=false;commit(newGame(G.seats,G.opts))});
   $('btnEdit').addEventListener('click',goLobby);
   $('btnShare').addEventListener('click',async()=>{
     const s=V;if(!s||!s.order)return;
@@ -1507,10 +1605,11 @@ function wireUI(){
     try{if(navigator.share){await navigator.share({text:txt});return}await navigator.clipboard.writeText(txt);
       const b=$('btnShare'),o=b.innerHTML;b.textContent='✓ '+T('copied');setTimeout(()=>{b.innerHTML=o},1500)}catch(_){}
   });
-  $('btnMenu').addEventListener('click',()=>{
+  $('btnMenu').addEventListener('click',async()=>{
     SND.click();
+    if(V2on()){K.sheet();return}
     if(!G||NET.role==='guest')return;
-    if(G.phase==='play'){if(!confirm(T('quit')))return}
+    if(G.phase==='play'){if(!await askLocal(T('quit')))return}
     if(G.phase==='over'){resultDismissed=false}
     goLobby();
   });
@@ -1539,7 +1638,7 @@ function init(){
   setTimeout(()=>{layout();refreshUI()},300);
 
   /* 온라인 — 링크로 들어온 게스트 / 새로고침한 방장 */
-  waitLpRoom(()=>{
+  if(LPV2){v2Boot()}else waitLpRoom(()=>{
     const auto=window.LpRoom.detectAutoJoinParams?window.LpRoom.detectAutoJoinParams():{};
     if(auto&&auto.code){
       window.LpRoom.showGuestJoinModal(auto.code,{gameId:'ludo',prefillPin:auto.pin,prefillNick:auto.nickname,onJoined:wireGuest});
