@@ -43,20 +43,20 @@ window.LP_HELP_TEXT = {
     pt: {t:'Yacht Dice', l:['Role cinco dados até três vezes e anote em uma de 12 casas · vence o maior total após 12 rodadas','Segure Rolar para chacoalhar o copo e solte para lançar · toque nos dados para segurá-los','Toque numa casa e de novo (ou o botão amarelo) para anotar · sem combinação, anota-se 0','Se a parte de cima somar 63+ ganha +35 · ligue 💡 para ver a melhor jogada']}
   },
   'ludo': {
-    ko: {t:'루도', l:['주사위를 굴려 말 4개를 먼저 가운데 집에 넣으면 승리','6이 나와야 출발, 6이면 한 번 더 · 상대 말 위에 멈추면 잡기','별 칸·출발칸은 안전 · 친구와 온라인: 메신저 링크로 각자 폰에서']},
-    en: {t:'Ludo', l:['Roll the dice and race all 4 tokens into the center home','Roll a 6 to leave base; a 6 rolls again. Land on a rival to capture','Stars and start squares are safe. Play online: share a chat link']},
-    ja: {t:'ルドー', l:['サイコロを振り、4つのコマを先に中央のゴールへ','6で出発、6ならもう一回 · 相手のコマに止まると取れる','星マスとスタートは安全 · オンライン: リンクで各自のスマホから']},
-    zh: {t:'鲁多棋', l:['掷骰子，先把四枚棋子全部送进中央的家','掷出6才能出发，6可再掷 · 停在对手棋子上即可吃掉','星格和起点格安全 · 在线玩：发链接，各用各的手机']},
-    es: {t:'Ludo', l:['Tira el dado y lleva tus 4 fichas a la casa central','Sal con un 6; el 6 repite. Cae sobre un rival para comerlo','Estrellas y salidas son seguras. Online: comparte el enlace']},
-    pt: {t:'Ludo', l:['Jogue o dado e leve suas 4 peças à casa central','Saia com um 6; o 6 joga de novo. Pare no rival para capturar','Estrelas e saídas são seguras. Online: compartilhe o link']}
+    ko: {t:'루도', l:['주사위를 굴려 말 4개를 먼저 가운데 집에 넣으면 승리','6이 나와야 출발, 6이면 한 번 더 · 상대 말 위에 멈추면 잡기','별 칸·출발칸은 안전 · 갈 말이 하나면 자동 이동(설정에서 끄기)','봇 성격: 레서판다 돌격 · 고양이 신중 · 여우 질주 · 수달 균형']},
+    en: {t:'Ludo', l:['Roll the dice and race all 4 tokens into the center home','Roll a 6 to leave base; a 6 rolls again. Land on a rival to capture','Stars and start squares are safe · a single movable token moves itself (toggle in setup)','Bot styles: Red Panda attacks · Cat plays safe · Fox races · Otter balances']},
+    ja: {t:'ルドー', l:['サイコロを振り、4つのコマを先に中央のゴールへ','6で出発、6ならもう一回 · 相手のコマに止まると取れる','星マスとスタートは安全 · 動かせるコマが1つなら自動(設定でオフ)','ボットの性格: レッサーパンダ突撃 · ネコ慎重 · キツネ疾走 · カワウソ均衡']},
+    zh: {t:'鲁多棋', l:['掷骰子，先把四枚棋子全部送进中央的家','掷出6才能出发，6可再掷 · 停在对手棋子上即可吃掉','星格和起点格安全 · 只有一枚可走时自动移动(可在设置关闭)','电脑性格：小熊猫进攻 · 猫咪谨慎 · 狐狸冲刺 · 水獭均衡']},
+    es: {t:'Ludo', l:['Tira el dado y lleva tus 4 fichas a la casa central','Sal con un 6; el 6 repite. Cae sobre un rival para comerlo','Estrellas y salidas son seguras · si solo una ficha puede mover, se mueve sola (ajustes)','Estilos: Panda rojo ataca · Gato prudente · Zorro veloz · Nutria equilibrada']},
+    pt: {t:'Ludo', l:['Jogue o dado e leve suas 4 peças à casa central','Saia com um 6; o 6 joga de novo. Pare no rival para capturar','Estrelas e saídas são seguras · se só uma peça puder andar, anda sozinha (ajustes)','Estilos: Panda-vermelho ataca · Gato cauteloso · Raposa veloz · Lontra equilibrada']}
   },
   'reversi': {
-    ko: {t:'리버시', l:['상대 돌을 내 돌 사이에 끼우면 전부 내 색으로 뒤집혀요','점 표시된 칸에만 둘 수 있고, 둘 곳이 없으면 자동 패스','모서리는 절대 안 뒤집혀요 — 모서리 옆 대각선 칸은 피하세요']},
-    en: {t:'Reversi', l:['Sandwich opponent discs between yours to flip them all','You can only play on dotted squares; no move means a pass','Corners never flip: avoid the diagonal square next to one']},
-    ja: {t:'リバーシ', l:['相手の石を自分の石で挟むと全部ひっくり返ります','点のあるマスにだけ置けます。置けなければ自動でパス','角は二度と返されません。角の斜め隣は避けましょう']},
-    zh: {t:'黑白棋', l:['用自己的棋子夹住对方棋子，就能全部翻成己色','只能下在有圆点的格子；无处可下时自动跳过','角上的棋子永远不会被翻，避开角的斜邻格']},
-    es: {t:'Reversi', l:['Encierra fichas rivales entre las tuyas y se voltean','Solo juegas en casillas con punto; si no hay, pasas','Las esquinas nunca se voltean: evita la casilla diagonal vecina']},
-    pt: {t:'Reversi', l:['Cerque peças rivais entre as suas e todas viram','Só dá para jogar nas casas com ponto; sem jogada, passa','Cantos nunca viram: evite a casa diagonal ao lado deles']}
+    ko: {t:'리버시', l:['상대 돌을 내 돌 사이에 끼우면 전부 내 색으로 뒤집혀요','AI는 레서판다 가족 — 콩이(쉬움)·단풍(보통)·아빠(어려움)·할배(고수)','힌트 버튼: 점 → 뒤집는 개수 → 끔 · 💡 코치 팁은 설정에서','모서리는 절대 안 뒤집혀요 — 모서리 옆 대각선 칸은 피하세요']},
+    en: {t:'Reversi', l:['Sandwich opponent discs between yours to flip them all','AI is a red-panda family — Kong (Easy), Maple (Normal), Papa (Hard), Grandpa (Expert)','Hint button: dots → flip counts → off · 💡 Coach tips in setup','Corners never flip: avoid the diagonal square next to one']},
+    ja: {t:'リバーシ', l:['相手の石を自分の石で挟むと全部ひっくり返ります','AIはレッサーパンダ一家 — コン(かんたん)・もみじ(ふつう)・パパ(むずかしい)・じいじ(達人)','ヒントボタン: 点 → 返す枚数 → オフ · 💡コーチは設定で','角は二度と返されません。角の斜め隣は避けましょう']},
+    zh: {t:'黑白棋', l:['用自己的棋子夹住对方棋子，就能全部翻成己色','AI是小熊猫一家：豆豆(简单)·小枫(普通)·熊猫爸爸(困难)·爷爷(高手)','提示按钮：圆点 → 可翻数量 → 关闭 · 💡教练提示在设置里','角上的棋子永远不会被翻，避开角的斜邻格']},
+    es: {t:'Reversi', l:['Encierra fichas rivales entre las tuyas y se voltean','La IA es una familia de pandas rojos — Kong (Fácil), Arce (Normal), Papá (Difícil), Abuelo (Experto)','Botón de pistas: puntos → cuántas voltea → apagado · 💡 Consejos en ajustes','Las esquinas nunca se voltean: evita la casilla diagonal vecina']},
+    pt: {t:'Reversi', l:['Cerque peças rivais entre as suas e todas viram','A IA é uma família de pandas-vermelhos — Kong (Fácil), Bordo (Normal), Papai (Difícil), Vovô (Mestre)','Botão de dicas: pontos → quantas vira → desligado · 💡 Dicas nos ajustes','Cantos nunca viram: evite a casa diagonal ao lado deles']}
   },
   'yut': {
     ko: {t:'윷놀이', l:['2~4팀이 윷을 던져 말을 먼저 모두 내보내면 승리','윷 던지기 → 말을 누르고 빛나는 칸을 눌러 이동','윷·모는 한 번 더, 도·개·걸로 잡아도 한 번 더 · 모서리·방에 멈추면 지름길','온라인: 초대 링크 → 각자 캐릭터 고르고 「준비」 → 방장이 시작 · 시간을 넘기면 자동으로 둬요']},
