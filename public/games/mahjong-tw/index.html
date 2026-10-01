@@ -190,6 +190,27 @@ table.hist tr.sum td{font-weight:900;color:#FFE9B8;border-bottom:0}
 .taitab .k{font-family:var(--serif);font-weight:900;color:#FFE9B8;font-size:15px}
 .taitab .n{font-weight:900;color:var(--gold);white-space:nowrap}
 .taitab .d{grid-column:1 / -1;font-size:11.5px;color:rgba(255,236,200,.58);line-height:1.45}
+.hwT{font-size:13px;font-weight:900;letter-spacing:.04em;color:#FFE9B8;margin:14px 2px 6px}
+.winShape{display:block;margin:4px auto 2px}
+ul.hw{list-style:none;padding:0;margin:6px 0 2px}
+ul.hw li{position:relative;padding:4px 2px 4px 14px;font-size:12.5px;line-height:1.5;color:rgba(255,236,200,.82)}
+ul.hw li::before{content:'';position:absolute;left:3px;top:11px;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+details.rules{margin-top:10px;border:1px solid rgba(233,196,106,.25);border-radius:12px;padding:6px 10px;background:rgba(0,0,0,.18)}
+details.rules summary{cursor:pointer;font-weight:800;font-size:13px;color:#FFE9B8;padding:4px 0;list-style-position:inside}
+.endHead{display:flex;align-items:center;justify-content:center;gap:8px;min-height:64px}
+.endTitle{min-width:0;text-align:center}
+.mjPanda{flex:0 0 auto;width:68px;height:68px;margin-left:-6px;background:url(/games/mahjong-tw/panda.webp) 0 0/800% 100% no-repeat;filter:drop-shadow(0 4px 6px rgba(0,0,0,.5))}
+.mjPanda.pop{animation:pdPop .55s cubic-bezier(.3,1.7,.5,1) both}
+@keyframes pdPop{0%{transform:translateY(18px) scale(.4);opacity:0}100%{transform:none;opacity:1}}
+.tai li.in{animation:taiIn .34s cubic-bezier(.2,1.4,.4,1) both}
+@keyframes taiIn{0%{opacity:0;transform:translateX(-14px) scale(.96)}100%{opacity:1;transform:none}}
+#taiTot{display:inline-block;transform-origin:left center}
+#taiTot.bump{animation:totBump .22s ease-out}
+#taiTot.fin{animation:totFin .5s cubic-bezier(.3,1.8,.5,1);color:#FFE27A;text-shadow:0 0 12px rgba(255,200,60,.55)}
+@keyframes totBump{0%{transform:scale(1.18)}100%{transform:none}}
+@keyframes totFin{0%{transform:scale(1.4)}100%{transform:none}}
+.pays.late{animation:taiIn .4s ease-out both}
+@media (prefers-reduced-motion:reduce){.mjPanda.pop,.tai li.in,#taiTot.bump,#taiTot.fin,.pays.late{animation:none}}
 #toast{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%) scale(.85);z-index:30;pointer-events:none;opacity:0;
   font:900 17px/1.35 var(--ui);padding:11px 18px;border-radius:16px;max-width:88vw;text-align:center;
   background:rgba(24,6,4,.88);border:1px solid rgba(233,196,106,.45);box-shadow:0 12px 30px rgba(0,0,0,.5);transition:opacity .2s,transform .25s cubic-bezier(.2,1.6,.4,1)}
@@ -737,7 +758,7 @@ function canWin(G,s,k,how){
 function discard(G,s,k){
   if(G.phase!=='play'||G.step!=='act'||G.turn!==s)return null;
   const i=G.hands[s].indexOf(k);if(i<0)return null;
-  G.hands[s].splice(i,1);G.disc[s].push({k});G.last={s,k};G.lastDraw[s]=null;G.kanFlag=false;G.discN++;sortHand(G,s);
+  G.hands[s].splice(i,1);G.disc[s].push({k,n:G.discN});G.last={s,k};G.lastDraw[s]=null;G.kanFlag=false;G.discN++;sortHand(G,s);
   const ev={k:'disc',s,t:k};
   const after=openClaims(G,s,k,'disc');
   if(after)ev.then=after;
@@ -942,12 +963,22 @@ function visible(G,s){
   for(let o=0;o<4;o++)for(const m of G.melds[o]){if(m.t==='ak'&&o!==s)continue;for(const t of meldTiles(m))v[t]++}
   return v;
 }
+/* 상대가 聽牌일 가능성 — 副露 수 + 판이 얼마나 흘렀나(門清도 늦으면 위험) */
 function threat(G,s,o){
-  const n=G.melds[o].length;let t=n>=4?0.9:n===3?0.6:n===2?0.3:n===1?0.1:0;
-  if(G.wall.length<50)t+=0.12;if(G.wall.length<34)t+=0.15;
+  const n=G.melds[o].length;let t=[0.04,0.12,0.32,0.6,0.92][Math.min(4,n)];
+  if(G.wall.length<50)t+=0.1;if(G.wall.length<34)t+=0.12;
+  if(n<=1&&G.discN>=36)t+=0.14;
   return Math.min(1,t);
 }
+/* 通過 — o 가 마지막으로 버린 뒤 남이 버린 패를 o 가 胡 하지 않았다면 o 의 대기에 없다(손패가 그대로이므로).
+   대만 마작은 振聽이 없어 o 자신의 버림패는 완전 안전이 아니다(0.25) */
+function passed(G,k,o){
+  let lastN=-1;for(const x of G.disc[o])if(x.n!=null&&x.n>lastN)lastN=x.n;
+  for(let p=0;p<4;p++){if(p===o)continue;for(const x of G.disc[p])if(x.k===k&&x.n!=null&&x.n>lastN)return true}
+  return false;
+}
 function danger(G,k,o,vis){
+  if(passed(G,k,o))return 0.04;
   if(G.disc[o].some(x=>x.k===k))return 0.25;
   if(isHonor(k)){const v=vis[k];return v>=3?0.05:v===2?0.35:0.6}
   let b=[0.5,0.7,0.85,1,1,1,0.85,0.7,0.5][k%9];
@@ -960,6 +991,7 @@ function bestDiscard(G,s){
   const h=G.hands[s],m=5-G.melds[s].length,c=cnt(h),vis=visible(G,s);
   const sw=(s-G.dealer+4)%4;
   const opps=[1,2,3].map(d=>(s+d)%4).map(o=>({o,th:threat(G,s,o)}));
+  const maxTh=Math.max(...opps.map(x=>x.th));
   let best=null;
   for(const k of [...new Set(h)]){
     c[k]--;const sh=shanten(c,m);let uk=0;
@@ -968,7 +1000,8 @@ function bestDiscard(G,s){
     if(isHonor(k)&&c[k]===0){const yak=k>=31||k===27+G.wind||k===27+sw;sc+=yak?0.4:1.2}
     else if(!isHonor(k)&&c[k]===0&&(k%9===0||k%9===8))sc+=0.5;
     let dg=0;for(const x of opps)if(x.th>0)dg+=x.th*danger(G,k,x.o,vis);
-    sc-=dg*(sh>=2?30:sh===1?12:4);
+    /* 멀면(2향청 이상) 위험한 상대 앞에서 접는다 — 한 단계 손해보다 放槍 한 번이 더 비싸다. 聽牌면 웬만하면 민다 */
+    sc-=dg*(sh>=2?(maxTh>=0.5?170:60):sh===1?(maxTh>=0.6?55:18):5);
     c[k]++;
     if(!best||sc>best.sc)best={k,sc,sh};
   }
@@ -1033,19 +1066,34 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const WINDS='東南西北';
 
 /* ════════════════════════ 언어 ════════════════════════ */
-const LANGS=['tw','ko','en','ja'];
-const LANG_LABEL={tw:'繁體中文',ko:'한국어​',en:'English',ja:'日本語'};  /* ZWSP: 사이트 lpGameText 가 '한국어' 칩을 'Korean' 으로 바꾸지 않게 */
+const LANGS=['tw','cn','ko','en','ja','es','pt'];
+const LANG_LABEL={tw:'繁體中文',cn:'简体中文',ko:'한국어​',en:'English',ja:'日本語',es:'Español',pt:'Português'};  /* ZWSP: 사이트 lpGameText 가 '한국어' 칩을 'Korean' 으로 바꾸지 않게 */
+/* 繁體(tw)는 이 게임 전용 표시 언어다 — 사이트 언어 코드(luckyplz_lang)를 새로 만들지 않는다.
+   사이트 zh(간체)라도 브라우저가 zh-TW·zh-HK·zh-MO·Hant 면 繁體, 아니면 简体(cn). 사이트 언어가 없으면 브라우저 언어로. */
+function hantNav(){const ls=(navigator.languages&&navigator.languages.length?navigator.languages:[navigator.language||'']).map(x=>String(x||'').toLowerCase());
+  for(const n of ls){if(n.indexOf('zh')!==0)continue;if(/hant|-tw|-hk|-mo/.test(n))return true;if(/hans|-cn|-sg|-my/.test(n))return false;return true}return false}
+function siteLangToGame(l){
+  if(l==='zh'||l==='zh-cn'||l==='zh-hans')return hantNav()?'tw':'cn';
+  if(l==='zh-tw'||l==='tw'||l==='zh-hant'||l==='zh-hk')return 'tw';
+  if(l==='ko'||l==='ja'||l==='en'||l==='es'||l==='pt')return l;
+  return '';
+}
 function detectLang(){
   /* 게임 안 언어 칩(mjtw_lang)은 '그때의 사이트 언어'와 함께 저장한다. 사이트 언어를 바꾸면 칩 선택은 무시 —
      예전엔 칩을 한 번 누르면 사이트 언어를 영구히 무시했다(2026-10-01 QA) */
   let l='';try{l=(localStorage.getItem('luckyplz_lang')||'').toLowerCase()}catch(_){}
   let o=null,os=null;try{o=localStorage.getItem('mjtw_lang');os=localStorage.getItem('mjtw_lang_site')}catch(_){}
   if(o&&LANGS.indexOf(o)>=0&&(os||'')===l)return o;
-  if(l==='zh'||l==='zh-tw'||l==='tw')return 'tw';if(l==='ko')return 'ko';if(l==='ja')return 'ja';
+  if(l){const g=siteLangToGame(l);return g||'en'}
   const n=((navigator.languages&&navigator.languages[0])||navigator.language||'').toLowerCase();
-  if(!l){if(n.indexOf('zh')===0)return 'tw';if(n.indexOf('ko')===0)return 'ko';if(n.indexOf('ja')===0)return 'ja'}
+  if(n.indexOf('zh')===0)return hantNav()?'tw':'cn';
+  for(const x of ['ko','ja','es','pt'])if(n.indexOf(x)===0)return x;
   return 'en';
 }
+/* 언어 칩 — 繁體·한국어·English·日本語 넷은 늘, 简体·Español·Português 는 지금 언어이거나 사이트·브라우저 언어일 때만(칩 줄이 길어지지 않게) */
+function langChips(){let base='';try{base=siteLangToGame((localStorage.getItem('luckyplz_lang')||'').toLowerCase())}catch(_){}
+  const n=((navigator.language||'')+'').toLowerCase();const navG=n.indexOf('zh')===0?(hantNav()?'tw':'cn'):n.slice(0,2);
+  return LANGS.filter(l=>['tw','ko','en','ja'].indexOf(l)>=0||l===LG||l===base||l===navG)}
 function mjSaveLang(v){try{localStorage.setItem('mjtw_lang',v);localStorage.setItem('mjtw_lang_site',(localStorage.getItem('luckyplz_lang')||'').toLowerCase())}catch(_){}}
 let LG=detectLang();
 const I18N={
@@ -1142,7 +1190,118 @@ const I18N={
   pickKan:'カンする牌を選択',robWait:'加槓 — 搶槓を確認中…',noMoney:'※ ポイントのみ・換金なし',
   share:'共有'}
 };
-function barTitle(){return W&&W<400&&LG!=='tw'&&LG!=='ja'?'台灣麻將':T('title')}
+/* 简体中文 · Español · Português — 표시 문자열 (2026-10-01). 패·台 이름 같은 고유 용어는 漢字 그대로 둔다 */
+Object.assign(I18N,{
+ cn:{title:'台湾麻将',title2:'TAIWAN 16-TILE MAHJONG',sub:'16张 · 花牌 · 算台 — 和电脑练习，或开房和朋友各用手机打一将',
+  modeQ:'怎么玩？',m1:'和电脑练习（单人）',m1d:'你＋3 位电脑，随时可以停',m2:'开房和朋友一起玩',m2d:'各用各的手机，最多 4 人 · 空位由电脑补上',
+  resumeG:'继续上一将',points:'只计积分，不涉及任何金钱。',
+  rounds:'圈数',r1:'一圈（东风）',r2:'两圈（东南）',r4:'四圈（一将）',speed:'电脑速度',spN:'普通',spF:'快速',
+  stakes:'底 300 · 每台 100 积分',start:'开始',back:'返回',
+  onQ:'和朋友联机',create:'开新房间',createD:'把链接或二维码发给朋友 · 你是房主',joinT:'用房号加入',joinD:'输入朋友给你的房号',join:'加入',needCode:'请输入房号',
+  seats:'座位',you:'你',bot:'电脑',botN:'电脑{n}',open:'空位（电脑代打）',host:'房主',guest:'玩家',invite:'邀请朋友',copied:'已复制链接',
+  waitHost:'等房主开始…',lobbyNote:'空位由电脑补上，中途也能加入。每个人只看得到自己的牌。',
+  roundLbl:'{w}风圈 · 第 {n} 局',wallLbl:'剩余',lian:'连{n}',dealer:'庄',
+  yourTurn:'轮到你 — 点一张牌，再点一次打出',tapAgain:'再点一次打出这张',waitClaim:'等其他人决定…',turnOf:'{n} 出牌中',
+  ting:'听',left:'剩',noTing:'打这张还没听牌',
+  chi:'吃',pon:'碰',kan:'杠',hu:'胡',pass:'过',tsumo:'自摸',
+  lchi:'吃',lpon:'碰',lkan:'杠',lhu:'胡',lpass:'过',ltsumo:'自摸',
+  flower:'补花',exhaust:'流局',
+  winT:'{n} 胡了！',howTsumo:'自摸',howRon:'{n} 点炮',howRob:'抢杠 · {n} 付',howBaxian:'八仙过海',howQqy:'七抢一 · {n} 付',
+  total:'共 {n} 台',dealerNote:'庄家台只在庄家与胡牌者之间计算',
+  thisHand:'这局积分',next:'下一局',waitNext:'等房主开下一局…',drawT:'流局',drawSub:'牌摸完了 · 庄家连庄',
+  final:'最终成绩',rematch:'再来一将',toMenu:'回到菜单',scoreT:'成绩表',hand:'局',sum:'合计',
+  menu:'菜单',cont:'继续',endGame:'结束这一将',leave:'离开房间',sound:'音效',close:'关闭',
+  off:'断线',botPlays:'电脑代打',spect:'观战中',full:'房间已满，先观战',
+  resumeD:'第 {h} 局 · {s}',online:'联机',youLbl:'（你）',
+  pickKan:'选择要杠的牌',robWait:'加杠 — 等抢杠…',noMoney:'※ 积分游戏，不能兑换、不涉及金钱',share:'分享'},
+ es:{title:'Mahjong taiwanés',title2:'台灣麻將 · 16 FICHAS',sub:'16 fichas · flores · puntos en tai — practica con bots o abre una sala y juega con amigos, cada uno en su móvil',
+  modeQ:'¿Cómo quieres jugar?',m1:'Practicar con bots (solo)',m1d:'Tú + 3 bots, para cuando quieras',m2:'Unirse y jugar juntos',m2d:'Cada uno en su dispositivo, hasta 4 · los bots ocupan los huecos',
+  resumeG:'Continuar partida',points:'Solo puntos: sin dinero.',
+  rounds:'Duración',r1:'1 vuelta (Este)',r2:'2 vueltas (E+S)',r4:'4 vueltas (completa)',speed:'Velocidad de los bots',spN:'Normal',spF:'Rápida',
+  stakes:'Base 300 · 100 puntos por tai',start:'Empezar',back:'Volver',
+  onQ:'Jugar en línea con amigos',create:'Crear sala',createD:'Envía el enlace o el QR · tú eres el anfitrión',joinT:'Unirse con código',joinD:'Escribe el código de la sala',join:'Unirse',needCode:'Escribe un código',
+  seats:'Asientos',you:'Tú',bot:'Bot',botN:'Bot {n}',open:'Libre (juega un bot)',host:'Anfitrión',guest:'Jugador',invite:'Invitar amigos',copied:'Enlace copiado',
+  waitHost:'Esperando a que el anfitrión empiece…',lobbyNote:'Los bots ocupan los asientos libres y quien llega tarde toma el de un bot. Cada uno ve solo sus fichas.',
+  roundLbl:'Viento {w} · mano {n}',wallLbl:'Muro',lian:'+{n}',dealer:'莊',
+  yourTurn:'Tu turno — toca una ficha y otra vez para descartarla',tapAgain:'Toca otra vez para descartar esta ficha',waitClaim:'Los demás están decidiendo…',turnOf:'Turno de {n}',
+  ting:'Esperas',left:'quedan',noTing:'Con este descarte aún no estás a una (聽)',
+  lchi:'Chow',lpon:'Pong',lkan:'Kong',lhu:'Ganar',lpass:'Pasar',ltsumo:'Autorrobo',
+  flower:'補花 Flor',exhaust:'流局 Tablas',
+  winT:'¡{n} gana!',howTsumo:'自摸 Ficha robada',howRon:'Con el descarte de {n}',howRob:'Robo del kong · paga {n}',howBaxian:'Las ocho flores',howQqy:'Siete roban una · paga {n}',
+  total:'Total {n} tai',dealerNote:'Los tai de la banca (莊) solo cuentan entre la banca y el ganador',
+  thisHand:'Puntos de esta mano',next:'Siguiente mano',waitNext:'Esperando al anfitrión…',drawT:'流局 Tablas',drawSub:'Se acabó el muro · la banca repite',
+  final:'Clasificación final',rematch:'Jugar otra vez',toMenu:'Menú principal',scoreT:'Hoja de puntos',hand:'Mano',sum:'Total',
+  menu:'Menú',cont:'Seguir',endGame:'Terminar partida',leave:'Salir de la sala',sound:'Sonido',close:'Cerrar',
+  off:'desconectado',botPlays:'juega un bot',spect:'Mirando',full:'Sala llena — mirando',
+  resumeD:'mano {h} · {s}',online:'En línea',youLbl:' (tú)',
+  pickKan:'Elige el kong',robWait:'Kong añadido — ¿alguien lo roba?…',noMoney:'※ Juego de puntos — nada se canjea',share:'Compartir'},
+ pt:{title:'Mahjong taiwanês',title2:'台灣麻將 · 16 PEÇAS',sub:'16 peças · flores · pontos em tai — treine com bots ou abra uma sala e jogue com amigos, cada um no seu celular',
+  modeQ:'Como você quer jogar?',m1:'Treinar com bots (solo)',m1d:'Você + 3 bots, pare quando quiser',m2:'Entrar e jogar juntos',m2d:'Cada um no seu aparelho, até 4 · bots ocupam as vagas',
+  resumeG:'Continuar partida',points:'Só pontos — sem dinheiro.',
+  rounds:'Duração',r1:'1 volta (Leste)',r2:'2 voltas (L+S)',r4:'4 voltas (completa)',speed:'Velocidade dos bots',spN:'Normal',spF:'Rápida',
+  stakes:'Base 300 · 100 pontos por tai',start:'Começar',back:'Voltar',
+  onQ:'Jogar online com amigos',create:'Criar sala',createD:'Envie o link ou o QR · você é o anfitrião',joinT:'Entrar com código',joinD:'Digite o código da sala',join:'Entrar',needCode:'Digite um código',
+  seats:'Lugares',you:'Você',bot:'Bot',botN:'Bot {n}',open:'Livre (bot joga)',host:'Anfitrião',guest:'Jogador',invite:'Convidar amigos',copied:'Link copiado',
+  waitHost:'Esperando o anfitrião começar…',lobbyNote:'Bots ocupam as vagas e quem chega depois assume um bot. Cada um vê só as próprias peças.',
+  roundLbl:'Vento {w} · mão {n}',wallLbl:'Muro',lian:'+{n}',dealer:'莊',
+  yourTurn:'Sua vez — toque numa peça e de novo para descartar',tapAgain:'Toque de novo para descartar esta peça',waitClaim:'Os outros estão decidindo…',turnOf:'Vez de {n}',
+  ting:'Esperas',left:'restam',noTing:'Com este descarte ainda não fica pronto (聽)',
+  lchi:'Chow',lpon:'Pong',lkan:'Kong',lhu:'Ganhar',lpass:'Passar',ltsumo:'Auto-compra',
+  flower:'補花 Flor',exhaust:'流局 Empate',
+  winT:'{n} venceu!',howTsumo:'自摸 Peça comprada',howRon:'Com o descarte de {n}',howRob:'Roubo do kong · {n} paga',howBaxian:'As oito flores',howQqy:'Sete roubam uma · {n} paga',
+  total:'Total {n} tai',dealerNote:'Os tai da banca (莊) só contam entre a banca e o vencedor',
+  thisHand:'Pontos desta mão',next:'Próxima mão',waitNext:'Esperando o anfitrião…',drawT:'流局 Empate',drawSub:'O muro acabou · a banca continua',
+  final:'Classificação final',rematch:'Jogar de novo',toMenu:'Menu principal',scoreT:'Placar',hand:'Mão',sum:'Total',
+  menu:'Menu',cont:'Continuar',endGame:'Encerrar partida',leave:'Sair da sala',sound:'Som',close:'Fechar',
+  off:'offline',botPlays:'bot jogando',spect:'Assistindo',full:'Sala cheia — assistindo',
+  resumeD:'mão {h} · {s}',online:'Online',youLbl:' (você)',
+  pickKan:'Escolha o kong',robWait:'Kong adicionado — alguém rouba?…',noMoney:'※ Jogo de pontos — nada a resgatar',share:'Compartilhar'}
+});
+/* 모든 언어 공통으로 더한 키: 규칙 안내·聽 힌트 */
+(function(){const A={
+ tw:{winMe:'你胡了！',taiList:'台數表',taiTab:'規則與台數表',offline:'無法連線',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'怎麼胡牌？',hw1:'手上 16 張，摸進或吃碰第 17 張時，湊成「五組＋一對」就胡',hw2:'一組 = 順子（同花色連三張，例：一二三萬）或刻子（三張一樣）· 一對 = 兩張一樣',
+  hw3:'吃只能吃上家打的牌，碰、槓誰打的都可以 · 花牌自動補花，算正花台',setL:'組',pairL:'對',
+  rulesT:'本桌規則',hintT:'聽牌提示',hintD:'選牌時顯示聽哪些牌、還剩幾張；打出後能聽牌的牌下方有綠點',on:'開',offL:'關',
+  rules:['胡 > 碰・槓 > 吃。同時有多家胡，由放槍者下家順序最近的人胡（截胡，不一炮多響）','牌牆剩 16 張（8 墩）就流局，槓牌不另外多留；最後一張打出的牌只能胡','沒有過水：上一輪沒胡的牌，下一輪照樣可以胡','只有加槓能被搶槓，暗槓不能搶','不計嚦咕嚦咕、十三么；槓牌不另收槓錢','莊家胡或流局都連莊；莊家 1 台＋連 n 拉 n 共 2n 台，只在莊家與對方之間計算','天胡 24・地胡 16・人胡 8 台，只另加花台；七搶一、八仙過海各 8 台']},
+ cn:{winMe:'你胡了！',taiList:'台数表',taiTab:'规则与台数表',offline:'无法联机',cFlower:'补花',cDraw:'流局',cBaxian:'八仙过海',cQqy:'七抢一',
+  howT:'怎么胡牌？',hw1:'手上 16 张，摸进或吃碰第 17 张时，凑成“五组＋一对”就胡',hw2:'一组 = 顺子（同花色连三张，例：一二三万）或刻子（三张一样）· 一对 = 两张一样',
+  hw3:'吃只能吃上家打的牌，碰、杠谁打的都可以 · 花牌自动补花，算正花台',setL:'组',pairL:'对',
+  rulesT:'本桌规则',hintT:'听牌提示',hintD:'选牌时显示听哪些牌、还剩几张；打出后能听牌的牌下方有绿点',on:'开',offL:'关',
+  rules:['胡 > 碰・杠 > 吃。多家同时胡，由点炮者下家顺序最近的人胡（截胡，不一炮多响）','牌墙剩 16 张（8 墩）就流局，杠牌不另外多留；最后打出的一张只能胡','没有过水：上一轮没胡的牌，下一轮照样可以胡','只有加杠能被抢杠，暗杠不能抢','不计嚦咕嚦咕、十三幺；杠牌不另收杠钱','庄家胡或流局都连庄；庄家 1 台＋连 n 拉 n 共 2n 台，只在庄家与对方之间计算','天胡 24・地胡 16・人胡 8 台，只另加花台；七抢一、八仙过海各 8 台']},
+ ko:{winMe:'내가 화료!',taiList:'台 점수표',taiTab:'규칙·台 점수표',offline:'온라인에 연결할 수 없어요',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'어떻게 이기나요?',hw1:'16장을 들고, 17장째(뽑거나 치·펑)로 「면자 5개 + 머리 1개」를 만들면 화료(胡)',hw2:'면자 = 슌쯔(같은 무늬 연속 3장, 예: 一二三萬) 또는 커쯔(같은 패 3장) · 머리 = 같은 패 2장',
+  hw3:'吃(치)는 바로 윗사람이 버린 패만, 碰·槓은 누구 패든 · 꽃패는 자동 補花, 내 자리 꽃이면 台',setL:'면자',pairL:'머리',
+  rulesT:'이 탁자의 규칙',hintT:'聽牌 힌트',hintD:'패를 고르면 대기패와 남은 장수를 보여 주고, 버리면 聽牌가 되는 패 아래에 초록 점',on:'켜기',offL:'끄기',
+  rules:['胡 > 碰·槓 > 吃. 여럿이 동시에 胡면 버린 사람 다음 차례에 가까운 한 명만(截胡, 동시 화료 없음)','패산이 16장(8墩) 남으면 流局, 깡을 해도 더 남기지 않음 · 마지막 버림패는 胡만 가능','過水 없음: 지난 바퀴에 놓친 패라도 다음에 胡 가능','搶槓은 加槓만, 暗槓은 못 뺏음','嚦咕嚦咕·十三么는 없음 · 깡 즉시 정산(槓錢) 없음','딜러가 이기거나 流局이면 연장(連莊) · 莊家 1台 + 連n拉n 2n台는 딜러와 주고받을 때만','天胡 24·地胡 16·人胡 8台(꽃 台만 더함) · 七搶一·八仙過海 각 8台']},
+ en:{winMe:'You win!',taiList:'Tai table',taiTab:'Rules & tai table',offline:'Online unavailable',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'How do you win?',hw1:'Hold 16 tiles. When the 17th (drawn or called) makes 5 sets + 1 pair, you win (胡)',hw2:'Set = a run of three in one suit (e.g. 1-2-3 characters) or three identical tiles · pair = two identical tiles',
+  hw3:'Chow (吃) only from the player before you; pong/kong (碰/槓) from anyone · flowers are replaced automatically and your seat flower scores',setL:'set',pairL:'pair',
+  rulesT:'House rules at this table',hintT:'Ready (聽) hints',hintD:'Shows your waits and how many are left when you pick a tile; a green dot marks discards that leave you ready',on:'On',offL:'Off',
+  rules:['胡 > 碰/槓 > 吃. If several can win on one discard, only the nearest in turn order wins (no multiple winners)','The hand is a draw (流局) with 16 tiles left in the wall; kongs do not extend it · the last discard can only be won on','No “passed-win” lock (過水): a tile you let go can still win for you later','Only an added kong (加槓) can be robbed; concealed kongs cannot','No 7-pairs (嚦咕嚦咕) or 13-orphans hands · no instant kong payments','Dealer keeps the deal after winning or a draw · dealer 1 tai + 2n for n repeats, only between the dealer and the other player','Heavenly 24 · Earthly 16 · Human 8 tai (plus flowers only) · Seven-robs-one and All-eight-flowers 8 tai each']},
+ ja:{winMe:'あなたの和了！',taiList:'台数表',taiTab:'ルール・台数表',offline:'オンラインに接続できません',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'どうすれば和了？',hw1:'16枚を持ち、17枚目（ツモか鳴き）で「5面子＋雀頭1つ」がそろえば和了（胡）',hw2:'面子 = 順子（同じ種類の3連番、例：一二三萬）か刻子（同じ牌3枚）・雀頭 = 同じ牌2枚',
+  hw3:'吃（チー）は上家の捨て牌だけ、碰・槓は誰からでも・花牌は自動で補花、自風の花は台になる',setL:'面子',pairL:'雀頭',
+  rulesT:'この卓のルール',hintT:'聴牌ヒント',hintD:'牌を選ぶと待ちと残り枚数を表示、切ると聴牌になる牌の下に緑の点',on:'オン',offL:'オフ',
+  rules:['胡 > 碰・槓 > 吃。同時に複数が和了れるときは放銃者の下家から近い1人だけ（頭ハネ、ダブロンなし）','山が16枚（8墩）残ったら流局、カンしても残りは増えない・最後の捨て牌は和了のみ','過水（フリテン）なし：見逃した牌でも次から和了れる','搶槓は加槓のみ、暗槓は奪えない','嚦咕嚦咕・十三么なし・カンの即時精算なし','親の和了か流局で連荘・莊家1台＋連n拉n 2n台は親との精算だけ','天胡24・地胡16・人胡8台（花台のみ加算）・七搶一と八仙過海は各8台']},
+ es:{winMe:'¡Ganas tú!',taiList:'Tabla de tai',taiTab:'Reglas y tabla de tai',offline:'Sin conexión en línea',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'¿Cómo se gana?',hw1:'Tienes 16 fichas. Si la 17.ª (robada o cantada) forma 5 grupos + 1 pareja, ganas (胡)',hw2:'Grupo = escalera de tres del mismo palo (p. ej. 1-2-3 de caracteres) o tres fichas iguales · pareja = dos iguales',
+  hw3:'Chow (吃) solo del jugador anterior; pong/kong (碰/槓) de cualquiera · las flores se reponen solas y la de tu asiento suma',setL:'grupo',pairL:'pareja',
+  rulesT:'Reglas de esta mesa',hintT:'Ayuda de espera (聽)',hintD:'Al elegir ficha muestra tus esperas y cuántas quedan; un punto verde marca los descartes que te dejan listo',on:'Sí',offL:'No',
+  rules:['胡 > 碰/槓 > 吃. Si varios pueden ganar con un descarte, solo el más cercano en el turno (sin ganadores múltiples)','Tablas (流局) con 16 fichas en el muro; los kongs no lo alargan · el último descarte solo sirve para ganar','Sin bloqueo por dejar pasar (過水): una ficha que dejaste pasar te puede dar la victoria luego','Solo se puede robar un kong añadido (加槓), no uno oculto','Sin manos de 7 parejas (嚦咕嚦咕) ni 13 huérfanos · sin pagos inmediatos por kong','La banca repite si gana o hay tablas · banca 1 tai + 2n por n repeticiones, solo entre la banca y el otro jugador','Celestial 24 · Terrenal 16 · Humana 8 tai (más flores) · Siete roban una y Ocho flores, 8 tai cada una']},
+ pt:{winMe:'Você venceu!',taiList:'Tabela de tai',taiTab:'Regras e tabela de tai',offline:'Online indisponível',cFlower:'補花',cDraw:'流局',cBaxian:'八仙過海',cQqy:'七搶一',
+  howT:'Como se vence?',hw1:'Você tem 16 peças. Se a 17.ª (comprada ou chamada) forma 5 grupos + 1 par, você vence (胡)',hw2:'Grupo = sequência de três do mesmo naipe (ex.: 1-2-3 de caracteres) ou três peças iguais · par = duas iguais',
+  hw3:'Chow (吃) só do jogador anterior; pong/kong (碰/槓) de qualquer um · flores são repostas sozinhas e a do seu lugar pontua',setL:'grupo',pairL:'par',
+  rulesT:'Regras desta mesa',hintT:'Dica de espera (聽)',hintD:'Ao escolher uma peça mostra suas esperas e quantas restam; um ponto verde marca descartes que deixam você pronto',on:'Sim',offL:'Não',
+  rules:['胡 > 碰/槓 > 吃. Se vários podem vencer com um descarte, só o mais próximo na ordem (sem vencedores múltiplos)','Empate (流局) com 16 peças no muro; kongs não o alongam · o último descarte só serve para vencer','Sem bloqueio por deixar passar (過水): uma peça que você deixou passar ainda pode dar a vitória depois','Só um kong adicionado (加槓) pode ser roubado; kong oculto não','Sem mãos de 7 pares (嚦咕嚦咕) ou 13 órfãos · sem pagamento imediato por kong','A banca continua se vencer ou empatar · banca 1 tai + 2n por n repetições, só entre a banca e o outro jogador','Celestial 24 · Terrena 16 · Humana 8 tai (mais flores) · Sete roubam uma e Oito flores, 8 tai cada']}
+};for(const l in A)Object.assign(I18N[l],A[l])})();
+/* 台 이름·설명 — 简体·es·pt (TAI 배열 열은 [繁, ko, en, ja] 그대로 두고 따로 둔다) */
+const TAI_X={
+ cn:{zhuang:['庄家','做庄的人胡牌或点炮，多算 1 台（连庄再加）'],lianzhuang:['连庄拉庄','连 n 拉 n 共 2n 台，和庄家 1 台合起来是 2n+1'],mqzm:['门清自摸','没吃没碰又自摸（不求人），门清 1 + 自摸 1 + 1'],menqing:['门清','没有吃、碰、明杠（暗杠可以）'],zimo:['自摸','自己摸到胡牌'],quanqiu:['全求人','五组都吃碰出来，单吊别人打的牌胡'],sanyuan:['三元牌','中、发、白任一刻子，每副 1 台'],xiaosanyuan:['小三元','两副三元刻子＋一对三元'],dasanyuan:['大三元','中发白三副刻子'],quanfeng:['圈风','本圈风牌的刻子'],menfeng:['门风','自己门风的刻子（庄家是东）'],xiaosixi:['小四喜','三副风刻＋一对风'],dasixi:['大四喜','东南西北四副刻子'],pengpeng:['碰碰胡','五组都是刻子'],hunyise:['混一色','只有一种花色加字牌'],qingyise:['清一色','全部同一种花色'],ziyise:['字一色','全部字牌'],anke3:['三暗刻','三副自己摸成的刻子'],anke4:['四暗刻','四副自己摸成的刻子'],anke5:['五暗刻','五副自己摸成的刻子'],pinghu:['平胡','全是顺子、没有字牌和花、不是自摸也不是独听'],dudu:['独听','只听一张（单吊、嵌张、边张）'],haidi:['海底捞月','摸最后一张牌自摸'],hedi:['河底捞鱼','胡最后一张打出的牌'],gangshang:['杠上开花','杠后补牌自摸'],qianggang:['抢杠','别人加杠的那张正好胡'],zhenghua:['正花','和自己门风相同的花（东：春梅 · 南：夏兰 · 西：秋菊 · 北：冬竹）'],huagang:['花杠','春夏秋冬或梅兰菊竹集满一套'],tianhu:['天胡','庄家开门第一手就自摸'],dihu:['地胡','闲家第一次摸牌就自摸（无人吃碰）'],renhu:['人胡','胡庄家打出的第一张牌'],baxian:['八仙过海','八张花全拿到，直接胡'],qqy:['七抢一','有七张花时抢别人的第八张，被抢的人付']},
+ es:{zhuang:['Banca','+1 cuando la banca gana o paga'],lianzhuang:['Racha de banca','n repeticiones suman 2n (2n+1 con el tai de banca)'],mqzm:['Autorrobo oculto','Sin cantar y ganando con ficha propia (1+1 +1 extra)'],menqing:['Mano oculta','Sin chow, pong ni kong abierto (el kong oculto vale)'],zimo:['Autorrobo','Ganar con tu propia ficha'],quanqiu:['Todo cantado','Los cinco grupos cantados y ganar con un descarte a espera simple'],sanyuan:['Pong de dragón','Cada pong de Rojo, Verde o Blanco'],xiaosanyuan:['Tres dragones menores','Dos pongs de dragón y una pareja de dragón'],dasanyuan:['Tres dragones mayores','Pongs de los tres dragones'],quanfeng:['Viento de ronda','Pong del viento de la ronda'],menfeng:['Viento de asiento','Pong de tu viento (la banca es Este)'],xiaosixi:['Cuatro vientos menores','Tres pongs de viento y una pareja de viento'],dasixi:['Cuatro vientos mayores','Pongs de los cuatro vientos'],pengpeng:['Todo pongs','Los cinco grupos son pongs'],hunyise:['Medio color','Un solo palo más honores'],qingyise:['Color puro','Todas las fichas de un mismo palo'],ziyise:['Todo honores','Solo vientos y dragones'],anke3:['3 pongs ocultos','Tres pongs hechos por ti'],anke4:['4 pongs ocultos','Cuatro pongs hechos por ti'],anke5:['5 pongs ocultos','Cinco pongs hechos por ti'],pinghu:['Todo escaleras','Solo escaleras, sin honores ni flores, ganada con descarte y espera doble'],dudu:['Espera única','Solo una ficha podía completar la mano'],haidi:['Última ficha','Autorrobo con la última ficha del muro'],hedi:['Último descarte','Ganar con el último descarte'],gangshang:['Flor sobre el kong','Autorrobo con la ficha de reposición del kong'],qianggang:['Robo del kong','Ganar con la ficha que otro añade a su pong'],zhenghua:['Flor de asiento','Flor de tu viento (E: primavera/ciruelo, S: verano/orquídea, O: otoño/crisantemo, N: invierno/bambú)'],huagang:['Juego de flores','Las cuatro estaciones o las cuatro plantas'],tianhu:['Mano celestial','La banca gana con su primera ficha'],dihu:['Mano terrenal','Otro jugador gana con su primer robo, sin cantos'],renhu:['Mano humana','Ganar con el primer descarte de la banca'],baxian:['Ocho flores','Reúne las 8 flores: victoria inmediata'],qqy:['Siete roban una','Con 7 flores, robas la 8.ª a su dueño, que paga']},
+ pt:{zhuang:['Banca','+1 quando a banca vence ou paga'],lianzhuang:['Sequência da banca','n repetições somam 2n (2n+1 com o tai da banca)'],mqzm:['Auto-compra fechada','Sem chamadas e vencendo com peça própria (1+1 +1 extra)'],menqing:['Mão fechada','Sem chow, pong ou kong aberto (kong oculto pode)'],zimo:['Auto-compra','Vencer com a própria compra'],quanqiu:['Tudo chamado','Os cinco grupos chamados e vencer com descarte em espera simples'],sanyuan:['Pong de dragão','Cada pong de Vermelho, Verde ou Branco'],xiaosanyuan:['Três dragões menores','Dois pongs de dragão e um par de dragão'],dasanyuan:['Três dragões maiores','Pongs dos três dragões'],quanfeng:['Vento da rodada','Pong do vento da rodada'],menfeng:['Vento do lugar','Pong do seu vento (a banca é Leste)'],xiaosixi:['Quatro ventos menores','Três pongs de vento e um par de vento'],dasixi:['Quatro ventos maiores','Pongs dos quatro ventos'],pengpeng:['Tudo pongs','Os cinco grupos são pongs'],hunyise:['Meia cor','Um só naipe mais honras'],qingyise:['Cor pura','Todas as peças de um mesmo naipe'],ziyise:['Tudo honras','Só ventos e dragões'],anke3:['3 pongs ocultos','Três pongs feitos por você'],anke4:['4 pongs ocultos','Quatro pongs feitos por você'],anke5:['5 pongs ocultos','Cinco pongs feitos por você'],pinghu:['Tudo sequências','Só sequências, sem honras nem flores, vencida com descarte e espera dupla'],dudu:['Espera única','Só uma peça completava a mão'],haidi:['Última peça','Auto-compra com a última peça do muro'],hedi:['Último descarte','Vencer com o último descarte'],gangshang:['Flor sobre o kong','Auto-compra com a peça de reposição do kong'],qianggang:['Roubo do kong','Vencer com a peça que outro adiciona ao pong'],zhenghua:['Flor do lugar','Flor do seu vento (L: primavera/ameixa, S: verão/orquídea, O: outono/crisântemo, N: inverno/bambu)'],huagang:['Jogo de flores','As quatro estações ou as quatro plantas'],tianhu:['Mão celestial','A banca vence com a primeira peça'],dihu:['Mão terrena','Outro jogador vence na primeira compra, sem chamadas'],renhu:['Mão humana','Vencer com o primeiro descarte da banca'],baxian:['Oito flores','Junte as 8 flores: vitória imediata'],qqy:['Sete roubam uma','Com 7 flores, você rouba a 8.ª do dono, que paga']}
+};
+function barTitle(){return W&&W<400&&LG!=='tw'&&LG!=='ja'&&LG!=='cn'?'台灣麻將':T('title')}
 function T(k,v){let s=(I18N[LG]&&I18N[LG][k]);if(s==null)s=I18N.en[k];if(s==null)s=k;if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s}
 /* 台 항목 — [繁體, ko, en, ja, 台, 설명(tw), 설명(ko), 설명(en), 설명(ja)] */
 const TAI={
@@ -1182,9 +1341,11 @@ const TAI={
 };
 const TAI_ORDER=['zhuang','lianzhuang','mqzm','menqing','zimo','quanqiu','zhenghua','huagang','sanyuan','quanfeng','menfeng','pinghu','dudu','anke3','anke4','anke5','pengpeng','hunyise','xiaosanyuan','qingyise','dasanyuan','xiaosixi','dasixi','ziyise','haidi','hedi','gangshang','qianggang','baxian','qqy','renhu','dihu','tianhu'];
 const LI={tw:0,ko:1,en:2,ja:3};
-function taiName(key){const t=TAI[key];if(!t)return key;return t[0]}
-function taiLocal(key){const t=TAI[key];if(!t||LG==='tw')return '';return t[LI[LG]]}
-function taiDesc(key){const t=TAI[key];return t?t[5+LI[LG]]:''}
+/* 표 머리 이름: 繁體 원문(简体면 简体). 옆 작은 글씨: 그 언어 이름. 설명: 그 언어(없으면 en) */
+const LIx=()=>LI[LG]!=null?LI[LG]:2;
+function taiName(key){const t=TAI[key];if(!t)return key;if(LG==='cn'&&TAI_X.cn[key])return TAI_X.cn[key][0];return t[0]}
+function taiLocal(key){const t=TAI[key];if(!t||LG==='tw'||LG==='cn')return '';if(TAI_X[LG]&&TAI_X[LG][key])return TAI_X[LG][key][0];return t[LIx()]}
+function taiDesc(key){const t=TAI[key];if(!t)return '';if(TAI_X[LG]&&TAI_X[LG][key])return TAI_X[LG][key][1];return t[5+LIx()]}
 
 /* ════════════════════════ 소리 (WebAudio 합성) ════════════════════════ */
 let AC=null,sndOn=true;try{sndOn=localStorage.getItem('mjtw_snd')!=='0'}catch(_){}
@@ -1200,6 +1361,7 @@ const Sfx={
     const g2=a.createGain();env(g2,t,0.002,0.22*v,0.06);o.connect(g2);g2.connect(a.destination);o.start(t);o.stop(t+0.09);
     const o2=a.createOscillator();o2.type='sine';o2.frequency.value=160;const g3=a.createGain();env(g3,t,0.003,0.25*v,0.07);o2.connect(g3);g3.connect(a.destination);o2.start(t);o2.stop(t+0.1)},
   soft(){this.clack(0.35)},
+  pip(i){if(!sndOn)return;const a=ac();if(!a)return;const t=a.currentTime;const f=660*Math.pow(2,Math.min(12,i*2)/12);const o=a.createOscillator();o.type='triangle';o.frequency.value=f;const g=a.createGain();env(g,t,0.004,0.11,0.16);o.connect(g);g.connect(a.destination);o.start(t);o.stop(t+0.2);this.clack(0.3)},
   shuffle(){if(!sndOn)return;for(let i=0;i<16;i++)setTimeout(()=>this.clack(0.25+Math.random()*0.35),i*45+Math.random()*30)},
   call(){if(!sndOn)return;const a=ac();if(!a)return;const t=a.currentTime;
     [[392,0],[587,0.07]].forEach(([f,d])=>{const o=a.createOscillator();o.type='triangle';o.frequency.value=f;const g=a.createGain();env(g,t+d,0.01,0.18,0.35);o.connect(g);g.connect(a.destination);o.start(t+d);o.stop(t+d+0.4)})},
@@ -1398,7 +1560,7 @@ function buildBg(){
 
 /* ════════════════════════ 그리기 ════════════════════════ */
 let needDraw=true,needAmb=false,lastDrawT=0;const req=()=>{needDraw=true};const amb=()=>{needAmb=true};
-const anims=[];let sel=-1,selKind=-1,hideDrawn=0;
+const anims=[];let sel=-1,selKind=-1,hideDrawn=0,selT=0;
 function spr(k,w,view){return MJArt.get(k,w,Math.round(w*1.34*2)/2,DPR,view||'flat')}
 function tile(k,x,y,w,view,alpha){const s=spr(k,w,view);if(alpha!=null&&alpha<1){ctx.save();ctx.globalAlpha=alpha}
   ctx.drawImage(s.canvas,x-s.ox,y-s.oy,s.W,s.H);if(alpha!=null&&alpha<1)ctx.restore();return s}
@@ -1434,7 +1596,7 @@ function draw(now){
   ctx.restore();
   drawBox(now);
   /* 버림패 */
-  const flying=new Set(anims.filter(a=>a.type==='fly'&&a.slot).map(a=>a.slot));
+  const flying=new Set(anims.filter(a=>(a.type==='fly'||a.type==='land')&&a.slot).map(a=>a.slot));
   for(let s=0;s<4;s++){
     const r=rel(s),list=(V.disc[s]||[]).filter(x=>!x.taken);
     const order=list.map((x,i)=>({x,i,pos:pondPos(r,i)})).sort((a,c)=>a.pos.y-c.pos.y||a.pos.x-c.pos.x);
@@ -1442,6 +1604,7 @@ function draw(now){
       if(flying.has(s+':'+o.i))continue;
       tile(o.x.k,o.pos.x,o.pos.y,p.pw,'flat');
       if(selKind>=0&&o.x.k===selKind)hl(o.pos.x,o.pos.y,p.pw,p.ph);
+      if(P&&P.opts&&V.claim&&V.claim.from===s&&o.i===list.length-1&&o.x.k===V.claim.k){hl(o.pos.x,o.pos.y,p.pw,p.ph,'rgba(120,220,255,'+(0.55+0.45*Math.sin(now/170)).toFixed(3)+')');amb()}
     }
     /* 방금 버린 패 표시 */
     if(V.last&&V.last.s===s&&list.length&&!flying.has(s+':'+(list.length-1))){
@@ -1628,21 +1791,30 @@ function drawHand(now){
     let y=r.y,alpha=1;
     if(deal){const u=(now-deal.t0)/deal.dur;const grp=Math.floor(j/4);const v=clamp(u*5-grp,0,1);if(v<=0)continue;alpha=v;y-=(1-v)*hd.hh*0.6}
     if(r.drawn&&hideDrawn>now){const v=1-(hideDrawn-now)/220;y-=(1-clamp(v,0,1))*hd.hh*0.8;alpha=clamp(v*1.4,0,1);req()}
-    const isSel=sel===j;if(isSel)y-=hd.raise;
+    const isSel=sel===j;if(isSel){const e=clamp((now-selT)/90,0,1);y-=hd.raise*(e<1?(1-Math.pow(1-e,3))*1.12:1);if(e<1)req()}
     r.dy=y;
     tile(r.k,r.x,y,hd.hw,'stand',alpha);
     if(isSel)hl(r.x,y,hd.hw,hd.hh,'rgba(255,214,90,1)');
     else if(selKind>=0&&r.k===selKind)hl(r.x,y,hd.hw,hd.hh,'rgba(255,214,90,.45)');
     else if(claimK!=null&&(r.k===claimK||(claimV&&claimV.indexOf(r.k)>=0)))hl(r.x,y,hd.hw,hd.hh,'rgba(120,220,255,.85)');
   }
+  if(myAct&&hintOn){const ts=tingSet();if(ts&&ts.size){ctx.save();for(const {r} of order){if(!ts.has(r.k)||r.dy==null)continue;const cx=r.x+hd.hw/2,cy=r.dy+hd.hh+Math.max(3,hd.hh*0.09);
+    ctx.beginPath();ctx.arc(cx,cy,Math.max(2.6,hd.hw*0.085),0,Math.PI*2);ctx.fillStyle='#7EE2A8';ctx.shadowColor='rgba(126,226,168,.9)';ctx.shadowBlur=6;ctx.fill()}ctx.restore()}}
   if(myAct&&sel<0){ctx.save();ctx.globalAlpha=0.5+0.3*Math.sin(now/300);ctx.strokeStyle='#FFD65A';ctx.lineWidth=2;
     const xs=handRects.map(r=>r.x),x0=Math.min(...xs)-4,x1=Math.max(...xs)+hd.hw+4;const y0=Math.min(...handRects.map(r=>r.y))-hd.strip-5;
     ctx.beginPath();ctx.moveTo(x0+10,y0);ctx.lineTo(x1-10,y0);ctx.stroke();ctx.restore();amb()}
 }
 /* 聽 힌트 — 고른 패를 버리면 무엇을 기다리나, 몇 장 남았나 */
-let hintCache={key:'',w:[]};
+let hintCache={key:'',w:[]},hintOn=true,tingCache={key:'',set:null};
+try{hintOn=localStorage.getItem('mjtw_hint')!=='0'}catch(_){}
+/* 지금 버리면 聽牌가 되는 패 종류 — 손패가 바뀔 때만 다시 센다 */
+function tingSet(){
+  if(!P||!P.hand||P.hand.length%3!==2)return null;const key=P.hand.join(',')+'|'+(P.melds||[]).length;
+  if(tingCache.key!==key){const set=new Set();for(const k of new Set(P.hand)){if(MJ.tenpaiAfter(P.hand,P.melds||[],k).length)set.add(k)}tingCache={key,set}}
+  return tingCache.set;
+}
 function drawHint(){
-  const r=L.hint;if(!r||!P||!P.hand||!V||V.phase!=='play')return;
+  const r=L.hint;if(!hintOn||!r||!P||!P.hand||!V||V.phase!=='play')return;
   const acting=P.hand.length%3===2;
   if(acting&&(sel<0||!handRects[sel]))return;
   const k=acting?handRects[sel].k:-1;const key=P.hand.join(',')+'|'+(P.melds||[]).length+'|'+k;
@@ -1683,6 +1855,10 @@ function drawAnims(now){
       ctx.fillStyle=g;ctx.fillText(a.txt,0,0);
       if(a.sub){ctx.font='800 '+Math.round(a.size*0.32)+'px '+getComputedStyle(document.body).fontFamily;ctx.lineWidth=3;ctx.strokeText(a.sub,0,a.size*0.72);ctx.fillStyle='#FFF1D6';ctx.fillText(a.sub,0,a.size*0.72)}
       ctx.restore();
+    }else if(a.type==='land'){
+      const h=a.w*1.34,e=1-Math.pow(1-u,2),sq=Math.sin(u*Math.PI)*(1-u);
+      ctx.save();ctx.globalAlpha=(1-u)*0.85;ctx.strokeStyle='#FFE08A';ctx.lineWidth=2*(1-u)+0.5;rrect(a.x-e*a.w*0.35,a.y-e*h*0.25,a.w+e*a.w*0.7,h+e*h*0.5,6+e*6);ctx.stroke();ctx.restore();
+      ctx.save();ctx.translate(a.x+a.w/2,a.y+h);ctx.scale(1+sq*0.16,1-sq*0.12);tile(a.k,-a.w/2,-h,a.w,'flat');ctx.restore();
     }else if(a.type==='spark'){
       ctx.save();for(const q of a.ps){const t=u*a.dur/1000;const x=q.x+q.vx*t,y=q.y+q.vy*t+300*t*t;ctx.globalAlpha=1-u;ctx.fillStyle=q.c;
         ctx.save();ctx.translate(x,y);ctx.rotate(q.r+u*6);ctx.fillRect(-q.s/2,-q.s/4,q.s,q.s/2);ctx.restore()}ctx.restore();
@@ -1723,11 +1899,11 @@ function onEvent(ev,prevV){
   switch(ev.k){
     case 'deal':
       anims.push({type:'deal',t0:now,dur:900});Sfx.shuffle();
-      (ev.fl||[]).forEach((f,i)=>setTimeout(()=>{callText(f.s,'補花');Sfx.flower()},600+i*140));
+      (ev.fl||[]).forEach((f,i)=>setTimeout(()=>{callText(f.s,T('cFlower'));Sfx.flower()},600+i*140));
       break;
     case 'draw':
       if(ev.s===mySeat){hideDrawn=now+220;Sfx.soft();sel=-1;selKind=-1}
-      if(ev.fl&&ev.fl.length){callText(ev.s,'補花');Sfx.flower()}
+      if(ev.fl&&ev.fl.length){callText(ev.s,T('cFlower'));Sfx.flower()}
       if(ev.s===mySeat&&!(ev.fl&&ev.fl.length))setTimeout(()=>Sfx.turn(),120);
       break;
     case 'disc':{
@@ -1737,25 +1913,25 @@ function onEvent(ev,prevV){
       if(s===mySeat&&lastTap&&lastTap.k===ev.t&&now-lastTap.t<3000)from={x:lastTap.x,y:lastTap.y,w:L.hand.hw};
       else{const a=seatAnchor(s);from={x:a.x-L.pond.pw/2,y:a.y,w:L.pond.pw*0.9}}
       const slot=s+':'+idx;
-      anims.push({type:'fly',k:ev.t,from,to:{x:to.x,y:to.y,w:L.pond.pw},t0:now,dur:230,slot,done:()=>{Sfx.clack();if(s===mySeat)vib(8)}});
+      anims.push({type:'fly',k:ev.t,from,to:{x:to.x,y:to.y,w:L.pond.pw},t0:now,dur:230,slot,done:()=>{Sfx.clack();if(s===mySeat)vib(8);anims.push({type:'land',k:ev.t,x:to.x,y:to.y,w:L.pond.pw,t0:performance.now(),dur:260,slot})}});
       if(s===mySeat){sel=-1;selKind=-1}
       break;}
     case 'call':{
-      const map={chi:'吃',pon:'碰',kan:'槓',hu:'胡',tsumo:'自摸'};
+      const map={chi:T('chi'),pon:T('pon'),kan:T('kan'),hu:T('hu'),tsumo:T('tsumo')};
       if(ev.a==='hu'||ev.a==='tsumo'){callText(ev.s,map[ev.a],null,true);Sfx.win();sparks();vib([30,40,30])}
       else{callText(ev.s,map[ev.a]);Sfx.call();vib(15)}
-      if(ev.rep&&ev.rep.fl&&ev.rep.fl.length)setTimeout(()=>{callText(ev.s,'補花');Sfx.flower()},700);
+      if(ev.rep&&ev.rep.fl&&ev.rep.fl.length)setTimeout(()=>{callText(ev.s,T('cFlower'));Sfx.flower()},700);
       if(ev.s===mySeat){sel=-1;selKind=-1}
       break;}
     case 'kan':case 'kakan':
-      callText(ev.s,'槓',ev.k==='kakan'?T('robWait'):null);Sfx.call();
-      if(ev.rep&&ev.rep.fl&&ev.rep.fl.length)setTimeout(()=>{callText(ev.s,'補花');Sfx.flower()},700);
+      callText(ev.s,T('kan'),ev.k==='kakan'?T('robWait'):null);Sfx.call();
+      if(ev.rep&&ev.rep.fl&&ev.rep.fl.length)setTimeout(()=>{callText(ev.s,T('cFlower'));Sfx.flower()},700);
       if(ev.s===mySeat){sel=-1;selKind=-1}
       break;
     case 'exhaust':break;
   }
-  if(V.phase==='end'&&V.result&&V.result.type==='draw'&&(!prevV||prevV.phase!=='end')){callText(0,'流局',null,true);Sfx.sad()}
-  if(V.phase==='end'&&V.result&&V.result.type==='win'&&(ev.k==='draw'||ev.k==='deal')&&(V.result.how==='baxian'||V.result.how==='qqy')){callText(V.result.w,V.result.how==='baxian'?'八仙過海':'七搶一',null,true);Sfx.win();sparks()}
+  if(V.phase==='end'&&V.result&&V.result.type==='draw'&&(!prevV||prevV.phase!=='end')){callText(0,T('cDraw'),null,true);Sfx.sad()}
+  if(V.phase==='end'&&V.result&&V.result.type==='win'&&(ev.k==='draw'||ev.k==='deal')&&(V.result.how==='baxian'||V.result.how==='qqy')){callText(V.result.w,V.result.how==='baxian'?T('cBaxian'):T('cQqy'),null,true);Sfx.win();sparks()}
 }
 
 /* ════════════════════════ 상태 받기(모든 역할 공통) ════════════════════════ */
@@ -1771,8 +1947,7 @@ function onView(pub,priv){
   if(V.ev)onEvent(V.ev,prev);
   if(P.hand&&sel>=0){const hr=layoutHand();if(!hr[sel]){sel=-1;selKind=-1}else selKind=hr[sel].k}
   renderBar();renderTurnTag();
-  document.body.classList.toggle('lp-chrome-play',V.phase==='play');
-  try{if(window.LpChrome)window.LpChrome.setPlaying(V.phase==='play')}catch(_){}
+  chromeSync();
   if(V.phase==='end'){
     const id=V.handNo+':'+(V.hist?V.hist.length:0)+':'+(V.result&&V.result.pays?V.result.pays.join(','):'');
     if(endShownFor!==id){endShownFor=id;clearTimeout(endTimer);endTimer=setTimeout(showEnd,V.result&&V.result.type==='draw'?1300:1700)}
@@ -1805,7 +1980,7 @@ function renderBar(){
     if(cvs)b.appendChild(cvs);if(big){const e=document.createElement('b');e.textContent=big;b.appendChild(e)}
     if(small){const e=document.createElement('small');e.textContent=small;b.appendChild(e)}
     b.addEventListener('click',e=>{e.stopPropagation();ac();fn()});bar.appendChild(b);return b};
-  const lb=k=>LG==='tw'?'':T('l'+k);
+  const lb=k=>(LG==='tw'||LG==='cn')?'':T('l'+k);
   if(claimKey&&key===claimKey){
     const op=P.opts,k=V.claim.k,ck=claimKey;
     const send=ch=>{answered=ck;bar.classList.add('hide');barKey='';clearInterval(barTimer);humanClaim(ch)};
@@ -1867,7 +2042,7 @@ function tap(x,y){
     const r=handRects[hit];lastTap={k:r.k,x:r.x,y:(r.dy!=null?r.dy:r.y),t:performance.now()};
     humanAct({a:'disc',k:r.k});return;
   }
-  sel=hit;selKind=handRects[hit].k;Sfx.soft();renderTurnTag();req();
+  sel=hit;selKind=handRects[hit].k;selT=performance.now();Sfx.soft();vib(4);renderTurnTag();req();
 }
 window.addEventListener('keydown',e=>{
   if(!V||V.phase!=='play'||!handRects.length)return;
@@ -2227,7 +2402,7 @@ function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoo
   const s=document.createElement('script');s.src='/js/lpGames.js?v=1790863243';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('mahjong-tw')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
 function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
   if(!K){K=LpRoomsTurn.mount(mjSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 52px)');ds.setProperty('--lpt-hud-right','8px');ds.setProperty('--lpt-hud-left','auto')}res(K)})))}
-const V2NOTE={tw:'🀄 房主的裝置負責洗牌發牌 · 每局結束後大家都能驗證',ko:'🀄 방장 기기가 패를 섞어 나눠요 · 판이 끝나면 모두 배분을 검증해요',en:'🀄 The host device shuffles and deals · everyone verifies the deal after each hand',ja:'🀄 ホストの端末が配牌します · 各局の後に全員が配牌を検証'};
+const V2NOTE={tw:'🀄 房主的裝置負責洗牌發牌 · 每局結束後大家都能驗證',ko:'🀄 방장 기기가 패를 섞어 나눠요 · 판이 끝나면 모두 배분을 검증해요',en:'🀄 The host device shuffles and deals · everyone verifies the deal after each hand',ja:'🀄 ホストの端末が配牌します · 各局の後に全員が配牌を検証',cn:'🀄 房主的设备负责洗牌发牌 · 每局结束后大家都能验证',es:'🀄 El dispositivo del anfitrión baraja y reparte · todos verifican el reparto tras cada mano',pt:'🀄 O aparelho do anfitrião embaralha e distribui · todos verificam a distribuição após cada mão'};
 function mjSpec(){return {gameId:'mahjong-tw',name:()=>T('title'),seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:false,hiddenInfo:true,drive:'game',
   options:[{key:'rounds',values:[1,2,4],def:1,title:()=>T('rounds'),label:n=>T('r'+n)},{key:'speed',values:['n','f'],def:'n',title:()=>T('speed'),label:v=>T(v==='n'?'spN':'spF')}],
   lobbyNote:()=>V2NOTE[LG]||V2NOTE.en,onStart:()=>v2Start(),botName:i=>T('botN',{n:'ABCD'[i]||''}),
@@ -2336,7 +2511,7 @@ function renderMode(){
   $('heroT').textContent=T('title');$('heroT2').textContent=T('title2');$('heroSub').textContent=T('sub');$('modeQ').textContent=T('modeQ');
   $('m1t').textContent=T('m1');$('m1d').textContent=T('m1d');$('m2t').textContent=T('m2');$('m2d').textContent=T('m2d');
   $('ttT').textContent=T('taiTab');$('pointsNote').textContent=T('noMoney');$('tbTitle').textContent=barTitle();
-  $('langs').innerHTML=LANGS.map(l=>'<button type="button" data-l="'+l+'" class="'+(l===LG?'on':'')+'">'+LANG_LABEL[l]+'</button>').join('');
+  $('langs').innerHTML=langChips().map(l=>'<button type="button" data-l="'+l+'" class="'+(l===LG?'on':'')+'">'+LANG_LABEL[l]+'</button>').join('');
   const g=savedGame();$('btnResume').classList.toggle('hide',!g);
   if(g){$('rsT').textContent=T('resumeG');const me=g.G.seats[0];$('rsD').textContent=T('resumeD',{h:g.G.handNo,s:(me.score>0?'+':'')+me.score})}
   heroArt();
@@ -2395,58 +2570,106 @@ function sndUi(){$('btnSnd').textContent=sndOn?'🔊':'🔇'}
 $('btnScore').addEventListener('click',()=>showScores());
 $('btnMenu').addEventListener('click',()=>showMenu());
 function closeOv(id){$(id).classList.remove('on')}
+/* 공용 독(⛶·?·👥) — 판 중·판 끝·시트가 열려 있으면 손잡이 하나로 접는다.
+   360px 에서 펼친 독이 화료 손패 첫 장과 규칙 시트 제목을 가렸다(2026-10-01) */
+function chromeSync(){
+  const on=!!(V&&(V.phase==='play'||V.phase==='end'))||!!document.querySelector('.ov.on');
+  document.body.classList.toggle('lp-chrome-play',on);
+  try{if(window.LpChrome)window.LpChrome.setPlaying(on)}catch(_){}
+}
+try{const mo=new MutationObserver(()=>chromeSync());document.querySelectorAll('.ov').forEach(o=>mo.observe(o,{attributes:true,attributeFilter:['class']}))}catch(_){}
 ['ovMenu','ovTai','ovScore'].forEach(id=>$(id).addEventListener('click',e=>{if(e.target===$(id))closeOv(id)}));
 
 /* ── 판 끝 ── */
-function handStrip(res){
+/* 화료 손패 — 副露 · 손패 · 화료패(금빛, 끝에 따로) · 꽃. anim 이면 한 장씩 펼쳐진다(부채꼴 → 제자리, 화료패가 마지막) */
+function handStrip(res,anim){
   const w=res.w,melds=res.melds[w]||[],hand=(res.hands[w]||[]).slice(),fl=res.flowers[w]||[];
-  const tiles=[];
   if(res.how==='ron'||res.how==='rob')hand.push(res.k);
   hand.sort((a,b)=>a-b);
   const wi=res.k!=null?hand.lastIndexOf(res.k):-1;
-  hand.forEach((k,i)=>tiles.push({k,win:i===wi}));
-  const tw=clamp((Math.min(W,480)-40)/(tiles.length+melds.length*3.4+fl.length*0.8+1.5),14,30);
-  const th=tw*1.34;const gap=tw*0.35;
-  const width=tiles.length*tw*1.02+melds.reduce((a,m)=>a+3*tw*1.02+gap,0)+(fl.length?gap+fl.length*tw*0.8:0)+tw;
-  const rows=width>Math.min(W,480)-30?2:1;
+  const maxW=Math.min(W,480)-30;
+  const nT=hand.length+melds.length*3;
+  const tw=clamp((maxW-10)/(nT*1.02+melds.length*0.35+(fl.length?fl.length*0.82+0.4:0)+0.6),14,30);
+  const th=tw*1.34,gap=tw*0.35;
+  const width=nT*tw*1.02+melds.length*gap+gap*0.6+(fl.length?gap+fl.length*tw*0.82:0);
+  const rows=width>maxW?2:1;
   const c=document.createElement('canvas');c.className='handStrip';
-  const cw=Math.min(width+10,Math.min(W,480)-30),ch=(th*1.25+tw*0.4)*rows+8;
+  const cw=Math.min(width+10,maxW),ch=(th*1.25+tw*0.4)*rows+10;
   c.width=Math.round(cw*DPR);c.height=Math.round(ch*DPR);c.style.width=cw+'px';c.style.height=ch+'px';
-  const x=c.getContext('2d');x.scale(DPR,DPR);
-  let px=4,py=tw*0.4;
-  const put=(k,view,sz,glow)=>{if(px+sz>cw-2){px=4;py+=th*1.25+tw*0.4}const s=MJArt.get(k,sz,Math.round(sz*1.34),DPR,view);x.drawImage(s.canvas,px-s.ox,py-s.oy,s.W,s.H);
-    if(glow){x.save();x.strokeStyle='#FFD65A';x.lineWidth=2;x.shadowColor='#FFD65A';x.shadowBlur=8;x.strokeRect(px-1,py-1,sz+2,sz*1.34+2);x.restore()}px+=sz*1.02};
-  for(const m of melds){const ts=MJ.meldTiles(m);ts.slice(0,3).forEach(k=>put(k,'flat',tw));px+=gap}
-  tiles.forEach(t=>put(t.k,'flat',tw,t.win));
-  if(fl.length){px+=gap;fl.forEach(k=>put(k,'flat',tw*0.8))}
+  const x=c.getContext('2d');
+  const items=[];let px=4,py=tw*0.45;
+  const put=(k,sz,win)=>{if(px+sz>cw-2){px=4;py+=th*1.25+tw*0.4}items.push({k,sz,x:px,y:py,win});px+=sz*1.02};
+  for(const m of melds){MJ.meldTiles(m).slice(0,3).forEach(k=>put(k,tw));px+=gap}
+  const wins=[];hand.forEach((k,i)=>{if(i===wi)wins.push(k);else put(k,tw)});
+  if(wins.length){px+=gap*0.6;wins.forEach(k=>put(k,tw,true))}
+  if(fl.length){px+=gap;fl.forEach(k=>put(k,tw*0.8))}
+  const STEP=26,POP=200,t0=performance.now();
+  const order=items.map((it,i)=>({it,i})).sort((a,b)=>(a.it.win?1:0)-(b.it.win?1:0)||a.i-b.i);
+  order.forEach((o,n)=>{o.it.t=anim?(o.it.win?n*STEP+160:n*STEP):-1e9});
+  const paint=now=>{
+    x.setTransform(DPR,0,0,DPR,0,0);x.clearRect(0,0,cw,ch);let busy=false;
+    for(const it of items){
+      const u=clamp((now-t0-it.t)/POP,0,1);if(u<1)busy=true;if(u<=0)continue;
+      const e=1-Math.pow(1-u,3),sc=u<0.7?0.6+0.55*(u/0.7):1.15-0.15*((u-0.7)/0.3);
+      const s=MJArt.get(it.k,it.sz,Math.round(it.sz*1.34),DPR,'flat');
+      const cx=it.x+it.sz/2,cy=it.y+it.sz*0.67+(1-e)*it.sz*0.9;
+      x.save();x.globalAlpha=Math.min(1,u*2);x.translate(cx,cy);x.rotate((1-e)*(it.x/cw-0.5)*0.5);x.scale(sc,sc);
+      x.drawImage(s.canvas,-it.sz/2-s.ox,-it.sz*0.67-s.oy,s.W,s.H);x.restore();
+      if(it.win&&u>=1){const pulse=0.6+0.4*Math.sin((now-t0)/180);x.save();x.strokeStyle='rgba(255,214,90,'+pulse.toFixed(3)+')';x.lineWidth=2;x.shadowColor='#FFD65A';x.shadowBlur=10;
+        x.strokeRect(it.x-1.5,it.y-1.5,it.sz+3,it.sz*1.34+3);x.restore();busy=true}
+    }
+    if(busy&&c.isConnected&&now-t0<8000)requestAnimationFrame(paint);
+  };
+  paint(anim?t0:t0+1e6);if(anim||wins.length)requestAnimationFrame(paint);
   return c;
 }
+/* 판 끝 레서판다 표정 — 0 기본·1 웃음·2 활짝·3 시무룩·4 반짝·5 놀람·6 울음·7 손 흔들기 (assets/lots 와 같은 8컷) */
+function pandaFor(res){
+  if(res.type!=='win')return 3;
+  if(mySeat<0||!V.seats[mySeat]||(P&&P.seat<0))return 7;
+  if(res.w===mySeat)return 4;
+  if((res.how==='ron'||res.how==='rob'||res.how==='qqy')&&res.from===mySeat)return 6;
+  if(res.how==='tsumo'||res.how==='baxian')return 5;
+  return 1;
+}
+let endAnimFor=null;
 function showEnd(){
   if(!V||V.phase!=='end'||!V.result)return;
   const res=V.result,box=$('endBox');box.innerHTML='';
+  const anim=endAnimFor!==endShownFor;endAnimFor=endShownFor;
+  const head=document.createElement('div');head.className='endHead';
+  const pd=document.createElement('div');pd.className='mjPanda'+(anim?' pop':'');pd.style.backgroundPosition=(pandaFor(res)*100/7)+'% 0';
+  const tb=document.createElement('div');tb.className='endTitle';
   const h2=document.createElement('h2');const sub=document.createElement('div');sub.className='sub2';
   if(res.type==='draw'){h2.textContent=T('drawT');sub.textContent=T('drawSub')}
   else{
-    h2.textContent=T('winT',{n:seatName(res.w)});
+    h2.textContent=res.w===mySeat&&P&&P.seat>=0?T('winMe'):T('winT',{n:seatName(res.w)});
     const nm=s=>seatName(s);
     sub.textContent=res.how==='tsumo'?T('howTsumo'):res.how==='ron'?T('howRon',{n:nm(res.from)}):res.how==='rob'?T('howRob',{n:nm(res.from)}):res.how==='baxian'?T('howBaxian'):T('howQqy',{n:nm(res.from)});
   }
-  box.appendChild(h2);box.appendChild(sub);
+  tb.appendChild(h2);tb.appendChild(sub);head.appendChild(pd);head.appendChild(tb);box.appendChild(head);
+  let after=0;
   if(res.type==='win'){
-    box.appendChild(handStrip(res));
+    box.appendChild(handStrip(res,anim));
     const ul=document.createElement('ul');ul.className='tai';
-    ul.innerHTML=res.items.map(it=>'<li><span class="k">'+esc(taiName(it.key))+'</span><span class="l">'+esc(taiLocal(it.key))+'</span><span class="n">'+it.n+' 台</span></li>').join('')+
-      '<li class="tot"><span class="k">'+esc(T('total',{n:res.tai}))+'</span><span class="l"></span><span class="n"></span></li>';
+    const row=(key,n,cls,note)=>{const loc=taiLocal(key);return '<li class="'+(cls||'')+'" data-n="'+n+'"><span class="k">'+esc(taiName(key))+'</span><span class="l">'+esc([loc,note].filter(Boolean).join(' · '))+'</span><span class="n">'+(cls==='dl'?'+':'')+n+' 台</span></li>'};
     const per=Object.values(res.per||{}),anyD=per.some(x=>x.d),allD=per.length&&per.every(x=>x.d);
-    if(anyD){
-      const addD=(key,n)=>{const li=document.createElement('li');li.className='dl';li.innerHTML='<span class="k">'+esc(taiName(key))+'</span><span class="l">'+esc((taiLocal(key)?taiLocal(key)+' · ':'')+(allD?'':T('dealerNote')))+'</span><span class="n">+'+n+' 台</span>';ul.insertBefore(li,ul.lastChild)};
-      addD('zhuang',1);if(res.lian>0)addD('lianzhuang',2*res.lian);
-      ul.lastChild.querySelector('.k').textContent=allD?T('total',{n:res.tai+res.dt}):T('total',{n:res.tai})+' (+'+res.dt+')';
+    let html=res.items.map(it=>row(it.key,it.n)).join('');
+    if(anyD){html+=row('zhuang',1,'dl',allD?'':T('dealerNote'));if(res.lian>0)html+=row('lianzhuang',2*res.lian,'dl',allD?'':T('dealerNote'))}
+    const fin=anyD?(allD?T('total',{n:res.tai+res.dt}):T('total',{n:res.tai})+' (+'+res.dt+')'):T('total',{n:res.tai});
+    html+='<li class="tot"><span class="k" id="taiTot">'+esc(anim?T('total',{n:0}):fin)+'</span><span class="l"></span><span class="n"></span></li>';
+    ul.innerHTML=html;box.appendChild(ul);
+    if(anim){
+      /* 台 하나씩 — 줄이 들어올 때마다 합계가 올라가고 음이 한 칸씩 높아진다. 버튼은 처음부터 누를 수 있다 */
+      const lis=[...ul.querySelectorAll('li:not(.tot)')];const base=300+Math.min(17,(res.hands[res.w]||[]).length)*26;let sum=0;
+      lis.forEach((li,i)=>{li.classList.add('in');li.style.animationDelay=(base+i*150)+'ms';
+        setTimeout(()=>{if(endAnimFor!==endShownFor||!li.isConnected)return;sum+=+li.getAttribute('data-n')||0;const t=$('taiTot');if(t){t.textContent=T('total',{n:sum});t.classList.remove('bump');void t.offsetWidth;t.classList.add('bump')}Sfx.pip(i)},base+i*150+120)});
+      after=base+lis.length*150+180;
+      setTimeout(()=>{if(endAnimFor!==endShownFor)return;const t=$('taiTot');if(t){t.textContent=fin;t.classList.add('fin')}if(res.w===mySeat||res.tai+res.dt>=8)Sfx.flower()},after);
     }
-    box.appendChild(ul);
   }
   const h3=document.createElement('div');h3.className='sub2';h3.style.marginTop='10px';h3.textContent=T('thisHand')+' · '+T('stakes');box.appendChild(h3);
-  const pays=document.createElement('div');pays.className='pays';
+  const pays=document.createElement('div');pays.className='pays'+(anim&&after?' late':'');if(anim&&after)pays.style.animationDelay=after+'ms';
   pays.innerHTML=[0,1,2,3].map(s=>{const d=res.pays[s],sc=V.seats[s].score;const me=s===mySeat?' me':'';
     return '<span class="pn'+me+'">'+esc(WINDS[(s-res.dealer+4)%4]+' '+seatName(s))+'</span><span class="pd '+(d>0?'up':d<0?'dn':'')+'">'+(d>0?'+':'')+d.toLocaleString()+'</span><span class="pt">'+(sc>0?'+':'')+sc.toLocaleString()+'</span>'}).join('');
   box.appendChild(pays);
@@ -2455,7 +2678,8 @@ function showEnd(){
   else{const p=document.createElement('p');p.className='small';p.textContent=T('waitNext');box.appendChild(p)}
   const b2=document.createElement('button');b2.className='btn';b2.type='button';b2.style.height='42px';b2.style.fontSize='14px';b2.textContent='📋 '+T('scoreT');b2.addEventListener('click',showScores);box.appendChild(b2);
   const n=document.createElement('p');n.className='small';n.textContent=T('noMoney');box.appendChild(n);
-  $('ovEnd').classList.add('on');$('ovEnd').scrollTop=0;
+  const wasOn=$('ovEnd').classList.contains('on');
+  $('ovEnd').classList.add('on');if(!wasOn)$('ovEnd').scrollTop=0;
 }
 function showOver(){
   const box=$('overBox');box.innerHTML='';
@@ -2473,16 +2697,45 @@ function mountNav(el,tries){if(!window.LpNav){if((tries|0)<50)setTimeout(()=>mou
 function showScores(){
   if(!V||!V.seats)return;
   const box=$('scoreBox');const hist=V.hist||[];
-  let rows=hist.map(h=>'<tr><td>'+WINDS[h.wind]+(h.n)+' '+(h.type==='draw'?'流局':(h.how==='tsumo'?'自摸':'胡'))+(h.tai!=null&&h.type!=='draw'?' '+h.tai+'台':'')+'</td>'+h.pays.map(d=>'<td style="color:'+(d>0?'#9EE8B8':d<0?'#FFB0A2':'inherit')+'">'+(d>0?'+':'')+d+'</td>').join('')+'</tr>').join('');
+  let rows=hist.map(h=>'<tr><td>'+WINDS[h.wind]+(h.n)+' '+(h.type==='draw'?T('cDraw'):(h.how==='tsumo'?T('tsumo'):T('hu')))+(h.tai!=null&&h.type!=='draw'?' '+h.tai+'台':'')+'</td>'+h.pays.map(d=>'<td style="color:'+(d>0?'#9EE8B8':d<0?'#FFB0A2':'inherit')+'">'+(d>0?'+':'')+d+'</td>').join('')+'</tr>').join('');
   box.innerHTML='<h2>'+esc(T('scoreT'))+'</h2><div class="sub2">'+esc(T('stakes'))+'</div><table class="hist"><tr><th>'+esc(T('hand'))+'</th>'+[0,1,2,3].map(s=>'<th>'+esc(seatName(s)).slice(0,8)+'</th>').join('')+'</tr>'+rows+
     '<tr class="sum"><td>'+esc(T('sum'))+'</td>'+V.seats.map(s=>'<td>'+(s.score>0?'+':'')+s.score+'</td>').join('')+'</tr></table>';
   const b=document.createElement('button');b.className='btn';b.type='button';b.textContent=T('close');b.addEventListener('click',()=>closeOv('ovScore'));box.appendChild(b);
   $('ovScore').classList.add('on');
 }
+/* 이기는 모양 — 면자 5 + 머리 1 을 묶음 이름표와 함께 그린다(규칙 안내 맨 위) */
+function winShapeCanvas(maxW){
+  const G6=[[0,1,2],[12,13,14],[24,25,26],[27,27,27],[31,31,31],[32,32]];
+  const gap=8,two=maxW<17*25+5*gap;
+  const rows=two?[G6.slice(0,3),G6.slice(3)]:[G6];
+  const tw=Math.floor(clamp((maxW-8-(Math.max(...rows.map(r=>r.length))-1)*gap)/(Math.max(...rows.map(r=>r.reduce((a,g)=>a+g.length,0)))*1.02),14,30));
+  const th=tw*1.34,lab=Math.round(clamp(tw*0.46,10,13)),rowH=th+tw*0.3+lab+12;
+  const c=document.createElement('canvas');const cw=maxW,ch=rows.length*rowH+4;
+  c.width=Math.round(cw*DPR);c.height=Math.round(ch*DPR);c.style.width=cw+'px';c.style.height=ch+'px';c.className='winShape';
+  const x=c.getContext('2d');x.scale(DPR,DPR);x.textAlign='center';x.textBaseline='top';
+  const ff=getComputedStyle(document.body).fontFamily;
+  rows.forEach((r,ri)=>{
+    const w=r.reduce((a,g)=>a+g.length*tw*1.02,0)+(r.length-1)*gap;let px=(cw-w)/2;const py=ri*rowH+4;
+    r.forEach(g=>{const isPair=g.length===2;const gw=g.length*tw*1.02;
+      g.forEach((k,i)=>{const s=MJArt.get(k,tw,Math.round(tw*1.34),DPR,'flat');x.drawImage(s.canvas,px+i*tw*1.02-s.ox,py-s.oy,s.W,s.H)});
+      const by=py+th+tw*0.3;x.strokeStyle=isPair?'rgba(126,226,168,.9)':'rgba(233,196,106,.85)';x.lineWidth=1.5;
+      x.beginPath();x.moveTo(px+2,by-4);x.lineTo(px+2,by);x.lineTo(px+gw-3,by);x.lineTo(px+gw-3,by-4);x.stroke();
+      x.font='800 '+lab+'px '+ff;x.fillStyle=isPair?'#7EE2A8':'#F4D27A';x.fillText(isPair?T('pairL'):T('setL'),px+gw/2,by+3);
+      px+=gw+gap});
+  });
+  return c;
+}
 function showTaiTable(){
   const box=$('taiBox');
-  box.innerHTML='<h2>'+esc(T('taiTab'))+'</h2><div class="sub2">'+esc(T('stakes'))+'</div><ul class="taitab">'+TAI_ORDER.map(k=>{const t=TAI[k];
-    return '<li><span class="k">'+esc(t[0])+(LG!=='tw'?' <small style="font-family:var(--ui);font-weight:700;font-size:11.5px;color:rgba(255,236,200,.55)">'+esc(t[LI[LG]])+'</small>':'')+'</span><span></span><span class="n">'+t[4]+' 台</span><span class="d">'+esc(taiDesc(k))+'</span></li>'}).join('')+'</ul><p class="small">'+esc(T('noMoney'))+'</p>';
+  const li=(arr)=>arr.map(t=>'<li>'+esc(t)+'</li>').join('');
+  box.innerHTML='<h2>'+esc(T('taiTab'))+'</h2>'+
+    '<h3 class="hwT">'+esc(T('howT'))+'</h3><div id="winShapeBox"></div>'+
+    '<ul class="hw">'+li([T('hw1'),T('hw2'),T('hw3')])+'</ul>'+
+    '<details class="rules"><summary>📜 '+esc(T('rulesT'))+'</summary><ul class="hw">'+li(T('rules')||[])+'</ul></details>'+
+    '<h3 class="hwT">'+esc(T('taiList'))+' · <span style="font-weight:700;opacity:.75">'+esc(T('stakes'))+'</span></h3>'+
+    '<ul class="taitab">'+TAI_ORDER.map(k=>{const t=TAI[k];const loc=taiLocal(k);
+    return '<li><span class="k">'+esc(taiName(k))+(loc?' <small style="font-family:var(--ui);font-weight:700;font-size:11.5px;color:rgba(255,236,200,.55)">'+esc(loc)+'</small>':'')+'</span><span></span><span class="n">'+t[4]+' 台</span><span class="d">'+esc(taiDesc(k))+'</span></li>'}).join('')+'</ul><p class="small">'+esc(T('noMoney'))+'</p>';
+  const sw=$('winShapeBox');const mw=Math.min(box.clientWidth||300,460)-28;sw.appendChild(winShapeCanvas(Math.max(240,mw)));
   const b=document.createElement('button');b.className='btn';b.type='button';b.textContent=T('close');b.addEventListener('click',()=>closeOv('ovTai'));box.appendChild(b);
   $('ovTai').classList.add('on');$('ovTai').scrollTop=0;
 }
@@ -2492,7 +2745,9 @@ function showMenu(){
   add('▶ '+T('cont'),'pri',()=>closeOv('ovMenu'));
   add('📜 '+T('taiTab'),'',()=>{closeOv('ovMenu');showTaiTable()});
   add('📋 '+T('scoreT'),'',()=>{closeOv('ovMenu');showScores()});
-  const lg=document.createElement('div');lg.className='langs';lg.innerHTML=LANGS.map(l=>'<button type="button" data-l="'+l+'" class="'+(l===LG?'on':'')+'">'+LANG_LABEL[l]+'</button>').join('');
+  add('💡 '+T('hintT')+' · '+(hintOn?T('on'):T('offL')),hintOn?'jade':'',()=>{hintOn=!hintOn;try{localStorage.setItem('mjtw_hint',hintOn?'1':'0')}catch(_){}req();showMenu()});
+  {const p=document.createElement('p');p.className='small';p.style.marginTop='4px';p.textContent=T('hintD');box.appendChild(p)}
+  const lg=document.createElement('div');lg.className='langs';lg.innerHTML=langChips().map(l=>'<button type="button" data-l="'+l+'" class="'+(l===LG?'on':'')+'">'+LANG_LABEL[l]+'</button>').join('');
   lg.addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');mjSaveLang(LG);applyLang();showMenu()});box.appendChild(lg);
   if(ROLE==='local')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
   else if(ROLE==='host')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
@@ -2708,7 +2963,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then
 <p>144장 가운데 꽃은 8장뿐이지만 생각보다 자주 들어옵니다. 배패 16장에 들어오는 꽃은 평균 <strong>약 0.89장</strong>이고, 꽃이 한 장도 없을 확률은 <strong>약 38%</strong>입니다. 다시 말해 세 판 중 두 판은 시작하자마자 補花를 한다는 뜻입니다.</p>
 <p>꽃은 자기 자리와 맞아야 台가 됩니다. 딜러(東)는 春·梅, 南은 夏·蘭, 西는 秋·菊, 北은 冬·竹이 <strong>正花</strong>(각 1台)이고, 春夏秋冬이나 梅蘭菊竹 네 장을 한 벌로 모으면 <strong>花槓</strong> 2台가 더해집니다.</p>
 <p>기다림의 모양도 확률로 이해하면 쉽습니다. 양쪽이 열린 대기(예: 三四萬으로 二萬·五萬)는 최대 8장, 가운데·끝·단기 대기는 최대 4장이라 화료 확률이 절반가량입니다. 그 불리함을 보상하는 것이 <strong>獨聽</strong> 1台이고, 반대로 여러 장을 기다리는 깔끔한 슌쯔 손은 <strong>平胡</strong> 2台를 받습니다.</p>
-<p>참고로 이 게임의 봇끼리 300게임(1,695판)을 시뮬레이션해 보니 流局은 약 3.5%, 自摸 비율은 약 27%, 평균 台는 1.6 안팎이었습니다. 봇이 빠른 화료를 우선하는 성향이라, 사람이 門清으로 버티면 더 큰 台를 노릴 여지가 있습니다.</p>
+<p>참고로 이 게임의 봇끼리 四圈 63게임(1,500판)을 시뮬레이션해 보니 流局은 약 9%, 화료 중 自摸 비율은 약 27%, 평균 台(莊家台 제외)는 1.7 안팎이었습니다. 봇이 빠른 화료를 우선하는 성향이라, 사람이 門清으로 버티면 더 큰 台를 노릴 여지가 있습니다.</p>
       </div>
     </details>
     <details class="lp-about-block">
@@ -2717,7 +2972,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then
 <p>봇은 무작위로 버리지 않습니다. 매 턴 손패의 <strong>향청수(聽牌까지 몇 장 남았나)</strong>를 계산하고, 각 패를 버렸을 때 <strong>유효패(향청수를 줄이는 패)가 아직 몇 장 남았는지</strong>를 눈에 보이는 패로 세어 가장 넓은 쪽을 고릅니다. 16장·17장처럼 긴 손도 무늬별로 나눠 계산해 즉시 답을 냅니다.</p>
 <ul>
 <li><strong>부르기</strong> — 三元牌·圈風·門風 커쯔처럼 台가 붙는 碰은 적극적으로, 나머지 碰·吃은 향청수가 실제로 줄 때만 부릅니다. 이미 門清인 좋은 손은 쉽게 깨지 않습니다.</li>
-<li><strong>수비</strong> — 판 후반이나 상대가 세 번 이상 울었을 때는 그 사람이 이미 버린 패, 석 장이 보인 자패처럼 안전한 패를 우선합니다. 한 무늬로만 울고 있는 상대에게는 그 무늬를 덜 줍니다.</li>
+<li><strong>수비</strong> — 판 후반이나 상대가 여러 번 울었을 때는 안전한 패를 우선합니다. 가장 안전한 것은 그 사람이 마지막으로 버린 뒤 남이 버렸는데 胡 하지 않은 패(通過)이고, 석 장이 보인 자패가 그다음입니다. 대만 마작에는 振聽이 없어 그 사람이 예전에 버린 패도 완전히 안전하지는 않습니다. 聽牌까지 두 장 이상 남은 손으로 위험한 상대를 만나면 아예 접습니다. 한 무늬로만 울고 있는 상대에게는 그 무늬를 덜 줍니다.</li>
 <li><strong>화료</strong> — 胡·自摸은 놓치지 않습니다.</li>
 </ul>
       </div>
@@ -2742,7 +2997,7 @@ if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then
 <li>操作：點一張牌會升起，再點一次打出；可以吃碰槓胡時畫面下方會出現大按鈕，8 秒內沒選就自動「過」。</li>
 <li>連線隱私：每位玩家的手牌用各自的金鑰加密傳送，同房的其他人看不到你的牌。</li>
 </ul>
-<p>介面支援繁體中文、한국어、English、日本語，可在首頁切換。</p>
+<p>介面支援繁體中文、简体中文、한국어、English、日本語、Español、Português，可在首頁或選單切換；瀏覽器是台灣、香港設定時直接以繁體中文開啟。</p>
 </div>
       </div>
     </details>
@@ -2774,14 +3029,69 @@ if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then
         <dt>Q. 吃·碰 버튼이 금방 사라져요.</dt>
         <dd>남이 버린 패를 부를 수 있을 때 버튼은 8초(胡는 12초) 동안 떠 있고, 그 안에 고르지 않으면 過로 처리됩니다. 판이 멈추지 않게 하려는 장치입니다. 버튼 아래 막대가 남은 시간이고, 마지막 3초는 똑딱 소리로 알려 줍니다. 부를 수 있는 손패는 파랗게 표시됩니다.</dd>
         <dt>Q. 繁體中文으로 바꿀 수 있나요?</dt>
-        <dd>첫 화면과 메뉴에서 繁體中文·한국어·English·日本語 중 하나를 고를 수 있고, 브라우저가 중국어나 대만 설정이면 처음부터 繁體中文으로 열립니다. 온라인 방에서는 사람마다 다른 언어로 같은 판을 볼 수 있습니다.</dd>
+        <dd>첫 화면과 메뉴에서 繁體中文·한국어·English·日本語 중 하나를 고를 수 있고(简体中文·Español·Português 도 지원), 브라우저가 대만·홍콩 설정이면 처음부터 繁體中文, 중국 본토 설정이면 简体中文으로 열립니다. 온라인 방에서는 사람마다 다른 언어로 같은 판을 볼 수 있습니다.</dd>
       </dl>
       </div>
     </details>
     <footer class="lp-about-footer">대만 마작 台灣麻將 · Lucky Please — 포인트만 쓰는 무료 게임입니다. 규칙은 대만에서 가장 널리 쓰이는 16張 방식(莊家·連莊拉莊, 補花, 搶槓, 16장 流局)을 따랐고, 지역마다 台 항목이 조금씩 다를 수 있습니다.</footer>
   </div>
 </section>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"대만 마작은 일본 리치 마작과 뭐가 가장 다른가요?","acceptedAnswer":{"@type":"Answer","text":"손패가 16장이고 17장째로 면자 5개와 머리 1개를 만듭니다. 꽃패 8장이 있어 들어오면 바로 내려놓고 보충하며, 리치나 도라 대신 台를 셉니다. 역이 없어도 화료할 수 있고, 吃는 바로 윗사람이 버린 패로만 할 수 있으며, 패산이 16장 남으면 流局입니다."}},{"@type":"Question","name":"점수는 어떻게 계산하나요? 돈을 거는 건가요?","acceptedAnswer":{"@type":"Answer","text":"底 300에 台 하나당 100포인트를 더한 값을 주고받는 포인트 게임이며 돈과는 전혀 관계가 없습니다. 自摸면 세 사람이 각각, 放槍이면 버린 사람 혼자 냅니다. 莊家 1台와 연장 2n台는 딜러와 주고받을 때만 붙고, 판이 끝나면 台 항목이 한 줄씩 정산표에 나옵니다."}},{"@type":"Question","name":"친구와 각자 폰으로 할 수 있나요? 다른 사람 패가 보이지는 않나요?","acceptedAnswer":{"@type":"Answer","text":"네. 방을 만들어 링크나 QR을 보내면 친구가 자기 폰에서 빈자리에 앉고, 남는 자리는 봇이 채웁니다. 손패는 참가할 때 각자 기기와 방장이 합의한 열쇠로 따로 암호화해 보내므로, 같은 방의 다른 사람에게는 풀 수 없는 데이터로만 도착합니다."}},{"@type":"Question","name":"중간에 연결이 끊기면 어떻게 되나요?","acceptedAnswer":{"@type":"Answer","text":"10초 넘게 신호가 없으면 끊김으로 표시되고 잠시 뒤 봇이 그 자리를 대신 둡니다. 같은 탭에서 다시 링크로 들어오면 같은 열쇠로 자기 자리와 손패를 되찾습니다. 판이 이미 시작된 뒤 새로 들어온 사람은 봇 자리를 이어받습니다."}},{"@type":"Question","name":"吃·碰 버튼이 금방 사라져요.","acceptedAnswer":{"@type":"Answer","text":"남이 버린 패를 부를 수 있을 때 버튼은 8초(胡는 12초) 동안 떠 있고, 그 안에 고르지 않으면 過로 처리됩니다. 판이 멈추지 않게 하려는 장치입니다. 버튼 아래 막대가 남은 시간이고, 마지막 3초는 똑딱 소리로 알려 줍니다. 부를 수 있는 손패는 파랗게 표시됩니다."}},{"@type":"Question","name":"繁體中文으로 바꿀 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"첫 화면과 메뉴에서 繁體中文·한국어·English·日本語 중 하나를 고를 수 있고, 브라우저가 중국어나 대만 설정이면 처음부터 繁體中文으로 열립니다. 온라인 방에서는 사람마다 다른 언어로 같은 판을 볼 수 있습니다."}}]}</script>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "FAQPage",
+ "mainEntity": [
+  {
+   "@type": "Question",
+   "name": "대만 마작은 일본 리치 마작과 뭐가 가장 다른가요?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "손패가 16장이고 17장째로 면자 5개와 머리 1개를 만듭니다. 꽃패 8장이 있어 들어오면 바로 내려놓고 보충하며, 리치나 도라 대신 台를 셉니다. 역이 없어도 화료할 수 있고, 吃는 바로 윗사람이 버린 패로만 할 수 있으며, 패산이 16장 남으면 流局입니다."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "점수는 어떻게 계산하나요? 돈을 거는 건가요?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "底 300에 台 하나당 100포인트를 더한 값을 주고받는 포인트 게임이며 돈과는 전혀 관계가 없습니다. 自摸면 세 사람이 각각, 放槍이면 버린 사람 혼자 냅니다. 莊家 1台와 연장 2n台는 딜러와 주고받을 때만 붙고, 판이 끝나면 台 항목이 한 줄씩 정산표에 나옵니다."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "친구와 각자 폰으로 할 수 있나요? 다른 사람 패가 보이지는 않나요?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "네. 방을 만들어 링크나 QR을 보내면 친구가 자기 폰에서 빈자리에 앉고, 남는 자리는 봇이 채웁니다. 손패는 참가할 때 각자 기기와 방장이 합의한 열쇠로 따로 암호화해 보내므로, 같은 방의 다른 사람에게는 풀 수 없는 데이터로만 도착합니다."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "중간에 연결이 끊기면 어떻게 되나요?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "10초 넘게 신호가 없으면 끊김으로 표시되고 잠시 뒤 봇이 그 자리를 대신 둡니다. 같은 탭에서 다시 링크로 들어오면 같은 열쇠로 자기 자리와 손패를 되찾습니다. 판이 이미 시작된 뒤 새로 들어온 사람은 봇 자리를 이어받습니다."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "吃·碰 버튼이 금방 사라져요.",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "남이 버린 패를 부를 수 있을 때 버튼은 8초(胡는 12초) 동안 떠 있고, 그 안에 고르지 않으면 過로 처리됩니다. 판이 멈추지 않게 하려는 장치입니다. 버튼 아래 막대가 남은 시간이고, 마지막 3초는 똑딱 소리로 알려 줍니다. 부를 수 있는 손패는 파랗게 표시됩니다."
+   }
+  },
+  {
+   "@type": "Question",
+   "name": "繁體中文으로 바꿀 수 있나요?",
+   "acceptedAnswer": {
+    "@type": "Answer",
+    "text": "첫 화면과 메뉴에서 繁體中文·한국어·English·日本語 중 하나를 고를 수 있고(简体中文·Español·Português 도 지원), 브라우저가 대만·홍콩 설정이면 처음부터 繁體中文, 중국 본토 설정이면 简体中文으로 열립니다. 온라인 방에서는 사람마다 다른 언어로 같은 판을 볼 수 있습니다."
+   }
+  }
+ ]
+}
+</script>
 <script>
 /* 이 섹션이 게임 화면과 겹치지 않도록 시작 위치를 잰다.
    CSS 만으로는 못 한다 — 게임마다 흐름 높이가 0~734px 로 제각각이라
