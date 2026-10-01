@@ -1569,13 +1569,19 @@ const TetrisBGM = (function(){
        (Cloudflare / 브라우저 / 모바일 WebView) 도 stale 로 hit 안
        함. 비용: 매 방문마다 mp3 다운로드 (~3 MB 합계). 음악 안
        들리는 것보단 낫고, 안정화 후 stable hash 로 전환 가능. */
-    const CACHE_BUST = '?v=' + Date.now();
+    /* 2026-10-01 QA M-6: Date.now() 는 방문마다 URL 이 달라 /assets 1주 캐시가 전혀 안 먹었다(재방문마다 2.4MB).
+       이제 페이지에 박힌 빌드 스탬프(<meta name="lp-build">, bump-cache.sh 가 갱신)를 쓴다 — 배포 때만 바뀌므로
+       옛 404 캐시 문제는 새 배포가 풀고, 같은 빌드 안에서는 캐시가 그대로 쓰인다 */
+    const CACHE_BUST = (function(){
+        try { const m = document.querySelector('meta[name="lp-build"]'); if(m && m.content) return '?v=' + m.content; } catch(_){}
+        return '';
+    })();
 
     for(let i = 1; i <= TRACK_COUNT; i++){
         const a = new Audio('/assets/bgm/tetris/track' + i + '.mp3' + CACHE_BUST);
         a.loop = true;
         a.volume = 0;
-        a.preload = 'auto';
+        a.preload = i === 1 ? 'auto' : 'none';   /* 첫 곡(평상시 tier)만 미리 — 긴장 tier 곡은 첫 입력 warmup·필요 시 받는다 */
         const trackNum = i;   /* closure 변수 */
         a.addEventListener('error', function(){
             a.dataset.failed = '1';
@@ -4317,7 +4323,7 @@ function startGame(){
     /* HUD SCORE/TIME 라벨 — 모드 따라 자동 갱신. selectMode 가 보통
        먼저 처리하지만 startGame 에서도 belt-and-suspenders. */
     const sLabel = $('scoreLabel');
-    if(sLabel) sLabel.textContent = (gameMode === 'sprint') ? 'TIME' : 'SCORE';
+    if(sLabel) sLabel.textContent = (gameMode === 'sprint') ? tT('time') : tT('score');   /* 영어 고정이던 자리(2026-10-01 QA: es 'PUNTOS'→'SCORE') */
     /* Sprint 모드: SCORE 칸을 TIME 으로 표시 — 라이브 elapsed 갱신은 loop().
        Marathon: 0 점수로 시작. */
     $('scoreNow').textContent = (gameMode === 'sprint') ? '0:00.00' : '0';
@@ -5112,7 +5118,7 @@ function selectMode(mode){
     /* HUD 의 SCORE 라벨도 모드 따라 갱신 — Sprint 모드에선 점수 칸이
        elapsed 시간을 표시하므로 라벨이 "TIME" 이어야 의미 일치. */
     const sl = $('scoreLabel');
-    if(sl) sl.textContent = (mode === 'sprint') ? 'TIME' : 'SCORE';
+    if(sl) sl.textContent = (mode === 'sprint') ? tT('time') : tT('score');
     try { localStorage.setItem('tetris-mode', mode); } catch(_){}
 }
 /* 초기 모드 — 저장된 값 또는 marathon */

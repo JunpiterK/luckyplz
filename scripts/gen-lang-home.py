@@ -302,6 +302,12 @@ def build(code, cfg, src):
     s = s.replace("</head>",
                   "<script>window.__LP_FORCE_LANG=%r;</script>\n</head>" % code, 1)
 
+    # 일본어 홈은 Noto Sans JP 한 벌만 — KR 폰트로 그리면 한자가 한국식 자형이고 서브셋 조각을 40여 개 더
+    # 받는다(2026-10-01 QA M-12). 한글이 거의 없는 페이지라 KR 는 아예 싣지 않는다.
+    if code == "ja":
+        s = s.replace("family=Noto+Sans+KR:", "family=Noto+Sans+JP:")
+        s = s.replace("'Noto Sans KR'", "'Noto Sans JP'").replace('"Noto Sans KR"', '"Noto Sans JP"')
+
     return s
 
 

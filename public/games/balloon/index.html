@@ -85,6 +85,8 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     box-shadow:0 22px 70px rgba(0,0,0,.6),0 0 60px rgba(255,92,122,.07)}
 .rule-line{text-align:center;color:rgba(255,255,255,.62);font-size:.92em;margin:2px 0 16px;line-height:1.5}
 .rule-line b{color:var(--primary)}
+/* 좌상단 버튼 줄(⛶·?·👥, 왼쪽 10~50px)이 안내문 첫 줄 왼쪽 끝과 겹쳤다 — 폰에서는 양옆을 비운다(2026-10-01 QA) */
+@media(max-width:600px){.rule-line{padding:0 26px}}
 .players{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
 .player-row{display:flex;align-items:center;gap:8px}
 .player-row .num{width:26px;text-align:center;font-family:'Orbitron',sans-serif;font-size:12px;
@@ -590,10 +592,18 @@ function initBgm(){
        재생이 통째로 잠겼다(2026-08-20 실기기 신고). 버튼은 즉시 보이고,
        재생은 제스처 안에서 play() 를 바로 부른다 — 브라우저가 알아서
        버퍼링 후 시작한다. 파일이 없을 때(404)만 숨긴다. */
+    if(bgm)return;   /* DOMContentLoaded 와 readyState 분기가 둘 다 부를 수 있다 */
+    /* 2026-10-01 QA: 진입하자마자 1.25MB 를 받던 것 — 진입 때는 받지 않고(HEAD 로 유무만),
+       본 다운로드는 첫 터치·키 입력 때 시작한다(시작 버튼을 누르기 전 이름 입력 중에 받아진다) */
     bgm=new Audio('/assets/balloon-bgm.mp3');
-    bgm.loop=true;bgm.volume=.35;bgm.preload='auto';
+    bgm.loop=true;bgm.volume=.35;bgm.preload='none';
     jingle=new Audio('/assets/balloon-pop-jingle.mp3');
-    jingle.preload='auto';jingle.volume=.8;
+    jingle.preload='none';jingle.volume=.8;
+    /* 파일 유무는 HEAD 한 번으로 — 없으면 버튼을 숨긴다(preload 를 미루면 error 이벤트가 늦게 온다) */
+    try{fetch('/assets/balloon-bgm.mp3',{method:'HEAD'}).then(r=>{if(r&&r.status===404){$('btnBgm').hidden=true;bgmOn=false}}).catch(()=>{})}catch(_){}
+    const warm=()=>{['pointerdown','keydown'].forEach(t=>document.removeEventListener(t,warm,true));
+        if(!bgmOn)return;try{[bgm,jingle].forEach(a=>{a.preload='auto';if(a.readyState===0&&!a.currentSrc)a.load()})}catch(_){}};
+    ['pointerdown','keydown'].forEach(t=>document.addEventListener(t,warm,{capture:true,passive:true}));
     const b=$('btnBgm');b.hidden=false;syncBgmBtn();
     bgm.addEventListener('error',()=>{ b.hidden=true;bgmOn=false; });
 }

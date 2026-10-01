@@ -1034,14 +1034,17 @@ const WINDS='東南西北';
 const LANGS=['tw','ko','en','ja'];
 const LANG_LABEL={tw:'繁體中文',ko:'한국어​',en:'English',ja:'日本語'};  /* ZWSP: 사이트 lpGameText 가 '한국어' 칩을 'Korean' 으로 바꾸지 않게 */
 function detectLang(){
-  let o=null;try{o=localStorage.getItem('mjtw_lang')}catch(_){}
-  if(o&&LANGS.indexOf(o)>=0)return o;
+  /* 게임 안 언어 칩(mjtw_lang)은 '그때의 사이트 언어'와 함께 저장한다. 사이트 언어를 바꾸면 칩 선택은 무시 —
+     예전엔 칩을 한 번 누르면 사이트 언어를 영구히 무시했다(2026-10-01 QA) */
   let l='';try{l=(localStorage.getItem('luckyplz_lang')||'').toLowerCase()}catch(_){}
+  let o=null,os=null;try{o=localStorage.getItem('mjtw_lang');os=localStorage.getItem('mjtw_lang_site')}catch(_){}
+  if(o&&LANGS.indexOf(o)>=0&&(os||'')===l)return o;
   if(l==='zh'||l==='zh-tw'||l==='tw')return 'tw';if(l==='ko')return 'ko';if(l==='ja')return 'ja';
   const n=((navigator.languages&&navigator.languages[0])||navigator.language||'').toLowerCase();
   if(!l){if(n.indexOf('zh')===0)return 'tw';if(n.indexOf('ko')===0)return 'ko';if(n.indexOf('ja')===0)return 'ja'}
   return 'en';
 }
+function mjSaveLang(v){try{localStorage.setItem('mjtw_lang',v);localStorage.setItem('mjtw_lang_site',(localStorage.getItem('luckyplz_lang')||'').toLowerCase())}catch(_){}}
 let LG=detectLang();
 const I18N={
  tw:{title:'台灣麻將',title2:'TAIWAN 16-TILE MAHJONG',sub:'16張 · 花牌 · 算台 — 跟電腦練習，或開房和朋友各用手機打一將',
@@ -2367,7 +2370,7 @@ function renderLobby(){
   $('btnLobbyStart').textContent='▶ '+T('start');$('btnLobbyStart').classList.toggle('hide',ROLE!=='host');
   $('btnInvite').textContent='🔗 '+T('invite');$('btnInvite').classList.toggle('hide',ROLE!=='host');
 }
-$('langs').addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');try{localStorage.setItem('mjtw_lang',LG)}catch(_){}applyLang()});
+$('langs').addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');mjSaveLang(LG);applyLang()});
 $('btnSolo').addEventListener('click',()=>{ac();show('scrSolo')});
 $('btnOnline').addEventListener('click',()=>{ac();show('scrOnline')});
 $('btnResume').addEventListener('click',()=>{ac();resumeSolo()});
@@ -2488,7 +2491,7 @@ function showMenu(){
   add('📜 '+T('taiTab'),'',()=>{closeOv('ovMenu');showTaiTable()});
   add('📋 '+T('scoreT'),'',()=>{closeOv('ovMenu');showScores()});
   const lg=document.createElement('div');lg.className='langs';lg.innerHTML=LANGS.map(l=>'<button type="button" data-l="'+l+'" class="'+(l===LG?'on':'')+'">'+LANG_LABEL[l]+'</button>').join('');
-  lg.addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');try{localStorage.setItem('mjtw_lang',LG)}catch(_){}applyLang();showMenu()});box.appendChild(lg);
+  lg.addEventListener('click',e=>{const b=e.target.closest('button[data-l]');if(!b)return;LG=b.getAttribute('data-l');mjSaveLang(LG);applyLang();showMenu()});box.appendChild(lg);
   if(ROLE==='local')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
   else if(ROLE==='host')add('⏹ '+T('endGame'),'',()=>{closeOv('ovMenu');if(G){G.phase='over';G.step=null;publish({k:'over'})}});
   if(V2on())add('👥 '+(K.room.code?LpRooms.util.fmtCode(K.room.code):''),'',()=>{closeOv('ovMenu');K.sheet()});
@@ -2507,8 +2510,8 @@ function applyLang(){
   if($('ovEnd').classList.contains('on'))showEnd();
   req();
 }
-document.addEventListener('lp:langchanged',()=>{try{if(localStorage.getItem('mjtw_lang'))return}catch(_){}LG=detectLang();applyLang()});
-window.addEventListener('storage',e=>{if(e&&e.key==='luckyplz_lang'){try{if(localStorage.getItem('mjtw_lang'))return}catch(_){}LG=detectLang();applyLang()}});
+document.addEventListener('lp:langchanged',()=>{LG=detectLang();applyLang()});   /* 사이트 언어가 바뀌면 detectLang 이 칩 선택을 버린다 */
+window.addEventListener('storage',e=>{if(e&&e.key==='luckyplz_lang'){LG=detectLang();applyLang()}});
 
 /* ── 공용 멀티플레이 패널이 손패를 덮지 않게 (윷놀이와 같은 방식) ──
    판이 시작되면 한 번 접고, 접힌 패널이 화면 아래쪽에 있으면 그 높이만큼 판을 올린다 */
@@ -2825,5 +2828,14 @@ if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then
 })();
 </script>
 <!--lp-game-about:end-->
+<script>/* 헤더 제목 맞춤 — 좌상단 버튼(⛶·?·👥 …)이 헤더 줄에 들어오면서 제목이 말줄임('Yut …')으로 잘렸다(2026-10-01 QA).
+   들어갈 때까지 글자를 줄이고(하한 11px), 그래도 넘치면 띄어쓰기에서 두 줄, 그래도 안 되면 잘린 글자 대신 비운다(게임 화면에 이름이 따로 있다).
+   언어 전환·버튼 추가·화면 회전 때 다시 잰다 */
+(function(){var ID='tbTitle',q=0;function fit(){var t=document.getElementById(ID);if(!t||!t.getClientRects().length)return;var st=t.style;st.fontSize='';st.whiteSpace='';st.lineHeight='';st.visibility='';var fs=parseFloat(getComputedStyle(t).fontSize)||16,n=0;while(t.scrollWidth>t.clientWidth+1&&fs>11&&n++<40){fs-=.5;st.fontSize=fs+'px'}if(t.scrollWidth>t.clientWidth+1&&/\s/.test(t.textContent.trim())){st.whiteSpace='normal';st.lineHeight='1.05'}if(t.scrollWidth>t.clientWidth+1||t.scrollHeight>t.clientHeight+4)st.visibility='hidden'}
+function soon(){cancelAnimationFrame(q);q=requestAnimationFrame(fit)}
+function boot(){var t=document.getElementById(ID);if(!t)return;fit();addEventListener('resize',soon);addEventListener('orientationchange',soon);
+new MutationObserver(soon).observe(t,{childList:true,characterData:true,subtree:true});if(t.parentElement)new MutationObserver(soon).observe(t.parentElement,{childList:true});
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(soon);setTimeout(soon,800);setTimeout(soon,2500);setInterval(function(){var t=document.getElementById(ID);if(t&&t.scrollWidth>t.clientWidth+1)soon()},2000)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot()})();</script>
 </body>
 </html>
