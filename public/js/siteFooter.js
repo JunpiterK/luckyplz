@@ -91,7 +91,9 @@ try{
         if(!gid)return {mode:'v1',gid:null};
         if(isR)return {mode:'v2',gid:gid};
         var legacy=!!q.get('room')&&!q.get('r');
-        if(legacy||qv==='v1'||(!qv&&!tab&&lv==='v1'))return {mode:'v1',gid:gid};
+        /* 2026-10-01: 옛 ?room= 링크도 그 코드가 살아 있는 v2 방이면 v2 로 보낸다(아래 'legacy' 탐지). 강제 v1(?rooms=v1)은 그대로 v1 */
+        if(qv==='v1'||(!qv&&!tab&&lv==='v1'))return {mode:'v1',gid:gid};
+        if(legacy)return {mode:'legacy',gid:gid};
         var act=null;try{act=JSON.parse(ss('lpr_active')||'null')}catch(_){}
         if(isLobby||q.get('r')||q.get('lpr')||qv==='v2'||tab||lv==='v2'||(act&&act.gameId===gid))return {mode:'v2',gid:gid};
         return {mode:'ask',gid:gid};
@@ -495,6 +497,21 @@ try{
     }
     if(lprMode.mode==='v1')lprLoadV1();
     else if(lprMode.mode==='v2')lprLoadV2();
+    else if(lprMode.mode==='legacy'){
+        /* 옛 ?room= 링크 — 코어만 실어 2초 안에 v2 방인지 확인 → 맞으면 그 방 주소로, 아니면 예전 v1 스택 */
+        var lgFall=false,lgV1=function(){if(lgFall)return;lgFall=true;lprLoadV1();lprLoadInviteBtn();};
+        var lgProbe=function(){
+            try{
+                if(!(window.LpRooms&&typeof window.LpRooms.resolve==='function'))return lgV1();
+                Promise.resolve(window.LpRooms.resolve(location.href,{v2Only:true,ms:2000})).then(function(r){
+                    if(r&&r.kind==='rooms'&&r.url&&!lgFall){lgFall=true;location.replace(r.url);}else lgV1();
+                },lgV1);
+            }catch(_){lgV1();}
+        };
+        setTimeout(lgV1,4500);
+        var lgCore=function(){var c=lprAdd('/js/lpRoomsCore.js?v=1790845784',true);c.onload=lgProbe;c.onerror=lgV1;};
+        if(window.supabase)lgCore();else{var lgSb=lprAdd('/vendor/supabase.min.js',true);lgSb.onload=lgCore;lgSb.onerror=lgV1;}
+    }
     else{
         /* 레지스트리 판정 — lpGames.js 하나만 먼저 */
         var lg=lprAdd('/js/lpGames.js?v=1790845784',true);
