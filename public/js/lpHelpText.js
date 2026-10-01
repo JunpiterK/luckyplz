@@ -227,11 +227,11 @@ window.LP_HELP_TEXT = {
     pt: {t:'Chef Burger', l:['Toque os ingredientes na ordem do pedido para montar o lanche','Celular: toque nos pratos. PC: clique ou teclas 1–5','Um erro tira 2 segundos; sem erros, bônus PERFECT','Com mais de cinco ingredientes, decore em blocos']}
   },
   'quiz': {
-    ko: {t:'라이브 퀴즈', l:['진행자가 방을 열고 카테고리·문제 수·제한 시간을 정해요','참가자는 6자리 코드나 메신저 링크로, 닉네임만 넣고 입장','빨리 맞힐수록 점수가 크고, 연속 정답엔 보너스','튕겨도 같은 링크를 다시 열면 점수 그대로 이어져요']},
-    en: {t:'Live Quiz', l:['The host opens a room and picks categories, question count and time','Players join with the 6-digit code or a chat link, nickname only','Faster correct answers score more, and streaks add a bonus','Dropped out? Reopen the same link and your score carries on']},
-    ja: {t:'ライブクイズ', l:['司会がルームを開き、カテゴリ・問題数・制限時間を決めます','参加者は6桁コードかリンクから、ニックネームだけで入室','早く正解するほど高得点、連続正解でボーナス','落ちても同じリンクを開き直せば、点数はそのまま続きます']},
-    zh: {t:'实时问答', l:['主持人开房间，设定题目类别、题数和限时','参与者用6位房间码或聊天链接加入，只需填昵称','答对越快分数越高，连续答对有加分','掉线了？重新打开同一链接，分数照样接着算']},
-    es: {t:'Quiz en Vivo', l:['El anfitrión abre una sala y elige categorías, preguntas y tiempo','Se entra con el código de 6 dígitos o un enlace, solo con apodo','Acertar rápido da más puntos y las rachas suman bonus','¿Se cortó? Abre el mismo enlace y sigues con tu puntuación']},
-    pt: {t:'Quiz ao Vivo', l:['O anfitrião abre uma sala e escolhe categorias, perguntas e tempo','Entra-se com o código de 6 dígitos ou um link, só com apelido','Acertar rápido vale mais e sequências dão bônus','Caiu? Abra o mesmo link e continue com sua pontuação']}
+    ko: {t:'라이브 퀴즈', l:['진행자가 방을 열고 카테고리·문제 수·제한 시간을 정해요','참가자는 6자리 코드나 메신저 링크로, 닉네임만 넣고 입장','빨리 맞힐수록 점수가 크고, 연속 정답엔 보너스','튕겨도 같은 링크를 다시 열면 점수 그대로 이어져요','혼자 풀기 — 방 없이 바로, 주제별 최고 기록에 도전']},
+    en: {t:'Live Quiz', l:['The host opens a room and picks categories, question count and time','Players join with the 6-digit code or a chat link, nickname only','Faster correct answers score more, and streaks add a bonus','Dropped out? Reopen the same link and your score carries on','Play solo — no room needed, beat your best in each category']},
+    ja: {t:'ライブクイズ', l:['司会がルームを開き、カテゴリ・問題数・制限時間を決めます','参加者は6桁コードかリンクから、ニックネームだけで入室','早く正解するほど高得点、連続正解でボーナス','落ちても同じリンクを開き直せば、点数はそのまま続きます','ひとりで解く — ルーム不要、カテゴリ別ベストに挑戦']},
+    zh: {t:'实时问答', l:['主持人开房间，设定题目类别、题数和限时','参与者用6位房间码或聊天链接加入，只需填昵称','答对越快分数越高，连续答对有加分','掉线了？重新打开同一链接，分数照样接着算','单人挑战 — 不用开房间，刷新每个类别的最高分']},
+    es: {t:'Quiz en Vivo', l:['El anfitrión abre una sala y elige categorías, preguntas y tiempo','Se entra con el código de 6 dígitos o un enlace, solo con apodo','Acertar rápido da más puntos y las rachas suman bonus','¿Se cortó? Abre el mismo enlace y sigues con tu puntuación','Jugar solo — sin sala, supera tu récord en cada categoría']},
+    pt: {t:'Quiz ao Vivo', l:['O anfitrião abre uma sala e escolhe categorias, perguntas e tempo','Entra-se com o código de 6 dígitos ou um link, só com apelido','Acertar rápido vale mais e sequências dão bônus','Caiu? Abra o mesmo link e continue com sua pontuação','Jogar sozinho — sem sala, bata seu recorde em cada categoria']}
   }
 };
