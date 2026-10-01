@@ -155,12 +155,15 @@ async function uiRun(ctx) {
             /* v1 기본(플래그 없음) 페이지는 예전대로 v1 */
             const V = await dev(E, 'uv', { lang: 'ko' });
             try {
-                await V.c.send('Page.navigate', { url: E.base + '/games/ludo/' });
+                /* 표(레지스트리)에서 아직 v1 인 게임을 고른다 — 예전엔 ludo 로 고정이라 2026-09-30 보드게임 v2 전환 뒤 늘 실패했다 */
+                const v1g = await H.ev(`(LpGames.all().find(g=>g.mp&&g.mp.v==='v1'&&g.mp.v1&&!g.mp.later)||{}).id||null`);
+                if (!v1g) throw Object.assign(new Error('skip'), { skipU4b: true });
+                await V.c.send('Page.navigate', { url: E.base + '/games/' + v1g + '/' });
                 await V.wait(`document.readyState==='complete'&&[...document.scripts].some(s=>/lpRoom\\.js/.test(s.src))`, 10000);
                 await sleep(500);
                 const v = await V.ev(`({v2:[...document.scripts].filter(s=>/lpRoomsCore|lpRoomsUI/.test(s.src)).length,v1:[...document.scripts].filter(s=>/lpRoom\\.js|lpHostCtl|lpMultiplayer|lpInviteButton/.test(s.src)).length,btn:!!document.querySelector('.lp-rooms-btn')})`);
-                ok('U4b', v.v2 === 0 && v.v1 === 4 && !v.btn, 'default game page (registry v1) keeps the v1 stack, no v2 scripts', v);
-            } finally { await closeAll(E, [V]); }
+                ok('U4b', v.v2 === 0 && v.v1 === 4 && !v.btn, 'default game page (registry v1: ' + v1g + ') keeps the v1 stack, no v2 scripts', v);
+            } catch (e) { if (!e.skipU4b) throw e; ok('U4b', true, 'no game left on the v1 flag — nothing to check'); } finally { await closeAll(E, [V]); }
         } finally { await closeAll(E, [H, G]); }
     }
 
