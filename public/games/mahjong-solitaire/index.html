@@ -156,6 +156,15 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
 .navslot .lp-nav2{max-width:none}
 @media (max-height:760px){.feats{display:none}.card .sub{margin-bottom:8px}}
 @media (max-height:640px){.logo{height:44px;margin-bottom:2px}.logo canvas{width:100px;height:44px}.card h2{font-size:20px}.lay canvas{aspect-ratio:2/1}.lay .b{display:none}.btn{padding:10px}.hintline{display:none}}
+.mpanda{width:84px;height:84px;margin:-6px auto 0;background:url(/games/mahjong-solitaire/panda.webp?v=1) no-repeat 0 0/500% 100%;
+  filter:drop-shadow(0 6px 10px rgba(0,0,0,.5));pointer-events:none}
+.mpanda.win{animation:mpDance .56s steps(1) infinite,mpHop .56s ease-in-out infinite}
+.mpanda.worry{background-position:50% 0;animation:mpSway 1.8s ease-in-out infinite}
+@keyframes mpDance{0%{background-position:0 0}50%{background-position:25% 0}}
+@keyframes mpHop{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes mpSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@media (max-height:640px){.mpanda{width:58px;height:58px;margin-top:-4px}}
+@media (prefers-reduced-motion:reduce){.mpanda.win,.mpanda.worry{animation:none}}
 .toast{position:fixed;left:50%;bottom:calc(78px + var(--sb));transform:translateX(-50%) translateY(14px);opacity:0;z-index:200;max-width:88vw;text-align:center;
   padding:9px 16px;border-radius:14px;background:rgba(40,16,9,.94);border:1px solid rgba(233,196,106,.3);font-size:13px;font-weight:700;
   transition:.25s;pointer-events:none;color:var(--ivory)}
@@ -236,6 +245,7 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
 
 <div class="ov" id="stuckOv">
   <div class="card">
+    <div class="mpanda worry" aria-hidden="true"></div>
     <h2 data-t="stuck">더 뗄 짝이 없어요</h2>
     <p class="sub" id="stuckSubTxt">남은 패를 풀리는 배치로 섞거나, 한 수 되돌려 보세요.</p>
     <div class="btn-col">
@@ -250,6 +260,7 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
 
 <div class="ov" id="clearOv">
   <div class="card">
+    <div class="mpanda win" aria-hidden="true"></div>
     <h2 data-t="cleared">완성!</h2>
     <div class="nb" id="newBest" data-t="newBest">최고 기록!</div>
     <div class="grid2">
@@ -1053,6 +1064,10 @@ let lpRaceRng=null;   /* Rooms v2 레이스 — 섞기 난수도 같은 시드 �
 let playT=0, score=0, combo=0, lastMatchT=-99, hints=0, shuffles=0, matches=0, penalty=0;
 let sel=-1, selT=1, hintPair=null, hintT=0;
 let undoSt=[];
+/* 지금 국면에서 끝까지 가는 '알려진 정답' — 판 만들 때의 순서·섞기 순서·풀이기 결과에서 얻는다.
+   자유 패 판정은 패가 줄수록 풀리기만 하므로(단조), 정답에 들어 있는 짝을 먼저 떼어도 나머지 순서는 그대로 유효하다.
+   힌트가 이 길을 먼저 쓰면 풀이기가 시간 안에 못 찾는 어려운 배치에서도 막다른 길로 안내하지 않는다 */
+let known=null;
 let flights=[], parts=[], pops=[], wig={}, wigRed={}, casc=[], fireT=0;
 let movesN=0, leftN=0;
 let won=false;
@@ -1337,6 +1352,27 @@ function wantRot(lay){
     const pd=12, f=TT=>{ const e=extents(100,TT); return Math.min((inner.w-pd)/e.w,(inner.h-pd)/e.h); };
     return f(MJ.prep(rotPos(lay.pos)))>f(MJ.prep(lay.pos))*1.12;
 }
+function knownOK(path){
+    if(!path) return false;
+    const al=Uint8Array.from(alive); let rem=0; for(let i=0;i<al.length;i++) rem+=al[i];
+    if(path.length*2!==rem) return false;
+    for(const [a,b] of path){
+        if(!al[a]||!al[b]||a===b||MJ.group(faces[a])!==MJ.group(faces[b])||!MJ.isFree(T,al,a)||!MJ.isFree(T,al,b)) return false;
+        al[a]=0; al[b]=0;
+    }
+    return true;
+}
+/* 짝 (a,b)를 뗀 뒤 알려진 정답을 고친다: 같은 짝이면 빼기만, 다른 짝끼리면 남은 두 장을 한 짝으로 묶어 넣을 자리를 찾는다 */
+function knownAfter(a,b){
+    if(!known) return null;
+    const i=known.findIndex(p=>p[0]===a||p[1]===a), j=known.findIndex(p=>p[0]===b||p[1]===b);
+    if(i<0||j<0) return null;
+    if(i===j) return known.filter((_,k)=>k!==i);
+    const c=known[i][0]===a?known[i][1]:known[i][0], d=known[j][0]===b?known[j][1]:known[j][0];
+    const rest=known.filter((_,k)=>k!==i&&k!==j), hi=Math.max(i,j)-1;
+    for(let pos=hi;pos>=0;pos--){ const cand=rest.slice(0,pos).concat([[c,d]],rest.slice(pos)); if(knownOK(cand)) return cand; }
+    return null;
+}
 function newDeal(id,sd,isDaily,rot){
     LAY=MJ.layout(id); layId=LAY.id; store(LS_LAY,layId);
     curRot=!!rot;
@@ -1347,10 +1383,11 @@ function newDeal(id,sd,isDaily,rot){
     faces=d.faces; order=d.order; alive=new Uint8Array(T.length).fill(1);
     daily=isDaily?today():null;
     resetRun();
+    known=order.map(p=>p.slice());
 }
 function resetRun(){
     playT=0; score=0; combo=0; lastMatchT=-99; hints=0; shuffles=0; matches=0; penalty=0;
-    sel=-1; hintPair=null; undoSt=[]; flights=[]; parts=[]; pops=[]; wig={}; wigRed={}; casc=[]; fireT=0; won=false;
+    sel=-1; hintPair=null; undoSt=[]; known=null; flights=[]; parts=[]; pops=[]; wig={}; wigRed={}; casc=[]; fireT=0; won=false;
     zoom=1; panX=0; panY=0;
     refresh();
 }
@@ -1391,7 +1428,7 @@ function match(a,b){
     combo=(nowT-lastMatchT<=COMBO_WIN)?combo+1:1; lastMatchT=nowT;
     const base=faces[a]>=34?20:10, mult=Math.min(5,1+(combo-1)*.5), pts=Math.round(base*mult);
     score+=pts; matches++;
-    undoSt.push({k:'m',a,b,pts,prev});
+    undoSt.push({k:'m',a,b,pts,prev,known});
     /* 날아갈 위치: 들려 있던 패는 들린 자리에서 출발 */
     const pa=tilePos(a), pb=tilePos(b), li=geo.dep*.9;
     const ca=[pa[0]+geo.tw/2-li,pa[1]+geo.th/2-li], cb=[pb[0]+geo.tw/2,pb[1]+geo.th/2];
@@ -1405,6 +1442,7 @@ function match(a,b){
     /* 안전장치: rAF 가 멈춘 환경(백그라운드 탭·일부 웹뷰)에서도 판정(완성·막힘)이 밀리지 않게 */
     setTimeout(()=>{ const k=flights.indexOf(fl); if(k<0) return; if(!fl.hit){ fl.hit=true; impact(fl); } flights.splice(k,1); if(!flights.length) afterFlights(); dirty(); },(fl.dur+.26)*1000+450);
     alive[a]=0; alive[b]=0; sel=-1; hintPair=null;
+    known=knownAfter(a,b);
     refresh(); hud(); save();
     dirty();
 }
@@ -1437,6 +1475,7 @@ function undo(){
     if(!u){ toast(t('noUndo')); return; }
     if(u.k==='m'){ alive[u.a]=1; alive[u.b]=1; score=Math.max(0,score-u.pts); matches--; }
     else if(u.k==='s'){ faces=u.faces; }
+    known=u.known||null;
     combo=0; lastMatchT=-99; sel=-1; hintPair=null;
     $('combo').classList.remove('on');
     SND.undo(); vib(6);
@@ -1448,9 +1487,13 @@ function hint(){
     const mv=MJ.moves(T,alive,faces);
     if(!mv.length){ toast(t('noHint')); openStuck(); return; }
     /* 끝까지 풀리는 길의 첫 수를 우선(예산 안에서), 못 찾으면 아무 짝 */
-    let pick=null;
-    const res=MJ.solveR(T,faces,alive,60000,4,isTouch?160:240);
-    if(res.ok&&res.path&&res.path.length) pick=res.path[0];
+    let pick=null, res={ok:null};
+    if(known&&known.length&&knownOK(known)) pick=known[0];
+    else{
+        known=null;
+        res=MJ.solveR(T,faces,alive,60000,4,isTouch?160:240);
+        if(res.ok&&res.path&&res.path.length){ pick=res.path[0]; known=res.path.map(p=>p.slice()); }
+    }
     if(!pick) pick=mv[Math.floor(Math.random()*mv.length)];
     /* 풀이기가 '끝까지는 못 푼다'를 증명했으면 알려 준다(되돌리기·섞기로 살릴 수 있다) */
     if(res.ok===false) setTimeout(()=>toast(t('deadEnd')),250);
@@ -1480,7 +1523,8 @@ function shuffle(fromStuck){
     const prevFaces=faces.slice();
     const nf=faces.slice(); for(let i=0;i<T.length;i++) if(alive[i]) nf[i]=d.faces[i];
     faces=nf;
-    undoSt.push({k:'s',faces:prevFaces});
+    undoSt.push({k:'s',faces:prevFaces,known});
+    known=d.order.map(p=>p.slice());
     shuffles++; penalty+=50; score=Math.max(0,score-50);
     sel=-1; hintPair=null; combo=0; lastMatchT=-99;
     /* 섞는 소리 + 패마다 살짝 흔들림(판 전체가 흔들리진 않는다) */
@@ -1766,11 +1810,11 @@ $('btnDaily').addEventListener('click',()=>{ if(performance.now()-titleAt<450) r
 $('btnCont').addEventListener('click',()=>{ const s=loadSave(); if(s) resume(s); else refreshIntro(); });
 $('btnResume').addEventListener('click',()=>setPaused(false));
 $('btnRestart').addEventListener('click',()=>{ paused=false; show('pauseOv',false); restartSame(); });
-$('btnNew').addEventListener('click',()=>{ paused=false; show('pauseOv',false); if(daily) startGame(null,true); else startGame(layId,false); });
+$('btnNew').addEventListener('click',()=>{ paused=false; show('pauseOv',false); if(lpRaceRng) restartSame(); else if(daily) startGame(null,true); else startGame(layId,false); });
 $('btnMenu').addEventListener('click',()=>{ paused=false; show('pauseOv',false); goTitle(); });
 $('btnStuckShuffle').addEventListener('click',()=>shuffle(true));
 $('btnStuckUndo').addEventListener('click',()=>{ if(!undoSt.length){ toast(t('noUndo')); return; } undo(); });
-$('btnStuckNew').addEventListener('click',()=>{ show('stuckOv',false); clearSave(); if(daily) restartSame(); else startGame(layId,false); });
+$('btnStuckNew').addEventListener('click',()=>{ show('stuckOv',false); clearSave(); if(daily||lpRaceRng) restartSame(); else startGame(layId,false); });
 $('btnAgain').addEventListener('click',()=>{ show('clearOv',false); casc=[]; fireT=0; startGame(layId,false); });
 $('btnOther').addEventListener('click',()=>{ casc=[]; fireT=0; goTitle(); });
 $('btnPause').addEventListener('click',()=>{ if(state==='play') setPaused(!paused); });
@@ -1803,7 +1847,7 @@ window.addEventListener('pagehide',()=>save());
 /* 디버그·검증용(헤드리스 테스트) — 게임 동작에는 쓰이지 않는다 */
 window.__mjs={MJ,get state(){return state;},get T(){return T;},get faces(){return faces;},get alive(){return alive;},get free(){return freeA;},
     get score(){return score;},get time(){return playT;},get sel(){return sel;},get hintPair(){return hintPair;},get moves(){return movesN;},get left(){return leftN;},
-    get order(){return order;},get undoLen(){return undoSt.length;},get zoom(){return zoom;},get rot(){return curRot;},get geo(){return geo;},get TWf(){return TWf;},get combo(){return combo;},get flights(){return flights.length;},
+    get order(){return order;},get known(){return known;},get undoLen(){return undoSt.length;},get zoom(){return zoom;},get rot(){return curRot;},get geo(){return geo;},get TWf(){return TWf;},get combo(){return combo;},get flights(){return flights.length;},
     screenPos(i){ const [x,y]=tilePos(i); const r=cv.getBoundingClientRect(); return [r.left+x+geo.tw/2,r.top+y+geo.th/2]; },
     tap,hint,undo,shuffle,startGame,restartSame,setPaused,goTitle,setZoom,
     solveNow(b){ return MJ.solveR(T,faces,alive,b||200000,4); },
