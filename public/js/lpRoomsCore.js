@@ -159,7 +159,8 @@
         wd1: 12000, wd2: 20000, wd3: 30000, wdEnd: 300000,
         offLobby: 45000, offLobbyHidden: 90000, rmLobby: 120000, offPlay: 20000, offSpec: 60000,
         helloGap: 300, rosterGap: 100, snapWait: 250, snapPer: 2000, conflictWin: 400, collideWin: 1200,
-        resend: [200, 400, 600], joinRetry: [2000, 4000, 7000], joinTimeout: 10000, pendingMax: 180000
+        resend: [200, 400, 600], joinRetry: [2000, 4000, 7000], joinTimeout: 10000, pendingMax: 180000,
+        wakeGap: 3000, prevHostWin: 120000   /* [+ 2026-10-01] 깨어남 판정(타이머 공백) · 원방장 복귀 인정 창 */
     };
     var SUPA_URL = 'https://jkrpxijybuljdxkrbsan.supabase.co';
     var SUPA_KEY = 'sb_publishable_Ypa1NMQCVGxFWidBOd5iEA_ECBldTAb';
@@ -170,7 +171,7 @@
         '🍓', '🍉', '🍒', '🍇', '🥝', '🍄', '🌵', '🌻', '🌙', '☀️', '⚡', '🔥', '❄️', '🌈', '💎', '🎁',
         '🎸', '🎺', '🥁', '🎯', '🏀', '⚽', '🎳', '🛼', '🚗', '🚲', '⛵', '✈️', '🛸', '🏰', '🗿', '🎡',
         '🍕', '🍔', '🌮', '🍣', '🍦', '🧁', '🍪', '🥨', '🐙', '🦋', '🐢', '🐳', '🦉', '🐝', '🦖', '🐞'];
-    var HOST_EV = { hello: 1, welcome: 1, deny: 1, roster: 1, state: 1, delta: 1, priv: 1, nack: 1, ack: 1, hb: 1, tick: 1, phase: 1, 'switch': 1, kicked: 1, rekey: 1, close: 1, fair: 1, x: 1, react: 1, th: 1 };
+    var HOST_EV = { hello: 1, welcome: 1, deny: 1, roster: 1, state: 1, delta: 1, priv: 1, nack: 1, ack: 1, hb: 1, tick: 1, phase: 1, 'switch': 1, kicked: 1, rekey: 1, close: 1, fair: 1, x: 1, react: 1, th: 1, refuse: 1 };
     var PLAIN_H = { hello: 1, deny: 1, welcome: 1, rekey: 1 };
     var T_EV = { hb: 1, hello: 1, tick: 1 };
 
@@ -640,6 +641,8 @@
         T.onG(function (env) { self._rxG(env); });
         T.onStatus(function (ok) {
             self.emit('net', { ok: ok });
+            /* [+ 2026-10-01] 소켓이 다시 붙은 시각 — 그 전까지 아무것도 못 들었으니 방장 감시 시계를 여기서 다시 잰다 */
+            if (ok) self._netOkAt = now(); else self._netDownAt = now();
             if (ok && self._state === 'member') {
                 if (self.isHost) self._flushState(true);
                 else self._snapReq(true);
@@ -707,7 +710,10 @@
     Room.prototype._guestH = async function (env) {
         if (this._state === 'joining') { if (this._joinW) this._joinW(env); else if (this._jbuf && this._jbuf.length < 64) this._jbuf.push(env); return; }
         if (this._state !== 'member') return;
-        if (!(await verifyStr(this._hostPk, hSigStr(this.code, env), env.z))) { STATS.bad++; return; }
+        if (!(await verifyStr(this._hostPk, hSigStr(this.code, env), env.z))) {
+            if (this._prevHost && await this._prevHostAlive(env)) return this._revertHost('host still alive');
+            STATS.bad++; return;
+        }
         if (env.ep < this.ep) return;                        /* 옛 epoch 재생 */
         if (env.ep > this.ep) {                               /* 같은 키의 새 epoch = 방장 재개 */
             this.ep = env.ep; this._lastS = null; this._lastT = 0; this._buf = {}; this._gaps = [];
@@ -957,30 +963,57 @@
         this._hbX = {}; this._hbSoon = 0; this._lastGHb = now();
         this._gsend('hb', d);
     };
+    /* ── 깨어남 (2026-10-01, 요트 에이전트 보고) ──────────────────────────
+       폰 백그라운드·탭 얼림으로 30초 넘게 멈췄다 돌아온 기기는 그동안 아무것도 못 들었다. 예전엔 깨어난 첫 틱에
+       dt(마지막 방장 신호부터) 가 12·20·30초를 한꺼번에 넘어 곧바로 승계를 시도했고, _peerAlive 가 자기 자신만 '살아 있음'으로
+       쳐서(남들은 얼기 전 기록이라 죽은 것으로 보임) 멀쩡한 방장을 밀어냈다. 이제:
+         ① 깨어남 = 틱 사이 공백 > 3초 · 숨김 3초 넘은 뒤 복귀 · 소켓 재연결. 감시 시계는 max(마지막 방장 신호, 깨어남, 재연결) 부터 다시 잰다
+         ② 소켓이 끊긴 동안은 승계하지 않는다(들을 수도 말할 수도 없다)
+         ③ 깨어난 뒤 한동안(피어 창) 나는 후보 맨 뒤 · 깨어난 뒤 아직 못 들어 본 피어는 살아 있다고 본다
+         ④ 원방장은 최근 20초 안에 다른 멤버 신호를 들었으면(자기가 끊긴 쪽이 아니면) 강등을 거부하고 상태를 다시 방송
+         ⑤ 승계했거나 승계를 받아들인 기기가 2분 안에 원방장 키로 서명된 '더 새' 봉투를 받으면 원방장으로 되돌아간다 */
+    Room.prototype._noteWake = function (why, gap) {
+        this._wakeAt = now();
+        dbg('wake', why, gap);
+        if (!this.isHost && this._state === 'member') this._resync(gap || 0);
+    };
+    Room.prototype._recentlyCut = function (win) {
+        var ref = Math.max(this._wakeAt || 0, this._netOkAt && this._netDownAt ? this._netOkAt : 0);
+        return !!ref && now() - ref < win;
+    };
     Room.prototype._guestTick = function () {
         if (this.isHost || this._left || this._state !== 'member') return;
         var t = now();
+        var gap = this._tickAt ? t - this._tickAt : 0; this._tickAt = t;
+        if (gap > TM.wakeGap) this._noteWake('timer', gap);
         if (t - this._lastGHb >= this._hbInterval() || (this._hbSoon && t >= this._hbSoon)) this._sendGHb();
-        var mult = this._hostHidden ? 2 : 1, dt = t - this._lastHostAt;
+        var base = Math.max(this._lastHostAt, this._wakeAt || 0, this._netDownAt ? (this._netOkAt || 0) : 0);
+        var netOk = !this._T || this._T.ok();
+        var mult = this._hostHidden ? 2 : 1, dt = t - base;
         if (dt >= TM.wd1 * mult && this._wd < 1) { this._wd = 1; this.emit('hostlost', { level: 1 }); this._snapReq(true); }
         if (dt >= TM.wd2 * mult && this._wd < 2) { this._wd = 2; this.emit('hostlost', { level: 2 }); }
-        if (dt >= TM.wd3 * mult && this._wd >= 2) {
+        if (dt >= TM.wd3 * mult && this._wd >= 2 && netOk) {
             if (this._migratable()) this._tryTakeover();
             else if (this._wd < 3) { this._wd = 3; this.emit('hostlost', { level: 3 }); }
         }
         if (dt >= TM.wdEnd && !this._migratable()) this._closedBy('host_gone');
     };
+    Room.prototype._peerWin = function () { var S = this._S; return S && S.phase === 'playing' ? 25000 : 50000; };
     Room.prototype._peerAlive = function (p) {
         if (p === this.me.pid) return true;
-        var pr = this._peer[p], S = this._S;
-        var win = S && S.phase === 'playing' ? 25000 : 50000;
-        return !!pr && now() - pr.t < win;
+        var pr = this._peer[p], win = this._peerWin(), t = now();
+        if (pr && t - pr.t < win) return true;
+        /* 내가 깨어난 뒤 아직 못 들어 본 피어 = 모른다 → 살아 있다고 본다(얼기 전 기록으로 죽었다고 단정하지 않는다) */
+        var w = this._wakeAt || 0;
+        return !!pr && pr.t !== 0 && pr.t <= w && t - w < win;
     };
     Room.prototype._tryTakeover = function () {
         var S = this._S, hm = this._hostMember(), self = this;
         if (!S || this._takeBy) return;
         var dead = this._deadCand || (this._deadCand = {});
         var cands = (S.succ || []).filter(function (p) { return (!hm || p !== hm.p) && !dead[p] && self._member(p) && self._peerAlive(p); });
+        /* 방금 끊겼다 돌아온 기기는 후보 맨 뒤 — 다른 후보가 10초씩 나서지 않을 때만 차례가 온다 */
+        if (cands.length > 1 && this._recentlyCut(this._peerWin()) && cands[0] === this.me.pid) cands = cands.slice(1).concat([this.me.pid]);
         if (!cands.length) { if (this._wd < 3) { this._wd = 3; this.emit('hostlost', { level: 3 }); } return; }
         if (cands[0] === this.me.pid) { this._becomeHost({}); return; }
         /* 앞 후보가 10초 안에 나서지 않으면 죽은 것으로 보고 다음으로 */
@@ -1526,6 +1559,8 @@
     Room.prototype._hostTick = function () {
         var H = this._H; if (!H || this._left) return;
         var t = now(), n = this._humans().length - 1;
+        var gap = this._tickAt ? t - this._tickAt : 0; this._tickAt = t;
+        if (gap > TM.wakeGap) this._noteWake('host timer', gap);
         var iv = n > 0 ? TM.hostHb : TM.hostHbAlone;
         if (t - H.lastHb >= iv || (this._hbSoon && t >= this._hbSoon)) this._sendHostHb();
         if (H.dirty && t - H.saveT > 1000) this._save();
@@ -1696,10 +1731,30 @@
         this.emit('pending', this.pending());
     };
     Room.prototype.rotateLink = function () { hostOnly(this); this._H.tok = rid(16); this.setState(null); this._dirty(); return this.inviteUrl(); };
+    /* 방장이 멀쩡한가(④): 최근 20초 안에 (승계를 선언한 사람 말고) 다른 멤버의 서명 봉투를 들었고, 방금 깨어난 게 아니고, 소켓이 살아 있다 */
+    Room.prototype._hostHealthy = function (exceptP) {
+        var H = this._H, t = now(); if (!H) return false;
+        if (this._wakeAt && t - this._wakeAt < TM.wd3) return false;
+        if (this._T && !this._T.ok()) return false;
+        return Object.keys(H.members).some(function (q) { var mb = H.members[q]; return q !== exceptP && !mb.bye && t - mb.seen < TM.wd2; });
+    };
+    Room.prototype._refuseTakeover = function (p) {
+        var t = now();
+        if (this._refusedAt && t - this._refusedAt < 1500) return;
+        this._refusedAt = t;
+        dbg('takeover refused (host alive)', p);
+        /* 서명된 거부 — 승계자와 그를 따른 기기만 이걸 보고 되돌아간다(평범한 hb 로는 되돌리지 않는다: 진짜로 끊겼던
+           원방장이 돌아와 강등 처리 전에 보낸 hb 로 방을 되찾는 일(되찾기 금지 §6.0.6-5)을 막는다) */
+        this._hsend('refuse', { p: p }, { reliable: true });
+        this.setState(null, { full: true });
+        this._sendHostHb();
+        this._sendHello();
+    };
     Room.prototype.transferHost = function (pid) {
         hostOnly(this);
         var m = this._member(pid), self = this;
         if (!m || m.r === 'bot' || pid === this.me.pid || m.c === 'off' || !this._migratable()) return false;
+        this._H.thTo = pid;
         var ep = this.ep, succ = [pid];
         signStr(this._H.sk, succMsg(this.code, ep, succ)).then(function (z) { self._hsend('th', { succ: succ, ep: ep, z: z }, { to: pid, reliable: true }); });
         return true;
@@ -1721,6 +1776,8 @@
             link = { succ: S.succ, ep: S.succe, z: S.succz, npk: { sig: dev.sig.pub, dh: dev.dh.pub } };
         }
         var oldHost = this._hostMember(), ep2 = Math.max(now(), this.ep + 1), fromSeq = S.seq;
+        if (!o.transfer) this._prevHost = { pk: this._hostPk, dh: this._hostDh, ep: this.ep, pid: oldHost && oldHost.p, chainLen: (this._chain || []).length, lastS: this._lastS, lastT: this._lastT, at: now() };
+        else this._prevHost = null;
         this._takeBy = this.me.pid;
         this._prevHostPk = this._hostPk; this._prevHostDh = this._hostDh; this._prevEp = this.ep;
         this._chain = (this._chain || []).concat([link]);
@@ -1778,10 +1835,13 @@
             /* 나는 방장인데 누군가 승계를 선언: 원방장이면 강등, 승계 방장이면 더 앞 순번에게 양보 */
             var myIdx = L.succ.indexOf(this.me.pid);
             if (this._takeBy === this.me.pid && myIdx >= 0 && myIdx < idx) return;
+            /* ④ 내가 넘겨준 게 아니고, 나는 멀쩡하다(다른 멤버를 듣고 있다) → 끊긴 쪽은 저 사람. 거부하고 살아 있음을 알린다 */
+            if (this._H && this._H.thTo !== p && this._takeBy !== this.me.pid && this._hostHealthy(p)) return this._refuseTakeover(p);
             dbg('demote: takeover by', p);
             return this._demote(p, d);
         }
         if (!transfer && this._wd < 2) return;              /* 나는 방장이 아직 들린다 → 무시 */
+        if (transfer) d.fromTransfer = true;
         if (this._takeBy && this._takeBy !== p) {
             var cur = L.succ.indexOf(this._takeBy);
             if (cur >= 0 && cur <= idx) return;
@@ -1790,6 +1850,8 @@
     };
     Room.prototype._acceptHost = function (p, d) {
         var S = this._S, L = d.link, self = this;
+        var oh = this._hostMember();
+        if (!this.isHost && !(d && d.fromTransfer)) this._prevHost = { pk: this._hostPk, dh: this._hostDh, ep: this.ep, pid: oh && oh.p, chainLen: (this._chain || []).length, lastS: this._lastS, lastT: this._lastT, at: now() };
         this._takeBy = p;
         this._hostPk = L.npk.sig; this._hostDh = L.npk.dh;
         this._chain = (this._chain || []).concat([L]);
@@ -1815,7 +1877,38 @@
         /* 새 방장에게 알려진 pid 로 다시 인사(복귀) */
         this._rejoin();
     };
+    /* ⑤ 원방장이 아직 살아 있다: 2분 안에 원방장 키로 서명된 '거부(refuse)' 봉투(같은 ep, 승계 전에 본 것보다 새 순번) */
+    Room.prototype._prevHostAlive = async function (env) {
+        var P = this._prevHost;
+        if (!P || env.e !== 'refuse' || now() - P.at > TM.prevHostWin || env.ep !== P.ep) return false;
+        var newer = env.t != null ? env.t > (P.lastT || 0) : (P.lastS == null || env.s > P.lastS);
+        if (!newer) return false;
+        return verifyStr(P.pk, hSigStr(this.code, env), env.z);
+    };
+    Room.prototype._revertHost = function (why) {
+        var P = this._prevHost; if (!P) return;
+        this._prevHost = null;
+        var wasHost = this.isHost, S = this._S;
+        dbg('revert to original host', why, P.pid);
+        if (wasHost) {
+            this._clearTimers();
+            this.isHost = false; this._H = null; this._offerUntil = 0; this._prevHostPk = null;
+            ssSet('lpr_host_' + this.code, null);
+        }
+        this._hostPk = P.pk; this._hostDh = P.dh; this.ep = P.ep;
+        this._chain = (this._chain || []).slice(0, P.chainLen); if (!this._chain.length) this._chain = null;
+        this._takeBy = null; this._lastS = null; this._buf = {}; this._lastT = 0; this._gaps = [];
+        this._lastHostAt = now(); this._wd = 0; this._deadCand = {}; this._waitCand = null;
+        if (S) S.roster.forEach(function (m) { if (m.r === 'host' && m.p !== P.pid) m.r = 'player'; if (m.p === P.pid) { m.r = 'host'; m.c = 'on'; } });
+        this._syncMe();
+        if (wasHost) { this.emit('demoted', { by: P.pid, revert: true }); this._guestLoops(); }
+        this.emit('takeover', { pid: P.pid, ep: P.ep, revert: true });
+        this.emit('hostback');
+        setActive({ code: this.code, role: 'guest', gameId: S && S.gameId, want: this._want, inv: this._inv });
+        if (wasHost) this._rejoin(); else this._snapReq(true);
+    };
     Room.prototype._hostSeesH = async function (env) {
+        if (this._prevHost && await this._prevHostAlive(env)) return this._revertHost('host still alive (taker yields)');
         /* 방장이 남의 'h' 를 듣는 경우: 내가 끊긴 사이 누군가 승계했다 → 게스트로 합류 */
         /* (a) 다른 기기 키로 서명된 더 높은 epoch 방송 = 누가 승계했다(내가 끊겨 있던 사이) →
                hello 를 청해 승계 체인을 받고 (b) 에서 게스트로 합류. 되찾기 없음(§6.0.6-5) */
@@ -1834,6 +1927,8 @@
             if (h && h.chain && h.rpk && this._rpk && h.rpk.sig === this._rpk.sig && h.hk && h.hk.sig !== this._hostPk) {
                 var fk = await chainKey(this.code, h.rpk, h.chain);
                 if (fk && fk === h.hk.sig && await verifyStr(fk, hSigStr(this.code, env), env.z)) {
+                    var sp = await pidOf(fk);
+                    if (this._H && this._H.thTo !== sp && this._takeBy !== this.me.pid && this._hostHealthy(sp)) { this._refuseTakeover(sp); return; }
                     dbg('hello chain shows successor → demote');
                     var last = h.chain[h.chain.length - 1];
                     this._chain = h.chain.slice(0, -1);
@@ -2256,8 +2351,10 @@
             var vis = G.document.visibilityState !== 'hidden';
             if (!vis) hidAt = now();
             var r = _current; if (!r || r._left || r._state !== 'member') return;
+            var hidMs = vis && hidAt ? now() - hidAt : 0;
+            if (vis && hidMs > TM.wakeGap) r._wakeAt = now();      /* [+] 오래 숨었다 돌아옴 = 깨어남(감시 시계 다시) */
             if (r.isHost) { r._sendHostHb(); r._save(); }
-            else if (vis) r._resync(hidAt ? now() - hidAt : 0);   /* 복귀 = 시계 다시 맞추기(§6.0.3) */
+            else if (vis) r._resync(hidMs);   /* 복귀 = 시계 다시 맞추기(§6.0.3) */
             else r._sendGHb();
         });
         G.addEventListener('pagehide', function () {
@@ -2478,6 +2575,13 @@
    2026-09-30  통합 2차(턴제↔공통 UI): 방장 room.me 동기화 — create 직후와 방장 state 방송마다 _syncMe().
                예전엔 방장 me.role 이 첫 roster 방송(명단 변화) 전까지 'player', me.seat 는 시작 때 재배치돼도 옛 값이었다.
                영향: UI '내 차례' 알림(me.seat) · 게스트 hb 주기(_hbInterval 은 게스트 전용이라 무관).
+   2026-10-01  실전 보강(fx-live): S6 서명 검증 뒤 처리량 차감(+검증 대기 상한·hello_req 전용 버킷·재생 floor·join 재전송 welcome) ·
+               Web Locks 없는 브라우저 폴백(BroadcastChannel → storage 이벤트) · 레거시 채널 탐색 토픽별 직렬화(C14 실버그) ·
+               시계 양방향 최소 필터 · [+] resolve(input,{v2Only,ms}) · [+] 방장 이벤트 'refuse'.
+               깨어남 승계 버그(요트 에이전트 보고): 30초 넘게 멈췄다 돌아온 게스트가 방장 신호를 받기 전에 혼자 승계하던 것 →
+               ① 깨어남(틱 공백 >3s·숨김 복귀·소켓 재연결)부터 감시 시계 다시 ② 소켓 끊긴 동안 승계 안 함 ③ 깨어난 기기는 후보 맨 뒤,
+               못 들어 본 피어는 살아 있다고 봄 ④ 원방장은 다른 멤버를 듣고 있으면 강등 거부 + 서명된 refuse ⑤ refuse 를 받은
+               승계자·추종자는 원방장으로 되돌아감(평범한 hb 로는 되돌리지 않음 — 되찾기 금지 유지). 회귀: C8w·C8w2·C8r, C8·CX2·T1j·T9 유지.
    결정: supabase realtime {worker:true} 는 채택 보류 — 방 페이지는 getSupabase() 공용 클라이언트(소켓 1개)를
          재사용하고, 워커 옵션은 클라이언트 생성 시점에만 줄 수 있어 공용 클라이언트와 충돌한다. 헤드리스 하네스로는
          백그라운드 스로틀을 재현할 수 없어 실기기 확인 항목으로 넘긴다(§6.0.3 소켓 항목).

@@ -519,7 +519,8 @@ async function gummy(ctx) {
 }
 
 /* ================================================================
-   V1 회귀 — 플래그 없이 열면 기존(v1) 경로 그대로: v2 비활성·예외 0
+   V1 회귀 — 롤백 경로(?rooms=v1, DESIGN §12)로 열면 기존(v1) 경로 그대로: v2 비활성·예외 0
+   (2026-10-01: 보드게임 6종은 2026-09-30 부터 표 기본값이 v2 — '플래그 없음 = v1' 가정이 낡아 늘 실패하던 것을 롤백 링크 검사로 바꿈)
    ================================================================ */
 async function v1smoke(ctx) {
     const { E, ok } = ctx;
@@ -527,21 +528,21 @@ async function v1smoke(ctx) {
     const res = {}; const pages = [];
     for (const [g, hk] of games) {
         const P = await gamePage(E, 'v1' + g.slice(0, 3), { nick: 'Zed' }); pages.push(P);
-        await P.nav('/games/' + g + '/index.html');
+        await P.nav('/games/' + g + '/index.html?rooms=v1');
         await sleep(2500);
         res[g] = await P.ev(`({hook:!!window.${hk},v2:!!(window.${hk}&&${hk}.on),core:typeof LpRooms,v1:typeof LpRoom})`);
         res[g].exc = P.exc.slice(0, 2);
     }
     await closePages(E, pages);
-    ok('V1', Object.values(res).every(x => x.hook && !x.v2 && x.core === 'undefined' && !x.exc.length), '플래그 없음 = v1 경로(v2 스크립트 미로드·예외 0) — 6종', res);
+    ok('V1', Object.values(res).every(x => x.hook && !x.v2 && x.core === 'undefined' && !x.exc.length), '롤백 링크 ?rooms=v1 = v1 경로(v2 스크립트 미로드·예외 0) — 6종', res);
 }
 
-/* v1 윷 기능 회귀(플래그 없음) — 방 만들기 → PIN 링크 참가 → 준비 → 시작 */
+/* v1 윷 기능 회귀(롤백 ?rooms=v1) — 방 만들기 → PIN 링크 참가 → 준비 → 시작 */
 async function v1yut(ctx) {
     const { E, ok } = ctx;
     const H = await gamePage(E, 'v1yH', { nick: 'Ann' }), Gp = await gamePage(E, 'v1yG', { nick: 'Bob' });
     try {
-        await H.nav('/games/yut/index.html'); await sleep(1500);
+        await H.nav('/games/yut/index.html?rooms=v1'); await sleep(1500);
         await H.ev(`document.getElementById('btnModeOnline').click(),document.getElementById('btnCreate').click(),1`);
         await H.wait(`!document.getElementById('scrLobby').classList.contains('hide')&&/[0-9]{4}/.test(document.getElementById('lbPin').textContent)`, 20000);
         const code = await H.ev(`document.getElementById('lbCode').textContent`), pin = (await H.ev(`document.getElementById('lbPin').textContent`)).replace(/\D/g, '');
@@ -556,7 +557,8 @@ async function v1yut(ctx) {
         ok('V1y', can && st.every(x => x.ph === 'play' && !x.v2) && st[0].role === 'host' && st[1].role === 'guest', 'v1 윷(기존 lpRoom 경로) — 만들기·PIN 참가·준비·시작 그대로 동작', { code, st });
         const exc = [H, Gp].map(p => p.exc.slice(0, 2)).filter(x => x.length);
         ok('V1yz', !exc.length, 'v1 윷 예외 0', exc);
-    } finally { await closePages(E, [H, Gp]); }
+    } catch (e) { ok('V1y', false, 'v1 윷(롤백 경로) crashed', String(e.message || e).slice(0, 400)); }
+    finally { await closePages(E, [H, Gp]); }
 }
 
 export async function all(ctx) {

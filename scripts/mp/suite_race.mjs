@@ -44,6 +44,12 @@ export async function dev(E, label, o = {}) {
 }
 export async function closeAll(E, pages) { for (const p of pages) { try { await p.close(); } catch (_) {} try { await E.disposeContext(p.ctx); } catch (_) {} } }
 
+/* 진단: '판 시작' 대기가 시간 초과되면 기기별 방·커널 상태를 남긴다(부하 탓인지 유실 탓인지 가르기) */
+const DIAG = `(()=>{try{const r=LpRoomsUI.room(),S=r&&r.state(),g=S&&S.game,i=LpRoomsRace.info(),st=LpRooms.stats();return {role:r&&r.me.role,ph:S&&S.phase,seq:S&&S.seq,gst:g&&g.st,heat:g&&g.heat,ent:g&&g.ent&&g.ent.length,mine:!!(g&&g.ent&&g.ent.indexOf(r.me.pid)>=0),run:i.st,runHeat:i.heat,t0In:g&&g.t0?Math.round(g.t0-r.clock()):null,lastS:r._lastS,buf:Object.keys(r._buf||{}).length,hostAgo:Date.now()-r._lastHostAt,wd:r._wd,bad:st.bad,shed:st.shed,rate:st.rate,off:Math.round(r._off||0),vq:r._vqc&&r._vqc.n}}catch(e){return 'diag err '+e.message}})()`;
+export async function waitPlay(pages, cond, ms, tag) {
+    try { return await Promise.all(pages.map(p => p.wait(cond, ms))); }
+    catch (e) { const d = await Promise.all(pages.map(p => p.ev(DIAG).catch(x => 'ERR ' + x.message))); console.log('DIAG ' + tag + ' ' + JSON.stringify(pages.map((p, k) => [p.label, d[k]]))); throw e; }
+}
 const V2READY = `document.readyState==='complete'&&window.LpRoomsUI&&!/stub/.test(LpRoomsUI.version)&&window.LpRooms&&LpRooms.getAdapter&&!!LpRooms.getAdapter()`;
 const RACEREADY = V2READY + `&&!!window.LpRoomsRace`;
 
@@ -70,11 +76,21 @@ async function allEq(pages, expr, ms = 15000) {
     return { ok: false, vals };
 }
 /* 방장 시작 — 대기실의 [▶ 시작] 버튼(실제 UI 경로). 없으면 API */
-async function hostStartBtn(H) {
+/* 2026-10-01: room.canStart() 는 준비 의도가 닿는 즉시 true 지만 대기실 [▶] 은 roster 이벤트(100ms 뭉침) 뒤에야 활성 →
+   그 사이 누르면 disabled 버튼 click() 은 아무 일도 안 하는데 true 를 돌려줘 판이 영영 시작되지 않았다(R·R7 간헐 실패의 원인 —
+   진단: 방장 phase 'lobby'·game 없음, 게스트는 정상 수신). 이제 '활성 버튼'을 기다려 누르고, 시작을 확인한다 */
+const START_BTN = `[...document.querySelectorAll('.lpr-lobby .lpr-btn.go')].find(x=>x.textContent.includes('▶')&&!x.disabled&&x.getBoundingClientRect().width>0)`;
+/* 대기실 [▶] — 활성이 될 때까지 기다렸다 누른다(누름 성공 여부) */
+async function clickStart(H) {
     await H.wait(`LpRoomsUI.room().canStart()`, 10000);
-    const clicked = await H.click('.lpr-lobby .lpr-btn.go', '▶');
-    if (!clicked) await H.ev(`LpRoomsRace.hostStart(LpRoomsUI.room())`);
-    return clicked;
+    const enabled = await H.wait(`!!${START_BTN}`, 5000).then(() => true).catch(() => false);
+    return enabled && H.ev(`(()=>{const b=${START_BTN};if(!b)return false;b.click();return true})()`);
+}
+async function hostStartBtn(H) {
+    const clicked = await clickStart(H);
+    const started = clicked && await H.wait(`(()=>{const S=LpRoomsUI.room().state();return S.phase!=='lobby'||!!(S.game&&S.game.st==='run')||LpRoomsRace.info().st==='wait'})()`, 6000).then(() => true).catch(() => false);
+    if (!started) await H.ev(`LpRoomsRace.hostStart(LpRoomsUI.room())`);
+    return clicked && started;
 }
 const INFO = `(()=>{const i=LpRoomsRace.info();return {st:i.st,heat:i.heat,seed:i.seed,t0:i.t0,skew:i.skew,ts:i.trueStart,g:i.g,fin:i.fin,card:i.card,chip:i.chip,res:i.game&&i.game.res?i.game.res.map(r=>r.p+':'+r.s).join(','):null,gst:i.game&&i.game.st,ent:i.game&&i.game.ent}})()`;
 
@@ -97,7 +113,7 @@ export async function race(ctx) {
         await sleep(2500);   /* 시계 에코 표본(합류 직후 15초 가속) */
         await ready(G1); await ready(G2);
         const btn = await hostStartBtn(H);
-        await Promise.all(pages.map(p => p.wait(`LpRoomsRace.info().st==='play'`, 20000)));
+        await waitPlay(pages, `LpRoomsRace.info().st==='play'`, 20000, 'R-heat1');
         const inf = await Promise.all(pages.map(p => p.ev(INFO)));
         /* R1 — 같은 시드 = 같은 판 */
         if (run1(only, 'R1')) {
@@ -158,7 +174,7 @@ export async function race(ctx) {
             await G3.wait(`LpRoomsUI.room().me.role==='player'&&LpRoomsUI.room().state().phase==='lobby'`, 8000);
             await ready(G1); await ready(G2); await ready(G3);
             await hostStartBtn(H);
-            await Promise.all([H, G1, G2, G3].map(p => p.wait(`LpRoomsRace.info().st==='play'&&LpRoomsRace.info().heat===2`, 20000)));
+            await waitPlay([H, G1, G2, G3], `LpRoomsRace.info().st==='play'&&LpRoomsRace.info().heat===2`, 20000, 'R-heat2');
             const h2 = await Promise.all([H, G1, G2, G3].map(p => p.ev(INFO)));
             const pr2 = await Promise.all([H, G3].map(p => p.ev(`JSON.stringify(LpRooms.getAdapter().race.probe(40))`)));
             ok('R5', j3.role === 'spec' && i3.i.st === null && /👀/.test(i3.i.chip) && resOk && h2.every(i => i.heat === 2 && i.ent.length === 4) && pr2[0] === pr2[1] && h2[0].seed !== inf[0].seed,
@@ -201,7 +217,7 @@ export async function games(ctx) {
             await sleep(1200);
             await ready(G);
             await hostStartBtn(H);
-            await Promise.all([H, G].map(p => p.wait(`LpRoomsRace.info().st==='play'`, 20000)));
+            await waitPlay([H, G], `LpRoomsRace.info().st==='play'`, 20000, 'R7-' + gm.id);
             const pr = await Promise.all([H, G].map(p => p.ev(`JSON.stringify(LpRooms.getAdapter().race.probe(100))`)));
             const n = JSON.parse(pr[0]).length;
             ok('R7:' + gm.id, pr[0] === pr[1] && n >= 40, gm.id + ': same seed → identical first ' + n + ' ' + gm.note + ' (host vs guest)', { n, head: JSON.parse(pr[0]).slice(0, 6) });
@@ -263,7 +279,7 @@ export async function bridges(ctx) {
             await G.nav(gameUrl('quiz', c), V2READY + `&&LpRoomsUI.room&&!!LpRoomsUI.room()`, 25000);
             await G.ev(`LpRoomsUI.room().intent('ready',true)`);
             await H.wait(`LpRoomsUI.room().roster().length===2&&LpRoomsUI.room().canStart()`, 8000);
-            await H.click('.lpr-lobby .lpr-btn.go', '▶');
+            await clickStart(H);
             await H.wait(`!!document.querySelector('#qopen')`, 10000);
             await H.shot(path.join(SHOTS, 'quiz_host_setup.png'));
             await H.click('#qopen');
@@ -293,7 +309,7 @@ export async function bridges(ctx) {
             await G.nav(gameUrl('dodge', c), V2READY + `&&LpRoomsUI.room&&!!LpRoomsUI.room()`, 40000);
             await G.ev(`LpRoomsUI.room().intent('ready',true)`);
             await H.wait(`LpRoomsUI.room().roster().length===2&&LpRoomsUI.room().canStart()`, 8000);
-            await H.click('.lpr-lobby .lpr-btn.go', '▶');
+            await clickStart(H);
             await Promise.all([H, G].map(p => p.wait(`SZX._R.code&&SZX._R.joined`, 15000)));
             const panelOpen = await G.ev(`!!(document.getElementById('szxPanel')&&document.getElementById('szxPanel').classList.contains('on'))`);
             await Promise.all([H, G].map(p => p.wait(`SZX.racing()`, 25000)));

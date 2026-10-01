@@ -90,7 +90,7 @@ export async function dev(E, label, o = {}) {
     };
     P.shot = async (file) => { const r = await c.send('Page.captureScreenshot', { format: 'png' }); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, Buffer.from(r.data, 'base64')); return file; };
     P.click = (sel, txt) => P.ev(`(()=>{const e=[...document.querySelectorAll(${J(sel)})].find(x=>!${J(txt || '')}||x.textContent.includes(${J(txt || '')}));if(!e)return false;e.click();return true})()`);
-    P.clickWhen = async (sel, txt, ms) => { await P.wait(`!![...document.querySelectorAll(${J(sel)})].find(x=>(!${J(txt || '')}||x.textContent.includes(${J(txt || '')}))&&x.getBoundingClientRect().width>0)`, ms || 8000); return P.click(sel, txt); };
+    P.clickWhen = async (sel, txt, ms) => { await P.wait(`!![...document.querySelectorAll(${J(sel)})].find(x=>(!${J(txt || '')}||x.textContent.includes(${J(txt || '')}))&&!x.disabled&&x.getBoundingClientRect().width>0)`, ms || 8000); return P.ev(`(()=>{const e=[...document.querySelectorAll(${J(sel)})].find(x=>(!${J(txt || '')}||x.textContent.includes(${J(txt || '')}))&&!x.disabled&&x.getBoundingClientRect().width>0);if(!e)return false;e.click();return true})()`); };
     P.ws = () => P.ev(`(()=>{var M=window.__ws||{};return {tx:M.tx|0,rx:M.rx|0,by:M.by||{},other:M.other||{},ms:Date.now()-(M.t0||Date.now())}})()`);
     P.wsReset = () => P.ev(`window.__wsReset&&window.__wsReset()`);
     /* 참가 지연: probing → member (핸드셰이크만) */

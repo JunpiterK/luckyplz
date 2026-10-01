@@ -203,6 +203,55 @@ export async function core(ctx) {
         ok('C8c', !!dem && (hv.match(/:host:/g) || []).length === 1, 'old host returns → joins as guest (no take-back)', hv);
     });
 
+    /* C8w·C8w2 (2026-10-01, 요트 에이전트 보고 회귀): 게스트(승계 1순위)가 30초 넘게 멈췄다(폰 백그라운드) 깨어나면
+       방장 신호를 받기도 전에 워치독이 12·20·30초를 한 번에 넘기고, 자기만 '살아 있음'으로 쳐서 혼자 승계 → 멀쩡한 방장을 밀어냈다.
+       C8w = 3대, 소켓은 살아 있음(멈춘 사이 메시지는 릴레이가 버림) · C8w2 = 2대, 깨어날 때 소켓이 끊겨 다시 붙음(폰 실제 상황) */
+    for (const [id, n, kill] of [['C8w', 2, false], ['C8w2', 1, true]]) {
+        if (!run1(only, id)) continue;
+        await withSetup(E, n, 'roulette', async (H, G) => {
+            const c = await create(H); for (const g of G) await join(g, c.url);
+            await sleep(1500);
+            const succ = await G[0].ev('T.room.state().succ');
+            const me = await G[0].ev('T.room.me.pid');
+            const lab = G[0].label;
+            await G[0].c.send('Debugger.enable'); await G[0].c.send('Debugger.pause');
+            relay.partition(lab);
+            await sleep(36000);
+            relay.partition(lab, false);
+            if (kill) relay.kill(lab);
+            await G[0].c.send('Debugger.resume').catch(() => {}); await G[0].c.send('Debugger.disable').catch(() => {});
+            await G[0].ev(`(document.dispatchEvent(new Event('visibilitychange')),1)`).catch(() => 0);
+            await sleep(15000);
+            const all = [H, ...G];
+            const v = await Promise.all(all.map(p => p.ev(`({host:T.room&&T.room.isHost,cur:!!LpRooms.current(),tk:T.count('takeover'),dem:T.count('demoted'),hostP:(T.room.roster().find(m=>m.r==='host')||{}).p,ep:T.room.ep})`).catch(e => ({ err: e.message.slice(0, 120) }))));
+            const hostPid = await H.ev('T.room.me.pid');
+            const back = await H.ev(`(T.room.roster().find(m=>m.p===${J(me)})||{}).c`);
+            const r = await G[0].ev(`T.room.intent('inc',1)`).catch(e => ({ ok: false, reason: e.message.slice(0, 80) }));
+            const eq = await allEqual(all, `String(T.room.state().game&&T.room.state().game.n)`, 8000);
+            ok(id, succ[0] === me && v[0].host === true && v.every(x => x.cur && x.tk === 0 && x.hostP === hostPid) && !v[1].host && back === 'on' && r.ok && eq.ok && eq.v === '1',
+                `guest (first successor) frozen 36s ${kill ? '+ socket dropped on wake, ' : ''}(${n + 1} devices) wakes up → waits for the host, no takeover, original host keeps the room, guest back in its seat`,
+                { views: v.map(x => Object.assign({}, x, { hostP: x.hostP === hostPid ? 'H' : x.hostP })), back, intent: r, n: eq.v || eq.vals });
+        });
+    }
+
+    /* C8r (2026-10-01): 마지막 안전망 — 그래도 누가 멀쩡한 방장을 두고 승계를 선언하면(예: 다른 원인으로 감시가 오판)
+       원방장은 강등을 거부하고 서명된 refuse 를 보내며, 승계자는 원방장으로 되돌아가 게스트로 다시 들어온다 */
+    if (run1(only, 'C8r')) await withSetup(E, 2, 'roulette', async (H, G) => {
+        const c = await create(H); for (const g of G) await join(g, c.url);
+        await sleep(1500);
+        await H.ev(`T.room.setState(S=>{S.game={n:5}})`); await sleep(600);
+        const hostPid = await H.ev('T.room.me.pid');
+        const forced = await G[0].ev(`(T.room._becomeHost({}),1)`);
+        await sleep(5000);
+        const v = await Promise.all([H, ...G].map(p => p.ev(`({host:T.room.isHost,hostP:(T.room.roster().find(m=>m.r==='host')||{}).p,tk:T.ev.filter(x=>x.e==='takeover').map(x=>x.x&&x.x.revert?'revert':'take').join(','),cur:!!LpRooms.current()})`)));
+        const r = await G[1].ev(`T.room.intent('inc',1)`);
+        const r0 = await G[0].ev(`T.room.intent('inc',1)`);
+        const eq = await allEqual([H, ...G], `String(T.room.state().game&&T.room.state().game.n)`, 8000);
+        const roles = await H.ev(`T.room.roster().map(m=>m.r+':'+m.c).sort().join(',')`);
+        ok('C8r', forced && v[0].host && v.every(x => x.cur && x.hostP === hostPid) && !v[1].host && !v[2].host && v[1].tk === 'take,revert' && v[0].tk === '' && v[2].tk === '' && r.ok && r0.ok && eq.ok && eq.v === '7' && roles === 'host:on,player:on,player:on',
+            'forced takeover while the host is healthy → host refuses (signed), taker yields back to guest, room & game intact', { views: v.map(x => Object.assign({}, x, { hostP: x.hostP === hostPid ? 'H' : x.hostP })), intents: [r.ok, r0.ok], n: eq.v || eq.vals, roles });
+    });
+
     if (run1(only, 'C9')) await withSetup(E, 2, 'roulette', async (H, G) => {
         const c = await create(H); for (const g of G) await join(g, c.url);
         await G[0].ev(`T.room.intent('pick',{key:'char',val:'b'})`);
