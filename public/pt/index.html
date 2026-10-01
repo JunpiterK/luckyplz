@@ -1775,7 +1775,22 @@ function init() {
        serving and they need to hard-refresh. */
     const createBtn = document.getElementById('lpHomeCreateBtn');
     if (createBtn) {
-        createBtn.addEventListener('click', () => {
+        /* 2026-10-02: Create 도 Rooms v2 시트로(설계 §4.4) — 게임을 고르면 그 게임 페이지에서 v2 방이 열리고,
+           [먼저 모이기]는 대기실 방. Join 과 같은 방식으로 누르는 순간에만 싣고, 4초 안에 못 오면 예전 v1 창 */
+        createBtn.addEventListener('pointerdown', () => { try { if (typeof window.lpRoomsLoad === 'function') window.lpRoomsLoad().catch(() => {}); } catch (_) {} }, { once: true });
+        createBtn.addEventListener('click', (ev) => {
+            if (typeof window.lpRoomsLoad !== 'function') return v1Create();
+            let done = false;
+            const fb = () => { if (done) return; done = true; v1Create(); };
+            const to = setTimeout(fb, 4000);
+            window.lpRoomsLoad().then((UI) => {
+                if (done) return;
+                clearTimeout(to);
+                if (UI && typeof UI.openCreate === 'function' && !/stub/.test(UI.version || '')) { done = true; UI.openCreate({ pick: true }); }
+                else fb();
+            }, () => { clearTimeout(to); fb(); });
+        });
+        function v1Create() {
             let tries = 0;
             (function wait(){
                 if (window.LpRoom && typeof window.LpRoom.showHostModal === 'function') {
@@ -1787,7 +1802,7 @@ function init() {
                     alert(ko ? '연결 모듈을 불러오지 못했어요. 새로고침해주세요.' : 'Connection module failed to load. Please refresh.');
                 }
             })();
-        });
+        }
     }
 
     const joinBtn = document.getElementById('lpHomeJoinBtn');

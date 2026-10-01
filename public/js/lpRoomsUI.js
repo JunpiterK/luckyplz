@@ -822,7 +822,9 @@
     }
     /* 허브·그리드에서 고른 게임으로 방 만들기 */
     function goCreate(id) {
-        if (id === 'lobby' || id === pageGid()) { openCreate({ gameId: id }); return; }
+        if (id === pageGid()) { openCreate({ gameId: id }); return; }
+        /* 홈 등 허브 밖에서 [먼저 모이기] → 대기실 페이지에서 만든다(그래야 새로고침·재입장 때 방을 이어받는다) */
+        if (id === 'lobby') { location.assign('/lobby/?lpr=new'); return; }
         var path = G.LpGames && G.LpGames.path(id);
         if (!path) return;
         location.assign(path + (v2ok(id) ? '?lpr=new' : ''));
