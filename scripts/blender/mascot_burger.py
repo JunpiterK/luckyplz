@@ -16,8 +16,9 @@
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- chef
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- guest
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- food
+  C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- icon   (접시·주문서용 60° 아이콘)
   (-- chef:idle,cheer 처럼 일부만) · MB_SAMPLES=24 로 시안
-출력: scripts/og-assets/burger/{chef,guest,food}/*.png + meta.json → python scripts/build_arcade_mascots.py burger
+출력: scripts/og-assets/burger/{chef,guest,food,icon}/*.png + meta.json → python scripts/build_arcade_mascots.py burger
 """
 import bpy
 import bmesh
@@ -180,7 +181,14 @@ def render_guest(sp, ex):
 
 
 # ════════════════════════ 재료 ════════════════════════
+# 2026-09-30 v3 — 운영자: "재료가 애매한 옆 각도라 한눈에 안 보인다. 확실하게 고쳐라."
+#  · food(쌓기용) — 옆 20° 부감은 유지(층 순서가 읽혀야 한다). 대신 얇던 양파·토마토를 두껍게,
+#    옆면 색을 재료마다 확 갈랐다(양파=자주 테, 토마토=진홍 껍질, 양상추=밝은 연두 프릴이 밖으로 늘어짐)
+#  · icon(접시·주문서용) — 60° 내려다보는 아이콘 뷰. 윗면이 전부 보여 0.3초 안에 구분된다.
+#    실루엣을 과장했다: 양상추=톱니 프릴 잎+잎맥, 토마토=씨방 4칸, 치즈=구멍 난 정사각+모서리 흘러내림,
+#    양파=겹친 링 셋(가운데가 뚫림), 패티=두꺼운 갈색+석쇠 자국.
 ELEV = math.radians(20)
+ICON_ELEV = math.radians(60)
 R_PX = 62.0                       # 게임의 버거 반지름(px) — LAYER_H 와 짝
 
 
@@ -189,7 +197,8 @@ def T_of(layer_h):
 
 
 FOOD = ['bunBottom', 'bunTop', 'patty', 'cheese', 'lettuce', 'tomato', 'onion']
-LAYER_H = dict(bunBottom=16, bunTop=26, patty=22, cheese=12, lettuce=16, tomato=10, onion=8)
+# 게임(public/games/burger) 의 LAYER_H 와 같아야 한다 — 양파 8→12, 토마토 10→13, 패티 22→24
+LAYER_H = dict(bunBottom=16, bunTop=26, patty=24, cheese=12, lettuce=16, tomato=13, onion=12)
 
 
 def ramp_mat(name, lo, hi, rough=0.35, coat=0.6):
@@ -217,6 +226,64 @@ def ramp_mat(name, lo, hi, rough=0.35, coat=0.6):
     return m
 
 
+def radial_mat(name, inner, outer, R, soft=0.03, rough=0.22, coat=0.9):
+    """오브젝트 좌표의 xy 반지름이 R 보다 크면 outer, 작으면 inner — 양파 링의 자주 겉껍질 / 흰 속"""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = rough
+    try:
+        b.inputs["Coat Weight"].default_value = coat
+        b.inputs["Coat Roughness"].default_value = 0.08
+    except Exception:
+        pass
+    tc = nt.nodes.new('ShaderNodeTexCoord')
+    vm = nt.nodes.new('ShaderNodeVectorMath')
+    vm.operation = 'MULTIPLY'
+    vm.inputs[1].default_value = (1.0, 1.0, 0.0)
+    ln = nt.nodes.new('ShaderNodeVectorMath')
+    ln.operation = 'LENGTH'
+    cr = nt.nodes.new('ShaderNodeValToRGB')
+    cr.color_ramp.elements[0].position = R - soft
+    cr.color_ramp.elements[0].color = (*inner, 1)
+    cr.color_ramp.elements[1].position = R + soft
+    cr.color_ramp.elements[1].color = (*outer, 1)
+    nt.links.new(tc.outputs['Object'], vm.inputs[0])
+    nt.links.new(vm.outputs['Vector'], ln.inputs[0])
+    nt.links.new(ln.outputs['Value'], cr.inputs[0])
+    nt.links.new(cr.outputs['Color'], b.inputs['Base Color'])
+    return m
+
+
+def noise_mat(name, dark, light, scale=14.0, bump=0.55, rough=0.4, coat=0.5, p0=0.35, p1=0.7):
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bs = nt.nodes["Principled BSDF"]
+    bs.inputs["Roughness"].default_value = rough
+    try:
+        bs.inputs["Coat Weight"].default_value = coat
+        bs.inputs["Coat Roughness"].default_value = 0.12
+    except Exception:
+        pass
+    nz = nt.nodes.new('ShaderNodeTexNoise')
+    nz.inputs['Scale'].default_value = scale
+    nz.inputs['Detail'].default_value = 6.0
+    cr = nt.nodes.new('ShaderNodeValToRGB')
+    cr.color_ramp.elements[0].position = p0
+    cr.color_ramp.elements[0].color = (*dark, 1)
+    cr.color_ramp.elements[1].position = p1
+    cr.color_ramp.elements[1].color = (*light, 1)
+    bp = nt.nodes.new('ShaderNodeBump')
+    bp.inputs['Strength'].default_value = bump
+    nt.links.new(nz.outputs['Fac'], cr.inputs[0])
+    nt.links.new(cr.outputs['Color'], bs.inputs['Base Color'])
+    nt.links.new(nz.outputs['Fac'], bp.inputs['Height'])
+    nt.links.new(bp.outputs['Normal'], bs.inputs['Normal'])
+    return m
+
+
 def half_ellipsoid(r, h, z0, m, upper=True, seg=64):
     """위(또는 아래) 반쪽 타원체 — 자른 면은 z0"""
     bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, segments=seg, ring_count=seg // 2, location=(0, 0, 0))
@@ -232,16 +299,21 @@ def half_ellipsoid(r, h, z0, m, upper=True, seg=64):
     return yp._fin(o, m)
 
 
-def polar_sheet(R, rings, segs, zf, m, thick=0.04):
+def polar_sheet(Rf, rings, segs, zf, m, thick=0.04):
+    """Rf(th) — 각도별 바깥 반지름(프릴 톱니). zf(u, th) — u=0..1 정규 반지름에서의 높이"""
+    if not callable(Rf):
+        R0 = Rf
+        Rf = lambda th: R0
     bm = bmesh.new()
     center = bm.verts.new((0, 0, zf(0.0, 0.0)))
     grid = []
     for i in range(1, rings + 1):
-        r = R * i / rings
+        u = i / rings
         row = []
         for j in range(segs):
             th = j / segs * math.tau
-            row.append(bm.verts.new((r * math.cos(th), r * math.sin(th), zf(r, th))))
+            r = Rf(th) * u
+            row.append(bm.verts.new((r * math.cos(th), r * math.sin(th), zf(u, th))))
         grid.append(row)
     for j in range(segs):
         bm.faces.new((center, grid[0][j], grid[0][(j + 1) % segs]))
@@ -261,63 +333,61 @@ def polar_sheet(R, rings, segs, zf, m, thick=0.04):
     return yp._fin(o, m)
 
 
-def f_bunBottom():
+def f_bunBottom(icon=False):
     T = T_of(16)
-    crust = ramp_mat('bun_heel', (0.62, 0.3, 0.08), (0.9, 0.62, 0.3), rough=0.38, coat=0.5)
+    crust = ramp_mat('bun_heel', (0.62, 0.28, 0.06), (0.9, 0.6, 0.26), rough=0.38, coat=0.5)
     half_ellipsoid(1.0, T, T, crust, upper=False)
-    crumb = yp.mat('crumb', (0.93, 0.66, 0.34), rough=0.6, coat=0.15)
+    crumb = noise_mat('crumb', (0.86, 0.56, 0.24), (1.0, 0.8, 0.5), scale=30, bump=0.25, rough=0.7, coat=0.1)
     yp.cyl(0.95, 0.012, (0, 0, T + 0.004), crumb, bevel=0.0)
     return T
 
 
-def f_bunTop():
+def f_bunTop(icon=False):
     H = 0.66
-    crust = ramp_mat('bun_crown', (0.93, 0.62, 0.26), (0.62, 0.27, 0.06), rough=0.3, coat=0.75)
+    crust = ramp_mat('bun_crown', (0.93, 0.58, 0.2), (0.66, 0.26, 0.04), rough=0.3, coat=0.75)
     half_ellipsoid(1.0, H, 0.0, crust, upper=True)
     seed = yp.mat('sesame', (0.99, 0.93, 0.74), rough=0.3, coat=0.6)
     rnd = random.Random(7)
     objs = []
-    for k in range(17):
-        th = math.radians(12 + 58 * math.sqrt(rnd.random()))
+    for k in range(19 if icon else 17):
+        th = math.radians(8 + 62 * math.sqrt(rnd.random()))
         ph = rnd.random() * math.tau
         p = Vector((math.sin(th) * math.cos(ph), math.sin(th) * math.sin(ph), H * math.cos(th)))
         n = Vector((p.x, p.y, p.z / (H * H))).normalized()
         q = Vector((0, 0, 1)).rotation_difference(n) @ Matrix.Rotation(rnd.random() * math.tau, 3, 'Z').to_quaternion()
-        o = yp.sph(0.055, p + n * 0.01, seed, scale=(1.7, 0.85, 0.5), seg=16, rot=q)
+        s = 0.07 if icon else 0.055
+        o = yp.sph(s, p + n * 0.01, seed, scale=(1.7, 0.85, 0.5), seg=16, rot=q)
         objs.append(o)
     to_noline(objs)
     return 0.0
 
 
-def f_patty():
-    T = T_of(22)
-    meat = bpy.data.materials.new('patty')
-    meat.use_nodes = True
-    nt = meat.node_tree
-    bs = nt.nodes["Principled BSDF"]
-    bs.inputs["Roughness"].default_value = 0.4
-    try:
-        bs.inputs["Coat Weight"].default_value = 0.5
-        bs.inputs["Coat Roughness"].default_value = 0.12
-    except Exception:
-        pass
-    nz = nt.nodes.new('ShaderNodeTexNoise')
-    nz.inputs['Scale'].default_value = 14.0
-    nz.inputs['Detail'].default_value = 6.0
-    cr = nt.nodes.new('ShaderNodeValToRGB')
-    cr.color_ramp.elements[0].position = 0.35
-    cr.color_ramp.elements[0].color = (0.07, 0.025, 0.01, 1)
-    cr.color_ramp.elements[1].position = 0.7
-    cr.color_ramp.elements[1].color = (0.36, 0.14, 0.05, 1)
-    bump = nt.nodes.new('ShaderNodeBump')
-    bump.inputs['Strength'].default_value = 0.55
-    nt.links.new(nz.outputs['Fac'], cr.inputs[0])
-    nt.links.new(cr.outputs['Color'], bs.inputs['Base Color'])
-    nt.links.new(nz.outputs['Fac'], bump.inputs['Height'])
-    nt.links.new(bump.outputs['Normal'], bs.inputs['Normal'])
+def grill_marks(T, R, m, ang=0.55, n=3, w=0.1, gap=0.42):
+    """패티 윗면 석쇠 자국 — 비스듬한 짙은 막대 n 개"""
+    objs = []
+    for k in range(n):
+        off = (k - (n - 1) / 2) * gap
+        L = 2 * math.sqrt(max(0.04, (R * 0.86) ** 2 - off * off))
+        bpy.ops.mesh.primitive_cube_add(size=1, location=(0, 0, 0))
+        o = bpy.context.object
+        o.scale = (L, w, 0.03)
+        o.rotation_euler = (0, 0, ang)
+        c, s = math.cos(ang + math.pi / 2), math.sin(ang + math.pi / 2)
+        o.location = (off * c, off * s, T + 0.005)
+        yp._fin(o, m, bevel=0.012)
+        objs.append(o)
+    to_noline(objs)
+
+
+def f_patty(icon=False):
+    T = 0.36 if icon else T_of(24)
+    meat = noise_mat('patty', (0.16, 0.05, 0.015), (0.5, 0.2, 0.06), scale=14.0, bump=0.6)
     bpy.ops.mesh.primitive_uv_sphere_add(radius=1.0, segments=96, ring_count=48, location=(0, 0, T / 2))
     o = bpy.context.object
-    o.scale = (1.03, 1.03, T / 2 * 1.02)
+    # 위아래가 납작하고 옆이 둥근 '두툼한' 패티 — 구를 누른 뒤 윗면을 편평하게
+    o.scale = (1.0, 1.0, T / 2 * 1.02)
+    for v in o.data.vertices:
+        v.co.z = math.copysign(min(1.0, abs(v.co.z) ** 0.55), v.co.z)
     tex = bpy.data.textures.new('meat', 'CLOUDS')
     tex.noise_scale = 0.12
     md = o.modifiers.new('bumps', 'DISPLACE')
@@ -325,83 +395,139 @@ def f_patty():
     md.strength = 0.05
     md.mid_level = 0.5
     yp._fin(o, meat)
+    char = None if not icon else yp.mat('grill', (0.035, 0.012, 0.006), rough=0.55, coat=0.3)
+    if icon:
+        grill_marks(T * 1.0, 1.0, char, n=3, w=0.11)
     return T
 
 
-def f_cheese():
-    T = T_of(12)
-    cheese = yp.mat('cheese', (1.0, 0.64, 0.06), rough=0.22, coat=0.9)
+def f_cheese(icon=False):
+    T = 0.1 if icon else T_of(12)
+    cheese = yp.mat('cheese', (1.0, 0.56, 0.0), rough=0.2, coat=0.9)
     try:
         b = cheese.node_tree.nodes["Principled BSDF"]
-        b.inputs["Subsurface Weight"].default_value = 0.15
+        b.inputs["Subsurface Weight"].default_value = 0.12
         b.inputs["Subsurface Radius"].default_value = (1.0, 0.6, 0.2)
     except Exception:
         pass
-    bpy.ops.mesh.primitive_grid_add(x_subdivisions=36, y_subdivisions=36, size=1.84, location=(0, 0, 0))
+    size = 1.62 if icon else 1.84
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=40, y_subdivisions=40, size=size, location=(0, 0, 0))
     o = bpy.context.object
+    rot = math.radians(18) if icon else math.radians(45)
+    cr, sr = math.cos(rot), math.sin(rot)
+    half = size / 2
     for v in o.data.vertices:
         x, y = v.co.x, v.co.y
-        # 45° 돌린 정사각 — 모서리가 앞·뒤·좌·우로 흘러내린다
-        rx, ry = (x - y) / math.sqrt(2), (x + y) / math.sqrt(2)
-        d = math.hypot(rx, ry)
-        droop = 2.1 * max(0.0, d - 0.86) ** 2 + 0.03 * math.sin(rx * 7) * max(0.0, d - 0.7)
+        rx, ry = x * cr - y * sr, x * sr + y * cr
+        # 모서리일수록(두 축이 다 바깥) 흘러내린다 — 정사각 실루엣은 유지
+        cx_, cy_ = abs(x) / half, abs(y) / half
+        corner = max(0.0, cx_ - 0.55) * max(0.0, cy_ - 0.55) / 0.2025
+        edge = max(0.0, max(cx_, cy_) - 0.8) / 0.2
+        if icon:
+            droop = 0.55 * corner ** 1.6 + 0.04 * edge
+        else:   # 쌓기용 — 45° 돌린 정사각의 앞·뒤·좌·우 모서리가 빵 밖으로 살짝 흘러내린다
+            d = math.hypot(rx, ry)
+            droop = 2.1 * max(0.0, d - 0.86) ** 2 + 0.03 * math.sin(rx * 7) * max(0.0, d - 0.7)
         v.co = Vector((rx, ry, T - droop))
     md = o.modifiers.new("sol", 'SOLIDIFY')
-    md.thickness = 0.075
+    md.thickness = 0.07
     md.offset = -1
     sub = o.modifiers.new("sub", 'SUBSURF')
     sub.levels = 1
     sub.render_levels = 1
-    return yp._fin(o, cheese) and T
-
-
-def f_lettuce():
-    T = T_of(16)
-    g1 = yp.mat('lettuce', (0.28, 0.66, 0.1), rough=0.3, coat=0.7)
-    g2 = yp.mat('lettuce_hi', (0.52, 0.86, 0.22), rough=0.3, coat=0.7)
-    R = 1.14
-
-    def zf1(r, th):
-        u = r / R
-        return T * 0.78 * (1 - u * u) ** 0.6 + 0.085 * u ** 2.5 * math.sin(11 * th + 1.7 * math.sin(3 * th)) - 0.1 * u ** 4
-    polar_sheet(R, 16, 132, zf1, g1, thick=0.05)
-
-    def zf2(r, th):
-        u = r / (R * 0.9)
-        return T * 0.95 * (1 - min(1, u) ** 2) ** 0.5 + 0.07 * u ** 2.5 * math.sin(9 * th + 0.8) - 0.06 * u ** 4 + 0.02
-    s = polar_sheet(R * 0.9, 14, 110, zf2, g2, thick=0.045)
-    s.rotation_euler = (0, 0, 0.5)
+    yp._fin(o, cheese)
+    if icon:
+        # 구멍 — '치즈' 를 가장 빨리 말해 주는 기호. 짙은 주황 오목 원
+        hole = yp.mat('cheese_hole', (0.85, 0.32, 0.0), rough=0.35, coat=0.6)
+        objs = []
+        for (hx, hy, hr) in ((-0.28, 0.2, 0.15), (0.3, 0.3, 0.1), (0.1, -0.3, 0.12), (-0.38, -0.3, 0.07), (0.4, -0.08, 0.06)):
+            objs.append(yp.sph(hr, (hx * cr - hy * sr, hx * sr + hy * cr, T + 0.004), hole, scale=(1, 1, 0.12), seg=24))
+        to_noline(objs)
+        # 흘러내린 방울 — 앞쪽 두 모서리
+        drip = yp.mat('cheese', (1.0, 0.56, 0.0))
+        for sx_, sy_ in ((1, -1), (-1, -1)):
+            px, py = sx_ * half * 0.98, sy_ * half * 0.98
+            qx, qy = px * cr - py * sr, px * sr + py * cr
+            yp.sph(0.07, (qx * 0.97, qy * 0.97, T - 0.56), drip, scale=(1, 1, 1.9), seg=20)
     return T
 
 
-def f_tomato():
-    T = T_of(10)
-    skin = yp.mat('tom_skin', (0.78, 0.05, 0.03), rough=0.18, coat=1.0)
-    pulp = yp.mat('tom_pulp', (0.95, 0.24, 0.16), rough=0.25, coat=1.0)
-    gel = yp.mat('tom_gel', (1.0, 0.62, 0.3), rough=0.1, coat=1.0)
-    core = yp.mat('tom_core', (1.0, 0.5, 0.42), rough=0.3, coat=0.8)
-    yp.cyl(0.92, T, (0, 0, T / 2), skin, bevel=0.04, verts=96)
-    yp.cyl(0.84, 0.01, (0, 0, T + 0.002), pulp, bevel=0.0, verts=96)
+def f_lettuce(icon=False):
+    T = 0.16 if icon else T_of(16)
+    g1 = yp.mat('lettuce', (0.1, 0.52, 0.02), rough=0.3, coat=0.7)
+    g2 = yp.mat('lettuce_hi', (0.36, 0.86, 0.06), rough=0.3, coat=0.7)
+    R = 1.08 if icon else 1.2
+    # 톱니 프릴 — 바깥 반지름이 각도마다 들쭉날쭉(잎 끝), 가장자리는 위아래로 크게 주름진다
+    # 둥근 물결(scallop) — |sin| 의 제곱근이라 봉우리는 둥글고 골은 좁게 파인다 (뾰족한 별이 되지 않게)
+    tooth = lambda th, k=11, a=0.1: 1.0 - a + a * abs(math.sin(k * th / 2 + 0.6 * math.sin(3 * th))) ** 0.45
+
+    def zf1(u, th):
+        # 쌓기용은 프릴이 아래층을 덮지 않게 늘어짐을 줄였다(양파 층이 가려지던 문제)
+        rip = (0.09 if icon else 0.05) * u ** 2.2 * math.sin(11 * th + 1.5 * math.sin(4 * th))
+        return T * 0.75 * (1 - u * u) ** 0.6 + rip - (0.02 if icon else 0.03) * u ** 3 + (0.0 if icon else 0.05)
+    polar_sheet(lambda th: R * tooth(th, 14, 0.12), 18, 180, zf1, g1, thick=0.05)
+
+    def zf2(u, th):
+        rip = (0.07 if icon else 0.06) * u ** 2.2 * math.sin(9 * th + 0.8)
+        return T * 1.0 * (1 - min(1, u) ** 2) ** 0.5 + rip - 0.03 * u ** 3 + 0.03
+    s = polar_sheet(lambda th: R * 0.84 * tooth(th, 11, 0.14), 16, 150, zf2, g2, thick=0.045)
+    s.rotation_euler = (0, 0, 0.5)
+    if icon:
+        # 잎맥 — 가운데서 뻗는 밝은 줄기. 윗면 높이를 따라 살짝 띄운다
+        vein = yp.mat('lettuce_vein', (0.78, 1.0, 0.45), rough=0.3, coat=0.7)
+        objs = []
+        for k in range(7):
+            a = k / 7 * math.tau + 0.2
+            pts = []
+            for t in (0.08, 0.35, 0.62):
+                r = R * 0.84 * t
+                u = t
+                z = T * 1.0 * (1 - u * u) ** 0.5 + 0.03 + 0.02
+                pts.append(Vector((r * math.cos(a), r * math.sin(a), z)))
+            for p0, p1 in zip(pts, pts[1:]):
+                objs += yp.capsule(p0, p1, 0.03, vein, rb=0.018)
+        to_noline(objs)
+    return T
+
+
+def f_tomato(icon=False):
+    T = 0.2 if icon else T_of(13)
+    skin = yp.mat('tom_skin', (0.62, 0.015, 0.01), rough=0.16, coat=1.0)
+    pulp = yp.mat('tom_pulp', (0.95, 0.06, 0.03), rough=0.22, coat=1.0)
+    # 씨방 젤은 '주황빛 도는 연한 빨강' — 노랗게 두면 꽃·피자로 읽혔다(v3 1차 시안)
+    gel = yp.mat('tom_gel', (1.0, 0.22, 0.08), rough=0.08, coat=1.0)
+    core = yp.mat('tom_core', (1.0, 0.55, 0.45), rough=0.3, coat=0.8)
+    seedm = yp.mat('tom_seed', (1.0, 0.86, 0.3), rough=0.3)
+    Rr = 0.95
+    yp.cyl(Rr, T, (0, 0, T / 2), skin, bevel=0.04, verts=96)
+    yp.cyl(Rr - 0.09, 0.01, (0, 0, T + 0.002), pulp, bevel=0.0, verts=96)
     objs = []
-    for k in range(5):
-        a = k / 5 * math.tau + 0.2
+    n = 4 if icon else 5
+    for k in range(n):
+        a = k / n * math.tau + 0.4
         p = (0.47 * math.cos(a), 0.47 * math.sin(a), T + 0.012)
-        o = yp.sph(0.2, p, gel, scale=(1.0, 0.72, 0.08), seg=24)
+        o = yp.sph(0.27 if icon else 0.2, p, gel, scale=(1.0, 0.7, 0.08), seg=24)
         o.rotation_euler = (0, 0, a)
         objs.append(o)
-        for s in (-1, 1):
-            q = (0.5 * math.cos(a + s * 0.12), 0.5 * math.sin(a + s * 0.12), T + 0.022)
-            objs.append(yp.sph(0.04, q, yp.mat('tom_seed', (1.0, 0.9, 0.55), rough=0.3), scale=(1.4, 0.8, 0.5), seg=10))
-    objs.append(yp.sph(0.16, (0, 0, T + 0.01), core, scale=(1, 1, 0.08), seg=24))
+        for s in ((-1, 0.0), (1, 0.0), (0, 0.1)) if icon else ((-1, 0.0), (1, 0.0)):
+            rr = 0.5 + s[1]
+            q = (rr * math.cos(a + s[0] * 0.14), rr * math.sin(a + s[0] * 0.14), T + 0.024)
+            objs.append(yp.sph(0.05 if icon else 0.04, q, seedm, scale=(1.4, 0.8, 0.5), seg=10))
+    objs.append(yp.sph(0.18, (0, 0, T + 0.01), core, scale=(1, 1, 0.08), seg=24))
     to_noline(objs)
     return T
 
 
-def f_onion():
-    T = T_of(8)
-    on = yp.mat('onion', (0.94, 0.82, 0.95), rough=0.2, coat=0.9)
-    on2 = yp.mat('onion_in', (0.99, 0.95, 0.98), rough=0.25, coat=0.9)
-    for R, r, m in ((0.8, 0.085, on), (0.56, 0.075, on2), (0.32, 0.065, on)):
+def f_onion(icon=False):
+    T = 0.14 if icon else T_of(12)
+    if icon:
+        # 겹친 링 셋 — 가운데가 뚫린 고리 모양이 곧 '양파'. 겉은 자주, 안쪽은 흰 라벤더
+        for i, (R, r, x, y) in enumerate(((0.62, 0.1, -0.3, 0.16), (0.5, 0.095, 0.4, -0.12), (0.34, 0.085, -0.3, 0.16))):
+            m = radial_mat('onion_%d' % i, (0.97, 0.9, 0.98), (0.5, 0.03, 0.36), R + r * 0.25, soft=0.02)
+            o = yp.torus(R, r, (x, y, T / 2 + i * 0.02), m, scale=(1, 1, 0.75))
+        return T
+    for i, (R, r) in enumerate(((0.82, 0.12), (0.56, 0.1), (0.32, 0.085))):
+        m = radial_mat('onion_%d' % i, (0.97, 0.9, 0.98), (0.5, 0.03, 0.36), R + r * 0.25, soft=0.02)
         yp.torus(R, r, (0, 0, T / 2), m, scale=(1, 1, T / 2 / r))
     return T
 
@@ -410,21 +536,23 @@ FOOD_FN = dict(bunBottom=f_bunBottom, bunTop=f_bunTop, patty=f_patty, cheese=f_c
                lettuce=f_lettuce, tomato=f_tomato, onion=f_onion)
 FOOD_W, FOOD_H = 512, 320
 FOOD_ORTHO = 2.9
+ICON_RES, ICON_ORTHO = 512, 2.7
 
 
-def food_studio():
+def food_studio(icon=False):
     yp.SAMPLES = SAMPLES
     sc = yp.studio()
-    sc.render.resolution_x = FOOD_W
-    sc.render.resolution_y = FOOD_H
-    th = 2.4
+    sc.render.resolution_x = ICON_RES if icon else FOOD_W
+    sc.render.resolution_y = ICON_RES if icon else FOOD_H
+    th = 3.4 if icon else 2.4
     sc.render.line_thickness = th
     bpy.context.view_layer.freestyle_settings.linesets[0].linestyle.thickness = th
     cam = sc.camera
     cam.data.type = 'ORTHO'
-    cam.data.ortho_scale = FOOD_ORTHO
-    d = Vector((0.0, -math.cos(ELEV), math.sin(ELEV)))
-    tgt = Vector((0.0, 0.0, 0.02))
+    cam.data.ortho_scale = ICON_ORTHO if icon else FOOD_ORTHO
+    el = ICON_ELEV if icon else ELEV
+    d = Vector((0.0, -math.cos(el), math.sin(el)))
+    tgt = Vector((0.0, 0.0, 0.1 if icon else 0.02))
     cam.location = tgt + d * 14.0
     cam.rotation_mode = 'QUATERNION'
     cam.rotation_quaternion = (-d).to_track_quat('-Z', 'Y')
@@ -432,17 +560,17 @@ def food_studio():
     return sc
 
 
-def render_food(name):
-    sc = food_studio()
-    T = FOOD_FN[name]()
-    dd = os.path.join(OUT, "food")
+def render_food(name, icon=False):
+    sc = food_studio(icon)
+    T = FOOD_FN[name](icon)
+    dd = os.path.join(OUT, "icon" if icon else "food")
     os.makedirs(dd, exist_ok=True)
     sc.render.filepath = os.path.join(dd, name + ".png")
     bpy.ops.render.render(write_still=True)
     o = proj(sc, (0, 0, 0))
     u = proj(sc, (1, 0, 0))
     t = proj(sc, (0, 0, T or 0.0))
-    print("RENDERED food", name)
+    print("RENDERED", "icon" if icon else "food", name)
     return dict(o=o, ux=round(u[0] - o[0], 5), top=t)
 
 
@@ -469,8 +597,8 @@ if __name__ == "__main__":
             meta['%s-%s' % (s, e)] = render_guest(s, e)
             with open(mpath, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=1)
-    elif kind == 'food':
+    elif kind in ('food', 'icon'):
         for n in (only.split(',') if only else FOOD):
-            meta[n] = render_food(n)
+            meta[n] = render_food(n, icon=(kind == 'icon'))
             with open(mpath, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=1)
