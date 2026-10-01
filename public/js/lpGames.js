@@ -80,6 +80,7 @@
         'prism-hex': {ko:'프리즘 헥스',en:'Prism Hex',ja:'プリズムヘックス',es:'Prism Hex',pt:'Prism Hex',zh:'棱镜六角棋',de:'Prism Hex',fr:'Prism Hex',ru:'Призм Хекс',ar:'بريزم هكس',hi:'प्रिज़्म हेक्स',th:'พริซึม เฮ็กซ์',id:'Prism Hex',vi:'Prism Hex',tr:'Prism Hex'},
         'mahjong-tw': {ko:'대만 마작',en:'Taiwanese Mahjong',ja:'台湾麻雀',es:'Mahjong Taiwanés',pt:'Mahjong Taiwanês',zh:'台灣麻將',de:'Taiwan-Mahjong',fr:'Mahjong taïwanais',ru:'Тайваньский маджонг',ar:'ماجونغ تايواني',hi:'ताइवानी माहजोंग',th:'ไพ่นกกระจอกไต้หวัน',id:'Mahjong Taiwan',vi:'Mạt chược Đài Loan',tr:'Tayvan Mahjong'},
         'mahjong-solitaire': {ko:'마작 솔리테어',en:'Mahjong Solitaire',ja:'麻雀ソリティア',es:'Mahjong Solitario',pt:'Paciência Mahjong',zh:'麻将接龙',de:'Mahjong Solitär',fr:'Mahjong Solitaire',ru:'Маджонг пасьянс',ar:'ماجونغ سوليتير',hi:'माहजोंग सॉलिटेयर',th:'มาจองโซลิแทร์',id:'Mahjong Solitaire',vi:'Mạt chược xếp cặp',tr:'Mahjong Solitaire'},
+        'yacht': {ko:'요트 다이스',en:'Yacht Dice',ja:'ヨットダイス',es:'Yacht Dice',pt:'Yacht Dice',zh:'快艇骰子',de:'Yacht Dice',fr:'Yacht Dice',ru:'Яхт Дайс',ar:'يخت دايس',hi:'यॉट डाइस',th:'ยอทช์ไดซ์',id:'Yacht Dice',vi:'Yacht Dice',tr:'Yacht Dice'},
         'lobby': {ko:'먼저 모이기',en:'Gather first',ja:'先に集合',es:'Reunirse primero',pt:'Reunir primeiro',zh:'先集合',de:'Erst sammeln',fr:'Se réunir d\'abord',ru:'Сначала собраться',ar:'التجمع أولاً',hi:'पहले इकट्ठा हों',th:'รวมตัวก่อน',id:'Kumpul dulu',vi:'Tập hợp trước',tr:'Önce toplan'}
     };
     /* mp 약식 생성기 — 기본값: 좌석 없음·정원 12·늦참 언제든·승계 가능·숨은 정보 없음·신뢰 A */
@@ -127,6 +128,10 @@
         g('prism-hex', 'board', mp('turn', 'v2', { v1: true, seats: [2, 6], late: 'takeBot', choices: { options: [TURN_SEC] } })),
         g('mahjong-tw', 'board', mp('turn', 'v2', { v1: true, seats: [4, 4], max: 8, late: 'takeBot', migr: false, hidden: true })),
         g('mahjong-solitaire', 'board', mp('race', 'v2', { seats: [2, 8], late: 'nextRound' })),
+        /* 요트 다이스 (2026-09-30) — v2 전용(처음부터 lpRoomsTurn). 굴림 = LpFair.chain */
+        g('yacht', 'board', mp('turn', 'v2', { seats: [2, 4], max: 8, late: 'takeBot',
+            choices: { picks: [{ key: 'color', options: ['r', 'y', 'g', 'b'], unique: true, botYield: true }],
+                options: [{ key: 'turnSec', values: [30, 45, 60], def: 45 }, { key: 'botLv', values: ['easy', 'normal', 'hard'], def: 'normal' }, { key: 'hint', values: [false, true], def: false }] } })),
         /* 허브 — "먼저 모이기" 방 (방장이 나중에 게임을 고름) */
         g('lobby', 'hub', mp('lobby', 'v1', { v1: true }))
     ];

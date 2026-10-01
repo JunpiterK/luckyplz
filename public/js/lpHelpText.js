@@ -34,6 +34,14 @@ window.LP_HELP_TEXT = {
     es: {t:'Revienta Burbujas', l:['Junta 3 o más del mismo color para reventarlas','Arrastra para apuntar y suelta para disparar; rebota en las paredes','Lo que queda suelto del techo cae y da más puntos','Si fallas mucho baja una fila; toca la burbuja pequeña para cambiar']},
     pt: {t:'Estoura Bolhas', l:['Junte 3 ou mais da mesma cor para estourar','Arraste para mirar e solte para atirar; use as paredes','O que se solta do teto cai e vale mais pontos','Errou muito? Desce uma fileira; toque na bolha pequena para trocar']}
   },
+  'yacht': {
+    ko: {t:'요트 다이스', l:['주사위 5개를 한 차례에 세 번까지 굴려 12칸 중 한 칸에 적어요 · 12라운드 합계 1등이 승리','굴리기를 꾹 눌러 흔들고 떼면 던져요 · 남길 주사위를 누르면 위 칸에 고정','칸을 누르고 한 번 더(또는 노란 버튼) 누르면 확정 · 맞는 칸이 없으면 0점으로 지워야 해요','1~6의 눈 합 63점 이상이면 +35 · 💡 힌트를 켜면 가장 좋은 선택을 보여 줘요']},
+    en: {t:'Yacht Dice', l:['Roll five dice up to three times, then score one of 12 boxes · highest total after 12 rounds wins','Hold Roll to shake the cup, release to throw · tap dice to keep them on the rail','Tap a box, then tap again (or the yellow button) to score · no match means writing a 0','Upper boxes totalling 63+ give +35 · turn on 💡 hints to see the best move']},
+    ja: {t:'ヨットダイス', l:['サイコロ5個を1ターン3回まで振り、12マスのどれかに記入 · 12ラウンドの合計で勝負','振るボタン長押しでカップを振り、離すと投げる · 残すサイコロをタップで上にキープ','マスをタップしてもう一度（または黄色ボタン）で確定 · 合うマスがなければ0点で消す','1〜6の合計63点以上で+35 · 💡ヒントでおすすめを表示']},
+    zh: {t:'快艇骰子', l:['每回合最多掷三次五颗骰子，选十二格之一记分 · 十二轮后总分最高者胜','长按掷骰摇骰盅，松开掷出 · 点骰子可保留到上方','点一格再点一次（或黄色按钮）确认 · 没有合适的格就要记0分','一到六点合计63分以上奖励+35 · 打开💡提示可看最佳选择']},
+    es: {t:'Yacht Dice', l:['Tira cinco dados hasta tres veces y anota en una de 12 casillas · gana el mayor total tras 12 rondas','Mantén Tirar para agitar el cubilete y suelta para lanzar · toca los dados para guardarlos','Toca una casilla y otra vez (o el botón amarillo) para anotar · si nada encaja, anotas un 0','Si la parte de arriba suma 63+ ganas +35 · activa 💡 para ver la mejor jugada']},
+    pt: {t:'Yacht Dice', l:['Role cinco dados até três vezes e anote em uma de 12 casas · vence o maior total após 12 rodadas','Segure Rolar para chacoalhar o copo e solte para lançar · toque nos dados para segurá-los','Toque numa casa e de novo (ou o botão amarelo) para anotar · sem combinação, anota-se 0','Se a parte de cima somar 63+ ganha +35 · ligue 💡 para ver a melhor jogada']}
+  },
   'ludo': {
     ko: {t:'루도', l:['주사위를 굴려 말 4개를 먼저 가운데 집에 넣으면 승리','6이 나와야 출발, 6이면 한 번 더 · 상대 말 위에 멈추면 잡기','별 칸·출발칸은 안전 · 친구와 온라인: 메신저 링크로 각자 폰에서']},
     en: {t:'Ludo', l:['Roll the dice and race all 4 tokens into the center home','Roll a 6 to leave base; a 6 rolls again. Land on a rival to capture','Stars and start squares are safe. Play online: share a chat link']},

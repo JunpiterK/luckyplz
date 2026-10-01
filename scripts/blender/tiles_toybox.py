@@ -1873,6 +1873,52 @@ def mahjong_tw_toy():
 
 
 TOYS['mahjong-tw'] = mahjong_tw_toy
+def yacht_toy():
+    """요트 다이스 (2026-09-30) — 원목 테두리 펠트 트레이에 상아 주사위 다섯(전부 6 = 요트) +
+    쏟아붓는 빨간 가죽 컵 + 금빛 별. 주사위는 보드게임 공용 _ivory_die."""
+    g = group("yacht", math.radians(-20))
+    WD = P('wood', rough=0.45, coat=0.4)
+    FELT = mat('felt', (0.02, 0.33, 0.37), rough=0.95, coat=0.0)
+    TW, TD = 2.2, 1.5
+    box((TW, TD, 0.14), (0, 0.1, 0.07), WD, bevel=0.05, parent=g)
+    box((TW - 0.22, TD - 0.22, 0.03), (0, 0.1, 0.15), FELT, bevel=0.008, parent=g)
+    # 테두리 — 앞은 낮게(안이 보이게), 뒤·옆은 높게
+    box((TW, 0.12, 0.3), (0, 0.1 + TD / 2 - 0.06, 0.24), WD, bevel=0.045, parent=g)
+    box((TW, 0.12, 0.14), (0, 0.1 - TD / 2 + 0.06, 0.2), WD, bevel=0.045, parent=g)
+    for s in (-1, 1):
+        box((0.12, TD, 0.24), (s * (TW / 2 - 0.06), 0.1, 0.22), WD, bevel=0.045, parent=g)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            sph(0.06, (sx * (TW / 2 - 0.06), 0.1 + sy * (TD / 2 - 0.06), 0.4 if sy > 0 else 0.29), GOLD(), parent=g, seg=20)
+    # 주사위 다섯 — 윗면 전부 6
+    z = 0.165
+    ds = 0.5
+    spots = [(-0.72, -0.28, 12), (-0.14, -0.4, -16), (0.44, -0.3, 24), (-0.46, 0.3, -28)]
+    for (x, y, a) in spots:
+        _ivory_die((x, y, z + ds / 2), ds, (0, 0, math.radians(a)), [(2, 1, 6), (1, -1, 2), (0, 1, 3), (0, -1, 4)], g)
+    # 다섯 번째는 컵에서 막 튀어나와 공중에서 도는 중
+    _ivory_die((0.1, 0.22, 0.84), ds, (math.radians(-30), math.radians(22), math.radians(14)),
+               [(2, 1, 6), (1, -1, 2), (0, 1, 3), (0, -1, 4), (1, 1, 5), (2, -1, 1)], g)
+    # 컵 — 뒤 오른쪽 위에서 입을 왼쪽 앞 아래(트레이)로 향해 쏟는다. 어두운 안쪽이 보여야 '컵'으로 읽힌다
+    c = group("cup", 0, loc=(0.7, 0.62, 1.3))
+    c.parent = g
+    c.rotation_mode = 'QUATERNION'
+    c.rotation_quaternion = Vector((-0.64, -0.5, -0.58)).to_track_quat('Z', 'Y')
+    RED = mat('cupred', (0.62, 0.05, 0.04), rough=0.4, coat=0.6)
+    h, r0, r1 = 0.95, 0.36, 0.48
+    cone(r0, r1, h, (0, 0, 0), RED, parent=c)
+    cyl(r0 * 1.03, 0.07, (0, 0, -h / 2 + 0.035), GOLD(), bevel=0.02, parent=c)
+    torus(r1, 0.05, (0, 0, h / 2), GOLD(), parent=c)
+    torus(r0 + (r1 - r0) * 0.36, 0.028, (0, 0, -h / 2 + h * 0.36), P('cream'), parent=c)
+    cyl(r1 * 0.9, 0.02, (0, 0, h / 2 - 0.01), mat('cupin', (0.06, 0.015, 0.02), rough=0.8, coat=0.0), bevel=0.0, parent=c)
+    # 금빛 별 — 요트!
+    star = mat('ystar', PAL['mustard'], emit=(1.0, 0.75, 0.2), estr=0.4, coat=0.6)
+    prism(star_pts(0.24, 0.11), 0.06, (-0.78, 0.05, 1.42), star, parent=g)
+    prism(star_pts(0.13, 0.06), 0.05, (-0.34, 0.2, 1.78), star, parent=g)
+    return g
+
+
+TOYS['yacht'] = yacht_toy
 HOME_IDS =['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
 
 if __name__ == "__main__":
