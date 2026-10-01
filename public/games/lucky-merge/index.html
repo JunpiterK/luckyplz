@@ -232,6 +232,18 @@ canvas#g{
 .modal .stats-modal .item.tier .v{color:var(--cyan);}
 .modal .stats-modal .item.best .v{color:var(--magenta);}
 .modal .stats-modal .item.merges .v{color:var(--orange);font-size:16px;}
+/* 2026-10 결과 손맛 — 점수 차르륵 + 신기록 도장(테트로미노·벽돌깨기와 같은 문법. 레이아웃 높이 불변) */
+.modal .stats-modal .item{position:relative}
+.modal .stats-modal .item .v.cnt-done{animation:lm-cnt-pop .26s cubic-bezier(.2,1.8,.4,1)}
+@keyframes lm-cnt-pop{0%{transform:scale(1.4);color:#FFE66D}100%{transform:scale(1)}}
+.lp-nb-stamp{position:absolute;right:-8px;bottom:-11px;z-index:2;padding:2px 8px;border:2px solid #FFD447;border-radius:7px;
+  background:rgba(30,18,0,.82);color:#FFE66D;font:900 10px Orbitron,sans-serif;letter-spacing:.06em;white-space:nowrap;
+  text-shadow:0 0 8px rgba(255,214,71,.7);box-shadow:0 0 16px -4px rgba(255,214,71,.8);
+  opacity:0;transform:rotate(-9deg) scale(2.4);pointer-events:none}
+.lp-nb-stamp.on{animation:lp-stamp .42s cubic-bezier(.2,1.5,.4,1) forwards}
+@keyframes lp-stamp{0%{opacity:0;transform:rotate(-17deg) scale(2.4)}55%{opacity:1}100%{opacity:1;transform:rotate(-9deg) scale(1)}}
+.go-new.wait{visibility:hidden}
+@media (prefers-reduced-motion:reduce){.lp-nb-stamp.on{animation:none;opacity:1;transform:rotate(-9deg)}.modal .stats-modal .item .v.cnt-done{animation:none}}
 .features{
   list-style:none;font-size:11.5px;color:var(--txt-dim);
   text-align:left;line-height:1.7;margin:10px 0 16px;
@@ -1157,8 +1169,13 @@ function processMerges(merges){
     S.score += earned;
     S.totalMerges++;
     if(S.comboCount >= 2){
-      spawnFloatText(S.comboCount + ' CHAIN!', C.W/2, C.H*0.19,
-                     comboMult >= 2 ? '#FF66CC' : '#FFE66D', 1000, {size: 17 + Math.min(14, S.comboCount * 3), glow: 12 + S.comboCount * 2, pop: true});
+      /* 연쇄 글자는 한 자리에서 갈아 끼운다(예전엔 2·3·4 CHAIN 이 겹쳐 쌓였다). 단계마다 색·크기·배수가 오른다 */
+      S.chainFx = { n: S.comboCount, mult: comboMult, t: 0, dur: 1150, x: px };
+      if(S.comboCount >= 3){
+        S.hitstop = Math.max(S.hitstop, 26 + Math.min(30, S.comboCount * 6));
+        const up = Math.pow(2, Math.min(8, S.comboCount) * 2 / 12);
+        setTimeout(() => playTone(1320 * up, 0.12, 'sine', 0.06, 0.002, 0.05, 1760 * up), 40);
+      }
     }
     if(!S.achievedTiers[newTier]){
       S.achievedTiers[newTier] = true;
@@ -1174,7 +1191,17 @@ function processMerges(merges){
         S.bgPulse = 1.0;
       }
     }
-    spawnFloatText('+' + earned.toLocaleString(), px, py - t.r - 6,
+    let popY = py - t.r - 6;
+    /* 연쇄로 같은 자리에 점수가 연달아 뜨면 위로 한 줄씩 쌓고, 새 단계 배너 띠는 건너뛴다(글자끼리 겹쳐 읽히지 않던 문제) */
+    const bandY = C.H * 0.34, below = !!S.banner && popY > bandY - 12;
+    for(let guard = 0; guard < 8; guard++){
+      if(S.banner && Math.abs(popY - bandY) < 56){ popY = below ? bandY + 56 : bandY - 56; continue; }
+      let hit = false;
+      for(const ft of S.floatTexts){ if(ft.maxLife - ft.life < 30 && Math.abs(ft.x - px) < 60 && Math.abs(ft.y - popY) < 15){ hit = true; break; } }
+      if(!hit) break;
+      popY += below ? 16 : -16;
+    }
+    spawnFloatText('+' + earned.toLocaleString(), px, popY,
                    comboMult > 1 ? '#FF66CC' : '#FFE66D', 850,
                    {size: comboMult > 1 ? 15 : 12, glow: 6, pop: true});
     if(newTier > S.highestTier) S.highestTier = newTier;
@@ -1230,13 +1257,14 @@ function triggerBlackHoleSweep(cx, cy){
 function spawnMergeParticles(x, y, tier){
   const t = TIERS[tier];
   S.rings.push({
-    x, y, r: t.r * 0.55, max: t.r * (2.6 + tier * 0.22),
+    /* 2026-10 충격파는 합체 자리에 머문다 — 예전 최대 반경 r×4.6~5.2 는 상위 티어에서 판 전체를 덮었다 */
+    x, y, r: t.r * 0.55, max: t.r * (1.75 + tier * 0.05) + 14,
     life: 1, decay: 0.045 - Math.min(0.02, tier * 0.0016),
     color: t.accent, w: 2 + tier * 0.35
   });
   if(tier >= 6){
     S.rings.push({
-      x, y, r: t.r * 0.3, max: t.r * (1.9 + tier * 0.14),
+      x, y, r: t.r * 0.3, max: t.r * (1.45 + tier * 0.04) + 10,
       life: 1, decay: 0.030, color: '#ffffff', w: 1 + tier * 0.18, delay: 5
     });
   }
@@ -1275,12 +1303,12 @@ function spawnMergeParticles(x, y, tier){
     });
   }
   S.shockwaves.push({
-    x, y, r: t.r * 0.5, rMax: t.r * 4.2,
+    x, y, r: t.r * 0.5, rMax: t.r * 2.1 + 18,
     color: accent, width: 2 + Math.min(3, tier * 0.3),
     life: 42, maxLife: 42,
   });
   S.shockwaves.push({
-    x, y, r: t.r * 0.2, rMax: t.r * 5.2,
+    x, y, r: t.r * 0.2, rMax: t.r * 2.6 + 26,
     color: baseColor, width: 1,
     life: 34, maxLife: 34, delay: 5
   });
@@ -1359,6 +1387,7 @@ function updateParticles(dtMs){
   updateFlashes(dtMs); updateOrbits(dtMs); updateDrops(dtMs); updateBlackHole(dtMs);
   if(S.wob.amp > 0) S.wob.t += dtMs;
   if(S.chainGlow > 0) S.chainGlow = Math.max(0, S.chainGlow - dtMs * (performance.now() - S.lastMergeAt > 700 ? 0.0016 : 0.0002));
+  if(S.chainFx){ S.chainFx.t += dtMs; if(S.chainFx.t >= S.chainFx.dur) S.chainFx = null; }
   if(S.banner){
     S.banner.t += dtMs;
     if(S.banner.t >= S.banner.dur) S.banner = null;
@@ -1367,7 +1396,7 @@ function updateParticles(dtMs){
     S.bgPulse = Math.max(0, S.bgPulse - dtMs * 0.0024);
   }
   if(S.flashAlpha > 0){
-    S.flashAlpha = Math.max(0, S.flashAlpha - dtMs * 0.0011);
+    S.flashAlpha = Math.max(0, S.flashAlpha - dtMs * 0.0022);   /* 최대 0.24 → 110ms 안에 사라진다(전체 번쩍임 ≤120ms, 2026-10) */
   }
   for(const ft of S.floatTexts){
     ft.y += ft.vy * k;
@@ -2793,6 +2822,16 @@ function drawWalls(){
   drawChainGlow();
 }
 
+/* 경고선 띠 스프라이트 — 매 프레임 그라디언트를 만들지 않도록 1회 생성(0 = 노랑 예비 경고, 1 = 빨강) */
+const _bandCache = [];
+function _dangerBand(i){
+  if(_bandCache[i]) return _bandCache[i];
+  const c = document.createElement('canvas'); c.width = 4; c.height = 40;
+  const g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 40), bc = i ? '255,60,90' : '255,214,90';
+  gr.addColorStop(0, 'rgba(' + bc + ',0)'); gr.addColorStop(0.5, 'rgba(' + bc + ',1)'); gr.addColorStop(1, 'rgba(' + bc + ',0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 4, 40);
+  return (_bandCache[i] = c);
+}
 function drawDangerLine(now){
   const ratio = Math.min(1, S.dangerTime / C.DANGER_LIMIT_MS);
   /* 위험 비네트 — 누적될수록 위쪽이 붉게 */
@@ -2808,8 +2847,15 @@ function drawDangerLine(now){
   }
   const g = Math.round(230 - ratio * 180);
   const bl = Math.round(109 - ratio * 109);
+  /* 2026-10 예비 경고 — 시간이 쌓이기 전이라도 천체가 선에 30px 안으로 다가오면 선 둘레가 노랗게 숨 쉰다 */
+  if(S.dangerNear || ratio > 0.01){
+    const pw = RM ? 0.7 : 0.5 + 0.5 * Math.sin(now * 0.008);
+    ctx.globalAlpha = Math.min(1, (0.10 + ratio * 0.18) * (0.6 + pw * 0.4));
+    ctx.drawImage(_dangerBand(ratio > 0.01 ? 1 : 0), C.WALL_LEFT, C.DANGER_Y - 10, C.WALL_RIGHT - C.WALL_LEFT, 20);
+    ctx.globalAlpha = 1;
+  }
   const blink = ratio > 0.4 ? Math.sin(now * (0.006 + ratio*0.012)) * (ratio * 0.25) : 0;
-  const alpha = Math.min(1, 0.28 + ratio * 0.55 + blink);
+  const alpha = Math.min(1, 0.28 + ratio * 0.55 + blink + (S.dangerNear && ratio < 0.02 ? 0.25 : 0));
   const col = 'rgba(255,' + g + ',' + bl + ',';
   ctx.strokeStyle = col + alpha.toFixed(3) + ')';
   ctx.lineWidth = 1 + ratio * 1.6;
@@ -2826,16 +2872,29 @@ function drawDangerLine(now){
   ctx.font = '700 9px "JetBrains Mono", monospace';
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(ratio < 0.02 ? tT('dangerLine') : '⚠ ' + ((C.DANGER_LIMIT_MS - S.dangerTime) / 1000 / C.DANGER_RATE_CROSSING).toFixed(1) + 's',
-               C.WALL_RIGHT - 4, C.DANGER_Y - 9);
-  /* 위험 천체에 남은 시간 링 */
   const db = S.dangerBody;
-  if(db && ratio > 0.02 && S.bodies.indexOf(db) >= 0){
+  const dbOn = db && ratio > 0.02 && S.bodies.indexOf(db) >= 0;
+  const left = ((C.DANGER_LIMIT_MS - S.dangerTime) / 1000 / C.DANGER_RATE_CROSSING).toFixed(1);
+  if(ratio < 0.02 || !dbOn) ctx.fillText(ratio < 0.02 ? tT('dangerLine') : '⚠ ' + left + 's', C.WALL_RIGHT - 4, C.DANGER_Y - 9);
+  /* 위험 천체에 남은 시간 링 — 심장 박동에 맞춰 굵어진다 */
+  if(dbOn){
+    const hb2 = S.heartAt && !RM ? Math.exp(-(now - S.heartAt) / 170) : 0;
     /* shadowBlur 대신 반투명 굵은 선을 한 번 더 — 매 프레임 비용을 줄인다 */
     ctx.beginPath();
-    ctx.arc(db.x, db.y, db.r + 5, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * (1 - ratio));
-    ctx.strokeStyle = 'rgba(255,51,102,0.3)'; ctx.lineWidth = 7; ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,51,102,0.9)'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.arc(db.x, db.y, db.r + 5 + hb2 * 3, -Math.PI/2, -Math.PI/2 + Math.PI * 2 * (1 - ratio));
+    ctx.strokeStyle = 'rgba(255,51,102,' + (0.3 + hb2 * 0.25).toFixed(3) + ')'; ctx.lineWidth = 7 + hb2 * 5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,51,102,0.9)'; ctx.lineWidth = 2.5 + hb2 * 1.5; ctx.stroke();
+    /* 남은 초 — 경고선 끝의 9px 글자 대신 위험한 천체 바로 옆에 크게(2026-10) */
+    const tx = Math.max(C.WALL_LEFT + 30, Math.min(C.WALL_RIGHT - 30, db.x + (db.x < C.W / 2 ? db.r + 30 : -db.r - 30)));
+    const ty = Math.max(-VIEW_PAD + 70, db.y);
+    const sc = 1 + hb2 * 0.18;
+    ctx.save();
+    ctx.translate(tx, ty); ctx.scale(sc, sc);
+    ctx.font = '900 16px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(20,0,8,0.8)'; ctx.strokeText(left + 's', 0, 0);
+    ctx.fillStyle = ratio > 0.6 ? '#FF3366' : '#FF7A8F'; ctx.fillText(left + 's', 0, 0);
+    ctx.font = '900 9px Orbitron, sans-serif'; ctx.lineWidth = 3; ctx.strokeText('⚠', 0, -15); ctx.fillText('⚠', 0, -15);
+    ctx.restore();
   }
 }
 
@@ -3026,6 +3085,41 @@ function drawFloatTexts(){
   ctx.globalAlpha = 1;
 }
 
+/* 연쇄 표시(2026-10) — 2 노랑 → 3 주황 → 4 분홍 → 5+ 하늘. 새 단계마다 1.7배에서 튀어나오고 뒤에 같은 색 고리가 퍼진다 */
+const CHAIN_COL = ['#FFE66D', '#FFE66D', '#FFE66D', '#FF9A3C', '#FF66CC', '#00E5FF'];
+function drawChainFx(){
+  const cf = S.chainFx;
+  if(!cf) return;
+  const u = cf.t / cf.dur, col = CHAIN_COL[Math.min(5, cf.n)];
+  const pin = RM ? 1 : (cf.t < 90 ? 1.7 - 0.7 * (cf.t / 90) : cf.t < 160 ? 1 - 0.06 * Math.sin((cf.t - 90) / 70 * Math.PI) : 1);
+  const a = u > 0.72 ? (1 - u) / 0.28 : 1;
+  const cx = C.W / 2, cy = C.H * 0.19;
+  const size = 19 + Math.min(15, (cf.n - 2) * 4);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, a);
+  if(!RM && cf.t < 380){
+    const k = cf.t / 380;
+    ctx.globalAlpha = (1 - k) * 0.8 * a;
+    ctx.strokeStyle = col; ctx.lineWidth = 3 * (1 - k) + 0.5;
+    ctx.beginPath(); ctx.ellipse(cx, cy, 30 + k * (70 + cf.n * 10), 10 + k * 22, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = Math.max(0, a);
+  }
+  ctx.translate(cx, cy); ctx.scale(pin, pin);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.font = '900 ' + size + 'px Orbitron, sans-serif';
+  const txt = cf.n + ' CHAIN!';
+  ctx.globalAlpha = Math.max(0, a) * 0.32; ctx.strokeStyle = col; ctx.lineWidth = 8 + cf.n; ctx.strokeText(txt, 0, 0);
+  ctx.globalAlpha = Math.max(0, a); ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 4; ctx.strokeText(txt, 0, 0);
+  ctx.fillStyle = col; ctx.fillText(txt, 0, 0);
+  if(cf.mult > 1){
+    ctx.font = '900 12px Orbitron, sans-serif';
+    const mt = '×' + cf.mult.toFixed(1) + ' SCORE';
+    ctx.lineWidth = 3; ctx.strokeText(mt, 0, size * 0.5 + 10);
+    ctx.fillStyle = '#fff'; ctx.fillText(mt, 0, size * 0.5 + 10);
+  }
+  ctx.restore();
+}
+
 /* 새 단계 배너 — 렌더 스프라이트가 튀어나오며 이름·단계 표시 */
 function drawBanner(){
   const bn = S.banner;
@@ -3143,6 +3237,7 @@ function render(now){
   }
   drawBanner();
   drawFloatTexts();
+  drawChainFx();
   ctx.restore();
   drawFlash();
 }
@@ -3410,7 +3505,7 @@ function onGameOver(){
   S.flashAlpha = RM ? 0.05 : 0.14;
   S.flashColor = '#FF3366';
   const tName = _tierName(S.highestTier);
-  document.getElementById('goScore').textContent = S.score.toLocaleString();
+  document.getElementById('goScore').textContent = '0';
   document.getElementById('goTier').textContent = tName;
   document.getElementById('goBest').textContent = S.best.toLocaleString();
   document.getElementById('goMerges').textContent = S.totalMerges.toLocaleString();
@@ -3423,16 +3518,46 @@ function onGameOver(){
   if(nb){
     nb.style.display = newBest && S.score > 0 ? '' : 'none';
     nb.textContent = prevBest > 0 ? tT('newBest') : tT('firstRecord');
+    nb.classList.add('wait');          /* 점수 차르륵이 끝나는 순간 도장과 함께 드러난다 */
   }
   const title = document.getElementById('goTitle');
   if(title) title.textContent = tT('gameOver');
   setTimeout(()=>{
     document.getElementById('gameOv').classList.add('show');try{window.lpMountAds&&window.lpMountAds()}catch(_){}
+    goReveal(S.score, prevBest, newBest);
     /* 🎮 게임 홈 · 🏠 전체 홈 (siteFooter 가 싣는 lpGameNav) */
     const nav = document.getElementById('lpEndNav');
     if(window.LpNav) window.LpNav.mount(nav);
     else setTimeout(()=>{ if(window.LpNav) window.LpNav.mount(nav); }, 800);
   }, 700);
+}
+
+/* 결과 공개 — 점수가 0 에서 차르륵(끝으로 갈수록 느리게), 이전 최고를 넘었으면 BEST 칸에 도장 쾅.
+   tetris·brick·snake·pacman(2026-10-01)과 같은 lp-nb-stamp. 첫 기록은 도장 없이 '첫 기록!' 띠만 */
+let _goRevealTok = 0;
+function goReveal(to, prevBest, newBest){
+  const el = document.getElementById('goScore'), nb = document.getElementById('goNew'), tok = ++_goRevealTok;
+  document.querySelectorAll('#gameOv .lp-nb-stamp').forEach(n => n.remove());
+  const done = () => {
+    if(nb) nb.classList.remove('wait');
+    if(!(newBest && prevBest > 0)) return;
+    const st = document.createElement('div');
+    st.className = 'lp-nb-stamp'; st.setAttribute('aria-hidden', 'true'); st.textContent = 'NEW BEST!';
+    document.getElementById('goBest').parentNode.appendChild(st);
+    requestAnimationFrame(() => st.classList.add('on'));
+    sfxNewTier(); HAP.v([18, 40, 30]);
+  };
+  el.classList.remove('cnt-done');
+  if(RM || to <= 0){ el.textContent = to.toLocaleString(); done(); return; }
+  const t0 = performance.now(); let lastTick = 0;
+  (function step(){
+    if(tok !== _goRevealTok) return;
+    const now = performance.now(), k = Math.min(1, (now - t0) / 720), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(to * e).toLocaleString();
+    if(k < 1 && now - lastTick > 70){ lastTick = now; playTone(1100 + k * 700, 0.03, 'square', 0.025, 0.002, 0.02); }
+    if(k < 1) requestAnimationFrame(step);
+    else { el.classList.add('cnt-done'); done(); }
+  })();
 }
 
 /* ======== UPDATE LOOP ======== */
@@ -3577,7 +3702,7 @@ function startGame(){
   S.shockwaves = [];
   S.floatTexts = [];
   S.ghosts = [];
-  S.banner = null;
+  S.banner = null; S.chainFx = null;
   S.score = 0;
   S.highestTier = 0;
   S.totalMerges = 0;
