@@ -81,6 +81,7 @@
         'mahjong-tw': {ko:'대만 마작',en:'Taiwanese Mahjong',ja:'台湾麻雀',es:'Mahjong Taiwanés',pt:'Mahjong Taiwanês',zh:'台灣麻將',de:'Taiwan-Mahjong',fr:'Mahjong taïwanais',ru:'Тайваньский маджонг',ar:'ماجونغ تايواني',hi:'ताइवानी माहजोंग',th:'ไพ่นกกระจอกไต้หวัน',id:'Mahjong Taiwan',vi:'Mạt chược Đài Loan',tr:'Tayvan Mahjong'},
         'mahjong-solitaire': {ko:'마작 솔리테어',en:'Mahjong Solitaire',ja:'麻雀ソリティア',es:'Mahjong Solitario',pt:'Paciência Mahjong',zh:'麻将接龙',de:'Mahjong Solitär',fr:'Mahjong Solitaire',ru:'Маджонг пасьянс',ar:'ماجونغ سوليتير',hi:'माहजोंग सॉलिटेयर',th:'มาจองโซลิแทร์',id:'Mahjong Solitaire',vi:'Mạt chược xếp cặp',tr:'Mahjong Solitaire'},
         'yacht': {ko:'요트 다이스',en:'Yacht Dice',ja:'ヨットダイス',es:'Yacht Dice',pt:'Yacht Dice',zh:'快艇骰子',de:'Yacht Dice',fr:'Yacht Dice',ru:'Яхт Дайс',ar:'يخت دايس',hi:'यॉट डाइस',th:'ยอทช์ไดซ์',id:'Yacht Dice',vi:'Yacht Dice',tr:'Yacht Dice'},
+        'omok': {ko:'오목',en:'Gomoku',ja:'五目並べ',es:'Gomoku',pt:'Gomoku',zh:'五子棋',de:'Gomoku',fr:'Gomoku',ru:'Гомоку',ar:'غوموكو',hi:'गोमोकू',th:'โกะโมะกุ',id:'Gomoku',vi:'Cờ caro',tr:'Gomoku'},
         'lobby': {ko:'먼저 모이기',en:'Gather first',ja:'先に集合',es:'Reunirse primero',pt:'Reunir primeiro',zh:'先集合',de:'Erst sammeln',fr:'Se réunir d\'abord',ru:'Сначала собраться',ar:'التجمع أولاً',hi:'पहले इकट्ठा हों',th:'รวมตัวก่อน',id:'Kumpul dulu',vi:'Tập hợp trước',tr:'Önce toplan'}
     };
     /* mp 약식 생성기 — 기본값: 좌석 없음·정원 12·늦참 언제든·승계 가능·숨은 정보 없음·신뢰 A */
@@ -132,6 +133,7 @@
         g('yacht', 'board', mp('turn', 'v2', { seats: [2, 4], max: 8, late: 'takeBot',
             choices: { picks: [{ key: 'color', options: ['r', 'y', 'g', 'b'], unique: true, botYield: true }],
                 options: [{ key: 'turnSec', values: [30, 45, 60], def: 45 }, { key: 'botLv', values: ['easy', 'normal', 'hard'], def: 'normal' }, { key: 'hint', values: [false, true], def: false }] } })),
+        g('omok', 'board', mp('turn', 'v2', { seats: [2, 2], late: 'spectate', choices: { options: [{ key: 'side', values: ['b', 'w', 'r'], def: 'b' }, { key: 'rule', values: ['free', 'std', 'renju'], def: 'free' }, { key: 'size', values: [15, 19], def: 15 }, { key: 'turnSec', values: [0, 30, 60], def: 30 }] } })),
         /* 허브 — "먼저 모이기" 방 (방장이 나중에 게임을 고름) */
         g('lobby', 'hub', mp('lobby', 'v1', { v1: true }))
     ];
