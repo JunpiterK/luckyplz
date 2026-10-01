@@ -28,6 +28,17 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# siteFooter.js?v= 에는 지금 라이브 빌드 스탬프를 넣는다. 예전 템플릿의 고정값 `?v=1` 은 bump-cache.sh 정규식({4,20})에
+# 안 걸려서 21개 랜딩이 캐시 버스팅 1층에서 영원히 빠져 있었다(2026-10-01 QA M-11). 정규식도 {1,20} 으로 넓혔다.
+def _build_stamp():
+    try:
+        return str(json.loads((ROOT / "public" / "build.json").read_text(encoding="utf-8"))["v"])
+    except Exception:
+        return "0000"
+
+
+BUILD_V = _build_stamp()
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from lp_clusters import CLUSTERS, hreflang_lines, member, OG_LOCALE  # noqa: E402
@@ -189,7 +200,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 </div>
 
-<script src="/js/siteFooter.js?v=1" defer></script>
+<script src="/js/siteFooter.js?v={build_v}" defer></script>
 </body>
 </html>
 """
@@ -248,13 +259,17 @@ def build(lang, tool, cfg):
         '      <a href="%s">%s<span>%s</span></a>' % (member(t, lang), c["h1"], c["short"])
         for t, c in CONTENT[lang].items() if t != tool)
 
-    return TEMPLATE.format(
-        lang=lang, slug=slug, game=game, hreflang=hreflang_lines(tool, indent=""),
+    html = TEMPLATE.format(
+        build_v=BUILD_V, lang=lang, slug=slug, game=game, hreflang=hreflang_lines(tool, indent=""),
         og_locale=OG_LOCALE[lang], og_img=OG_IMG[tool],
         app_ld=app_ld, faq_ld=faq_ld, crumb_ld=crumb_ld,
         steps=steps, uses=uses, faq_html=faq_html, more_html=more_html,
         sections=cfg["sections"], **ui, **{k: cfg[k] for k in
         ("title", "description", "keywords", "og_title", "og_desc", "h1", "lead")})
+    # 일본어 랜딩은 Noto Sans JP — KR 로 그리면 한자가 한국식 자형이고 폰트 조각을 40여 개 더 받는다(2026-10-01 QA M-12)
+    if lang == "ja":
+        html = html.replace("family=Noto+Sans+KR:", "family=Noto+Sans+JP:").replace("'Noto Sans KR'", "'Noto Sans JP'")
+    return html
 
 
 def main():

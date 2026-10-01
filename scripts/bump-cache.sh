@@ -42,14 +42,17 @@ cd "$(dirname "$0")/.."
 NEW_VERSION=$(date +%s)
 
 # ---- LAYER 1: ?v= query rewrites in shared JS + CSS references --------
-JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
-BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{4,20}'
-CSS_RE='(/css/[a-zA-Z0-9_-]+\.css)\?v=[0-9a-zA-Z]{4,20}'
+# 스탬프 길이는 1~20자. 예전 {4,20} 은 생성 랜딩 21종의 `siteFooter.js?v=1` 을 못 잡아
+# 그 페이지들이 1층에서 영원히 빠져 있었다(2026-10-01 QA M-11). /js/·/css/·/assets/ 접두와 .js/.css
+# 확장자로 이미 좁혀져 있어 1자 이상으로 넓혀도 YouTube ?v= 같은 엉뚱한 쿼리는 걸리지 않는다.
+JS_RE='(/js/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{1,20}'
+BLOG_RE='(/blog/[a-zA-Z0-9_-]+\.js)\?v=[0-9a-zA-Z]{1,20}'
+CSS_RE='(/css/[a-zA-Z0-9_-]+\.css)\?v=[0-9a-zA-Z]{1,20}'
 # /assets/ 아래의 JS 도 잡는다. 3MB 짜리 3D 번들은 /js/* 의 no-store 를
 # 피하려고 /assets/deltav/ 로 옮겼는데(Pages 의 _headers 는 매칭 규칙을 전부
 # 이어 붙여서 예외를 만들 수 없다), 그러면 위의 JS_RE 가 못 잡아 ?v= 가
 # 영원히 안 바뀐다. 경로에 슬래시가 들어가므로 문자군에 / 를 넣는다.
-ASSETJS_RE='(/assets/[a-zA-Z0-9_/-]+\.js(on)?)\?v=[0-9a-zA-Z]{4,20}'
+ASSETJS_RE='(/assets/[a-zA-Z0-9_/-]+\.js(on)?)\?v=[0-9a-zA-Z]{1,20}'
 
 # 무버전 참조도 잡는다: src="/js/x.js" 처럼 ?v= 없이 로드되는 공용 JS 는
 # 이 스크립트가 영원히 못 덮어서 stale 로 남는다(2026-08-20 감사 —

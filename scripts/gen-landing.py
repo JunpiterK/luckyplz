@@ -27,6 +27,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lp_clusters import CLUSTERS, hreflang_lines  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# siteFooter.js?v= 에는 지금 라이브 빌드 스탬프를 넣는다. 예전 템플릿의 고정값 `?v=1` 은 bump-cache.sh 정규식({4,20})에
+# 안 걸려서 21개 랜딩이 캐시 버스팅 1층에서 영원히 빠져 있었다(2026-10-01 QA M-11). 정규식도 {1,20} 으로 넓혔다.
+def _build_stamp():
+    try:
+        return str(json.loads((ROOT / "public" / "build.json").read_text(encoding="utf-8"))["v"])
+    except Exception:
+        return "0000"
+
+
+BUILD_V = _build_stamp()
 OUT = ROOT / "public"
 
 # 6종 상호 링크 — 모든 랜딩이 나머지 5개를 가리킨다.
@@ -150,7 +161,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 </div>
 
-<script src="/js/siteFooter.js?v=1" defer></script>
+<script src="/js/siteFooter.js?v={build_v}" defer></script>
 </body>
 </html>
 """
@@ -359,7 +370,7 @@ def build(slug, cfg):
         '      <a href="%s">%s<span>%s</span></a>' % (u, t, d) for u, t, d in ALL if u != slug)
 
     hreflang = hreflang_lines(SLUG2TOOL[slug], indent="")
-    return TEMPLATE.format(slug=slug, hreflang=hreflang, app_ld=app_ld, faq_ld=faq_ld, crumb_ld=crumb_ld,
+    return TEMPLATE.format(build_v=BUILD_V, slug=slug, hreflang=hreflang, app_ld=app_ld, faq_ld=faq_ld, crumb_ld=crumb_ld,
                            faq_html=faq_html, more_html=more_html, **cfg)
 
 
