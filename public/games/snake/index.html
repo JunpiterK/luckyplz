@@ -453,7 +453,9 @@ body.lp-playing .lp-help-fab{display:none}
 .overlay.ov-over>:nth-child(6){animation-delay:.28s}
 @keyframes ovIn{0%{opacity:0;transform:translateY(10px) scale(.92)}100%{opacity:1;transform:none}}
 .overlay.ov-over .score-big{text-shadow:0 0 18px rgba(0,230,118,.55);font-variant-numeric:tabular-nums}
-.overlay .nb{display:inline-block;animation:nbShine 1s ease-in-out infinite alternate}
+.overlay .nb{display:inline-block;animation:nbStamp .42s cubic-bezier(.2,1.5,.4,1) .62s both,nbShine 1s ease-in-out 1.04s infinite alternate}
+/* 2026-10: 점수 차르륵(0.62초)이 끝나는 순간 도장처럼 쾅 */
+@keyframes nbStamp{0%{opacity:0;transform:rotate(-14deg) scale(2.3)}55%{opacity:1}100%{opacity:1;transform:rotate(-4deg) scale(1)}}
 @keyframes nbShine{from{text-shadow:0 0 4px rgba(255,230,109,.4)}to{text-shadow:0 0 14px rgba(255,230,109,.95)}}
 .ctrl-btn.vib-btn{padding:8px 12px}
 .ctrl-btn.vib-btn.off{opacity:.55;border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.6);background:rgba(255,255,255,.04)}
@@ -1023,6 +1025,34 @@ function syncBestUI(){
     if(el) el.textContent = b>0 ? b : '—';
 }
 /* 결과 카드 점수 — 0 에서 올라가며 채워진다(0.6초) */
+/* 결과 카드 문구 현지화 (2026-10) — 함수 안에 박힌 한국어가 en/ja 결과 화면에 그대로 새던 자리.
+   ko 는 원문 그대로, es/pt/ja 는 각 언어, 그 밖의 UI 언어는 en. 판정·기록 로직과 무관한 표시 문자열만 */
+const RT_MAP = {
+    '조회 중…':                         {en:'Loading…', ja:'読み込み中…', es:'Cargando…', pt:'Carregando…'},
+    '🏆 랭크':                           {en:'🏆 Rank', ja:'🏆 ランク', es:'🏆 Ranking', pt:'🏆 Ranking'},
+    '다시하기':                          {en:'Play again', ja:'もう一度', es:'Otra vez', pt:'De novo'},
+    '재시작':                            {en:'Restart', ja:'リスタート', es:'Reiniciar', pt:'Reiniciar'},
+    '🏆 개인 신기록!':                   {en:'🏆 Personal best!', ja:'🏆 自己ベスト!', es:'🏆 ¡Récord personal!', pt:'🏆 Recorde pessoal!'},
+    '⏸ 1시간 내 30회 한도 초과':         {en:'⏸ Limit: 30 runs per hour', ja:'⏸ 1時間30回の上限超過', es:'⏸ Límite: 30 partidas por hora', pt:'⏸ Limite: 30 partidas por hora'},
+    '🛠 랭킹 시스템 점검 중':            {en:'🛠 Ranking maintenance', ja:'🛠 ランキング点検中', es:'🛠 Ranking en mantenimiento', pt:'🛠 Ranking em manutenção'},
+    '잠시 후 다시 시도해주세요':          {en:'Please try again later', ja:'しばらくしてからお試しください', es:'Inténtalo más tarde', pt:'Tente mais tarde'},
+    '⚠️ 랭킹 등록 실패':                 {en:'⚠️ Rank submission failed', ja:'⚠️ 登録失敗', es:'⚠️ Falló el envío', pt:'⚠️ Falha no envio'},
+    '네트워크를 확인하고 다시 시도해주세요': {en:'Check your network and retry', ja:'ネットワークを確認してください', es:'Comprueba la red y reintenta', pt:'Verifique a rede e tente de novo'},
+    '⚠️ 점수 검증 실패':                 {en:'⚠️ Score check failed', ja:'⚠️ スコア検証失敗', es:'⚠️ Verificación fallida', pt:'⚠️ Verificação falhou'},
+    '비정상적으로 빠른 진행 감지':         {en:'Unusually fast progress detected', ja:'異常に速い進行を検出', es:'Progreso anormalmente rápido', pt:'Progresso anormalmente rápido'},
+    '🔐 로그인이 필요해요':              {en:'🔐 Sign-in required', ja:'🔐 ログインが必要です', es:'🔐 Inicia sesión', pt:'🔐 Faça login'},
+    '로그인 후 다시 시도':                {en:'Sign in and try again', ja:'ログインして再試行', es:'Inicia sesión y reintenta', pt:'Entre e tente de novo'},
+    '🔒 로그인하면 기록 저장!':           {en:'🔒 Sign in to save your record!', ja:'🔒 ログインで記録を保存!', es:'🔒 ¡Inicia sesión para guardar!', pt:'🔒 Entre para salvar o recorde!'},
+    '랭킹 등록은 로그인 사용자만 가능':    {en:'Only signed-in players are ranked', ja:'ランキング登録はログインユーザーのみ', es:'Solo jugadores con sesión entran al ranking', pt:'Só jogadores logados entram no ranking'},
+    '⚠️ 기록 저장 실패':                 {en:'⚠️ Could not save record', ja:'⚠️ 記録の保存に失敗', es:'⚠️ No se pudo guardar', pt:'⚠️ Não foi possível salvar'},
+    '🎉 첫 기록 등록!':                  {en:'🎉 First record saved!', ja:'🎉 初記録登録!', es:'🎉 ¡Primer récord!', pt:'🎉 Primeiro recorde!'},
+    '월드 랭킹 진입 완료':                {en:'You are on the world ranking', ja:'ワールドランキング入り', es:'Ya estás en el ranking mundial', pt:'Você entrou no ranking mundial'}
+};
+function rtLang(){ let l='ko'; try{ l=(window.LpI18n&&LpI18n.getLang())||'ko'; }catch(_){} return l; }
+function rt(ko){ const l=rtLang(); if(l==='ko') return ko; const m=RT_MAP[ko]; return m ? (m[l]||m.en) : ko; }
+function rtTop(p){ const l=rtLang(); return l==='ko'?'상위 '+p+'%':l==='ja'?'上位 '+p+'%':l==='es'?'Top '+p+'%':l==='pt'?'Top '+p+'%':'Top '+p+'%'; }
+function rtFood(n,sec){ const l=rtLang(); return l==='ko'?'먹이 '+n+'개 · '+sec+'초':l==='ja'?'エサ '+n+'個 · '+sec+'秒':l==='es'?n+' comidas · '+sec+' s':l==='pt'?n+' comidas · '+sec+' s':n+' food · '+sec+'s'; }
+function rtOf(n){ const l=rtLang(); return l==='ko'?n+'명 중':l==='ja'?n+'人中':l==='es'?'de '+n:l==='pt'?'de '+n:'of '+n; }
 function countUp(el, to){
     if(!el) return;
     if(REDUCED || to<=0){ el.textContent=to; return; }
@@ -1060,16 +1090,16 @@ function gameOver(){
     ov.innerHTML=
         '<h2 class="go">GAME OVER</h2>'
       +'<div class="score-big" id="ovScore">0</div>'
-      +'<p>먹이 '+foodsEaten+'개 · '+(duration/1000).toFixed(1)+'초'+(isNewBest?'<br><b class="nb">🏆 NEW BEST!</b>':'')+'</p>'
+      +'<p>'+rtFood(foodsEaten, (duration/1000).toFixed(1))+(isNewBest?'<br><b class="nb">🏆 NEW BEST!</b>':'')+'</p>'
       +'<div class="rank-card" id="ovRankCard">'
-      +  '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
+      +  '<div class="rank-card-rank" id="ovRankNum">'+rt('조회 중…')+'</div>'
       +  '<div class="rank-card-pct" id="ovRankPct"></div>'
       +  '<div class="rank-card-pb" id="ovRankPb"></div>'
       +  '<div class="rank-card-debug" id="ovRankDebug"></div>'
-      +  '<button class="rank-card-link" id="ovRankBtn">🏆 랭크</button>'
+      +  '<button class="rank-card-link" id="ovRankBtn">'+rt('🏆 랭크')+'</button>'
       +'</div>'
-      +'<button class="btn" id="ovBtn">다시하기</button>'
-      +'<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
+      +'<button class="btn" id="ovBtn">'+rt('다시하기')+'</button>'
+      +'<div class="kbd-hint"><kbd>Enter</kbd> '+rt('재시작')+'</div>';
     ov.classList.remove('hidden');
     countUp($('ovScore'), score);
     lpNavShow('lpEndNav', true);
@@ -1130,13 +1160,13 @@ function gameOver(){
                 });
                 if(!error){
                     recordOk=true;
-                    if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                    if(data?.is_personal_best) pbMsg=rt('🏆 개인 신기록!');
                     if(data?.is_personal_best && !isNewBest){ sfx.best(); vib([20,40,20,40,60]); confetti(); kick(); }
                 }else{
                     recordErrKind=_classifyErr(error);
                     console.warn('[snake.record_snake_attempt]', error);
                     if(recordErrKind==='missing_migration')_logDeployHint();
-                    if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
+                    if(recordErrKind==='rate_limit') pbMsg=rt('⏸ 1시간 내 30회 한도 초과');
                 }
             }catch(e){
                 recordErrKind=_classifyErr(e);
@@ -1203,35 +1233,35 @@ function gameOver(){
                percentile/total) still renders cleanly. */
             $('ovRankNum').textContent='🌍 #'+rank;
             const parts=[];
-            if(d.percentile!=null) parts.push('상위 '+d.percentile+'%');
-            if(d.total_world_players!=null) parts.push(d.total_world_players.toLocaleString()+'명 중');
+            if(d.percentile!=null) parts.push(rtTop(d.percentile));
+            if(d.total_world_players!=null) parts.push(rtOf(d.total_world_players.toLocaleString()));
             $('ovRankPct').textContent=parts.join(' · ');
         }else if(rankErrKind==='missing_migration'||recordErrKind==='missing_migration'){
             /* Admin needs to deploy the migrations. Calmer language for
                end users (most won't be the admin); detail in console. */
-            $('ovRankNum').textContent='🛠 랭킹 시스템 점검 중';
-            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('🛠 랭킹 시스템 점검 중');
+            $('ovRankPct').textContent=rt('잠시 후 다시 시도해주세요');
         }else if(rankErrKind||recordErrKind==='unknown'){
-            $('ovRankNum').textContent='⚠️ 랭킹 등록 실패';
-            $('ovRankPct').textContent='네트워크를 확인하고 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('⚠️ 랭킹 등록 실패');
+            $('ovRankPct').textContent=rt('네트워크를 확인하고 다시 시도해주세요');
         }else if(!recordOk && recordErrKind==='invalid'){
-            $('ovRankNum').textContent='⚠️ 점수 검증 실패';
-            $('ovRankPct').textContent='비정상적으로 빠른 진행 감지';
+            $('ovRankNum').textContent=rt('⚠️ 점수 검증 실패');
+            $('ovRankPct').textContent=rt('비정상적으로 빠른 진행 감지');
         }else if(!recordOk && recordErrKind==='no_auth'){
-            $('ovRankNum').textContent='🔐 로그인이 필요해요';
-            $('ovRankPct').textContent='로그인 후 다시 시도';
+            $('ovRankNum').textContent=rt('🔐 로그인이 필요해요');
+            $('ovRankPct').textContent=rt('로그인 후 다시 시도');
         }else if(!recordOk && recordErrKind==='no_login'){
             /* Anon-friendly upsell: not an error — they intentionally
                played without logging in. Encourage signup, but the world
                leaderboard still loads (loadLeaderboard call below). */
-            $('ovRankNum').textContent='🔒 로그인하면 기록 저장!';
-            $('ovRankPct').textContent='랭킹 등록은 로그인 사용자만 가능';
+            $('ovRankNum').textContent=rt('🔒 로그인하면 기록 저장!');
+            $('ovRankPct').textContent=rt('랭킹 등록은 로그인 사용자만 가능');
         }else if(!recordOk){
-            $('ovRankNum').textContent='⚠️ 기록 저장 실패';
-            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('⚠️ 기록 저장 실패');
+            $('ovRankPct').textContent=rt('잠시 후 다시 시도해주세요');
         }else{
-            $('ovRankNum').textContent='🎉 첫 기록 등록!';
-            $('ovRankPct').textContent='월드 랭킹 진입 완료';
+            $('ovRankNum').textContent=rt('🎉 첫 기록 등록!');
+            $('ovRankPct').textContent=rt('월드 랭킹 진입 완료');
         }
         $('ovRankPb').textContent=pbMsg;
         /* Debug slot kept in DOM for inspection but blank for end users.
@@ -1329,17 +1359,21 @@ function step(){
             burst(fc.x, fc.y, '#FFD147', 24, 190, 3.4);
             sparkles(fc.x, fc.y, '#FFF3C4', 10, 120);
             ringFx(fc.x, fc.y, '#FFF3C4', 50, 0.55);
-            popText(fc.x, fc.y-6, '+'+(10+bonus), '#FFD147', 19);
+            popText(fc.x, fc.y-6, '+'+(10+bonus), '#FFD147', 19, combo>=3?'COMBO ×'+combo:'', comboColor(combo));
+            popFx(fc.x, fc.y, '#FFD147', cell*1.5);
             vib([10,30,18]);
         } else {
             sfx.eat(combo);
-            burst(fc.x, fc.y, combo>=4?'#FFB3C6':'#FF5C85', 14+Math.min(10,combo*2), 130+combo*8, 2.8);
+            popFx(fc.x, fc.y, combo>=4?'#FFB3C6':'#FF5C85', cell*(0.9+Math.min(0.6,combo*0.08)));
+            burst(fc.x, fc.y, combo>=4?'#FFB3C6':'#FF5C85', 14+Math.min(10,combo*2), 130+combo*8, 3.2);
             sparkles(fc.x, fc.y, '#FFFFFF', 3+Math.min(6,combo), 90);
             ringFx(fc.x, fc.y, '#FF9DB5', 30+Math.min(20,combo*3), 0.38);
-            popText(fc.x, fc.y-6, '+10', '#FFFFFF', 13+Math.min(6,combo));
+            /* 점수와 콤보를 한 덩어리로 — 예전엔 '+10' 과 'COMBO ×n' 이 따로 떠서 겹쳐 읽히지 않았다 */
+            const cc=comboColor(combo);
+            popText(fc.x, fc.y-8, '+10', combo>=3?cc:'#FFFFFF', 13+Math.min(7,combo), combo>=3?'COMBO ×'+combo:'', cc);
             vib(combo>=4?18:12);
         }
-        if(combo>=3) popText(fc.x, fc.y+10, 'COMBO ×'+combo, combo>=8?'#FFD147':combo>=5?'#FF9DF0':'#7CFFB8', 10+Math.min(5,combo*0.6));
+        comboPopT=performance.now();
         bulges.push(0);
         headGulp=performance.now();
         $('scoreNow').textContent=score;
@@ -1383,6 +1417,32 @@ function step(){
         sparkles(c.x, c.y, THEMES[themeIdx].rim, lastLevel>=6?2:1, 30);
     }
 }
+function comboColor(c){ return c>=8?'#FFD147':c>=5?'#FF9DF0':c>=3?'#7CFFB8':'#CFFFE8'; }
+/* 콤보 미터 — 보드 오른쪽 위. 숫자는 콤보마다 커지고 색이 달아오르며, 아래 막대가 3초 유효시간만큼 줄어든다 */
+let comboPopT=0;
+function drawComboMeter(now){
+    if(combo<2 || comboLeft<=0 || !running || dying) return;
+    const k=Math.max(0, Math.min(1, comboLeft/3)), c=comboColor(combo);
+    const pu=REDUCED?1:Math.min(1,(now-comboPopT)/260);
+    const pop=1+(1-pu)*(1-pu)*0.55*(1+Math.min(1,combo/8));
+    const fade=Math.min(1, comboLeft/0.35);
+    const x=BASE_SIZE-10, y=20;
+    ctx.save();
+    ctx.globalAlpha=0.92*fade;
+    ctx.translate(x, y); ctx.scale(pop, pop);
+    ctx.textAlign='right'; ctx.textBaseline='middle';
+    const fs=Math.round(15+Math.min(9, combo*1.1));
+    ctx.font='900 '+fs+'px Orbitron, system-ui, sans-serif';
+    ctx.lineWidth=4; ctx.strokeStyle='rgba(0,16,8,.88)';
+    ctx.strokeText('×'+combo, 0, 0); ctx.fillStyle=c; ctx.fillText('×'+combo, 0, 0);
+    const tw=ctx.measureText('×'+combo).width;
+    ctx.font='800 8px Orbitron, system-ui, sans-serif';
+    ctx.lineWidth=3; ctx.strokeText('COMBO', -tw-4, 2); ctx.fillStyle='#FFFFFF'; ctx.fillText('COMBO', -tw-4, 2);
+    const bw=tw+44;
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(-bw, fs*0.62, bw, 3);
+    ctx.fillStyle=c; ctx.fillRect(-bw*k, fs*0.62, bw*k, 3);
+    ctx.restore();
+}
 function nearMiss(h, tight){
     nearCool=1.4;
     const c=cellCenter(h);
@@ -1424,7 +1484,7 @@ const FX=new Array(FXN);
 for(let i=0;i<FXN;i++) FX[i]={on:false,k:0,x:0,y:0,vx:0,vy:0,life:0,max:1,size:1,color:'#fff',g:0,rot:0,spin:0};
 let fxHead=0, fxLive=0;
 const TXN=14, TX=new Array(TXN);
-for(let i=0;i<TXN;i++) TX[i]={on:false,x:0,y:0,text:'',color:'#fff',size:13,life:0,max:1};
+for(let i=0;i<TXN;i++) TX[i]={on:false,x:0,y:0,text:'',color:'#fff',size:13,life:0,max:1,sub:'',subColor:'#fff'};
 let txHead=0;
 const FXCAP=[120,220,360];
 function fxNew(essential){
@@ -1476,10 +1536,15 @@ function confetti(){
         f.life=1.6+Math.random()*1.2; f.max=f.life; f.size=3+Math.random()*3; f.color=cols[i%cols.length]; f.rot=Math.random()*6; f.spin=(Math.random()-0.5)*14; f.g=90;
     }
 }
-function popText(x,y,text,color,size){
+function popText(x,y,text,color,size,sub,subColor){
+    /* 가까이 떠 있던 옛 글자는 서둘러 지운다 — 연속으로 먹을 때 글자끼리 겹쳐 읽히지 않게 */
+    for(let i=0;i<TXN;i++){ const o=TX[i]; if(o.on && o.life>0.22 && Math.abs(o.x-x)<70 && Math.abs(o.y-y)<40) o.life=0.22; }
     const t=TX[txHead]; txHead=(txHead+1)%TXN;
     t.on=true; t.x=Math.max(30,Math.min(BASE_SIZE-30,x)); t.y=Math.max(14,y); t.text=text; t.color=color; t.size=size||13; t.life=0.9; t.max=0.9;
+    t.sub=sub||''; t.subColor=subColor||color;
 }
+/* 먹는 순간 먹이 자리에서 번쩍 부푸는 원 — 국소 섬광(0.16초, 화면 전체가 아니라 그 칸만) */
+function popFx(x,y,color,r){ if(REDUCED) return; const f=fxNew(true); f.k=7; f.x=x; f.y=y; f.size=r; f.color=color; f.life=0.16; f.max=0.16; }
 function flash(a,rgb){ if(REDUCED) return; flashA=Math.min(0.12, Math.max(flashA,a)); flashRGB=rgb||'255,255,255'; }
 function showBanner(text, sub, secs){ banner={text,sub:sub||'',t:secs,max:secs}; }
 function updateFx(dt){
@@ -1557,6 +1622,10 @@ function drawFx(){
         } else if(f.k===3){
             ctx.globalAlpha=a*0.9; ctx.strokeStyle=f.color; ctx.lineWidth=3*a+0.5;
             ctx.beginPath(); ctx.arc(f.x, f.y, f.size*(1-a*a)+3, 0, Math.PI*2); ctx.stroke();
+        } else if(f.k===7){
+            const e=1-a;
+            ctx.globalAlpha=a*a*0.9; ctx.fillStyle=a>0.6?'#FFFFFF':f.color;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.size*(0.4+0.9*(1-(1-e)*(1-e))), 0, Math.PI*2); ctx.fill();
         }
     }
     ctx.globalCompositeOperation='source-over';
@@ -1590,6 +1659,11 @@ function drawFx(){
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.lineWidth=4; ctx.strokeStyle='rgba(0,16,8,.88)'; ctx.strokeText(t.text,0,0);
         ctx.fillStyle=t.color; ctx.fillText(t.text,0,0);
+        if(t.sub){
+            ctx.font='900 '+Math.round(t.size*0.62)+'px Orbitron, system-ui, sans-serif';
+            ctx.lineWidth=3; ctx.strokeText(t.sub,0,t.size*0.82);
+            ctx.fillStyle=t.subColor; ctx.fillText(t.sub,0,t.size*0.82);
+        }
         ctx.restore();
     }
 }
@@ -2051,6 +2125,7 @@ function render(now){
     }
     drawSnake(now, a);
     drawFx();
+    drawComboMeter(now);
     lastRenderT=now;
     if(banner){
         const k=banner.t/banner.max;
