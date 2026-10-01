@@ -281,6 +281,18 @@ body{
 .over-stats .row b{color:#fff;font-weight:700;font-variant-numeric:tabular-nums}
 .over-rank{margin-top:8px;font-size:.86em;color:var(--cyan);font-weight:700}
 .over-pb{margin-top:4px;font-size:.78em;color:var(--success);font-weight:700}
+/* 2026-10 결과 손맛 — 점수 차르륵 끝에 톡, 신기록 도장(점수 카드 모서리에 비스듬히 찍힌다. 레이아웃 높이 불변) */
+.over-stats{position:relative}
+.over-stats .row b.ov-cnt{display:inline-block;transform-origin:right center}
+.over-stats .row b.ov-cnt.done{animation:ov-cnt-pop .26s cubic-bezier(.2,1.8,.4,1)}
+@keyframes ov-cnt-pop{0%{transform:scale(1.45);color:#FFE66D}100%{transform:scale(1)}}
+.lp-nb-stamp{position:absolute;right:-10px;top:-16px;z-index:2;padding:3px 10px;border:2.5px solid #FFD447;border-radius:8px;
+    background:rgba(30,18,0,.78);color:#FFE66D;font:900 12px Orbitron,sans-serif;letter-spacing:.06em;white-space:nowrap;
+    text-shadow:0 0 10px rgba(255,214,71,.7);box-shadow:0 0 18px -4px rgba(255,214,71,.8),inset 0 0 10px rgba(255,214,71,.25);
+    opacity:0;transform:rotate(-8deg) scale(2.4);pointer-events:none}
+.lp-nb-stamp.on{animation:lp-stamp .42s cubic-bezier(.2,1.5,.4,1) forwards}
+@keyframes lp-stamp{0%{opacity:0;transform:rotate(-16deg) scale(2.4)}55%{opacity:1}100%{opacity:1;transform:rotate(-8deg) scale(1)}}
+@media (prefers-reduced-motion:reduce){.lp-nb-stamp.on{animation:none;opacity:1;transform:rotate(-8deg)}.over-stats .row b.ov-cnt.done{animation:none}}
 /* Game-over 화면 액션 버튼 행 — "다시 도전" + "🏆 랭크". */
 .ov-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 .overlay .btn-rank{
@@ -2303,6 +2315,20 @@ function moveX(dx){
         }
         return true;
     }
+    /* 막힘 — 누를 때마다(자동 반복은 0.18초에 한 번) 톡 부딪히는 반응. 숫자 두 개만 적고 그림은 render 가 */
+    const bn = performance.now();
+    if(bn - fx.bumpT > 180){
+        fx.bumpT = bn; fx.bumpDx = dx; Sfx.soft();
+        /* 부딪힌 면에서 먼지 두 톨 */
+        if(!RM && Q.lvl > 0){
+            const shape = PIECES[current.type].shapes[current.rot];
+            let ex = dx > 0 ? -1 : 99, ey = 0;
+            for(const [sx, sy] of shape){ const x = current.x + sx; if(dx > 0 ? x > ex : x < ex){ ex = x; ey = current.y + sy; } }
+            const px = (dx > 0 ? ex + 1 : ex) * CELL, py = (ey + 0.5) * CELL;
+            fxDust(px, py - 3, dx * 0.4, -0.5, PIECES[current.type].color, 2.2);
+            fxDust(px, py + 3, dx * 0.3, 0.3, PIECES[current.type].color, 1.8);
+        }
+    }
     return false;
 }
 function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
@@ -2324,6 +2350,7 @@ function rotate(dir){  /* dir = +1 (CW) or -1 (CCW) */
             const kicked = kx !== 0 || ky !== 0;
             Sfx.rotate(kicked);
             fxRotateSpark(kicked);
+            fx.rotT = performance.now();
             lastMoveRotated = true;   /* spin 후보 — lock 시 검증 */
             if(landed){
                 if(canMoveDown()){
@@ -3268,7 +3295,9 @@ const Q = { lvl: 2, ema: 4, n: 0, good: 0 };
 const FX_CAP = [150, 280, 440];
 const fx = { parts: [], pool: [], flashes: [], collapse: null, danger: false, dangerK: 0, levelFlash: 0, lastT: 0,
              freezeUntil: 0, squash: null, after: [], lines: [], rings: [], goldFlash: 0, auroraBoost: 0,
-             beat: 0, nextBeat: 0, combo: { n: -1, b2b: -1, shown: 0, t: 0 }, spawnAt: 0 };
+             beat: 0, nextBeat: 0, combo: { n: -1, b2b: -1, shown: 0, t: 0 }, spawnAt: 0,
+             /* 2026-10 손맛: 벽에 막힌 이동 → 조각이 그쪽으로 톡 부딪혔다 돌아온다 / 회전 → 순간 부풀었다 제자리 (그림만) */
+             bumpT: -1e9, bumpDx: 0, rotT: -1e9 };
 let lockFxStrong = false;
 /* 삼각 파편 모양 6종 (단위 좌표) — 파편마다 배열을 만들지 않으려고 미리 둔다 */
 const SHARD_TRI = [
@@ -3745,13 +3774,24 @@ function render(){
         const color = PIECES[current.type].color;
         const sk = RM ? 1 : Math.min(1, (now - fx.spawnAt) / 110);
         const sdy = (1 - (1 - Math.pow(1 - sk, 3))) * -6;
+        /* 벽 부딪힘(옆으로 톡) · 회전 순간 부풀기 — 판정 좌표는 그대로, 그림만 */
+        const bu = RM ? 1 : (now - fx.bumpT) / 150;
+        const bx = bu < 1 ? fx.bumpDx * 2.6 * Math.sin(bu * Math.PI) * (1 - bu * 0.4) : 0;
+        const ru = RM ? 1 : (now - fx.rotT) / 130;
+        const rs = ru < 1 ? 1 + 0.11 * (1 - ru) * (1 - ru) : 1;
+        if(rs !== 1){
+            let pcx = 0, pcy = 0;
+            for(const [dx, dy] of shape){ pcx += current.x + dx; pcy += current.y + dy; }
+            pcx = (pcx / 4 + 0.5) * CELL; pcy = (pcy / 4 + 0.5) * CELL + sdy;
+            ctx.setTransform(CTX_SX * rs, 0, 0, CTX_SY * rs, CTX_SX * pcx * (1 - rs), CTX_SY * pcy * (1 - rs));
+        }
         if(Q.lvl > 0){
             ctx.globalCompositeOperation = 'lighter';
-            ctx.globalAlpha = 0.20 * sk;
+            ctx.globalAlpha = (0.20 + (rs - 1) * 2.4) * sk;
             const gs = glowSprite(hexRgbCached(color));
             for(const [dx, dy] of shape){
                 const cy = current.y + dy;
-                if(cy >= 0) ctx.drawImage(gs, (current.x + dx) * CELL - CELL * 0.75, cy * CELL - CELL * 0.75 + sdy, CELL * 2.5, CELL * 2.5);
+                if(cy >= 0) ctx.drawImage(gs, (current.x + dx) * CELL - CELL * 0.75 + bx, cy * CELL - CELL * 0.75 + sdy, CELL * 2.5, CELL * 2.5);
             }
             ctx.globalCompositeOperation = 'source-over';
         }
@@ -3759,8 +3799,9 @@ function render(){
         const spr = getCellSprite(color);
         for(const [dx, dy] of shape){
             const cx = current.x + dx, cy = current.y + dy;
-            if(cy >= 0) ctx.drawImage(spr, cx * CELL, cy * CELL + sdy, CELL, CELL);
+            if(cy >= 0) ctx.drawImage(spr, cx * CELL + bx, cy * CELL + sdy, CELL, CELL);
         }
+        if(rs !== 1) ctx.setTransform(CTX_SX, 0, 0, CTX_SY, 0, 0);
         ctx.globalAlpha = 1;
         const lockK = (landed && lockDelay > 0) ? Math.min(1, lockTimer / lockDelay) : 0;
         if(lockK > 0.02){
@@ -4383,20 +4424,44 @@ function sprintComplete(){
     runFinale('win', () => showSprintCompleteOverlay(endedAt));
 }
 
+/* 결과 점수 차르륵 — 끝으로 갈수록 느려지고(ease-out), 숫자가 바뀔 때 가볍게 똑딱 */
+function ovCountUp(el, to, ms, done){
+    if(!el) return;
+    if(RM || to <= 0){ el.textContent = to.toLocaleString(); if(done) done(); return; }
+    const t0 = performance.now(); let lastTick = 0;
+    (function st(){
+        if(!el.isConnected) return;
+        const now = performance.now(), k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(to * e).toLocaleString();
+        if(k < 1 && now - lastTick > 70){ lastTick = now; try { Sfx.move(); } catch(_) {} }
+        if(k < 1) requestAnimationFrame(st);
+        else { el.classList.add('done'); if(done) done(); }
+    })();
+}
 async function showGameOverOverlay(endedAt){
     const duration = Math.max(0, Math.floor((endedAt || performance.now()) - startedAt));
     const ov = $('overlay');
     /* Sprint 모드: top-out 으로 game over 됐을 때 — 미완료 sprint 표시.
        Submit 안 함 (sprint 는 별도 ranking, 미구현). */
     const isSprintFail = (gameMode === 'sprint');
+    /* 2026-10 손맛: 기기 안 마라톤 최고점 — 비로그인도 '자기 기록 깨기' 가 보이게(새 키만 쓴다).
+       레이스(같은 시드·시간 제한)는 따로 세지 않는다 */
+    let lbPrev = 0, lbNew = false;
+    if(!isSprintFail && !lpRaceRng){
+        try {
+            lbPrev = parseInt(localStorage.getItem('tetris-marathon-best') || '0', 10) || 0;
+            if(score > lbPrev){ localStorage.setItem('tetris-marathon-best', String(score)); lbNew = lbPrev > 0; }
+        } catch(_) {}
+    }
     ov.innerHTML = ''
-        + '<div class="ov-panda" data-pf="cry" aria-hidden="true"></div>'
+        + '<div class="ov-panda' + (lbNew ? ' bob' : '') + '" data-pf="' + (lbNew ? 'dance1' : 'cry') + '" aria-hidden="true"></div>'
         + '<h2 class="over">' + (isSprintFail ? esc(tT('sprintFail')) : esc(tT('gameOver'))) + '</h2>'
         + '<div class="over-stats">'
         + (isSprintFail
             ? '<div class="row"><span>'+esc(tT('lines'))+'</span><b>' + lines + '/' + SPRINT_TARGET + '</b></div>'
               + '<div class="row"><span>'+esc(tT('time'))+'</span><b>' + formatSprintTime(duration) + '</b></div>'
-            : '<div class="row"><span>'+esc(tT('score'))+'</span><b>' + score.toLocaleString() + '</b></div>'
+            : (lbNew ? '<div class="lp-nb-stamp" id="ovNbStamp" aria-hidden="true">NEW BEST!</div>' : '')
+              + '<div class="row"><span>'+esc(tT('score'))+'</span><b class="ov-cnt" id="ovScoreVal">' + (RM ? score.toLocaleString() : '0') + '</b></div>'
               + '<div class="row"><span>'+esc(tT('lines'))+'</span><b>' + lines + '</b></div>'
               + '<div class="row"><span>'+esc(tT('level'))+'</span><b>' + level + '</b></div>'
               + '<div class="row"><span>'+esc(tT('time'))+'</span><b>' + Math.floor(duration/1000) + 's</b></div>')
@@ -4429,6 +4494,19 @@ async function showGameOverOverlay(endedAt){
 
     /* Sprint top-out — ranking 제출 안 함, early return. */
     if(isSprintFail) return;
+
+    /* 점수 차르륵 → 신기록이면 도장 쾅 (비로그인은 기기 최고점을 아래 줄에) */
+    if(!me){
+        const pbEl = $('ovRankPb');
+        if(pbEl) pbEl.textContent = lbNew ? tT('myBest') : (lbPrev > 0 ? tT('priorBest') + ': ' + lbPrev.toLocaleString() : '');
+    }
+    ovCountUp($('ovScoreVal'), score, 720, () => {
+        if(!lbNew) return;
+        const st = $('ovNbStamp');
+        if(st) st.classList.add('on');
+        try { Sfx.levelUp(); } catch(_) {}
+        buzz([18, 40, 30]);
+    });
 
     /* Submit the score (anon: skip) */
     let recordOk = false, recordErrKind = null;
