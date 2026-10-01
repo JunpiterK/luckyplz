@@ -276,7 +276,38 @@
             var d = dock.getBoundingClientRect(), k = kids[i];
             var r = { left: d.left + k.offsetLeft, top: d.top + k.offsetTop, width: k.offsetWidth, height: k.offsetHeight };
             r.right = r.left + r.width; r.bottom = r.top + r.height;
-            if (r.width && rectCollides(r)) return true;
+            if (r.width && (rectCollides(r) || textCollides(r))) return true;
+        }
+        return false;
+    }
+    /* 2026-10-02: 펼친 버튼이 '글자'를 가리는가 — 퀴즈 '참가하기'·프리즘 헥스 '인원' 라벨이 ⛶·? 아래 깔렸다.
+       요소 박스가 아니라 글자 자체의 사각형(Range)으로 잰다 — 넓은 블록의 빈 자리 때문에 괜히 접히지 않게.
+       접힌 손잡이(handleCollides)에는 쓰지 않는다: 글자 때문에 손잡이까지 사라지면 ⛶·? 에 갈 길이 없다 */
+    function textCollides(r) {
+        if (!document.createRange) return false;
+        var seen = [], rng = document.createRange();
+        for (var gx = 0; gx < 3; gx++) for (var gy = 0; gy < 3; gy++) {
+            var x = r.left + 3 + gx * (r.width - 6) / 2, y = r.top + 3 + gy * (r.height - 6) / 2;
+            if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+            var stack = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [];
+            for (var j = 0; j < stack.length; j++) {
+                var el = stack[j];
+                if (el === document.body || el === document.documentElement) break;
+                if (dock.contains(el) || el.closest('.lp-sw-fab,.lp-help-ov,.lp-sw-modal,.lp-ap-ov')) continue;
+                if (seen.indexOf(el) === -1) {
+                    seen.push(el);
+                    for (var c = el.firstChild; c; c = c.nextSibling) {
+                        if (c.nodeType !== 3 || !/\S/.test(c.nodeValue)) continue;
+                        rng.selectNodeContents(c);
+                        var rs = rng.getClientRects();
+                        for (var q = 0; q < rs.length; q++) {
+                            var t = rs[q];
+                            if (t.width > 1 && t.right > r.left + 2 && t.left < r.right - 2 && t.bottom > r.top + 2 && t.top < r.bottom - 2 && effectivelyVisible(el)) return true;
+                        }
+                    }
+                }
+                if (opaqueBg(el)) break;
+            }
         }
         return false;
     }

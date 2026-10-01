@@ -83,12 +83,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Yut Nori', l:['2–4 times: vence quem levar todas as peças para casa primeiro','Jogue os palitos, toque na peça e depois na casa brilhante','Yut/Mo = joga de novo; capturar com Do/Gae/Geol também · canto = atalho','Online: envie o link → cada um escolhe o personagem e toca em Pronto → o anfitrião começa; tempo esgotado joga sozinho']}
   },
   'prism-hex': {
-    ko: {t:'프리즘 헥스', l:['보석 블록 18개를 판에 최대한 많이 놓으면 승리 — 남은 칸이 적은 순','첫 블록은 ★ 시작 칸, 같은 색은 변이 닿으면 안 되고 꼭짓점 다리로만 연결','블록 고르기 → 판 누르기(착지) → 한 번 더 누르면 놓기 · 두 손가락으로 확대']},
-    en: {t:'Prism Hex', l:['Place as many of your 18 gem blocks as you can — fewest cells left wins','First block covers your ★ start; same colors never share an edge, only a corner bridge','Pick a block, tap the board to land it, tap again to place · pinch to zoom']},
-    ja: {t:'プリズムヘックス', l:['宝石ブロック18個をできるだけ多く置く — 残りマスが少ない人の勝ち','最初は★スタートマス、同じ色は辺で接さず角のブリッジでだけつなぐ','ブロックを選ぶ → 盤をタップで仮置き → もう一度タップで確定 · 2本指で拡大']},
-    zh: {t:'棱镜六角棋', l:['尽量把18块宝石积木放上棋盘，剩余格数最少者获胜','第一块盖住★起点；同色不能边对边，只能用角上的桥相连','选积木 → 点棋盘先放下 → 再点一次确定 · 双指缩放']},
-    es: {t:'Prism Hex', l:['Coloca todos los bloques de gemas que puedas: gana quien deje menos celdas','El primero cubre tu ★; el mismo color nunca comparte lado, solo un puente de esquina','Elige un bloque, toca el tablero para posarlo y otra vez para colocar · pellizca para ampliar']},
-    pt: {t:'Prism Hex', l:['Coloque o máximo dos 18 blocos de gemas: vence quem sobrar menos casas','O primeiro cobre sua ★; a mesma cor nunca encosta pelo lado, só por uma ponte de canto','Escolha um bloco, toque no tabuleiro para pousar e de novo para colocar · pinça para zoom']}
+    ko: {t:'프리즘 헥스', l:['보석 블록 18개를 판에 최대한 많이 놓으면 승리 — 남은 칸이 적은 순','첫 블록은 ★ 시작 칸, 같은 색은 변이 닿으면 안 되고 꼭짓점 다리로만 연결','블록 고르기 → 판 누르기(착지) → 한 번 더 누르면 놓기 · 두 손가락으로 확대','봇 실력 쉬움·보통·어려움 · 한 판 더는 직전 꼴찌가 먼저']},
+    en: {t:'Prism Hex', l:['Place as many of your 18 gem blocks as you can — fewest cells left wins','First block covers your ★ start; same colors never share an edge, only a corner bridge','Pick a block, tap the board to land it, tap again to place · pinch to zoom','Bot level Easy/Normal/Hard · on a rematch the last-place player starts']},
+    ja: {t:'プリズムヘックス', l:['宝石ブロック18個をできるだけ多く置く — 残りマスが少ない人の勝ち','最初は★スタートマス、同じ色は辺で接さず角のブリッジでだけつなぐ','ブロックを選ぶ → 盤をタップで仮置き → もう一度タップで確定 · 2本指で拡大','ボットの強さ やさしい・ふつう・つよい · もう一回は前回最下位から']},
+    zh: {t:'棱镜六角棋', l:['尽量把18块宝石积木放上棋盘，剩余格数最少者获胜','第一块盖住★起点；同色不能边对边，只能用角上的桥相连','选积木 → 点棋盘先放下 → 再点一次确定 · 双指缩放','电脑难度 简单/普通/困难 · 再来一局由上局最后一名先手']},
+    es: {t:'Prism Hex', l:['Coloca todos los bloques de gemas que puedas: gana quien deje menos celdas','El primero cubre tu ★; el mismo color nunca comparte lado, solo un puente de esquina','Elige un bloque, toca el tablero para posarlo y otra vez para colocar · pellizca para ampliar','Nivel del bot Fácil/Normal/Difícil · en la revancha empieza el último']},
+    pt: {t:'Prism Hex', l:['Coloque o máximo dos 18 blocos de gemas: vence quem sobrar menos casas','O primeiro cobre sua ★; a mesma cor nunca encosta pelo lado, só por uma ponte de canto','Escolha um bloco, toque no tabuleiro para pousar e de novo para colocar · pinça para zoom','Nível do robô Fácil/Normal/Difícil · na revanche começa o último colocado']}
   },
   'gummy': {
     ko: {t:'구미 체인', l:['같은 색 젤리 4개 이상을 이으면 터져요','떨어져서 또 터지면 연쇄 — 점수가 크게 뛰어요','대전에선 연쇄가 설탕 블록 공격, 내 연쇄로 예고분을 상쇄','3열 맨 윗칸이 막히면 패배']},
