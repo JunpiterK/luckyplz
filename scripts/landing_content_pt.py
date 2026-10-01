@@ -21,7 +21,7 @@ CONTENT["roulette"] = dict(
         "<b>Digite as opções.</b> Nomes de pessoas, restaurantes, tarefas, prêmios: o que precisar ser sorteado.",
         "<b>Gire.</b> Toque na roleta ou no botão. Ela acelera, desacelera e para em uma fatia aleatória.",
         "<b>Leia o resultado.</b> O ponteiro marca a fatia sorteada. Pode girar quantas vezes quiser.",
-        "<b>Compartilhe.</b> Um link de um toque mostra o mesmo resultado para quem não estava olhando.",
+        "<b>Compartilhe.</b> O resultado vai com um toque pelo WhatsApp, LINE ou outro app; e se você abrir uma sala, os outros veem o mesmo giro ao vivo no celular.",
     ],
     uses=[
         ("Quem paga", "O café, o rodízio ou a conta do bar."),
@@ -45,30 +45,30 @@ CONTENT["roulette"] = dict(
         ("O giro é realmente aleatório?",
          "Sim. Cada giro usa o gerador de números aleatórios do navegador, então todas as opções têm a mesma chance de sair."),
         ("Quantos nomes posso adicionar?",
-         "Quantos quiser. A roleta ajusta o tamanho de cada fatia automaticamente para que todas as entradas continuem legíveis."),
+         "Até 30, o bastante para uma turma inteira. A roleta ajusta o tamanho de cada fatia automaticamente para que todas as entradas continuem legíveis."),
         ("Funciona no celular?",
          "Sim. Foi feita primeiro para tela de celular e escala para tablet e computador, sem instalar nada."),
         ("Posso compartilhar o resultado?",
-         "Sim. Depois de girar você recebe um link de um toque, e quem abrir verá exatamente o mesmo resultado."),
+         "Sim. O resultado vai com um toque pelo WhatsApp, LINE ou outro app. Numa sala, o link de resultado permite rever o giro e conferir."),
         ("Preciso criar uma conta?",
-         "Não. Girar não exige login. A conta serve apenas para extras opcionais, como salvar grupos ou as salas multijogador."),
+         "Não. Nem girar nem abrir uma sala para assistir junto exige login: na sala basta um apelido. A conta serve apenas para salvar listas de nomes entre aparelhos."),
     ],
 )
 
 CONTENT["team"] = dict(
     h1="Sorteio de Times",
-    short="Cole uma lista e divida em times equilibrados.",
+    short="Digite os nomes e divida em times do mesmo tamanho.",
     title="Sorteio de Times Aleatório — Dividir Grupos Grátis | Lucky Please",
-    description="Sorteador de times grátis. Cole a lista de participantes e ela é dividida em grupos do mesmo tamanho na hora. Sem cadastro, funciona em qualquer celular.",
+    description="Sorteador de times grátis. Digite até 40 participantes e eles são divididos em grupos do mesmo tamanho na hora, no aleatório ou equilibrando por nível. Sem cadastro, funciona em qualquer celular.",
     keywords="sorteio de times, dividir times, sortear grupos, gerador de times, formar times aleatorios, dividir grupos aleatorios, sorteador de equipes",
     og_title="Sorteio de Times Aleatório — Grátis",
-    og_desc="Cole a lista e divida em times equilibrados na hora. Grátis e sem cadastro.",
-    lead="Cole a lista de participantes, escolha quantos times você quer e a divisão sai pronta. Times do mesmo tamanho, sem que ninguém do grupo tenha encostado.",
+    og_desc="Digite os nomes e divida em times parelhos na hora. Grátis e sem cadastro.",
+    lead="Digite os participantes, escolha quantos times você quer e a divisão sai pronta. Times do mesmo tamanho, sem que ninguém do grupo tenha encostado.",
     steps=[
-        "<b>Cole a lista.</b> Um nome por linha, do jeito que já estiver no celular ou na planilha.",
-        "<b>Escolha quantos times.</b> A divisão mantém os grupos do mesmo tamanho e distribui a sobra.",
-        "<b>Sorteie.</b> Cada nome cai em um time aleatoriamente, à vista de todos.",
-        "<b>Passe o link.</b> Quem abrir vê a mesma formação, então não circulam versões diferentes.",
+        "<b>Digite os nomes.</b> Até 40, um por campo. A última lista usada volta com um toque.",
+        "<b>Escolha quantos times.</b> De 2 a 8, ou quantas pessoas por time. A divisão mantém os grupos do mesmo tamanho.",
+        "<b>Sorteie.</b> Uma máquina de cápsulas vai tirando os nomes time por time, à vista de todos.",
+        "<b>Compartilhe o resultado.</b> A formação completa vai na mensagem, então não circulam versões diferentes. Com «Ver juntos», cada um acompanha o sorteio ao vivo no celular.",
     ],
     uses=[
         ("Pelada", "Futebol, vôlei, basquete na quadra do prédio."),
@@ -84,60 +84,63 @@ CONTENT["team"] = dict(
 
     <h2>Times iguais e o que acontece com a sobra</h2>
     <p>Quando o número de pessoas não é divisível pelo número de times, alguém joga com um a mais. A divisão espalha essa sobra em vez de amontoar: com treze pessoas em quatro times saem grupos de 4, 3, 3 e 3, nunca um de 7 e três de 2.</p>
-    <p>Se você precisa de times <i>equilibrados por nível</i> e não só por tamanho, o sorteio puro não é a ferramenta certa: ele divide às cegas, que é justamente o que o torna inquestionável. O caminho usual nesse caso é sortear dois capitães na roleta e deixar que escolham alternadamente.</p>
+    <p>Se você precisa de times <i>equilibrados por nível</i> e não só por tamanho, troque para o modo Por Nível: você marca cada jogador como T1, T2 ou T3 e a divisão passa cada nível pelos times em rodízio, embaralhando dentro de cada nível. Assim os craques não caem juntos e quem joga com quem continua sendo sorte. Já o modo Aleatório divide às cegas, que é justamente o que o torna inquestionável.</p>
 """,
     faq=[
         ("O sorteio de times é grátis?",
-         "Sim, é gratuito, sem cadastro e sem instalação. Cole a lista e sorteie."),
+         "Sim, é gratuito, sem cadastro e sem instalação. Digite os nomes e sorteie."),
         ("Os times saem do mesmo tamanho?",
          "Sim. Quando o número de participantes não é divisível pelo número de times, a sobra é distribuída entre vários grupos em vez de se acumular em um só."),
         ("Posso sortear de novo?",
          "Sim, quantas vezes quiser. Cada sorteio é independente do anterior, então duas divisões seguidas não precisam se parecer."),
         ("Ele equilibra por nível dos jogadores?",
-         "Não. A divisão é puramente aleatória, e é exatamente isso que impede qualquer contestação. Se você precisa equilibrar por nível, o caminho usual é sortear capitães e deixá-los escolher alternadamente."),
+         "Se você quiser. No modo Por Nível você marca cada um como T1, T2 ou T3 e cada nível é distribuído em rodízio entre os times, para os melhores não ficarem juntos. No modo Aleatório a divisão é às cegas, e é isso que impede qualquer contestação."),
         ("Quantas pessoas cabem?",
-         "O suficiente para uma turma inteira ou um elenco completo. Cole a lista toda e a divisão sai de uma vez."),
+         "Até 40 participantes, em 2 a 8 times ou em grupos de 2 a 8 pessoas. O suficiente para uma turma inteira ou um elenco completo."),
         ("Posso compartilhar os times?",
-         "Sim. Um link de um toque mostra a mesma formação para todo mundo, então não circulam versões diferentes."),
+         "Sim. A formação completa vai com um toque pelo WhatsApp, LINE ou outro app, então não circulam versões diferentes."),
     ],
 )
 
 CONTENT["dice"] = dict(
     h1="Rolar Dados Online",
-    short="Role de um a seis dados com física de verdade.",
-    title="Rolar Dados Online Grátis — Dado Virtual de 1 a 6 Dados | Lucky Please",
-    description="Role dados online grátis com rolagem física de verdade. De um a seis dados, sem cadastro e sem instalar nada. Ideal para o jogo de tabuleiro que perdeu o dado.",
+    short="Cada jogador rola de um a três dados e perde o menor.",
+    title="Rolar Dados Online Grátis — Dado Virtual e Duelo de Dados | Lucky Please",
+    description="Role dados online grátis com física de verdade. De 2 a 12 jogadores, de um a três dados cada: perde o número mais baixo, ou o mais alto. Inclui o jogo do Porco. Sem cadastro.",
     keywords="rolar dados online, dado virtual, jogar dados online, dado online gratis, simulador de dados, dado 6 faces, dados 3d online, sortear numero dado",
     og_title="Rolar Dados Online Grátis — Dado Virtual",
-    og_desc="Role de um a seis dados com física de verdade. Grátis, sem cadastro.",
-    lead="De um a seis dados que rolam de verdade antes de parar. Para o jogo que perdeu o dado, e para qualquer coisa que se resolva mais rápido com dois números do que com uma discussão.",
+    og_desc="Cada jogador rola de um a três dados e perde o menor. Grátis, sem cadastro.",
+    lead="Dados que rolam de verdade antes de parar. Cada jogador rola de um a três e perde o número mais baixo (ou o mais alto, se preferir). Para qualquer coisa que se resolva mais rápido com alguns números do que com uma discussão.",
     steps=[
-        "<b>Escolha quantos dados.</b> De um a seis, conforme o jogo pedir.",
-        "<b>Role.</b> Os dados rolam e param sozinhos, como sobre a mesa.",
-        "<b>Leia o total.</b> Aparecem as faces e a soma, sem precisar somar de cabeça.",
-        "<b>Role de novo.</b> Cada rolagem é independente da anterior.",
+        "<b>Digite os jogadores.</b> De 2 a 12 e, se quiser, a prenda ou o prêmio de cada posição.",
+        "<b>Escolha o modo.</b> Lançamento rápido, de um a três dados por jogador, ou o jogo do Porco.",
+        "<b>Sacuda e jogue.</b> Segure para sacudir e solte para jogar. Os dados rolam e param sozinhos.",
+        "<b>Leia o resultado.</b> Aparecem as faces e a soma de cada um. Se houver empate na posição que perde, os empatados rolam de novo.",
     ],
     uses=[
-        ("Jogos de tabuleiro", "Banco Imobiliário, Ludo, RPG: o dado que sempre some."),
+        ("Quem começa", "Banco Imobiliário, Ludo: quem tirar mais sai primeiro."),
         ("Desempate", "O número mais alto ganha e acabou a discussão."),
         ("Prendas", "O mais baixo paga, convida ou cumpre a prenda."),
         ("Aula de matemática", "Probabilidade com dois dados, ao vivo e sem material."),
-        ("RPG de mesa", "Rolagens rápidas quando falta o conjunto completo."),
-        ("Escolher um número", "De 1 a 6 sem pensar muito."),
+        ("Jogo do Porco", "Arriscar ou parar: ganha quem chegar primeiro à meta."),
+        ("A rodada do bar", "Quem paga a próxima, numa rolagem só."),
     ],
     sections="""    <h2>Um dado e dois dados não têm nada a ver</h2>
     <p>Com um dado só, os seis resultados são igualmente prováveis: cada face tem 1 em 6. É a forma mais limpa de sortear entre seis opções.</p>
     <p>Com dois dados muda tudo, e muita gente usa errado. São 36 combinações possíveis, mas só uma soma 2 (1+1) e só uma soma 12 (6+6), enquanto o 7 sai de seis jeitos diferentes (1+6, 2+5, 3+4 e os simétricos). Ou seja, <b>o 7 é seis vezes mais provável que o 12</b>. Se você está distribuindo prêmios pela soma de dois dados, não está distribuindo por igual, mesmo que pareça.</p>
     <p>A regra prática: para sortear entre opções de mesma chance, use <b>um</b> dado e atribua uma opção a cada face. Dois dados são para jogar, não para sortear.</p>
 
+    <h2>O jogo do Porco e a regra dos 20</h2>
+    <p>No Porco você rola um dado quantas vezes quiser e vai somando, mas se sair 1 perde tudo o que juntou no turno. A conta é simples: com <i>t</i> pontos acumulados, rolar de novo rende em média 4 pontos em cinco de cada seis vezes e custa <i>t</i> na sexta, então só compensa enquanto <i>t</i> for menor que 20. Por isso parar por volta de 20 pontos por turno é a estratégia que mais rende.</p>
+
     <h2>Por que a rolagem demora</h2>
     <p>O número já está decidido no instante em que você toca, e mesmo assim o dado rola um segundo antes de parar. É de propósito. Um número que aparece de uma vez é lido como saída de computador e sempre fica a dúvida se alguém mexeu; um dado que rola e para é lido como algo que aconteceu. Quando o resultado decide quem paga, essa diferença é a razão de a ferramenta existir.</p>
 """,
     faq=[
         ("É grátis?",
-         "Sim, é gratuito, sem cadastro e sem instalação. Escolha quantos dados e role."),
+         "Sim, é gratuito, sem cadastro e sem instalação. Digite os jogadores e role."),
         ("Quantos dados posso rolar de uma vez?",
-         "De um a seis. Aparecem todas as faces e a soma total, sem precisar somar na mão."),
+         "De um a três por jogador no Lançamento rápido, com até 12 jogadores na mesma rolagem. Aparecem as faces e a soma de cada um. O jogo do Porco usa um dado só."),
         ("A rolagem é realmente aleatória?",
          "Sim. Cada rolagem usa o gerador de números aleatórios do navegador, e as seis faces têm a mesma chance."),
         ("Serve para sortear entre seis opções?",
@@ -157,10 +160,10 @@ CONTENT["bingo"] = dict(
     keywords="bingo online gratis, globo de bingo, sortear numeros bingo, bingo virtual, cantar bingo online, gerador de numeros bingo, bingo para sala de aula",
     og_title="Globo de Bingo Online Grátis",
     og_desc="Sorteia números sem repetir e mantém o histórico na tela. Grátis, sem cadastro.",
-    lead="Sorteia números, nunca repete um, e deixa todos os cantados à vista para quem se perdeu conseguir se achar. Substitui o globo, não as cartelas.",
+    lead="Sorteia números, nunca repete um, e deixa todos os cantados à vista para quem se perdeu conseguir se achar. Com cartela de papel faz o papel do globo; numa sala, cada jogador recebe a sua cartela no celular.",
     steps=[
-        "<b>Coloque na maior tela que tiver.</b> Notebook no projetor ou tablet apoiado: o histórico fica visível o tempo todo.",
-        "<b>Sorteie um número.</b> Ele sai de quem ainda não saiu, então repetir é impossível e não precisa conferir na mão.",
+        "<b>Escolha a faixa e a tela.</b> De 1 a 75 ou de 1 a 90, conforme as suas cartelas, na maior tela que tiver: o histórico fica visível o tempo todo.",
+        "<b>Sorteie um número.</b> Na mão ou no automático, a cada poucos segundos. Ele sai de quem ainda não saiu, então repetir é impossível.",
         "<b>Cante duas vezes e espere.</b> A reclamação mais comum numa partida ao vivo não é o ritmo lento, é o rápido.",
         "<b>Confira contra o histórico.</b> Quando alguém bater, confira a cartela pela lista na tela. Aquela lista é a ata.",
     ],
@@ -173,7 +176,7 @@ CONTENT["bingo"] = dict(
         ("Por videochamada", "Compartilhe a tela e todos veem a mesma bola ao mesmo tempo."),
     ],
     sections="""    <h2>Bingo de 75 e de 90 bolas: não dá para trocar</h2>
-    <p>No Brasil o mais comum em festa junina e quermesse é a cartela impressa com faixa de 1 a 75 ou de 1 a 90, dependendo do jogo comprado, e vale conferir antes de começar porque muda tudo.</p>
+    <p>No Brasil o mais comum em festa junina e quermesse é a cartela impressa com faixa de 1 a 75 ou de 1 a 90, dependendo do jogo comprado, e vale conferir antes de começar porque muda tudo. O globo daqui sorteia as duas faixas: é só escolher antes de começar.</p>
     <p>O <b>bingo de 90 bolas</b> usa cartela de 9&times;3 com quinze números e costuma ser jogado em fases: linha, duas linhas e cartela cheia. As cartelas são vendidas em tiras de seis que juntas contêm os noventa números exatamente uma vez, e por isso com uma tira completa você marca alguma coisa em toda bola sorteada.</p>
     <p>O <b>bingo de 75 bolas</b> usa cartela de 5&times;5 com espaço livre no centro e separa os números por coluna: B de 1 a 15, I de 16 a 30, N de 31 a 45, G de 46 a 60 e O de 61 a 75. Por isso lá se canta a letra junto com o número, o que deixa o jogador olhar uma coluna só em vez da cartela inteira.</p>
 
@@ -189,7 +192,7 @@ CONTENT["bingo"] = dict(
         ("Dá para ver os números já cantados?",
          "Sim. Todos os números sorteados ficam na tela, então quem se perdeu consegue se achar e você confere uma cartela vencedora contra o registro."),
         ("Funciona com cartela de papel?",
-         "Sim. Ele substitui o globo e as bolas, não as cartelas. Funciona com qualquer conjunto de cartelas impressas."),
+         "Sim. No modo Offline a página só canta os números, sem distribuir cartelas: escolha a faixa das suas (1 a 75 ou 1 a 90) e funciona com qualquer conjunto de cartelas impressas."),
         ("Dá para usar em projetor ou compartilhando a tela?",
          "Sim. Escala do celular até um projetor, então você pode colocar na tela grande da sala ou compartilhar numa videochamada."),
         ("Quantas bolas dura uma partida normal?",
@@ -205,12 +208,12 @@ CONTENT["car-racing"] = dict(
     keywords="corrida aleatoria, sorteio com ordem, ordenar aleatoriamente, gerador de ordem aleatoria, sortear ordem de apresentacao, classificacao aleatoria, sortear turnos",
     og_title="Corrida Aleatória — Sorteio com Ordem de Chegada",
     og_desc="O sorteio roda como corrida e devolve a classificação completa. Grátis.",
-    lead="Quase todo sorteio responde &laquo;quem?&raquo;. Este responde &laquo;em que ordem?&raquo;: cada nome corre na sua raia e no fim voc&ecirc; tem uma classifica&ccedil;&atilde;o inteira, n&atilde;o s&oacute; um vencedor.",
+    lead="Quase todo sorteio responde &laquo;quem?&raquo;. Este responde &laquo;em que ordem?&raquo;: cada nome vira um carro e no fim voc&ecirc; tem uma classifica&ccedil;&atilde;o inteira, n&atilde;o s&oacute; um vencedor.",
     steps=[
-        "<b>Digite os nomes.</b> Cada um recebe uma raia. A raia não influencia o resultado.",
-        "<b>Largue.</b> As posições mudam até o fim; ver as ultrapassagens é justamente o ponto.",
+        "<b>Digite os nomes.</b> De 2 a 12. Cada um ganha um carro e a posição de largada é sorteada, então a ordem em que você digitou não influencia.",
+        "<b>Largue.</b> Com itens e ultrapassagens, as posições mudam até o fim, e uma chegada apertada aparece em câmera lenta.",
         "<b>Leia a classificação.</b> Do primeiro ao último. Uma corrida só resolve uma escala inteira.",
-        "<b>Compartilhe.</b> Um link reproduz a mesma ordem para quem não viu.",
+        "<b>Compartilhe.</b> A classificação completa vai na mensagem; numa sala, todos assistem à corrida ao vivo.",
     ],
     uses=[
         ("Ordem de apresentação", "Uma corrida distribui todos os horários de uma vez."),
@@ -218,7 +221,7 @@ CONTENT["car-racing"] = dict(
         ("Escala de tarefas", "Ordene a casa e desça pela lista a cada semana."),
         ("Draft", "Ligas de fantasy e times de pelada que precisam de ordem de escolha."),
         ("Karaokê", "Quem canta primeiro e quem vai depois do que canta bem."),
-        ("A conta", "O último paga, ou o primeiro escolhe o lugar da próxima vez."),
+        ("A conta", "Divida o valor por posição, ou o último paga."),
     ],
     sections="""    <h2>Uma lista embaralhada e uma corrida dão o mesmo, mas não são recebidas igual</h2>
     <p>Estatisticamente são idênticas. A diferença está inteira em como o grupo recebe. Uma lista aparece pronta e convida à pergunta de como foi decidido. Uma corrida é assistida do início ao fim, então quando a ordem existe todo mundo já viu ela ser produzida. Ninguém pergunta como decidiu porque estava ali.</p>
@@ -226,22 +229,22 @@ CONTENT["car-racing"] = dict(
 
     <h2>A matemática de uma ordem aleatória</h2>
     <p>Com <i>n</i> participantes há <i>n</i>! ordens possíveis, todas igualmente prováveis. O número cresce mais rápido do que a intuição espera: cinco nomes dão 120 ordens, oito dão 40.320 e dez passam de três milhões e meio. A partir de seis participantes, repetir exatamente a mesma classificação é praticamente impossível.</p>
-    <p>Vale saber disso caso alguém acuse a corrida de ser viciada: cada participante tem 1/<i>n</i> de terminar em primeiro, 1/<i>n</i> de terminar em último e 1/<i>n</i> de qualquer posição no meio. Nem a raia, nem a ordem em que você digitou os nomes, nem o tamanho do nome influenciam. E se alguém ficar em último duas vezes seguidas, é esperado: com seis pessoas isso acontece 1 vez a cada 36, então ao longo de uma tarde vai acontecer com alguém.</p>
+    <p>Vale saber disso caso alguém acuse a corrida de ser viciada: cada participante tem 1/<i>n</i> de terminar em primeiro, 1/<i>n</i> de terminar em último e 1/<i>n</i> de qualquer posição no meio. Nem a posição de largada, nem a ordem em que você digitou os nomes, nem o tamanho do nome influenciam. E se alguém ficar em último duas vezes seguidas, é esperado: com seis pessoas isso acontece 1 vez a cada 36, então ao longo de uma tarde vai acontecer com alguém.</p>
 
     <h2>Quando não usar</h2>
-    <p>A corrida leva cerca de meio minuto, de propósito. Essa lentidão só compensa se o grupo estiver assistindo. Se cada um está no seu canto, ou se você só precisa de um nome para preencher um formulário, use a roleta: ela responde em dois segundos. A corrida é para quando a plateia é o ponto.</p>
+    <p>Com as configurações padrão a corrida leva pouco mais de um minuto, de propósito. Essa lentidão só compensa se o grupo estiver assistindo. Se cada um está no seu canto, ou se você só precisa de um nome para preencher um formulário, use a roleta: ela responde em poucos segundos. A corrida é para quando a plateia é o ponto.</p>
 """,
     faq=[
         ("É grátis?",
          "Sim, é gratuito, sem cadastro e sem instalação. Digite os nomes e largue a corrida."),
         ("A ordem de chegada é realmente aleatória?",
-         "Sim. Cada participante tem a mesma chance de qualquer posição. Nem a raia, nem a ordem em que você digitou os nomes, nem o tamanho do nome influenciam o resultado."),
+         "Sim. Cada participante tem a mesma chance de qualquer posição. Nem a posição de largada, nem a ordem em que você digitou os nomes, nem o tamanho do nome influenciam o resultado."),
         ("Qual a diferença para a roleta?",
-         "A roleta escolhe um vencedor em cerca de dois segundos. A corrida produz uma classificação completa, do primeiro ao último, em cerca de meio minuto. Use a roleta se precisa de um nome e a corrida se precisa de uma ordem."),
+         "A roleta escolhe um vencedor em poucos segundos. A corrida produz uma classificação completa, do primeiro ao último, em pouco mais de um minuto. Use a roleta se precisa de um nome e a corrida se precisa de uma ordem."),
         ("Quantas pessoas podem correr de uma vez?",
-         "O suficiente para um grupo ou uma turma. Cada participante tem a sua raia e a classificação final traz todos eles."),
+         "De 2 a 12. Cada participante tem o seu carro e a classificação final traz todos eles."),
         ("Posso compartilhar a classificação?",
-         "Sim. Ao terminar você recebe um link de um toque, e quem abrir vê exatamente a mesma ordem de chegada."),
+         "Sim. Ao terminar você manda a classificação completa com um toque pelo WhatsApp, LINE ou outro app."),
         ("Por que o mesmo sempre fica em último?",
          "É mais normal do que parece. Com seis participantes, um específico ficar em último duas vezes seguidas acontece 1 vez a cada 36, então ao longo de uma tarde vai acontecer com alguém. Cada corrida é independente da anterior."),
     ],
@@ -259,8 +262,8 @@ CONTENT["ladder"] = dict(
     steps=[
         "<b>Coloque embaixo o que será distribuído.</b> Prêmios, tarefas, papéis, quem paga o quê.",
         "<b>Cada um escolhe a sua linha primeiro.</b> Esta é a parte que importa: comprometem-se antes de ver qualquer coisa.",
-        "<b>Revele a escada.</b> As travessas horizontais aparecem, geradas aleatoriamente.",
-        "<b>Siga o caminho para baixo.</b> A cada travessa você passa para a linha vizinha e continua descendo.",
+        "<b>Toque em Iniciar.</b> As travessas aparecem, geradas aleatoriamente, e os resultados de baixo são embaralhados. Até 12 pessoas.",
+        "<b>Siga o caminho para baixo.</b> Um por um, todos juntos ou em sequência. Cada travessa leva você para a linha vizinha.",
     ],
     uses=[
         ("Distribuir tarefas", "Cada um recebe uma e nenhuma fica sem dono."),
@@ -278,6 +281,7 @@ CONTENT["ladder"] = dict(
     <h2>Por que escolher a linha antes</h2>
     <p>A verdadeira vantagem da escada não é matemática, é de procedimento. Os participantes escolhem a linha <i>antes</i> de os caminhos existirem. Isso significa que cada um tomou uma decisão real e que ninguém, nem quem organiza, podia saber aonde ela levava.</p>
     <p>É aí que se desarma a suspeita de armação que qualquer sorteio carrega. Com uma roleta, o desconfiado precisa confiar na ferramenta. Com uma escada ele só precisa confiar que as travessas não estavam à vista quando escolheu, e isso ele confere com os próprios olhos. Por isso o formato é usado há séculos no Japão e na Coreia justamente para as decisões mais delicadas.</p>
+    <p>Além disso, ao tocar em Iniciar os resultados de baixo são embaralhados em posições novas. Mesmo que as travessas apareçam antes (na prévia de uma tela grande), ninguém consegue direcionar a distribuição: cada pessoa tem exatamente 1/<i>n</i> de chance de receber cada resultado, seja qual for o formato da escada.</p>
 """,
     faq=[
         ("O que é uma escada aleatória?",
@@ -287,10 +291,10 @@ CONTENT["ladder"] = dict(
         ("Qual a diferença para a roleta?",
          "A escada produz uma correspondência um para um: cada pessoa recebe exatamente um resultado e cada resultado é atribuído uma única vez. A roleta pode repetir o mesmo resultado em giros seguidos e deixar outro sem dono."),
         ("O resultado é realmente aleatório?",
-         "Sim. As travessas são geradas aleatoriamente e não aparecem até que todos tenham escolhido a linha de partida, então nenhuma posição inicial é melhor que outra."),
+         "Sim. As travessas são geradas aleatoriamente e, ao iniciar, os resultados de baixo são embaralhados em posições novas. Mesmo que alguém tenha visto a escada na prévia, cada pessoa tem exatamente 1/n de chance de receber cada resultado."),
         ("Por que escolher a linha antes de revelar a escada?",
          "Essa ordem é o que torna o sorteio convincente. Cada participante decide num momento em que ninguém, nem quem organiza, pode saber aonde aquela linha leva, o que elimina a suspeita de que a distribuição estivesse combinada."),
         ("Serve para amigo secreto?",
-         "Sim, é um dos usos mais comuns, porque garante que cada pessoa presenteie uma só e receba de uma só."),
+         "Sim, é um dos usos mais comuns, porque garante que cada pessoa presenteie uma só e receba de uma só. Com os mesmos nomes em cima e embaixo, em cerca de 2 de cada 3 sorteios alguém tira a si mesmo: aí, sorteie de novo."),
     ],
 )
