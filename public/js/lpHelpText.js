@@ -27,12 +27,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Paciência Mahjong', l:['Toque em duas peças iguais para formar o par e limpar a mesa','Só estão livres se nada as cobre e um lado (esq. ou dir.) está aberto','Qualquer flor com qualquer flor, qualquer estação com outra','Travou? Embaralhar (sempre resolvível), Dica ou Desfazer; pinça para zoom']}
   },
   'bubble': {
-    ko: {t:'버블 버스트', l:['같은 색 버블 3개 이상을 붙이면 터져요','끌어서 조준하고 떼면 발사 — 벽에 튕겨도 돼요','천장과 끊긴 덩어리는 통째로 떨어져 점수가 커요','헛방이 쌓이면 새 줄이 내려와요 — 작은 버블을 눌러 교체']},
-    en: {t:'Bubble Burst', l:['Touch 3+ bubbles of one color to pop them','Drag to aim, release to shoot — bank off the walls','Anything cut off from the ceiling drops for big points','Misses bring down a new row; tap the small bubble to swap']},
-    ja: {t:'バブルバースト', l:['同じ色を3つ以上つなげると消えます','ドラッグで狙って離すと発射、壁で跳ね返せます','天井から切れた塊はまとめて落ちて高得点','ミスが続くと新しい列が下りてきます。小さいバブルで交換']},
-    zh: {t:'泡泡爆破', l:['三个以上同色泡泡相连就会爆掉','拖动瞄准，松开发射，可以借墙反弹','与顶部断开的泡泡会整串掉落，分数更高','失误多了会压下新一行；点小泡泡可交换']},
-    es: {t:'Revienta Burbujas', l:['Junta 3 o más del mismo color para reventarlas','Arrastra para apuntar y suelta para disparar; rebota en las paredes','Lo que queda suelto del techo cae y da más puntos','Si fallas mucho baja una fila; toca la burbuja pequeña para cambiar']},
-    pt: {t:'Estoura Bolhas', l:['Junte 3 ou mais da mesma cor para estourar','Arraste para mirar e solte para atirar; use as paredes','O que se solta do teto cai e vale mais pontos','Errou muito? Desce uma fileira; toque na bolha pequena para trocar']}
+    ko: {t:'버블 버스트', l:['같은 색 3개 이상 붙이면 펑 — 천장과 끊긴 덩어리는 와르르, 점수가 커요','끌어서 조준하고 떼면 발사 · 조준선은 벽 한 번까지 착지 칸을 보여줘요','짝수 판은 아기 판다 구출 · 얼음 버블은 두 번 맞아야 녹아요','헛방이 쌓이면 새 줄 · 적은 발 수로 깨면 별 3개 · 작은 버블을 눌러 교체']},
+    en: {t:'Bubble Burst', l:['Touch 3+ of one colour to pop — anything cut off from the ceiling drops for big points','Drag to aim, release to shoot · the guide shows the landing cell (up to one wall bounce)','Even stages: rescue the baby pandas · ice bubbles need two hits','Misses bring a new row · fewer shots = more stars · tap the small bubble to swap']},
+    ja: {t:'バブルバースト', l:['同じ色を3つ以上つなげるとポン · 天井から切れた塊はまとめて落ちて高得点','ドラッグで狙って離すと発射 · ガイドは壁1回まで着地点を表示','偶数ステージは赤ちゃんパンダ救出 · 氷バブルは2回当てると溶ける','ミスが続くと新しい列 · 少ない手数で星3つ · 小さいバブルで交換']},
+    zh: {t:'泡泡爆破', l:['三个以上同色相连就爆 · 与顶部断开的整串掉落，分数更高','拖动瞄准，松开发射 · 辅助线显示落点（最多反弹一次）','偶数关救出小熊猫 · 冰泡泡要打两次才会融化','失误多了会压下新一行 · 用越少的球过关星越多 · 点小泡泡交换']},
+    es: {t:'Revienta Burbujas', l:['Junta 3+ del mismo color para reventar · lo que se suelta del techo cae y da más puntos','Arrastra para apuntar y suelta para disparar · la guía marca dónde cae (hasta un rebote)','Niveles pares: rescata a los pandas bebé · las burbujas de hielo necesitan dos golpes','Si fallas baja una fila · menos disparos = más estrellas · toca la burbuja pequeña para cambiar']},
+    pt: {t:'Estoura Bolhas', l:['Junte 3+ da mesma cor para estourar · o que se solta do teto cai e vale mais','Arraste para mirar e solte para atirar · a guia mostra onde para (até uma tabela)','Fases pares: resgate os pandinhas · bolhas de gelo precisam de dois acertos','Errou muito? Desce uma fileira · menos tiros = mais estrelas · toque na bolha pequena para trocar']}
   },
   'yacht': {
     ko: {t:'요트 다이스', l:['주사위 5개를 한 차례에 세 번까지 굴려 12칸 중 한 칸에 적어요 · 12라운드 합계 1등이 승리','굴리기를 꾹 눌러 흔들고 떼면 던져요 · 남길 주사위를 누르면 위 칸에 고정','칸을 누르고 한 번 더(또는 노란 버튼) 누르면 확정 · 맞는 칸이 없으면 0점으로 지워야 해요','1~6의 눈 합 63점 이상이면 +35 · 💡 힌트를 켜면 가장 좋은 선택을 보여 줘요']},
