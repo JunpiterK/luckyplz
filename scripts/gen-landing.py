@@ -44,7 +44,7 @@ OUT = ROOT / "public"
 ALL = [
     ("/wheel-spinner/",  "Wheel Spinner",   "Type names, spin, and one is picked at random."),
     ("/team-generator/", "Team Generator",  "Split any roster into balanced random teams."),
-    ("/dice-roller/",    "Dice Roller",     "Roll one to six dice with a real physical tumble."),
+    ("/dice-roller/",    "Dice Roller",     "Roll one to three dice with a real physical tumble."),
     ("/bingo-caller/",   "Bingo Caller",    "Call numbers without repeats and keep the history on screen."),
     ("/race-picker/",    "Race Picker",     "Turn a draw into a race with a full finishing order."),
     ("/ladder-draw/",    "Ladder Draw",     "Ghost leg / amidakuji — pick a line before the paths appear."),
@@ -181,8 +181,8 @@ PAGES["/bingo-caller/"] = dict(
     lead="Draws numbers at random, never repeats one, and keeps every call visible so latecomers can catch up. Free, nothing to install, and readable from the back of a room.",
     content="""    <h2 id="how">How to run a game with it</h2>
     <ol>
-      <li><b>Put it on the biggest screen you have.</b> A laptop on a projector, a tablet propped up, or a phone passed to whoever is calling. The called-number history stays on screen the whole time.</li>
-      <li><b>Draw a number.</b> Each draw is taken from the numbers that have not come out yet, so a repeat is impossible &mdash; you never have to check by hand.</li>
+      <li><b>Put it on the biggest screen you have.</b> A laptop on a projector, a tablet propped up, or a phone passed to whoever is calling. The flashboard lights up every called number and stays on screen the whole time.</li>
+      <li><b>Draw a number.</b> Press DRAW yourself or set Auto to draw every 1&ndash;30 seconds. Each draw is taken from the numbers that have not come out yet, so a repeat is impossible &mdash; you never have to check by hand.</li>
       <li><b>Call it twice, then pause.</b> Say the number, say it again, wait. The single most common complaint at a live game is that calls come too fast; the pause is what people are actually asking for.</li>
       <li><b>Verify against the history.</b> When someone shouts, read their card back against the list on screen. That list is the record, which ends arguments before they start.</li>
     </ol>
@@ -217,9 +217,9 @@ PAGES["/bingo-caller/"] = dict(
         ("Does it show which numbers have already been called?",
          "Yes. Every called number stays visible on screen, so players who lost track can catch up and you can verify a winning card against the record instead of relying on memory."),
         ("Can I use it with printed bingo cards?",
-         "Yes. It replaces the cage and the balls, not the cards. Any standard printed card set works, and the caller is the only piece of equipment you need."),
+         "Yes. Choose Offline and it becomes a pure number caller that replaces the cage and the balls, not the cards. Pick the 1-75 range for American cards or 1-90 for UK-style tickets."),
         ("Does it work on a projector or a shared screen?",
-         "Yes. It scales from a phone up to a projector, so you can put it on the biggest screen in the room or share it on a video call and everyone sees the same draw at the same moment."),
+         "Yes. It scales from a phone up to a projector, so you can put it on the biggest screen in the room or share it on a video call. For remote players, host a room instead: friends join by link, get their own card on their phone, and see the same draw at the same moment."),
         ("How many calls does a typical game take?",
          "For 75-ball bingo a single line usually falls between the fifteenth and twenty-fifth call, while a blackout needs most of the ball set. For 90-ball, a first line tends to land in the twenties and a full house in the low fifties."),
     ],
@@ -235,13 +235,13 @@ PAGES["/race-picker/"] = dict(
     keywords="random race picker, random order generator, random ranking generator, randomize order, random turn order, race random picker, pick order at random, random draw with ranking",
     og_title="Random Race Picker — Draw a Full Order, Not Just a Winner",
     og_desc="Runs your entries as a race and gives a complete finishing order. Free, no sign-up.",
-    lead="Most random pickers answer &ldquo;who?&rdquo;. This one answers &ldquo;in what order?&rdquo; &mdash; every entry gets a lane, the race runs, and you end up with a full ranking instead of a single winner.",
+    lead="Most random pickers answer &ldquo;who?&rdquo;. This one answers &ldquo;in what order?&rdquo; &mdash; every entry gets a car, the race runs, and you end up with a full ranking instead of a single winner.",
     content="""    <h2 id="how">How it works</h2>
     <ol>
-      <li><b>Enter the names.</b> Each one is assigned a lane. Lane position has no effect on the result &mdash; it is purely where the entry sits on screen.</li>
-      <li><b>Start the race.</b> Positions swap the whole way down. Watching the lead change hands is the point, not a side effect.</li>
+      <li><b>Enter two to twelve names.</b> Each one gets its own car. The starting grid is shuffled before every race, so the order you type names in has no effect on the result.</li>
+      <li><b>Start the race.</b> Positions swap the whole way round &mdash; items, ice, mud and collisions keep reshuffling the field, and a close finish drops into slow motion. Watching the lead change hands is the point, not a side effect.</li>
       <li><b>Read the finishing order.</b> You get first through last, not just a winner, so one run settles an entire schedule.</li>
-      <li><b>Share the result.</b> A one-tap link reproduces the same finishing order for anyone who missed it.</li>
+      <li><b>Share or watch together.</b> The share button sends the podium as a message. In a watch-together room everyone follows the same race live on their own phone, and a host-signed result link lets anyone re-check the finishing order.</li>
     </ol>
 
     <h2>When a ranking beats a single pick</h2>
@@ -260,21 +260,21 @@ PAGES["/race-picker/"] = dict(
 
     <h2>The mathematics of a random order</h2>
     <p>With <i>n</i> entries there are <i>n</i>! possible finishing orders, and each is equally likely. That number grows faster than most people expect: five entries give 120 orders, eight give 40,320, and ten give more than three and a half million. In practice this means you can stop worrying about repeats &mdash; past about six entries, seeing the same complete order twice is effectively impossible.</p>
-    <p>A subtler point is worth knowing if anyone accuses the race of being unfair. Every entry has a 1/<i>n</i> chance of finishing first, a 1/<i>n</i> chance of finishing last, and a 1/<i>n</i> chance of any position in between. Lane number, the order you typed names in, and name length all have zero effect. If a run looks suspicious &mdash; the same person last twice in a row &mdash; that is expected: with six people, the odds of one specific person finishing last on two consecutive runs are about 1 in 36, so across an evening it will happen to someone.</p>
+    <p>A subtler point is worth knowing if anyone accuses the race of being unfair. Every entry has a 1/<i>n</i> chance of finishing first, a 1/<i>n</i> chance of finishing last, and a 1/<i>n</i> chance of any position in between. The order you typed names in and name length have zero effect, because the grid is shuffled before every race. If a run looks suspicious &mdash; the same person last twice in a row &mdash; that is expected: with six people, the odds of one specific person finishing last on two consecutive runs are about 1 in 36, so across an evening it will happen to someone.</p>
 
     <h2>Getting the length right</h2>
-    <p>A race takes roughly half a minute, which is deliberately slow compared with a wheel. That is the correct trade only when the group is watching together. If people are heads-down, or you just need a name for a form, use the wheel spinner instead &mdash; it answers in two seconds. Use the race when the audience is the point: a classroom, a table, a video call where everyone is already looking at the same screen.</p>""",
+    <p>With the default two laps a race lasts a little over a minute, which is deliberately slow compared with a wheel; one lap or a faster game speed shortens it. That is the correct trade only when the group is watching together. If people are heads-down, or you just need a name for a form, use the wheel spinner instead &mdash; it answers in a few seconds. Use the race when the audience is the point: a classroom, a table, a video call where everyone is already looking at the same screen.</p>""",
     faq=[
         ("Is the race picker free?",
          "Yes. It is free with no sign-up and nothing to install. Add your names and start the race."),
         ("Is the finishing order really random?",
-         "Yes. Every entry has the same chance of any position. Lane number, the order you typed names in, and name length have no effect on the result."),
+         "Yes. Every entry has the same chance of any position. The starting grid is shuffled, so the order you typed names in and name length have no effect on the result."),
         ("How is this different from a wheel spinner?",
-         "A wheel picks one winner in about two seconds. The race produces a complete ranking from first to last over about half a minute. Use the wheel when you need a name; use the race when you need an order."),
+         "A wheel picks one winner in a few seconds. The race produces a complete ranking from first to last in about a minute. Use the wheel when you need a name; use the race when you need an order."),
         ("How many people can race at once?",
-         "Enough for a normal group or class. Each entry gets its own lane, and the finishing order lists every one of them from first to last."),
+         "Two to twelve. Each entry gets its own car, and the finishing order lists every one of them from first to last."),
         ("Can I share the finishing order?",
-         "Yes. After a race you get a one-tap share link, and anyone who opens it sees the same finishing order, which makes the result hard to dispute."),
+         "Yes. The share button sends the podium as a message. For a result nobody can dispute, open a watch-together room first: everyone follows the same race live on their own phone, and the result link carries a host-signed record of the finishing order that anyone can re-check."),
         ("Does the same person keep finishing last?",
          "It can look that way, and it is expected. With six entries, one specific person finishing last twice in a row has odds of about 1 in 36, so over an evening it will happen to somebody. Each race is independent of the last."),
     ],
@@ -293,8 +293,8 @@ PAGES["/ladder-draw/"] = dict(
     lead="Everyone picks a line at the top before any of the rungs are shown. Then the paths appear and each line leads somewhere different. Known as ghost leg in English, <i>amidakuji</i> in Japan, and <i>sadari</i> in Korea.",
     content="""    <h2 id="how">How a ladder draw works</h2>
     <ol>
-      <li><b>Set the outcomes.</b> Put whatever is being assigned at the bottom &mdash; prizes, chores, roles, who pays.</li>
-      <li><b>Everyone claims a line first.</b> This is the part that matters. People commit to a starting position while the rungs are still hidden.</li>
+      <li><b>Set the outcomes.</b> Put whatever is being assigned at the bottom &mdash; prizes, chores, roles, who pays &mdash; one per player, for two to twelve players.</li>
+      <li><b>Everyone claims a line first.</b> This is the part that matters. People commit to a starting position while the rungs are still hidden. The results are also shuffled when the game starts, so even the desktop preview cannot be exploited.</li>
       <li><b>Reveal the ladder.</b> The horizontal rungs appear, generated at random.</li>
       <li><b>Follow the path down.</b> Trace from a starting line; every time you meet a rung, you cross to the neighbouring line and keep descending. Where you land is your result.</li>
     </ol>
@@ -313,6 +313,7 @@ PAGES["/ladder-draw/"] = dict(
     <p>A ladder draw is not just another way to pick at random. It produces a <b>bijection</b> &mdash; a strict one-to-one matching. Every person lands on exactly one outcome and every outcome is claimed by exactly one person. No result is doubled up and none is left over.</p>
     <p>A wheel cannot do this. Spin a wheel six times for six chores and you will very likely draw the same chore twice while another goes unassigned; you would have to remove each result manually between spins. The ladder handles it structurally, which is why it is the right tool whenever the outcomes are a set to be distributed rather than a pool to be sampled.</p>
     <p>The mathematical reason is neat: each horizontal rung swaps two adjacent lines, and no matter how many swaps you apply in sequence, the result is still a permutation. You cannot break the one-to-one property by adding rungs, only shuffle it further.</p>
+    <p>One catch: a random ladder is not automatically an <i>even</i> one. With sparse rungs a line tends to drop straight to the result beneath it &mdash; about one time in three for six players, not one in six. So this version also shuffles the results at the start, giving everyone exactly a 1/<i>N</i> chance of each.</p>
 
     <h2>Why committing to a line first is the whole point</h2>
     <p>The ladder&rsquo;s real advantage over every other random picker is procedural rather than mathematical. Participants choose their starting line <i>before</i> the paths exist. That means each person made a real choice, and nobody &mdash; including whoever is running it &mdash; could have known where that choice would lead.</p>
@@ -329,7 +330,7 @@ PAGES["/ladder-draw/"] = dict(
         ("How is it different from a wheel spinner?",
          "A ladder produces a strict one-to-one matching: every person gets exactly one outcome and every outcome is taken exactly once. A wheel samples with replacement, so spinning it repeatedly can give the same result twice while leaving another unassigned."),
         ("Is the result really random?",
-         "Yes. The horizontal rungs are generated at random and are not shown until after everyone has claimed a starting line, so no starting position is better than another."),
+         "Yes. The rungs are generated at random, and the results are shuffled into new positions when the game starts, so even if the rungs are visible beforehand (the desktop preview), nobody can steer the outcome: each person has exactly a 1/N chance of each result."),
         ("Why should people pick their line before the ladder is revealed?",
          "That order is what makes the draw convincing. Each participant makes a real choice at a moment when nobody, including the organiser, could know where it leads, which removes any suspicion that the draw was arranged."),
         ("Does it work on a phone?",
