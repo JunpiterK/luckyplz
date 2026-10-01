@@ -56,7 +56,7 @@ header .snd.off{opacity:.5}
 
 .stats{display:grid;grid-template-columns:.8fr 1.2fr 1fr 1fr;gap:5px;padding:7px 10px;background:linear-gradient(180deg,var(--bg-2),rgba(10,18,36,.6));border-bottom:1px solid var(--line);flex-shrink:0}
 .stat{position:relative;text-align:center;padding:5px 4px 8px;background:rgba(255,255,255,0.035);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.stat .l{font-family:'JetBrains Mono',monospace;font-size:8.5px;color:var(--txt-mute);letter-spacing:0.12em;text-transform:uppercase}
+.stat .l{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--txt-mute);letter-spacing:0.06em;text-transform:uppercase}
 .stat .v{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:900;color:var(--accent);font-variant-numeric:tabular-nums;margin-top:1px;line-height:1.05;white-space:nowrap}
 .stat .v small{font-size:.62em;opacity:.6;margin-left:1px}
 .stat .bar{position:absolute;left:5px;right:5px;bottom:3px;height:3px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden}
@@ -581,6 +581,9 @@ let lpRace = null;   /* Rooms v2 레이스 컨텍스트(시드) — null = 솔�
 /* 캔버스를 홀더에 3:5 로 꽉 맞추고, 백킹스토어는 CSS 크기 × DPR.
    논리 좌표(360×600)는 그대로 두고 변환만 건다 → 레티나에서도 선명 */
 let VIEW_SCALE = 1, DPR = 1;
+/* 계기판 글자 — 캔버스 좌표 7~9px 이 작은 폰(320·360)에서 화면상 4~7px 로 줄어 읽히지 않았다(2026-10-01 QA).
+   화면상 8px 아래로는 안 내려가게 캔버스 좌표 크기를 키운다 */
+function hudFont(w, px, fam){ const css = Math.max(0.05, VIEW_SCALE / (DPR || 1)); return w + ' ' + Math.max(px, 8 / css).toFixed(1) + 'px ' + fam; }
 function fitCanvas(){
   try{
     const hr = holder.getBoundingClientRect();
@@ -1309,7 +1312,7 @@ function drawEnvAnim(now){
     ctx.strokeStyle = '#9fe6ff'; ctx.fillStyle = '#9fe6ff'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + len, y); ctx.stroke();
     if (Math.abs(len) > 3){ const d = Math.sign(len); ctx.beginPath(); ctx.moveTo(cx + len + d * 5, y); ctx.lineTo(cx + len - d * 2, y - 4); ctx.lineTo(cx + len - d * 2, y + 4); ctx.closePath(); ctx.fill(); }
-    ctx.font = '700 7px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.55)';
+    ctx.font = hudFont('700', 7, 'JetBrains Mono, monospace'); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.55)';
     ctx.fillText(T.wind, cx, y - 7);
     ctx.restore();
   }
@@ -1357,7 +1360,7 @@ function drawGuides(now){
     ctx.strokeStyle = 'rgb(' + col + ')'; ctx.lineWidth = 1.6; ctx.setLineDash([4, 3]);
     ctx.beginPath(); ctx.moveTo(ship.x - 22, sy); ctx.lineTo(ship.x + 22, sy); ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgb(' + col + ')'; ctx.font = '800 7.5px JetBrains Mono, monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgb(' + col + ')'; ctx.font = hudFont('800', 7.5, 'JetBrains Mono, monospace'); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
     ctx.fillText(T.stop, ship.x + 25, sy);
     ctx.restore();
     /* 늦기 직전인데 분사하지 않으면 BURN 신호 */
@@ -1611,7 +1614,7 @@ function drawHud(now){
   if (S.phase === 'fly' && S.t < 2.6){
     const a = S.t < 2 ? 1 : (2.6 - S.t) / 0.6;
     ctx.save(); ctx.globalAlpha = a; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = '800 9px JetBrains Mono, monospace'; ctx.fillStyle = 'rgba(0,217,255,.9)';
+    ctx.font = hudFont('800', 9, 'JetBrains Mono, monospace'); ctx.fillStyle = 'rgba(0,217,255,.9)';
     ctx.fillText('STAGE ' + (S.stage + 1) + ' / ' + STAGES.length, C.W / 2, 150);
     ctx.font = '900 15px Orbitron, "Noto Sans KR", sans-serif'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.55)';
     ctx.strokeText(st.name, C.W / 2, 170); ctx.fillStyle = '#fff'; ctx.fillText(st.name, C.W / 2, 170);
@@ -1632,10 +1635,10 @@ function drawHud(now){
   ctx.fillStyle = vcol;
   ctx.beginPath(); ctx.moveTo(x - 9, my); ctx.lineTo(x - 3, my - 4); ctx.lineTo(x - 3, my + 4); ctx.closePath(); ctx.fill();
   ctx.fillRect(x - 3, my - 1, 6, 2);
-  ctx.font = '800 7px JetBrains Mono, monospace'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.6)';
+  ctx.font = hudFont('800', 7, 'JetBrains Mono, monospace'); ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.6)';
   ctx.fillText('V↓', x, top - 4);
   /* 바늘 옆 숫자(m/s) — 색이 곧 판정 */
-  ctx.textAlign = 'right'; ctx.font = '900 8px Orbitron, sans-serif'; ctx.fillStyle = vcol;
+  ctx.textAlign = 'right'; ctx.font = hudFont('900', 8, 'Orbitron, sans-serif'); ctx.fillStyle = vcol;
   ctx.fillText(fmt(Math.max(0, ship.vy) / PX_PER_M, 1), x - 11, my + 3);
   /* 수평 표류 */
   const hy = top + H + 22, hw = 26;
@@ -1653,7 +1656,7 @@ function drawHud(now){
   const upright = Math.abs(ship.angle) <= st.maxAng;
   ctx.strokeStyle = upright ? '#00FF88' : '#FFB547'; ctx.lineWidth = 2; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(x - 2, ay); ctx.lineTo(x - 2 + Math.sin(ship.angle) * ar, ay - Math.cos(ship.angle) * ar); ctx.stroke();
-  ctx.textAlign = 'center'; ctx.font = '800 7px JetBrains Mono, monospace'; ctx.fillStyle = upright ? 'rgba(0,255,136,.85)' : '#FFB547';
+  ctx.textAlign = 'center'; ctx.font = hudFont('800', 7, 'JetBrains Mono, monospace'); ctx.fillStyle = upright ? 'rgba(0,255,136,.85)' : '#FFB547';
   ctx.fillText(Math.round(Math.abs(ship.angle) * 57.3) + '°', x - 2, ay + ar + 12);
   ctx.restore();
   /* 연료 부족 */

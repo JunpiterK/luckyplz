@@ -309,7 +309,7 @@
         .course-card .course-desc{font-size:0.65em;color:rgba(255,255,255,0.45);margin-top:3px;display:block}
         .title-row{display:flex;flex-direction:column;align-items:center;gap:8px}
         .lang-selector-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;margin:0 auto 10px}
-        .lang-label{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:0.6em;color:rgba(255,255,255,0.5);letter-spacing:2px;text-transform:uppercase}
+        .lang-label{font-family:'Orbitron','Noto Sans KR',sans-serif;font-size:max(0.6em,10px);color:rgba(255,255,255,0.5);letter-spacing:2px;text-transform:uppercase}
         .lang-selector{display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap;justify-content:center;max-width:300px}
         .lang-btn{width:32px;height:24px;border:2px solid rgba(255,255,255,0.15);border-radius:6px;background:rgba(255,255,255,0.05);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.3s;padding:0;overflow:hidden}
         .lang-btn img{width:24px;height:17px;object-fit:cover;border-radius:2px;display:block}
@@ -446,7 +446,7 @@
             .lang-selector{max-width:100%}
             .lang-btn{width:26px;height:19px}
             .lang-btn img{width:20px;height:14px}
-            .lang-label{font-size:0.5em}
+            .lang-label{font-size:max(0.5em,10px)}
             #soundToggle{position:relative;top:auto;left:auto;margin:0 auto 8px;display:block;font-size:0.75em;padding:5px 12px;z-index:1}
             .course-selector h3{font-size:0.75em}
             .course-card{min-width:80px;padding:8px 5px}
@@ -2234,11 +2234,14 @@ const AudioEngine=(function(){
         '/assets/bgm/car-racing/track3.mp3',
         '/assets/bgm/car-racing/track4.mp3'
     ];
+    /* 2026-10-01 QA M-5: 예전엔 진입하자마자 4곡(약 4.9MB)을 preload='auto' 로 받았다(랜딩 iframe 포함 7~8.5MB).
+       이제 src 를 비워 두고 ① 첫 사용자 입력 때 첫 곡 하나만 미리 받고 ② 다음 곡은 고를 때 받는다(trackSrc) */
     const audios=TRACK_URLS.map(function(src){
-        const a=new Audio(src);
+        const a=new Audio();
+        a.dataset.src=src;
         a.loop=false;       /* queue handles the loop, not the element */
         a.volume=0;
-        a.preload='auto';
+        a.preload='none';
         a.addEventListener('error',function(){
             /* Mark this track as unplayable so pickNextIdx skips it.
                Silent — the game still runs even if 0 tracks load. */
@@ -2253,6 +2256,18 @@ const AudioEngine=(function(){
        startBGM/pauseBGM/etc just operate on this — we re-point it
        on each `ended` event. Kept as `let` so reassign is legal. */
     let bgmAudio=audios[curIdx];
+    let bgmFirstPending=true;   /* 첫 레이스는 미리 받아 둔 curIdx 곡을 그대로 쓴다 */
+    function trackSrc(a){
+        if(a&&!a.getAttribute('src')&&a.dataset.src){a.preload='auto';a.src=a.dataset.src;try{a.load()}catch(_){}}
+        return a;
+    }
+    (function(){
+        function warm(){
+            ['pointerdown','touchstart','keydown'].forEach(function(t){document.removeEventListener(t,warm,true)});
+            trackSrc(audios[curIdx]);
+        }
+        ['pointerdown','touchstart','keydown'].forEach(function(t){document.addEventListener(t,warm,{capture:true,passive:true})});
+    })();
 
     const BGM_MAX_VOL=0.5;
     const BGM_FADE_DURATION=2.0;
@@ -2282,7 +2297,7 @@ const AudioEngine=(function(){
             const nextIdx=pickNextIdx();
             if(nextIdx<0)return;
             curIdx=nextIdx;
-            bgmAudio=audios[curIdx];
+            bgmAudio=trackSrc(audios[curIdx]);
             try{bgmAudio.currentTime=0}catch(_){}
             bgmAudio.volume=BGM_MAX_VOL;
             safePlayBgm();
@@ -2336,8 +2351,10 @@ const AudioEngine=(function(){
         if(!bgmEnabled)return;
         /* Pick a fresh random track for this race so consecutive
            races feel different even if the user replays quickly. */
-        const startIdx=pickNextIdx();
+        const startIdx=bgmFirstPending&&!audios[curIdx].dataset.failed?curIdx:pickNextIdx();
+        bgmFirstPending=false;
         if(startIdx>=0){curIdx=startIdx;bgmAudio=audios[curIdx]}
+        trackSrc(bgmAudio);
         bgmAudio.volume=0;
         bgmAudio.currentTime=0;
         safePlayBgm().then(function(){fadeVolume(BGM_MAX_VOL,BGM_FADE_DURATION)});
@@ -7518,6 +7535,8 @@ function checkOrientation(){
             const rs=document.getElementById('rotateSub');
             if(rt)rt.textContent=t.land.replace(/^📱\s*/,'');
             if(rs)rs.textContent=t.landSub;
+            /* 회전 잠금을 켠 사용자는 여기서 막다른 길이었다(2026-10-01 QA) — 정지·결과 화면과 같은 게임 홈·전체 홈 버튼 */
+            _lpNavMount(overlay,_crGameHome);
         }
     }
     /* When NOT showing the rotate gate, sync canvas + track params to

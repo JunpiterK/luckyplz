@@ -75,5 +75,5 @@ CONTENT_GUMMY["gummy"] = {
         ("잘 알려진 연쇄 퍼즐 게임과 같은 게임인가요?",
          "같은 장르의 규칙을 따르는 자체 구현입니다. 판 크기, 4개 소거, 연쇄 배율, 70점당 방해 블록 1개 같은 대전 규칙은 장르 표준을 따랐지만, 이름과 캐릭터, 그림, 효과음은 모두 이 사이트가 따로 만들었고 특정 게임의 권리자와는 관련이 없습니다."),
     ],
-    "footer": '다른 레트로 퍼즐도 있습니다 — <a href="/games/tetris/">블록 스택</a>·<a href="/games/bubble/">버블 버스트</a>·<a href="/games/lucky-merge/">행성 키우기</a>·<a href="/arcade/">아케이드 전체</a>. 모두 무료이며 로그인이 필요 없습니다.',
+    "footer": '다른 레트로 퍼즐도 있습니다 — <a href="/games/tetris/">테트로미노 쌓기</a>·<a href="/games/bubble/">버블 버스트</a>·<a href="/games/lucky-merge/">행성 키우기</a>·<a href="/arcade/">아케이드 전체</a>. 모두 무료이며 로그인이 필요 없습니다.',
 }
