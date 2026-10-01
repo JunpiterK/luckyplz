@@ -1969,14 +1969,33 @@ window.BRFIELD=(function(){
   function textures(){
     /* 타일 해상도 = 화면에 실제로 찍히는 크기. 폰 가로(DRAW_SCALE≈0.55)는 DPR 2 여도 1배면 충분하고,
        저사양은 1배 고정 — 텍스처 굽기는 td² 에 비례한다(데스크톱 1배 ≈ 0.2초) */
-    const dk=Math.max(0.55,(typeof DRAW_SCALE==='number'&&DRAW_SCALE)||1),dp=(typeof DPR==='number'&&DPR)||1;
-    let td=Math.min(2,Math.max(1,Math.round(dp*dk*2)/2));if(window.BRQ&&BRQ.tier===0)td=1;
+    const td=tdNow();
     if(M.tx&&M.td===td)return M.tx;
-    const N=Math.round(256*td),u=td,t0=performance.now();
-    M.tx={N,grass:texGrass(N,u),dirt:texDirt(N,u),gravel:texGravel(N,u),mud:texMud(N),caustic:texCaustic(N),patch:texPatch(Math.round(N/2))};
+    const N=Math.round(256*td),u=td,t0=performance.now(),pre=(M.pre&&M.pre.td===td)?M.pre.tx:{};
+    const TX=pre;TX.N=N;for(const [k,f] of texJobs(N,u))if(!TX[k])TX[k]=f();
+    M.tx=TX;M.pre=null;
     M.td=td;M.buildMs=Math.round(performance.now()-t0);return M.tx;
   }
-  function prewarm(){try{textures()}catch(e){M.off=true}}
+  function tdNow(){
+    const dk=Math.max(0.55,(typeof DRAW_SCALE==='number'&&DRAW_SCALE)||1),dp=(typeof DPR==='number'&&DPR)||1;
+    let td=Math.min(2,Math.max(1,Math.round(dp*dk*2)/2));if(window.BRQ&&BRQ.tier===0)td=1;
+    return td;
+  }
+  function texJobs(N,u){return [['grass',()=>texGrass(N,u)],['dirt',()=>texDirt(N,u)],['gravel',()=>texGravel(N,u)],['mud',()=>texMud(N)],['caustic',()=>texCaustic(N)],['patch',()=>texPatch(Math.round(N/2))]]}
+  /* 2026-10-02 QA M-3: 여섯 장을 한 번에 구우면 CPU 4× 에서 0.6~1.4초짜리 긴 작업 — 한가할 때 한 장씩 굽는다.
+     경주가 먼저 시작돼 textures() 가 불리면 남은 장만 그 자리에서 마저 굽는다(결과 동일) */
+  function prewarm(){try{
+    const td=tdNow();if(M.tx&&M.td===td)return;
+    const N=Math.round(256*td),u=td,jobs=texJobs(N,u),tx={N};let i=0;M.pre={td,tx};
+    const idle=window.requestIdleCallback?(f=>requestIdleCallback(f,{timeout:2500})):(f=>setTimeout(f,60));
+    const step=()=>{try{
+      if(M.tx&&M.td===td)return;                       /* 그새 textures() 가 다 구웠다 */
+      if(!M.pre||M.pre.tx!==tx)return;
+      const [k,f]=jobs[i++];if(!tx[k])tx[k]=f();
+      if(i<jobs.length)idle(step);else{M.tx=tx;M.td=td;M.pre=null}
+    }catch(e){M.off=true}};
+    idle(step);
+  }catch(e){M.off=true}}
   /* 패턴: 타일 한 장 = 화면 256px × 배율. td 로 나눠 기기 해상도만큼 선명하게 */
   function pat(g,tex,scale,dx,dy){
     const p=g.createPattern(tex,'repeat');

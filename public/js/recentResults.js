@@ -21,7 +21,11 @@
         ladder:     {emoji:'🪜', ko:'사다리', en:'Ladder',     ja:'あみだくじ', zh:'梯子', es:'Escalera', pt:'Escada'},
         team:       {emoji:'👥', ko:'팀 뽑기',en:'Team',       ja:'チーム',     zh:'分队', es:'Equipos',  pt:'Times'},
         'car-racing':{emoji:'🏎️',ko:'카레이싱',en:'Race',      ja:'レース',     zh:'赛车', es:'Carrera',  pt:'Corrida'},
-        lotto:      {emoji:'🎱', ko:'로또',   en:'Lotto',      ja:'ロト',       zh:'乐透', es:'Lotería',  pt:'Loteria'}
+        lotto:      {emoji:'🎱', ko:'로또',   en:'Lotto',      ja:'ロト',       zh:'乐透', es:'Lotería',  pt:'Loteria'},
+        bingo:      {emoji:'🎰', ko:'빙고',   en:'Bingo',      ja:'ビンゴ',     zh:'宾果', es:'Bingo',    pt:'Bingo'},
+        yut:        {emoji:'🪵', ko:'윷놀이', en:'Yut Nori',   ja:'ユンノリ',   zh:'掷柶', es:'Yut Nori', pt:'Yut Nori'},
+        'prism-hex':{emoji:'💎', ko:'프리즘 헥스',en:'Prism Hex',ja:'プリズムヘックス',zh:'棱镜六角',es:'Prism Hex',pt:'Prism Hex'},
+        lots:       {emoji:'🎟️', ko:'제비뽑기',en:'Scratch Lots',ja:'スクラッチくじ',zh:'刮刮签',es:'Sorteo',  pt:'Sorteio'}
     };
 
     function load(){
@@ -118,5 +122,7 @@
 
     injectStyles();
 
-    window.LpRecent={save:save,load:load,render:render,clearAll:clearAll};
+    /* add({game, result}) — 윷·프리즘 헥스가 부르던 형태(2026-10-02 QA: 없는 함수라 기록이 안 남았다) */
+    function add(o){ if(!o||!o.game)return; save(o.game, String(o.result==null?'':o.result) + (o.suffix||''), o.url); }
+    window.LpRecent={save:save,add:add,load:load,render:render,clearAll:clearAll};
 })();
