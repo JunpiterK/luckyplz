@@ -16,6 +16,7 @@
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- chef
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- guest
   C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- food
+  C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/mascot_burger.py -- foodside   (주문서 레퍼런스용 정측면)
   (-- chef:idle,cheer 처럼 일부만) · MB_SAMPLES=24 로 시안
 출력: scripts/og-assets/burger/{chef,guest,food}/*.png + meta.json → python scripts/build_arcade_mascots.py burger
 """
@@ -412,19 +413,21 @@ FOOD_W, FOOD_H = 512, 320
 FOOD_ORTHO = 2.9
 
 
-def food_studio():
+def food_studio(elev=None, res_y=None, tz=0.02):
+    """elev=None → 게임 스택용 20° 부감. foodside 는 elev=0(정측면) — 주문서 레퍼런스 옆모습(2026-10-02)"""
+    elev = ELEV if elev is None else elev
     yp.SAMPLES = SAMPLES
     sc = yp.studio()
     sc.render.resolution_x = FOOD_W
-    sc.render.resolution_y = FOOD_H
+    sc.render.resolution_y = res_y or FOOD_H
     th = 2.4
     sc.render.line_thickness = th
     bpy.context.view_layer.freestyle_settings.linesets[0].linestyle.thickness = th
     cam = sc.camera
     cam.data.type = 'ORTHO'
     cam.data.ortho_scale = FOOD_ORTHO
-    d = Vector((0.0, -math.cos(ELEV), math.sin(ELEV)))
-    tgt = Vector((0.0, 0.0, 0.02))
+    d = Vector((0.0, -math.cos(elev), math.sin(elev)))
+    tgt = Vector((0.0, 0.0, tz))
     cam.location = tgt + d * 14.0
     cam.rotation_mode = 'QUATERNION'
     cam.rotation_quaternion = (-d).to_track_quat('-Z', 'Y')
@@ -432,10 +435,13 @@ def food_studio():
     return sc
 
 
-def render_food(name):
-    sc = food_studio()
+FOODSIDE_H, FOODSIDE_TZ = 256, 0.16
+
+
+def render_food(name, side=False):
+    sc = food_studio(0.0, FOODSIDE_H, FOODSIDE_TZ) if side else food_studio()
     T = FOOD_FN[name]()
-    dd = os.path.join(OUT, "food")
+    dd = os.path.join(OUT, "foodside" if side else "food")
     os.makedirs(dd, exist_ok=True)
     sc.render.filepath = os.path.join(dd, name + ".png")
     bpy.ops.render.render(write_still=True)
@@ -469,8 +475,8 @@ if __name__ == "__main__":
             meta['%s-%s' % (s, e)] = render_guest(s, e)
             with open(mpath, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=1)
-    elif kind == 'food':
+    elif kind in ('food', 'foodside'):
         for n in (only.split(',') if only else FOOD):
-            meta[n] = render_food(n)
+            meta[n] = render_food(n, side=(kind == 'foodside'))
             with open(mpath, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=1)

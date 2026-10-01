@@ -63,6 +63,26 @@ def burger():
     print(json.dumps(out, separators=(',', ':')))
 
 
+def burger_side():
+    """주문서 레퍼런스 옆모습(정측면 0°) 재료 7종 — 게임 스택과 같은 모델·같은 축척(2026-10-02).
+    th = 재료 바닥→윗면 높이(셀 높이 비율). 게임은 바닥 중심을 맞춰 아래→위로 th 만큼씩 올려 쌓는다."""
+    dst = os.path.join(ROOT, "public", "assets", "burger")
+    food = ['bunBottom', 'bunTop', 'patty', 'cheese', 'lettuce', 'tomato', 'onion']
+    f = os.path.join(OG, "burger", "foodside")
+    atlas(f, food, 4, 384, 192, os.path.join(dst, "food_side.webp"), q=88)
+    fm = json.load(open(os.path.join(f, "meta.json"), encoding='utf-8'))
+    o = fm['patty']['o']
+    ext = {}
+    for k in food:          # 셀 높이 비율: 바닥 기준 위로 솟은 끝(up)·아래로 처진 끝(dn) — 칸 맞춤용
+        im = Image.open(os.path.join(f, k + ".png")).convert("RGBA")
+        bb = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+        H = im.size[1]
+        ext[k] = [r4(fm[k]['o'][1] - bb[1] / H), r4(bb[3] / H - fm[k]['o'][1])]
+    out = dict(cols=4, order=food, o=r4(o), ux=r4(fm['patty']['ux']),
+               th={k: r4(fm[k]['o'][1] - fm[k]['top'][1]) for k in food}, ext=ext)
+    print(json.dumps(out, separators=(',', ':')))
+
+
 def merge():
     dst = os.path.join(ROOT, "public", "assets", "lucky-merge")
     order = ['idle', 'blink', 'drop', 'happy', 'cheer', 'wow', 'nervous', 'cry', 'wink']
@@ -76,4 +96,4 @@ def merge():
 
 
 if __name__ == "__main__":
-    {'burger': burger, 'merge': merge}[sys.argv[1]]()
+    {'burger': burger, 'burger_side': burger_side, 'merge': merge}[sys.argv[1]]()
