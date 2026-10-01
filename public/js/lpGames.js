@@ -61,6 +61,7 @@
         'bingo': {ko:'빙고',en:'Bingo',ja:'ビンゴ',es:'Bingo',pt:'Bingo',zh:'宾果',de:'Bingo',fr:'Bingo',ru:'Бинго',ar:'بينغو',hi:'बिंगो',th:'บิงโก',id:'Bingo',vi:'Bingo',tr:'Bingo'},
         'team': {ko:'팀 뽑기',en:'Team Picker',ja:'チーム分け',es:'Equipos',pt:'Times',zh:'分队抽签',de:'Team-Los',fr:'Équipes',ru:'Жеребьёвка',ar:'قرعة الفرق',hi:'टीम चुनाव',th:'จับทีม',id:'Undi Tim',vi:'Bốc Thăm Đội',tr:'Takım Çekilişi'},
         'balloon': {ko:'풍선 룰렛',en:'Balloon Pop',ja:'風船ルーレット',es:'Revienta Globos',pt:'Estoura Balão',zh:'气球轮盘',de:'Ballon-Knall',fr:'Ballon Boum',ru:'Шар-рулетка',ar:'بالون بوم',hi:'गुब्बारा धमाका',th:'ลูกโป่งแตก',id:'Balon Dor',vi:'Bóng Nổ',tr:'Balon Patlat'},
+        'lots': {ko:'긁는 제비뽑기',en:'Scratch Lots',ja:'スクラッチくじ',es:'Sorteo para rascar',pt:'Sorteio de raspar',zh:'刮刮签',de:'Rubbel-Lose',fr:'Tirage à gratter',ru:'Жребий-скретч',ar:'قرعة الكشط',hi:'खुरच पर्ची',th:'จับฉลากขูด',id:'Undian Gosok',vi:'Bốc thăm cào',tr:'Kazı Kura'},
         'lotto': {ko:'로또 추첨',en:'Lotto Draw',ja:'ロト抽選',es:'Lotería',pt:'Loteria',zh:'乐透抽奖',de:'Lottoziehung',fr:'Tirage Loto',ru:'Лотерея',ar:'سحب',hi:'लॉटो',th:'ลอตโต',id:'Undian',vi:'Xổ số',tr:'Çekiliş'},
         'lucky-merge': {ko:'행성 키우기',en:'Planet Merge'},
         'dodge': {ko:'스페이스-Z',en:'Space-Z',ja:'スペースZ',es:'Space-Z',pt:'Space-Z',zh:'太空-Z',de:'Space-Z',fr:'Space-Z',ru:'Спейс-Z',ar:'سبيس-Z',hi:'स्पेस-Z',th:'สเปซ-Z',id:'Space-Z',vi:'Space-Z',tr:'Space-Z'},
@@ -103,6 +104,7 @@
         g('ladder', 'random', mp('draw', 'v2', { v1: true })),
         g('team', 'random', mp('draw', 'v2', { v1: true })),
         g('balloon', 'random', mp('turn', 'v2', { seats: [2, 8], late: 'nextRound', migr: false, hidden: true })),
+        g('lots', 'random', mp('draw', 'v2')),
         g('bingo', 'draw', mp('draw', 'v2', { v1: true, adapter: 'draw-session', migr: false })),
         g('lotto', 'draw', mp('draw', 'v2', { v1: true })),
         /* 아케이드 — race(같은 시드 대결) · realtime */

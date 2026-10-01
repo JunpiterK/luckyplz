@@ -326,6 +326,7 @@ CONTENT.update(_load("game_about_content_mahjong_solitaire", "CONTENT_MAHJONG_SO
 CONTENT.update(_load("game_about_content_mahjong_tw", "CONTENT_MAHJONG_TW"))  # 2026-09-27 대만 마작 台灣麻將
 CONTENT.update(_load("game_about_content_yacht", "CONTENT_YACHT"))  # 2026-09-30 요트 다이스
 CONTENT.update(_load("game_about_content_omok", "CONTENT_OMOK"))  # 2026-10-01 오목
+CONTENT.update(_load("game_about_content_lots", "CONTENT_LOTS"))  # 2026-10-01 긁는 제비뽑기
 
 # 600단어 미달 게임 보강 블록 — 각 게임의 blocks 뒤(FAQ 앞)에 덧붙인다.
 for _k, _extra in _load("game_about_content_4", "EXTRA_BLOCKS").items():
