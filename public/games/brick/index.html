@@ -221,6 +221,17 @@ canvas#g{
   color:var(--accent);margin-top:3px;
 }
 .modal .btn-row{display:flex;gap:8px}
+/* 2026-10 결과 손맛 — 점수 차르륵 + 신기록 도장(점수 칸 모서리에 비스듬히. 레이아웃 높이 불변) */
+.modal .stats-modal .item{position:relative}
+.modal .stats-modal .v.cnt-done{animation:go-cnt-pop .26s cubic-bezier(.2,1.8,.4,1)}
+@keyframes go-cnt-pop{0%{transform:scale(1.4);color:#FFE66D}100%{transform:scale(1)}}
+.lp-nb-stamp{position:absolute;right:-10px;top:-15px;z-index:2;padding:2px 8px;border:2px solid #FFD447;border-radius:7px;
+  background:rgba(30,18,0,.82);color:#FFE66D;font:900 10px Orbitron,sans-serif;letter-spacing:.06em;white-space:nowrap;
+  text-shadow:0 0 8px rgba(255,214,71,.7);box-shadow:0 0 16px -4px rgba(255,214,71,.8);
+  opacity:0;transform:rotate(-9deg) scale(2.4);pointer-events:none}
+.lp-nb-stamp.on{animation:lp-stamp .42s cubic-bezier(.2,1.5,.4,1) forwards}
+@keyframes lp-stamp{0%{opacity:0;transform:rotate(-17deg) scale(2.4)}55%{opacity:1}100%{opacity:1;transform:rotate(-9deg) scale(1)}}
+@media (prefers-reduced-motion:reduce){.lp-nb-stamp.on{animation:none;opacity:1;transform:rotate(-9deg)}.modal .stats-modal .v.cnt-done{animation:none}}
 .modal .btn-row .btn{flex:1;max-width:none}
 .modal .features{
   text-align:left;margin:14px 0;padding:12px;
@@ -1324,7 +1335,17 @@ function spawnShards(br, t, hx, hy, power){
 }
 function spawnRing(x, y, rgb, r0, vr, life, lw){
   const p = pNew();
-  p.k = 'ring'; p.x = x; p.y = y; p.r = r0; p.vr = vr; p.rgb = rgb; p.life = life; p.max = life; p.lw = lw || 2;
+  p.k = 'ring'; p.x = x; p.y = y; p.r = r0; p.vr = vr; p.rgb = rgb; p.life = life; p.max = life; p.lw = lw || 2; p.flat = 0;
+  pushP(p);
+  return p;
+}
+/* 깨진 벽돌의 잔상 — 하얗게 번쩍인 벽돌 실루엣이 부풀며 사라진다(국소 섬광, 약 0.17초) */
+const COMBO_TXT = ['#FFFFFF','#FFFFFF','#9FFFE0','#FFE66D','#FFB547','#FF8AD8'];
+function spawnGhost(br, rgb){
+  if(RM) return;
+  const p = pNew();
+  p.k = 'ghost'; p.x = br.x + br.w/2; p.y = br.y + br.h/2; p.w = br.w; p.h = br.h; p.rgb = rgb;
+  p.life = 10; p.max = 10;
   pushP(p);
 }
 function spawnText(text, x, y, color, size, life){
@@ -1658,6 +1679,8 @@ function updateBall(b){
       PD.sqv += 5;
       pandaReact('strain', 150, 1);
       spawnSparks(b.x, C.PADDLE_Y, modeRGB(), 6, 2.2, 18, -1);
+      /* 패들 윗면을 따라 퍼지는 납작한 물결 — 맞은 자리가 보인다 */
+      if(!RM){ const rp = spawnRing(b.x, C.PADDLE_Y, modeRGB(), 3, 2.8, 14, 2.2); rp.flat = 0.28; }
       /* 콤보 감쇠 — 한 왕복은 버티고 그 다음에 끊긴다 (2026-08-21) */
       if(S.combo > 1){
         if(S.comboGrace){
@@ -1776,13 +1799,15 @@ function hitBrick(br, hx, hy, opt){
     spawnShards(br, t, hx, hy, br.maxHp >= 3 || t.gold ? 1.35 : 1);
     /* 단단한 벽돌·금 벽돌을 부순 순간 — 짧은 정지(그림만) + 진동 */
     if(!RM && !aoe && (t.gold || br.maxHp >= 3)){ S.hitstop = Math.max(S.hitstop, t.gold ? 55 : 34); buzz(t.gold ? 22 : 12); }
-    spawnSparks(br.x + br.w/2, br.y + br.h/2, t.rgb, 8, 2.8, 26);
-    spawnRing(br.x + br.w/2, br.y + br.h/2, t.rgb, 4, 2.4, 16, 2);
+    spawnGhost(br, t.rgb);
+    spawnSparks(br.x + br.w/2, br.y + br.h/2, t.rgb, 8 + Math.min(6, S.combo * 1.5), 2.8 + S.combo * 0.15, 26);
+    spawnRing(br.x + br.w/2, br.y + br.h/2, t.rgb, 4, 2.4 + S.combo * 0.2, 16, 2);
     if(t.gold) sfxGold(); else sfxBrickBreak(t.tier || 3);
     if(t.gold || lpR() < C.POWER_DROP_RATE){
       spawnPowerUp(br.x + br.w/2, br.y + br.h/2);
     }
-    spawnText('+' + pts, br.x + br.w/2, br.y + 4, S.combo >= 2 ? '#FFE66D' : '#FFFFFF', S.combo >= 2 ? 13 : 11, 48);
+    /* 점수 글자 — 콤보가 오를수록 크고 뜨거운 색 (HUD 콤보 색과 같은 줄) */
+    spawnText('+' + pts, br.x + br.w/2, br.y + 4, COMBO_TXT[Math.min(5, S.combo)], 11 + (Math.min(5, S.combo) - 1) * 2, 48);
   } else {
     spawnSparks(hx, hy, t.rgb, 4, 1.6, 14);
     /* 금이 가는 순간 부스러기 */
@@ -1867,6 +1892,7 @@ function onLevelClear(){
   const timeBonus = computeTimeBonus();
   S.score += baseBonus + timeBonus;
   if(S.level >= C.MAX_LEVEL){
+    const prevBestAC = S.best;
     if(S.score > S.best) S.best = S.score;
     if(S.level > S.bestLevel) S.bestLevel = S.level;
     saveStorage();
@@ -1880,6 +1906,7 @@ function onLevelClear(){
     document.getElementById('goBestLv').textContent = S.bestLevel;
     gameOv.classList.add('show');try{window.lpMountAds&&window.lpMountAds()}catch(_){}
     lpNavMount(document.getElementById('lpEndNav'));
+    goReveal(prevBestAC);
     S.uiDirty = true;
     return;
   }
@@ -1915,7 +1942,34 @@ function onGameOver(){
   document.getElementById('goBestLv').textContent = S.bestLevel;
   gameOv.classList.add('show');try{window.lpMountAds&&window.lpMountAds()}catch(_){}
   lpNavMount(document.getElementById('lpEndNav'));
+  goReveal(prevBest);
   S.uiDirty = true;
+}
+/* 결과 공개 — 점수가 0 에서 차르륵 올라가고(끝으로 갈수록 느리게), 이전 최고를 넘었으면 도장 쾅 */
+let goRevealTok = 0;
+function goReveal(prevBest){
+  const el = document.getElementById('goScore');
+  const to = S.score, isNew = prevBest > 0 && to > prevBest, tok = ++goRevealTok;
+  const old = document.getElementById('goNb'); if(old) old.remove();
+  const stamp = () => {
+    if(!isNew) return;
+    const st = document.createElement('div');
+    st.className = 'lp-nb-stamp'; st.id = 'goNb'; st.setAttribute('aria-hidden', 'true'); st.textContent = 'NEW BEST!';
+    (document.getElementById('goBest') || el).parentNode.appendChild(st);
+    requestAnimationFrame(() => st.classList.add('on'));
+    sfxGold(); buzz([18, 40, 30]);
+  };
+  if(RM || to <= 0){ el.textContent = to.toLocaleString(); stamp(); return; }
+  const t0 = performance.now(); let lastTick = 0;
+  el.classList.remove('cnt-done');
+  (function step(){
+    if(tok !== goRevealTok) return;
+    const now = performance.now(), k = Math.min(1, (now - t0) / 720), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(to * e).toLocaleString();
+    if(k < 1 && now - lastTick > 70){ lastTick = now; sfxWall(); }
+    if(k < 1) requestAnimationFrame(step);
+    else { el.classList.add('cnt-done'); stamp(); }
+  })();
 }
 
 // ======== UPDATE (fixed 60Hz step) ========
@@ -2808,7 +2862,15 @@ function drawParticles(){
       ctx.globalAlpha = k * 0.9;
       ctx.strokeStyle = 'rgb(' + p.rgb + ')';
       ctx.lineWidth = p.lw * (0.4 + 0.6*k);
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath();
+      if(p.flat) ctx.ellipse(p.x, p.y, p.r, p.r * p.flat, 0, 0, Math.PI*2); else ctx.arc(p.x, p.y, p.r, 0, Math.PI*2);
+      ctx.stroke();
+    } else if(p.k === 'ghost'){
+      const k = p.life / p.max, sc = 1 + 0.38 * (1 - k*k);
+      ctx.globalAlpha = Math.pow(k, 1.4) * 0.95;
+      ctx.fillStyle = k > 0.7 ? '#FFFFFF' : 'rgb(' + p.rgb + ')';
+      const w = p.w * sc, h = p.h * (1 + 0.6 * (1 - k*k));
+      ctx.fillRect(p.x - w/2, p.y - h/2, w, h);
     }
   }
   ctx.globalCompositeOperation = 'source-over';
@@ -2832,7 +2894,8 @@ function drawParticles(){
     const k = p.life / p.max;
     ctx.globalAlpha = Math.min(1, k*1.6);
     const spr = textSprite(p.text, p.color, p.size);
-    const sc = (1 + p.pop*0.45) / 1.45;
+    const age = p.max - p.life;
+    const sc = (1 + p.pop*0.45) / 1.45 * (age < 3 && !RM ? 0.55 + 0.15 * age : 1);
     const w = spr._w * sc, h = spr._h * sc;
     ctx.drawImage(spr, p.x - w/2, p.y - h/2, w, h);
   }
