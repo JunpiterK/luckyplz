@@ -53,7 +53,8 @@
         '.lp-nav2 button{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 10px;' +
         'border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.07);color:#fff;' +
         'font:800 14px/1.2 "Noto Sans KR",sans-serif;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;' +
-        'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:auto}' +
+        /* 320px·긴 언어('🎮 Inicio del juego')에서 말줄임이 났다 — 두 줄까지 허용(2026-10-01 QA) */
+        'white-space:normal;overflow-wrap:break-word;text-align:center;overflow:hidden;pointer-events:auto}' +
         '.lp-nav2 button:hover{background:rgba(255,255,255,.14);border-color:rgba(255,230,109,.5)}' +
         '.lp-nav2 button:active{transform:translateY(1px)}' +
         '.lp-nav2 .ic{font-size:15px;line-height:1}';
