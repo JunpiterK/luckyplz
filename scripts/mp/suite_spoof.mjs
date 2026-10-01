@@ -127,6 +127,91 @@ export async function spoof(ctx) {
             ok('S6', legit.ok && lag < 50 && bad1 > bad0 && n.ok && sent / secs >= 190, `flood ${sent} junk msgs in ${secs.toFixed(1)}s (${Math.round(sent / secs)}/s: bad sig, 40KB, broken JSON, junk) → dropped, host responsive`, { legit, hostMaxLagMs: Math.round(lag), droppedBad: bad1 - bad0 });
         }
 
+        /* S6b (2026-09-30 실전 보강): 한 게스트(A)의 pid 를 적은 위조 봉투 폭주 — 모양은 맞고(서명 86자) 서명만 틀리다.
+           수정 전: 방장이 서명 검증 전에 A 의 처리량 버킷을 깎아서 A 의 진짜 의도가 버려졌다(재전송 1.5초 뒤에야 통과하거나 실패).
+           수정 후: 검증 뒤에만 차감 → A 의 의도 5개가 전부 재전송 없이(< 1초) 수락, 방장 rate 드롭 0, 메인 스레드 블록 < 50ms.
+           + 녹화한 A 의 진짜 봉투 재생 폭주도 같은 결과(재생은 검증 없이 버림, 차감 없음). */
+        if (run1(only, 'S6b')) {
+            await H.ev('T.lag=0');
+            const st0 = await H.ev('LpRooms.stats()');
+            const n0 = (await stateN())[0];
+            const genuine = rec.g.filter(e => e && e.p === pa && e.c < 1e14).slice(-40);   /* A 가 실제로 보낸 서명 봉투(재생용) */
+            const junk = [];
+            for (let i = 0; i < 800; i++) {
+                if (i % 4 === 3 && genuine.length) junk.push(genuine[i % genuine.length]);
+                else junk.push(await A.gEnv({ code, e: i % 2 ? 'intent' : 'hb', p: pa, c: 2e15 + i, d: i % 2 ? { a: 'inc', x: 100 } : { t0: 1 } }));
+            }
+            const lat = [];
+            const legitP = (async () => {
+                await sleep(500);
+                for (let k = 0; k < 5; k++) { lat.push(await Ga.ev(`(async()=>{const t=performance.now();const r=await T.room.intent('inc',1);return {ok:r.ok,ms:Math.round(performance.now()-t)}})()`)); await sleep(350); }
+            })();
+            const t0 = Date.now(); let sent = 0;
+            while (sent < junk.length) {
+                const due = Math.floor((Date.now() - t0) / 5);
+                while (sent < junk.length && sent <= due) { relay.inject(topic, 'g', junk[sent]); sent++; }
+                await sleep(4);
+            }
+            const secs = (Date.now() - t0) / 1000;
+            await legitP; await sleep(400);
+            const lag = await H.ev('T.lag'), st1 = await H.ev('LpRooms.stats()');
+            const n = await allEqual(pages, 'String(T.room.state().game.n)');
+            const worst = Math.max(...lat.map(x => x.ms));
+            ok('S6b', lat.length === 5 && lat.every(x => x.ok) && worst < 1000 && n.ok && +n.v === n0 + 5 && lag < 50 && st1.rate === st0.rate && sent / secs >= 190,
+                `targeted flood: ${sent} forged/replayed envelopes claiming guest A's pid at ${Math.round(sent / secs)}/s → A's 5 real intents all accepted without retry, allowance untouched`,
+                { intentMs: lat.map(x => x.ms), hostMaxLagMs: Math.round(lag), rateDrops: st1.rate - st0.rate, shed: st1.shed - st0.shed, bad: st1.bad - st0.bad, n: n.v || n.vals });
+        }
+        /* S6c: 위조 join 폭주 중에도 새 사람이 링크로 바로 들어온다(재시도 전) — join 허용량은 서명이 맞는 join 만 센다.
+           hello_req(무서명) 폭주는 join 허용량과 별개 버킷 — hello 방송은 증폭 방지로 2초 간격까지 늦어지므로 입장은 ~2.5초 안 */
+        if (run1(only, 'S6c')) {
+            const X = await device(E, 'sX'), Y = await device(E, 'sY');
+            try {
+                const flood = async (junk, fn) => {
+                    await H.ev('T.lag=0');
+                    const p = (async () => { await sleep(700); return fn(); })();
+                    const t0 = Date.now(); let sent = 0;
+                    while (sent < junk.length) {
+                        const due = Math.floor((Date.now() - t0) / 5);
+                        while (sent < junk.length && sent <= due) { relay.inject(topic, 'g', junk[sent]); sent++; }
+                        await sleep(4);
+                    }
+                    const r = await p;
+                    return { r, rate: Math.round(sent / ((Date.now() - t0) / 1000)), lag: Math.round(await H.ev('T.lag')) };
+                };
+                const tj = async (P) => { const t = Date.now(); const r = await join(P, c.url); return { ok: r.ok, reason: r.reason, ms: Date.now() - t }; };
+                const j1 = [], j2 = [];
+                for (let i = 0; i < 700; i++) {
+                    const fake = 'p' + [...Array(20)].map((_, k) => 'abcdefghijklmnopqrstuvwxyz234567'[(i * 7 + k * 13) % 32]).join('');
+                    j1.push(await A.gEnv({ code, e: 'join', p: fake, c: 1e12 + i, d: { v: 2, dpk: { sig: evil.pub, dh: evil.pub }, want: 'play', t0: 1 } }));
+                    j2.push({ v: 2, e: 'hello_req', n: 'n' + i });
+                }
+                const a = await flood(j1, () => tj(X));
+                await sleep(2500);
+                const b = await flood(j2, () => tj(Y));
+                ok('S6c', a.r.ok && a.r.ms < 1500 && a.lag < 50 && b.r.ok && b.r.ms < 4500 && b.lag < 50,
+                    `join flood: 700 forged joins at ${a.rate}/s → a real newcomer joins by link on the first try; 700 hello_req at ${b.rate}/s → still joins (hello is rate-limited, not join)`,
+                    { forgedJoins: a, helloReqs: b });
+                await X.ev('T.room&&T.room.leave()').catch(() => 0); await Y.ev('T.room&&T.room.leave()').catch(() => 0);
+                await sleep(300);
+            } finally { await closeAll(E, [X, Y]); }
+        }
+        /* S6d: 게스트 쪽도 같다 — A 를 사칭한 위조 g:x 폭주가 다른 게스트(B)의 "A 허용량"을 소진하지 못한다 → A 의 진짜 x 가 B 에 닿는다 */
+        if (run1(only, 'S6d')) {
+            const junk = [];
+            for (let i = 0; i < 400; i++) junk.push(await A.gEnv({ code, e: 'x', p: pa, c: 3e15 + i, d: { k: 'fake', d: i } }));
+            const x0 = await Gb.ev(`T.ev.filter(v=>v.e==='x'&&v.x.k==='real6d').length`);
+            const sendP = (async () => { await sleep(600); for (let k = 0; k < 3; k++) { await Ga.ev(`T.room.x('real6d',{k:${k}})`); await sleep(300); } })();
+            const t0 = Date.now(); let sent = 0;
+            while (sent < junk.length) {
+                const due = Math.floor((Date.now() - t0) / 5);
+                while (sent < junk.length && sent <= due) { relay.inject(topic, 'g', junk[sent]); sent++; }
+                await sleep(4);
+            }
+            await sendP; await sleep(500);
+            const got = await Promise.all([H, Gb].map(p => p.ev(`({real:T.ev.filter(v=>v.e==='x'&&v.x.k==='real6d').length,fake:T.ev.filter(v=>v.e==='x'&&v.x.k==='fake').length})`)));
+            ok('S6d', got.every(g => g.real - (g === got[1] ? x0 : 0) === 3 && g.fake === 0), "guest-side: forged g:x flood as A → host and guest B still receive A's 3 real x, 0 fake", got);
+        }
+
         if (run1(only, 'S7')) {
             await H.ev(`T.room.x('result',{winner:'WINNER_XYZ',names:['Alice7','Bobby7']})`);
             await Ga.ev(`T.room.react(2)`);

@@ -110,6 +110,11 @@ async function sheetPng(E, files, out, cols, title) {
 }
 
 export async function ui(ctx) {
+    /* pageFor(게임 경로 → UI 픽스처)는 이 스위트 동안만 — 끝나면 되돌린다(뒤 스위트가 하네스 페이지를 못 받아 죽던 순서 의존) */
+    const prevPageFor = ctx.relay.pageFor;
+    try { return await uiRun(ctx); } finally { ctx.relay.pageFor = prevPageFor || null; }
+}
+async function uiRun(ctx) {
     const { E, relay, ok, only } = ctx;
     relay.pageFor = pageFor;
     const SHOTS = process.env.MP_SHOTS || path.join(SCR, 'shots');
@@ -150,12 +155,15 @@ export async function ui(ctx) {
             /* v1 기본(플래그 없음) 페이지는 예전대로 v1 */
             const V = await dev(E, 'uv', { lang: 'ko' });
             try {
-                await V.c.send('Page.navigate', { url: E.base + '/games/ludo/' });
+                /* 표(레지스트리)에서 아직 v1 인 게임을 고른다 — 예전엔 ludo 로 고정이라 2026-09-30 보드게임 v2 전환 뒤 늘 실패했다 */
+                const v1g = await H.ev(`(LpGames.all().find(g=>g.mp&&g.mp.v==='v1'&&g.mp.v1&&!g.mp.later)||{}).id||null`);
+                if (!v1g) throw Object.assign(new Error('skip'), { skipU4b: true });
+                await V.c.send('Page.navigate', { url: E.base + '/games/' + v1g + '/' });
                 await V.wait(`document.readyState==='complete'&&[...document.scripts].some(s=>/lpRoom\\.js/.test(s.src))`, 10000);
                 await sleep(500);
                 const v = await V.ev(`({v2:[...document.scripts].filter(s=>/lpRoomsCore|lpRoomsUI/.test(s.src)).length,v1:[...document.scripts].filter(s=>/lpRoom\\.js|lpHostCtl|lpMultiplayer|lpInviteButton/.test(s.src)).length,btn:!!document.querySelector('.lp-rooms-btn')})`);
-                ok('U4b', v.v2 === 0 && v.v1 === 4 && !v.btn, 'default game page (registry v1) keeps the v1 stack, no v2 scripts', v);
-            } finally { await closeAll(E, [V]); }
+                ok('U4b', v.v2 === 0 && v.v1 === 4 && !v.btn, 'default game page (registry v1: ' + v1g + ') keeps the v1 stack, no v2 scripts', v);
+            } catch (e) { if (!e.skipU4b) throw e; ok('U4b', true, 'no game left on the v1 flag — nothing to check'); } finally { await closeAll(E, [V]); }
         } finally { await closeAll(E, [H, G]); }
     }
 
@@ -201,6 +209,7 @@ export async function ui(ctx) {
             const ia = await G.ev(`({ia:!!window.LpInApp,we:window.LpInApp&&typeof LpInApp.willEscape==='function'?LpInApp.willEscape():'n/a',app:window.LpInApp&&LpInApp.info&&LpInApp.info.app})`);
             await H.wait(`LpRoomsUI.room().roster().length===2`, 6000);
             /* 방장: 명단 행 → 내보내기 → 자체 확인창 → 확인 */
+            const rowInfo = await H.wait(`(()=>{const r=[...document.querySelectorAll('.lpr-lobby .lpr-m')];const t=document.querySelector('.lpr-lobby .lpr-m.tap');return t?{rows:r.length,tap:true}:null})()`, 6000).catch(async e => { console.log('U3 rows', await H.ev(`[...document.querySelectorAll('.lpr-lobby .lpr-m')].map(e=>e.className+'|'+e.textContent.slice(0,20)).join(' ;; ')+' // sheets='+document.querySelectorAll('.lpr-sheet').length`)); throw e; });
             await H.click('.lpr-lobby .lpr-m.tap');
             await H.wait(`!!document.querySelector('.lpr-sheet')`, 3000);
             await H.clickText('.lpr-sheet .lpr-btn', '내보내기');

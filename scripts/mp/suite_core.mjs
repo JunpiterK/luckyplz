@@ -94,6 +94,61 @@ export async function core(ctx) {
         } finally { await closeAll(E, [g1]); }
     });
 
+    /* C5b·C5c·C5d (2026-09-30): Web Locks 없는 브라우저 폴백 — BroadcastChannel, 그것도 없으면 storage 이벤트.
+       C5 와 같은 결과(other_tab → "여기서 계속" → 옛 탭 분리, 방장 onJoin 1회)여야 한다.
+       C5d: 옛 탭이 얼어 있어(백그라운드) 'q' 에 답을 못 한 사이 새 탭이 자리를 잡음 → 옛 탭이 깨어나면 조용히 분리 */
+    const NOLOCK = `try{Object.defineProperty(Navigator.prototype,'locks',{get:function(){return undefined},configurable:true})}catch(e){}`;
+    const NOBC = `try{window.BroadcastChannel=undefined}catch(e){}`;
+    for (const [id, pre, mode] of [['C5b', NOLOCK, 'bc'], ['C5c', NOLOCK + NOBC, 'ls']]) {
+        if (!run1(only, id)) continue;
+        await withSetup(E, 0, 'roulette', async (H) => {
+            const c = await create(H);
+            const g1 = await E.page({ label: id + 'a', pre }); await g1.go('/games/roulette/');
+            const g2 = await E.page({ label: id + 'b', ctx: g1.ctx, pre }); await g2.go('/games/roulette/');
+            try {
+                const lm = await g1.ev('LpRooms._t.lockMode()');
+                const t0 = Date.now(); const j1 = await join(g1, c.url); const ms1 = Date.now() - t0;
+                const j2 = await join(g2, c.url);
+                const j3 = await join(g2, c.url, { steal: true });
+                const det = await g1.wait(`T.count('detached')===1`, 5000).then(() => true).catch(() => false);
+                await sleep(9000);
+                const joins = await H.ev(`T.joins[${J(j1.pid)}]||0`);
+                const ros = await H.ev(`T.room.roster().filter(m=>m.p===${J(j1.pid)}).map(m=>m.c).join(',')`);
+                const g1room = await g1.ev('!!(LpRooms.current())');
+                const g2ok = await g2.ev(`T.room.intent('inc',1).then(r=>r.ok)`);
+                /* 분리된 탭이 다시 "여기서 계속" → 이번엔 g2 가 분리 */
+                const j4 = await join(g1, c.url);
+                const j5 = await join(g1, c.url, { steal: true });
+                const det2 = await g2.wait(`T.count('detached')===1`, 5000).then(() => true).catch(() => false);
+                ok(id, lm === mode && j1.ok && !j2.ok && j2.reason === 'other_tab' && j3.ok && j3.pid === j1.pid && det && joins === 1 && ros === 'on' && !g1room && g2ok && j4.reason === 'other_tab' && j5.ok && det2,
+                    `no Web Locks → ${mode === 'bc' ? 'BroadcastChannel' : 'storage-event'} fallback: 2nd tab = other_tab, "continue here" detaches the old tab (both directions), host onJoin 1×`,
+                    { lockMode: lm, joinMs: ms1, j2: j2.reason, j3: j3.ok, detached: det, joins, ros, g2intent: g2ok, j4: j4.reason, j5: j5.ok, detached2: det2 });
+            } finally { await closeAll(E, [g1]); }
+        });
+    }
+    if (run1(only, 'C5d')) await withSetup(E, 0, 'roulette', async (H) => {
+        const c = await create(H);
+        const pre = NOLOCK;
+        const g1 = await E.page({ label: 'c5da', pre }); await g1.go('/games/roulette/');
+        const g2 = await E.page({ label: 'c5db', ctx: g1.ctx, pre }); await g2.go('/games/roulette/');
+        try {
+            const j1 = await join(g1, c.url);
+            /* 얼림 흉내: 디버거로 JS 를 세운다(헤드리스에선 lifecycle 'frozen' 이 메시지 처리를 막지 않는다) */
+            await g1.c.send('Debugger.enable'); await g1.c.send('Debugger.pause');
+            await sleep(300);
+            const j2 = await join(g2, c.url);                     /* 얼어 있는 탭은 답을 못 한다 → 새 탭이 자리를 잡는다 */
+            await sleep(500);
+            await g1.c.send('Debugger.resume').catch(() => {}); await g1.c.send('Debugger.disable').catch(() => {});
+            await sleep(200);
+            /* 사용자가 옛 탭으로 돌아옴(같은 컨텍스트의 뒤 탭은 헤드리스에서 hidden 이라 visible 로 덮어쓴다) */
+            await g1.ev(`(function(){try{Object.defineProperty(document,'visibilityState',{configurable:true,get:function(){return 'visible'}})}catch(e){}document.dispatchEvent(new Event('visibilitychange'));return 1})()`);
+            const det = await g1.wait(`T.count('detached')===1`, 5000).then(() => true).catch(() => false);
+            const g2room = await g2.ev('!!LpRooms.current()&&T.count("detached")===0');
+            const joins = await H.ev(`T.joins[${J(j1.pid)}]||0`);
+            ok('C5d', j1.ok && j2.ok && j2.pid === j1.pid && det && g2room && joins === 1, 'fallback lock: old tab frozen in background → new tab takes the seat; old tab wakes → detaches itself (newest tab wins), 1 seat', { j2: j2.ok ? true : j2.reason, oldDetached: det, newStays: g2room, joins });
+        } finally { await closeAll(E, [g1]); }
+    });
+
     if (run1(only, 'C6')) await withSetup(E, 1, 'roulette', async (H, G) => {
         const c = await create(H); const j = await join(G[0], c.url);
         await H.ev('T.room.lock(true)');
@@ -146,6 +201,55 @@ export async function core(ctx) {
         const dem = await H.wait(`T.room&&!T.room.isHost&&T.room.state().roster.find(m=>m.p===T.room.me.pid&&m.c==='on'&&m.r!=='host')`, 20000).catch(() => null);
         const hv = await G[0].ev(`T.room.roster().map(m=>m.p+':'+m.r+':'+m.c).sort().join(',')`);
         ok('C8c', !!dem && (hv.match(/:host:/g) || []).length === 1, 'old host returns → joins as guest (no take-back)', hv);
+    });
+
+    /* C8w·C8w2 (2026-10-01, 요트 에이전트 보고 회귀): 게스트(승계 1순위)가 30초 넘게 멈췄다(폰 백그라운드) 깨어나면
+       방장 신호를 받기도 전에 워치독이 12·20·30초를 한 번에 넘기고, 자기만 '살아 있음'으로 쳐서 혼자 승계 → 멀쩡한 방장을 밀어냈다.
+       C8w = 3대, 소켓은 살아 있음(멈춘 사이 메시지는 릴레이가 버림) · C8w2 = 2대, 깨어날 때 소켓이 끊겨 다시 붙음(폰 실제 상황) */
+    for (const [id, n, kill] of [['C8w', 2, false], ['C8w2', 1, true]]) {
+        if (!run1(only, id)) continue;
+        await withSetup(E, n, 'roulette', async (H, G) => {
+            const c = await create(H); for (const g of G) await join(g, c.url);
+            await sleep(1500);
+            const succ = await G[0].ev('T.room.state().succ');
+            const me = await G[0].ev('T.room.me.pid');
+            const lab = G[0].label;
+            await G[0].c.send('Debugger.enable'); await G[0].c.send('Debugger.pause');
+            relay.partition(lab);
+            await sleep(36000);
+            relay.partition(lab, false);
+            if (kill) relay.kill(lab);
+            await G[0].c.send('Debugger.resume').catch(() => {}); await G[0].c.send('Debugger.disable').catch(() => {});
+            await G[0].ev(`(document.dispatchEvent(new Event('visibilitychange')),1)`).catch(() => 0);
+            await sleep(15000);
+            const all = [H, ...G];
+            const v = await Promise.all(all.map(p => p.ev(`({host:T.room&&T.room.isHost,cur:!!LpRooms.current(),tk:T.count('takeover'),dem:T.count('demoted'),hostP:(T.room.roster().find(m=>m.r==='host')||{}).p,ep:T.room.ep})`).catch(e => ({ err: e.message.slice(0, 120) }))));
+            const hostPid = await H.ev('T.room.me.pid');
+            const back = await H.ev(`(T.room.roster().find(m=>m.p===${J(me)})||{}).c`);
+            const r = await G[0].ev(`T.room.intent('inc',1)`).catch(e => ({ ok: false, reason: e.message.slice(0, 80) }));
+            const eq = await allEqual(all, `String(T.room.state().game&&T.room.state().game.n)`, 8000);
+            ok(id, succ[0] === me && v[0].host === true && v.every(x => x.cur && x.tk === 0 && x.hostP === hostPid) && !v[1].host && back === 'on' && r.ok && eq.ok && eq.v === '1',
+                `guest (first successor) frozen 36s ${kill ? '+ socket dropped on wake, ' : ''}(${n + 1} devices) wakes up → waits for the host, no takeover, original host keeps the room, guest back in its seat`,
+                { views: v.map(x => Object.assign({}, x, { hostP: x.hostP === hostPid ? 'H' : x.hostP })), back, intent: r, n: eq.v || eq.vals });
+        });
+    }
+
+    /* C8r (2026-10-01): 마지막 안전망 — 그래도 누가 멀쩡한 방장을 두고 승계를 선언하면(예: 다른 원인으로 감시가 오판)
+       원방장은 강등을 거부하고 서명된 refuse 를 보내며, 승계자는 원방장으로 되돌아가 게스트로 다시 들어온다 */
+    if (run1(only, 'C8r')) await withSetup(E, 2, 'roulette', async (H, G) => {
+        const c = await create(H); for (const g of G) await join(g, c.url);
+        await sleep(1500);
+        await H.ev(`T.room.setState(S=>{S.game={n:5}})`); await sleep(600);
+        const hostPid = await H.ev('T.room.me.pid');
+        const forced = await G[0].ev(`(T.room._becomeHost({}),1)`);
+        await sleep(5000);
+        const v = await Promise.all([H, ...G].map(p => p.ev(`({host:T.room.isHost,hostP:(T.room.roster().find(m=>m.r==='host')||{}).p,tk:T.ev.filter(x=>x.e==='takeover').map(x=>x.x&&x.x.revert?'revert':'take').join(','),cur:!!LpRooms.current()})`)));
+        const r = await G[1].ev(`T.room.intent('inc',1)`);
+        const r0 = await G[0].ev(`T.room.intent('inc',1)`);
+        const eq = await allEqual([H, ...G], `String(T.room.state().game&&T.room.state().game.n)`, 8000);
+        const roles = await H.ev(`T.room.roster().map(m=>m.r+':'+m.c).sort().join(',')`);
+        ok('C8r', forced && v[0].host && v.every(x => x.cur && x.hostP === hostPid) && !v[1].host && !v[2].host && v[1].tk === 'take,revert' && v[0].tk === '' && v[2].tk === '' && r.ok && r0.ok && eq.ok && eq.v === '7' && roles === 'host:on,player:on,player:on',
+            'forced takeover while the host is healthy → host refuses (signed), taker yields back to guest, room & game intact', { views: v.map(x => Object.assign({}, x, { hostP: x.hostP === hostPid ? 'H' : x.hostP })), intents: [r.ok, r0.ok], n: eq.v || eq.vals, roles });
     });
 
     if (run1(only, 'C9')) await withSetup(E, 2, 'roulette', async (H, G) => {
@@ -259,6 +363,14 @@ export async function core(ctx) {
                 && r.quiz.kind === 'qlive' && r.quiz.url === '/games/quiz/?c=123456' && r.szx.kind === 'szx' && r.szx.url === '/games/dodge/?race=654321'
                 && r.qlink.kind === 'qlive' && r.none.kind === 'none';
             ok('C14', good, 'resolve: v2 code/link · v1 code · old ?room= · quiz numeric · SZX numeric · ?c= · unknown', Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.kind + ' ' + (v.url || '')])));
+            /* C14b (2026-10-01): 같은 레거시 코드를 쉬지 않고 연달아·동시에 resolve — 예전엔 앞 탐색의 채널이 닫히는 중이라
+               두 번째부터 'none'(4초 뒤)이 나왔다(C14 가 가끔 떨어지던 원인 = 실제 버그). SZX 숫자 코드도 같은 경로 */
+            const t0 = Date.now();
+            const seq = await X.ev(`(async()=>{const o=[];for(let i=0;i<4;i++)o.push((await LpRooms.resolve('KQ7R4M')).kind);return o.join(',')})()`, 40000);
+            const par = await X.ev(`Promise.all([LpRooms.resolve('KQ7-R4M'),LpRooms.resolve('https://luckyplz.com/games/yut/?room=KQ7R4M'),LpRooms.resolve('kq7r4m')]).then(a=>a.map(x=>x.kind+':'+x.url).join(','))`, 40000);
+            const szx = await X.ev(`(async()=>{const o=[];for(let i=0;i<3;i++)o.push((await LpRooms.resolve('654321')).kind);return o.join(',')})()`, 40000);
+            ok('C14b', seq === 'rooms-v1,rooms-v1,rooms-v1,rooms-v1' && par === Array(3).fill('rooms-v1:/games/yut/?room=KQ7R4M').join(',') && szx === 'szx,szx,szx',
+                'resolve the same legacy code back-to-back / concurrently (v1 ×4, ×3 parallel, SZX ×3) → always found (per-topic serialized probe)', { seq, par, szx, ms: Date.now() - t0 });
         } finally { v1.stop(); sz.stop(); delete relay.rpcMocks.qlive_state; await closeAll(E, [X]); }
     });
 

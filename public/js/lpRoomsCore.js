@@ -80,7 +80,7 @@
           //  | 'inapp'(인앱 브라우저 탈출 예정 — 탈출 뒤 다시) | 'network' | 'error'      [+]
           //  create 거절: 'bad_game'(레지스트리에 없음) | 'collision'(5회 충돌) | 'network' | 'inapp'  [+]
           //  'pending'(승인 대기)은 거절이 아니다 — onStatus({st:'pending'}) 후 방장 결정까지 promise 유지(최대 3분)
-     resolve(input:string): Promise<{kind:'rooms'|'rooms-v1'|'qlive'|'szx'|'choice'|'none', code:string,
+     resolve(input:string, o?:{v2Only?:boolean, ms?:number} (*[+] v2 방인지만 빨리 — 옛 ?room= 링크 판별용*)): Promise<{kind:'rooms'|'rooms-v1'|'qlive'|'szx'|'choice'|'none', code:string,
              gameId?:string, url?:string, hello?:object, options?:{kind:string, url:string}[] (*[+] kind='choice'*)}>;
      parseInvite(hrefOrText:string): {code:string, inv?:{fp:string, tok?:string}, hint?:'v2'|'v1'|'qlive'|'szx'} | null;
      resume(): Promise<Room|null>;
@@ -159,7 +159,8 @@
         wd1: 12000, wd2: 20000, wd3: 30000, wdEnd: 300000,
         offLobby: 45000, offLobbyHidden: 90000, rmLobby: 120000, offPlay: 20000, offSpec: 60000,
         helloGap: 300, rosterGap: 100, snapWait: 250, snapPer: 2000, conflictWin: 400, collideWin: 1200,
-        resend: [200, 400, 600], joinRetry: [2000, 4000, 7000], joinTimeout: 10000, pendingMax: 180000
+        resend: [200, 400, 600], joinRetry: [2000, 4000, 7000], joinTimeout: 10000, pendingMax: 180000,
+        wakeGap: 3000, prevHostWin: 120000   /* [+ 2026-10-01] 깨어남 판정(타이머 공백) · 원방장 복귀 인정 창 */
     };
     var SUPA_URL = 'https://jkrpxijybuljdxkrbsan.supabase.co';
     var SUPA_KEY = 'sb_publishable_Ypa1NMQCVGxFWidBOd5iEA_ECBldTAb';
@@ -170,7 +171,7 @@
         '🍓', '🍉', '🍒', '🍇', '🥝', '🍄', '🌵', '🌻', '🌙', '☀️', '⚡', '🔥', '❄️', '🌈', '💎', '🎁',
         '🎸', '🎺', '🥁', '🎯', '🏀', '⚽', '🎳', '🛼', '🚗', '🚲', '⛵', '✈️', '🛸', '🏰', '🗿', '🎡',
         '🍕', '🍔', '🌮', '🍣', '🍦', '🧁', '🍪', '🥨', '🐙', '🦋', '🐢', '🐳', '🦉', '🐝', '🦖', '🐞'];
-    var HOST_EV = { hello: 1, welcome: 1, deny: 1, roster: 1, state: 1, delta: 1, priv: 1, nack: 1, ack: 1, hb: 1, tick: 1, phase: 1, 'switch': 1, kicked: 1, rekey: 1, close: 1, fair: 1, x: 1, react: 1, th: 1 };
+    var HOST_EV = { hello: 1, welcome: 1, deny: 1, roster: 1, state: 1, delta: 1, priv: 1, nack: 1, ack: 1, hb: 1, tick: 1, phase: 1, 'switch': 1, kicked: 1, rekey: 1, close: 1, fair: 1, x: 1, react: 1, th: 1, refuse: 1 };
     var PLAIN_H = { hello: 1, deny: 1, welcome: 1, rekey: 1 };
     var T_EV = { hb: 1, hello: 1, tick: 1 };
 
@@ -236,9 +237,12 @@
         if (!_vk[pk]) { if (++_vkN > 400) { _vk = {}; _vkN = 0; } _vk[pk] = SUB.importKey('raw', ub64u(pk), EC_S, false, ['verify']); }
         return _vk[pk];
     }
-    async function verifyStr(pk, str, sig) {
+    async function verifyStr(pk, str, sig, noCache) {
         if (typeof pk !== 'string' || typeof sig !== 'string' || sig.length > 100) return false;
-        try { return await SUB.verify(SIG, await vkey(pk), ub64u(sig), utf8(str)); } catch (_) { return false; }
+        try {
+            var key = (noCache && !_vk[pk]) ? SUB.importKey('raw', ub64u(pk), EC_S, false, ['verify']) : vkey(pk);
+            return await SUB.verify(SIG, await key, ub64u(sig), utf8(str));
+        } catch (_) { return false; }
     }
     async function hkdf(bits, salt, info) {
         var ikm = await SUB.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
@@ -613,13 +617,15 @@
     var RXT = typeof WeakMap === 'function' ? new WeakMap() : null;
     function rxMark(env) { if (RXT && env && typeof env === 'object' && !RXT.has(env)) RXT.set(env, now()); }
     function rxOf(env) { var v = RXT && env && typeof env === 'object' ? RXT.get(env) : undefined; return typeof v === 'number' ? v : now(); }
+    /* 서명 모양(값싼 사전 거름): P-256 P1363 서명 = 64바이트 = base64url 86자. 모양이 다르면 검증(WebCrypto)까지 가지 않는다 */
+    var SIG_RE = /^[A-Za-z0-9_-]{86}$/;
     function okH(env) {
-        return env && typeof env === 'object' && env.v === 2 && typeof env.e === 'string' && HOST_EV[env.e] && typeof env.z === 'string' && typeof env.ep === 'number'
+        return env && typeof env === 'object' && env.v === 2 && typeof env.e === 'string' && HOST_EV[env.e] && typeof env.z === 'string' && SIG_RE.test(env.z) && typeof env.ep === 'number'
             && (typeof env.s === 'number' || typeof env.t === 'number') && (typeof env.j === 'string' || (env.c && typeof env.c.ct === 'string' && typeof env.c.iv === 'string')) && envSize(env) <= MAXJ;
     }
     function okG(env) {
         return env && typeof env === 'object' && env.v === 2 && typeof env.e === 'string' && env.e.length < 16 && typeof env.p === 'string' && PID_RE.test(env.p)
-            && typeof env.c === 'number' && typeof env.z === 'string' && (typeof env.j === 'string' || (env.y && typeof env.y.ct === 'string' && typeof env.y.iv === 'string')) && envSize(env) <= MAXJ;
+            && typeof env.c === 'number' && typeof env.z === 'string' && SIG_RE.test(env.z) && (typeof env.j === 'string' || (env.y && typeof env.y.ct === 'string' && typeof env.y.iv === 'string')) && envSize(env) <= MAXJ;
     }
     Room.prototype._openBody = async function (env, cf) {
         var c = env[cf];
@@ -635,36 +641,67 @@
         T.onG(function (env) { self._rxG(env); });
         T.onStatus(function (ok) {
             self.emit('net', { ok: ok });
+            /* [+ 2026-10-01] 소켓이 다시 붙은 시각 — 그 전까지 아무것도 못 들었으니 방장 감시 시계를 여기서 다시 잰다 */
+            if (ok) self._netOkAt = now(); else self._netDownAt = now();
             if (ok && self._state === 'member') {
                 if (self.isHost) self._flushState(true);
                 else self._snapReq(true);
             }
         });
     };
+    /* ── 검증 대기열 한도 (S6, 2026-09-30 실전 보강) ────────────────────────
+       처리량 한도(토큰 버킷)는 **서명 검증 뒤에** 차감한다. 예전엔 검증 전에 "봉투가 주장하는 pid" 의 버킷을 깎아서,
+       외부인이 남의 pid 를 적은 위조 봉투를 퍼부으면 그 사람의 진짜 메시지가 버려졌다(서명은 틀려도 허용량은 소진).
+       공개 채널에는 전송 계층 발신자 식별이 없으므로 "전송별 사전 버킷"은 만들 수 없다 → 대신 값싼 한도 3겹:
+         ① 모양 거름(okG/okH: 서명 86자·크기·형식) — WebCrypto 호출 0
+         ② 이미 본 c(재생)는 검증 없이 버림 — 읽기만 하고 표시는 검증 뒤에
+         ③ 검증 대기 수 상한: 전체 VQ.all, 주장 pid 하나당 VQ.pid, join VQ.join, 방장 봉투 VQ.h
+            — 기기가 감당 못 할 폭주만 버린다(기기 속도에 자동 적응). 한 pid 를 노린 폭주가 다른 사람 줄을 막지 못한다.
+       검증은 WebCrypto(비동기, 메인 스레드 밖) 라 200통/초 폭주에도 메인 스레드 블록은 수 ms. */
+    var VQ = { all: 512, pid: 48, join: 96, h: 512 };
+    function vqEnter(room, key) {
+        var q = room._vqc || (room._vqc = { n: 0, by: {} });
+        q.n++; q.by[key] = (q.by[key] || 0) + 1;
+    }
+    function vqLeave(room, key) {
+        var q = room._vqc; if (!q) return;
+        q.n--; if (--q.by[key] <= 0) delete q.by[key];
+    }
+    function vqFull(room, key, cap) { var q = room._vqc; return !!q && (q.n >= VQ.all + VQ.h || (q.by[key] || 0) >= cap || (key !== '#h' && q.n - (q.by['#h'] || 0) >= VQ.all)); }
+    function shed() { STATS.shed = (STATS.shed || 0) + 1; }
     Room.prototype._rxH = function (env) {
         rxMark(env);
         if (this._left) return;
         if (!okH(env)) { STATS.bad++; return; }
+        if (vqFull(this, '#h', VQ.h)) { shed(); return; }
         var self = this;
-        this._vq = this._vq.then(function () { return self.isHost ? self._hostSeesH(env) : self._guestH(env); }).catch(function (e) { STATS.bad++; dbg('rxH', e); });
+        vqEnter(this, '#h');
+        this._vq = this._vq.then(function () { return self.isHost ? self._hostSeesH(env) : self._guestH(env); }).catch(function (e) { STATS.bad++; dbg('rxH', e); }).then(function () { vqLeave(self, '#h'); });
     };
     Room.prototype._rxG = function (env) {
         rxMark(env);
         if (this._left) return;
         if (env && env.e === 'hello_req' && env.v === 2) { if (this.isHost) this._helloReq(env); return; }
         if (!okG(env)) { STATS.bad++; return; }
+        var key = env.p, cap = VQ.pid;
         if (this.isHost) {
             var H = this._H;
-            if (env.e !== 'join' && !H.members[env.p]) { STATS.bad++; return; }
-            if (env.e === 'join') { if (!H.joinB.take()) return; }
-            else { var mb = H.members[env.p]; if (!mb.bk.take()) return; }
+            if (env.e === 'join') { key = '#join'; cap = VQ.join; }
+            else {
+                var mb = H.members[env.p];
+                if (!mb) { STATS.bad++; return; }
+                /* ② 이미 본 c — 검증 없이 버린다. 단 의도 재전송(응답 유실)은 저장된 응답을 다시 보내야 하므로 검증 경로로 */
+                if (replaySeen(mb, env.c) && !(env.e === 'intent' && mb.ic[env.c])) return;
+            }
         } else {
-            if (this._state !== 'member' || !this._member(env.p)) return;
-            var pb = this._peer[env.p] || (this._peer[env.p] = { t: now(), b: new Bucket(15, 30) });
-            if (!pb.b.take()) return;
+            if (this._state !== 'member' || !this._member(env.p) || env.p === this.me.pid) return;
+            var pc = this._peerC[env.p];
+            if (pc && typeof pc === 'object' && replaySeen(pc, env.c)) return;
         }
+        if (vqFull(this, key, cap)) { shed(); return; }
         var self = this;
-        this._vq = this._vq.then(function () { return self.isHost ? self._hostG(env) : self._peerG(env); }).catch(function (e) { STATS.bad++; dbg('rxG', e); });
+        vqEnter(this, key);
+        this._vq = this._vq.then(function () { return self.isHost ? self._hostG(env) : self._peerG(env); }).catch(function (e) { STATS.bad++; dbg('rxG', e); }).then(function () { vqLeave(self, key); });
     };
 
     /* ================================================================
@@ -673,7 +710,10 @@
     Room.prototype._guestH = async function (env) {
         if (this._state === 'joining') { if (this._joinW) this._joinW(env); else if (this._jbuf && this._jbuf.length < 64) this._jbuf.push(env); return; }
         if (this._state !== 'member') return;
-        if (!(await verifyStr(this._hostPk, hSigStr(this.code, env), env.z))) { STATS.bad++; return; }
+        if (!(await verifyStr(this._hostPk, hSigStr(this.code, env), env.z))) {
+            if (this._prevHost && await this._prevHostAlive(env)) return this._revertHost('host still alive');
+            STATS.bad++; return;
+        }
         if (env.ep < this.ep) return;                        /* 옛 epoch 재생 */
         if (env.ep > this.ep) {                               /* 같은 키의 새 epoch = 방장 재개 */
             this.ep = env.ep; this._lastS = null; this._lastT = 0; this._buf = {}; this._gaps = [];
@@ -820,24 +860,43 @@
         var self = this;
         setTimeout(function () { if (self._lastS !== null && self._lastS < hs) self._snapReq(false); }, TM.snapWait);
     };
-    /* NTP 식 시계 (§6.0.3, 2026-09-30 정밀화): 표본 창 최근 24개·10분(최소 3개 유지), RTT 하위 N(=min(5,⌈n/2⌉))개의
-       오프셋 중앙값. 표본 출처 = 합류 welcome · hb 에코(ec) · 추첨 lock/reveal 에코(lpFair, 추첨마다 2개, 추가 메시지 0).
-       t1·t3 은 수신 콜백 진입 시각(rxOf) — 서명 검증·복호 큐 대기와 긴 작업으로 늦게 처리된 표본은 RTT 가 커져 자동 배제된다. */
-    var CLK = { win: 24, age: 600000, keep: 3, best: 5 };
+    /* NTP 식 시계 (§6.0.3). 표본 출처 = 합류 welcome · hb 에코(ec) · 추첨 lock/reveal 에코(lpFair, 추첨마다 2개, 추가 메시지 0).
+       t1·t3 은 수신 콜백 진입 시각(rxOf) — 서명 검증·복호 큐 대기는 표본에 섞이지 않는다.
+       표본 하나 = 가는 길 f = t1−t0 = θ+d↑, 오는 길 b = t2−t3 = θ−d↓ (θ = 방장−나, d↑·d↓ ≥ 0) → 참값은 항상 b ≤ θ ≤ f.
+       [2026-10-01 양방향 최소 필터] 창 안 표본 전체에서 U = min f, L = max b → θ ∈ [L, U], 추정 = (L+U)/2.
+         가는 길이 가장 빨랐던 표본과 오는 길이 가장 빨랐던 표본을 따로 고른다(서로 다른 표본이어도 된다).
+         이전 방식(RTT 하위 5개의 오프셋 중앙값)은 왕복이 둘 다 빨랐던 표본만 쓸모가 있어, 지연 30~150ms 무작위·표본 19개에서
+         오차 rms 10.7ms·|오차|>20ms 6.8%(CX3b 가 가끔 떨어지던 원인) → 같은 조건 rms 4.0ms·0.03%. 표본 3개일 때도 같거나 낫다.
+         창 = 최근 CLK.age2(3분, 최소 CLK.keep2 개) — 기기 간 시계 드리프트(수십 ppm)가 필터에 스며드는 양을 수 ms 아래로.
+         L > U(시계가 뛰었거나 크게 흘렀다) → 오래된 표본부터 버려 맞는 구간을 찾는다(표본 1개는 항상 맞는다).
+       _rtt = 창 안 최소 RTT(진단용). */
+    var CLK = { win: 24, age: 600000, keep: 3, best: 5, age2: 180000, keep2: 6 };
+    function clkEstimate(c, t) {
+        var from = 0;
+        for (var i = 0; i < c.length; i++) { if (t - c[i].t <= CLK.age2) break; from = i + 1; }
+        from = Math.max(0, Math.min(from, c.length - CLK.keep2));
+        for (; from < c.length; from++) {
+            var U = Infinity, L = -Infinity;
+            for (var k = from; k < c.length; k++) { if (c[k].f < U) U = c[k].f; if (c[k].b > L) L = c[k].b; }
+            if (L <= U) return { off: (L + U) / 2, from: from, slack: U - L };
+        }
+        return null;
+    }
     Room.prototype._clockSample = function (t0, t1, t2, t3) {
         if (typeof t0 !== 'number' || typeof t1 !== 'number' || typeof t2 !== 'number') return;
         if (typeof t3 !== 'number') t3 = now();
         var rtt = (t3 - t0) - (t2 - t1), off = ((t1 - t0) + (t2 - t3)) / 2;
         if (!(rtt >= 0) || rtt > 30000 || !isFinite(off)) return;
         var t = now(), c = this._clk;
-        c.push({ rtt: rtt, off: off, t: t });
+        c.push({ rtt: rtt, off: off, t: t, f: t1 - t0, b: t2 - t3 });
         while (c.length > CLK.win || (c.length > CLK.keep && t - c[0].t > CLK.age)) c.shift();
-        var by = c.slice().sort(function (a, b) { return a.rtt - b.rtt; });
-        var k = Math.max(1, Math.min(CLK.best, Math.ceil(c.length / 2)));
-        var best = by.slice(0, k).map(function (x) { return x.off; }).sort(function (a, b) { return a - b; });
-        var mid = best.length >> 1;
-        this._off = best.length % 2 ? best[mid] : (best[mid - 1] + best[mid]) / 2;
-        this._rtt = by[0].rtt;
+        var est = clkEstimate(c, t);
+        if (est) {
+            if (est.from > 0 && t - c[est.from - 1].t <= CLK.age2) { dbg('clock: inconsistent samples dropped', est.from); c.splice(0, est.from); }
+            this._off = est.off; this._clkSlack = est.slack;
+        } else this._off = off;
+        var m = Infinity; for (var i = 0; i < c.length; i++) if (c[i].rtt < m) m = c[i].rtt;
+        this._rtt = m;
         this._clkN = (this._clkN || 0) + 1;
     };
     /* 다시 맞추기 — 화면 복귀(visibilitychange→visible) 때 빠른 에코 hb 3개(fs:1 → 방장이 250ms 안에 hb 로 되돌림).
@@ -860,8 +919,11 @@
         if (!(await verifyStr(m.k.sig, gSigStr(this.code, env), env.z))) { STATS.bad++; return; }
         var pc = this._peerC[env.p];
         if (!pc || typeof pc !== 'object') pc = this._peerC[env.p] = { lastC: pc || 0 };
-        if (!replayOk(pc, env.c)) return;
+        if (replaySeen(pc, env.c)) return;
         var pr = this._peer[env.p] || (this._peer[env.p] = { b: new Bucket(15, 30) });
+        if (!pr.b) pr.b = new Bucket(15, 30);
+        if (!pr.b.take()) return;                     /* 처리량 한도는 서명 검증 뒤(S6) — 표시(replayOk) 전이라 재전송은 다시 받을 수 있다 */
+        replayOk(pc, env.c);
         pr.t = now(); if (env.e === 'bye') pr.t = 0;
         var d; try { d = await this._openBody(env, 'y'); } catch (_) { return; }
         switch (env.e) {
@@ -901,30 +963,57 @@
         this._hbX = {}; this._hbSoon = 0; this._lastGHb = now();
         this._gsend('hb', d);
     };
+    /* ── 깨어남 (2026-10-01, 요트 에이전트 보고) ──────────────────────────
+       폰 백그라운드·탭 얼림으로 30초 넘게 멈췄다 돌아온 기기는 그동안 아무것도 못 들었다. 예전엔 깨어난 첫 틱에
+       dt(마지막 방장 신호부터) 가 12·20·30초를 한꺼번에 넘어 곧바로 승계를 시도했고, _peerAlive 가 자기 자신만 '살아 있음'으로
+       쳐서(남들은 얼기 전 기록이라 죽은 것으로 보임) 멀쩡한 방장을 밀어냈다. 이제:
+         ① 깨어남 = 틱 사이 공백 > 3초 · 숨김 3초 넘은 뒤 복귀 · 소켓 재연결. 감시 시계는 max(마지막 방장 신호, 깨어남, 재연결) 부터 다시 잰다
+         ② 소켓이 끊긴 동안은 승계하지 않는다(들을 수도 말할 수도 없다)
+         ③ 깨어난 뒤 한동안(피어 창) 나는 후보 맨 뒤 · 깨어난 뒤 아직 못 들어 본 피어는 살아 있다고 본다
+         ④ 원방장은 최근 20초 안에 다른 멤버 신호를 들었으면(자기가 끊긴 쪽이 아니면) 강등을 거부하고 상태를 다시 방송
+         ⑤ 승계했거나 승계를 받아들인 기기가 2분 안에 원방장 키로 서명된 '더 새' 봉투를 받으면 원방장으로 되돌아간다 */
+    Room.prototype._noteWake = function (why, gap) {
+        this._wakeAt = now();
+        dbg('wake', why, gap);
+        if (!this.isHost && this._state === 'member') this._resync(gap || 0);
+    };
+    Room.prototype._recentlyCut = function (win) {
+        var ref = Math.max(this._wakeAt || 0, this._netOkAt && this._netDownAt ? this._netOkAt : 0);
+        return !!ref && now() - ref < win;
+    };
     Room.prototype._guestTick = function () {
         if (this.isHost || this._left || this._state !== 'member') return;
         var t = now();
+        var gap = this._tickAt ? t - this._tickAt : 0; this._tickAt = t;
+        if (gap > TM.wakeGap) this._noteWake('timer', gap);
         if (t - this._lastGHb >= this._hbInterval() || (this._hbSoon && t >= this._hbSoon)) this._sendGHb();
-        var mult = this._hostHidden ? 2 : 1, dt = t - this._lastHostAt;
+        var base = Math.max(this._lastHostAt, this._wakeAt || 0, this._netDownAt ? (this._netOkAt || 0) : 0);
+        var netOk = !this._T || this._T.ok();
+        var mult = this._hostHidden ? 2 : 1, dt = t - base;
         if (dt >= TM.wd1 * mult && this._wd < 1) { this._wd = 1; this.emit('hostlost', { level: 1 }); this._snapReq(true); }
         if (dt >= TM.wd2 * mult && this._wd < 2) { this._wd = 2; this.emit('hostlost', { level: 2 }); }
-        if (dt >= TM.wd3 * mult && this._wd >= 2) {
+        if (dt >= TM.wd3 * mult && this._wd >= 2 && netOk) {
             if (this._migratable()) this._tryTakeover();
             else if (this._wd < 3) { this._wd = 3; this.emit('hostlost', { level: 3 }); }
         }
         if (dt >= TM.wdEnd && !this._migratable()) this._closedBy('host_gone');
     };
+    Room.prototype._peerWin = function () { var S = this._S; return S && S.phase === 'playing' ? 25000 : 50000; };
     Room.prototype._peerAlive = function (p) {
         if (p === this.me.pid) return true;
-        var pr = this._peer[p], S = this._S;
-        var win = S && S.phase === 'playing' ? 25000 : 50000;
-        return !!pr && now() - pr.t < win;
+        var pr = this._peer[p], win = this._peerWin(), t = now();
+        if (pr && t - pr.t < win) return true;
+        /* 내가 깨어난 뒤 아직 못 들어 본 피어 = 모른다 → 살아 있다고 본다(얼기 전 기록으로 죽었다고 단정하지 않는다) */
+        var w = this._wakeAt || 0;
+        return !!pr && pr.t !== 0 && pr.t <= w && t - w < win;
     };
     Room.prototype._tryTakeover = function () {
         var S = this._S, hm = this._hostMember(), self = this;
         if (!S || this._takeBy) return;
         var dead = this._deadCand || (this._deadCand = {});
         var cands = (S.succ || []).filter(function (p) { return (!hm || p !== hm.p) && !dead[p] && self._member(p) && self._peerAlive(p); });
+        /* 방금 끊겼다 돌아온 기기는 후보 맨 뒤 — 다른 후보가 10초씩 나서지 않을 때만 차례가 온다 */
+        if (cands.length > 1 && this._recentlyCut(this._peerWin()) && cands[0] === this.me.pid) cands = cands.slice(1).concat([this.me.pid]);
         if (!cands.length) { if (this._wd < 3) { this._wd = 3; this.emit('hostlost', { level: 3 }); } return; }
         if (cands[0] === this.me.pid) { this._becomeHost({}); return; }
         /* 앞 후보가 10초 안에 나서지 않으면 죽은 것으로 보고 다음으로 */
@@ -1036,12 +1125,20 @@
             intentCb: null, tickAt: 0, curI: null, stateDirty: false
         };
     }
-    function memRec(k, lastC) { return { k: k, lastC: lastC || 0, seen: now(), vis: 'visible', t0: null, t1: 0, bk: new Bucket(30, 40), ib: new Bucket(10, 20), ic: {}, icN: [], bye: false, offAt: 0 }; }
+    function memRec(k, lastC) { return { k: k, lastC: lastC || 0, floor: lastC || 0, seen: now(), vis: 'visible', t0: null, t1: 0, bk: new Bucket(30, 40), ib: new Bucket(10, 20), ic: {}, icN: [], bye: false, offAt: 0 }; }
     /* 재생 방지 창 (2026-09-30 통합): 릴레이 지연 편차로 같은 게스트의 봉투 순서가 바뀌면 예전엔 c ≤ lastC 로 버려져
        hb 편승(w 목격·sc 점수)·fair c/r 이 유실됐다(추첨 재시도·목격 누락 — 30~150ms 지터 하네스에서 실측).
        이제 최근 RWIN 개 창 안에서 처음 보는 c 는 받는다(서명된 진짜 봉투의 늦은 도착). 창 밖·이미 본 c 는 여전히 버린다. */
     var RWIN = 64;
+    /* 읽기 전용: 이 c 는 이미 봤거나 창 밖인가(표시하지 않는다 — 서명 검증 전에도 안전하게 쓸 수 있다) */
+    function replaySeen(rec, c) {
+        if (c > rec.lastC) return false;
+        if (c <= (rec.floor || 0)) return true;    /* 방장 새로고침·승계로 창이 비어도, 저장된 lastC 이하는 재생으로 본다 */
+        var w = rec.win;
+        return c <= rec.lastC - RWIN || !!(w && w[c]) || (!w && c === rec.lastC);
+    }
     function replayOk(rec, c) {
+        if (c <= (rec.floor || 0)) return false;
         var w = rec.win || (rec.win = {});
         if (c > rec.lastC) {
             rec.lastC = c; w[c] = 1;
@@ -1055,7 +1152,8 @@
 
     Room.prototype._helloReq = function (env) {
         var H = this._H;
-        if (!H.joinB.take()) return;
+        if (!H.helloB) H.helloB = new Bucket(20, 20);       /* hello_req(무서명) 전용 — join 허용량(joinB)을 깎지 않는다(S6) */
+        if (!H.helloB.take()) return;
         if (typeof env.n === 'string' && env.n.length <= 16 && H.helloN.length < 8) H.helloN.push(env.n);
         /* 증폭 방지: hello 는 방송(N 명 과금)이라 10초에 10건 넘게 청하면 간격을 2초로 늘린다 */
         var t = now(); H.helloReqs = (H.helloReqs || []).filter(function (x) { return t - x < 10000; }); H.helloReqs.push(t);
@@ -1079,10 +1177,15 @@
         var mb = H.members[env.p];
         if (!mb) return;
         if (!(await verifyStr(mb.k.sig, gSigStr(this.code, env), env.z))) { STATS.bad++; return; }
-        if (!replayOk(mb, env.c)) {
-            if (env.e === 'intent' && mb.ic[env.c]) this._replyIntent(env.p, env.c, mb.ic[env.c]);
+        if (!this._H || this._H.members[env.p] !== mb) return;   /* 검증을 기다리는 사이 내보내졌다 */
+        if (replaySeen(mb, env.c)) {
+            /* 같은 의도 재전송 → 저장된 응답 재발송(멱등). 녹화 재생으로 응답 방송을 부풀리지 못하게 초당 2통(버스트 4) */
+            if (env.e === 'intent' && mb.ic[env.c]) { if (!mb.rr) mb.rr = new Bucket(2, 4); if (mb.rr.take()) this._replyIntent(env.p, env.c, mb.ic[env.c]); }
             return;
         }
+        /* 처리량 한도 — 서명이 맞는 그 게스트 자신의 메시지만 차감한다(S6). 표시(replayOk) 전이라 넘쳐 버린 봉투의 재전송은 다시 받는다 */
+        if (!mb.bk.take()) { STATS.rate = (STATS.rate || 0) + 1; return; }
+        replayOk(mb, env.c);
         var d;
         try { d = await this._openBody(env, 'y'); } catch (e) { if (e && e.nokey) this._resendRekey(env.p); return; }
         mb.seen = now(); mb.bye = false;
@@ -1135,10 +1238,18 @@
         var d = jparse(env.j, null);
         if (!d || !d.dpk || typeof d.dpk.sig !== 'string' || typeof d.dpk.dh !== 'string' || d.dpk.sig.length > 100 || d.dpk.dh.length > 100) return;
         if ((await pidOf(d.dpk.sig)) !== env.p) { STATS.bad++; return; }                     /* 1 pid==fp(dpk) */
-        if (!(await verifyStr(d.dpk.sig, gSigStr(this.code, env), env.z))) { STATS.bad++; return; }   /* 1 서명 */
+        var knownP = !!(H.known[env.p] || H.members[env.p]);
+        /* 모르는 키는 검증 키 캐시에 넣지 않는다(위조 join 폭주가 멤버 키 캐시를 밀어내지 못하게) */
+        if (!(await verifyStr(d.dpk.sig, gSigStr(this.code, env), env.z, !knownP))) { STATS.bad++; return; }   /* 1 서명 */
+        if (!this._H || this._left) return;
+        /* 3 처리량 — 서명이 맞는 join 만 센다(S6). 알던 pid(복귀)는 낯선 입장 폭주와 별개 허용량 */
+        if (knownP) { var kb = (H.kjb || (H.kjb = {}))[env.p] || (H.kjb[env.p] = new Bucket(3, 6)); if (!kb.take()) return; }
+        else if (!H.joinB.take()) { STATS.rate = (STATS.rate || 0) + 1; return; }
         var prev = H.members[env.p];
-        if (prev && env.c <= prev.lastC) return;
         var jl = H.joinSeen || (H.joinSeen = {});
+        /* 옛 join 재생은 버린다. 단 방금 받아들인 바로 그 join(c 같음)의 재전송은 아래에서 welcome 을 다시 보낸다
+           (예전엔 여기서 같이 버려져 welcome 4통이 다 유실되면 핸드셰이크 재시도가 소용없었다) */
+        if (prev && (env.c < prev.lastC || (env.c === prev.lastC && !(jl[env.p] && jl[env.p].c === env.c)))) return;
         if (jl[env.p] && jl[env.p].c === env.c) {                                          /* 같은 join 재전송 */
             if (now() - jl[env.p].t < 1000) return;
             jl[env.p].t = now();
@@ -1448,6 +1559,8 @@
     Room.prototype._hostTick = function () {
         var H = this._H; if (!H || this._left) return;
         var t = now(), n = this._humans().length - 1;
+        var gap = this._tickAt ? t - this._tickAt : 0; this._tickAt = t;
+        if (gap > TM.wakeGap) this._noteWake('host timer', gap);
         var iv = n > 0 ? TM.hostHb : TM.hostHbAlone;
         if (t - H.lastHb >= iv || (this._hbSoon && t >= this._hbSoon)) this._sendHostHb();
         if (H.dirty && t - H.saveT > 1000) this._save();
@@ -1618,10 +1731,30 @@
         this.emit('pending', this.pending());
     };
     Room.prototype.rotateLink = function () { hostOnly(this); this._H.tok = rid(16); this.setState(null); this._dirty(); return this.inviteUrl(); };
+    /* 방장이 멀쩡한가(④): 최근 20초 안에 (승계를 선언한 사람 말고) 다른 멤버의 서명 봉투를 들었고, 방금 깨어난 게 아니고, 소켓이 살아 있다 */
+    Room.prototype._hostHealthy = function (exceptP) {
+        var H = this._H, t = now(); if (!H) return false;
+        if (this._wakeAt && t - this._wakeAt < TM.wd3) return false;
+        if (this._T && !this._T.ok()) return false;
+        return Object.keys(H.members).some(function (q) { var mb = H.members[q]; return q !== exceptP && !mb.bye && t - mb.seen < TM.wd2; });
+    };
+    Room.prototype._refuseTakeover = function (p) {
+        var t = now();
+        if (this._refusedAt && t - this._refusedAt < 1500) return;
+        this._refusedAt = t;
+        dbg('takeover refused (host alive)', p);
+        /* 서명된 거부 — 승계자와 그를 따른 기기만 이걸 보고 되돌아간다(평범한 hb 로는 되돌리지 않는다: 진짜로 끊겼던
+           원방장이 돌아와 강등 처리 전에 보낸 hb 로 방을 되찾는 일(되찾기 금지 §6.0.6-5)을 막는다) */
+        this._hsend('refuse', { p: p }, { reliable: true });
+        this.setState(null, { full: true });
+        this._sendHostHb();
+        this._sendHello();
+    };
     Room.prototype.transferHost = function (pid) {
         hostOnly(this);
         var m = this._member(pid), self = this;
         if (!m || m.r === 'bot' || pid === this.me.pid || m.c === 'off' || !this._migratable()) return false;
+        this._H.thTo = pid;
         var ep = this.ep, succ = [pid];
         signStr(this._H.sk, succMsg(this.code, ep, succ)).then(function (z) { self._hsend('th', { succ: succ, ep: ep, z: z }, { to: pid, reliable: true }); });
         return true;
@@ -1643,6 +1776,8 @@
             link = { succ: S.succ, ep: S.succe, z: S.succz, npk: { sig: dev.sig.pub, dh: dev.dh.pub } };
         }
         var oldHost = this._hostMember(), ep2 = Math.max(now(), this.ep + 1), fromSeq = S.seq;
+        if (!o.transfer) this._prevHost = { pk: this._hostPk, dh: this._hostDh, ep: this.ep, pid: oldHost && oldHost.p, chainLen: (this._chain || []).length, lastS: this._lastS, lastT: this._lastT, at: now() };
+        else this._prevHost = null;
         this._takeBy = this.me.pid;
         this._prevHostPk = this._hostPk; this._prevHostDh = this._hostDh; this._prevEp = this.ep;
         this._chain = (this._chain || []).concat([link]);
@@ -1700,10 +1835,13 @@
             /* 나는 방장인데 누군가 승계를 선언: 원방장이면 강등, 승계 방장이면 더 앞 순번에게 양보 */
             var myIdx = L.succ.indexOf(this.me.pid);
             if (this._takeBy === this.me.pid && myIdx >= 0 && myIdx < idx) return;
+            /* ④ 내가 넘겨준 게 아니고, 나는 멀쩡하다(다른 멤버를 듣고 있다) → 끊긴 쪽은 저 사람. 거부하고 살아 있음을 알린다 */
+            if (this._H && this._H.thTo !== p && this._takeBy !== this.me.pid && this._hostHealthy(p)) return this._refuseTakeover(p);
             dbg('demote: takeover by', p);
             return this._demote(p, d);
         }
         if (!transfer && this._wd < 2) return;              /* 나는 방장이 아직 들린다 → 무시 */
+        if (transfer) d.fromTransfer = true;
         if (this._takeBy && this._takeBy !== p) {
             var cur = L.succ.indexOf(this._takeBy);
             if (cur >= 0 && cur <= idx) return;
@@ -1712,6 +1850,8 @@
     };
     Room.prototype._acceptHost = function (p, d) {
         var S = this._S, L = d.link, self = this;
+        var oh = this._hostMember();
+        if (!this.isHost && !(d && d.fromTransfer)) this._prevHost = { pk: this._hostPk, dh: this._hostDh, ep: this.ep, pid: oh && oh.p, chainLen: (this._chain || []).length, lastS: this._lastS, lastT: this._lastT, at: now() };
         this._takeBy = p;
         this._hostPk = L.npk.sig; this._hostDh = L.npk.dh;
         this._chain = (this._chain || []).concat([L]);
@@ -1737,7 +1877,38 @@
         /* 새 방장에게 알려진 pid 로 다시 인사(복귀) */
         this._rejoin();
     };
+    /* ⑤ 원방장이 아직 살아 있다: 2분 안에 원방장 키로 서명된 '거부(refuse)' 봉투(같은 ep, 승계 전에 본 것보다 새 순번) */
+    Room.prototype._prevHostAlive = async function (env) {
+        var P = this._prevHost;
+        if (!P || env.e !== 'refuse' || now() - P.at > TM.prevHostWin || env.ep !== P.ep) return false;
+        var newer = env.t != null ? env.t > (P.lastT || 0) : (P.lastS == null || env.s > P.lastS);
+        if (!newer) return false;
+        return verifyStr(P.pk, hSigStr(this.code, env), env.z);
+    };
+    Room.prototype._revertHost = function (why) {
+        var P = this._prevHost; if (!P) return;
+        this._prevHost = null;
+        var wasHost = this.isHost, S = this._S;
+        dbg('revert to original host', why, P.pid);
+        if (wasHost) {
+            this._clearTimers();
+            this.isHost = false; this._H = null; this._offerUntil = 0; this._prevHostPk = null;
+            ssSet('lpr_host_' + this.code, null);
+        }
+        this._hostPk = P.pk; this._hostDh = P.dh; this.ep = P.ep;
+        this._chain = (this._chain || []).slice(0, P.chainLen); if (!this._chain.length) this._chain = null;
+        this._takeBy = null; this._lastS = null; this._buf = {}; this._lastT = 0; this._gaps = [];
+        this._lastHostAt = now(); this._wd = 0; this._deadCand = {}; this._waitCand = null;
+        if (S) S.roster.forEach(function (m) { if (m.r === 'host' && m.p !== P.pid) m.r = 'player'; if (m.p === P.pid) { m.r = 'host'; m.c = 'on'; } });
+        this._syncMe();
+        if (wasHost) { this.emit('demoted', { by: P.pid, revert: true }); this._guestLoops(); }
+        this.emit('takeover', { pid: P.pid, ep: P.ep, revert: true });
+        this.emit('hostback');
+        setActive({ code: this.code, role: 'guest', gameId: S && S.gameId, want: this._want, inv: this._inv });
+        if (wasHost) this._rejoin(); else this._snapReq(true);
+    };
     Room.prototype._hostSeesH = async function (env) {
+        if (this._prevHost && await this._prevHostAlive(env)) return this._revertHost('host still alive (taker yields)');
         /* 방장이 남의 'h' 를 듣는 경우: 내가 끊긴 사이 누군가 승계했다 → 게스트로 합류 */
         /* (a) 다른 기기 키로 서명된 더 높은 epoch 방송 = 누가 승계했다(내가 끊겨 있던 사이) →
                hello 를 청해 승계 체인을 받고 (b) 에서 게스트로 합류. 되찾기 없음(§6.0.6-5) */
@@ -1756,6 +1927,8 @@
             if (h && h.chain && h.rpk && this._rpk && h.rpk.sig === this._rpk.sig && h.hk && h.hk.sig !== this._hostPk) {
                 var fk = await chainKey(this.code, h.rpk, h.chain);
                 if (fk && fk === h.hk.sig && await verifyStr(fk, hSigStr(this.code, env), env.z)) {
+                    var sp = await pidOf(fk);
+                    if (this._H && this._H.thTo !== sp && this._takeBy !== this.me.pid && this._hostHealthy(sp)) { this._refuseTakeover(sp); return; }
                     dbg('hello chain shows successor → demote');
                     var last = h.chain[h.chain.length - 1];
                     this._chain = h.chain.slice(0, -1);
@@ -1795,10 +1968,75 @@
     };
 
     /* ── Web Lock (한 기기 = 방 안 한 자리, §2.5) ──────────────────── */
-    function acquireLock(name, steal) {
+    /* ── Web Locks 없는 브라우저(iOS Safari < 15.4 · 그 엔진의 인앱 웹뷰 · 구형 Firefox) 폴백 (§2.5, 2026-09-30) ──
+       같은 기기의 탭끼리 "이 방 자리는 내가 잡고 있다"를 주고받는다. 전송 = BroadcastChannel('lpr-tabs'),
+       그것도 없으면(iOS < 15.4 는 둘 다 없다) localStorage 'storage' 이벤트(다른 탭에만 온다).
+         잡기: {t:'q'} 방송 → 180ms 안에 {t:'held'} 가 오면 누가 잡고 있다 → steal 아니면 실패(other_tab),
+               steal 이면 {t:'steal'} → 잡고 있던 탭은 lost() (= 조용히 분리, bye 안 보냄 — Web Lock steal 과 같은 결과)
+         동시 요청: 서로의 'q' 가 보이면 id 가 작은 쪽이 이긴다.
+         얼었다 깨어난 탭(백그라운드에서 멈춰 'q' 에 답을 못 한 사이 새 탭이 자리를 잡음): 화면 복귀 때 {t:'assert', since} →
+               더 나중에 잡은 탭이 {t:'steal'} 로 답한다 → 옛 탭이 분리("나중에 연 탭이 이어 간다").
+       저장소도 못 쓰면(구형 iOS 사파리 개인정보 보호 모드) 예전처럼 잠금 없이 입장만 시킨다. */
+    var _bus = null, _softHeld = [];
+    function tabBus() {
+        if (_bus) return _bus;
+        var ls = [], bc = null, mode = 'none';
+        function fire(m) { ls.slice().forEach(function (f) { try { f(m); } catch (_) {} }); }
+        try { if (typeof G.BroadcastChannel === 'function') { bc = new G.BroadcastChannel('lpr-tabs'); bc.onmessage = function (e) { if (e && e.data && typeof e.data === 'object') fire(e.data); }; mode = 'bc'; } } catch (_) { bc = null; }
+        if (!bc) {
+            try {
+                G.localStorage.setItem('lpr_bus', ''); G.localStorage.removeItem('lpr_bus');
+                G.addEventListener('storage', function (e) { if (e && e.key === 'lpr_bus' && e.newValue) { var m = jparse(e.newValue, null); if (m && typeof m === 'object') fire(m); } });
+                mode = 'ls';
+            } catch (_) { mode = 'none'; }
+        }
+        _bus = {
+            mode: mode,
+            post: function (m) { try { if (bc) bc.postMessage(m); else if (mode === 'ls') { m._r = rid(4); G.localStorage.setItem('lpr_bus', JSON.stringify(m)); } } catch (_) {} },
+            on: function (f) { ls.push(f); return function () { var i = ls.indexOf(f); if (i >= 0) ls.splice(i, 1); }; }
+        };
+        if (G.document) {
+            var assertAll = function () { if (G.document.visibilityState === 'hidden') return; _softHeld.slice().forEach(function (h) { _bus.post({ t: 'assert', n: h.name, id: h.id, since: h.since }); }); };
+            G.document.addEventListener('visibilitychange', assertAll);
+            G.addEventListener('pageshow', assertAll);
+        }
+        return _bus;
+    }
+    var SOFT_WAIT = 180;
+    function softLock(name, steal, fresh) {
+        return new Promise(function (res) {
+            var bus = tabBus();
+            if (bus.mode === 'none') { res({ ok: true, soft: 'none', release: function () {} }); return; }
+            var me = TID + '.' + rid(3), state = 'ask', holder = null, out = { ok: true, lost: null, soft: bus.mode }, rec = { name: name, id: me, since: 0 }, off = null;
+            function drop() { state = 'gone'; if (off) off(); var i = _softHeld.indexOf(rec); if (i >= 0) _softHeld.splice(i, 1); }
+            function lose() { if (state !== 'held') return; var f = out.lost; drop(); if (f) { try { f(); } catch (_) {} } }
+            out.release = function () { out.lost = null; drop(); };
+            function hold() { state = 'held'; rec.since = now(); _softHeld.push(rec); res(out); }
+            off = bus.on(function (m) {
+                if (!m || m.n !== name || m.id === me) return;
+                if (state === 'ask') {
+                    if (m.t === 'held') holder = m.id;
+                    else if (m.t === 'q' && String(m.id) < me && !holder) holder = '~' + m.id;
+                } else if (state === 'held') {
+                    if (m.t === 'q') bus.post({ t: 'held', n: name, id: me, since: rec.since });
+                    else if (m.t === 'steal' && (!m.to || m.to === me)) lose();
+                    else if (m.t === 'assert') { if (m.since < rec.since) bus.post({ t: 'steal', n: name, id: me, to: m.id }); else if (m.since > rec.since) lose(); }
+                }
+            });
+            if (fresh) { hold(); return; }
+            bus.post({ t: 'q', n: name, id: me });
+            setTimeout(function () {
+                if (state !== 'ask') return;
+                if (holder && !steal) { drop(); res({ ok: false, soft: bus.mode }); return; }
+                if (holder && steal) bus.post({ t: 'steal', n: name, id: me });
+                hold();
+            }, SOFT_WAIT);
+        });
+    }
+    function acquireLock(name, steal, fresh) {
         return new Promise(function (res) {
             var L = G.navigator && G.navigator.locks;
-            if (!L || typeof L.request !== 'function') { res({ ok: true, release: function () {} }); return; }
+            if (!L || typeof L.request !== 'function') { softLock(name, steal, fresh).then(res); return; }
             var rel, out = { ok: true, lost: null }, held = new Promise(function (r) { rel = r; });
             out.release = function () { out.lost = null; if (rel) rel(); };
             L.request(name, steal ? { steal: true } : { ifAvailable: true }, function (lock) {
@@ -1918,8 +2156,8 @@
             P.close(); P = null;
             if (++tries >= 5) throw err('collision');
         }
-        var hl = await acquireLock('lpr-host-' + code, false);
-        var sl = await acquireLock('lpr-seat-' + code, false);
+        var hl = await acquireLock('lpr-host-' + code, false, true);
+        var sl = await acquireLock('lpr-seat-' + code, false, true);
         var room = new Room(code, dev);
         room.isHost = true; room.gameId = gid; room.sealed = o.sealed !== false;
         room._rpk = rpk; room._hostPk = rpk.sig; room._hostDh = rpk.dh; room.fp = fpOfF(F); room.seal = sealOfF(F);
@@ -2113,8 +2351,10 @@
             var vis = G.document.visibilityState !== 'hidden';
             if (!vis) hidAt = now();
             var r = _current; if (!r || r._left || r._state !== 'member') return;
+            var hidMs = vis && hidAt ? now() - hidAt : 0;
+            if (vis && hidMs > TM.wakeGap) r._wakeAt = now();      /* [+] 오래 숨었다 돌아옴 = 깨어남(감시 시계 다시) */
             if (r.isHost) { r._sendHostHb(); r._save(); }
-            else if (vis) r._resync(hidAt ? now() - hidAt : 0);   /* 복귀 = 시계 다시 맞추기(§6.0.3) */
+            else if (vis) r._resync(hidMs);   /* 복귀 = 시계 다시 맞추기(§6.0.3) */
             else r._sendGHb();
         });
         G.addEventListener('pagehide', function () {
@@ -2154,23 +2394,57 @@
         return null;
     }
     function withTimeout(p, ms, v) { return Promise.race([p, sleep(ms).then(function () { return v; })]); }
-    async function probeV2(code, inv) {
+    async function probeV2(code, inv, ms) {
         var T = await openTopic(PFX + code);
         try {
             if (!(await withTimeout(T.ready, 3000, false))) return null;
-            var r = await probeHello(T, code, inv, 3500);
+            var r = await probeHello(T, code, inv, ms || 3500);
             if (r.conflict) return { conflict: true };
             return r.h ? r : null;
         } finally { T.close(); }
     }
+    /* 레거시 채널(v1 lp-room-* · SZX szx-race-*) 탐색 공용 — 토픽마다 직렬 (2026-10-01, C14 실버그)
+       realtime-js 는 같은 토픽의 channel() 에 기존 객체를 돌려주고, 닫히는 중(leaving)인 채널의 subscribe() 는 조용히 아무것도 안 한다.
+       예전 probeV1/probeSzx 는 탐색이 끝나면 removeChannel(비동기)을 던져 놓고 곧바로 돌아와서, 같은 코드를 연달아 resolve 하면
+       (코드 입력 뒤 곧바로 다시 시도 · ?room= 링크 → 허브 → 게임 · 최근 방 점 + 코드 입력) 두 번째 탐색이 "닫히는 중인 채널"을 받아
+       SUBSCRIBED 가 오지 않고 4초 뒤 'none' 이 됐다. 이제:
+         · 같은 토픽 탐색이 진행 중이면 그 결과를 같이 쓴다(채널 1개)
+         · 앞 탐색의 채널 제거가 끝난 뒤에 새 채널을 만든다
+         · 이 클라이언트에 그 토픽의 남의 채널(v1 lpRoom 이 쓰는 중)이 살아 있으면 건드리지 않는다 — 그 채널에 듣기만 얹고 제거하지 않는다 */
+    var _rawP = {};
+    function rawProbe(topic, ms, wire) {
+        var cur = _rawP[topic];
+        if (cur && cur.live) return cur.p;
+        var prev = cur ? cur.done : Promise.resolve();
+        var rec = _rawP[topic] = { live: true }, doneRes;
+        rec.done = new Promise(function (r) { doneRes = r; });
+        rec.p = prev.then(function () {
+            return new Promise(function (res) {
+                var sb = sbClient(), fin = false, own = true, ch = null;
+                function end(v) {
+                    if (fin) return; fin = true; rec.live = false;
+                    Promise.resolve().then(function () { return own && ch && sb ? sb.removeChannel(ch) : null; }).catch(function () {}).then(function () { if (_rawP[topic] === rec) delete _rawP[topic]; doneRes(); });
+                    res(v);
+                }
+                if (!sb) { end(null); return; }
+                try {
+                    var ex = (typeof sb.getChannels === 'function' ? sb.getChannels() : []).filter(function (c) { return c && (c.topic === 'realtime:' + topic || c.topic === topic); })[0];
+                    own = !ex;
+                    ch = ex || sb.channel(topic, { config: { broadcast: { self: false, ack: false } } });
+                    var go = wire(ch, end);
+                    if (own) ch.subscribe(function (st) { if (st === 'SUBSCRIBED' && go && !fin) go(); });
+                    else if (go) go();
+                } catch (e) { dbg('rawProbe', topic, e); end(null); return; }
+                setTimeout(function () { end(null); }, ms);
+            });
+        });
+        return rec.p;
+    }
     function probeV1(code) {
-        var sb = sbClient(); if (!sb) return Promise.resolve(null);
-        return new Promise(function (res) {
-            var ch = sb.channel('lp-room-' + code, { config: { broadcast: { self: false, ack: false } } }), pid = rid(8), fin = false;
-            function end(v) { if (fin) return; fin = true; try { sb.removeChannel(ch); } catch (_) {} res(v); }
+        return rawProbe('lp-room-' + code, 4000, function (ch, end) {
+            var pid = rid(8);
             ch.on('broadcast', { event: 'host:probe_ack' }, function (m) { var p = (m && m.payload) || {}; if (p.pid === pid) end({ gameId: String(p.gameId || ''), locked: !!p.locked }); });
-            ch.subscribe(function (s) { if (s === 'SUBSCRIBED') ch.send({ type: 'broadcast', event: 'guest:probe', payload: { pid: pid } }); });
-            setTimeout(function () { end(null); }, 4000);
+            return function () { try { var r = ch.send({ type: 'broadcast', event: 'guest:probe', payload: { pid: pid } }); if (r && r.catch) r.catch(function () {}); } catch (_) {} };
         });
     }
     function probeQlive(code) {
@@ -2178,20 +2452,25 @@
         return withTimeout(Promise.resolve(sb.rpc('qlive_state', { p_code: code, p_pid: null, p_host_key: null })).then(function (r) { return !!(r && r.data && r.data.ok); }).catch(function () { return false; }), 4000, false);
     }
     function probeSzx(code, ms) {
-        var sb = sbClient(); if (!sb) return Promise.resolve(false);
-        return new Promise(function (res) {
-            var ch = sb.channel('szx-race-' + code, { config: { broadcast: { self: false, ack: false } } }), fin = false;
-            function end(v) { if (fin) return; fin = true; try { sb.removeChannel(ch); } catch (_) {} res(v); }
-            ch.on('broadcast', { event: 'st' }, function () { end(true); });
-            ch.subscribe(function () {});
-            setTimeout(function () { end(false); }, ms);
-        });
+        return rawProbe('szx-race-' + code, ms, function (ch, end) { ch.on('broadcast', { event: 'st' }, function () { end(true); }); return null; }).then(function (v) { return !!v; });
     }
     var V1_GAMES = ['roulette', 'ladder', 'team', 'lotto', 'bingo', 'car-racing', 'quiz', 'ludo', 'yut', 'reversi', 'gummy', 'prism-hex', 'mahjong-tw'];
-    async function resolve(input) {
+    /* o(선택) [+ 2026-10-01]: {v2Only:true, ms?:number} — v2(lpr-*) 방인지 만 빨리 확인(레거시 v1·퀴즈·SZX 탐색 생략, 기본 2초).
+       로더가 옛 ?room= 링크를 받았을 때 "살아 있는 v2 방 코드인가"를 먼저 물어볼 수 있게: kind 'rooms'(+url) 아니면 'none'. */
+    async function resolve(input, o) {
+        o = o || {};
         var p = parseInvite(input);
         if (!p) return { kind: 'none', code: '' };
         var code = p.code;
+        if (o.v2Only) {
+            if (!(CODE_RE.test(code) && hasLetter(code))) return { kind: 'none', code: code };
+            await ready();
+            var r2 = null; try { r2 = await probeV2(code, p.inv, Math.max(600, Math.min(4000, o.ms || 2000))); } catch (_) { r2 = null; }
+            if (!r2 || r2.conflict || !r2.h) return { kind: 'none', code: code, reason: r2 && r2.conflict ? 'host_conflict' : undefined };
+            var u2 = urlFor(r2.h.gameId, code); if (!u2) return { kind: 'none', code: code };
+            if (p.inv) u2 += '#k=' + p.inv.fp + (p.inv.tok ? '.' + p.inv.tok : '');
+            return { kind: 'rooms', code: code, gameId: r2.h.gameId, url: u2, hello: { gameId: r2.h.gameId, kind: r2.h.kind, phase: r2.h.phase, count: r2.h.count, max: r2.h.max, lock: r2.h.lock, pinReq: r2.h.pinReq, appr: r2.h.appr } };
+        }
         if (p.hint === 'qlive') return { kind: 'qlive', code: code, gameId: 'quiz', url: '/games/quiz/?c=' + code };
         if (p.hint === 'szx') return { kind: 'szx', code: code, gameId: 'dodge', url: '/games/dodge/?race=' + code };
         await ready();
@@ -2268,8 +2547,9 @@
             b64u: b64u, ub64u: ub64u, hex: hex, sha256: sha256, canon: canon, fmtCode: fmtCode, normCode: normCode,
             cleanNick: cleanNick, seal: sealOfF, verify: verifyStr, pidOf: pidOf, codeOfF: codeOfF, fpOfF: fpOfF, roomF: roomF
         },
-        stats: function () { return { sent: STATS.sent, recv: STATS.recv, bad: STATS.bad, estPerSec: STATS.win.length / 60 }; },
-        _t: { TM: TM, Room: Room, diffOps: diffOps, applyOps: applyOps, chainKey: chainKey }
+        stats: function () { return { sent: STATS.sent, recv: STATS.recv, bad: STATS.bad, estPerSec: STATS.win.length / 60, shed: STATS.shed || 0, rate: STATS.rate || 0 }; },
+        _t: { TM: TM, Room: Room, diffOps: diffOps, applyOps: applyOps, chainKey: chainKey, VQ: VQ, CLK: CLK, clkEstimate: clkEstimate, memRec: memRec, replayOk: replayOk, replaySeen: replaySeen,
+            lockMode: function () { var L = G.navigator && G.navigator.locks; return (L && typeof L.request === 'function') ? 'weblocks' : tabBus().mode; } }
     };
 })(typeof window !== 'undefined' ? window : globalThis);
 /* CHANGE LOG
@@ -2295,6 +2575,13 @@
    2026-09-30  통합 2차(턴제↔공통 UI): 방장 room.me 동기화 — create 직후와 방장 state 방송마다 _syncMe().
                예전엔 방장 me.role 이 첫 roster 방송(명단 변화) 전까지 'player', me.seat 는 시작 때 재배치돼도 옛 값이었다.
                영향: UI '내 차례' 알림(me.seat) · 게스트 hb 주기(_hbInterval 은 게스트 전용이라 무관).
+   2026-10-01  실전 보강(fx-live): S6 서명 검증 뒤 처리량 차감(+검증 대기 상한·hello_req 전용 버킷·재생 floor·join 재전송 welcome) ·
+               Web Locks 없는 브라우저 폴백(BroadcastChannel → storage 이벤트) · 레거시 채널 탐색 토픽별 직렬화(C14 실버그) ·
+               시계 양방향 최소 필터 · [+] resolve(input,{v2Only,ms}) · [+] 방장 이벤트 'refuse'.
+               깨어남 승계 버그(요트 에이전트 보고): 30초 넘게 멈췄다 돌아온 게스트가 방장 신호를 받기 전에 혼자 승계하던 것 →
+               ① 깨어남(틱 공백 >3s·숨김 복귀·소켓 재연결)부터 감시 시계 다시 ② 소켓 끊긴 동안 승계 안 함 ③ 깨어난 기기는 후보 맨 뒤,
+               못 들어 본 피어는 살아 있다고 봄 ④ 원방장은 다른 멤버를 듣고 있으면 강등 거부 + 서명된 refuse ⑤ refuse 를 받은
+               승계자·추종자는 원방장으로 되돌아감(평범한 hb 로는 되돌리지 않음 — 되찾기 금지 유지). 회귀: C8w·C8w2·C8r, C8·CX2·T1j·T9 유지.
    결정: supabase realtime {worker:true} 는 채택 보류 — 방 페이지는 getSupabase() 공용 클라이언트(소켓 1개)를
          재사용하고, 워커 옵션은 클라이언트 생성 시점에만 줄 수 있어 공용 클라이언트와 충돌한다. 헤드리스 하네스로는
          백그라운드 스로틀을 재현할 수 없어 실기기 확인 항목으로 넘긴다(§6.0.3 소켓 항목).
