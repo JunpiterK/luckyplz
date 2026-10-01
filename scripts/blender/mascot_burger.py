@@ -356,6 +356,60 @@ def f_cheese():
     return yp._fin(o, cheese) and T
 
 
+def f_cheese_side():
+    """주문서 레퍼런스(정측면) 전용 치즈 — 운영자(2026-10-02): "치즈는 그냥 얇게. 가운데가 아래로 뾰족해 두께를 많이 차지해 보인다."
+    게임 스택용 f_cheese 는 45° 돌린 정사각이라 앞 모서리가 가운데로 흘러내린다(옆에서 보면 V). 여기선 축 정렬 정사각 한 장을
+    바닥 바로 위에 얹고, 좌우 모서리만 살짝 처지게 한다. 두께 = 장 두께뿐."""
+    th = 0.085
+    cheese = yp.mat('cheese', (1.0, 0.64, 0.06), rough=0.22, coat=0.9)
+    try:
+        b = cheese.node_tree.nodes["Principled BSDF"]
+        b.inputs["Subsurface Weight"].default_value = 0.15
+        b.inputs["Subsurface Radius"].default_value = (1.0, 0.6, 0.2)
+    except Exception:
+        pass
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=36, y_subdivisions=36, size=2.2, location=(0, 0, 0))
+    o = bpy.context.object
+    for v in o.data.vertices:
+        x, y = v.co.x, v.co.y
+        e = max(abs(x), abs(y))
+        droop = 1.4 * max(0.0, abs(x) - 0.9) ** 2 + 0.012 * math.sin(y * 9) * max(0.0, e - 0.8)
+        v.co = Vector((x, y, th - droop))
+    md = o.modifiers.new("sol", 'SOLIDIFY')
+    md.thickness = th * 0.9
+    md.offset = -1
+    sub = o.modifiers.new("sub", 'SUBSURF')
+    sub.levels = 1
+    sub.render_levels = 1
+    yp._fin(o, cheese)
+    return th
+
+
+def f_lettuce_side():
+    """주문서 레퍼런스(정측면) 전용 양상추 — 아래층 위에 얹힌 잎은 아래층 윗면 밑으로 못 내려간다(운영자 2026-10-02:
+    "치즈 위 양상추가 치즈를 뚫고 아래에서 보인다"). 게임 스택용 f_lettuce 의 모양·재질 그대로, 높이만 바닥(0) 위로 눌러 둔다 —
+    물결 프릴은 위로만 일렁인다."""
+    T = T_of(16)
+    g1 = yp.mat('lettuce', (0.28, 0.66, 0.1), rough=0.3, coat=0.7)
+    g2 = yp.mat('lettuce_hi', (0.52, 0.86, 0.22), rough=0.3, coat=0.7)
+    R = 1.14
+    floor = 0.05      # 시트 두께(0.05, 아래로 붙는 solidify)만큼 띄워 바닥면이 z=0 에 오게
+
+    def zf1(r, th):
+        u = r / R
+        z = T * 0.78 * (1 - u * u) ** 0.6 + 0.085 * u ** 2.5 * math.sin(11 * th + 1.7 * math.sin(3 * th)) - 0.1 * u ** 4
+        return max(floor + 0.03 * u ** 2.5 * (1 + math.sin(11 * th + 1.7 * math.sin(3 * th))), z)
+    polar_sheet(R, 16, 132, zf1, g1, thick=0.05)
+
+    def zf2(r, th):
+        u = r / (R * 0.9)
+        z = T * 0.95 * (1 - min(1, u) ** 2) ** 0.5 + 0.07 * u ** 2.5 * math.sin(9 * th + 0.8) - 0.06 * u ** 4 + 0.02
+        return max(floor + 0.02, z)
+    s = polar_sheet(R * 0.9, 14, 110, zf2, g2, thick=0.045)
+    s.rotation_euler = (0, 0, 0.5)
+    return T
+
+
 def f_lettuce():
     T = T_of(16)
     g1 = yp.mat('lettuce', (0.28, 0.66, 0.1), rough=0.3, coat=0.7)
@@ -440,7 +494,8 @@ FOODSIDE_H, FOODSIDE_TZ = 256, 0.16
 
 def render_food(name, side=False):
     sc = food_studio(0.0, FOODSIDE_H, FOODSIDE_TZ) if side else food_studio()
-    T = FOOD_FN[name]()
+    SIDE_FN = dict(cheese=f_cheese_side, lettuce=f_lettuce_side)
+    T = (SIDE_FN[name]() if (side and name in SIDE_FN) else FOOD_FN[name]())
     dd = os.path.join(OUT, "foodside" if side else "food")
     os.makedirs(dd, exist_ok=True)
     sc.render.filepath = os.path.join(dd, name + ".png")

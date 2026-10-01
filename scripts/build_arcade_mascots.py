@@ -72,14 +72,16 @@ def burger_side():
     atlas(f, food, 4, 384, 192, os.path.join(dst, "food_side.webp"), q=88)
     fm = json.load(open(os.path.join(f, "meta.json"), encoding='utf-8'))
     o = fm['patty']['o']
-    ext = {}
+    ext, hw = {}, {}   # hw = 좌우 반폭(재료 반지름 단위) — 위층이 아래층 폭 안쪽에선 아래층 윗면 밑으로 못 내려가게 자르는 기준
     for k in food:          # 셀 높이 비율: 바닥 기준 위로 솟은 끝(up)·아래로 처진 끝(dn) — 칸 맞춤용
         im = Image.open(os.path.join(f, k + ".png")).convert("RGBA")
         bb = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
         H = im.size[1]
+        W = im.size[0]
+        hw[k] = r4(max(fm[k]['o'][0] - bb[0] / W, bb[2] / W - fm[k]['o'][0]) / fm[k]['ux'])
         ext[k] = [r4(fm[k]['o'][1] - bb[1] / H), r4(bb[3] / H - fm[k]['o'][1])]
     out = dict(cols=4, order=food, o=r4(o), ux=r4(fm['patty']['ux']),
-               th={k: r4(fm[k]['o'][1] - fm[k]['top'][1]) for k in food}, ext=ext)
+               th={k: r4(fm[k]['o'][1] - fm[k]['top'][1]) for k in food}, ext=ext, hw=hw)
     print(json.dumps(out, separators=(',', ':')))
 
 
