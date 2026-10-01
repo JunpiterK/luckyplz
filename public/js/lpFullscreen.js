@@ -323,7 +323,8 @@
     btn.type='button';
     btn.className='lp-fs-btn';
     btn.setAttribute('aria-label','Toggle fullscreen');
-    btn.setAttribute('title','전체화면');
+    /* 툴팁은 페이지 언어로 — 예전엔 모든 언어에 '전체화면'(한국어)이 떴다 */
+    btn.setAttribute('title',(function(){var m={ko:'전체화면',ja:'全画面',zh:'全屏',es:'Pantalla completa',pt:'Tela cheia',de:'Vollbild',fr:'Plein écran',ru:'Во весь экран'};var l='en';try{l=(window.LpI18n&&LpI18n.getLang&&LpI18n.getLang())||localStorage.getItem('luckyplz_lang')||'en'}catch(_){}return m[l]||'Fullscreen'})());
     btn.textContent='⛶';
     btn.addEventListener('click',function(e){
       e.preventDefault();

@@ -25,7 +25,7 @@
     if (window.LpNav) return;
     var L = {
         ko: ['게임 홈', '전체 홈'], en: ['Game home', 'Main home'], ja: ['ゲームホーム', 'トップへ'],
-        zh: ['游戏首页', '网站首页'], es: ['Inicio del juego', 'Inicio'], pt: ['Início do jogo', 'Início'],
+        zh: ['游戏首页', '网站首页'], es: ['Juego', 'Inicio'], pt: ['Jogo', 'Início'],
         de: ['Spielstart', 'Startseite'], fr: ['Accueil du jeu', 'Accueil'], ru: ['Меню игры', 'Главная'],
         ar: ['بداية اللعبة', 'الرئيسية'], hi: ['गेम होम', 'मुख्य पेज'], th: ['หน้าเกม', 'หน้าหลัก'],
         id: ['Beranda game', 'Beranda'], vi: ['Trang game', 'Trang chủ'], tr: ['Oyun ana sayfası', 'Ana sayfa']
