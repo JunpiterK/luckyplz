@@ -307,7 +307,9 @@ body.lp-playing .lp-help-fab{display:none}
 @container (min-height:401px){.overlay.ov-over .rank-card{margin:6px 0 12px;padding:14px 18px;gap:6px}}
 /* 아주 작은 보드(320×568 등) — 결과 카드가 넘쳐 다시하기가 가려졌다 → 부가 줄을 접는다 */
 @container (max-height:300px){.overlay .rank-card-pct{display:none}.overlay .rank-card{padding:4px 8px;margin:2px 0 5px}.overlay .pb{margin-bottom:2px}}
-.overlay .nb{display:inline-block;animation:nbShine 1s ease-in-out infinite alternate}
+.overlay .nb{display:inline-block;animation:nbStamp .42s cubic-bezier(.2,1.5,.4,1) .65s both,nbShine 1s ease-in-out 1.07s infinite alternate}
+/* 2026-10: 점수 차르륵(0.65초)이 끝나는 순간 도장처럼 쾅 */
+@keyframes nbStamp{0%{opacity:0;transform:rotate(-14deg) scale(2.3)}55%{opacity:1}100%{opacity:1;transform:rotate(-4deg) scale(1)}}
 @keyframes nbShine{from{text-shadow:0 0 4px rgba(124,255,155,.4)}to{text-shadow:0 0 14px rgba(124,255,155,.95)}}
 .ctrl-btn.vib-btn{padding:8px 12px}
 .ctrl-btn.vib-btn.off{opacity:.55;border-color:rgba(255,255,255,.2);color:rgba(255,255,255,.6);background:rgba(255,255,255,.04)}
@@ -1495,9 +1497,13 @@ function furPuff(x, y){
     }
 }
 function popText(x, y, text, color, size, punch){
+    /* 가까이 떠 있던 옛 글자는 서둘러 지운다 — POWER! 위에 200 이 겹쳐 읽히지 않게 */
+    for (let i=0;i<TXN;i++){ const o = TX[i]; if (o.on && o.life > 0.22 && Math.abs(o.x - x) < 60 && Math.abs(o.y - y) < 34) o.life = 0.22; }
     const t = TX[txHead]; txHead = (txHead + 1) % TXN;
     t.on = true; t.x = Math.max(24, Math.min(BW-24, x)); t.y = Math.max(12, y); t.text = text; t.color = color; t.size = size||11; t.life = 0.95; t.max = 0.95; t.punch = punch||0;
 }
+/* 그 자리에서만 번쩍 부푸는 원 — 화면 전체가 아니라 사건 위치만 (0.16초) */
+function popFx(x, y, color, r){ if (REDUCED) return; const f = fxNew(true); f.k = 7; f.x = x; f.y = y; f.size = r; f.color = color; f.life = 0.16; f.max = 0.16; }
 function flash(a, rgb){ if (REDUCED) return; flashA = Math.min(0.12, Math.max(flashA, a)); flashColor = rgb || '255,255,255'; }
 function showBanner(text, sub, secs, color){ banner = {text, sub:sub||'', t:secs, max:secs, color:color||'#FFE066'}; }
 function updateFx(dt){
@@ -1542,6 +1548,10 @@ function drawFx(){
             ctx.globalAlpha = a*0.9;
             ctx.strokeStyle = f.color; ctx.lineWidth = 2.2*a + 0.4;
             ctx.beginPath(); ctx.arc(f.x, f.y, f.size*(1 - a*a) + 2, 0, Math.PI*2); ctx.stroke();
+        } else if (f.k === 7){
+            const e = 1 - a;
+            ctx.globalAlpha = a*a*0.9; ctx.fillStyle = a > 0.6 ? '#FFFFFF' : f.color;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.size*(0.4 + 0.9*(1 - (1-e)*(1-e))), 0, Math.PI*2); ctx.fill();
         }
     }
     ctx.globalCompositeOperation = 'source-over';
@@ -1587,6 +1597,34 @@ function drawFx(){
         ctx.fillText(t.text, 0, 0);
         ctx.restore();
     }
+}
+
+/* 파워 미터 — 맨 위 벽 줄 위에 남은 파워 시간 막대 + 연쇄 4칸(200·400·800·1600).
+   먹을 때마다 해당 칸이 톡 튀며 불이 들어온다. 판정·점수와 무관한 그림 */
+const CHAIN_COL = ['#7FF3FF','#7CFF9B','#FF8AE6','#FFD147'];
+let chainPopT = 0;
+function drawFrenzyMeter(t){
+    if (!running || !(S.frightLeft > 0) || S.phase === 'clear' || S.phase === 'dying') return;
+    const ft = (S.params && S.params.frightTime) || 6;
+    const k = Math.max(0, Math.min(1, S.frightLeft / ft));
+    const warn = S.frightLeft < 2.2 && Math.floor(S.frightLeft * 5) % 2 === 0;
+    const W = 112, x0 = BW/2 - W/2 - 30, y = 10;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0,0,0,.65)';
+    roundRect(ctx, x0 - 3, y - 5, W + 6 + 66, 10, 5); ctx.fill();
+    ctx.fillStyle = warn ? '#FFFFFF' : '#FF7BE6';
+    ctx.globalAlpha = 0.95;
+    roundRect(ctx, x0, y - 2, Math.max(2, W * k), 4, 2); ctx.fill();
+    const pu = REDUCED ? 1 : Math.min(1, (performance.now() - chainPopT) / 240);
+    for (let i=0;i<4;i++){
+        const lit = i < S.chain;
+        const px = x0 + W + 12 + i*15;
+        const pop = (lit && i === S.chain - 1) ? 1 + (1 - pu)*(1 - pu)*0.9 : 1;
+        ctx.globalAlpha = lit ? 1 : 0.35;
+        ctx.fillStyle = lit ? CHAIN_COL[i] : 'rgba(255,255,255,.5)';
+        ctx.beginPath(); ctx.arc(px, y, 3.2*pop, 0, Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
 }
 
 /* ========== 캐릭터 ========== */
@@ -1968,6 +2006,7 @@ function render(t){
 
     drawTunnelFade();
     drawFx();
+    drawFrenzyMeter(t);
 
     /* READY! */
     if (running && S.phase === 'ready'){
@@ -2103,11 +2142,15 @@ function handleEvents(){
                 sfx.dot();
                 dotPopT = 0.09;
                 if (!REDUCED && Q > 0 && Math.random() < 0.6) sparkles(tileX(e.x), tileX(e.y), '#FFE9C8', 1, 30);
+                /* 점 하나하나가 톡 터지는 작은 섬광 — 쉬지 않고 먹을수록(연속 10개마다) 조금씩 커진다 */
+                if (!REDUCED && Q > 0) popFx(tileX(e.x), tileX(e.y), '#FFE9C8', 5 + Math.min(4, Math.floor(dotStreak/10)));
                 break;
             }
             case 'power': {
                 const x = tileX(e.x), y = tileX(e.y);
                 sfx.power(); vib([20,30,20]);
+                popFx(x, y, '#ff7be6', 22);
+                chainPopT = performance.now();
                 ringFx(x, y, '#FFE066', 50, 0.5);
                 ringFx(x, y, '#ff7be6', 80, 0.75);
                 burst(x, y, '#FFD447', 18, 100, 2.6);
@@ -2120,6 +2163,8 @@ function handleEvents(){
                 const x = tileX(e.x), y = tileX(e.y);
                 sfx.eatGhost(e.chain); vib(20 + e.chain*8);
                 const cc = ['#7FF3FF','#7CFF9B','#FF8AE6','#FFD147'][Math.min(3, e.chain - 1)];
+                popFx(x, y, e.color, 16 + e.chain*3);
+                chainPopT = performance.now();
                 starBurst(x, y, e.color, 12 + e.chain*2.5, 0.5);
                 burst(x, y, e.color, 18 + e.chain*4, 120, 2.6);
                 burst(x, y, '#ffffff', 8, 80, 1.8);
@@ -2270,6 +2315,33 @@ document.addEventListener('visibilitychange', ()=>{
     quit: ()=>{ if (window.LpNav) window.LpNav.goGameHome(); else location.href = '/games/pacman/'; }
 });
 /* 결과 카드 점수 — 0 에서 올라가며 채워진다(0.6초) */
+/* 결과 카드 문구 현지화 (2026-10) — 함수 안에 박힌 한국어가 en/ja 결과 화면에 그대로 새던 자리.
+   ko 는 원문 그대로, es/pt/ja 는 각 언어, 그 밖의 UI 언어는 en. 판정·기록 로직과 무관한 표시 문자열만 */
+const RT_MAP = {
+    '조회 중…':                         {en:'Loading…', ja:'読み込み中…', es:'Cargando…', pt:'Carregando…'},
+    '🏆 랭크':                           {en:'🏆 Rank', ja:'🏆 ランク', es:'🏆 Ranking', pt:'🏆 Ranking'},
+    '다시하기':                          {en:'Play again', ja:'もう一度', es:'Otra vez', pt:'De novo'},
+    '재시작':                            {en:'Restart', ja:'リスタート', es:'Reiniciar', pt:'Reiniciar'},
+    '🏆 개인 신기록!':                   {en:'🏆 Personal best!', ja:'🏆 自己ベスト!', es:'🏆 ¡Récord personal!', pt:'🏆 Recorde pessoal!'},
+    '⏸ 1시간 내 30회 한도 초과':         {en:'⏸ Limit: 30 runs per hour', ja:'⏸ 1時間30回の上限超過', es:'⏸ Límite: 30 partidas por hora', pt:'⏸ Limite: 30 partidas por hora'},
+    '🛠 랭킹 시스템 점검 중':            {en:'🛠 Ranking maintenance', ja:'🛠 ランキング点検中', es:'🛠 Ranking en mantenimiento', pt:'🛠 Ranking em manutenção'},
+    '잠시 후 다시 시도해주세요':          {en:'Please try again later', ja:'しばらくしてからお試しください', es:'Inténtalo más tarde', pt:'Tente mais tarde'},
+    '⚠️ 랭킹 등록 실패':                 {en:'⚠️ Rank submission failed', ja:'⚠️ 登録失敗', es:'⚠️ Falló el envío', pt:'⚠️ Falha no envio'},
+    '네트워크를 확인하고 다시 시도해주세요': {en:'Check your network and retry', ja:'ネットワークを確認してください', es:'Comprueba la red y reintenta', pt:'Verifique a rede e tente de novo'},
+    '⚠️ 점수 검증 실패':                 {en:'⚠️ Score check failed', ja:'⚠️ スコア検証失敗', es:'⚠️ Verificación fallida', pt:'⚠️ Verificação falhou'},
+    '비정상적으로 빠른 진행 감지':         {en:'Unusually fast progress detected', ja:'異常に速い進行を検出', es:'Progreso anormalmente rápido', pt:'Progresso anormalmente rápido'},
+    '🔐 로그인이 필요해요':              {en:'🔐 Sign-in required', ja:'🔐 ログインが必要です', es:'🔐 Inicia sesión', pt:'🔐 Faça login'},
+    '로그인 후 다시 시도':                {en:'Sign in and try again', ja:'ログインして再試行', es:'Inicia sesión y reintenta', pt:'Entre e tente de novo'},
+    '🔒 로그인하면 기록 저장!':           {en:'🔒 Sign in to save your record!', ja:'🔒 ログインで記録を保存!', es:'🔒 ¡Inicia sesión para guardar!', pt:'🔒 Entre para salvar o recorde!'},
+    '랭킹 등록은 로그인 사용자만 가능':    {en:'Only signed-in players are ranked', ja:'ランキング登録はログインユーザーのみ', es:'Solo jugadores con sesión entran al ranking', pt:'Só jogadores logados entram no ranking'},
+    '⚠️ 기록 저장 실패':                 {en:'⚠️ Could not save record', ja:'⚠️ 記録の保存に失敗', es:'⚠️ No se pudo guardar', pt:'⚠️ Não foi possível salvar'},
+    '🎉 첫 기록 등록!':                  {en:'🎉 First record saved!', ja:'🎉 初記録登録!', es:'🎉 ¡Primer récord!', pt:'🎉 Primeiro recorde!'},
+    '월드 랭킹 진입 완료':                {en:'You are on the world ranking', ja:'ワールドランキング入り', es:'Ya estás en el ranking mundial', pt:'Você entrou no ranking mundial'}
+};
+function rtLang(){ let l='ko'; try{ l=(window.LpI18n&&LpI18n.getLang())||'ko'; }catch(_){} return l; }
+function rt(ko){ const l=rtLang(); if(l==='ko') return ko; const m=RT_MAP[ko]; return m ? (m[l]||m.en) : ko; }
+function rtTop(p){ const l=rtLang(); return l==='ko'?'상위 '+p+'%':l==='ja'?'上位 '+p+'%':l==='es'?'Top '+p+'%':l==='pt'?'Top '+p+'%':'Top '+p+'%'; }
+function rtOf(n){ const l=rtLang(); return l==='ko'?n+'명 중':l==='ja'?n+'人中':l==='es'?'de '+n:l==='pt'?'de '+n:'of '+n; }
 function countUp(el, to){
     if (!el) return;
     if (REDUCED || to <= 0){ el.textContent = to; return; }
@@ -2312,14 +2384,14 @@ function gameOver(won){
       + '<div class="score-big" id="ovScore">0</div>'
       + '<p>'+(won ? esc(tT('allClear'))+'<br>' : '')+esc(stats)+(isLocalBest?'<br><b class="nb">🏆 NEW BEST!</b>':'')+'</p>'
       + '<div class="rank-card" id="ovRankCard">'
-      +   '<div class="rank-card-rank" id="ovRankNum">조회 중…</div>'
+      +   '<div class="rank-card-rank" id="ovRankNum">'+rt('조회 중…')+'</div>'
       +   '<div class="rank-card-pct" id="ovRankPct"></div>'
       +   '<div class="rank-card-pb" id="ovRankPb"></div>'
       +   '<div class="rank-card-debug" id="ovRankDebug"></div>'
-      +   '<button class="rank-card-link" id="ovRankBtn">🏆 랭크</button>'
+      +   '<button class="rank-card-link" id="ovRankBtn">'+rt('🏆 랭크')+'</button>'
       + '</div>'
-      + '<button class="btn" id="ovBtn">다시하기</button>'
-      + '<div class="kbd-hint"><kbd>Enter</kbd> 재시작</div>';
+      + '<button class="btn" id="ovBtn">'+rt('다시하기')+'</button>'
+      + '<div class="kbd-hint"><kbd>Enter</kbd> '+rt('재시작')+'</div>';
     ov.classList.remove('hidden');
     countUp($('ovScore'), finalScore);
     lpNavShow('lpEndNav', true);
@@ -2383,13 +2455,13 @@ function gameOver(won){
                 });
                 if(!error){
                     recordOk=true;
-                    if(data?.is_personal_best) pbMsg='🏆 개인 신기록!';
+                    if(data?.is_personal_best) pbMsg=rt('🏆 개인 신기록!');
                     if(data?.is_personal_best && !isLocalBest){ sfx.clear(); vib([20,40,20,40,60]); confetti(70); ensureLoop(); }
                 }else{
                     recordErrKind=_classifyErr(error);
                     console.warn('[pacman.record_pacman_attempt]', error);
                     if(recordErrKind==='missing_migration')_logDeployHint();
-                    if(recordErrKind==='rate_limit') pbMsg='⏸ 1시간 내 30회 한도 초과';
+                    if(recordErrKind==='rate_limit') pbMsg=rt('⏸ 1시간 내 30회 한도 초과');
                 }
             }catch(e){
                 recordErrKind=_classifyErr(e);
@@ -2456,35 +2528,35 @@ function gameOver(won){
                percentile/total) still renders cleanly. */
             $('ovRankNum').textContent='🌍 #'+rank;
             const parts=[];
-            if(d.percentile!=null) parts.push('상위 '+d.percentile+'%');
-            if(d.total_world_players!=null) parts.push(d.total_world_players.toLocaleString()+'명 중');
+            if(d.percentile!=null) parts.push(rtTop(d.percentile));
+            if(d.total_world_players!=null) parts.push(rtOf(d.total_world_players.toLocaleString()));
             $('ovRankPct').textContent=parts.join(' · ');
         }else if(rankErrKind==='missing_migration'||recordErrKind==='missing_migration'){
             /* Admin needs to deploy the migrations. Calmer language for
                end users (most won't be the admin); detail in console. */
-            $('ovRankNum').textContent='🛠 랭킹 시스템 점검 중';
-            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('🛠 랭킹 시스템 점검 중');
+            $('ovRankPct').textContent=rt('잠시 후 다시 시도해주세요');
         }else if(rankErrKind||recordErrKind==='unknown'){
-            $('ovRankNum').textContent='⚠️ 랭킹 등록 실패';
-            $('ovRankPct').textContent='네트워크를 확인하고 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('⚠️ 랭킹 등록 실패');
+            $('ovRankPct').textContent=rt('네트워크를 확인하고 다시 시도해주세요');
         }else if(!recordOk && recordErrKind==='invalid'){
-            $('ovRankNum').textContent='⚠️ 점수 검증 실패';
-            $('ovRankPct').textContent='비정상적으로 빠른 진행 감지';
+            $('ovRankNum').textContent=rt('⚠️ 점수 검증 실패');
+            $('ovRankPct').textContent=rt('비정상적으로 빠른 진행 감지');
         }else if(!recordOk && recordErrKind==='no_auth'){
-            $('ovRankNum').textContent='🔐 로그인이 필요해요';
-            $('ovRankPct').textContent='로그인 후 다시 시도';
+            $('ovRankNum').textContent=rt('🔐 로그인이 필요해요');
+            $('ovRankPct').textContent=rt('로그인 후 다시 시도');
         }else if(!recordOk && recordErrKind==='no_login'){
             /* Anon-friendly upsell: not an error — they intentionally
                played without logging in. Encourage signup, but the world
                leaderboard still loads (loadLeaderboard call below). */
-            $('ovRankNum').textContent='🔒 로그인하면 기록 저장!';
-            $('ovRankPct').textContent='랭킹 등록은 로그인 사용자만 가능';
+            $('ovRankNum').textContent=rt('🔒 로그인하면 기록 저장!');
+            $('ovRankPct').textContent=rt('랭킹 등록은 로그인 사용자만 가능');
         }else if(!recordOk){
-            $('ovRankNum').textContent='⚠️ 기록 저장 실패';
-            $('ovRankPct').textContent='잠시 후 다시 시도해주세요';
+            $('ovRankNum').textContent=rt('⚠️ 기록 저장 실패');
+            $('ovRankPct').textContent=rt('잠시 후 다시 시도해주세요');
         }else{
-            $('ovRankNum').textContent='🎉 첫 기록 등록!';
-            $('ovRankPct').textContent='월드 랭킹 진입 완료';
+            $('ovRankNum').textContent=rt('🎉 첫 기록 등록!');
+            $('ovRankPct').textContent=rt('월드 랭킹 진입 완료');
         }
         $('ovRankPb').textContent=pbMsg;
         /* Debug slot kept in DOM for inspection but blank for end users.
