@@ -131,12 +131,12 @@ window.LP_HELP_TEXT = {
     pt: {t:'Corrida', l:['Digite nomes; os carros correm e a chegada ordena todos','Avançado: pista, duração, voltas e frequência de eventos','Prêmios: divida a conta ou tarefas pela colocação','Peça para cada um achar o próprio carro antes da largada']}
   },
   'ladder': {
-    ko: {t:'사다리타기', l:['참가자 수만큼 결과(벌칙·보상)를 적어요','프리셋(🍺 음주·💰 계산·🧹 집안일·🎭 벌칙)으로 빠르게 채우기','진행 방식: 한 명씩·동시에·순차','같은 사다리에서 두 사람이 같은 결과에 닿는 일은 없어요']},
-    en: {t:'Ladder Game', l:['Write one result (dare or prize) per player','Presets fill results fast: drinks, pay, chores, dares','Reveal one by one, all at once, or in sequence','No two starting points ever reach the same result']},
-    ja: {t:'あみだくじ', l:['参加者と同じ数だけ結果（罰ゲーム・ごほうび）を書きます','プリセット（飲み・支払い・家事・罰ゲーム）ですぐ埋まります','進め方：一人ずつ・全員同時・順番に','同じくじで2人が同じ結果に着くことはありません']},
-    zh: {t:'爬梯子', l:['写下和人数一样多的结果（惩罚或奖励）','用预设（喝酒、买单、家务、惩罚）快速填好','进行方式：逐个、同时或按顺序','同一张梯子上，两个人不会走到同一个结果']},
-    es: {t:'Juego de Escalera', l:['Escribe un resultado (castigo o premio) por jugador','Los preajustes rellenan rápido: tragos, pagar, tareas, retos','Revela uno a uno, todos a la vez o en secuencia','Dos puntos de salida nunca llegan al mismo resultado']},
-    pt: {t:'Jogo da Escada', l:['Escreva um resultado (castigo ou prêmio) por jogador','Predefinições preenchem rápido: bebida, conta, tarefas, desafios','Revele um por um, todos juntos ou em sequência','Dois pontos de partida nunca chegam ao mesmo resultado']}
+    ko: {t:'사다리타기', l:['참가자 수만큼 결과(벌칙·보상)를 적어요','프리셋(🍺 음주·💰 계산·🧹 집안일·🎭 벌칙)으로 빠르게 채우기','진행 방식: 순서대로(1번부터)·동시에 · 시작할 때 결과 위치를 섞어 누구나 같은 확률','같은 사다리에서 두 사람이 같은 결과에 닿는 일은 없어요']},
+    en: {t:'Ladder Game', l:['Write one result (dare or prize) per player','Presets fill results fast: drinks, pay, chores, dares','Reveal in sequence or all at once · result slots are shuffled at Start, so everyone has equal odds','No two starting points ever reach the same result']},
+    ja: {t:'あみだくじ', l:['参加者と同じ数だけ結果（罰ゲーム・ごほうび）を書きます','プリセット（飲み・支払い・家事・罰ゲーム）ですぐ埋まります','進め方：順番に・全員同時 · スタート時に結果の位置をシャッフルするので全員同じ確率','同じくじで2人が同じ結果に着くことはありません']},
+    zh: {t:'爬梯子', l:['写下和人数一样多的结果（惩罚或奖励）','用预设（喝酒、买单、家务、惩罚）快速填好','进行方式：按顺序或同时 · 开始时打乱结果位置，人人机会均等','同一张梯子上，两个人不会走到同一个结果']},
+    es: {t:'Juego de Escalera', l:['Escribe un resultado (castigo o premio) por jugador','Los preajustes rellenan rápido: tragos, pagar, tareas, retos','Revela en secuencia o todos a la vez · al empezar se mezclan los resultados: misma probabilidad para todos','Dos puntos de salida nunca llegan al mismo resultado']},
+    pt: {t:'Jogo da Escada', l:['Escreva um resultado (castigo ou prêmio) por jogador','Predefinições preenchem rápido: bebida, conta, tarefas, desafios','Revele em sequência ou todos juntos · ao começar os resultados são embaralhados: mesma chance para todos','Dois pontos de partida nunca chegam ao mesmo resultado']}
   },
   'glory-racing': {
     ko: {t:'브롤 런', l:['이름을 넣으면 캐릭터들이 달리고 몸싸움하며 순위를 가려요','? 상자에서 아이템이 나와요 — 선두일수록 꽝이 잦아요','바위 구간에선 0~2번 넘어져 막판까지 뒤집혀요','경주 시간·속도·이벤트 빈도는 설정에서 바꿔요']},
