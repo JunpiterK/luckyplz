@@ -689,6 +689,31 @@ def m_mahjong_tw(d, img):
     img.alpha_composite(toy, (MCX - w // 2 + 40, MCY - h // 2 + 18))   # 부제가 길어 오른쪽으로 비킨다
 
 
+def m_yacht(d, img):
+    """요트 다이스 — 홈 타일과 같은 Blender 장난감 렌더(트레이·주사위·쏟는 컵) + 마스코트 레서판다 만세 포즈.
+
+    원본(둘 다 Blender, 저장소 밖 중간 산출물):
+      scripts/og-assets/tiles3d/yacht.png        (blender -b -P scripts/blender/tiles_toybox.py -- yacht)
+      scripts/og-assets/mascot-yacht/cheer.png   (blender -b -P scripts/blender/mascot_yacht.py -- cheer)
+    펠트 청록·금빛 후광."""
+    glow(img, MCX - 10, MCY + 30, 270, (20, 168, 184), 70)
+    glow(img, MCX + 60, MCY - 110, 170, (246, 200, 95), 46)
+    def load(path):
+        im = Image.open(HERE / "og-assets" / path).convert("RGBA")
+        a = im.getchannel("A").point(lambda v: 255 if v > 40 else 0)
+        return im.crop(a.getbbox())
+    toy = load("tiles3d/yacht.png")
+    w = 440
+    h = round(toy.height * w / toy.width)
+    toy = toy.resize((w, h), Image.LANCZOS)
+    img.alpha_composite(toy, (MCX - w // 2 + 30, MCY - h // 2 + 40))
+    pd = load("mascot-yacht/cheer.png")
+    pw = 230
+    ph = round(pd.height * pw / pd.width)
+    pd = pd.resize((pw, ph), Image.LANCZOS)
+    img.alpha_composite(pd, (MX - 70, MY + MH - ph + 40))
+
+
 GAMES = {
     "mahjong-tw":      dict(title="TAIWAN MAHJONG", sub="대만 마작 台灣麻將 — 16장, 친구와 각자 폰으로", cat="BOARD", top=(52, 8, 12), bot=(16, 3, 4), accent=(233, 196, 106), motif=m_mahjong_tw),
     "mahjong-solitaire": dict(title="MAHJONG", sub="마작 솔리테어 — 같은 패 짝지어 144장 치우기", cat="SOLITAIRE", top=(40, 10, 12), bot=(14, 4, 5), accent=(233, 196, 106), motif=m_mahjong_solitaire),
@@ -696,6 +721,7 @@ GAMES = {
     "gummy":           dict(title="GUMMY CHAIN", sub="구미 체인 — 쫀득한 연쇄로 1:1 대결", cat="PUZZLE", top=(30, 12, 40), bot=(12, 5, 18), accent=(255, 111, 168), motif=m_gummy),
     "yut":             dict(title="YUT NORI", sub="윷놀이 — 여럿이 함께, 최대 4팀", cat="BOARD", top=(30, 18, 12), bot=(12, 7, 5), accent=(244, 195, 90), motif=m_yut),
     "reversi":         dict(title="REVERSI", sub="리버시 — AI·친구와 한 판, 모서리를 잡아라", cat="BOARD", top=(8, 26, 18), bot=(3, 10, 7), accent=(232, 200, 114), motif=m_reversi),
+    "yacht":           dict(title="YACHT DICE", sub="요트 다이스 — 주사위 5개, 세 번의 기회", cat="BOARD", top=(10, 26, 40), bot=(4, 10, 18), accent=(246, 200, 95), motif=m_yacht),
     "ludo":            dict(title="LUDO", sub="루도 — 친구와 온라인 보드게임", cat="BOARD", top=(24, 12, 20), bot=(9, 5, 10), accent=(255, 209, 102), motif=m_ludo),
     "bubble":          dict(title="BUBBLE BURST", sub="버블 버스트 — 같은 색 셋이면 펑", cat="RETRO", top=(22, 12, 34), bot=(8, 5, 16), accent=(255, 95, 162), motif=m_bubble),
     "balloon":         dict(title="BALLOON POP", sub="풍선 룰렛 — 터뜨린 사람이 벌칙", cat="LUCKY", top=(28, 10, 18), bot=(11, 4, 8), accent=(255, 92, 122), motif=m_balloon),
