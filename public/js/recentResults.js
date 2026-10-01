@@ -17,11 +17,11 @@
     const MAX=5;
 
     const GAME_META={
-        roulette:   {emoji:'🎯', ko:'룰렛',   en:'Roulette',   ja:'ルーレット', zh:'轮盘'},
-        ladder:     {emoji:'🪜', ko:'사다리', en:'Ladder',     ja:'はしご',     zh:'梯子'},
-        team:       {emoji:'👥', ko:'팀 뽑기',en:'Team',       ja:'チーム',     zh:'分队'},
-        'car-racing':{emoji:'🏎️',ko:'카레이싱',en:'Race',      ja:'レース',     zh:'赛车'},
-        lotto:      {emoji:'🎱', ko:'로또',   en:'Lotto',      ja:'ロト',       zh:'乐透'}
+        roulette:   {emoji:'🎯', ko:'룰렛',   en:'Roulette',   ja:'ルーレット', zh:'轮盘', es:'Ruleta',   pt:'Roleta'},
+        ladder:     {emoji:'🪜', ko:'사다리', en:'Ladder',     ja:'あみだくじ', zh:'梯子', es:'Escalera', pt:'Escada'},
+        team:       {emoji:'👥', ko:'팀 뽑기',en:'Team',       ja:'チーム',     zh:'分队', es:'Equipos',  pt:'Times'},
+        'car-racing':{emoji:'🏎️',ko:'카레이싱',en:'Race',      ja:'レース',     zh:'赛车', es:'Carrera',  pt:'Corrida'},
+        lotto:      {emoji:'🎱', ko:'로또',   en:'Lotto',      ja:'ロト',       zh:'乐透', es:'Lotería',  pt:'Loteria'}
     };
 
     function load(){
@@ -49,14 +49,19 @@
         write(list.slice(0,MAX));
     }
 
+    function nameFor(item,lang){const m=GAME_META[item.gameId];return(m&&(m[String(lang).slice(0,2)]||m.en))||item.gameName||item.gameId}
+
     function clearAll(){try{localStorage.removeItem(KEY)}catch(e){}}
 
     function timeAgo(ts,lang){
         const s=Math.max(1,Math.floor((Date.now()-ts)/1000));
-        if(s<60){return lang==='ko'?'방금 전':(lang==='ja'?'たった今':'just now')}
-        const m=Math.floor(s/60);if(m<60){return lang==='ko'?m+'분 전':(lang==='ja'?m+'分前':m+'m ago')}
-        const h=Math.floor(m/60);if(h<24){return lang==='ko'?h+'시간 전':(lang==='ja'?h+'時間前':h+'h ago')}
-        const d=Math.floor(h/24);return lang==='ko'?d+'일 전':(lang==='ja'?d+'日前':d+'d ago');
+        const L=String(lang).slice(0,2),F={ko:['방금 전','분 전','시간 전','일 전'],ja:['たった今','分前','時間前','日前'],zh:['刚刚','分钟前','小时前','天前'],
+            es:['ahora','min','h','d'],pt:['agora','min','h','d']},f=F[L];
+        const pre=(L==='es'||L==='pt')?(L==='es'?'hace ':'há '):'';
+        if(s<60){return f?f[0]:'just now'}
+        const m=Math.floor(s/60);if(m<60){return f?(pre+m+(pre?' ':'')+f[1]):m+'m ago'}
+        const h=Math.floor(m/60);if(h<24){return f?(pre+h+(pre?' ':'')+f[2]):h+'h ago'}
+        const d=Math.floor(h/24);return f?(pre+d+(pre?' ':'')+f[3]):d+'d ago';
     }
 
     function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -81,7 +86,7 @@
             a.href=item.url;
             a.innerHTML='<span class="lp-recent-emoji">'+item.emoji+'</span>'
                        +'<span class="lp-recent-body">'
-                           +'<span class="lp-recent-game">'+escapeHtml(item.gameName)+'</span>'
+                           +'<span class="lp-recent-game">'+escapeHtml(nameFor(item,lang))+'</span>'
                            +'<span class="lp-recent-summary">'+escapeHtml(item.summary)+'</span>'
                        +'</span>'
                        +'<span class="lp-recent-time">'+timeAgo(item.savedAt,lang)+'</span>';
