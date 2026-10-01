@@ -33,26 +33,6 @@ def atlas(src_dir, names, cols, cw, ch, out, q=84):
     print("atlas", os.path.relpath(out, ROOT), os.path.getsize(out) // 1024, "KB", A.size, file=sys.stderr)
 
 
-def icon_atlas(src_dir, names, cols, cell, out, q=84, pad=0.03):
-    """아이콘 — 알파 bbox 로 잘라 정사각 가운데 정렬(셀을 꽉 채운다). 셀 중심 = 아이콘 중심"""
-    rows = (len(names) + cols - 1) // cols
-    A = Image.new("RGBA", (cell * cols, cell * rows), (0, 0, 0, 0))
-    for i, n in enumerate(names):
-        im = Image.open(os.path.join(src_dir, n + ".png")).convert("RGBA")
-        bb = im.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
-        W, H = im.size
-        if bb[0] <= 1 or bb[1] <= 1 or bb[2] >= W - 1 or bb[3] >= H - 1:
-            print("WARN clipped", n, bb, file=sys.stderr)
-        im = im.crop(bb)
-        s = int(max(im.size) * (1 + 2 * pad))
-        sq = Image.new("RGBA", (s, s), (0, 0, 0, 0))
-        sq.paste(im, ((s - im.width) // 2, (s - im.height) // 2))
-        sm = sq.convert("RGBa").resize((cell, cell), Image.LANCZOS).convert("RGBA")
-        A.paste(sm, ((i % cols) * cell, (i // cols) * cell))
-    A.save(out, "WEBP", quality=q, method=6, alpha_quality=90)
-    print("atlas", os.path.relpath(out, ROOT), os.path.getsize(out) // 1024, "KB", A.size, file=sys.stderr)
-
-
 def r4(v):
     if isinstance(v, list):
         return [r4(x) for x in v]
@@ -77,12 +57,9 @@ def burger():
     f = os.path.join(OG, "burger", "food")
     atlas(f, food, 4, 384, 240, os.path.join(dst, "food.webp"), q=86)
     fm = json.load(open(os.path.join(f, "meta.json"), encoding='utf-8'))
-    # 2026-09-30 v3 — 접시·주문서용 60° 아이콘 (mascot_burger.py -- icon)
-    icon_atlas(os.path.join(OG, "burger", "icon"), food, 4, 192, os.path.join(dst, "icons.webp"))
     out = dict(chef=dict(cols=4, order=chef, meta={k: r4(cm[k]) for k in chef}),
                guest=dict(cols=6, sp=sp, ex=ex, head=r4(gm['fox-n']['head']), headR=r4(gm['fox-n']['headR'])),
-               food=dict(cols=4, order=food, o=r4(fm['patty']['o']), ux=r4(fm['patty']['ux'])),
-               icon=dict(cols=4, cell=192))
+               food=dict(cols=4, order=food, o=r4(fm['patty']['o']), ux=r4(fm['patty']['ux'])))
     print(json.dumps(out, separators=(',', ':')))
 
 
