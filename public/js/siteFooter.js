@@ -609,9 +609,12 @@ try{
         vi:'Trang chủ', tr:'Ana sayfa'
     };
     function lpLocalizeHome(){
-        var lang;
-        try { lang = localStorage.getItem('luckyplz_lang') || 'en'; } catch(e){ lang = 'en'; }
+        var lang, stored = null;
+        try { stored = localStorage.getItem('luckyplz_lang'); } catch(e){}
+        lang = stored || 'en';
         var label = LP_HOME_LABEL[lang] || LP_HOME_LABEL.en;
+        /* 대만·홍콩 브라우저는 번체로 — 사이트 언어 코드는 늘리지 않는다(CLAUDE.md 언어 정책), 표시만 */
+        try { if ((!stored || lang === 'zh') && /^zh-(tw|hk|mo)|hant/i.test(navigator.language || '')) label = '首頁'; } catch(e){}
         var sel = '#homeBtn, #homeLink, .floating-home, .home[href="/"], a.home';
         var seen = [];
         document.querySelectorAll(sel).forEach(function(a){
