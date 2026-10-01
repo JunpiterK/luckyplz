@@ -116,6 +116,8 @@
         '.lp-dock.is-scrolling{opacity:0}' +
         '.lp-dock.is-ghost>.lp-dock-handle{visibility:hidden;pointer-events:none}' +
         '.lp-dock.is-scrolling>*{pointer-events:none!important}' +
+        /* 떠 있는 '← 홈' 이 스크롤된 내용의 버튼·입력칸 위에 겹치면 잠깐 숨긴다(맨 위로 돌아오면 다시 보인다) — 2026-10-01 QA */
+        '.lp-home-obstructed{opacity:0!important;visibility:hidden!important;pointer-events:none!important;transition:opacity .16s ease,visibility 0s linear .16s}' +
         '@media(prefers-reduced-motion:reduce){.lp-dock,.lp-dock>*{transition:none!important}}';
     (document.head || document.documentElement).appendChild(css);
 
@@ -218,15 +220,15 @@
         return !p || getComputedStyle(p).cursor !== 'pointer';
     }
     /* 🎮 아래(가운데 + 네 모서리 안쪽)에 누를 수 있는 것·캔버스가 있는가 */
-    function fabObstructed(fab) {
+    function fabObstructed(fab, rect) {
         var r = fab.getBoundingClientRect();
         if (!r.width) return false;
-        /* 원형이라 모서리 바깥은 빼고, 원 안쪽 4x4 격자 */
+        /* 원형이라 모서리 바깥은 빼고, 원 안쪽 4x4 격자 (rect=true 면 알약·사각 버튼 — 격자 전체) */
         var pts = [];
         for (var gx = 0; gx < 4; gx++) for (var gy = 0; gy < 4; gy++) {
             var px = r.left + 6 + gx * (r.width - 12) / 3, py = r.top + 6 + gy * (r.height - 12) / 3;
             var dx = px - (r.left + r.width / 2), dy = py - (r.top + r.height / 2);
-            if (dx * dx + dy * dy <= (r.width / 2) * (r.width / 2)) pts.push([px, py]);
+            if (rect || dx * dx + dy * dy <= (r.width / 2) * (r.width / 2)) pts.push([px, py]);
         }
         for (var i = 0; i < pts.length; i++) {
             var x = pts[i][0], y = pts[i][1];
@@ -341,6 +343,20 @@
         var fab = document.getElementById('lpSwFab');
         if (heavy && fab && !hard && !scrolling && getComputedStyle(fab).display !== 'none') {
             fab.classList.toggle('lp-obstructed', fabObstructed(fab));
+        }
+        /* 떠 있는 '← 홈'(position:fixed) — 스크롤해 내려간 상태에서 아래에 누를 것이 겹치면 숨긴다 */
+        if (heavy && !scrolling) {
+            var away = scrolledAway(), homes = document.querySelectorAll(HOME_SEL);
+            for (var h = 0; h < homes.length; h++) {
+                var hm = homes[h];
+                if (dock && dock.contains(hm)) continue;
+                var on = false;
+                if (away && getComputedStyle(hm).position === 'fixed') {
+                    hm.classList.remove('lp-home-obstructed');
+                    on = visible(hm) && fabObstructed(hm, true);
+                }
+                hm.classList.toggle('lp-home-obstructed', on);
+            }
         }
     }
     /* rAF 로 한 프레임에 한 번 — 백그라운드 탭처럼 rAF 가 멈추는 곳을 위해 타이머 폴백도 건다 */

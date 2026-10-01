@@ -51,6 +51,8 @@
            +'.lp-pwa-btn .lp-pwa-x{opacity:.65;margin-left:4px;font-size:1.05em;line-height:1}'
            +'.lp-pwa-btn .lp-pwa-x:hover{opacity:1}'
            +'.lp-pwa-btn.show{display:inline-flex}'
+           /* 알약이 떠 있는 동안 페이지 맨 아래 내용(홈 마지막 줄 타일)을 알약 위로 스크롤할 수 있게 여유를 준다(2026-10-01 QA) */
+           +'body.lp-pwa-on{padding-bottom:64px}'
            +'@media(max-width:500px){.lp-pwa-btn{bottom:12px;right:12px;padding:9px 14px;font-size:.78em}}';
         document.head.appendChild(s);
     }
@@ -70,6 +72,10 @@
 
     let deferredPrompt=null;
     let btn=null;
+    function setShow(on){
+        if(btn)btn.classList.toggle('show',!!on);
+        try{document.body.classList.toggle('lp-pwa-on',!!on)}catch(_){}
+    }
 
     function createBtn(){
         if(btn)return btn;
@@ -82,17 +88,17 @@
         btn.querySelector('.lp-pwa-x').addEventListener('click',function(ev){
             ev.stopPropagation();
             setDismissed();
-            btn.classList.remove('show');
+            setShow(false);
         });
         btn.addEventListener('click',function(){
             if(!deferredPrompt)return;
             deferredPrompt.prompt();
             deferredPrompt.userChoice.then(function(c){
                 if(c&&c.outcome==='accepted'){
-                    btn.classList.remove('show');
+                    setShow(false);
                 }else{
                     setDismissed();
-                    btn.classList.remove('show');
+                    setShow(false);
                 }
                 deferredPrompt=null;
             }).catch(function(){});
@@ -108,7 +114,7 @@
         deferredPrompt=e;
         if(isStandalone()||inCooldown())return;
         injectStyles();
-        createBtn().classList.add('show');
+        createBtn();setShow(true);
     }
 
     /* Two-way hook-up: (a) pick up any event that siteFooter.js already
@@ -123,7 +129,7 @@
     }
     window.addEventListener('beforeinstallprompt',onPrompt);
     window.addEventListener('appinstalled',function(){
-        if(btn)btn.classList.remove('show');
+        setShow(false);
         deferredPrompt=null;
         try{localStorage.removeItem(KEY)}catch(_){}
     });
@@ -136,7 +142,7 @@
         try{localStorage.removeItem(KEY)}catch(_){}
         if(deferredPrompt&&!isStandalone()){
             injectStyles();
-            createBtn().classList.add('show');
+            createBtn();setShow(true);
         }
         return !!deferredPrompt;
     };

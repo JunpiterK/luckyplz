@@ -67,7 +67,10 @@
     'reversi':true,   /* 보드게임 — BGM 없음(돌 소리가 주인공). 없는 트랙 HEAD 404 방지 */
     'gummy':true,     /* 구미 체인 — 연쇄 음이 올라가는 자체 WebAudio 효과음. 없는 트랙 HEAD 404 방지 */
     'mahjong-tw':true,         /* 대만 마작 — 패 소리·효과음 자체 합성(WebAudio), BGM 없음(404 방지) */
-    'mahjong-solitaire':true   /* 마작 솔리테어 — 패 딸깍 소리 자체 합성, BGM 없음(404 방지) */
+    'mahjong-solitaire':true,  /* 마작 솔리테어 — 패 딸깍 소리 자체 합성, BGM 없음(404 방지) */
+    /* 2026-10-01 QA M-7: assets/bgm/<id>/ 가 없거나 README 만 있는 게임 — 진입마다 track1 HEAD 404,
+       시작 후 track1~4 를 차례로 시도해 404 가 4~5건 더 났다. 트랙을 넣으면 여기서 빼면 된다 */
+    'bubble':true,'dice':true,'glory-racing':true,'lucky-merge':true,'orbit':true,'starship-lander':true
   };
 
   /* Detect game from URL. Lobby + home + blog → no BGM. */
@@ -335,6 +338,9 @@
   }
   try{
     fetch(TRACK_BASE+'1.mp3',{method:'HEAD'}).then(function(r){
+      /* 트랙이 하나도 없는 게임(SKIP 목록에 아직 안 올린 새 게임) — 한 번 확인했으면 start() 가
+         track1~4 를 하나씩 404 로 두드리지 않게 전부 '없음'으로 표시하고 멈춘다 */
+      if(r&&r.status===404){for(var i=1;i<=MAX_TRACKS;i++)knownMissing[i]=true;return}
       if(r&&r.ok){
         if(document.body)mountBgmBtn();
         else document.addEventListener('DOMContentLoaded',mountBgmBtn);
