@@ -1525,6 +1525,17 @@ function renderPreview(forceRegenerate){
     drawLadder();
 }
 
+function ladShuffleNote(){
+    const M={ko:'🔀 결과 위치를 섞었어요 — 누구나 같은 확률',en:'🔀 Result slots shuffled — equal odds for everyone',ja:'🔀 結果の位置をシャッフル — 全員同じ確率',
+        zh:'🔀 结果位置已打乱 — 人人机会均等',es:'🔀 Resultados mezclados — misma probabilidad para todos',pt:'🔀 Resultados embaralhados — mesma chance para todos'};
+    let l='en';try{l=String((typeof lang==='string'&&lang)||localStorage.getItem('luckyplz_lang')||'en').slice(0,2).toLowerCase()}catch(_){}
+    let el=document.getElementById('ladShufNote');
+    if(!el){el=document.createElement('div');el.id='ladShufNote';el.setAttribute('role','status');
+        el.style.cssText='position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);transform:translateX(-50%);z-index:9050;padding:8px 14px;border-radius:12px;background:rgba(10,14,34,.92);color:#e9f2ff;font:700 13px/1.3 system-ui,sans-serif;border:1px solid rgba(120,200,255,.35);pointer-events:none;max-width:calc(100vw - 32px);text-align:center;transition:opacity .3s';
+        document.body.appendChild(el)}
+    el.textContent=M[l]||M.en;el.style.opacity='1';el.style.display='block';
+    clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0';setTimeout(()=>{el.style.display='none'},320)},2600);
+}
 function startGame(){
     if(window.LPV2&&LPV2.hook('start'))return;   /* Rooms v2 방: 방장 = 공정 추첨 시작, 게스트 = 안내만 */
     /* BGM 은 게임 시작 시점에만 — 제스처 콜스택 안에서 SYNC 호출 */
@@ -1580,6 +1591,19 @@ function startGame(){
         nameInputs.forEach((inp,i)=>names.push(inp.value.trim()||inp.placeholder||''));
         resultInputs.forEach((inp,i)=>results.push(inp.value.trim()||(inp.dataset.cleared?'':inp.placeholder)||''));
         ladder.names=names;ladder.results=results;
+    }
+
+    /* 2026-10-02 공정성: 가로대는 열마다 같은 개수라 순열이 고르지 않다(2명이면 늘 짝수 → 91% 직진,
+       6명도 바로 아래 결과가 2배). 시작할 때 결과 칸 위치를 암호 난수로 섞으면 사다리 모양과 무관하게
+       누구나 각 결과를 정확히 1/N 로 받는다 — 진행자가 '직진 자리'에 벌칙을 놓는 것도 막힌다.
+       게스트는 방장이 보낸 ladder.results 를 그대로 쓴다(아래 브로드캐스트) */
+    if(!isGuest&&Array.isArray(ladder.results)&&ladder.results.length>1){
+        const a=ladder.results.slice(),u=new Uint32Array(a.length);
+        try{crypto.getRandomValues(u)}catch(_){for(let i=0;i<u.length;i++)u[i]=Math.floor(Math.random()*4294967296)}
+        for(let i=a.length-1;i>0;i--){const j=u[i]%(i+1);[a[i],a[j]]=[a[j],a[i]]}
+        const moved=a.some((v,i)=>v!==ladder.results[i]);
+        ladder.results=a;
+        if(moved&&a.some(v=>v!==a[0]))ladShuffleNote();
     }
 
     /* Broadcast AFTER generateLadder / name-refresh so guests receive the
@@ -1985,7 +2009,8 @@ function init(){
         const ri=document.querySelectorAll('#resultInputs input');
         const names=[...ni].map(function(i){return i.value.trim()||i.placeholder||''});
         const results=[...ri].map(function(i){return i.value.trim()||i.placeholder||''});
-        const p={game:'ladder',ladder:ladder,names:names,results:results,playerCount:playerCount,playMode:playMode};
+        const rs=(Array.isArray(ladder.results)&&ladder.results.length===results.length)?ladder.results:results;
+        const p={game:'ladder',ladder:ladder,names:names,results:rs,playerCount:playerCount,playMode:playMode};
         window._lpHost.snapshot(p);
         window._lpHost.broadcast('host:config',p);
         window._lpHost.broadcast('host:start',{t:Date.now()});
@@ -2578,11 +2603,12 @@ function setVals(names,results){
 }
 function posAt(t,prog){let d=0;for(const s of t.segs){if(d+s.len>=prog){const f=s.len?(prog-d)/s.len:1;return[s.from.x+(s.to.x-s.from.x)*f,s.from.y+(s.to.y-s.from.y)*f,s]}d+=s.len}const l=t.segs[t.segs.length-1];return[l.to.x,l.to.y,l]}
 let cur=null;
+function resSlots(p,r){return(r&&Array.isArray(r.q)&&r.q.length===p.n)?r.q.map(i=>p.results[i]):p.results.slice()}
 LPV2.register({
     id:'ladder',path:'/games/ladder/',online:'.lp-room-online-btn',
     showOnline(on){document.querySelectorAll('.lp-room-online-btn').forEach(b=>{b.style.display=on?'':'none'})},
     setupRoot(){return document.getElementById('setupWrap')},
-    params(){const v=vals(),n=v.names.length;if(n<2)return null;return{n:n,names:v.names,results:v.results.slice(0,n),cx:complexity,mode:playMode==='all'?'all':'seq'}},
+    params(){const v=vals(),n=v.names.length;if(n<2)return null;return{v:2,n:n,names:v.names,results:v.results.slice(0,n),cx:complexity,mode:playMode==='all'?'all':'seq'}},
     applyCfg(c){
         if(!c||!Array.isArray(c.names)||c.names.length<2)return;
         setVals(c.names.map(String),(c.results||[]).map(String));
@@ -2611,9 +2637,11 @@ LPV2.register({
         for(const c of slots){for(let a=0;a<120;a++){const y=mg+rng.int(AV-mg*2);if(near(c,y))continue;if(c>0&&near(c-1,y))continue;if(c<n-2&&near(c+1,y))continue;seg[c].push(y);R.push([c,y]);break}}
         R.sort((a,b)=>a[1]-b[1]||a[0]-b[0]);
         const m=[];for(let s=0;s<n;s++){let col=s;for(const[c]of R){if(c===col)col++;else if(c===col-1)col--}m.push(col)}
+        /* v2: 결과 칸 위치 섞기(가로대 뒤에 뽑아 옛 인증서는 그대로 재검증된다) */
+        if((p.v|0)>=2)return{r:R,m:m,q:rng.shuffle([...Array(n).keys()])};
         return{r:R,m:m};
     },
-    resText(p,r){return p.names.map((nm,i)=>nm+'→'+(p.results[r.m[i]]||'?')).slice(0,3).join(' · ')+(p.n>3?' …':'')},
+    resText(p,r){const rs=resSlots(p,r);return p.names.map((nm,i)=>nm+'→'+(rs[r.m[i]]||'?')).slice(0,3).join(' · ')+(p.n>3?' …':'')},
     inResult(){return document.getElementById('resultScreen').style.display==='flex'},
     resultCard(){return document.querySelector('#resultScreen .result-card')},
     resultAnchor(){return document.getElementById('matchList')},
@@ -2633,7 +2661,7 @@ LPV2.register({
         const v=vals();if(JSON.stringify(v.names)!==JSON.stringify(p.names)||JSON.stringify(v.results.slice(0,n))!==JSON.stringify(p.results))setVals(p.names,p.results);
         playMode=p.mode==='all'?'all':'seq';complexity=p.cx||complexity;try{updateModeBtn()}catch(_){}
         if(animId)cancelAnimationFrame(animId);
-        ladder={n:n,names:p.names.slice(),results:p.results.slice(),rungs:r.r.map(([c,y])=>({col:c,yFrac:y/AV})),verticals:[],horizontals:[]};
+        ladder={n:n,names:p.names.slice(),results:resSlots(p,r),rungs:r.r.map(([c,y])=>({col:c,yFrac:y/AV})),verticals:[],horizontals:[]};
         gamePhase='playing';tracers=[];particles=[];arrivedCount=0;matchResults=[];confetti=[];LAD.sparks=[];promptAlpha=0;
         if(!isPCLayout())document.getElementById('setupWrap').style.display='none';
         document.getElementById('gameWrap').style.display='block';document.getElementById('resultScreen').style.display='none';document.getElementById('soundToggle').style.display='block';
@@ -2680,7 +2708,7 @@ LPV2.register({
         }
         function fire(){
             if(stopped)return;stopped=true;clearTimeout(resTimer);window._v2LadFrame=null;
-            matchResults=[];for(let i=0;i<n;i++)matchResults.push({name:esc(p.names[i]),result:esc(p.results[r.m[i]]||''),color:COLORS[i%COLORS.length],playerIdx:i,endCol:r.m[i]});
+            matchResults=[];for(let i=0;i<n;i++)matchResults.push({name:esc(p.names[i]),result:esc(resSlots(p,r)[r.m[i]]||''),color:COLORS[i%COLORS.length],playerIdx:i,endCol:r.m[i]});
             gamePhase='done';showResultScreen();
             try{if(window.LpWakeLock)LpWakeLock.release()}catch(_){}
             try{o.onEnd&&o.onEnd()}catch(_){}
