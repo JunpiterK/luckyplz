@@ -69,6 +69,9 @@ header .snd.off{opacity:.5}
 .stat.vel .v{color:var(--success)}
 .stat.vel.warn .v{color:var(--amber)}
 .stat.vel.fast .v{color:var(--danger)}
+/* 착지 직전(낮은 고도) 속도가 한계 안이면 칸이 초록으로 켜진다 — 캔버스 계기와 같은 신호(애니메이션 없음: 매 프레임 repaint 방지) */
+.stat.vel.safe{border-color:rgba(0,255,136,.7);box-shadow:inset 0 0 12px rgba(0,255,136,.22),0 0 10px -2px rgba(0,255,136,.55)}
+
 
 .wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 8px 4px;min-height:0;position:relative}
 .canvas-holder{position:relative;flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
@@ -113,6 +116,17 @@ canvas#g{display:block;background:#000814;border-radius:10px;box-shadow:0 0 0 1.
 .modal .stats-modal .item{padding:8px;background:rgba(255,255,255,0.04);border:1px solid var(--line);border-radius:8px}
 .modal .stats-modal .l{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--txt-mute);letter-spacing:0.1em;text-transform:uppercase}
 .modal .stats-modal .v{font-family:'Orbitron',sans-serif;font-size:16px;font-weight:900;color:var(--accent);margin-top:2px;font-variant-numeric:tabular-nums}
+/* 2026-10 결과 손맛 — 점수 차르륵 + 신기록 도장(테트로미노·벽돌깨기와 같은 문법. 레이아웃 높이 불변) */
+.modal .stats-modal .item{position:relative}
+.modal .stats-modal .v.cnt-done{animation:ld-cnt-pop .26s cubic-bezier(.2,1.8,.4,1)}
+@keyframes ld-cnt-pop{0%{transform:scale(1.4);color:#FFE66D}100%{transform:scale(1)}}
+.lp-nb-stamp{position:absolute;right:-8px;bottom:-11px;z-index:2;padding:2px 8px;border:2px solid #FFD447;border-radius:7px;
+  background:rgba(30,18,0,.82);color:#FFE66D;font:900 10px Orbitron,sans-serif;letter-spacing:.06em;white-space:nowrap;
+  text-shadow:0 0 8px rgba(255,214,71,.7);box-shadow:0 0 16px -4px rgba(255,214,71,.8);
+  opacity:0;transform:rotate(-9deg) scale(2.4);pointer-events:none}
+.lp-nb-stamp.on{animation:lp-stamp .42s cubic-bezier(.2,1.5,.4,1) forwards}
+@keyframes lp-stamp{0%{opacity:0;transform:rotate(-17deg) scale(2.4)}55%{opacity:1}100%{opacity:1;transform:rotate(-9deg) scale(1)}}
+@media (prefers-reduced-motion:reduce){.lp-nb-stamp.on{animation:none;opacity:1;transform:rotate(-9deg)}.modal .stats-modal .v.cnt-done{animation:none}}
 .modal .btn-row{display:flex;gap:6px;margin-top:14px}
 .modal .btn-row .btn{flex:1;max-width:none}
 .modal .stage-fact{margin-top:10px;padding:10px;background:rgba(0,217,255,0.06);border:1px solid rgba(0,217,255,0.2);border-radius:8px;font-size:11.5px;color:var(--txt-dim);line-height:1.5;text-align:left}
@@ -376,7 +390,7 @@ const T = LANG === 'en' ? {
   tip_pad: 'Follow the dotted path: its end is where you will land if you stop firing.',
   tip_hull: 'Keep clear of towers and ridges — fly over them, then descend.',
   paused: 'PAUSED', burn: 'BURN', stop: 'STOP', low_fuel: 'LOW FUEL', wind: 'WIND',
-  touchdown: 'TOUCHDOWN'
+  touchdown: 'TOUCHDOWN', ready: 'SAFE'
 } : {
   title: 'STARSHIP LANDER',
   intro_title: 'STARSHIP LANDER',
@@ -427,7 +441,7 @@ const T = LANG === 'en' ? {
   tip_pad: '점선을 보세요. 점선 끝이 지금 분사를 멈췄을 때의 착지 지점입니다.',
   tip_hull: '탑·능선은 위로 넘어간 뒤 내려가세요.',
   paused: 'PAUSED', burn: 'BURN', stop: 'STOP', low_fuel: 'LOW FUEL', wind: 'WIND',
-  touchdown: 'TOUCHDOWN'
+  touchdown: 'TOUCHDOWN', ready: '착륙 OK'
 };
 
 /* Apply translations to static UI
@@ -585,6 +599,7 @@ let VIEW_SCALE = 1, DPR = 1;
    화면상 8px 아래로는 안 내려가게 캔버스 좌표 크기를 키운다 */
 function hudFont(w, px, fam){ const css = Math.max(0.05, VIEW_SCALE / (DPR || 1)); return w + ' ' + Math.max(px, 8 / css).toFixed(1) + 'px ' + fam; }
 function fitCanvas(){
+  S.readyTw = 0;   /* SAFE 칩 글자 폭 캐시 — 글자 크기가 화면 배율을 따른다 */
   try{
     const hr = holder.getBoundingClientRect();
     let w = hr.width, h = hr.height;
@@ -1103,14 +1118,14 @@ function crash(reason, x, y){
   }
   S.rings.push({ x: cx, y: cy, t: 0, dur: 0.6, r0: 8, r1: 110, rgb: '255,190,110', w: 3 });
   S.rings.push({ x: cx, y: cy, t: -0.1, dur: 0.8, r0: 6, r1: 150, rgb: '255,255,255', w: 1.4 });
-  flash('255,200,150', 0.12, 280);
+  flash('255,200,150', 0.12, 120);   /* 전체 번쩍임은 120ms 이하(2026-10) — 무게는 화구·히트스톱이 맡는다 */
   S.phase = 'crashed';
   S.endAt = performance.now() + 1500; S.endShown = false;
   SND.engine(0, false); SND.boom();
   crashFx(reason, cx, cy, ship);
   vib([40, 30, 90]);
 }
-function flash(rgb, peak, dur){ S.flashRGB = rgb; S.flashPeak = Math.min(0.12, peak); S.flashDur = dur; S.flashUntil = performance.now() + dur; }
+function flash(rgb, peak, dur){ dur = Math.min(120, dur); S.flashRGB = rgb; S.flashPeak = Math.min(0.12, peak); S.flashDur = dur; S.flashUntil = performance.now() + dur; }
 function dustBurst(x, y, n, sp){
   const st = STAGES[S.stage];
   const kind = S.terrain.sea ? 'spray' : 'dust';
@@ -1498,6 +1513,12 @@ function drawShip(now){
   const sink = ship.landed ? ship.legComp * 3 : 0;
   ctx.translate(ship.x, ship.y + sink);
   ctx.rotate(ship.angle);
+  /* 착지 찌그러짐 — 발(로컬 y≈19)을 축으로 눌렸다 튕기며 감쇠(0.5초) */
+  if (squash){
+    const u = (now - squash.t0) / 1000;
+    if (u > 0.5) squash = null;
+    else { const q = u < 0 ? squash.amp : squash.amp * Math.cos(u * 30) * Math.exp(-u * 9); ctx.translate(0, 19); ctx.scale(1 + q * 0.8, 1 - q); ctx.translate(0, -19); }
+  }
   /* 엔진 화염 (기체 뒤) */
   if (th > 0.03){
     const fl = 0.85 + Math.random() * 0.3;
@@ -1595,6 +1616,7 @@ function drawPopups(){
   if (!S.popups.length) return;
   ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const p of S.popups){
+    if (p.t < 0) continue;
     const k = p.t / p.dur;
     const pop = k < 0.12 ? 0.6 + k / 0.12 * 0.5 : k < 0.24 ? 1.1 - (k - 0.12) / 0.12 * 0.1 : 1;
     ctx.globalAlpha = k > 0.75 ? (1 - k) / 0.25 : 1;
@@ -1658,6 +1680,33 @@ function drawHud(now){
   ctx.beginPath(); ctx.moveTo(x - 2, ay); ctx.lineTo(x - 2 + Math.sin(ship.angle) * ar, ay - Math.cos(ship.angle) * ar); ctx.stroke();
   ctx.textAlign = 'center'; ctx.font = hudFont('800', 7, 'JetBrains Mono, monospace'); ctx.fillStyle = upright ? 'rgba(0,255,136,.85)' : '#FFB547';
   ctx.fillText(Math.round(Math.abs(ship.angle) * 57.3) + '°', x - 2, ay + ar + 12);
+  /* 2026-10 착지 직전 판정 미리보기 — 낮은 고도에서 세 계기가 각자 '한계 안 = 초록 숨쉬기 / 밖 = 빨강 깜빡임'.
+     셋 다 초록 + 착륙장 위면 SAFE 칩과 짧은 '띵'. 판정 기준은 evaluateTouchdown 과 같은 값(표시만) */
+  const altPx = groundAt(ship.x) - (ship.y + 19);
+  if (altPx < 150 && ship.vy > 3){
+    const okV = ship.vy <= st.maxVy, okH = Math.abs(ship.vx) <= st.maxVx;
+    const allOk = okV && okH && upright && onPadX(ship.x);
+    const pulse = RM ? 0.8 : 0.55 + 0.45 * Math.sin(now * 0.012);
+    const blink = RM ? 1 : (Math.sin(now * 0.03) > 0 ? 1 : 0.25);
+    const ring = (ok) => { ctx.strokeStyle = ok ? 'rgba(0,255,136,' + (0.45 + 0.5 * pulse).toFixed(2) + ')' : 'rgba(255,51,102,' + (0.95 * blink).toFixed(2) + ')'; ctx.lineWidth = ok ? 1.6 : 2; ctx.stroke(); };
+    ctx.globalAlpha = 1;
+    roundRect(x - 7, top - 12, 14, H + 24, 6); ring(okV);
+    roundRect(x - hw / 2 - 8, hy - 7, hw + 16, 14, 6); ring(okH);
+    ctx.beginPath(); ctx.arc(x - 2, ay, ar + 5, 0, Math.PI * 2); ring(upright);
+    if (allOk){
+      const cy = ay + ar + 26;
+      ctx.font = hudFont('900', 7.5, 'Orbitron, "Noto Sans KR", sans-serif'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const tw = S.readyTw || (S.readyTw = ctx.measureText(T.ready).width + 10);
+      const cx = Math.min(C.W - tw / 2 - 2, x - 2);
+      ctx.globalAlpha = 0.75 + 0.25 * pulse;
+      roundRect(cx - tw / 2, cy - 7, tw, 14, 7); ctx.fillStyle = 'rgba(0,60,34,.85)'; ctx.fill();
+      ctx.strokeStyle = '#00FF88'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = '#00FF88'; ctx.fillText(T.ready, cx, cy + 0.5);
+      ctx.globalAlpha = 1;
+    }
+    if (allOk && !S.readyOn && now > (S.readyAt || 0)){ S.readyAt = now + 900; SND.tone(1568, 0.07, 'sine', 0.045); SND.tone(2093, 0.09, 'sine', 0.035, 0, 0.06); }
+    S.readyOn = allOk;
+  } else S.readyOn = false;
   ctx.restore();
   /* 연료 부족 */
   if (ship.fuel / st.fuel < 0.22 && ship.fuel > 0 && Math.sin(now * 0.012) > 0){
@@ -1670,15 +1719,20 @@ function roundRect(x, y, w, h, r){
 }
 
 // ============ EVENTS ============
-function showLanded(){
-  const ship = S.ship, st = STAGES[S.stage], r = S.result;
+/* 스테이지 점수 — 공식은 그대로(2026-10 착지 순간 점수 팝을 위해 함수로만 뺐다) */
+function stageScoreOf(ship, r){
   const fuelBonus = Math.floor(ship.fuel * 10);
   const softBonus = Math.floor((1 - clamp(r.vyN, 0, 1)) * 400);
   const driftBonus = Math.floor((1 - clamp(r.vxN, 0, 1)) * 150);
   const angleBonus = Math.floor((1 - clamp(r.aN, 0, 1)) * 250);
   const centerBonus = Math.floor((1 - clamp(r.cN, 0, 1)) * 200);
   const perfectBonus = r.grade === 'perfect' ? 500 : 0;
-  const stageScore = 1000 + fuelBonus + softBonus + driftBonus + angleBonus + centerBonus + perfectBonus;
+  return 1000 + fuelBonus + softBonus + driftBonus + angleBonus + centerBonus + perfectBonus;
+}
+function showLanded(){
+  const ship = S.ship, st = STAGES[S.stage], r = S.result;
+  const stageScore = stageScoreOf(ship, r);
+  const prevBest = S.best;
   S.totalScore += stageScore;
   if (S.totalScore > S.best){
     S.best = S.totalScore;
@@ -1689,6 +1743,7 @@ function showLanded(){
     document.getElementById('completeBest').textContent = S.best.toLocaleString();
     setCardPilot(completeOv, 'cheer');
     completeOv.classList.add('show'); lpNav(completeOv);
+    ldReveal(document.getElementById('completeScore'), S.totalScore, document.getElementById('completeBest'), prevBest);
   } else {
     document.getElementById('winScore').textContent = stageScore.toLocaleString();
     document.getElementById('winBest').textContent = S.best.toLocaleString();
@@ -1701,7 +1756,37 @@ function showLanded(){
     document.getElementById('winSub').textContent = T['s_' + r.grade];
     setCardPilot(winOv, r.grade === 'hard' ? 'happy' : 'cheer');
     winOv.classList.add('show'); lpNav(winOv); try{ window.lpMountAds && window.lpMountAds(); }catch(_){}
+    ldReveal(document.getElementById('winScore'), stageScore, document.getElementById('winBest'), prevBest);
   }
+}
+/* 결과 공개 — 점수가 0 에서 차르륵(끝으로 갈수록 느리게), 이번 판 누적이 이전 최고를 넘었으면 BEST 칸에 도장 쾅.
+   tetris·brick·snake·pacman(2026-10-01)과 같은 lp-nb-stamp. 첫 기록(이전 최고 0)은 도장 없음 */
+let ldRevealTok = 0;
+function ldReveal(el, to, bestEl, prevBest){
+  const tok = ++ldRevealTok;
+  document.querySelectorAll('.lp-nb-stamp').forEach(n => n.remove());
+  const isNew = prevBest > 0 && S.totalScore > prevBest;
+  const stamp = () => {
+    if (!isNew || !bestEl) return;
+    const st = document.createElement('div');
+    st.className = 'lp-nb-stamp'; st.setAttribute('aria-hidden', 'true'); st.textContent = 'NEW BEST!';
+    bestEl.parentNode.appendChild(st);
+    requestAnimationFrame(() => st.classList.add('on'));
+    [880, 1175, 1568].forEach((f, i) => SND.tone(f, 0.18, 'triangle', 0.09, 0, i * 0.06));
+    vib([18, 40, 30]);
+  };
+  if (!el) return;
+  el.classList.remove('cnt-done');
+  if (RM || to <= 0){ el.textContent = to.toLocaleString(); stamp(); return; }
+  const t0 = performance.now(); let lastTick = 0;
+  (function step(){
+    if (tok !== ldRevealTok) return;
+    const now = performance.now(), k = Math.min(1, (now - t0) / 720), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = Math.round(to * e).toLocaleString();
+    if (k < 1 && now - lastTick > 70){ lastTick = now; SND.tone(1200 + k * 600, 0.03, 'square', 0.025); }
+    if (k < 1) requestAnimationFrame(step);
+    else { el.classList.add('cnt-done'); stamp(); }
+  })();
 }
 function showCrashed(){
   const ship = S.ship, st = STAGES[S.stage], r = S.result;
@@ -1726,7 +1811,7 @@ function lpNav(ov){
 }
 function goIntro(){
   S.running = false; S.paused = false; S.phase = 'intro';
-  S.stage = 0; S.totalScore = 0;
+  S.stage = 0; S.totalScore = 0; perfStreak = 0;
   S.thrust = { left:false, right:false, main:false };
   S.canvasThrust = false;
   document.querySelectorAll('.ctrl-btn').forEach(b => b.classList.remove('pressed', 'cue'));
@@ -1772,7 +1857,7 @@ function startStage(stage){
   pauseOv.classList.remove('show');
   updateStatsUI();
 }
-function startGame(){ SND.unlock(); S.totalScore = 0; try{ if(window.LpBgm){ window.LpBgm.start(); } else { window.__lpBgmWanted = true; } }catch(_){} startStage(0); }
+function startGame(){ SND.unlock(); S.totalScore = 0; perfStreak = 0; try{ if(window.LpBgm){ window.LpBgm.start(); } else { window.__lpBgmWanted = true; } }catch(_){} startStage(0); }
 
 function nextStage(){
   if (S.stage + 1 < STAGES.length) startStage(S.stage + 1);
@@ -1783,6 +1868,7 @@ function retry(){
      최고점을 무한히 부풀릴 수 있었다 (2026-08-21).
      착륙 연출 중(점수 반영 전) RETRY 는 반영 자체를 건너뛴다. */
   if (typeof S.scoreAtStageStart === 'number') S.totalScore = S.scoreAtStageStart;
+  perfStreak = 0;
   startStage(S.stage);
 }
 function togglePause(force){
@@ -2044,12 +2130,14 @@ function emitGroundDust(dt){
 }
 
 /* ---- 도장(PERFECT LANDING) · 슬로모션 · 탈출 캡슐 ---- */
-let stamp = null, slowUntil = 0;
-function timeK(n){ return n < slowUntil ? 0.3 : 1; }
-function showStamp(text, color, sub){ stamp = { text, color, sub: sub || '', t0: performance.now(), dur: 1700 }; }
+let stamp = null, slowUntil = 0, hitUntil = 0, perfStreak = 0, squash = null;
+/* 히트스톱(2026-10) — 닿는 순간 입자·고리·글자가 한 박자 멈췄다 터진다. 조종 입력·물리는 이미 끝난 뒤라 지연 없음 */
+function timeK(n){ return n < hitUntil ? 0 : n < slowUntil ? 0.3 : 1; }
+function showStamp(text, color, sub, delay){ stamp = { text, color, sub: sub || '', t0: performance.now() + (delay || 0), dur: 1700 }; }
 function drawStamp(n){
   if (!stamp) return;
   const t = (n - stamp.t0) / stamp.dur;
+  if (t < 0) return;
   if (t >= 1){ stamp = null; return; }
   const inK = Math.min(1, t / 0.12);
   const sc = RM ? 1 : (t < 0.12 ? 1.8 - 0.8 * (1 - Math.pow(1 - inK, 3)) : 1);
@@ -2121,6 +2209,21 @@ function drawPod(n, dt){
   ctx.restore(); ctx.globalAlpha = 1;
 }
 
+/* ---- 점화 킥(2026-10) — MAIN 을 누르는 순간 노즐에서 '퍽' 하는 연기 고리 + 낮은 쿵. 연타 소음 방지 120ms ---- */
+let ignPrev = 0, ignAt = 0;
+function tickIgnition(n){
+  const ship = S.ship;
+  const want = !!((S.thrust.main || S.canvasThrust) && ship && ship.fuel > 0 && S.phase === 'fly');
+  if (want && !ignPrev && n - ignAt > 120){
+    ignAt = n;
+    const nz = toWorld(ship, 0, 18), st = STAGES[S.stage];
+    S.rings.push({ x: nz.x, y: nz.y + 2, t: 0, dur: 0.22, r0: 3, r1: 20, rgb: '255,200,140', w: 1.6, flat: true });
+    if (st.kind !== 'moon') for (let i = 0; i < (tier ? 2 : 4); i++){ const a = Math.PI * (i / 3), d = Math.cos(a); S.parts.push({ k: 'smoke', x: nz.x + d * 4, y: nz.y + 4, vx: d * 60 + ship.vx * 0.5, vy: 30 + ship.vy * 0.5, life: 0.5 + Math.random() * 0.3, max: 0.8, r: 3 + Math.random() * 2 }); }
+    SND.tone(72, 0.09, 'sine', 0.16, 40); SND.burst(0.06, 0.12, 2600);
+  }
+  ignPrev = want;
+}
+
 /* ---- 소리 신호: 다리 전개 철컥 · 고도 경보(주차 센서처럼 땅이 가까울수록 빨라짐) · 저연료 경보 ---- */
 let legPrev = 0, beepAt = 0, fuelBeepAt = 0;
 function tickImpact(n, dt){
@@ -2172,7 +2275,7 @@ setCardPilot(introOv, 'salute');
     const jobs = STAGES.map(st => ['900 15px Orbitron, "Noto Sans KR", sans-serif', st.name]);
     jobs.push(['900 21px Orbitron, sans-serif', 'PERFECT LANDING'], ['800 9px Orbitron, "Noto Sans KR", sans-serif', LANG === 'ko' ? '깃털처럼, 정중앙에' : 'Feather-soft, dead center'],
               ['900 15px Orbitron, sans-serif', T.g_good + ' ' + T.g_hard], ['900 14px Orbitron, sans-serif', T.burn], ['900 8px Orbitron, sans-serif', '0123456789.°'],
-              ['800 7px JetBrains Mono, monospace', '0123456789°' + T.stop + T.wind], ['900 12px Orbitron, sans-serif', '!♪★…']);
+              ['800 7px JetBrains Mono, monospace', '0123456789°' + T.stop + T.wind], ['900 12px Orbitron, sans-serif', '!♪★…'], ['900 21px Orbitron, sans-serif', 'PERFECT ×2345'], ['900 7.5px Orbitron, "Noto Sans KR", sans-serif', T.ready], ['900 12px Orbitron, sans-serif', '+0123456789,']);
     for (const j of jobs){ x.clearRect(0, 0, 460, 40); x.font = j[0]; x.fillText(j[1], 2, 28); }
   }catch(_){} };
   const go = () => window.requestIdleCallback ? requestIdleCallback(run, { timeout: 1500 }) : setTimeout(run, 300);
@@ -2183,7 +2286,7 @@ setCardPilot(introOv, 'salute');
 window.__lander = { S, startStage: (i) => startStage(i), tier: () => tier, setTier: (t) => { tier = clamp(t, 0, 2); fitCanvas(); }, onFrame: null };
 
 function resetImpact(){
-  stamp = null; slowUntil = 0; pod = null; S.scorch = null; legPrev = 0; beepAt = 0; fuelBeepAt = 0; dustAcc = 0;
+  stamp = null; slowUntil = 0; hitUntil = 0; squash = null; ignPrev = 0; pod = null; S.scorch = null; legPrev = 0; beepAt = 0; fuelBeepAt = 0; dustAcc = 0;
   PL.ev = null; PL.evUntil = 0; PL.crackUntil = 0; PL.fogUntil = 0; PL.emoteUntil = 0; PL.ledUntil = 0; PL.base = 'focus';
 }
 function landFx(grade, x, gy, vy){
@@ -2196,17 +2299,29 @@ function landFx(grade, x, gy, vy){
   }
   S.rings.push({ x, y: gy, t: -0.05, dur: 0.7, r0: 10, r1: 90, rgb: '220,200,170', w: 1.4, flat: true });
   SND.burst(0.12, 0.3, 1600); SND.tone(90, 0.16, 'sine', 0.3, 50);
+  /* 히트스톱 + 찌그러짐 — 세게 닿을수록 길게 멈추고 더 눌린다. 화면은 그대로(흔들림 없음) */
+  const vyN = clamp(vy / st.maxVy, 0, 1);
+  if (!RM) hitUntil = n + 45 + vyN * 45;
+  squash = { t0: n + (RM ? 0 : 45 + vyN * 45), amp: RM ? 0 : 0.05 + vyN * 0.11 };
+  /* 점수 미리보기 — showLanded 와 같은 공식(stageScoreOf). 등급 글자 아래에서 금빛으로 솟는다 */
+  try { const sc = stageScoreOf(S.ship, S.result); S.popups.push({ text: '+' + sc.toLocaleString(), x, y: S.ship.y - (grade === 'perfect' ? 30 : 26), t: -0.08, dur: 1.5, color: '#FFE66D', size: 12 }); } catch(_){}
+  if (grade !== 'perfect') perfStreak = 0;
   if (grade === 'perfect'){
+    perfStreak++;
+    /* 연속 PERFECT — 도장 글자·색·차임 음높이가 단계마다 오른다(점수와 무관한 표시) */
+    const stk = perfStreak, scol = stk >= 4 ? '#FF66CC' : stk >= 3 ? '#00E5FF' : stk >= 2 ? '#7CFFB2' : '#FFE66D';
     lmood('cheer', 2600, 3, '★', '255,230,109');
-    showStamp('PERFECT LANDING', '#FFE66D', LANG === 'ko' ? '깃털처럼, 정중앙에' : 'Feather-soft, dead center');
-    if (!RM) slowUntil = n + 650;
+    showStamp(stk >= 2 ? 'PERFECT ×' + stk : 'PERFECT LANDING', scol, LANG === 'ko' ? (stk >= 2 ? '연속 완벽 착륙!' : '깃털처럼, 정중앙에') : (stk >= 2 ? 'Perfect streak!' : 'Feather-soft, dead center'), RM ? 0 : 60);
+    if (!RM) slowUntil = n + 650 + 90;
     const cols = ['#FFE66D', '#00D9FF', '#FF66CC', '#00FF88', '#FF9A3C'];
     for (let i = 0; i < (tier ? 24 : 44); i++){
       const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8, sp = 120 + Math.random() * 180;
       S.parts.push({ k: 'conf', x: x + (Math.random() - 0.5) * 20, y: S.ship.y - 20, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1.6 + Math.random() * 0.8, max: 2.4, r: 1.6 + Math.random() * 1.4, rot: Math.random() * 6, spin: (Math.random() - 0.5) * 16, col: cols[i % cols.length] });
     }
-    [1047, 1319, 1568, 2093].forEach((f, i) => SND.tone(f, 0.5, 'triangle', 0.08, 0, 0.35 + i * 0.07));
-    flash('255,240,190', 0.1, 260);
+    const up = Math.pow(2, Math.min(5, stk - 1) * 2 / 12);
+    [1047, 1319, 1568, 2093].forEach((f, i) => SND.tone(f * up, 0.5, 'triangle', 0.08, 0, 0.35 + i * 0.07));
+    if (stk >= 2) SND.tone(2637 * up, 0.35, 'sine', 0.05, 0, 0.66);
+    flash('255,240,190', 0.1, 110);
   } else if (grade === 'good'){
     lmood('happy', 1800, 2, '♪', '0,255,136');
   } else {
@@ -2216,6 +2331,8 @@ function landFx(grade, x, gy, vy){
 }
 function crashFx(reason, cx, cy, ship){
   const st = STAGES[S.stage];
+  perfStreak = 0;
+  if (!RM){ hitUntil = performance.now() + 70; S.boom.t0 += 70; }
   S.boom.dx = (Math.random() < 0.5 ? -1 : 1) * (10 + Math.random() * 8);
   lmood('dizzy', 99999, 9, '!', '255,70,110');
   PL.crackUntil = performance.now() + 99999;
@@ -2260,6 +2377,7 @@ function updateStatsUI(){
   elVel.innerHTML = (vy >= 0 ? '↓' : '↑') + fmt(Math.abs(vy), 1);
   cellVel.classList.toggle('fast', ship.vy > st.maxVy * 1.3);
   cellVel.classList.toggle('warn', ship.vy > st.maxVy && ship.vy <= st.maxVy * 1.3);
+  cellVel.classList.toggle('safe', S.phase === 'fly' && alt < 7.5 && ship.vy > 3 && ship.vy <= st.maxVy);
 }
 
 // ============ LOOP ============
@@ -2275,7 +2393,7 @@ function loop(ts){
       let n = 0;
       while (S.acc >= STEP && n < 8){ step(STEP); S.acc -= STEP; n++; if (S.phase !== 'fly') break; }
       if (n >= 8) S.acc = 0;
-      emitExhaust(dt); emitRcs(); emitGroundDust(dt);
+      emitExhaust(dt); emitRcs(); emitGroundDust(dt); tickIgnition(now);
       SND.engine(S.ship ? S.ship.throttle : 0, S.ship && S.ship.fuel > 0 && (S.thrust.left || S.thrust.right));
     }
     updateParts(dt);
