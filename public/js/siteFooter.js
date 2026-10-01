@@ -495,6 +495,23 @@ try{
             document.body.appendChild(lib);
         }
     }
+    /* 2026-10-02 CWV — 방·소셜 모듈(lpRoom·lpHostCtl·lpMultiplayer·lpSocial·lpActivity·lpPresence·lpInvite·lpNotify, ~120KB)
+       묶음. 페이지가 window.__LP_LAZY_SOCIAL=1 로 옵트인하면(지금은 홈 5종만) '조용한 방문자'에 한해 첫 화면을 다 그린 뒤
+       (load + idle) 또는 첫 터치·키 입력 때 싣는다 — 모바일 3G 에서 이 묶음이 첫 화면 타일 이미지와 대역폭을 다퉜다.
+       로그인 세션·방 기록·방 링크가 있으면 지금처럼 바로 싣는다(그 사람에게는 시작 시 하는 일이 있다).
+       게임 페이지(isGamePage)는 옵트인과 무관하게 항상 바로 — 동작 변화 없음. */
+    function lprQuietVisitor(){
+        try{
+            if(/[?&](room|r|lpr|pin|rooms)=/.test(location.search))return false;
+            for(var i=0;i<localStorage.length;i++){
+                var k=localStorage.key(i)||'';
+                if(/^sb-.+-auth-token$/.test(k)||k==='lp_profile_cache_v1'||k==='lp_lastHostRoom'||k==='lp_hostTransit')return false;
+            }
+            if(sessionStorage.getItem('lp_guestTransit')||sessionStorage.getItem('lpr_active')||sessionStorage.getItem('lpr_v2'))return false;
+            return true;
+        }catch(_){return false}
+    }
+    function lprSocialLoad(){
     if(lprMode.mode==='v1')lprLoadV1();
     else if(lprMode.mode==='v2')lprLoadV2();
     else if(lprMode.mode==='legacy'){
@@ -578,6 +595,18 @@ try{
         ln.defer=true;
         document.body.appendChild(ln);
     }
+    }
+    if(!isGamePage&&window.__LP_LAZY_SOCIAL===1&&lprQuietVisitor()){
+        var lprSocialDone=false,lprSocialEv=['pointerdown','keydown','touchstart'];
+        var lprSocialGo=function(){
+            if(lprSocialDone)return;lprSocialDone=true;
+            lprSocialEv.forEach(function(t){window.removeEventListener(t,lprSocialGo,true)});
+            lprSocialLoad();
+        };
+        lprSocialEv.forEach(function(t){window.addEventListener(t,lprSocialGo,{capture:true,passive:true})});
+        var lprSocialIdle=function(){if(window.requestIdleCallback)requestIdleCallback(lprSocialGo,{timeout:2000});else setTimeout(lprSocialGo,200)};
+        if(document.readyState==='complete')lprSocialIdle();else window.addEventListener('load',lprSocialIdle);
+    }else lprSocialLoad();
 
     /* Reading aids (sticky TOC + top progress bar) — only on blog post
        pages, not the blog index, games, or other pages. The script self-

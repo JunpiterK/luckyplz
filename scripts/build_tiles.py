@@ -4,7 +4,12 @@
 - 그림자 캐처가 프레임 가장자리 바닥까지 옅은 알파(10~30)를 남긴다. 그대로 자르면 타일 위에
   네모난 얼룩이 생기므로, 장난감 불투명 영역 밖의 알파는 거리 기반으로 부드럽게 지운다
 - 자른 뒤 정사각 여백을 똑같이 줘서 9종의 시각 크기를 맞춘다
+- 축소판(s160·s256·s384/) 도 함께 만든다 — 홈·아케이드가 srcset 으로 화면에 맞는 크기만 받는다.
+  모바일 3열 타일 아이콘은 ~80px(DPR 2.6 → ~210px) 인데 560px 원본을 9장 받으면 첫 화면 이미지가
+  500KB 를 넘어 LCP 를 끌었다(2026-10-02 CWV 측정). 원본 560px 은 그대로 두고 그 webp 에서 줄인다
 실행: python scripts/build_tiles.py [id ...]
+      python scripts/build_tiles.py --sizes      # 이미 있는 toy-*.webp 전부의 축소판만 다시 만든다
+타일 webp 를 다른 방법으로 바꿨다면 반드시 --sizes 를 다시 돌릴 것 — 축소판이 옛 그림으로 남는다
 """
 import os
 import sys
@@ -16,6 +21,7 @@ DST = os.path.join(ROOT, "public", "assets", "tiles")
 IDS = ['roulette', 'car-racing', 'glory-racing', 'dice', 'ladder', 'bingo', 'team', 'retro', 'balloon']
 OUT = 560      # 4K 3열에서 아이콘 ≈150px × DPR 2 + 여유
 PAD = 0.04
+SIZES = (160, 256, 384)   # srcset 축소판 폭 — public/assets/tiles/s<N>/toy-<id>.webp
 
 
 def build(gid):
@@ -42,8 +48,29 @@ def build(gid):
     out = os.path.join(DST, "toy-%s.webp" % gid)
     sq.save(out, "WEBP", quality=88, method=6)
     print(gid, "src", bb, "->", os.path.getsize(out) // 1024, "KB")
+    build_sizes("toy-%s" % gid)
+
+
+def build_sizes(name):
+    """public/assets/tiles/<name>.webp(560 원본) → s<N>/<name>.webp. 알파 가장자리 번짐을 막으려고
+    premultiplied(RGBa) 상태에서 줄인다."""
+    src = os.path.join(DST, name + ".webp")
+    im = Image.open(src).convert("RGBA").convert("RGBa")
+    out = []
+    for n in SIZES:
+        d = os.path.join(DST, "s%d" % n)
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, name + ".webp")
+        im.resize((n, n), Image.LANCZOS).convert("RGBA").save(p, "WEBP", quality=88, method=6)
+        out.append("%d:%dKB" % (n, (os.path.getsize(p) + 512) // 1024))
+    print(name, "sizes", " ".join(out))
 
 
 if __name__ == "__main__":
-    for gid in (sys.argv[1:] or IDS):
-        build(gid)
+    if sys.argv[1:2] == ["--sizes"]:
+        for f in sorted(os.listdir(DST)):
+            if f.startswith("toy-") and f.endswith(".webp"):
+                build_sizes(f[:-5])
+    else:
+        for gid in (sys.argv[1:] or IDS):
+            build(gid)
