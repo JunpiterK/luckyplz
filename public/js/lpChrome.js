@@ -305,14 +305,16 @@
         rafPending = false;
         if (!document.body || !ensureDock()) return;
         adopt();
-        placeTop();
+        var heavy = heavyDirty || Date.now() - heavyAt > 2000;
+        if (heavy) { heavyDirty = false; heavyAt = Date.now(); placeTop(); }
 
         var kids = dock.querySelectorAll(KIDS_SEL), any = false;
         for (var i = 0; i < kids.length; i++) if (getComputedStyle(kids[i]).display !== 'none') { any = true; break; }
         dock.classList.toggle('is-empty', !any);
 
         var hard = playingHard();
-        if (!scrolling) collide = !hard && dockCollides();
+        if (!scrolling && heavy) collide = !hard && dockCollides();
+        else if (hard) collide = false;
         var compactWanted = hard || scrolledAway() || playingSoft() || collide;
         var userOpen = Date.now() < expandedUntil;
         var compact = compactWanted && !userOpen;
@@ -320,7 +322,7 @@
 
         dock.classList.toggle('is-compact', compact);
         if (!compact || scrolling) { ghost = false; ghostAt = 0; }
-        else if (!hard || Date.now() - ghostAt > 1500) { ghost = handleCollides(); ghostAt = Date.now(); }
+        else if ((heavy && !hard) || Date.now() - ghostAt > 1500) { ghost = handleCollides(); ghostAt = Date.now(); }
         dock.classList.toggle('is-ghost', ghost);
         dock.classList.toggle('is-scrolling', scrolling);
         handle.setAttribute('aria-expanded', compact ? 'false' : 'true');
@@ -337,12 +339,17 @@
 
         /* 🎮 — 플레이 중·스크롤 중에는 CSS 가 숨긴다. 그 밖에서는 아래에 누를 것이 있으면 숨긴다 */
         var fab = document.getElementById('lpSwFab');
-        if (fab && !hard && !scrolling && getComputedStyle(fab).display !== 'none') {
+        if (heavy && fab && !hard && !scrolling && getComputedStyle(fab).display !== 'none') {
             fab.classList.toggle('lp-obstructed', fabObstructed(fab));
         }
     }
     /* rAF 로 한 프레임에 한 번 — 백그라운드 탭처럼 rAF 가 멈추는 곳을 위해 타이머 폴백도 건다 */
-    function schedule() {
+    /* 2026-10-01 성능: 0.45s 폴링은 '플레이 중인가'만 가볍게 본다. 겹침 검사(elementsFromPoint 격자·배치 강제 계산)는
+       화면이 바뀐 신호(변형 관찰·리사이즈·스크롤·누름·언어·전체화면)가 있었거나 2초가 지났을 때만 — 4x 스로틀에서 한 번에 20~30ms 였다 */
+    var heavyDirty = true, heavyAt = 0;
+    function schedulePoll() { schedRun(); }
+    function schedule() { heavyDirty = true; schedRun(); }
+    function schedRun() {
         if (rafPending) return;
         rafPending = true;
         var done = false;
@@ -421,7 +428,7 @@
     window.addEventListener('lp-fullscreen-change', schedule);
     document.addEventListener('lp:langchanged', schedule);
     /* 게임 상태(isActive)는 이벤트가 없어서 가볍게 폴링 — 화면이 보일 때만 */
-    setInterval(function () { if (document.visibilityState !== 'hidden') schedule(); }, 450);
+    setInterval(function () { if (document.visibilityState !== 'hidden') schedulePoll(); }, 450);
 
     if (document.body) boot();
     else document.addEventListener('DOMContentLoaded', boot);
