@@ -12278,26 +12278,66 @@ function _hideMissionBannerNow(){
     banner.classList.remove('show');
 }
 
-/* P1 — 로드 뒤 한가할 때 배너에 6개 언어 문구·이모지를 한 번 넣어 글꼴·글리프를 미리 준비한다
-   (보이지 않는 상태). 첫 미션 프레임이 폰트 적재·글자 배치를 떠안지 않게 */
+/* P1 — 로드 뒤 한가할 때 배너에 문구·이모지를 한 번 넣어 글꼴·글리프를 미리 준비한다
+   (보이지 않는 상태). 첫 미션 프레임이 폰트 적재·글자 배치를 떠안지 않게.
+   2026-10-01 첫 로드 성능 — 예전엔 6개 언어 문구를 한꺼번에 넣어 CPU 4배 스로틀에서 이 한 번의 배치가
+   580~770ms(일·중 글꼴 적재 + 긴 글자열 셰이핑) 메인 스레드를 막았다. 배너는 지금 언어(없으면 en)로만 뜨므로
+   지금 언어 + en 만 데우고, 언어를 바꾸면 그 언어를 한가할 때 데운다(같은 언어는 한 번만) */
 function _szPrewarmMissionBanner(){
     try{
         const t = document.getElementById('mbTitle'), sub = document.getElementById('mbSubtitle'), ic = document.getElementById('mbIcon'), tm = document.getElementById('mbTimer');
         if(!t || !sub) return;
+        const done = _szPrewarmMissionBanner._done || (_szPrewarmMissionBanner._done = new Set());
+        if(!_szPrewarmMissionBanner._hook){
+            _szPrewarmMissionBanner._hook = 1;
+            try{ if(window.LpI18n && typeof LpI18n.onChange === 'function') LpI18n.onChange(() => { const f = () => { try{ _szPrewarmMissionBanner(); }catch(_){} }; if(window.requestIdleCallback) requestIdleCallback(f, {timeout: 2000}); else setTimeout(f, 300); }); }catch(_){}
+        }
+        const want = new Set(['en']);
+        try{ want.add(_missionLang()); }catch(_){}
+        try{ want.add(_szCommLang()); }catch(_){}
+        try{ want.add(szZL()); }catch(_){}
+        for(const L of [...want]) if(done.has(L)) want.delete(L);
+        if(!want.size) return;
         const parts = [];
-        try{ for(const L in SZ_COMM_TXT){ const o = SZ_COMM_TXT[L]; for(const k in o) parts.push(String(o[k])); } }catch(_){}
-        try{ parts.push(...Object.values(MISSION_TITLES_KO), ...Object.values(MISSION_TITLES_EN)); }catch(_){}
-        try{ parts.push(...Object.values(MISSION_SUBTITLES_KO), ...Object.values(MISSION_SUBTITLES_EN)); }catch(_){}
-        try{ for(const L in SZB_TXT){ const o = SZB_TXT[L]; for(const k of ['t2', 'd2', 't5', 'd5', 't19', 'd19']) if(o[k]) parts.push(String(o[k])); } }catch(_){}
-        try{ for(const L in SZSAT_I18N){ const o = SZSAT_I18N[L]; for(const k in o) parts.push(String(o[k])); } }catch(_){}   /* C — SAT 고도화 문구 */
-        const o0 = [t.textContent, sub.textContent, ic ? ic.textContent : '', tm ? tm.textContent : ''];
-        t.textContent = parts.join(' ') + ' ✓ ✗ ⚡ —';
-        sub.textContent = parts.slice().reverse().join(' ');
-        if(ic) ic.textContent = '📡✨✗🏃';
-        if(tm) tm.textContent = '25✓—';
-        void t.offsetWidth;   /* 여기서 한 번 배치(한가한 때) */
-        t.textContent = o0[0]; sub.textContent = o0[1]; if(ic) ic.textContent = o0[2]; if(tm) tm.textContent = o0[3];
+        try{ for(const L in SZ_COMM_TXT){ if(!want.has(L)) continue; const o = SZ_COMM_TXT[L]; for(const k in o) parts.push(String(o[k])); } }catch(_){}
+        try{ if(want.has('ko')) parts.push(...Object.values(MISSION_TITLES_KO)); if([...want].some(L => L !== 'ko')) parts.push(...Object.values(MISSION_TITLES_EN)); }catch(_){}
+        try{ if(want.has('ko')) parts.push(...Object.values(MISSION_SUBTITLES_KO)); if([...want].some(L => L !== 'ko')) parts.push(...Object.values(MISSION_SUBTITLES_EN)); }catch(_){}
+        try{ for(const L in SZB_TXT){ if(!want.has(L)) continue; const o = SZB_TXT[L]; for(const k of ['t2', 'd2', 't5', 'd5', 't19', 'd19']) if(o[k]) parts.push(String(o[k])); } }catch(_){}
+        try{ for(const L in SZSAT_I18N){ if(!want.has(L)) continue; const o = SZSAT_I18N[L]; for(const k in o) parts.push(String(o[k])); } }catch(_){}   /* C — SAT 고도화 문구 */
+        /* 문장 전체 대신 쓰인 글자(grapheme)를 한 번씩만 — 글꼴 적재·글리프 준비는 같고 셰이핑할 글자 수가 1/10 로 준다.
+           제목(굵게)·부제(보통)는 글꼴 파일이 달라 따로 배치한다. 매번 같은 작업 안에서 원래 글자로 되돌린다 */
+        const seen = new Set(), g = [];
+        let seg = null; try{ seg = (window.Intl && Intl.Segmenter) ? new Intl.Segmenter() : null; }catch(_){}
+        for(const p of parts){ const it = seg ? Array.from(seg.segment(p), x => x.segment) : Array.from(p); for(const c of it){ if(/\s/.test(c) || seen.has(c)) continue; seen.add(c); g.push(c); } }
+        /* 글자를 문자 체계별로 묶어(한글 / 한자·가나 / 라틴 등 / 기호·이모지) 묶음마다 한가한 틈 한 번씩 —
+           한 번의 배치가 글꼴 파일 하나 정도만 적재하도록 나눈다(4배 스로틀에서 한 덩어리 230~290ms → 묶음당 ~100ms) */
+        const grp = { h: [], c: [], l: [], s: [] };
+        for(const c of g){
+            let k = 'l';
+            try{ if(/\p{Script=Hangul}/u.test(c)) k = 'h'; else if(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(c)) k = 'c'; else if(!/[\p{L}\p{N}]/u.test(c)) k = 's'; }catch(_){}
+            grp[k].push(c);
+        }
+        const jobs = [];
+        for(const k of ['h', 'c', 'l', 's']) if(grp[k].length) jobs.push([t, grp[k].join('') + (k === 's' ? ' ✓ ✗ ⚡ —' : ''), k === 's']);
+        for(const k of ['h', 'c', 'l', 's']) if(grp[k].length) jobs.push([sub, grp[k].slice().reverse().join(''), false]);
+        const warm = (el, txt, extra) => {
+            if(!el) return;
+            const o0 = [el.textContent, ic ? ic.textContent : '', tm ? tm.textContent : ''];
+            el.textContent = txt;
+            if(extra){ if(ic) ic.textContent = '📡✨✗🏃'; if(tm) tm.textContent = '25✓—'; }
+            void el.offsetWidth;   /* 여기서 한 번 배치(한가한 때) */
+            el.textContent = o0[0]; if(extra){ if(ic) ic.textContent = o0[1]; if(tm) tm.textContent = o0[2]; }
+        };
+        const next = () => { const j = jobs.shift(); if(!j) return; try{ warm(j[0], j[1], j[2]); }catch(_){} if(jobs.length){ if(window.requestIdleCallback) requestIdleCallback(next, {timeout: 1500}); else setTimeout(next, 60); } };
+        next();
+        for(const L of want) done.add(L);
     }catch(_){}
+}
+/* _szCommT 와 같은 언어 선택(SZ_COMM_TXT 에 없으면 en) */
+function _szCommLang(){
+    let l = 'en';
+    try{ if(window.LpI18n && typeof window.LpI18n.getLang === 'function') l = window.LpI18n.getLang() || 'en'; }catch(_){}
+    return SZ_COMM_TXT[l] ? l : 'en';
 }
 
 function _setSatBtnState(state){

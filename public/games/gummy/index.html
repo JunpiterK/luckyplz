@@ -1442,8 +1442,22 @@ const GL=(()=>{
     }
     const wanted=()=>{ try{ if(new URLSearchParams(location.search).get('gl')==='0') return false; }catch(_){} return true; };
     function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.async=true; s.onload=res; s.onerror=()=>rej(new Error('script '+src)); document.head.appendChild(s); }); }
-    function loadImg(src){ return new Promise((res,rej)=>{ const im=new Image(); im.decoding='async'; im.onload=()=>res(im); im.onerror=()=>rej(new Error('img '+src)); im.src=src; }); }
+    /* 2026-10-01 첫 로드 성능 — 예전엔 Pixi 실행·렌더러·아틀라스 업로드·셰이더 예열·글꼴 굽기를 한 덩어리로 돌려
+       CPU 4배 스로틀에서 1.1~1.6초짜리 긴 작업 하나가 메뉴 탭을 막았다. 지금은 단계마다 쉬어 가며(gap) 나눠 돌고,
+       아틀라스는 img.decode() 로 메인 스레드 밖에서 미리 푼다. 그리는 결과는 같다 */
+    function loadImg(src){ return new Promise((res,rej)=>{ const im=new Image(); im.decoding='async'; im.onload=()=>{ if(im.decode) im.decode().then(()=>res(im),()=>res(im)); else res(im); }; im.onerror=()=>rej(new Error('img '+src)); im.src=src; }); }
+    /* 한 단계 쉬기 — 입력·프레임이 사이에 끼어들 수 있게. 판이 돌고 있으면(카운트·플레이) 빨리 이어 간다 */
+    function gap(){ return new Promise(r=>{ const busy=G.state==='play'||G.state==='count'; if(!busy&&window.requestIdleCallback) requestIdleCallback(()=>r(),{timeout:250}); else setTimeout(r,busy?0:16); }); }
     function resFor(q){ const d=Math.min(window.devicePixelRatio||1,2); return q>=2?d:q===1?Math.min(d,1.5):1; }
+    /* 언제 올릴지 — 첫 화면(메뉴)이 먼저 반응하도록, 첫 입력(탭·키) 순간 또는 로드 뒤 한가할 때(약 4초) 중 빠른 쪽.
+       온라인 자동 참가 경로는 boot 에서 바로 start() 를 부른다. Canvas2D 가 그 사이 그대로 그린다 */
+    function soon(){
+        if(S.on||S.dead||S.loading) return;
+        let fired=false; const go=()=>{ if(fired) return; fired=true; try{ removeEventListener('pointerdown',go,true); removeEventListener('keydown',go,true); removeEventListener('touchstart',go,true); }catch(_){} start(); };
+        addEventListener('pointerdown',go,{capture:true,passive:true}); addEventListener('keydown',go,true); addEventListener('touchstart',go,{capture:true,passive:true});
+        const idle=()=>setTimeout(()=>{ if(window.requestIdleCallback) requestIdleCallback(go,{timeout:1500}); else go(); },4000);
+        if(document.readyState==='complete') idle(); else addEventListener('load',idle,{once:true});
+    }
     async function start(){
         if(S.on||S.dead||S.loading||!wanted()) { if(!wanted()){ S.dead=true; S.reason='?gl=0'; } return; }
         S.loading=true;
@@ -1451,6 +1465,7 @@ const GL=(()=>{
             const imgs=Promise.all([loadImg('/assets/gummy/gummy.webp?v=1'),loadImg('/assets/gummy/panda.webp?v=1')]);
             if(!window.PIXI) await loadScript('/vendor/pixi/8.21.0/pixi.min.js');
             const [a,p]=await imgs;
+            await gap();
             await init(a,p);
             S.on=true; STATIC=null; HUDK='';
         }catch(e){
@@ -1608,6 +1623,8 @@ void main(){
         try{ if(document.fonts&&document.fonts.load) await Promise.race([Promise.all(['700 72px Fredoka','72px Jua','900 72px "Noto Sans KR"'].map(f=>document.fonts.load(f,strs.join('')))),new Promise(r=>setTimeout(r,1500))]); }catch(_){}
         try{ P.BitmapFont.uninstall('gumStamp'); }catch(_){}
         let fill='#ffffff'; try{ fill=new P.FillGradient({end:{x:0,y:1},colorStops:[{offset:0,color:'#ffffff'},{offset:.55,color:'#f4f4f4'},{offset:1,color:'#c9c9c9'}]}); }catch(_){}
+        /* 한 번에 굽는다 — 몇 자씩 나눠 ensureCharacters 로 이어 구우면 Pixi 커닝 표(쌍을 재는 순서에 따라 값이
+           덮어써진다)가 달라져 글자 간격이 미세하게 바뀌었다(2026-10-01 실측). 그래서 이 단계 하나만 통째로 둔다 */
         P.BitmapFont.install({name:'gumStamp',chars,resolution:Math.min(2,window.devicePixelRatio||1),padding:6,
             style:{fontFamily:'Fredoka, Jua, "Noto Sans KR", sans-serif',fontWeight:'700',fontSize:72,fill,stroke:{color:'#2a0618',width:13,join:'round'},
                 dropShadow:{color:'#12020c',alpha:.6,blur:2,distance:5,angle:Math.PI/2}}});
@@ -1844,6 +1861,7 @@ void main(){
             background:0x140A24,backgroundAlpha:1,preference:'webgl',powerPreference:'high-performance',hello:false});
         if(!R||!R.gl) throw new Error('no webgl context');
         cvs.addEventListener('webglcontextlost',e=>{ if(!S.on) return; try{ e.preventDefault(); }catch(_){} S.dead=true; S.reason='context lost'; teardown(); });
+        await gap();
         const gl2=R.context&&R.context.webGLVersion===2;
         const src=new P.ImageSource({resource:atlas,autoGenerateMipmaps:!!gl2,scaleMode:'linear'});
         if(gl2) src.style.mipmapFilter='linear';
@@ -1852,8 +1870,13 @@ void main(){
         const ps=new P.ImageSource({resource:panda,autoGenerateMipmaps:!!gl2}); if(gl2) ps.style.mipmapFilter='linear';
         pandaPx=panda.naturalHeight;
         GA_PANDA.forEach((n,i)=>{ PF[n]=new P.Texture({source:ps,frame:new P.Rectangle(i*pandaPx,0,pandaPx,pandaPx)}); });
+        /* 아틀라스 업로드(+밉맵)를 첫 렌더에서 떼어 각자 한 단계로 — 렌더가 처음 쓸 때 하던 그 initSource 와 같다 */
+        await gap(); if(!R) throw new Error('renderer gone'); try{ R.texture.initSource(src); }catch(_){}
+        await gap(); if(!R) throw new Error('renderer gone'); try{ R.texture.initSource(ps); }catch(_){}
         makeTextures();
+        await gap();
         await installFont();
+        await gap();
         root=new P.Container();
         bg=new P.Sprite(P.Texture.EMPTY); par=new P.Container();
         views=[new View(),new View()];
@@ -1867,12 +1890,24 @@ void main(){
         for(const c of [views[0].root,views[1].root,fxN,fxA,txtL,par]) c.isRenderGroup=true;
         /* 셰이더 컴파일 확인 — 여기서 실패하면 catch 로 가서 Canvas2D 로 돈다 */
         relayout(true);
-        /* 예열 — 블룸 필터·도장 글자·컷인 띠 셰이더를 첫 연쇄 순간이 아니라 지금 컴파일해 둔다(첫 사용 끊김 방지) */
+        await gap();
+        /* 예열 — 블룸 필터·도장 글자·컷인 띠 셰이더를 첫 연쇄 순간이 아니라 지금 컴파일해 둔다(첫 사용 끊김 방지).
+           한 번에 다 그리면 텍스처 업로드 + 셰이더 3~4개 컴파일이 한 작업이 되므로, 판 → 블룸 → 도장 → 띠 순서로
+           한 장씩 그려 나눈다(컴파일되는 프로그램·올라가는 텍스처는 예전과 같다) */
+        if(!R) throw new Error('renderer gone');
+        R.render({container:root});
+        await gap(); if(!R) throw new Error('renderer gone');
         const w1=new P.Sprite(TX.star); w1.position.set(LW/2,LH/2); w1.alpha=.01; fxA.addChild(w1); fxA.filters=[bloom];
+        R.render({container:root});
+        await gap(); if(!R) throw new Error('renderer gone');
         const w2=stamp(24,'#ffffff','1'); w2.alpha=.01; txtL.addChild(w2);
+        R.render({container:root});
+        await gap(); if(!R) throw new Error('renderer gone');
         const w3=new P.TilingSprite({texture:TX.stripe,width:8,height:8}); w3.alpha=.01; topL.addChild(w3);
         R.render({container:root});
         w1.destroy(); w2.destroy(); w3.destroy(); fxA.filters=null;
+        await gap(); if(!R) throw new Error('renderer gone');
+        relayout(false);   /* 쉬는 사이 화면 크기가 바뀌었으면 맞춘다(같으면 아무것도 안 함) */
         R.render({container:root});
         const err=R.gl.getError&&R.gl.getError();
         if(err&&err!==R.gl.NO_ERROR&&err!==R.gl.CONTEXT_LOST_WEBGL){ /* 무시 가능한 상태 오류도 있어 치명으로 보지 않는다 */ }
@@ -2106,7 +2141,7 @@ void main(){
     }
     function setQuality(q){ S.q=clamp(q|0,0,2); S.res=resFor(S.q); relayout(true); }
     function lang(){ if(S.on&&fontLang&&fontLang!==LANG){ installFont().then(()=>{ if(cdTxt){ cdTxt.destroy(); cdTxt=null; cdKey=''; } }); } }
-    return {start,frame,lang,relayout:()=>relayout(false),setQuality,S,get on(){ return S.on; },get renderer(){ return R; },get _dbg(){ return {views,root,nextGoo,P}; }};
+    return {start,soon,frame,lang,relayout:()=>relayout(false),setQuality,S,get on(){ return S.on; },get renderer(){ return R; },get _dbg(){ return {views,root,nextGoo,P}; }};
 })();
 /* GL 모드의 2D 오버레이 — 점수·이름 같은 글자만(바뀔 때만 다시 그린다) */
 let HUDK='';
@@ -2760,7 +2795,7 @@ layout();
 (function boot(){
     let auto=null;
     try{ const q=new URLSearchParams(location.search); if(q.get('room')) auto={code:q.get('room'),pin:q.get('pin'),nick:q.get('nick')}; }catch(_){}
-    if(LPV2){ v2Boot(); kick(); setTimeout(()=>GL.start(),0); return; }
+    if(LPV2){ v2Boot(); kick(); let hot=!!auto; try{ hot=hot||!!(new URLSearchParams(location.search).get('r')||sessionStorage.getItem('lpr_active')); }catch(_){} if(hot) setTimeout(()=>GL.start(),0); else GL.soon(); return; }
     if(auto){
         G.mode='online'; showOv(null); G.state='lobby'; renderNet();
         collapsePanel();
@@ -2772,8 +2807,9 @@ layout();
         });
     }
     kick();
-    /* WebGL 렌더러는 첫 화면(Canvas2D) 뒤에 비동기로 올린다 — 실패하면 그대로 Canvas2D */
-    setTimeout(()=>GL.start(),0);
+    /* WebGL 렌더러는 첫 화면(Canvas2D) 뒤에 비동기로 올린다 — 실패하면 그대로 Canvas2D.
+       초대 링크(auto)로 들어오면 곧 판이 시작되니 바로, 아니면 첫 입력 또는 로드 뒤 한가할 때(GL.soon) */
+    if(auto) setTimeout(()=>GL.start(),0); else GL.soon();
 })();
 })();
 </script>
