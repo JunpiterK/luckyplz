@@ -90,17 +90,19 @@ body.online .brand{visibility:hidden}
 .pp.done{border-color:rgba(255,209,102,.55)}
 .pp-av{width:36px;height:36px;flex-shrink:0;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(circle at 34% 30%,rgba(var(--pc),.62),rgba(var(--pc),.16) 72%);box-shadow:inset 0 1px 2px rgba(255,255,255,.25),0 2px 6px rgba(0,0,0,.35)}
-.pp-av .pal{position:absolute;left:50%;bottom:-1px;width:136%;height:136%;margin-left:-68%;pointer-events:none;transform-origin:50% 92%}
+.pp-av .pal{position:absolute;left:50%;bottom:-1px;width:136%;height:136%;margin-left:-68%;pointer-events:none;transform-origin:50% 92%;will-change:transform}
 .pp.active .pp-av .pal{animation:ppBob 1.05s ease-in-out infinite}
 @keyframes ppBob{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-7%) scale(1.03,.98)}}
 /* 턴 시간 고리 — 온라인(턴 시간 있음)은 남은 시간만큼, 그 밖에는 가득 */
 .pp-av::before{content:'';position:absolute;inset:-4px;border-radius:50%;opacity:0;transition:opacity .2s;
   background:conic-gradient(rgb(var(--rc,var(--pc))) calc(var(--tp,1)*360deg),rgba(255,255,255,.16) 0);
   -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3.6px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3.6px),#000 calc(100% - 3px))}
-.pp.active .pp-av::before{opacity:1}
+body.timed .pp.active .pp-av::before{opacity:1}
 .pp-emo{position:absolute;left:50%;top:-20px;margin-left:-13px;width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 3px 8px rgba(0,0,0,.4);
   font-size:15px;line-height:26px;text-align:center;opacity:0;pointer-events:none;z-index:3}
-.pp-emo.show{animation:emoPop 1.5s ease-out forwards}
+.pp-emo.show,.pp-emo.show2{animation:emoPop 1.5s ease-out forwards}
+.pp-emo.show2{animation-name:emoPop2}
+@keyframes emoPop2{0%{opacity:0;transform:translateY(8px) scale(.4)}14%{opacity:1;transform:translateY(-4px) scale(1.18)}24%{transform:translateY(0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-6px) scale(.9)}}
 @keyframes emoPop{0%{opacity:0;transform:translateY(8px) scale(.4)}14%{opacity:1;transform:translateY(-4px) scale(1.18)}24%{transform:translateY(0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-6px) scale(.9)}}
 .pal{display:block;background-image:url(/assets/ludo/pals.webp);background-size:800% 400%;background-repeat:no-repeat}
 .pp-rank{position:absolute;bottom:-5px;right:-5px;min-width:19px;height:19px;border-radius:10px;padding:0 4px;font:900 10.5px/19px 'Orbitron',sans-serif;
@@ -719,12 +721,13 @@ function threatAt(s,seat,a,skip){
   }
   return n;
 }
-/* 봇 성격 — 자리(동물)마다 다르게 둔다. 값은 scoreMove 항목별 배수 */
+/* 봇 성격 — 자리(동물)마다 다르게 둔다. 값은 scoreMove 항목별 배수.
+   2026-09-30 헤드리스 몬테카를로(후보 1 대 옛 봇 3, 3000판 × 좌표 탐색)로 잡기·출발 가중치를 올렸다 */
 const PERS=[
-  {cap:1.45,risk:.6,out:1.0,run:1.0,safe:.75,chase:1.6},   /* 레서판다 돌격형 — 잡기에 달려들고 위험은 덜 본다 */
+  {cap:2.2,risk:.6,out:1.6,run:1.0,safe:.75,chase:1.6},    /* 레서판다 돌격형 — 잡기에 달려들고 위험은 덜 본다 */
   {cap:.95,risk:1.5,out:.9,run:.85,safe:1.7,chase:.6},     /* 고양이 신중형 — 안전칸을 찾고 위험을 피한다 */
   {cap:.9,risk:.95,out:.75,run:1.6,safe:1.0,chase:.8},     /* 여우 질주형 — 앞선 말을 끝까지 민다 */
-  {cap:1.1,risk:1.1,out:1.25,run:1.0,safe:1.1,chase:1.0}   /* 수달 균형형 — 말을 고루 꺼낸다 */
+  {cap:1.3,risk:1.0,out:1.8,run:1.0,safe:1.0,chase:1.0}    /* 수달 균형형 — 말을 고루 꺼낸다 */
 ];
 function scoreMove(s,seat,ti,d,W){
   W=W||PERS[seat]||PERS[3];
@@ -850,6 +853,7 @@ function layout(){
   buildBoard();
   drawAvatars();
   fabGap();
+  prewarm();
 }
 /* 공용 ⛶·? 버튼(좌상단 고정)이 왼쪽 위 플레이어 패널의 아바타를 덮으면 그 패널 안쪽만 비켜 준다 */
 function fabGap(){
@@ -997,7 +1001,15 @@ function buildBoard(){
 const PCELL=128,FOOT=.93,EXC={n:0,b:1,h:2,s:3,x:4,o:5,c:6,w:7};
 const PALIMG=new Image();let palReady=false;
 PALIMG.decoding='async';
-PALIMG.onload=()=>{palReady=true;pawnCache={}};
+PALIMG.onload=()=>{palReady=true;pawnCache={};prewarm()};
+/* 표정·크기별 스프라이트를 유휴 시간에 미리 굽는다 — 처음 쓰는 순간의 프레임 튐(실측 40ms, CPU 4배) 방지 */
+let warmT=0;
+function prewarm(){
+  clearTimeout(warmT);if(!palReady||!U)return;
+  const sizes=[Math.round(U*1.9),Math.round(U*1.9*.7)],jobs=[];
+  for(let s=0;s<4;s++)for(const ex of ['n','w','h','s','b','x','o','c'])for(const z of sizes)jobs.push([s,ex,z]);
+  (function step(){const t0=performance.now();while(jobs.length&&performance.now()-t0<4){const j=jobs.shift();palSprite(j[0],j[1],j[2])}if(jobs.length)warmT=setTimeout(step,30)})();
+}
 PALIMG.src='/assets/ludo/pals.webp';
 function palPos(seat,ex){return (EXC[ex||'n']*100/7)+'% '+(seat*100/3)+'%'}
 function palSprite(seat,ex,size){
@@ -1124,6 +1136,7 @@ function bonk(x,y){if(!fxOk())return;BONKS.push({x,y,t0:performance.now()})}
 function spikes(g,x,y,R,r,n,rot){g.beginPath();for(let i=0;i<n*2;i++){const a=rot+i*Math.PI/n;const rad=i%2?r:R;g.lineTo(x+Math.cos(a)*rad,y+Math.sin(a)*rad)}g.closePath()}
 
 let lastT=performance.now(),twinkT=0;
+const MV={k:'',a:[]};
 function draw(now){
   const dt=Math.min(50,now-lastT);lastT=now;
   const g=cx,N=cv.width,u=U;
@@ -1141,12 +1154,15 @@ function draw(now){
   const movSet=new Set(movable.map(t=>V.turn*4+t));
   /* 고를 수 있는 말의 길과 도착 칸 — 잡기는 빨강, 안전·골인은 금색 */
   if(movable.length){
-    const seen={},C=CLR[V.turn];
-    movable.forEach(t=>{
-      const from=V.tok[V.turn][t],to=from<0?0:from+V.dice,p=cellOf(V.turn,to,t),k=p[0]+','+p[1];
-      if(from>=0){g.fillStyle='rgba('+C.rgb+','+(.5+.3*pulse)+')';for(let r=from+1;r<to;r++){const q=cellOf(V.turn,r,t);g.beginPath();g.arc(q[0]*u,q[1]*u,u*.1,0,6.283);g.fill()}}
-      if(seen[k])return;seen[k]=1;
-      const cap=capturesAt(V,V.turn,to).length>0,gold=to===56||(to<=50&&SAFE.has(absOf(V.turn,to)));
+    const C=CLR[V.turn],mk=V.sid+':'+V.aid+':'+V.turn+':'+V.dice;
+    if(MV.k!==mk){MV.k=mk;const seen={};MV.a=movable.map(t=>{const from=V.tok[V.turn][t],to=from<0?0:from+V.dice,p=cellOf(V.turn,to,t),key=p[0]+','+p[1],dup=!!seen[key];seen[key]=1;
+      const path=[];if(from>=0)for(let r=from+1;r<to;r++)path.push(cellOf(V.turn,r,t));
+      return {p,path,dup,cap:capturesAt(V,V.turn,to).length>0,gold:to===56||(to<=50&&SAFE.has(absOf(V.turn,to)))}})}
+    g.fillStyle='rgba('+C.rgb+','+(.5+.3*pulse)+')';
+    MV.a.forEach(m=>m.path.forEach(q=>{g.beginPath();g.arc(q[0]*u,q[1]*u,u*.1,0,6.283);g.fill()}));
+    MV.a.forEach(m=>{
+      if(m.dup)return;
+      const p=m.p,cap=m.cap,gold=m.gold;
       const col=cap?'229,40,60':gold?'214,150,10':C.rgb;
       g.fillStyle='rgba('+col+','+(.2+.16*pulse)+')';g.beginPath();g.arc(p[0]*u,p[1]*u,u*.4,0,6.283);g.fill();
       g.save();g.setLineDash([u*.14,u*.1]);g.lineDashOffset=-now/40;g.strokeStyle='rgba('+col+','+(.7+.3*pulse)+')';g.lineWidth=u*.09;
@@ -1335,7 +1351,8 @@ const EMO={cap:['💥','😼','😏','🤗'],hit:['😤','😿','🥺','😢'],s
 function emote(i,kind,always){
   const st=V&&V.seats[i];if(!st||(!always&&st.kind!=='bot'))return;
   const el=document.querySelector('.pp[data-seat="'+i+'"] .pp-emo');if(!el)return;
-  el.textContent=(EMO[kind]||EMO.six)[i];el.classList.remove('show');void el.offsetWidth;el.classList.add('show');
+  /* 두 이름의 같은 애니메이션을 번갈아 — 다시 틀 때 강제 리플로(offsetWidth)가 필요 없다 */
+  el.textContent=(EMO[kind]||EMO.six)[i];const a=el.classList.contains('show')?'show2':'show';el.classList.remove('show','show2');el.classList.add(a);
 }
 function startRollAnim(prev,s){
   const L0=s.last;
@@ -1484,6 +1501,7 @@ function renderPanels(){
 /* 턴 시간 고리 — 온라인(턴 시간 있음)에서만 줄어든다 */
 function ringTick(){
   if(!V)return;
+  {const tm=!!(V2on()&&K.turnSec&&K.turnSec()>0);if(document.body.classList.contains('timed')!==tm)document.body.classList.toggle('timed',tm)}
   let tp=1,warn=false;
   if(V2on()&&V.phase==='play'&&!anim&&!Q.length){const r=K.remain(),ts=K.turnSec?K.turnSec():0;if(r!=null&&ts>0){tp=Math.max(0,Math.min(1,r/(ts*1000)));warn=r<=5000}}
   document.querySelectorAll('.pp').forEach(el=>{const av=el.querySelector('.pp-av');if(!av)return;const on=el.classList.contains('active');
