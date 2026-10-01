@@ -59,6 +59,7 @@ ASSETJS_RE='(/assets/[a-zA-Z0-9_/-]+\.js(on)?)\?v=[0-9a-zA-Z]{1,20}'
 # topNav/langBar/supabase-config 등 다수). 따옴표 직전의 .js 에 스탬프를
 # 새로 붙인다. 이미 ?v= 가 있으면 다음 문자가 ? 라 매칭되지 않는다.
 JS_BARE_RE='(/js/[a-zA-Z0-9_-]+\.js)(["'"'"'])'
+LPV_RE="(LPV=')[0-9]{1,20}(')"
 
 count=0
 while IFS= read -r -d '' f; do
@@ -81,6 +82,12 @@ while IFS= read -r -d '' f; do
     fi
     if grep -qE "$ASSETJS_RE" "$f" 2>/dev/null; then
         sed -i -E "s|${ASSETJS_RE}|\\1?v=${NEW_VERSION}|g" "$f"
+        matched=1
+    fi
+    # 2026-10-02: 요트·오목·장기는 Rooms v2 스크립트를 '/js/x.js?v='+LPV 로 이어 붙여 싣는다 —
+    # 위 정규식이 못 잡으니 LPV 상수 자체를 갱신한다(안 하면 옛 스탬프로 옛 lpGames.js 를 받을 수 있다)
+    if grep -qE "$LPV_RE" "$f" 2>/dev/null; then
+        sed -i -E "s|${LPV_RE}|\\1${NEW_VERSION}\\2|g" "$f"
         matched=1
     fi
     if [ "$matched" = "1" ]; then
