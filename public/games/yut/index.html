@@ -812,6 +812,17 @@ document.addEventListener('visibilitychange',()=>{
   else{AC.resume().then(()=>{Bgm.next=AC.currentTime+0.12}).catch(()=>{})}
 });
 const live=()=>AC&&AC.state==='running';
+/* 2026-10-01 첫 탭 지연 — AudioContext 생성(+잔향 IR·잡음 버퍼 계산)이 첫 pointerdown 안에서 돌아 CPU 4배 스로틀에서
+   첫 탭이 110~230ms 늦게 반응했다. 로드 3초 뒤 한가할 때 미리 만들어 둔다(정지 상태로 생성 — 소리는 안 난다.
+   첫 화면이 그려지고 조용해진 뒤라 메뉴 반응을 막지 않는다). 그 전에 탭하면 예전처럼 탭 안에서 만든다.
+   첫 탭의 unlockAudio 는 그대로 resume + 무음 한 샘플로 푼다. dodge 의 발사음도 같은 방식(로드 때 생성) */
+(function(){
+  const pre=()=>{if(AC||document.hidden)return;const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+    try{AC=new C({latencyHint:'interactive'})}catch(_){try{AC=new C()}catch(__){return}}
+    try{buildGraph()}catch(e){try{AC.close()}catch(_){}AC=null}};
+  const go=()=>setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(pre,{timeout:2000});else pre()},3000);
+  if(document.readyState==='complete')go();else addEventListener('load',go,{once:true});
+})();
 
 /* ── 음 높이: 평조 솔(D4)을 0도로. 도수 i → 주파수 (5음 음계, 옥타브 넘나듦) ── */
 const SC=[0,2,5,7,9],BASE=293.66;
