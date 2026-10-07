@@ -268,6 +268,8 @@ body::after{
 .left-controls .reward-slot.has-storm{  color:#FF8FB0; text-shadow:0 0 8px rgba(255,80,140,.85); }
 .left-controls .reward-slot.has-fuel{   color:#FFE680; text-shadow:0 0 8px rgba(255,180,40,.85); }
 .left-controls .reward-slot.has-drone{  color:#9CDFFF; text-shadow:0 0 8px rgba(120,200,255,.85); }
+/* sz:mod:drones — 호위 드론 보상 아이콘 = 렌더 아틀라스 한 칸(글자 크기 em 이라 레이아웃마다 슬롯 글자 크기를 따른다) */
+.reward-slot svg.sz-drone-ic{width:1.2em;height:1.2em;display:block;pointer-events:none;filter:drop-shadow(0 0 4px rgba(120,200,255,.6))}
 .left-controls .reward-slot:not(.empty):hover{
     transform:translateY(-1px);
     box-shadow:
@@ -12845,7 +12847,8 @@ function szDrawBuoyFx(now){
    ===================================================================== */
 const REWARD_KINDS = ['warp','storm','drone'];
 /* 2026-05-10: drone 아이콘 🛰 (위성) → 🛸 (UFO/드론) — 실제 비행체처럼 보이게. */
-const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'🛸'};
+/* 2026-10-08 sz:mod:drones: drone 은 렌더한 호위 드론(drones.webp 행 2 첫 칸) SVG — 슬롯은 innerHTML 로 넣는다(전부 우리 상수) */
+const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'<svg class="sz-drone-ic" viewBox="2 194 92 92" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="480" height="288"/></svg>'};
 const REWARD_SLOT_IDS = {warp:'rewardSlot0', storm:'rewardSlot1', drone:'rewardSlot2'};
 let rewardCounts = {warp: 0, storm: 0, drone: 0};
 /* Time Warp 상태 */
@@ -12896,7 +12899,7 @@ function _refreshRewardSlot(kind){
         if(count > 1){
             el.innerHTML = REWARD_ICONS[kind] + '<span class="rs-count">' + count + '</span>';
         } else {
-            el.textContent = REWARD_ICONS[kind];
+            el.innerHTML = REWARD_ICONS[kind];
         }
     } else {
         el.classList.add('empty');
@@ -13174,7 +13177,7 @@ function drawAegisDrone(now){
     {
         const cyc = (now % 500) / 500;
         if(cyc < 0.40){
-            const arcAlpha = baseAlpha * (1 - cyc / 0.40) * 0.7;
+            const arcAlpha = baseAlpha * (1 - cyc / 0.40) * 0.42;   /* sz:mod:drones — 렌더 드론이 주인공이라 동력 아크는 한 톤 낮춘다(0.7→0.42) */
             const dx = player.x - pos.x;
             const dy = (player.y - 4) - pos.y;
             const len = Math.sqrt(dx*dx + dy*dy);
@@ -13200,6 +13203,8 @@ function drawAegisDrone(now){
         }
     }
 
+    /* sz:mod:drones — 렌더 스프라이트(덕트 팬 센티넬)가 있으면 그걸로. 아래 3~5 는 그림이 오기 전 폴백 */
+    if(szDrawAegisSprite(pos, now, baseAlpha)){ ctx.restore(); return; }
     /* 3. 헥사 외곽 — 드론 진행과 반대로 회전 (속도 0.5×). */
     ctx.save();
     ctx.translate(pos.x, pos.y);
@@ -13283,8 +13288,10 @@ function drawAegisDrone(now){
 function drawAegisLasers(){
     if(!aegisLasers.length) return;
     ctx.save();
+    const spr = !!_szDroneBk.ag.s;   /* sz:mod:drones — 스프라이트면 앞 이미터(좌우 번갈아)에서 나간다 */
     for(const l of aegisLasers){
         const a = Math.max(0, l.life / l.maxLife);
+        if(spr && !l.em){ l.em = 1; l.x1 += ((Math.floor(l.x2 * 8) & 1) ? 1 : -1) * SZ_DRONE.agEmit[0] * SZ_DRONE.ag.u; l.y1 -= SZ_DRONE.agEmit[1] * SZ_DRONE.ag.u; }
         /* 메인 빔 — 두꺼운 cyan + 글로우 */
         ctx.shadowColor = '#9CDFFF';
         ctx.shadowBlur = 12;
@@ -13949,17 +13956,10 @@ function szDrawItemIcon(k, x, y, s){
 function szItemHeld(item){ return item !== ITEM.HEART; }   /* 하트만 즉시 회복 — 나머지는 전부 슬롯 */
 function szItemTech(item){ return !!SZI_ICON[item]; }
 /*</sz:mod:items>*/
-/* MINI 아이콘 — 실제 drawF117(canvas) 의 path/색을 그대로 inline SVG 로 재현.
-   inventory slot 에 띄울 때 emoji 대신 이 SVG 를 innerHTML 로 삽입.
-   viewBox -10 -9 to 10 9 (대충 18×18) — drawF117 의 좌표계와 일치. */
-const F117_SVG = '<svg viewBox="-10 -9 20 18" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-    + '<polygon points="0,-8 -2,-4 -9,6 -4,7 0,5" fill="#5e6c7a"/>'
-    + '<polygon points="0,-8 2,-4 9,6 4,7 0,5" fill="#7c8c9a"/>'
-    + '<polygon points="0,-8 -2.2,-2 -1.6,5 1.6,5 2.2,-2" fill="#3a4654"/>'
-    + '<polygon points="-1.5,3 -3.2,7 -0.4,6" fill="#2c3642"/>'
-    + '<polygon points="1.5,3 3.2,7 0.4,6" fill="#2c3642"/>'
-    + '<polygon points="0,-5 -1.2,-1.5 1.2,-1.5" fill="#00D9FF" opacity="0.85"/>'
-    + '<polyline points="-9,6 0,-8 9,6" fill="none" stroke="#00D9FF" stroke-opacity="0.45" stroke-width="0.6"/>'
+/* MINI 아이콘 — sz:mod:drones (2026-10-08): 옛 F-117 손그림 SVG 대신 렌더 아틀라스(drones.webp)의 윙맨 정면 프레임을
+   SVG <image> + viewBox 로 잘라 쓴다(인벤 슬롯 CSS 의 svg 크기·글로우 규칙 그대로). 이름은 호출부 호환을 위해 유지 */
+const F117_SVG = '<svg viewBox="196 4 88 88" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    + '<image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="480" height="288"/>'
     + '</svg>';
 
 const ITEM_VISUAL = {
@@ -14225,6 +14225,8 @@ function drawDepot(d, now){
     ctx.lineWidth = 1.6; ctx.strokeStyle = v.borderColor; ctx.stroke();
     if(szItemTech(d.item)){
         szDrawItemIcon(d.item, 0, 0, 0.93);   /* sz:mod:items — 슬롯과 같은 아이콘 */
+    } else if(d.item === ITEM.MINI && szDrawDroneIcon(0, 0, 22)){
+        /* sz:mod:drones — 렌더한 윙맨(정면 프레임) */
     } else if(d.item === ITEM.MINI){
         ctx.save();
         ctx.scale(0.95, 0.95);
@@ -15023,7 +15025,198 @@ function updateMiniShip(dt, now){
         if(w < len) miniLasers.length = w;
     }
 }
-/* F-117 Nighthawk — 면 분할 스텔스기. 위쪽이 정면. 크기 ≈ 18×16 px.
+/*<sz:mod:drones>*/
+/* 아이템 드론 스프라이트 (2026-10-08, 운영자: "아이템 중 드론들 그래픽이 형편없다 — 고도화된 그래픽, 리얼한 생김새로 렌더링").
+   원본 = scripts/blender/spacez_drones.py (Cycles, Standard 뷰 — 기체 starship_scene.py 와 같은 조명·스테인리스/광택 금 도장)
+   → public/assets/dodge/drones.webp (96px 칸 5열×3행, ≈43KB):
+     행 0 = 윙맨(MINI) 은색 뱅크 −2…+2 · 행 1 = 윙맨 금색 · 행 2 = 호위 드론(AEGIS) 은색 로터 a·b, 금색 a·b
+   윙맨 = 꼬리 없는 블렌디드 플라잉윙 무인 요격기(옛 캔버스 삼각형 스텔스기 대체), 호위 드론 = 덕트 팬 4발 센티넬(옛 육각형 선 대체).
+   표시 전용 — 판정·발사·궤도·타이머는 그대로(updateMiniShip·updateAegisDrone 무변경). 그림 안 쓰는 연출(분사·포구 섬광·항법등)은
+   미리 구운 글로우 스프라이트(SZ_GLOW)만 쓴다 — 프레임마다 새 객체 0, Math.random 0(결정성 무관).
+   도장 = 내 기체와 같이 szMyLivery() (솔로·방장 은색 / 참가자 금색). 그림이 오기 전에는 옛 벡터로 그린다(drawF117·육각 드론). */
+const SZ_DRONE = {
+    url: '/assets/dodge/drones.webp', cell: 96,
+    wm: {css: 27, u: 27 / 12},       /* 윙맨 칸을 27 CSS px 로 — 모델 12 단위 칸 → 1 단위 2.25px (날개폭 9.6 ≈ 21.6px, 옛 18px) */
+    ag: {css: 32, u: 32 / 7},        /* 호위 드론 칸 32px — 7 단위 칸 → 덕트 끝 지름 6.2 ≈ 28px (옛 육각 26px) */
+    wmMuzzle: [1.30, 3.22], wmNozzle: [0.50, -3.95], wmNav: [4.70, -2.10],   /* 모델 단위 (+y = 노즈) */
+    agEmit: [0.40, 3.10], agLed: 2.73, agEye: 0.45
+};
+let _szDroneIm = null;
+function szDroneImg(){
+    if(!_szDroneIm){
+        _szDroneIm = new Image();
+        _szDroneIm.decoding = 'async';
+        _szDroneIm.src = SZ_DRONE.url + (typeof SZ_BV === 'string' ? SZ_BV : '');
+    }
+    return (_szDroneIm.complete && _szDroneIm.naturalWidth) ? _szDroneIm : null;
+}
+/* 첫 화면 전송량에 끼지 않게 부팅 5초 뒤 미리 받는다(보급 캡슐 아이콘이 먼저 부르면 그때) */
+setTimeout(function(){ try{ szDroneImg(); }catch(_){} }, 5000);
+/* 캔버스 배율로 미리 줄인 비트맵(szShipArt 와 같은 방식 — 큰 축소의 에일리어싱 제거). 종류마다 표시 크기가 달라 따로 굽는다 */
+const _szDroneBk = {wm: {bm: null, s: 0, p: false}, ag: {bm: null, s: 0, p: false}};
+function szDroneArt(kind){
+    const im = szDroneImg();
+    if(!im) return null;
+    const B = _szDroneBk[kind], S = szBakeScale();
+    if(B.s === S) return B.bm || im;
+    if(!B.p){
+        const c = Math.round(SZ_DRONE[kind].css * S);
+        if(!window.createImageBitmap || c >= SZ_DRONE.cell * 0.95){ B.bm = null; B.s = S; return im; }
+        B.p = true;
+        createImageBitmap(im, {resizeWidth: c * 5, resizeHeight: c * 3, resizeQuality: 'high'}).then(function(b){
+            try{ if(B.bm && B.bm.close) B.bm.close(); }catch(_){}
+            B.bm = b; B.s = S; B.p = false;
+        }, function(){ B.bm = null; B.s = S; B.p = false; });
+    }
+    return B.bm || im;
+}
+let _szDroneGl = null;   /* {shadow, red} — 처음 그릴 때 한 번 굽는다 */
+function szDroneGlows(){
+    if(!_szDroneGl) _szDroneGl = {shadow: szMakeGlow(0, 2, 10, 48), red: szMakeGlow(255, 60, 50, 48)};
+    return _szDroneGl;
+}
+function _szDroneBlit(art, col, row, size){
+    const cw = art.width / 5, ch = art.height / 3;
+    ctx.drawImage(art, col * cw, row * ch, cw, ch, -size / 2, -size / 2, size, size);
+}
+/* 보급 캡슐 창 안 아이콘(윙맨 정면 프레임). 그림이 아직이면 false → 옛 벡터 */
+function szDrawDroneIcon(x, y, size){
+    const art = szDroneArt('wm');
+    if(!art) return false;
+    ctx.save();
+    ctx.translate(x, y);
+    _szDroneBlit(art, 2, szMyLivery() === 'gold' ? 1 : 0, size);
+    ctx.restore();
+    return true;
+}
+/* 옆 속도 → 뱅크 −1…1 (표시 전용 상태). 프레임 사이 간격이 길면(일시정지·탭 전환) 0 으로 */
+function _szDroneBank(fx, x, now){
+    const dt = (now - fx.t) / 1000;
+    if(dt > 0.0005 && dt < 0.25){
+        const tgt = Math.max(-1, Math.min(1, (x - fx.x) / dt / 260));
+        fx.bk += (tgt - fx.bk) * Math.min(1, dt * 10);
+    } else if(dt >= 0.25) fx.bk = 0;
+    fx.x = x; fx.t = now;
+    return fx.bk;
+}
+const _szWmFx = [{x: 0, t: 0, bk: 0}, {x: 0, t: 0, bk: 0}];
+/* 윙맨 한 대 — 그림자 · 이온 분사(가산) · 렌더 스프라이트(뱅크 5프레임) · 항법 섬광 · 포구 섬광. 그림이 없으면 false */
+function szDrawWingman(m, i, now){
+    const art = szDroneArt('wm');
+    if(!art) return false;
+    const fx = _szWmFx[i] || (_szWmFx[i] = {x: m.x, t: now, bk: 0});
+    const bk = _szDroneBank(fx, m.x, now);
+    const D = SZ_DRONE, u = D.wm.u, size = D.wm.css;
+    const lo = szLo();
+    const left = MINI_DUR - (now - m.spawnedAt);
+    const a = left < 2500 ? 0.55 + 0.45 * Math.abs(Math.sin(now * 0.018)) : 1;   /* 곧 떠난다 — 마지막 2.5초 깜빡 */
+    const G = szDroneGlows();
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    /* 남은 시간 고리 — 기체 밑에 가늘게 (옛 고리는 날개 위를 지나갔다) */
+    ctx.globalAlpha = 0.3 * a;
+    ctx.strokeStyle = '#FF5A50';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, left / MINI_DUR));
+    ctx.stroke();
+    /* 그림자 — 운석·성운 위에서도 기체가 떠 보이게 */
+    ctx.globalAlpha = 0.5 * a;
+    ctx.drawImage(G.shadow, -10 + 1.5, -10 + 3, 20, 20);
+    ctx.rotate(bk * 0.12);
+    /* 이온 분사 — 노즐 두 개, 세로로 늘인 차가운 글로우 + 흰 심 */
+    const cb = Math.cos(bk * 0.56);
+    const nx = D.wmNozzle[0] * u * cb, ny = -D.wmNozzle[1] * u;
+    ctx.globalCompositeOperation = 'lighter';
+    for(let s = -1; s <= 1; s += 2){
+        const f = 0.85 + 0.15 * Math.sin(now * 0.047 + i * 1.7 + s * 0.9);
+        const r = 3.4 * f;
+        ctx.globalAlpha = 0.8 * a;
+        ctx.drawImage(SZ_GLOW.cold, s * nx - r, ny - r * 0.45, r * 2, r * 3.6);
+        if(!lo){ ctx.globalAlpha = 0.9 * a; ctx.drawImage(SZ_GLOW.white, s * nx - 1.6, ny - 1.2, 3.2, 3.2); }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    /* 기체 */
+    ctx.globalAlpha = a;
+    const fi = Math.max(0, Math.min(4, Math.round((bk + 1) * 2)));
+    _szDroneBlit(art, fi, szMyLivery() === 'gold' ? 1 : 0, size);
+    ctx.globalCompositeOperation = 'lighter';
+    /* 항법 섬광 — 날개 끝 흰 스트로브 1.2초에 한 번(두 대가 엇갈리게) */
+    if(!lo && ((now + i * 600) % 1200) < 70){
+        const tx = D.wmNav[0] * u * cb, ty = -D.wmNav[1] * u;
+        ctx.globalAlpha = 0.9 * a;
+        ctx.drawImage(SZ_GLOW.white, -tx - 3, ty - 3, 6, 6);
+        ctx.drawImage(SZ_GLOW.white, tx - 3, ty - 3, 6, 6);
+    }
+    /* 포구 섬광 — 쏜 직후 90ms, 좌우 이미터 번갈아 */
+    const age = now - m.lastShot;
+    if(age >= 0 && age < 90){
+        const k = 1 - age / 90;
+        const sd = (((m.lastShot / MINI_SHOT_INTERVAL) | 0) & 1) ? 1 : -1;
+        const mx = sd * D.wmMuzzle[0] * u * cb, my = -D.wmMuzzle[1] * u;
+        const r = 3 + 5 * k;
+        ctx.globalAlpha = a;
+        ctx.drawImage(G.red, mx - r, my - r, r * 2, r * 2);
+        ctx.drawImage(SZ_GLOW.white, mx - 2 * k - 0.5, my - 2 * k - 0.5, 4 * k + 1, 4 * k + 1);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return true;
+}
+const _szAgFx = {x: 0, t: 0, bk: 0};
+/* 호위 드론 — 노즈는 늘 위(편대 비행), 옆 속도로 살짝 기운다. 로터 2프레임 교대 = 회전 착시. 그림이 없으면 false */
+function szDrawAegisSprite(pos, now, baseAlpha){
+    const art = szDroneArt('ag');
+    if(!art) return false;
+    const bk = _szDroneBank(_szAgFx, pos.x, now);
+    const D = SZ_DRONE, u = D.ag.u, size = D.ag.css;
+    const lo = szLo();
+    const G = szDroneGlows();
+    ctx.save();
+    ctx.translate(pos.x, pos.y);
+    /* 덕트 하강풍 빛(가산) + 그림자 */
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.16 * baseAlpha;
+    ctx.drawImage(SZ_GLOW.cyan, -19, -19, 38, 38);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.5 * baseAlpha;
+    ctx.drawImage(G.shadow, -15 + 2, -15 + 3.5, 30, 30);
+    ctx.rotate(bk * 0.22);
+    ctx.globalAlpha = baseAlpha;
+    const rot = ((now / 38) | 0) & 1;
+    _szDroneBlit(art, (szMyLivery() === 'gold' ? 2 : 0) + rot, 2, size);
+    ctx.globalCompositeOperation = 'lighter';
+    /* 센서 눈 숨쉬기 · 덕트 상태등(대각으로 번갈아) */
+    if(!lo){
+        const br = 0.5 + 0.5 * Math.sin(now * 0.006);
+        ctx.globalAlpha = (0.35 + 0.35 * br) * baseAlpha;
+        ctx.drawImage(SZ_GLOW.cyan, -4.5, -D.agEye * u - 4.5, 9, 9);
+        const L = D.agLed * u, on = ((now / 400) | 0) & 1;
+        ctx.globalAlpha = 0.85 * baseAlpha;
+        ctx.drawImage(SZ_GLOW.cyan, (on ? L : -L) - 2.5, -L - 2.5, 5, 5);
+        ctx.drawImage(SZ_GLOW.cyan, (on ? -L : L) - 2.5, L - 2.5, 5, 5);
+    }
+    /* 이미터 — 평소 은은히, 쏜 직후 100ms 섬광 */
+    const ex = D.agEmit[0] * u, ey = -D.agEmit[1] * u;
+    const age = now - aegisLastFireAt;
+    const k = (age >= 0 && age < 100) ? 1 - age / 100 : 0;
+    const r = 2.6 + 6 * k;
+    ctx.globalAlpha = (0.55 + 0.45 * k) * baseAlpha;
+    ctx.drawImage(SZ_GLOW.cyan, -ex - r, ey - r, r * 2, r * 2);
+    ctx.drawImage(SZ_GLOW.cyan, ex - r, ey - r, r * 2, r * 2);
+    if(k > 0){
+        ctx.globalAlpha = k * baseAlpha;
+        ctx.drawImage(SZ_GLOW.white, -ex - 2.5, ey - 2.5, 5, 5);
+        ctx.drawImage(SZ_GLOW.white, ex - 2.5, ey - 2.5, 5, 5);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return true;
+}
+/*</sz:mod:drones>*/
+/* (폴백 — drones.webp 가 오기 전) F-117 Nighthawk — 면 분할 스텔스기. 위쪽이 정면. 크기 ≈ 18×16 px.
    메인 우주선의 stainless steel 톤과 매칭 (#7c8c9a, #94a2ae 계열) +
    cyan accent. 이전 검정 톤은 어두운 배경에 묻혀 안 보였음. */
 function drawF117(cx, cy){
@@ -15104,7 +15297,9 @@ function drawF117(cx, cy){
 function drawMiniShip(){
     if(miniShips.length === 0) return;
     const now = performance.now();
-    for(const m of miniShips){
+    for(let i = 0; i < miniShips.length; i++){
+        const m = miniShips[i];
+        if(szDrawWingman(m, i, now)) continue;   /* sz:mod:drones — 렌더 스프라이트 */
         const age = now - m.spawnedAt;
         drawF117(m.x, m.y);
         /* 잔여 시간 ring (붉은 톤 — 레이저 컬러와 통일) */
@@ -15117,16 +15312,19 @@ function drawMiniShip(){
         ctx.stroke();
         ctx.restore();
     }
-    /* 레이저 — 빨강 */
+    /* 레이저 — 빨강. sz:mod:drones — 스프라이트가 있으면 날개 앞전 이미터(좌우 번갈아)에서 나간다 */
+    const spr = !!_szDroneBk.wm.s;
     ctx.save();
     ctx.shadowColor = 'rgba(255, 60, 60, 0.85)';
     ctx.shadowBlur = 6;
     for(const l of miniLasers){
         const a = l.life / l.maxLife;
+        let fx = l.fromX, fy = l.fromY;
+        if(spr){ fx += ((Math.floor(l.fromX * 8) & 1) ? 1 : -1) * SZ_DRONE.wmMuzzle[0] * SZ_DRONE.wm.u; fy -= SZ_DRONE.wmMuzzle[1] * SZ_DRONE.wm.u; }
         ctx.strokeStyle = 'rgba(255, 60, 60, ' + a + ')';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(l.fromX, l.fromY);
+        ctx.moveTo(fx, fy);
         ctx.lineTo(l.target.x, l.target.y);
         ctx.stroke();
     }
