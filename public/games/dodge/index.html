@@ -9075,10 +9075,14 @@ function updateAsteroidClusters(dt){
                 rock.gravGlowT = 0.45;
             }
             rock.gravGlowT = Math.max(0, rock.gravGlowT - dt);
-            rock.y += rock.vy * dt;
+            /* sz:mod:items2 — 반중력장에 밀린 바위는 옆(vx)·위로도 움직이고, 화면 밖으로 밀려나면 지운다 */
+            if(!(szAG && szAgStep(rock, dt))){
+                rock.y += rock.vy * dt;
+                if(rock.vx) rock.x += rock.vx * dt;
+            }
             rock.ang += rock.spin * dt;
             /* keep rocks that haven't passed bottom yet (with small buffer) */
-            if(rock.y < CH + 50){
+            if(rock.y < CH + 50 && !(rock._ag && (rock.x < -80 || rock.x > CW + 80 || rock.y < -160))){
                 if(w !== i) rocks[w] = rock;
                 w++;
             }
@@ -9303,6 +9307,8 @@ function updateComets(dt){
         }
         const d = Math.min(c.len, c.t / 1000 * COMET_SPEED), k = d / c.len;
         c.x = c.x1 + (c.x2 - c.x1) * k; c.y = c.y1 + (c.y2 - c.y1) * k;
+        if(szAG) szAgComet(c, dt);                                /* sz:mod:items2 — 반중력장에 밀린 만큼(오프셋) */
+        if(c.ovx !== undefined){ c.x += c.ox; c.y += c.oy; }
         c.trail.push({x:c.x, y:c.y}); if(c.trail.length > 16) c.trail.shift();
         if(k >= 1) comets.splice(i, 1);
     }
@@ -9365,7 +9371,9 @@ function spawnSplitter(){
 function updateSplitters(dt){
     for(let i = splitters.length - 1; i >= 0; i--){
         const s = splitters[i];
-        s.t += dt; s.y += s.vy * dt; s.rot += s.spin * dt;
+        s.t += dt; s.rot += s.spin * dt;
+        if(!(szAG && szAgStep(s, dt))){ s.y += s.vy * dt; if(s.vx) s.x += s.vx * dt; }   /* sz:mod:items2 — 반중력장 */
+        if(s._ag && (s.x < -80 || s.x > CW + 80 || s.y < -160)){ splitters.splice(i, 1); continue; }
         if(s.y >= s.splitY){
             for(let k = 0; k < SPLIT_FRAGS; k++){
                 const a = s.off + k * Math.PI * 2 / SPLIT_FRAGS;
@@ -11101,7 +11109,7 @@ function szFunUpdate(dt, now){
     }
     /* 별가루 — 떠내려오다 기체 근처(피버 때는 더 멀리서)면 빨려 온다 */
     const canGet = running && !szSpectating && !szShipHidden && lives > 0;
-    const mag = szFeverOn ? 120 : szAerogelOn() ? SZI_T.AERO_MAG : 42, mag2 = mag * mag;   /* sz:mod:items — 에어로겔 채집기 */
+    const mag = szFeverOn ? 120 : 42, mag2 = mag * mag;
     let w = 0;
     for(let i = 0; i < F.dust.length; i++){
         const m = F.dust[i];
@@ -11147,7 +11155,7 @@ function szFunUpdate(dt, now){
     }
 }
 function szFunPick(F, m, now){
-    F.g = Math.min(100, F.g + m.v * (szAerogelOn() ? SZI_T.AERO_GAIN : 1)); F.flashT = now;
+    F.g = Math.min(100, F.g + m.v); F.flashT = now;
     F.chain = (now - F.pickT < 650) ? F.chain + 1 : 0; F.pickT = now;
     const step = SZF_SCALE[Math.min(F.chain, SZF_SCALE.length - 1)];
     szFunTone(988 * Math.pow(2, step / 12), 0.09, 'triangle', 0.04);
@@ -11422,6 +11430,7 @@ function updateMagneticMines(dt, now){
                 m.vy += ny * MINE_HOMING_ACCEL * dt;
             }
         }
+        if(szAG) szAgKick(m, dt);   /* sz:mod:items2 — 반중력장이 기체 쪽 끌림을 밀어낸다 */
         m.vx *= MINE_DAMP; m.vy *= MINE_DAMP;
         m.x += m.vx * dt; m.y += m.vy * dt;
         m.pulse += dt * 4;
@@ -12039,17 +12048,37 @@ const SZ_SLOT_OMEGA = {0: 0, 1: 0.22, 4: 0.30, 6: 0.35, 7: 0.50, 11: 0.30, 12: 0
    다음 위성 설치에 성공하면 그때부터 다시 보급 (만회 가능). 싱글 전용 —
    1:1 PvP 와 동시 대결은 같은 보급을 두고 다투는 공정성·시드 동기화 때문에 제외. */
 let commLinkLost = false;
+/* 보급 영구 차단 (2026-10-08, 운영자: "인공위성 미션을 두 번 연속 못 하면 영구적으로 아이템 보급이 막히도록, 경고 메시지도 투명하게").
+   주 위성 미션(부표 제외)이 연속 SZ_SUPPLY_CUT_N 번 실패(시간 초과·미션 중 존 종료)하면 그 판의 보급 캡슐이 전부 끝난다 —
+   존 보급·보스 보상 하트·복구 하트·5연속 하트·열적 죽음 반복 보급 모두 (szDropDepot 한 곳에서 막는다).
+   설치 성공(주 미션·부표·2인 협동의 팀 위성)은 연속 수를 0 으로. 1:1 PvP 에서 상대가 먼저 설치한 미션은 실패로 세지 않는다.
+   모든 모드에서 기체마다 따로(로컬) — 보급 좌표는 해시라 수열 소비 0, 대결 코스는 그대로. 첫 판(배우는 판)은 통신 두절처럼 면제.
+   이미 떠 있던 캡슐은 그대로 둔다(이미 도착한 보급). */
+const SZ_SUPPLY_CUT_N = 2;
+let szSatMiss = 0;               /* 주 미션 연속 실패 수 */
+let szSupplyCut = false;         /* 이번 판 보급 영구 차단 */
+function szSatMissed(){
+    if(szSupplyCut) return;
+    try{ if(szFirstRunNow()) return; }catch(_){}
+    szSatMiss++;
+    if(szSatMiss >= SZ_SUPPLY_CUT_N){
+        szSupplyCut = true;
+        if(_szSoloRun()) commLinkLost = true;   /* 통신 두절 상태로 고정 — 이후 설치 성공이 '복구'로 보이지 않게 */
+        try{ window.SZ3 && SZ3.mood && SZ3.mood('cry', 1600, 3, '…', '255,90,110'); }catch(_){}
+    }
+}
+function szSatLinked(){ if(!szSupplyCut) szSatMiss = 0; }
 let _szLooseBannerHideAt = 0;    /* 미션 상태와 무관하게 떠 있는 배너(존 종료로 끊긴 실패 안내) 숨김 시각 */
 function _szSoloRun(){
     try{ return !(pvpState && pvpState.gameMode === 'pvp') && !_szRacing(); }catch(_){ return true; }
 }
 const SZ_COMM_TXT = {
-    ko:{ lost:'📡 통신 두절 — 보급 중단', lostSub:'다음 위성·부표를 이으면 복구돼요', back:'📡 통신 복구 — 보급 재개', backSub:'보상 획득 · 슬롯을 눌러 사용', intro:'궤도에서 SAT 꾹 → 중계기 연결', hud:'통신 두절' },
-    en:{ lost:'📡 Comms Lost — Supplies Cut', lostSub:'Link the next satellite or buoy to restore', back:'📡 Comms Restored — Supplies Back', backSub:'Reward granted · tap slot to use', intro:'Hold SAT on orbit to link', hud:'NO LINK' },
-    ja:{ lost:'📡 通信途絶 — 補給停止', lostSub:'次の衛星かブイをつなぐと復旧', back:'📡 通信復旧 — 補給再開', backSub:'報酬獲得 · スロットをタップ', intro:'軌道でSAT長押し → 中継リンク', hud:'通信途絶' },
-    zh:{ lost:'📡 通信中断 — 补给停止', lostSub:'连接下一颗卫星或浮标即可恢复', back:'📡 通信恢复 — 补给重启', backSub:'获得奖励 · 点击槽位使用', intro:'在轨道按住SAT → 连接中继', hud:'通信中断' },
-    es:{ lost:'📡 Sin enlace — Suministros cortados', lostSub:'Enlaza el próximo satélite o boya para recuperarlo', back:'📡 Enlace restablecido — Vuelven los suministros', backSub:'Recompensa obtenida · toca la ranura', intro:'Mantén SAT en la órbita para enlazar', hud:'SIN ENLACE' },
-    pt:{ lost:'📡 Sem sinal — Suprimentos cortados', lostSub:'Conecte o próximo satélite ou boia para restaurar', back:'📡 Sinal restaurado — Suprimentos de volta', backSub:'Recompensa obtida · toque no slot', intro:'Segure SAT na órbita para conectar', hud:'SEM SINAL' }
+    ko:{ lost:'📡 통신 두절 — 보급 중단', lostSub:'다음 위성·부표를 이으면 복구돼요', back:'📡 통신 복구 — 보급 재개', backSub:'보상 획득 · 슬롯을 눌러 사용', intro:'궤도에서 SAT 꾹 → 중계기 연결', hud:'통신 두절', warn1:'⚠ 위성 미션을 한 번 더 놓치면 보급이 영구 차단돼요', cut:'📡 통신망 두절 — 보급이 영구 차단됐어요', cutSub:'이번 판은 가진 아이템과 실력으로!', hudCut:'보급 차단' },
+    en:{ lost:'📡 Comms Lost — Supplies Cut', lostSub:'Link the next satellite or buoy to restore', back:'📡 Comms Restored — Supplies Back', backSub:'Reward granted · tap slot to use', intro:'Hold SAT on orbit to link', hud:'NO LINK', warn1:'⚠ Miss one more satellite mission and supplies are cut for good', cut:'📡 Network down — supplies cut for good', cutSub:'Fly on with what you have!', hudCut:'NO SUPPLY' },
+    ja:{ lost:'📡 通信途絶 — 補給停止', lostSub:'次の衛星かブイをつなぐと復旧', back:'📡 通信復旧 — 補給再開', backSub:'報酬獲得 · スロットをタップ', intro:'軌道でSAT長押し → 中継リンク', hud:'通信途絶', warn1:'⚠ 衛星ミッションをもう一度逃すと補給が永久に止まります', cut:'📡 通信網途絶 — 補給が永久に止まりました', cutSub:'残りのアイテムと腕で勝負！', hudCut:'補給停止' },
+    zh:{ lost:'📡 通信中断 — 补给停止', lostSub:'连接下一颗卫星或浮标即可恢复', back:'📡 通信恢复 — 补给重启', backSub:'获得奖励 · 点击槽位使用', intro:'在轨道按住SAT → 连接中继', hud:'通信中断', warn1:'⚠ 再错过一次卫星任务，补给将永久中断', cut:'📡 通信网中断 — 补给已永久中断', cutSub:'靠剩下的道具和技术撑下去！', hudCut:'补给中断' },
+    es:{ lost:'📡 Sin enlace — Suministros cortados', lostSub:'Enlaza el próximo satélite o boya para recuperarlo', back:'📡 Enlace restablecido — Vuelven los suministros', backSub:'Recompensa obtenida · toca la ranura', intro:'Mantén SAT en la órbita para enlazar', hud:'SIN ENLACE', warn1:'⚠ Si fallas otra misión de satélite, los suministros se cortan para siempre', cut:'📡 Red caída — suministros cortados para siempre', cutSub:'¡Sigue con lo que tienes!', hudCut:'SIN SUMINISTROS' },
+    pt:{ lost:'📡 Sem sinal — Suprimentos cortados', lostSub:'Conecte o próximo satélite ou boia para restaurar', back:'📡 Sinal restaurado — Suprimentos de volta', backSub:'Recompensa obtida · toque no slot', intro:'Segure SAT na órbita para conectar', hud:'SEM SINAL', warn1:'⚠ Perca mais uma missão de satélite e os suprimentos serão cortados de vez', cut:'📡 Rede caiu — suprimentos cortados de vez', cutSub:'Siga com o que você tem!', hudCut:'SEM SUPRIMENTOS' }
 };
 /* C (2026-09-29) — SAT 고도화 문구 (6개 언어, 짧게). sub = 두 번째 미션 안내 · m13/m15 = 견우직녀·베텔게우스 ·
    buoy = 부표 캔버스 칩 · buoyS = 조종판 칩 · perf/perfSub = PERFECT 도장 · sec = 초 단위 */
@@ -12086,7 +12115,16 @@ function szDrawCommHud(now){
     /* P1 — 컬러 이모지 fillText(첫 사용 4x 19ms)를 매 프레임 하지 않고 한 번 구운 비트맵으로 */
     const _ant = szBakeText('commHud', '11px sans-serif', '📡', 14, '#fff', -1);
     let tx = x + 18;
-    if(!commLinkLost || !solo){
+    if(szSupplyCut){
+        /* 보급 영구 차단 — 흐린 📡 + 빨간 ✕ (모든 모드, 깜빡이지 않는 고정 표시) */
+        ctx.globalAlpha = 0.3;
+        szDrawBaked(_ant, x + 6.5, y);
+        ctx.globalAlpha = 0.9;
+        ctx.strokeStyle = '#ff5a6e';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x + 1, y - 5); ctx.lineTo(x + 12, y + 6); ctx.moveTo(x + 12, y - 5); ctx.lineTo(x + 1, y + 6); ctx.stroke();
+    } else if(!commLinkLost || !solo){
         ctx.globalAlpha = 0.5;
         szDrawBaked(_ant, x + 6.5, y);
         if(solo){
@@ -12119,7 +12157,12 @@ function szDrawCommHud(now){
         ctx.restore();
         tx += w + 5;
     }
-    if(commLinkLost && solo){
+    if(szSupplyCut){
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#ff8a98';
+        ctx.font = 'bold 9px "Noto Sans KR",sans-serif';
+        ctx.fillText(_szCommT('hudCut'), tx - 1, y + 1);
+    } else if(commLinkLost && solo){
         ctx.globalAlpha = 0.6 + 0.35 * Math.sin(now * 0.0035);
         ctx.fillStyle = '#ff8a98';
         ctx.font = 'bold 9px "Noto Sans KR",sans-serif';
@@ -12227,10 +12270,10 @@ function szDomFlush(){
 }
 
 function _showMissionBanner(zIdx, kind){
-    const _lost = commLinkLost;
-    szDomQueue(() => _showMissionBannerNow(zIdx, kind, _lost));
+    const _lost = commLinkLost, _miss = szSatMiss, _cut = szSupplyCut;
+    szDomQueue(() => _showMissionBannerNow(zIdx, kind, _lost, _miss, _cut));
 }
-function _showMissionBannerNow(zIdx, kind, _lostAtCall){
+function _showMissionBannerNow(zIdx, kind, _lostAtCall, _missAtCall, _cutAtCall){
     const banner = document.getElementById('missionBanner');
     if(!banner) return;
     const lang = _missionLang();
@@ -12267,16 +12310,24 @@ function _showMissionBannerNow(zIdx, kind, _lostAtCall){
         if(timerEl) timerEl.textContent = '✓';
         banner.classList.remove('failed');
         banner.classList.add('success');
+    } else if(kind === 'failed' && _cutAtCall){
+        /* 보급 영구 차단 — 연속 실패 2번째 */
+        if(titleEl) titleEl.textContent = _szCommT('cut');
+        if(subEl) subEl.textContent = _szCommT('cutSub');
+        if(iconEl) iconEl.textContent = '✗';
+        if(timerEl) timerEl.textContent = '—';
+        banner.classList.remove('success');
+        banner.classList.add('failed');
     } else if(kind === 'failed' && _lostAtCall){
         if(titleEl) titleEl.textContent = _szCommT('lost');
-        if(subEl) subEl.textContent = _szCommT('lostSub');
+        if(subEl) subEl.textContent = _missAtCall >= 1 ? _szCommT('warn1') : _szCommT('lostSub');
         if(iconEl) iconEl.textContent = '✗';
         if(timerEl) timerEl.textContent = '—';
         banner.classList.remove('success');
         banner.classList.add('failed');
     } else if(kind === 'failed'){
         if(titleEl) titleEl.textContent = _szMT('mFailT', '✗ Mission Failed');
-        if(subEl) subEl.textContent = _szMT('mFail', 'HQ: No worries—next orbit!');
+        if(subEl) subEl.textContent = _missAtCall >= 1 ? _szCommT('warn1') : _szMT('mFail', 'HQ: No worries—next orbit!');
         if(iconEl) iconEl.textContent = '✗';
         if(timerEl) timerEl.textContent = '—';
         banner.classList.remove('success');
@@ -12476,7 +12527,8 @@ function _failMission(now){
     missionsCompletedZones.add(missionZoneIdx);    /* one shot per zone */
     szSatStreak = 0;
     _szCommLose();                                 /* 싱글: 통신 두절 → 보급 중단 */
-    missionBannerHideAt = now + 3500;
+    szSatMissed();                                 /* 연속 2번이면 보급 영구 차단 (모든 모드) */
+    missionBannerHideAt = now + (szSupplyCut || szSatMiss ? 4500 : 3500);
     _showMissionBanner(missionZoneIdx, 'failed');
     _setSatBtnState('disabled');
 }
@@ -12501,7 +12553,8 @@ function completeMission(now){
         szFeverAdd(20);
         SZM2.bOk = now;
         try{ const B = szBuoyPos(SZM2, elapsedMs); szBuoyFxL.push({x: B.x, y: B.y, t0: performance.now(), ok: true}); }catch(_){}
-        const _restored = commLinkLost;
+        szSatLinked();
+        const _restored = commLinkLost && !szSupplyCut;
         if(_restored){
             commLinkLost = false;
             try{ szDropDepot(z, missionBuoyK ? 'r' + missionBuoyK : 'r', ITEM.HEART, now); }catch(_){}
@@ -12520,7 +12573,8 @@ function completeMission(now){
     missionBannerHideAt = now + 2600;
     szMbHideAt = 0;
     /* 끊겼던 통신망은 위성 설치 성공으로 복구 → 이 순간부터 보급 재개 */
-    const _restored = commLinkLost && !opponentWonThisZone;
+    if(!opponentWonThisZone) szSatLinked();
+    const _restored = commLinkLost && !opponentWonThisZone && !szSupplyCut;
     if(_restored){
         commLinkLost = false;
         /* P4 — 복구 보급 1개 (key z-'r', 해시 좌표) */
@@ -12995,7 +13049,7 @@ function updateAegisDrone(dt, now){
         aegisDroneTrail.length = 0;
         return;
     }
-    aegisDroneAngle += (dt/1000) * AEGIS_ANGULAR_VEL;
+    aegisDroneAngle += dt * AEGIS_ANGULAR_VEL;   /* 2026-10-08 — dt 는 이미 초. 예전 (dt/1000) 은 궤도가 사실상 멈춰(0.003rad/프레임) 보급 자석도 안 돌았다 */
     const pos = _aegisDronePos();
     /* 모션 트레일 — 매 프레임 현재 위치 push, 최대 8 entry. */
     aegisDroneTrail.push({x: pos.x, y: pos.y});
@@ -13113,7 +13167,7 @@ function updateAegisDrone(dt, now){
     if(typeof depots !== 'undefined' && depots){
         const PICK2 = (AEGIS_HIT_RADIUS + 14) * (AEGIS_HIT_RADIUS + 14);
         const PULL2 = AEGIS_PICKUP_RADIUS * AEGIS_PICKUP_RADIUS;
-        const dts = dt / 1000;
+        const dts = dt;   /* 2026-10-08 — dt 는 이미 초 (예전 /1000 으로 끌림이 0.28px/s 였다) */
         for(const d of depots){
             if(!d || d.collected) continue;
             /* 인벤토리 가득 차서 못 줍는 held item 은 끌어당기지도 말고 건너뜀 */
@@ -13880,57 +13934,35 @@ const ITEM = {
     HEART:  'heart',   // instant: lives++ (max 5)
     WIPE:   'wipe',    // held: clear all bullets + flash
     MINI:   'mini',    // held: 30s companion ship, 3 lasers/sec
-    /* 2026-10-07 우주공학 장비 6종 (sz:mod:items) — 전부 보유형(슬롯) */
-    WHIPPLE: 'whipple', // 휘플 실드 — 작은 운석 3번 흡수
-    LIDAR:   'lidar',   // 라이다 — 운석 예상 궤적 12초
-    LASER:   'laser',   // 레이저 빗자루 — 충돌 코스 운석 옆으로 밀기 12초
-    RAIL:    'rail',    // 레일건 — 기체 위 한 줄 관통 3발
-    REPAIR:  'repair',  // 수리 드론 — 5초 무피격이면 목숨 +1
-    AEROGEL: 'aerogel'  // 에어로겔 채집기 — 별가루 자석·게이지 12초
+    /* 2026-10-08 운영자 제안 아이템 2종 (sz:mod:items) — 보유형(슬롯). 2026-10-07 장비 6종은 운영자 판정('와닿는 게 없다')으로 폐기 */
+    ANTIGRAV: 'antigrav', // 반중력파 — 기체 둘레 1/r² 척력장, 다가오는 운석을 밀어낸다
+    ION:      'ion'       // 이온 충격파 — 기체 앞 120° 부채꼴 플라즈마 충격파, 닿는 운석 분해 30초
 };
 /*<sz:mod:items>*/
-/* 소유: 아이템 확장 (2026-10-07, 운영자 요청 "과학공학적 상상력으로 그럴듯한 아이템 + 슬롯 5칸").
+/* 소유: 아이템 확장 (2026-10-07 슬롯 5칸 · 2026-10-08 반중력파·이온 충격파).
    아이콘 = SVG path 한 벌 → 슬롯·게임방법은 인라인 SVG, 캡슐 창은 같은 path 를 Path2D 로 (그림 원본 하나) */
 const SZI_ICON = {
-    whipple: [
-        {d: 'M-8,1.5 Q0,-5.5 8,1.5', s: '#FFD2A0', w: 2.3},
-        {d: 'M-8,5.5 Q0,-1.5 8,5.5', s: '#FF9F43', w: 2.3},
-        {d: 'M-8,9.5 Q0,2.5 8,9.5', s: '#C2651C', w: 2.3},
-        {d: 'M0,-9.6 L1.6,-7 L0,-4.4 L-1.6,-7 Z', f: '#FFFFFF'}
+    /* 반중력파 — 가운데 점(기체)에서 바깥으로 밀려나는 동심 물결 + 밖을 향한 화살촉 넷 */
+    antigrav: [
+        {d: 'M-9.2,0 A9.2,9.2 0 1,0 9.2,0 A9.2,9.2 0 1,0 -9.2,0', s: 'rgba(170,140,255,0.55)', w: 1.1},
+        {d: 'M-6.2,0 A6.2,6.2 0 1,0 6.2,0 A6.2,6.2 0 1,0 -6.2,0', s: '#B49CFF', w: 1.6},
+        {d: 'M-3.2,0 A3.2,3.2 0 1,0 3.2,0 A3.2,3.2 0 1,0 -3.2,0', s: '#E6DCFF', w: 1.8},
+        {d: 'M0,-10.2 L-2,-7.6 M0,-10.2 L2,-7.6 M10.2,0 L7.6,-2 M10.2,0 L7.6,2 M0,10.2 L-2,7.6 M0,10.2 L2,7.6 M-10.2,0 L-7.6,-2 M-10.2,0 L-7.6,2', s: '#7DF3FF', w: 1.5},
+        {d: 'M-1.4,0 A1.4,1.4 0 1,0 1.4,0 A1.4,1.4 0 1,0 -1.4,0', f: '#FFFFFF'}
     ],
-    lidar: [
-        {d: 'M0,0 L0,-8.2 A8.2,8.2 0 0,1 7.1,-4.1 Z', f: 'rgba(77,255,160,0.5)'},
-        {d: 'M-8.2,0 A8.2,8.2 0 1,0 8.2,0 A8.2,8.2 0 1,0 -8.2,0', s: '#4DFFA0', w: 1.5},
-        {d: 'M-4.2,0 A4.2,4.2 0 1,0 4.2,0 A4.2,4.2 0 1,0 -4.2,0', s: 'rgba(77,255,160,0.55)', w: 1},
-        {d: 'M0,0 L0,-8.2', s: '#D8FFE9', w: 1.3},
-        {d: 'M2,3.4 A1.5,1.5 0 1,0 5,3.4 A1.5,1.5 0 1,0 2,3.4', f: '#FFFFFF'}
-    ],
-    laser: [
-        {d: 'M3.5,-8.6 L8.4,-6.4 L9.3,-2.2 L6.2,0.2 L2,-0.8 L0.8,-5.2 Z', f: '#9C8A78', s: '#2A2420', w: 0.8},
-        {d: 'M-7.6,7.6 L2.4,-2.4', s: '#F2C8FF', w: 2.2},
-        {d: 'M1.4,-0.6 L-1.8,1.4 M2.4,0.4 L0.6,3.6 M0.8,-2.2 L-2.6,-2.6', s: '#FFFFFF', w: 1.1},
-        {d: 'M-9.6,5.6 L-5.6,9.6 L-3.8,7.8 L-7.8,3.8 Z', f: '#C46BFF'}
-    ],
-    rail: [
-        {d: 'M-4.6,9 L-4.6,-3.5 M4.6,9 L4.6,-3.5', s: '#B8C2FF', w: 2.1},
-        {d: 'M-6.8,9.2 L6.8,9.2', s: '#7D8CFF', w: 2.4},
-        {d: 'M-4.6,1.2 L-2,2.4 L-4.6,3.6 M4.6,4.6 L2,5.8 L4.6,7', s: '#9FB0FF', w: 1},
-        {d: 'M-2,-0.8 L2,-0.8 L2,-6.8 L0,-9.8 L-2,-6.8 Z', f: '#FFFFFF'}
-    ],
-    repair: [
-        {d: 'M0,-9 L7.8,-4.5 L7.8,4.5 L0,9 L-7.8,4.5 L-7.8,-4.5 Z', f: 'rgba(182,242,90,0.16)', s: '#B6F25A', w: 1.6},
-        {d: 'M-1.7,-5.2 L1.7,-5.2 L1.7,-1.7 L5.2,-1.7 L5.2,1.7 L1.7,1.7 L1.7,5.2 L-1.7,5.2 L-1.7,1.7 L-5.2,1.7 L-5.2,-1.7 L-1.7,-1.7 Z', f: '#ECFFC8'}
-    ],
-    aerogel: [
-        {d: 'M0,-9.4 C5,-9.4 7.2,-5.6 7.2,-2.4 C7.2,1.6 4.2,4 0,4 C-4.2,4 -7.2,1.6 -7.2,-2.4 C-7.2,-5.6 -5,-9.4 0,-9.4 Z', f: 'rgba(143,216,255,0.28)', s: '#8FD8FF', w: 1.4},
-        {d: 'M-3.6,-8 L-3.6,3 M0,-9 L0,3.6 M3.6,-8 L3.6,3 M-6.2,-5.4 L6.2,-5.4 M-7,-2.2 L7,-2.2 M-5.8,1.2 L5.8,1.2', s: 'rgba(214,240,255,0.75)', w: 0.8},
-        {d: 'M0,4 L0,9.6', s: '#D8F2FF', w: 2.1},
-        {d: 'M-3,-4.2 A1.1,1.1 0 1,0 -0.8,-4.2 A1.1,1.1 0 1,0 -3,-4.2 M2.3,-0.6 A0.95,0.95 0 1,0 4.2,-0.6 A0.95,0.95 0 1,0 2.3,-0.6', f: '#FFF1A8'}
+    /* 이온 충격파 — 아래 꼭짓점에서 위로 펼쳐지는 120° 부채꼴 + 초승달 파면 셋 + 번개 한 줄 */
+    ion: [
+        {d: 'M0,7.6 L-8.4,-4.8 A9.7,9.7 0 0,1 8.4,-4.8 Z', f: 'rgba(90,170,255,0.22)', s: 'rgba(130,190,255,0.6)', w: 0.9},
+        {d: 'M-3.6,1.6 A4.4,4.4 0 0,1 3.6,1.6', s: '#9FE8FF', w: 1.7},
+        {d: 'M-5.6,-1.6 A7.2,7.2 0 0,1 5.6,-1.6', s: '#7FB2FF', w: 1.7},
+        {d: 'M-7.4,-5 A10,10 0 0,1 7.4,-5', s: '#C29BFF', w: 1.7},
+        {d: 'M-1.2,-9.4 L0.9,-6.2 L-0.8,-5.4 L1.4,-2.4', s: '#FFFFFF', w: 1.1},
+        {d: 'M-1.3,7.6 A1.3,1.3 0 1,0 1.3,7.6 A1.3,1.3 0 1,0 -1.3,7.6', f: '#FFFFFF'}
     ]
 };
 /* 아이템 색 — 슬롯 글로우·캡슐 띠·HUD 버프 고리 */
-const SZI_COL = {whipple: '#FF9F43', lidar: '#4DFFA0', laser: '#C46BFF', rail: '#7D8CFF', repair: '#B6F25A', aerogel: '#8FD8FF'};
-const SZI_BORDER = {whipple: '#FFC48A', lidar: '#A8FFD0', laser: '#E2B5FF', rail: '#B8C2FF', repair: '#DAFF9E', aerogel: '#CDEFFF'};
+const SZI_COL = {antigrav: '#A98CFF', ion: '#5FC8FF'};
+const SZI_BORDER = {antigrav: '#D6C8FF', ion: '#B4E6FF'};
 function szItemSvg(k){
     const P = SZI_ICON[k]; if(!P) return '';
     let h = '<svg viewBox="-10.5 -10.5 21 21" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">';
@@ -13970,59 +14002,55 @@ const ITEM_VISUAL = {
        (실제 보조우주선 cyan canopy 와 통일). */
     mini:   {emoji: F117_SVG, color:'#7c8c9a', borderColor:'#7CE7FF', isSvg:true}
 };
-/* sz:mod:items — 새 장비 6종도 같은 표에 (emoji 자리 = 인라인 SVG) */
+/* sz:mod:items — 반중력파·이온 충격파도 같은 표에 (emoji 자리 = 인라인 SVG) */
 for(const k of Object.keys(SZI_ICON)) ITEM_VISUAL[k] = {emoji: szItemSvg(k), color: SZI_COL[k], borderColor: SZI_BORDER[k], isSvg: true, tech: true};
 /* Zone → 거점 아이템 매핑 (스토리 의미 고려해 배치). zone 당 2 개 depot (3 개는 너무 많다는 피드백).
-   sz:mod:items (2026-10-07) — slot0 은 예전 그대로(고전 4종), slot1 은 [예전 아이템, 장비 A, 장비 B] 중 하나를
-   (시드, 'I', 존, 슬롯) 해시로 고른다(가중치 2:1:1 = 50%·25%·25%, 수열 소비 0 → 대결·도전장 모두 같은 보급). 미션 존의 slot1 은
-   위성을 이어야 오는 '추가 보급'이라, 통신망을 이을수록 지구가 새 장비를 보내 주는 셈이다.
-   장비는 대체로 고전 아이템보다 약하게(시간 제한·조건부) — 슬롯 5칸이 된 만큼 '다양함'을 주고 세지는 않게.
-   ※ 존 이름 주석은 2026-10 기준 ZONES 순서 */
+   sz:mod:items (2026-10-08) — 고전 분포(2026-10-07 이전 그대로) + 일부 존의 slot1 만 [고전 아이템, 새 아이템] 쌍:
+   (시드, 'I', 존, 슬롯) 해시로 SZI_RARE(25%) 확률에 새 아이템(수열 소비 0 → 대결·도전장 모두 같은 보급).
+   반중력파 = 바위가 몰려오는 존(소행성대·카이퍼·오르트·좀생이별·말머리·은하 밖 바위띠), 이온 충격파 = 몰아치기·보스가 센 존.
+   2026-10-07 장비 6종이 slot1 의 절반을 차지해 하트·방어막·폭탄·윙맨이 줄어든 것이 '전체적으로 어려워졌다'의 주원인이었다 */
 const I_ = ITEM;
 const ZONE_DEPOT_MAP = [
-    {zoneIdx:0,  items:[I_.SHIELD, I_.MINI]},                              // 🌍 지구 궤도 — 튜토리얼 그대로
-    {zoneIdx:1,  items:[I_.SHIELD, [I_.WIPE,   I_.WHIPPLE, I_.RAIL]]},     // 🌙 달 — 미세운석 → 휘플 실드
-    {zoneIdx:2,  items:[I_.MINI,   [I_.SHIELD, I_.LIDAR,   I_.AEROGEL]]},  // 🔴 화성
-    {zoneIdx:3,  items:[I_.SHIELD, [I_.WIPE,   I_.LASER,   I_.RAIL]]},     // ☄️ 소행성대 — 레이저 빗자루
-    {zoneIdx:4,  items:[I_.WIPE,   [I_.HEART,  I_.REPAIR,  I_.WHIPPLE]]},  // 🟠 목성
-    {zoneIdx:5,  items:[I_.MINI,   [I_.SHIELD, I_.AEROGEL, I_.LIDAR]]},    // 🪐 토성 — 고리 먼지 → 에어로겔
-    {zoneIdx:6,  items:[I_.HEART,  [I_.WIPE,   I_.LASER,   I_.RAIL]]},     // 🔵 천왕성
-    {zoneIdx:7,  items:[I_.HEART,  [I_.MINI,   I_.LIDAR,   I_.REPAIR]]},   // 💙 해왕성
-    {zoneIdx:8,  items:[I_.SHIELD, [I_.HEART,  I_.REPAIR,  I_.AEROGEL]]},  // ⚪ 명왕성·카이퍼벨트
-    {zoneIdx:9,  items:[I_.SHIELD, [I_.WIPE,   I_.WHIPPLE, I_.LASER]]},    // 🌌 태양권 경계
-    {zoneIdx:10, items:[I_.SHIELD, [I_.MINI,   I_.LIDAR,   I_.RAIL]]},     // ❄ 오르트 구름
-    {zoneIdx:11, items:[I_.SHIELD, [I_.HEART,  I_.REPAIR,  I_.WHIPPLE]]},  // ⭐ 프록시마
-    {zoneIdx:12, items:[I_.MINI,   [I_.HEART,  I_.AEROGEL, I_.LASER]]},    // ✨ 시리우스
-    {zoneIdx:13, items:[I_.SHIELD, [I_.MINI,   I_.RAIL,    I_.LIDAR]]},    // ✨ 견우직녀
-    {zoneIdx:14, items:[I_.MINI,   [I_.SHIELD, I_.AEROGEL, I_.WHIPPLE]]},  // ✨ 좀생이별
-    {zoneIdx:15, items:[I_.HEART,  [I_.WIPE,   I_.LASER,   I_.REPAIR]]},   // 🟥 베텔게우스
-    {zoneIdx:16, items:[I_.SHIELD, [I_.HEART,  I_.LIDAR,   I_.WHIPPLE]]},  // 🌸 오리온 성운
-    {zoneIdx:17, items:[I_.SHIELD, [I_.WIPE,   I_.RAIL,    I_.AEROGEL]]},  // 🌠 말머리 성운
-    {zoneIdx:18, items:[I_.MINI,   [I_.SHIELD, I_.LASER,   I_.REPAIR]]},   // 🌫 창조의 기둥
-    {zoneIdx:19, items:[I_.HEART,  [I_.SHIELD, I_.WHIPPLE, I_.LIDAR]]},    // ⚫ 궁수자리 A*
-    /* 20~30 — 후반부라 HEART + SHIELD 풍족하게(slot0). 28~30 은 2026-08-21 보급 누락 보정분 */
-    {zoneIdx:20, items:[I_.HEART,  [I_.SHIELD, I_.RAIL,    I_.LASER]]},
-    {zoneIdx:21, items:[I_.SHIELD, [I_.MINI,   I_.AEROGEL, I_.LIDAR]]},
-    {zoneIdx:22, items:[I_.SHIELD, [I_.WIPE,   I_.RAIL,    I_.WHIPPLE]]},
-    {zoneIdx:23, items:[I_.HEART,  [I_.MINI,   I_.LASER,   I_.REPAIR]]},
-    {zoneIdx:24, items:[I_.SHIELD, [I_.WIPE,   I_.LASER,   I_.RAIL]]},
-    {zoneIdx:25, items:[I_.HEART,  [I_.SHIELD, I_.WHIPPLE, I_.LIDAR]]},
-    {zoneIdx:26, items:[I_.SHIELD, [I_.HEART,  I_.REPAIR,  I_.AEROGEL]]},
-    {zoneIdx:27, items:[I_.HEART,  [I_.WIPE,   I_.RAIL,    I_.LASER]]},
-    {zoneIdx:28, items:[I_.HEART,  [I_.SHIELD, I_.WHIPPLE, I_.LASER]]},
-    {zoneIdx:29, items:[I_.SHIELD, [I_.HEART,  I_.REPAIR,  I_.LIDAR]]},
-    {zoneIdx:30, items:[I_.HEART,  [I_.SHIELD, I_.WHIPPLE, I_.RAIL]]}      // ♾ Heat Death (endless) — 반복 보급은 고전 그대로
+    {zoneIdx:0,  items:[I_.SHIELD, I_.MINI ]},                  // 🌍 지구 궤도 — 튜토리얼 (보호 + 보조)
+    {zoneIdx:1,  items:[I_.SHIELD, I_.WIPE ]},                  // 🌙 달
+    {zoneIdx:2,  items:[I_.MINI,   I_.HEART]},                  // 🔴 화성 — 2026-10-08 SHIELD→HEART (보급 영구 차단 규칙 보정)
+    {zoneIdx:3,  items:[I_.SHIELD, [I_.WIPE,   I_.ANTIGRAV]]},  // ☄️ 소행성대 — 바위 → 반중력파
+    {zoneIdx:4,  items:[I_.WIPE,   I_.HEART]},                  // 🟠 목성
+    {zoneIdx:5,  items:[I_.MINI,   I_.HEART]},                  // 🪐 토성 — 2026-10-08 SHIELD→HEART (보급 영구 차단 규칙 보정)
+    {zoneIdx:6,  items:[I_.HEART,  [I_.WIPE,   I_.ION]]},       // 🔵 천왕성
+    {zoneIdx:7,  items:[I_.HEART,  I_.MINI ]},                  // 💙 해왕성
+    {zoneIdx:8,  items:[I_.SHIELD, [I_.HEART,  I_.ANTIGRAV]]},  // ⚪ 명왕성·카이퍼벨트
+    {zoneIdx:9,  items:[I_.SHIELD, [I_.WIPE,   I_.ION]]},       // 🌌 태양권 경계 — 종단 충격파
+    {zoneIdx:10, items:[I_.SHIELD, [I_.HEART,  I_.ANTIGRAV]]},  // ❄ 오르트 구름 — 2026-10-08 MINI→HEART (보급 영구 차단 규칙 보정)
+    {zoneIdx:11, items:[I_.SHIELD, I_.HEART]},                  // ⭐ 프록시마
+    {zoneIdx:12, items:[I_.MINI,   [I_.HEART,  I_.ION]]},       // ✨ 시리우스
+    {zoneIdx:13, items:[I_.SHIELD, I_.HEART]},                  // ✨ 견우직녀 — 2026-10-08 MINI→HEART (보급 영구 차단 규칙 보정)
+    {zoneIdx:14, items:[I_.MINI,   [I_.HEART,  I_.ANTIGRAV]]},  // ✨ 좀생이별 — 2026-10-08 SHIELD→HEART (보급 영구 차단 규칙 보정)
+    {zoneIdx:15, items:[I_.HEART,  I_.WIPE ]},                  // 🟥 베텔게우스
+    {zoneIdx:16, items:[I_.SHIELD, [I_.HEART,  I_.ION]]},       // 🌸 오리온 성운
+    {zoneIdx:17, items:[I_.SHIELD, [I_.WIPE,   I_.ANTIGRAV]]},  // 🌠 말머리 성운
+    {zoneIdx:18, items:[I_.MINI,   [I_.SHIELD, I_.ION]]},       // 🌫 창조의 기둥
+    {zoneIdx:19, items:[I_.HEART,  I_.SHIELD]},                 // ⚫ 궁수자리 A*
+    /* 20~27 후반부라 HEART + SHIELD 풍족하게. WIPE 는 큰 폭격 시점. 28~30 은 2026-08-21 보급 누락 보정분 */
+    {zoneIdx:20, items:[I_.HEART,  [I_.SHIELD, I_.ANTIGRAV]]},
+    {zoneIdx:21, items:[I_.SHIELD, [I_.MINI,   I_.ION]]},
+    {zoneIdx:22, items:[I_.SHIELD, [I_.WIPE,   I_.ANTIGRAV]]},
+    {zoneIdx:23, items:[I_.HEART,  I_.MINI ]},
+    {zoneIdx:24, items:[I_.SHIELD, [I_.WIPE,   I_.ION]]},
+    {zoneIdx:25, items:[I_.HEART,  I_.SHIELD]},
+    {zoneIdx:26, items:[I_.SHIELD, [I_.HEART,  I_.ANTIGRAV]]},
+    {zoneIdx:27, items:[I_.HEART,  [I_.WIPE,   I_.ION]]},
+    {zoneIdx:28, items:[I_.HEART,  I_.SHIELD]},
+    {zoneIdx:29, items:[I_.SHIELD, I_.HEART]},
+    {zoneIdx:30, items:[I_.HEART,  I_.SHIELD]}                  // ♾ Heat Death (endless)
 ];
-/* sz:mod:items — 슬롯 항목이 배열이면 (시드, 'I', 존, 슬롯) 해시로 하나. 1:1 PvP 는 별가루가 꺼져 있어 에어로겔 대신 첫 항목 */
+/* 새 아이템이 slot1 고전 아이템 자리를 차지할 확률 — 하트·방어막보다 드물게 (9분까지 기대값 각 ~1개) */
+const SZI_RARE = 0.25;
 function szDepotItem(def, slot){
     const e = def.items[slot];
     if(!Array.isArray(e)) return e;
     let u = 0; try{ u = _szU('I', def.zoneIdx, slot); }catch(_){ u = Math.random(); }
-    /* 가중치 — 첫 항목(예전 고전 아이템) 2 : 장비 각 1 → 고전 50% · 장비 A 25% · 장비 B 25% */
-    const k = Math.min(e.length, Math.floor(u * (e.length + 1)));
-    let it = e[k < 2 ? 0 : k - 1];
-    try{ if(it === ITEM.AEROGEL && !szZoneOn()) it = e[0]; }catch(_){}
-    return it;
+    return u < SZI_RARE ? e[1] : e[0];
 }
 
 /* depot pickup hold 시간 (초). 3 초는 길어서 2 초로 완화. P5 — BEAM 한 손 조작에 맞춰 1.5 초 */
@@ -14127,6 +14155,7 @@ function _handleDepotSpawnPayload(p){
     if(_isStaleGameBroadcast(p)) return;
     if(depotsSpawnedZones.has(p.key)) return;
     depotsSpawnedZones.add(p.key);
+    if(szSupplyCut) return;   /* 보급 영구 차단 — 게스트 쪽도 기체마다 */
     depots.push({
         x: Number(p.x), y: Number.isFinite(Number(p.y)) ? Number(p.y) : -50,   /* 궤도 보급 y (옛 호스트는 x 만 보낸다) */
         speed: 24,
@@ -14606,7 +14635,7 @@ function inventoryUseSlot(idx){
     if(idx < 0 || idx >= INVENTORY_SLOTS) return;
     const item = inventory[idx];
     if(!item) return;
-    /* MINI 는 동시 2 기까지 · 수리 드론은 목숨이 꽉 찼거나 이미 수리 중이면 — 사용 거부 (슬롯 그대로, 칸만 깜빡) */
+    /* MINI 는 동시 2 기까지 · 반중력파·이온 충격파는 이미 켜져 있으면 — 사용 거부 (슬롯 그대로, 칸만 깜빡) */
     if(!szItemCanUse(item)){ szSlotNope(idx); return; }
     if(item === ITEM.WIPE) triggerWipe();
     else if(item === ITEM.MINI) triggerMiniShip();
@@ -15333,32 +15362,35 @@ function drawMiniShip(){
 
 /*<sz:mod:items2>*/
 /* =====================================================================
-   우주공학 장비 6종 (2026-10-07, 운영자 요청 — "과학공학적 상상력으로 그럴듯하게, 밸런스를 깨지 않게").
-   원칙: 시간·횟수 제한, 화면 전체 무적·싹쓸이 없음(폭탄보다 약하게), 힘은 운석에만(기체에 힘 = 입력 지연),
-   표시·판정은 로컬(대결 코스를 바꾸는 시드 수열 소비 0, 연출은 Math.random). 타이머는 논리시간 elapsedMs(일시정지 제외).
-   · 휘플 실드  — 1946 Fred Whipple 의 이중 범퍼(ISS·스타더스트 탐사선). 작은 운석 3번 흡수(45초 안, 최대 4겹). 보스 벽·충격파는 못 막는다
-   · 라이다     — 우주 쓰레기 추적 레이더/라이다. 12초간 운석의 1.2초 뒤 예상 궤적, 내 쪽으로 오는 것은 빨강 + 조준 괄호
-   · 레이저 빗자루 — NASA 'Laser Broom'(1996)·레이저 어블레이션 우주 쓰레기 제거. 12초간 0.25초마다 충돌 코스 운석 하나의
-                  옆면을 태워(어블레이션 반작용) 옆으로 160px/s 비튼다 — 부수지 않는다
-   · 레일건     — 전자기 레일건(로렌츠 힘으로 탄을 가속). 0.5초 간격 3발, 발마다 기체 위 폭 30px 한 줄을 관통(운석·소행성 바위·분열암, 보스 벽 제외)
-   · 수리 드론  — 캐나다암2·덱스터·OSAM 궤도 수리 로봇. 5초 안 맞으면 목숨 +1 (맞으면 처음부터). 목숨이 꽉 차 있으면 못 쓴다
-   · 에어로겔   — NASA 스타더스트(1999) 혜성 먼지 채집 라켓. 12초간 별가루 자석 반경 42→96px · 피버 게이지 ×2
+   반중력파 · 이온 충격파 (2026-10-08, 운영자 제안 — "신규 아이템은 와닿는 게 없으니 이 둘만 매우 임팩트 있게").
+   2026-10-07 장비 6종(휘플·라이다·레이저 빗자루·레일건·수리 드론·에어로겔)은 이 자리에서 통째로 폐기했다.
+   공통: 보유형(슬롯을 눌러 사용), 타이머는 논리시간 elapsedMs(일시정지 제외), 힘·파괴는 운석에만(기체는 그대로 — 입력 지연 0),
+   시드 수열 소비 0(연출은 Math.random) — 대결 코스·보급은 그대로, 효과는 쓴 기체의 화면에서만.
+   기체 치수: 무게중심(기하 중심) = 판정점(player) 위 8.5px (노즈 −31.5 · 스커트 +14.5), 외접원 지름 D = 46px (SZ_SHIP 기체 길이).
+   · 반중력파 (15초) — 중심에서 R = 3D = 138px 안의 움직이는 위험물(운석·조각·편대·얼음띠·초고속 별·소행성 바위·분열암·기뢰·혜성)에
+     바깥 방향 가속 a = K / max(r, 8)² 를 적분한다(장 안에서는 4ms 이하 작은 걸음 — 프레임률과 무관한 궤적).
+     K = 2.88e6 px³/s² — 정면으로 오는 운석의 반환점 r* 는 ½v² = K(1/r* − 1/R) 에서
+       v 320px/s(5~9분 보통 운석) → r* ≈ 40px(노즈 23px 앞에서 돌아 나간다), v 450 → 24px(노즈 끝까지 파고든다), 혜성 820 → 8px(정면이면 맞는다).
+     빠를수록 깊이 들어왔다 밀려 나간다 — 속도별 예외 없이 물리에서 나온다. 보스 벽(협곡 벽·충격파 마디)은 밀리지 않고 장에 물결만 인다.
+     15초 = 5~9분 몰아치기 한 번(7~13초)을 덮고 남는 길이. 방어막(20초·닿는 운석 파괴)보다 짧은 대신 360° — 정면 고속 운석·광선·보스는 못 막는다.
+   · 이온 충격파 (30초, 운영자 지정) — 기체 앞(위) 120° 부채꼴, 중심에서 R = 138px. 부채꼴에 들어온 부술 수 있는 위험물은 플라즈마로 분해.
+     보스 벽·광선·제트는 못 부순다(닿는 자리에 불꽃만) — 보스는 체력 없는 시간표 패턴이라 보스전 의미가 그대로 남는다.
+     점수는 버틴 시간이라 파괴 보너스 없음(폭탄·방어막과 같다). 황금 운석은 피버로 부술 때처럼 잭팟.
+   성능: 장 밖 물체는 거리 비교 한 번, 장 안 작은 걸음은 프레임당 900회 상한(넘으면 한 걸음). 입자는 고정 풀 260개(재할당 없음).
    ===================================================================== */
+const SZ_HULL_D = 46, SZ_HULL_CY = -8.5;
 const SZI_T = {
-    WH_ADD: 3, WH_MAX: 4, WH_MS: 45000,
-    LIDAR_MS: 12000, LIDAR_H: 1.2,
-    LASER_MS: 12000, LASER_EVERY: 250, LASER_RANGE: 210, LASER_DV: 160, LASER_H: 1.3, LASER_MISS: 26,
-    RAIL_HALF: 15, RAIL_FX_MS: 520, RAIL_SHOTS: 3, RAIL_GAP: 500,
-    REPAIR_S: 5,
-    AERO_MS: 12000, AERO_MAG: 96, AERO_GAIN: 2
+    AG_MS: 15000, AG_R: 3 * SZ_HULL_D, AG_K: 2.88e6, AG_RMIN: 8, AG_H: 0.004, AG_BUDGET: 900,
+    ION_MS: 30000, ION_R: 3 * SZ_HULL_D, ION_HALF: Math.PI / 3, ION_WAVE: 0.15, ION_WAVE_LIFE: 0.55,
+    WARN: 3000
 };
 const SZI_I18N = {
-    ko: {whipple: '휘플 실드', lidar: '라이다', laser: '레이저 빗자루', rail: '레일건', repair: '수리 드론', aerogel: '에어로겔'},
-    en: {whipple: 'Whipple Shield', lidar: 'LIDAR', laser: 'Laser Broom', rail: 'Railgun', repair: 'Repair Drone', aerogel: 'Aerogel'},
-    ja: {whipple: 'ホイップルシールド', lidar: 'ライダー', laser: 'レーザーほうき', rail: 'レールガン', repair: '修理ドローン', aerogel: 'エアロゲル'},
-    zh: {whipple: '惠普尔防护罩', lidar: '激光雷达', laser: '激光扫帚', rail: '电磁轨道炮', repair: '维修无人机', aerogel: '气凝胶'},
-    es: {whipple: 'Escudo Whipple', lidar: 'LIDAR', laser: 'Escoba láser', rail: 'Cañón de riel', repair: 'Dron de reparación', aerogel: 'Aerogel'},
-    pt: {whipple: 'Escudo Whipple', lidar: 'LIDAR', laser: 'Vassoura laser', rail: 'Canhão de trilho', repair: 'Drone de reparo', aerogel: 'Aerogel'}
+    ko: {antigrav: '반중력파', ion: '이온 충격파'},
+    en: {antigrav: 'Anti-Gravity Wave', ion: 'Ion Shockwave'},
+    ja: {antigrav: '反重力波', ion: 'イオン衝撃波'},
+    zh: {antigrav: '反重力波', ion: '离子冲击波'},
+    es: {antigrav: 'Onda antigravedad', ion: 'Onda de choque iónica'},
+    pt: {antigrav: 'Onda antigravidade', ion: 'Onda de choque iônica'}
 };
 function szItemName(k){ let l = 'en'; try{ l = _szLang() || 'en'; }catch(_){} const t = SZI_I18N[l] || SZI_I18N.en; return t[k] || SZI_I18N.en[k] || k; }
 function szItemRGB(k){
@@ -15370,108 +15402,149 @@ function szItemGlow(k){
     if(!_sziGlow[k]){ const c = szItemRGB(k).split(',').map(Number); _sziGlow[k] = szMakeGlow(c[0], c[1], c[2]); }
     return _sziGlow[k];
 }
+/* 플라즈마·반중력 전용 글로우 (한 번 굽기) */
+const SZI_GL = {violet: szMakeGlow(170, 130, 255), ion: szMakeGlow(110, 200, 255), plasma: szMakeGlow(200, 235, 255)};
+/* 입자 풀 — k: 0 불티(파랑→보라) · 1 뜨거운 불티(흰→주황) · 2 플라즈마 티끌(부채꼴 안을 흐름) */
+const SZI_PN = 260;
+const SZI_P = Array.from({length: SZI_PN}, () => ({x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, r: 1, k: 0}));
+let _sziPi = 0, _sziPn = 0;
+function _sziEmit(x, y, vx, vy, life, r, k){
+    const p = SZI_P[_sziPi]; _sziPi = (_sziPi + 1) % SZI_PN;
+    if(p.life <= 0) _sziPn++;
+    p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life; p.r = r; p.k = k;
+}
 /* 상태 — 판마다 szItemsReset */
 let SZI = null;
+var szAG = false;            /* 반중력파가 켜져 있는가 — 운석 갱신 루프가 한 번에 읽는다 */
+let _szAgSteps = 0;
 function szItemsReset(){
-    SZI = {wh: 0, whUntil: 0, whHitT: -1e9, whX: 0, whY: 0,
-           lidarUntil: 0, lidarT0: -1e9,
-           laserUntil: 0, laserNext: 0, beams: [],
-           rail: null, railLeft: 0, railNext: 0,
-           rep: null, repLives: -1,
-           aeroUntil: 0, aeroT0: -1e9};
+    SZI = {agUntil: 0, agT0: -1e9, agHum: 0, agWarnS: 0, agRings: [],
+           ionUntil: 0, ionT0: -1e9, ionWarnS: 0, ionHolds: [], ionFl: [], ionZaps: [], ionArcs: [], ionArcT: 0, ionWaveN: 0, ionSparkT: 0, ionPopN: 0};
+    szAG = false;
+    for(const p of SZI_P) p.life = 0;
+    _sziPn = 0;
 }
 szItemsReset();
 function _sziE(){ try{ return elapsedMs; }catch(_){ return 0; } }
-function szAerogelOn(){ return !!(SZI && _sziE() < SZI.aeroUntil); }
+function szAgOn(){ return !!(SZI && _sziE() < SZI.agUntil); }
+function szIonOn(){ return !!(SZI && _sziE() < SZI.ionUntil); }
 function szItemCanUse(item){
     if(item === ITEM.MINI) return miniShips.length < MINI_MAX;
-    if(item === ITEM.REPAIR) return lives < MAX_LIVES && !(SZI && SZI.rep);
+    if(item === ITEM.ANTIGRAV) return !szAgOn();
+    if(item === ITEM.ION) return !szIonOn();
     return true;
 }
-/* 장비 사용 — 소리·표정은 SZ3.useItem, 여기는 효과와 그 순간의 그림 */
+/* 사용 — 소리·표정은 SZ3.useItem, 여기는 효과와 그 순간의 그림 */
 function szItemUse(item){
     if(!SZI) szItemsReset();
     const e = _sziE(), now = performance.now();
-    const px = player.x, py = player.y;
-    if(item === ITEM.WHIPPLE){
-        SZI.wh = Math.min(SZI_T.WH_MAX, SZI.wh + SZI_T.WH_ADD);
-        SZI.whUntil = e + SZI_T.WH_MS;
-        szRings.push({x: px, y: py, t: 0, dur: 0.35, r0: 30, r1: 18, rgb: '255,180,110', w: 2.6});
-    } else if(item === ITEM.LIDAR){
-        SZI.lidarUntil = Math.min(e + SZI_T.LIDAR_MS * 2, Math.max(SZI.lidarUntil, e) + SZI_T.LIDAR_MS);
-        SZI.lidarT0 = now;
-    } else if(item === ITEM.LASER){
-        SZI.laserUntil = Math.min(e + SZI_T.LASER_MS * 2, Math.max(SZI.laserUntil, e) + SZI_T.LASER_MS);
-        SZI.laserNext = e;
-        szRings.push({x: px, y: py - 14, t: 0, dur: 0.3, r0: 4, r1: 26, rgb: '210,140,255', w: 2});
-    } else if(item === ITEM.RAIL){
-        /* 축전기 3발 — 지금 한 발, 0.5초마다 한 발씩 (그때 기체 x 줄) */
-        szRailFire(now);
-        SZI.railLeft = SZI_T.RAIL_SHOTS - 1; SZI.railNext = e + SZI_T.RAIL_GAP;
-    } else if(item === ITEM.REPAIR){
-        SZI.rep = {p: 0, sp: 0, hitT: 0};
-        SZI.repLives = lives;
-    } else if(item === ITEM.AEROGEL){
-        SZI.aeroUntil = Math.min(e + SZI_T.AERO_MS * 2, Math.max(SZI.aeroUntil, e) + SZI_T.AERO_MS);
-        SZI.aeroT0 = now;
-        szRings.push({x: px, y: py, t: 0, dur: 0.5, r0: 12, r1: SZI_T.AERO_MAG, rgb: '170,225,255', w: 2});
-    }
-    /* 이름 한 번 (레일건은 빛줄기와 겹치지 않게 옆으로) */
-    szPopup(szItemName(item), item === ITEM.RAIL ? px + (px < CW / 2 ? 52 : -52) : px, py - 44, SZI_COL[item] || '#FFE66D', 13, 0.8);
-}
-/* ── 레일건 — 기체 위 한 줄 관통. 운석(보스 벽·충격파 제외)·소행성 바위·분열암 ── */
-function szRailFire(now){
-    const x0 = player.x, y0 = player.y - 16, W = SZI_T.RAIL_HALF;
-    const hits = [];
-    let w = 0; const len = bullets.length;
-    for(let i = 0; i < len; i++){
-        const b = bullets[i];
-        if(b.zk !== 'cw' && b.zk !== 'sh' && b.y < player.y + 4 && Math.abs(b.x - x0) < W + 5){ hits.push(b.x, b.y); continue; }
-        if(w !== i) bullets[w] = b;
-        w++;
-    }
-    if(w < len) bullets.length = w;
-    try{
-        for(const c of asteroidClusters){
-            for(let i = c.rocks.length - 1; i >= 0; i--){ const r = c.rocks[i]; if(r.y < player.y && Math.abs(r.x - x0) < W + r.r){ hits.push(r.x, r.y); c.rocks.splice(i, 1); } }
+    const cx = player.x, cy = player.y + SZ_HULL_CY, lo = szLo();
+    if(item === ITEM.ANTIGRAV){
+        SZI.agUntil = e + SZI_T.AG_MS; SZI.agT0 = now; SZI.agHum = now + 500; SZI.agWarnS = 0;
+        szAG = true;
+        /* 활성 폭발 — 장 경계까지 밀려 나가는 고리 세 겹 + 바깥으로 튀는 빛 알갱이 */
+        szRings.push({x: cx, y: cy, t: 0, dur: 0.5, r0: 10, r1: SZI_T.AG_R, rgb: '180,150,255', w: 5});
+        szRings.push({x: cx, y: cy, t: -0.08, dur: 0.55, r0: 6, r1: SZI_T.AG_R * 0.86, rgb: '125,243,255', w: 2.4});
+        szRings.push({x: cx, y: cy, t: -0.16, dur: 0.6, r0: 4, r1: SZI_T.AG_R * 0.62, rgb: '235,225,255', w: 1.6});
+        const nP = lo ? 14 : 30;
+        for(let i = 0; i < nP; i++){
+            const a = i / nP * 6.2832 + Math.random() * 0.2, sp = 260 + Math.random() * 160;
+            _sziEmit(cx + Math.cos(a) * 12, cy + Math.sin(a) * 12, Math.cos(a) * sp, Math.sin(a) * sp, 0.45 + Math.random() * 0.25, 1.4 + Math.random() * 1.6, 0);
         }
-    }catch(_){}
-    try{
-        for(let i = splitters.length - 1; i >= 0; i--){ const s = splitters[i]; if(s.y < player.y && Math.abs(s.x - x0) < W + SPLIT_R * 0.85){ hits.push(s.x, s.y); splitters.splice(i, 1); } }
-    }catch(_){}
-    SZI.rail = {x: x0, y: y0, t0: now, n: hits.length / 2};
-    const lo = szLo();
-    for(let i = 0; i < hits.length; i += 2){
-        const k = i / 2;
-        szBurst(hits[i], hits[i + 1], {shards: lo ? 2 : 4, sparks: lo ? 3 : 7, power: 210, ring: 30, ringRGB: '170,185,255', ringDur: 0.32, ringW: 2.2});
-        if(k < 5) try{ window.SZ3 && SZ3.pop && SZ3.pop(hits[i], hits[i + 1]); }catch(_){}
+    } else if(item === ITEM.ION){
+        SZI.ionUntil = e + SZI_T.ION_MS; SZI.ionT0 = now; SZI.ionWarnS = 0; SZI.ionWaveN = 0; SZI.ionArcT = 0;
+        const nx = player.x, ny = player.y - 30;
+        szRings.push({x: nx, y: ny, t: 0, dur: 0.35, r0: 4, r1: 42, rgb: '150,215,255', w: 3.2});
+        szBurst(nx, ny, {sparks: lo ? 8 : 18, power: 240});
+        for(let i = 0; i < (lo ? 12 : 26); i++){
+            const a = -Math.PI / 2 + (Math.random() - 0.5) * 2 * SZI_T.ION_HALF, sp = 300 + Math.random() * 220;
+            _sziEmit(nx, ny, Math.cos(a) * sp, Math.sin(a) * sp, 0.35 + Math.random() * 0.25, 1.2 + Math.random() * 1.4, 2);
+        }
     }
-    /* 총구 섬광·반동 찌그러짐(기체 위치는 그대로) */
-    szBurst(x0, y0, {sparks: lo ? 6 : 14, power: 160, ring: 22, ringRGB: '210,220,255', ringDur: 0.22, ringW: 2.4});
-    for(let k = 0; k < (lo ? 6 : 14); k++) _pushFxSpark(grazeSparks, x0 + (Math.random() - 0.5) * 8, Math.random() * y0, Math.random() < 0.5 ? '#C9D2FF' : '#FFFFFF', 90, 0.35);
-    try{ szSquashUntil = now + 200; }catch(_){}
-    szFlash('150,170,255', 0.08, 120);
+    szPopup(szItemName(item), player.x, player.y - 50, SZI_COL[item] || '#FFE66D', 14, 0.9);
 }
-/* ── 휘플 실드 — 충돌 검사 직전(무적 아닐 때만). 닿은 작은 운석을 겹 하나로 막는다 ── */
-function szWhippleAbsorb(now){
-    if(!SZI || SZI.wh <= 0) return;
-    const e = _sziE();
-    if(e >= SZI.whUntil){ SZI.wh = 0; return; }
-    const HR2 = (HIT_RADIUS + 6) * (HIT_RADIUS + 6);
-    let w = 0; const len = bullets.length;
+
+/* ── 반중력파: 장 안 적분. o.{x,y,vx,vy} 를 dt 동안 움직인다. 장 밖이면 false (호출자가 원래대로 움직인다) ── */
+function szAgStep(o, dt){
+    if(!(dt > 0)) return false;
+    const cx = player.x, cy = player.y + SZ_HULL_CY, R = SZI_T.AG_R, K = SZI_T.AG_K, RM = SZI_T.AG_RMIN;
+    if(o.vx === undefined) o.vx = 0;
+    let dx = o.x - cx, dy = o.y - cy;
+    const reach = R + (Math.abs(o.vx) + Math.abs(o.vy)) * dt + 4;
+    if(dx * dx + dy * dy > reach * reach){ o._agVr = undefined; return false; }
+    let rem = dt, amax = 0, rmin = 1e9;
+    while(rem > 1e-7){
+        const r = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        let h = rem;
+        if(r < R){
+            if(_szAgSteps++ < SZI_T.AG_BUDGET){
+                const vv = Math.sqrt(o.vx * o.vx + o.vy * o.vy);
+                h = Math.min(rem, SZI_T.AG_H, Math.max(0.0005, 0.12 * r / (vv + 60)));
+            }
+            const rr = r < RM ? RM : r, a = K / (rr * rr);
+            o.vx += dx / r * a * h; o.vy += dy / r * a * h;
+            if(a > amax) amax = a;
+            if(r < rmin) rmin = r;
+        }
+        o.x += o.vx * h; o.y += o.vy * h;
+        dx = o.x - cx; dy = o.y - cy;
+        rem -= h;
+    }
+    o._ag = 1;
+    /* 표시 — 세게 밀린 것은 빛 꼬리, 안으로 오다 밖으로 돌아서는 순간 그 자리에 작은 충격 고리 */
+    if(amax > 700){ o._agT = performance.now(); o._agA = amax; }
+    const vr = dx * o.vx + dy * o.vy;
+    if(o._agVr !== undefined && o._agVr < 0 && vr >= 0 && rmin < R * 0.8 && SZI.agRings.length < 16){
+        SZI.agRings.push({x: o.x, y: o.y, t0: performance.now(), s: Math.min(1, amax / 9000), a: Math.atan2(dy, dx)});
+        try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('agPush', Math.min(1, amax / 9000)); }catch(_){}
+    }
+    o._agVr = vr;
+    return true;
+}
+/* 속도만 바꾸는 판(자기 기뢰 — 자체 감쇠·이동 루프가 있다) */
+function szAgKick(o, dt){
+    const dx = o.x - player.x, dy = o.y - (player.y + SZ_HULL_CY), r2 = dx * dx + dy * dy, R = SZI_T.AG_R;
+    if(r2 >= R * R) return;
+    const r = Math.sqrt(r2) || 0.001, rr = Math.max(r, SZI_T.AG_RMIN), a = SZI_T.AG_K / (rr * rr);
+    const dv = Math.min(900, a * dt);
+    o.vx += dx / r * dv; o.vy += dy / r * dv;
+    if(a > 700) o._agT = performance.now();
+}
+/* 혜성 — 경로는 매개변수(직선)라 밀린 만큼을 오프셋(ox,oy)·오프셋 속도로 따로 적분한다 */
+function szAgComet(c, dt){
+    if(c.ovx === undefined){ c.ox = 0; c.oy = 0; c.ovx = 0; c.ovy = 0; }
+    const N = 4, h = dt / N, cx = player.x, cy = player.y + SZ_HULL_CY, R = SZI_T.AG_R;
+    for(let i = 0; i < N; i++){
+        const dx = c.x + c.ox - cx, dy = c.y + c.oy - cy, r2 = dx * dx + dy * dy;
+        if(r2 < R * R){
+            const r = Math.sqrt(r2) || 0.001, rr = Math.max(r, SZI_T.AG_RMIN), a = SZI_T.AG_K / (rr * rr);
+            c.ovx += dx / r * a * h; c.ovy += dy / r * a * h;
+            if(a > 700) c._agT = performance.now();
+        }
+        c.ox += c.ovx * h; c.oy += c.ovy * h;
+    }
+}
+
+/* ── 이온 충격파: 부채꼴 판정·분해 (충돌 검사 직전) ── */
+function _sziInFan(x, y, rad){
+    const dx = x - player.x, dy = y - (player.y + SZ_HULL_CY);
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if(d > SZI_T.ION_R + rad) return false;
+    if(d < 16 + rad) return dy < 6;   /* 기체 바로 앞 — 노즈 쪽만 */
+    return Math.abs(Math.atan2(dx, -dy)) <= SZI_T.ION_HALF + Math.asin(Math.min(1, rad / d));
+}
+function szIonSweep(now){
+    if(!SZI) return;
+    let n = 0;
+    /* 운석·조각·편대·얼음띠·초고속 별 */
+    const len = bullets.length; let w = 0;
     for(let i = 0; i < len; i++){
         const b = bullets[i];
-        if(SZI.wh > 0 && b.zk !== 'cw' && b.zk !== 'sh'){
-            const dx = b.x - player.x, dy = b.y - player.y;
-            if(dx * dx + dy * dy < HR2){
-                SZI.wh--; SZI.whHitT = now; SZI.whX = b.x; SZI.whY = b.y;
-                const lo = szLo();
-                szBurst((b.x + player.x) / 2, (b.y + player.y) / 2, {shards: lo ? 3 : 6, sparks: lo ? 5 : 12, power: 200, ring: 28, ringRGB: '255,170,90', ringDur: 0.3, ringW: 2.6});
-                for(let k = 0; k < (lo ? 4 : 9); k++) _pushFxSpark(grazeSparks, b.x, b.y, k % 3 ? '#FFB566' : '#FFFFFF', 150, 0.4);
-                try{ window.SZ3 && SZ3.pop && SZ3.pop(b.x, b.y); }catch(_){}
-                szFunTone(SZI.wh > 0 ? 330 : 220, 0.09, 'square', 0.045); szFunTone(990, 0.05, 'triangle', 0.03);
-                try{ window.SZ3 && SZ3.haptic && SZ3.haptic('razor'); }catch(_){}
-                try{ szSquashUntil = now + 140; }catch(_){}
+        if(_sziInFan(b.x, b.y, 6)){
+            if(b.zk === 'cw' || b.zk === 'sh'){ _sziWallSpark(b.x, b.y, now); }
+            else {
+                szIonPop(b.x, b.y, 7, n++, now, b.vx, b.vy);
+                if(b._g === 1){ try{ if(SZFUN && SZFUN.on) szFunJackpot(SZFUN, b, now); }catch(_){} }
                 continue;
             }
         }
@@ -15479,309 +15552,401 @@ function szWhippleAbsorb(now){
         w++;
     }
     if(w < len) bullets.length = w;
+    /* 소행성 바위 (큰 것은 잠깐 하얗게 달아올랐다가 터진다 — 국소 정지) */
+    try{
+        for(const c of asteroidClusters){
+            for(let i = c.rocks.length - 1; i >= 0; i--){
+                const r = c.rocks[i];
+                if(_sziInFan(r.x, r.y, r.r + HIT_RADIUS - 2)){ szIonBig(r.x, r.y, r.r + 4, n++, now, r.vx || 0, r.vy); c.rocks.splice(i, 1); }
+            }
+        }
+    }catch(_){}
+    try{ for(let i = splitters.length - 1; i >= 0; i--){ const s = splitters[i]; if(_sziInFan(s.x, s.y, SPLIT_R * 0.85)){ szIonBig(s.x, s.y, SPLIT_R, n++, now, 0, s.vy); splitters.splice(i, 1); } } }catch(_){}
+    try{ for(let i = magneticMines.length - 1; i >= 0; i--){ const m = magneticMines[i]; if(_sziInFan(m.x, m.y, MINE_R)){ szIonBig(m.x, m.y, MINE_R + 6, n++, now, m.vx, m.vy); magneticMines.splice(i, 1); } } }catch(_){}
+    try{ for(let i = comets.length - 1; i >= 0; i--){ const c = comets[i]; if(c.phase === 'fly' && _sziInFan(c.x, c.y, COMET_R)){ szIonPop(c.x, c.y, 12, n++, now, 0, 0); comets.splice(i, 1); } } }catch(_){}
+    if(n) SZI.ionPopN += n;
 }
-/* 충돌 코스 판정 — 지금 기체 자리 기준 H초 안 최근접 [t*, 거리] */
-function _sziCPA(b, H){
-    const dx = b.x - player.x, dy = b.y - player.y, vx = b.vx || 0, vy = b.vy || 0;
-    const vv = vx * vx + vy * vy;
-    let t = vv > 1 ? -(dx * vx + dy * vy) / vv : 0;
-    if(t < 0) t = 0; else if(t > H) t = H;
-    const cx = dx + vx * t, cy = dy + vy * t;
-    return [t, Math.sqrt(cx * cx + cy * cy)];
+function _sziWallSpark(x, y, now){
+    if(now - SZI.ionSparkT < 60) return;
+    SZI.ionSparkT = now;
+    for(let k = 0; k < (szLo() ? 2 : 5); k++){
+        const a = Math.atan2(y - player.y, x - player.x) + (Math.random() - 0.5) * 1.6, sp = 90 + Math.random() * 120;
+        _sziEmit(x, y, Math.cos(a) * sp, Math.sin(a) * sp, 0.25 + Math.random() * 0.2, 1 + Math.random(), 0);
+    }
 }
+/* 분해 — 플라즈마 점화(흰 핵 섬광) + 돌 조각 + 빛나는 불티 + 짧은 충격 고리 + 겹소리(음높이는 크기·무작위) */
+function szIonPop(x, y, sz, n, now, vx, vy){
+    const lo = szLo(), full = n < 8;
+    if(SZI.ionFl.length < 28) SZI.ionFl.push({x, y, r: sz, t0: now});
+    /* 방전 — 노즈에서 분해된 자리까지 번개 한 줄(130ms) */
+    if(n < 6 && SZI.ionZaps.length < 8){
+        const x0 = player.x, y0 = player.y - 30, pts = [x0, y0], st = 5, dx = x - x0, dy = y - y0, dl = Math.hypot(dx, dy) || 1;
+        for(let q = 1; q <= st; q++){ const f = q / st, j = q < st ? (Math.random() - 0.5) * Math.min(22, dl * 0.25) : 0; pts.push(x0 + dx * f - dy / dl * j, y0 + dy * f + dx / dl * j); }
+        SZI.ionZaps.push({pts, t0: now});
+    }
+    /* 기체에서 멀어지는 쪽으로 쏠린 불티 — 충격파가 밀어낸 느낌 */
+    const ax = x - player.x, ay = y - (player.y + SZ_HULL_CY), al = Math.hypot(ax, ay) || 1, ux = ax / al, uy = ay / al;
+    const ne = full ? (lo ? 6 : 12) : 3;
+    for(let k = 0; k < ne; k++){
+        const a = Math.random() * 6.2832, sp = 70 + Math.random() * 230;
+        _sziEmit(x, y, Math.cos(a) * sp + ux * 160 + (vx || 0) * 0.15, Math.sin(a) * sp + uy * 160 + (vy || 0) * 0.15,
+            0.35 + Math.random() * 0.45, 1 + Math.random() * (sz > 10 ? 2.4 : 1.6), k % 3 === 0 ? 1 : 0);
+    }
+    if(full){
+        szBurst(x, y, {shards: lo ? 1 : 3, ring: 14 + sz * 2, ringRGB: (n & 1) ? '140,210,255' : '190,150,255', ringDur: 0.26, ringW: 2.2});
+        if(n < 3) try{ window.SZ3 && SZ3.pop && SZ3.pop(x, y); }catch(_){}
+    }
+    try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('ionPop', sz); }catch(_){}
+}
+/* 큰 것 — 80ms 동안 하얗게 달아오른 채 멈춰 있다가(국소 정지 — 화면·세계는 그대로) 크게 터진다 */
+function szIonBig(x, y, sz, n, now, vx, vy){
+    if(SZI.ionHolds.length < 10) SZI.ionHolds.push({x, y, sz, t0: now, vx, vy});
+    else szIonPop(x, y, sz, n, now, vx, vy);
+}
+
+/* ── 프레임 갱신 (gameLoop — 보급·윙맨 뒤) ── */
 function szItemsUpdate(dt, now){
     if(!SZI) szItemsReset();
-    if(szSpectating){ if(SZI.wh || SZI.rep || SZI.laserUntil || SZI.lidarUntil || SZI.aeroUntil || SZI.railLeft) szItemsReset(); return; }
+    _szAgSteps = 0;
+    if(szSpectating){ if(SZI.agUntil || SZI.ionUntil) szItemsReset(); return; }
     const e = _sziE();
-    /* 레일건 남은 발 */
-    if(SZI.railLeft > 0 && e >= SZI.railNext){
-        SZI.railLeft--; SZI.railNext = e + SZI_T.RAIL_GAP;
-        szRailFire(now);
-        try{ window.SZ3 && SZ3.useItem && SZ3.useItem(ITEM.RAIL); }catch(_){}
+    /* 반중력파 — 웅웅거림(0.62초마다 낮은 맥동) · 마지막 3초 째깍 · 끝나는 순간 안으로 접히는 고리 */
+    const ag = e < SZI.agUntil;
+    if(szAG && !ag && SZI.agUntil > 0 && running){
+        szRings.push({x: player.x, y: player.y + SZ_HULL_CY, t: 0, dur: 0.4, r0: SZI_T.AG_R, r1: 8, rgb: '170,140,255', w: 2.2});
+        try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('agEnd'); }catch(_){}
     }
-    /* 레이저 빗자루 */
-    if(e < SZI.laserUntil && e >= SZI.laserNext && bullets.length){
-        SZI.laserNext = e + SZI_T.LASER_EVERY;
-        let best = null, bt = 9;
-        const R2 = SZI_T.LASER_RANGE * SZI_T.LASER_RANGE;
-        for(const b of bullets){
-            if(b.zk === 'cw' || b.zk === 'sh') continue;
-            if(b._lzE != null && e - b._lzE < 600) continue;
-            const dx = b.x - player.x, dy = b.y - player.y;
-            if(dx * dx + dy * dy > R2) continue;
-            const c = _sziCPA(b, SZI_T.LASER_H);
-            if(c[0] < 0.04 || c[1] > SZI_T.LASER_MISS) continue;
-            if(c[0] < bt){ bt = c[0]; best = b; }
-        }
-        if(best){
-            const b = best, vl = Math.hypot(b.vx, b.vy) || 1;
-            const nx = -b.vy / vl, ny = b.vx / vl;
-            let s = nx * (b.x - player.x) + ny * (b.y - player.y);
-            if(Math.abs(s) < 0.5) s = (b.x < player.x) ? -nx : nx;   /* 정면이면 화면 가운데 반대쪽으로 */
-            const sg = s >= 0 ? 1 : -1;
-            b.vx += nx * sg * SZI_T.LASER_DV; b.vy += ny * sg * SZI_T.LASER_DV;
-            b._lzE = e;
-            /* 빛은 기체 코에서 운석의 '기체 쪽 옆면'으로 — 거기서 증발한 가스가 뿜어 나오며(반작용) 운석이 반대로 밀린다 */
-            const rr = 7, hx = b.x - nx * sg * rr, hy = b.y - ny * sg * rr;
-            SZI.beams.push({x0: player.x, y0: player.y - 14, x1: hx, y1: hy, t0: now});
-            if(SZI.beams.length > 6) SZI.beams.shift();
-            const lo = szLo();
-            for(let k = 0; k < (lo ? 3 : 7); k++){
-                const a = Math.atan2(-ny * sg, -nx * sg) + (Math.random() - 0.5) * 1.1, sp = 90 + Math.random() * 110;
-                grazeSparks.push({x: hx, y: hy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: 0.8 + Math.random() * 1.8, life: 0.35, maxLife: 0.35, color: k % 2 ? '#F0C8FF' : '#FFFFFF'});
+    szAG = ag;
+    if(ag){
+        if(now >= SZI.agHum){ SZI.agHum = now + 620; try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('agHum', (SZI.agUntil - e) / SZI_T.AG_MS); }catch(_){} }
+        const left = SZI.agUntil - e, s = Math.ceil(left / 1000);
+        if(left < SZI_T.WARN && s !== SZI.agWarnS){ SZI.agWarnS = s; try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('warn', s); }catch(_){} }
+    }
+    /* 이온 충격파 — 파면 리듬 소리 · 마지막 3초 · 끝 */
+    if(SZI.ionUntil){
+        if(e < SZI.ionUntil){
+            const wn = Math.floor((now - SZI.ionT0) / 1000 / SZI_T.ION_WAVE);
+            if(wn !== SZI.ionWaveN){
+                SZI.ionWaveN = wn;
+                if(wn % 3 === 0) try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('ionWave'); }catch(_){}
+                /* 파면마다 부채꼴 안으로 흐르는 플라즈마 티끌 몇 개 */
+                if(!szLo()) for(let k = 0; k < 3; k++){
+                    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2 * SZI_T.ION_HALF, sp = 260 + Math.random() * 120;
+                    _sziEmit(player.x + Math.cos(a) * 14, player.y - 26 + Math.sin(a) * 14, Math.cos(a) * sp, Math.sin(a) * sp, 0.38, 0.9 + Math.random(), 2);
+                }
             }
-            if(grazeSparks.length > 96) grazeSparks.splice(0, grazeSparks.length - 96);
-            szFunTone(1480 + Math.random() * 120, 0.05, 'sawtooth', 0.018);
+            const left = SZI.ionUntil - e, s = Math.ceil(left / 1000);
+            if(left < SZI_T.WARN && s !== SZI.ionWarnS){ SZI.ionWarnS = s; try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('warn', s); }catch(_){} }
+        } else {
+            SZI.ionUntil = 0;
+            if(running){ szRings.push({x: player.x, y: player.y - 30, t: 0, dur: 0.35, r0: 30, r1: 4, rgb: '150,215,255', w: 2}); try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('ionEnd'); }catch(_){} }
         }
     }
-    /* 수리 드론 — 5초 무피격 */
-    if(SZI.rep){
-        const r = SZI.rep;
-        if(!running || lives <= 0 || lives >= MAX_LIVES){ SZI.rep = null; }
-        else {
-            if(SZI.repLives >= 0 && lives < SZI.repLives){
-                r.p = 0; r.hitT = now;
-                szBurst(player.x + 16, player.y + 4, {sparks: 8, power: 120});
-                szFunTone(196, 0.12, 'square', 0.04);
-            }
-            r.p += dt;
-            r.sp += dt;
-            if(r.sp > 0.08){ r.sp = 0; if(!szLo()) _pushFxSpark(grazeSparks, player.x + 8, player.y + 3, Math.random() < 0.5 ? '#E8FFB0' : '#FFFFFF', 55, 0.25); }
-            if(r.p >= SZI_T.REPAIR_S){
-                lives = Math.min(MAX_LIVES, lives + 1);
-                SZI.rep = null;
-                szRings.push({x: player.x, y: player.y, t: 0, dur: 0.5, r0: 8, r1: 54, rgb: '190,245,110', w: 2.8});
-                szRings.push({x: player.x, y: player.y, t: -0.1, dur: 0.5, r0: 8, r1: 34, rgb: '255,120,160', w: 1.8});
-                szBurst(player.x, player.y, {sparks: szLo() ? 8 : 16, power: 180});
-                szPopup('♥ +1', player.x, player.y - 34, '#FF6F96', 15, 0.9);
-                szFunTone(784, 0.08, 'triangle', 0.045); szFunTone(1175, 0.16, 'triangle', 0.04);
-                try{ window.SZ3 && SZ3.mood && SZ3.mood('cheer', 900, 2, '♪', '190,245,110'); }catch(_){}
-            }
-        }
-        SZI.repLives = lives;
+    /* 국소 정지했던 큰 바위 — 80ms 뒤 터진다 */
+    for(let i = SZI.ionHolds.length - 1; i >= 0; i--){
+        const H = SZI.ionHolds[i];
+        if(now - H.t0 < 80) continue;
+        SZI.ionHolds.splice(i, 1);
+        const lo = szLo();
+        szBurst(H.x, H.y, {rocks: lo ? 5 : 10, shards: lo ? 2 : 5, sparks: lo ? 6 : 12, power: 240, ring: H.sz * 3.2, ringRGB: '170,220,255', ringDur: 0.36, ringW: 3});
+        szRings.push({x: H.x, y: H.y, t: -0.06, dur: 0.42, r0: H.sz * 0.6, r1: H.sz * 4.4, rgb: '190,150,255', w: 1.6});
+        szIonPop(H.x, H.y, H.sz, 0, now, H.vx, H.vy);
+        try{ window.SZ3 && SZ3.itemSfx && SZ3.itemSfx('ionBig', H.sz); }catch(_){}
     }
-    if(SZI.wh > 0 && e >= SZI.whUntil) SZI.wh = 0;
+    /* 입자 풀 */
+    if(_sziPn > 0){
+        let live = 0;
+        for(let i = 0; i < SZI_PN; i++){
+            const p = SZI_P[i];
+            if(p.life <= 0) continue;
+            p.life -= dt;
+            if(p.life <= 0) continue;
+            live++;
+            const dr = p.k === 2 ? 0.985 : 0.94;
+            p.vx *= dr; p.vy *= dr;
+            p.x += p.vx * dt; p.y += p.vy * dt;
+        }
+        _sziPn = live;
+    }
 }
+
 /* ── 그리기: 세계층(운석·보급 위, 기체 아래) ── */
+let _sziField = null;
+function _sziFieldImg(){
+    if(_sziField) return _sziField;
+    const R = SZI_T.AG_R, c = document.createElement('canvas');
+    c.width = c.height = Math.ceil(R * 2 + 4);
+    const x = c.getContext('2d'), h = c.width / 2;
+    /* 1/r² 처럼 가운데가 진하고 바깥으로 급히 옅어지는 장 */
+    const g = x.createRadialGradient(h, h, 0, h, h, R);
+    g.addColorStop(0, 'rgba(200,180,255,0.42)'); g.addColorStop(0.12, 'rgba(170,140,255,0.3)'); g.addColorStop(0.25, 'rgba(140,120,255,0.13)');
+    g.addColorStop(0.5, 'rgba(110,150,255,0.05)'); g.addColorStop(0.84, 'rgba(110,200,255,0.035)');
+    /* 가장자리 — 비눗방울 막처럼 얇게 빛나는 경계(장이 '구'로 읽히게) */
+    g.addColorStop(0.94, 'rgba(160,140,255,0.12)'); g.addColorStop(0.985, 'rgba(190,235,255,0.24)'); g.addColorStop(1, 'rgba(190,235,255,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(h, h, R, 0, Math.PI * 2); x.fill();
+    _sziField = c;
+    return c;
+}
 function szItemsDrawWorld(now){
     if(!SZI || !running) return;   /* 결과 화면에서는 논리시간이 멈춰 효과가 '영원히 켜진' 채로 그려진다 */
     const e = _sziE();
-    /* 에어로겔 — 기체 둘레 옅은 채집 원(운석을 가리지 않게 아주 옅게) */
-    if(e < SZI.aeroUntil && !szShipHidden){
-        const left = (SZI.aeroUntil - e) / 1000, fade = Math.min(1, left / 1.2) * Math.min(1, (now - SZI.aeroT0) / 250);
-        const R = SZI_T.AERO_MAG, px = player.x, py = player.y;
-        ctx.save();
-        ctx.globalAlpha = 0.6 * fade;
-        const g = ctx.createRadialGradient(px, py, R * 0.55, px, py, R);
-        g.addColorStop(0, 'rgba(143,216,255,0)'); g.addColorStop(0.85, 'rgba(143,216,255,0.08)'); g.addColorStop(1, 'rgba(200,236,255,0.2)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, R, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = 'rgba(190,232,255,0.6)'; ctx.lineWidth = 1.2; ctx.setLineDash([3, 6]); ctx.lineDashOffset = -now * 0.02;
-        ctx.beginPath(); ctx.arc(px, py, R, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-        /* 격자 — 바깥 띠에만 (가운데 기체 주변은 비운다) */
-        ctx.globalAlpha = 0.22 * fade; ctx.lineWidth = 0.8; ctx.strokeStyle = '#CDEFFF';
-        ctx.beginPath();
-        for(let k = 0; k < 12; k++){ const a = k * Math.PI / 6 + now * 0.0003; ctx.moveTo(px + Math.cos(a) * R * 0.62, py + Math.sin(a) * R * 0.62); ctx.lineTo(px + Math.cos(a) * R, py + Math.sin(a) * R); }
-        ctx.moveTo(px + R * 0.8, py); ctx.arc(px, py, R * 0.8, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-    }
-    /* 라이다 — 예상 궤적. 안전 = 옅은 초록 점선 한 묶음, 내 쪽 = 빨강 + 예상 지점 × */
-    if(e < SZI.lidarUntil){
-        const left = (SZI.lidarUntil - e) / 1000, fade = Math.min(1, left / 0.8);
-        const H = SZI_T.LIDAR_H, px = player.x, py = player.y;
-        const sweep = (now - SZI.lidarT0) / 700;
-        ctx.save();
-        if(sweep >= 0 && sweep < 1){
-            ctx.globalAlpha = (1 - sweep) * 0.7; ctx.strokeStyle = '#4DFFA0'; ctx.lineWidth = 2.4;
-            ctx.beginPath(); ctx.arc(px, py, 20 + sweep * Math.max(CW, CH), 0, Math.PI * 2); ctx.stroke();
-        }
-        ctx.globalAlpha = 0.75 * fade;
-        ctx.lineWidth = 1.1; ctx.setLineDash([4, 5]); ctx.lineDashOffset = -now * 0.04;
-        ctx.strokeStyle = 'rgba(77,255,160,0.5)';
-        const danger = [];
-        ctx.beginPath();
-        let n = 0;
-        for(const b of bullets){
-            if(n++ > 70) break;
-            if(b.y < -30 || b.y > CH + 30) continue;
-            const c = _sziCPA(b, H);
-            if(c[1] < HIT_RADIUS + 16 && c[0] > 0.02){ danger.push(b, c[0]); continue; }
-            ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + b.vx * H, b.y + b.vy * H);
-        }
-        try{ for(const cl of asteroidClusters) for(const r of cl.rocks){ const vx = r.vx || cl.vx || 0, vy = r.vy || cl.vy || 0; ctx.moveTo(r.x, r.y); ctx.lineTo(r.x + vx * H, r.y + vy * H); } }catch(_){}
-        ctx.stroke();
-        if(danger.length){
-            /* 내 쪽으로 오는 운석 — 운석에서 최근접 지점까지 빨간 실선 + 운석에 조준 괄호(가까울수록 진하고 빨리 깜빡) */
-            ctx.setLineDash([]);
-            ctx.strokeStyle = '#FF5A6E';
-            for(let i = 0; i < danger.length; i += 2){
-                const b = danger[i], t = danger[i + 1];
-                const k = 1 - t / H, x = b.x + b.vx * t * 0.82, y = b.y + b.vy * t * 0.82;
-                const blink = 0.75 + 0.25 * Math.sin(now * (0.012 + 0.03 * k));
-                ctx.globalAlpha = (0.5 + 0.5 * k) * fade * blink;
-                ctx.lineWidth = 1.8;
-                ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(x, y); ctx.stroke();
-                const r = 15 - 3 * k;
-                ctx.lineWidth = 2.4;
-                ctx.beginPath();
-                for(let q = 0; q < 4; q++){ const a = q * Math.PI / 2 + Math.PI / 4; ctx.moveTo(b.x + Math.cos(a - 0.38) * r, b.y + Math.sin(a - 0.38) * r); ctx.arc(b.x, b.y, r, a - 0.38, a + 0.38); }
-                ctx.stroke();
-            }
-        }
-        ctx.setLineDash([]);
-        /* 기체 둘레 회전 스캔 호 — 작동 중 표시 */
-        if(!szShipHidden){
-            const a = now * 0.006;
-            ctx.globalAlpha = 0.4 * fade; ctx.strokeStyle = '#4DFFA0'; ctx.lineWidth = 1.4;
-            ctx.beginPath(); ctx.arc(px, py, 24, a, a + 0.9); ctx.stroke();
-        }
-        ctx.restore();
-    }
-    /* 레이저 빗자루 빛줄기 — 0.14초 */
-    if(SZI.beams.length){
+    const lo = szLo();
+    ctx.save();
+    if(e < SZI.agUntil && !szShipHidden) _sziDrawAG(now, e, lo);
+    if(e < SZI.ionUntil && !szShipHidden) _sziDrawIon(now, e, lo);
+    /* 반중력 — 밀린 위험물의 빛 꼬리 */
+    if(SZI.agUntil && e < SZI.agUntil + 600) _sziDrawPushTrails(now);
+    /* 돌아서는 자리 충격 고리 */
+    if(SZI.agRings.length){
         let w = 0;
-        ctx.save();
         ctx.globalCompositeOperation = 'lighter';
-        for(let i = 0; i < SZI.beams.length; i++){
-            const L = SZI.beams[i], k = 1 - (now - L.t0) / 140;
-            if(k <= 0) continue;
-            SZI.beams[w++] = L;
-            ctx.globalAlpha = k * 0.55; ctx.strokeStyle = '#B45CFF'; ctx.lineWidth = 6;
-            ctx.beginPath(); ctx.moveTo(L.x0, L.y0); ctx.lineTo(L.x1, L.y1); ctx.stroke();
-            ctx.globalAlpha = k; ctx.strokeStyle = '#F6E2FF'; ctx.lineWidth = 1.6;
-            ctx.beginPath(); ctx.moveTo(L.x0, L.y0); ctx.lineTo(L.x1, L.y1); ctx.stroke();
-            szGlow(szItemGlow('laser'), L.x1, L.y1, 14, k);
+        for(let i = 0; i < SZI.agRings.length; i++){
+            const Rg = SZI.agRings[i], k = (now - Rg.t0) / 320;
+            if(k >= 1) continue;
+            SZI.agRings[w++] = Rg;
+            const r = 5 + 16 * k * (0.6 + 0.4 * Rg.s);
+            ctx.globalAlpha = (1 - k) * (0.55 + 0.45 * Rg.s);
+            ctx.strokeStyle = '#CDBEFF'; ctx.lineWidth = 2.2 * (1 - k) + 0.6;
+            ctx.beginPath(); ctx.arc(Rg.x, Rg.y, r, 0, Math.PI * 2); ctx.stroke();
+            /* 기체 쪽 면 — 밀어낸 벽이 보이게 짧은 호 */
+            ctx.strokeStyle = '#7DF3FF'; ctx.lineWidth = 2.6 * (1 - k);
+            ctx.beginPath(); ctx.arc(Rg.x, Rg.y, r + 3, Rg.a + Math.PI - 0.7, Rg.a + Math.PI + 0.7); ctx.stroke();
         }
-        SZI.beams.length = w;
-        ctx.restore(); ctx.globalAlpha = 1;
+        SZI.agRings.length = w;
     }
-    /* 레이저 작동 중 — 기체 코의 발사구 빛 */
-    if(e < SZI.laserUntil && !szShipHidden){
-        ctx.save(); ctx.globalCompositeOperation = 'lighter';
-        szGlow(szItemGlow('laser'), player.x, player.y - 14, 7 + Math.sin(now * 0.02) * 1.5, 0.75);
-        ctx.restore(); ctx.globalAlpha = 1;
-    }
-    /* 레일건 — 흰 심 + 남색 번짐, 0.52초에 걸쳐 가늘어지며 사라진다 */
-    if(SZI.rail){
-        const R = SZI.rail, k = 1 - (now - R.t0) / SZI_T.RAIL_FX_MS;
-        if(k <= 0) SZI.rail = null;
-        else {
-            ctx.save();
-            ctx.globalCompositeOperation = 'lighter';
-            const wO = 2 * SZI_T.RAIL_HALF * (0.4 + 0.6 * k);
-            const g = ctx.createLinearGradient(R.x - wO, 0, R.x + wO, 0);
-            g.addColorStop(0, 'rgba(125,140,255,0)'); g.addColorStop(0.5, 'rgba(150,165,255,' + (0.55 * k).toFixed(3) + ')'); g.addColorStop(1, 'rgba(125,140,255,0)');
-            ctx.fillStyle = g; ctx.fillRect(R.x - wO, -10, wO * 2, R.y + 10);
-            ctx.globalAlpha = Math.min(1, k * 1.4); ctx.fillStyle = '#FFFFFF';
-            const wc = 1 + 4 * k; ctx.fillRect(R.x - wc / 2, -10, wc, R.y + 10);
-            /* 레일 사이 전기 아크 — 총구 근처 */
-            if(k > 0.4){
-                ctx.strokeStyle = 'rgba(200,210,255,' + k.toFixed(3) + ')'; ctx.lineWidth = 1.2;
-                ctx.beginPath();
-                let y = R.y; ctx.moveTo(R.x - 7, y);
-                for(let j = 0; j < 6; j++){ y -= 5; ctx.lineTo(R.x + (j % 2 ? 7 : -7) + (Math.random() - 0.5) * 3, y); }
+    /* 이온 — 방전 번개 · 플라즈마 점화 섬광 · 달아오른 큰 바위 */
+    if(SZI.ionZaps.length){
+        ctx.globalCompositeOperation = 'lighter';
+        let w = 0;
+        for(let i = 0; i < SZI.ionZaps.length; i++){
+            const Z = SZI.ionZaps[i], k = 1 - (now - Z.t0) / 130;
+            if(k <= 0) continue;
+            SZI.ionZaps[w++] = Z;
+            for(let pass = 0; pass < 2; pass++){
+                ctx.globalAlpha = k * (pass ? 1 : 0.45);
+                ctx.strokeStyle = pass ? '#FFFFFF' : '#9C7CFF'; ctx.lineWidth = pass ? 1.4 : 5;
+                ctx.beginPath(); ctx.moveTo(Z.pts[0], Z.pts[1]);
+                for(let j = 2; j < Z.pts.length; j += 2) ctx.lineTo(Z.pts[j], Z.pts[j + 1]);
                 ctx.stroke();
             }
-            szGlow(szItemGlow('rail'), R.x, R.y, 22 * k + 8, k);
-            ctx.restore(); ctx.globalAlpha = 1;
         }
+        SZI.ionZaps.length = w;
     }
-    /* 수리 드론 — 기체 오른쪽 아래에 붙어 용접 불꽃 + 진행 고리 */
-    if(SZI.rep && !szShipHidden){
-        const r = SZI.rep, px = player.x, py = player.y;
-        const bob = Math.sin(now * 0.008) * 1.5;
-        const dx = px + 18, dy = py + 8 + bob;
-        const hurt = r.hitT && now - r.hitT < 400;
-        const col = hurt ? '#FF6B7A' : '#B6F25A';
-        ctx.save();
-        ctx.strokeStyle = 'rgba(30,40,20,0.85)'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.moveTo(dx - 4, dy - 1); ctx.lineTo(px + 7, py + 3); ctx.stroke();
-        ctx.strokeStyle = hurt ? '#FF6B7A' : '#D8FF8A'; ctx.lineWidth = 1.4;
-        ctx.beginPath(); ctx.moveTo(dx - 4, dy - 1); ctx.lineTo(px + 7, py + 3); ctx.stroke();
+    if(SZI.ionFl.length || SZI.ionHolds.length){
         ctx.globalCompositeOperation = 'lighter';
-        szGlow(SZ_GLOW.white, px + 7, py + 3, 5 + Math.random() * 3, 0.9);
-        ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-        /* 몸통 — 육각 + 로터 둘 */
-        ctx.fillStyle = '#2E3A22'; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        for(let i = 0; i < 6; i++){ const a = i * Math.PI / 3 + Math.PI / 6; const x = dx + Math.cos(a) * 5.2, y = dy + Math.sin(a) * 5.2; if(i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#ECFFC8'; ctx.beginPath(); ctx.arc(dx, dy, 1.6, 0, Math.PI * 2); ctx.fill();
-        const rs = now * 0.05;
-        ctx.strokeStyle = 'rgba(220,255,180,0.75)'; ctx.lineWidth = 1;
-        for(const sx of [-7.5, 7.5]){ ctx.beginPath(); ctx.moveTo(dx + sx - Math.cos(rs) * 3.5, dy - 4.5); ctx.lineTo(dx + sx + Math.cos(rs) * 3.5, dy - 4.5); ctx.stroke(); }
-        /* 진행 고리 */
-        const p = Math.min(1, r.p / SZI_T.REPAIR_S);
-        ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(dx, dy, 9.5, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = col; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(dx, dy, 9.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.stroke();
-        ctx.restore();
-    }
-}
-/* ── 그리기: 기체층 — 휘플 범퍼 판 (기체 앞쪽 호, 남은 겹 수만큼) ── */
-function szItemsDrawShip(now){
-    if(!SZI || szShipHidden || !running) return;
-    const e = _sziE();
-    const px = player.x, py = player.y;
-    if(SZI.wh > 0 && e < SZI.whUntil){
-        const left = (SZI.whUntil - e) / 1000, blink = left < 3 ? (0.55 + 0.45 * Math.sin(now * 0.02)) : 1;
-        ctx.save();
-        ctx.lineCap = 'round';
-        for(let i = 0; i < SZI.wh; i++){
-            const R = 23 + i * 5.5, a0 = -Math.PI / 2 - 0.9, a1 = -Math.PI / 2 + 0.9;
-            ctx.globalAlpha = blink * (0.95 - i * 0.18);
-            ctx.strokeStyle = 'rgba(20,10,0,0.7)'; ctx.lineWidth = 4.2;
-            ctx.beginPath(); ctx.arc(px, py - 2, R, a0, a1); ctx.stroke();
-            ctx.strokeStyle = i === 0 ? '#FFD2A0' : i === 1 ? '#FF9F43' : '#D7782C'; ctx.lineWidth = 2.4;
-            ctx.beginPath(); ctx.arc(px, py - 2, R, a0, a1); ctx.stroke();
-            /* 판 이음 리벳 */
-            ctx.fillStyle = 'rgba(255,240,220,0.8)';
-            for(const a of [-0.55, 0, 0.55]){ const aa = -Math.PI / 2 + a; ctx.beginPath(); ctx.arc(px + Math.cos(aa) * R, py - 2 + Math.sin(aa) * R, 0.9, 0, Math.PI * 2); ctx.fill(); }
+        let w = 0;
+        for(let i = 0; i < SZI.ionFl.length; i++){
+            const F = SZI.ionFl[i], k = (now - F.t0) / 230;
+            if(k >= 1) continue;
+            SZI.ionFl[w++] = F;
+            const r = F.r * (1.4 + 2.2 * k);
+            szGlow(SZI_GL.ion, F.x, F.y, r * 2.6, (1 - k));
+            szGlow(SZ_GLOW.white, F.x, F.y, r * (1.0 - 0.5 * k), 0.85 * (1 - k) * (1 - k));   /* 흰 핵은 작게 — 파랑·보라 플라즈마가 보이게 */
         }
-        ctx.restore();
+        SZI.ionFl.length = w;
+        for(const H of SZI.ionHolds){
+            const k = Math.min(1, (now - H.t0) / 80);
+            szGlow(SZI_GL.plasma, H.x, H.y, H.sz * (1.6 + 1.4 * k), 0.6 + 0.4 * k);
+            szGlow(SZ_GLOW.white, H.x, H.y, H.sz * (0.9 + 0.5 * k), 0.9);
+            /* 금 가는 번개 */
+            ctx.globalAlpha = 0.9; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 1.3;
+            ctx.beginPath();
+            for(let j = 0; j < 4; j++){ const a = Math.random() * 6.2832, r1 = H.sz * (0.9 + 0.7 * k); ctx.moveTo(H.x, H.y); ctx.lineTo(H.x + Math.cos(a + 0.3) * r1 * 0.5, H.y + Math.sin(a + 0.3) * r1 * 0.5); ctx.lineTo(H.x + Math.cos(a) * r1, H.y + Math.sin(a) * r1); }
+            ctx.stroke();
+        }
     }
-    /* 방금 막은 자리 — 깨진 판 조각이 튄다 */
-    const hitK = 1 - (now - SZI.whHitT) / 380;
-    if(hitK > 0 && hitK <= 1){
-        ctx.save();
-        ctx.globalAlpha = hitK;
-        const a0 = Math.atan2(SZI.whY - py, SZI.whX - px);
-        ctx.strokeStyle = '#FFB566'; ctx.lineWidth = 2.6; ctx.lineCap = 'round';
-        const R = 22 + (1 - hitK) * 18;
-        for(const s of [-1, 1]){ ctx.beginPath(); ctx.arc(px, py - 2, R, a0 + s * 0.15, a0 + s * 0.5); ctx.stroke(); }
-        ctx.restore();
+    /* 입자 */
+    if(_sziPn > 0){
+        ctx.globalCompositeOperation = 'lighter';
+        for(let i = 0; i < SZI_PN; i++){
+            const p = SZI_P[i];
+            if(p.life <= 0) continue;
+            const a = p.life / p.max;
+            if(p.k === 1){
+                szGlow(a > 0.55 ? SZ_GLOW.white : SZ_GLOW.hot, p.x, p.y, p.r * (2.2 + a * 2.4), a);
+            } else if(p.k === 2){
+                szGlow(SZI_GL.plasma, p.x, p.y, p.r * 3.2, a * 0.8);
+            } else {
+                szGlow(a > 0.5 ? SZI_GL.ion : SZI_GL.violet, p.x, p.y, p.r * (2 + a * 2.6), a);
+                if(!lo && a > 0.45){ ctx.globalAlpha = a; ctx.fillStyle = '#EAF6FF'; ctx.fillRect(p.x - 0.7, p.y - 0.7, 1.4, 1.4); }
+            }
+        }
     }
+    ctx.restore();
+    ctx.globalAlpha = 1;
 }
-/* ── HUD — 하트 줄 아래 작은 장비 칩(남은 시간 고리). 글자 없음 ── */
+/* 반중력장 — 1/r² 로 진해지는 장 + 밖으로 퍼지는 일렁이는 물결 + 경계 점선 + 기체 핵 맥동 + 보스 벽이 닿는 자리 물결 */
+function _sziDrawAG(now, e, lo){
+    const cx = player.x, cy = player.y + SZ_HULL_CY, R = SZI_T.AG_R;
+    const left = SZI.agUntil - e, fin = Math.min(1, (now - SZI.agT0) / 260);
+    const warn = left < SZI_T.WARN ? (0.55 + 0.45 * Math.sin(now * 0.028)) * Math.max(0.35, left / SZI_T.WARN) : 1;
+    const A = fin * warn;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.85 * A;
+    const img = _sziFieldImg();
+    ctx.drawImage(img, cx - img.width / 2, cy - img.height / 2);
+    /* 물결 — 밖으로 흐르며 옅어진다(밝기 ∝ 1/r²). 원 둘레는 6갈래로 일렁여 굴절처럼 보인다 */
+    const N = lo ? 3 : 5, seg = lo ? 28 : 48;
+    for(let i = 0; i < N; i++){
+        const ph = ((now * 0.0008) + i / N) % 1;
+        const r0 = 14 + ph * (R - 14);
+        const I = Math.min(1, (26 / r0) * (26 / r0));
+        const amp = 0.5 + 1.5 * ph;
+        /* 두 번 긋기 — 보라 위에 살짝 바깥으로 밀린 청록(굴절된 빛이 갈라지는 느낌) */
+        for(let c = 0; c < (lo ? 1 : 2); c++){
+            ctx.globalAlpha = A * (0.08 + 0.8 * I) * (1 - ph * 0.55) * (c ? 0.55 : 1);
+            ctx.strokeStyle = c ? '#7DF3FF' : '#C9B6FF';
+            ctx.lineWidth = (c ? 0.9 : 1.1) + 2.4 * I;
+            const off = c ? 1.6 + 1.2 * ph : 0;
+            ctx.beginPath();
+            for(let j = 0; j <= seg; j++){
+                const th = j / seg * 6.2832;
+                const rr = r0 + off + amp * Math.sin(5 * th + now * 0.003 + i * 1.7) + 0.45 * amp * Math.sin(9 * th - now * 0.005 + i);
+                const x = cx + Math.cos(th) * rr, y = cy + Math.sin(th) * rr;
+                if(j) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+        }
+    }
+    /* 경계 — 옅은 점선이 천천히 돈다(마지막 3초는 분홍) */
+    ctx.globalAlpha = 0.32 * A; ctx.strokeStyle = left < SZI_T.WARN ? '#FF9FC0' : '#B9A8FF'; ctx.lineWidth = 1.2;
+    ctx.setLineDash([2, 7]); ctx.lineDashOffset = -now * 0.012;
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    /* 핵 — 기체 무게중심에서 맥동 */
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.0101);
+    szGlow(SZI_GL.violet, cx, cy, 30 + 8 * pulse, 0.5 * A);
+    szGlow(SZ_GLOW.white, cx, cy, 9 + 3 * pulse, 0.35 * A);
+    /* 보스 벽(밀리지 않는 것) — 장에 닿은 자리에 물결 고리 */
+    let nw = 0;
+    for(let i = 0; i < bullets.length && nw < 10; i++){
+        const b = bullets[i];
+        if(b.zk !== 'cw' && b.zk !== 'sh') continue;
+        const dx = b.x - cx, dy = b.y - cy;
+        if(dx * dx + dy * dy > R * R) continue;
+        nw++;
+        const k = (now * 0.004 + i * 0.37) % 1;
+        ctx.globalAlpha = A * 0.6 * (1 - k); ctx.strokeStyle = '#D8CCFF'; ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(b.x, b.y, 6 + 12 * k, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+}
+function _sziDrawPushTrails(now){
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    let n = 0;
+    const one = (o, vx, vy) => {
+        if(n > 40 || !o._agT) return;
+        const k = 1 - (now - o._agT) / 420;
+        if(k <= 0) return;
+        n++;
+        const sp = Math.hypot(vx, vy) || 1, ux = vx / sp, uy = vy / sp;
+        const L = Math.min(46, sp * 0.075) * (0.5 + 0.5 * k);
+        ctx.globalAlpha = 0.5 * k; ctx.strokeStyle = '#9A84FF'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - ux * L, o.y - uy * L); ctx.stroke();
+        ctx.globalAlpha = 0.7 * k; ctx.strokeStyle = '#B8F4FF'; ctx.lineWidth = 1.3;
+        ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - ux * L * 0.6, o.y - uy * L * 0.6); ctx.stroke();
+        szGlow(SZI_GL.violet, o.x, o.y, 15, 0.6 * k);
+    };
+    for(let i = 0; i < bullets.length; i++){ const b = bullets[i]; if(b._agT) one(b, b.vx, b.vy); }
+    try{ for(const c of asteroidClusters) for(const r of c.rocks) if(r._agT) one(r, r.vx || 0, r.vy); }catch(_){}
+    try{ for(const s of splitters) if(s._agT) one(s, s.vx || 0, s.vy); }catch(_){}
+    try{ for(const m of magneticMines) if(m._agT) one(m, m.vx, m.vy); }catch(_){}
+    try{ for(const c of comets) if(c._agT && c.phase === 'fly') one(c, c.ovx || 0, c.ovy || 0); }catch(_){}
+    ctx.globalCompositeOperation = 'source-over';
+}
+/* 이온 충격파 — 부채꼴 바탕 + 앞으로 퍼지는 초승달 파면(흰 심 + 파랑·보라 번짐) + 번개 + 노즈 방출구 */
+function _sziDrawIon(now, e, lo){
+    const ox = player.x, oy = player.y + SZ_HULL_CY, R = SZI_T.ION_R, H = SZI_T.ION_HALF;
+    const nx = player.x, ny = player.y - 30;
+    const left = SZI.ionUntil - e, fin = Math.min(1, (now - SZI.ionT0) / 200);
+    const warn = left < SZI_T.WARN ? (0.55 + 0.45 * Math.sin(now * 0.028)) * Math.max(0.35, left / SZI_T.WARN) : 1;
+    const A = fin * warn;
+    const a0 = -Math.PI / 2 - H, a1 = -Math.PI / 2 + H;
+    ctx.globalCompositeOperation = 'lighter';
+    /* 바탕 — 플라즈마 부채꼴(운석은 비쳐 보이게 옅게, 바깥 테는 충격 전선처럼 밝게) */
+    const g = ctx.createRadialGradient(ox, oy, 8, ox, oy, R);
+    g.addColorStop(0, 'rgba(140,215,255,0.34)'); g.addColorStop(0.45, 'rgba(100,150,255,0.12)'); g.addColorStop(0.9, 'rgba(140,110,255,0.07)'); g.addColorStop(1, 'rgba(190,170,255,0.2)');
+    ctx.globalAlpha = A; ctx.fillStyle = g;
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.arc(ox, oy, R, a0, a1); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = A * (0.45 + 0.2 * Math.sin(now * 0.017)); ctx.strokeStyle = '#A9DFFF'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(ox, oy, R, a0, a1); ctx.stroke();
+    /* 가장자리 — 일렁이는 빛 선 */
+    ctx.globalAlpha = A * (0.35 + 0.15 * Math.sin(now * 0.02)); ctx.strokeStyle = '#8FD0FF'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(ox + Math.cos(a0) * 16, oy + Math.sin(a0) * 16); ctx.lineTo(ox + Math.cos(a0) * R, oy + Math.sin(a0) * R);
+    ctx.moveTo(ox + Math.cos(a1) * 16, oy + Math.sin(a1) * 16); ctx.lineTo(ox + Math.cos(a1) * R, oy + Math.sin(a1) * R); ctx.stroke();
+    /* 파면 — ION_WAVE 마다 하나, ION_WAVE_LIFE 동안 R 까지. 바깥 번짐(보라) → 가운데(파랑) → 흰 심, 양 끝은 가는 초승달 꼬리 */
+    const t = (now - SZI.ionT0) / 1000, W = SZI_T.ION_WAVE, L = SZI_T.ION_WAVE_LIFE;
+    const kN = Math.floor(t / W);
+    const passes = lo ? 2 : 3;
+    for(let j = 0; j < Math.ceil(L / W) + 1; j++){
+        const age = t - (kN - j) * W;
+        if(age < 0 || age > L) continue;
+        const p = age / L, r = 16 + p * (R - 16), fade = (1 - p) * (p < 0.12 ? p / 0.12 : 1);
+        const b0 = a0 + 0.12 * (1 - p), b1 = a1 - 0.12 * (1 - p);
+        /* 전선 뒤 플라즈마 띠 — 초승달 면 */
+        const th = 16 * (1 - 0.4 * p);
+        ctx.globalAlpha = A * fade * 0.3; ctx.fillStyle = '#4FA8FF';
+        ctx.beginPath(); ctx.arc(ox, oy, r, b0, b1); ctx.arc(ox, oy, Math.max(4, r - th), b1, b0, true); ctx.closePath(); ctx.fill();
+        for(let s = 3 - passes; s < 3; s++){
+            ctx.globalAlpha = A * fade * (s === 0 ? 0.3 : s === 1 ? 0.55 : 1);
+            ctx.strokeStyle = s === 0 ? '#8A6CFF' : s === 1 ? '#5FC8FF' : '#F2FBFF';
+            ctx.lineWidth = (s === 0 ? 12 : s === 1 ? 6.5 : 2.6) * (1 - 0.45 * p);
+            ctx.beginPath(); ctx.arc(ox, oy, r, b0, b1); ctx.stroke();
+        }
+        ctx.globalAlpha = A * fade * 0.6; ctx.strokeStyle = '#BFE8FF'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(ox, oy, r + 3, a0 - 0.02, a0 + 0.3);
+        ctx.moveTo(ox + Math.cos(a1 - 0.3) * (r + 3), oy + Math.sin(a1 - 0.3) * (r + 3)); ctx.arc(ox, oy, r + 3, a1 - 0.3, a1 + 0.02); ctx.stroke();
+    }
+    /* 번개 — 70ms 마다 다시 뽑는 지그재그(노즈 → 부채꼴 안) */
+    if(now - SZI.ionArcT > 70){
+        SZI.ionArcT = now;
+        SZI.ionArcs.length = 0;
+        const nA = lo ? 1 : 3;
+        for(let q = 0; q < nA; q++){
+            const ang = -Math.PI / 2 + (Math.random() - 0.5) * 2 * H * 0.9, len = R * (0.45 + Math.random() * 0.5);
+            const pts = [nx, ny], st = 6;
+            for(let s2 = 1; s2 <= st; s2++){
+                const d = len * s2 / st, jit = (s2 < st ? (Math.random() - 0.5) * 16 : 0);
+                pts.push(ox + Math.cos(ang) * d - Math.sin(ang) * jit, oy + Math.sin(ang) * d + Math.cos(ang) * jit);
+            }
+            SZI.ionArcs.push(pts);
+        }
+    }
+    for(const pts of SZI.ionArcs){
+        for(let pass = 0; pass < 2; pass++){
+            ctx.globalAlpha = A * (pass ? 0.95 : 0.35) * (0.6 + 0.4 * Math.random());
+            ctx.strokeStyle = pass ? '#FFFFFF' : '#7FA8FF'; ctx.lineWidth = pass ? 1.1 : 4;
+            ctx.beginPath(); ctx.moveTo(pts[0], pts[1]);
+            for(let i = 2; i < pts.length; i += 2) ctx.lineTo(pts[i], pts[i + 1]);
+            ctx.stroke();
+        }
+    }
+    /* 노즈 방출구 */
+    szGlow(SZI_GL.ion, nx, ny, 16 + 4 * Math.sin(now * 0.03), 0.85 * A);
+    szGlow(SZ_GLOW.white, nx, ny, 6, 0.8 * A);
+    ctx.globalCompositeOperation = 'source-over';
+}
+/* ── HUD — 하트 줄 아래 작은 아이템 칩(남은 시간 고리, 마지막 3초 빨강 깜빡). 글자 없음 ── */
 function szItemsDrawHud(now){
     if(!SZI || szSpectating || !running) return;
     const e = _sziE();
     const L = [];
-    if(SZI.wh > 0 && e < SZI.whUntil) L.push(['whipple', (SZI.whUntil - e) / SZI_T.WH_MS, SZI.wh]);
-    if(e < SZI.lidarUntil) L.push(['lidar', (SZI.lidarUntil - e) / SZI_T.LIDAR_MS, 0]);
-    if(e < SZI.laserUntil) L.push(['laser', (SZI.laserUntil - e) / SZI_T.LASER_MS, 0]);
-    if(e < SZI.aeroUntil) L.push(['aerogel', (SZI.aeroUntil - e) / SZI_T.AERO_MS, 0]);
-    if(SZI.rep) L.push(['repair', SZI.rep.p / SZI_T.REPAIR_S, 0]);
+    if(e < SZI.agUntil) L.push(['antigrav', (SZI.agUntil - e) / SZI_T.AG_MS, SZI.agUntil - e]);
+    if(e < SZI.ionUntil) L.push(['ion', (SZI.ionUntil - e) / SZI_T.ION_MS, SZI.ionUntil - e]);
     if(!L.length) return;
     const x0 = 22 + szHudDX, y0 = 66, gap = 23;
     ctx.save();
     for(let i = 0; i < L.length; i++){
-        const k = L[i][0], f = L[i][1], cnt = L[i][2];
+        const k = L[i][0], ff = Math.max(0, Math.min(1, L[i][1])), warn = L[i][2] < SZI_T.WARN;
         const x = x0 + i * gap, y = y0;
         ctx.globalAlpha = 1;
         ctx.fillStyle = 'rgba(6,10,22,0.8)';
         ctx.beginPath(); ctx.arc(x, y, 9.5, 0, Math.PI * 2); ctx.fill();
         szDrawItemIcon(k, x, y, 0.64);
-        const ff = Math.max(0, Math.min(1, f));
         ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(x, y, 10.5, 0, Math.PI * 2); ctx.stroke();
-        ctx.strokeStyle = (ff < 0.2 && k !== 'repair') ? 'rgba(255,90,110,' + (0.6 + 0.4 * Math.sin(now * 0.02)).toFixed(3) + ')' : SZI_COL[k];
+        ctx.strokeStyle = warn ? 'rgba(255,90,110,' + (0.6 + 0.4 * Math.sin(now * 0.02)).toFixed(3) + ')' : SZI_COL[k];
         ctx.beginPath(); ctx.arc(x, y, 10.5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * ff); ctx.stroke();
-        if(cnt > 1){
-            ctx.fillStyle = '#FFE0C0';
-            for(let j = 0; j < cnt; j++){ ctx.beginPath(); ctx.arc(x - (cnt - 1) * 1.6 + j * 3.2, y + 14, 1.2, 0, Math.PI * 2); ctx.fill(); }
-        }
     }
     ctx.restore();
 }
@@ -16242,6 +16407,7 @@ function resetGame(){
     missionsCompletedZones=new Set();
     missionBannerHideAt=0;
     commLinkLost=false;                /* 통신망 — 새 판은 연결된 상태로 */
+    szSatMiss=0; szSupplyCut=false;    /* 보급 영구 차단 — 새 판은 처음부터 */
     _szLooseBannerHideAt=0;
     missionKind='main'; missionBuoyK=-1; szBuoyDone=new Set(); szLinkN=0; szLinkNT=0;   /* C — 부표·연결 수·연속 */
     szSatStreak=0; szSatStreakPend=false; szMbHideAt=0; szSatDoneUntil=0; szGhosts=[]; szBuoyFxL=[];
@@ -18129,6 +18295,10 @@ function gameLoop(now){
             /* 2026-09-25 — 위성을 못 놓은 채 존이 끝나면(싱글) 실패 = 통신 두절.
                예전엔 조용히 지워서 '건너뛰기' 가 벌이 없었다. 실패 안내는 3.5초 남긴다 */
             const _cut = (missionState === 'active') && _szSoloRun() && missionKind === 'main';
+            /* 보급 영구 차단 — 미션 중 존이 끝난 것도 실패 (대결·협동 포함, 기체마다) */
+            const _miss = (missionState === 'active') && missionKind === 'main';
+            if(_miss) szSatMissed();
+            if(_miss && !_cut && szSatMiss){ missionsCompletedZones.add(missionZoneIdx); _showMissionBanner(missionZoneIdx, 'failed'); _szLooseBannerHideAt = now + 4500; }
             const _endingBanner = (missionState === 'success' || missionState === 'failed');
             /* C — 부표는 존이 바뀌면 조용히 끝난다(벌칙 없음) */
             if(missionKind === 'buoy' && missionState === 'active'){ try{ szBuoyDone.add(missionZoneIdx + '-' + missionBuoyK); }catch(_){} }
@@ -18136,10 +18306,10 @@ function gameLoop(now){
                 missionsCompletedZones.add(missionZoneIdx);
                 _szCommLose();
                 _showMissionBanner(missionZoneIdx, 'failed');
-                _szLooseBannerHideAt = now + 3500;
+                _szLooseBannerHideAt = now + (szSatMiss ? 4500 : 3500);
             } else if(_endingBanner){
                 _szLooseBannerHideAt = Math.max(now + 600, missionBannerHideAt);
-            } else {
+            } else if(!(_miss && szSatMiss)){
                 _hideMissionBanner();
             }
             missionState = 'idle';
@@ -18223,8 +18393,11 @@ function gameLoop(now){
             /* Time Warp 시 dt × 0.35 — bullet 만 슬로우, player 는 정상. */
             const wdt = _worldDt(dt, now);
             if(szZF) szZoneForce(b, wdt);   /* P4 — 존 힘(소용돌이·바람·오작교·항성풍·BEAM 반발)은 운석에만 */
-            b.x += b.vx * wdt;
-            b.y += b.vy * wdt;
+            /* sz:mod:items2 — 반중력장 안이면 그 함수가 작은 걸음으로 움직인다(보스 벽 마디는 제외) */
+            if(!(szAG && b.zk !== 'cw' && b.zk !== 'sh' && szAgStep(b, wdt))){
+                b.x += b.vx * wdt;
+                b.y += b.vy * wdt;
+            }
             /* Near-miss combo credit (Stage 7). Once per bullet via the
                creditedNearMiss flag. Outer = 32px, inner = HIT_RADIUS+4
                (just outside the lethal ring). Bullets that hit get
@@ -18299,7 +18472,7 @@ function gameLoop(now){
     updateShieldBubble(now);
 
     if(szFeverOn) szFunShatter(now);    /* P8b — 피버: 닿는 운석은 부서진다 */
-    if(now>invincibleUntil) szWhippleAbsorb(now);   /* sz:mod:items — 휘플 실드: 닿은 작은 운석을 겹 하나로 */
+    if(szIonOn()) szIonSweep(now);      /* sz:mod:items2 — 이온 충격파: 앞 120° 부채꼴에 든 운석 분해 (무적과 무관) */
     /* ---- Collision ----
        PERF: 충돌 시 bullets.filter 로 새 array 생성 대신 splice 한 번 — 어차피
        break 하니 한 번만 발생, 새 array 할당 없음. */
@@ -18381,7 +18554,7 @@ function gameLoop(now){
     updateDepots(dt, now);
     updateGravFieldCharge(dt);
     updateMiniShip(dt, now);
-    szItemsUpdate(dt, now);             /* sz:mod:items — 레이저 빗자루·수리 드론 */
+    szItemsUpdate(dt, now);             /* sz:mod:items2 — 반중력파·이온 충격파 타이머·소리·입자 */
     updateWipeFragments(dt);
 
     /* ---- GRAV 버튼 게이지·상태 동기화 ----
@@ -18545,7 +18718,7 @@ function drawFrame(now, dt){
 
     /* ---- Mini-ship (있을 때) ---- */
     drawMiniShip();
-    szItemsDrawWorld(now);             /* sz:mod:items — 라이다 궤적·레이저·레일건·에어로겔·수리 드론 */
+    szItemsDrawWorld(now);             /* sz:mod:items2 — 반중력장·이온 부채꼴·분해 불꽃 */
 
     /* ---- Cinematic feedback (graze sparks, hit debris, zone warp) ---- */
     drawCinematicFx(now);
@@ -18584,7 +18757,6 @@ function drawFrame(now, dt){
     /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
        player 본체 위에 그려져야 우주선이 막 안에 든 듯이 보임. */
     drawShieldBubble(now);
-    szItemsDrawShip(now);              /* sz:mod:items — 휘플 범퍼 판 */
 
     /* ---- Gravity field cone (player 위) ---- */
     drawGravField();
@@ -18611,7 +18783,7 @@ function drawFrame(now, dt){
        하트 크기도 16→13 으로 축소 (overlay 와 위계 분리). */
     szDrawLives(now);
     szDrawCommHud(now);                /* 통신망 📡 — 하트 줄 오른쪽 */
-    szItemsDrawHud(now);               /* sz:mod:items — 하트 줄 아래 장비 칩(남은 시간 고리) */
+    szItemsDrawHud(now);               /* sz:mod:items2 — 하트 줄 아래 아이템 칩(남은 시간 고리) */
 
     /* ---- HUD: level badge ---- 2026-05-11 v5: y=10→y=40, font 13→11 ---- */
     const s=running?elapsedMs/1000:0;
@@ -19883,6 +20055,17 @@ function szDropDepot(zoneIdx, tag, item, now, atSec){
     if(depotsSpawnedZones.has(key)) return null;
     depotsSpawnedZones.add(key);
     const p = szDepotPos(zoneIdx, tag, atSec);
+    if(szSupplyCut){
+        /* 보급 영구 차단 — 이 기체에는 오지 않는다. 그 자리에 30% 실루엣 + ✗ (무엇을 잃는지, 표시 전용).
+           1:1 PvP 호스트는 상대 몫으로 좌표 방송은 그대로 한다 */
+        if(szGhosts.length < 6) szGhosts.push({key, x: p.x, y: Math.max(96, p.y), item, t0: performance.now()});
+        if(pvpState && pvpState.gameMode === 'pvp' && pvpState.role === 'host' && pvpState.channel){
+            const payload = { key, x: p.x, y: p.y, item, zoneIdx, slot: tag, gameId: pvpState.seed || 0 };
+            _rtcSend({ event: 'depot_spawn', payload });
+            try { pvpState.channel.send({ type:'broadcast', event:'depot_spawn', payload }); } catch(_){}
+        }
+        return null;
+    }
     const d = {
         x: p.x, y: p.y,
         speed: 24,                     /* 메테오보다 느림 = 충분히 공략 시간 */
@@ -21756,30 +21939,43 @@ function useItem(item){
         tone(520, 0.12, 'triangle', 0.05, 1040); tone(1560, 0.35, 'sine', 0.035, 0, 0.08);
         szRings.push({x:player.x, y:player.y, t:0, dur:0.4, r0:8, r1:44, rgb:'124,231,255', w:3});
         for(let i = 0; i < 12; i++){ const a = i / 12 * 6.28; emit(K_STAR, player.x + Math.cos(a) * 30, player.y + Math.sin(a) * 30, Math.cos(a) * 40, Math.sin(a) * 40, 0.4, 4, 1); }
-    } else if(item === ITEM.RAIL){
-        /* 레일건 — 낮은 쿵 + 전기 지글 + 높은 쨍 */
-        mood('focus', 700, 2, '!', '150,170,255');
-        tone(110, 0.18, 'sawtooth', 0.06, 55); nz(0.22, 0.07, 3000, 600, 1, 'bandpass'); tone(2400, 0.07, 'square', 0.03, 1200, 0.02);
-        vib([12, 20, 30]);
-    } else if(item === ITEM.WHIPPLE){
-        mood('focus', 700, 1, '!', '255,170,90');
-        tone(392, 0.07, 'square', 0.04); tone(523, 0.07, 'square', 0.04, 0, 0.06); tone(659, 0.12, 'triangle', 0.04, 0, 0.12);
-    } else if(item === ITEM.LIDAR){
-        mood('lookR', 900, 1, '?', '77,255,160');
-        tone(1760, 0.05, 'sine', 0.04); tone(1760, 0.05, 'sine', 0.03, 0, 0.18); tone(880, 0.3, 'sine', 0.025, 1760, 0.02);
-    } else if(item === ITEM.LASER){
-        mood('focus', 800, 1, '!', '196,107,255');
-        tone(880, 0.22, 'sawtooth', 0.03, 1760); nz(0.12, 0.03, 6000, 3000, 1, 'bandpass');
-    } else if(item === ITEM.REPAIR){
-        mood('happy', 900, 1, '♪', '182,242,90');
-        tone(523, 0.08, 'triangle', 0.04); tone(659, 0.08, 'triangle', 0.04, 0, 0.08); nz(0.25, 0.02, 4500, 4500, 1, 'bandpass');
-    } else if(item === ITEM.AEROGEL){
-        mood('cheer', 900, 1, '♪', '143,216,255');
-        tone(1047, 0.1, 'sine', 0.035); tone(1319, 0.1, 'sine', 0.03, 0, 0.07); tone(1568, 0.18, 'sine', 0.03, 0, 0.14);
+    } else if(item === ITEM.ANTIGRAV){
+        /* 반중력파 — 깊은 쿵(장이 펴진다) + 위로 휘는 쉬익 + 반짝임 셋 */
+        mood('focus', 900, 2, '!', '170,140,255');
+        tone(72, 0.55, 'sine', 0.1, 38); tone(146, 0.45, 'triangle', 0.045, 290, 0.02);
+        nz(0.5, 0.05, 300, 2600, 2, 'bandpass', 0.03);
+        tone(1320, 0.12, 'sine', 0.025, 0, 0.12); tone(1760, 0.12, 'sine', 0.02, 0, 0.2); tone(2350, 0.18, 'sine', 0.016, 0, 0.28);
+        vib([18, 30, 12]);
+    } else if(item === ITEM.ION){
+        /* 이온 충격파 — 방전 지지직 + 내려앉는 톱니 + 낮은 쿵 */
+        mood('cheer', 900, 2, '!', '95,200,255');
+        nz(0.35, 0.08, 6500, 900, 1.5, 'bandpass'); tone(1250, 0.32, 'sawtooth', 0.035, 170);
+        tone(90, 0.42, 'sine', 0.08, 44); tone(2600, 0.08, 'square', 0.02, 1300, 0.05);
+        vib([10, 24, 10, 24]);
     } else {
         mood('cheer', 700, 1, '♪', '124,231,255');
         tone(660, 0.1, 'square', 0.035, 990); tone(990, 0.16, 'square', 0.03, 0, 0.09);
     }
+}
+/* 반중력파·이온 충격파 진행 소리 (sz:mod:items2) — 짧은 보이스만, 같은 종류는 간격 제한 */
+const _ifxT = {};
+function itemSfx(k, v){
+    const n = now_();
+    const gap = k === 'ionPop' ? 45 : k === 'agPush' ? 90 : k === 'ionBig' ? 70 : 0;
+    if(gap && n - (_ifxT[k] || 0) < gap) return;
+    _ifxT[k] = n;
+    if(k === 'agHum'){ const f = 54 + 10 * (v || 0); tone(f, 0.62, 'sine', 0.045); tone(f * 2, 0.5, 'triangle', 0.012, f * 2.06); }
+    else if(k === 'agPush'){ const s = v || 0.5; tone(340 + 260 * s + Math.random() * 60, 0.09, 'sine', 0.022 + 0.02 * s, 900 + 500 * s); }
+    else if(k === 'agEnd'){ tone(320, 0.45, 'sine', 0.05, 70); nz(0.3, 0.025, 2000, 300, 1.5, 'bandpass'); }
+    else if(k === 'warn'){ tone(v === 1 ? 660 : 880, 0.05, 'square', 0.022); }
+    else if(k === 'ionWave'){ nz(0.14, 0.014, 2400, 5200, 2, 'bandpass'); }
+    else if(k === 'ionPop'){
+        /* 겹소리 — 지직(대역 잡음) + 작게 깨지는 사각파(크기가 클수록 낮게, 매번 조금씩 다른 음) + 낮은 퍽 */
+        const sz = Math.max(6, Math.min(30, v || 8)), f = (1500 - sz * 28) * (0.85 + Math.random() * 0.3);
+        nz(0.16, 0.05, 5200, 700, 1.2, 'bandpass'); tone(f, 0.08, 'square', 0.03, f * 0.45); tone(70 + Math.random() * 30, 0.12, 'sine', 0.045, 34);
+    }
+    else if(k === 'ionBig'){ nz(0.35, 0.09, 3200, 220, 1, 'lowpass'); tone(58, 0.32, 'sine', 0.09, 30); tone(980, 0.16, 'sawtooth', 0.025, 160); vib([14]); }
+    else if(k === 'ionEnd'){ tone(900, 0.35, 'sawtooth', 0.025, 120); nz(0.25, 0.02, 4000, 600, 1, 'bandpass'); }
 }
 function death(x, y){
     S.magnet(false);
@@ -21912,6 +22108,7 @@ window.SZ3.mood = (f, ms, prio, emote, led) => mood(f, ms, prio, emote, led);
 window.SZ3.haptic = (k) => { if(HAP[k]) vib(HAP[k]); };
 window.SZ3._voice = () => ({made: VOICE.n, active: VOICE.active(), ctx: AC ? AC.state : 'none', max: VOICE_MAX});
 window.SZ3.beat = beatHook;    /* P3 — earthrise · leave_galaxy · finale · salute */
+window.SZ3.itemSfx = itemSfx;  /* sz:mod:items2 — 반중력파·이온 충격파 진행 소리 */
 })();
 </script>
 <script>
@@ -22449,7 +22646,7 @@ body.lp-playing .lp-help-fab{display:none}
    칸 크기 44px 하한·조이스틱 크기를 지키면서 이 화면에 5칸을 한 줄로 넣을 자리가 없다 — 조종판 재배치 작업에서 해결할 몫 */
 /* 장비 아이콘(SVG) — 아이템 색 글로우 */
 .left-controls .item-slot.sz-tech svg{width:72%;height:72%;filter:drop-shadow(0 0 3px currentColor)}
-/* 사용 거부(윙맨 2기·목숨 가득 찬 수리 드론) — 칸 테두리만 빨갛게 한 번 */
+/* 사용 거부(윙맨 2기·이미 켜진 반중력파·이온 충격파) — 칸 테두리만 빨갛게 한 번 */
 .left-controls .item-slot.sz-nope{animation:szSlotNope .42s ease-out}
 @keyframes szSlotNope{
     0%,100%{outline:2px solid rgba(255,90,110,0);outline-offset:0}
@@ -23991,10 +24188,12 @@ Object.assign(window.SZX,{joinSilent:szxJoinSilent,goSilent:szxGoSilent,onFinish
 <script>
 /*<sz:mod:howto>*/
 /* 소유: 게임방법 팝업 (2026-10-02, 운영자 요청). 실제 게임을 녹화한 클립 4개(public/assets/dodge/howto/*.mp4)
-   ① 위성 설치(SAT, 플로팅 상대 드래그 조향) ② BEAM 보급 끌기(슬롯 5칸) ③ 피버 ④ 장비(라이다·레일건·휘플·폭탄). 2026-10-07 플로팅 조작 기본값으로 재녹화. 사실은 코드 기준:
+   ① 위성 설치(SAT, 플로팅 상대 드래그 조향) ② BEAM 보급 끌기(슬롯 5칸) ③ 피버 ④ 아이템. 2026-10-07 플로팅 조작 기본값으로 재녹화.
+   ※ 2026-10-08 장비 6종 폐기 → ④ 영상은 아직 옛 장비(라이다·레일건·휘플)를 보여 준다 — 재녹화 때 자막 순서(반중력파·이온 충격파·방어막·폭탄)에 맞출 것. 사실은 코드 기준:
    SAT_INSTALL_MS 1200 · GRAV_PICKUP_TIME 1.5 · GRAV_GAUGE_MAX 3000(재사용 40%) · SZF_FEVER_MS 5000 · 피버 자석 42→120 · 설치 ×1.5 ·
    PERFECT LINK +40 · SHIELD_BUBBLE_MS 20000(막을 때 −2000) · MAX_LIVES 5 · WIPE_SPAWN_BLOCK_MS 5000 · MINI_DUR 30000(MINI_MAX 2).
-   장비 6종(2026-10-07, SZI_T): 휘플 3겹/45s(최대 4) · 라이다 12s(1.2s 앞) · 레이저 12s(0.25s마다 160px/s) · 레일건 3발(0.5s, 폭 30px) · 수리 5s · 에어로겔 12s(자석 96·×2). 슬롯 ITEM_SLOT_MAX 5.
+   반중력파·이온 충격파(2026-10-08, SZI_T): AG_MS 15000 · R 138(기체 지름 46 × 3) · 1/r² · ION_MS 30000 · 120° 부채꼴 R 138 · SZI_RARE 0.25. 슬롯 ITEM_SLOT_MAX 5.
+   보급 영구 차단(2026-10-08, SZ_SUPPLY_CUT_N 2): 주 위성 미션을 연속 2번 놓치면 그 판의 보급 캡슐 전부(보스·복구·연속 보상 하트 포함) 끝.
    열려 있는 동안 키·탭을 삼켜 아래에서 게임이 시작되지 않게 한다(window 캡처 단계). 레이어는 body 직속이라 캔버스 터치 함정과 무관 */
 (function(){
 const SZH_CLIPS = [
@@ -24003,98 +24202,92 @@ const SZH_CLIPS = [
     {id: 'fever', ic: '🌈', dur: 7.2, cues: [[0, 1.33], [1.33, 6.35], [6.35, 9]]},
     {id: 'items', ic: '🎁', dur: 8.0, cues: [[0.3, 2.2], [2.25, 4.25], [4.3, 6.45], [6.5, 9]]}
 ];
-const SZH_ITEM_KEYS = ['lidar', 'rail', 'whipple', 'wipe', 'heart', 'mini', 'shield', 'laser', 'repair', 'aerogel'];   /* 앞 4개 = 영상 순서(자막과 함께 강조: 라이다·레일건·휘플·폭탄), 나머지 = 전체 목록 (2026-10-07 재녹화) */
+const SZH_ITEM_KEYS = ['antigrav', 'ion', 'shield', 'wipe', 'heart', 'mini'];   /* 앞 4개 = 영상 자막 순서(반중력파·이온 충격파·방어막·폭탄 — 재녹화 예정), 나머지 = 전체 목록 (2026-10-08) */
 const SZH_I18N = {
     ko: {title: '📖 게임방법', close: '닫기', prev: '이전', next: '다음', play: '재생',
         tabs: ['위성', 'BEAM', '피버', '아이템'],
         ttl: ['📡 위성 설치', '🧲 BEAM으로 보급 끌기', '🌈 피버 모드', '🎁 아이템'],
-        lines: [['빈 곳 어디든 끌어서 조종 — 엄지가 기체를 가리지 않음', '미션이 뜨면 노란 슬롯 아래로 → SAT 꾹 1.2초 · 안 놓치면 PERFECT LINK(피버 +40 · 추가 보급)', '시작 화면 ✋ 배치 편집 = 버튼 옮기기·크기 · 🎮 클래식 = 예전 조종판'],
+        lines: [['빈 곳 어디든 끌어서 조종 — 엄지가 기체를 가리지 않음', '미션이 뜨면 노란 슬롯 아래로 → SAT 꾹 1.2초 · 안 놓치면 PERFECT LINK(피버 +40 · 추가 보급)', '시작 화면 ✋ 배치 편집 = 버튼 옮기기·크기 · 🎮 클래식 = 예전 조종판', '위성 미션을 2번 연속 놓치면 그 판은 보급이 영구 차단'],
                 ['보급 캡슐을 노란 원뿔에 1.5초 담으면 획득 → 슬롯(5칸)에 보관 (하트는 즉시 +1)', '게이지 3초분 · 떼면 다시 참 · 아슬아슬 스치면 빨리 참'],
                 ['별가루·스침·황금 운석·PERFECT LINK → 기체 둘레 고리 100%', '5초간 닿는 운석 파괴(보스 장벽 제외) · 별가루 자석 약 3배 · 위성 설치 ×1.5'],
-                ['BEAM으로 캡슐 획득 → 슬롯(5칸)을 눌러 사용', '각 구간 두 번째 보급에서 우주공학 장비가 나올 수 있다 (미션 구간은 위성을 이어야 옴)']],
+                ['BEAM으로 캡슐 획득 → 슬롯(5칸)을 눌러 사용', '반중력파·이온 충격파는 일부 구간 두 번째 보급에서 드물게 나온다 (미션 구간은 위성을 이어야 옴)']],
         pc: ['PC: R 꾹', 'PC: F · S · Shift 꾹', '', 'PC: 1~5 (Q W E = 1~3)'],
         chips: [['👆 빈 곳 어디든 끌어서 조종', '📡 미션! 노란 슬롯 아래로', 'SAT 꾹 — 1.2초', '✨ PERFECT LINK!'],
                 ['📦 보급 캡슐 등장', '캡슐 아래로', 'BEAM 꾹 — 1.5초', '슬롯에 쏙!', 'BEAM 꾹 — 1.5초', '슬롯 5칸까지 보관'],
                 ['✦ 별가루로 고리 채우기', '🌈 피버 5초 — 몸통 박치기!', '피버 끝'],
-                ['◎ 라이다 — 운석 진로 표시', '⚡ 레일건 — 3발 관통', '🛡 휘플 실드 — 작은 운석 막기', '✦ 폭탄 — 싹쓸이']],
-        items: [['라이다', '12초 · 운석 진로 표시, 내 쪽은 빨강'], ['레일건', '0.5초 간격 3발 · 기체 위 한 줄 관통'], ['휘플 실드', '작은 운석 3번 막음 (45초, 최대 4겹)'], ['폭탄', '화면 운석 싹쓸이 + 5초간 새 운석 없음'],
-                ['하트', '먹는 즉시 목숨 +1 (최대 5)'], ['윙맨', '30초 자동 사격 (최대 2기)'], ['방어막', '20초 · 닿는 운석 파괴 (막을 때마다 −2초)'],
-                ['레이저 빗자루', '12초 · 다가오는 운석을 옆으로 밀어냄'], ['수리 드론', '5초 안 맞으면 목숨 +1 (맞으면 처음부터)'], ['에어로겔', '12초 · 별가루 자석 2배 넓게 · 피버 게이지 ×2']]},
+                ['🌀 반중력파 — 다가오는 운석을 밀어냄', '⚡ 이온 충격파 — 앞쪽 운석 분해', '🛡 방어막', '✦ 폭탄 — 싹쓸이']],
+        items: [['반중력파', '15초 · 기체 둘레 장이 다가오는 운석을 밀어냄 (빠를수록 깊이 파고듦)'], ['이온 충격파', '30초 · 앞쪽 120° 부채꼴에 든 운석 분해 (보스 벽 제외)'], ['방어막', '20초 · 닿는 운석 파괴 (막을 때마다 −2초)'], ['폭탄', '화면 운석 싹쓸이 + 5초간 새 운석 없음'],
+                ['하트', '먹는 즉시 목숨 +1 (최대 5)'], ['윙맨', '30초 자동 사격 (최대 2기)']]},
     en: {title: '📖 How to play', close: 'Close', prev: 'Previous', next: 'Next', play: 'Play',
         tabs: ['Satellite', 'BEAM', 'FEVER', 'Items'],
         ttl: ['📡 Place a satellite', '🧲 Pull supplies with BEAM', '🌈 FEVER mode', '🎁 Items'],
-        lines: [['Drag anywhere on empty space to steer — your thumb never covers the ship', 'Mission → get under the yellow slot, hold SAT 1.2 s · never slip off = PERFECT LINK (FEVER +40 · extra supplies)', 'Start screen: ✋ Edit layout moves/resizes buttons · 🎮 Classic = the old control panel'],
+        lines: [['Drag anywhere on empty space to steer — your thumb never covers the ship', 'Mission → get under the yellow slot, hold SAT 1.2 s · never slip off = PERFECT LINK (FEVER +40 · extra supplies)', 'Start screen: ✋ Edit layout moves/resizes buttons · 🎮 Classic = the old control panel', 'Miss 2 satellite missions in a row and supplies are cut for the rest of the run'],
                 ['Keep a capsule in the yellow cone for 1.5 s → it goes into a slot (5) · hearts heal at once', 'Gauge lasts 3 s · refills when released · close grazes refill it faster'],
                 ['Stardust, grazes, golden meteors, PERFECT LINK → fill the ring around your ship', '5 s: meteors you touch shatter (not boss walls) · stardust magnet ~3× · satellite install ×1.5'],
-                ['Grab capsules with BEAM → tap a slot (5) to use', 'The 2nd supply in each zone may carry space-tech gear (mission zones: link the satellite first)']],
+                ['Grab capsules with BEAM → tap a slot (5) to use', 'Anti-Gravity Wave and Ion Shockwave rarely ride in the 2nd supply of some zones (mission zones: link the satellite first)']],
         pc: ['PC: hold R', 'PC: hold F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
         chips: [['👆 Drag anywhere to steer', '📡 Mission! Get under the yellow slot', 'Hold SAT — 1.2 s', '✨ PERFECT LINK!'],
                 ['📦 Supply capsule', 'Get under it', 'Hold BEAM — 1.5 s', 'Into the slot!', 'Hold BEAM — 1.5 s', 'Up to 5 slots'],
                 ['✦ Stardust fills the ring', '🌈 5 s FEVER — ram them!', 'FEVER over'],
-                ['◎ LIDAR — meteor paths', '⚡ Railgun — 3 piercing shots', '🛡 Whipple Shield — stops small rocks', '✦ Bomb — wipe out']],
-        items: [['LIDAR', '12 s · shows meteor paths, red = heading at you'], ['Railgun', '3 shots, 0.5 s apart · each pierces the lane above you'], ['Whipple Shield', 'Stops 3 small-meteor hits (45 s, up to 4 layers)'], ['Bomb', 'Clears on-screen meteors + no new ones for 5 s'],
-                ['Heart', 'Instant +1 life (max 5)'], ['Wingman', '30 s auto-fire escort (max 2)'], ['Shield', '20 s · smashes meteors (−2 s per block)'],
-                ['Laser Broom', '12 s · nudges incoming meteors aside'], ['Repair Drone', 'No hits for 5 s → +1 life (a hit restarts it)'], ['Aerogel', '12 s · 2× wider stardust magnet · FEVER gauge ×2']]},
+                ['🌀 Anti-Gravity Wave — pushes meteors away', '⚡ Ion Shockwave — disintegrates meteors ahead', '🛡 Shield', '✦ Bomb — wipe out']],
+        items: [['Anti-Gravity Wave', '15 s · a field around the ship pushes incoming meteors away (faster ones dig in deeper)'], ['Ion Shockwave', '30 s · disintegrates meteors in the 120° fan ahead (not boss walls)'], ['Shield', '20 s · smashes meteors (−2 s per block)'], ['Bomb', 'Clears on-screen meteors + no new ones for 5 s'],
+                ['Heart', 'Instant +1 life (max 5)'], ['Wingman', '30 s auto-fire escort (max 2)']]},
     ja: {title: '📖 遊び方', close: '閉じる', prev: '前へ', next: '次へ', play: '再生',
         tabs: ['衛星', 'BEAM', 'フィーバー', 'アイテム'],
         ttl: ['📡 衛星を設置', '🧲 BEAMで補給を引き寄せ', '🌈 フィーバーモード', '🎁 アイテム'],
-        lines: [['空いた所ならどこでもドラッグで操縦 — 親指が機体を隠さない', 'ミッションが出たら黄色いスロットの下へ → SAT長押し1.2秒 · 外さなければPERFECT LINK（フィーバー+40・追加補給）', 'スタート画面 ✋ 配置編集でボタンの移動・サイズ · 🎮 クラシック = 従来の操縦パネル'],
+        lines: [['空いた所ならどこでもドラッグで操縦 — 親指が機体を隠さない', 'ミッションが出たら黄色いスロットの下へ → SAT長押し1.2秒 · 外さなければPERFECT LINK（フィーバー+40・追加補給）', 'スタート画面 ✋ 配置編集でボタンの移動・サイズ · 🎮 クラシック = 従来の操縦パネル', '衛星ミッションを2回続けて逃すと、その回は補給が永久に止まる'],
                 ['補給カプセルを黄色い円すいに1.5秒入れると獲得 → スロット（5つ）に保管（ハートは即+1）', 'ゲージは3秒分 · 離すと回復 · ぎりぎりのかすりで早く回復'],
                 ['星くず・かすり・金色の隕石・PERFECT LINK → 機体のまわりのリングを満タンに', '5秒間：触れた隕石が砕ける（ボスの壁は除く）· 星くず吸引 約3倍 · 衛星設置 ×1.5'],
-                ['BEAMでカプセル獲得 → スロット（5つ）をタップで使用', '各区間2つ目の補給から宇宙工学装備が出ることも（ミッション区間は衛星をつなぐと届く）']],
+                ['BEAMでカプセル獲得 → スロット（5つ）をタップで使用', '反重力波・イオン衝撃波は一部の区間の2つ目の補給からまれに出る（ミッション区間は衛星をつなぐと届く）']],
         pc: ['PC：R長押し', 'PC：F · S · Shift長押し', '', 'PC：1〜5（Q W E = 1〜3）'],
         chips: [['👆 どこでもドラッグで操縦', '📡 ミッション！黄色いスロットの下へ', 'SAT長押し — 1.2秒', '✨ PERFECT LINK!'],
                 ['📦 補給カプセル', 'カプセルの下へ', 'BEAM長押し — 1.5秒', 'スロットにイン！', 'BEAM長押し — 1.5秒', 'スロットは5つまで'],
                 ['✦ 星くずでリング充電', '🌈 フィーバー5秒 — 体当たり！', 'フィーバー終了'],
-                ['◎ ライダー — 隕石の進路を表示', '⚡ レールガン — 貫通3発', '🛡 ホイップルシールド — 小さな隕石を防ぐ', '✦ ボム — 一掃']],
-        items: [['ライダー', '12秒 · 隕石の進路を表示、こちらに来るものは赤'], ['レールガン', '0.5秒おきに3発 · 機体の上の一列を貫通'], ['ホイップルシールド', '小さな隕石を3回防ぐ（45秒・最大4枚）'], ['ボム', '画面の隕石を一掃 + 5秒間 新しい隕石なし'],
-                ['ハート', 'すぐにライフ+1（最大5）'], ['僚機', '30秒 自動射撃（最大2機）'], ['シールド', '20秒 · 触れた隕石を破壊（防ぐたび−2秒）'],
-                ['レーザーほうき', '12秒 · 迫る隕石を横へそらす'], ['修理ドローン', '5秒当たらなければライフ+1（当たるとやり直し）'], ['エアロゲル', '12秒 · 星くず吸引が2倍広く · フィーバーゲージ×2']]},
+                ['🌀 反重力波 — 迫る隕石を押し返す', '⚡ イオン衝撃波 — 前方の隕石を分解', '🛡 シールド', '✦ ボム — 一掃']],
+        items: [['反重力波', '15秒 · 機体まわりの場が迫る隕石を押し返す（速いほど深く入り込む）'], ['イオン衝撃波', '30秒 · 前方120°の扇形に入った隕石を分解（ボスの壁は除く）'], ['シールド', '20秒 · 触れた隕石を破壊（防ぐたび−2秒）'], ['ボム', '画面の隕石を一掃 + 5秒間 新しい隕石なし'],
+                ['ハート', 'すぐにライフ+1（最大5）'], ['僚機', '30秒 自動射撃（最大2機）']]},
     zh: {title: '📖 玩法', close: '关闭', prev: '上一个', next: '下一个', play: '播放',
         tabs: ['卫星', 'BEAM', '狂热', '道具'],
         ttl: ['📡 安装卫星', '🧲 用 BEAM 拉补给', '🌈 狂热模式', '🎁 道具'],
-        lines: [['在空白处任意拖动即可操控 — 拇指不会挡住飞船', '任务出现后移到黄色槽位下方 → 按住 SAT 1.2 秒 · 全程不脱离 = PERFECT LINK（狂热 +40 · 额外补给）', '开始画面 ✋ 编辑布局：移动按钮、调大小 · 🎮 经典 = 原来的操控面板'],
+        lines: [['在空白处任意拖动即可操控 — 拇指不会挡住飞船', '任务出现后移到黄色槽位下方 → 按住 SAT 1.2 秒 · 全程不脱离 = PERFECT LINK（狂热 +40 · 额外补给）', '开始画面 ✋ 编辑布局：移动按钮、调大小 · 🎮 经典 = 原来的操控面板', '连续 2 次错过卫星任务，本局补给将永久中断'],
                 ['让补给舱在黄色锥形里停 1.5 秒即可获得 → 存入槽位（5 格）（爱心立即 +1）', '能量可用 3 秒 · 松开自动回充 · 惊险擦边回充更快'],
                 ['星尘、擦边、金色陨石、PERFECT LINK → 填满飞船周围的光环', '5 秒内：碰到的陨石粉碎（Boss 墙除外）· 星尘吸力约 3 倍 · 卫星安装 ×1.5'],
-                ['用 BEAM 获得补给舱 → 点按槽位（5 格）使用', '每段第 2 个补给可能是航天工程装备（任务区段需先接通卫星）']],
+                ['用 BEAM 获得补给舱 → 点按槽位（5 格）使用', '反重力波、离子冲击波偶尔出现在部分区段的第 2 个补给中（任务区段需先接通卫星）']],
         pc: ['电脑：按住 R', '电脑：按住 F · S · Shift', '', '电脑：1–5（Q W E = 1–3）'],
         chips: [['👆 空白处任意拖动操控', '📡 任务！移到黄色槽位下方', '按住 SAT — 1.2 秒', '✨ PERFECT LINK!'],
                 ['📦 补给舱出现', '移到它下方', '按住 BEAM — 1.5 秒', '进槽位！', '按住 BEAM — 1.5 秒', '最多存 5 格'],
                 ['✦ 星尘充能光环', '🌈 狂热 5 秒 — 撞碎它们！', '狂热结束'],
-                ['◎ 激光雷达 — 显示陨石航迹', '⚡ 电磁轨道炮 — 贯穿 3 发', '🛡 惠普尔防护罩 — 挡住小陨石', '✦ 炸弹 — 一扫而空']],
-        items: [['激光雷达', '12 秒 · 显示陨石航迹，朝你来的为红色'], ['电磁轨道炮', '每隔 0.5 秒共 3 发 · 贯穿飞船正上方一条线'], ['惠普尔防护罩', '挡住 3 次小陨石撞击（45 秒，最多 4 层）'], ['炸弹', '清空屏幕陨石 + 5 秒内不出新陨石'],
-                ['爱心', '立即生命 +1（最多 5）'], ['僚机', '30 秒自动射击（最多 2 架）'], ['护盾', '20 秒 · 碰到的陨石被摧毁（每挡一次 −2 秒）'],
-                ['激光扫帚', '12 秒 · 把逼近的陨石推向一旁'], ['维修无人机', '5 秒不被击中则生命 +1（被击中重新计时）'], ['气凝胶', '12 秒 · 星尘吸力范围 2 倍 · 狂热能量 ×2']]},
+                ['🌀 反重力波 — 推开逼近的陨石', '⚡ 离子冲击波 — 分解前方陨石', '🛡 护盾', '✦ 炸弹 — 一扫而空']],
+        items: [['反重力波', '15 秒 · 飞船周围的力场推开逼近的陨石（越快钻得越深）'], ['离子冲击波', '30 秒 · 分解前方 120° 扇形内的陨石（Boss 墙除外）'], ['护盾', '20 秒 · 碰到的陨石被摧毁（每挡一次 −2 秒）'], ['炸弹', '清空屏幕陨石 + 5 秒内不出新陨石'],
+                ['爱心', '立即生命 +1（最多 5）'], ['僚机', '30 秒自动射击（最多 2 架）']]},
     es: {title: '📖 Cómo jugar', close: 'Cerrar', prev: 'Anterior', next: 'Siguiente', play: 'Reproducir',
         tabs: ['Satélite', 'BEAM', 'FIEBRE', 'Objetos'],
         ttl: ['📡 Instala un satélite', '🧲 Atrae suministros con BEAM', '🌈 Modo FIEBRE', '🎁 Objetos'],
-        lines: [['Arrastra en cualquier zona libre para pilotar — el pulgar no tapa la nave', 'Misión → ponte bajo la ranura amarilla y mantén SAT 1,2 s · sin salirte = PERFECT LINK (FIEBRE +40 · más suministros)', 'Pantalla de inicio: ✋ Editar mueve y redimensiona botones · 🎮 Clásico = el panel de antes'],
+        lines: [['Arrastra en cualquier zona libre para pilotar — el pulgar no tapa la nave', 'Misión → ponte bajo la ranura amarilla y mantén SAT 1,2 s · sin salirte = PERFECT LINK (FIEBRE +40 · más suministros)', 'Pantalla de inicio: ✋ Editar mueve y redimensiona botones · 🎮 Clásico = el panel de antes', 'Si fallas 2 misiones de satélite seguidas, los suministros se cortan el resto de la partida'],
                 ['Mantén la cápsula 1,5 s en el cono amarillo → va a una ranura (5) · el corazón cura al instante', 'Carga de 3 s · se recarga al soltar · los roces la recargan más rápido'],
                 ['Polvo estelar, roces, meteoritos dorados y PERFECT LINK → llena el anillo de tu nave', '5 s: los meteoritos que tocas se rompen (no los muros de jefe) · imán de polvo ~3× · satélite ×1,5'],
-                ['Atrapa cápsulas con BEAM → toca una ranura (5) para usarla', 'El 2.º suministro de cada zona puede traer equipo espacial (en zonas de misión, enlaza el satélite)']],
+                ['Atrapa cápsulas con BEAM → toca una ranura (5) para usarla', 'La Onda antigravedad y la Onda de choque iónica salen rara vez en el 2.º suministro de algunas zonas (en zonas de misión, enlaza el satélite)']],
         pc: ['PC: mantén R', 'PC: mantén F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
         chips: [['👆 Arrastra donde quieras para pilotar', '📡 ¡Misión! Bajo la ranura amarilla', 'Mantén SAT — 1,2 s', '✨ PERFECT LINK!'],
                 ['📦 Cápsula de suministros', 'Ponte debajo', 'Mantén BEAM — 1,5 s', '¡A la ranura!', 'Mantén BEAM — 1,5 s', 'Hasta 5 ranuras'],
                 ['✦ El polvo llena el anillo', '🌈 FIEBRE 5 s — ¡embiste!', 'Fin de la FIEBRE'],
-                ['◎ LIDAR — trayectorias', '⚡ Cañón de riel — 3 disparos', '🛡 Escudo Whipple — para rocas pequeñas', '✦ Bomba — limpieza total']],
-        items: [['LIDAR', '12 s · muestra las trayectorias; rojo = va hacia ti'], ['Cañón de riel', '3 disparos cada 0,5 s · atraviesan la línea sobre tu nave'], ['Escudo Whipple', 'Para 3 impactos de meteoritos pequeños (45 s, hasta 4 capas)'], ['Bomba', 'Limpia los meteoritos en pantalla + 5 s sin nuevos'],
-                ['Corazón', '+1 vida al instante (máx. 5)'], ['Escolta', '30 s de disparo automático (máx. 2)'], ['Escudo', '20 s · rompe meteoritos (−2 s por bloqueo)'],
-                ['Escoba láser', '12 s · desvía los meteoritos que se acercan'], ['Dron de reparación', '5 s sin impactos → +1 vida (un impacto lo reinicia)'], ['Aerogel', '12 s · imán de polvo 2× más amplio · carga de FIEBRE ×2']]},
+                ['🌀 Onda antigravedad — aparta meteoritos', '⚡ Onda de choque iónica — desintegra lo de delante', '🛡 Escudo', '✦ Bomba — limpieza total']],
+        items: [['Onda antigravedad', '15 s · un campo alrededor de la nave aparta los meteoritos (los rápidos se adentran más)'], ['Onda de choque iónica', '30 s · desintegra los meteoritos del abanico de 120° delante (no los muros de jefe)'], ['Escudo', '20 s · rompe meteoritos (−2 s por bloqueo)'], ['Bomba', 'Limpia los meteoritos en pantalla + 5 s sin nuevos'],
+                ['Corazón', '+1 vida al instante (máx. 5)'], ['Escolta', '30 s de disparo automático (máx. 2)']]},
     pt: {title: '📖 Como jogar', close: 'Fechar', prev: 'Anterior', next: 'Próximo', play: 'Reproduzir',
         tabs: ['Satélite', 'BEAM', 'FEBRE', 'Itens'],
         ttl: ['📡 Instale um satélite', '🧲 Puxe suprimentos com BEAM', '🌈 Modo FEBRE', '🎁 Itens'],
-        lines: [['Arraste em qualquer área livre para pilotar — o polegar não cobre a nave', 'Missão → fique sob o encaixe amarelo e segure SAT 1,2 s · sem escapar = PERFECT LINK (FEBRE +40 · mais suprimentos)', 'Tela inicial: ✋ Editar move e redimensiona botões · 🎮 Clássico = o painel antigo'],
+        lines: [['Arraste em qualquer área livre para pilotar — o polegar não cobre a nave', 'Missão → fique sob o encaixe amarelo e segure SAT 1,2 s · sem escapar = PERFECT LINK (FEBRE +40 · mais suprimentos)', 'Tela inicial: ✋ Editar move e redimensiona botões · 🎮 Clássico = o painel antigo', 'Perca 2 missões de satélite seguidas e os suprimentos são cortados até o fim da partida'],
                 ['Mantenha a cápsula 1,5 s no cone amarelo → vai para um encaixe (5) · o coração cura na hora', 'Carga de 3 s · recarrega ao soltar · raspões recarregam mais rápido'],
                 ['Poeira estelar, raspões, meteoros dourados e PERFECT LINK → encha o anel da nave', '5 s: meteoros que você toca se quebram (exceto muros de chefe) · ímã de poeira ~3× · satélite ×1,5'],
-                ['Pegue cápsulas com BEAM → toque num encaixe (5) para usar', 'O 2º suprimento de cada zona pode trazer equipamento espacial (em zonas de missão, ligue o satélite)']],
+                ['Pegue cápsulas com BEAM → toque num encaixe (5) para usar', 'A Onda antigravidade e a Onda de choque iônica aparecem raramente no 2º suprimento de algumas zonas (em zonas de missão, ligue o satélite)']],
         pc: ['PC: segure R', 'PC: segure F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
         chips: [['👆 Arraste onde quiser para pilotar', '📡 Missão! Sob o encaixe amarelo', 'Segure SAT — 1,2 s', '✨ PERFECT LINK!'],
                 ['📦 Cápsula de suprimentos', 'Fique embaixo', 'Segure BEAM — 1,5 s', 'No encaixe!', 'Segure BEAM — 1,5 s', 'Até 5 encaixes'],
                 ['✦ Poeira enche o anel', '🌈 FEBRE 5 s — passe por cima!', 'Fim da FEBRE'],
-                ['◎ LIDAR — trajetórias', '⚡ Canhão de trilho — 3 tiros', '🛡 Escudo Whipple — para rochas pequenas', '✦ Bomba — limpa tudo']],
-        items: [['LIDAR', '12 s · mostra as trajetórias; vermelho = vindo até você'], ['Canhão de trilho', '3 tiros a cada 0,5 s · atravessam a linha acima da nave'], ['Escudo Whipple', 'Para 3 impactos de meteoros pequenos (45 s, até 4 camadas)'], ['Bomba', 'Limpa os meteoros da tela + 5 s sem novos'],
-                ['Coração', '+1 vida na hora (máx. 5)'], ['Ala', '30 s de tiro automático (máx. 2)'], ['Escudo', '20 s · quebra meteoros (−2 s por bloqueio)'],
-                ['Vassoura laser', '12 s · desvia os meteoros que se aproximam'], ['Drone de reparo', '5 s sem levar golpe → +1 vida (um golpe reinicia)'], ['Aerogel', '12 s · ímã de poeira 2× mais amplo · carga de FEBRE ×2']]}
+                ['🌀 Onda antigravidade — afasta meteoros', '⚡ Onda de choque iônica — desintegra o que vem à frente', '🛡 Escudo', '✦ Bomba — limpa tudo']],
+        items: [['Onda antigravidade', '15 s · um campo ao redor da nave afasta os meteoros (os rápidos entram mais fundo)'], ['Onda de choque iônica', '30 s · desintegra meteoros no leque de 120° à frente (exceto muros de chefe)'], ['Escudo', '20 s · quebra meteoros (−2 s por bloqueio)'], ['Bomba', 'Limpa os meteoros da tela + 5 s sem novos'],
+                ['Coração', '+1 vida na hora (máx. 5)'], ['Ala', '30 s de tiro automático (máx. 2)']]}
 };
 function L(){ let l = 'en'; try{ l = (window.LpI18n && LpI18n.getLang && LpI18n.getLang()) || 'en'; }catch(_){} return SZH_I18N[l] || SZH_I18N.en; }
 const H = {el: null, open: false, ch: 0, raf: 0, last: null, cue: -1};
@@ -24828,8 +25021,8 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
 <li><strong>모바일</strong> — 화면 아래 원형 패드를 드래그해 움직입니다. <strong>BEAM</strong>·<strong>SAT</strong> 버튼은 누르고 있는 동안 켜집니다(설정에서 BEAM 을 탭 방식으로 바꿀 수 있습니다).</li>
 <li><strong>PC</strong> — 방향키(또는 A·D)로 이동, F·S·Shift 를 누르고 있으면 BEAM, R 을 누르고 있으면 SAT, 1~5(Q·W·E 는 1~3)는 아이템 슬롯, Space 는 일시정지입니다.</li>
 <li><strong>BEAM</strong> — 기체 앞쪽으로 뻗는 노란 원뿔입니다. 보급 상자를 1.5초 비추면 끌어와 아이템이 됩니다.</li>
-<li><strong>아이템 5칸</strong> — 하트·방어막·폭탄·윙맨 말고도, 각 구간 두 번째 보급에서 실제 우주공학을 본뜬 장비 6종이 나옵니다. 국제우주정거장을 지키는 이중 범퍼 <strong>휘플 실드</strong>(작은 운석 3번 흡수), 우주 쓰레기를 추적하는 <strong>라이다</strong>(12초간 운석 진로 표시), 운석 옆면을 레이저로 증발시켜 그 반작용으로 진로를 비트는 <strong>레이저 빗자루</strong>, 전류와 자기장의 로렌츠 힘으로 탄을 쏘는 <strong>레일건</strong>(한 줄 관통 3발), 궤도 수리 로봇을 본뜬 <strong>수리 드론</strong>(5초 동안 안 맞으면 목숨 +1), 혜성 먼지를 붙잡아 온 스타더스트 탐사선의 <strong>에어로겔</strong>(별가루 자석)입니다.</li>
-<li><strong>SAT</strong> — 위성 미션 때만 켜지는 버튼입니다. 천체를 도는 궤도 링 위에 <strong>노란 슬롯</strong>이 움직이는데, 원뿔로 그 슬롯을 1.2초 비추면 위성이 펼쳐지며 설치됩니다. 한 번도 놓치지 않으면 <strong>PERFECT LINK</strong>로 피버 게이지와 점수가 더 붙습니다. 위성을 이어야 보급이 끊기지 않습니다.</li>
+<li><strong>아이템 5칸</strong> — 하트·방어막·폭탄·윙맨에 더해, 일부 구간의 두 번째 보급에서 드물게 두 가지 특수 장비가 나옵니다. <strong>반중력파</strong>(15초)는 기체 무게중심에서 기체 길이의 3배(138px)까지 밀어내는 장을 펼칩니다. 미는 힘은 거리의 제곱에 반비례해서 가까울수록 급격히 세지고, 그래서 정면으로 오는 운석은 운동 에너지만큼 파고든 뒤 되돌아 나갑니다 — 보통 속도(초속 320px)는 노즈 앞 40px 에서, 빠른 운석(초속 450px)은 노즈 끝까지 들어왔다가 튕겨 나갑니다. 장은 운석에만 작용하고 기체에는 아무 힘도 주지 않습니다. <strong>이온 충격파</strong>(30초)는 기체 앞 120° 부채꼴로 플라즈마 충격파를 연달아 내보내 그 안에 들어온 운석·바위·기뢰·혜성을 분해합니다. 보스의 벽과 광선은 부서지지 않으니 옆과 뒤는 여전히 직접 피해야 합니다.</li>
+<li><strong>SAT</strong> — 위성 미션 때만 켜지는 버튼입니다. 천체를 도는 궤도 링 위에 <strong>노란 슬롯</strong>이 움직이는데, 원뿔로 그 슬롯을 1.2초 비추면 위성이 펼쳐지며 설치됩니다. 한 번도 놓치지 않으면 <strong>PERFECT LINK</strong>로 피버 게이지와 점수가 더 붙습니다. 위성을 이어야 보급이 끊기지 않습니다. 큰 위성 미션을 <strong>두 번 연속</strong> 놓치면 그 판은 보급 캡슐이 영구히 끊기니(한 번 놓치면 경고가 뜹니다), 다음 미션은 꼭 이어 두세요.</li>
 <li><strong>보조 부표</strong> — 큰 위성 미션(12개) 사이와 은하 밖 구간에는 작은 중계 부표가 20~40초마다 내려옵니다. 원뿔로 0.8초 덮으면 설치되고, 끊긴 통신도 되살아납니다.</li>
 <li><strong>스침</strong> — 운석을 아슬아슬하게 비껴가면 BEAM 게이지가 차고 콤보가 쌓입니다. 과감할수록 보상이 큽니다.</li>
 </ul>

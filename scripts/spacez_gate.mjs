@@ -19,6 +19,7 @@
      i18n    *I18N* 표 ko/en/ja/zh/es/pt 키 누락 + 비한국어 화면의 한글 잔존
      fx0     ?fx=0 (SZ_FLAGS.fx=false) 로 31존 순회 — 에러 0
      bot     자동 조종봇 몬테카를로 — 같은 시드 N판, 30/60fps, 184·343·475초 도달률
+     ibot    아이템 봇 — bot 회피 + 보급 BEAM 줍기·아이템 사용·위성 미션 확률(--mis-p, 기본 0.8). 60~540초 도달률·10초당 피격률·아이템 통계
      soak    합성 시계 1260초 무작위 입력 — 에러 0·힙 톱니
      assets  첫 로드·존 순회 전송량
      beamdrain  BEAM 게이지 소진 회귀(탭·꾹·PC F 키 — 4초 방치 뒤 시계가 계속 가는가) + SAT R 키 설치
@@ -42,6 +43,10 @@
      --course-seeds <n>    bot 코스 시드 수 (기본 1 = 424242 한 코스). n>1 이면 판마다 n 개 코스를 돌려 쓴다 —
                            코스(수열)를 의도적으로 바꾼 변경(P2)은 한 코스 도달률이 우연히 크게 변하므로 여러 코스 분포로 비교
      --soak-secs <n>       soak 합성 시간 (기본 1260)
+     --mis-p <p>           ibot 위성 미션 성공 확률 (기본 0.8)
+     --ibot-secs <n>       ibot 한 판 최대 합성 시간 (기본 560)
+     --mis-p-warn <p>      ibot 경고(위성 1번 놓침)가 뜬 뒤의 미션 성공 확률 — 경고를 본 사람이 다음 미션에 집중하는 모델 (기본 = --mis-p)
+     --no-cut              ibot 에서 보급 영구 차단 규칙만 끈다 (규칙의 영향 비교용)
      --edge <exe>          msedge.exe 경로
      --json <file>         결과 전체를 JSON 으로 저장
      --verbose             진행 로그
@@ -94,7 +99,7 @@ const HANGUL_RE = /[\uAC00-\uD7A3]/;
 let CMDS = A._.length ? A._ : ['all'];
 if(CMDS.includes('all')) CMDS = [...new Set(CMDS.filter(c => c !== 'all').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain']))];
 if(CMDS.includes('full')) CMDS = [...new Set(CMDS.filter(c => c !== 'full').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'sweep', 'bot', 'soak', 'assets']))];
-const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets', 'beamdrain'];
+const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain'];
 for(const c of CMDS) if(!KNOWN.includes(c)){ console.error('알 수 없는 명령: ' + c); process.exit(2); }
 
 const log = (...a) => { if(VERBOSE) console.log('[gate]', ...a); };
@@ -474,6 +479,117 @@ function pageLib(){
             }
             for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys[k] = false;
             res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, frames, lost: lifeLost.slice(0, 12) });
+            running = false;
+        }
+        G.unsynth();
+        window.drawFrame = oDraw; window.triggerGameOver = oOver;
+        return res;
+    };
+    /* 아이템 봇 (2026-10-08) — G.bot 과 같은 회피에 ① 보급 캡슐 쪽으로 가서 BEAM 으로 끌기 ② 아이템 사용(위험할 때 방어형,
+       윙맨 등은 바로) ③ 위성 미션을 확률 P.misP 로 성공(성공이면 활성 뒤 1.5~6초에 설치, 실패면 시간 초과)를 더한다.
+       첫 판 완화(szFirstRunCalc)는 끈다 — 운영자처럼 여러 판 해 본 플레이어. 판마다 피격 시각 전부·주운/쓴 아이템·보급 차단 시각 */
+    G.ibot = function(P){
+        const res = [];
+        const oDraw = window.drawFrame, oOver = window.triggerGameOver;
+        window.drawFrame = function(){};
+        let dead = false;
+        window.triggerGameOver = function(){ running = false; dead = true; };
+        try{ window.szFirstRunCalc = function(){ return false; }; }catch(_){}
+        /* --no-cut — 보급 영구 차단 규칙만 끈 비교용 */
+        if(P.noCut) try{ window.szSatMissed = function(){}; }catch(_){}
+        const mb = (s) => { let a = s | 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+        const DIRS = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [0.707, 0.707], [-0.707, 0.707], [0.707, -0.707], [-0.707, -0.707]];
+        const SP = (typeof PLAYER_SPEED !== 'undefined') ? PLAYER_SPEED : 300;
+        const HR = (typeof HIT_RADIUS !== 'undefined') ? HIT_RADIUS : 5;
+        const MAXL = (typeof MAX_LIVES !== 'undefined') ? MAX_LIVES : 5;
+        const pure = [['checkSolarFlareCollision', 0], ['checkSupernovaRingCollision', 0], ['checkPulsarBeamCollision', 1], ['checkCometCollision', 0], ['checkSplitterCollision', 0], ['checkBlackHoleJetCollision', 0]]
+            .filter(([n]) => typeof window[n] === 'function');
+        /* 보스(S2 별·퀘이사 제트)·블랙홀 지평선도 내다본다 — G.bot 은 이걸 못 봐서 7~9분 보스에서 무더기로 죽는다 */
+        if(typeof checkZoneBossCollision === 'function') pure.push(['checkZoneBossCollision', 1]);
+        const NOW_USE = { mini: 1, whipple: 1, lidar: 1, laser: 1, aerogel: 1 };
+        const DEF_ORDER = ['shield', 'antigrav', 'ion', 'rail', 'wipe'];
+        const pickable = (d) => !d.collected && !d.collectedByPeer && (d.item === 'heart' ? lives < MAXL : inventoryHasSpace());
+        G.synth();
+        for(let bi = 0; bi < P.botSeeds.length; bi++){
+            const bs = P.botSeeds[bi];
+            const br = mb(bs), bm = mb(bs ^ 0x5bd1e995);
+            dead = false;
+            G.begin(P.courseSeeds ? P.courseSeeds[bi] : P.seed, false);
+            invincibleUntil = 0;
+            let nextDecide = 0, dir = DIRS[0], frames = 0; const lifeLost = [];
+            let lv = lives; const picks = {}, uses = {}; let misKey = '', misOk = false, misAt = 0, nMis = 0, nMisOk = 0, cutAt = null;
+            const nPick0 = {};
+            const oPick = window.onDepotCollected;
+            window.onDepotCollected = function(d){ picks[d.item] = (picks[d.item] || 0) + 1; return oPick.apply(this, arguments); };
+            const score = (d, tgt) => {
+                let s = 0; const ox = player.x, oy = player.y;
+                for(let k = 1; k <= 4; k++){
+                    const t = k * 0.07;
+                    const px = Math.max(16, Math.min(CW - 16, ox + d[0] * SP * t)), py = Math.max(18, Math.min(CH - 18, oy + d[1] * SP * t));
+                    for(const b of bullets){ const dx = b.x + b.vx * t - px, dy = b.y + b.vy * t - py; const dd = Math.sqrt(dx * dx + dy * dy) - HR - 6; s += dd < 0 ? 400 / k : 40 / (k * (dd + 6) * (dd + 6)); }
+                    if(typeof asteroidClusters !== 'undefined') for(const c of asteroidClusters) for(const r of c.rocks){ const dd = Math.hypot(r.x + (r.vx || c.vx || 0) * t - px, r.y + (r.vy || c.vy || 0) * t - py) - r.r - HR; s += dd < 0 ? 400 / k : 30 / (k * (dd + 6) * (dd + 6)); }
+                    if(typeof magneticMines !== 'undefined') for(const m of magneticMines){ const dd = Math.hypot(m.x - px, m.y - py) - (typeof MINE_R !== 'undefined' ? MINE_R : 10) - HR; s += dd < 0 ? 400 / k : 30 / (k * (dd + 6) * (dd + 6)); }
+                    player.x = px; player.y = py;
+                    let hk = null, ha = 0; try{ hk = SZM.hitKind; ha = SZM.hitAt; }catch(_){}
+                    for(const [n, withNow] of pure){ try{ if(withNow ? window[n](G.VT) : window[n]()) s += 300 / k; }catch(_){} }
+                    try{ SZM.hitKind = hk; SZM.hitAt = ha; }catch(_){}
+                    player.x = ox; player.y = oy;
+                    try{ if(isBlackHoleZone()){ const hd = Math.hypot(px - blackHole.cx, py - blackHole.cy) - blackHole.r - 4; s += hd < 0 ? 400 / k : 30 / (k * (hd + 6) * (hd + 6)); } }catch(_){}
+                    if(tgt) s += 0.00006 * ((px - tgt[0]) ** 2 + (py - tgt[1]) ** 2);
+                    else s += 0.00002 * ((px - CW * 0.5) ** 2 + (py - CH * 0.62) ** 2);
+                }
+                return s;
+            };
+            while(G.VT - startedAt < P.secs * 1000 && running){
+                G.VT += P.step; frames++;
+                if(elapsedMs >= nextDecide){
+                    nextDecide = elapsedMs + 90 + br() * 80;
+                    /* 노릴 보급 — 화면 안, 주울 수 있는 것 중 가장 가까운 것 (기체가 그 아래 90px 에 서면 원뿔에 든다) */
+                    let tgt = null, bd = 1e9;
+                    for(const d of depots){ if(!pickable(d) || d.y < -10 || d.y > CH - 40) continue; const q = Math.hypot(d.x - player.x, d.y + 90 - player.y); if(q < bd){ bd = q; tgt = [d.x, Math.min(CH - 30, d.y + 90)]; } }
+                    let best = Infinity;
+                    if(br() > 0.04){ for(const d of DIRS){ const s = score(d, tgt) + br() * 0.002; if(s < best){ best = s; dir = d; } } }
+                    for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys[k] = false;
+                    if(dir[0] < -0.1) keys.ArrowLeft = true; if(dir[0] > 0.1) keys.ArrowRight = true;
+                    if(dir[1] < -0.1) keys.ArrowUp = true; if(dir[1] > 0.1) keys.ArrowDown = true;
+                    /* BEAM — 주울 수 있는 캡슐이 원뿔 안이면 켜고, 없으면 끈다 */
+                    let inCone = false;
+                    for(const d of depots){ if(!pickable(d)) continue; const dx = d.x - player.x, dy = d.y - player.y, dl = Math.hypot(dx, dy); if(dl < 172 && dl > 8 && Math.abs(Math.atan2(dx, -dy)) < 0.72){ inCone = true; break; } }
+                    try{ if(inCone && !gravityFieldActive) szBeamOn(false); else if(!inCone && gravityFieldActive) szBeamOff(); }catch(_){}
+                    /* 아이템 */
+                    const danger = best >= (lives <= 2 ? 120 : 200);
+                    for(let i = 0; i < inventory.length; i++){
+                        const it = inventory[i]; if(!it) continue;
+                        if(NOW_USE[it] || (it === 'repair' && lives < MAXL)){ const n0 = inventory[i]; inventoryUseSlot(i); if(!inventory[i]) uses[n0] = (uses[n0] || 0) + 1; }
+                    }
+                    if(danger){
+                        let used = false;
+                        for(const want of DEF_ORDER){
+                            const i = inventory.indexOf(want); if(i < 0) continue;
+                            if(want === 'shield' && typeof shieldBubbleUntil !== 'undefined' && performance.now() < shieldBubbleUntil) continue;
+                            inventoryUseSlot(i); if(!inventory[i]){ uses[want] = (uses[want] || 0) + 1; used = true; break; }
+                        }
+                        /* 위성 보상(호위 드론·플라즈마 폭풍)도 위험할 때 쓴다 */
+                        if(!used && typeof rewardCounts !== 'undefined') for(const rk of ['drone', 'storm']){   /* 시간 왜곡은 뺀다 — 봇의 내다보기가 느려진 세계를 몰라 오히려 손해 */
+                            if(rewardCounts[rk] > 0){ const c0 = rewardCounts[rk]; try{ activateRewardSlot(rk); }catch(_){} if(rewardCounts[rk] < c0){ uses['r_' + rk] = (uses['r_' + rk] || 0) + 1; break; } }
+                        }
+                    }
+                }
+                /* 위성 미션 — 새 미션마다 확률로 성공 여부를 정한다 */
+                if(missionState === 'active'){
+                    const key = missionZoneIdx + ':' + (typeof missionKind !== 'undefined' ? missionKind : 'main') + ':' + (typeof missionBuoyK !== 'undefined' ? missionBuoyK : 0);
+                    if(key !== misKey){ misKey = key; const pw = (P.misPW != null && typeof szSatMiss !== 'undefined' && szSatMiss > 0) ? P.misPW : (P.misP != null ? P.misP : 0.8); misOk = bm() < pw; misAt = elapsedMs + 1500 + bm() * 4500; nMis++; if(misOk) nMisOk++; }
+                    if(misOk && elapsedMs >= misAt) try{ completeMission(G.VT); }catch(_){}
+                }
+                try{ gameLoop(G.VT); }catch(e){ res.push({ err: String(e.message).slice(0, 160) }); running = false; break; }
+                if(lives < lv) lifeLost.push(Math.round(elapsedMs / 100) / 10); lv = lives;
+                if(cutAt == null && typeof szSupplyCut !== 'undefined' && szSupplyCut) cutAt = Math.round(elapsedMs / 1000);
+            }
+            window.onDepotCollected = oPick;
+            for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys[k] = false;
+            try{ if(gravityFieldActive) szBeamOff(); }catch(_){}
+            let why = null; try{ why = dead ? (SZM && SZM.hitKind) || null : null; }catch(_){}
+            res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, why, frames, lost: lifeLost, picks, uses, nMis, nMisOk, cutAt });
             running = false;
         }
         G.unsynth();
@@ -1091,6 +1207,56 @@ function judgeBot(cur, base){
     }
 }
 
+/* ================= ibot (아이템 봇) ================= */
+async function runIBot(base){
+    const out = {};
+    const MISP = A['mis-p'] != null ? +A['mis-p'] : 0.8, SECS = +(A['ibot-secs'] || 560);
+    const MARKS = [60, 120, 184, 240, 300, 343, 385, 420, 475, 540];
+    for(const fps of [30, 60]){
+        const seeds = Array.from({ length: BOT_RUNS }, (_, i) => 1000 + i);
+        const chunks = []; const per = Math.ceil(seeds.length / JOBS);
+        for(let i = 0; i < seeds.length; i += per) chunks.push(seeds.slice(i, i + per));
+        const t0 = Date.now();
+        const parts = await pool(chunks, JOBS, async (ch) => withEdge({ w: 412, h: 915, dsf: 1, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko'), 1200);
+            const cs = COURSE_SEEDS > 1 ? ch.map(b => 424242 + ((b - 1000) % COURSE_SEEDS) * 7919) : undefined;
+            const r = await e.ev('__G.ibot(' + JSON.stringify({ seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: SECS, misP: MISP, misPW: A['mis-p-warn'] != null ? +A['mis-p-warn'] : null, noCut: !!A['no-cut'] }) + ')', 3600000);
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            collectErrs('ibot ' + fps, e, pe.concat(r.filter(x => x.err).map(x => x.err)));
+            return r;
+        }));
+        const runs = parts.flat().filter(x => !x.err);
+        const reach = {}; for(const s of MARKS) reach[s] = r1(100 * runs.filter(x => x.t >= s || !x.dead).length / runs.length);
+        /* 10초 칸 피격률 — 그 칸 시작에 살아 있던 판 하나당 피격 수 */
+        const hit10 = [];
+        for(let b = 0; b < Math.ceil(SECS / 10); b++){
+            const alive = runs.filter(x => x.t >= b * 10).length;
+            const n = runs.reduce((a, x) => a + x.lost.filter(t => t >= b * 10 && t < b * 10 + 10).length, 0);
+            hit10.push(alive ? r2(n / alive) : null);
+        }
+        const sum = (f) => { const o = {}; for(const x of runs) for(const [k, v] of Object.entries(x[f] || {})) o[k] = (o[k] || 0) + v; for(const k in o) o[k] = r2(o[k] / runs.length); return o; };
+        const cut = runs.filter(x => x.cutAt != null);
+        const zoneDeaths = {}; for(const x of runs) if(x.dead) zoneDeaths[x.z] = (zoneDeaths[x.z] || 0) + 1;
+        const ts = runs.map(x => x.t).sort((a, b) => a - b);
+        out[fps + 'fps'] = { runs: runs.length, misP: MISP, reach, hit10, picks: sum('picks'), uses: sum('uses'), mis: r2(runs.reduce((a, x) => a + x.nMis, 0) / runs.length),
+            raw: runs.map(x => [x.t, x.dead ? 1 : 0, x.cutAt, x.lost.length, x.z, x.why]),
+            cutPct: r1(100 * cut.length / runs.length), cutMed: cut.length ? q(cut.map(x => x.cutAt).sort((a, b) => a - b), 0.5) : null, zoneDeaths, medianT: q(ts, 0.5), wallS: Math.round((Date.now() - t0) / 1000) };
+        say('ibot ' + fps + 'fps: ' + runs.length + '판 · ' + MARKS.map(s => s + 's ' + reach[s] + '%').join(' · ') + ' (중앙 ' + out[fps + 'fps'].medianT + 's, 차단 ' + out[fps + 'fps'].cutPct + '%, ' + out[fps + 'fps'].wallS + 's)');
+    }
+    return out;
+}
+function judgeIBot(cur, base){
+    const G = 'G9 ibot';
+    for(const k of ['30fps', '60fps']){
+        const c = cur[k], b = base && base[k];
+        for(const s of [60, 184, 343, 475]){
+            const ok = !b || Math.abs(c.reach[s] - b.reach[s]) <= 5;
+            row(G, k + ' ' + s + 's 도달률', c.reach[s] + '%', b ? b.reach[s] + '%' : null, '기준 ±5%p', b ? (ok ? 'PASS' : 'FAIL') : 'INFO');
+        }
+        row(G, k + ' 보급 영구 차단 판', c.cutPct + '%', b ? b.cutPct + '%' : null, '-', 'INFO');
+    }
+}
+
 /* ================= soak / assets ================= */
 async function runSoak(base){
     return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
@@ -1189,7 +1355,7 @@ try{
         row('G10 site', '금지 문자열', bad.length ? bad.join(' ') : 0, null, '0', bad.length ? (bad.every(s => s === '말머리 성운까지') ? 'WARN' : 'FAIL') : 'PASS', bad.includes('말머리 성운까지') ? '말머리 문구는 P3 과제' : '');
     }
 
-    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'soak', 'assets', 'beamdrain'].includes(c));
+    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain'].includes(c));
     if(needServer){
         const base = await startServer();
         say('서버 ' + base + ' (cwd ' + ROOT + ')');
@@ -1219,6 +1385,7 @@ try{
         }
         if(CMDS.includes('beamdrain')){ CUR.beamdrain = await runBeamDrain(base); judgeBeamDrain(CUR.beamdrain); }
         if(CMDS.includes('bot')){ CUR.bot = await runBot(base); judgeBot(CUR.bot, BASE && BASE.bot); }
+        if(CMDS.includes('ibot')){ CUR.ibot = await runIBot(base); judgeIBot(CUR.ibot, BASE && BASE.ibot); }
         if(CMDS.includes('soak')){
             CUR.soak = await runSoak(base);
             const s = CUR.soak;
