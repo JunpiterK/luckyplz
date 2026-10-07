@@ -569,8 +569,8 @@ function pageLib(){
                             if(want === 'shield' && typeof shieldBubbleUntil !== 'undefined' && performance.now() < shieldBubbleUntil) continue;
                             inventoryUseSlot(i); if(!inventory[i]){ uses[want] = (uses[want] || 0) + 1; used = true; break; }
                         }
-                        /* 위성 보상(호위 드론·플라즈마 폭풍·시간 왜곡)도 위험할 때 쓴다 */
-                        if(!used && typeof rewardCounts !== 'undefined') for(const rk of ['drone', 'storm', 'warp']){
+                        /* 위성 보상(호위 드론·플라즈마 폭풍)도 위험할 때 쓴다 */
+                        if(!used && typeof rewardCounts !== 'undefined') for(const rk of ['drone', 'storm']){   /* 시간 왜곡은 뺀다 — 봇의 내다보기가 느려진 세계를 몰라 오히려 손해 */
                             if(rewardCounts[rk] > 0){ const c0 = rewardCounts[rk]; try{ activateRewardSlot(rk); }catch(_){} if(rewardCounts[rk] < c0){ uses['r_' + rk] = (uses['r_' + rk] || 0) + 1; break; } }
                         }
                     }
