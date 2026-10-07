@@ -6643,7 +6643,7 @@ const SZ_OV_R = 70, SZ_OV_LO = 0.12;   /* QA 2026-09-29 — 운영자 재지적:
 const _szOvP = new Float32Array(1024);   /* x,y 쌍 — 최대 512점 */
 let _szOvN = 0, _szOvFid = 0, _szOvBuilt = -1, _szOvPl = 0;   /* _szOvPl = 1 이면 0번 점이 내 기체 */
 const _szOvV = new Float32Array(24);     /* 칸별 부드러운 근접도 0..1 */
-function szOvFrame(){ _szOvFid++; try{ _szOvBanner(); }catch(_){} }
+function szOvFrame(){ _szOvFid++; try{ _szOvBanner(); }catch(_){} try{ const _c = window.SZCTL; if(_c && _c.on) _c.tick(); }catch(_){} }
 function _szOvAdd(x, y){ if(_szOvN < 512 && x === x && y === y){ _szOvP[_szOvN * 2] = x; _szOvP[_szOvN * 2 + 1] = y; _szOvN++; } }
 function _szOvBuild(){
     if(_szOvBuilt === _szOvFid) return;
@@ -8437,8 +8437,9 @@ function flushTpInput(){
     if(!pendingTp.hasMove) return;
     player.x = Math.max(16, Math.min(CW-16, player.x + pendingTp.dx));
     player.y = Math.max(18, Math.min(CH-18, player.y + pendingTp.dy));
-    tpSetRing(pendingTp.ringX, pendingTp.ringY);
-    tpSetGlow(pendingTp.rawDx, pendingTp.rawDy);
+    /* 플로팅 조작(window.SZCTL, 2026-10-07)은 손가락 자리 고리만 옮긴다 — 트랙패드 원·빛은 숨어 있다 */
+    if(window.SZCTL && window.SZCTL.on) window.SZCTL.vis(pendingTp.ringX, pendingTp.ringY);
+    else { tpSetRing(pendingTp.ringX, pendingTp.ringY); tpSetGlow(pendingTp.rawDx, pendingTp.rawDy); }
     pendingTp.dx = 0;
     pendingTp.dy = 0;
     pendingTp.rawDx = 0;
@@ -20660,7 +20661,8 @@ function szDrawSay(n){
     const asp = canvas.height > 0 ? Math.max(0.6, Math.min(2.2, (canvas.width * CH) / (canvas.height * CW))) : 1;
     const ptop = CH - 60 - 26 * asp * 2 - 8;        /* SZ3 portraitPos 의 위 끝 (PR=26) */
     const w = c.b.w, h = c.b.h * asp;
-    const yb = Math.min(ptop - 3, CH * 0.80 - 40), x0 = 14;
+    /* 플로팅 조작(SZF)에서 교신창이 오른쪽으로 비켜 서면 말풍선도 오른쪽 정렬 */
+    const yb = Math.min(ptop - 3, CH * 0.80 - 40), x0 = (window.SZCTL && window.SZCTL.on && window.SZCTL.side === 'left') ? CW - 14 - w : 14;
     /* P8a — 평소 0.85, 운석·위험물·기체가 말풍선 70px 안이면 0.15 까지 비켜 준다 */
     const ak = (typeof szOvA === 'function') ? szOvA(0.72, x0, yb - h, x0 + w, yb, 1) : 0.72;   /* QA — 0.85 → 0.72 */
     const pop = (!RM && t < 0.18) ? 0.9 + 0.1 * (t / 0.18) : 1;
@@ -21129,7 +21131,11 @@ function curFrame(n){
 const PR = 26;                                   /* 창 반지름(논리 px) */
 /* 캔버스는 360×600 논리 좌표를 화면 비율대로 늘려 그린다(세로가 짧은 폰은 납작). 창은 둥글게 보이도록 세로를 되돌린다 */
 let pAsp = 1;
-function portraitPos(){ return {x: 12 + PR + 2, y: CH - 60 - PR * pAsp - 8}; }
+function portraitPos(){
+    /* 플로팅 조작(SZF)에서 버튼 묶음이 왼쪽이면 교신창은 조향 쪽(오른쪽)으로 비켜 선다 — 버튼과 겹쳐 둘 다 흐려지지 않게 (표시 전용) */
+    const x = (window.SZCTL && window.SZCTL.on && window.SZCTL.side === 'left') ? CW - (12 + PR + 2) : 12 + PR + 2;
+    return {x, y: CH - 60 - PR * pAsp - 8};
+}
 function drawPortrait(n){
     try{ if(typeof szStoryWorld === 'function') szStoryWorld(n); }catch(_){}   /* P3 — 말풍선·부표·피날레(교신창 층, 운석 아래) */
     if(!bakes.length || !rimBake) return;
@@ -24041,6 +24047,478 @@ window.SZH = {open, close, show: (i) => { if(H.open) show(i); }, isOpen: () => H
 /*</sz:mod:howto>*/
 </script>
 <!--/sz:mod:howto-->
+<!--<sz:mod:ctl>-->
+<style id="sz-ctl-css">
+/* ===== SZF 플로팅 조작 (2026-10-07) — 세로 터치 폰·태블릿 기본 =====
+   문제(운영자): 조향 원·BEAM·SAT·아이템이 화면 맨 아래 조종판에 있어 오래 쥐면 폰 무게중심과 엄지 사이 거리만큼
+   손목에 토크가 걸린다. 화면을 줄이면 몰입이 떨어진다.
+   답: ① 조종판(불투명 막대)을 없애고 캔버스를 화면 폭 가득(3:5 그대로) ② 조향 = 빈 곳 어디서든 상대 드래그(엄지가 기체를 안 가린다)
+   ③ BEAM·SAT·아이템·보상 = 반투명 버튼, 화면 중간~아래 버튼 쪽 엄지 호(弧) 위 — 폰 가운데를 쥔 채로 닿는다
+   ④ 위험물·기체가 밑을 지나면 더 흐려진다(szOvNear 재사용) ⑤ '배치 편집'으로 옮기기·크기 — szx_ctl_lay
+   클래식(예전 조종판)은 설정 칩 하나로 그대로 돌아간다 — szx_ctl=classic */
+body.sz-float .wrap{max-width:none;padding:0 0 var(--sb-bottom);gap:0;height:calc(100vh - var(--sz-tbh, 50px));height:calc(100dvh - var(--sz-tbh, 50px))}
+body.sz-float .left-col{position:relative;flex:1 1 auto;min-height:0;height:100%;gap:0;justify-content:flex-start}
+body.sz-float .canvas-wrap{width:min(100%, 560px, calc((100vh - var(--sz-tbh, 50px)) * .6));width:min(100%, 560px, calc((100dvh - var(--sz-tbh, 50px)) * .6));
+    max-width:none;max-height:none;height:auto;aspect-ratio:3/5;flex-shrink:0;border-radius:0 0 18px 18px;border-top-width:0}
+body.sz-float .hint,body.sz-float .game-ctrl{display:none !important}
+/* 조종판 → 왼쪽 열 전체를 덮는 투명 층. 빈 곳 = 조향 면, 버튼만 떠 있다 */
+body.sz-float .control-row{position:absolute;left:0;top:0;right:0;bottom:0;width:auto;max-width:none;height:auto;padding:0;margin:0;border:0;border-radius:0;
+    background:none;box-shadow:none;overflow:visible;z-index:3;touch-action:none;display:none}
+body.sz-float .control-row.on,body.sz-editing .control-row{display:block}
+body.sz-float .control-row::before,body.sz-float .control-row::after{display:none}
+body.sz-float .control-row .tp-wrap{display:none}
+body.sz-float .left-controls{position:absolute;inset:0;display:block;pointer-events:none;gap:0}
+body.sz-float .action-row{display:contents}
+body.sz-float .szf-g{position:absolute;left:0;top:0;margin:0;pointer-events:auto;transform:translate3d(var(--x,0px),var(--y,0px),0);
+    opacity:var(--szf-a,.62);transition:opacity .14s linear;will-change:transform,opacity}
+/* 누르는 동안은 또렷하게 */
+body.sz-float .szf-g.active,body.sz-float .szf-g.firing,body.sz-float .szf-g.installing,body.sz-float .szf-g.draining{opacity:.96}
+/* 정지·결과 중에는 층이 입력을 받지 않는다(정지 메뉴는 캔버스 안에 있다) */
+body.sz-float:not(.lp-playing):not(.sz-editing) .control-row,body.sz-float:not(.lp-playing):not(.sz-editing) .control-row *{pointer-events:none !important}
+body.sz-float:not(.lp-playing):not(.sz-editing) .szf-g{opacity:.22}
+/* BEAM — 원형, 엄지 기본 자리 */
+body.sz-float #gravBtn{width:calc(72px * var(--s,1));height:calc(72px * var(--s,1));flex:none;padding:0;border-radius:50%;flex-direction:column;gap:1px;overflow:hidden}
+/* 기본 상태는 유리판 — 노란 테두리만 또렷하고 속은 비친다(게이지·누름 상태는 원래 색 그대로) */
+body.sz-float #gravBtn:not(.active):not(.cooldown):not(.disabled):not(.draining){background:radial-gradient(circle at 50% 38%,rgba(255,230,109,.26) 0%,rgba(40,28,4,.5) 72%);
+    box-shadow:inset 0 0 0 2px rgba(255,230,109,.82),0 0 16px -2px rgba(255,214,90,.45);color:#FFE66D}
+body.sz-float #satBtn:not(.disabled):not(.firing):not(.installing):not(.done):not(.engaged):not(.armed){background:radial-gradient(ellipse at 50% 35%,rgba(93,193,255,.24) 0%,rgba(4,18,34,.52) 75%)}
+body.sz-float #satBtn:not(.engaged):not(.done):not(.firing):not(.installing):not(.disabled){box-shadow:inset 0 0 0 2px rgba(93,193,255,.7),0 0 14px -3px rgba(93,193,255,.5)}
+body.sz-float #gravBtn .grav-icon{font-size:calc(1.6em * var(--s,1))}
+body.sz-float #gravBtn .grav-label{font-size:calc(.62em * var(--s,1));letter-spacing:.06em}
+/* 게이지가 모자라도 버튼 자리는 손가락을 받는다(밑으로 흘러 조향이 되지 않게) — 누르면 빨간 테두리로 알린다 */
+body.sz-float #gravBtn.cooldown{pointer-events:auto}
+/* SAT — 둥근 사각, 미션 칩 한 줄 안에 */
+body.sz-float #satBtn{width:calc(80px * var(--s,1));height:calc(64px * var(--s,1));flex:none;border-radius:calc(22px * var(--s,1));padding:0 4px}
+body.sz-float #satBtn .sat-icon{font-size:calc(1.15em * var(--s,1))}
+body.sz-float #satBtn .sat-label{font-size:calc(.74em * var(--s,1))}
+body.sz-float #satBtn.disabled{opacity:.2}
+/* 아이템 줄 — 칸 수와 무관(INVENTORY_SLOTS). data-o = v 세로 / h 가로 / g 두 줄 */
+body.sz-float .slot-row{display:flex;flex-direction:column;gap:6px;max-width:none;flex-wrap:nowrap}
+body.sz-float .slot-row[data-o="h"]{flex-direction:row}
+body.sz-float .slot-row[data-o="g"]{flex-direction:row;flex-wrap:wrap;width:calc(104px * var(--s,1) + 6px)}
+body.sz-float .slot-row .item-slot{width:calc(52px * var(--s,1));height:calc(52px * var(--s,1));border-radius:calc(15px * var(--s,1));font-size:calc(1.5em * var(--s,1))}
+/* 빈 칸은 자리만 보이게 아주 옅게, 손가락은 밑(조향 면)으로 흘려 보낸다 */
+body.sz-float .slot-row .item-slot.empty{opacity:.4;pointer-events:none}
+body.sz-float #rewardRow{display:flex;flex-direction:row;gap:6px}
+body.sz-float #rewardRow[data-o="v"]{flex-direction:column}
+body.sz-float #rewardRow[data-o="g"]{flex-wrap:wrap;width:calc(96px * var(--s,1) + 6px)}
+body.sz-float #rewardRow .reward-slot{width:calc(48px * var(--s,1));height:calc(48px * var(--s,1));border-radius:calc(13px * var(--s,1));font-size:calc(1.7em * var(--s,1))}
+body.sz-float #rewardRow .reward-slot.empty{opacity:.3;pointer-events:none}
+/* 손가락 자리 고리 — 상대 드래그의 기준점(엄지 둘레로 살짝 보인다) */
+.szf-touch{position:absolute;left:0;top:0;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;pointer-events:none;display:none;
+    border:2px solid rgba(0,217,255,.45);box-shadow:0 0 14px rgba(0,217,255,.35),inset 0 0 10px rgba(0,217,255,.18);will-change:transform}
+.szf-touch.on{display:block}
+/* 첫 판 안내 한 줄(3판까지) */
+.szf-tip{position:absolute;left:50%;transform:translateX(-50%);top:34%;pointer-events:none;white-space:nowrap;
+    font:800 13px 'Noto Sans KR',sans-serif;color:rgba(200,240,255,.92);text-shadow:0 1px 3px rgba(0,0,0,.9);padding:6px 12px;border-radius:999px;
+    background:rgba(2,8,24,.55);border:1px solid rgba(0,217,255,.3);opacity:0;transition:opacity .4s}
+.szf-tip.on{opacity:1}
+/* ---- 배치 편집 ---- */
+.szf-dim,.szf-tools,.szf-ehint{display:none}
+body.sz-editing .szf-dim{display:block;position:absolute;inset:0;background:rgba(2,6,20,.3);pointer-events:none}
+/* 편집 중에는 시작 카드를 감추고 실제 플레이 화면(우주 배경) 위에 버튼만 보인다 */
+body.sz-editing #overlay,body.sz-editing .lp-dock{visibility:hidden}
+body.sz-editing .szf-g{opacity:1 !important;pointer-events:auto !important;outline:2px dashed rgba(255,255,255,.4);outline-offset:4px;border-radius:14px;touch-action:none;cursor:grab}
+body.sz-editing .szf-g *{pointer-events:none !important}
+body.sz-editing .szf-g.szf-sel{outline-color:#FFE66D;outline-style:solid}
+body.sz-editing .slot-row .item-slot.empty,body.sz-editing #rewardRow .reward-slot.empty{opacity:.75}
+body.sz-editing #satBtn.disabled{opacity:1}
+body.sz-editing .szf-tools{display:flex;position:absolute;left:50%;top:56px;transform:translateX(-50%);z-index:5;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;
+    width:max-content;max-width:calc(100% - 16px);padding:8px;border-radius:16px;background:rgba(6,10,26,.94);border:1px solid rgba(0,217,255,.4);box-shadow:0 8px 24px rgba(0,0,0,.6)}
+.szf-tools .szf-sel-name{font:900 13px 'Orbitron','Noto Sans KR',sans-serif;color:#FFE66D;min-width:64px;text-align:center}
+.szf-tools button{min-width:48px;min-height:48px;padding:0 12px;border-radius:12px;border:1px solid rgba(0,217,255,.4);background:rgba(0,217,255,.1);color:#CFF6FF;
+    font:800 14px 'Noto Sans KR',sans-serif;cursor:pointer;touch-action:manipulation}
+.szf-tools button:disabled{opacity:.35}
+.szf-tools button[data-szft="done"]{background:linear-gradient(135deg,#00D9FF,#0099CC);color:#001828;border-color:transparent}
+body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--sb-bottom) + 12px);z-index:5;pointer-events:none;white-space:nowrap;
+    font:800 12px 'Noto Sans KR',sans-serif;color:rgba(255,255,255,.8);text-shadow:0 1px 3px #000}
+/* 설정 칩 줄 (시작 화면) */
+.szf-opts{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:6px}
+.szf-opts .sz-opt{font:800 .74em 'Orbitron','Noto Sans KR',sans-serif;white-space:nowrap;min-height:44px}
+/* 클래식의 5칸 두 줄(3+2)·조종판 높이는 sz-items-css 그대로.
+   단 작은 세로 폰(≤360 폭·≤640 높이)은 둘째 줄만큼 캔버스가 눌려 세로/가로 0.91 이었다(게이트 FAIL) —
+   보상 줄을 트랙패드 아래 빈칸으로 옮겨(2×2 격자: 아이템|패드 / 액션|보상) 조종판을 195 → 166px 로 줄인다 */
+@media (max-width:360px) and (orientation:portrait), (max-height:700px) and (max-width:767px) and (orientation:portrait){
+    body:not(.sz-float) .control-row.on{display:grid;grid-template-columns:auto auto;justify-content:space-between;align-items:center;row-gap:6px;column-gap:8px;
+        grid-template-areas:"tp slots" "rew act"}
+    body:not(.sz-float) .control-row.on.steer-right{grid-template-areas:"slots tp" "act rew"}
+    body:not(.sz-float) .control-row .left-controls{display:contents}
+    body:not(.sz-float) .control-row .tp-wrap{grid-area:tp;justify-self:center}
+    body:not(.sz-float) .control-row .slot-row{grid-area:slots;position:relative;z-index:1}
+    body:not(.sz-float) .control-row .action-row{grid-area:act;position:relative;z-index:1}
+    body:not(.sz-float) .control-row #rewardRow{grid-area:rew;justify-self:center;position:relative;z-index:1}
+    body:not(.sz-float) .left-col{--sz-panel-h:166px}
+}
+/* 641~700px 높이(375×667 등) — 트랙패드 148 → 120, 조종판 238 → 202px (세로/가로 0.91 → 1.0 이상) */
+@media (min-height:641px) and (max-height:700px) and (min-width:361px) and (max-width:767px) and (orientation:portrait){
+    body:not(.sz-float) .control-row .tp-zone{width:120px;height:120px}
+    body:not(.sz-float) .left-col{--sz-panel-h:202px}
+}
+</style>
+<script>
+/*<sz:mod:ctl>*/
+/* window.SZCTL — 플로팅 조작 (이 IIFE 안의 SZF. 전역 SZF 는 이야기 모듈의 글자 캐시라 이름을 달리 쓴다). 판정·시드·시뮬레이션과 무관(입력 배치·표시 전용). 기체 이동은 기존 pendingTp → flushTpInput(매 프레임 맨 앞) 그대로라
+   손가락이 움직인 다음 프레임에 바로 반영된다(추가 지연 0). 저장 키: szx_ctl('float'|'classic') · szx_sens · szx_ctl_lay */
+(function(){
+    const $ = (id) => document.getElementById(id);
+    const LSG = (k) => { try{ return localStorage.getItem(k); }catch(_){ return null; } };
+    const LSS = (k, v) => { try{ if(v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); }catch(_){} };
+    const SENS = [1.2, 1.5, 1.8, 2.2, 2.6];
+    const SCALES = [0.93, 1, 1.1, 1.2, 1.32];   /* 0.93 × 아이템 52px = 48px 하한 */
+    const GAP = 6;
+    const KEYS = ['beam', 'sat', 'items', 'rewards'];
+    const SZF_I18N = {
+        ko:{ float:'🎮 플로팅', classic:'🎮 클래식', sens:'감도', edit:'✋ 배치 편집', size:'크기', arr:'배열', reset:'↺ 초기화', done:'✓ 완료', ehint:'끌어서 옮기기 · 눌러서 고르기', tip:'빈 곳 어디든 끌어서 조종', items:'아이템', rewards:'보상' },
+        en:{ float:'🎮 Float', classic:'🎮 Classic', sens:'Sens', edit:'✋ Edit layout', size:'Size', arr:'Layout', reset:'↺ Reset', done:'✓ Done', ehint:'Drag to move · tap to select', tip:'Drag anywhere to steer', items:'Items', rewards:'Rewards' },
+        ja:{ float:'🎮 フロート', classic:'🎮 クラシック', sens:'感度', edit:'✋ 配置編集', size:'サイズ', arr:'並び', reset:'↺ リセット', done:'✓ 完了', ehint:'ドラッグで移動 · タップで選択', tip:'空いた所ならどこでもドラッグで操縦', items:'アイテム', rewards:'報酬' },
+        zh:{ float:'🎮 悬浮', classic:'🎮 经典', sens:'灵敏度', edit:'✋ 编辑布局', size:'大小', arr:'排列', reset:'↺ 重置', done:'✓ 完成', ehint:'拖动移动 · 点按选择', tip:'在空白处任意拖动即可操控', items:'道具', rewards:'奖励' },
+        es:{ float:'🎮 Flotante', classic:'🎮 Clásico', sens:'Sens', edit:'✋ Editar', size:'Tamaño', arr:'Forma', reset:'↺ Reiniciar', done:'✓ Listo', ehint:'Arrastra para mover · toca para elegir', tip:'Arrastra en cualquier lugar para pilotar', items:'Ítems', rewards:'Premios' },
+        pt:{ float:'🎮 Flutuante', classic:'🎮 Clássico', sens:'Sens', edit:'✋ Editar', size:'Tamanho', arr:'Forma', reset:'↺ Redefinir', done:'✓ Pronto', ehint:'Arraste para mover · toque para escolher', tip:'Arraste em qualquer lugar para pilotar', items:'Itens', rewards:'Prêmios' }
+    };
+    const L = () => { let l = 'en'; try{ l = (window.LpI18n && LpI18n.getLang && LpI18n.getLang()) || 'en'; }catch(_){} return SZF_I18N[l] ? l : 'en'; };
+    const T = (k) => SZF_I18N[L()][k] || SZF_I18N.en[k] || k;
+
+    const SZF = window.SZCTL = { on:false, side:'left', editing:false, sens:1.8, scale:1, vis, tick, apply, eligible };
+    const s0 = parseFloat(LSG('szx_sens'));
+    SZF.sens = SENS.includes(s0) ? s0 : 1.8;
+    let pref = LSG('szx_ctl') === 'classic' ? 'classic' : 'float';
+
+    const cr = document.querySelector('.control-row'), col = document.querySelector('.left-col'), body = document.body;
+    if(!cr || !col) return;
+    /* 층 부속 — 손가락 고리·첫 판 안내·편집 도구 */
+    const ring = document.createElement('div'); ring.className = 'szf-touch'; cr.appendChild(ring);
+    const tipEl = document.createElement('div'); tipEl.className = 'szf-tip'; cr.appendChild(tipEl);
+    const dim = document.createElement('div'); dim.className = 'szf-dim'; cr.insertBefore(dim, cr.firstChild);
+    const tools = document.createElement('div'); tools.className = 'szf-tools'; cr.appendChild(tools);
+    const ehint = document.createElement('div'); ehint.className = 'szf-ehint'; cr.appendChild(ehint);
+
+    function eligible(){
+        let touch = false;
+        try{ touch = matchMedia('(pointer:coarse)').matches || ((navigator.maxTouchPoints || 0) > 0 && matchMedia('(hover:none)').matches); }catch(_){}
+        return touch && innerWidth < 1024 && innerHeight > innerWidth;
+    }
+    function grp(){ return { beam:$('gravBtn'), sat:$('satBtn'), items:document.querySelector('.slot-row'), rewards:$('rewardRow') }; }
+    function nItems(){ const r = document.querySelector('.slot-row'); return r ? Math.max(1, r.querySelectorAll('.item-slot').length) : 3; }
+    function nRew(){ const r = $('rewardRow'); return r ? Math.max(1, r.querySelectorAll('.reward-slot').length) : 3; }
+    function gridWH(n, d, o){
+        if(o === 'h') return [n * d + (n - 1) * GAP, d];
+        if(o === 'g'){ const c = Math.min(2, n), r = Math.ceil(n / 2); return [c * d + (c - 1) * GAP, r * d + (r - 1) * GAP]; }
+        return [d, n * d + (n - 1) * GAP];
+    }
+    function size(k, g){
+        const s = g.s;
+        if(k === 'beam') return [72 * s, 72 * s];
+        if(k === 'sat') return [80 * s, 64 * s];
+        if(k === 'items') return gridWH(nItems(), 52 * s, g.o);
+        return gridWH(nRew(), 48 * s, g.o);
+    }
+    /* 기본 배치 — 버튼 쪽 가장자리에서 잰 중심(px).
+       오래 쥐는 입력(조향·BEAM·SAT)은 화면 가운데~아래 사이(층 높이 64%)에 — 폰 가운데를 쥔 채 엄지가 닿는다.
+       가끔 한 번 누르는 아이템·보상은 캔버스 아래 남는 띠(3:5 캔버스와 화면 비율 차이)에 — 플레이필드를 가리지 않는다.
+       띠가 없을 만큼 납작한 화면이면 BEAM 위 가장자리 세로 줄로 */
+    function defaults(W, H){
+        const by = Math.max(150, Math.min(H * 0.64, H - 150));
+        const n = nItems(), nr = nRew(), rowW = n * 52 + (n - 1) * GAP;
+        const sy0 = Math.min(H, geo.cy0 + geo.ch), strip = H - sy0;
+        const D = { beam:{x:66, y:by, s:1}, sat:{x:66 + 76, y:by + 62, s:1}, items:{s:1, o:'h'}, rewards:{s:1, o:'h'} };
+        const put = (k) => { const z = size(k, D[k]); D[k].x = 8 + z[0] / 2; return z; };
+        const mg = geo.cx0;   /* 캔버스 옆 여백(태블릿) */
+        if(mg >= 92){
+            /* 태블릿 — 캔버스 옆 여백에 세로로 전부(플레이필드를 하나도 가리지 않는다): 아이템 / BEAM / SAT / 보상 */
+            const cx = mg / 2;
+            D.beam.x = cx; D.sat.x = cx; D.sat.y = by + 36 + 12 + 32;
+            D.items.o = (n * 52 + (n - 1) * GAP) <= by - 60 ? 'v' : 'g';
+            const iz = size('items', D.items); D.items.x = cx; D.items.y = by - 36 - 14 - iz[1] / 2;
+            D.rewards.o = 'v'; const rz = size('rewards', D.rewards); D.rewards.x = cx; D.rewards.y = Math.min(D.sat.y + 32 + 14 + rz[1] / 2, H - 8 - rz[1] / 2);
+        } else if(strip >= 64 && rowW <= W - 16){
+            const iz = put('items');
+            if(strip >= 124){
+                D.items.y = sy0 + 8 + iz[1] / 2;
+                const rz = put('rewards'); D.rewards.y = sy0 + 8 + iz[1] + GAP + rz[1] / 2;
+            } else {
+                D.items.y = sy0 + strip / 2;
+                D.rewards.o = 'v'; const rz = put('rewards'); D.rewards.y = by - 36 - 14 - rz[1] / 2;
+            }
+        } else if(rowW <= W - 16){
+            /* 띠가 없는 납작한 폰(320×568·375×667) — 아이템은 캔버스 맨 아래 한 줄(항로 패널 자리, 기체가 덜 가는 곳), 보상은 BEAM 위 세로줄 */
+            const iz = put('items'); D.items.y = H - 6 - iz[1] / 2;
+            D.rewards.o = 'v'; const rz = put('rewards'); D.rewards.y = by - 36 - 14 - rz[1] / 2;
+            D.sat.y = Math.min(D.sat.y, H - 6 - iz[1] - 12 - 32);
+        } else {
+            const colH = n * 52 + (n - 1) * GAP;
+            D.items.o = colH <= H * 0.36 ? 'v' : 'g';
+            const iz = put('items'); D.items.y = by - 36 - 14 - iz[1] / 2;
+            const rz = put('rewards'); D.rewards.y = Math.min(by + 62 + 32 + 14 + rz[1] / 2, H - 8 - rz[1] / 2);
+            void nr;
+        }
+        for(const k of KEYS){ D[k].x /= W; D[k].y /= H; }
+        return D;
+    }
+    let LAY = null;
+    try{ const j = JSON.parse(LSG('szx_ctl_lay') || 'null'); if(j && j.beam) LAY = j; }catch(_){}
+    let geo = { W:0, H:0, cx0:0, cy0:0, cw:1, ch:1 }, PX = {}, LR = {}, _a = {}, _aw = {};
+
+    /* 층 크기·캔버스 자리를 재고 네 묶음을 놓는다 (크기 바뀔 때·판 시작·조향 쪽 바뀔 때만 — 매 프레임 레이아웃을 읽지 않는다) */
+    function layout(){
+        if(!SZF.on) return;
+        const lr = col.getBoundingClientRect(), cv = (typeof canvas !== 'undefined' && canvas) ? canvas.getBoundingClientRect() : lr;
+        geo = { W: lr.width, H: lr.height, cx0: cv.left - lr.left, cy0: cv.top - lr.top, cw: cv.width || 1, ch: cv.height || 1, L: lr.left, T: lr.top };
+        if(geo.W < 50 || geo.H < 50) return;
+        SZF.scale = CW / geo.cw;
+        const D = defaults(geo.W, geo.H), G = grp();
+        const lay = {};
+        for(const k of KEYS){
+            const g = Object.assign({}, D[k], (LAY && LAY[k]) || {});
+            if(!SCALES.includes(g.s)) g.s = 1;
+            if(k === 'beam' || k === 'sat') delete g.o; else if(!/^[vhg]$/.test(g.o || '')) g.o = D[k].o;
+            lay[k] = g;
+            const el = G[k]; if(!el) continue;
+            const [w, h] = size(k, g);
+            let cx = g.x * geo.W, cy = g.y * geo.H;
+            cx = Math.max(4 + w / 2, Math.min(geo.W - 4 - w / 2, cx));
+            cy = Math.max(4 + h / 2, Math.min(geo.H - 4 - h / 2, cy));
+            const left = SZF.side === 'left' ? cx - w / 2 : geo.W - cx - w / 2;
+            el.classList.add('szf-g'); el.dataset.szg = k;
+            if(g.o) el.dataset.o = g.o; else delete el.dataset.o;
+            el.style.setProperty('--x', left.toFixed(1) + 'px'); el.style.setProperty('--y', (cy - h / 2).toFixed(1) + 'px'); el.style.setProperty('--s', g.s);
+            PX[k] = { cx, cy, w, h };
+            /* 근접 비킴용 — 캔버스 논리 좌표 사각형. 캔버스 밖(태블릿 옆 여백·아래 띠)이면 비킬 일이 없다 */
+            const x0 = (left - geo.cx0) * CW / geo.cw, y0 = (cy - h / 2 - geo.cy0) * CH / geo.ch, x1 = x0 + w * CW / geo.cw, y1 = y0 + h * CH / geo.ch;
+            LR[k] = (x1 < 0 || x0 > CW || y1 < 0 || y0 > CH) ? null : [x0, y0, x1, y1];
+        }
+        SZF.lay = lay;
+    }
+    function clearGroups(){
+        const G = grp();
+        for(const k of KEYS){ const el = G[k]; if(!el) continue; el.classList.remove('szf-g', 'szf-sel'); delete el.dataset.szg; delete el.dataset.o; el.style.removeProperty('--x'); el.style.removeProperty('--y'); el.style.removeProperty('--s'); el.style.removeProperty('--szf-a'); }
+    }
+    function measureTop(){
+        const tb = document.querySelector('.topbar');
+        if(tb) document.documentElement.style.setProperty('--sz-tbh', Math.round(tb.getBoundingClientRect().height) + 'px');
+    }
+    /* 모드 적용 — 바뀌면 캔버스 해상도를 다시 맞춘다 */
+    function apply(){
+        const on = pref === 'float' && eligible();
+        const steer = (typeof userSteer !== 'undefined') ? userSteer : 'right';
+        SZF.side = steer === 'right' ? 'left' : 'right';
+        try{ if(typeof szEnsureItemSlots === 'function') szEnsureItemSlots(); }catch(_){}   /* 아이템 칸(ITEM_SLOT_MAX) — sz:mod:items */
+        if(on) measureTop();
+        if(on !== SZF.on){
+            SZF.on = on;
+            body.classList.toggle('sz-float', on);
+            if(!on){ clearGroups(); if(SZF.editing) editEnd(false); ringOff(); }
+            try{ if(typeof fitCanvas === 'function') fitCanvas(); }catch(_){}
+        }
+        if(on) layout();
+        syncChips();
+    }
+    let _raf = 0;
+    function applySoon(){ if(_raf) return; _raf = requestAnimationFrame(() => { _raf = 0; apply(); try{ if(SZF.on && typeof fitCanvas === 'function') fitCanvas(); }catch(_){} }); }
+    addEventListener('resize', applySoon);
+    addEventListener('orientationchange', () => setTimeout(applySoon, 120));
+    /* 조향 쪽 바뀜(steer-right 토글)·판 시작(.on) — 다시 놓는다 */
+    try{ new MutationObserver(() => { const s = cr.classList.contains('steer-right') ? 'left' : 'right'; if(s !== SZF.side || cr.classList.contains('on')) applySoon(); }).observe(cr, { attributes:true, attributeFilter:['class'] }); }catch(_){}
+
+    /* ---- 조향: 빈 곳 어디서든 상대 드래그 ---- */
+    let tipShownRun = false;
+    function ringAt(x, y){ ring.style.transform = 'translate3d(' + (x - geo.L).toFixed(1) + 'px,' + (y - geo.T).toFixed(1) + 'px,0)'; }
+    function ringOff(){ ring.classList.remove('on'); }
+    function vis(x, y){ ringAt(x, y); }
+    cr.addEventListener('touchstart', (e) => {
+        if(!SZF.on || SZF.editing) return;
+        if(e.target.closest && e.target.closest('.szf-tools')) return;
+        e.preventDefault();
+        if(!running || paused || (typeof szSpectating !== 'undefined' && szSpectating)) return;
+        if(tpTouchId !== null) return;
+        const t = e.changedTouches[0]; if(!t) return;
+        const r = col.getBoundingClientRect(); geo.L = r.left; geo.T = r.top;
+        tpTouchId = t.identifier; tpLastX = t.clientX; tpLastY = t.clientY;
+        pendingTp.active = true;
+        ringAt(t.clientX, t.clientY); ring.classList.add('on');
+        if(tipEl.classList.contains('on')) tipEl.classList.remove('on');
+    }, { passive:false });
+    cr.addEventListener('touchmove', (e) => {
+        if(!SZF.on || SZF.editing) return;
+        e.preventDefault();
+        if(tpTouchId === null || !running || paused) return;
+        const t = _findTouchById(e.changedTouches, tpTouchId);
+        if(!t) return;   /* 다른 손가락(BEAM·SAT) 움직임 — 무시 */
+        const k = SZF.sens * SZF.scale;
+        const rdx = t.clientX - tpLastX, rdy = t.clientY - tpLastY;
+        pendingTp.dx += rdx * k; pendingTp.dy += rdy * k;
+        pendingTp.ringX = t.clientX; pendingTp.ringY = t.clientY; pendingTp.rawDx = rdx; pendingTp.rawDy = rdy;
+        pendingTp.hasMove = true;
+        tpLastX = t.clientX; tpLastY = t.clientY;
+    }, { passive:false });
+    const tEnd = (e) => {
+        if(!SZF.on) return;
+        if(tpTouchId === null) return;
+        if(!_findTouchById(e.changedTouches, tpTouchId)) return;
+        tpEnd(e); ringOff();
+    };
+    cr.addEventListener('touchend', tEnd);
+    cr.addEventListener('touchcancel', tEnd);
+    /* 마우스(터치 노트북·좁은 창) — 예전처럼 커서에 붙는다 */
+    cr.addEventListener('mousemove', (e) => {
+        if(!SZF.on || SZF.editing || !running || paused) return;
+        const r = canvas.getBoundingClientRect();
+        pointer.x = (e.clientX - r.left) / r.width * CW; pointer.y = (e.clientY - r.top) / r.height * CH; pointer.active = true;
+    });
+    cr.addEventListener('mouseleave', () => { if(SZF.on) pointer.active = false; });
+    /* 반투명 버튼은 손끝에 걸리는 감이 없다 — 누르는 순간 아주 짧은 진동(진동 설정 따름) */
+    cr.addEventListener('touchstart', (e) => {
+        if(!SZF.on || SZF.editing || !running || paused) return;
+        const b = e.target.closest && e.target.closest('.szf-g button, button.szf-g');
+        if(b && !b.classList.contains('empty') && !b.classList.contains('disabled')) try{ szVibrate(8); }catch(_){}
+    }, { capture:true, passive:true });
+
+    /* ---- 위험물·기체가 밑을 지나면 더 흐려진다 (szOvFrame 에서 매 프레임) ---- */
+    const A0 = 0.62, ALO = 0.28, AOUT = 0.85;   /* 위험물 밑으로 지나가도 버튼 자리는 찾을 수 있게 하한 0.28 */
+    function tick(){
+        if(!running || SZF.editing || typeof szOvNear !== 'function') return;
+        const G = grp();
+        for(const k of KEYS){
+            const el = G[k]; if(!el) continue;
+            let a;
+            const r = LR[k];
+            if(!r) a = AOUT;
+            else {
+                let n = szOvNear(r[0], r[1], r[2], r[3]);
+                const v = _a[k] || 0;
+                n = n > v ? Math.min(n, v + 0.34) : Math.max(n, v - 0.07);
+                _a[k] = n;
+                a = A0 + (ALO - A0) * n;
+            }
+            if(Math.abs(a - (_aw[k] || 0)) > 0.03){ _aw[k] = a; const s = a.toFixed(2); szDomQueue(() => el.style.setProperty('--szf-a', s)); }
+        }
+        if(!tipShownRun && cr.classList.contains('on')){
+            tipShownRun = true;
+            const n = parseInt(LSG('szx_ctl_tip') || '0', 10) || 0;
+            if(n < 3){ LSS('szx_ctl_tip', String(n + 1)); tipEl.textContent = T('tip'); tipEl.classList.add('on'); setTimeout(() => tipEl.classList.remove('on'), 2600); }
+        }
+    }
+    /* 판이 끝나면 다음 판에 다시 안내할 수 있게 */
+    try{ new MutationObserver(() => { if(!cr.classList.contains('on')){ tipShownRun = false; ringOff(); } }).observe(cr, { attributes:true, attributeFilter:['class'] }); }catch(_){}
+
+    /* ---- 배치 편집 ---- */
+    let sel = 'beam', drag = null;
+    function save(){ LAY = SZF.lay; LSS('szx_ctl_lay', JSON.stringify(LAY)); }
+    function renderTools(){
+        const g = SZF.lay && SZF.lay[sel];
+        const name = sel === 'beam' ? 'BEAM' : sel === 'sat' ? 'SAT' : T(sel);
+        const si = g ? SCALES.indexOf(g.s) : 1;
+        tools.innerHTML = '<span class="szf-sel-name">' + name + '</span>'
+            + '<button type="button" data-szft="minus" aria-label="' + T('size') + ' -"' + (si <= 0 ? ' disabled' : '') + '>−</button>'
+            + '<button type="button" data-szft="plus" aria-label="' + T('size') + ' +"' + (si >= SCALES.length - 1 ? ' disabled' : '') + '>+</button>'
+            + ((sel === 'items' || sel === 'rewards') ? '<button type="button" data-szft="orient">⇅ ' + T('arr') + '</button>' : '')
+            + '<button type="button" data-szft="reset">' + T('reset') + '</button>'
+            + '<button type="button" data-szft="done">' + T('done') + '</button>';
+        ehint.textContent = T('ehint');
+        const G = grp(); for(const k of KEYS) if(G[k]) G[k].classList.toggle('szf-sel', k === sel);
+    }
+    function editStart(){
+        if(!SZF.on) return;
+        SZF.editing = true; body.classList.add('sz-editing');
+        requestAnimationFrame(() => { layout(); renderTools(); });
+    }
+    function editEnd(doSave){
+        if(doSave !== false) save();
+        SZF.editing = false; body.classList.remove('sz-editing'); drag = null;
+        const G = grp(); for(const k of KEYS) if(G[k]) G[k].classList.remove('szf-sel');
+    }
+    SZF.edit = editStart; SZF.editEnd = editEnd;
+    tools.addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-szft]'); if(!b) return;
+        e.preventDefault(); e.stopPropagation();
+        const a = b.dataset.szft, g = SZF.lay && SZF.lay[sel];
+        if(a === 'done'){ editEnd(true); return; }
+        if(a === 'reset'){ LAY = null; LSS('szx_ctl_lay', null); layout(); renderTools(); return; }
+        if(!g) return;
+        if(a === 'minus' || a === 'plus'){ const i = SCALES.indexOf(g.s) + (a === 'plus' ? 1 : -1); if(i >= 0 && i < SCALES.length) g.s = SCALES[i]; }
+        if(a === 'orient'){ g.o = g.o === 'v' ? 'h' : g.o === 'h' ? 'g' : 'v'; }
+        LAY = SZF.lay; layout(); save(); renderTools();
+    });
+    /* 편집 중 드래그 — 캡처 단계에서 먼저 받아 버튼 본래 동작(아이템 사용·BEAM)을 막는다 */
+    const pt = (e) => (e.changedTouches && e.changedTouches[0]) || e;
+    function dStart(e){
+        if(!SZF.editing) return;
+        if(e.target.closest && e.target.closest('.szf-tools')) return;
+        e.preventDefault(); e.stopPropagation();
+        const g = e.target.closest && e.target.closest('.szf-g');
+        if(!g || drag) return;
+        sel = g.dataset.szg; renderTools();
+        const p = pt(e), P = PX[sel]; if(!P) return;
+        drag = { k: sel, id: p.identifier, x: p.clientX, y: p.clientY, cx: P.cx, cy: P.cy };
+    }
+    function dMove(e){
+        if(!SZF.editing || !drag) return;
+        e.preventDefault(); e.stopPropagation();
+        let p = pt(e);
+        if(e.changedTouches){ p = _findTouchById(e.changedTouches, drag.id); if(!p) return; }
+        const sgn = SZF.side === 'left' ? 1 : -1;
+        const g = SZF.lay[drag.k];
+        g.x = (drag.cx + sgn * (p.clientX - drag.x)) / geo.W; g.y = (drag.cy + (p.clientY - drag.y)) / geo.H;
+        LAY = SZF.lay; layout();
+    }
+    function dEnd(e){
+        if(!SZF.editing || !drag) return;
+        if(e.changedTouches && !_findTouchById(e.changedTouches, drag.id)) return;
+        e.preventDefault(); e.stopPropagation();
+        /* 놓은 자리(경계 안으로 당겨진 값)를 저장 */
+        const P = PX[drag.k], g = SZF.lay[drag.k];
+        if(P){ g.x = P.cx / geo.W; g.y = P.cy / geo.H; }
+        drag = null; save();
+    }
+    cr.addEventListener('touchstart', dStart, { capture:true, passive:false });
+    cr.addEventListener('touchmove', dMove, { capture:true, passive:false });
+    cr.addEventListener('touchend', dEnd, { capture:true, passive:false });
+    cr.addEventListener('touchcancel', dEnd, { capture:true, passive:false });
+    cr.addEventListener('mousedown', dStart, true);
+    addEventListener('mousemove', dMove, true);
+    addEventListener('mouseup', dEnd, true);
+    document.addEventListener('keydown', (e) => { if(SZF.editing && (e.key === 'Escape' || e.key === 'Enter')){ e.preventDefault(); e.stopPropagation(); editEnd(true); } }, true);
+
+    /* ---- 설정 칩 (시작·결과 화면의 소리·진동 칩 줄 아래) ---- */
+    function chipsHtml(){
+        let h = '<div class="szf-opts" role="group">'
+            + '<button type="button" class="sz-opt' + (pref === 'float' ? ' on' : '') + '" data-szf="mode" aria-pressed="' + (pref === 'float') + '">' + T(pref === 'float' ? 'float' : 'classic') + '</button>';
+        if(pref === 'float') h += '<button type="button" class="sz-opt" data-szf="sens">' + T('sens') + ' ' + SZF.sens.toFixed(1) + '×</button>'
+            + '<button type="button" class="sz-opt" data-szf="edit">' + T('edit') + '</button>';
+        return h + '</div>';
+    }
+    function syncChips(){
+        const ok = eligible();
+        document.querySelectorAll('.sz-opts').forEach((o) => {
+            let c = o.nextElementSibling;
+            if(c && !c.classList.contains('szf-opts')) c = null;
+            /* 시작 화면에만 — 결과 카드는 이미 길다(게임 홈으로 돌아가면 보인다) */
+            const res = !!(o.parentElement && o.parentElement.querySelector('.sz-go-head'));
+            if(!ok || res){ if(c) c.remove(); return; }
+            const html = chipsHtml();
+            /* 같은 내용이면 건드리지 않는다(아래 MutationObserver 가 다시 부르므로 무한 반복 방지) */
+            if(c && c.dataset.k === html) return;
+            if(c) c.remove();
+            o.insertAdjacentHTML('afterend', html);
+            const n = o.nextElementSibling; if(n) n.dataset.k = html;
+        });
+    }
+    document.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('[data-szf]');
+        if(!b) return;
+        e.preventDefault(); e.stopPropagation();
+        const a = b.dataset.szf;
+        if(a === 'mode'){ pref = pref === 'float' ? 'classic' : 'float'; LSS('szx_ctl', pref); apply(); }
+        else if(a === 'sens'){ const i = (SENS.indexOf(SZF.sens) + 1) % SENS.length; SZF.sens = SENS[i]; LSS('szx_sens', String(SZF.sens)); syncChips(); }
+        else if(a === 'edit'){ editStart(); }
+    }, true);
+    try{ const ov = $('overlay'); if(ov) new MutationObserver(() => syncChips()).observe(ov, { childList:true, subtree:true }); }catch(_){}
+
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+    addEventListener('load', applySoon);
+})();
+/*</sz:mod:ctl>*/
+</script>
+<!--</sz:mod:ctl>-->
 <script src="/js/siteFooter.js?v=1790898993"></script>
 <!--lp-game-about:start-->
 <style>
