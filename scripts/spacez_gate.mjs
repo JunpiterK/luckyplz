@@ -34,6 +34,7 @@
      --prof-dir <dir>      Edge 프로필 상위 폴더 (기본 OS temp)
      --prof-prefix <s>     Edge 프로필 폴더 접두어 (기본 edgeprof_gate)
      --jobs <n>            det/layout/bot 병렬 Edge 수 (기본 3). perf/sweep 은 항상 직렬
+     --layout-ctl <m>      layout 의 조작 방식 고정: float | classic (기본 = 페이지 기본값, 세로 터치 폰·태블릿은 float)
      --secs <n>            det 합성 시간(초, 기본 460)
      --quick               det 180초·perf 존 5개·layout 4해상도·bot 100판 (빠른 확인용, 기준선 비교는 같은 조건끼리만)
      --zones 1,2,4         perf 존 목록 덮어쓰기
@@ -390,8 +391,8 @@ function pageLib(){
     /* 레이아웃 검사 */
     G.layout = function(){
         const vw = innerWidth, vh = innerHeight;
-        const SEL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#pauseBtn', '#ovBtn', '#missionBanner', '.control-row', '.topbar', '.score-strip', '.szx-live', '.sz-pilot', '#rewardRow', '#introStory', '#tpRing', '#handToggle', '#overlay .ov-btn-row', '#dodge-canvas', '.dodge-kbd-ref'];
-        const CTRL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#pauseBtn', '#ovBtn'];
+        const SEL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#itemSlot3', '#itemSlot4', '#pauseBtn', '#ovBtn', '#missionBanner', '.control-row', '.topbar', '.score-strip', '.szx-live', '.sz-pilot', '#rewardRow', '#introStory', '#tpRing', '#handToggle', '#overlay .ov-btn-row', '#dodge-canvas', '.dodge-kbd-ref'];
+        const CTRL = ['#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#itemSlot3', '#itemSlot4', '#pauseBtn', '#ovBtn'];
         const vis = (el) => { if(!el || !el.getClientRects().length || el.closest('.hidden')) return false; for(let p = el; p && p !== document.documentElement; p = p.parentElement){ const c = getComputedStyle(p); if(c.display === 'none' || c.visibility === 'hidden' || +c.opacity < 0.05) return false; } const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
         const rects = {};
         for(const s of SEL){ const el = document.querySelector(s); if(vis(el)){ const r = el.getBoundingClientRect(); rects[s] = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]; } }
@@ -413,7 +414,11 @@ function pageLib(){
         const cov = {};
         for(const s of ['.control-row', '.dodge-kbd-ref']){ const a = rects[s], b = rects['#dodge-canvas']; if(!a || !b) continue;
             const ix = Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), iy = Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]); cov[s] = (ix > 0 && iy > 0) ? ix : 0; }
-        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
+        /* SZF (2026-10-07) — 세로 터치 기본 '플로팅 조작': .control-row 는 왼쪽 열 전체를 덮는 투명 입력 층(버튼만 떠 있고 위험물 근처에서 흐려진다).
+           캔버스를 덮는 게 설계라 cov 검사 대신 버튼 ≥48px 를 본다 */
+        const float = document.body.classList.contains('sz-float');
+        const fbtn = float ? ['#gravBtn', '#satBtn', '#itemSlot0'].filter(s => rects[s]).map(s => s + ' ' + rects[s][2] + 'x' + rects[s][3]) : [];
+        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, float, fbtn, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
     };
     /* 자동 조종봇 — 같은 시드, 봇 난수만 다르게. 그리기는 끈다(시뮬만) */
     G.bot = function(P){
@@ -726,6 +731,8 @@ async function runLayout(base){
     const res = await pool(jobs, JOBS, async (j) => withEdge({ w: j.w, h: j.h, dsf: j.dsf, mobile: j.w < 900 }, async (e) => {
         const key = j.L + ' ' + j.w + 'x' + j.h, fn = (st) => path.join(OUT, 'layout', j.L + '_' + j.w + 'x' + j.h + '_' + st + '.png');
         await e.open(gameUrl(base, j.L), 2200);
+        /* --layout-ctl classic|float — 조작 방식 고정 (기본: 페이지 기본값 = 세로 터치는 플로팅) */
+        if(A['layout-ctl']){ await e.ev(`localStorage.setItem('szx_ctl', ${JSON.stringify(String(A['layout-ctl']))}); 1`); await e.open(gameUrl(base, j.L), 2200); }
         await e.ev('__G.hookText()');
         const o = {};
         o.start = await e.ev('__G.layout()'); await e.shot(fn('start'));
@@ -791,11 +798,17 @@ function judgeLayout(cur, base){
             }
             if(b && !sameGeo(m.rects, b.rects)) geoChanged++;
             /* E (2026-09-29) — 조종판·키 가이드 × 캔버스 겹침 0px (PC) */
-            if(m.cov) for(const [s, px] of Object.entries(m.cov)) if(px > 0 || (st === 'play' && m.vw >= 1024)) row(G, id + ' ' + s + '×캔버스 겹침', px + 'px', b && b.cov && b.cov[s] != null ? b.cov[s] + 'px' : null, '0px', px > 0 ? 'FAIL' : 'PASS');
+            if(m.cov) for(const [s, px] of Object.entries(m.cov)) if(!(m.float && s === '.control-row')) if(px > 0 || (st === 'play' && m.vw >= 1024)) row(G, id + ' ' + s + '×캔버스 겹침', px + 'px', b && b.cov && b.cov[s] != null ? b.cov[s] + 'px' : null, '0px', px > 0 ? 'FAIL' : 'PASS');
             /* E — 세로 폰에서 캔버스가 눌리지 않게: 표시 세로/가로 ≥ 1.0 (목표 1.1) */
             if(st === 'play' && m.vw < 900 && m.vh > m.vw && m.rects['#dodge-canvas']){
                 const c = m.rects['#dodge-canvas'], a = c[3] / c[2], bc = b && b.rects && b.rects['#dodge-canvas'];
                 row(G, id + ' 캔버스 세로/가로', a.toFixed(2), bc ? (bc[3] / bc[2]).toFixed(2) : null, '≥1.0 (목표 1.1)', a >= 1.0 ? 'PASS' : 'FAIL');
+            }
+            /* SZF — 플로팅 조작: 떠 있는 버튼 ≥48px · 캔버스 3:5 그대로(±2%) */
+            if(st === 'play' && m.float){
+                const c = m.rects['#dodge-canvas'], ar = c ? c[3] / c[2] : 0;
+                const bad = (m.fbtn || []).filter(x => { const [w, h] = x.split(' ')[1].split('x').map(Number); return Math.min(w, h) < 48; });
+                row(G, id + ' 플로팅 조작 버튼≥48 · 캔버스 3:5', (m.fbtn || []).join(' | ') + ' · ' + ar.toFixed(3), null, '≥48px · 1.667±2%', bad.length || Math.abs(ar - 5 / 3) > 0.034 ? 'FAIL' : 'PASS');
             }
             /* E — 결과 카드가 떠 있으면 HUD 줄(.score-strip)은 숨긴다 (카드 글자를 가렸다) */
             if(st === 'result') row(G, id + ' 결과 카드 위 HUD 줄', m.rects['.score-strip'] ? '보임' : '숨김', b ? (b.rects['.score-strip'] ? '보임' : '숨김') : null, '숨김', m.rects['.score-strip'] ? 'FAIL' : 'PASS');
