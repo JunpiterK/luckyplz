@@ -42,6 +42,7 @@
      mp1        MP1 시작 화면(ko·en·ja×320·390: 버튼 ≤5·출발 엄지 영역·시트 20회 멱등·?mp1=0=MP0 서명)·단계 개방 1~3판·시드 판·링크 진입 (--mp1-nopin: 하네스 3판 고정 끔)
      mp3 · mp3assist · mp3shots  (MP3) A1 데스봄 유예·A2 블랙홀 버블·편한 비행·RPC·지연 검사 / ibot 편한 비행 ≥ 기본×1.5 / 장면·색각 시트  (ibot 옵션 --assist --mp3-db <p> --mp3-nobh --mp3-nodb)
      mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
+     mp7        (MP7) 오늘 한 줄·스트릭(구 szx_daily 하위호환)·도전장 URL 회귀·&sp= 구간 비교·URL ≤300·결과 카드 줄 수·PNG(ko·en·ja·de·가짜 GL)·공유 폴백·?mp7=0  [--mp7-shots]
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -1132,6 +1133,263 @@ EXT_CMDS.mp4 = {
 /*<gate:mp6>*/
 /*</gate:mp6>*/
 /*<gate:mp7>*/
+/* MP7 — mp7: 오늘 한 줄·스트릭(szx_daily 하위호환)·도전장 구간 기록(&sp=)·결과 그림 PNG·공유 폴백·킬스위치.
+   ① 데일리 단위 검사 — 구 {date,best}(오늘·어제) · 스트릭 이어짐/끊김 · 그날 최고 유지 · 한 줄 형식
+   ② 도전장 URL 회귀 — v1(cv 없음)·cv=2·한글 닉 + 새 &sp= 링크 · 깨진 sp 무시 · URL ≤300자(한글 닉 14자 + 31구간)
+   ③ 비행 중 구간 비교(♥·✦·=·🏆) — 존 경계 직전으로 시각을 옮겨 자연 전환 · ④ 결과 카드 줄 수(?mp7=0 대비 같음)·칩이 도전장 버튼과 같은 줄
+   ⑤ PNG(ko·en·ja·de 폴백 · 오늘의 코스 · 가짜 GL 켬) 파일 저장 · ⑥ 폴백: share 없음(폰=시트·PC=내려받기)·인앱·files share 동기 호출·글 복사
+   --mp7-shots: <out>/mp7/ 에 결과 카드·분할·시트·토스트 스크린샷(ko·en × 320x568·390x844)과 PNG */
+const MP7_PAGE = {
+    fly: `(function(){ if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); try{ startGame(); }catch(_){} return 1; })()`,
+    waitRun: `new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(running ? 1 : 0); setTimeout(w, 30); })(); })`,
+    die: `(function(){ clearInterval(window.__inv); window.__inv = 0; invincibleUntil = 0; try{ triggerGameOver(); }catch(err){ (window.__E = window.__E || []).push('gameover ' + err.message); } return 1; })()`,
+    /* 존 z 경계 0.25초 전으로 시각을 옮긴다(자연 전환 → zone 이벤트). 따라잡기 폭주 막으려 lastSpawn 도 옮긴다 */
+    toZone: (z) => `(function(){ var T = ZONES[${z}].s * 1000 - 120; var d = T - elapsedMs; startedAt -= d; lastSpawn = performance.now(); return Math.round(d); })()`,
+    card: `(function(){ var o = document.getElementById('overlay'); var row = o.querySelector('.sz-mp7-row'), send = o.querySelector('#szxChSend');
+        var kids = Array.prototype.slice.call(o.children).filter(function(x){ var r = x.getBoundingClientRect(); return r.height > 0 && getComputedStyle(x).display !== 'none'; });
+        var tops = {}; kids.forEach(function(x){ tops[Math.round(x.getBoundingClientRect().top)] = 1; });
+        var box = send && send.parentElement; var bl = 0; if(box){ var bt = {}; box.querySelectorAll('button').forEach(function(b){ bt[Math.round(b.getBoundingClientRect().top / 4)] = 1; }); bl = Object.keys(bt).length; }
+        var chips = row ? Array.prototype.map.call(row.querySelectorAll('.sz-mp7-chip'), function(c){ var r = c.getBoundingClientRect(); return { t: c.textContent, top: Math.round(r.top), h: Math.round(r.height), w: Math.round(r.width) }; }) : [];
+        var sr = send ? send.getBoundingClientRect() : null;
+        return { rows: Object.keys(tops).length, h: o.scrollHeight, row: !!row, shareLines: bl, chips: chips, send: sr ? { top: Math.round(sr.top), h: Math.round(sr.height), w: Math.round(sr.width), cut: send.scrollWidth > send.clientWidth + 1 } : null,
+            daily: (o.querySelector('.szx-daily') || {}).textContent || null }; })()`
+};
+/* window.prompt 는 페이지를 멈춰 CDP 가 시간 초과된다(클립보드 실패 시 마지막 폴백) — 막고 횟수만 센다 */
+async function mp7Open(e, url, settle){ await e.open(url, settle); await e.ev('(window.prompt = function(){ window.__pr = (window.__pr || 0) + 1; return null; }, 1)'); }
+async function mp7Fly(e){ await e.ev(MP7_PAGE.fly); const ok = await e.ev(MP7_PAGE.waitRun, 30000); await sleep(600); return ok; }
+const mp7Today = () => { const d = new Date(); return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate(); };
+const mp7Prev = (date, k = 1) => { const t = new Date(Date.UTC(Math.floor(date / 10000), Math.floor(date / 100) % 100 - 1, date % 100) - 864e5 * k); return t.getUTCFullYear() * 10000 + (t.getUTCMonth() + 1) * 100 + t.getUTCDate(); };
+/* 오늘의 코스 한 판: 시작 화면 칩 → (ms 까지 시각 이동) → 사망 → 결과 카드 */
+async function mp7DailyRun(e, ms){
+    const ok = await e.ev(`(function(){ var c = document.getElementById('szDailyChip'); if(!c) return 0; window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); c.click(); return 1; })()`);
+    if(!ok) return null;
+    await e.ev(MP7_PAGE.waitRun, 30000); await sleep(300);
+    const kind = await e.ev('szRunKind()');
+    if(ms) await e.ev(`(function(){ var d = ${ms} - elapsedMs; startedAt -= d; lastSpawn = performance.now(); return 1; })()`);
+    await sleep(120);
+    await e.ev(MP7_PAGE.die); await sleep(1700);
+    const st = await e.ev(`(function(){ var o = null; try{ o = JSON.parse(localStorage.getItem('szx_daily')); }catch(_){} return { o: o, card: ${MP7_PAGE.card} }; })()`);
+    st.kind = kind;
+    return st;
+}
+async function mp7Png(e, file){
+    const r = await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ var P = window.SZMP7 && SZMP7.makePng ? SZMP7.makePng() : null; if(!P) return res(null);
+        P.then(function(b){ if(!b) return res(null); var fr = new FileReader(); fr.onload = function(){ res({ size: b.size, url: fr.result }); }; fr.readAsDataURL(b); }); })(); })`, 30000);
+    if(r && r.url && file){ fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, Buffer.from(r.url.split(',')[1], 'base64')); }
+    return r ? { size: r.size } : null;
+}
+EXT_CMDS.mp7 = {
+    all: false,
+    run: async (base) => {
+        const out = { daily: {}, ch: {}, split: [], card: {}, png: {}, fb: {}, off: {}, url: null, shots: [] };
+        const dir = path.join(OUT, 'mp7');
+        const today = mp7Today(), y1 = mp7Prev(today), y2 = mp7Prev(today, 2);
+        /* ① 데일리 — 412x915 폰 */
+        await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            const seed = async (o) => { await mp7Open(e, gameUrl(base, 'ko'), 600); await e.ev(`(localStorage.setItem('szx_daily', ${JSON.stringify(JSON.stringify(o))}), localStorage.setItem('szx_nick', 'Tester'), 1)`); await mp7Open(e, gameUrl(base, 'ko'), 1500); };
+            /* a. 구 형식, 오늘 기록 90초 → 30초 판: 최고 90초 유지 + 스트릭 1 */
+            await seed({ date: today, best: 90000 });
+            out.daily.legacyToday = await mp7DailyRun(e, 30000);
+            /* b. 구 형식, 어제 기록 → 오늘 첫 판: 스트릭 2 */
+            await seed({ date: y1, best: 50000 });
+            out.daily.legacyYday = await mp7DailyRun(e, 42000);
+            /* c. 새 형식, 어제까지 4일 → 오늘 5일 · 같은 날 두 번째 판은 그대로 5 */
+            await seed({ date: y1, best: 61000, streak: 4, last: y1, maxStreak: 4 });
+            out.daily.chipBefore = await e.ev(`(document.getElementById('szDailyChip') || {}).textContent || null`);
+            out.daily.cont = await mp7DailyRun(e, 125000);
+            out.daily.line = await e.ev(`(function(){ var o = JSON.parse(localStorage.getItem('szx_daily')); return SZMP7.dayLine({ date: o.date, o: o }); })()`);
+            if(A['mp7-shots']){ await e.shot(path.join(dir, 'daily_card_ko_412.png')); }
+            /* 같은 날 둘째 판(다시하기 = 같은 코스) */
+            await e.ev(`document.getElementById('ovBtn').click()`); await e.ev(MP7_PAGE.waitRun, 30000);
+            out.daily.secondKind = await e.ev('szRunKind()');
+            await e.ev(`(function(){ window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); var d = 20000 - elapsedMs; startedAt -= d; return 1; })()`); await sleep(100);
+            await e.ev(MP7_PAGE.die); await sleep(1700);
+            out.daily.second = await e.ev(`JSON.parse(localStorage.getItem('szx_daily'))`);
+            /* 오늘 한 줄 공유 — share 없음 → 복사(클립보드 또는 execCommand) */
+            await e.ev(`(function(){ try{ Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); }catch(_){} return 1; })()`);
+            await e.ev(`(function(){ var c = document.querySelector('#overlay .sz-mp7-chip.day'); if(c) c.click(); return !!c; })()`); await sleep(500);
+            out.fb.dayCopy = await e.ev('window.SZMP7 && SZMP7.last');
+            if(A['mp7-shots']) await e.shot(path.join(dir, 'daily_copied_ko_412.png'));
+            /* d. 끊긴 스트릭(그제가 마지막) → 1, 칩에 🔥 없음 */
+            await seed({ date: y2, best: 61000, streak: 6, last: y2, maxStreak: 6 });
+            out.daily.brokenChip = await e.ev(`(document.getElementById('szDailyChip') || {}).textContent || null`);
+            out.daily.broken = await mp7DailyRun(e, 15000);
+            /* e. ?daily=1 링크 — 칩 강조 */
+            await mp7Open(e, gameUrl(base, 'ko', 'daily=1'), 1500);
+            out.daily.hi = await e.ev(`!!document.querySelector('#szDailyChip.sz-mp7-hi')`);
+            if(A['mp7-shots']) await e.shot(path.join(dir, 'start_daily1_ko_412.png'));
+            collectErrs('mp7 daily', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        });
+        /* ② 도전장 URL 회귀 + ③ 구간 비교 */
+        const SEED = (123457).toString(36), MS = (115000).toString(36);
+        const nickKo = encodeURIComponent('테스터');
+        const urls = {
+            v1: 'ch=' + SEED + '-' + MS + '-Pilot',
+            cv2: 'ch=' + SEED + '-' + MS + '-Pilot&cv=2',
+            ko: 'ch=' + SEED + '-' + MS + '-' + nickKo + '&cv=2',
+            sp: 'ch=' + SEED + '-' + MS + '-Pilot&cv=2&sp=3a.2b.3c.35.31',
+            spBad: 'ch=' + SEED + '-' + MS + '-Pilot&cv=2&sp=%%zz..'
+        };
+        for(const [k, q] of Object.entries(urls)){
+            await withEdge({ w: 390, h: 844, dsf: 3, mobile: true }, async (e) => {
+                await mp7Open(e, gameUrl(base, 'ko', q), 1500);
+                const r = { banner: await e.ev(`!!document.getElementById('szxChBanner')`), bannerTxt: await e.ev(`(document.getElementById('szxChBanner') || {}).textContent || ''`) };
+                await mp7Fly(e);
+                r.kind = await e.ev('szRunKind()'); r.seed = await e.ev('SZX._snd().seed');
+                if(k === 'sp'){
+                    /* 상대: 존1 ♥3 ✦10 · 존2 ♥2 ✦21 · 존3 ♥3 ✦33 · 존4 ♥3 ✦38 · 존5 ♥3 ✦39 → 95초(존 ?)에 끝 */
+                    const steps = [[1, 3, 10, 'eq'], [2, 3, 21, 'up ♥'], [3, 3, 30, 'dn ✦'], [4, 2, 50, 'dn ♥']];
+                    for(const [z, l, g] of steps){
+                        await e.ev(`(lives = ${l}, szGrazeN = ${g}, 1)`);
+                        await e.ev(MP7_PAGE.toZone(z));
+                        await sleep(480);
+                        const s = await e.ev('window.SZMP7 && SZMP7.lastSplit');
+                        const vis = await e.ev(`(function(){ var el = document.getElementById('szMp7Split'); if(!el) return null; var r = el.getBoundingClientRect(); return { op: +getComputedStyle(el).opacity, top: Math.round(r.top), h: Math.round(r.height), txt: el.textContent }; })()`);
+                        r['z' + z] = { s, vis };
+                        if(A['mp7-shots'] && (z === 2 || z === 3)) await e.shot(path.join(dir, 'split_z' + z + '_ko_390.png'));
+                    }
+                    /* 상대가 못 간 존 → 🏆 한 번 */
+                    const cz = await e.ev(`szZoneAtMs(115000)`);
+                    for(let z = 5; z <= cz + 1; z++){ await e.ev(MP7_PAGE.toZone(z)); await sleep(420); }
+                    r.win = await e.ev('window.SZMP7 && SZMP7.lastSplit'); r.chZone = cz;
+                    if(A['mp7-shots']) await e.shot(path.join(dir, 'split_win_ko_390.png'));
+                }
+                if(k === 'spBad' || k === 'cv2'){
+                    await e.ev(MP7_PAGE.toZone(1)); await sleep(400);
+                    r.split = await e.ev('window.SZMP7 && SZMP7.lastSplit || null');
+                }
+                await e.ev(MP7_PAGE.die); await sleep(1700);
+                r.vs = await e.ev(`(document.querySelector('#overlay .szx-vs') || {}).textContent || null`);
+                r.card = await e.ev(MP7_PAGE.card);
+                out.ch[k] = r;
+                collectErrs('mp7 ch ' + k, e, await e.ev('(window.__E||[]).slice(0,8)'));
+            });
+        }
+        /* URL 길이 — 한글 닉 14자 + 31구간(스침 많음) */
+        await withEdge({ w: 390, h: 844, dsf: 3, mobile: true }, async (e) => {
+            await mp7Open(e, gameUrl(base, 'ko'), 1500);
+            await mp7Fly(e);
+            const u = await e.ev(`(function(){ for(var z = 1; z <= 30; z++){ lives = 1 + (z % 5); szGrazeN = z * 997; SZE.emit('zone', z, z - 1); }
+                var nick = encodeURIComponent('가나다라마바사아자차카타파하');
+                var base = location.origin.replace(/127\\.0\\.0\\.1:\\d+/, 'luckyplz.com') + '/games/dodge/?ch=' + (2147483646).toString(36) + '-' + (3599999).toString(36) + '-' + nick + '&cv=2';
+                var full = base + SZMP7.spQ(base); var shortU = 'https://luckyplz.com/games/dodge/?ch=abc-1z14-A&cv=2'; var s2 = shortU + SZMP7.spQ(shortU);
+                return { len: full.length, n: (full.split('&sp=')[1] || '').split('.').filter(Boolean).length, shortLen: s2.length, shortN: (s2.split('&sp=')[1] || '').split('.').length, s2: s2 }; })()`);
+            out.url = u;
+            collectErrs('mp7 url', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        });
+        /* ④ 결과 카드 줄 수 + ⑤ PNG + ⑥ 폴백 — ko·en × 320x568·390x844 (+ ja·de 390 PNG) */
+        const VPS = [[320, 568, 2], [390, 844, 3]];
+        for(const L of ['ko', 'en', 'ja', 'de']) for(const vp of VPS){
+            if((L === 'ja' || L === 'de') && vp[0] === 320) continue;
+            for(const fl of ['', 'mp7=0']){
+                if(fl && L !== 'ko' && L !== 'en') continue;
+                await withEdge({ w: vp[0], h: vp[1], dsf: vp[2], mobile: true }, async (e) => {
+                    const k = L + '_' + vp[0] + (fl ? '_off' : '');
+                    await mp7Open(e, gameUrl(base, L, fl), 1500);
+                    await e.ev(`(localStorage.setItem('szx_nick', 'Tester'), 1)`);
+                    await mp7Fly(e);
+                    await e.ev(`(function(){ szWarpTo(12); comboMaxThisRun = 23; return 1; })()`); await sleep(500);
+                    await e.ev(MP7_PAGE.die); await sleep(1800);
+                    out.card[k] = await e.ev(MP7_PAGE.card);
+                    if(A['mp7-shots']) await e.shot(path.join(dir, 'card_' + k + '.png'));
+                    if(!fl){
+                        out.png[k] = await mp7Png(e, path.join(dir, 'png_' + k + '.png'));
+                        if(vp[0] === 390 && L === 'ko'){
+                            /* 가짜 GL — snapshot 이 받은 ctx 에 그린 것이 배경에 들어가는가(2D 캔버스 위가 아니라 아래) */
+                            await e.ev(`(function(){ window.SZGL = { on: true, snapshot: function(ctx){ var g = ctx.createLinearGradient(0, 0, ctx.canvas.width, ctx.canvas.height); g.addColorStop(0, '#ff00aa'); g.addColorStop(1, '#00ffaa'); ctx.fillStyle = g; ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height); window.__glSnap = (window.__glSnap || 0) + 1; return true; } }; return 1; })()`);
+                            await e.ev(MP7_PAGE.fly); await e.ev(MP7_PAGE.waitRun, 30000); await sleep(600);
+                            await e.ev(MP7_PAGE.die); await sleep(1800);
+                            out.png[k + '_gl'] = await mp7Png(e, path.join(dir, 'png_' + k + '_gl.png'));
+                            out.png[k + '_gl'].calls = await e.ev('window.__glSnap || 0');
+                            /* 폴백 1: share 없음 + 폰 → 그림 시트 */
+                            await e.ev(`(function(){ try{ Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); }catch(_){} return 1; })()`);
+                            await e.ev(`document.querySelector('#overlay .sz-mp7-chip.img').click()`); await sleep(700);
+                            out.fb.noShare = await e.ev(`({ last: SZMP7.last, sheet: !!document.querySelector('.sz-mp7-sheet img'), hint: (document.querySelector('.sz-mp7-sheet p') || {}).textContent || null })`);
+                            if(A['mp7-shots']) await e.shot(path.join(dir, 'sheet_' + k + '.png'));
+                            await e.ev(`(document.querySelector('.sz-mp7-sheet .x').click(), 1)`); await sleep(200);
+                            out.fb.sheetClosed = await e.ev(`!document.querySelector('.sz-mp7-sheet')`);
+                            /* 폴백 2: 인앱 브라우저 → share 가 있어도 시트 */
+                            await e.ev(`(function(){ window.__shareCalls = 0; Object.defineProperty(navigator, 'share', { value: function(){ window.__shareCalls++; return Promise.resolve(); }, configurable: true }); Object.defineProperty(navigator, 'canShare', { value: function(){ return true; }, configurable: true }); window.LpInApp = window.LpInApp || {}; window.__iab0 = LpInApp.info; LpInApp.info = { inApp: true }; return 1; })()`);
+                            await e.ev(`document.querySelector('#overlay .sz-mp7-chip.img').click()`); await sleep(500);
+                            out.fb.inApp = await e.ev(`({ last: SZMP7.last, calls: window.__shareCalls, sheet: !!document.querySelector('.sz-mp7-sheet') })`);
+                            await e.ev(`(SZMP7.sheetClose(), LpInApp.info = window.__iab0 || { inApp: false }, 1)`);
+                            /* 3: files share — 미리 구운 그림이면 탭 안에서 동기로 share 호출 */
+                            out.fb.filesSync = await e.ev(`(function(){ window.__shareCalls = 0; document.querySelector('#overlay .sz-mp7-chip.img').click(); return { calls: window.__shareCalls, last: SZMP7.last }; })()`);
+                        }
+                    }else{
+                        out.off[k] = { flag: await e.ev('SZ_FLAGS.mp7'), spQ: await e.ev(`SZMP7.spQ('x')`), split: await e.ev('document.getElementById("szMp7Split") ? 1 : 0') };
+                    }
+                    collectErrs('mp7 card ' + k, e, await e.ev('(window.__E||[]).slice(0,8)'));
+                });
+            }
+        }
+        /* 데일리 결과 PNG(📅·🔥) + PC 내려받기 폴백 */
+        await withEdge({ w: 1280, h: 800, dsf: 1, mobile: false }, async (e) => {
+            await mp7Open(e, gameUrl(base, 'ko'), 600);
+            await e.ev(`(localStorage.setItem('szx_daily', ${JSON.stringify(JSON.stringify({ date: y1, best: 61000, streak: 6, last: y1, maxStreak: 6 }))}), 1)`);
+            await mp7Open(e, gameUrl(base, 'ko'), 1500);
+            const st = await mp7DailyRun(e, 190000);
+            out.png.daily = await mp7Png(e, path.join(dir, 'png_daily_ko.png'));
+            if(A['mp7-shots']) await e.shot(path.join(dir, 'card_daily_pc_1280.png'));
+            await e.ev(`(function(){ try{ Object.defineProperty(navigator, 'share', { value: undefined, configurable: true }); }catch(_){} return 1; })()`);
+            await e.ev(`document.querySelector('#overlay .sz-mp7-chip.img').click()`); await sleep(500);
+            out.fb.pc = await e.ev('SZMP7.last');
+            out.daily.pcCard = st && st.card;
+            collectErrs('mp7 pc', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        });
+        say('mp7: ' + JSON.stringify({ url: out.url && out.url.len, png: Object.fromEntries(Object.entries(out.png).map(([k, v]) => [k, v && v.size])) }));
+        if(A['mp7-shots']) say('mp7 스크린샷·PNG → ' + dir);
+        return out;
+    },
+    judge: (cur) => {
+        const G = 'G-mp7';
+        const P = (c) => c ? 'PASS' : 'FAIL';
+        const today = mp7Today(), y1 = mp7Prev(today);
+        const d = cur.daily;
+        const lt = d.legacyToday || {}, ly = d.legacyYday || {}, ct = d.cont || {}, br = d.broken || {};
+        row(G, '데일리 판 종류', [lt.kind, ly.kind, ct.kind].join(','), null, 'daily', P(lt.kind === 'daily' && ly.kind === 'daily' && ct.kind === 'daily'));
+        row(G, '구 {date,best}(오늘 90초) → 30초 판: 최고 유지·스트릭 1', JSON.stringify(lt.o), null, 'best 90000 · streak 1', P(lt.o && lt.o.best === 90000 && lt.o.streak === 1 && lt.o.date === today));
+        row(G, '구 {date,best}(어제) → 오늘 첫 판: 스트릭 2', JSON.stringify(ly.o), null, 'best 42000± · streak 2', P(ly.o && ly.o.streak === 2 && ly.o.last === today && ly.o.best >= 41000 && ly.o.best < 44000));
+        row(G, '스트릭 이어짐(어제까지 4) → 5 · 칩/결과 줄 🔥', JSON.stringify({ o: ct.o, chip: d.chipBefore, line: ct.card && ct.card.daily }), null, 'streak 5 · maxStreak 5', P(ct.o && ct.o.streak === 5 && ct.o.maxStreak === 5 && /🔥4/.test(d.chipBefore || '') && /🔥5/.test((ct.card && ct.card.daily) || '')));
+        row(G, '같은 날 둘째 판 — 같은 코스·스트릭 그대로·최고 유지', JSON.stringify({ k: d.secondKind, o: d.second }), null, 'daily · 5 · best 그대로', P(d.secondKind === 'daily' && d.second && d.second.streak === 5 && d.second.best === (ct.o && ct.o.best)));
+        row(G, '끊긴 스트릭(그제) → 1 · 칩 🔥 없음', JSON.stringify({ o: br.o, chip: d.brokenChip }), null, 'streak 1 · maxStreak 6', P(br.o && br.o.streak === 1 && br.o.maxStreak === 6 && !/🔥/.test(d.brokenChip || '')));
+        row(G, '오늘 한 줄 형식', d.line, null, 'Space-Z MM/DD 막5칸 m:ss 🔥5', P(/^Space-Z \d\d\/\d\d (?:🟩|🔶|⬛){5} \d+:\d\d 🔥5$/u.test(d.line || '')));
+        row(G, '오늘 한 줄 공유(share 없음 → 복사)', JSON.stringify(cur.fb.dayCopy).slice(0, 120), null, 'copy|prompt + 링크 ?daily=1', P(cur.fb.dayCopy && /copy|prompt/.test(cur.fb.dayCopy.how) && /\?daily=1$/.test(cur.fb.dayCopy.text || '')));
+        row(G, '?daily=1 링크 → 오늘의 코스 칩 강조', String(d.hi), null, 'true', P(d.hi === true));
+        for(const [k, r] of Object.entries(cur.ch)){
+            const okOpen = r.banner && r.kind === 'ch' && r.seed === 123457;
+            row(G, '도전장 URL 열림: ' + k, JSON.stringify({ b: r.banner, kind: r.kind, seed: r.seed, vs: r.vs }).slice(0, 110), null, '배너·ch·같은 시드·승패 줄', P(okOpen && !!r.vs));
+        }
+        if(cur.ch.v1) row(G, 'v1(cv 없음) = 구버전 코스 안내 그대로', cur.ch.v1.vs, null, '구버전 문구', P(/구버전/.test(cur.ch.v1.vs || '')));
+        if(cur.ch.ko) row(G, '한글 닉 배너', cur.ch.ko.bannerTxt.slice(0, 40), null, '테스터', P(/테스터/.test(cur.ch.ko.bannerTxt)));
+        const sp = cur.ch.sp || {};
+        const sv = (z) => (sp['z' + z] && sp['z' + z].s) || {};
+        row(G, '구간 비교 z1 같음 / z2 ♥ 앞섬 / z3 ✦ 뒤짐 / z4 ♥ 뒤짐', [1, 2, 3, 4].map(z => sv(z).txt + '(' + sv(z).cls + ')').join(' · '), null, '= · ♥+1 ▲ · ✦−3 ▼ · ♥−1 ▼',
+            P(sv(1).txt === '=' && sv(2).txt === '♥+1 ▲' && sv(2).cls === 'up' && sv(3).txt === '✦−3 ▼' && sv(4).txt === '♥−1 ▼'));
+        row(G, '구간 비교 표시(1.5초 안, 보임)', JSON.stringify(sp.z2 && sp.z2.vis), null, 'opacity>0.5', P(sp.z2 && sp.z2.vis && sp.z2.vis.op > 0.5));
+        row(G, '상대가 못 간 존 → 🏆', JSON.stringify(sp.win) + ' (상대 존 ' + sp.chZone + ')', null, '🏆', P(sp.win && sp.win.txt === '🏆' && sp.win.z === sp.chZone + 1));
+        row(G, 'sp 없음·깨진 sp → 구간 표시 없음', JSON.stringify([cur.ch.cv2 && cur.ch.cv2.split, cur.ch.spBad && cur.ch.spBad.split]), null, 'null', P(cur.ch.cv2 && !cur.ch.cv2.split && cur.ch.spBad && !cur.ch.spBad.split));
+        if(cur.url){
+            row(G, 'URL ≤300자(한글 닉 14자 + 30구간)', cur.url.len + '자 · 구간 ' + cur.url.n, null, '≤300', P(cur.url.len <= 300 && cur.url.n > 0));
+            row(G, '짧은 닉이면 30구간 전부', cur.url.shortLen + '자 · 구간 ' + cur.url.shortN, null, '30', P(cur.url.shortN === 30 && cur.url.shortLen <= 300));
+        }
+        for(const L of ['ko', 'en']) for(const w of [320, 390]){
+            const a = cur.card[L + '_' + w], b = cur.card[L + '_' + w + '_off'];
+            if(!a || !b) continue;
+            const same = a.chips.every(c => Math.abs(c.top - a.send.top) <= a.send.h);
+            row(G, '결과 카드 줄 수 ' + L + ' ' + w + ' (MP7 / ?mp7=0)', a.rows + ' / ' + b.rows + ' · 높이 ' + a.h + ' / ' + b.h + ' · 칩 ' + a.chips.map(c => c.t).join(''), null, '같음 · 칩이 도전장 줄', P(a.rows <= b.rows && a.h <= b.h + 2 && same && a.chips.length >= 1));
+            row(G, '도전장 버튼 글자 잘림 ' + L + ' ' + w, JSON.stringify(a.send), null, '잘림 없음', a.send && !a.send.cut ? 'PASS' : 'WARN');
+        }
+        for(const [k, v] of Object.entries(cur.png)) row(G, 'PNG ' + k, v ? (Math.round(v.size / 1024) + 'KB' + (v.calls != null ? ' · GL snapshot ' + v.calls + '회' : '')) : '없음', null, '만들어짐 ≤1.5MB', P(v && v.size > 10000 && v.size < 1.5e6 && (v.calls == null || v.calls >= 1)));
+        const fb = cur.fb;
+        row(G, '폴백: share 없음(폰) → 그림 시트', JSON.stringify(fb.noShare).slice(0, 110), null, 'sheet', P(fb.noShare && fb.noShare.sheet && fb.noShare.last && fb.noShare.last.how === 'sheet'));
+        row(G, '그림 시트 ✕ 닫힘', String(fb.sheetClosed), null, 'true', P(fb.sheetClosed === true));
+        row(G, '폴백: 인앱 브라우저 → share 안 부르고 시트', JSON.stringify(fb.inApp), null, 'calls 0 · sheet', P(fb.inApp && fb.inApp.calls === 0 && fb.inApp.sheet));
+        row(G, 'files share — 탭 안에서 동기 호출(활성 유지)', JSON.stringify(fb.filesSync), null, 'calls 1', P(fb.filesSync && fb.filesSync.calls === 1));
+        row(G, '폴백: PC share 없음 → 내려받기', JSON.stringify(fb.pc), null, 'download', P(fb.pc && fb.pc.how === 'download'));
+        for(const [k, v] of Object.entries(cur.off)) row(G, '?mp7=0 ' + k, JSON.stringify(v), null, 'flag false · sp 없음 · 분할 없음', P(v.flag === false && v.spQ === '' && !v.split));
+    }
+};
 /*</gate:mp7>*/
 /*<gate:mp8>*/
 /*</gate:mp8>*/
