@@ -1386,6 +1386,18 @@ body.szm1-s1 #gravBtn,body.szm1-s1 .control-row .slot-row{visibility:hidden!impo
 
 
 /*<sz:css:mp3>*/
+/* MP3 — 데스봄 유예: 폭탄·이온 칸이 140ms 동안 번쩍인다(칸 테두리만 — 화면 번쩍임 아님) */
+.item-slot.sz-mp3-db{animation:szMp3Db 70ms steps(1,end) infinite;border-color:#FFE66D!important;box-shadow:0 0 0 2px #FFE66D,0 0 14px 4px rgba(255,230,109,.75)!important;z-index:2}
+@keyframes szMp3Db{0%{background-color:rgba(255,230,109,.55)}50%{background-color:rgba(255,255,255,.18)}}
+@media (prefers-reduced-motion: reduce){.item-slot.sz-mp3-db{animation:none;background-color:rgba(255,230,109,.45)}}
+/* 설정 칩(편한 비행 깃털·판정 링) — MP1 SZSET 이 없을 때만 소리·진동 칩 줄 끝에 붙는다 */
+.sz-mp3-opts{display:contents}
+.sz-opt.sz-mp3-chip svg{display:block;margin:auto}
+.sz-opt.sz-mp3-chip.sz-mp3-lock{opacity:.35;filter:grayscale(1);cursor:not-allowed}
+/* 결과 카드 — 편한 비행 판 깃털 배지(글자 없음) */
+.sz-mp3-feather{display:inline-flex;align-items:center;justify-content:center;vertical-align:middle;margin-left:.35em;width:1.05em;height:1.05em;font-size:.62em;color:#BFEAFF;opacity:.9}
+.sz-mp3-feather svg{width:100%;height:100%}
+.sz-mp3-feather.best{color:#FFE66D}
 /*</sz:css:mp3>*/
 
 
@@ -9601,7 +9613,9 @@ function checkSolarFlareCollision(){
 function drawSolarFlares(){
     for(const f of solarFlares){
         ctx.save();
-        if(f.phase === 'warn'){
+        if(f.phase === 'warn' && SZ_FLAGS.mp3 && window.szWarn){
+            szWarn('line', f.x1, f.y1, f.t, f.t / FLARE_WARN_MS, f.x2, f.y2);   /* MP3 — 예고 문법(빨강 외곽 + 흰 심, 각진 표식) */
+        } else if(f.phase === 'warn'){
             const pulse = 0.35 + Math.abs(Math.sin(f.t * 0.013)) * 0.45;
             ctx.strokeStyle = `rgba(255, 100, 70, ${pulse})`;
             ctx.lineWidth = 2;
@@ -9700,7 +9714,9 @@ function checkCometCollision(){
 function drawComets(now){
     for(const c of comets){
         ctx.save();
-        if(c.phase === 'warn'){
+        if(c.phase === 'warn' && SZ_FLAGS.mp3 && window.szWarn){
+            szWarn('line', c.x1, c.y1, c.t, c.t / COMET_WARN_MS, c.x2, c.y2);   /* MP3 — 예고 문법 */
+        } else if(c.phase === 'warn'){
             const p = c.t / COMET_WARN_MS, pulse = 0.35 + Math.abs(Math.sin(c.t * 0.016)) * 0.5;
             ctx.strokeStyle = `rgba(255,120,80,${pulse})`; ctx.lineWidth = 2;
             ctx.setLineDash([8, 8]); ctx.lineDashOffset = -c.t * 0.12;
@@ -9886,8 +9902,9 @@ function drawWaves(){
         if(w.phase !== 'warn') continue;
         const p = w.t / WAVE_WARN_MS, blink = 0.45 + 0.55 * Math.abs(Math.sin(w.t * 0.018));
         ctx.save();
+        const _wg = (SZ_FLAGS.mp3 && window.szWarnGlyph) ? szWarnGlyph : _szWaveGlyph;   /* MP3 — 예고 문법(빨강 외곽 + 흰 심 삼각) */
         if(w.kind === 'wall'){
-            const n = 9, step = CW / n, gw = _szWaveGlyph('▼');
+            const n = 9, step = CW / n, gw = _wg('▼');
             for(let k = 0; k < n; k++){
                 if(k === w.gap){
                     const hh = CH * 0.22 * p + 10;
@@ -9898,7 +9915,7 @@ function drawWaves(){
                 ctx.globalAlpha = blink; szDrawBaked(gw, step * (k + 0.5), NH_WARN_TOP);
             }
         } else if(w.kind === 'side'){
-            const n = 11, step = CH * 0.8 / n, x = w.side < 0 ? 10 : CW - 10, gw = _szWaveGlyph(w.side < 0 ? '▶' : '◀');
+            const n = 11, step = CH * 0.8 / n, x = w.side < 0 ? 10 : CW - 10, gw = _wg(w.side < 0 ? '▶' : '◀');
             for(let k = 0; k < n; k++){
                 const y = CH * 0.1 + step * (k + 0.5);
                 if(k === w.gap || k === w.gap + 1){
@@ -9911,7 +9928,7 @@ function drawWaves(){
                 ctx.globalAlpha = blink; szDrawBaked(gw, x, y);
             }
         } else {
-            const gw = _szWaveGlyph('▼');
+            const gw = _wg('▼');
             ctx.globalAlpha = blink;
             for(let k = -2; k <= 2; k++) szDrawBaked(gw, w.cx + k * 18, NH_WARN_TOP + Math.abs(k) * 5);
         }
@@ -11239,7 +11256,7 @@ function szUpdateBlackHoleGeom(zoneT){
     blackHole.zoneT = zoneT||0.4;
     /* 2026-10-07 — 존 19 진입 순간 화면 중앙 세로줄 전체가 바로 제트(판정)라 가운데 있던 기체는 예고 없이 맞았다(봇 기준 판당 0.94회).
        제트가 블랙홀에서 2.5s 동안 뻗어 나온다 — 그리기·판정이 같은 jetReach 라 보이는 만큼만 아프다 */
-    const _jg = Math.min(1, Math.max(0.05, (zoneT || 0) * ZONES[BLACK_HOLE_ZONE_IDX].dur / 2.5));
+    const _jg = Math.min(1, Math.max(0.05, (zoneT || 0) * ZONES[BLACK_HOLE_ZONE_IDX].dur / ((window.SZMP3 && SZMP3.as) ? SZMP3.JET_GROW_S : 2.5)));   /* MP3 편한 비행 — 제트가 1초 더 천천히 뻗는다(예고 +1s) */
     blackHole.jetReach = Math.max(CW, CH) * 1.1 * _jg;
     blackHole.jetHalfAngle = 0.14;
 }
@@ -12058,7 +12075,9 @@ function drawSupernovaRings(){
             ? s.t / SUPERNOVA_TELEGRAPH_MS
             : 1 - Math.max(0, s.t - SUPERNOVA_EXPAND_MS) / 500;
         ctx.save();
-        if(s.t < SUPERNOVA_TELEGRAPH_MS){
+        if(s.t < SUPERNOVA_TELEGRAPH_MS && SZ_FLAGS.mp3 && window.szWarn){
+            szWarn('ring', s.cx, s.cy, s.t, fade);   /* MP3 — 예고 문법(각진 육각 고리) */
+        } else if(s.t < SUPERNOVA_TELEGRAPH_MS){
             ctx.fillStyle = `rgba(255, 80, 60, ${fade * 0.7})`;
             ctx.beginPath();
             ctx.arc(s.cx, s.cy, 14 + Math.sin(s.t * 0.04) * 4, 0, Math.PI*2);
@@ -12271,6 +12290,7 @@ function drawPulsarBeam(now){
     ctx.arc(pulsarBeam.cx, pulsarBeam.cy, 6 + d * 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+    if(phase.mode === 'warn' && SZ_FLAGS.mp3 && window.szWarn) szWarn('beam', pulsarBeam.cx, pulsarBeam.cy, now, d, a);   /* MP3 — 예고 문법(빔 축의 각진 눈금) */
 }
 
 /* =====================================================================
@@ -12441,6 +12461,7 @@ function szSatMissed(){
     SZE.emit('mission', 'fail', missionZoneIdx, 'main');   /* MP0 — 주 미션 실패(존 끝·시간 초과) */
     if(szSupplyCut) return;
     try{ if(szFirstRunNow() || (window.SZMP1 && SZMP1.lock('cut'))) return; }catch(_){}   /* MP1 A6 — 보급 차단은 3판부터 */
+    if(window.SZMP3 && SZMP3.as) return;   /* MP3 편한 비행 — 보급 영구 차단을 쓰지 않는다(기본 모드는 그대로) */
     szSatMiss++;
     if(szSatMiss >= SZ_SUPPLY_CUT_N){
         szSupplyCut = true;
@@ -13301,7 +13322,7 @@ function _isTimeWarpActive(now){ return now < timeWarpUntil; }
 function _worldDt(dt, now){
     /* SZ3.slow — 아슬아슬 스침 순간 0.12초만 세상이 느려진다(혼자 할 때만). 기체 조종은 그대로 */
     const _s = Math.min(window.SZ3 ? SZ3.slow(now) : 1, szBossSlowK(now));   /* P4 — SURVIVED 120ms 슬로모(싱글) */
-    return ((now < timeWarpUntil) ? dt * TIME_WARP_FACTOR : dt) * _s;
+    return ((now < timeWarpUntil) ? dt * TIME_WARP_FACTOR : dt) * _s * (window.SZMP3 ? SZMP3.wk : 1);   /* MP3 편한 비행 — 세상만 ×0.85 (평소 1) */
 }
 /* Aegis Drone 상태.
    2026-05-10 v2 활약 강화:
@@ -14616,6 +14637,7 @@ function drawDepot(d, now){
     ctx.lineDashOffset = -t * 14;
     ctx.beginPath(); ctx.arc(cx, cy, d.radius + 7, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
+    if(SZ_FLAGS.mp3 && window.szShapeRule) szShapeRule.reward(cx, cy, d.radius + 11, rgb, blocked ? 0.25 : 0.8);   /* MP3 — 모양 규칙: 보상 = 둥근 외곽선 */
     /* 캡슐 동체 */
     ctx.save();
     ctx.translate(cx, cy);
@@ -14850,7 +14872,8 @@ function updateBlackHolePull(dt){
     /* event horizon — player 가 들어오면 즉사 (lives=0 트리거). */
     const phx = player.x - cx, phy = player.y - cy;
     const phd = Math.sqrt(phx*phx + phy*phy);
-    if(phd < blackHole.r + BH_EVENT_HORIZON_BUFFER){
+    /* MP3 A2 (2026-10-08 운영자 승인·기본 켜짐) — 방어막 버블이 켜져 있으면 지평선은 버블만 깨고(기체는 그대로) 0.7초 빠져나갈 틈을 준다 */
+    if(phd < blackHole.r + BH_EVENT_HORIZON_BUFFER && !(window.SZMP3 && SZMP3.bhGuard(performance.now()))){
         /* spaghettification — 즉사. Phase D: Time Anchor 가 가로채서
            lives=1 로 부활시키고 player 를 BH 영향 반경 밖으로 밀어냄. */
         const _now = performance.now();
@@ -16671,7 +16694,7 @@ function szFuelUpdate(dt, now){
         SZP.hdr -= dt * 1000;
         /* 헤더 탱크 — 화염이 툭툭 끊긴다(표시 전용 Math.random) */
         szFuelFlameK = Math.random() < 0.22 ? 0.18 : 0.7 + Math.random() * 0.25;
-        if(SZP.hdr <= 0){ SZP.hdr = 0; szFuelStrand(); }
+        if(SZP.hdr <= 0){ SZP.hdr = 0; if(!(window.SZMP3 && SZMP3.fuelReserve(now))) szFuelStrand(); }   /* MP3 편한 비행 — 판당 1회 비상 예비 탱크 */
     }
 }
 /* 헤더까지 0 — 엔진 정지·조향 불가 → 우주 미아 */
@@ -19254,6 +19277,34 @@ function szMovePlayer(dt){
     szSpawnExhaust(dt);
 }
 
+/* 피격 적용 — 목숨 −1·콤보 0·무적·게임오버. 즉시 피격(아래 gameLoop 충돌 블록)과 데스봄 유예 확정(MP3 SZMP3.pendTick)이 같이 쓴다.
+   (MP3 이전 gameLoop 안 if(hit){…} 본문 그대로 — 순서·값 동일. 편한 비행 판만 무적 3초)
+   돌려주는 값: true = 게임오버(호출자가 이 프레임을 끝낸다) */
+function szHitApply(now, hitX, hitY){
+    triggerHitFx(now);
+    lives--;
+    if(!szKillMark || szKillMark.t0 !== now) szKillMark = {x: hitX, y: hitY, vx: 0, vy: 0, t0: now};   /* 위험물 충돌은 부딪힌 자리 */
+    if(!szHitboxHintAt && elapsedMs < 30000 && _szFirstRun()) szHitboxHintAt = now + SZ_HITSTOP_MS;
+    szOnHit(now, hitX, hitY);
+    invincibleUntil = now + ((window.SZMP3 && SZMP3.as) ? SZMP3.INV_MS : INVINCIBLE_MS);
+    flashVisible = true;
+    lastFlashToggle = now;
+    comboCount = 0;            /* Stage 7: hit breaks the chain */
+    comboFlashUntil = 0;
+    if(!window.SZ3 && navigator.vibrate) try{szVibrate(40)}catch(_){}   /* P5 — 햅틱은 SZ3.hit 의 표 한 줄 */
+    if(lives <= 0){
+        /* Phase D: Time Anchor saves player from death once */
+        if(_consumeTimeAnchorIfArmed(now)){
+            /* anchor consumed → revive, skip game over */
+        } else {
+            triggerGameOver();
+            return true;
+        }
+    }
+    sfxHit();
+    return false;
+}
+
 /* ---- Main loop ---- */
 let lastFrame=0;
 function gameLoop(now){
@@ -19369,6 +19420,7 @@ function gameLoop(now){
         while(true){
             const logicalElapsed = lastSpawn - startedAt - totalPausedMs;
             const localDiff = szDiffMod(_computeDiffAt(logicalElapsed), logicalElapsed);
+            if(window.SZMP3 && SZMP3.as) localDiff.spawnInterval /= SZMP3.WK;   /* MP3 편한 비행 — 세상 ×0.85 만큼 간격도 늘려 화면 밀도는 그대로 */
             if(!(localDiff.spawnInterval >= 60)) localDiff.spawnInterval = 60;   /* 훅 안전장치 — 0 이면 무한 루프 */
             if(now - lastSpawn < localDiff.spawnInterval) break;
             lastSpawn += localDiff.spawnInterval;
@@ -19493,8 +19545,11 @@ function gameLoop(now){
     if(szIonOn()) szIonSweep(now);      /* sz:mod:items2 — 이온 충격파: 앞 120° 부채꼴에 든 운석 분해 (무적과 무관) */
     /* ---- Collision ----
        PERF: 충돌 시 bullets.filter 로 새 array 생성 대신 splice 한 번 — 어차피
-       break 하니 한 번만 발생, 새 array 할당 없음. */
-    if(now>invincibleUntil){
+       break 하니 한 번만 발생, 새 array 할당 없음.
+       MP3 A1 (2026-10-08 운영자 승인) — 데스봄 유예: 폭탄·이온 충격파를 들고 있으면 피격을 140ms 보류(pendingHit).
+       보류 중에는 충돌 검사를 쉬고, 확정은 여기서(szHitApply). 아이템이 없으면 아래 경로는 예전과 같다 */
+    if(window.SZMP3 && SZMP3.pend && SZMP3.pendTick(now) === 2) return;
+    if(now>invincibleUntil && !(window.SZMP3 && SZMP3.pend)){
         const HR2 = (HIT_RADIUS+6) * (HIT_RADIUS+6);
         let hit = false;
         let hitX = player.x, hitY = player.y;
@@ -19521,28 +19576,8 @@ function gameLoop(now){
         if(!hit && splitters.length)       hit = checkSplitterCollision();
         if(!hit && isBlackHoleZone())      hit = checkBlackHoleJetCollision();
         if(!hit)                           hit = checkZoneBossCollision(now);   /* P4 — S2 별·퀘이사 제트 */
-        if(hit){
-            triggerHitFx(now);
-            lives--;
-            if(!szKillMark || szKillMark.t0 !== now) szKillMark = {x: hitX, y: hitY, vx: 0, vy: 0, t0: now};   /* 위험물 충돌은 부딪힌 자리 */
-            if(!szHitboxHintAt && elapsedMs < 30000 && _szFirstRun()) szHitboxHintAt = now + SZ_HITSTOP_MS;
-            szOnHit(now, hitX, hitY);
-            invincibleUntil = now + INVINCIBLE_MS;
-            flashVisible = true;
-            lastFlashToggle = now;
-            comboCount = 0;            /* Stage 7: hit breaks the chain */
-            comboFlashUntil = 0;
-            if(!window.SZ3 && navigator.vibrate) try{szVibrate(40)}catch(_){}   /* P5 — 햅틱은 SZ3.hit 의 표 한 줄 */
-            if(lives <= 0){
-                /* Phase D: Time Anchor saves player from death once */
-                if(_consumeTimeAnchorIfArmed(now)){
-                    /* anchor consumed → revive, skip game over */
-                } else {
-                    triggerGameOver();
-                    return;
-                }
-            }
-            sfxHit();
+        if(hit && !(window.SZMP3 && SZMP3.defer(now, hitX, hitY))){
+            if(szHitApply(now, hitX, hitY)) return;
         }
     }
 
@@ -26623,8 +26658,457 @@ SZMP2.ok = true;
 (function(){
 'use strict';
 const SZMP3 = window.SZMP3 = {ok: false};
-/* MP3 코드는 이 IIFE 안에만. 밖으로는 window.SZMP3 하나만 노출한다.
-   기능은 SZ_FLAGS.mp3 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+/* MP3 코드는 이 IIFE 안에만. 밖으로는 window.SZMP3 하나만 노출한다(예고 문법 그리기 도구 szWarn·szWarnGlyph·szShapeRule 은 위험물 그리기 함수가 부른다).
+   기능은 SZ_FLAGS.mp3 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin).
+   설계: docs/SPACEZ_MASTERPIECE_PLAN.md 4장 MP3 · 8장 A1(데스봄 유예)·A2(블랙홀 앞 방어막 버블)·A3(판정 링 기본 꺼짐).
+   결정성: rand·randH·randD 를 부르지 않는다. 판정에 쓰는 시각은 gameLoop 의 now·elapsedMs 뿐, Math.random 은 그림에만 */
+
+/* ── 상수 ── */
+SZMP3.WK = 0.85;          /* 편한 비행 — 세상 속도(_worldDt). 스폰 간격은 ÷WK (gameLoop 스폰 루프 1줄) */
+SZMP3.INV_MS = 3000;      /* 편한 비행 — 피격 무적 2.0 → 3.0초 */
+SZMP3.DB_MS = 140;        /* A1 데스봄 유예창 — 이 동안 세상이 멈추고(히트스톱 85ms 를 대신한다) 폭탄·이온 칸이 번쩍인다 */
+SZMP3.BH_SAFE_MS = 700;   /* A2 — 지평선이 버블을 깬 뒤 빠져나갈 틈(이게 없으면 다음 프레임에 그대로 즉사) */
+SZMP3.LEAD = 1500;        /* 예고 문법 — 스케줄 위험물 발사 1.5초 전부터 가장자리 표식(편한 비행 +0.5초) */
+SZMP3.RESERVE = 0.40;
+SZMP3.SAVE_INV_MS = 600;  /* A1 취소 뒤 짧은 무적 — 혜성·펄사·제트처럼 남는 위험물에 다음 프레임 재피격 방지 (운영자 10-08) */
+SZMP3.JET_GROW_S = 3.5;   /* 편한 비행 — 블랙홀 제트가 다 뻗는 데 걸리는 시간(기본 2.5s, +1s 예고) */     /* 편한 비행 — 비상 예비 탱크(판당 1회, 하트 −1): 추진제 40% */
+
+/* ── 상태 (판마다 begin) ── */
+SZMP3.as = false;         /* 이 판이 편한 비행인가 */
+SZMP3.wk = 1;             /* _worldDt 배율 — 평소 1(곱해도 값이 그대로) */
+SZMP3.pend = null;        /* A1 보류 피격 {t0, until, x, y, sa, km, slots} */
+SZMP3.dbOn = true;        /* A1 게이트 시험용 스위치(운영자 결정 = 켬) */
+SZMP3.bhOn = true;        /* A2 운영자 결정 = 기본 켬 (?mp3=0 이면 SZ_FLAGS.mp3 로 꺼진다) */
+SZMP3.bhSafeUntil = 0; SZMP3.bhSa = -1;
+SZMP3.resSa = -1;         /* 비상 예비 탱크를 쓴 판(startedAt) */
+SZMP3.st = {defer: 0, save: 0, conf: 0, bh: 0, reserve: 0};
+
+const MP3_I18N = {
+    ko: {assist: '편한 비행', assistTip: '느린 세상 · 기록 따로', hitbox: '판정 링', assistLocked: '대결·코스 판 제외'},
+    en: {assist: 'Easy Flight', assistTip: 'Slower · own record', hitbox: 'Hit ring', assistLocked: 'Off in races'},
+    ja: {assist: 'やさしい飛行', assistTip: 'ゆっくり · 記録は別', hitbox: '判定リング', assistLocked: '対戦・コースは除外'},
+    zh: {assist: '轻松飞行', assistTip: '世界变慢 · 记录另计', hitbox: '判定圈', assistLocked: '对战·课程除外'},
+    es: {assist: 'Vuelo fácil', assistTip: 'Más lento · aparte', hitbox: 'Anillo', assistLocked: 'No en carreras'},
+    pt: {assist: 'Voo fácil', assistTip: 'Mais lento · à parte', hitbox: 'Anel', assistLocked: 'Não em corridas'}
+};
+function T(k){ let l = 'en'; try{ l = _szLang() || 'en'; }catch(_){} const t = MP3_I18N[l] || MP3_I18N.en; return t[k] || MP3_I18N.en[k] || k; }
+SZMP3.T = T;
+
+/* ── 설정 (편한 비행·판정 링) — szx_assist · szx_hitbox. ?assist=1 · ?hitbox=1 은 게이트·스크린샷용(저장 안 함) ── */
+const LSG = (k) => { try{ return localStorage.getItem(k); }catch(_){ return null; } };
+const LSS = (k, v) => { try{ localStorage.setItem(k, v); }catch(_){} };
+let setAssist = LSG('szx_assist') === '1';
+let setHitbox = LSG('szx_hitbox') === '1';   /* A3 — 기본 꺼짐 */
+try{
+    const q = location.search;
+    if(/[?&]assist=1(?:&|$)/.test(q)) setAssist = true;
+    if(/[?&]hitbox=1(?:&|$)/.test(q)) setHitbox = true;
+}catch(_){}
+SZMP3.get = (id) => id === 'assist' ? setAssist : id === 'hitbox' ? setHitbox : false;
+SZMP3.set = function(id, v){
+    v = !!v;
+    if(id === 'assist'){ setAssist = v; LSS('szx_assist', v ? '1' : '0'); wantSync(); }
+    else if(id === 'hitbox'){ setHitbox = v; LSS('szx_hitbox', v ? '1' : '0'); }
+    chipSync(true);
+};
+/* 편한 비행은 판 종류(szRunKind 'assist')로 정한다 — 판 시작 전에 SZRUN.want 를 놓아 둔다(시드 판이면 MP0 이 무시한다) */
+function wantSync(){
+    if(setAssist && SZ_FLAGS.mp3){ if(!SZRUN.want) SZRUN.want = 'assist'; }
+    else if(SZRUN.want === 'assist') SZRUN.want = null;
+}
+SZMP3.wantSync = wantSync;
+function seededNow(){ try{ return szRunSeeded(szRunKindLive()); }catch(_){ return false; } }
+
+/* ── 판 시작 ── */
+function begin(kind){
+    SZMP3.as = !!SZ_FLAGS.mp3 && kind === 'assist';
+    SZMP3.wk = SZMP3.as ? SZMP3.WK : 1;
+    if(SZMP3.pend) pendEnd(SZMP3.pend);
+    SZMP3.pend = null;
+    SZMP3.bhSafeUntil = 0; SZMP3.bhSa = -1; SZMP3.resSa = -1;
+    SZMP3.st = {defer: 0, save: 0, conf: 0, bh: 0, reserve: 0};
+    ringA = 0;
+}
+SZMP3.begin = begin;
+SZE.on('runStart', begin);
+SZE.on('death', () => {
+    /* 편한 비행 기록은 따로(szx_best_assist_ms) — 리더보드·best·데일리는 MP0 szRecOk 가 거른다 */
+    try{
+        if(SZRUN.kind === 'assist'){
+            const ms = Math.round(elapsedMs), b = +(LSG('szx_best_assist_ms') || 0);
+            SZMP3.lastAssistBest = ms > b;
+            if(ms > b) LSS('szx_best_assist_ms', String(ms));
+        }
+    }catch(_){}
+    if(SZMP3.pend) pendEnd(SZMP3.pend);
+    wantSync();
+});
+/* 결과 카드 — 편한 비행 판에 깃털 배지(글자 없음). MP2 의 #szGoExtra 가 있으면 거기, 없으면 큰 시간 옆 */
+SZE.on('goCard', (ov, info) => {
+    if(!ov || !info || info.kind !== 'assist') return;
+    if(ov.querySelector('.sz-mp3-feather')) return;
+    const host = ov.querySelector('#szGoExtra') || ov.querySelector('.score-big');
+    if(!host) return;
+    const b = document.createElement('span');
+    b.className = 'sz-mp3-feather' + (SZMP3.lastAssistBest ? ' best' : '');
+    b.setAttribute('role', 'img'); b.setAttribute('aria-label', T('assist')); b.title = T('assist');
+    b.innerHTML = FEATHER;
+    host.appendChild(b);
+});
+
+/* ══════════ A1 데스봄 유예 ══════════
+   gameLoop 충돌 블록: 맞으면 SZMP3.defer() — 폭탄·(꺼져 있는)이온 충격파를 들고 있고 1:1 이 아니면 피격을 보류하고 true.
+   보류 140ms 동안 세상이 멈추고(szHitStopUntil — 히트스톱 85ms 대신) 그 칸이 번쩍인다. 기체 조종은 계속(입력 지연 0).
+   · 누르면(inventoryUseSlot 감쌈) 취소 — 아이템이 소모·발동되고 목숨·콤보는 그대로, 무적 0.6초(남는 위험물 재피격 방지), hit 이벤트 없음
+   · 안 누르면 다음 프레임(정지가 풀린 첫 프레임) SZMP3.pendTick 이 szHitApply — 목숨 −1·콤보 0·무적·게임오버·hit 를 그 시점에
+   아이템이 없으면 defer 가 false → 예전 경로 그대로(hitpath 해시 = 기준선) */
+function saveSlots(){
+    const out = [];
+    if(typeof inventory === 'undefined') return out;
+    let ionOk = true; try{ ionOk = !szIonOn(); }catch(_){}
+    for(let i = 0; i < inventory.length; i++){
+        const it = inventory[i];
+        if(it === ITEM.WIPE || (it === ITEM.ION && ionOk)) out.push(i);
+    }
+    return out;
+}
+SZMP3.saveSlot = function(){ const s = saveSlots(); return s.length ? s[0] : -1; };
+SZMP3.defer = function(now, x, y){
+    if(!SZ_FLAGS.mp3 || !SZMP3.dbOn) return false;
+    try{ if(pvpState && pvpState.gameMode === 'pvp') return false; }catch(_){}
+    if(szSpectating) return false;
+    const slots = saveSlots();
+    if(!slots.length) return false;
+    /* 부딪힌 자리 표식은 원래 경로처럼 지금 — 무엇에 맞았는지 정지 화면에서 먼저 읽힌다 */
+    if(!szKillMark || szKillMark.t0 !== now) szKillMark = {x: x, y: y, vx: 0, vy: 0, t0: now};
+    SZMP3.pend = {t0: now, until: now + SZMP3.DB_MS, x: x, y: y, sa: startedAt, km: szKillMark, slots: slots};
+    szHitStopUntil = now + SZMP3.DB_MS;
+    SZMP3.st.defer++;
+    slotFlash(slots, true);
+    cue(1);
+    return true;
+};
+/* gameLoop 충돌 블록 머리(보류 중일 때만 불린다): 0 = 보류 없음(낡은 보류는 버림) · 1 = 보류 중이거나 확정 후 생존(이 프레임 충돌 검사 생략) · 2 = 확정으로 게임오버 */
+SZMP3.pendTick = function(now){
+    const p = SZMP3.pend;
+    if(!p) return 0;
+    if(p.sa !== startedAt || !running){ pendEnd(p); return 0; }
+    if(now < p.until) return 1;
+    pendEnd(p);
+    SZMP3.st.conf++;
+    if(szKillMark && szKillMark === p.km) szKillMark.t0 = now;   /* 들어온 길 외곽선은 확정 순간부터 300ms */
+    if(szHitApply(now, p.x, p.y)) return 2;
+    szHitStopUntil = now;   /* 유예창이 히트스톱을 대신했다 — 확정 때 85ms 를 또 걸지 않는다 */
+    return 1;
+};
+function pendEnd(p){
+    if(SZMP3.pend === p) SZMP3.pend = null;
+    slotFlash(p.slots, false);
+}
+function pendSave(p){
+    pendEnd(p);
+    SZMP3.st.save++;
+    szKillMark = null;
+    const n = performance.now();
+    szHitStopUntil = n;   /* 바로 다시 흐른다 */
+    if(invincibleUntil < n + SZMP3.SAVE_INV_MS){ invincibleUntil = n + SZMP3.SAVE_INV_MS; flashVisible = true; lastFlashToggle = n; }
+    try{
+        const px = player.x, py = player.y;
+        szRings.push({x: px, y: py, t: 0, dur: 0.42, r0: 10, r1: 58, rgb: '255,230,140', w: 3});
+        szRings.push({x: px, y: py, t: -0.08, dur: 0.42, r0: 6, r1: 34, rgb: '255,255,255', w: 1.6});
+    }catch(_){}
+    cue(2);
+}
+/* 칸 입력 — 보류 중에 폭탄·이온 칸이 실제로 쓰였으면 취소 */
+(function(){
+    const use0 = window.inventoryUseSlot;
+    if(typeof use0 !== 'function') return;
+    window.inventoryUseSlot = function(idx){
+        const p = SZMP3.pend;
+        const it = (p && typeof inventory !== 'undefined') ? inventory[idx] : null;
+        const r = use0.apply(this, arguments);
+        if(p && SZMP3.pend === p && (it === ITEM.WIPE || it === ITEM.ION) && inventory[idx] == null) pendSave(p);
+        return r;
+    };
+})();
+function slotFlash(slots, on){
+    if(!slots) return;
+    for(const i of slots){
+        const el = document.getElementById('itemSlot' + i);
+        if(el) el.classList.toggle('sz-mp3-db', !!on);
+    }
+}
+let _cueT = 0;
+/* 소리 — 1 보류(짧은 경고) · 2 취소 성공 · 3 예고(상승음). SZAU(MP4a)가 살아 있으면 그쪽 */
+function cue(k){
+    try{
+        if(k === 3 && window.SZAU && SZAU.ctx){ const n = performance.now(); if(n - _cueT < 1100) return; _cueT = n; SZAU.warn(); return; }
+        if(typeof LPAudio === 'undefined') return;
+        if(k === 1) LPAudio.beep({freq: 1480, dur: 0.06, vol: 0.06, type: 'square', decay: 0.5});
+        else if(k === 2){ LPAudio.beep({freq: 880, dur: 0.08, vol: 0.06, type: 'triangle', slide: 1760, decay: 0.7}); }
+        else if(k === 3){ const n = performance.now(); if(n - _cueT < 1100) return; _cueT = n; LPAudio.beep({freq: 620, dur: 0.16, vol: 0.045, type: 'square', slide: 1240, decay: 0.6}); }
+    }catch(_){}
+}
+
+/* ══════════ A2 블랙홀 앞 방어막 버블 (운영자 승인 · 기본 켜짐) ══════════
+   updateBlackHolePull 의 지평선 판정이 부른다. 버블이 켜져 있으면 버블만 즉시 끝내고(기체는 옮기지 않는다) 0.7초 틈 — true 면 즉사하지 않는다 */
+SZMP3.bhGuard = function(now){
+    if(!SZ_FLAGS.mp3) return false;
+    if(SZMP3.bhSa === startedAt && now < SZMP3.bhSafeUntil) return true;
+    let on = false; try{ on = SZMP3.bhOn && shieldBubbleActive(now); }catch(_){}
+    if(!on) return false;
+    shieldBubbleUntil = 0; shieldHitFlashUntil = now + 220;
+    SZMP3.bhSafeUntil = now + SZMP3.BH_SAFE_MS; SZMP3.bhSa = startedAt;
+    SZMP3.st.bh++;
+    try{ sfxOver(); }catch(_){}
+    try{
+        szRings.push({x: player.x, y: player.y, t: 0, dur: 0.55, r0: 30, r1: 96, rgb: '0,217,255', w: 3.2});
+        szRings.push({x: player.x, y: player.y, t: -0.1, dur: 0.5, r0: 20, r1: 60, rgb: '255,255,255', w: 1.5});
+    }catch(_){}
+    return true;
+};
+
+/* ══════════ 편한 비행 — 비상 예비 탱크 (szFuelUpdate 고갈 분기) ══════════
+   헤더 탱크까지 바닥나면(우주 미아 직전) 판당 1회: 하트 −1, 추진제 40%. 하트가 1개뿐이면 쓰지 않는다(기존대로 우주 미아) */
+SZMP3.fuelReserve = function(now){
+    if(!SZMP3.as || SZMP3.resSa === startedAt || lives < 2) return false;
+    SZMP3.resSa = startedAt; SZMP3.st.reserve++;
+    lives--;
+    try{ szHeartBreak.push({idx: Math.max(0, lives), t0: now}); if(szHeartBreak.length > 4) szHeartBreak.shift(); }catch(_){}
+    SZP.ch4 = Math.max(SZP.ch4, SZMP3.RESERVE); SZP.lox = Math.max(SZP.lox, SZMP3.RESERVE);
+    SZP.mode = 0; SZP.hdr = SZP_T.HDR_MS; SZP.popT = now; SZP.lastAdd = Math.round(SZMP3.RESERVE * 100);
+    szFuelFlameK = 1;
+    try{ szPopup('♥−1 · +' + Math.round(SZMP3.RESERVE * 100) + '%', player.x, player.y - 44, '#BFEAFF', 14, 1.3); }catch(_){}
+    return true;
+};
+
+/* ══════════ 예고 문법 szWarn (위험 = 각진 모양 · 빨강 #FF3B5C 외곽 + 흰 심) ══════════ */
+const WR = '#FF3B5C';
+const szShapeRule = window.szShapeRule = {
+    hazard: {col: WR, core: '#FFFFFF', sides: 6},
+    reward: function(x, y, r, rgb, a){
+        /* 보상 = 둥근 외곽선(실선 두 겹) — 위험물 예고(각진 모양)와 모양으로 갈린다(색각 이상 대비) */
+        ctx.save();
+        ctx.globalAlpha *= a;
+        ctx.lineWidth = 2.2; ctx.strokeStyle = 'rgba(' + rgb + ',0.9)';
+        ctx.beginPath(); ctx.arc(x, y, r, 0, 6.2832); ctx.stroke();
+        ctx.lineWidth = 0.9; ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.beginPath(); ctx.arc(x, y, r - 2.2, 0, 6.2832); ctx.stroke();
+        ctx.restore();
+    }
+};
+function poly(x, y, r, n, rot){
+    ctx.beginPath();
+    for(let i = 0; i < n; i++){ const a = rot + i * 6.2832 / n; const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r; if(i) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+    ctx.closePath();
+}
+/* 두 겹 선 — 빨강 외곽(굵게) 위 흰 심(가늘게) */
+function stroke2(w){
+    ctx.lineWidth = w + 2.6; ctx.strokeStyle = WR; ctx.stroke();
+    ctx.lineWidth = Math.max(1, w * 0.45); ctx.strokeStyle = '#FFFFFF'; ctx.stroke();
+}
+/* 화살 머리 '>' (진행 방향 ux,uy) — 각진 표식 */
+function chevron(x, y, ux, uy, s){
+    const px = -uy, py = ux;
+    ctx.beginPath();
+    ctx.moveTo(x - ux * s + px * s * 0.9, y - uy * s + py * s * 0.9);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x - ux * s - px * s * 0.9, y - uy * s - py * s * 0.9);
+}
+const NHT = (typeof NH_WARN_TOP === 'number') ? NH_WARN_TOP : 66;
+/* szWarn(shape, x, y, t, p, …) — shape: 'line'(x2,y2) · 'ring' · 'beam'(angle) · 'peek'(glyph). t = 경과 ms(깜빡임), p = 진행 0..1 */
+function szWarn(shape, x, y, t, p, a5, a6){
+    p = Math.max(0, Math.min(1, p || 0));
+    const blink = 0.55 + 0.45 * Math.abs(Math.sin((t || 0) * 0.016));
+    ctx.save();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'miter';
+    if(shape === 'line'){
+        const x2 = a5, y2 = a6, dx = x2 - x, dy = y2 - y, L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L;
+        ctx.globalAlpha = 0.35 + 0.55 * blink * (0.5 + 0.5 * p);
+        ctx.setLineDash([12, 9]); ctx.lineDashOffset = -(t || 0) * 0.1;
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2);
+        stroke2(1.6);
+        ctx.setLineDash([]);
+        /* 들어오는 쪽 — 화면 안으로 당긴 자리에 겹화살(진행할수록 촘촘) */
+        const ex = Math.max(18, Math.min(CW - 18, x)), ey = Math.max(NHT, Math.min(CH - 18, y));
+        ctx.globalAlpha = 0.6 + 0.4 * blink;
+        const g = 7 - 3 * p;
+        for(let k = 0; k < 2; k++){ chevron(ex + ux * (10 + k * g), ey + uy * (10 + k * g), ux, uy, 7); stroke2(2); }
+    } else if(shape === 'ring'){
+        /* 각진 육각 고리 — 차오를수록 커지고 진해진다 */
+        const r = 12 + 10 * p;
+        ctx.globalAlpha = 0.45 + 0.55 * p;
+        poly(x, y, r, 6, (t || 0) * 0.002);
+        stroke2(2);
+        ctx.globalAlpha *= 0.5;
+        poly(x, y, r * 0.5, 6, -(t || 0) * 0.003);
+        stroke2(1.2);
+    } else if(shape === 'beam'){
+        /* 펄사 — 빔 축 위 각진 눈금(양쪽), 잠김에 가까울수록 진하게 */
+        const ang = a5 || 0, ux = Math.cos(ang), uy = Math.sin(ang);
+        ctx.globalAlpha = 0.35 + 0.65 * p;
+        for(const s of [1, -1]) for(let k = 1; k <= 5; k++){
+            const d = 34 + k * 46, cx = x + ux * d * s, cy = y + uy * d * s;
+            if(cx < -10 || cx > CW + 10 || cy < -10 || cy > CH + 10) continue;
+            chevron(cx, cy, ux * s, uy * s, 6); stroke2(1.6);
+        }
+    } else if(shape === 'peek'){
+        /* 스케줄 예고 — 각진 마름모 + 가운데 모양(종류) + 좁혀 오는 괄호(남은 시간) */
+        const k = p, gl = a5;
+        ctx.globalAlpha = 0.45 + 0.55 * k;
+        poly(x, y, 9, 4, 0);
+        ctx.fillStyle = 'rgba(40,6,14,0.72)'; ctx.fill();
+        stroke2(1.6);
+        ctx.lineWidth = 1.6; ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF';
+        if(gl === 'line'){ ctx.beginPath(); ctx.moveTo(x - 4, y + 3); ctx.lineTo(x + 4, y - 3); ctx.stroke(); }
+        else if(gl === 'ring'){ poly(x, y, 3.6, 6, 0); ctx.stroke(); }
+        else if(gl === 'tri'){ ctx.beginPath(); ctx.moveTo(x - 3.6, y - 2.4); ctx.lineTo(x + 3.6, y - 2.4); ctx.lineTo(x, y + 3.4); ctx.closePath(); ctx.fill(); }
+        else { for(let i = 0; i < 4; i++){ const a = i * 1.5708 + 0.785; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * 4, y + Math.sin(a) * 4); ctx.stroke(); } }
+        const gap = 11 + 13 * (1 - k);
+        ctx.globalAlpha = 0.5 + 0.5 * blink;
+        chevron(x - gap, y, 1, 0, 5); stroke2(1.3);
+        chevron(x + gap, y, -1, 0, 5); stroke2(1.3);
+    }
+    ctx.restore();
+}
+window.szWarn = szWarn;
+/* 파도 예고 글리프 — 각진 삼각(빨강 외곽 + 흰 심). _szWaveGlyph 와 같은 반환 모양 {c,w,h,S} (szDrawBaked) */
+const _wg = {};
+function szWarnGlyph(ch, green){
+    if(green){ try{ return _szWaveGlyph(ch, true); }catch(_){ return null; } }
+    if(_wg[ch]) return _wg[ch];
+    const S = 2, W = 26, c = document.createElement('canvas'); c.width = W * S; c.height = W * S;
+    const x = c.getContext('2d'); x.scale(S, S); x.translate(W / 2, W / 2);
+    const rot = ch === '▲' ? Math.PI : ch === '▶' ? -Math.PI / 2 : ch === '◀' ? Math.PI / 2 : 0;
+    x.rotate(rot);
+    x.beginPath(); x.moveTo(-7.5, -5.5); x.lineTo(7.5, -5.5); x.lineTo(0, 7.5); x.closePath();
+    x.lineJoin = 'miter';
+    x.lineWidth = 3.4; x.strokeStyle = WR; x.stroke();
+    x.fillStyle = '#FFFFFF'; x.fill();
+    return (_wg[ch] = {c: c, w: W, h: W, S: S});
+}
+window.szWarnGlyph = szWarnGlyph;
+
+/* ── 스케줄 위험물 예고(SZ_HZ.ev 읽기 전용 peek) — 종류별 모양 하나씩, 위 가장자리 줄 ── */
+const PK = {comet: 'line', flare: 'line', szx: 'line', szjet: 'line', nova: 'ring', sznova: 'ring', szsh: 'ring',
+            wave: 'tri', szvee: 'tri', split: 'burst', cluster: 'burst', mix: 'burst', szdeb: 'burst', szecho: 'burst', mine: 'burst'};
+/* 이미 그 자체가 예고인 사건(szice·szps)과 계속 흐르는 협곡 줄(szcw)은 뺀다 */
+const _pk = {line: -1, ring: -1, tri: -1, burst: -1};
+const _pkOrder = ['line', 'ring', 'tri', 'burst'];
+function drawPeek(now){
+    const H = (typeof SZ_HZ !== 'undefined') ? SZ_HZ : null;
+    if(!H || !H.ev || !H.ev.length) return;
+    try{ if(pvpState && pvpState.gameMode === 'pvp') return; }catch(_){}
+    const e0 = elapsedMs, lead = SZMP3.LEAD + (SZMP3.as ? 500 : 0);
+    _pk.line = _pk.ring = _pk.tri = _pk.burst = -1;
+    let n = 0;
+    for(let i = 0; i < H.ev.length; i++){
+        const e = H.ev[i], tAbs = H.z0 + e.t;
+        if(tAbs > e0 + lead) break;
+        if(tAbs < e0 || tAbs >= H.z1) continue;
+        const g = PK[e.kind]; if(!g) continue;
+        try{ if(tAbs >= SZ_FIN_T && tAbs < SZ_FIN_T + 6400 && SZ_FIN_QUIET[e.kind] && szZS().on) continue; }catch(_){}
+        if(e._mp3w !== e.t){ e._mp3w = e.t; if(e.kind !== 'mine' && e.kind !== 'cluster') cue(3); }
+        if(_pk[g] < 0){ _pk[g] = 1 - (tAbs - e0) / lead; n++; }
+    }
+    if(!n) return;
+    let k = 0;
+    const y = NHT + 28, step = 30, x0 = CW / 2 - (n - 1) * step / 2;
+    for(const g of _pkOrder){
+        if(_pk[g] < 0) continue;
+        szWarn('peek', x0 + k * step, y, now, _pk[g], g);
+        k++;
+    }
+}
+
+/* ══════════ 판정 반경 링 (A3 — 기본 꺼짐, 설정에서 켬) ══════════
+   실제 판정 = 운석 중심이 기체 중심에서 HIT_RADIUS+6 = 11px 안. 첫 판 힌트(R=11)와 같은 반경.
+   평시 α0.18, 32px 안에 위험물이 있으면 α0.6 */
+let ringA = 0;
+function drawRing(){
+    const px = player.x, py = player.y, N2 = 32 * 32;
+    let near = false;
+    for(let i = 0; i < bullets.length && !near; i++){ const b = bullets[i], dx = b.x - px, dy = b.y - py; if(dx * dx + dy * dy < N2) near = true; }
+    if(!near && asteroidClusters.length){
+        for(const c of asteroidClusters){ for(const r of c.rocks){ const d = Math.hypot(r.x - px, r.y - py) - r.r; if(d < 32){ near = true; break; } } if(near) break; }
+    }
+    const tgt = near ? 0.6 : 0.18;
+    ringA += (tgt - ringA) * (near ? 0.5 : 0.15);
+    ctx.save();
+    ctx.globalAlpha = ringA;
+    ctx.lineWidth = 1.5; ctx.strokeStyle = '#7CFFB2';
+    ctx.beginPath(); ctx.arc(px, py, HIT_RADIUS + 6, 0, 6.2832); ctx.stroke();
+    ctx.globalAlpha = ringA * 0.9; ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(px, py, 1.4, 0, 6.2832); ctx.fill();
+    ctx.restore();
+}
+/* 보류 중 기체 둘레 — 각진 고리가 좁혀 온다(남은 유예) */
+function drawPend(now){
+    const p = SZMP3.pend; if(!p || szShipHidden) return;
+    const k = Math.max(0, Math.min(1, (now - p.t0) / SZMP3.DB_MS));
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    poly(player.x, player.y, 30 - 12 * k, 6, k * 0.8);
+    stroke2(2.4);
+    ctx.restore();
+}
+SZE.on('drawShip', (now) => {
+    if(!running || !SZ_FLAGS.mp3) return;
+    if(SZMP3.pend) drawPend(now);
+    if(setHitbox && !szShipHidden && !szSpectating) drawRing();
+    drawPeek(now);
+});
+
+/* ══════════ 설정 칩 — MP1 SZSET 이 있으면 거기에 등록, 없으면 시작 화면 소리·진동 칩 줄(settings 슬롯) 끝에 아이콘 칩 2개 ══════════ */
+const FEATHER = '<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M19.5 3.5C13 4 8.6 7.8 7.8 13.6"/><path d="M19.5 3.5c.8 6.4-3.4 11.4-10.2 12.4"/><path d="M18.6 4.6L5 20.5"/><path d="M12.4 11.2l3.4-.4M10.4 13.6l3-.2"/></svg>';
+const RING = '<svg viewBox="0 0 24 24" width="1.15em" height="1.15em" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8">'
+    + '<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>';
+let usedSet = false;
+function regSet(){
+    if(usedSet) return true;
+    const S = window.SZSET;
+    if(!S || typeof S.add !== 'function') return false;
+    try{
+        S.add({id: 'assist', icon: FEATHER, label: T('assist'), tip: T('assistTip'), get: () => setAssist, set: (v) => SZMP3.set('assist', v), lockInSeeded: true});
+        S.add({id: 'hitbox', icon: RING, label: T('hitbox'), get: () => setHitbox, set: (v) => SZMP3.set('hitbox', v)});
+        usedSet = true;
+    }catch(_){ return false; }
+    return true;
+}
+function chipsHtml(){
+    const lock = seededNow();
+    const aOn = setAssist && !lock;
+    return '<span class="sz-mp3-opts" id="szMp3Opts" role="group">'
+        + '<button type="button" class="sz-opt sz-mp3-chip' + (aOn ? ' on' : '') + (lock ? ' sz-mp3-lock' : '') + '" data-szmp3="assist" aria-pressed="' + aOn + '"'
+        + (lock ? ' aria-disabled="true"' : '') + ' aria-label="' + T('assist') + '" title="' + (lock ? T('assistLocked') : T('assist') + ' — ' + T('assistTip')) + '">' + FEATHER + '</button>'
+        + '<button type="button" class="sz-opt sz-mp3-chip' + (setHitbox ? ' on' : '') + '" data-szmp3="hitbox" aria-pressed="' + setHitbox + '" aria-label="' + T('hitbox') + '" title="' + T('hitbox') + '">' + RING + '</button>'
+        + '</span>';
+}
+function chipSync(force){
+    if(!SZ_FLAGS.mp3) { const c = document.getElementById('szMp3Opts'); if(c) c.remove(); return; }
+    if(regSet()) return;
+    if(running) return;
+    const html = chipsHtml();
+    const ex = document.getElementById('szMp3Opts');
+    if(ex && ex.dataset.szk === html && !force) return;
+    try{ SZSTART.put('settings', 'szMp3Opts', html, 'end', html); }catch(_){}
+}
+document.addEventListener('click', (e) => {
+    const b = e.target.closest && e.target.closest('[data-szmp3]');
+    if(!b) return;
+    e.preventDefault(); e.stopPropagation();
+    const id = b.dataset.szmp3;
+    if(id === 'assist' && b.classList.contains('sz-mp3-lock')) return;
+    SZMP3.set(id, !SZMP3.get(id));
+}, true);
+function boot(){
+    wantSync();
+    chipSync();
+    try{ const ov = document.getElementById('overlay'); if(ov) new MutationObserver(() => { wantSync(); chipSync(); }).observe(ov, {childList: true, subtree: true}); }catch(_){}
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+
 SZMP3.ok = true;
 })();
 /*</sz:mod:mp3>*/
