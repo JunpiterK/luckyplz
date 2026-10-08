@@ -22334,6 +22334,8 @@ function mkAC(){
     if(AC) return AC;
     try{
         AC = new (window.AudioContext || window.webkitAudioContext)();
+        /* 운영자 2026-10-09 (B2) — 시퀀서 음악은 예전 <audio> BGM 처럼 iOS 무음 스위치와 무관하게 들린다. 끄기는 게임 🔊 버튼 */
+        try{ if(navigator.audioSession && !(window.SZ_FLAGS && SZ_FLAGS.mp4 === false)) navigator.audioSession.type = 'playback'; }catch(_){}
         MST = AC.createGain(); MST.gain.value = 0.9 * vol; MST.connect(AC.destination);
         const n = AC.sampleRate;
         NB = AC.createBuffer(1, n, n);
@@ -22930,7 +22932,8 @@ function tick(n, dt){
         for(let i = 0; i < 22; i++){ const a = Math.random() * 6.28; emit(K_STAR, CW / 2, CH * 0.34, Math.cos(a) * 210, Math.sin(a) * 150, 0.9, 7, 0); }
     }
     /* 마지막 목숨 — 낮은 심장 박동 */
-    if(lives <= 1 && n > P.beatAt){ P.beatAt = n + 1050; S.beat(); }
+    /* 운영자 2026-10-09 — 시퀀서 음악(MP4)이 돌면 박동은 곡의 heart 층이 맡는다(겹침 방지). mp3 BGM 판은 예전대로 */
+    if(lives <= 1 && n > P.beatAt){ P.beatAt = n + 1050; let sq = false; try{ sq = !!(BGM && BGM.isSeq && BGM.isSeq()); }catch(_){} if(!sq) S.beat(); }
 }
 
 /* ─────────── 이벤트 ─────────── */
@@ -28075,7 +28078,7 @@ if(window.SZE){
         if(a !== actOf(prev)){
             vo('act', a + 1);
             if(a !== LV.act){ LV.act = a; const s = songForAct(a); if(s) LV.core.queueSong(s); }
-        } else vo('new_zone');
+        }   /* 운영자 2026-10-09 — 'new zone' 음성은 존마다 잦아서 뺀다(막 전환 'act' 음성만). 음성 파일은 남겨 둔다 */
     }));
     SZE.on('death', function(){ voClear(); });
 }
