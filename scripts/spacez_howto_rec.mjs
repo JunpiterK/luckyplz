@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* =====================================================================
-   Space-Z 「게임방법」 팝업 영상 녹화기 (2026-10-08, fx-szhow3)
+   Space-Z 「게임방법」 팝업 영상 녹화기 (2026-10-08, fx-szhow3 · fx-szhow4)
    public/assets/dodge/howto/{sat,beam,fever,items}.mp4 + 포스터 .webp 를 실제 게임에서 찍는다.
 
    방식: 헤드리스 Edge(CDP) + 가상 시계 + 녹화 전용 주입. 주입 코드는 페이지 파일에 넣지 않는다(Runtime.evaluate 로만).
@@ -13,11 +13,13 @@
    결과: H.264 Main yuv420p 432×930 30fps faststart(소리 없음) + 포스터 webp. 프레임 시트(검수용)는 --review 폴더에.
 
    사용:
-     node scripts/spacez_howto_rec.mjs [sat beam items | verify | probe | touchtest] --root <체크아웃> [옵션]
-       sat·beam·items — 녹화 → mp4·webp 를 --out 에, 프레임 시트·로그를 --review 에 (피격이 영상에 남으면 3번까지 다시)
+     node scripts/spacez_howto_rec.mjs [sat beam fever items | verify | probe | touchtest] --root <체크아웃> [옵션]
+       sat·beam·fever·items — 녹화 → mp4·webp 를 --out 에, 프레임 시트·로그를 --review 에 (피격이 영상에 남으면 3번까지 다시)
        verify  — 팝업을 412×915·360×740 × ko·en 으로 열어 4장 모두 재생되는지·콘솔 에러 0 인지 (스크린샷은 --review)
        probe   — --probe-zone 존으로 이동해 몇 장 찍기 · touchtest — CDP 멀티터치 떼기 동작 확인
-       fever.mp4 는 2026-10-07 녹화 그대로(녹화기 없음 — 필요하면 clipFever 를 더한다)
+       2026-10-08 fx-szhow4: fever 장(clipFever) 추가 · beam 장은 추진제 바닥 직전 → 궤도 급유 탱커 BEAM → 윙맨 캡슐.
+       정기 탱커(T-k)는 startRun 에서 막는다(R.noTank) — 탱커는 beam 장에서만 녹화 주입. 첫 탱커 안내 알약은 szx_fuel_tip 으로 끔.
+       자막 시각은 SZH_CLIPS.cues(public/games/dodge/index.html) 에 녹화 로그(cue)로 맞춘다
    옵션:
      --port <n>       정적 서버 포트 (기본 9421 — 8611–8810·50000–50059 는 Windows 예약이라 피한다)
      --out <dir>      mp4·webp 저장 폴더 (기본 <root>/public/assets/dodge/howto)
@@ -215,7 +217,8 @@ function pageLib(){
         try{ st = { run: running, z: currentZoneIdx, e: Math.round(elapsedMs), px: Math.round(player.x), py: Math.round(player.y), lives, ms: missionState, nb: bullets.length,
             inv: inventory.slice(), fev: !!szFeverOn, g: Math.round(gravGauge), dep: depots.length, sat: Math.round(satInstallProgress), mz: missionZoneIdx,
             slot: SZM2.vis ? [Math.round(SZM2.x), Math.round(SZM2.y)] : null, eng: !!SZM2.eng, cut: !!szSupplyCut, miss: szSatMiss,
-            dps: depots.map(d => [Math.round(d.x), Math.round(d.y), d.item, d.collected ? 1 : 0, Math.round(d.chargeTime * 100) / 100]), beam: !!gravityFieldActive, ag: szAgOn(), ion: szIonOn(), sh: shieldBubbleActive(performance.now()) }; }catch(e){ st.err = String(e); }
+            dps: depots.map(d => [Math.round(d.x), Math.round(d.y), d.item, d.collected ? 1 : 0, Math.round(d.chargeTime * 100) / 100]), beam: !!gravityFieldActive, ag: szAgOn(), ion: szIonOn(), sh: shieldBubbleActive(performance.now()),
+            fu: [Math.round(SZP.ch4 * 1000) / 10, Math.round(SZP.lox * 1000) / 10, SZP.mode], fg: (function(){ try{ const F = szFS(); return [Math.round(F.g), szFeverOn ? Math.round(F.fever - elapsedMs) : 0, F.dust.length]; }catch(_){ return null; } })() }; }catch(e){ st.err = String(e); }
         return st;
     };
     /* 화면(CSS px) ↔ 캔버스 논리 좌표 */
@@ -308,6 +311,10 @@ function pageLib(){
         depots.push({x, y, speed: 24, item, zoneIdx: currentZoneIdx, slot: 'rec', key, chargeTime: 0, collected: false, collectedByPeer: false, spawnedAt: now, radius: 19});
         return 1;
     };
+    /* 정기 탱커(T-k) 막기 — 녹화 장면에 우연히 떠내려와 닿으면 급유가 섞인다. 탱커는 BEAM 장에서 R.depot(ITEM.FUEL…) 로만 */
+    R.noTank = function(){ for(let k = 0; k < 60; k++) depotsSpawnedZones.add('T-' + k); for(let i = depots.length - 1; i >= 0; i--) if(depots[i].item === 'fuel') depots.splice(i, 1); return 1; };
+    /* 추진제 수준(0~1) — 그 시각에 있을 법한 값으로 (게이지는 하트 줄 아래 HUD) */
+    R.fuel = function(c, o){ SZP.ch4 = c; SZP.lox = o; SZP.mode = 0; SZP.hdr = SZP_T.HDR_MS; return 1; };
     R.STEP = 16.6667; R.SUB = 2;
     return 1;
 }
@@ -415,7 +422,7 @@ const LS_BASE = {
     luckyplz_lang: LANG, lp_lang: LANG,
     szx_ctl: 'float', szx_sens: '1.8', szx_tier: '0', szx_fx: '1',
     szx_log: JSON.stringify({ v: 1, far: 8, seen: 511, sat: 0, ch: 1, runs: 6, end: 0, bestAct: [0, 0, 0, 0, 0], skin: 0 }),
-    szx_ctl_tip: '3'
+    szx_ctl_tip: '3', szx_fuel_tip: '1'   /* 첫 탱커 안내 알약은 꺼 둔다(자막 칩과 겹친다) */
 };
 async function startRun(rec, opts = {}){
     const e = rec.e;
@@ -423,6 +430,7 @@ async function startRun(rec, opts = {}){
     await e.ev('(function(){ try{ startGame(); }catch(e){ __R.err(e); } return 1; })()');
     for(let i = 0; i < 400; i++){ await rec.skip(STEP * 6); if(rec.st.run) break; }
     if(!rec.st.run) throw new Error('판이 시작되지 않음: ' + JSON.stringify(rec.st) + ' ' + JSON.stringify(await e.ev('__R.errs')));
+    await e.ev('__R.noTank()');
     await rec.skip(300);
 }
 /* 존 z 의 시작 + off 초로 논리 시각을 옮긴다 (그 사이 보급·미션은 건너뛴 것으로) */
@@ -500,38 +508,99 @@ async function clipSat(rec){
 }
 
 /* ---------------- 장 2: BEAM (화성) ----------------
-   슬롯 [방어막·폭탄] 에서 시작 → 캡슐(윙맨 — 새 드론 그림) 아래로 → BEAM 꾹 1.5초 → 슬롯 3칸째
-   → 두 번째 캡슐(이온 충격파) → BEAM 꾹 → 슬롯 4칸째 (5칸까지 보관) */
+   추진제가 바닥 직전(하트 줄 아래 게이지 주황 깜빡)인 상태에서 시작 → 궤도 급유 탱커 아래로 → BEAM 꾹 1.5초 → 게이지 +35%(파랑·하양으로 돌아옴)
+   → 보급 캡슐(윙맨 — 새 진공용 요격기 그림) → BEAM 꾹 → 슬롯 3칸째 (5칸까지 보관) */
 async function clipBeam(rec){
     const e = rec.e, cue = {};
     await e.ev('__R.noHaz()');
-    await e.ev('(function(){ missionsCompletedZones.add(2); depotsSpawnedZones.add("2-0"); depotsSpawnedZones.add("2-1"); return 1; })()');   /* 화성 과제(포보스)·화성 정규 보급은 이 장의 주제가 아니다 — 녹화 캡슐 두 개만 */
+    await e.ev('(function(){ missionsCompletedZones.add(2); depotsSpawnedZones.add("2-0"); depotsSpawnedZones.add("2-1"); return 1; })()');   /* 화성 과제(포보스)·화성 정규 보급은 이 장의 주제가 아니다 — 녹화 탱커·캡슐만 */
     await jump(rec, 2, 2.2);
     await rec.skip(2600);                      /* 화성 도착 카드가 걷힐 때까지 */
-    await e.ev('(function(){ depots.length = 0; inventory.fill(null); inventory[0] = ITEM.SHIELD; inventory[1] = ITEM.WIPE; syncInventoryUI(); player.x = 176; player.y = 450; gravGauge = GRAV_GAUGE_MAX; return 1; })()');
+    await e.ev('(function(){ depots.length = 0; inventory.fill(null); inventory[0] = ITEM.SHIELD; inventory[1] = ITEM.WIPE; syncInventoryUI(); player.x = 176; player.y = 450; gravGauge = GRAV_GAUGE_MAX; __R.fuel(0.17, 0.145); return 1; })()');
+    await rec.skip(STEP * 2);
     const S0 = { x: 334, y: TBH + 575 };
-    let phase = 0, beamAt = -1, gotAt = -1, n = 0;
-    const plan = [{ item: 'MINI', x: 250, y: 92, at: 0.12 }, { item: 'ION', x: 112, y: 96, at: 2.2 }], OFF = 142;
-    for(let f = 0; f < 260; f++){
+    let phase = 0, gotAt = -1;
+    const plan = [{ item: 'FUEL', x: 286, y: 104, at: 0.1 }, { item: 'MINI', x: 118, y: 88, at: 2.45 }], OFF = 142;
+    const done = (st) => phase === 0 ? !!(st.dps || []).find(d => d[2] === 'fuel' && d[3]) : (st.inv || []).filter(Boolean).length >= 3;
+    for(let f = 0; f < 280; f++){
         const t = rec.t(), st = rec.st;
-        for(const p of plan) if(!p.done && t >= p.at){ p.done = true; await e.ev(`__R.depot(ITEM.${p.item}, ${p.x}, ${p.y})`); if(p === plan[0]) cue.cap1 = t; else cue.cap2 = t; }
-        if(f === 10) await rec.down('steer', S0.x, S0.y);
+        for(const p of plan) if(!p.done && t >= p.at){ p.done = true; await e.ev(`__R.depot(ITEM.${p.item}, ${p.x}, ${p.y})`); if(p === plan[0]) cue.tank = t; else cue.cap = t; }
+        if(f === 8) await rec.down('steer', S0.x, S0.y);
         const live = (st.dps || []).filter(d => !d[3]);
         const d = live[0];
         if(rec.fing.has('steer') && d) await rec.steer(d[0], Math.min(d[1] + OFF, 560), 300);
         else if(rec.fing.has('steer')) await rec.steer(st.px, st.py, 300);
-        /* BEAM 꾹 — 캡슐 아래에 거의 왔을 때 */
-        if(d && !rec.fing.has('beam') && Math.abs(st.px - d[0]) < 14 && Math.abs(st.py - (d[1] + OFF)) < 24 && t > (phase === 0 ? 0.8 : 3.4) && phase < 2){
+        /* BEAM 꾹 — 목표 아래에 거의 왔을 때 */
+        if(d && !rec.fing.has('beam') && Math.abs(st.px - d[0]) < 14 && Math.abs(st.py - (d[1] + OFF)) < 24 && t > (phase === 0 ? 0.75 : gotAt + 0.9) && phase < 2){
             const b = await btn(rec, '#gravBtn');
-            await rec.down('beam', b.x, b.y); beamAt = t; cue['beam' + (phase + 1)] = t;
+            await rec.down('beam', b.x, b.y); cue['beam' + (phase + 1)] = t;
         }
-        const filled = (st.inv || []).filter(Boolean).length;
-        if(rec.fing.has('beam') && filled >= 3 + phase){ await rec.up('beam'); cue['got' + (phase + 1)] = t; gotAt = t; phase++; }
+        if(rec.fing.has('beam') && done(st)){ await rec.up('beam'); cue['got' + (phase + 1)] = t; gotAt = t; if(phase === 0) cue.fuel = st.fu; phase++; }
         await rec.frame();
-        if(phase >= 2 && t - gotAt > 1.15) break;
+        if(phase >= 2 && t - gotAt > 1.3) break;
     }
     if(phase < 2) throw new Error('BEAM 획득 실패: ' + JSON.stringify(rec.st));
-    cue.poster = cue.beam1 + 0.7;
+    cue.fuelEnd = rec.st.fu;
+    cue.poster = cue.beam1 + 0.8;
+    return cue;
+}
+/* ---------------- 장 3: 피버 (목성) ----------------
+   별가루 리본을 쓸어 담아 기체 둘레 고리를 100% 로 → FEVER! 5초 동안 운석에 몸통 박치기 → 피버 끝.
+   고리는 64% 에서 시작(녹화 보정 — 앞선 별가루·스침으로 모은 것으로), 별가루 8알 ×5 = +40 */
+async function clipFever(rec){
+    const e = rec.e, cue = {};
+    await e.ev('__R.noHaz()');
+    await e.ev('(function(){ missionsCompletedZones.add(4); depotsSpawnedZones.add("4-0"); depotsSpawnedZones.add("4-1"); return 1; })()');   /* 목성 위성 미션·정규 보급은 이 장의 주제가 아니다 */
+    await jump(rec, 4, 3.0);
+    await rec.skip(5200);                      /* 목성 도착 카드·1:00 기록 배지가 걷힐 때까지 */
+    await e.ev(`(function(){ depots.length = 0; bullets.length = 0; player.x = 182; player.y = 500; __R.fuel(0.71, 0.66);
+        const F = szFS(); F.g = 64; F.dust.length = 0; F.q.length = 0; F.qi = 0;
+        const now = elapsedMs;
+        for(let j = 0; j < 8; j++){ const y = 418 - j * 40, a = (y + 14) / 84, x0 = 176 + 34 * Math.sin(j * 0.8 + 0.6);
+            F.dust.push({t: now - a * 1000, x0, x: x0, y, vy: 84, v: 5, st: 0, ph: (x0 * 0.137) % 6.2832, sp: 0, hold: 0, vx: 0, vv: 0}); }
+        return F.dust.length; })()`);
+    await rec.skip(STEP * 2);
+    const S0 = { x: 330, y: TBH + 590 };
+    const rocks = async (list) => { if(list.length) await e.ev('(function(){ ' + list.map(r => `__R.rock(${r.map(v => Math.round(v * 10) / 10).join(',')});`).join('') + ' return 1; })()'); };
+    const rnd = (() => { let x = 20261008; return () => { x = (x * 1103515245 + 12345) >>> 0; return x / 4294967296; }; })();
+    let feverAt = -1, endAt = -1, next = 0, tgt = null, back = false;
+    for(let f = 0; f < 300; f++){
+        const t = rec.t(), st = rec.st, fg = st.fg || [0, 0, 0];
+        if(f === 5) await rec.down('steer', S0.x, S0.y);
+        if(st.fev && feverAt < 0){ feverAt = t; cue.fever = t; next = t + 0.35; await e.ev('(function(){ __R.avoid.on = false; return 1; })()'); }
+        if(feverAt >= 0 && !st.fev && endAt < 0){ endAt = t; cue.end = t; }
+        if(rec.fing.has('steer')){
+            if(feverAt < 0){
+                /* 별가루 리본을 따라 위로 — 가장 가까운(아직 안 먹은) 별가루 쪽 */
+                const dust = await e.ev('(function(){ const F = szFS(); let b = null, bd = 1e9; for(const m of F.dust){ if(m.st) continue; const d = Math.abs(m.y - player.y) + Math.abs(m.x - player.x) * 0.5; if(m.y < player.y + 10 && d < bd){ bd = d; b = [m.x, m.y]; } } return b; })()');
+                if(dust) await rec.steer(dust[0], dust[1] + 6, 330, 2400);
+                else await rec.steer(st.px, Math.max(220, st.py - 30), 200);
+            } else if(endAt < 0 && fg[1] > 450){
+                /* 피버 — 가까운 운석으로 돌진 (화면 위 2/3 안에서) */
+                const b = await e.ev('(function(){ let b = null, bd = 1e9; for(const r of bullets){ if(r.zk || r.y < 40 || r.y > 560 || r.x < 10 || r.x > 350) continue; const d = Math.hypot(r.x - player.x, r.y - player.y); if(d < bd){ bd = d; b = [r.x, r.y]; } } return b; })()');
+                if(b) tgt = b;
+                if(tgt) await rec.steer(Math.max(30, Math.min(330, tgt[0])), Math.max(170, Math.min(520, tgt[1])), 360, 3200);
+            } else {
+                /* 피버 끝 무렵 — 가운데로 물러나며 회피 보정 다시 켬 */
+                if(!back){ back = true; await e.ev('(function(){ __R.avoid.on = true; __R.avoid.minMiss = 32; for(let i = bullets.length - 1; i >= 0; i--){ const r = bullets[i]; if(Math.hypot(r.x - player.x, r.y - player.y) < 120) bullets.splice(i, 1); } return 1; })()'); }
+                await rec.steer(180, 430, 200, 1500);
+            }
+        }
+        /* 피버 중 운석 — 위·옆에서 기체 쪽으로 (끝나기 0.7초 전에 멈춘다) */
+        if(feverAt >= 0 && endAt < 0 && fg[1] > 700 && t >= next){
+            const L = [];
+            for(let k = 0; k < (rnd() < 0.4 ? 2 : 1); k++){
+                const side = rnd(), sp = 170 + rnd() * 90;
+                if(side < 0.6){ const x = 30 + rnd() * 300; L.push([x, -24, st.px + (rnd() - 0.5) * 120, st.py, sp]); }
+                else { const L0 = side < 0.8, y = 120 + rnd() * 260; L.push([L0 ? -24 : 384, y, st.px, st.py + (rnd() - 0.5) * 80, sp]); }
+            }
+            await rocks(L); next = t + 0.2 + rnd() * 0.12;
+        }
+        await rec.frame();
+        if(endAt >= 0 && t - endAt > 0.85) break;
+    }
+    if(feverAt < 0 || endAt < 0) throw new Error('피버가 안 켜짐/안 끝남: ' + JSON.stringify(rec.st));
+    cue.poster = cue.fever + 1.4;
     return cue;
 }
 /* ---------------- 장 4: 아이템 (천왕성) ----------------
@@ -681,9 +750,8 @@ async function main(){
             say('에러', JSON.stringify(await e.ev('__R.errs')), JSON.stringify(e.exc.slice(0, 5)));
             return;
         }
-        const FN = { sat: clipSat, beam: clipBeam, items: clipItems };
-        /* fever.mp4 — 2026-10-07 녹화 그대로 둔다(플로팅·5칸 UI 와 같고 바뀐 아이템·SAT 가 화면에 없다). 다시 찍어야 하면 여기에 clipFever 를 더한다 */
-        const CRF = { sat: 30, beam: 30, items: 31 };
+        const FN = { sat: clipSat, beam: clipBeam, fever: clipFever, items: clipItems };
+        const CRF = { sat: 30, beam: 30, fever: 31, items: 31 };
         const LSX = { sat: { szx_ctl_tip: '0' } };
         const report = {};
         for(let ci = 0; ci < CLIPS.length; ci++){
