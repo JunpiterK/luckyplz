@@ -27415,21 +27415,24 @@ function Core(ac, dest, opt){
     let nOff = 0;
 
     /* ── 곡 위치·시계 ── */
-    let S = null, nextS = null, fi = 0, bar = 0, step = 0, pass = 0, nextT = 0, barT = 0, sd = 0.125;
+    let S = null, nextS = null, nextFi = 0, fi = 0, bar = 0, step = 0, pass = 0, nextT = 0, barT = 0, sd = 0.125;
     function setSd(){ sd = 60 / S.bpm / S.beatSteps; }
     C.song = () => S;
     C.setSong = function(cs){ S = cs; nextS = null; fi = 0; bar = 0; step = 0; pass = 0; setSd(); for(const tr of T) tr.f.frequency.value = (S.V[tr.n].cut || 6000); for(const tr of T) tr.f.Q.value = S.V[tr.n].q || 0.5; };
-    C.queueSong = function(cs){ if(!S || cs === S){ if(!S) C.setSong(cs); return; } nextS = cs; };
+    /* MP4b — at = 새 곡을 form 의 몇 번째 구역부터(보스 뒤 막 곡을 끊긴 다음 구역부터 잇는다). 지금 곡을 다시 부르면 대기 중인 교체를 취소 */
+    C.queueSong = function(cs, at){ if(!S){ C.setSong(cs); return; } if(cs === S){ nextS = null; return; } nextS = cs; nextFi = at | 0; };
+    C.fi = () => fi;
+    C.secLog = null;   /* MP4b — 오프라인 녹음만: [마디 머리 시각, 곡, 구역] */
     C.startAt = function(t){ nextT = t; barT = t; step = 0; bar = 0; fi = 0; };
     C.beat = () => sd * S.beatSteps;
     C.barDur = () => sd * S.steps;
     /* 재개 — 패턴 위치는 그대로, 시계만 t 로 민다 */
     C.reanchor = function(t){ if(nextT < t){ const d = t - nextT; nextT += d; barT += d; } };
     function barAdvance(){
-        if(nextS){ S = nextS; nextS = null; fi = 0; bar = 0; setSd(); for(const tr of T){ tr.f.frequency.setTargetAtTime(S.V[tr.n].cut || 6000, nextT, 0.05); } return; }
+        if(nextS){ S = nextS; nextS = null; fi = nextFi % S.form.length; nextFi = 0; bar = 0; setSd(); for(const tr of T){ tr.f.frequency.setTargetAtTime(S.V[tr.n].cut || 6000, nextT, 0.05); } if(C.secLog) C.secLog.push([nextT, S.id, S.secN[S.form[fi]]]); return; }
         const sec = S.secs[S.form[fi]];
         bar++;
-        if(bar >= sec.n){ bar = 0; fi = (fi + 1) % S.form.length; if(fi === 0) pass++; }
+        if(bar >= sec.n){ bar = 0; fi = (fi + 1) % S.form.length; if(fi === 0) pass++; if(C.secLog) C.secLog.push([nextT, S.id, S.secN[S.form[fi]]]); }
     }
     C.pos = () => ({sec: S ? S.secN[S.form[fi]] : null, bar: bar, step: step, pass: pass, nextT: nextT, barT: barT, song: S ? S.id : null});
     C.pump = function(tEnd, tNow){
@@ -27740,35 +27743,165 @@ function Core(ac, dest, opt){
      drum: k 킥 · s 스네어 · c 클랩 · h 닫힌 하이햇 · o 열린 하이햇 · l 낮은 탐 · t 탐   (대문자 = 강세 ×1.35)
      heart: x 강(lub) · y 약(dub)
    코드: 로마 숫자, 조성 음계 기준 — 대문자 장 · 소문자 단 · '°' 감 · '+' 증 · 뒤에 7 · maj7 · sus2 · sus4 · 앞에 b/# (예 'bVII', 'V7', 'ii°')
-   변주: 같은 길이의 다른 구역(A2 등)을 만들어 form 에 넣는다(리듬 치환·oct 변경·카운터 선율) */
-const MP4_SONGS = {
-    v: 1,
-    /* MP4a 엔진 검증용 임시 데모 1곡 — MP4b 가 막별 곡으로 바꾼다 */
-    songs: {
-        demo: {
-            id: 'demo', bpm: 120, key: 'D', mode: 'minor', swing: 0,
-            levels: {breath: {pad: 2.1}},
-            sections: {
-                A: {bars: 4, chords: ['i', 'VI', 'III', 'VII'],
-                    bass: ['0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.2.3.'],
-                    pad: 'x---------------',
-                    drum: 'k.......k.k.....|....s.......s...|..h...h...h...hh',
-                    lead: ['7---5---4-3-4---', '5---4---3-2-0---', '4-5-7---9-7-5---', '6---5-4-3---2---'],
-                    arp: '0123210301232103',
-                    heart: 'x..y....x..y....'},
-                B: {bars: 4, chords: ['iv', 'VI', 'i', 'VII'],
-                    bass: ['0..0..0.0..0..3.', '0..0..0.0..0..3.', '0..0..0.0..0..3.', '0..0..0.0.2.3.2.'],
-                    pad: 'x-------x-------',
-                    drum: 'k.......k.k.....|....s.......s.s.|..h.h.h.h.h.h.h.',
-                    lead: ['a---9---7---5---', '9---7-5-4---2---', '7---5---4-5-7---', '9---8---7-------'],
-                    arp: '0210321003210321',
-                    heart: 'x..y....x..y....'}
-            },
-            form: ['A', 'A', 'B', 'A']
-        }
-    },
-    act: ['demo']
-};
+   변주: 같은 길이의 다른 구역(A2 등)을 만들어 form 에 넣는다(리듬 치환·oct 변경·카운터 선율)
+   boss: { <SZB_BOSS id>: <곡 id> }  (MP4b — 보스 등장(SZE boss start) 때 다음 마디 머리에서 그 곡으로, 끝나면 막 곡의 끊긴 다음 구역부터. 없으면 MP4a 그대로) */
+/* ═══ MP4b 작곡 (2026-10-09) — 막 곡 5 + 보스 곡 5 · 설계 docs/SPACEZ_MASTERPIECE_PLAN.md 4장 MP4b ═══
+   막마다 조성이 반음씩 오른다 D→E♭→E→F→F♯, 템포 112→116→120→124→128(같은 곡을 오래 들어도 '올라간다'는 감각).
+   1 앞마당 = D 도리안(단조인데 IV 가 장조 — 럭키의 밝은 장난기) · 2 이웃 별 = E♭ 리디안(#4 = 경이, 견우직녀의 maj7)
+   3 별의 요람과 무덤 = E 화성단음계(장조 V = 극적, 요람 구역은 부드럽게) · 4 은하 밖 = F 단조(VI–VII–i 넓은 진행·♭II 공허·장조로 열리는 안드로메다)
+   5 시간의 끝 = F♯ 단조, 패드가 유리종(삼각파 종 엔벌로프·디튠)·arp 사인, 마지막 구역은 F♯ 장조(끝은 밝게)
+   보스 5 = lead 모티프 5: 협곡 당김음 리프 · 충격파 옥타브 맥박 · 초신성 상승 아르페지오 · S2 프리지안 반음 · 제트 16분 질주.
+   보스가 뜨면 보스 곡(첫 마디 = 경보 1마디), 끝나면 막 곡을 처음이 아니라 끊긴 다음 구역부터 잇는다(boss 표 · 엔진 MP4b 표시 4곳).
+   반복 피로: 막 곡 한 바퀴 = 8마디 구역 7~10개(60~84마디, 2.0~2.7분). 한 바퀴 안에 같은 구역 두 번 없음 — 2회째는 변주 구역
+   (리듬 치환 · 베이스 한 옥타브 위 대선율 · 코드 색 7/maj7/sus · 드럼 교체 · 8마디째 필인). 국면이 층을 바꾸므로 같은 마디도 다르게 들린다.
+   lead 는 보스 곡에만 둔다(막 곡의 보스 예고 국면 첫 마디가 엉뚱한 선율로 시작하지 않게). 상표·실존 곡 차용 없음 — 전부 이 표의 도수로 새로 썼다 */
+const MP4_SONGS = (function(){
+const R = (n,p,l) => { const a = []; for(let i = 1; i < n; i++) a.push(p); a.push(l); return a; };   /* n마디 — 마지막 마디만 l(필인) */
+const X = (b,o) => Object.assign({},b,o),C = (s) => s.split(' ');
+/* 드럼 */
+const D4 = 'k...k...k...k...|....s.......s...|..h...h...h...h.',D4b = 'k...k...k...k.k.|....s.......s...|h.h.h.h.h.h.h.ho',
+    D4c = 'k...k...k...k...|....c.......c...|..h...h...h...ho',DH = 'k.......k.k.....|........s.......|..h...h...h...h.',
+    DH2 = 'k.......k..k....|........s.....s.|h.h.h.h.h.h.h.h.',DBk = 'k.....k...k.....|....s.......s...|h.hhh.hhh.hhh.hh',
+    DF = 'k...k...k...k...|....s...s.s.sSSS|..h...h.........',DT = 'k...k...k.......|....s.......s...|..........l.t.T.',
+    DS = 'k.......k.......|................|..h...h...h...h.';
+/* 화음 리듬 · 피버 arp · 마지막 하트 */
+const PH = 'x-------x-------',PW = 'X---------------',PQ = 'x---x---x---x---',PT = 'x-------x---x---',
+    A1 = '0123012301230123',A2 = '3210321032103210',A3 = '0132013201320132',A4 = '0123432101234321',A5 = '0212402124021240',
+    HT = 'x.y.....x.y.....';
+const S = (o) => X({bars:8,pad:PH,arp:A1,heart:HT},o);   /* 기본 8마디 */
+const B8 = '0.3.0.3.0.3.0.3.',B8f = '0.3.0.3.2.3.4.5.',BSy = '0..3..0.0..3..0.',BSyf = '0..3..0.2.3.4.5.',
+    BUp = '0.1.2.3.2.1.0.1.',BUpf = '0.1.2.3.4.5.4.3.',BW = '0---------------';
+const LVL = {calm:{pad:1.2},breath:{pad:2}};
+
+/* 1막 앞마당 — D 도리안 */
+const h1A = S({chords:C('i VII IV IV i VII III IV'),bass:R(8,B8,B8f),drum:R(8,D4,DF)}),
+    h1B = S({chords:C('III IV v IV III IV VII VII'),bass:R(8,'0.0.0.0.0.0.3.2.','0.0.0.0.2.2.4.4.'),pad:PQ,drum:R(8,D4c,DF),arp:A4}),
+    h1C = S({chords:C('ii IV i i ii IV VIIsus4 VII'),bass:'0-------3---2---',pad:PW,drum:R(8,DH,DT),arp:A2});
+const home = {bpm:112,key:'D',mode:'dorian',gain:0.95,levels:LVL,sections:{
+    A:h1A,
+    A2:X(h1A,{bass:R(8,BSy,BSyf),drum:R(8,D4b,DT),arp:A3}),
+    B:h1B,
+    C:h1C,
+    A3:X(h1A,{chords:C('i7 VII IV IV7 i7 VII IIImaj7 IV'),oct:{bass:1},bass:R(8,BUp,BUpf),drum:R(8,DBk,DF),arp:A5}),
+    B2:X(h1B,{chords:C('IIImaj7 IV v7 IV IIImaj7 IV VII IV'),bass:R(8,'0..0..3.0..0..3.',BSyf),pad:PT,drum:R(8,D4b,DT),arp:A3}),
+    D:S({bars:4,chords:C('i i VII IV'),bass:BW,pad:PW,drum:DS}),
+    C2:X(h1C,{chords:C('ii7 IV i7 i ii7 IV VIIsus4 VII'),bass:'0.....3.....2...',drum:R(8,DH2,DF)}),
+    A4:X(h1A,{pad:PT,drum:R(8,D4c,DT),arp:A4})
+},form:['A','A2','B','C','A3','B2','D','C2','A4']};
+
+/* 2막 이웃 별 — E♭ 리디안 */
+const s2A = S({chords:C('I II iii II I II vi V'),bass:R(8,'0.2.3.2.0.2.3.2.','0.2.3.2.0.2.4.5.'),drum:R(8,D4c,DF),arp:A2}),
+    s2B = S({chords:C('vi V II I vi V II II'),bass:R(8,'0.0.2.0.3.0.2.0.','0.0.2.0.3.3.4.4.'),pad:PQ,drum:R(8,D4,DF)}),
+    s2C = S({chords:C('vi7 iii7 II Imaj7 vi7 iii7 II V'),bass:'0-------1---2---',pad:PW,drum:R(8,DH,DT),arp:A3});
+const stars = {bpm:116,key:'Eb',mode:'lydian',voices:{bass:{cut:560},pad:{cut:1900}},gain:0.95,levels:LVL,sections:{
+    A:s2A,
+    A2:X(s2A,{chords:C('Imaj7 II iii7 II Imaj7 II vi7 Vsus4'),bass:R(8,'0..2..3.0..2..3.',BSyf),pad:PT,drum:R(8,D4b,DT),arp:A4}),
+    B:s2B,
+    C:s2C,
+    A3:X(s2A,{oct:{bass:1},bass:R(8,'0.1.2.1.3.2.1.2.',BUpf),drum:R(8,DBk,DF),arp:A5}),
+    D:S({bars:4,chords:C('I II I II'),bass:BW,pad:PW,drum:DS}),
+    B2:X(s2B,{chords:C('vi7 V II Imaj7 vi7 V IIsus4 II'),bass:R(8,'0..0..2.3..0..2.','0..0..2.3.3.4.4.'),pad:PT,drum:R(8,D4c,DT),arp:A3}),
+    C2:X(s2C,{bass:'0.....1.....2...',drum:R(8,DH2,DF),arp:A1}),
+    A4:X(s2A,{pad:PQ,drum:R(8,D4b,DF),arp:A4})
+},form:['A','A2','B','C','A3','D','B2','C2','A4']};
+
+/* 3막 별의 요람과 무덤 — E 화성단음계 */
+const c3A = S({chords:C('i VI iv V i VI iv V'),bass:R(8,'0.0.3.0.0.0.3.0.','0.0.3.0.2.3.4.3.'),drum:R(8,D4,DF)}),
+    c3B = S({chords:C('VI bVII i i VI bVII V V'),bass:R(8,B8,'0.3.0.3.4.3.2.1.'),pad:PQ,drum:R(8,D4b,DT),arp:A4}),
+    c3C = S({chords:C('iv i VI III iv i ii° V'),bass:'0-------2-------',pad:PW,drum:R(8,DH,DF),arp:A3});
+const cradle = {bpm:120,key:'E',mode:'harmonic',penta:[0,2,3,5,7],voices:{bass:{cut:430,q:6}},gain:0.95,levels:LVL,sections:{
+    A:c3A,
+    A2:X(c3A,{chords:C('i VI III V i VI iv V7'),bass:R(8,'00.00.00.00.0.3.','00.00.00.0.3.4.5'),drum:R(8,DBk,DT),arp:A5}),
+    B:c3B,
+    C:c3C,
+    A3:X(c3A,{oct:{bass:1},bass:R(8,'0.1.2.1.0.1.2.3.','0.1.2.3.2.1.0.2.'),pad:PT,drum:R(8,D4c,DF),arp:A2}),
+    D:S({bars:4,chords:C('i VI ii° V'),bass:BW,pad:PW,drum:DS}),
+    B2:X(c3B,{chords:C('VImaj7 bVII i7 i VImaj7 bVII V7 V'),bass:R(8,BSy,'0..3..0.4.3.2.1.'),drum:R(8,DH2,DF)}),
+    A4:X(c3A,{pad:PQ,drum:R(8,D4b,DT),arp:A4})
+},form:['A','A2','B','C','A3','D','B2','A4']};
+
+/* 4막 은하 밖 — F 단조 */
+const v4A = S({chords:C('i VI III VII i VI III VII'),bass:R(8,'0-------0-3-....','0-------2-3-4-5-'),pad:PW,drum:R(8,DH,DT)}),
+    v4B = S({chords:C('iv VI i VII iv VI VII VII'),bass:R(8,'0..0..0.0..0..0.',BSyf),drum:R(8,D4,DF),arp:A4}),
+    v4C = S({chords:C('i bII i bII i bII VII VII'),bass:'0.......0.......',drum:R(8,DH2,DT),arp:A3}),
+    v4D = S({chords:C('VI VII III III VI VII I I'),bass:R(8,B8,B8f),pad:PQ,drum:R(8,D4c,DF),arp:A4});
+const voidS = {bpm:124,key:'F',mode:'minor',voices:{pad:{cut:1150,det:13}},gain:0.95,levels:LVL,sections:{
+    A:v4A,
+    A2:X(v4A,{chords:C('i7 VImaj7 III VII i7 VImaj7 III VIIsus4'),bass:R(8,B8,B8f),pad:PH,drum:R(8,D4,DF),arp:A2}),
+    B:v4B,
+    C:v4C,
+    A3:X(v4A,{oct:{bass:1},bass:R(8,BUp,BUpf),pad:PT,drum:R(8,DBk,DF),arp:A5}),
+    D:v4D,
+    E:S({bars:4,chords:C('i i VI VI'),bass:BW,pad:PW,drum:DS}),
+    B2:X(v4B,{chords:C('iv7 VImaj7 i7 VII iv7 VImaj7 VIIsus4 VII'),bass:R(8,'0.0.3.0.0.0.3.0.',B8f),pad:PT,drum:R(8,D4b,DT)}),
+    C2:X(v4C,{bass:'0.....0.....3...',pad:PW,drum:R(8,DH,DF),arp:A1}),
+    A4:X(v4A,{pad:PH,drum:R(8,D4c,DT),arp:A4}),
+    D2:X(v4D,{chords:C('VImaj7 VII IIImaj7 III VImaj7 VIIsus4 I I'),bass:R(8,BSy,BSyf),drum:R(8,D4b,DF),arp:A5})
+},form:['A','A2','B','C','A3','D','E','B2','C2','A4','D2']};
+
+/* 5막 시간의 끝 — F♯ 단조 → 장조, 유리종 */
+const PB1 = 'x.....x.....x...',PB2 = 'x...x...x...x...',PB4 = 'x.....x.x.....x.';
+const e5A = S({chords:C('i VI III VII i VI III VII'),bass:R(8,B8,B8f),pad:PB1,drum:R(8,D4,DF)}),
+    e5B = S({chords:C('iv VI VII i iv VI VII VII'),bass:R(8,BSy,BSyf),pad:PB2,drum:R(8,D4c,DT),arp:A4}),
+    e5C = S({chords:C('VI VII i i VI VII III III'),bass:'0-------2-------',drum:R(8,DH,DF),arp:A3}),
+    e5D = S({chords:C('I III IV I I III IV IV'),bass:R(8,B8,'0.3.2.3.4.3.5.3.'),pad:PB4,drum:R(8,D4b,DF),arp:A5});
+const end = {bpm:128,key:'F#',mode:'minor',
+    voices:{pad:{wave:'triangle',oct:5,cut:6500,q:0.5,env:[0.002,1.1,0,1.3],gain:0.06,det:6},arp:{wave:'sine',oct:6,gain:0.07},bass:{cut:420}},
+    gain:0.95,levels:LVL,sections:{   /* levels 는 전 곡 같은 값 — 곡이 바뀌는 마디에는 국면 세기를 다시 걸지 않으므로 */
+    A:e5A,
+    A2:X(e5A,{chords:C('i VI III VII i VI iv V'),bass:R(8,'0.0.3.0.0.0.3.0.','0.0.3.0.2.3.4.3.'),pad:PB4,drum:R(8,DBk,DT),arp:A2}),
+    B:e5B,
+    C:e5C,
+    D:e5D,
+    A3:X(e5A,{chords:C('i7 VImaj7 III VII i7 VImaj7 III VIIsus4'),oct:{bass:1},bass:R(8,BUp,BUpf),pad:PB2,drum:R(8,D4c,DF),arp:A1}),
+    B2:X(e5B,{pad:PB1,drum:R(8,DH2,DF),arp:A3}),
+    D2:X(e5D,{chords:C('Imaj7 III IV I Imaj7 III IVsus2 I'),pad:PB2,drum:R(8,D4,DT),arp:A4})
+},form:['A','A2','B','C','D','A3','B2','D2']};
+
+/* 보스 — 첫 구역 W = 경보 1마디. lead 는 한 옥타브 낮춰(4) 귀를 찌르지 않게. levels 는 막 곡과 같게(보스 끝 숨 고르기의 층 세기는 그 순간 곡의 levels 로 걸린다) */
+const bv = {lead:{oct:4,cut:2800}},BB = '0.0.3.0.0.0.3.0.',BB2 = '0.000.000.000.00',BBH = '0-------0-.0-.3.',B8th = '0.0.0.0.0.0.0.0.';
+const kA = S({bars:4,chords:C('i i VI V'),bass:BB,drum:R(4,D4b,DF),lead:C('0-0-2-0-4---2-0- 0-0-2-0-4---5-4- 5-5-7-5-9---7-5- 4-4-6-4-8---6-4-')});
+const canyon = {bpm:120,key:'D',mode:'harmonic',penta:[0,2,3,5,7],voices:bv,gain:0.9,levels:LVL,sections:{
+    W:S({bars:1,chords:C('V'),bass:B8th,drum:'k.l.k.l.k.t.k.tt|................|h.h.h.h.h.h.h.h.',lead:'4-4-5-5-6-6-7---'}),
+    A:kA,
+    A2:X(kA,{bass:BB2,drum:R(4,DBk,DT),lead:C('0..0..2.4---2-0- 0..0..2.4---5-4- 5..5..7.9---7-5- 4..4..6.8---6-4-')}),
+    B:S({bars:4,chords:C('iv i VI V'),bass:BBH,pad:PW,drum:R(4,D4c,DF),lead:C('3-------5---7--- 7-------4---2--- 5-------7---9--- 8-------6---4---')})
+},form:['W','A','A2','B','A','A2','B']};
+const xA = S({bars:4,chords:C('i i VII VI'),bass:B8,drum:R(4,D4,DF),lead:C('0.70.70.4-2-0--- 0.70.70.4-5-4-2- 6.d6.d6.3-1-6--- 5.c5.c5.7-9-7---')});
+const shock = {bpm:126,key:'Eb',mode:'minor',voices:bv,gain:0.9,levels:LVL,sections:{
+    W:S({bars:1,chords:C('V'),bass:B8th,drum:'k...k...k.k.kkkk|................|h.h.h.h.h.h.h.h.',lead:'4.4.4.4.b.b.b.b.'}),
+    A:xA,
+    A2:X(xA,{bass:BB2,drum:R(4,D4b,DT),lead:C('0.70.70.4-2-0--- 0.70.70.b-9-7--- 6.d6.d6.3-1-6--- 5.c5.c5.2---0---')}),
+    B:S({bars:4,chords:C('iv VI VII V'),bass:BBH,pad:PW,drum:R(4,DH2,DF),lead:C('3-------5---7--- 5-------7---9--- 6-------8---a--- 4-------4---b---')})
+},form:['W','A','A2','B','A2','B']};
+const nA = S({bars:4,chords:C('i VI iv V'),bass:BB,drum:R(4,D4b,DF),lead:C('0-2-4-7-9-b-e--- 5-7-9-c-e------- 3-5-7-a-c-e----- 4-6-8-b-d-b-8-6-')});
+const nova = {bpm:132,key:'E',mode:'harmonic',penta:[0,2,3,5,7],voices:bv,gain:0.9,levels:LVL,sections:{
+    W:S({bars:1,chords:C('V'),bass:B8th,drum:'k...k...k...k.k.|............ssss|h.h.h.h.h.h.h.h.',lead:'4-6-8-b-4-6-8-b-'}),
+    A:nA,
+    A2:X(nA,{bass:BB2,drum:R(4,DBk,DT),lead:C('0.2.4.7.9.b.e.b. 5.7.9.c.e.c.9.7. 3.5.7.a.c.e.c.a. 4.6.8.b.d.b.8.6.')}),
+    B:S({bars:4,chords:C('VI III iv V'),bass:BBH,pad:PW,drum:R(4,D4c,DF),lead:C('c-9-7-5-7-9-c--- 9---b---9---4--- a---7---5---3--- b-a-8-6-4-------')})
+},form:['W','A','A2','B','A2','B']};
+const qA = S({bars:4,chords:C('i II i VII'),bass:BBH,drum:R(4,DH,DT),lead:C('0-1-0---4---2--- 1---3-1-5---3--- 0-1-0---7---4--- 6---3---6-5-6---')});
+const sgr = {bpm:120,key:'E',mode:'phrygian',voices:{lead:bv.lead,bass:{cut:380,q:7}},gain:0.9,levels:LVL,sections:{
+    W:S({bars:1,chords:C('i'),bass:BW,pad:PW,drum:'k.......k.......|................|h.h.h.h.h.h.h.h.',lead:'0-1-0-1-0-1-0-1-'}),
+    A:qA,
+    A2:X(qA,{bass:'0..0..0.0..0..0.',drum:R(4,DH2,DF),lead:C('0-1-0-1-4-5-4--- 1---3-1-5-6-5--- 0-1-0---7-8-7--- 6---3---6-5-6---')}),
+    B:S({bars:4,chords:C('iv i II VII'),bass:'0.......0.3.....',pad:PW,drum:R(4,DH,DF),lead:C('a-c-a---7---3--- 7---4---2---0--- 8---a---c---8--- d---a---6-------')})
+},form:['W','A','A2','B','A2','B']};
+const jA = S({bars:4,chords:C('i VI VII i'),bass:BB,drum:R(4,D4b,DF),lead:C('0-2-4-2-0-2-4-7- 5-7-9-7-5-7-9-c- 6-8-a-8-6-8-a-d- 7-------4---2---')});
+const jet = {bpm:136,key:'F',mode:'minor',voices:bv,gain:0.9,levels:LVL,sections:{
+    W:S({bars:1,chords:C('V'),bass:B8th,drum:'k.k.k.k.k.k.k.k.|............ssss|hhhhhhhhhhhhhhhh',lead:'4-b-4-b-4-b-4-b-'}),
+    A:jA,
+    A2:X(jA,{bass:BB2,drum:R(4,DBk,DT),lead:C('0242024202420247 5797579757975797 68a868a868a868ad 7-------4---2---')}),
+    B:S({bars:4,chords:C('iv i VI V'),bass:BBH,pad:PW,drum:R(4,D4c,DF),lead:C('3-------5------- 7-------4---2--- 5-------9------- 4-------8-------')}),
+    C:S({bars:4,chords:C('VI VII i i'),bass:BB,pad:PQ,drum:R(4,D4b,DT),lead:C('c-------9------- d-------a------- e-------b------- e---------------')})
+},form:['W','A','A2','B','A','C','A2','B','C','A2']};
+
+return {v:1,songs:{home:home,stars:stars,cradle:cradle,void:voidS,end:end,canyon:canyon,shock:shock,nova:nova,s2:sgr,jet:jet},
+    act:['home','stars','cradle','void','end'],
+    boss:{canyon:'canyon',shock:'shock',nova:'nova',s2:'s2',jet:'jet'}};
+})();
+SZMP4.songs = MP4_SONGS;   /* 게이트 mp4b 가 읽는다(구조·반복 검사) */
 /*</sz:mod:mp4:song>*/
 
 /* ══════════ 곡 묶음 ══════════ */
@@ -27783,6 +27916,8 @@ function loadBundle(def){
         if(!B.act.length) B.act = Object.keys(B.songs).slice(0, 1);
     }
     if(!B.act.length) throw new Error('song: 곡 없음');
+    B.boss = {};   /* MP4b — 보스 id → 컴파일된 곡 */
+    if(def.boss) for(const k of Object.keys(def.boss)) if(B.songs[def.boss[k]]) B.boss[k] = B.songs[def.boss[k]];
     return B;
 }
 function actOf(z){ return z >= 26 ? 4 : z >= 20 ? 3 : z >= 15 ? 2 : z >= 9 ? 1 : 0; }
@@ -27790,6 +27925,14 @@ function songForAct(a){
     if(!BUNDLE) return null;
     for(let i = clamp(a | 0, 0, 4); i >= 0; i--){ const id = BUNDLE.act[i]; if(id && BUNDLE.songs[id]) return BUNDLE.songs[id]; }
     return BUNDLE.songs[BUNDLE.act[0]];
+}
+/* MP4b — 보스 곡 교대. st = {boss, ret}(실시간 LV · 오프라인 녹음 각자). 시작: 다음 마디 머리에서 보스 곡(구역 0 = 경보 마디)
+   · 끝: 막 곡을 끊긴 구역의 다음 구역부터(보스 중에 막이 바뀌었으면 새 막 곡 처음부터). 보스 곡이 없으면 아무것도 안 한다(MP4a 그대로) */
+function bossSwap(B, c, st, id, k, actSong){
+    const bs = B && B.boss && B.boss[id];
+    if(!bs || !actSong) return;
+    if(k === 'start'){ if(st.boss !== id){ st.boss = id; st.ret = {s: actSong, fi: c.song() === actSong ? c.fi() + 1 : 0}; c.queueSong(bs, 0); } }
+    else if(st.boss === id){ st.boss = null; c.queueSong(actSong, st.ret && st.ret.s === actSong ? st.ret.fi : 0); }
 }
 let BROKEN = false;
 try{ BUNDLE = loadBundle(MP4_SONGS); }catch(e){ BROKEN = true; try{ console.warn('[SZAU] song', e); }catch(_){} }
@@ -27820,7 +27963,7 @@ function segIdx(S, e){
 }
 const LV = {
     st: 'off', hold: false, core: null, timer: 0, vol: 0.245, onFail: null, fails: 0, ahead: 0.12, lastTick: 0, muted: false,
-    run: false, seg: -1, act: 0, capUser: null, best: 0, recSaid: false,
+    run: false, seg: -1, act: 0, capUser: null, best: 0, recSaid: false, boss: null, ret: null,
     log: [], qlog: {n: 0, max: 0, sum: 0}, tk: {n: 0, sum: 0, max: 0, over: 0}, ev: {n: 0, sum: 0, max: 0}, startedAt: 0
 };
 function level(){ return (LV.muted || mutedNow()) ? 0 : LV.vol * CAL; }
@@ -27900,7 +28043,7 @@ const music = {
         try{
             const c = bootCore(ac);
             c.reset();
-            LV.act = 0;
+            LV.act = 0; LV.boss = null; LV.ret = null;
             c.setSong(songForAct(0));
             c.setCap(LV.capUser != null ? LV.capUser : (tierNow() >= 2 ? 3 : 6));
             const t = ac.currentTime + 0.06;
@@ -28060,6 +28203,7 @@ if(window.SZE){
         const c = LV.core, now = c.ac.currentTime;
         c.setMod('boss', k === 'start', now);
         if(k === 'start') vo('boss');
+        bossSwap(BUNDLE, c, LV, id, k, songForAct(LV.act));   /* MP4b — 보스 곡 */
     }));
     SZE.on('fever', evT(function(k){
         if(!live()) return;
@@ -28074,7 +28218,7 @@ if(window.SZE){
         const a = actOf(idx);
         if(a !== actOf(prev)){
             vo('act', a + 1);
-            if(a !== LV.act){ LV.act = a; const s = songForAct(a); if(s) LV.core.queueSong(s); }
+            if(a !== LV.act){ LV.act = a; if(!LV.boss){ const s = songForAct(a); if(s) LV.core.queueSong(s); } }   /* MP4b — 보스 곡 중이면 보스 끝에서 새 막 곡 */
         } else vo('new_zone');
     }));
     SZE.on('death', function(){ voClear(); });
@@ -28108,7 +28252,9 @@ async function render(opt){
     const oc = new OAC(2, Math.ceil(secs * sr), sr);
     const c = Core(oc, oc.destination, {rich: opt.rich !== false});
     const B = opt.song ? loadBundle(opt.song) : BUNDLE;
-    c.setSong(B.songs[B.act[0]]);
+    const s0 = (opt.id && B.songs[opt.id]) || B.songs[B.act[0]], bst = {boss: null, ret: null};   /* MP4b — opt.id = 시작 곡 */
+    c.setSong(s0);
+    c.secLog = [[0, s0.id, s0.secN[s0.form[0]]]];
     c.setCap(opt.cap || 6);
     const t0 = 0.05;
     c.startAt(t0);
@@ -28123,6 +28269,7 @@ async function render(opt){
         else if(e.k === 'mod') c.setMod(e.m, e.v, t);
         else if(e.k === 'graze') qd.push(c.note(t, e.n, 1));
         else if(e.k === 'hit'){ c.hitDip(t); c.duck(t, 250); }
+        else if(e.k === 'boss'){ c.setMod('boss', e.v === 'start', t); bossSwap(B, c, bst, e.id, e.v, s0); }   /* MP4b */
         if(e.name) marks.push([e.name, e.t]);
     }
     c.pump(secs, 0);
@@ -28138,7 +28285,7 @@ async function render(opt){
         for(let k = Math.floor(a * sr); k < Math.floor(b * sr); k++){ const v = (L[k] + R[k]) * 0.5; s += v * v; n++; const av = Math.max(Math.abs(L[k]), Math.abs(R[k])); if(av > pk) pk = av; }
         seg.push({name: marks[i][0], from: marks[i][1], rms: db(Math.sqrt(s / Math.max(1, n))), peak: db(pk)});
     }
-    return {buf: buf, sr: sr, secs: secs, seg: seg, notes: c.notes, quant: qd, level: lv, cal: CAL};
+    return {buf: buf, sr: sr, secs: secs, seg: seg, notes: c.notes, quant: qd, level: lv, cal: CAL, secs_: c.secLog.map(r => [+(r[0] - t0).toFixed(2), r[1], r[2]])};
 }
 /* 게이트용 — WAV(16비트 스테레오) base64 조각 */
 async function renderWav(opt){
@@ -28152,7 +28299,7 @@ async function renderWav(opt){
     const parts = [], CH = 1 << 20;
     for(let o = 0; o < u8.length; o += CH){ let s = ''; const e = Math.min(u8.length, o + CH); for(let i = o; i < e; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(e, i + 8192))); parts.push(btoa(s)); }
     window.__SZAU_WAV = parts;
-    return {parts: parts.length, bytes: u8.length, seg: r.seg, secs: r.secs, notes: r.notes, quant: r.quant, cal: r.cal, level: r.level};
+    return {parts: parts.length, bytes: u8.length, seg: r.seg, secs: r.secs, notes: r.notes, quant: r.quant, cal: r.cal, level: r.level, sec: r.secs_};
 }
 
 /* ══════════ 공개 API ══════════ */
@@ -28203,7 +28350,7 @@ const API = {
             q: {n: LV.qlog.n, maxMs: +(LV.qlog.max * 1000).toFixed(1), avgMs: LV.qlog.n ? +(LV.qlog.sum / LV.qlog.n * 1000).toFixed(1) : 0},
             tick: {n: LV.tk.n, avgMs: LV.tk.n ? +(LV.tk.sum / LV.tk.n).toFixed(4) : 0, maxMs: +LV.tk.max.toFixed(3), over1ms: LV.tk.over},
             ev: {n: LV.ev.n, avgMs: LV.ev.n ? +(LV.ev.sum / LV.ev.n).toFixed(4) : 0, maxMs: +LV.ev.max.toFixed(3)},
-            vo: {loaded: Object.keys(VO.buf), played: VO.played.slice(), on: voOn()}, song: c && c.song() ? c.song().id : null, bus: c ? +c.bus.gain.value.toFixed(4) : null, level: level()};
+            vo: {loaded: Object.keys(VO.buf), played: VO.played.slice(), on: voOn()}, song: c && c.song() ? c.song().id : null, boss: LV.boss, act: LV.act, bus: c ? +c.bus.gain.value.toFixed(4) : null, level: level()};
     }
 };
 window.SZAU = API;

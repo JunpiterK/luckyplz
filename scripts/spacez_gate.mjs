@@ -42,6 +42,7 @@
      mp1        MP1 시작 화면(ko·en·ja×320·390: 버튼 ≤5·출발 엄지 영역·시트 20회 멱등·?mp1=0=MP0 서명)·단계 개방 1~3판·시드 판·링크 진입 (--mp1-nopin: 하네스 3판 고정 끔)
      mp3 · mp3assist · mp3shots  (MP3) A1 데스봄 유예·A2 블랙홀 버블·편한 비행·RPC·지연 검사 / ibot 편한 비행 ≥ 기본×1.5 / 장면·색각 시트  (ibot 옵션 --assist --mp3-db <p> --mp3-nobh --mp3-nodb)
      mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
+     mp4b       MP4b 작곡 — 곡 데이터 ≤12KB·막 5곡 조성/템포·반복 0·보스 lead 5종·보스 곡 교대(실시간)·청취 녹음 m4a 11개 (--rec-audio <dir>, --mp4b-norec)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -1126,6 +1127,228 @@ EXT_CMDS.mp4 = {
         row(G, 'SURGE RMS vs mp3 평균(-15.5dBFS)', su ? su.rms + 'dBFS' : '-', null, '±2dB (CAL ' + r.cal + ')', su && Math.abs(su.rms + 15.5) <= 2 ? 'PASS' : 'WARN');
     }
 };
+/*<gate:mp4b>*/
+/* MP4b (2026-10-09) — 작곡 게이트 'mp4b' [--rec-audio <dir>] [--mp4b-norec]
+   ① 정적(node vm, 브라우저 없음): 곡 펜스 코드 크기(주석 제외 ≤12KB) · 10곡 컴파일 · 막 5곡 조성·템포 서로 다름 · 막 곡 ≥32마디·한 바퀴 안 같은 구역 0회 반복
+      · 보스 5종 매핑·lead 모티프 서로 다름 · 패턴 한 줄 16스텝 · 보스 lead 강박(1·3박) 비화성음 0
+   ② 실시간(?mp4=1): 1막 곡 → 보스 canyon 등장 → ≤1마디+여유 안에 보스 곡·lead 층 → 끝 → 막 곡의 '다음 구역' /
+      보스 shock 중 존 9(2막) → 보스 곡 유지 → 끝에 2막 곡 처음 구역. 막별 실제 재생 시간(ZONES·SZB_BOSS) 대비 한 바퀴 길이(반복 피로 근거)
+   ③ 녹음(운영자 청취): 막 5 × 45s · 보스 5 × 30s · 154s 중앙값 판 재현(실제 리듬표 SZR_SEGS·보스 시각) → WAV → ffmpeg AAC 160k m4a
+      (기본 C:/code/python/luckyplz_wt/_mp4bout/listen). 칸별 RMS·최고값 · SURGE RMS vs mp3 -15.5dBFS · 인접 칸 급변 ≤6dB */
+import mp4bZlib from 'node:zlib';
+const MP4B_FF = A.ffmpeg || 'C:/ffmpeg/bin/ffmpeg.exe';
+function mp4bStatic(){
+    const src = fs.readFileSync(GAME_FILE, 'utf8');
+    const a = src.indexOf('/* ── 음악 이론 표 ── */'), b = src.indexOf('/* ── 자체 LCG');
+    const o = '/*<sz:mod:mp4:song>*/', c = '/*</sz:mod:mp4:song>*/';
+    const f0 = src.indexOf(o), f1 = src.indexOf(c);
+    if(a < 0 || b < 0 || f0 < 0 || f1 < 0) return { err: '펜스·이론 구역을 못 찾음' };
+    const fence = src.slice(f0, f1 + c.length);
+    const code = fence.slice(fence.indexOf('const MP4_SONGS')).replace(/\/\*[\s\S]*?\*\//g, '');
+    const ctx = { SZMP4: {} };
+    vm.createContext(ctx);
+    vm.runInContext(src.slice(a, b) + '\n' + fence + '\n;this.__S = MP4_SONGS; this.__C = compileSong; this.__ch = chordOf;', ctx);
+    const D = ctx.__S, out = { bytes: Buffer.byteLength(code), gz: 0, songs: {}, act: D.act.slice(), boss: Object.assign({}, D.boss), bad: [] };
+    out.gz = mp4bZlib.gzipSync(Buffer.from(code)).length;
+    for(const id of Object.keys(D.songs)){
+        const def = Object.assign({ id }, D.songs[id]);
+        const S = ctx.__C(def);
+        const bars = S.form.reduce((s, i) => s + S.secs[i].n, 0);
+        const names = S.form.map(i => S.secN[i]);
+        const dup = names.filter((n, i) => names.indexOf(n) !== i);
+        let nct = 0, nctW = 0;
+        for(const name of Object.keys(def.sections)){
+            const sc = def.sections[name];
+            for(const tn of ['bass', 'pad', 'drum', 'lead', 'arp', 'heart']){
+                const p = sc[tn]; if(p == null) continue;
+                for(const s of (Array.isArray(p) ? p : [p])) for(const lane of s.split('|')) if(lane.length !== S.steps) out.bad.push(id + '.' + name + '.' + tn + ' 길이 ' + lane.length);
+            }
+            if(!sc.lead) continue;
+            const cs = S.secs[S.secN.indexOf(name)];
+            for(let bi = 0; bi < cs.n; bi++){
+                const ch = ctx.__ch(sc.chords[bi % sc.chords.length], S.kp, S.scale), pcs = ch.tones.map(t => (ch.root + t) % 12);
+                for(const st of [0, 4, 8, 12]) for(const e of (cs.bars[bi].ev[st] || [])) if(e.t === 3 && !pcs.includes(e.m % 12)){ if(st % 8 === 0) nct++; else nctW++; }
+            }
+        }
+        const lead0 = def.sections.A && def.sections.A.lead ? JSON.stringify(def.sections.A.lead) : null;
+        out.songs[id] = { key: def.key, mode: S.mode, bpm: S.bpm, bars, sec: +(bars * 240 / S.bpm).toFixed(1), form: names, dup: dup.length, sections: S.secN.length, nct, nctW, lead0 };
+    }
+    return out;
+}
+const MP4B_ACT = [
+    { t: 0, k: 'ph', v: 'calm', name: 'calm' }, { t: 6, k: 'ph', v: 'surge', name: 'surge' },
+    ...Array.from({ length: 14 }, (_, i) => ({ t: 7 + i * 0.5 + (i % 3) * 0.07, k: 'graze', n: i + 1 })),
+    { t: 20, k: 'ph', v: 'breath', name: 'breath' }, { t: 27, k: 'ph', v: 'surge', name: 'surge2' },
+    { t: 33, k: 'mod', m: 'fever', v: true, name: 'fever' },
+    ...Array.from({ length: 8 }, (_, i) => ({ t: 33.4 + i * 0.6, k: 'graze', n: 22 + i * 4 })),
+    { t: 39, k: 'mod', m: 'fever', v: false }, { t: 39, k: 'mod', m: 'heart', v: true, name: 'heart' }, { t: 43, k: 'hit' }, { t: 45, k: 'end' }
+];
+const MP4B_BOSS = (id) => [
+    { t: 0, k: 'ph', v: 'surge', name: 'act' },
+    { t: 4, k: 'ph', v: 'boss', name: 'boss' }, { t: 4, k: 'boss', id, v: 'start' },
+    { t: 22, k: 'boss', id, v: 'end' }, { t: 22, k: 'ph', v: 'breath', name: 'breath' },
+    { t: 26, k: 'ph', v: 'surge', name: 'back' }, { t: 30, k: 'end' }
+];
+async function mp4bRec(e, dir, file, opt, cueHead){
+    const r = await e.ev('SZAU._render(' + JSON.stringify(opt) + ')', 600000);
+    const parts = [];
+    for(let i = 0; i < r.parts; i++) parts.push(Buffer.from(await e.ev('window.__SZAU_WAV[' + i + ']', 60000), 'base64'));
+    await e.ev('(window.__SZAU_WAV = null, 1)');
+    const wav = path.join(dir, file + '.wav'), m4a = path.join(dir, file + '.m4a');
+    fs.writeFileSync(wav, Buffer.concat(parts));
+    let enc = 'ok';
+    try{ execFileSync(MP4B_FF, ['-y', '-loglevel', 'error', '-i', wav, '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', m4a], { stdio: 'pipe', timeout: 120000 }); fs.unlinkSync(wav); }
+    catch(err){ enc = 'ffmpeg 실패 — WAV 유지: ' + String(err && err.message || err).slice(0, 120); }
+    const cue = [cueHead, '칸 시작(s)  이름  RMS(dBFS)  최고(dBFS)']
+        .concat(r.seg.map(s => String(s.from).padStart(6) + '  ' + s.name.padEnd(12) + String(s.rms).padStart(7) + String(s.peak).padStart(9)))
+        .concat(['', '구역(마디 머리 s · 곡 · 구역): ' + (r.sec || []).map(x => x[0] + ' ' + x[1] + '.' + x[2]).join(' | ')]);
+    fs.writeFileSync(path.join(dir, file + '.txt'), cue.join('\n'));
+    return { file: fs.existsSync(m4a) ? m4a : wav, enc, kb: fs.existsSync(m4a) ? Math.round(fs.statSync(m4a).size / 1024) : 0, seg: r.seg, sec: r.sec, secs: r.secs };
+}
+async function mp4bLive(base){
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', 'mp4=1'), 2200);
+        const pt = await e.ev('(function(){ var r = document.getElementById("dodge-canvas").getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + 40)]; })()');
+        await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1] }] });
+        await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await sleep(400);
+        await e.ev('(function(){ startGame(); window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 50); return 1; })()');
+        await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+        await sleep(1500);
+        const out = { meta: await e.ev(`({ zones: ZONES.map(function(z){ return z.s; }), boss: SZB_BOSS.map(function(b){ return [b.id, b.z, b.warn, b.end]; }) })`) };
+        const ST = '(function(){ var s = SZAU._st(); return { song: s.song, sec: s.pos && s.pos.sec, on: s.on, boss: s.boss, act: s.act, st: s.st, now: s.now }; })()';
+        const waitSong = (id, ms) => e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ var s = SZAU._st(); if(s.song === ${JSON.stringify(id)} || performance.now() - t0 > ${ms}) return res({ ms: Math.round(performance.now() - t0), song: s.song, sec: s.pos && s.pos.sec, on: s.on, boss: s.boss, act: s.act }); setTimeout(w, 20); })(); })`, ms + 5000);
+        out.s0 = await e.ev(ST);
+        out.pre = await e.ev(`(function(){ var s = SZAU._st(); SZE.emit('boss', 'canyon', 'start'); return { sec: s.pos && s.pos.sec, song: s.song }; })()`);
+        out.inB = await waitSong('canyon', 4000);
+        await sleep(300);
+        out.inB2 = await e.ev(ST);
+        await sleep(2500);
+        await e.ev(`(SZE.emit('boss', 'canyon', 'end'), 1)`);
+        out.outB = await waitSong('home', 4000);
+        await sleep(400);
+        await e.ev(`(SZE.emit('boss', 'shock', 'start'), 1)`);
+        out.inS = await waitSong('shock', 4000);
+        await e.ev(`(SZE.emit('zone', 9, 8), 1)`);
+        await sleep(2600);
+        out.midS = await e.ev(ST);
+        await e.ev(`(SZE.emit('boss', 'shock', 'end'), 1)`);
+        out.outS = await waitSong('stars', 4500);
+        out.forms = await e.ev(`({ home: SZMP4.songs.songs.home.form, stars: SZMP4.songs.songs.stars.form })`);
+        await e.ev('(function(){ clearInterval(window.__inv); invincibleUntil = 0; try{ triggerGameOver(); }catch(_){} return 1; })()');
+        await sleep(800);
+        out.after = await e.ev(ST);
+        collectErrs('mp4b live', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        return out;
+    });
+}
+async function mp4bRender(base, meta){
+    const dir = path.resolve(A['rec-audio'] && A['rec-audio'] !== true ? A['rec-audio'] : 'C:/code/python/luckyplz_wt/_mp4bout/listen');
+    fs.mkdirSync(dir, { recursive: true });
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', 'mp4=1'), 1200);
+        const D = await e.ev('SZMP4.songs');
+        const segs = await e.ev(`(SZR_SEGS || szRhyBuild(), SZR_SEGS) ? SZR_SEGS.filter(function(s){ return s.t0 < 154000; }).map(function(s){ return [s.ph, s.t0]; }) : []`);
+        const recs = [];
+        const PHN = ['calm', 'surge', 'breath', 'boss'];
+        const actName = ['앞마당', '이웃 별', '별의 요람과 무덤', '은하 밖', '시간의 끝'];
+        for(let k = 0; k < 5; k++){
+            const id = D.act[k], s = D.songs[id];
+            say('mp4b: 녹음 막 ' + (k + 1) + ' ' + id);
+            recs.push(Object.assign({ name: 'act' + (k + 1) }, await mp4bRec(e, dir, 'act' + (k + 1) + '_' + id, { id, script: MP4B_ACT, secs: 46 },
+                (k + 1) + '막 ' + actName[k] + ' — ' + s.key + ' ' + s.mode + ' ' + s.bpm + 'BPM · 45s: 0 calm(bass+pad) · 6 SURGE(+drum, 스침 음계 1~14) · 20 BREATHER(pad) · 27 SURGE · 33 피버(+arp·필터 개방, 콤보 22~50) · 39 마지막 하트(+심장) · 43 피격')));
+        }
+        const bossIds = Object.keys(D.boss);
+        for(let k = 0; k < bossIds.length; k++){
+            const b = bossIds[k], m = (meta && meta.boss || []).find(x => x[0] === b), z = m ? m[1] : 0, zs = (meta && meta.zones) || [];
+            const act = m && zs.length ? [9, 15, 20, 26].filter(i => zs[i] * 1000 <= m[2]).length : 0;   /* 경보 시각의 막(shock 은 1막 끝 181s) */
+            const actId = D.act[act];
+            say('mp4b: 녹음 보스 ' + b);
+            recs.push(Object.assign({ name: 'boss' + (k + 1) }, await mp4bRec(e, dir, 'boss' + (k + 1) + '_' + b, { id: actId, script: MP4B_BOSS(b), secs: 31 },
+                '보스 ' + b + ' (존 ' + z + ') — 0 막 곡(' + actId + ') SURGE · 4 경보·보스 등장(다음 마디 머리에서 보스 곡 + lead) · 22 보스 끝 → 숨 고르기(pad) · 26 SURGE(막 곡 다음 구역)')));
+        }
+        /* 154s 중앙값 판 — 실제 리듬표 + 보스 canyon(67~85.4s) + 스침·피버·피격 */
+        const sc = [];
+        for(const [ph, t0] of segs) sc.push({ t: t0 / 1000, k: 'ph', v: PHN[ph] || 'calm', name: (PHN[ph] || 'calm') + '@' + Math.round(t0 / 1000) });
+        for(const b of (meta && meta.boss || [])) if(b[2] < 154000){ sc.push({ t: b[2] / 1000, k: 'boss', id: b[0], v: 'start' }); if(b[3] < 154000) sc.push({ t: b[3] / 1000, k: 'boss', id: b[0], v: 'end' }); }
+        let combo = 0;
+        for(let t = 15; t < 152; t += 0.85){ if(t > 67 && t < 86) continue; combo = (t > 120 && t < 121) || (t > 141 && t < 142) ? 0 : combo + 1; sc.push({ t: +t.toFixed(2), k: 'graze', n: combo }); }
+        sc.push({ t: 100, k: 'mod', m: 'fever', v: true }, { t: 106, k: 'mod', m: 'fever', v: false }, { t: 120.5, k: 'hit' }, { t: 141.5, k: 'hit' }, { t: 141.6, k: 'mod', m: 'heart', v: true }, { t: 154, k: 'end' });
+        say('mp4b: 녹음 154s 중앙값 판');
+        recs.push(Object.assign({ name: 'run154' }, await mp4bRec(e, dir, 'run154_median', { id: D.act[0], script: sc, secs: 155 },
+            '154초 중앙값 판 재현 — 실제 리듬표(SZR_SEGS) 국면 · 67s 보스 canyon 경보 → 85.4s 끝(막 곡 다음 구역부터) · 100~106 피버 · 120.5·141.5 피격 · 141.6~ 마지막 하트')));
+        const list = ['Space-Z MP4b 청취 목록 (' + STAMP + ') — SZ_FLAGS.mp4 는 꺼짐(운영자 청취 승인 대기). 각 파일 옆 .txt 에 칸·구역 시각',
+            '볼륨 기준: 버스 = CAL(mp3 BGM 최대 볼륨과 같은 기준). 이어폰·폰 스피커 둘 다 권장', ''];
+        for(const r of recs) list.push(path.basename(r.file) + '  (' + r.kb + 'KB)');
+        fs.writeFileSync(path.join(dir, '00_목록.txt'), list.join('\n'));
+        collectErrs('mp4b render', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        return { dir, recs };
+    });
+}
+EXT_CMDS.mp4b = {
+    all: false, server: true,
+    run: async (base) => {
+        const out = { st: mp4bStatic() };
+        say('mp4b: 실시간 보스 곡 교대 세션');
+        out.live = await mp4bLive(base);
+        if(!A['mp4b-norec']){ try{ out.rec = await mp4bRender(base, out.live.meta); }catch(err){ out.rec = { err: String(err && err.message || err).slice(0, 300) }; } }
+        return out;
+    },
+    judge: (cur) => {
+        const G = 'G-mp4b', st = cur.st || {};
+        if(st.err){ row(G, '정적 검사', st.err, null, '-', 'FAIL'); return; }
+        row(G, '곡 데이터 코드 크기(주석 제외 / gzip)', (st.bytes / 1024).toFixed(1) + 'KB / ' + (st.gz / 1024).toFixed(1) + 'KB', null, '≤12KB', st.bytes <= 12288 ? 'PASS' : 'FAIL');
+        const ids = Object.keys(st.songs), acts = st.act.map(id => st.songs[id]), bossIds = Object.keys(st.boss);
+        row(G, '곡 수 / 막 / 보스 매핑', ids.length + ' / ' + st.act.join(',') + ' / ' + bossIds.map(b => b + '→' + st.boss[b]).join(','), null, '10 / 5 / 5', ids.length >= 10 && acts.length === 5 && acts.every(Boolean) && ['canyon', 'shock', 'nova', 's2', 'jet'].every(b => st.songs[st.boss[b]]) ? 'PASS' : 'FAIL');
+        row(G, '패턴 한 줄 길이(16스텝)', st.bad.length ? st.bad.slice(0, 4).join(', ') : '전부 16', null, '오류 0', st.bad.length ? 'FAIL' : 'PASS');
+        const keys = acts.map(s => s.key + ' ' + s.mode), bpms = acts.map(s => s.bpm);
+        row(G, '막별 조성·템포', acts.map((s, i) => (i + 1) + ':' + s.key + '-' + s.mode + '·' + s.bpm).join(' '), null, '5막 서로 다름', new Set(keys).size === 5 && new Set(bpms).size === 5 ? 'PASS' : 'FAIL');
+        row(G, '막 곡 한 바퀴 (마디·초·구역)', acts.map((s, i) => (i + 1) + ':' + s.bars + '마디/' + s.sec + 's/' + s.form.length + '구역').join(' '), null, '≥32마디 · 같은 구역 반복 0', acts.every(s => s.bars >= 32 && s.dup === 0) ? 'PASS' : 'FAIL');
+        const bl = bossIds.map(b => st.songs[st.boss[b]]);
+        row(G, '보스 lead 모티프 5종 서로 다름', bl.map(s => s.key + '-' + s.mode + '·' + s.bpm).join(' '), null, '5종', new Set(bl.map(s => s.lead0)).size === 5 && bl.every(s => s.lead0) ? 'PASS' : 'FAIL');
+        row(G, '보스 lead 비화성음 (1·3박 / 2·4박)', bl.reduce((a, s) => a + s.nct, 0) + ' / ' + bl.reduce((a, s) => a + s.nctW, 0), null, '1·3박 0 (2·4박은 경과음 허용)', bl.every(s => s.nct === 0) ? 'PASS' : 'FAIL');
+        /* 반복 피로 근거 — 막별 실제 막 곡 재생 시간(보스 구간 제외) / 한 바퀴 */
+        const L = cur.live || {}, M = L.meta || {};
+        if(M.zones){
+            const zs = M.zones, edges = [0, zs[9], zs[15], zs[20], zs[26], null];
+            const rows = [];
+            for(let k = 0; k < 5; k++){
+                const s = acts[k], a0 = edges[k], a1 = edges[k + 1];
+                if(a1 == null){ rows.push((k + 1) + '막 ∞(마지막) 한 바퀴 ' + s.sec + 's'); continue; }
+                let play = a1 - a0;
+                for(const b of M.boss){ const w0 = Math.max(a0, b[2] / 1000), w1 = Math.min(a1, b[3] / 1000); if(w1 > w0) play -= (w1 - w0); }
+                rows.push((k + 1) + '막 ' + Math.round(play) + 's/' + s.sec + 's=' + (play / s.sec).toFixed(2) + '바퀴');
+            }
+            const med = 154 - Math.max(0, Math.min(154, M.boss[0][3] / 1000) - M.boss[0][2] / 1000);
+            rows.push('154s 판 1막 곡 ' + Math.round(med) + 's/' + acts[0].sec + 's=' + (med / acts[0].sec).toFixed(2) + '바퀴');
+            row(G, '반복 피로 — 막 곡 재생 시간 / 한 바퀴', rows.join(' · '), null, '154s 판 <1바퀴(같은 구역 두 번 안 들음)', med < acts[0].sec ? 'PASS' : 'WARN');
+        }
+        const pb = L.pre || {}, ib = L.inB || {}, ob = L.outB || {}, f = L.forms || {};
+        row(G, '실시간: 시작 곡', (L.s0 || {}).song + ' · ' + (L.s0 || {}).sec + ' · ' + ((L.s0 || {}).on || []).join('+'), null, 'home', (L.s0 || {}).song === 'home' ? 'PASS' : 'FAIL');
+        const barMs = Math.round(240000 / 112);
+        row(G, '실시간: 보스 canyon 등장 → 보스 곡·lead', ib.song + ' ' + ib.ms + 'ms · ' + ib.sec + ' · ' + ((L.inB2 || {}).on || []).join('+'), null, 'canyon ≤' + (barMs + 200) + 'ms(1마디) · W · lead', ib.song === 'canyon' && ib.ms <= barMs + 200 && ib.sec === 'W' && ((L.inB2 || {}).on || []).includes('lead') ? 'PASS' : 'FAIL');
+        const exp = f.home ? f.home[(f.home.indexOf(pb.sec) + 1) % f.home.length] : '?';
+        row(G, '실시간: 보스 끝 → 막 곡 다음 구역', ob.song + ' ' + ob.ms + 'ms · ' + pb.sec + ' → ' + ob.sec, null, 'home · ' + exp, ob.song === 'home' && ob.sec === exp ? 'PASS' : 'FAIL');
+        const ms = L.midS || {}, os = L.outS || {};
+        row(G, '실시간: 보스 중 막 전환(존 9) → 보스 곡 유지 → 끝에 2막 곡', (L.inS || {}).song + ' → 존9 ' + ms.song + '(act ' + ms.act + ') → ' + os.song + '.' + os.sec + ' ' + os.ms + 'ms', null, 'shock → shock(1) → stars.A', (L.inS || {}).song === 'shock' && ms.song === 'shock' && ms.act === 1 && os.song === 'stars' && os.sec === (f.stars || [])[0] ? 'PASS' : 'FAIL');
+        row(G, '실시간: 게임오버 → 시퀀서 정지', (L.after || {}).st, null, 'off', (L.after || {}).st === 'off' ? 'PASS' : 'FAIL');
+        const r = cur.rec;
+        if(!r) return;
+        if(r.err){ row(G, '녹음', r.err, null, 'm4a', 'FAIL'); return; }
+        row(G, '녹음 폴더 (운영자 청취)', r.dir + ' · ' + r.recs.length + '개 · ' + r.recs.map(x => x.kb + 'KB').join(','), null, '막 5·보스 5·154s', r.recs.length === 11 && r.recs.every(x => x.enc === 'ok') ? 'PASS' : 'WARN', r.recs.filter(x => x.enc !== 'ok').map(x => x.enc).join(' ').slice(0, 120));
+        let worstJ = 0, wj = '', worstP = -99, wp = '';
+        const surg = [];
+        for(const x of r.recs){
+            const seg = x.seg || [];
+            for(let i = 1; i < seg.length; i++){ const d = Math.abs(seg[i].rms - seg[i - 1].rms); if(d > worstJ && !/heart|hit/.test(seg[i].name)){ worstJ = d; wj = x.name + ' ' + seg[i - 1].name + '→' + seg[i].name; } }
+            for(const s of seg){ if(s.peak > worstP){ worstP = s.peak; wp = x.name + ' ' + s.name; } if(/^surge$/.test(s.name)) surg.push(x.name + ' ' + s.rms); }
+        }
+        row(G, '최고값(전 파일)', worstP + 'dBFS (' + wp + ')', null, '≤-0.5dBFS', worstP <= -0.5 ? 'PASS' : 'FAIL');
+        row(G, 'SURGE RMS (막별, mp3 평균 -15.5)', surg.join(' · '), null, '±2dB', surg.every(s => Math.abs(+s.split(' ').pop() + 15.5) <= 2) ? 'PASS' : 'WARN');
+        row(G, '인접 칸 RMS 차 최대(급변)', worstJ.toFixed(1) + 'dB (' + wj + ')', null, '≤6dB', worstJ <= 6 ? 'PASS' : 'WARN');
+    }
+};
+/*</gate:mp4b>*/
 /*</gate:mp4>*/
 /*<gate:mp5>*/
 /*</gate:mp5>*/
