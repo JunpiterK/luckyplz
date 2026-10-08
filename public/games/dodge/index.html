@@ -17413,6 +17413,16 @@ function sfxZone(){
    the same file location so the directory tree stays symmetric and
    Cloudflare's /assets/* cache rule applies uniformly.
    Files missing → audio.error fires silently and the game still runs. */
+/* 2026-10-09 운영자: '기본은 내 곡(직접 만든 mp3 2곡), 설정에서 선택'.
+   반응형 음악(MP4 시퀀서)은 SZ_FLAGS.mp4(킬스위치)가 켜져 있고 + 설정 칩 '반응형 음악'(szx_seqmus=1)을 켠 사람만.
+   게이트·검수용 ?mp4=1 은 설정과 무관하게 켠다 */
+function szSeqMusicOn(){
+    try{
+        if(!(window.SZ_FLAGS && SZ_FLAGS.mp4)) return false;
+        if(/[?&]mp4=1(?:&|$)/.test(location.search)) return true;
+        return localStorage.getItem('szx_seqmus') === '1';
+    }catch(_){ return false; }
+}
 const BGM = (function(){
     const TRACKS = ['/assets/bgm/dodge/track1.mp3', '/assets/bgm/dodge/track2.mp3'];
     const MAX_VOL0 = 0.35;
@@ -17478,7 +17488,7 @@ const BGM = (function(){
        createMediaElementSource 로 <audio> 를 Web Audio 에 넣지 않는다(iOS 무음 스위치 체감 회귀). 플래그가 꺼져 있으면 아래 경로는 MP0 그대로 */
     let seq = null;
     function seqTake(){
-        try{ const m = window.SZAU && SZAU.music; return (window.SZ_FLAGS && SZ_FLAGS.mp4 && m && m.can()) ? m : null; }catch(_){ return null; }
+        try{ const m = window.SZAU && SZAU.music; return (szSeqMusicOn() && m && m.can()) ? m : null; }catch(_){ return null; }
     }
     /* 판 도중 시퀀서가 죽으면(예외 3회) 그 자리에서 mp3 로 이어 간다 */
     function seqFail(){ seq = null; if(enabled) mp3Start(); }
@@ -22464,7 +22474,7 @@ function mkAC(){
     try{
         AC = new (window.AudioContext || window.webkitAudioContext)();
         /* 운영자 2026-10-09 (B2) — 시퀀서 음악은 예전 <audio> BGM 처럼 iOS 무음 스위치와 무관하게 들린다. 끄기는 게임 🔊 버튼 */
-        try{ if(navigator.audioSession && !(window.SZ_FLAGS && SZ_FLAGS.mp4 === false)) navigator.audioSession.type = 'playback'; }catch(_){}
+        try{ if(navigator.audioSession && szSeqMusicOn()) navigator.audioSession.type = 'playback'; }catch(_){}
         MST = AC.createGain(); MST.gain.value = 0.9 * vol; MST.connect(AC.destination);
         const n = AC.sampleRate;
         NB = AC.createBuffer(1, n, n);
@@ -26811,7 +26821,7 @@ const ease = (k) => 1 - Math.pow(1 - k, 3);
 function note(i){
     try{
         const au = window.SZAU;
-        if(SZ_FLAGS.mp4 && au && au !== AU_STUB && typeof au.note === 'function'){ au.note(i); return; }
+        if(szSeqMusicOn() && au && au !== AU_STUB && typeof au.note === 'function'){ au.note(i); return; }
     }catch(_){}
     try{ if(typeof szFunTone === 'function') szFunTone([784, 988, 1175][i] || 1175, 0.08, 'triangle', 0.14); }catch(_){}
 }
@@ -27403,8 +27413,8 @@ const LSS = (k, v) => { try{ localStorage.setItem(k, v); }catch(_){} };
 const pnow = () => performance.now();
 function lang(){ try{ return (typeof _szLang === 'function' ? _szLang() : (window.LpI18n && LpI18n.getLang && LpI18n.getLang())) || 'en'; }catch(_){ return 'en'; } }
 const MP4_I18N = {
-    ko: {voice: '음성'}, en: {voice: 'Voice'}, ja: {voice: '音声'},
-    zh: {voice: '语音'}, es: {voice: 'Voz'}, pt: {voice: 'Voz'}
+    ko: {voice: '음성', seqmus: '반응형 음악'}, en: {voice: 'Voice', seqmus: 'Live music'}, ja: {voice: '音声', seqmus: 'ライブ音楽'},
+    zh: {voice: '语音', seqmus: '动态音乐'}, es: {voice: 'Voz', seqmus: 'Música viva'}, pt: {voice: 'Voz', seqmus: 'Música viva'}
 };
 function t4(k){ const T = MP4_I18N[lang()] || MP4_I18N.en; return T[k] || MP4_I18N.en[k] || k; }
 
@@ -28343,6 +28353,8 @@ function voSetReg(){
     try{
         if(window.SZSET && typeof SZSET.add === 'function'){
             SZSET.add({id: 'voice', icon: '🎙', label: t4('voice'), get: () => voOn(), set: (v) => LSS('szx_vo', v ? '1' : '0'), lockInSeeded: false});
+            /* 2026-10-09 — 기본은 운영자 곡(mp3). 켜면 다음 판부터 반응형 음악. 킬스위치(mp4)가 꺼져 있으면 칩을 안 보인다 */
+            if(window.SZ_FLAGS && SZ_FLAGS.mp4) SZSET.add({id: 'seqmus', icon: '🎼', label: t4('seqmus'), get: () => { try{ return localStorage.getItem('szx_seqmus') === '1'; }catch(_){ return false; } }, set: (v) => { try{ localStorage.setItem('szx_seqmus', v ? '1' : '0'); }catch(_){} }, lockInSeeded: false});
             _voSet = true;
         }
     }catch(_){}
@@ -28353,7 +28365,7 @@ voSetReg();
 function evT(f){ return function(a, b, c){ if(!LV.run) return; const p0 = pnow(); try{ f(a, b, c); }finally{ const d = pnow() - p0; LV.ev.n++; LV.ev.sum += d; if(d > LV.ev.max) LV.ev.max = d; } }; }
 if(window.SZE){
     SZE.on('runStart', function(kind){
-        LV.run = !!(window.SZ_FLAGS && SZ_FLAGS.mp4);
+        LV.run = szSeqMusicOn();   /* 2026-10-09 — 반응형 음악을 켠 판만(기본은 운영자 mp3 곡) */
         if(!LV.run) return;
         LV.recSaid = false;
         LV.best = +LSG('szx_best_ms', '0') || 0;
