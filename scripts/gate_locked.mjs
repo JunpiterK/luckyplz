@@ -9,30 +9,38 @@ import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 
-const LOCK = 'C:/code/python/luckyplz_wt/_gatelock';
+// 슬롯 수: 기본 2 (2026-10-09 — 6코어 PC 에서 게이트 1개 ≈ CPU 70%. 2개까지는 낮은 우선순위로 돌려 PC 가 멈추지 않게)
+const SLOTS = Math.max(1, Math.min(4, +(process.env.GATE_SLOTS || 2)));
+const LOCKS = Array.from({ length: SLOTS }, (_, i) => 'C:/code/python/luckyplz_wt/_gatelock' + (i ? i + 1 : ''));
+let LOCK = LOCKS[0];
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
+async function tryLock(L) {
+    try {
+        mkdirSync(L);
+        writeFileSync(L + '/owner.json', JSON.stringify({ pid: process.pid, args, at: new Date().toISOString() }));
+        return true;
+    } catch (e) {
+        if (e.code !== 'EEXIST') throw e;
+        let o = null;
+        try { o = JSON.parse(readFileSync(L + '/owner.json', 'utf8')); } catch (_) {}
+        if (o && o.pid && !alive(o.pid)) { console.log('[gate-lock] 낡은 잠금 회수 (' + L + ', pid ' + o.pid + ' 없음)'); try { rmSync(L, { recursive: true, force: true }); } catch (_) {} return tryLock(L); }
+        if (!o && existsSync(L)) { await sleep(3000); try { o = JSON.parse(readFileSync(L + '/owner.json', 'utf8')); } catch (_) {} if (!o) { try { rmSync(L, { recursive: true, force: true }); } catch (_) {} return tryLock(L); } }
+        return false;
+    }
+}
 async function acquire() {
     const t0 = Date.now();
     for (;;) {
-        try {
-            mkdirSync(LOCK);
-            writeFileSync(LOCK + '/owner.json', JSON.stringify({ pid: process.pid, args, at: new Date().toISOString() }));
-            return;
-        } catch (e) {
-            if (e.code !== 'EEXIST') throw e;
-            let o = null;
-            try { o = JSON.parse(readFileSync(LOCK + '/owner.json', 'utf8')); } catch (_) {}
-            if (o && o.pid && !alive(o.pid)) { console.log('[gate-lock] 낡은 잠금 회수 (pid ' + o.pid + ' 없음)'); try { rmSync(LOCK, { recursive: true, force: true }); } catch (_) {} continue; }
-            if (!o && existsSync(LOCK)) { await sleep(3000); try { o = JSON.parse(readFileSync(LOCK + '/owner.json', 'utf8')); } catch (_) {} if (!o) { try { rmSync(LOCK, { recursive: true, force: true }); } catch (_) {} continue; } }
-            if (Date.now() - t0 > 3 * 3600e3) { console.error('[gate-lock] 3시간 대기 초과 — 포기'); process.exit(3); }
-            console.log('[gate-lock] 다른 게이트 실행 중(pid ' + (o && o.pid) + ', ' + (o && (o.args || []).slice(0, 4).join(' ')) + ') — 20초 뒤 다시');
-            await sleep(20000);
-        }
+        for (const L of LOCKS) { if (await tryLock(L)) { LOCK = L; return; } }
+        if (Date.now() - t0 > 4 * 3600e3) { console.error('[gate-lock] 4시간 대기 초과 — 포기'); process.exit(3); }
+        console.log('[gate-lock] 슬롯 ' + SLOTS + '개 모두 사용 중 — 20초 뒤 다시');
+        await sleep(20000);
     }
 }
 function release() {
@@ -43,8 +51,10 @@ function release() {
 }
 
 await acquire();
-console.log('[gate-lock] 잠금 획득 — 게이트 시작');
+console.log('[gate-lock] 잠금 획득(' + LOCK + ') — 게이트 시작');
 const child = spawn(process.execPath, [path.join(here, 'spacez_gate.mjs'), ...args], { stdio: 'inherit' });
+// 게이트(와 그 자식 Edge)를 '낮음' 우선순위로 — CPU 가 꽉 차도 사용자 조작·화면이 먼저 돈다(Windows 는 자식이 우선순위 클래스를 물려받는다)
+try { os.setPriority(child.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch (_) {}
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => { try { child.kill(); } catch (_) {} release(); process.exit(130); });
 process.on('exit', release);
 child.on('exit', (code) => { release(); process.exit(code == null ? 1 : code); });
