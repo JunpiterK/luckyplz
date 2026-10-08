@@ -3701,7 +3701,9 @@ function szWarpTake(now){
 
 /* ── 5. rAF 래퍼 — gameLoop 재무장은 전부 여기로(MP8a 가 본문만 고친다: 120Hz 솎아내기 등).
    requestAnimationFrame 을 부를 때마다 전역에서 찾는다(게이트 합성 시계가 바꿔 끼운 것도 그대로 따른다) */
-function szRAF(fn){ return requestAnimationFrame(fn); }
+/* MP8a — SZ_FLAGS.mp8 이면 SZMP8.raf: 프레임 시작 시각 기록(굽기 조절)·다음 존 미리 굽기 계획·120Hz 솎아내기(mp8hz, 기본 꺼짐).
+   꺼지면 MP0 그대로 */
+function szRAF(fn){ const m = window.SZMP8; return (m && m.raf && SZ_FLAGS.mp8) ? m.raf(fn) : requestAnimationFrame(fn); }
 
 /* ── 6. 시작 화면 슬롯 SZSTART — slot(name) 은 그 자리 요소(없으면 null), put(name, id, make, where, key) 는 멱등 쓰기.
    이름: primary(출발·게임방법) · together(방·대결·협동·1:1) · chips(오늘의 코스·엽서) · settings(조작 칩 — 소리·진동 칩 줄 바로 뒤) · extra(#szStartExtra, MP6)
@@ -22807,8 +22809,17 @@ function drawDeath(n, dt){
 /* ─────────── 성능 등급 ─────────── */
 const FT = new Float32Array(120), JT = new Float32Array(120);
 let fi = 0, lastNow = 0, evalAt = 0, goodSince = 0, fitPending = false;
-const TIERS = [{dpr:3, bloom:true, nebula:true}, {dpr:2, bloom:false, nebula:true}, {dpr:1.5, bloom:false, nebula:false}];
+/* MP8a (2026-10-09) — tier 사다리 한 곳. 등급이 오르면(느린 기기) 무거운 것부터 이 순서로 끈다:
+     등급 0 → 1: 블룸 끔 · DPR 3→2 · shadowBlur 0 · GL 격자 끔(grid) · 입자 ×0.75
+     등급 1 → 2: GL 층 전체 끔(gl) · 성운 끔 · DPR 1.5 · 입자 ×0.5 · 시퀀서 층 6→3(layers — MP8a 가 SZAU.maxLayers 로 맞춘다)
+   gl·grid 는 MP8b(GL 층)가 읽는다(SZ3.tierCfg()). part = 장식 입자 배율(표시 전용). hz = 120Hz 솎아내기 허용 등급(MP8a, 플래그 mp8hz).
+   등급 1 은 코어 ≤4 또는 메모리 ≤4GB 기기의 시작값이라 60Hz 폰에도 걸린다 — 솎아내기는 측정 간격 p50 ≤10ms 일 때만 */
+const TIERS = [{dpr:3, bloom:true, nebula:true, grid:true, gl:true, part:1, layers:6, hz:false},
+               {dpr:2, bloom:false, nebula:true, grid:false, gl:true, part:0.75, layers:6, hz:true},
+               {dpr:1.5, bloom:false, nebula:false, grid:false, gl:false, part:0.5, layers:3, hz:true}];
 function pct(arr, p){ const a = Array.prototype.slice.call(arr).sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * p))]; }
+/* MP8a — DPR 상한 A/B(측정용): ?mp8dpr=2.5 면 등급 0 상한을 그 값으로(SZ_FLAGS.mp8 일 때만). 기본은 표 값(3) */
+const _mp8Dpr = (function(){ try{ const m = /[?&]mp8dpr=([0-9.]+)(?:&|$)/.exec(location.search); return m ? Math.max(1, Math.min(3, +m[1])) : 0; }catch(_){ return 0; } })();
 /* P1 (2026-09-27) — 등급 기억. 매 판 가장 무거운 설정(DPR 3·블룸)에서 다시 배우느라 첫 2초가 끊겼다.
    szx_tier = 마지막 안정 등급(새 키). 첫 방문은 코어·메모리가 적으면 1 에서 시작.
    판 도중에는 블룸·성운·그림자만 바로 바뀌고, 캔버스 해상도(fitCanvas = 백버퍼 재할당)는
@@ -23214,8 +23225,8 @@ document.addEventListener('lp:langchanged', () => setTimeout(prewarm, 300));
 window.SZ3 = {
     RM, vib, tick, frame, drawPool, drawPortrait, drawStamp, drawDeath, slow, reset,
     graze, hit, pop, pickup, satDone, buoyDone, satTick, zone, useItem, death, optsHtml,
-    dprCap: () => TIERS[tier].dpr, bloom: () => TIERS[tier].bloom, nebula: () => TIERS[tier].nebula,
-    tier: () => tier, setTier: (t) => setTier(t, 1), applyFit,
+    dprCap: () => (tier === 0 && _mp8Dpr && window.SZ_FLAGS && SZ_FLAGS.mp8) ? _mp8Dpr : TIERS[tier].dpr, bloom: () => TIERS[tier].bloom, nebula: () => TIERS[tier].nebula,
+    tier: () => tier, setTier: (t) => setTier(t, 1), applyFit, tierCfg: () => TIERS[tier],   /* MP8a — 사다리 한 칸 */
     perf: () => ({tier, p50i: pct(FT, 0.5), p90i: pct(FT, 0.9), p99i: pct(FT, 0.99), p50j: pct(JT, 0.5), p95j: pct(JT, 0.95), p99j: pct(JT, 0.99)}),
     _P: P
 };
@@ -28272,7 +28283,277 @@ const SZMP8 = window.SZMP8 = {ok: false};
 /* MP8 코드는 이 IIFE 안에만. 밖으로는 window.SZMP8 하나만 노출한다.
    기능은 SZ_FLAGS.mp8 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
 /*<sz:mod:mp8a>*/
-/* MP8a — 존 전환 미리 굽기·tier 표·120Hz 솎아내기(szRAF 본문은 sz:mod:flags 안 함수 — MP8a 소유) */
+/* MP8a — 존 전환 미리 굽기·tier 표·120Hz 솎아내기(szRAF 본문은 sz:mod:flags 안 함수 — MP8a 소유)
+   (2026-10-09 웨이브 2) 프로파일 근거: 존 전환·미션 시작 프레임의 큰 덩어리는 '처음 한 번' 비용 — 글자·패널 굽기(szBake),
+   첫 글꼴 사용(대체 글꼴 탐색), 탱커 스프라이트, 부표 글자, 파생 판(P7) 굽기, 새 비트맵 첫 래스터. 그래서
+   ① 프레임 안 굽기 조절: 한 프레임에 처음 굽는 것은 1개만(이미 8ms 넘게 쓴 프레임이면 0개), 나머지는 한가할 때로 미룬다
+      (모든 호출부가 null 을 견딘다 — 페이드인 첫 프레임이 비는 것과 같다. 기존 lazy 와 같은 규칙을 프레임 예산으로 넓힌 것)
+   ② 미리 굽기: 다음 존 시작 8초 전부터 그 존의 굽기·디코드·파생 판·래스터를 '남는 시간 ≥4ms' 조각으로(rIC 기한, 없으면 프레임 뒤 타이머)
+   ③ 판 시작 예열: 탱커 스프라이트·파도 글리프·부표 글자·처음 보는 글꼴
+   ④ tier 사다리는 SZ3 성능 등급(TIERS) 한 곳 — 바뀌면 SZAU.maxLayers 로 시퀀서 층 수를 맞춘다
+   ⑤ 120Hz 솎아내기 — 측정한 화면 간격 p50 ≤10ms · tier ≥1 · 플래그 mp8hz 일 때만 한 프레임 걸러(운영자 승인 B3 전 기본 꺼짐)
+   결정성: rand·randH·randD 를 부르지 않는다. 굽기 함수 본문은 고치지 않는다(호출 시점·캐시만). 합성 시계(det·ibot)는 rAF 를
+   안 쓰므로 ①·⑤ 는 끼어들지 않는다. SZ_FLAGS.mp8 이 거짓이면 szRAF 는 MP0 그대로(requestAnimationFrame) */
+(function(){
+const M = SZMP8;
+const on = () => !!(window.SZ_FLAGS && SZ_FLAGS.mp8);
+const now_ = () => performance.now();
+/* 하위 스위치(측정·A/B 용): ?mp8hz=1 · ?mp8pre=0 · ?mp8defer=0 — localStorage lp_sz_flags {"mp8hz":1} 도 읽는다 */
+function sub(k, def){
+    let v = def;
+    try{ const o = JSON.parse(localStorage.getItem('lp_sz_flags') || 'null'); if(o && o[k] != null) v = !!(+o[k]); }catch(_){}
+    try{ const m = new RegExp('[?&]' + k + '=([01])(?:&|$)').exec(location.search); if(m) v = m[1] === '1'; }catch(_){}
+    return v;
+}
+const OPT = {hz: sub('mp8hz', false), pre: sub('mp8pre', true), defer: sub('mp8defer', true)};
+M.opt = OPT;
+
+/* ── 1. 프레임 추적 + szRAF 본문 ── */
+const FR = {t0: 0, in: false, cold: 0, n: 0, lastT: 0, par: 0, ivA: new Float32Array(48), ivI: 0, ivN: 0, p50: 16.7, p50At: 0, hz: false,
+    deferN: 0, preN: 0, preMs: 0, coldN: 0};
+M.fr = FR;
+const wraps = new WeakMap();
+function hzWanted(){
+    if(!OPT.hz) return false;
+    let t = 0; try{ t = (window.SZ3 && SZ3.tier) ? SZ3.tier() : 0; }catch(_){}
+    return t >= 1 && FR.ivN >= 24 && FR.p50 <= 10;
+}
+function ivNote(t){
+    if(FR.lastT){
+        const d = t - FR.lastT;
+        if(d > 0 && d < 100){ FR.ivA[FR.ivI] = d; FR.ivI = (FR.ivI + 1) % FR.ivA.length; if(FR.ivN < FR.ivA.length) FR.ivN++; }
+    }
+    FR.lastT = t;
+    if(t - FR.p50At > 1000 && FR.ivN >= 8){
+        FR.p50At = t;
+        const a = Array.prototype.slice.call(FR.ivA, 0, FR.ivN).sort((x, y) => x - y);
+        FR.p50 = a[a.length >> 1];
+        FR.hz = hzWanted();
+    }
+}
+function wrapOf(fn){
+    let w = wraps.get(fn);
+    if(w) return w;
+    w = function(t){
+        ivNote(t);
+        /* 120Hz 솎아내기 — 홀수 vsync 는 건너뛴다(게임 루프는 dt 기반이라 한 프레임 dt 가 두 배일 뿐). 입력 반영 최대 +1 vsync */
+        if(FR.hz){ FR.par ^= 1; if(FR.par){ requestAnimationFrame(w); return; } } else FR.par = 0;
+        FR.t0 = now_(); FR.in = true; FR.cold = 0; FR.n++;
+        try{ fn(t); } finally { FR.in = false; }
+    };
+    wraps.set(fn, w);
+    return w;
+}
+M.raf = function(fn){
+    FR.in = false;   /* gameLoop 끝 — 이 뒤 굽기는 프레임 밖 */
+    if(Q.length && !HAS_RIC) armTimer();
+    if(FR.n % 15 === 0) plan();
+    return requestAnimationFrame(wrapOf(fn));
+};
+
+/* ── 2. 한가할 때 조각 실행 큐 — 남는 시간 ≥4ms 일 때만 한 조각. rIC 가 없으면(iOS Safari) 프레임 뒤 타이머로 같은 예산을 흉내 낸다 ── */
+const HAS_RIC = typeof window.requestIdleCallback === 'function';
+const Q = [], QK = new Set();
+let armed = false, tArmed = false;
+const MIN_LEFT = 4;
+function want(k, fn){
+    if(QK.has(k)) return;
+    QK.add(k); Q.push([k, fn]);
+    arm();
+}
+M.want = want;
+function runOne(){
+    const j = Q.shift();
+    const t = now_();
+    let again = false;
+    try{ again = j[1]() === false; }catch(_){}
+    FR.preN++; FR.preMs += now_() - t;
+    /* false = 아직 준비 안 됨(디코드 중) — 키를 지워 다음 계획 때 다시 넣는다. 미룬 굽기(b|)·조각(ij|)은 일회성 —
+       풀린(szBakeRelease) 비트맵이 다시 필요하면 또 미룰 수 있어야 한다 */
+    const c0 = j[0].charCodeAt(0);
+    if(again || c0 === 98 /* b */ || c0 === 105 /* i */) QK.delete(j[0]);
+}
+function arm(){
+    if(!Q.length) return;
+    if(HAS_RIC){ if(!armed){ armed = true; requestIdleCallback(idle, {timeout: 700}); } }
+    else armTimer();
+}
+function idle(dl){
+    armed = false;
+    let n = 0;
+    while(Q.length){
+        const left = dl.timeRemaining();
+        if(left < MIN_LEFT && !(dl.didTimeout && n === 0)) break;
+        runOne(); n++;
+    }
+    arm();
+}
+/* rIC 없음: 프레임이 끝난 직후 타이머 — 이번 vsync 까지 남은 시간(측정 간격 기준)이 4ms 이상일 때만 */
+function armTimer(){
+    if(tArmed || !Q.length) return;
+    tArmed = true;
+    setTimeout(() => {
+        tArmed = false;
+        const iv = FR.p50 || 16.7, t = now_();
+        const end = (FR.t0 && t - FR.t0 < iv) ? FR.t0 + iv - MIN_LEFT : t + 8;
+        let n = 0;
+        while(Q.length && now_() < end && (n === 0 || end - now_() >= MIN_LEFT)){ runOne(); n++; }
+        if(Q.length && !(typeof running !== 'undefined' && running)) armTimer();
+    }, 0);
+}
+
+/* ── 3. 프레임 안 굽기 조절 — szBake 래퍼(본문 그대로, 호출 시점만). 이미 구운 것·lazy·프레임 밖 호출은 그대로 통과 ── */
+const DEFER_MS = 8;
+const _bake = window.szBake;
+if(typeof _bake === 'function'){
+    window.szBake = function(key, w, h, draw, z, fonts, lazy){
+        if(!lazy && FR.in && OPT.defer && on() && typeof SZ_BAKE !== 'undefined'){
+            const k = key + '@' + szBakeScale().toFixed(3);
+            if(!SZ_BAKE.has(k)){
+                if(FR.cold >= 1 || now_() - FR.t0 > DEFER_MS){
+                    FR.deferN++;
+                    want('b|' + k, () => { if(!SZ_BAKE.has(k)) _bake(key, w, h, draw, z, fonts); });
+                    return null;
+                }
+                FR.cold++; FR.coldN++;
+            }
+        }
+        return _bake.apply(this, arguments);
+    };
+}
+/* 기존 다음 존 준비(szPrepZone)의 조각 실행기도 같은 큐로 — 예전엔 rIC 기한(800ms)이 지나면 프레임 사이 6ms 덩어리로 돌았다 */
+const _idleJobs = window.szIdleJobs;
+if(typeof _idleJobs === 'function'){
+    let jn = 0;
+    window.szIdleJobs = function(jobs){
+        if(!on() || !OPT.pre) return _idleJobs.apply(this, arguments);
+        const id = ++jn;
+        jobs.forEach((f, i) => want('ij|' + id + '|' + i, f));
+    };
+}
+
+/* ── 4. 미리 굽기 계획 — 15프레임마다(≈250ms) 다음 존까지 남은 시간을 보고 한 번씩 ── */
+const L = () => { try{ return _szLang(); }catch(_){ return 'en'; } };
+let runKey = '', lastPlan = -1;
+function plan(){
+    if(!on() || !OPT.pre) return;
+    if(typeof running === 'undefined' || !running || typeof ZONES === 'undefined') return;
+    const S = (typeof szBakeScale === 'function') ? szBakeScale().toFixed(3) : '1';
+    const rk = L() + '|' + S;
+    if(rk !== runKey){ runKey = rk; warmSession(); }
+    const cur = currentZoneIdx | 0;
+    planZone(cur);   /* 지금 존(판 시작·워프 직후) — 이미 구운 것은 건너뛴다 */
+    const nx = cur + 1;
+    if(!ZONES[nx]) return;
+    const left = ZONES[nx].s * 1000 - elapsedMs;
+    if(left <= 8000) planZone(nx);
+    /* 워프·재시작으로 존이 뒤로 가면 그 사이 풀린 비트맵을 다시 계획한다 */
+    if(lastPlan !== cur){ if(cur < lastPlan) QK.forEach(k => { if(k.charCodeAt(0) === 122) QK.delete(k); }); lastPlan = cur; }
+}
+/* 판(언어·배율)마다 한 번 — 존과 무관하게 언젠가 처음 그려지는 것 */
+function warmSession(){
+    const lg = L();
+    want('s|fuel', () => { try{ szFuelSprite(); }catch(_){} });
+    /* 파도 예고 글리프 — 초록 틈 ▲ · 빨강 ▼▶◀(MP3 켜짐이면 szWarnGlyph 의 각진 삼각, 꺼짐이면 구운 글리프) */
+    want('s|wave', () => { try{ _szWaveGlyph('▲', true); for(const ch of ['▼', '▶', '◀']){ if(SZ_FLAGS.mp3 && window.szWarnGlyph) szWarnGlyph(ch); else _szWaveGlyph(ch); } }catch(_){} });
+    want('s|font|' + runKey, warmFonts);
+    /* 팝업 글자(szDrawPopups) — 0.5→1.38배로 튀며 크기가 프레임마다 바뀐다. 크기마다 첫 글리프·외곽선 경로가 한 번 비싸다
+       (실측 4x: 콤보·피버 팝업이 뜨는 프레임 strokeText 5~25ms). 같은 글꼴·배율로 그 크기들을 미리 한 번씩 그린다 */
+    /* 한 조각 = 글자 하나·크기 하나(4x 에서도 수 ms) — 한 글자 전 크기를 한 번에 그리면 50ms 넘는 롱태스크가 됐다 */
+    POPS().forEach((pp, i) => { const lo = Math.round(pp[1] * 0.5), hi = Math.round(pp[1] * 1.38);
+        for(let px = lo; px <= hi; px++) want('s|pop|' + runKey + '|' + pp[0] + '|' + px, () => warmPop(pp[0], pp[1], px)); });
+}
+/* 처음 보는 글꼴·글자(대체 글꼴 탐색이 한 번 수 ms). SZ3 prewarm 이 안 데우는 것만 — 실제 캔버스 배율로 */
+let _wf = null;
+function warmFonts(){
+    let S = 1;
+    try{ const tr = ctx.getTransform(); S = Math.max(1, Math.hypot(tr.a, tr.b)); }catch(_){}
+    if(!_wf){ _wf = document.createElement('canvas'); }
+    _wf.width = Math.ceil(320 * S); _wf.height = Math.ceil(40 * S);
+    const x = _wf.getContext('2d');
+    x.setTransform(S, 0, 0, S, 0, 0);
+    let buoy = '', zf = '"Noto Sans KR",sans-serif';
+    try{ buoy = szSatT('buoy'); }catch(_){}
+    try{ zf = szZFont(); }catch(_){}
+    const J = [['800 11px "Noto Sans KR",sans-serif', buoy], ['700 10.5px Orbitron, sans-serif', 'CH₄ · LOX'],
+        ['900 20px Orbitron,sans-serif', 'WARNING'], ['900 26px Orbitron,sans-serif', 'SURVIVED!'], ['800 11px ' + zf, '0123456789'],
+        ['900 11px Orbitron,sans-serif', '0123456789/'], ['900 16px sans-serif', '▲▼▶◀'], ['800 4.6px sans-serif', 'CH4 LOX']];
+    try{ J.push(['800 11px ' + zf, szZT('pre') + szZT('dim')]); }catch(_){}
+    for(const j of J){ if(!j[1]) continue; x.font = j[0]; x.lineWidth = 3; x.strokeText(j[1], 2, 28); x.fillText(j[1], 2, 28); }
+    x.clearRect(0, 0, 320, 40);
+}
+/* 팝업 [글자, 기본 크기] — szPopup 호출부의 값(표시 전용). 숫자는 0~9 를 한 줄에 담아 콤보 수가 바뀌어도 같은 글리프 */
+function POPS(){
+    const P = [['×0123456789 COMBO', 15], ['×0123456789 COMBO', 19], ['CLOSE!', 13], ['✦', 16], ['📡×0123456789', 15]];
+    try{ P.push([szFunT('fever'), 22], [szFunT('jack'), 19]); }catch(_){}
+    try{ for(const k of ['antigrav', 'ion', 'shield', 'mini', 'wipe', 'heart', 'fuel']){ const nm = szItemName(k); if(nm && nm !== k) P.push([nm, 14]); } }catch(_){}
+    return P.filter(p => p[0]);
+}
+let _wp = null;
+function warmPop(text, size, px){
+    let S = 1;
+    try{ const tr = ctx.getTransform(); S = Math.max(1, Math.hypot(tr.a, tr.b)); }catch(_){}
+    if(!_wp) _wp = document.createElement('canvas');
+    const W = Math.ceil(Math.min(400, size * 1.4 * text.length + 20) * S), H = Math.ceil(size * 1.6 * S);
+    if(_wp.width !== W || _wp.height !== H){ _wp.width = W; _wp.height = H; }
+    const x = _wp.getContext('2d');
+    x.setTransform(S, 0, 0, S, 0, 0);
+    x.textAlign = 'left'; x.textBaseline = 'middle'; x.lineWidth = 3; x.strokeStyle = 'rgba(0,0,0,0.5)'; x.fillStyle = '#fff';
+    x.font = '900 ' + px + 'px Orbitron, sans-serif'; x.strokeText(text, 2, size * 0.8); x.fillText(text, 2, size * 0.8);
+    x.clearRect(0, 0, W, H);
+}
+/* 존 n 에서 처음 쓰는 것 — 아트 디코드·파생 판·부표 글자·다음 존 패널(szPrepZone)·성운·도착 칩.
+   (첫 래스터 예열 — 디코드된 판을 작은 캔버스에 미리 그리기 — 는 A/B 2회에서 이득이 없어 뺐다) */
+const DERIVED = {
+    1: () => (SZ_FLAGS.earthrise && szArt('earth_small')) ? (_szErSprite(szArt('earth_small')), true) : !SZ_FLAGS.earthrise || SZ_ART.st.earth_small === -1,
+    11: () => szArt('proxima_b') ? (_p7PbHalf(szArt('proxima_b')), true) : SZ_ART.st.proxima_b === -1,
+    24: () => szArt('quasar') ? (_p7QuasarCold(szArt('quasar')), true) : SZ_ART.st.quasar === -1,
+    28: () => szArt('proxima') ? (_p7AmberBake(szArt('proxima')), true) : SZ_ART.st.proxima === -1
+};
+function planZone(n){
+    const lg = L(), base = 'z|' + n + '|' + lg + '|';
+    if(SZ_FLAGS.fx){
+        want(base + 'art', () => { try{ (SZ_ZONE_ART[n] || []).forEach(szArtLoad); }catch(_){} });
+        if(DERIVED[n]) want(base + 'der', () => DERIVED[n]() ? true : false);
+        want(base + 'neb', () => { try{ szNebPrep(n); }catch(_){} });
+    }
+    want(base + 'prep', () => { try{ szPrepZone(n); }catch(_){} });
+    want(base + 'buoy', () => {
+        try{ szBakeText('buoy|' + _missionLang(), '800 11px "Noto Sans KR",sans-serif', szSatT('buoy'), 150, 'rgb(' + szBuoyRGB(n) + ')', -1); }catch(_){}
+    });
+    if(typeof SZQ_CHIPZ !== 'undefined' && SZQ_CHIPZ[n]) want(base + 'chip', () => {
+        try{
+            const enName = (ZONES[n] && ZONES[n].nameEn) || '', lo = _zoneName(n);
+            const showLocal = !!(lg !== 'en' && lg !== 'gb' && lo && lo !== enName && lo !== szZoneLabelEn(n));
+            const nm = showLocal ? lo : szZoneLabelEn(n);
+            szChipBake('arr' + n + '|' + nm, '→ ' + nm, 'rgba(' + _zoneAccentRGB(n) + ',0.95)');
+        }catch(_){}
+    });
+}
+
+/* ── 5. tier 사다리 → 시퀀서 층 수 (SZ3 TIERS 가 원천. 바뀔 때만 SZAU.maxLayers) ── */
+let tierSeen = -1;
+function tierSync(){
+    if(!on()) return;
+    let t = 0, cfg = null;
+    try{ t = SZ3.tier(); cfg = SZ3.tierCfg ? SZ3.tierCfg() : null; }catch(_){ return; }
+    if(t === tierSeen || !cfg) return;
+    tierSeen = t;
+    try{ if(window.SZAU && SZAU.maxLayers) SZAU.maxLayers(cfg.layers); }catch(_){}
+}
+M.tierSync = tierSync;
+/* 판 시작 — 존 계획 키를 비운다(지난 판에서 풀린 비트맵을 다시 굽게). 하위 스위치는 판 시작 때만 다시 읽는다 */
+try{ SZE.on('runStart', () => {
+    tierSeen = -1; tierSync(); OPT.hz = sub('mp8hz', false); FR.hz = false; FR.par = 0; lastPlan = -1;
+    QK.forEach(k => { if(k.charCodeAt(0) === 122) QK.delete(k); });
+    /* 연습 비행(MP6) 워프 예약 — 카운트다운 동안 그 존을 미리 굽는다(워프 첫 프레임이 존 하나를 통째로 처음 그리는 일을 줄인다) */
+    try{ const wz = SZRUN.warpZ | 0; if(wz > 0 && on() && OPT.pre){ planZone(wz); if(ZONES[wz + 1]) planZone(wz + 1); } }catch(_){}
+}); }catch(_){}
+try{ SZE.on('zone', () => { tierSync(); }); }catch(_){}
+
+M.stat = () => ({on: on(), opt: OPT, hz: FR.hz, p50: FR.p50, ivN: FR.ivN, deferN: FR.deferN, coldN: FR.coldN, preN: FR.preN, preMs: Math.round(FR.preMs * 10) / 10, q: Q.length, tier: tierSeen});
+M.okA = true;
+})();
 /*</sz:mod:mp8a>*/
 /*<sz:mod:mp8b>*/
 /* MP8b — GL 층(#szGl, 2D 아래), window.SZGL = {on, snapshot(ctx2d)} 구현 */
