@@ -1,33 +1,35 @@
 # -*- coding: utf-8 -*-
-"""Space-Z 아이템 드론 2종 스프라이트 — Blender Cycles (2026-10-08).
+"""Space-Z 아이템 드론 2종 스프라이트 — Blender Cycles (2026-10-08 v2 '진공판').
 
-운영자: "아이템 중 드론들 종류가 몇 개 있는데 그래픽이 너무 형편없어 — 더 고도화된 그래픽으로 리얼한 생김새로 렌더링해줘."
-바뀌는 것(그림만, 규칙·판정 그대로):
-  ① 윙맨(MINI, 아이템 '✈ +1') — 옛 캔버스 삼각형(스텔스기 흉내) → 무인 요격기(UCAV). 꼬리 없는 블렌디드 플라잉윙
-     (스팬 × 시위 매개 곡면, 에어포일 두께 √c·(1−c) 라 앞전·뒷전이 칼날처럼 얇다) + 등 혹(센서 바이저·흡입구·안테나) +
-     쌍발 슬롯 이온 노즐 + 앞전 크랭크 레이저 이미터(빨강 = 게임의 윙맨 레이저 색) + 검은 내열타일 앞전·노즈 캡 + 엘레본·편대등·항법등.
-     (시안 단계에서 버린 것: 둥근 동체+델타익 = 50년대 제트기처럼 읽혔다 / 두꺼운 리프팅 바디 = 우주왕복선처럼 읽혔다)
-  ② 호위 드론(AEGIS, 위성 임무 보상 🛸) — 옛 육각형 선 → 덕트 팬 4발 센티넬. 원반 동체 + 앞쪽 센서 블리스터(청록 렌즈) +
-     쌍열 이미터(청록 = 호위 드론 레이저 색) + 4 덕트(로터 2프레임 교대 = 회전 착시).
-  실존 기체·상표·국적 표지 없음(형상은 일반적인 요격 드론 문법만 — 특정 기체 실루엣 복제 금지).
+v1(같은 날 오전): 윙맨 = 꼬리 없는 플라잉윙 UCAV, 호위 드론 = 덕트 팬 4발 센티넬.
+운영자: "대기가 있어야 프로펠러가 도는 드론은 안 어울린다. 우주는 초고진공이라 작용·반작용 추진만 있으니
+        형태와 구동 방식을 바꾸고 UFO 형태나 멋진 셰이프로 재구성해라."  → 날개·프로펠러·공력 조종면 전부 폐기.
+
+  ① 윙맨(MINI, 아이템 '✈ +1') — 날개 없는 우주 요격기.
+     팔각 단면 다면체 동체(평면 셰이딩 = 면마다 빛이 갈린다) + 앞 센서 창(짙은 유리) + 코 양옆 레이저 이미터(빨강 = 윙맨 레이저 색)
+     + 동체에서 띄워 지주로 단 방열판 한 쌍(흰 세라믹 + 히트파이프 골, 뒤로 살짝 벌어진 좁고 긴 판 — 동체와 틈이 있어 날개로 안 읽힌다)
+     + 후미 그리드 이온 추력기(원통 하우징 + 청색 발광 그리드 테) + RCS 쿼드 4개(앞 둘·뒤 둘, 각각 옆 노즐 + 앞/뒤 노즐).
+  ② 호위 드론(AEGIS, 위성 임무 보상 🛸) — UFO 렌즈 원반.
+     매끈한 렌즈 동체(회전체) + 가운데 센서 돔(짙은 유리, 앞쪽 청록 눈) + 하부 고리형 이온 추력기(위 렌즈보다 넓어 렌즈와 바깥 링 사이로
+     청색 그리드 고리가 보인다) + 바깥 링 + 대각 45°마다 RCS 쿼드 포드 4개(바깥 방향 노즐 1 + 접선 노즐 2) + 앞쪽 쌍 이미터(청록).
+     돌아가는 기계 부품 없음 — 링을 따라 도는 항법등·이온 배기·RCS 분사는 게임 쪽 그리기 코드(sz:mod:drones)가 빛으로만 얹는다.
+  실존 기체·상표·국적 표지 없음.
 
 스타일 = 플레이어 기체(starship_scene.py)와 같은 문법: Standard 뷰(AgX 금지 — 은색을 탁하게 누른다), 스테인리스 금속 +
   거의 검은 내열타일, 왼쪽 위 키 + 세로 띠 소프트박스(긴 스페큘러) + 오른쪽 청색 림, 월드 그라디언트는 반사에만.
   도장 2종: steel(솔로·방장) / gold(2인 모드 참가자) — 기체 LIVERY 와 같은 값.
 
-좌표: 평면도(위에서 내려다봄). 월드 +Y = 화면 위 = 진행 방향(노즈), +X = 화면 오른쪽, 카메라는 +Z 에서 −Z 를 본다.
-  뱅크 + (오른쪽으로 이동) = Y 축 +회전 → 오른쪽 날개가 아래로(비행기가 선회 방향으로 기운다).
-프레임: 한 칸 = 윙맨 FRAME_U(12) / 호위 FRAME_A(7) 단위 정사각, 렌더 384px → 굽기 96px(4배 축소·샤픈).
-  윙맨 노즈 y +5 · 노즐 끝 y −4.2 · 날개폭 9.6, 호위 드론 덕트 끝 지름 ≈ 6.2 단위. 게임 쪽 앵커(SZ_DRONE 표)는 이 단위로 적는다.
-  금속이 평면도에서 하얗게 뜨지 않게: 월드 = 키 방향 하늘만 밝은 내적 그라디언트, 거칠기 0.11~0.24(반사가 기울기를 따라 갈린다).
+좌표: 평면도(위에서 내려다봄). 월드 +Y = 화면 위 = 노즈, +X = 화면 오른쪽, 카메라는 +Z 에서 −Z 를 본다.
+칸: 윙맨 FRAME_U(10.5) / 호위 FRAME_A(7.4) 단위 정사각, 렌더 RPX(384) → 굽기 CELL(128px, 샤픈).
+  게임 쪽 앵커(SZ_DRONE 표 — 노즐·이미터·RCS 위치)는 이 단위 그대로 적는다. 아래 WM_*·AG_* 상수가 원천.
 
 실행:
   전체   : python scripts/blender/spacez_drones.py              (Blender 렌더 → 굽기)
-  렌더만 : C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/spacez_drones.py -- all
+  렌더만 : C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/spacez_drones.py -- all   (wing | aegis)
   굽기만 : python scripts/blender/spacez_drones.py post         → public/assets/dodge/drones.webp
   시안   : SZD_SAMPLES=48 로 샘플 낮추기 / SZD_REN=<폴더> 로 중간 PNG 위치 바꾸기(기본 scripts/og-assets/spacez_drones, git 미추적)
-아틀라스(96px 칸, 5열 × 3행):
-  행 0 = 윙맨 steel 뱅크 −2…+2 / 행 1 = 윙맨 gold 뱅크 −2…+2 / 행 2 = 호위 steel 로터 a·b, gold a·b, (빈칸)
+아틀라스(128px 칸, 2열 × 2행 = 256×256):
+  행 0 = 윙맨 steel · gold / 행 1 = 호위 드론 steel · gold
 """
 import math
 import os
@@ -38,21 +40,31 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
 REN = os.environ.get("SZD_REN") or os.path.join(ROOT, "scripts", "og-assets", "spacez_drones")
 PUB = os.path.join(ROOT, "public", "assets", "dodge")
 SAMPLES = int(os.environ.get("SZD_SAMPLES", "128"))
-FRAME_U = 12.0                    # 윙맨 칸 = 12 단위 정사각
-FRAME_A = 7.0                     # 호위 드론 칸 = 7 단위(덕트 끝 지름 ≈ 6.2 가 칸의 88%)
+FRAME_U = 10.5                    # 윙맨 칸 = 10.5 단위 정사각 (전장 ≈ 8.9)
+FRAME_A = 7.4                     # 호위 드론 칸 = 7.4 단위 (노즐 끝 지름 ≈ 6.7)
 RPX = 384
-CELL = 96
-BANKS = [-2, -1, 0, 1, 2]
-BANK_DEG = 16.0
+CELL = 128
 LIVERY = {
     'steel': dict(base=(0.64, 0.655, 0.68), rr=(0.11, 0.24)),
     'gold': dict(base=(1.0, 0.77, 0.34), rr=(0.10, 0.22), coat=0.55),
 }
+# 앵커(모델 단위) — 게임 SZ_DRONE 표와 같은 값
+WM_MUZZLE = (0.66, 4.50)          # 레이저 이미터 렌즈
+WM_ENGINE = (0.0, -3.66)          # 이온 그리드 끝
+WM_RCS_F = (1.16, 2.15)           # 앞 RCS 쿼드 중심(±x)
+WM_RCS_R = (0.78, -2.90)          # 뒤 RCS 쿼드 중심(±x)
+AG_HULL_R = 2.25                  # 위 렌즈 반지름
+AG_ION = (2.12, 2.70)             # 이온 고리 안·밖 반지름
+AG_RIM = 2.90                     # 바깥 링 중심 반지름
+AG_POD_R = 3.06                   # RCS 포드 중심 반지름(45° + 90°k)
+AG_EMIT = (0.36, 3.06)            # 앞 쌍 이미터(하우징 앞면 y, 렌즈 끝은 +0.12)
+AG_TILT = 30.0                    # 호위 드론만 앞으로 30° 기울여 찍는다(평면도 원반은 시계판처럼 읽혔다)
 try:
     import bpy  # noqa
     IN_BLENDER = True
 except ImportError:
     IN_BLENDER = False
+
 
 
 # ══════════════════════════════ Blender ══════════════════════════════
@@ -143,9 +155,10 @@ def lights():
     area("fill", (0, -26, 14), 18, 1.1e3, (0.55, 0.62, 0.80))
 
 
-def materials(livery):
+def materials(livery, rough_add=0.0):
     import bpy
-    LV = LIVERY[livery]
+    LV = dict(LIVERY[livery])
+    LV['rr'] = (LV['rr'][0] + rough_add, LV['rr'][1] + rough_add)
 
     def principled(name):
         m = bpy.data.materials.new(name); m.use_nodes = True
@@ -225,29 +238,35 @@ def materials(livery):
             p.inputs["Emission Strength"].default_value = es
         return m
     gun = plain("gunmetal", (0.11, 0.115, 0.125), 0.36, 1.0)
-    panel = plain("panel", (0.34, 0.35, 0.37), 0.30, 1.0)                          # 엘레본 — 한 톤 어두운 판
-    slime = plain("slime", (0.02, 0.03, 0.03), 0.4, 0.0, emit=(0.45, 1.0, 0.80), es=0.45)   # 편대등(희미한 띠)
-    glass = plain("glass", (0.010, 0.016, 0.026), 0.04, 0.35, coat=1.0)      # 센서 블리스터 — 짙은 유리
+    panel = plain("panel", (0.34, 0.35, 0.37), 0.30, 1.0)                          # 한 톤 어두운 판(링·테두리)
+    glass = plain("glass", (0.010, 0.016, 0.026), 0.04, 0.35, coat=1.0)      # 센서 창 — 짙은 유리
+    dome = plain("dome", (0.015, 0.06, 0.08), 0.16, 0.2, emit=(0.0, 0.45, 0.6), es=0.12, coat=0.7)   # UFO 돔 — 짙은 청록 유리(안쪽 희미한 빛)
     noz = plain("nozzle", (0.20, 0.19, 0.19), 0.42, 1.0)
-    nozin = plain("nozzle_in", (0.05, 0.05, 0.06), 0.5, 0.2, emit=(0.55, 0.80, 1.0), es=3.2)   # 이온 노즐 안쪽 — 청백
     eye = plain("eye", (0.0, 0.0, 0.0), 0.3, 0.0, emit=(0.0, 0.85, 1.0), es=4.0)            # 센서 렌즈 — 기체 청록 액센트
     red = plain("laser_red", (0.0, 0.0, 0.0), 0.3, 0.0, emit=(1.0, 0.16, 0.12), es=2.8)      # 윙맨 레이저 포구
     cyan = plain("laser_cyan", (0.0, 0.0, 0.0), 0.3, 0.0, emit=(0.35, 0.85, 1.0), es=2.6)    # 호위 드론 이미터
-    navr = plain("nav_r", (0, 0, 0), 0.3, 0.0, emit=(1.0, 0.10, 0.08), es=6.0)
-    navg = plain("nav_g", (0, 0, 0), 0.3, 0.0, emit=(0.15, 1.0, 0.35), es=6.0)
-    # 로터 — 반투명 짙은 날(회전 흐림 대신 2프레임 교대)
-    rot = bpy.data.materials.new("rotor"); rot.use_nodes = True
-    nt = rot.node_tree
-    p = nt.nodes["Principled BSDF"]
-    p.inputs["Base Color"].default_value = (0.05, 0.05, 0.06, 1)
-    p.inputs["Roughness"].default_value = 0.45; p.inputs["Metallic"].default_value = 0.6
-    p.inputs["Alpha"].default_value = 0.62
-    try:
-        rot.blend_method = 'BLEND'
-    except Exception:
-        pass
-    return dict(hull=st, tile=tl, gun=gun, panel=panel, slime=slime, glass=glass, noz=noz, nozin=nozin, eye=eye, red=red, cyan=cyan,
-                navr=navr, navg=navg, rotor=rot)
+    ion = plain("ion", (0.02, 0.03, 0.06), 0.4, 0.0, emit=(0.20, 0.48, 1.0), es=0.62)         # 이온 그리드 — 청색 발광
+    iondk = plain("ion_dark", (0.03, 0.035, 0.05), 0.45, 0.6, emit=(0.10, 0.25, 0.8), es=0.25)  # 그리드 살(어두운 칸막이)
+    # 방열판 — 흰 세라믹 코팅 + 길이 방향 히트파이프 골(오브젝트 X 로 흐르는 띠 = 판 길이 방향 줄무늬)
+    rad, nt, b = principled("radiator")
+    b.inputs["Metallic"].default_value = 0.0
+    b.inputs["Roughness"].default_value = 0.38
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    wv = nt.nodes.new("ShaderNodeTexWave")
+    wv.wave_type = 'BANDS'; wv.bands_direction = 'X'
+    wv.inputs["Scale"].default_value = 1.15; wv.inputs["Distortion"].default_value = 0.0
+    nt.links.new(tc.outputs["Object"], wv.inputs["Vector"])
+    cr = nt.nodes.new("ShaderNodeValToRGB")
+    e = cr.color_ramp.elements
+    e[0].position = 0.10; e[0].color = (0.16, 0.17, 0.19, 1)
+    e[1].position = 0.30; e[1].color = (0.80, 0.82, 0.84, 1)
+    nt.links.new(wv.outputs["Fac"], cr.inputs[0])
+    nt.links.new(cr.outputs[0], b.inputs["Base Color"])
+    bmp = nt.nodes.new("ShaderNodeBump"); bmp.inputs["Strength"].default_value = 0.6; bmp.inputs["Distance"].default_value = 0.02
+    nt.links.new(wv.outputs["Fac"], bmp.inputs["Height"])
+    nt.links.new(bmp.outputs["Normal"], b.inputs["Normal"])
+    return dict(hull=st, tile=tl, gun=gun, panel=panel, glass=glass, dome=dome, noz=noz, eye=eye, red=red, cyan=cyan,
+                ion=ion, iondk=iondk, rad=rad)
 
 
 def mesh_obj(name, verts, faces, mats, mat_idx=None, smooth=True, parent=None, subsurf=0, bevel=0.0):
@@ -273,7 +292,7 @@ def mesh_obj(name, verts, faces, mats, mat_idx=None, smooth=True, parent=None, s
     return ob
 
 
-def loft(name, sections, mats, parent=None, n=28, subsurf=1, mat_fn=None, ex=2.6):
+def loft(name, sections, mats, parent=None, n=28, subsurf=1, mat_fn=None, ex=2.6, smooth=True):
     """단면 로프트 — sections = [(y, half_w, half_h_top, half_h_bot, z0)] 앞→뒤. 단면은 초타원(지수 ex).
     끝 단면 폭이 0 이면 한 점으로 모은다. ex 가 2 보다 작으면 옆선이 뾰족한 체인(chine)이 된다. mat_fn(y, ang) → 재질 인덱스."""
     verts, faces, rings = [], [], []
@@ -304,7 +323,7 @@ def loft(name, sections, mats, parent=None, n=28, subsurf=1, mat_fn=None, ex=2.6
             for k in range(n):
                 faces.append([a[k], b[k], b[(k + 1) % n], a[(k + 1) % n]]); fy.append((yc, 2 * math.pi * (k + 0.5) / n))
     return mesh_obj(name, verts, faces, mats, mat_idx=(lambda i, p: mat_fn(*fy[i])) if mat_fn else None,
-                    parent=parent, subsurf=subsurf)
+                    parent=parent, subsurf=subsurf, smooth=smooth)
 
 
 def wing_slab(name, pts, t_root, t_tip, x_root, x_tip, z0, mats, parent=None, mat_fn=None, bevel=0.05):
@@ -374,7 +393,66 @@ def sphere(name, loc, r, scale, mats, parent=None, seg=32):
     return o
 
 
-# ─────────── ① 윙맨 (무인 요격기) ───────────
+def lathe(name, prof, mats, parent=None, seg=72, mat_fn=None, smooth=True, z_rot=0.0):
+    """회전체 — prof = [(r, z)] 순서대로 이어 붙인 단면(r≈0 은 한 점). mat_fn(i_prof, k_seg) → 재질 인덱스."""
+    verts, faces, rings, fm = [], [], [], []
+    for (r, z) in prof:
+        if r <= 1e-5:
+            rings.append([len(verts)]); verts.append((0.0, 0.0, z)); continue
+        ring = []
+        for k in range(seg):
+            a = z_rot + 2 * math.pi * k / seg
+            ring.append(len(verts)); verts.append((r * math.cos(a), r * math.sin(a), z))
+        rings.append(ring)
+    for i in range(len(rings) - 1):
+        a, b = rings[i], rings[i + 1]
+        for k in range(seg):
+            k2 = (k + 1) % seg
+            if len(a) == 1:
+                faces.append([a[0], b[k], b[k2]])
+            elif len(b) == 1:
+                faces.append([a[k], b[0], a[k2]])
+            else:
+                faces.append([a[k], b[k], b[k2], a[k2]])
+            fm.append(mat_fn(i, k) if mat_fn else 0)
+    return mesh_obj(name, verts, faces, mats, mat_idx=lambda i, p: fm[i], smooth=smooth, parent=parent)
+
+
+def nozzle(M, pos, d, parent, throat=0.045, exit_r=0.085, length=0.15, z=None):
+    """RCS 노즐 — 종 모양(목이 좁고 출구가 넓은 원뿔), 열린 출구가 방향 d=(dx, dy) 를 본다. pos 는 노즐 목(뿌리) 위치."""
+    import bpy
+    dx, dy = d
+    n = math.hypot(dx, dy); dx, dy = dx / n, dy / n
+    zz = pos[2] if len(pos) > 2 else (z or 0.0)
+    c = (pos[0] + dx * length / 2, pos[1] + dy * length / 2, zz)
+    bpy.ops.mesh.primitive_cone_add(radius1=throat, radius2=exit_r, depth=length, vertices=14, location=c, end_fill_type='NOTHING')
+    o = bpy.context.object
+    o.rotation_euler = (math.radians(-90), 0, math.atan2(-dx, dy))
+    o.data.materials.append(M['noz'])
+    for p in o.data.polygons:
+        p.use_smooth = True
+    sol = o.modifiers.new("sol", 'SOLIDIFY'); sol.thickness = 0.012
+    o.parent = parent
+    return o
+
+
+def box(name, loc, half, mats, parent=None, rot_z=0.0, bevel=0.03):
+    import bpy
+    bpy.ops.mesh.primitive_cube_add(size=2.0, location=loc)
+    o = bpy.context.object
+    o.name = name
+    o.scale = half
+    o.rotation_euler = (0, 0, rot_z)
+    for m in mats:
+        o.data.materials.append(m)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+    if bevel > 0:
+        bv = o.modifiers.new("bev", 'BEVEL'); bv.width = bevel; bv.segments = 2
+    if parent:
+        o.parent = parent
+    return o
+
+
 def _pl(xs, ys, x):
     """구간 선형 보간 (xs 오름차순)."""
     if x <= xs[0]:
@@ -386,117 +464,105 @@ def _pl(xs, ys, x):
     return ys[-1]
 
 
-# 윙맨 평면형(오른쪽 반, x ≥ 0) — 앞전은 노즈 쪽이 급하고(체인) 크랭크 뒤 50° 후퇴, 뒷전은 가운데가 들어간 노치
-WM_LE = ([0.0, 0.55, 1.25, 2.6, 4.55, 4.78], [5.0, 3.85, 2.50, 0.85, -1.55, -2.02])
-WM_TE = ([0.0, 0.62, 0.95, 1.55, 2.55, 4.55, 4.78], [-3.92, -3.92, -3.50, -3.50, -2.95, -2.28, -2.12])
-WM_XMAX = 4.78
+# ─────────── ① 윙맨 (날개 없는 우주 요격기) ───────────
+# 동체 단면표 (y, 반폭, 위 반높이, 아래 반높이, z0) — 앞→뒤. 팔각 단면 + 평면 셰이딩 = 다면체.
+WM_SECS = [(3.10, 0.0, 0.0, 0.0, 0.10), (2.70, 0.30, 0.16, 0.10, 0.10), (1.80, 0.78, 0.31, 0.18, 0.08),
+           (0.60, 1.08, 0.40, 0.22, 0.06), (-0.80, 1.04, 0.38, 0.22, 0.05), (-2.00, 0.86, 0.33, 0.20, 0.03),
+           (-2.70, 0.64, 0.28, 0.18, 0.02), (-2.85, 0.0, 0.0, 0.0, 0.02)]
+# 앞 갈퀴(이미터 붐) 2개 — 어깨에서 앞으로 뻗은 좁은 다면체 빔, 끝에 레이저 렌즈. 사이가 비어 '포크' 실루엣
+WM_PRONG_X, WM_PRONG_DEG = 0.86, 2.5
+WM_PRONG = [(4.50, 0.0, 0.0, 0.0, 0.10), (4.30, 0.13, 0.09, 0.06, 0.10), (3.40, 0.19, 0.13, 0.08, 0.10),
+            (1.80, 0.24, 0.16, 0.10, 0.09), (0.60, 0.28, 0.17, 0.10, 0.08), (-0.40, 0.0, 0.0, 0.0, 0.06)]
+# 등 모듈(전자장비 블록) — 동체 위에 한 층 더 얹은 좁은 다면체
+WM_DORSAL = [(2.45, 0.0, 0.0, 0.0, 0.34), (2.05, 0.26, 0.12, 0.05, 0.36), (1.20, 0.40, 0.18, 0.06, 0.38),
+             (-0.40, 0.44, 0.19, 0.06, 0.40), (-1.80, 0.38, 0.16, 0.06, 0.36), (-2.35, 0.26, 0.10, 0.05, 0.30),
+             (-2.50, 0.0, 0.0, 0.0, 0.28)]
+WM_RAD = [(1.44, 0.90), (2.06, 0.64), (2.20, -1.90), (1.58, -1.90)]   # 방열판 평면형(오른쪽) — 배 가운데(꼬리 날개처럼 안 읽히게)
 
 
-def wingman_body(M, root):
-    """블렌디드 플라잉윙 한 장 — 스팬 방향 스테이션 × 시위 방향 에어포일(두께 분포 √c·(1−c)) 매개 곡면.
-    앞전·뒷전이 칼날처럼 얇아져서 위에서 보면 가장자리가 림라이트를 받는다. 재질: 앞전 띠·노즈 캡 = 타일, 바깥 뒷전 = 엘레본 판."""
-    NS, NC = 30, 22
-    # 스테이션 — 뿌리 쪽 촘촘(코사인)
-    xs = [WM_XMAX * (1 - math.cos(math.pi / 2 * i / (NS - 1))) for i in range(NS)]
-    xs_full = [-x for x in xs[::-1]] + xs[1:]
-    cs = [0.5 * (1 - math.cos(math.pi * j / (NC - 1))) for j in range(NC)]      # 앞전·뒷전 촘촘
-
-    def thick(x):
-        ax = abs(x)
-        return 0.46 * (1 - ax / WM_XMAX) ** 1.4 + 0.05
-
-    def prof(c):
-        return math.sqrt(max(c, 0.0)) * (1 - c) / 0.3849
-    verts, faces, fm = [], [], []
-    top, bot = [], []
-    for x in xs_full:
-        ax = abs(x)
-        le, te = _pl(*WM_LE, ax), _pl(*WM_TE, ax)
-        T = thick(x)
-        # 노즈 쪽(긴 시위 앞부분)은 두께를 앞전으로 몰지 않게 — 위치 y 로도 얇게
-        rt, rb = [], []
-        for c in cs:
-            y = le + (te - le) * c
-            k = prof(c) * min(1.0, max(0.25, (5.0 - y) / 2.2))
-            rt.append(len(verts)); verts.append((x, y, T * 0.62 * k))
-        for c in cs:
-            y = le + (te - le) * c
-            k = prof(c) * min(1.0, max(0.25, (5.0 - y) / 2.2))
-            rb.append(len(verts)); verts.append((x, y, -T * 0.38 * k))
-        # 앞전·뒷전 꼭짓점은 위아래 같은 점으로
-        rb[0] = rt[0]; rb[-1] = rt[-1]
-        top.append(rt); bot.append(rb)
-
-    def key_top(x0, x1, j):
-        ax = (abs(x0) + abs(x1)) / 2
-        c = (cs[j] + cs[j + 1]) / 2
-        le = _pl(*WM_LE, ax)
-        if le - (le - _pl(*WM_TE, ax)) * c > 4.25:
-            return 1                                           # 노즈 캡
-        if c < 0.15 + 0.05 * min(1, ax / 2.0) and ax > 0.9:
-            return 1                                           # 앞전 타일 띠
-        if c > 0.76 and 1.7 < ax < 4.35:
-            return 2                                           # 엘레본
+def _side_mat(lo, hi):
+    def f(y, ang):
+        a = math.degrees(ang) % 360
+        if 180 < a < 360:
+            return 1                               # 배면 — 타일
+        if (a < 45 or a > 135) and lo < y < hi:
+            return 2                               # 옆 체인 면 — 어두운 판(윤곽이 또렷해진다)
         return 0
-    for i in range(len(xs_full) - 1):
-        for j in range(NC - 1):
-            a, b, c_, d = top[i][j], top[i + 1][j], top[i + 1][j + 1], top[i][j + 1]
-            f = [a, d, c_, b]
-            f = [v for k_, v in enumerate(f) if v not in f[:k_]]
-            if len(f) >= 3:
-                faces.append(f); fm.append(key_top(xs_full[i], xs_full[i + 1], j))
-            a, b, c_, d = bot[i][j], bot[i + 1][j], bot[i + 1][j + 1], bot[i][j + 1]
-            f = [a, b, c_, d]
-            f = [v for k_, v in enumerate(f) if v not in f[:k_]]
-            if len(f) >= 3:
-                faces.append(f); fm.append(1)
-    # 날개 끝 마감
-    for side in (0, len(xs_full) - 1):
-        ring = top[side] + bot[side][-2:0:-1]
-        faces.append(ring if side else ring[::-1]); fm.append(0)
-    ob = mesh_obj("wing", verts, faces, [M['hull'], M['tile'], M['panel']], mat_idx=lambda i, p: fm[i], parent=root)
-    return ob
+    return f
 
 
 def build_wingman(M, root):
-    """무인 요격기(UCAV) — 꼬리 없는 블렌디드 플라잉윙 + 가운데 등 혹(센서·흡입구·안테나) + 납작한 쌍발 이온 슬롯 노즐.
-    조종석 없음: 노즈 위 짙은 센서 바이저 + 청록 렌즈. 앞전 크랭크에 레이저 이미터 2개(빨간 렌즈 = 윙맨 레이저 색)."""
+    """우주 요격기 — 날개·조종면 없음. 다면체 동체 + 앞 갈퀴 2(이미터) + 등 모듈 + 센서 + 방열판 2(지주로 띄움) + 이온 추력기 + RCS 쿼드 4."""
     H = M['hull']
-    wingman_body(M, root)
-    # 등 혹 — 낮은 초타원 로프트(날개 윗면에서 솟는다)
-    secs = [(4.35, 0.0, 0.0, 0.0, 0.18), (3.9, 0.30, 0.13, 0.10, 0.20), (3.1, 0.56, 0.24, 0.12, 0.22),
-            (2.0, 0.78, 0.32, 0.14, 0.24), (0.6, 0.90, 0.36, 0.15, 0.24), (-1.0, 0.92, 0.35, 0.15, 0.22),
-            (-2.4, 0.86, 0.30, 0.14, 0.18), (-3.4, 0.74, 0.22, 0.12, 0.12), (-3.85, 0.66, 0.16, 0.10, 0.06)]
-    loft("hump", secs, [H], parent=root, n=36, subsurf=1, ex=2.4)
-    # 센서 바이저 — 짙은 유리 + 앞쪽 청록 렌즈
-    sphere("visor", (0, 2.75, 0.42), 0.26, (1.05, 2.3, 0.36), [M['glass']], parent=root)
-    sphere("eye_ring", (0, 3.55, 0.36), 0.13, (1.2, 0.7, 0.55), [M['gun']], parent=root, seg=20)
-    sphere("eye", (0, 3.60, 0.37), 0.085, (1.2, 0.8, 0.6), [M['eye']], parent=root, seg=16)
-    # 등 흡입구(검은 쐐기) + 위성 통신 안테나 판 + 등 능선
-    sphere("intake", (0, 1.05, 0.55), 0.30, (1.5, 0.75, 0.26), [M['tile']], parent=root, seg=24)
-    sphere("intake_lip", (0, 1.30, 0.57), 0.30, (1.55, 0.30, 0.26), [M['panel']], parent=root, seg=24)
-    sphere("spine", (0, -1.4, 0.55), 0.24, (0.85, 4.2, 0.30), [H], parent=root)
-    sphere("ant", (0, -0.35, 0.64), 0.17, (1, 1, 0.45), [M['panel']], parent=root, seg=16)
+    loft("hull", WM_SECS, [H, M['tile'], M['panel']], parent=root, n=8, subsurf=0, ex=2.0, mat_fn=_side_mat(-2.6, 2.6), smooth=False)
     for sg in (1, -1):
-        # 편대등 — 날개 윗면 희미한 띠(실기 '슬라임 라이트')
-        sl = [(2.35, -0.85), (3.85, -2.05), (3.82, -2.15), (2.32, -0.95)]
-        wing_slab("slime", [(sg * x, y) for (x, y) in sl], 0.006, 0.006, 0.0, 1.0, 0.13, [M['slime']], parent=root, bevel=0.0)
-        # 날개 끝 항법등 — 왼쪽 빨강, 오른쪽 초록
-        sphere("nav", (sg * 4.70, -2.10, 0.02), 0.10, (1, 1, 1), [M['navg'] if sg > 0 else M['navr']], parent=root, seg=12)
-        # 레이저 이미터 — 앞전 크랭크의 포드 + 앞을 보는 빨간 렌즈
-        px = sg * 1.30
-        sphere("gun_fair", (px, 1.95, 0.10), 0.24, (1, 2.8, 0.7), [M['gun']], parent=root, seg=24)
-        cyl("barrel", (px, 2.75, 0.10), 0.085, 0.70, 'Y', [M['gun']], parent=root, verts=16)
-        sphere("muzzle", (px, 3.12, 0.10), 0.085, (1, 1, 1), [M['red']], parent=root, seg=12)
-        # 납작한 슬롯 노즐(스텔스 배기) — 검은 덕트 + 청백 발광 슬릿
-        nx = sg * 0.50
-        cyl("nozzle", (nx, -3.80, 0.08), 0.36, 0.50, 'Y', [M['noz']], parent=root, verts=28, r2=0.36, cap=False).scale = (1.0, 0.55, 1.0)   # 로컬 Y = 월드 Z(높이)
-        bpy_disc(M['nozin'], (nx, -3.92, 0.08), 0.30, root).scale = (1.0, 0.55, 1.0)
+        pr = loft("prong", WM_PRONG, [H, M['tile'], M['panel']], parent=root, n=8, subsurf=0, ex=2.0, mat_fn=_side_mat(0.4, 4.2),
+                  smooth=False)
+        pr.location = (sg * WM_PRONG_X, 0, 0)
+        pr.rotation_euler = (0, 0, sg * math.radians(WM_PRONG_DEG))
+        # 갈퀴 끝 레이저 렌즈 + 갈퀴 위 어두운 띠
+        mx, my = WM_MUZZLE
+        sphere("muzzle", (sg * mx, my, 0.10), 0.085, (1, 1.3, 1), [M['red']], parent=root, seg=12)
+        sphere("gun_ring", (sg * (mx + 0.01), my - 0.16, 0.10), 0.12, (1, 0.7, 0.9), [M['gun']], parent=root, seg=14)
+    loft("dorsal", WM_DORSAL, [H, M['panel']], parent=root, n=8, subsurf=0, ex=2.0, smooth=False,
+         mat_fn=lambda y, ang: 1 if (math.degrees(ang) % 360) < 45 or (math.degrees(ang) % 360) > 135 else 0)
+    box("spine", (0, -1.0, 0.61), (0.06, 1.05, 0.03), [M['tile']], parent=root, bevel=0.015)
+    lathe("ant", [(0, 0.68), (0.20, 0.66), (0.22, 0.62), (0, 0.60)], [M['panel']], parent=root, seg=24).location = (0, 0.30, 0)
+    # 센서 창 — 등 모듈 앞 다면 유리 + 뱃머리 청록 눈
+    s = sphere("visor", (0, 1.55, 0.53), 0.24, (1.0, 2.4, 0.40), [M['glass']], parent=root, seg=10)
+    for p in s.data.polygons:
+        p.use_smooth = False
+    sphere("eye", (0, 2.95, 0.16), 0.10, (1.2, 0.9, 0.6), [M['eye']], parent=root, seg=14)
+    # 방열판 — 동체에서 틈을 두고 지주 2개로 단 좁고 긴 판(몸통과 거의 나란함). 흰 세라믹 + 히트파이프 골, 테두리는 어두운 판
+    for sg in (1, -1):
+        wing_slab("radiator", [(sg * x, y) for (x, y) in WM_RAD], 0.07, 0.07, 0.0, 10.0, 0.10, [M['rad'], M['panel']], parent=root,
+                  bevel=0.02, mat_fn=lambda nx, ny, nz, cx, cy: 0 if nz > 0.9 else 1)
+        for yy in (0.35, -1.35):
+            xin = _pl([-2.7, -2.0, -0.8, 0.6], [0.64, 0.86, 1.04, 1.08], yy) - 0.08
+            x1 = WM_RAD[0][0] + (WM_RAD[0][1] - yy) / (WM_RAD[0][1] - WM_RAD[3][1]) * (WM_RAD[3][0] - WM_RAD[0][0]) + 0.03
+            st = cyl("strut", (sg * (xin + x1) / 2, yy, 0.09), 0.05, x1 - xin, 'Z', [M['gun']], parent=root, verts=10)
+            st.rotation_euler = (0, math.radians(90), 0)
+    # 이온 추력기 — 원통 하우징 + 넓어지는 종 + 그리드 테(청색 발광) + 안쪽 그리드 원판(발광)
+    ex_, ey_ = WM_ENGINE
+    cyl("eng_house", (0, -2.92, 0.04), 0.60, 0.62, 'Y', [M['gun']], parent=root, verts=32)
+    cyl("eng_bell", (0, -3.42, 0.04), 0.68, 0.40, 'Y', [M['noz']], parent=root, verts=32, r2=0.60, cap=False)
+    ring = torus("eng_grid", (0, ey_ + 0.06, 0.04), 0.62, 0.07, [M['ion']], parent=root)
+    ring.rotation_euler = (math.radians(90), 0, 0)
+    bpy_disc(M['ion'], (0, ey_ + 0.12, 0.04), 0.58, root)
+    # RCS 쿼드 4 — 앞 둘(갈퀴 바깥: 옆 노즐 + 앞 노즐), 뒤 둘(엔진 옆: 옆 노즐 + 뒤 노즐)
+    for sg in (1, -1):
+        fx, fy = WM_RCS_F
+        box("rcs_f", (sg * fx, fy, 0.10), (0.15, 0.17, 0.12), [M['panel']], parent=root)
+        nozzle(M, (sg * (fx + 0.14), fy, 0.10), (sg, 0), root)
+        nozzle(M, (sg * fx, fy + 0.16, 0.10), (0, 1), root)
+        rx, ry = WM_RCS_R
+        box("rcs_r", (sg * rx, ry, 0.10), (0.15, 0.17, 0.12), [M['panel']], parent=root)
+        nozzle(M, (sg * (rx + 0.14), ry, 0.10), (sg, 0), root)
+        nozzle(M, (sg * rx, ry - 0.16, 0.10), (0, -1), root)
+
+
+def bpy_last():
+    import bpy
+    return bpy.context.object
+
+
+def torus(name, loc, R, r, mats, parent=None, seg=56, mseg=12):
+    import bpy
+    bpy.ops.mesh.primitive_torus_add(major_radius=R, minor_radius=r, major_segments=seg, minor_segments=mseg, location=loc)
+    t = bpy.context.object
+    t.name = name
+    for m in mats:
+        t.data.materials.append(m)
+    for p in t.data.polygons:
+        p.use_smooth = True
+    if parent:
+        t.parent = parent
+    return t
 
 
 def bpy_disc(mat, loc, r, parent):
     import bpy
-    bpy.ops.mesh.primitive_circle_add(radius=r, vertices=28, fill_type='NGON', location=loc)
+    bpy.ops.mesh.primitive_circle_add(radius=r, vertices=32, fill_type='NGON', location=loc)
     d = bpy.context.object
     d.rotation_euler = (math.radians(90), 0, 0)
     d.data.materials.append(mat)
@@ -504,88 +570,55 @@ def bpy_disc(mat, loc, r, parent):
     return d
 
 
-# ─────────── ② 호위 드론 (덕트 팬 4발 센티넬) ───────────
-def build_aegis(M, root, phase):
-    import bpy
+# ─────────── ② 호위 드론 (UFO 렌즈 원반) ───────────
+def lens_top(r):
+    """위 렌즈 높이 — 가운데 0.80, 가장자리 0 으로 매끈하게(렌즈 단면)."""
+    t = min(1.0, r / AG_HULL_R)
+    return 0.80 * (1 - t * t) ** 1.25 + 0.04
+
+
+def build_aegis(M, root):
     H = M['hull']
-    # 원반 동체 — 납작한 렌즈형 + 윗면 링 홈
-    RC = 1.95
-    secs = [(RC, 0.0, 0.0, 0.0, 0.0)]
-    n = 16
-    for i in range(1, n):
-        t = i / n
-        y = RC - 2 * RC * t
-        hw = math.sqrt(max(0.0, 1.0 - (2 * t - 1) ** 2)) * RC
-        secs.append((y, hw, 0.58 * hw / RC + 0.06, 0.32 * hw / RC + 0.04, 0.0))
-    secs.append((-RC, 0.0, 0.0, 0.0, 0.0))
-    loft("disc", secs, [H], parent=root, n=40, subsurf=1)
-    # 윗면 검은 타일 링(센서 터렛 받침)
-    bpy.ops.mesh.primitive_torus_add(major_radius=1.08, minor_radius=0.11, major_segments=48, minor_segments=10, location=(0, -0.1, 0.56))
-    t = bpy.context.object; t.data.materials.append(M['tile']); t.parent = root
-    for p in t.data.polygons:
-        p.use_smooth = True
-    # 중앙 돔 — 짙은 유리, 그 앞 센서 블리스터 + 청록 렌즈(진행 방향)
-    sphere("dome", (0, -0.1, 0.52), 0.80, (1, 1, 0.55), [M['glass']], parent=root)
-    sphere("eye", (0, 0.45, 0.78), 0.17, (1.3, 1.0, 0.7), [M['eye']], parent=root, seg=16)
-    # 팔 4개(45° 대각) — 스틸 팔 + 윗면 타일 띠
+    # 위 렌즈 — 회전체, 가운데는 돔이 앉으므로 r 0.8 안쪽은 평평하게
+    prof = [(0.0, lens_top(0.0))]
+    for i in range(1, 19):
+        r = AG_HULL_R * (1 - math.cos(math.pi / 2 * i / 18))
+        prof.append((r, lens_top(r)))
+    prof += [(AG_HULL_R + 0.02, 0.0), (AG_HULL_R - 0.10, -0.12), (1.6, -0.30), (0.0, -0.36)]
+    lathe("lens", prof, [H], parent=root, seg=96)
+    # 동심 홈 2줄(타일) — 렌즈 곡면에 붙인 가는 고리
+    for rr in (1.55,):
+        torus("groove", (0, 0, lens_top(rr) - 0.005), rr, 0.028, [M['tile']], parent=root, seg=96, mseg=8)
+    # 센서 돔 — 짙은 유리 + 받침 고리 + 앞쪽 청록 눈
+    sphere("dome", (0, 0, lens_top(0) - 0.10), 0.86, (1, 1, 0.72), [M['dome']], parent=root, seg=48)
+    torus("dome_collar", (0, 0, lens_top(0.88) + 0.01), 0.90, 0.07, [M['panel']], parent=root, seg=72, mseg=10)
+    sphere("eye", (0, 0.52, lens_top(0) + 0.38), 0.14, (1.3, 1.0, 0.55), [M['eye']], parent=root, seg=18)
+    # 하부 고리형 이온 추력기 — 위 렌즈보다 넓어서 렌즈와 바깥 링 사이로 보인다. 48칸 그리드(4칸마다 어두운 살)
+    ri, ro = AG_ION
+    lathe("ion_ring", [(ri, -0.05), (ro, -0.05)], [M['ion'], M['iondk']], parent=root, seg=96,
+          mat_fn=lambda i, k: 1 if (k % 4) == 0 else 0)
+    lathe("ion_well", [(ro, -0.04), (ro, -0.22), (ri - 0.2, -0.24)], [M['gun']], parent=root, seg=96)
+    # 바깥 링 — 어두운 판 금속 고리(납작)
+    tr = torus("rim", (0, 0, 0.02), AG_RIM, 0.25, [M['panel']], parent=root, seg=128, mseg=16)
+    tr.scale = (1, 1, 0.62)
+    torus("rim_lip", (0, 0, 0.12), AG_RIM - 0.10, 0.06, [H], parent=root, seg=128, mseg=8)
+    # RCS 쿼드 포드 4 — 45° 대각. 바깥 방향 노즐 1 + 접선 노즐 2(시계·반시계)
     for k in range(4):
         a = math.radians(45 + 90 * k)
         ca, sa = math.cos(a), math.sin(a)
-        L0, L1 = 1.5, 2.35
-        w0, w1 = 0.30, 0.20
-        px, py = -sa, ca
-        pts = [(ca * L0 + px * w0, sa * L0 + py * w0), (ca * L1 + px * w1, sa * L1 + py * w1),
-               (ca * L1 - px * w1, sa * L1 - py * w1), (ca * L0 - px * w0, sa * L0 - py * w0)]
-        # 반시계 정렬
-        cx_ = sum(p[0] for p in pts) / 4; cy_ = sum(p[1] for p in pts) / 4
-        pts.sort(key=lambda p: math.atan2(p[1] - cy_, p[0] - cx_))
-        wing_slab("arm", pts, 0.26, 0.20, 0.0, 10.0, 0.06, [H, M['tile']], parent=root, bevel=0.04,
-                  mat_fn=lambda nx, ny, nz, cx, cy: 1 if nz > 0.9 else 0)
-        # 덕트 링
-        dx, dy = ca * 2.85, sa * 2.85
-        # 덕트 = 짙은 금속 링(높이 1.6 배) + 위 가장자리 외피색 립
-        bpy.ops.mesh.primitive_torus_add(major_radius=0.90, minor_radius=0.15, major_segments=56, minor_segments=14, location=(dx, dy, 0.08))
-        d = bpy.context.object; d.data.materials.append(M['panel']); d.parent = root
-        d.scale = (1, 1, 1.6)
-        for p in d.data.polygons:
-            p.use_smooth = True
-        bpy.ops.mesh.primitive_torus_add(major_radius=0.92, minor_radius=0.075, major_segments=56, minor_segments=10, location=(dx, dy, 0.30))
-        d = bpy.context.object; d.data.materials.append(H); d.parent = root
-        for p in d.data.polygons:
-            p.use_smooth = True
-        # 덕트 안 바닥(어두운 배기 그릴) + 허브
-        bpy_disc_flat(M['gun'], (dx, dy, -0.12), 0.80, root)
-        cyl("hub", (dx, dy, 0.06), 0.20, 0.22, 'Z', [M['gun']], parent=root, verts=20)
-        sphere("hubcap", (dx, dy, 0.18), 0.13, (1, 1, 0.6), [H], parent=root, seg=16)
-        # 로터 3엽 — phase 0/1 은 60° 어긋남(2프레임 교대 = 회전 착시)
-        for b in range(3):
-            ang = math.radians(b * 120 + phase * 60 + k * 17)
-            bx, by = math.cos(ang), math.sin(ang)
-            nx_, ny_ = -by, bx
-            r0, r1, bw0, bw1 = 0.18, 0.76, 0.14, 0.09
-            bl = [(dx + bx * r0 + nx_ * bw0, dy + by * r0 + ny_ * bw0), (dx + bx * r1 + nx_ * bw1, dy + by * r1 + ny_ * bw1),
-                  (dx + bx * r1 - nx_ * bw1, dy + by * r1 - ny_ * bw1), (dx + bx * r0 - nx_ * bw0, dy + by * r0 - ny_ * bw0)]
-            ccx = sum(p[0] for p in bl) / 4; ccy = sum(p[1] for p in bl) / 4
-            bl.sort(key=lambda p: math.atan2(p[1] - ccy, p[0] - ccx))
-            wing_slab("blade", bl, 0.04, 0.04, 0.0, 10.0, 0.04, [M['rotor']], parent=root, bevel=0.0)
-        # 덕트 바깥 상태등(청록 LED)
-        sphere("led", (ca * 3.86, sa * 3.86, 0.24), 0.07, (1, 1, 1), [M['eye']], parent=root, seg=10)
-    # 앞쪽 쌍열 이미터 — 앞 두 덕트 사이
+        px, py = ca * AG_POD_R, sa * AG_POD_R
+        box("pod", (px, py, 0.08), (0.17, 0.27, 0.15), [H], parent=root, rot_z=a, bevel=0.05)
+        box("pod_cap", (px + ca * 0.02, py + sa * 0.02, 0.24), (0.10, 0.18, 0.02), [M['tile']], parent=root, rot_z=a, bevel=0.01)
+        nozzle(M, (px + ca * 0.16, py + sa * 0.16, 0.08), (ca, sa), root)
+        tx, ty = -sa, ca
+        nozzle(M, (px + tx * 0.26, py + ty * 0.26, 0.08), (tx, ty), root, length=0.13)
+        nozzle(M, (px - tx * 0.26, py - ty * 0.26, 0.08), (-tx, -ty), root, length=0.13)
+    # 앞쪽 쌍 이미터 — 링 앞(노즈 방향) 하우징 + 청록 렌즈
+    ex, ey = AG_EMIT
+    box("emit_house", (0, ey - 0.16, 0.10), (0.52, 0.16, 0.12), [M['gun']], parent=root, bevel=0.05)
     for sg in (1, -1):
-        cyl("emit", (sg * 0.40, 2.35, 0.12), 0.15, 1.2, 'Y', [M['gun']], parent=root, verts=18)
-        sphere("emit_tip", (sg * 0.40, 2.97, 0.12), 0.11, (1, 1, 1), [M['cyan']], parent=root, seg=12)
-    cyl("emit_base", (0, 1.90, 0.10), 0.36, 0.60, 'Y', [H], parent=root, verts=24)
-    # 뒤 안테나 핀
-    cyl("ant", (0, -2.15, 0.30), 0.04, 0.9, 'Y', [M['gun']], parent=root, verts=8)
-
-
-def bpy_disc_flat(mat, loc, r, parent):
-    import bpy
-    bpy.ops.mesh.primitive_circle_add(radius=r, vertices=40, fill_type='NGON', location=loc)
-    d = bpy.context.object
-    d.data.materials.append(mat)
-    d.parent = parent
-    return d
+        cyl("emit", (sg * ex, ey - 0.02, 0.10), 0.10, 0.30, 'Y', [M['gun']], parent=root, verts=16)
+        sphere("emit_tip", (sg * ex, ey + 0.12, 0.10), 0.085, (1, 1, 1), [M['cyan']], parent=root, seg=12)
 
 
 def render(path):
@@ -599,19 +632,17 @@ def do_all(which):
     import bpy
     os.makedirs(REN, exist_ok=True)
     for lv in ('steel', 'gold'):
-        if which in ('all', 'wing', 'wing0'):
-            for bi in (BANKS if which != 'wing0' else [0, 2]):
-                scene(); M = materials(lv); lights()
-                root = bpy.data.objects.new("wm", None); bpy.context.scene.collection.objects.link(root)
-                build_wingman(M, root)
-                root.rotation_euler = (0, math.radians(bi * BANK_DEG), 0)
-                render(os.path.join(REN, "wing_%s_b%+d.png" % (lv, bi)))
+        if which in ('all', 'wing'):
+            scene(FRAME_U); M = materials(lv, -0.05); lights()     # 평면 다면체는 넓은 반사 꼬리가 면 전체를 덮어 하얗게 뜬다 → 결을 한 단계 매끈하게
+            root = bpy.data.objects.new("wm", None); bpy.context.scene.collection.objects.link(root)
+            build_wingman(M, root)
+            render(os.path.join(REN, "wing_%s.png" % lv))
         if which in ('all', 'aegis'):
-            for ph in (0, 1):
-                scene(FRAME_A); M = materials(lv); lights()
-                root = bpy.data.objects.new("ag", None); bpy.context.scene.collection.objects.link(root)
-                build_aegis(M, root, ph)
-                render(os.path.join(REN, "aegis_%s_%d.png" % (lv, ph)))
+            scene(FRAME_A); M = materials(lv); lights()
+            root = bpy.data.objects.new("ag", None); bpy.context.scene.collection.objects.link(root)
+            build_aegis(M, root)
+            root.rotation_euler = (math.radians(-AG_TILT), 0, 0)    # 앞(화면 아래)쪽이 보이게 기울임 → 돔이 위로 솟아 UFO 로 읽힌다
+            render(os.path.join(REN, "aegis_%s.png" % lv))
 
 
 # ══════════════════════════════ 굽기(일반 파이썬) ══════════════════════════════
@@ -621,34 +652,23 @@ def post():
     sys.path.insert(0, HERE)
     import spacez_planets as sp
     from starship_scene import sharpen, bbox
-    cells = []
     rep = {}
 
-    def cell(name):
+    def cell(name, gold):
         a = sp.load_rgba(os.path.join(REN, name + ".png"))
         x0, y0, x1, y1 = bbox(a)
         assert x0 > 2 and y0 > 2 and x1 < a.shape[1] - 3 and y1 < a.shape[0] - 3, ("잘림", name, (x0, y0, x1, y1))
         rep[name] = [x0, y0, x1, y1]
-        return sharpen(sp.resize_premul(a, CELL, CELL), 0.4)
+        c = sharpen(sp.resize_premul(a, CELL, CELL), 0.4)
+        if gold:
+            c[..., 0] = np.clip(c[..., 0] * 1.10, 0, 1); c[..., 1] = np.clip(c[..., 1] * 1.04, 0, 1); c[..., 2] = np.clip(c[..., 2] * 0.90, 0, 1)
+        return c
     rows = []
-    for lv in ('steel', 'gold'):
-        r = [cell("wing_%s_b%+d" % (lv, bi)) for bi in BANKS]
-        if lv == 'gold':
-            for c in r:
-                c[..., 0] = np.clip(c[..., 0] * 1.10, 0, 1); c[..., 1] = np.clip(c[..., 1] * 1.04, 0, 1); c[..., 2] = np.clip(c[..., 2] * 0.90, 0, 1)
-        rows.append(np.concatenate(r, axis=1))
-    ag = []
-    for lv in ('steel', 'gold'):
-        for ph in (0, 1):
-            c = cell("aegis_%s_%d" % (lv, ph))
-            if lv == 'gold':
-                c[..., 0] = np.clip(c[..., 0] * 1.10, 0, 1); c[..., 1] = np.clip(c[..., 1] * 1.04, 0, 1); c[..., 2] = np.clip(c[..., 2] * 0.90, 0, 1)
-            ag.append(c)
-    ag.append(np.zeros((CELL, CELL, 4), np.float32))
-    rows.append(np.concatenate(ag, axis=1))
+    for kind in ('wing', 'aegis'):
+        rows.append(np.concatenate([cell("%s_%s" % (kind, lv), lv == 'gold') for lv in ('steel', 'gold')], axis=1))
     A = sp.clean_alpha(np.concatenate(rows, axis=0))
     os.makedirs(PUB, exist_ok=True)
-    q, sz = sp.save_webp(A, os.path.join(PUB, "drones.webp"), 70, q0=88, qmin=60, qmax=94, aq=92)
+    q, sz = sp.save_webp(A, os.path.join(PUB, "drones.webp"), 60, q0=90, qmin=70, qmax=95, aq=95)
     rep["drones"] = dict(w=A.shape[1], h=A.shape[0], q=q, kb=round(sz / 1024, 1))
     print(json.dumps(rep, indent=1))
 
