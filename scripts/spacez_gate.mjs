@@ -38,6 +38,7 @@
      startshot  시작 화면 ko·en × 320x568·390x844 — 스크린샷(보통 + 애니메이션 정지·캔버스 숨김) 해시·DOM 배치 서명 기준선 비교
      gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
+     mp3 · mp3assist · mp3shots  (MP3) A1 데스봄 유예·A2 블랙홀 버블·편한 비행·RPC·지연 검사 / ibot 편한 비행 ≥ 기본×1.5 / 장면·색각 시트  (ibot 옵션 --assist --mp3-db <p> --mp3-nobh --mp3-nodb)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -133,6 +134,399 @@ const HIT_SCEN = [];
 /*<gate:mp2>*/
 /*</gate:mp2>*/
 /*<gate:mp3>*/
+/* MP3 (2026-10-08) — 공정성·편한 비행. 옵션: ibot --assist(편한 비행 판) · --mp3-db <p>(봇이 데스봄 유예창에서 p 확률로 폭탄·이온을 누름, 60~130ms)
+   · --mp3-nobh(A2 끔) · --mp3-nodb(A1 끔) — 기여도 분리용. 명령: mp3(A1·A2·편한 비행·RPC·지연·칩 검사) · mp3assist(ibot 편한 비행 판정 ≥ 기본 ×1.5) · mp3shots(장면·색각 시트) */
+IBOT_HOOKS.push((P) => {
+    P.ext = P.ext || {};
+    if(A.assist) P.ext.assist = 1;
+    if(A['mp3-db'] != null) P.ext.mp3db = +A['mp3-db'];
+    if(A['mp3-nobh']) P.ext.nobh = 1;
+    if(A['mp3-nodb']) P.ext.nodb = 1;
+    if(A['mp3-wk'] != null) P.ext.wk = +A['mp3-wk'];   /* 실험 — 편한 비행 세상 배율(기본 0.85) */
+    return P;
+});
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const pre0 = G.ibotPre, post0 = G.ibotPost;
+    const lcg = (c) => { c.s = (Math.imul(c.s, 1664525) + 1013904223) >>> 0; return c.s / 4294967296; };
+    G.ibotPre = function(P, bi){
+        if(pre0) try{ pre0(P, bi); }catch(_){}
+        if(!window.SZMP3) return;
+        const X = P.ext || {};
+        SZRUN.kind = null;
+        if(X.wk > 0) SZMP3.WK = X.wk;
+        if(X.assist){ SZRUN.want = 'assist'; szRunBegin(); }
+        else { if(SZRUN.want === 'assist') SZRUN.want = null; SZMP3.begin(szRunKind()); }
+        SZMP3.bhOn = !X.nobh; SZMP3.dbOn = !X.nodb;
+        /* 사인 기록 — 판정 직후의 피격 종류(szHitKind, 300ms 안) — ibot 의 why(SZM.hitKind)는 운석 피격 때 갱신되지 않아 낡은 값이 남는다 */
+        G._mp3k = null; G._mp3jet = 0; G._mp3dk = null;
+        if(window.triggerGameOver !== G._mp3tgW){ const t = window.triggerGameOver; G._mp3tgW = function(k){ G._mp3dk = k || null; return t.apply(this, arguments); }; window.triggerGameOver = G._mp3tgW; }
+        if(!G._mp3oh){ const oh = window.szOnHit; G._mp3oh = oh; window.szOnHit = function(){ let k = null; try{ k = szHitKind(null); }catch(_){} G._mp3k = k || 'rock'; if(k === 'bh') G._mp3jet++; return oh.apply(this, arguments); }; }
+        /* 데스봄 모델 — 봇 시드에서 뽑는 별도 수열(게임 rand·Math.random 과 무관) */
+        G._mp3db = X.mp3db > 0 ? { p: X.mp3db, s: ((P.botSeeds[bi] | 0) * 2654435761) >>> 0, pid: null, go: false, at: 0 } : null;
+        if(G._mp3db && !G._mp3gl){
+            const gl = window.gameLoop; G._mp3gl = gl;
+            window.gameLoop = function(now){
+                const c = G._mp3db, p = window.SZMP3 && SZMP3.pend;
+                if(c && p){
+                    if(c.pid !== p){ c.pid = p; c.go = lcg(c) < c.p; c.at = p.t0 + 60 + lcg(c) * 70; }
+                    if(c.go && now >= c.at){ c.go = false; const i = SZMP3.saveSlot(); if(i >= 0) inventoryUseSlot(i); }
+                }
+                return gl.apply(this, arguments);
+            };
+        }
+    };
+    G.ibotPost = function(P, bi, rec){
+        if(post0) try{ post0(P, bi, rec); }catch(_){}
+        if(!window.SZMP3) return;
+        const s = SZMP3.st; rec.uses = rec.uses || {};
+        /* 판당 평균으로 모이게 uses 에 싣는다(runIBotSet 의 sum('uses')) */
+        for(const k of ['defer', 'save', 'conf', 'bh', 'reserve']) if(s[k]) rec.uses['mp3_' + k] = s[k];
+        if(G._mp3jet) rec.uses.mp3_jetHits = G._mp3jet;
+        if(rec.dead){ const kk = G._mp3dk ? G._mp3dk + '!' : (G._mp3k || 'x'); rec.uses['mp3_kill_' + kk + '@z' + rec.z] = 1; }
+    };
+    /* A2 블랙홀 — {bubble, flag, stayMs, step}: 존 19 로 워프, 기체를 지평선 안에 두고 stayMs 뒤 바깥으로 뺀다 */
+    G.mp3bh = function(P){
+        const out = { errs: [] };
+        G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1;
+        let over = null;
+        const oOver = window.triggerGameOver;
+        window.triggerGameOver = function(k){ if(over == null) over = { t: Math.round(G.VT - t0), k: String(k || '') }; running = false; };
+        let t0 = 0;
+        try{
+            SZMP3.begin('ranked'); SZMP3.bhOn = !!P.flag; if(P.assist){ SZMP3.as = true; SZMP3.wk = SZMP3.WK; }
+            szWarpTo(19, G.VT);
+            G.VT += 16.667; gameLoop(G.VT);   /* 존 진입 프레임 */
+            invincibleUntil = 1e15; lives = 5;
+            szUpdateBlackHoleGeom(getZoneT(19));
+            if(P.bubble) triggerShieldBubble();
+            t0 = G.VT;
+            const cx = blackHole.cx, cy = blackHole.cy;
+            let fr = 0;
+            while(running && G.VT - t0 < 1600){
+                G.VT += P.step || 16.667; fr++;
+                const inside = G.VT - t0 < (P.stayMs || 200);
+                player.x = cx + (inside ? 6 : 0); player.y = cy + (inside ? 0 : 140);
+                if(!P.assist) invincibleUntil = 1e15; else if(fr === 1) invincibleUntil = 0;
+                gameLoop(G.VT);
+            }
+            Object.assign(out, { frames: fr, over, alive: over == null, lives, bubbleLeft: Math.max(0, Math.round(shieldBubbleUntil - G.VT)), bh: SZMP3.st.bh, zone: currentZoneIdx, r: blackHole.r });
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        window.triggerGameOver = oOver; running = false; G.unsynth(); window.__szFuelInf = 0; SZMP3.as = false; SZMP3.wk = 1;
+        return out;
+    };
+    /* 편한 비행 — 같은 코스 60초를 ranked·assist 로 날려 스폰 수·세상 배율·무적·보급 차단·예비 탱크를 잰다 */
+    G.mp3assist = function(P){
+        const out = { errs: [] };
+        const run = (assist) => {
+            window.szFirstRunCalc = function(){ return false; };   /* 첫 판 완화(보급 차단 면제)를 끈다 — ibot 과 같은 조건 */
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1;
+            SZRUN.kind = null; SZRUN.want = assist ? 'assist' : null; szRunBegin();
+            const r = { kind: szRunKind(), as: SZMP3.as, wk: SZMP3.wk, spawned: 0, rpcOk: szRecOk('rpc'), bestOk: szRecOk('best') };
+            const oSpawn = window.spawnBullet; window.spawnBullet = function(){ r.spawned++; return oSpawn.apply(this, arguments); };
+            try{
+                const t0 = G.VT;
+                while(G.VT - t0 < 60000 && running){ G.VT += 16.667; invincibleUntil = 1e15; lives = 5; player.x = 180; player.y = 390; gameLoop(G.VT); }
+                r.endSec = Math.round(elapsedMs / 100) / 10;
+                /* 무적 — 피격 1회 적용 */
+                invincibleUntil = 0; const n = G.VT; szHitApply(n, player.x, player.y); r.inv = Math.round(invincibleUntil - n);
+                /* 보급 영구 차단 — 미션 실패 2번 */
+                szSatMiss = 0; szSupplyCut = false; for(let i = 0; i < SZ_SUPPLY_CUT_N; i++) szSatMissed(); r.cut = !!szSupplyCut; r.miss = szSatMiss;
+                /* 비상 예비 탱크 — 헤더까지 바닥 */
+                window.__szFuelInf = 0; lives = 3; let over = null;
+                const oOver = window.triggerGameOver; window.triggerGameOver = function(k){ over = k || 'x'; running = false; };
+                szHitStopUntil = 0; SZP.ch4 = 0; SZP.lox = 0; SZP.mode = 1; SZP.hdr = 20;
+                for(let i = 0; i < 6 && running; i++){ G.VT += 16.667; invincibleUntil = 1e15; gameLoop(G.VT); }
+                r.res1 = { lives, mode: SZP.mode, fuel: Math.round(Math.min(SZP.ch4, SZP.lox) * 100), over };
+                SZP.ch4 = 0; SZP.lox = 0; SZP.mode = 1; SZP.hdr = 20;
+                for(let i = 0; i < 6 && running; i++){ G.VT += 16.667; invincibleUntil = 1e15; gameLoop(G.VT); }
+                r.res2 = { lives, mode: SZP.mode, over };
+                window.triggerGameOver = oOver;
+            }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+            window.spawnBullet = oSpawn;
+            running = false; G.unsynth(); window.__szFuelInf = 0; SZRUN.want = null; SZRUN.kind = null;
+            return r;
+        };
+        out.ranked = run(false);
+        out.assist = run(true);
+        /* 시드 판에서는 assist 가 될 수 없다 — SZX.mode 를 데일리로 흉내 */
+        try{
+            const X = window.SZX, m0 = X && X.mode;
+            if(X){ X.mode = () => 'daily'; SZRUN.want = 'assist'; SZRUN.kind = null; out.seededKind = szRunKindLive(); X.mode = m0; SZRUN.want = null; }
+        }catch(e){ out.errs.push('seeded ' + e.message); }
+        return out;
+    };
+});
+/* hitpath 시나리오 — A1 데스봄 유예. 인벤토리 [폭탄, 이온, 폭탄] · 누름(보류 70ms 뒤 그 칸) · 안 누름 · 아이템 없음 */
+const MP3_INV = "inventory.fill(null); inventory[0]='wipe'; inventory[1]='ion'; inventory[2]='wipe'; syncInventoryUI();";
+const MP3_PRESS = "(function(){ " + MP3_INV + " var gl = window.gameLoop; window.gameLoop = function(now){ var p = window.SZMP3 && SZMP3.pend; if(p && now - p.t0 >= 70){ var i = SZMP3.saveSlot(); if(i >= 0) inventoryUseSlot(i); } return gl.apply(this, arguments); }; })()";
+for(const st of [1000 / 60, 1000 / 30]){
+    const tag = '@' + (st < 20 ? '16.67' : '33.33');
+    HIT_SCEN.push({ key: 'mp3db-press' + tag, mode: 'inject', step: st, setup: MP3_PRESS });
+    HIT_SCEN.push({ key: 'mp3db-hold' + tag, mode: 'inject', step: st, setup: '(function(){ ' + MP3_INV + ' })()' });
+}
+HIT_SCEN.push({ key: 'mp3db-none@16.67', mode: 'inject', step: 1000 / 60, setup: '(function(){ inventory.fill(null); syncInventoryUI(); })()' });
+
+async function runMp3(base){
+    const out = {};
+    /* 1) A1 — 누름·안 누름·없음 각 2번(결정성) + 없음 = 기준선 inject@16.67 */
+    const scen = [['press', MP3_PRESS], ['hold', '(function(){ ' + MP3_INV + ' })()'], ['none', '(function(){ inventory.fill(null); syncInventoryUI(); })()']];
+    out.db = {};
+    for(const [k, setup] of scen){
+        const reps = [];
+        for(let rep = 0; rep < 2; rep++){
+            reps.push(await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+                await e.open(gameUrl(base, 'ko'), 1500);
+                const o = await e.ev('__G.hitpath(' + JSON.stringify({ seed: 424242, step: 1000 / 60, secs: 240, mode: 'inject', mr: rep ? 7 : 1, lives: 5, setup }) + ')', 600000);
+                const st = await e.ev('JSON.stringify(SZMP3.st)');
+                collectErrs('mp3 db ' + k, e, (await e.ev('(window.__E||[]).slice(0,8)')).concat(o.errs));
+                return { h: sha(o.ev), nHit: o.nHit, over: o.over, livesEnd: o.livesEnd, st: JSON.parse(st), head: o.ev.slice(0, 10) };
+            }));
+        }
+        out.db[k] = { h: reps[0].h, same: reps[0].h === reps[1].h, nHit: reps[0].nHit, over: reps[0].over, st: reps[0].st, head: reps[0].head };
+        say('mp3 A1 ' + k + ': #' + reps[0].h + ' 반복 ' + (reps[0].h === reps[1].h ? '같음' : '다름') + ' 피격 ' + reps[0].nHit + ' 끝 ' + reps[0].over + ' ' + JSON.stringify(reps[0].st));
+    }
+    /* 2) A2 + 편한 비행 + 시드 판 */
+    await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        out.bh = {};
+        for(const [k, P] of [['on+bubble', { flag: 1, bubble: 1 }], ['off+bubble', { flag: 0, bubble: 1 }], ['on+none', { flag: 1, bubble: 0 }], ['on+bubble+stay', { flag: 1, bubble: 1, stayMs: 1200 }], ['on+bubble@30', { flag: 1, bubble: 1, step: 1000 / 30 }]]){
+            out.bh[k] = await e.ev('__G.mp3bh(' + JSON.stringify(P) + ')', 120000);
+            await e.ev('(function(){ SZMP3.bhOn = true; return 1; })()');
+        }
+        out.assist = await e.ev('__G.mp3assist({})', 300000);
+        collectErrs('mp3 bh/assist', e, (await e.ev('(window.__E||[]).slice(0,8)')).concat(...Object.values(out.bh).map(x => x.errs), out.assist.errs));
+    });
+    say('mp3 A2: ' + JSON.stringify(out.bh));
+    say('mp3 편한 비행: ' + JSON.stringify(out.assist));
+    /* 3) 기록 — 실제 startGame → triggerGameOver. RPC 를 가짜 로그인·스텁으로 세어 ranked 1회 / assist 0회 */
+    out.rpc = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        await e.ev(`(function(){ window.__rpc = []; me = {id: 'gate-user'}; meIdAtBoot = 'gate-user';
+            window.getUser = async function(){ return {id: 'gate-user', email: 'g@x'}; };
+            const q = {select(){ return q; }, eq(){ return q; }, order(){ return q; }, limit(){ return q; }, maybeSingle: async () => ({data: null}), then(r){ return Promise.resolve({data: [], error: null}).then(r); }};
+            window.getSupabase = function(){ return {rpc: function(n, a){ __rpc.push(n); return Promise.resolve({data: null, error: {message: 'gate stub'}}); }, from: function(){ return q; }}; };
+            localStorage.removeItem('szx_best_assist_ms'); return 1; })()`);
+        const one = async (assist) => {
+            await e.ev('(function(){ SZMP3.set("assist", ' + (assist ? 'true' : 'false') + '); __rpc.length = 0; localStorage.setItem("szx_best_ms", "1"); startGame(); return 1; })()');
+            await e.ev(`new Promise(function(res){ var t0 = Date.now(); (function w(){ if((running && !_introRunning) || Date.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+            await sleep(1200);
+            await e.ev('(function(){ triggerGameOver(); return 1; })()');
+            await sleep(2500);
+            return await e.ev(`({ kind: SZRUN.kind, as: SZMP3.as, rpc: __rpc.filter(function(n){ return n === 'record_dodge_attempt'; }).length, best: localStorage.getItem('szx_best_ms'),
+                bestAssist: localStorage.getItem('szx_best_assist_ms'), feather: !!document.querySelector('#overlay .sz-mp3-feather') })`);
+        };
+        const r = { ranked: await one(false), assist: await one(true) };
+        await e.ev('(function(){ SZMP3.set("assist", false); return 1; })()');
+        collectErrs('mp3 rpc', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        return r;
+    });
+    say('mp3 기록: ' + JSON.stringify(out.rpc));
+    /* 4) 입력 지연 — 편한 비행 켬(?assist=1)으로 runLatency 와 같은 측정 */
+    out.lat = {};
+    for(const mode of ['mouse', 'touch']){
+        const vp = mode === 'mouse' ? { w: 1280, h: 800, dsf: 1, mobile: false } : { w: 412, h: 915, dsf: 2.625, mobile: true };
+        out.lat[mode] = await withEdge(vp, async (e) => {
+            await e.open(gameUrl(base, 'ko', 'assist=1'), 1800);
+            await e.ev(LAT_PAGE);
+            await e.ev('(function(){ window.__inv = setInterval(function(){ invincibleUntil = 1e15; lives = 5; }, 50); startGame(); return 1; })()');
+            await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+            await sleep(900);
+            const as = await e.ev('SZMP3.as');
+            const geo = await e.ev('(function(){ var r = document.getElementById("dodge-canvas").getBoundingClientRect(); return { l: r.left, t: r.top, w: r.width, h: r.height }; })()');
+            const cx = geo.l + geo.w * 0.5, cy = geo.t + geo.h * 0.55, N = 24;
+            if(mode === 'touch') await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: cy, id: 1 }] });
+            for(let i = 0; i < N; i++){
+                const x = cx + ((i % 2) ? 1 : -1) * (14 + (i % 5) * 3), y = cy + ((i % 3) - 1) * 6;
+                await e.ev('(window.__LAT.on = null, 1)');
+                if(mode === 'mouse') await e.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+                else await e.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y, id: 1 }] });
+                await sleep(90 + (i % 4) * 13);
+            }
+            if(mode === 'touch') await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            const r = await e.ev('(function(){ clearInterval(window.__inv); running = false; return window.__LAT.res; })()');
+            collectErrs('mp3 latency ' + mode, e, await e.ev('(window.__E||[]).slice(0,8)'));
+            const ms = r.map(x => x[0]).sort((a, b) => a - b), fr = r.map(x => x[1]).sort((a, b) => a - b);
+            return { as, n: r.length, sent: N, p50: q(ms, 0.5), p90: q(ms, 0.9), fr50: q(fr, 0.5), frMax: fr[fr.length - 1] };
+        });
+    }
+    say('mp3 지연(편한 비행): ' + JSON.stringify(out.lat));
+    return out;
+}
+function judgeMp3(cur){
+    const G = 'MP3';
+    const bi = BASE && BASE.hitpath && BASE.hitpath.runs && BASE.hitpath.runs['inject@16.67'];
+    const D = cur.db;
+    for(const k of ['press', 'hold', 'none']) row(G, 'A1 ' + k + ' 결정성(2회·Math.random 시드 다름)', '#' + D[k].h + (D[k].same ? ' 같음' : ' 다름'), null, '같음', D[k].same ? 'PASS' : 'FAIL');
+    row(G, 'A1 아이템 없음 = 기준선 inject@16.67', '#' + D.none.h, bi ? '#' + bi.h : null, '해시 동일', bi ? (D.none.h === bi.h ? 'PASS' : 'FAIL') : 'WARN');
+    row(G, 'A1 아이템 없음 — 유예창 안 열림', JSON.stringify(D.none.st), null, 'defer 0', D.none.st.defer === 0 ? 'PASS' : 'FAIL');
+    row(G, 'A1 누름 — 취소(save) 발생·피격 경로도 탐', 'save ' + D.press.st.save + ' · 피격 ' + D.press.nHit, null, 'save ≥1 · 피격 ≥1', D.press.st.save >= 1 && D.press.nHit >= 1 ? 'PASS' : 'FAIL');
+    row(G, 'A1 안 누름 — 보류 = 확정', 'defer ' + D.hold.st.defer + ' · conf ' + D.hold.st.conf + ' · 피격 ' + D.hold.nHit, null, 'defer = conf = 피격', D.hold.st.defer >= 1 && D.hold.st.defer === D.hold.st.conf && D.hold.st.conf === D.hold.nHit ? 'PASS' : 'FAIL');
+    const nh = D.none.head.filter(x => x[0] === 'h'), hh = D.hold.head.filter(x => x[0] === 'h');
+    if(nh.length && hh.length) row(G, 'A1 안 누름 — 첫 확정 지연(ms)', hh[0][1] - nh[0][1], null, '≈140 (유예창)', Math.abs(hh[0][1] - nh[0][1] - 140) <= 20 ? 'PASS' : 'WARN');
+    const B = cur.bh;
+    row(G, 'A2 버블 켬 → 지평선 생존·버블 종료', B['on+bubble'].alive + ' · 남은 버블 ' + B['on+bubble'].bubbleLeft + 'ms · bh ' + B['on+bubble'].bh, null, '생존 · 0ms · 1', B['on+bubble'].alive && B['on+bubble'].bubbleLeft === 0 && B['on+bubble'].bh === 1 ? 'PASS' : 'FAIL');
+    row(G, 'A2 30fps', B['on+bubble@30'].alive, null, '생존', B['on+bubble@30'].alive ? 'PASS' : 'FAIL');
+    row(G, 'A2 플래그 끔 → 예전대로 즉사', JSON.stringify(B['off+bubble'].over), null, 'bh', B['off+bubble'].over && B['off+bubble'].over.k === 'bh' ? 'PASS' : 'FAIL');
+    row(G, 'A2 버블 없음 → 즉사', JSON.stringify(B['on+none'].over), null, 'bh', B['on+none'].over && B['on+none'].over.k === 'bh' ? 'PASS' : 'FAIL');
+    row(G, 'A2 틈(0.7초) 지나도 머물면 즉사', JSON.stringify(B['on+bubble+stay'].over), null, 'bh @≈700ms', B['on+bubble+stay'].over && B['on+bubble+stay'].over.k === 'bh' && Math.abs(B['on+bubble+stay'].over.t - 717) < 60 ? 'PASS' : 'FAIL');
+    const R = cur.assist.ranked, S = cur.assist.assist;
+    row(G, '편한 비행 판 종류·배율', S.kind + ' · as ' + S.as + ' · wk ' + S.wk, R.kind + ' · wk ' + R.wk, 'assist · 0.85 / ranked · 1', S.kind === 'assist' && S.as && S.wk === 0.85 && R.kind === 'ranked' && R.wk === 1 ? 'PASS' : 'FAIL');
+    row(G, '편한 비행 운석 스폰 수(60s, ÷0.85 간격)', S.spawned, R.spawned, '≈ ×0.85', Math.abs(S.spawned / R.spawned - 0.85) < 0.06 ? 'PASS' : 'WARN', 'ratio ' + r2(S.spawned / R.spawned));
+    row(G, '편한 비행 무적', S.inv + 'ms', R.inv + 'ms', '3000 / 2000', S.inv === 3000 && R.inv === 2000 ? 'PASS' : 'FAIL');
+    row(G, '보급 영구 차단(미션 실패 2번)', 'assist ' + S.cut + ' · ranked ' + R.cut, null, 'assist 안 걸림 · ranked 걸림', !S.cut && R.cut ? 'PASS' : 'FAIL');
+    row(G, '비상 예비 탱크(1번째 → 2번째)', JSON.stringify(S.res1) + ' → ' + JSON.stringify(S.res2), JSON.stringify(R.res1), 'assist: 하트−1·연료 40 → 우주 미아 / ranked: 우주 미아', S.res1.lives === 2 && S.res1.over == null && S.res1.fuel === 40 && S.res2.over === 'fuel' && R.res1.over === 'fuel' ? 'PASS' : 'FAIL');
+    row(G, '시드 판(데일리)에서 assist 불가', cur.assist.seededKind, null, 'daily', cur.assist.seededKind === 'daily' ? 'PASS' : 'FAIL');
+    row(G, '기록 거름 szRecOk(rpc·best)', 'assist ' + S.rpcOk + '/' + S.bestOk + ' · ranked ' + R.rpcOk + '/' + R.bestOk, null, 'false/false · true/true', !S.rpcOk && !S.bestOk && R.rpcOk && R.bestOk ? 'PASS' : 'FAIL');
+    const P = cur.rpc;
+    row(G, 'RPC record_dodge_attempt (실제 startGame→결과)', 'assist ' + P.assist.rpc + ' · ranked ' + P.ranked.rpc, null, '0 · 1', P.assist.rpc === 0 && P.ranked.rpc === 1 && P.assist.kind === 'assist' ? 'PASS' : 'FAIL', 'kind ' + P.assist.kind + '/' + P.ranked.kind);
+    row(G, 'best 저장(assist 는 따로) · 깃털 배지', 'szx_best_ms ' + P.assist.best + ' · assist best ' + P.assist.bestAssist + ' · 깃털 ' + P.assist.feather + '/' + P.ranked.feather, null, '1 유지 · 기록됨 · true/false',
+        P.assist.best === '1' && +P.assist.bestAssist > 0 && P.assist.feather && !P.ranked.feather ? 'PASS' : 'FAIL');
+    const BL = BASE && BASE.latency;
+    for(const m of ['mouse', 'touch']){ const c = cur.lat[m], b = BL && BL[m];
+        row(G, '입력 지연(편한 비행) ' + m + ' 프레임 중앙/최대', c.fr50 + ' / ' + c.frMax + ' (as ' + c.as + ', ' + c.n + '/' + c.sent + ')', b ? b.fr50 + ' / ' + b.frMax : null, '중앙값 증가 0프레임', c.as && c.n >= c.sent / 2 && (!b || c.fr50 <= b.fr50) ? 'PASS' : 'FAIL', c.p50 + 'ms'); }
+}
+EXT_CMDS.mp3 = { run: runMp3, judge: (cur) => judgeMp3(cur), all: false };
+/* ibot 편한 비행 — 기본 모드(기준선) 중앙값의 1.5배 이상 */
+EXT_CMDS.mp3assist = {
+    run: async (base) => { const a0 = A.assist; A.assist = true; try{ return await runIBot(base); } finally { A.assist = a0; } },
+    judge: (cur) => {
+        const b = BASE && BASE.ibot;
+        for(const k of ['30fps', '60fps']){
+            const c = cur[k], bb = b && b[k];
+            row('MP3', 'ibot 편한 비행 ' + k + ' 중앙값', c.medianT + 's (CI ' + (c.ci || []).join('–') + ')', bb ? bb.medianT + 's' : null, '≥ 기본 ×1.5' + (bb ? ' = ' + r1(bb.medianT * 1.5) + 's' : ''),
+                bb ? (c.medianT >= bb.medianT * 1.5 ? 'PASS' : 'FAIL') : 'INFO', '평균 ' + c.meanT + 's (기본 ' + (bb ? bb.meanT : '-') + 's) · 540s 상한 도달 ' + c.reach[540] + '% · uses ' + JSON.stringify(c.uses));
+        }
+    }, all: false
+};
+/* 장면 — 합성 시계로 장면을 만든 뒤 멈춘 화면을 찍는다(사람 검수용). 색각 시트 = 게임 캔버스를 적록 색각 이상 행렬(Machado 2009, 강도 1)로 바꿔 나란히 */
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const step = (ms, f) => { const t1 = G.VT + ms; while(G.VT < t1 && running){ G.VT += 16.667; if(f) f(); gameLoop(G.VT); } };
+    const fix = () => { player.x = 180; player.y = 430; invincibleUntil = 1e15; lives = 5; };
+    G.mp3scene = function(name){
+        const out = { errs: [] };
+        try{
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1; SZMP3.begin('ranked');
+            fix();
+            const warp = (z) => { szWarpTo(z, G.VT); step(50, fix); };
+            if(name === 'db'){
+                warp(1); step(1500, () => { fix(); lastSpawn = G.VT; bullets.length = 0; });
+                inventory.fill(null); inventory[0] = 'wipe'; inventory[1] = 'ion'; inventory[2] = 'shield'; syncInventoryUI();
+                invincibleUntil = 0;
+                bullets.push({x: player.x + 120, y: player.y - 120, vx: -240, vy: 240, aimed: true, trail: []});
+                for(let i = 0; i < 90 && !SZMP3.pend; i++){ G.VT += 16.667; player.x = 180; player.y = 430; lastSpawn = G.VT; gameLoop(G.VT); }
+                out.pend = !!SZMP3.pend;
+                for(let i = 0; i < 4; i++){ G.VT += 16.667; gameLoop(G.VT); }   /* 보류 중(정지) 프레임 */
+            } else if(name === 'bh'){
+                warp(19); step(4000, fix);
+                szUpdateBlackHoleGeom(getZoneT(19));
+                triggerShieldBubble(); step(300, fix);
+                for(let i = 0; i < 6; i++){ G.VT += 16.667; player.x = blackHole.cx + 6; player.y = blackHole.cy; invincibleUntil = 1e15; gameLoop(G.VT); }
+                out.alive = running; out.bh = SZMP3.st.bh;
+            } else if(name === 'ring' || name === 'ringNear'){
+                SZMP3.set('hitbox', true);
+                warp(2); step(2500, () => { fix(); lastSpawn = G.VT; bullets.length = 0; });
+                if(name === 'ringNear'){ bullets.push({x: player.x + 60, y: player.y - 4, vx: -260, vy: 0, aimed: true, trail: []}); step(150, fix); }
+                else step(400, fix);
+            } else if(name === 'flare'){ warp(0); step(1200, fix); spawnSolarFlare(); spawnSolarFlare(); step(500, fix); }
+            else if(name === 'comet'){
+                warp(5); step(800, fix); spawnComet(); step(450, fix);
+                /* 같은 장면에 보급(둥근 외곽선) — 모양 대비 */
+                try{ szDropDepot(5, 'mp3shot', ITEM.SHIELD, G.VT); const d = depots[depots.length - 1]; if(d){ d.x = 120; d.y = 300; d.vy = 0; } }catch(e){ out.errs.push('depot ' + e.message); }
+                step(120, fix);
+            }
+            else if(name === 'nova'){ warp(15); step(600, fix); spawnSupernovaRing(); step(160, fix); }
+            else if(name === 'wave'){ warp(7); step(800, fix); spawnWave(220); step(380, fix); }
+            else if(name === 'pulsar'){ warp(12); step(7000, fix); if(pulsarBeam) pulsarElapsed = 8450; for(let i = 0; i < 4000 && _pulsarPhase(G.VT).mode !== 'warn'; i++){ G.VT += 16.667; fix(); gameLoop(G.VT); } step(300, fix); out.mode = _pulsarPhase(G.VT).mode; out.pb = !!pulsarBeam; }
+            else if(name === 'peek'){
+                warp(5);
+                const PKK = {comet: 1, flare: 1, nova: 1, wave: 1, split: 1, mix: 1, szx: 1, szjet: 1, szsh: 1, szvee: 1, sznova: 1};
+                let hit = null;
+                for(let i = 0; i < 2400 && !hit; i++){ G.VT += 16.667; fix(); gameLoop(G.VT); const H = SZ_HZ; for(const e of (H ? H.ev : [])){ const d = H.z0 + e.t - elapsedMs; if(d > 1500) break; if(d > 500 && d < 900 && PKK[e.kind]){ hit = e.kind; break; } } }
+                out.next = hit;
+            }
+            out.zone = currentZoneIdx; out.sec = Math.round(elapsedMs / 100) / 10;
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        G.unsynth();
+        return out;
+    };
+    /* 색각 시트 — 지금 게임 캔버스(장치 픽셀)를 반으로 줄여 [정상 · 제2색맹 · 제1색맹] 한 줄로 */
+    G.mp3cvd = function(){
+        const M = { d: [0.367322, 0.860646, -0.227968, 0.280085, 0.672501, 0.047413, -0.011820, 0.042940, 0.968881],
+                    p: [0.152286, 1.052583, -0.204868, 0.114503, 0.786281, 0.099216, -0.003882, -0.048116, 1.051998] };
+        const src = document.getElementById('dodge-canvas');
+        const w = Math.round(src.width / 2), h = Math.round(src.height / 2);
+        const c = document.createElement('canvas'); c.width = w * 3 + 16; c.height = h;
+        const x = c.getContext('2d'); x.fillStyle = '#000'; x.fillRect(0, 0, c.width, c.height);
+        x.drawImage(src, 0, 0, w, h);
+        const base = x.getImageData(0, 0, w, h);
+        let k = 1;
+        for(const m of [M.d, M.p]){
+            const o = new ImageData(new Uint8ClampedArray(base.data), w, h), d = o.data;
+            for(let i = 0; i < d.length; i += 4){
+                const r = d[i], g = d[i + 1], b = d[i + 2];
+                d[i] = m[0] * r + m[1] * g + m[2] * b; d[i + 1] = m[3] * r + m[4] * g + m[5] * b; d[i + 2] = m[6] * r + m[7] * g + m[8] * b;
+            }
+            x.putImageData(o, k * (w + 8), 0); k++;
+        }
+        return c.toDataURL('image/png').split(',')[1];
+    };
+});
+async function runMp3Shots(base){
+    const dir = path.join(OUT, 'mp3');
+    fs.mkdirSync(dir, { recursive: true });
+    const out = { dir, scenes: {} };
+    const vp = { w: 412, h: 915, dsf: 2.625, mobile: true };
+    await withEdge(vp, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        for(const s of ['db', 'bh', 'ring', 'ringNear', 'flare', 'comet', 'nova', 'wave', 'pulsar', 'peek']){
+            await e.ev('(function(){ running = false; SZMP3.set("hitbox", false); return 1; })()');
+            const r = await e.ev('__G.mp3scene(' + JSON.stringify(s) + ')', 120000);
+            await sleep(120);
+            await e.shot(path.join(dir, s + '.png'));
+            if(['comet', 'nova', 'wave', 'peek', 'flare', 'db'].includes(s)) fs.writeFileSync(path.join(dir, 'cvd_' + s + '.png'), Buffer.from(await e.ev('__G.mp3cvd()'), 'base64'));
+            out.scenes[s] = r;
+        }
+        collectErrs('mp3shots', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    /* 시작 화면 칩(편한 비행 켬) · 시드 판 잠금 · 편한 비행 결과 카드(깃털) */
+    await withEdge(vp, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        await e.ev('(function(){ SZMP3.set("assist", true); SZMP3.set("hitbox", true); return 1; })()');
+        await sleep(300); await e.shot(path.join(dir, 'chips.png'));
+        out.chips = await e.ev('(function(){ var c = document.getElementById("szMp3Opts"); return c ? c.outerHTML.length : 0; })()');
+        await e.ev('(function(){ window.__m0 = SZX.mode; SZX.mode = function(){ return "daily"; }; SZMP3.set("hitbox", true); return 1; })()');
+        await sleep(300); await e.shot(path.join(dir, 'chips_locked.png'));
+        out.locked = await e.ev('!!document.querySelector("[data-szmp3=assist].sz-mp3-lock")');
+        await e.ev('(function(){ SZX.mode = window.__m0; window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 50); startGame(); return 1; })()');
+        await e.ev(`new Promise(function(res){ var t0 = Date.now(); (function w(){ if((running && !_introRunning) || Date.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+        await sleep(2500);
+        await e.ev('(function(){ clearInterval(window.__inv); triggerGameOver(); return 1; })()');
+        await sleep(2200); await e.shot(path.join(dir, 'result_assist.png'));
+        /* 데스봄 보류 — 실제 판(조종판 칸이 보이는 상태)에서. 찍는 동안만 보류를 늘려 둔다 */
+        await e.ev('(function(){ SZMP3.set("assist", false); startGame(); return 1; })()');
+        await e.ev(`new Promise(function(res){ var t0 = Date.now(); (function w(){ if((running && !_introRunning) || Date.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+        await sleep(1500);
+        out.dbUi = await e.ev(`new Promise(function(res){ inventory.fill(null); inventory[0] = 'wipe'; inventory[1] = 'ion'; inventory[2] = 'shield'; syncInventoryUI(); invincibleUntil = 0;
+            bullets.push({x: player.x + 90, y: player.y - 90, vx: -300, vy: 300, aimed: true, trail: []});
+            var t0 = Date.now(); (function w(){ var p = SZMP3.pend; if(p){ p.until = performance.now() + 60000; szHitStopUntil = p.until; return res(document.querySelectorAll('.item-slot.sz-mp3-db').length); }
+                if(Date.now() - t0 > 4000) return res(-1); setTimeout(w, 4); })(); })`, 20000);
+        await sleep(250); await e.shot(path.join(dir, 'db_ui.png'));
+        await e.ev('(function(){ var p = SZMP3.pend; if(p){ p.until = performance.now(); szHitStopUntil = 0; } return 1; })()');
+        await e.ev('(function(){ SZMP3.set("assist", false); SZMP3.set("hitbox", false); return 1; })()');
+        collectErrs('mp3shots ui', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    say('mp3shots: ' + dir + ' ' + JSON.stringify(out.scenes) + ' chips ' + out.chips + ' locked ' + out.locked);
+    return out;
+}
+EXT_CMDS.mp3shots = { run: runMp3Shots, judge: (cur) => {
+    const s = cur.scenes;
+    row('MP3', '장면: 데스봄 보류 중 · 블랙홀 버블 생존', 'pend ' + s.db.pend + ' · bh ' + s.bh.bh + '/' + s.bh.alive, null, 'true · 1/true', s.db.pend && s.bh.bh === 1 && s.bh.alive ? 'PASS' : 'FAIL');
+    row('MP3', '장면: 실제 판 데스봄 — 번쩍이는 칸 수', cur.dbUi, null, '2 (폭탄·이온)', cur.dbUi === 2 ? 'PASS' : 'WARN');
+    row('MP3', '장면: 펄사 예고 · 설정 칩 · 시드 잠금', s.pulsar.mode + ' · ' + cur.chips + ' · ' + cur.locked, null, 'warn · >0 · true', s.pulsar.mode === 'warn' && cur.chips > 0 && cur.locked ? 'PASS' : 'WARN');
+    row('MP3', '장면 폴더 (사람 검수)', cur.dir, null, '-', 'INFO');
+}, all: false };
 /*</gate:mp3>*/
 /*<gate:mp4>*/
 /*</gate:mp4>*/
