@@ -12901,8 +12901,8 @@ function szDrawBuoyFx(now){
    ===================================================================== */
 const REWARD_KINDS = ['warp','storm','drone'];
 /* 2026-05-10: drone 아이콘 🛰 (위성) → 🛸 (UFO/드론) — 실제 비행체처럼 보이게. */
-/* 2026-10-08 sz:mod:drones: drone 은 렌더한 호위 드론(drones.webp 행 2 첫 칸) SVG — 슬롯은 innerHTML 로 넣는다(전부 우리 상수) */
-const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'<svg class="sz-drone-ic" viewBox="2 194 92 92" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="480" height="288"/></svg>'};
+/* 2026-10-08 sz:mod:drones v2: drone 은 렌더한 호위 드론(drones.webp 행 1 첫 칸 = UFO 원반 은색) SVG — 슬롯은 innerHTML 로 넣는다(전부 우리 상수) */
+const REWARD_ICONS = {warp:'⏱', storm:'💥', drone:'<svg class="sz-drone-ic" viewBox="8 135 112 112" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="256" height="256"/></svg>'};
 const REWARD_SLOT_IDS = {warp:'rewardSlot0', storm:'rewardSlot1', drone:'rewardSlot2'};
 let rewardCounts = {warp: 0, storm: 0, drone: 0};
 /* Time Warp 상태 */
@@ -13257,7 +13257,7 @@ function drawAegisDrone(now){
         }
     }
 
-    /* sz:mod:drones — 렌더 스프라이트(덕트 팬 센티넬)가 있으면 그걸로. 아래 3~5 는 그림이 오기 전 폴백 */
+    /* sz:mod:drones — 렌더 스프라이트(UFO 렌즈 원반)가 있으면 그걸로. 아래 3~5 는 그림이 오기 전 폴백 */
     if(szDrawAegisSprite(pos, now, baseAlpha)){ ctx.restore(); return; }
     /* 3. 헥사 외곽 — 드론 진행과 반대로 회전 (속도 0.5×). */
     ctx.save();
@@ -13345,7 +13345,7 @@ function drawAegisLasers(){
     const spr = !!_szDroneBk.ag.s;   /* sz:mod:drones — 스프라이트면 앞 이미터(좌우 번갈아)에서 나간다 */
     for(const l of aegisLasers){
         const a = Math.max(0, l.life / l.maxLife);
-        if(spr && !l.em){ l.em = 1; l.x1 += ((Math.floor(l.x2 * 8) & 1) ? 1 : -1) * SZ_DRONE.agEmit[0] * SZ_DRONE.ag.u; l.y1 -= SZ_DRONE.agEmit[1] * SZ_DRONE.ag.u; }
+        if(spr && !l.em) szDroneAgEmit(l);   /* sz:mod:drones — 앞 쌍 이미터(기울여 찍은 투영, 좌우 번갈아) */
         /* 메인 빔 — 두꺼운 cyan + 글로우 */
         ctx.shadowColor = '#9CDFFF';
         ctx.shadowBlur = 12;
@@ -13988,10 +13988,10 @@ function szDrawItemIcon(k, x, y, s){
 function szItemHeld(item){ return item !== ITEM.HEART; }   /* 하트만 즉시 회복 — 나머지는 전부 슬롯 */
 function szItemTech(item){ return !!SZI_ICON[item]; }
 /*</sz:mod:items>*/
-/* MINI 아이콘 — sz:mod:drones (2026-10-08): 옛 F-117 손그림 SVG 대신 렌더 아틀라스(drones.webp)의 윙맨 정면 프레임을
+/* MINI 아이콘 — sz:mod:drones (2026-10-08 v2): 옛 F-117 손그림 SVG 대신 렌더 아틀라스(drones.webp 행 0 첫 칸 = 우주 요격기 은색)를
    SVG <image> + viewBox 로 잘라 쓴다(인벤 슬롯 CSS 의 svg 크기·글로우 규칙 그대로). 이름은 호출부 호환을 위해 유지 */
-const F117_SVG = '<svg viewBox="196 4 88 88" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
-    + '<image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="480" height="288"/>'
+const F117_SVG = '<svg viewBox="13 6 102 102" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    + '<image href="/assets/dodge/drones.webp' + (typeof SZ_BV === 'string' ? SZ_BV : '') + '" x="0" y="0" width="256" height="256"/>'
     + '</svg>';
 
 const ITEM_VISUAL = {
@@ -15055,20 +15055,38 @@ function updateMiniShip(dt, now){
     }
 }
 /*<sz:mod:drones>*/
-/* 아이템 드론 스프라이트 (2026-10-08, 운영자: "아이템 중 드론들 그래픽이 형편없다 — 고도화된 그래픽, 리얼한 생김새로 렌더링").
+/* 아이템 드론 스프라이트 v2 '진공판' (2026-10-08).
+   v1(같은 날 오전, 플라잉윙 UCAV + 덕트 팬 센티넬) → 운영자: "대기가 있어야 프로펠러가 도는 드론은 안 어울린다. 우주는 초고진공이라
+   작용·반작용 추진만 있다 — 형태와 구동 방식을 바꿔라." → 날개·프로펠러·로터 프레임 전부 폐기.
    원본 = scripts/blender/spacez_drones.py (Cycles, Standard 뷰 — 기체 starship_scene.py 와 같은 조명·스테인리스/광택 금 도장)
-   → public/assets/dodge/drones.webp (96px 칸 5열×3행, ≈43KB):
-     행 0 = 윙맨(MINI) 은색 뱅크 −2…+2 · 행 1 = 윙맨 금색 · 행 2 = 호위 드론(AEGIS) 은색 로터 a·b, 금색 a·b
-   윙맨 = 꼬리 없는 블렌디드 플라잉윙 무인 요격기(옛 캔버스 삼각형 스텔스기 대체), 호위 드론 = 덕트 팬 4발 센티넬(옛 육각형 선 대체).
-   표시 전용 — 판정·발사·궤도·타이머는 그대로(updateMiniShip·updateAegisDrone 무변경). 그림 안 쓰는 연출(분사·포구 섬광·항법등)은
-   미리 구운 글로우 스프라이트(SZ_GLOW)만 쓴다 — 프레임마다 새 객체 0, Math.random 0(결정성 무관).
+   → public/assets/dodge/drones.webp (128px 칸 2열×2행 = 256×256, ≈20KB):
+     행 0 = 윙맨(MINI) 은색·금색 — 날개 없는 우주 요격기(다면체 동체 + 앞 갈퀴 이미터 2 + 지주로 띄운 방열판 2 + 그리드 이온 추력기 + RCS 쿼드 4)
+     행 1 = 호위 드론(AEGIS) 은색·금색 — UFO 렌즈 원반(센서 돔 + 하부 고리형 이온 추력기 + 바깥 링 + 45° RCS 쿼드 포드 4). 앞으로 30° 기울여 찍었다
+   구동 연출(그림 위에 빛으로만 — 판정·발사·궤도·타이머는 그대로, updateMiniShip·updateAegisDrone 무변경):
+     · 가속도(화면 위치의 2차 차분, 평활) 를 Δv 펄스로 쪼갠다 — |a| 가 A0 를 넘는 동안 Δv 를 적분해 Q 마다 RCS 한 번 '퍽'.
+       분사는 가속 '반대쪽' 노즐에서(오른쪽으로 가속 → 왼쪽 노즐), 멈출 땐 반대쪽, 정속 이동(관성 비행) 중엔 0.
+     · 김은 그 순간 드론 속도 + 분사 속도로 떠나 감속 없이 퍼진다(공기 속처럼 뒤에 남는 꼬리가 아니다 — 드론이 가속해 김에서 멀어진다).
+     · 윙맨 자세 회전(쏜 표적 쪽으로 기수를 돌림)은 대각선 쌍(앞왼+뒤오 = 시계, 앞오+뒤왼 = 반시계)이 각가속도 펄스로 분사.
+     · 윙맨 앞으로 가속하면 후미 이온 기둥이 커진다(평소엔 은은한 청색 기둥).
+     · 호위 드론의 궤도 구심 가속(ω²r, 늘 플레이어 쪽)은 하부 이온 고리가 맡는다 — 바깥쪽 고리가 밝아지고 배기가 바깥으로 흐른다.
+       RCS 는 플레이어를 따라가는 가속(궤도 중심의 가속)만 맡는다. 링을 따라 천천히 도는 항법등.
+   분사 입자 = 고정 풀(드론당 12개, 재할당 0) + 미리 구운 글로우 스프라이트, Math.random 0(결정성 무관). szLo() 면 분사·항법등·고리 강조 생략.
    도장 = 내 기체와 같이 szMyLivery() (솔로·방장 은색 / 참가자 금색). 그림이 오기 전에는 옛 벡터로 그린다(drawF117·육각 드론). */
 const SZ_DRONE = {
-    url: '/assets/dodge/drones.webp', cell: 96,
-    wm: {css: 27, u: 27 / 12},       /* 윙맨 칸을 27 CSS px 로 — 모델 12 단위 칸 → 1 단위 2.25px (날개폭 9.6 ≈ 21.6px, 옛 18px) */
-    ag: {css: 32, u: 32 / 7},        /* 호위 드론 칸 32px — 7 단위 칸 → 덕트 끝 지름 6.2 ≈ 28px (옛 육각 26px) */
-    wmMuzzle: [1.30, 3.22], wmNozzle: [0.50, -3.95], wmNav: [4.70, -2.10],   /* 모델 단위 (+y = 노즈) */
-    agEmit: [0.40, 3.10], agLed: 2.73, agEye: 0.45
+    url: '/assets/dodge/drones.webp', cell: 128, cols: 2, rows: 2,
+    wm: {css: 38, u: 38 / 10.5, row: 0},     /* 윙맨 칸 38 CSS px — 모델 10.5 단위 칸 → 1 단위 3.62px (전장 8.3 ≈ 30px · 폭 4.4 ≈ 16px) */
+    ag: {css: 38, u: 38 / 7.4, row: 1},      /* 호위 드론 칸 38px — 7.4 단위 칸 → 링 지름 6.3 ≈ 32px */
+    agTilt: 30 * Math.PI / 180,              /* 호위 드론 렌더 기울기 — 모델 (x, y, z) → 화면 (x, −(y·cos + z·sin)) */
+    /* 모델 단위 (+y = 노즈) — spacez_drones.py 의 WM_*·AG_* 와 같은 값 */
+    wmMuzzle: [0.66, 4.50], wmEngine: [0, -3.66], wmStrobe: [2.20, -1.90],
+    agEmit: [0.36, 3.18, 0.10], agEye: [0, 0.52, 1.22], agRim: [2.90, 0.18], agIon: [2.50, -0.05], agPod: 3.37,
+    /* RCS 노즐 출구 [x, y, 분사 방향 x, y] — 0 앞오른 옆 · 1 앞왼 옆 · 2 앞오른 앞 · 3 앞왼 앞 · 4 뒤오른 옆 · 5 뒤왼 옆 · 6 뒤오른 뒤 · 7 뒤왼 뒤 */
+    wmRcs: [[1.45, 2.15, 1, 0], [-1.45, 2.15, -1, 0], [1.16, 2.46, 0, 1], [-1.16, 2.46, 0, 1],
+            [1.07, -2.90, 1, 0], [-1.07, -2.90, -1, 0], [0.78, -3.21, 0, -1], [-0.78, -3.21, 0, -1]],
+    wmCw: [1, 4], wmCcw: [0, 5],             /* 화면 시계 방향 회전 = 앞왼 + 뒤오른 (토크 쌍), 반시계 = 앞오른 + 뒤왼 */
+    /* Δv 펄스 — A0 px/s² 넘는 가속만 적분, Q px/s 마다 한 번, 같은 드론 펄스 간격 ≥ GAP ms. 회전은 rad/s² · rad/s */
+    A0: 110, Q: 50, GAP: 60, RA0: 1.6, RQ: 0.42, RGAP: 90,
+    PUFF_MS: 300
 };
 let _szDroneIm = null;
 function szDroneImg(){
@@ -15086,161 +15104,369 @@ const _szDroneBk = {wm: {bm: null, s: 0, p: false}, ag: {bm: null, s: 0, p: fals
 function szDroneArt(kind){
     const im = szDroneImg();
     if(!im) return null;
-    const B = _szDroneBk[kind], S = szBakeScale();
+    const B = _szDroneBk[kind], S = szBakeScale(), D = SZ_DRONE;
     if(B.s === S) return B.bm || im;
     if(!B.p){
-        const c = Math.round(SZ_DRONE[kind].css * S);
-        if(!window.createImageBitmap || c >= SZ_DRONE.cell * 0.95){ B.bm = null; B.s = S; return im; }
+        const c = Math.round(D[kind].css * S);
+        if(!window.createImageBitmap || c >= D.cell * 0.95){ B.bm = null; B.s = S; return im; }
         B.p = true;
-        createImageBitmap(im, {resizeWidth: c * 5, resizeHeight: c * 3, resizeQuality: 'high'}).then(function(b){
+        createImageBitmap(im, {resizeWidth: c * D.cols, resizeHeight: c * D.rows, resizeQuality: 'high'}).then(function(b){
             try{ if(B.bm && B.bm.close) B.bm.close(); }catch(_){}
             B.bm = b; B.s = S; B.p = false;
         }, function(){ B.bm = null; B.s = S; B.p = false; });
     }
     return B.bm || im;
 }
-let _szDroneGl = null;   /* {shadow, red} — 처음 그릴 때 한 번 굽는다 */
+let _szDroneGl = null;   /* {shadow, red, puff} — 처음 그릴 때 한 번 굽는다 */
 function szDroneGlows(){
-    if(!_szDroneGl) _szDroneGl = {shadow: szMakeGlow(0, 2, 10, 48), red: szMakeGlow(255, 60, 50, 48)};
+    if(!_szDroneGl){
+        /* 냉가스 김 — 가장자리가 부드러운 흰 회색(빛나는 게 아니라 햇빛 받은 응결 김이라 가산 대신 덮어 그린다) */
+        const c = document.createElement('canvas');
+        c.width = c.height = 32;
+        const x = c.getContext('2d');
+        const g = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+        g.addColorStop(0, 'rgba(245,250,255,0.95)');
+        g.addColorStop(0.35, 'rgba(225,235,250,0.55)');
+        g.addColorStop(0.7, 'rgba(200,215,240,0.16)');
+        g.addColorStop(1, 'rgba(200,215,240,0)');
+        x.fillStyle = g; x.fillRect(0, 0, 32, 32);
+        _szDroneGl = {shadow: szMakeGlow(0, 2, 10, 48), red: szMakeGlow(255, 60, 50, 48), puff: c};
+    }
     return _szDroneGl;
 }
 function _szDroneBlit(art, col, row, size){
-    const cw = art.width / 5, ch = art.height / 3;
+    const cw = art.width / SZ_DRONE.cols, ch = art.height / SZ_DRONE.rows;
     ctx.drawImage(art, col * cw, row * ch, cw, ch, -size / 2, -size / 2, size, size);
 }
-/* 보급 캡슐 창 안 아이콘(윙맨 정면 프레임). 그림이 아직이면 false → 옛 벡터 */
+/* 보급 캡슐 창 안 아이콘(윙맨). 그림이 아직이면 false → 옛 벡터. 가는 기체라 칸을 조금 키워 창을 채운다 */
 function szDrawDroneIcon(x, y, size){
     const art = szDroneArt('wm');
     if(!art) return false;
     ctx.save();
     ctx.translate(x, y);
-    _szDroneBlit(art, 2, szMyLivery() === 'gold' ? 1 : 0, size);
+    _szDroneBlit(art, szMyLivery() === 'gold' ? 1 : 0, SZ_DRONE.wm.row, size * 1.18);
     ctx.restore();
     return true;
 }
-/* 옆 속도 → 뱅크 −1…1 (표시 전용 상태). 프레임 사이 간격이 길면(일시정지·탭 전환) 0 으로 */
-function _szDroneBank(fx, x, now){
-    const dt = (now - fx.t) / 1000;
-    if(dt > 0.0005 && dt < 0.25){
-        const tgt = Math.max(-1, Math.min(1, (x - fx.x) / dt / 260));
-        fx.bk += (tgt - fx.bk) * Math.min(1, dt * 10);
-    } else if(dt >= 0.25) fx.bk = 0;
-    fx.x = x; fx.t = now;
-    return fx.bk;
+
+/* ---- 운동 상태(표시 전용) — 위치 → 평활 속도 → 평활 가속도 → Δv 펄스. 객체는 드론당 한 번만 만든다 ---- */
+function _szKinNew(n){
+    const p = [];
+    for(let i = 0; i < n; i++) p.push({t: -1, x: 0, y: 0, dx: 0, dy: 0, s: 1, vx: 0, vy: 0});
+    return {t: 0, n: 0, x: 0, y: 0, vx: 0, vy: 0, ax: 0, ay: 0, ix: 0, iy: 0, lp: -1e9, dt: 0,
+            yaw: 0, yv: 0, ya: 0, yt: 0, ia: 0, la: -1e9, shot: -1, side: 1, aimUntil: 0, boost: -1e9,
+            puffs: p, pi: 0, ux: 0, uy: 0};
 }
-const _szWmFx = [{x: 0, t: 0, bk: 0}, {x: 0, t: 0, bk: 0}];
-/* 윙맨 한 대 — 그림자 · 이온 분사(가산) · 렌더 스프라이트(뱅크 5프레임) · 항법 섬광 · 포구 섬광. 그림이 없으면 false */
+/* 새 프레임이면 true. 0.2초 넘게 끊기면(일시정지·탭 전환·생성 직후) 처음부터 */
+function _szKin(st, x, y, now){
+    const dt = (now - st.t) / 1000;
+    if(st.n === 0 || dt > 0.2 || dt < 0){
+        st.t = now; st.x = x; st.y = y; st.vx = st.vy = st.ax = st.ay = st.ix = st.iy = 0; st.n = 1; st.dt = 0;
+        return false;
+    }
+    if(dt < 0.004) return false;
+    if(Math.abs(x - st.x) + Math.abs(y - st.y) > 40){ st.n = 0; return _szKin(st, x, y, now); }   /* 순간 이동(슬롯 재배치) — 가속으로 치지 않는다 */
+    const vx = (x - st.x) / dt, vy = (y - st.y) / dt;
+    if(st.n === 1){ st.vx = vx; st.vy = vy; }
+    else {
+        const kv = 1 - Math.exp(-dt / 0.025);
+        const nvx = st.vx + (vx - st.vx) * kv, nvy = st.vy + (vy - st.vy) * kv;
+        const ka = 1 - Math.exp(-dt / 0.025);
+        st.ax += ((nvx - st.vx) / dt - st.ax) * ka;
+        st.ay += ((nvy - st.vy) / dt - st.ay) * ka;
+        st.vx = nvx; st.vy = nvy;
+    }
+    st.x = x; st.y = y; st.t = now; st.dt = dt;
+    if(st.n < 9) st.n++;
+    return true;
+}
+/* 병진 Δv 펄스 — 나오면 st.ux, st.uy(화면 단위 벡터, 가속 방향)에 담고 true */
+function _szPulse(st, now){
+    const D = SZ_DRONE, dt = st.dt;
+    if(st.n < 5) return false;
+    const on = Math.hypot(st.ax, st.ay) > D.A0;
+    if(on){ st.ix += st.ax * dt; st.iy += st.ay * dt; }
+    else { const k = Math.exp(-dt / 0.08); st.ix *= k; st.iy *= k; }   /* 가속이 끝나면 남은 몫은 버린다 — 정속(관성) 구간에 김이 새지 않게 */
+    const im = Math.hypot(st.ix, st.iy);
+    if(im > D.Q * 2.5){ st.ix *= D.Q * 2.5 / im; st.iy *= D.Q * 2.5 / im; }
+    if(on && im > D.Q && now - st.lp >= D.GAP){
+        st.ux = st.ix / im; st.uy = st.iy / im;
+        st.ix -= st.ux * D.Q; st.iy -= st.uy * D.Q;
+        st.lp = now;
+        return true;
+    }
+    return false;
+}
+/* 김 한 줄기 — 월드 좌표에서 노즐 출구 (x, y), 분사 방향 (dx, dy)(길이 = 화면 단축 배율), 크기 배율 s,
+   (vx, vy) = 그 순간 드론 속도 px/s — 진공에서 김은 기체 속도 + 분사 속도로 떠난다(공기처럼 뒤에 남지 않는다) */
+function _szPuff(st, now, x, y, dx, dy, s, vx, vy){
+    const p = st.puffs[st.pi];
+    st.pi = (st.pi + 1) % st.puffs.length;
+    p.t = now; p.x = x; p.y = y; p.dx = dx; p.dy = dy; p.s = s; p.vx = vx; p.vy = vy;
+}
+/* 김은 노즐을 떠나면 직진하며 퍼진다(진공 — 감속 없음, 밀도만 옅어진다). 드론이 계속 가속하니 김은 드론에서 멀어진다 */
+function _szDrawPuffs(st, now, alpha){
+    const G = szDroneGlows(), T = SZ_DRONE.PUFF_MS;
+    for(let i = 0; i < st.puffs.length; i++){
+        const p = st.puffs[i];
+        if(p.t < 0) continue;
+        const k = (now - p.t) / T;
+        if(k >= 1 || k < 0){ p.t = -1; continue; }
+        const d = (3 + 20 * k) * p.s, r = (2.0 + 6.5 * k) * p.s;
+        const ts = (now - p.t) / 1000;
+        const ox = p.x + p.vx * ts, oy = p.y + p.vy * ts;
+        const cx = ox + p.dx * d, cy = oy + p.dy * d;
+        ctx.globalAlpha = alpha * 0.95 * (1 - k) * (1 - k);
+        ctx.drawImage(G.puff, cx - r, cy - r, r * 2, r * 2);
+        if(k < 0.3){                        /* 첫 순간 — 노즐 바로 앞 짙은 분사 심(김이 '퍽' 하고 터지는 순간) */
+            const j = 1 - k / 0.3, rc = 1.9 * p.s;
+            ctx.globalAlpha = alpha * j;
+            ctx.drawImage(G.puff, ox + p.dx * d * 0.35 - rc, oy + p.dy * d * 0.35 - rc, rc * 2, rc * 2);
+        }
+    }
+}
+
+/* ---- 윙맨 ---- */
+const _szWmSt = [_szKinNew(12), _szKinNew(12)];
+/* 노즐 k 에서 김 — 모델 → 화면(기수 회전 yaw) */
+function _szWmFire(st, m, k, now){
+    const D = SZ_DRONE, u = D.wm.u, N = D.wmRcs[k];
+    const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
+    const bx = N[0] * u, by = -N[1] * u, ex = N[2], ey = -N[3];
+    _szPuff(st, now, m.x + bx * c - by * s, m.y + bx * s + by * c, ex * c - ey * s, ex * s + ey * c, 1.0, st.vx, st.vy);
+}
+/* 윙맨 레이저 시작점 — 쏜 순간 기록한 이미터 위치(기수 회전 반영). drawMiniShip 레이저 줄이 부른다 */
+function szDroneMzWm(l){
+    if(l.mzx === undefined){
+        const D = SZ_DRONE, u = D.wm.u;
+        l.mzx = ((Math.floor(l.fromX * 8) & 1) ? 1 : -1) * D.wmMuzzle[0] * u; l.mzy = -D.wmMuzzle[1] * u;
+    }
+    _szMz[0] = l.mzx; _szMz[1] = l.mzy;
+    return _szMz;
+}
+const _szMz = [0, 0];
+/* 윙맨 한 대 — 그림자 · 이온 기둥(가산) · 렌더 스프라이트(기수 회전) · RCS 김 · 방열판 섬광 · 포구 섬광. 그림이 없으면 false */
 function szDrawWingman(m, i, now){
     const art = szDroneArt('wm');
     if(!art) return false;
-    const fx = _szWmFx[i] || (_szWmFx[i] = {x: m.x, t: now, bk: 0});
-    const bk = _szDroneBank(fx, m.x, now);
+    const st = _szWmSt[i] || (_szWmSt[i] = _szKinNew(12));
     const D = SZ_DRONE, u = D.wm.u, size = D.wm.css;
     const lo = szLo();
     const left = MINI_DUR - (now - m.spawnedAt);
     const a = left < 2500 ? 0.55 + 0.45 * Math.abs(Math.sin(now * 0.018)) : 1;   /* 곧 떠난다 — 마지막 2.5초 깜빡 */
     const G = szDroneGlows();
+    /* 새로 쏜 레이저 — 이미터(좌우 번갈아) 위치를 레이저에 기록하고, 그 표적 쪽으로 기수를 돌린다 */
+    if(m.lastShot !== st.shot){
+        st.shot = m.lastShot;
+        let best = null, bd = 400;
+        for(const l of miniLasers){
+            if(l.mzx !== undefined || l.life < l.maxLife - 0.07) continue;
+            const d = (l.fromX - m.x) * (l.fromX - m.x) + (l.fromY - m.y) * (l.fromY - m.y);
+            if(d < bd){ bd = d; best = l; }
+        }
+        if(best){
+            st.side = -st.side;
+            const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
+            const bx = st.side * D.wmMuzzle[0] * u, by = -D.wmMuzzle[1] * u;
+            best.mzx = bx * c - by * s; best.mzy = bx * s + by * c;
+            const tx = best.target.x - m.x, ty = best.target.y - m.y;
+            const aim = Math.max(-0.30, Math.min(0.30, Math.atan2(tx, -ty)));
+            if(Math.abs(aim - st.yt) > 0.12) st.yt = aim;
+            st.aimUntil = now + 650;
+        }
+    }
+    if(now > st.aimUntil) st.yt = 0;
+    if(_szKin(st, m.x, m.y, now)){
+        /* 자세 — 임계 감쇠 스프링(ω 9). 각가속도를 펄스로 쪼개 대각선 쌍 분사 */
+        const h = Math.min(st.dt, 0.05), W = 9;
+        st.ya = W * W * (st.yt - st.yaw) - 2 * W * st.yv;
+        st.yv += st.ya * h; st.yaw += st.yv * h;
+        if(!lo){
+            if(Math.abs(st.ya) > D.RA0) st.ia += st.ya * h; else st.ia *= Math.exp(-h / 0.25);
+            if(Math.abs(st.ia) > D.RQ && now - st.la >= D.RGAP){
+                const pair = st.ia > 0 ? D.wmCw : D.wmCcw;
+                st.ia -= (st.ia > 0 ? 1 : -1) * D.RQ; st.la = now;
+                _szWmFire(st, m, pair[0], now); _szWmFire(st, m, pair[1], now);
+            }
+            if(_szPulse(st, now)){
+                /* 가속 방향 → 기체 좌표(모델 +y = 노즈) */
+                const c = Math.cos(st.yaw), s = Math.sin(st.yaw);
+                const mx = st.ux * c + st.uy * s, my = -(-st.ux * s + st.uy * c);
+                for(let k = 0; k < 8; k++){
+                    const N = D.wmRcs[k];
+                    if(-(N[2] * mx + N[3] * my) > 0.45) _szWmFire(st, m, k, now);
+                }
+                if(my > 0.6) st.boost = now;   /* 앞으로 — 주 엔진도 힘을 보탠다 */
+            }
+        }
+    }
     ctx.save();
     ctx.translate(m.x, m.y);
-    /* 남은 시간 고리 — 기체 밑에 가늘게 (옛 고리는 날개 위를 지나갔다) */
+    /* 남은 시간 고리 — 기체 밑에 가늘게 */
     ctx.globalAlpha = 0.3 * a;
     ctx.strokeStyle = '#FF5A50';
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(0, 0, 15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, left / MINI_DUR));
+    ctx.arc(0, 0, 17, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, left / MINI_DUR));
     ctx.stroke();
     /* 그림자 — 운석·성운 위에서도 기체가 떠 보이게 */
     ctx.globalAlpha = 0.5 * a;
-    ctx.drawImage(G.shadow, -10 + 1.5, -10 + 3, 20, 20);
-    ctx.rotate(bk * 0.12);
-    /* 이온 분사 — 노즐 두 개, 세로로 늘인 차가운 글로우 + 흰 심 */
-    const cb = Math.cos(bk * 0.56);
-    const nx = D.wmNozzle[0] * u * cb, ny = -D.wmNozzle[1] * u;
+    ctx.drawImage(G.shadow, -11 + 1.5, -13 + 3, 22, 26);
+    ctx.rotate(st.yaw);
+    /* 이온 기둥 — 그리드에서 뒤로 은은한 청색 기둥, 앞으로 가속할 땐 길고 밝게 */
+    const bo = Math.max(0, 1 - (now - st.boost) / 260);
+    const ey = -D.wmEngine[1] * u;
+    const f = 0.9 + 0.1 * Math.sin(now * 0.041 + i * 1.7);
+    const r = (3.0 + 0.8 * bo) * f, L = r * (3.4 + 3.2 * bo);
     ctx.globalCompositeOperation = 'lighter';
-    for(let s = -1; s <= 1; s += 2){
-        const f = 0.85 + 0.15 * Math.sin(now * 0.047 + i * 1.7 + s * 0.9);
-        const r = 3.4 * f;
-        ctx.globalAlpha = 0.8 * a;
-        ctx.drawImage(SZ_GLOW.cold, s * nx - r, ny - r * 0.45, r * 2, r * 3.6);
-        if(!lo){ ctx.globalAlpha = 0.9 * a; ctx.drawImage(SZ_GLOW.white, s * nx - 1.6, ny - 1.2, 3.2, 3.2); }
-    }
+    ctx.globalAlpha = (0.62 + 0.35 * bo) * a;
+    ctx.drawImage(SZ_GLOW.cold, -r, ey - r * 0.55, r * 2, L);
+    if(!lo){ ctx.globalAlpha = (0.55 + 0.4 * bo) * a; ctx.drawImage(SZ_GLOW.white, -2, ey - 1.6, 4, 3.4); }
     ctx.globalCompositeOperation = 'source-over';
     /* 기체 */
     ctx.globalAlpha = a;
-    const fi = Math.max(0, Math.min(4, Math.round((bk + 1) * 2)));
-    _szDroneBlit(art, fi, szMyLivery() === 'gold' ? 1 : 0, size);
+    _szDroneBlit(art, szMyLivery() === 'gold' ? 1 : 0, D.wm.row, size);
     ctx.globalCompositeOperation = 'lighter';
-    /* 항법 섬광 — 날개 끝 흰 스트로브 1.2초에 한 번(두 대가 엇갈리게) */
+    /* 방열판 끝 흰 스트로브 — 1.2초에 한 번(두 대가 엇갈리게) */
     if(!lo && ((now + i * 600) % 1200) < 70){
-        const tx = D.wmNav[0] * u * cb, ty = -D.wmNav[1] * u;
+        const tx = D.wmStrobe[0] * u, ty = -D.wmStrobe[1] * u;
         ctx.globalAlpha = 0.9 * a;
         ctx.drawImage(SZ_GLOW.white, -tx - 3, ty - 3, 6, 6);
         ctx.drawImage(SZ_GLOW.white, tx - 3, ty - 3, 6, 6);
     }
-    /* 포구 섬광 — 쏜 직후 90ms, 좌우 이미터 번갈아 */
+    /* 포구 섬광 — 쏜 직후 90ms, 방금 쏜 쪽 이미터 */
     const age = now - m.lastShot;
     if(age >= 0 && age < 90){
         const k = 1 - age / 90;
-        const sd = (((m.lastShot / MINI_SHOT_INTERVAL) | 0) & 1) ? 1 : -1;
-        const mx = sd * D.wmMuzzle[0] * u * cb, my = -D.wmMuzzle[1] * u;
-        const r = 3 + 5 * k;
+        const mx = st.side * D.wmMuzzle[0] * u, my = -D.wmMuzzle[1] * u;
+        const rr = 3 + 5 * k;
         ctx.globalAlpha = a;
-        ctx.drawImage(G.red, mx - r, my - r, r * 2, r * 2);
+        ctx.drawImage(G.red, mx - rr, my - rr, rr * 2, rr * 2);
         ctx.drawImage(SZ_GLOW.white, mx - 2 * k - 0.5, my - 2 * k - 0.5, 4 * k + 1, 4 * k + 1);
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
+    if(!lo) _szDrawPuffs(st, now, a);
     ctx.globalAlpha = 1;
     return true;
 }
-const _szAgFx = {x: 0, t: 0, bk: 0};
-/* 호위 드론 — 노즈는 늘 위(편대 비행), 옆 속도로 살짝 기운다. 로터 2프레임 교대 = 회전 착시. 그림이 없으면 false */
+
+/* ---- 호위 드론 ---- */
+const _szAgSt = _szKinNew(12);
+let _szAgAng = 0, _szAgOrbT = -1e9;
+/* 모델 점 (x, y, z) → 화면 오프셋(기울여 찍은 투영) */
+function _szAgPx(x, y, z){
+    const D = SZ_DRONE, u = D.ag.u;
+    _szMz[0] = x * u; _szMz[1] = -(y * Math.cos(D.agTilt) + z * Math.sin(D.agTilt)) * u;
+    return _szMz;
+}
+/* 레이저 시작점을 앞 쌍 이미터(좌우 번갈아)로 — 한 번만. drawAegisLasers 도 같은 함수를 부른다 */
+function szDroneAgEmit(l){
+    if(l.em) return;
+    l.em = 1;
+    _szAgSt.side = -_szAgSt.side;
+    const E = SZ_DRONE.agEmit, p = _szAgPx(_szAgSt.side * E[0], E[1], E[2]);
+    l.x1 += p[0]; l.y1 += p[1];
+}
+/* 호위 드론 — 노즈는 늘 위(편대 비행, 기울여 찍은 그림이라 돌리지 않는다). 그림이 없으면 false */
 function szDrawAegisSprite(pos, now, baseAlpha){
     const art = szDroneArt('ag');
     if(!art) return false;
-    const bk = _szDroneBank(_szAgFx, pos.x, now);
-    const D = SZ_DRONE, u = D.ag.u, size = D.ag.css;
+    const D = SZ_DRONE, u = D.ag.u, size = D.ag.css, st = _szAgSt;
     const lo = szLo();
     const G = szDroneGlows();
+    const C = Math.cos(D.agTilt);
+    for(const l of aegisLasers) szDroneAgEmit(l);
+    /* 궤도 중이면(각이 움직이면) 구심 가속은 이온 고리 — 플레이어 쪽으로 미니까 배기는 바깥으로 */
+    if(aegisDroneAngle !== _szAgAng){ _szAgAng = aegisDroneAngle; _szAgOrbT = now; }
+    const orb = Math.max(0, 1 - (now - _szAgOrbT) / 200);
+    /* RCS = 궤도 중심(플레이어)의 가속만 — 드론 위치 = 중심 + 궤도 오프셋이라 나머지 가속이 바로 이것 */
+    const cx0 = player.x, cy0 = player.y - 4;
+    if(_szKin(st, cx0, cy0, now) && !lo && _szPulse(st, now)){
+        const mx = st.ux, my = -st.uy;
+        /* 드론 속도 = 중심(플레이어) 속도 + 궤도 속도 Rω(−sinθ, cosθ) */
+        const w = orb > 0 ? AEGIS_ANGULAR_VEL * AEGIS_ORBIT_RADIUS : 0;
+        const dvx = st.vx - Math.sin(aegisDroneAngle) * w, dvy = st.vy + Math.cos(aegisDroneAngle) * w;
+        for(let k = 0; k < 4; k++){
+            const th = Math.PI / 4 + k * Math.PI / 2, ca = Math.cos(th), sa = Math.sin(th);
+            if(-(ca * mx + sa * my) > 0.45){
+                const p = _szAgPx(ca * D.agPod, sa * D.agPod, 0.08);
+                _szPuff(st, now, pos.x + p[0], pos.y + p[1], ca, -sa * C, 1.15, dvx, dvy);   /* 방향 길이 = 기울기 단축(앞뒤 김은 짧아 보인다) */
+            }
+        }
+    }
     ctx.save();
     ctx.translate(pos.x, pos.y);
-    /* 덕트 하강풍 빛(가산) + 그림자 */
+    /* 하부 이온 고리 빛이 원반 밑으로 번진다(가산) + 그림자 */
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.16 * baseAlpha;
-    ctx.drawImage(SZ_GLOW.cyan, -19, -19, 38, 38);
+    ctx.globalAlpha = 0.20 * baseAlpha;
+    ctx.drawImage(SZ_GLOW.cold, -21, -18, 42, 36);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 0.5 * baseAlpha;
-    ctx.drawImage(G.shadow, -15 + 2, -15 + 3.5, 30, 30);
-    ctx.rotate(bk * 0.22);
-    ctx.globalAlpha = baseAlpha;
-    const rot = ((now / 38) | 0) & 1;
-    _szDroneBlit(art, (szMyLivery() === 'gold' ? 2 : 0) + rot, 2, size);
-    ctx.globalCompositeOperation = 'lighter';
-    /* 센서 눈 숨쉬기 · 덕트 상태등(대각으로 번갈아) */
-    if(!lo){
-        const br = 0.5 + 0.5 * Math.sin(now * 0.006);
-        ctx.globalAlpha = (0.35 + 0.35 * br) * baseAlpha;
-        ctx.drawImage(SZ_GLOW.cyan, -4.5, -D.agEye * u - 4.5, 9, 9);
-        const L = D.agLed * u, on = ((now / 400) | 0) & 1;
-        ctx.globalAlpha = 0.85 * baseAlpha;
-        ctx.drawImage(SZ_GLOW.cyan, (on ? L : -L) - 2.5, -L - 2.5, 5, 5);
-        ctx.drawImage(SZ_GLOW.cyan, (on ? -L : L) - 2.5, L - 2.5, 5, 5);
+    ctx.drawImage(G.shadow, -16 + 2, -14 + 4, 32, 28);
+    /* 이온 고리 배기 — 플레이어 반대쪽(바깥)으로. 원반 뒤에 깔리는 부분 */
+    let ox = pos.x - cx0, oy = pos.y - cy0;
+    const ol = Math.hypot(ox, oy) || 1; ox /= ol; oy /= ol;
+    const I = D.agIon, pI = _szAgPx(ox * I[0], -oy * I[0], I[1]);
+    const ipx = pI[0], ipy = pI[1];
+    const pdx = ox, pdy = oy * C, pl = Math.hypot(pdx, pdy) || 1;
+    if(orb > 0){
+        const f = 0.88 + 0.12 * Math.sin(now * 0.037);
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.save();
+        ctx.translate(ipx, ipy);
+        ctx.rotate(Math.atan2(pdy / pl, pdx / pl) - Math.PI / 2);
+        ctx.globalAlpha = 0.55 * orb * baseAlpha * f;
+        ctx.drawImage(SZ_GLOW.cold, -5.5, -3, 11, 22 * (0.6 + 0.4 * pl));
+        ctx.restore();
+        ctx.globalCompositeOperation = 'source-over';
     }
-    /* 이미터 — 평소 은은히, 쏜 직후 100ms 섬광 */
-    const ex = D.agEmit[0] * u, ey = -D.agEmit[1] * u;
+    ctx.globalAlpha = baseAlpha;
+    _szDroneBlit(art, szMyLivery() === 'gold' ? 1 : 0, D.ag.row, size);
+    ctx.globalCompositeOperation = 'lighter';
+    /* 이온 고리 — 미는 쪽 호가 밝아진다(고리 위 세 점) */
+    if(!lo && orb > 0){
+        const th0 = Math.atan2(-oy, ox);
+        for(let k = -1; k <= 1; k++){
+            const th = th0 + k * 0.30, p = _szAgPx(Math.cos(th) * I[0], Math.sin(th) * I[0], I[1]);
+            ctx.globalAlpha = (k === 0 ? 0.75 : 0.45) * orb * baseAlpha;
+            ctx.drawImage(SZ_GLOW.cold, p[0] - 4, p[1] - 3, 8, 6);
+        }
+    }
+    if(!lo){
+        /* 센서 눈 숨쉬기 */
+        const br = 0.5 + 0.5 * Math.sin(now * 0.006);
+        const pe = _szAgPx(D.agEye[0], D.agEye[1], D.agEye[2]);
+        ctx.globalAlpha = (0.35 + 0.35 * br) * baseAlpha;
+        ctx.drawImage(SZ_GLOW.cyan, pe[0] - 4.5, pe[1] - 4.5, 9, 9);
+        /* 링을 따라 천천히 도는 항법등 4개 — 흰·청록 번갈아, 하나씩 숨쉬듯 */
+        const R = D.agRim;
+        for(let k = 0; k < 4; k++){
+            const th = now * 0.0009 + k * Math.PI / 2;
+            const p = _szAgPx(Math.cos(th) * R[0], Math.sin(th) * R[0], R[1]);
+            const on = 0.55 + 0.45 * Math.sin(now * 0.004 + k * 1.6);
+            ctx.globalAlpha = 0.85 * on * baseAlpha;
+            ctx.drawImage((k & 1) ? SZ_GLOW.cyan : SZ_GLOW.white, p[0] - 3, p[1] - 3, 6, 6);
+        }
+    }
+    /* 이미터 — 평소 은은히, 쏜 직후 100ms 섬광(방금 쏜 쪽) */
+    const E = D.agEmit, pE = _szAgPx(E[0], E[1], E[2]);
+    const ex = pE[0], ey = pE[1];
     const age = now - aegisLastFireAt;
     const k = (age >= 0 && age < 100) ? 1 - age / 100 : 0;
-    const r = 2.6 + 6 * k;
-    ctx.globalAlpha = (0.55 + 0.45 * k) * baseAlpha;
-    ctx.drawImage(SZ_GLOW.cyan, -ex - r, ey - r, r * 2, r * 2);
-    ctx.drawImage(SZ_GLOW.cyan, ex - r, ey - r, r * 2, r * 2);
+    const r = 2.4 + 6 * k;
+    ctx.globalAlpha = 0.5 * baseAlpha;
+    ctx.drawImage(SZ_GLOW.cyan, -ex - 2.4, ey - 2.4, 4.8, 4.8);
+    ctx.drawImage(SZ_GLOW.cyan, ex - 2.4, ey - 2.4, 4.8, 4.8);
     if(k > 0){
+        const sx = st.side * ex;
         ctx.globalAlpha = k * baseAlpha;
-        ctx.drawImage(SZ_GLOW.white, -ex - 2.5, ey - 2.5, 5, 5);
-        ctx.drawImage(SZ_GLOW.white, ex - 2.5, ey - 2.5, 5, 5);
+        ctx.drawImage(SZ_GLOW.cyan, sx - r, ey - r, r * 2, r * 2);
+        ctx.drawImage(SZ_GLOW.white, sx - 2.5, ey - 2.5, 5, 5);
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.restore();
+    if(!lo) _szDrawPuffs(st, now, baseAlpha);
     ctx.globalAlpha = 1;
     return true;
 }
@@ -15341,7 +15567,7 @@ function drawMiniShip(){
         ctx.stroke();
         ctx.restore();
     }
-    /* 레이저 — 빨강. sz:mod:drones — 스프라이트가 있으면 날개 앞전 이미터(좌우 번갈아)에서 나간다 */
+    /* 레이저 — 빨강. sz:mod:drones — 스프라이트가 있으면 앞 갈퀴 끝 이미터(좌우 번갈아)에서 나간다 */
     const spr = !!_szDroneBk.wm.s;
     ctx.save();
     ctx.shadowColor = 'rgba(255, 60, 60, 0.85)';
@@ -15349,7 +15575,7 @@ function drawMiniShip(){
     for(const l of miniLasers){
         const a = l.life / l.maxLife;
         let fx = l.fromX, fy = l.fromY;
-        if(spr){ fx += ((Math.floor(l.fromX * 8) & 1) ? 1 : -1) * SZ_DRONE.wmMuzzle[0] * SZ_DRONE.wm.u; fy -= SZ_DRONE.wmMuzzle[1] * SZ_DRONE.wm.u; }
+        if(spr){ const o = szDroneMzWm(l); fx += o[0]; fy += o[1]; }   /* sz:mod:drones — 쏜 순간의 이미터(기수 회전 반영) */
         ctx.strokeStyle = 'rgba(255, 60, 60, ' + a + ')';
         ctx.lineWidth = 2;
         ctx.beginPath();
