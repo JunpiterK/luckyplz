@@ -26153,7 +26153,7 @@ function sheetHtml(id, ttlKey){
 function build(ov){
     const row = ov.querySelector('.ov-btn-row');
     if(!row) return false;
-    ov.classList.add('szm1');
+    if(!ov.classList.contains('szm1')) ov.classList.add('szm1');   /* 있으면 건드리지 않는다(같은 값 쓰기도 class 변경 기록이 된다) */
     if(!$id('szm1Row')){
         const r = document.createElement('div');
         r.className = 'szm1-row'; r.id = 'szm1Row';
@@ -26259,7 +26259,8 @@ function closeSheets(refocus){
     let was = false;
     for(const id of SHEETS){ const s = $id(id); if(s && !s.hidden){ s.hidden = true; was = true; } }
     const ov = $id('overlay');
-    if(ov) ov.classList.remove('szm1-open');
+    /* 있을 때만 뗀다 — 없는 클래스를 remove 해도 class 속성 변경 기록이 생겨 아래 class 옵저버가 끝없이 다시 부른다(마이크로태스크 무한 루프) */
+    if(ov && ov.classList.contains('szm1-open')) ov.classList.remove('szm1-open');
     for(const id of ['szm1TogBtn', 'szm1SetBtn']){ const b = $id(id); if(b && b.getAttribute('aria-expanded') !== 'false') b.setAttribute('aria-expanded', 'false'); }
     if(was && refocus && opener){ try{ opener.focus({preventScroll: true}); }catch(_){} }
     if(was) opener = null;
@@ -26287,7 +26288,8 @@ function sync(){
     if(!ov) return;
     if(!startOv()){
         /* 결과 카드(innerHTML 교체) — 시작 화면 표식만 걷는다. 시작 화면은 새로고침으로만 돌아온다 */
-        if(applied || ov.classList.contains('szm1')){ ov.classList.remove('szm1', 'szm1-open'); applied = false; }
+        if(ov.classList.contains('szm1') || ov.classList.contains('szm1-open')) ov.classList.remove('szm1', 'szm1-open');
+        applied = false;
         return;
     }
     if(on()) apply(); else undo();
@@ -26308,7 +26310,7 @@ try{
     /* 다른 주입자(SZX·소리 칩·조작 칩·엽서 칩)가 나중에 붙인 것을 제자리로. 옮길 게 없으면 아무것도 안 한다 */
     if(ov) new MutationObserver(() => { if(!running) syncSoon(); }).observe(ov, {childList: true, subtree: true});
     /* 시작 카드가 숨겨지면(출발·패널·모달) 시트도 닫는다 */
-    if(ov) new MutationObserver(() => { if(ov.classList.contains('hidden')) closeSheets(false); }).observe(ov, {attributes: true, attributeFilter: ['class']});
+    if(ov) new MutationObserver(() => { if(ov.classList.contains('hidden') && ov.classList.contains('szm1-open')) closeSheets(false); }).observe(ov, {attributes: true, attributeFilter: ['class']});
 }catch(_){}
 document.addEventListener('lp:langchanged', () => {
     document.querySelectorAll('[data-szm1t]').forEach((el) => { el.textContent = T(el.dataset.szm1t); });
