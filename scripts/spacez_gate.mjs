@@ -38,6 +38,7 @@
      startshot  시작 화면 ko·en × 320x568·390x844 — 스크린샷(보통 + 애니메이션 정지·캔버스 숨김) 해시·DOM 배치 서명 기준선 비교
      gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
+     mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -135,6 +136,156 @@ const HIT_SCEN = [];
 /*<gate:mp3>*/
 /*</gate:mp3>*/
 /*<gate:mp4>*/
+/* MP4a (2026-10-08) — 소리 엔진 게이트 'mp4'.
+   ① 기본 플래그(mp4 끔): 음악 = mp3(<audio>) · 시퀀서 꺼짐 · 컨텍스트 ≤2
+   ② ?mp4=1: 시퀀서 · mp3 미재생 · 컨텍스트 ≤2 · 층(calm→surge 미리 예약, 오차 ≤1박) · 스침 양자화 ≤63ms · 피버 arp · 마지막 하트 heart
+      · 피격 · 숨김(스케줄 멈춤·음악 0) → 복귀(재개) · 언더런 · 타이머 비용(프레임당 환산 ≤0.1ms) · 음성 콜아웃 로드·재생
+   ③ ?mp4=1&fx=0: mp3 폴백
+   ④ 오프라인 녹음: 데모 패턴 42초 WAV(칸별 RMS·최고값) → --rec-dir (기본 OS temp/mp4a_review). 소리 크기 급변(인접 칸 RMS 차) 확인
+   운영자 실기기 확인(iOS 무음 스위치·첫 탭·백그라운드 복귀·🔊)은 게이트 밖 — 완료 보고 목록 */
+const MP4_PLAY_HOOK = `(function(){ window.__PLAY = []; var op = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function(){ try{ window.__PLAY.push(String(this.currentSrc || this.src || '').replace(location.origin, '').split('?')[0]); }catch(_){} return op.apply(this, arguments); }; })();`;
+const MP4_HIDE = (h) => `(function(){ Object.defineProperty(document, 'hidden', {configurable: true, get: function(){ return ${h}; }});
+  Object.defineProperty(document, 'visibilityState', {configurable: true, get: function(){ return ${h} ? 'hidden' : 'visible'; }});
+  document.dispatchEvent(new Event('visibilitychange')); return 1; })()`;
+async function mp4Session(base, extra, long){
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.send('Page.addScriptToEvaluateOnNewDocument', { source: AC_HOOK });
+        await e.send('Page.addScriptToEvaluateOnNewDocument', { source: MP4_PLAY_HOOK });
+        await e.open(gameUrl(base, 'ko', extra), 2200);
+        const pt = await e.ev('(function(){ var r = document.getElementById("dodge-canvas").getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + 40)]; })()');
+        await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1] }] });
+        await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await sleep(400);
+        await e.ev('(function(){ startGame(); window.__inv = setInterval(function(){ invincibleUntil = 1e15; if(window.__keepLives) lives = window.__keepLives; }, 50); return 1; })()');
+        await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+        await sleep(600);
+        const ST = '(function(){ var s = window.SZAU && SZAU._st ? SZAU._st() : null; return { s: s, seq: !!(BGM.isSeq && BGM.isSeq()), mp4: !!(window.SZ_FLAGS && SZ_FLAGS.mp4), fx: !!(window.SZ_FLAGS && SZ_FLAGS.fx), ok: !!(window.SZMP4 && SZMP4.ok), el: Math.round(elapsedMs) }; })()';
+        const out = { start: await e.ev(ST) };
+        if(long){
+            /* calm(0~14s) → surge — 미리 예약된 첫 전환을 지나게 */
+            await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if(elapsedMs > 16500 || performance.now() - t0 > 30000) return res(1); setTimeout(w, 100); })(); })`, 40000);
+            out.surge = await e.ev(ST);
+            /* 스침 24회 — 간격 40~260ms */
+            await e.ev(`new Promise(function(res){ var k = 0; (function g(){ SZE.emit('graze', ++k); if(k >= 24) return res(1); setTimeout(g, 40 + (k * 37) % 220); })(); })`, 20000);
+            out.graze = await e.ev(ST);
+            await e.ev("(SZE.emit('fever', 'on'), 1)"); await sleep(450);
+            out.fever = await e.ev(ST);
+            await e.ev("(SZE.emit('fever', 'off'), window.__keepLives = 1, 1)"); await sleep(450);
+            out.heart = await e.ev(ST);
+            await e.ev("(SZE.emit('hit', 200, 300, 'rock'), 1)"); await sleep(300);
+            /* 숨김 → 스케줄 멈춤·음악 0 */
+            await e.ev(MP4_HIDE(true)); await sleep(500);
+            const h1 = await e.ev(ST); await sleep(700);
+            const h2 = await e.ev(ST);
+            out.hidden = { a: h1, b: h2 };
+            await e.ev(MP4_HIDE(false)); await sleep(200);
+            out.resumeVia = await e.ev(`(function(){ var b = document.querySelector('.lp-ap-go');
+                if(b && window.LpAutoPause && LpAutoPause.isShowing && LpAutoPause.isShowing()){ b.click(); return 'autopause'; }
+                if(paused){ paused = false; try{ BGM.resume(); }catch(_){} try{ syncPauseUI(); }catch(_){} return 'manual'; } return 'none'; })()`);
+            await sleep(900);
+            out.back = await e.ev(ST);
+            await sleep(2600);   /* 음성 큐(시작 간격 2s) 비우기 */
+            out.end = await e.ev(ST);
+        } else {
+            await sleep(3000);
+            out.end = await e.ev(ST);
+        }
+        out.ac = await e.ev('({ n: window.__AC, src: window.__ACs })');
+        out.play = await e.ev('window.__PLAY.slice(0, 12)');
+        await e.ev('(function(){ clearInterval(window.__inv); invincibleUntil = 0; try{ triggerGameOver(); }catch(_){} return 1; })()');
+        await sleep(1000);
+        out.after = await e.ev(ST);
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('mp4 ' + (extra || 'default'), e, pe);
+        return out;
+    });
+}
+async function mp4Render(base){
+    const dir = path.resolve(A['rec-dir'] || path.join(os.tmpdir(), 'mp4a_review'));
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', 'mp4=1'), 1200);
+        const r = await e.ev('SZAU._render()', 300000);
+        const parts = [];
+        for(let i = 0; i < r.parts; i++) parts.push(Buffer.from(await e.ev('window.__SZAU_WAV[' + i + ']', 60000), 'base64'));
+        fs.mkdirSync(dir, { recursive: true });
+        const wav = path.join(dir, 'mp4a_demo_' + STAMP + '.wav');
+        fs.writeFileSync(wav, Buffer.concat(parts));
+        const cue = ['MP4a 데모 패턴 오프라인 녹음 (' + r.secs + 's, 버스 = CAL ' + r.cal + ' — mp3 BGM 최대 볼륨과 같은 기준)', '칸 시작(s)  이름  RMS(dBFS)  최고(dBFS)']
+            .concat(r.seg.map(s => String(s.from).padStart(5) + '  ' + s.name.padEnd(14) + String(s.rms).padStart(7) + String(s.peak).padStart(9)))
+            .concat(['', '스침 음 양자화 지연(ms): ' + r.quant.map(x => Math.round(x * 1000)).join(' '),
+                '0~8 calm(bass+pad) · 8 surge(+drum, 스침 음계 1~10) · 16 breath(pad) · 22 boss 예고(+lead) · 24 보스 등장 · 30 surge+피버(+arp·필터 개방, 콤보 24~100 화음)',
+                '36 마지막 하트(+heart) · 39 피격(로우패스 0.4s + duck)']);
+        fs.writeFileSync(wav.replace(/\.wav$/, '.txt'), cue.join('\n'));
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('mp4 render', e, pe);
+        return { wav, bytes: r.bytes, seg: r.seg, notes: r.notes, quant: r.quant, cal: r.cal };
+    });
+}
+EXT_CMDS.mp4 = {
+    all: false, server: true,
+    run: async (base) => {
+        const out = {};
+        say('mp4: 기본 플래그(mp3) 세션');
+        out.def = await mp4Session(base, '', false);
+        say('mp4: ?mp4=1 시퀀서 세션 (~40s)');
+        out.on = await mp4Session(base, 'mp4=1', true);
+        say('mp4: ?mp4=1&fx=0 폴백 세션');
+        out.fx0 = await mp4Session(base, 'mp4=1&fx=0', false);
+        say('mp4: 오프라인 녹음');
+        try{ out.rec = await mp4Render(base); }catch(err){ out.rec = { err: String(err && err.message || err).slice(0, 200) }; }
+        return out;
+    },
+    judge: (cur) => {
+        const G = 'G-mp4';
+        const bgm = (p) => (p || []).some(s => /\/assets\/bgm\/dodge\/track\d\.mp3$/.test(s));
+        const d = cur.def, o = cur.on, f = cur.fx0;
+        row(G, '기본: SZ_FLAGS.mp4 / 음악', String(d.start.mp4) + ' / ' + (d.start.seq ? '시퀀서' : 'mp3') + (bgm(d.play) ? ' (재생됨)' : ' (재생 안 됨)'), null, 'false / mp3', !d.start.mp4 && !d.start.seq && bgm(d.play) ? 'PASS' : 'FAIL');
+        row(G, '기본: 시퀀서 상태', d.end.s ? d.end.s.st + ' run=' + d.end.s.run : 'SZAU 없음', null, 'off', d.end.s && d.end.s.st === 'off' && !d.end.s.run ? 'PASS' : 'FAIL');
+        row(G, '기본: AudioContext 수', d.ac.n, null, '≤2', d.ac.n <= 2 ? 'PASS' : 'FAIL', (d.ac.src || []).map(s => s.split(' < ')[0].replace(/^at /, '')).join(' | ').slice(0, 120));
+        row(G, '?mp4=1: 센티널·음악', 'SZMP4.ok=' + o.start.ok + ' / ' + (o.start.seq ? '시퀀서' : 'mp3') + ' / mp3 재생 ' + bgm(o.play), null, 'true / 시퀀서 / false', o.start.ok && o.start.seq && !bgm(o.play) ? 'PASS' : 'FAIL');
+        row(G, '?mp4=1: AudioContext 수', o.ac.n, null, '≤2', o.ac.n <= 2 ? 'PASS' : 'FAIL', (o.ac.src || []).map(s => s.split(' < ')[0].replace(/^at /, '')).join(' | ').slice(0, 120));
+        const s0 = o.start.s || {};
+        row(G, '?mp4=1: 시작 층 (calm)', (s0.on || []).join('+') + ' · ' + s0.song + ' · bus ' + s0.bus, null, 'bass+pad', s0.st === 'play' && (s0.on || []).join('+') === 'bass+pad' ? 'PASS' : 'FAIL');
+        const ss = o.surge.s || {};
+        const lg = (ss.log || []).filter(r => r.act != null);
+        const errMax = lg.length ? Math.max(...lg.map(r => Math.abs(r.err))) : null, errAct = lg.length ? Math.max(...lg.map(r => Math.abs(r.errAct))) : null, beat = lg.length ? lg[0].beat : 0.5;
+        row(G, '미리 예약 층 전환 (예측·실제 대비 오차)', lg.length ? lg.length + '건 · 예측 ' + Math.round(errMax * 1000) + 'ms · 실제 진입 ' + Math.round(errAct * 1000) + 'ms' : '0건', null, '≥1건 · ≤1박(' + Math.round(beat * 1000) + 'ms)', lg.length && errMax <= beat + 0.001 && errAct <= beat + 0.05 ? 'PASS' : 'FAIL', JSON.stringify((ss.log || []).slice(0, 2)).slice(0, 150));
+        row(G, 'SURGE 층', (ss.on || []).join('+') + ' (ph ' + ss.ph + ')', null, 'bass+drum+pad', ss.ph === 'surge' && (ss.on || []).join('+') === 'bass+drum+pad' ? 'PASS' : 'FAIL');
+        const gq = (o.graze.s || {}).q || {};
+        row(G, '스침 음계 양자화 지연 최대 / 평균', gq.maxMs + ' / ' + gq.avgMs + 'ms (' + gq.n + '음)', null, '≤63ms', gq.n > 0 && gq.maxMs <= 63 ? 'PASS' : 'FAIL');
+        const fv = o.fever.s || {}, ht = o.heart.s || {};
+        row(G, '피버 → arp(즉시 램프)', (fv.on || []).join('+') + ' · mods ' + JSON.stringify(fv.mods), null, 'arp 포함', (fv.on || []).includes('arp') ? 'PASS' : 'FAIL');
+        row(G, '마지막 하트 → heart', (ht.on || []).join('+'), null, 'heart 포함 · arp 없음', (ht.on || []).includes('heart') && !(ht.on || []).includes('arp') ? 'PASS' : 'FAIL');
+        const ha = o.hidden.a.s || {}, hb = o.hidden.b.s || {}, bk = o.back.s || {};
+        row(G, '숨김: 스케줄 멈춤 · 음악 버스', 'hold=' + ha.hold + ' st=' + ha.st + ' · 음 ' + ha.notes + '→' + hb.notes + ' · bus ' + hb.bus, null, 'hold · 음 수 그대로 · bus ≤0.01', ha.hold && hb.notes === ha.notes && hb.bus <= 0.01 ? 'PASS' : 'FAIL');
+        row(G, '복귀: 재개 (' + o.resumeVia + ')', 'st=' + bk.st + ' hold=' + bk.hold + ' · 음 ' + hb.notes + '→' + bk.notes + ' · bus ' + bk.bus, null, 'play · 음 증가', bk.st === 'play' && !bk.hold && bk.notes > hb.notes ? 'PASS' : 'FAIL');
+        const en = o.end.s || {};
+        row(G, '언더런(늦어서 버린 스텝)', en.under, null, '≤2', en.under <= 2 ? 'PASS' : 'WARN');
+        const perFrame = en.tick ? en.tick.avgMs * (16.67 / 25) : null;
+        row(G, '스케줄 타이머 비용 (25ms 틱)', en.tick ? '평균 ' + en.tick.avgMs + 'ms · 최대 ' + en.tick.maxMs + 'ms · >1ms ' + en.tick.over1ms + '회 / ' + en.tick.n : '-', null, '프레임당 환산 ≤0.1ms', perFrame != null && perFrame <= 0.1 ? 'PASS' : 'FAIL', '프레임당 ' + (perFrame != null ? perFrame.toFixed(4) : '-') + 'ms · 메인 루프(SZE tick) 구독 0');
+        /* 논리 이벤트(드묾 — 구간 전환·피버·스침)는 프레임 안에서 돈다 → 판 시간 동안의 합을 프레임 수(60Hz)로 나눈 값으로 본다 */
+        const evPF = en.ev && en.tick && en.tick.n ? en.ev.n * en.ev.avgMs / (en.tick.n * 0.025 * 60) : null;
+        row(G, 'SZE 논리 이벤트 리스너 비용', en.ev ? '평균 ' + en.ev.avgMs + 'ms · 최대 ' + en.ev.maxMs + 'ms (' + en.ev.n + '회)' : '-', null, '프레임당 환산 ≤0.1ms · 1회 ≤1ms', evPF != null && evPF <= 0.1 && en.ev.maxMs <= 1 ? 'PASS' : 'WARN', '프레임당 ' + (evPF != null ? evPF.toFixed(4) : '-') + 'ms');
+        row(G, '음성 콜아웃 로드 / 재생', (en.vo ? en.vo.loaded.length : 0) + '/8 · ' + (en.vo ? en.vo.played.map(x => x[0]).join(',') : ''), null, '8 · ≥1', en.vo && en.vo.loaded.length === 8 && en.vo.played.length >= 1 ? 'PASS' : 'FAIL');
+        const af = o.after.s || {};
+        row(G, '게임오버 → 시퀀서 정지', af.st, null, 'off', af.st === 'off' ? 'PASS' : 'FAIL');
+        row(G, '?mp4=1&fx=0 → mp3 폴백', (f.start.seq ? '시퀀서' : 'mp3') + (bgm(f.play) ? ' (재생됨)' : ''), null, 'mp3', !f.start.seq && bgm(f.play) ? 'PASS' : 'FAIL');
+        row(G, '?mp4=1&fx=0: AudioContext 수', f.ac.n, null, '≤2', f.ac.n <= 2 ? 'PASS' : 'FAIL');
+        const r = cur.rec || {};
+        if(r.err){ row(G, '오프라인 녹음', r.err, null, 'WAV', 'FAIL'); return; }
+        row(G, '오프라인 녹음 WAV', r.wav + ' (' + Math.round(r.bytes / 1024) + 'KB)', null, '파일', 'PASS');
+        const seg = r.seg || [];
+        let jump = 0, jumpAt = '';
+        for(let i = 1; i < seg.length; i++){ const dd = Math.abs(seg[i].rms - seg[i - 1].rms); if(dd > jump){ jump = dd; jumpAt = seg[i - 1].name + '→' + seg[i].name; } }
+        row(G, '칸별 RMS (dBFS)', seg.map(s => s.name + ' ' + s.rms).join(' · '), null, '기록', 'INFO');
+        row(G, '인접 칸 RMS 차 최대(소리 크기 급변)', jump.toFixed(1) + 'dB (' + jumpAt + ')', null, '≤6dB', jump <= 6 ? 'PASS' : 'WARN');
+        const pk = seg.length ? Math.max(...seg.map(s => s.peak)) : 0;
+        row(G, '최고값', pk + 'dBFS', null, '≤-0.5dBFS', pk <= -0.5 ? 'PASS' : 'FAIL');
+        const su = seg.find(s => s.name === 'surge');
+        row(G, 'SURGE RMS vs mp3 평균(-15.5dBFS)', su ? su.rms + 'dBFS' : '-', null, '±2dB (CAL ' + r.cal + ')', su && Math.abs(su.rms + 15.5) <= 2 ? 'PASS' : 'WARN');
+    }
+};
 /*</gate:mp4>*/
 /*<gate:mp5>*/
 /*</gate:mp5>*/

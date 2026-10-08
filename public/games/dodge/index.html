@@ -11354,8 +11354,33 @@ function szFS(){
     }
     return SZFUN;
 }
-function szFunTone(f, d, type, vol){ if(typeof LPAudio === 'undefined') return; try{ LPAudio.beep({freq: f, dur: d, vol: vol, type: type || 'triangle', decay: 0.8}); }catch(_){} }
+/* MP4a — 시퀀서가 이 판의 음악이면(SZAU.live) 음악성 소리는 SZAU 로: 다음 1/8박 격자(≤62.5ms)에 맞추고 곡 조성의 음으로 붙인다.
+   피버 중 은은한 박(SZF_BEAT, vol .025)은 시퀀서 arp 층이 대신하므로 낸다면 겹친다 → 건너뛴다. 시퀀서가 아니면 예전 LPAudio 그대로 */
+function szFunMus(){ try{ return !!(window.SZAU && SZAU.live && SZAU.live()); }catch(_){ return false; } }
+const SZF_SEQ = {
+    breath: [[784, 0.12], [1175, 0.36], 0.03, 'sine'],
+    perfect: [[1047, 0.06], [1319, 0.06], [1568, 0.06], [2093, 0.22], 0.04, 'triangle'],
+    fever: [[523, 0.05], [659, 0.05], [784, 0.05], [1047, 0.05], [1319, 0.05], [1568, 0.05], [2093, 0.3], 0.05, 'square'],
+    feverEnd: [[1568, 0.07], [1175, 0.07], [784, 0.2], 0.03, 'triangle'],
+    jack: [[1976, 0.05], [2637, 0.12], [0, 0.03], [1976, 0.05], [2637, 0.28], 0.045, 'square']
+};
+function szFunTone(f, d, type, vol){
+    if(szFunMus()){
+        if(szFeverOn && vol <= 0.025 && SZF_BEAT.indexOf(f) >= 0) return;
+        try{ if(SZAU.tone(f, d, type || 'triangle', vol)) return; }catch(_){}
+    }
+    if(typeof LPAudio === 'undefined') return; try{ LPAudio.beep({freq: f, dur: d, vol: vol, type: type || 'triangle', decay: 0.8}); }catch(_){}
+}
 function szFunSfx(k){
+    if(SZF_SEQ[k] && szFunMus()){
+        const q = SZF_SEQ[k], n = q.length - 2;
+        let ok = false;
+        try{ ok = SZAU.seq(q.slice(0, n), {vol: q[n], type: q[n + 1]}); }catch(_){ ok = false; }
+        if(ok){
+            if(k === 'fever' && typeof LPAudio !== 'undefined') try{ LPAudio.beep({freq: 180, dur: 0.6, vol: 0.06, type: 'sawtooth', slide: 720, decay: 0.9}); }catch(_){}
+            return;
+        }
+    }
     if(typeof LPAudio === 'undefined') return;
     try{
         if(k === 'surge'){ LPAudio.beep({freq: 70, dur: 0.9, vol: 0.05, type: 'sawtooth', slide: 150, decay: 0.95}); LPAudio.beep({freq: 294, dur: 0.7, vol: 0.018, type: 'triangle', slide: 588, decay: 0.9}); }
@@ -17245,7 +17270,28 @@ const BGM = (function(){
         } catch(_){}
     }
 
+    /* MP4a (2026-10-08) — 시퀀서 위임. 이 판이 SZ_FLAGS.mp4 로 시작했고(szRunBegin 이 판 시작 때 고정) SZAU 엔진이 살아 있으면
+       음악은 SZAU.music(0KB WebAudio 시퀀서)이 낸다. mp3 2곡은 폴백 전용 — ?mp4=0(기본)·?fx=0·tier≥3·시퀀서 예외.
+       createMediaElementSource 로 <audio> 를 Web Audio 에 넣지 않는다(iOS 무음 스위치 체감 회귀). 플래그가 꺼져 있으면 아래 경로는 MP0 그대로 */
+    let seq = null;
+    function seqTake(){
+        try{ const m = window.SZAU && SZAU.music; return (window.SZ_FLAGS && SZ_FLAGS.mp4 && m && m.can()) ? m : null; }catch(_){ return null; }
+    }
+    /* 판 도중 시퀀서가 죽으면(예외 3회) 그 자리에서 mp3 로 이어 간다 */
+    function seqFail(){ seq = null; if(enabled) mp3Start(); }
     function start(){
+        if(!enabled) return;
+        if(seq){ try{ seq.stop(); }catch(_){} }   /* 판 사이 stop 없이 다시 시작하는 길(1:1 등) — 앞 판 시퀀서를 남기지 않는다 */
+        seq = null;
+        const m = seqTake();
+        if(m){
+            let ok = false;
+            try{ ok = m.start(MAX_VOL, seqFail); }catch(_){ ok = false; }
+            if(ok){ seq = m; audios.forEach(function(a){ try { a.pause(); a.currentTime = 0; } catch(_){} }); return; }
+        }
+        mp3Start();
+    }
+    function mp3Start(){
         if(!enabled) return;
         /* Always restart from track 1 each time the game starts so the
            player gets a consistent intro. Stop any other track first. */
@@ -17259,17 +17305,20 @@ const BGM = (function(){
         fadeTo(a, MAX_VOL, FADE_IN_MS);
     }
     function stop(){
+        if(seq){ const m = seq; seq = null; try{ m.stop(); }catch(_){} return; }
         const a = audios[cur];
         fadeTo(a, 0, FADE_OUT_MS, function(){
             audios.forEach(function(x){ try { x.pause(); x.currentTime = 0; } catch(_){} });
         });
     }
     function pause(){
+        if(seq){ try{ seq.pause(); }catch(_){} return; }
         const a = audios[cur];
         fadeTo(a, 0, 350, function(){ try { a.pause(); } catch(_){} });
     }
     function resume(){
         if(!enabled) return;
+        if(seq){ try{ seq.resume(); }catch(_){} return; }
         const a = audios[cur];
         safePlay(a);
         fadeTo(a, MAX_VOL, 600);
@@ -17279,6 +17328,7 @@ const BGM = (function(){
     /* P5 — 피격·신기록 순간 -6dB(×0.5) 250ms. 페이드 중이면 건너뛴다 */
     let duckT = 0, duckBase = -1;
     function duck(ms){
+        if(seq){ try{ seq.duck(ms || 250); }catch(_){} return; }
         const a = audios[cur];
         if(!enabled || !a || a.paused || fadeTimer) return;
         if(duckBase < 0){ duckBase = a.volume; a.volume = duckBase * 0.5; }
@@ -17287,10 +17337,12 @@ const BGM = (function(){
     }
     function setVol(v){
         MAX_VOL = MAX_VOL0 * Math.max(0, Math.min(1, +v || 0));
+        if(seq){ try{ seq.setVol(MAX_VOL); }catch(_){} }
         const a = audios[cur];
         if(a && !a.paused && !fadeTimer && duckBase < 0) try{ a.volume = MAX_VOL; }catch(_){}
     }
-    return { start: start, stop: stop, pause: pause, resume: resume, toggle: toggle, isOn: isOn, duck: duck, setVol: setVol };
+    return { start: start, stop: stop, pause: pause, resume: resume, toggle: toggle, isOn: isOn, duck: duck, setVol: setVol,
+             isSeq: function(){ return !!seq; } };   /* MP4a — 게이트·SZAU 가 읽는다(이번 판 음악이 시퀀서인지) */
 })();
 
 function resetGame(){
@@ -22186,8 +22238,12 @@ function mkAC(){
     return AC;
 }
 function muted(){ try{ return !!(window.LPAudio && LPAudio.isMuted()); }catch(_){ return false; } }
-function unlockAudio(){ const c = mkAC(); if(c && c.state === 'suspended'){ try{ c.resume(); }catch(_){} } }
-['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, {capture:true, passive:true}));
+/* MP4a (2026-10-08) — 이 컨텍스트가 Space-Z 의 '하나뿐인' 자체 컨텍스트다. 효과음(여기)·카운트다운 음성·추진음(SZX)·시퀀서·음성 콜아웃(SZAU)이
+   같이 쓴다. 공용 LPAudio 컨텍스트는 그대로 두므로 페이지 전체 2개. szAudioCtx(true) = 없으면 만든다(로드 직후·손길 때만 — 판 도중 첫 생성은 장치 초기화로 멈춘다), false = 있는 것만.
+   잠금 해제: pointerup·touchend·click 추가(iOS 는 touchend·click 에서만 사용자 활성으로 친다). iOS 의 'interrupted'(전화·앱 전환 뒤)도 다시 깨운다 */
+function unlockAudio(){ const c = mkAC(); if(c && c.state !== 'running' && c.state !== 'closed'){ try{ const p = c.resume(); if(p && p.catch) p.catch(() => {}); }catch(_){} } }
+['pointerdown', 'touchstart', 'keydown', 'pointerup', 'touchend', 'click'].forEach(ev => document.addEventListener(ev, unlockAudio, {capture:true, passive:true}));
+window.szAudioCtx = function(make){ return make ? mkAC() : AC; };
 function out(pan){
     if(pan && AC.createStereoPanner){ const p = AC.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); p.connect(MST); return p; }
     return MST;
@@ -23815,24 +23871,47 @@ const LS={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:v}catch(
 let pid=LS.get('szx_pid','');if(!pid){pid=Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);LS.set('szx_pid',pid)}
 
 /* ══ 1. 발사 사운드 ══ */
-const SND={};let AC=null,roar=null;
+const SND={},RAW={},WAIT={};let AC=null,roar=null;
 const FILES={c3:'cd-3',c2:'cd-2',c1:'cd-1',go:'cd-launch',roar:'launch-roar'};
-function actx(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}return AC}
+/* MP4a (2026-10-08) — 컨텍스트는 SZ3 의 것(szAudioCtx)을 같이 쓴다 → 페이지 전체 ≤2(공용 LPAudio + Space-Z 1).
+   로드 600ms 에 그 컨텍스트를 (잠긴 채) 만들고 mp3 를 받아 디코드한다(RAW → SND). 컨텍스트가 아직 없으면 바이트만 들고 있다가 생기면 디코드.
+   "Three" 가 디코드보다 먼저 불리면 350ms 안에 디코드가 끝날 때 늦게라도 낸다(WAIT, 음성만 — 추진음은 roar 핸들이 필요).
+   SZ3 가 없으면(그 블록이 죽은 경우) 예전처럼 자기 컨텍스트를 600ms 에 만든다 */
+function actx(){
+    /* 공유 컨텍스트는 loadSnd(로드 600ms)와 SZ3 의 손길 리스너가 만든다. 판 도중(카운트다운 등)에는 만들지 않고 있는 것만 쓴다 */
+    if(window.szAudioCtx){try{return szAudioCtx(false)}catch(_){return null}}
+    if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}return AC
+}
 function muted(){try{return !!(window.LPAudio&&LPAudio.isMuted())}catch(_){return false}}
 function loadSnd(){
-    const c=actx();if(!c)return;
+    /* 로드 600ms 에 공유 컨텍스트를 미리 만든다(잠긴 채) — 예전 카운트다운 컨텍스트가 하던 일. 첫 컨텍스트 생성은 오디오 장치 초기화라
+       비싸다(실측: 손길 없는 판에서 LPAudio 가 존 도착 프레임에 첫 컨텍스트를 만들며 ~100ms 멈춤). 판 도중이 아니라 로드 때 치르게 둔다 */
+    try{if(window.szAudioCtx){const mk=()=>{try{szAudioCtx(true);decodeAll()}catch(_){}};if(window.requestIdleCallback)requestIdleCallback(mk,{timeout:1500});else setTimeout(mk,50)}}catch(_){}   /* 첫 화면 그리기를 막지 않게 한가할 때 */
     Object.keys(FILES).forEach(k=>{
         fetch('/assets/sfx/spacez/'+FILES[k]+'.mp3').then(r=>r.ok?r.arrayBuffer():null)
-        .then(b=>b&&new Promise((res,rej)=>c.decodeAudioData(b,res,rej))).then(buf=>{if(buf)SND[k]=buf}).catch(()=>{});
+        .then(b=>{if(b){RAW[k]=b;decodeAll()}}).catch(()=>{});
+    });
+}
+function decodeAll(){
+    const c=actx();if(!c)return;
+    Object.keys(RAW).forEach(k=>{
+        const b=RAW[k];delete RAW[k];
+        new Promise((res,rej)=>c.decodeAudioData(b,res,rej)).then(buf=>{
+            if(!buf)return;SND[k]=buf;
+            const w=WAIT[k];delete WAIT[k];
+            if(w&&performance.now()-w.t<350)play(k,w.vol);
+        }).catch(()=>{});
     });
 }
 function unlock(){
     const c=actx();if(!c)return;
-    if(c.state==='suspended')c.resume().catch(()=>{});
+    if(c.state!=='running'&&c.state!=='closed')c.resume().catch(()=>{});
     try{const b=c.createBuffer(1,1,22050),s=c.createBufferSource();s.buffer=b;s.connect(c.destination);s.start(0)}catch(_){}
+    decodeAll();
 }
 function play(k,vol){
-    const c=actx();if(!c||!SND[k]||muted())return null;
+    const c=actx();if(!c||muted())return null;
+    if(!SND[k]){if(k!=='roar'){WAIT[k]={t:performance.now(),vol};decodeAll()}return null}
     if(c.state==='suspended')c.resume().catch(()=>{});
     const s=c.createBufferSource(),g=c.createGain();
     let vm=1;try{if(window.SZ3&&SZ3.vol)vm=SZ3.vol()/0.7}catch(_){}   /* P5 — 볼륨 설정(70% 기준) */
@@ -23858,6 +23937,8 @@ function count(n){
 setTimeout(loadSnd,600);
 document.addEventListener('pointerdown',unlock,{capture:true,passive:true});
 document.addEventListener('keydown',unlock,{capture:true});
+document.addEventListener('pointerup',unlock,{capture:true,passive:true});   /* MP4a — iOS 는 touchend·pointerup 에서만 사용자 활성 */
+document.addEventListener('touchend',unlock,{capture:true,passive:true});
 
 /* ══ 2. 시드 · 도전장 · 개인 기록 ══ */
 let curSeed=0,pendingSeed=0,challenge=null,runBest=0,recShown=false;
@@ -24941,7 +25022,7 @@ window.SZX={
     _C:()=>C,
     _gh:()=>GH,
     _mesh:()=>Object.fromEntries(Object.entries(MESH).map(([k,v])=>[k,v.ready])),
-    _snd:()=>({ctx:AC&&AC.state,loaded:Object.keys(SND),roar:!!roar,seed:curSeed}),
+    _snd:()=>({ctx:(actx()||{}).state||null,loaded:Object.keys(SND),roar:!!roar,seed:curSeed}),
     racing:()=>R.racing,
     busy:()=>!!(panel&&panel.classList.contains('on')),
     _R:R
@@ -25949,11 +26030,1005 @@ SZMP3.ok = true;
 (function(){
 'use strict';
 const SZMP4 = window.SZMP4 = {ok: false};
-/* MP4 코드는 이 IIFE 안에만. 밖으로는 window.SZMP4 하나만 노출한다.
-   기능은 SZ_FLAGS.mp4 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+/* ═══════════ MP4a 소리 엔진 (2026-10-08) — 설계 docs/SPACEZ_MASTERPIECE_PLAN.md 4장 MP4a ═══════════
+   ① 컨텍스트: SZ3 의 컨텍스트(szAudioCtx) 하나를 효과음·카운트다운·시퀀서·음성 콜아웃이 같이 쓴다. 공용 LPAudio 는 그대로 → 페이지 전체 2개.
+   ② 음악: 0KB WebAudio 시퀀서 — bass·drum·pad·lead·arp·heart 6트랙(오실레이터 + 자체 잡음 버퍼). setInterval 25ms 가 0.12s 앞까지 미리 스케줄
+      (타이머가 밀리면 앞보기를 최대 0.3s 로 늘린다). 판의 음악은 BGM 이 music.start() 로 부르고, 실패하면 BGM 이 mp3 를 그대로 튼다.
+   ③ 층 전환: 리듬표 SZR_SEGS 는 결정적이라 다음 SURGE·BREATHER·보스 구간 시작 논리 시각을 미리 안다 → 그 시각에 가장 가까운 박
+      (마디 머리가 1박 안이면 마디)에 예약한다(오차 ≤1박). 피버·마지막 하트·보스 등장(SZE)처럼 미리 알 수 없는 것만 즉시 0.25s 램프.
+      피격은 로우패스 0.4s + duck(-6dB 250ms, BGM.duck 경유).
+   ④ 음악성 효과음(스침 음계·별가루 음)만 다음 1/8박 격자(120BPM 에서 62.5ms, 그보다 길면 반으로)로 양자화하고 곡 조성의 음으로 붙인다.
+      피격·경고음은 즉시(SZ3 그대로). 화면 반응은 소리와 무관하게 0ms.
+   ⑤ 메인 루프 비용 0: 프레임 리스너(SZE tick)를 쓰지 않는다. 스케줄·생명 확인은 25ms 타이머, 나머지는 드문 논리 이벤트(SZE).
+   ⑥ 결정성: rand·randH·randD·Math.random 을 부르지 않는다(잡음 버퍼·흔들림은 자체 LCG). 게임 상태는 읽기만.
+   ⑦ 숨김: 탭이 숨으면 음악을 0 으로 내리고 스케줄을 멈춘다. 돌아오면 게임이 멈춘 상태면(BGM.pause) 그대로, 아니면 이어서.
+   ⑧ 저사양: tier 2 → 최대 3층(maxLayers, MP8a 가 tier 표에서 덮어쓸 수 있다)·디튠 끔. tier ≥3·?fx=0 → mp3.
+   ⑨ 볼륨: 버스 = BGM 의 MAX_VOL(0.35×설정 볼륨) × CAL(몰아치기 혼합 RMS 를 mp3 평균 -15.5dBFS 에 맞춘 값). LPAudio 음소거를 25ms 마다 따른다.
+   공개 API(window.SZAU, 없어도 안전한 no-op 규약 유지): ctx · live() · note(i) · warn() · vo(id[,n]) · duck(ms) · layer(name,on) · maxLayers(n)
+     · song(def) · tone(f,d,type,vol) · seq(notes,{vol,type}) · music{can,start,stop,pause,resume,duck,setVol,isOn}(BGM 전용)
+     · _render(opt)(오프라인 녹음, 게이트 mp4) · _st()(게이트 계측) */
+
+const LSG = (k, d) => { try{ const v = localStorage.getItem(k); return v == null ? d : v; }catch(_){ return d; } };
+const LSS = (k, v) => { try{ localStorage.setItem(k, v); }catch(_){} };
+const pnow = () => performance.now();
+function lang(){ try{ return (typeof _szLang === 'function' ? _szLang() : (window.LpI18n && LpI18n.getLang && LpI18n.getLang())) || 'en'; }catch(_){ return 'en'; } }
+const MP4_I18N = {
+    ko: {voice: '음성'}, en: {voice: 'Voice'}, ja: {voice: '音声'},
+    zh: {voice: '语音'}, es: {voice: 'Voz'}, pt: {voice: 'Voz'}
+};
+function t4(k){ const T = MP4_I18N[lang()] || MP4_I18N.en; return T[k] || MP4_I18N.en[k] || k; }
+
+/* ── 음악 이론 표 ── */
+const TRK = ['bass', 'drum', 'pad', 'lead', 'arp', 'heart'];
+const TBIT = {bass: 1, drum: 2, pad: 4, lead: 8, arp: 16, heart: 32};
+const NOTE_PC = {C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11};
+const MODES = {
+    major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10],
+    lydian: [0, 2, 4, 6, 7, 9, 11], mixolydian: [0, 2, 4, 5, 7, 9, 10], harmonic: [0, 2, 3, 5, 7, 8, 11]
+};
+const PENTA = {major: [0, 2, 4, 7, 9], minor: [0, 3, 5, 7, 10]};
+const ROM = {i: 0, ii: 1, iii: 2, iv: 3, v: 4, vi: 5, vii: 6};
+const FQ = new Float32Array(128);
+for(let m = 0; m < 128; m++) FQ[m] = 440 * Math.pow(2, (m - 69) / 12);
+const VOICE_DEF = {
+    /* wave: 파형 · oct: 옥타브(C4=60 의 4) · rel: 'chord'(숫자 = 코드음 번호) | 'key'(숫자 = 조성 음계 도수) · cut/q: 로우패스
+       fenv: 음마다 필터 엔벌로프 폭(bass 만) · env: [어택, 디케이, 서스테인 비율, 릴리스] 초 · gain: 음 하나의 세기 · leg: 음 길이 비율 · det: 디튠(센트, tier 0 만) · pan */
+    bass:  {wave: 'sawtooth', oct: 2, rel: 'chord', cut: 480, q: 4, fenv: 1500, env: [0.004, 0.16, 0.5, 0.07], gain: 0.34, leg: 0.9, pan: 0},
+    pad:   {wave: 'sawtooth', oct: 4, cut: 1400, q: 0.6, env: [0.35, 0.8, 0.75, 0.6], gain: 0.045, det: 9, pan: 0},
+    lead:  {wave: 'square', oct: 5, rel: 'key', cut: 2400, q: 1, env: [0.008, 0.12, 0.55, 0.12], gain: 0.055, leg: 0.86, pan: 0.12},
+    arp:   {wave: 'triangle', oct: 5, rel: 'chord', cut: 6500, q: 0.5, env: [0.003, 0.09, 0, 0.05], gain: 0.085, leg: 0.6, pan: -0.18},
+    drum:  {kit: 'synth', gain: 0.85, pan: 0},
+    heart: {kit: 'heart', gain: 0.9, pan: 0}
+};
+/* 리듬 국면 → 층(기본). 보스 등장(SZE boss) +lead · 피버 +arp(로우패스 개방) · 마지막 하트 +heart 는 수식어 */
+const LAYERS_DEF = {calm: ['bass', 'pad'], surge: ['bass', 'pad', 'drum'], breath: ['pad'], boss: ['bass', 'pad', 'drum', 'lead']};
+const PRIO_DEF = ['bass', 'drum', 'lead', 'pad', 'arp', 'heart'];   /* maxLayers 로 줄일 때 앞에서부터 남긴다 */
+const PHN = ['calm', 'surge', 'breath', 'boss'];                     /* SZR_CALM/SURGE/BREATH/BOSS = 0..3 */
+/* 몰아치기 혼합(bass+pad+drum, 버스 1) RMS 를 mp3 BGM 평균(-15.5dBFS)에 맞추는 값 — 게이트 mp4 오프라인 녹음으로 잰다 */
+const CAL = 1.17;
+
+function clamp(v, a, b){ return v < a ? a : v > b ? b : v; }
+function keyPc(k){
+    const m = /^([A-Ga-g])([#b]?)$/.exec(String(k == null ? 'C' : k).trim());
+    if(!m) return 0;
+    let p = NOTE_PC[m[1].toUpperCase()];
+    if(m[2] === '#') p++; else if(m[2] === 'b') p--;
+    return (p + 12) % 12;
+}
+/* 로마 숫자 코드 — 대문자 장 · 소문자 단 · ° 감 · + 증 · 7 / maj7 / sus2 / sus4 · 앞의 b/# 은 근음 변화 */
+function chordOf(sym, kp, scale){
+    const m = /^([b#]?)(VII|VI|V|IV|III|II|I|vii|vi|v|iv|iii|ii|i)(°|o|\+)?(maj7|7|sus2|sus4)?$/.exec(String(sym || 'i').trim());
+    if(!m) return {root: kp, tones: [0, scale[2], scale[4]]};
+    const deg = ROM[m[2].toLowerCase()];
+    const r = scale[deg] + (m[1] === 'b' ? -1 : m[1] === '#' ? 1 : 0);
+    const up = m[2] !== m[2].toLowerCase();
+    const dim = m[3] === '°' || m[3] === 'o';
+    let t = dim ? [0, 3, 6] : m[3] === '+' ? [0, 4, 8] : up ? [0, 4, 7] : [0, 3, 7];
+    if(m[4] === 'sus2') t = [0, 2, 7];
+    else if(m[4] === 'sus4') t = [0, 5, 7];
+    else if(m[4] === '7') t = t.concat([dim ? 9 : 10]);
+    else if(m[4] === 'maj7') t = t.concat([11]);
+    return {root: (kp + r + 24) % 12, tones: t};
+}
+function hexv(c){ return /[0-9a-f]/.test(c) ? parseInt(c, 16) : -1; }
+
+/* ── 곡 컴파일: 문자열 패턴 → 마디·스텝별 사건 배열(재생 중 할당·파싱 없음) ── */
+function compileSong(def){
+    if(!def || typeof def !== 'object' || !def.sections) throw new Error('song: sections 없음');
+    const S = {id: String(def.id || 'song'), def: def};
+    S.bpm = clamp(+def.bpm || 120, 50, 220);
+    S.steps = clamp(def.steps | 0 || 16, 4, 64);
+    S.beatSteps = clamp(def.beatSteps | 0 || 4, 1, 16);
+    S.swing = clamp(+def.swing || 0, 0, 0.45);
+    S.kp = keyPc(def.key);
+    S.mode = MODES[def.mode] ? def.mode : 'minor';
+    S.scale = MODES[S.mode];
+    S.penta = Array.isArray(def.penta) && def.penta.length ? def.penta.slice() : (S.scale[2] === 3 ? PENTA.minor : PENTA.major);
+    S.cut = clamp(+def.cut || 7000, 800, 20000);
+    S.gain = clamp(def.gain == null ? 1 : +def.gain, 0, 2);
+    S.V = {};
+    for(const n of TRK) S.V[n] = Object.assign({}, VOICE_DEF[n], (def.voices && def.voices[n]) || {});
+    S.layers = Object.assign({}, LAYERS_DEF, def.layers || {});
+    S.prio = Array.isArray(def.prio) ? def.prio.filter(n => TBIT[n]) : PRIO_DEF;
+    S.levels = def.levels || {};
+    S.secN = [];
+    S.secs = [];
+    const names = Object.keys(def.sections);
+    for(const name of names){
+        const sec = def.sections[name] || {};
+        const nb = clamp(sec.bars | 0 || 4, 1, 64);
+        const chords = Array.isArray(sec.chords) && sec.chords.length ? sec.chords : ['i'];
+        const oct = sec.oct || {};
+        const bars = [];
+        for(let b = 0; b < nb; b++){
+            const ch = chordOf(chords[b % chords.length], S.kp, S.scale);
+            const ev = new Array(S.steps).fill(null);
+            const push = (st, e) => { if(st < S.steps) (ev[st] || (ev[st] = [])).push(e); };
+            for(let ti = 0; ti < TRK.length; ti++){
+                const tn = TRK[ti];
+                let pat = sec[tn];
+                if(pat == null) continue;
+                if(Array.isArray(pat)) pat = pat[b % pat.length];
+                if(typeof pat !== 'string' || !pat) continue;
+                const V = S.V[tn];
+                const o = (V.oct | 0) + (oct[tn] | 0);
+                for(const lane of pat.split('|')){
+                    for(let i = 0; i < lane.length && i < S.steps; i++){
+                        const c = lane[i];
+                        if(c === '.' || c === '-' || c === ' ') continue;
+                        let d = 1; while(lane[i + d] === '-') d++;
+                        if(tn === 'drum' || tn === 'heart'){
+                            const k = c.toLowerCase();
+                            if('ksholctxy'.indexOf(k) < 0) continue;
+                            push(i, {t: ti, k: k, a: c !== k ? 1.35 : 1});
+                        } else if(tn === 'pad'){
+                            if(c !== 'x' && c !== 'X') continue;
+                            /* 닫힌 화음 — 중심음(oct 의 조성 근음 + 5반음) ±6 안으로 접는다(코드가 바뀌어도 손이 크게 안 뛴다) */
+                            const cen = 12 * (o + 1) + S.kp + 5;
+                            const ms = ch.tones.map(tt => { const p = (ch.root + tt) % 12; return cen - 6 + ((p - (cen - 6)) % 12 + 12) % 12; }).sort((x, y) => x - y);
+                            push(i, {t: ti, ms: ms, d: d, a: c === 'X' ? 1.25 : 1});
+                        } else {
+                            const v = hexv(c);
+                            if(v < 0) continue;
+                            let m;
+                            if((V.rel || 'chord') === 'key'){
+                                m = 12 * (o + 1) + S.kp + S.scale[v % 7] + 12 * Math.floor(v / 7);
+                            } else {
+                                let base = 12 * (o + 1) + ch.root; if(ch.root > 7) base -= 12;
+                                const n = ch.tones.length;
+                                m = base + ch.tones[v % n] + 12 * Math.floor(v / n);
+                            }
+                            push(i, {t: ti, m: clamp(m, 12, 120), d: d});
+                        }
+                    }
+                }
+            }
+            bars.push({ev: ev});
+        }
+        S.secN.push(name);
+        S.secs.push({name: name, n: nb, bars: bars});
+    }
+    const form = Array.isArray(def.form) && def.form.length ? def.form : names;
+    S.form = form.map(n => names.indexOf(n)).filter(i => i >= 0);
+    if(!S.form.length) S.form = [0];
+    return S;
+}
+
+/* ── 자체 LCG(결정성 — Math.random 을 쓰지 않는다) ── */
+let _lcg = 0x2F6E2B1;
+function lcg(){ _lcg = (Math.imul(_lcg, 1664525) + 1013904223) >>> 0; return _lcg / 4294967296; }
+
+/* ══════════ Core — 시각을 명시로 받는 신스·시퀀서(실시간·오프라인 공용) ══════════ */
+function Core(ac, dest, opt){
+    opt = opt || {};
+    const C = {ac: ac, rich: opt.rich !== false, under: 0, notes: 0};
+    /* 버스: 트랙 → mix → lpfA(기본/피버) → lpfH(피격 꺼짐) → duck(피격) → vduck(음성) → comp → bus(볼륨·페이드) → dest */
+    const mix = ac.createGain(); mix.gain.value = 1;
+    const lpfA = ac.createBiquadFilter(); lpfA.type = 'lowpass'; lpfA.frequency.value = 7000; lpfA.Q.value = 0.5;
+    const lpfH = ac.createBiquadFilter(); lpfH.type = 'lowpass'; lpfH.frequency.value = 20000; lpfH.Q.value = 0.7;
+    const duck = ac.createGain(); duck.gain.value = 1;
+    const vduck = ac.createGain(); vduck.gain.value = 1;
+    const comp = ac.createDynamicsCompressor();
+    try{ comp.threshold.value = -18; comp.knee.value = 6; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.2; }catch(_){}
+    const bus = ac.createGain(); bus.gain.value = 0.0001;
+    mix.connect(lpfA); lpfA.connect(lpfH); lpfH.connect(duck); duck.connect(vduck); vduck.connect(comp); comp.connect(bus); bus.connect(dest);
+    /* 음악성 효과음(스침·별가루) 버스 — 음악 필터·duck 을 타지 않는다 */
+    const fx = ac.createGain(); fx.gain.value = 1; fx.connect(dest);
+    /* 음성 콜아웃 버스 */
+    const vo = ac.createGain(); vo.gain.value = 1; vo.connect(dest);
+    C.bus = bus; C.fx = fx; C.vo = vo;
+    /* 트랙 — 게인(층 램프) → 팬 → mix. pad·lead·arp 는 트랙 공용 로우패스(f)를 거친다 */
+    const T = TRK.map((n, i) => {
+        const g = ac.createGain(); g.gain.value = 0;
+        if(ac.createStereoPanner){ const p = ac.createStereoPanner(); p.pan.value = VOICE_DEF[n].pan || 0; g.connect(p); p.connect(mix); }
+        else g.connect(mix);
+        const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 6000; f.Q.value = 0.5; f.connect(g);
+        return {n: n, i: i, bit: TBIT[n], g: g, f: f, tl: [[-1, false, 0]]};
+    });
+    C.T = T;
+    const TD = T[1], TH = T[5];
+    /* 드럼 공용 필터 */
+    const hpH = ac.createBiquadFilter(); hpH.type = 'highpass'; hpH.frequency.value = 7200; hpH.connect(TD.g);
+    const bpS = ac.createBiquadFilter(); bpS.type = 'bandpass'; bpS.frequency.value = 1900; bpS.Q.value = 0.8; bpS.connect(TD.g);
+    const bpC = ac.createBiquadFilter(); bpC.type = 'bandpass'; bpC.frequency.value = 1150; bpC.Q.value = 1.1; bpC.connect(TD.g);
+    /* 잡음 버퍼 1초(자체 LCG) */
+    const NB = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    { const d = NB.getChannelData(0); for(let i = 0; i < d.length; i++) d[i] = lcg() * 2 - 1; }
+    let nOff = 0;
+
+    /* ── 곡 위치·시계 ── */
+    let S = null, nextS = null, fi = 0, bar = 0, step = 0, pass = 0, nextT = 0, barT = 0, sd = 0.125;
+    function setSd(){ sd = 60 / S.bpm / S.beatSteps; }
+    C.song = () => S;
+    C.setSong = function(cs){ S = cs; nextS = null; fi = 0; bar = 0; step = 0; pass = 0; setSd(); for(const tr of T) tr.f.frequency.value = (S.V[tr.n].cut || 6000); for(const tr of T) tr.f.Q.value = S.V[tr.n].q || 0.5; };
+    C.queueSong = function(cs){ if(!S || cs === S){ if(!S) C.setSong(cs); return; } nextS = cs; };
+    C.startAt = function(t){ nextT = t; barT = t; step = 0; bar = 0; fi = 0; };
+    C.beat = () => sd * S.beatSteps;
+    C.barDur = () => sd * S.steps;
+    /* 재개 — 패턴 위치는 그대로, 시계만 t 로 민다 */
+    C.reanchor = function(t){ if(nextT < t){ const d = t - nextT; nextT += d; barT += d; } };
+    function barAdvance(){
+        if(nextS){ S = nextS; nextS = null; fi = 0; bar = 0; setSd(); for(const tr of T){ tr.f.frequency.setTargetAtTime(S.V[tr.n].cut || 6000, nextT, 0.05); } return; }
+        const sec = S.secs[S.form[fi]];
+        bar++;
+        if(bar >= sec.n){ bar = 0; fi = (fi + 1) % S.form.length; if(fi === 0) pass++; }
+    }
+    C.pos = () => ({sec: S ? S.secN[S.form[fi]] : null, bar: bar, step: step, pass: pass, nextT: nextT, barT: barT, song: S ? S.id : null});
+    C.pump = function(tEnd, tNow){
+        let n = 0;
+        while(nextT < tEnd && n < 512){
+            if(nextT >= tNow - 0.004) playStep(nextT); else C.under++;
+            n++;
+            step++; nextT += sd;
+            if(step >= S.steps){ step = 0; barAdvance(); barT = nextT; }
+        }
+        return n;
+    };
+    /* 1/8박 격자 — 62.5ms 를 넘으면 반으로(어떤 템포에서도 양자화 지연 ≤62.5ms) */
+    C.grid = function(){ let g = C.beat() / 8; while(g > 0.0626) g /= 2; return g; };
+    C.nextGrid = function(t){ const g = C.grid(); return barT + Math.ceil((t - barT) / g - 1e-6) * g; };
+    /* 예측 시각 tb 에 가장 가까운 박(1박 안에 마디 머리가 있으면 마디). now 보다 앞이면 다음 박 */
+    C.snapBeat = function(tb, now){
+        const b = C.beat(), bd = C.barDur();
+        let tq = barT + Math.round((tb - barT) / b) * b;
+        const tbar = barT + Math.round((tb - barT) / bd) * bd;
+        if(Math.abs(tbar - tb) <= b + 1e-6) tq = tbar;
+        while(tq < now + 0.02) tq += b;
+        return tq;
+    };
+
+    /* ── 엔벌로프 ── */
+    function env(g, t, a, d, s, r, peak, len){
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.linearRampToValueAtTime(peak, t + a);
+        if(s > 0) g.gain.setTargetAtTime(Math.max(0.0001, peak * s), t + a, Math.max(0.005, d / 3));
+        else g.gain.setTargetAtTime(0.0001, t + a, Math.max(0.005, d / 3));
+        const off = t + Math.max(len, a + 0.01);
+        g.gain.setTargetAtTime(0.0001, off, Math.max(0.005, r / 3));
+        return off + r * 1.6 + 0.02;
+    }
+    function playMel(tr, t, m, dSteps, V, acc){
+        const len = dSteps * sd * (V.leg || 0.9);
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = V.wave || 'triangle';
+        o.frequency.setValueAtTime(FQ[m], t);
+        if(tr.n === 'bass'){
+            const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = V.q || 4;
+            f.frequency.setValueAtTime((V.cut || 480) + (V.fenv || 0), t);
+            f.frequency.setTargetAtTime(V.cut || 480, t, 0.07);
+            o.connect(f); f.connect(g); g.connect(tr.g);
+        } else { o.connect(g); g.connect(tr.f); }
+        const e = V.env;
+        const end = env(g, t, e[0], e[1], e[2], e[3], (V.gain || 0.1) * (acc || 1) * S.gain, len);
+        o.start(t); o.stop(end);
+        C.notes++;
+    }
+    function playPad(tr, t, ms, dSteps, V, acc){
+        const len = dSteps * sd * 0.98;
+        const g = ac.createGain(); g.connect(tr.f);
+        const e = V.env;
+        const end = env(g, t, e[0], e[1], e[2], e[3], (V.gain || 0.05) * (acc || 1) * S.gain, len);
+        for(let i = 0; i < ms.length; i++){
+            const o = ac.createOscillator(); o.type = V.wave || 'sawtooth'; o.frequency.setValueAtTime(FQ[ms[i]], t);
+            o.connect(g); o.start(t); o.stop(end);
+            if(C.rich && V.det){ const o2 = ac.createOscillator(); o2.type = o.type; o2.frequency.setValueAtTime(FQ[ms[i]], t); o2.detune.setValueAtTime(V.det, t); o2.connect(g); o2.start(t); o2.stop(end); }
+        }
+        C.notes++;
+    }
+    function noiseSrc(t, dur, to){
+        const s = ac.createBufferSource(); s.buffer = NB;
+        nOff = (nOff + 0.137) % 0.8;
+        s.connect(to); s.start(t, nOff); s.stop(t + dur);
+        return s;
+    }
+    function playDrum(tr, t, k, acc, V){
+        const pk = (V.gain || 0.85) * (acc || 1) * S.gain;
+        if(k === 'k'){
+            const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine';
+            o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(44, t + 0.12);
+            g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(pk * 0.8, t + 0.003); g.gain.setTargetAtTime(0.0001, t + 0.012, 0.075);
+            o.connect(g); g.connect(tr.g); o.start(t); o.stop(t + 0.4);
+        } else if(k === 's' || k === 'c'){
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.0001, t);
+            if(k === 's'){ g.gain.linearRampToValueAtTime(pk * 0.42, t + 0.002); g.gain.setTargetAtTime(0.0001, t + 0.01, 0.05); }
+            else { g.gain.linearRampToValueAtTime(pk * 0.4, t + 0.002); g.gain.setTargetAtTime(pk * 0.08, t + 0.008, 0.004); g.gain.setValueAtTime(pk * 0.38, t + 0.02);
+                   g.gain.setTargetAtTime(pk * 0.08, t + 0.022, 0.004); g.gain.setValueAtTime(pk * 0.36, t + 0.034); g.gain.setTargetAtTime(0.0001, t + 0.036, 0.05); }
+            g.connect(k === 's' ? bpS : bpC); noiseSrc(t, 0.3, g);
+            if(k === 's'){ const o = ac.createOscillator(), g2 = ac.createGain(); o.type = 'triangle'; o.frequency.setValueAtTime(190, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.08);
+                g2.gain.setValueAtTime(0.0001, t); g2.gain.linearRampToValueAtTime(pk * 0.3, t + 0.002); g2.gain.setTargetAtTime(0.0001, t + 0.01, 0.03); o.connect(g2); g2.connect(tr.g); o.start(t); o.stop(t + 0.2); }
+        } else if(k === 'h' || k === 'o'){
+            const g = ac.createGain();
+            g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(pk * 0.16, t + 0.002); g.gain.setTargetAtTime(0.0001, t + 0.004, k === 'h' ? 0.014 : 0.07);
+            g.connect(hpH); noiseSrc(t, k === 'h' ? 0.09 : 0.4, g);
+        } else if(k === 'l' || k === 't'){
+            const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine';
+            o.frequency.setValueAtTime(k === 'l' ? 105 : 150, t); o.frequency.exponentialRampToValueAtTime(k === 'l' ? 62 : 90, t + 0.18);
+            g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(pk * 0.5, t + 0.004); g.gain.setTargetAtTime(0.0001, t + 0.02, 0.07);
+            o.connect(g); g.connect(tr.g); o.start(t); o.stop(t + 0.45);
+        } else if(k === 'x' || k === 'y'){
+            /* 심장 — 낮은 사인 두 번(lub-dub). SZ3 의 마지막 목숨 박동(S.beat)과 같은 재료라 겹쳐도 한 몸처럼 들리게 낮게 */
+            const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine';
+            o.frequency.setValueAtTime(k === 'x' ? 64 : 56, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.14);
+            g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(pk * (k === 'x' ? 0.55 : 0.36), t + 0.006); g.gain.setTargetAtTime(0.0001, t + 0.03, 0.05);
+            o.connect(g); g.connect(tr.g); o.start(t); o.stop(t + 0.35);
+        }
+        C.notes++;
+    }
+    function playStep(t){
+        const sec = S.secs[S.form[fi]];
+        const evs = sec.bars[bar].ev[step];
+        if(!evs) return;
+        const tt = (step & 1) ? t + S.swing * sd : t;
+        for(let i = 0; i < evs.length; i++){
+            const e = evs[i], tr = T[e.t];
+            if(!onAt(tr, tt)) continue;
+            const V = S.V[tr.n];
+            if(e.k) playDrum(tr, tt, e.k, e.a, V);
+            else if(e.ms) playPad(tr, tt, e.ms, e.d, V, e.a);
+            else playMel(tr, tt, e.m, e.d, V, 1);
+        }
+    }
+
+    /* ── 층 ── */
+    const PH = [[-1, 'calm']];   /* 국면 시간표 [시각, 'calm'|'surge'|'breath'|'boss'] — 예약된 미래 전환 포함 */
+    const M = {fever: false, heart: false, boss: false, cap: 6, force: {}};
+    C.M = M;
+    function onAt(tr, t){ const tl = tr.tl; for(let i = tl.length - 1; i >= 0; i--) if(tl[i][0] <= t + 1e-4) return tl[i][1]; return false; }
+    C.onAt = (n, t) => onAt(T[TRK.indexOf(n)], t);
+    function phAt(t){ for(let i = PH.length - 1; i >= 0; i--) if(PH[i][0] <= t + 1e-4) return PH[i][1]; return 'calm'; }
+    function want(ph){
+        const L = S ? S.layers : LAYERS_DEF;
+        const base = L[ph] || L.calm;
+        let mask = 0;
+        for(let i = 0; i < base.length; i++) mask |= TBIT[base[i]] || 0;
+        if(M.boss) mask |= TBIT.lead;
+        if(M.fever) mask |= TBIT.arp;
+        if(M.heart) mask |= TBIT.heart;
+        for(const k in M.force){ if(M.force[k]) mask |= TBIT[k]; else mask &= ~TBIT[k]; }
+        let cnt = 0; for(const n of TRK) if(mask & TBIT[n]) cnt++;
+        if(cnt > M.cap){
+            const pr = S ? S.prio : PRIO_DEF;
+            let keep = 0, k = 0;
+            for(const n of pr){ if((mask & TBIT[n]) && k < M.cap){ keep |= TBIT[n]; k++; } }
+            mask = keep;
+        }
+        return mask;
+    }
+    function lvl(tr, ph){ const L = S && S.levels && S.levels[ph]; return (L && L[tr.n] != null) ? +L[tr.n] : 1; }
+    /* t 에 국면 ph 의 층을 건다. 켜짐은 t−20ms 부터 빠르게(박의 첫 음이 살게), 꺼짐은 t 부터 천천히 */
+    function applyAt(t, ph, tauOn, tauOff, now){
+        const mask = want(ph);
+        for(const tr of T){
+            const on = !!(mask & tr.bit), lv = on ? lvl(tr, ph) : 0;
+            const last = tr.tl[tr.tl.length - 1];
+            if(last[1] === on && Math.abs(last[2] - lv) < 1e-3) continue;
+            tr.tl.push([t, on, lv]);
+            tr.g.gain.setTargetAtTime(on ? lv : 0, on ? Math.max(now, t - 0.02) : t, on ? tauOn : tauOff);
+        }
+        lpfA.frequency.setTargetAtTime(M.fever ? 18000 : (S ? S.cut : 7000), t, 0.08);
+    }
+    function prune(now){
+        for(const tr of T){ const tl = tr.tl; while(tl.length > 2 && tl[1][0] < now - 2) tl.shift(); }
+        while(PH.length > 2 && PH[1][0] < now - 2) PH.shift();
+    }
+    /* now 이후를 지우고 다시 건다 — 즉시 수식어(피버·하트·보스·layer·cap)가 바뀌었을 때 예약된 미래 전환도 새 수식어로 */
+    function rebuild(now, tau){
+        for(const tr of T){
+            const tl = tr.tl; while(tl.length > 1 && tl[tl.length - 1][0] >= now) tl.pop();
+            try{ tr.g.gain.cancelScheduledValues(now); }catch(_){}
+        }
+        try{ lpfA.frequency.cancelScheduledValues(now); }catch(_){}
+        applyAt(now, phAt(now), tau, tau, now);
+        for(let i = 0; i < PH.length; i++) if(PH[i][0] > now) applyAt(PH[i][0], PH[i][1], 0.02, 0.09, now);
+        prune(now);
+    }
+    C.rebuild = rebuild;
+    /* 미래 시각 t 에 국면 전환 예약(예측된 리듬 구간). 이미 지났거나 순서가 꼬이면 즉시 경로 */
+    C.commit = function(t, ph, now){
+        if(t <= now + 0.005){ C.setPhNow(ph, now); return; }
+        const last = PH[PH.length - 1];
+        if(last[0] >= t){ PH.push([t, ph]); PH.sort((a, b) => a[0] - b[0]); rebuild(now, 0.083); return; }
+        PH.push([t, ph]);
+        applyAt(t, ph, 0.02, 0.09, now);
+    };
+    /* 지금 국면을 ph 로(예약된 미래 전환은 버린다 — 워프·예측 실패 복구용). 0.25s 램프(τ 0.083) */
+    C.setPhNow = function(ph, now, tau){
+        while(PH.length > 1 && PH[PH.length - 1][0] >= now) PH.pop();
+        PH.push([now, ph]);
+        rebuild(now, tau || 0.083);
+    };
+    C.phAt = phAt;
+    C.setMod = function(k, v, now){ if(M[k] === v) return; M[k] = v; rebuild(now, 0.083); };
+    C.setForce = function(n, on, now){ if(!TBIT[n]) return; if(on == null) delete M.force[n]; else M.force[n] = !!on; rebuild(now, 0.083); };
+    C.setCap = function(n, now){ n = clamp(n | 0, 1, 6); if(M.cap === n) return; M.cap = n; if(now != null) rebuild(now, 0.083); };
+    C.reset = function(){
+        PH.length = 0; PH.push([-1, 'calm']);
+        M.fever = false; M.heart = false; M.boss = false;
+        const now = ac.currentTime;
+        for(const tr of T){ tr.tl.length = 0; tr.tl.push([-1, false, 0]); try{ tr.g.gain.cancelScheduledValues(now); tr.g.gain.setValueAtTime(0, now); }catch(_){} }
+        try{ lpfH.frequency.cancelScheduledValues(now); lpfH.frequency.setValueAtTime(20000, now); duck.gain.cancelScheduledValues(now); duck.gain.setValueAtTime(1, now); vduck.gain.cancelScheduledValues(now); vduck.gain.setValueAtTime(1, now); }catch(_){}
+        C.under = 0; C.notes = 0;
+    };
+    C.mask = function(t){ let m = 0; for(const tr of T) if(onAt(tr, t)) m |= tr.bit; return m; };
+
+    /* ── 버스 ── */
+    C.fadeTo = function(v, dur, t){
+        t = t == null ? ac.currentTime : t;
+        const g = bus.gain;
+        try{ g.cancelScheduledValues(t); g.setTargetAtTime(Math.max(0.0001, v), t, Math.max(0.01, dur / 3)); }catch(_){}
+    };
+    C.fadeIn = function(v, dur, t){
+        const g = bus.gain;
+        try{ g.cancelScheduledValues(t); g.setValueAtTime(0.0001, t); g.linearRampToValueAtTime(Math.max(0.0001, v), t + dur); }catch(_){}
+    };
+    /* 피격 — 로우패스 420Hz 로 닫았다가 0.4s 에 걸쳐 연다 */
+    C.hitDip = function(t){
+        const f = lpfH.frequency;
+        try{ f.cancelScheduledValues(t); f.setTargetAtTime(420, t, 0.012); f.setTargetAtTime(20000, t + 0.12, 0.1); }catch(_){}
+    };
+    /* duck — -6dB, ms 뒤 복귀(BGM.duck 과 같은 값) */
+    C.duck = function(t, ms){
+        const g = duck.gain;
+        try{ g.cancelScheduledValues(t); g.setTargetAtTime(0.5, t, 0.015); g.setTargetAtTime(1, t + (ms || 250) / 1000, 0.08); }catch(_){}
+    };
+    C.vduck = function(t, dur){
+        const g = vduck.gain;
+        try{ g.cancelScheduledValues(t); g.setTargetAtTime(0.63, t, 0.04); g.setTargetAtTime(1, t + dur, 0.15); }catch(_){}
+    };
+
+    /* ── 음악성 효과음(fx 버스) ── */
+    let lastSlot = -1;
+    function snapMidi(m){
+        /* 곡 조성 음계 위의 가장 가까운 음 */
+        const pc = ((m - S.kp) % 12 + 12) % 12;
+        let best = 0, bd = 99;
+        for(const s of S.scale){ const d = Math.min(Math.abs(s - pc), 12 - Math.abs(s - pc)); if(d < bd){ bd = d; best = s; } }
+        let dlt = best - pc; if(dlt > 6) dlt -= 12; if(dlt < -6) dlt += 12;
+        return m + dlt;
+    }
+    function bell(t, m, vol, type, dur){
+        const o = ac.createOscillator(), g = ac.createGain();
+        o.type = type || 'triangle'; o.frequency.setValueAtTime(FQ[clamp(m, 12, 120)], t);
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(vol, t + 0.003); g.gain.setTargetAtTime(0.0001, t + 0.01, Math.max(0.02, dur / 3.2));
+        o.connect(g); g.connect(fx); o.start(t); o.stop(t + dur + 0.25);
+    }
+    /* 스침 음계 — 콤보 수로 현재 곡의 펜타토닉을 두 옥타브 올라간다. 콤보 25·50·100 에서 화음 1음씩 더(최대 4음) */
+    C.note = function(now, combo, vm){
+        const tq = Math.max(now, C.nextGrid(now));   /* 격자 위면 바로(지연 0), 아니면 다음 칸 — 최대 1칸(≤62.5ms) */
+        const slot = Math.round(tq * 1000);
+        if(slot === lastSlot) return -1;   /* 같은 격자 칸에 두 번 — 쌓지 않는다 */
+        lastSlot = slot;
+        const P = S.penta, n = P.length;
+        const k = (Math.max(1, combo | 0) - 1) % (n * 2);
+        const base = 12 * 6 + S.kp;
+        const deg = k;
+        const mOf = (d) => base + P[d % n] + 12 * Math.floor(d / n);
+        const v = 0.05 * (vm == null ? 1 : vm);
+        bell(tq, mOf(deg), v, 'triangle', 0.22);
+        const stack = (combo >= 25 ? 1 : 0) + (combo >= 50 ? 1 : 0) + (combo >= 100 ? 1 : 0);
+        for(let j = 1; j <= stack; j++) bell(tq, mOf(deg + j * 2) - 12, v * 0.6, 'sine', 0.3);
+        C.notes++;
+        return tq - now;
+    };
+    C.tone = function(now, f, d, type, vol){
+        const tq = Math.max(now, C.nextGrid(now));
+        const m = snapMidi(Math.round(69 + 12 * Math.log2(Math.max(20, f) / 440)));
+        bell(tq, m, vol || 0.04, type, Math.max(0.05, d || 0.1));
+        return tq - now;
+    };
+    C.seqn = function(now, notes, vol, type){
+        let t = Math.max(now, C.nextGrid(now));
+        const t0 = t;
+        for(const nn of notes){
+            const f = nn[0], d = nn[1];
+            if(f > 0) bell(t, snapMidi(Math.round(69 + 12 * Math.log2(f / 440))), vol || 0.04, type, Math.max(0.05, d));
+            t += d;
+        }
+        return t0 - now;
+    };
+    C.warn = function(t){
+        for(let i = 0; i < 2; i++){
+            const o = ac.createOscillator(), g = ac.createGain(), s = t + i * 0.13;
+            o.type = 'square'; o.frequency.setValueAtTime(940, s);
+            g.gain.setValueAtTime(0.0001, s); g.gain.linearRampToValueAtTime(0.05, s + 0.004); g.gain.setTargetAtTime(0.0001, s + 0.05, 0.012);
+            o.connect(g); g.connect(fx); o.start(s); o.stop(s + 0.12);
+        }
+    };
+    return C;
+}
+
 /*<sz:mod:mp4:song>*/
-/* MP4b 곡 데이터(패턴 표) — SZAU.song(def) 로 넘긴다 */
+/* ── 곡 데이터 형식 (MP4b 가 이 펜스 안만 채운다 — 아래 MP4_SONGS 를 바꿔 끼우면 엔진이 그대로 읽는다) ──
+   MP4_SONGS = { v: 1, songs: { <id>: SongDef, ... }, act: [<1막 id>, <2막>, <3막>, <4막>, <5막>] }
+     act[k] = 막 k(존 0·9·15·20·26 부터)의 곡. 비면 앞 막 곡. 막이 바뀌면 다음 마디 머리에서 곡이 바뀐다(템포가 달라도 됨).
+   SongDef = {
+     id, bpm(50~220), key: 'D'|'F#'|'Bb'…, mode: 'minor'|'major'|'dorian'|'phrygian'|'lydian'|'mixolydian'|'harmonic',
+     steps: 16(마디당 스텝, 기본 16 = 16분음표), beatSteps: 4(박당 스텝), swing: 0~0.45(홀수 스텝을 스텝 길이×swing 만큼 늦춤),
+     penta: [0,3,5,7,10](스침 음계 — 조성 근음 기준 반음. 없으면 장/단에 맞는 5음), cut: 7000(음악 버스 로우패스 Hz, 피버 때 18000 으로 열림),
+     gain: 1(곡 전체 트림),
+     voices: { bass|pad|lead|arp|drum|heart: {wave, oct, rel, cut, q, fenv, env:[a,d,s,r], gain, leg, det, pan} }  (VOICE_DEF 위에 덮어씀),
+     layers: { calm:[…], surge:[…], breath:[…], boss:[…] }  (국면별 기본 층 — 생략 시 calm=bass+pad · surge=+drum · breath=pad · boss=+drum+lead),
+     levels: { breath: {pad: 1.3}, … }  (국면별 트랙 세기 배율 — 소리 크기 급변 방지용),
+     prio: ['bass','drum','lead','pad','arp','heart']  (maxLayers 로 줄일 때 남기는 순서),
+     sections: { A: {bars: 4, chords: ['i','VI','III','VII'], oct: {lead: 1}, bass: …, pad: …, drum: …, lead: …, arp: …, heart: …}, … },
+     form: ['A','A','B','A2']  (재생 순서, 끝나면 처음으로)
+   }
+   패턴 문자열 — 한 글자 = 한 스텝. 문자열 하나면 매 마디 반복, 배열이면 마디마다 [b % 길이]. '|' 로 여러 줄(동시에 친다, 드럼 손 나누기·화음 선율)
+     공통: '.' 쉼 · '-' 앞 음을 늘림
+     bass·arp(rel 'chord'): 0~9·a~f = 그 마디 코드의 n번째 코드음(0 근음, 1 3음, 2 5음, 3 7음 또는 옥타브 근음 …, 코드음 수를 넘으면 한 옥타브 위)
+     lead(rel 'key'): 0~9·a~f = 조성 음계 도수(0 으뜸음, 7 = 한 옥타브 위)   ※ voices.<트랙>.rel 로 바꿀 수 있다
+     pad: 'x' 화음(코드 전체, 닫힌 배치) · 'X' 강세
+     drum: k 킥 · s 스네어 · c 클랩 · h 닫힌 하이햇 · o 열린 하이햇 · l 낮은 탐 · t 탐   (대문자 = 강세 ×1.35)
+     heart: x 강(lub) · y 약(dub)
+   코드: 로마 숫자, 조성 음계 기준 — 대문자 장 · 소문자 단 · '°' 감 · '+' 증 · 뒤에 7 · maj7 · sus2 · sus4 · 앞에 b/# (예 'bVII', 'V7', 'ii°')
+   변주: 같은 길이의 다른 구역(A2 등)을 만들어 form 에 넣는다(리듬 치환·oct 변경·카운터 선율) */
+const MP4_SONGS = {
+    v: 1,
+    /* MP4a 엔진 검증용 임시 데모 1곡 — MP4b 가 막별 곡으로 바꾼다 */
+    songs: {
+        demo: {
+            id: 'demo', bpm: 120, key: 'D', mode: 'minor', swing: 0,
+            levels: {breath: {pad: 2.1}},
+            sections: {
+                A: {bars: 4, chords: ['i', 'VI', 'III', 'VII'],
+                    bass: ['0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.0.3.', '0.3.0.3.0.3.2.3.'],
+                    pad: 'x---------------',
+                    drum: 'k.......k.k.....|....s.......s...|..h...h...h...hh',
+                    lead: ['7---5---4-3-4---', '5---4---3-2-0---', '4-5-7---9-7-5---', '6---5-4-3---2---'],
+                    arp: '0123210301232103',
+                    heart: 'x..y....x..y....'},
+                B: {bars: 4, chords: ['iv', 'VI', 'i', 'VII'],
+                    bass: ['0..0..0.0..0..3.', '0..0..0.0..0..3.', '0..0..0.0..0..3.', '0..0..0.0.2.3.2.'],
+                    pad: 'x-------x-------',
+                    drum: 'k.......k.k.....|....s.......s.s.|..h.h.h.h.h.h.h.',
+                    lead: ['a---9---7---5---', '9---7-5-4---2---', '7---5---4-5-7---', '9---8---7-------'],
+                    arp: '0210321003210321',
+                    heart: 'x..y....x..y....'}
+            },
+            form: ['A', 'A', 'B', 'A']
+        }
+    },
+    act: ['demo']
+};
 /*</sz:mod:mp4:song>*/
+
+/* ══════════ 곡 묶음 ══════════ */
+let BUNDLE = null;   /* {songs: {id: compiled}, act: [id…]} */
+function loadBundle(def){
+    if(!def || typeof def !== 'object') throw new Error('song: 정의 없음');
+    const B = {songs: {}, act: []};
+    if(def.sections){ const c = compileSong(def); B.songs[c.id] = c; B.act = [c.id]; }
+    else {
+        for(const id of Object.keys(def.songs || {})) B.songs[id] = compileSong(Object.assign({id: id}, def.songs[id]));
+        B.act = Array.isArray(def.act) ? def.act.filter(id => B.songs[id]) : [];
+        if(!B.act.length) B.act = Object.keys(B.songs).slice(0, 1);
+    }
+    if(!B.act.length) throw new Error('song: 곡 없음');
+    return B;
+}
+function actOf(z){ return z >= 26 ? 4 : z >= 20 ? 3 : z >= 15 ? 2 : z >= 9 ? 1 : 0; }
+function songForAct(a){
+    if(!BUNDLE) return null;
+    for(let i = clamp(a | 0, 0, 4); i >= 0; i--){ const id = BUNDLE.act[i]; if(id && BUNDLE.songs[id]) return BUNDLE.songs[id]; }
+    return BUNDLE.songs[BUNDLE.act[0]];
+}
+let BROKEN = false;
+try{ BUNDLE = loadBundle(MP4_SONGS); }catch(e){ BROKEN = true; try{ console.warn('[SZAU] song', e); }catch(_){} }
+
+/* ══════════ 실시간 운전 ══════════ */
+function acGet(make){ try{ return window.szAudioCtx ? szAudioCtx(!!make) : null; }catch(_){ return null; } }
+function tierNow(){ try{ return (window.SZ3 && SZ3.tier) ? SZ3.tier() : 0; }catch(_){ return 0; } }
+function mutedNow(){ try{ return !!(window.LPAudio && LPAudio.isMuted()); }catch(_){ return false; } }
+function volNow(){ try{ return (window.SZ3 && SZ3.vol) ? SZ3.vol() : 0.7; }catch(_){ return 0.7; } }
+function g_(name){ try{ switch(name){
+    case 'running': return typeof running !== 'undefined' && running;
+    case 'paused': return typeof paused !== 'undefined' && paused;
+    case 'lives': return typeof lives !== 'undefined' ? lives : 3;
+    case 'segs': return typeof SZR_SEGS !== 'undefined' ? SZR_SEGS : null;
+} }catch(_){} return null; }
+/* 논리 시각(ms) — 프레임 사이에도 흐르는 값(gameLoop 의 elapsedMs 와 같은 식) */
+function liveElapsed(){
+    try{
+        if(!g_('running')) return 0;
+        if(g_('paused')) return elapsedMs;
+        return pnow() - startedAt - totalPausedMs;
+    }catch(_){ return 0; }
+}
+function segIdx(S, e){
+    let lo = 0, hi = S.length - 1;
+    while(lo < hi){ const m = (lo + hi + 1) >> 1; if(S[m].t0 <= e) lo = m; else hi = m - 1; }
+    return lo;
+}
+const LV = {
+    st: 'off', hold: false, core: null, timer: 0, vol: 0.245, onFail: null, fails: 0, ahead: 0.12, lastTick: 0, muted: false,
+    run: false, seg: -1, act: 0, capUser: null, best: 0, recSaid: false,
+    log: [], qlog: {n: 0, max: 0, sum: 0}, tk: {n: 0, sum: 0, max: 0, over: 0}, ev: {n: 0, sum: 0, max: 0}, startedAt: 0
+};
+function level(){ return (LV.muted || mutedNow()) ? 0 : LV.vol * CAL; }
+function live(){ return LV.st === 'play' && !!LV.core && LV.run; }
+function fail(e){
+    BROKEN = true;
+    try{ console.warn('[SZAU] 시퀀서 중단 → mp3', e); }catch(_){}
+    const was = LV.st;
+    LV.st = 'off';
+    if(LV.timer){ clearInterval(LV.timer); LV.timer = 0; }
+    try{ LV.core && LV.core.fadeTo(0, 0.3); }catch(_){}
+    if(was !== 'off' && LV.onFail){ const f = LV.onFail; LV.onFail = null; try{ f(); }catch(_){} }
+}
+function startTimer(){ if(!LV.timer){ LV.lastTick = pnow(); LV.timer = setInterval(tick, 25); } }
+function stopTimer(){ if(LV.timer){ clearInterval(LV.timer); LV.timer = 0; } }
+/* 다음 리듬 구간 시작을 미리 예약 — 0.75s 안에 들어오면 박에 맞춰 건다(예측은 매 틱 새로: 히트스톱·일시정지에도 논리 시각 기준) */
+const HORIZON = 0.75;
+function predict(now){
+    const S = g_('segs');
+    if(!S || !S.length || !g_('running') || g_('paused')) return;
+    const c = LV.core, e = liveElapsed();
+    const i = segIdx(S, e);
+    if(LV.seg < 0 || i > LV.seg + 1 || i < LV.seg - 2){
+        /* 처음·워프·큰 점프 — 지금 구간으로 바로 맞춘다 */
+        c.setPhNow(PHN[S[i].ph] || 'calm', now, LV.seg < 0 ? 0.02 : 0.083);
+        LV.seg = i;
+        return;
+    }
+    for(let j = Math.max(i + 1, LV.seg + 1); j < S.length && j <= i + 2; j++){
+        const tb = now + (S[j].t0 - e) / 1000;
+        if(tb - now > HORIZON) break;
+        const ph = PHN[S[j].ph] || 'calm';
+        const tq = c.snapBeat(tb, now);
+        c.commit(tq, ph, now);
+        LV.seg = j;
+        if(LV.log.length < 64) LV.log.push({j: j, ph: ph, tb: +tb.toFixed(3), tq: +tq.toFixed(3), err: +(tq - tb).toFixed(3), beat: +c.beat().toFixed(3), act: null});
+    }
+}
+function lifeChecks(now){
+    const c = LV.core;
+    const hv = g_('lives') === 1 && g_('running');
+    if(hv !== c.M.heart){ c.setMod('heart', hv, now); if(hv) vo('last_heart'); }
+    if(!LV.recSaid && LV.best > 5000 && liveElapsed() > LV.best){ LV.recSaid = true; vo('new_record'); }
+}
+function tick(){
+    const p0 = pnow();
+    if(LV.st !== 'play' || LV.hold || !LV.core) return;
+    const ac = LV.core.ac;
+    if(ac.state !== 'running') return;   /* 잠김·중단 — 손길(unlockAudio)이 깨우면 이어서 */
+    try{
+        const now = ac.currentTime;
+        const gap = p0 - LV.lastTick; LV.lastTick = p0;
+        LV.ahead = gap > 70 ? Math.min(0.3, gap / 1000 + 0.06) : Math.max(0.12, LV.ahead - 0.002);
+        const m = mutedNow();
+        if(m !== LV.muted){ LV.muted = m; LV.core.fadeTo(level(), 0.15, now); }
+        predict(now);
+        lifeChecks(now);
+        voPump(now);
+        LV.core.pump(now + LV.ahead, now);
+        LV.fails = 0;
+    }catch(e){ if(++LV.fails >= 3) fail(e); }
+    const dt = pnow() - p0;
+    LV.tk.n++; LV.tk.sum += dt; if(dt > LV.tk.max) LV.tk.max = dt; if(dt > 1) LV.tk.over++;
+}
+function bootCore(ac){
+    if(!LV.core || LV.core.ac !== ac) LV.core = Core(ac, ac.destination, {rich: tierNow() === 0});
+    LV.core.rich = tierNow() === 0;
+    return LV.core;
+}
+const music = {
+    can(){ return !BROKEN && !!BUNDLE && !!window.szAudioCtx && !(window.SZ_FLAGS && SZ_FLAGS.fx === false) && tierNow() < 3; },
+    isOn(){ return LV.st !== 'off'; },
+    start(vol, onFail){
+        if(!music.can()) return false;
+        const ac = acGet(true);
+        if(!ac) return false;
+        try{
+            const c = bootCore(ac);
+            c.reset();
+            LV.act = 0;
+            c.setSong(songForAct(0));
+            c.setCap(LV.capUser != null ? LV.capUser : (tierNow() >= 2 ? 3 : 6));
+            const t = ac.currentTime + 0.06;
+            c.startAt(t);
+            LV.seg = -1; LV.log.length = 0;
+            LV.vol = +vol || 0.245; LV.muted = mutedNow();
+            LV.onFail = onFail || null;
+            LV.st = 'play'; LV.hold = !!document.hidden;
+            LV.startedAt = pnow();
+            c.setPhNow('calm', t, 0.02);
+            c.fadeIn(level(), 1.4, t);
+            startTimer();
+            tick();
+            return true;
+        }catch(e){ fail(e); return false; }
+    },
+    stop(){
+        if(LV.st === 'off') return;
+        LV.st = 'off';
+        stopTimer();
+        voClear();
+        try{ LV.core.fadeTo(0, 0.6); }catch(_){}
+    },
+    pause(){
+        if(LV.st !== 'play') return;
+        LV.st = 'pause';
+        stopTimer();
+        try{ LV.core.fadeTo(0, 0.35); }catch(_){}
+    },
+    resume(){
+        if(LV.st !== 'pause' || !LV.core) return;
+        LV.st = 'play';
+        if(LV.hold) return;   /* 아직 숨김 — 돌아오면(unhold) 이어서 */
+        resync();
+    },
+    duck(ms){ if(LV.st === 'play' && LV.core) try{ LV.core.duck(LV.core.ac.currentTime, ms); }catch(_){} },
+    setVol(v){ LV.vol = +v || 0; if(LV.st === 'play' && LV.core && !LV.hold) try{ LV.core.fadeTo(level(), 0.08); }catch(_){} }
+};
+/* 일시정지·숨김에서 돌아올 때 — 시계를 지금으로 밀고(패턴 위치 유지), 지금 리듬 구간으로 다시 맞춘 뒤 0.6s 페이드 인 */
+function resync(){
+    const c = LV.core, ac = c.ac, t = ac.currentTime + 0.06;
+    c.reanchor(t);
+    LV.seg = -1;
+    const S = g_('segs');
+    const ph = (S && S.length && g_('running')) ? (PHN[S[segIdx(S, liveElapsed())].ph] || 'calm') : 'calm';
+    c.setPhNow(ph, t, 0.05);
+    LV.seg = (S && S.length) ? segIdx(S, liveElapsed()) : -1;
+    c.fadeTo(level(), 0.6, t);
+    startTimer();
+}
+function holdOn(){
+    if(LV.hold) return;
+    LV.hold = true;
+    voClear();
+    if(LV.st === 'play' && LV.core){ stopTimer(); try{ LV.core.fadeTo(0, 0.12); }catch(_){} }
+}
+function holdOff(){
+    if(!LV.hold || document.hidden) return;
+    LV.hold = false;
+    if(LV.st === 'play' && LV.core) resync();
+}
+document.addEventListener('visibilitychange', () => { if(document.hidden) holdOn(); else holdOff(); });
+window.addEventListener('pagehide', holdOn);
+window.addEventListener('pageshow', () => { if(!document.hidden) holdOff(); });
+
+/* ══════════ 음성 콜아웃 — 영어 단어 고정·무선 톤(scripts/audio/spacez_launch_audio.py --vo) ══════════
+   동시 1개 · 시작 간격 ≥2s · 우선순위 큐 1칸(더 높은 것만 갈아 끼움, 3s 넘게 밀린 것은 버림). 지연 로드: 이 판이 mp4 로 시작할 때 */
+const VO_IDS = ['new_zone', 'warning', 'boss', 'fever', 'link_up', 'last_heart', 'new_record', 'act'];
+const VO_PRIO = {last_heart: 5, boss: 4, warning: 4, new_record: 3, act: 3, fever: 2, link_up: 2, new_zone: 1};
+const VO_ACT_SLOT = 1.25;   /* act.m4a = "Act two|three|four|five" 1.25s 칸 */
+const VO = {buf: {}, raw: {}, loading: false, q: null, busy: 0, last: -9, played: []};
+function voOn(){ return LSG('szx_vo', '1') !== '0'; }
+function voBV(){ try{ const m = document.querySelector('meta[name="lp-build"]'); return m && m.content ? '?v=' + m.content : ''; }catch(_){ return ''; } }
+function voDecode(){
+    const ac = acGet(false); if(!ac) return;
+    for(const id of Object.keys(VO.raw)){
+        const b = VO.raw[id]; delete VO.raw[id];
+        new Promise((res, rej) => { const p = ac.decodeAudioData(b, res, rej); if(p && p.catch) p.catch(rej); }).then(buf => { if(buf) VO.buf[id] = buf; }).catch(() => {});
+    }
+}
+function voLoad(){
+    if(VO.loading) return;
+    VO.loading = true;
+    const go = () => {
+        const v = voBV();
+        for(const id of VO_IDS){
+            try{ fetch('/assets/spacez/vo/' + id + '.m4a' + v).then(r => r.ok ? r.arrayBuffer() : null).then(b => { if(b){ VO.raw[id] = b; voDecode(); } }).catch(() => {}); }catch(_){}
+        }
+    };
+    if(window.requestIdleCallback) requestIdleCallback(go, {timeout: 2500}); else setTimeout(go, 400);
+}
+function voPlay(q, now){
+    const c = LV.core, buf = VO.buf[q.id];
+    if(!buf) return false;
+    const ac = c.ac;
+    const s = ac.createBufferSource(); s.buffer = buf;
+    const g = ac.createGain(); g.gain.value = 0.9 * volNow();
+    s.connect(g); g.connect(c.vo);
+    let off = 0, dur = buf.duration;
+    if(q.id === 'act'){ off = clamp((q.n | 0) - 2, 0, 3) * VO_ACT_SLOT; dur = Math.min(VO_ACT_SLOT - 0.05, buf.duration - off); if(dur <= 0.1) return false; }
+    s.start(now + 0.01, off, dur);
+    c.vduck(now, dur);
+    VO.busy = now + dur; VO.last = now;
+    if(VO.played.length < 40) VO.played.push([q.id, +now.toFixed(2)]);
+    return true;
+}
+function vo(id, n){
+    if(!live() || LV.hold || !voOn() || mutedNow() || VO_PRIO[id] == null) return;
+    const now = LV.core.ac.currentTime;
+    const q = {id: id, n: n, p: VO_PRIO[id], t: now};
+    if(now >= VO.busy && now >= VO.last + 2){ if(voPlay(q, now)) return; return; }
+    if(!VO.q || q.p > VO.q.p) VO.q = q;
+}
+function voPump(now){
+    const q = VO.q;
+    if(!q) return;
+    if(now - q.t > 3){ VO.q = null; return; }
+    if(now >= VO.busy && now >= VO.last + 2){ VO.q = null; voPlay(q, now); }
+}
+function voClear(){ VO.q = null; }
+/* 설정 — MP1 의 SZSET 이 있으면 '음성' 토글을 등록(멱등). 없으면 localStorage szx_vo='0' 으로만 끈다 */
+let _voSet = false;
+function voSetReg(){
+    if(_voSet) return;
+    try{
+        if(window.SZSET && typeof SZSET.add === 'function'){
+            SZSET.add({id: 'voice', icon: '🎙', label: t4('voice'), get: () => voOn(), set: (v) => LSS('szx_vo', v ? '1' : '0'), lockInSeeded: false});
+            _voSet = true;
+        }
+    }catch(_){}
+}
+voSetReg();
+
+/* ══════════ SZE 구독 — 논리 이벤트(드묾). 이 판이 mp4 로 시작하지 않았으면 바로 돌아간다 ══════════ */
+function evT(f){ return function(a, b, c){ if(!LV.run) return; const p0 = pnow(); try{ f(a, b, c); }finally{ const d = pnow() - p0; LV.ev.n++; LV.ev.sum += d; if(d > LV.ev.max) LV.ev.max = d; } }; }
+if(window.SZE){
+    SZE.on('runStart', function(kind){
+        LV.run = !!(window.SZ_FLAGS && SZ_FLAGS.mp4);
+        if(!LV.run) return;
+        LV.recSaid = false;
+        LV.best = +LSG('szx_best_ms', '0') || 0;
+        LV.qlog.n = 0; LV.qlog.max = 0; LV.qlog.sum = 0; LV.tk.n = 0; LV.tk.sum = 0; LV.tk.max = 0; LV.tk.over = 0; LV.ev.n = 0; LV.ev.sum = 0; LV.ev.max = 0;
+        VO.q = null; VO.played.length = 0;
+        voLoad(); voDecode(); voSetReg();
+        /* 'hit' 은 처음 mp4 판에서야 구독한다 — 구독자가 없으면 szOnHit 이 szHitKind 도 안 부른다(플래그 끔 = MP0 경로 그대로) */
+        if(!LV.hitOn){ LV.hitOn = true; SZE.on('hit', evT(function(){ if(live()) LV.core.hitDip(LV.core.ac.currentTime); })); }
+    });
+    SZE.on('rhythm', evT(function(kind, i){
+        if(!live()) return;
+        const c = LV.core, now = c.ac.currentTime;
+        for(const r of LV.log) if(r.j === i && r.act == null){ r.act = +now.toFixed(3); r.errAct = +(r.tq - now).toFixed(3); }
+        if(i > LV.seg && !LV.hold){ c.setPhNow(PHN.indexOf(kind) >= 0 ? kind : 'calm', now); LV.seg = i; }
+        if(kind === 'boss') vo('warning');
+    }));
+    SZE.on('boss', evT(function(id, k){
+        if(!live()) return;
+        const c = LV.core, now = c.ac.currentTime;
+        c.setMod('boss', k === 'start', now);
+        if(k === 'start') vo('boss');
+    }));
+    SZE.on('fever', evT(function(k){
+        if(!live()) return;
+        const c = LV.core, now = c.ac.currentTime;
+        c.setMod('fever', k === 'on', now);
+        if(k === 'on') vo('fever');
+    }));
+    SZE.on('graze', evT(function(n){ if(live()) API.note(n); }));
+    SZE.on('mission', evT(function(k, z, kind){ if(live() && k === 'ok' && kind === 'main') vo('link_up'); }));
+    SZE.on('zone', evT(function(idx, prev){
+        if(!live() || !(idx > prev)) return;
+        const a = actOf(idx);
+        if(a !== actOf(prev)){
+            vo('act', a + 1);
+            if(a !== LV.act){ LV.act = a; const s = songForAct(a); if(s) LV.core.queueSong(s); }
+        } else vo('new_zone');
+    }));
+    SZE.on('death', function(){ voClear(); });
+}
+
+/* ══════════ 오프라인 녹음 — 게이트 mp4 가 부른다(운영자 청취·볼륨 보정). 실시간 엔진과 같은 Core 를 OfflineAudioContext 에 띄운다 ══════════ */
+const DEMO_SCRIPT = [
+    {t: 0, k: 'ph', v: 'calm', name: 'calm'},
+    {t: 8, k: 'ph', v: 'surge', name: 'surge'},
+    {t: 9, k: 'graze', n: 1}, {t: 9.4, k: 'graze', n: 2}, {t: 9.7, k: 'graze', n: 3}, {t: 10.3, k: 'graze', n: 4}, {t: 10.6, k: 'graze', n: 5},
+    {t: 11.1, k: 'graze', n: 6}, {t: 11.5, k: 'graze', n: 7}, {t: 12.2, k: 'graze', n: 8}, {t: 12.6, k: 'graze', n: 9}, {t: 13.0, k: 'graze', n: 10},
+    {t: 16, k: 'ph', v: 'breath', name: 'breath'},
+    {t: 22, k: 'ph', v: 'boss', name: 'boss(warn)'},
+    {t: 24, k: 'mod', m: 'boss', v: true, name: 'boss'},
+    {t: 30, k: 'mod', m: 'boss', v: false},
+    {t: 30, k: 'ph', v: 'surge', name: 'surge+fever'},
+    {t: 30, k: 'mod', m: 'fever', v: true},
+    {t: 31, k: 'graze', n: 24}, {t: 31.5, k: 'graze', n: 25}, {t: 32.1, k: 'graze', n: 26}, {t: 32.8, k: 'graze', n: 50}, {t: 33.4, k: 'graze', n: 51}, {t: 34.2, k: 'graze', n: 100},
+    {t: 36, k: 'mod', m: 'fever', v: false},
+    {t: 36, k: 'mod', m: 'heart', v: true, name: 'surge+heart'},
+    {t: 39, k: 'hit'},
+    {t: 42, k: 'end'}
+];
+async function render(opt){
+    opt = opt || {};
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if(!OAC) throw new Error('OfflineAudioContext 없음');
+    const sr = opt.sr || 44100;
+    const scr = (opt.script || DEMO_SCRIPT).slice().sort((a, b) => a.t - b.t);
+    const secs = opt.secs || (scr[scr.length - 1].t + 1);
+    const oc = new OAC(2, Math.ceil(secs * sr), sr);
+    const c = Core(oc, oc.destination, {rich: opt.rich !== false});
+    const B = opt.song ? loadBundle(opt.song) : BUNDLE;
+    c.setSong(B.songs[B.act[0]]);
+    c.setCap(opt.cap || 6);
+    const t0 = 0.05;
+    c.startAt(t0);
+    c.setPhNow('calm', 0, 0.02);
+    const lv = opt.level != null ? opt.level : CAL;
+    c.fadeIn(lv, 0.3, 0);
+    const marks = [], qd = [];
+    for(const e of scr){
+        const t = t0 + e.t;
+        c.pump(t, 0);
+        if(e.k === 'ph'){ const tq = e.t === 0 ? t : c.snapBeat(t, t - 0.5); c.commit(tq, e.v, t - 0.5); }
+        else if(e.k === 'mod') c.setMod(e.m, e.v, t);
+        else if(e.k === 'graze') qd.push(c.note(t, e.n, 1));
+        else if(e.k === 'hit'){ c.hitDip(t); c.duck(t, 250); }
+        if(e.name) marks.push([e.name, e.t]);
+    }
+    c.pump(secs, 0);
+    const buf = await oc.startRendering();
+    /* 구간별 RMS·최고값(dBFS) — 표시·보정용 */
+    const L = buf.getChannelData(0), R = buf.getChannelData(1);
+    const db = (x) => x > 0 ? +(20 * Math.log10(x)).toFixed(1) : -120;
+    const seg = [];
+    for(let i = 0; i < marks.length; i++){
+        const a = marks[i][1] + 0.6, b = (i + 1 < marks.length ? marks[i + 1][1] : secs - 1) - 0.1;
+        if(b - a < 0.5) continue;
+        let s = 0, pk = 0, n = 0;
+        for(let k = Math.floor(a * sr); k < Math.floor(b * sr); k++){ const v = (L[k] + R[k]) * 0.5; s += v * v; n++; const av = Math.max(Math.abs(L[k]), Math.abs(R[k])); if(av > pk) pk = av; }
+        seg.push({name: marks[i][0], from: marks[i][1], rms: db(Math.sqrt(s / Math.max(1, n))), peak: db(pk)});
+    }
+    return {buf: buf, sr: sr, secs: secs, seg: seg, notes: c.notes, quant: qd, level: lv, cal: CAL};
+}
+/* 게이트용 — WAV(16비트 스테레오) base64 조각 */
+async function renderWav(opt){
+    const r = await render(opt);
+    const L = r.buf.getChannelData(0), R = r.buf.getChannelData(1), n = L.length;
+    const u8 = new Uint8Array(44 + n * 4), dv = new DataView(u8.buffer);
+    const wr = (o, s) => { for(let i = 0; i < s.length; i++) u8[o + i] = s.charCodeAt(i); };
+    wr(0, 'RIFF'); dv.setUint32(4, 36 + n * 4, true); wr(8, 'WAVE'); wr(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+    dv.setUint32(24, r.sr, true); dv.setUint32(28, r.sr * 4, true); dv.setUint16(32, 4, true); dv.setUint16(34, 16, true); wr(36, 'data'); dv.setUint32(40, n * 4, true);
+    for(let i = 0; i < n; i++){ dv.setInt16(44 + i * 4, clamp(L[i], -1, 1) * 32767, true); dv.setInt16(46 + i * 4, clamp(R[i], -1, 1) * 32767, true); }
+    const parts = [], CH = 1 << 20;
+    for(let o = 0; o < u8.length; o += CH){ let s = ''; const e = Math.min(u8.length, o + CH); for(let i = o; i < e; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(e, i + 8192))); parts.push(btoa(s)); }
+    window.__SZAU_WAV = parts;
+    return {parts: parts.length, bytes: u8.length, seg: r.seg, secs: r.secs, notes: r.notes, quant: r.quant, cal: r.cal, level: r.level};
+}
+
+/* ══════════ 공개 API ══════════ */
+const API = {
+    get ctx(){ return acGet(false); },
+    live: live,
+    note(i){
+        if(!live() || LV.hold || mutedNow()) return;
+        const c = LV.core, now = c.ac.currentTime;
+        const d = c.note(now, i | 0, volNow() / 0.7);
+        if(d >= 0){ LV.qlog.n++; LV.qlog.sum += d; if(d > LV.qlog.max) LV.qlog.max = d; }
+    },
+    warn(){ if(live() && !LV.hold) try{ LV.core.warn(LV.core.ac.currentTime); }catch(_){} },
+    vo(id, n){ vo(id, n); },
+    duck(ms){ music.duck(ms); },
+    layer(name, on){ if(!TBIT[name]) return; if(LV.core){ try{ LV.core.setForce(name, on, LV.core.ac.currentTime); }catch(_){} } },
+    maxLayers(n){ LV.capUser = n == null ? null : clamp(n | 0, 1, 6); if(LV.core){ try{ LV.core.setCap(LV.capUser != null ? LV.capUser : (tierNow() >= 2 ? 3 : 6), LV.core.ac.currentTime); }catch(_){} } },
+    song(def){
+        const B = loadBundle(def);
+        BUNDLE = B;
+        if(live()){ const s = songForAct(LV.act); if(s) LV.core.queueSong(s); }
+        return Object.keys(B.songs);
+    },
+    tone(f, d, type, vol){
+        if(!live() || LV.hold) return false;
+        if(mutedNow()) return true;   /* 예전 LPAudio 처럼 음소거면 소리 없음 */
+        const c = LV.core, now = c.ac.currentTime;
+        const q = c.tone(now, +f, +d, type, +vol);
+        LV.qlog.n++; LV.qlog.sum += q; if(q > LV.qlog.max) LV.qlog.max = q;
+        return true;
+    },
+    seq(notes, o){
+        if(!live() || LV.hold || !Array.isArray(notes)) return false;
+        if(mutedNow()) return true;
+        const c = LV.core, now = c.ac.currentTime;
+        const q = c.seqn(now, notes, o && o.vol, o && o.type);
+        LV.qlog.n++; LV.qlog.sum += q; if(q > LV.qlog.max) LV.qlog.max = q;
+        return true;
+    },
+    music: music,
+    _render: renderWav,
+    _st(){
+        const c = LV.core;
+        const ac = c ? c.ac : null, now = ac ? ac.currentTime : 0;
+        const on = c ? TRK.filter(n => c.onAt(n, now)) : [];
+        return {st: LV.st, hold: LV.hold, run: LV.run, broken: BROKEN, ctx: ac ? ac.state : null, now: +now.toFixed(3), on: on, mods: c ? {fever: c.M.fever, heart: c.M.heart, boss: c.M.boss, cap: c.M.cap} : null,
+            ph: c ? c.phAt(now) : null, pos: c ? c.pos() : null, ahead: LV.ahead, notes: c ? c.notes : 0, under: c ? c.under : 0, seg: LV.seg, log: LV.log.slice(),
+            q: {n: LV.qlog.n, maxMs: +(LV.qlog.max * 1000).toFixed(1), avgMs: LV.qlog.n ? +(LV.qlog.sum / LV.qlog.n * 1000).toFixed(1) : 0},
+            tick: {n: LV.tk.n, avgMs: LV.tk.n ? +(LV.tk.sum / LV.tk.n).toFixed(4) : 0, maxMs: +LV.tk.max.toFixed(3), over1ms: LV.tk.over},
+            ev: {n: LV.ev.n, avgMs: LV.ev.n ? +(LV.ev.sum / LV.ev.n).toFixed(4) : 0, maxMs: +LV.ev.max.toFixed(3)},
+            vo: {loaded: Object.keys(VO.buf), played: VO.played.slice(), on: voOn()}, song: c && c.song() ? c.song().id : null, bus: c ? +c.bus.gain.value.toFixed(4) : null, level: level()};
+    }
+};
+window.SZAU = API;
 SZMP4.ok = true;
 })();
 /*</sz:mod:mp4>*/
