@@ -28225,7 +28225,281 @@ SZMP4.ok = true;
 'use strict';
 const SZMP5 = window.SZMP5 = {ok: false};
 /* MP5 코드는 이 IIFE 안에만. 밖으로는 window.SZMP5 하나만 노출한다.
-   기능은 SZ_FLAGS.mp5 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+   기능은 SZ_FLAGS.mp5 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin).
+
+   MP5 (2026-10-09) — 숨 고르기 보상 무대 '회피가 곧 공격'. 설계: docs/SPACEZ_MASTERPIECE_PLAN.md 4장 MP5.
+   ① 별빛 편대 — 숨 고르기(BREATHER)에 들어서면 약 50% 확률로 무해한 별빛 코인 8~12개가 한 줄로 곡선 안무를 그리며 지나간다.
+      · 충돌 판정 없음. 스침 반경(COMBO_NEAR_OUTER 32px) 안에 들어오면 '스침' — 코인 하나 = 별가루 한 알(게이지 +2.5)
+      · 전부 스치면 PERFECT 도장 + 피버 게이지 +40. 일부만이면 스친 만큼 별가루
+      · 스침 규칙은 운석 스침과 같다 — 무적 중(피격 직후)에는 세지 않는다
+      · 발동·안무·개수 = szZoneRng(seed, 'mp5', 구간 번호) — rand·randH·randD 소비 0. 대결 8명이 같은 편대를 본다(먹기는 각자)
+      · 존 0·위성 설치 창 숨 고르기(o0 −1, 설치가 그 창의 보상)·1:1 PvP·관전 중에는 없다
+      · 위치 = 논리 시각(elapsedMs)의 함수(별가루와 같은 시계) → 프레임률과 무관한 같은 궤적
+   ② 스침 사다리 — 콤보 10·25·50·100 을 넘을 때마다 기체 둘레에 단계 색 링(청록 → 민트 → 금 → 보라)이 튀고,
+      그 단계 동안 얇은 고리와 단계 수만큼의 둥근 눈금이 기체를 돈다. 피격으로 콤보가 끊기면 사라진다. S등급 — 정지 0·입자 ≤8·음 1개
+   ③ 모양 규칙 — 코인·눈금은 전부 둥근 외곽(금·청록). 위험물 빨강(#FF3B5C 계열)을 쓰지 않는다. 색만으로 구분하지 않는다(별 무늬·원)
+   리듬 계수(szRhy*)·난이도 함수·스폰은 건드리지 않는다. 7장 — ibot 이 위로 벗어나면 P(발동률) 0.5 → 0.3 부터 */
+const P_LAUNCH = 0.5;
+const GAP = 160, LEAD = 700, TAIL = 600, V0 = 280, VMAX = 380, NS = 64;
+const RG = (typeof COMBO_NEAR_OUTER === 'number') ? COMBO_NEAR_OUTER : 32;
+const KINDS = ['loop', 'wave', 'zig', 'spiral'];
+/* 안무 — 정규화 좌표(가로 CW·세로 CH 비율) 제어점. 파도(wave) 위험물의 V자·나선·옆 쓸기 곡선 문법을 보상 쪽으로 옮겼다 */
+const CTRL = {
+    loop: [[-0.14, 0.10], [0.16, 0.30], [0.38, 0.62], [0.60, 0.78], [0.80, 0.68], [0.78, 0.50], [0.60, 0.46], [0.48, 0.60], [0.60, 0.78], [0.86, 0.66], [1.14, 0.34]],
+    wave: [[-0.14, 0.62], [0.04, 0.74], [0.21, 0.62], [0.38, 0.74], [0.55, 0.62], [0.72, 0.74], [0.89, 0.62], [1.14, 0.72]],
+    zig:  [[0.50, -0.06], [0.20, 0.16], [0.80, 0.34], [0.22, 0.52], [0.78, 0.68], [0.32, 0.84], [0.50, 1.08]]
+};
+const TIER = [10, 25, 50, 100];
+const TIER_RGB = ['90,230,255', '120,255,180', '255,214,90', '190,150,255'];
+const COIN_RGB = '124,247,255';
+
+const st = SZMP5.st = {launch: 0, perfect: 0, got: 0, coins: 0, rung: 0};
+SZMP5.P = P_LAUNCH;
+let fm = null;                       /* 지금 편대 {i, kind, n, t0, D, xs, ys, got, nGot, miss, done, path, run, pk} */
+const LD = {tier: 0, burstT: -1e9, burstK: 0, dropT: -1e9, dropK: 0};
+
+const on = () => !!(window.SZ_FLAGS && SZ_FLAGS.mp5);
+function zoneAt(ms){ let z = 0; for(let k = 1; k < ZONES.length; k++){ if(ZONES[k].s * 1000 <= ms) z = k; else break; } return z; }
+/* Catmull-Rom 제어점 → 같은 간격(호 길이) NS 점. 정규화 좌표 → 캔버스 px */
+function samplePath(kind, side){
+    const xs = new Float32Array(NS), ys = new Float32Array(NS);
+    const dx = [], dy = [];
+    if(kind === 'spiral'){
+        for(let j = 0; j <= 160; j++){
+            const u = j / 160, a = -1.5708 + side * u * 10.68, r = (0.03 + 0.45 * u) * CW;
+            dx.push(CW * 0.5 + Math.cos(a) * r); dy.push(CH * 0.58 + Math.sin(a) * r * 0.92);
+        }
+    } else {
+        const C = CTRL[kind], m = C.length;
+        const px = (k) => { const c = C[Math.max(0, Math.min(m - 1, k))]; return (side < 0 ? 1 - c[0] : c[0]) * CW; };
+        const py = (k) => C[Math.max(0, Math.min(m - 1, k))][1] * CH;
+        const f = (t, p0, p1, p2, p3) => { const t2 = t * t, t3 = t2 * t; return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3); };
+        for(let s = 0; s < m - 1; s++){
+            for(let j = 0; j < 20; j++){
+                const t = j / 20;
+                dx.push(f(t, px(s - 1), px(s), px(s + 1), px(s + 2))); dy.push(f(t, py(s - 1), py(s), py(s + 1), py(s + 2)));
+            }
+        }
+        dx.push(px(m - 1)); dy.push(py(m - 1));
+    }
+    const L = [0];
+    for(let j = 1; j < dx.length; j++) L.push(L[j - 1] + Math.hypot(dx[j] - dx[j - 1], dy[j] - dy[j - 1]));
+    const len = L[L.length - 1];
+    let q = 0;
+    for(let k = 0; k < NS; k++){
+        const want = len * k / (NS - 1);
+        while(q < L.length - 2 && L[q + 1] < want) q++;
+        const seg = L[q + 1] - L[q] || 1, w = Math.min(1, Math.max(0, (want - L[q]) / seg));
+        xs[k] = dx[q] + (dx[q + 1] - dx[q]) * w; ys[k] = dy[q] + (dy[q + 1] - dy[q]) * w;
+    }
+    return {xs, ys, len};
+}
+/* 구간 i 의 편대 계획 — (시드, 'mp5', i) 서브스트림만 쓰는 순수 함수. null = 이번 숨 고르기는 쉼 */
+function planFor(seed, i, s){
+    if(!s || s.ph !== SZR_BREATH || s.o0 === -1) return null;
+    const z = zoneAt(s.t0);
+    if(z <= 0) return null;
+    const r = szZoneRng(seed, 'mp5', i);
+    if(!(r() < SZMP5.P)) return null;
+    const kind = KINDS[(r() * KINDS.length) | 0], side = r() < 0.5 ? -1 : 1;
+    const n = 8 + ((r() * 5) | 0);
+    /* 길을 판마다 옮긴다 — 늘 같은 자리(화면 가운데 아래)를 지나면 가만히 있어도 PERFECT 가 된다(봇 실측 4.7/8.4).
+       세로는 위로 최대 28%까지(운석 쪽으로 올라가야 닿는 길 = 위험과 보상), 가로는 안무 폭에 맞춰 */
+    const xw = kind === 'spiral' ? 0.08 : kind === 'zig' ? 0.12 : 0.18;
+    const ox = (r() * 2 - 1) * xw * CW, oy = (0.06 - r() * 0.34) * CH;
+    return {i, z, kind, side, n, ox, oy, t0: s.t0 + LEAD, room: (s.t1 - s.t0) - LEAD + TAIL};
+}
+/* 안무 8벌(4종 × 좌우)은 처음 쓸 때 한 번 굽고 재사용 — 숨 고르기 진입 프레임에 배열·Path2D 를 새로 만들지 않는다 */
+const PCACHE = {};
+function pathOf(kind, side){
+    const key = kind + side;
+    let P = PCACHE[key];
+    if(!P){
+        P = samplePath(kind, side);
+        try{ const g = new Path2D(); for(let k = 0; k < NS; k++){ if(k) g.lineTo(P.xs[k], P.ys[k]); else g.moveTo(P.xs[k], P.ys[k]); } P.path = g; }catch(_){ P.path = null; }
+        PCACHE[key] = P;
+    }
+    return P;
+}
+function launch(pl){
+    const P = pathOf(pl.kind, pl.side);
+    let n = pl.n, D = P.len / V0 * 1000;
+    while(n > 8 && (n - 1) * GAP + D > pl.room) n--;
+    if((n - 1) * GAP + D > pl.room) D = Math.max(P.len / VMAX * 1000, pl.room - (n - 1) * GAP);
+    if((n - 1) * GAP + D > pl.room + 1) return null;
+    return {i: pl.i, z: pl.z, kind: pl.kind, side: pl.side, n, t0: pl.t0, D, xs: P.xs, ys: P.ys, ox: pl.ox || 0, oy: pl.oy || 0, got: new Uint8Array(n), nGot: 0, miss: 0, done: false, path: P.path, run: SZRUN.n, pk: false};
+}
+function coinPos(f, k, e, o){
+    const u = (e - (f.t0 + k * GAP)) / f.D;
+    o.u = u;
+    if(u < 0 || u > 1) return false;
+    const p = u * (NS - 1), j = Math.min(NS - 2, p | 0), w = p - j;
+    o.x = f.ox + f.xs[j] + (f.xs[j + 1] - f.xs[j]) * w; o.y = f.oy + f.ys[j] + (f.ys[j + 1] - f.ys[j]) * w;
+    return true;
+}
+const _o = {x: 0, y: 0, u: 0};
+
+/* ── 논리 ── */
+SZE.on('runStart', function(){ SZMP5.reset(); });
+SZE.on('rhythm', function(kind, i, s){
+    if(!on() || kind !== 'breath') return;
+    if(!running || szSpectating) return;
+    try{ if(pvpState && pvpState.gameMode === 'pvp') return; }catch(_){}
+    if(Math.abs(elapsedMs - s.t0) > 1500) return;      /* 워프·긴 멈춤 뒤 지난 구간은 건너뛴다(별가루 신호와 같은 규칙) */
+    const pl = planFor(_rngSeed, i, s);
+    if(!pl) return;
+    const f = launch(pl);
+    if(!f) return;
+    fm = f; st.launch++; st.coins += f.n;
+});
+SZE.on('tick', function(dt, now){
+    const f = fm;
+    if(!f || !on()) return;
+    if(f.run !== SZRUN.n){ fm = null; return; }
+    const e = elapsedMs;
+    if(e < f.t0 - LEAD - 2000){ fm = null; return; }
+    const canGet = running && !szSpectating && !szShipHidden && lives > 0 && now > invincibleUntil;
+    let live = 0;
+    for(let k = 0; k < f.n; k++){
+        if(f.got[k]) continue;
+        if(!coinPos(f, k, e, _o)){ if(_o.u > 1){ f.got[k] = 2; f.miss++; } else live++; continue; }
+        live++;
+        if(!canGet) continue;
+        const ddx = player.x - _o.x, ddy = player.y - _o.y;
+        if(ddx * ddx + ddy * ddy < RG * RG){ f.got[k] = 1; f.nGot++; st.got++; pick(_o.x, _o.y); live--; }
+    }
+    if(!f.pk && f.nGot === f.n){ f.pk = true; perfect(f, now); }
+    if(!live){ f.done = true; if(e > f.t0 + (f.n - 1) * GAP + f.D + 900) fm = null; }
+});
+/* 코인 스침 — 0프레임 반응(S등급): 둥근 고리 + 불티 5 + 별가루 한 알(빨려 와서 szFunPick 의 오르는 음계·게이지) */
+function pick(x, y){
+    szRings.push({x, y, t: 0, dur: 0.28, r0: 6, r1: 26, rgb: COIN_RGB, w: 1.8});
+    if(!szLo()) for(let k = 0; k < 5; k++) _pushFxSpark(grazeSparks, x, y, k ? '#BFFBFF' : '#FFFFFF', 90, 0.32);
+    const F = SZFUN;
+    if(F && F.on){
+        const a = Math.atan2(y - player.y, x - player.x);
+        F.dust.push({t: 0, x0: x, x, y, vy: 0, v: szFeverOn ? 0 : 2.5, st: 1, ph: Math.random() * 6.2832, sp: 260, hold: 0.04, vx: Math.cos(a) * 60, vv: Math.sin(a) * 60});
+    }
+}
+function perfect(f, now){
+    st.perfect++;
+    const F = SZFUN;
+    if(F && F.on && !szFeverOn){ F.g = Math.min(100, F.g + 40); F.flashT = now; }
+    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.55, r0: 12, r1: 74, rgb: '255,224,130', w: 2.6});
+    szRings.push({x: player.x, y: player.y, t: -0.1, dur: 0.55, r0: 12, r1: 52, rgb: COIN_RGB, w: 1.6});
+    let shown = false;
+    try{ if(window.SZ3 && SZ3.stamp && !(SZ3.stampOn && SZ3.stampOn())){ SZ3.stamp('PERFECT', '#FFE66D'); shown = true; } }catch(_){}
+    if(!shown) szPopup('PERFECT', player.x, player.y - 40, 'gold', 18, 1.1);
+    try{ szFunSfx('perfect'); }catch(_){}
+    try{ window.SZ3 && SZ3.haptic && SZ3.haptic('rec'); }catch(_){}
+    SZE.emit('mp5', 'perfect', f.n);
+}
+/* 스침 사다리 — 콤보가 단계 문턱과 같아지는 순간 한 번 */
+SZE.on('graze', function(n){
+    if(!on()) return;
+    const k = TIER.indexOf(n);
+    if(k < 0) return;
+    st.rung++;
+    LD.burstT = performance.now(); LD.burstK = k;
+    const rgb = TIER_RGB[k];
+    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.42, r0: 18, r1: 44 + k * 9, rgb, w: 2.2});
+    if(!szLo()) for(let j = 0; j < 6; j++) _pushFxSpark(grazeSparks, player.x, player.y, 'rgb(' + rgb + ')', 110, 0.34);
+    if(!szFunMus()) szFunTone([784, 988, 1175, 1568][k], 0.12, 'sine', 0.03);   /* 시퀀서가 돌면 MP4a 가 25·50·100 화음을 쌓는다 → 겹치지 않게 */
+});
+
+/* ── 그리기 ── */
+function coinDraw(x, y, a, now, lo, k){
+    const tw = 0.82 + 0.18 * Math.sin(now * 0.012 + k * 1.3);
+    if(!lo){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.cyan, x, y, 17, 0.32 * a * tw); szGlow(SZ_GLOW.gold, x, y, 10, 0.45 * a); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#FFD75A';
+    ctx.beginPath(); ctx.arc(x, y, 6.6, 0, 6.2832); ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
+    ctx.beginPath(); ctx.arc(x, y, 8.4, 0, 6.2832); ctx.stroke();
+    /* 가운데 네 갈래 별(흰) — 색이 아니라 무늬로도 '보상' */
+    const R = 4.6 * tw, r = 1.3, a0 = now * 0.004 + k;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    for(let j = 0; j < 8; j++){ const aa = a0 + j * 0.7854, rr = (j & 1) ? r : R; const px = x + Math.cos(aa) * rr, py = y + Math.sin(aa) * rr; if(j) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
+    ctx.closePath(); ctx.fill();
+}
+SZE.on('drawWorld', function(now){
+    const f = fm;
+    if(!f || !on() || !running) return;
+    const e = elapsedMs, lo = szLo();
+    ctx.save();
+    /* 길잡이 — 편대가 지나갈 길을 둥근 점선으로(첫 코인 0.5s 전부터, 남은 코인이 줄수록 옅게) */
+    if(f.path && !f.done){
+        const pre = Math.min(1, Math.max(0, (e - (f.t0 - 500)) / 500));
+        const left = (f.n - f.nGot - f.miss) / f.n;
+        const ga = 0.2 * pre * left;
+        if(ga > 0.01){
+            ctx.globalAlpha = ga; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
+            ctx.setLineDash([0.1, 11]); ctx.lineDashOffset = -e * 0.02;
+            ctx.translate(f.ox, f.oy); ctx.stroke(f.path); ctx.translate(-f.ox, -f.oy);
+            ctx.setLineDash([]);
+        }
+    }
+    for(let k = 0; k < f.n; k++){
+        if(f.got[k] || !coinPos(f, k, e, _o)) continue;
+        const a = f.kind === 'spiral' ? Math.min(1, _o.u * 12, (1 - _o.u) * 10) : 1;
+        if(a > 0.02) coinDraw(_o.x, _o.y, a, now, lo, k);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+});
+SZE.on('drawShip', function(now){
+    if(!on() || !running || szShipHidden) return;
+    let k = -1;
+    for(let j = TIER.length - 1; j >= 0; j--) if(comboCount >= TIER[j]){ k = j; break; }
+    if(k < LD.tier - 1){ LD.dropT = now; LD.dropK = LD.tier - 1; }
+    LD.tier = k + 1;
+    const px = player.x, py = player.y;
+    if(k < 0){
+        const d = (now - LD.dropT) / 300;
+        if(d >= 1) return;
+        ctx.save(); ctx.globalAlpha = 0.3 * (1 - d); ctx.lineWidth = 1.4; ctx.strokeStyle = 'rgb(' + TIER_RGB[LD.dropK] + ')';
+        ctx.beginPath(); ctx.arc(px, py, 29 + 10 * d, 0, 6.2832); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
+        return;
+    }
+    if(szFeverOn) return;                    /* 피버 무지개 고리와 겹치지 않게 */
+    const bt = (now - LD.burstT) / 420;
+    const rgb = TIER_RGB[k], pop = bt < 1 ? 1 - bt : 0;
+    ctx.save();
+    ctx.globalAlpha = 0.2 + 0.4 * pop; ctx.lineWidth = 1.3 + 1.2 * pop; ctx.strokeStyle = 'rgb(' + rgb + ')';
+    ctx.beginPath(); ctx.arc(px, py, 29, 0, 6.2832); ctx.stroke();
+    /* 단계 수만큼 둥근 눈금이 돈다 */
+    ctx.fillStyle = 'rgb(' + rgb + ')'; ctx.globalAlpha = 0.85;
+    const rot = now * 0.0021, n = k + 1;
+    for(let j = 0; j < n; j++){
+        const a = rot + j * 6.2832 / n;
+        ctx.beginPath(); ctx.arc(px + Math.cos(a) * 29, py + Math.sin(a) * 29, 2.2 + 1.2 * pop, 0, 6.2832); ctx.fill();
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+});
+
+/* 게이트·검수용 — 계획 미리보기(순수)·강제 발동(장면 촬영)·상태 */
+SZMP5.preview = function(seed, upToMs){
+    if(!SZR_SEGS) szRhyBuild();
+    const out = []; let elig = 0;
+    for(let i = 0; i < SZR_SEGS.length; i++){
+        const s = SZR_SEGS[i]; if(s.t0 > (upToMs || 600000)) break;
+        if(s.ph !== SZR_BREATH || s.o0 === -1 || zoneAt(s.t0) <= 0) continue;
+        elig++;
+        const pl = planFor(seed, i, s);
+        if(pl){ const f = launch(pl); out.push(f ? [i, f.z, f.kind, f.side, f.n, Math.round(f.t0), Math.round(f.D), Math.round(f.ox), Math.round(f.oy)] : [i, pl.z, pl.kind, pl.side, 0, Math.round(pl.t0), 0]); }
+    }
+    return {elig, list: out};
+};
+SZMP5.force = function(kind, side, n, ox, oy){
+    const f = launch({i: -1, z: currentZoneIdx, kind: kind || 'loop', side: side || 1, n: n || 10, ox: ox || 0, oy: oy || 0, t0: elapsedMs + LEAD, room: 9000});
+    if(f){ fm = f; st.launch++; st.coins += f.n; }
+    return f ? {n: f.n, D: Math.round(f.D), kind: f.kind, t0: Math.round(f.t0)} : null;
+};
+SZMP5.reset = function(){ fm = null; st.launch = st.perfect = st.got = st.coins = st.rung = 0; LD.tier = 0; LD.burstT = LD.dropT = -1e9; };
+SZMP5.cur = function(){ const f = fm; return f ? {kind: f.kind, n: f.n, nGot: f.nGot, miss: f.miss, done: f.done, pk: f.pk, t0: f.t0, D: f.D, i: f.i} : null; };
+SZMP5.coin = function(k){ const f = fm; if(!f) return null; return coinPos(f, k, elapsedMs, _o) ? {x: _o.x, y: _o.y, u: _o.u} : null; };
 SZMP5.ok = true;
 })();
 /*</sz:mod:mp5>*/

@@ -42,6 +42,7 @@
      mp1        MP1 시작 화면(ko·en·ja×320·390: 버튼 ≤5·출발 엄지 영역·시트 20회 멱등·?mp1=0=MP0 서명)·단계 개방 1~3판·시드 판·링크 진입 (--mp1-nopin: 하네스 3판 고정 끔)
      mp3 · mp3assist · mp3shots  (MP3) A1 데스봄 유예·A2 블랙홀 버블·편한 비행·RPC·지연 검사 / ibot 편한 비행 ≥ 기본×1.5 / 장면·색각 시트  (ibot 옵션 --assist --mp3-db <p> --mp3-nobh --mp3-nodb)
      mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
+     mp5 · mp5shots  (MP5) 별빛 편대 계획 결정성·발동률·rand 무소비·?mp5=0·완벽 비행 PERFECT·비용 4x / 장면(ko·en×390·320)·색각 시트  (ibot 옵션 --mp5-p <p>)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -1128,6 +1129,207 @@ EXT_CMDS.mp4 = {
 };
 /*</gate:mp4>*/
 /*<gate:mp5>*/
+/* MP5 (2026-10-09) — 숨 고르기 보상 무대(별빛 편대·스침 사다리). 명령: mp5(계획 결정성·발동률·rand 무소비·킬스위치·완벽 비행 PERFECT·비용) · mp5shots(장면·색각 시트)
+   ibot 옵션 --mp5-p <p>(편대 발동률 실험, 기본 = 게임 값 0.5) — 7장 '위로 벗어나면 발동률부터'. ibot 판마다 uses.mp5_launch·mp5_perfect·mp5_got */
+IBOT_HOOKS.push((P) => { P.ext = P.ext || {}; if(A['mp5-p'] != null) P.ext.mp5p = +A['mp5-p']; return P; });
+/* --mp5-off — 같은 커밋에서 MP5 만 끈 비교(perf·ibot A/B). 페이지 도구 주입 때 SZ_FLAGS.mp5 = false (게이트의 판은 szRunBegin 을 거치지 않아 유지된다) */
+if(A['mp5-off']) PAGE_EXT.push(function(){ try{ SZ_FLAGS.mp5 = false; }catch(_){} });
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const pre0 = G.ibotPre, post0 = G.ibotPost;
+    G.ibotPre = function(P, bi){
+        if(pre0) try{ pre0(P, bi); }catch(_){}
+        if(!window.SZMP5) return;
+        SZMP5.reset();
+        if(P.ext && P.ext.mp5p != null) SZMP5.P = P.ext.mp5p;
+    };
+    G.ibotPost = function(P, bi, rec){
+        if(post0) try{ post0(P, bi, rec); }catch(_){}
+        if(!window.SZMP5) return;
+        const s = SZMP5.st; rec.uses = rec.uses || {};
+        if(s.launch) rec.uses.mp5_launch = s.launch;
+        if(s.perfect) rec.uses.mp5_perfect = s.perfect;
+        if(s.got) rec.uses.mp5_got = s.got;
+        if(s.coins) rec.uses.mp5_coins = s.coins;
+    };
+    /* 완벽 비행 탐침 — 합성 시계로 secs 초. chase: 기체를 '아직 안 스친 맨 앞 코인' 자리로 옮긴다(=사람이 편대 길에 올라탄 경우).
+       무적은 매 프레임 0 으로(피격 직후 프레임만 놓친다), 목숨 5 고정, 연료 무한. SZE.emit 안(모든 패키지 리스너)에서 일어난 rand·randH·randD 호출을 센다 */
+    G.mp5probe = function(P){
+        const out = { errs: [] };
+        G.synth(); G.begin(P.seed, false, true); window.__szFuelInf = 1;
+        try{ if(window.SZMP3){ SZMP3.dbOn = false; } }catch(_){}
+        if(P.flag != null) SZ_FLAGS.mp5 = !!P.flag;
+        SZMP5.reset();
+        const gR = _seededRng, gH = _rngH, gD = _rngD;
+        let depth = 0, inR = 0, inH = 0, inD = 0, nR = 0, nH = 0, nD = 0;
+        _seededRng = function(){ nR++; if(depth) inR++; return gR(); };
+        _rngH = function(){ nH++; if(depth) inH++; return gH(); };
+        _rngD = function(){ nD++; if(depth) inD++; return gD(); };
+        const oEmit = SZE.emit;
+        SZE.emit = function(){ depth++; try{ return oEmit.apply(SZE, arguments); } finally { depth--; } };
+        const log = []; let lastL = 0, lastP = 0, hits = 0, lv = lives, frames = 0;
+        try{
+            startedAt = G.VT; lastFrame = G.VT; lastSpawn = 0;
+            while(G.VT - startedAt < P.secs * 1000 && running){
+                G.VT += P.step || 16.667; frames++;
+                lives = 5; lv = 5; invincibleUntil = P.inv ? 1e15 : 0;
+                if(P.chase){
+                    const c = SZMP5.cur();
+                    if(c && !c.done){ for(let k = 0; k < c.n; k++){ const q = SZMP5.coin(k); if(q){ player.x = Math.max(16, Math.min(CW - 16, q.x)); player.y = Math.max(18, Math.min(CH - 18, q.y)); break; } } }
+                    else { player.x = 180; player.y = 430; }
+                } else { player.x = 180; player.y = 430; }
+                try{ gameLoop(G.VT); }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); if(out.errs.length > 8) break; }
+                if(lives < lv) hits++;
+                const s = SZMP5.st;
+                if(s.launch !== lastL){ lastL = s.launch; const c = SZMP5.cur(); log.push(['L', c ? c.i : null, c ? c.kind : null, c ? c.n : null, Math.round(elapsedMs)]); }
+                if(s.perfect !== lastP){ lastP = s.perfect; log.push(['P', Math.round(elapsedMs)]); }
+            }
+        }catch(e){ out.errs.push(String(e && e.message || e)); }
+        SZE.emit = oEmit; _seededRng = gR; _rngH = gH; _rngD = gD;
+        running = false; G.unsynth();
+        SZ_FLAGS.mp5 = true;
+        Object.assign(out, { frames, hits, nR, nH, nD, inR, inH, inD, st: Object.assign({}, SZMP5.st), log, endSec: Math.round(elapsedMs / 100) / 10, endZone: currentZoneIdx, pv: SZMP5.preview(P.seed, P.secs * 1000), E: (window.__E || []).slice(0, 8) });
+        return out;
+    };
+    /* 비용 — 편대(12개)·사다리 단계 4 를 켠 상태와 끈 상태에서 tick·drawWorld·drawShip emit 시간 차(실제 시계, CDP CPU 스로틀은 바깥에서) */
+    G.mp5cost = function(P){
+        G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1; invincibleUntil = 1e15;
+        szWarpTo(9, G.VT);
+        for(let i = 0; i < 90; i++){ G.VT += 16.667; player.x = 180; player.y = 470; gameLoop(G.VT); }
+        const one = (onF) => {
+            SZ_FLAGS.mp5 = onF;
+            if(onF){ SZMP5.force('loop', 1, 12); elapsedMs += 1200; comboCount = 100; }
+            const T = [];
+            for(let i = 0; i < P.frames; i++){
+                G.VT += 16.667; elapsedMs += 16.667;
+                const t0 = G.realPN();
+                SZE.emit('tick', 0.016667, G.VT); SZE.emit('drawWorld', G.VT); SZE.emit('drawShip', G.VT);
+                T.push(G.realPN() - t0);
+                if(onF && i % 120 === 119){ SZMP5.force('loop', 1, 12); elapsedMs += 1200; }
+            }
+            T.sort((a, b) => a - b);
+            return { p50: T[Math.floor(T.length * 0.5)], p95: T[Math.floor(T.length * 0.95)], max: T[T.length - 1] };
+        };
+        const off1 = one(false), on1 = one(true), off2 = one(false), on2 = one(true);
+        SZ_FLAGS.mp5 = true; running = false; G.unsynth();
+        const R3 = (v) => Math.round(v * 1000) / 1000;
+        return { off: { p50: R3((off1.p50 + off2.p50) / 2), p95: R3((off1.p95 + off2.p95) / 2) }, on: { p50: R3((on1.p50 + on2.p50) / 2), p95: R3((on1.p95 + on2.p95) / 2), max: R3(Math.max(on1.max, on2.max)) } };
+    };
+    /* 장면 — 합성 시계로 만든 뒤 멈춘 화면(사람 검수용) */
+    G.mp5scene = function(name){
+        const out = { errs: [] };
+        const step = (ms, f) => { const t1 = G.VT + ms; while(G.VT < t1 && running){ G.VT += 16.667; if(f) f(); gameLoop(G.VT); } };
+        const fix = () => { player.x = 180; player.y = 470; invincibleUntil = 1e15; lives = 5; };
+        try{
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1; SZ_FLAGS.mp5 = true; SZMP5.reset(); comboCount = 0;
+            fix();
+            const warp = (z) => { szWarpTo(z, G.VT); step(50, fix); };
+            /* 실제로 편대가 뜨는 숨 고르기 시각에서 — 존 3(70~84s)은 통째로 협곡 보스라 편대가 없다 → 협곡 직후(85.4s, 존 4) 숨 고르기 */
+            const F = { z4post: [4, 85400, 'loop', 1], z9post: [9, 194000, 'zig', -1], z15: [15, 343000, 'spiral', 1], z6: [6, 132000, 'wave', 1] }[name];
+            if(F){
+                warp(F[0]);
+                for(let i = 0; i < 4000 && running && elapsedMs < F[1]; i++){ G.VT += 16.667; fix(); gameLoop(G.VT); }
+                SZMP5.force(F[2], F[3], 11);
+                step(F[1] === 'spiral' ? 2500 : 2100, fix);
+                out.cur = SZMP5.cur();
+            } else if(name === 'perfect'){
+                warp(4); step(1500, fix);
+                SZMP5.force('wave', 1, 10);
+                const chase = () => { fix(); invincibleUntil = 0; bullets.length = 0; const c = SZMP5.cur(); if(c) for(let k = 0; k < c.n; k++){ const q = SZMP5.coin(k); if(q){ player.x = q.x; player.y = q.y; break; } } };
+                for(let i = 0; i < 900 && !(SZMP5.cur() && SZMP5.cur().pk); i++){ G.VT += 16.667; chase(); gameLoop(G.VT); }
+                out.cur = SZMP5.cur();
+                step(260, () => { fix(); bullets.length = 0; });
+            } else if(name === 'ladder25' || name === 'ladder100'){
+                warp(2); step(1200, () => { fix(); bullets.length = 0; });
+                const n = name === 'ladder25' ? 25 : 100;
+                comboCount = n; SZE.emit('graze', n);
+                step(120, () => { fix(); bullets.length = 0; comboCount = n; });
+                out.combo = comboCount;
+            }
+            out.zone = currentZoneIdx; out.sec = Math.round(elapsedMs / 100) / 10;
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        G.unsynth();
+        return out;
+    };
+});
+async function runMp5(base){
+    const out = {};
+    await withEdge({ w: 412, h: 915, dsf: 1, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'en'), 1500);
+        /* ① 계획 — 시드 40개 × 600초: 발동률(대상 숨 고르기 중)·안무·개수·자리 부족으로 못 뜬 계획 수. 같은 시드 두 번 = 같은 목록 */
+        out.plan = await e.ev(`(function(){ var L = 0, E = 0, K = {}, N = {}, bad = 0, same = 1, Dmin = 1e9, Dmax = 0;
+            for(var s = 1; s <= 40; s++){ var a = SZMP5.preview(s * 7919, 600000), b = SZMP5.preview(s * 7919, 600000);
+                if(JSON.stringify(a) !== JSON.stringify(b)) same = 0; E += a.elig; L += a.list.length;
+                a.list.forEach(function(r){ K[r[2]] = (K[r[2]] || 0) + 1; N[r[4]] = (N[r[4]] || 0) + 1; if(!r[4]) bad++; else { Dmin = Math.min(Dmin, r[6]); Dmax = Math.max(Dmax, r[6]); } }); }
+            return {elig: E, launch: L, rate: Math.round(L / E * 1000) / 1000, kinds: K, n: N, bad: bad, same: same, Dmin: Dmin, Dmax: Dmax, P: SZMP5.P}; })()`);
+        /* ② 완벽 비행(chase) 두 번 — 같은 결과·rand 무소비·PERFECT */
+        const pr = { seed: 424242, secs: P5_SECS, chase: true, step: 16.667 };
+        out.chaseA = await e.ev('__G.mp5probe(' + JSON.stringify(pr) + ')', 900000);
+        out.chaseB = await e.ev('__G.mp5probe(' + JSON.stringify(pr) + ')', 900000);
+        out.chase33 = await e.ev('__G.mp5probe(' + JSON.stringify(Object.assign({}, pr, { step: 33.333 })) + ')', 900000);
+        /* ③ 같은 판 킬스위치 끔 — 편대 0 */
+        out.off = await e.ev('__G.mp5probe(' + JSON.stringify(Object.assign({}, pr, { flag: 0 })) + ')', 900000);
+        /* ④ 무적(det 와 같은 조건) — 스침 0 이므로 보상 0 */
+        out.inv = await e.ev('__G.mp5probe(' + JSON.stringify(Object.assign({}, pr, { inv: 1 })) + ')', 900000);
+        /* ⑤ 비용 — CPU 4x */
+        await e.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+        out.cost = await e.ev('__G.mp5cost({frames: 600})', 300000);
+        await e.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+        collectErrs('mp5', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    for(const k of ['chaseA', 'chaseB', 'chase33', 'off', 'inv']){ const o = out[k]; delete o.pv; }
+    say('mp5: plan ' + JSON.stringify(out.plan) + ' chase ' + JSON.stringify(out.chaseA.st) + ' hits ' + out.chaseA.hits + ' in ' + [out.chaseA.inR, out.chaseA.inH, out.chaseA.inD] + ' cost ' + JSON.stringify(out.cost));
+    return out;
+}
+const P5_SECS = +(A['mp5-secs'] || 300);
+EXT_CMDS.mp5 = { run: runMp5, all: false, judge: (cur) => {
+    const p = cur.plan, a = cur.chaseA, b = cur.chaseB, c = cur.chase33;
+    row('MP5', '편대 계획 — 같은 시드 두 번 같은 목록 · 자리 부족 0', 'same ' + p.same + ' · bad ' + p.bad, null, '1 · 0', p.same && !p.bad ? 'PASS' : 'FAIL', 'kinds ' + JSON.stringify(p.kinds) + ' n ' + JSON.stringify(p.n) + ' D ' + p.Dmin + '–' + p.Dmax + 'ms');
+    row('MP5', '편대 발동률(대상 숨 고르기, 시드 40×600s)', p.rate + ' (' + p.launch + '/' + p.elig + ')', null, 'P=' + p.P + ' ±0.08', Math.abs(p.rate - p.P) <= 0.08 ? 'PASS' : 'FAIL');
+    const inN = (o) => o.inR + o.inH + o.inD;
+    row('MP5', 'SZE 리스너 안 rand·randH·randD 호출', [a, c, cur.off].map(inN).join(' / '), null, '0', [a, c, cur.off].every(o => !inN(o)) ? 'PASS' : 'FAIL');
+    row('MP5', '완벽 비행 두 번 — 같은 편대·같은 PERFECT', JSON.stringify(a.log) === JSON.stringify(b.log) ? 'same' : 'DIFF', null, 'same', JSON.stringify(a.log) === JSON.stringify(b.log) ? 'PASS' : 'FAIL', a.log.length + ' 사건');
+    const lA = a.log.filter(x => x[0] === 'L').map(x => x.slice(0, 4)).join('|'), lC = c.log.filter(x => x[0] === 'L').map(x => x.slice(0, 4)).join('|');
+    row('MP5', '30fps 도 같은 편대(발동 구간·안무·개수)', lA === lC ? 'same' : 'DIFF', null, 'same', lA === lC ? 'PASS' : 'FAIL');
+    row('MP5', '완벽 비행 PERFECT / 발동', a.st.perfect + '/' + a.st.launch + ' (30fps ' + c.st.perfect + '/' + c.st.launch + ')', null, '발동 ≥3, PERFECT ≥ 발동−피격 겹침', a.st.launch >= 3 && a.st.perfect >= a.st.launch - 1 ? 'PASS' : 'WARN', '피격 ' + a.hits + ' · 코인 ' + a.st.got + '/' + a.st.coins + ' · 사다리 ' + a.st.rung);
+    row('MP5', '?mp5=0 같은 판 — 편대 0 · 호출 수 같음(nR/nH/nD)', cur.off.st.launch + ' · ' + [cur.off.nR, cur.off.nH, cur.off.nD].join('/') + ' vs ' + [a.nR, a.nH, a.nD].join('/'), null, '0 · (참고)', cur.off.st.launch === 0 ? 'PASS' : 'FAIL', '켬/끔 호출 수 차이는 스침→BEAM→보급 경로(사실상 재표본) 때문일 수 있다');
+    row('MP5', '무적 판(det 조건) — 코인 스침 0', cur.inv.st.got + ' (발동 ' + cur.inv.st.launch + ')', null, '0', cur.inv.st.got === 0 ? 'PASS' : 'FAIL');
+    const d95 = cur.cost.on.p95 - cur.cost.off.p95;
+    row('MP5', '비용 4x — tick+drawWorld+drawShip emit p95 증가', r1(d95 * 1000) / 1000 + 'ms', null, '≤ 0.5ms', d95 <= 0.5 ? 'PASS' : 'FAIL', 'off ' + JSON.stringify(cur.cost.off) + ' on ' + JSON.stringify(cur.cost.on));
+    const errs = [a, b, c, cur.off, cur.inv].reduce((s, o) => s + o.errs.length + (o.E || []).length, 0);
+    row('MP5', '탐침 오류', errs, null, '0', errs ? 'FAIL' : 'PASS');
+} };
+async function runMp5Shots(base){
+    const dir = path.join(OUT, 'mp5');
+    fs.mkdirSync(dir, { recursive: true });
+    const out = { dir, scenes: {} };
+    for(const vp of [{ w: 390, h: 844, dsf: 2, mobile: true, tag: '390' }, { w: 320, h: 568, dsf: 2, mobile: true, tag: '320' }]){
+        await withEdge(vp, async (e) => {
+            for(const lang of ['ko', 'en']){
+                await e.open(gameUrl(base, lang), 1500);
+                for(const s of ['z4post', 'z6', 'z9post', 'z15', 'perfect', 'ladder25', 'ladder100']){
+                    await e.ev('(function(){ running = false; return 1; })()');
+                    const r = await e.ev('__G.mp5scene(' + JSON.stringify(s) + ')', 120000);
+                    await sleep(120);
+                    await e.shot(path.join(dir, vp.tag + '_' + lang + '_' + s + '.png'));
+                    if(vp.tag === '390' && lang === 'ko' && /^z/.test(s) && (await e.ev('typeof __G.mp3cvd === "function"'))) fs.writeFileSync(path.join(dir, 'cvd_' + s + '.png'), Buffer.from(await e.ev('__G.mp3cvd()'), 'base64'));
+                    out.scenes[vp.tag + '_' + lang + '_' + s] = r;
+                }
+                collectErrs('mp5shots ' + vp.tag + ' ' + lang, e, await e.ev('(window.__E||[]).slice(0,8)'));
+            }
+        });
+    }
+    say('mp5shots: ' + dir);
+    return out;
+}
+EXT_CMDS.mp5shots = { run: runMp5Shots, all: false, judge: (cur) => {
+    const S = cur.scenes, ks = Object.keys(S);
+    const bad = ks.filter(k => (S[k].errs || []).length);
+    const pf = ks.filter(k => /perfect$/.test(k)).every(k => S[k].cur && S[k].cur.pk);
+    const fl = ks.filter(k => /_z\d+(post)?$/.test(k)).every(k => S[k].cur && S[k].cur.n > 0);
+    row('MP5', '장면 ' + ks.length + '개 — 편대 떠 있음 · PERFECT 찍힘 · 오류 0', fl + ' · ' + pf + ' · ' + bad.length, null, 'true · true · 0', fl && pf && !bad.length ? 'PASS' : 'FAIL', bad.join(','));
+    row('MP5', '장면 폴더 (사람 검수)', cur.dir, null, '-', 'INFO');
+} };
 /*</gate:mp5>*/
 /*<gate:mp6>*/
 /*</gate:mp6>*/
