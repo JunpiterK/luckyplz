@@ -1318,6 +1318,31 @@ body.sz-ov-res .lp-dock,body.sz-ov-res .lp-fs-btn,body.sz-ov-res .lp-help-fab{vi
 
 
 /*<sz:css:mp2>*/
+/* MP2 — 2초 재시작과 결과 정산. 결과 카드는 0.5초에 떠오른다(잠금 0.6초와 맞춤 — 안 보이는 카드가 눌리는 틈이 없게).
+   우주 미아(.sz-go-drift)는 2.6초 그대로 */
+.overlay.go-enter.sz-mp2:not(.sz-go-drift){animation-delay:.5s}
+@media (prefers-reduced-motion:reduce){.overlay.go-enter.sz-mp2:not(.sz-go-drift){animation-delay:.3s}}
+/* 길게 누르기 중 글자 선택·돋보기·길게 누르기 메뉴가 끼어들지 않게 — 결과 카드에서만 */
+.overlay.go-enter.sz-mp2{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+/* 확장 슬롯(#szGoExtra) — MP3·MP6·MP7 의 아이콘 칩 줄. 비면 자리 0 */
+#szGoExtra{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;max-width:300px;margin:0 0 4px}
+#szGoExtra:empty{display:none}
+/* 정산 카운트업 — 칸이 끝날 때 숫자만 1.12 로 튀었다 돌아온다(카드·캔버스는 움직이지 않는다) */
+.overlay .sz-cu{display:inline-block;font-variant-numeric:tabular-nums}
+.overlay .sz-cu-pop{animation:szCuPop .26s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes szCuPop{0%{transform:scale(1)}45%{transform:scale(1.12)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){.overlay .sz-cu-pop{animation:none}}
+/* 길게 누르기 — '다시하기' 테두리가 왼쪽부터 차오른다(0.35초) + 손가락 자리 고리 */
+.overlay #ovBtn::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    box-shadow:inset 0 0 0 3px rgba(255,255,255,.95);clip-path:inset(0 100% 0 0);-webkit-clip-path:inset(0 100% 0 0);opacity:0}
+.overlay #ovBtn.sz-hold::before{clip-path:inset(0 0 0 0);-webkit-clip-path:inset(0 0 0 0);opacity:1;
+    transition:clip-path .35s linear,-webkit-clip-path .35s linear,opacity .06s}
+.sz-hold-ring{position:fixed;left:0;top:0;width:64px;height:64px;margin:-32px 0 0 -32px;pointer-events:none;z-index:9050;opacity:0;transition:opacity .08s}
+.sz-hold-ring.on{opacity:1}
+.sz-hold-ring circle{fill:none;stroke-width:4;stroke-linecap:round}
+.sz-hold-ring .t{stroke:rgba(255,255,255,.18)}
+.sz-hold-ring .p{stroke:#7CE7FF;stroke-dasharray:176;stroke-dashoffset:176;transform:rotate(-90deg);transform-origin:32px 32px}
+.sz-hold-ring.on .p{stroke-dashoffset:0;transition:stroke-dashoffset .35s linear}
 /*</sz:css:mp2>*/
 
 
@@ -2934,7 +2959,9 @@ function _runIntroFast(){
     countEl.classList.remove('go');
     overlay.classList.add('on', 'sz-fast');
     overlay.setAttribute('aria-hidden', 'false');
-    _startIntroLaunch(performance.now() - 2150);   /* 발사 장면 2.15s 지점(점화 최대)부터 — 0.55s 뒤 상승 */
+    /* MP2 — 2초 재시작: 'GO!' 하나만 0.5초(발사 장면은 상승 직전 2.65s 지점부터 — 곧바로 떠오른다). 끄면(?mp2=0) 아래 옛 1.15초 경로 */
+    const _mp2 = !!(window.SZ_FLAGS && SZ_FLAGS.mp2);
+    _startIntroLaunch(performance.now() - (_mp2 ? 2650 : 2150));   /* 발사 장면 2.15s 지점(점화 최대)부터 — 0.55s 뒤 상승 */
     try{ window.SZX && SZX.count(-1); }catch(_){}   /* 추진음만(카운트 음성 없음) */
     return new Promise(resolve => {
         setTimeout(() => {
@@ -2944,7 +2971,7 @@ function _runIntroFast(){
             countEl.style.animation = 'none';
             void countEl.offsetWidth;
             countEl.style.animation = '';
-        }, 450);
+        }, _mp2 ? 0 : 450);
         setTimeout(() => {
             overlay.classList.remove('on', 'sz-fast');
             overlay.setAttribute('aria-hidden', 'true');
@@ -2952,7 +2979,7 @@ function _runIntroFast(){
             _szIntroCut(overlay);
             _introRunning = false;
             resolve();
-        }, 1150);
+        }, _mp2 ? 500 : 1150);
     });
 }
 /* D (S13) — 발사대 → 궤도 하드 컷을 0.22s 청백 플래시 + 워프 속도선(szIntroWarp, 캔버스 배경층)으로 잇는다. 흔들림 없음 */
@@ -17792,11 +17819,13 @@ function triggerGameOver(kind){
       +'<div class="score-big">'+timeStr+'</div>'
       +(_szR.line ? '<p class="sz-go-line">'+esc(_szR.line)+'</p>' : '')
       +'<div class="go-stats">'
-      +  '<div class="go-stat"><span class="go-stat-l">MAX COMBO</span><span class="go-stat-v">×'+(comboMaxThisRun|0)+(typeof szFunGoHtml==='function'?szFunGoHtml():'')+'</span></div>'
-      +  '<div class="go-stat sz-go-prog"><span class="go-stat-l">ZONE '+(currentZoneIdx+1)+'/'+ZONES.length+'</span>'
+      +  '<div class="go-stat"><span class="go-stat-l">MAX COMBO</span><span class="go-stat-v">×<span class="sz-cu" data-cu="'+(comboMaxThisRun|0)+'">'+(comboMaxThisRun|0)+'</span>'+(typeof szFunGoHtml==='function'?szFunGoHtml():'')+'</span></div>'
+      +  '<div class="go-stat sz-go-prog"><span class="go-stat-l">ZONE <span class="sz-cu" data-cu="'+(currentZoneIdx+1)+'">'+(currentZoneIdx+1)+'</span>/'+ZONES.length+'</span>'
       +     ((typeof szProgBarHtml === 'function') ? szProgBarHtml(currentZoneIdx, _szR.prevFar) : '')
       +     '<span class="sz-go-zn">'+esc(zoneReachedName)+esc(tT('zoneReachedSuffix'))+'</span></div>'
       +'</div>'
+      /* MP2 — 확장 슬롯: MP3(깃털)·MP6(금테·해금)·MP7(공유)이 goCard 뒤에 아이콘 칩으로만 채운다. 비면 자리 0 */
+      +'<div id="szGoExtra"></div>'
       +(_szR.newCards > 0 ? '<button type="button" class="sz-pc-new" data-szpc="1">'+esc(_szMT('pcNew', '📮 +{n} new').replace('{n}', _szR.newCards))+'</button>' : '')
       +'<button class="btn" id="ovBtn">'+esc(tT('retryBtn'))+'</button>'
       +'<div class="rank-card" id="ovRankCard">'
@@ -17829,7 +17858,10 @@ function triggerGameOver(kind){
             /* sz:mod:fuel — 우주 미아는 표류 연출을 더 오래 보여 준다(카드 2.6초 뒤) */
             ovEl.classList.add('go-enter', 'go-lock');
             if(kind === 'fuel') ovEl.classList.add('sz-go-drift');
-            setTimeout(()=>{ try{ ovEl.classList.remove('go-lock'); }catch(_){} }, kind === 'fuel' ? 3100 : 900);
+            /* MP2 — 카드가 0.5초에 떠오르고 잠금은 0.6초(카드가 보이기 전에는 여전히 못 누른다). 끄면(?mp2=0) 0.85초·0.9초 그대로 */
+            const _mp2 = !!(window.SZ_FLAGS && SZ_FLAGS.mp2);
+            ovEl.classList.toggle('sz-mp2', _mp2);
+            setTimeout(()=>{ try{ ovEl.classList.remove('go-lock'); }catch(_){} }, kind === 'fuel' ? 3100 : (_mp2 ? 600 : 900));
         }
     }
     $('overlay').classList.remove('hidden');
@@ -25918,7 +25950,245 @@ SZMP1.ok = true;
 'use strict';
 const SZMP2 = window.SZMP2 = {ok: false};
 /* MP2 코드는 이 IIFE 안에만. 밖으로는 window.SZMP2 하나만 노출한다.
-   기능은 SZ_FLAGS.mp2 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+   기능은 SZ_FLAGS.mp2 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin).
+   ① 길게 누르기 재시작 — 사망 연출(우주 미아 표류 포함)·결과 카드에서 화면을 0.35초 누르면 바로 startGame().
+      실수 방지: 사망 0.3초 뒤에 '새로' 닿은 손가락만(비행 중 대고 있던 손가락은 무시) · 10px 넘게 움직이면(스크롤) 취소 ·
+      두 번째 손가락이 닿으면 취소 · 버튼·링크·접기(ⓘ) 위에서는 무시('다시하기' 버튼만 예외) · 시트·대기실이 열려 있으면 무시.
+      판 종류 ranked·assist·practice·daily 만(대결·협동·1:1·도전장·관전은 끔). Space 도 같은 동작(사망 0.4초 뒤, 반복 입력 무시)
+   ② 정산 카운트업 — 결과 카드의 기존 칸(큰 시간·MAX COMBO·ZONE) 안에서 숫자만 0부터 올린다. 줄을 만들지 않는다.
+      시간 0.5초 → 콤보 0.3초 → 존 0.3초(진행 막대가 한 칸씩 켜진다) = 1.1초. 칸이 끝날 때 숫자만 1.12배로 튀고 음 하나. 카드를 탭하면 즉시 끝
+   ③ szTel.restart(ms) — 사망 → 다음 판 조종 가능까지(60초 넘게 쉬었다 시작한 판은 재시작으로 치지 않는다)
+   결정성: rand·randH·randD 를 부르지 않는다. 판정·수명에 닿지 않는다(표시·입력 경로만) */
+const MP2_I18N = {
+    ko: {holdRetry: '길게 눌러 다시'},
+    en: {holdRetry: 'Hold to retry'},
+    ja: {holdRetry: '長押しでリトライ'},
+    zh: {holdRetry: '长按重来'},
+    es: {holdRetry: 'Mantén para repetir'},
+    pt: {holdRetry: 'Segure p/ repetir'}
+};
+function T(k){ let L = 'en'; try{ L = _szLang(); }catch(_){} const t = MP2_I18N[L] || MP2_I18N.en; return t[k] || MP2_I18N.en[k]; }
+const HOLD_MS = 350, GUARD_MS = 300, KEY_GUARD_MS = 400, MOVE_PX = 10;
+const KINDS = {ranked: 1, assist: 1, practice: 1, daily: 1};
+const AU_STUB = window.SZAU;   /* MP0 의 no-op — MP4a 가 실제 엔진으로 바꿔 끼웠는지 가린다 */
+const on = () => !!(window.SZ_FLAGS && SZ_FLAGS.mp2);
+const now = () => performance.now();
+
+let A = null;          /* 무장 — 사망 시각·판 종류. 다음 판 runStart·시작 화면 복귀에서 풀린다 */
+let H = null;          /* 진행 중인 길게 누르기 {id, x, y, timer} */
+let CU = null;         /* 진행 중인 카운트업 */
+let ring = null;
+let blockClickUntil = 0;
+let HF = null;         /* 재시작을 일으킨 손가락 {id, t} — 뗄 때 생기는 click 을 삼킨다 */
+let deathAt = 0, path = '';
+SZMP2.stats = {holds: 0, keys: 0, last: null};
+
+/* ── 무장 조건 ── */
+const MODAL = '.lp-rank-overlay.on, .sz-pc-overlay.on, .pvp-overlay.on';
+function stillDead(){
+    if(!A) return false;
+    if(running){ A = null; return false; }
+    if(typeof _introRunning !== 'undefined' && _introRunning) return false;
+    const ov = document.getElementById('overlay');
+    if(ov && ov.querySelector('#ovTitle')){ A = null; return false; }   /* 게임 홈(시작 화면)으로 나갔다 */
+    try{ if(window.SZX && SZX.busy && SZX.busy()) return false; }catch(_){}
+    try{ if(window.LpAutoPause && LpAutoPause.isShowing()) return false; }catch(_){}
+    if(document.querySelector(MODAL)) return false;
+    return true;
+}
+const INTERACTIVE = 'button, a, input, select, textarea, summary, details, label, [role="button"], [data-szpc], [contenteditable], .lp-nav2';
+function eligible(t){
+    if(!t || !t.closest) return false;
+    if(!t.closest('#canvasWrap')) return false;
+    if(t.closest('.pvp-overlay, .intro-overlay')) return false;
+    const i = t.closest(INTERACTIVE);
+    if(i && i.id !== 'ovBtn') return false;
+    return true;
+}
+
+/* ── 길게 누르기 표시: 손가락 자리 고리(사망 연출 중에도 보인다) + '다시하기' 테두리 ── */
+function ringEl(){
+    if(ring) return ring;
+    ring = document.createElement('div');
+    ring.className = 'sz-hold-ring';
+    ring.setAttribute('aria-hidden', 'true');
+    ring.innerHTML = '<svg width="64" height="64" viewBox="0 0 64 64"><circle class="t" cx="32" cy="32" r="28"/><circle class="p" cx="32" cy="32" r="28"/></svg>';
+    document.body.appendChild(ring);
+    return ring;
+}
+function holdShow(x, y){
+    const r = ringEl();
+    r.classList.remove('on');
+    r.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)';
+    void r.offsetWidth;
+    r.classList.add('on');
+    const b = document.getElementById('ovBtn'), ov = document.getElementById('overlay');
+    if(b && ov && !ov.classList.contains('hidden') && !ov.classList.contains('go-lock')) b.classList.add('sz-hold');
+}
+function holdHide(){
+    if(ring) ring.classList.remove('on');
+    const b = document.getElementById('ovBtn');
+    if(b) b.classList.remove('sz-hold');
+}
+function holdCancel(){
+    if(!H) return;
+    clearTimeout(H.timer); H = null;
+    holdHide();
+}
+function restart(p){
+    if(!stillDead()) return false;
+    path = p;
+    blockClickUntil = now() + 700;   /* 손을 떼며 생기는 click 이 아래 요소(캔버스·버튼)에 닿지 않게 */
+    try{ startGame(); }catch(_){}
+    return true;
+}
+function holdFire(){
+    const h = H; H = null;
+    holdHide();
+    if(!h) return;
+    if(restart('hold')){ SZMP2.stats.holds++; HF = {id: h.id, t: now()}; }
+}
+
+function onDown(e){
+    if(!A) return;
+    if(CU && e.target && e.target.closest && e.target.closest('#overlay')) cuFinish();   /* 정산 중 탭 → 즉시 끝 */
+    if(H){ holdCancel(); return; }                         /* 두 번째 손가락 */
+    if(!stillDead()) return;
+    if(e.isPrimary === false) return;                      /* 비행 중 대고 있던 손가락이 있으면 새 손가락은 주 포인터가 아니다 */
+    if(e.pointerType === 'mouse' && e.button !== 0) return;
+    if(now() - A.t < GUARD_MS) return;
+    if(!eligible(e.target)) return;
+    H = {id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(holdFire, HOLD_MS)};
+    holdShow(e.clientX, e.clientY);
+}
+function onMove(e){
+    if(!H || e.pointerId !== H.id) return;
+    const dx = e.clientX - H.x, dy = e.clientY - H.y;
+    if(dx * dx + dy * dy > MOVE_PX * MOVE_PX) holdCancel();
+}
+function onUp(e){
+    if(H && e.pointerId === H.id) holdCancel();
+    /* 재시작 뒤 손을 떼는 순간의 click — 누른 곳(카드)과 뗀 곳(캔버스)의 공통 조상 canvasWrap 에 떨어지면 '탭 = 일시정지' 가 된다 */
+    if(HF && e.pointerId === HF.id){ HF = null; blockClickUntil = now() + 350; }
+}
+document.addEventListener('pointerdown', onDown, {capture: true, passive: true});
+document.addEventListener('pointermove', onMove, {capture: true, passive: true});
+document.addEventListener('pointerup', onUp, {capture: true, passive: true});
+document.addEventListener('pointercancel', onUp, {capture: true, passive: true});
+addEventListener('blur', holdCancel);
+document.addEventListener('visibilitychange', holdCancel);
+document.addEventListener('click', (e) => {
+    if(HF && now() - HF.t > 15000) HF = null;
+    if(HF || (blockClickUntil && now() < blockClickUntil)){ e.preventDefault(); e.stopPropagation(); }
+}, true);
+document.addEventListener('contextmenu', (e) => { if(H || (blockClickUntil && now() < blockClickUntil)) e.preventDefault(); }, true);
+/* 키보드 — Space 는 재시작(사망 0.4초 뒤·반복 입력 무시). Enter 는 기존 핸들러가 이미 재시작한다(경로 표시만) */
+document.addEventListener('keydown', (e) => {
+    if(!A) return;
+    if(e.key === 'Enter'){ if(stillDead()) path = 'key'; return; }
+    if(e.key !== ' ' || e.repeat) return;
+    const tg = e.target;
+    if(tg && (tg.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || ''))) return;
+    if(!stillDead() || now() - A.t < KEY_GUARD_MS) return;
+    e.preventDefault();
+    if(restart('key')) SZMP2.stats.keys++;
+}, true);
+
+/* ── 정산 카운트업 ── */
+const ease = (k) => 1 - Math.pow(1 - k, 3);
+function note(i){
+    try{
+        const au = window.SZAU;
+        if(SZ_FLAGS.mp4 && au && au !== AU_STUB && typeof au.note === 'function'){ au.note(i); return; }
+    }catch(_){}
+    try{ if(typeof szFunTone === 'function') szFunTone([784, 988, 1175][i] || 1175, 0.08, 'triangle', 0.14); }catch(_){}
+}
+function pop(el){
+    if(!el) return;
+    el.classList.remove('sz-cu-pop'); void el.offsetWidth; el.classList.add('sz-cu-pop');
+}
+function cuRender(st, v){
+    const s = st.fmt(v);
+    if(st.el.textContent !== s) st.el.textContent = s;
+    if(st.bar){ const n = Math.round(v); for(let i = 1; i < st.bar.length; i++){ const want = i < n; if(st.bar[i].classList.contains('on') !== want) st.bar[i].classList.toggle('on', want); } }
+}
+function cuStep(t){
+    const C = CU; if(!C) return;
+    if(!C.big.isConnected){ CU = null; return; }
+    const e = t - C.t0;
+    let start = 0, all = true;
+    for(let i = 0; i < C.st.length; i++){
+        const st = C.st[i];
+        if(e < start){ all = false; break; }
+        const k = st.dur > 0 ? Math.min(1, (e - start) / st.dur) : 1;
+        cuRender(st, st.from + (st.to - st.from) * ease(k));
+        if(k >= 1 && !st.done){ st.done = true; pop(st.el); note(i); }
+        if(k < 1) all = false;
+        start += st.dur;
+    }
+    if(all){ CU = null; return; }
+    C.raf = requestAnimationFrame(cuStep);
+}
+function cuFinish(){
+    const C = CU; CU = null;
+    if(!C) return;
+    clearTimeout(C.timer); if(C.raf) cancelAnimationFrame(C.raf);
+    for(const st of C.st) cuRender(st, st.to);
+}
+SZMP2.cuFinish = cuFinish;
+
+SZE.on('death', () => {
+    holdCancel(); cuFinish();
+    A = null; deathAt = now(); path = '';
+    if(!on()) return;
+    let k = '';
+    try{ k = szRunKind(); }catch(_){}
+    if(!KINDS[k]) return;
+    A = {t: deathAt, kind: k};
+});
+SZE.on('goCard', (ov, run) => {
+    cuFinish();
+    if(!on() || !ov) return;
+    const b = ov.querySelector('#ovBtn');
+    if(b && A) b.title = T('holdRetry');   /* 길게 누르기가 되는 판에서만 */
+    let rm = false;
+    try{ rm = !!(window.SZ3 && SZ3.RM) || matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){}
+    if(rm) return;
+    const big = ov.querySelector('.score-big'), cus = ov.querySelectorAll('.go-stats .sz-cu');
+    const ms = run && +run.ms;
+    if(!big || cus.length < 2 || !(ms > 0) || typeof formatDuration !== 'function') return;
+    const combo = +cus[0].dataset.cu || 0, zone = Math.max(1, +cus[1].dataset.cu || 1);
+    const fmtI = (v) => String(Math.round(v));
+    CU = {big, t0: 0, raf: 0, timer: 0, st: [
+        {el: big, from: 0, to: ms, dur: 500, fmt: (v) => formatDuration(v)},
+        {el: cus[0], from: 0, to: combo, dur: combo > 0 ? 300 : 0, fmt: fmtI},
+        {el: cus[1], from: 1, to: zone, dur: zone > 1 ? 300 : 0, fmt: fmtI, bar: ov.querySelectorAll('.go-stats .sz-prog i')}
+    ]};
+    for(const st of CU.st) cuRender(st, st.from);   /* 카드가 0 에서 떠오른다 */
+    const C = CU;
+    C.timer = setTimeout(() => { if(CU !== C) return; C.t0 = now(); C.raf = requestAnimationFrame(cuStep); }, ov.classList.contains('sz-go-drift') ? 2600 : 500);
+});
+/* 다음 판 — 무장 해제 + 재시작 시간(사망 → 조종 가능) 기록 */
+SZE.on('runStart', () => {
+    holdCancel(); cuFinish();
+    A = null;
+    const d = deathAt, p = path || 'tap';
+    deathAt = 0; path = '';
+    if(!d || !on()) return;
+    const t0 = now();
+    (function w(){
+        if(running && !(typeof _introRunning !== 'undefined' && _introRunning)){
+            const ms = now() - d;
+            SZMP2.stats.last = {ms: Math.round(ms), path: p};
+            if(ms < 60000) try{ szTel.restart(ms); }catch(_){}
+            return;
+        }
+        if(now() - t0 < 15000) setTimeout(w, 30);
+    })();
+});
+SZMP2.T = T;
+SZMP2.restart = restart;
+SZMP2.armed = () => !!A && stillDead();
 SZMP2.ok = true;
 })();
 /*</sz:mod:mp2>*/
