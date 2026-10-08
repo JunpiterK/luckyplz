@@ -39,6 +39,7 @@
      gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
      restart2   (MP2) 길게 누르기 p50≤2s·탭 p90≤3.5s·스크롤/대던 손가락/사망 직후/대결·협동 오작동 0·Space·정산 값·320x568 다시하기·?mp2=0  [--mp2-shots]
+     mp1        MP1 시작 화면(ko·en·ja×320·390: 버튼 ≤5·출발 엄지 영역·시트 20회 멱등·?mp1=0=MP0 서명)·단계 개방 1~3판·시드 판·링크 진입 (--mp1-nopin: 하네스 3판 고정 끔)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -130,6 +131,249 @@ const PAGE_EXT = [];
 const IBOT_HOOKS = [];
 const HIT_SCEN = [];
 /*<gate:mp1>*/
+/* MP1 (2026-10-08) — 첫 30초·시작 화면·단계 개방(운영자 A6).
+   ① 하네스 고정: 모든 게이트 페이지에서 SZMP1.pin(3). 단계는 '판 시작(startGame → runStart)' 때만 정해지므로 det·ibot·hitpath(G.begin 경로)는
+      원래 영향이 없고, startGame 을 부르는 layout·restart·latency·noshake 도 숙련자(3판 이상) 화면·규칙으로 돈다(기준선과 같은 조건).
+      1·2판은 아래 mp1 명령이 고정을 풀고 따로 본다. --mp1-nopin 이면 고정하지 않는다(새 프로필 = 1판).
+   ② mp1 명령 —
+      시작 화면 ko·en·ja × 320x568·390x844: 처음 보이는 버튼 ≤5(칩 줄 제외)·출발 버튼이 스크롤 없이 화면 안·엄지 영역(중심 ≥ 화면 1/3)·버튼 글자 잘림 0,
+        시트 열고 닫기 20회 + 옵저버 자극 → 슬롯 버튼 수 불변·중복 id 0, 스크린샷(시작·함께 날기·설정)
+      ?mp1=0 시작 화면 DOM 서명 = startshot 기준선(킬스위치 끔 = MP0 화면)
+      단계 개방: 새 기기 1판(BEAM·아이템 칸 숨김, 보급·연료·차단 잠김, 존 0 미션 대기만, 첫 활성 미션 ≥25초, 10초 스침 링 스크린샷) → 2판(BEAM·보급 열림, 힌트) → 3판(연료 소모)
+        · 오늘의 코스(시드 판) = 3단계 · 기존 사용자(szx_log.runs>0) 이전 = 3단계 · det 시작 경로(G.begin)의 단계·첫 판 판정
+      링크 진입 ?ch= · ?race= — mp1 켬/끔에서 같은 흐름(시작 카드 숨김 여부·도전장 띠·열린 패널) */
+if(!A['mp1-nopin']) PAGE_EXT.push(function(){ try{ if(window.SZMP1 && window.SZMP1.pin) window.SZMP1.pin(3); }catch(_){} });
+const MP1_LANGS = ['ko', 'en', 'ja'];
+const MP1_SIZES = [[320, 568, 2], [390, 844, 3]];
+const MP1_SCREEN = `(function(){
+    var ov = document.getElementById('overlay'), vw = innerWidth, vh = innerHeight;
+    function vis(el){ if(!el || !el.getClientRects().length) return false; for(var p = el; p && p !== document.documentElement; p = p.parentElement){ var c = getComputedStyle(p); if(c.display === 'none' || c.visibility === 'hidden' || +c.opacity < 0.05) return false; } var r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; }
+    var btns = [].slice.call(ov.querySelectorAll('button')).filter(vis);
+    var main = btns.filter(function(b){ return !b.closest('#szm1Chips') && !b.closest('.szx-ch'); });
+    var chips = btns.filter(function(b){ return !!b.closest('#szm1Chips'); });
+    var name = function(b){ return b.id || (b.textContent || '').trim().slice(0, 14); };
+    var ob = document.getElementById('ovBtn').getBoundingClientRect(), orc = ov.getBoundingClientRect();
+    var clip = btns.filter(function(b){ return b.scrollWidth > b.clientWidth + 1; }).map(name);
+    var inView = ob.top >= Math.max(0, orc.top) - 1 && ob.bottom <= Math.min(vh, orc.bottom) + 1 && ob.left >= -1 && ob.right <= vw + 1;
+    return { vw: vw, vh: vh, n: main.length, ids: main.map(name), chips: chips.map(name), ovBtn: [Math.round(ob.left), Math.round(ob.top), Math.round(ob.width), Math.round(ob.height)],
+        cy: Math.round(100 * (ob.top + ob.height / 2) / vh), inView: inView, scroll: ov.scrollHeight - ov.clientHeight, clip: clip, applied: ov.classList.contains('szm1'), E: (window.__E || []).slice(0, 5) };
+})()`;
+const MP1_CYCLE = `(async function(){
+    var sl = function(ms){ return new Promise(function(r){ setTimeout(r, ms); }); };
+    var ov = document.getElementById('overlay');
+    var q = function(s){ return document.querySelectorAll(s).length; };
+    var cnt = function(){ var ids = {}, dup = 0; ov.querySelectorAll('[id]').forEach(function(x){ if(ids[x.id]) dup++; ids[x.id] = 1; });
+        return [q('#szm1TogBody button'), q('#szm1SetBody button'), q('#szm1Chips button'), q('#overlay button'), q('#overlay .sz-opts'), q('#overlay .szf-opts'), q('#szxMp'), q('#szxDuo'), dup].join(','); };
+    var poke = function(){ var d = document.createElement('i'); ov.appendChild(d); ov.removeChild(d); };
+    var c0 = cnt(), seen = {}; seen[c0] = 1;
+    for(var i = 0; i < 20; i++){
+        SZMP1.open(i % 2 ? 'set' : 'tog'); poke(); await sl(25);
+        seen[cnt()] = 1;
+        SZMP1.close(); poke(); await sl(25);
+        seen[cnt()] = 1;
+    }
+    var tb = document.getElementById('szm1TogBody'), sb = document.getElementById('szm1SetBody');
+    return { c0: c0, states: Object.keys(seen), tog: tb ? [].map.call(tb.querySelectorAll('button'), function(b){ return b.id || b.textContent.trim().slice(0, 12); }) : null,
+        set: sb ? { hand: !!sb.querySelector('#handToggle'), opts: !!sb.querySelector('.sz-opts'), szf: !!sb.querySelector('#szfOpts'), n: sb.querySelectorAll('button').length } : null };
+})()`;
+async function mp1Start(base){
+    const out = {};
+    const jobs = [];
+    for(const L of MP1_LANGS) for(const s of MP1_SIZES) jobs.push({ L, w: s[0], h: s[1], dsf: s[2] });
+    const res = await pool(jobs, 1, async (j) => withEdge({ w: j.w, h: j.h, dsf: j.dsf, mobile: true }, async (e) => {
+        const key = j.L + '_' + j.w + 'x' + j.h, fn = (st) => path.join(OUT, 'mp1', key + '_' + st + '.png');
+        await e.open(gameUrl(base, j.L), 2600);
+        const scr = await e.ev(MP1_SCREEN);
+        await e.shot(fn('start'));
+        await e.ev('SZMP1.open("tog"); 1'); await sleep(450); await e.shot(fn('together'));
+        const togScr = await e.ev('(function(){ var c = document.querySelector("#szm1Tog .szm1-card").getBoundingClientRect(); return [Math.round(c.top), Math.round(c.bottom), innerHeight]; })()');
+        await e.ev('SZMP1.close(); SZMP1.open("set"); 1'); await sleep(450); await e.shot(fn('settings'));
+        const setScr = await e.ev('(function(){ var c = document.querySelector("#szm1Set .szm1-card"); var r = c.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.bottom), innerHeight, c.scrollHeight - c.clientHeight]; })()');
+        await e.ev('SZMP1.close(); 1');
+        const cyc = await e.ev(MP1_CYCLE, 60000);
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('mp1 ' + key, e, pe);
+        return { key, scr, cyc, togScr, setScr };
+    }));
+    for(const r of res) out[r.key] = r;
+    return out;
+}
+/* ?mp1=0 — startshot 와 같은 절차(고정 pid·정지 스타일)로 DOM 서명 */
+async function mp1Off(base){
+    const out = {};
+    const jobs = [];
+    for(const L of ['ko', 'en']) for(const s of STARTSHOT_SIZES) jobs.push({ L, w: s[0], h: s[1], dsf: s[2] });
+    const res = await pool(jobs, 1, async (j) => withEdge({ w: j.w, h: j.h, dsf: j.dsf, mobile: true }, async (e) => {
+        const key = j.L + '_' + j.w + 'x' + j.h;
+        await e.send('Page.addScriptToEvaluateOnNewDocument', { source: 'try{ if(!localStorage.getItem("szx_pid")) localStorage.setItem("szx_pid", "gatepid0001"); }catch(e){}' });
+        await e.open(gameUrl(base, j.L, 'mp1=0'), 2600);
+        await e.shot(path.join(OUT, 'mp1', 'off_' + key + '.png'));
+        await e.ev(`(function(){ var s = document.createElement('style'); s.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important} #dodge-canvas{visibility:hidden!important}'; document.head.appendChild(s); return 1; })()`);
+        await sleep(400);
+        const sig = await e.ev(`(function(){ var ov = document.getElementById('overlay'); var o = [];
+            ov.querySelectorAll('*').forEach(function(x){ if(!x.getClientRects().length) return; var r = x.getBoundingClientRect(); var c = getComputedStyle(x); if(c.display === 'none' || c.visibility === 'hidden') return;
+                var t = ''; for(var n = x.firstChild; n; n = n.nextSibling) if(n.nodeType === 3) t += n.nodeValue.trim();
+                o.push([x.tagName, String(x.className || ''), t.slice(0, 30), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]); });
+            return o; })()`);
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('mp1 off ' + key, e, pe);
+        return { key, dom: sha(sig), nDom: sig.length, sig };
+    }));
+    for(const r of res) out[r.key] = r;
+    return out;
+}
+const MP1_STATE = `(function(){
+    var g = document.getElementById('gravBtn'), sr = document.querySelector('.control-row .slot-row');
+    return { stage: SZMP1.stage(), runs: SZMP1.runs(), kind: szRunKind(), running: running, s1: document.body.classList.contains('szm1-s1'),
+        grav: g ? getComputedStyle(g).visibility : null, slots: sr ? getComputedStyle(sr).visibility : null,
+        lock: { beam: SZMP1.lock('beam'), fuel: SZMP1.lock('fuel'), cut: SZMP1.lock('cut') },
+        mis: [missionState, missionZoneIdx, missionPendingUntil > 1e14], fuel: [Math.round(SZP.ch4 * 1e4) / 1e4, Math.round(SZP.lox * 1e4) / 1e4, SZP.mode],
+        dep: depots.map(function(d){ return d.item + '@' + d.key; }).slice(0, 8), t: Math.round(elapsedMs), z: currentZoneIdx,
+        act: window.__mp1Act || null, hint: g ? g.classList.contains('szm1-hint') : null, E: (window.__E || []).slice(0, 5) };
+})()`;
+/* 판을 진짜 경로로 시작(startGame) — 무적·목숨 고정, 첫 '활성' 미션 시각 기록 */
+const MP1_GO = `(function(){
+    if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; lives = 5; }, 50);
+    window.__mp1Act = null;
+    if(!window.__mp1Hook){ window.__mp1Hook = 1; SZE.on('tick', function(){ if(!window.__mp1Act && missionState === 'active' && missionKind === 'main') window.__mp1Act = [missionZoneIdx, Math.round(elapsedMs)]; }); }
+    try{ startGame(); }catch(e){ return 'err ' + e.message; } return 1; })()`;
+const mp1Jump = (s) => `(function(){ startedAt = performance.now() - ${s} * 1000 - totalPausedMs; return 1; })()`;
+async function mp1WaitRun(e){ for(let i = 0; i < 60; i++){ if(await e.ev('!!running')) return true; await sleep(150); } return false; }
+async function mp1Stages(base){
+    return withEdge({ w: 390, h: 844, dsf: 3, mobile: true }, async (e) => {
+        const out = {}, fn = (st) => path.join(OUT, 'mp1', 'stage_' + st + '.png');
+        await e.open(gameUrl(base, 'ko'), 2200);
+        await e.ev('SZMP1.pin(null); 1');
+        /* det 시작 경로(G.begin — startGame·runStart 없음)에서의 상태: 새 프로필 = 기존 '첫 판'(szFirstRunCalc) · 단계 3(변화 없음) */
+        out.det = await e.ev('(function(){ __G.begin(424242, false, true); var o = { first: szFirstRunCalc(), firstNow: szFirstRunNow(), stage: SZMP1.stage(), lock: [SZMP1.lock("beam"), SZMP1.lock("fuel"), SZMP1.lock("cut")], runs: SZMP1.runs() }; running = false; return o; })()');
+        await e.open(gameUrl(base, 'ko'), 2200);
+        await e.ev('SZMP1.pin(null); 1');
+        out.runs0 = await e.ev('SZMP1.runs()');
+        /* ── 1판 ── */
+        out.go1 = await e.ev(MP1_GO); out.run1 = await mp1WaitRun(e);
+        out.s1 = await e.ev(MP1_STATE);
+        await e.ev(mp1Jump(10.4)); await sleep(500); await e.shot(fn('1_ring_10s'));
+        await e.ev(mp1Jump(16)); await sleep(1200);
+        out.s1b = await e.ev(MP1_STATE);
+        out.s1drop = await e.ev('(function(){ var d = szDropDepot(0, "mp1probe", ITEM.HEART, performance.now()); return d === null ? "null" : "dropped"; })()');
+        await e.shot(fn('1_play_16s'));
+        await e.ev(mp1Jump(22.6)); await sleep(700);
+        out.s1z1 = await e.ev(MP1_STATE);
+        out.win1 = await e.ev('szMissionWin(1)');
+        await sleep(6200);   /* 대기 미션 활성 시각은 벽시계 — 논리 시각을 건너뛰지 말고 실제로 기다린다(달 창 27.5초) */
+        out.s1c = await e.ev(MP1_STATE);
+        await e.ev('triggerGameOver(); 1'); await sleep(1800);
+        out.runsAfter1 = await e.ev('SZMP1.runs()');
+        /* ── 2판 ── */
+        out.go2 = await e.ev(MP1_GO); out.run2 = await mp1WaitRun(e);
+        out.s2 = await e.ev(MP1_STATE);
+        await e.ev(mp1Jump(6.2)); await sleep(1600);
+        out.s2b = await e.ev(MP1_STATE);
+        await e.shot(fn('2_beam_hint'));
+        await e.ev(mp1Jump(12)); await sleep(1500);
+        out.s2c = await e.ev(MP1_STATE);
+        await e.ev('triggerGameOver(); 1'); await sleep(1800);
+        out.runsAfter2 = await e.ev('SZMP1.runs()');
+        /* ── 3판 ── */
+        out.go3 = await e.ev(MP1_GO); out.run3 = await mp1WaitRun(e);
+        await sleep(2500);
+        out.s3 = await e.ev(MP1_STATE);
+        await e.shot(fn('3_full'));
+        await e.ev('triggerGameOver(); 1'); await sleep(1500);
+        /* ── 오늘의 코스(시드 판) — 판 수 0 으로 되돌린 뒤에도 3단계 ── */
+        await e.ev('localStorage.setItem("szx_runs", "0"); 1');
+        await e.open(gameUrl(base, 'ko'), 2200);
+        await e.ev('SZMP1.pin(null); if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; lives = 5; }, 50); 1');
+        out.dailyChip = await e.ev('(function(){ var b = document.getElementById("szDailyChip"); if(!b) return "no chip"; b.click(); return b.parentElement && b.parentElement.id; })()');
+        await mp1WaitRun(e);
+        out.daily = await e.ev(MP1_STATE);
+        await e.ev('triggerGameOver(); 1'); await sleep(1200);
+        /* ── 이미 해 본 기기 이전: szx_runs 없음 + szx_log.runs>0 → 3 ── */
+        out.logRuns = await e.ev('szLog().runs');
+        await e.ev('localStorage.removeItem("szx_runs"); 1');
+        await e.open(gameUrl(base, 'ko'), 1800);
+        out.migrated = await e.ev('SZMP1.runs()');
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('mp1 stages', e, pe);
+        return out;
+    });
+}
+/* 링크 진입 — mp1 켬/끔에서 같은 흐름인지 (시작 카드 숨김·도전장 띠·열린 패널). 네트워크는 막혀 있다(방 접속은 실패해도 흐름만 본다) */
+async function mp1Links(base){
+    const LINKS = [['ch', 'ch=a1b2c3-1n2o-gate&cv=2'], ['race', 'race=123456']];
+    return withEdge({ w: 390, h: 844, dsf: 3, mobile: true }, async (e) => {
+        const out = {};
+        for(const [k, q] of LINKS) for(const f of ['1', '0']){
+            await e.ev('try{ localStorage.clear(); sessionStorage.clear(); }catch(_){} 1').catch(() => {});
+            await e.open(gameUrl(base, 'ko', q + '&mp1=' + f), 2600);
+            out[k + '_' + f] = await e.ev(`(function(){ var ov = document.getElementById('overlay');
+                var shown = [].slice.call(document.querySelectorAll('.pvp-overlay.on, .szx-panel.on, [id^=szx].on, #szxPanel')).filter(function(x){ return x.getClientRects().length && getComputedStyle(x).display !== 'none' && getComputedStyle(x).visibility !== 'hidden'; }).map(function(x){ return x.id || x.className; });
+                return { ovHidden: ov.classList.contains('hidden'), start: !!ov.querySelector('#ovTitle'), chBanner: !!document.getElementById('szxChBanner'), shown: shown }; })()`);
+            await e.shot(path.join(OUT, 'mp1', 'link_' + k + '_mp1-' + f + '.png'));
+        }
+        return out;
+    });
+}
+async function runMp1(base){
+    say('mp1: 시작 화면 ' + (MP1_LANGS.length * MP1_SIZES.length) + '개 + ?mp1=0 4개 + 단계 개방 + 링크 2종 → ' + path.join(OUT, 'mp1'));
+    const start = await mp1Start(base);
+    const off = await mp1Off(base);
+    const stages = await mp1Stages(base);
+    const links = await mp1Links(base);
+    return { start, off, stages, links };
+}
+function judgeMp1(cur){
+    const G = 'G30 mp1';
+    for(const [k, r] of Object.entries(cur.start)){
+        const s = r.scr;
+        row(G, k + ' 처음 보이는 버튼(칩 제외)', s.n + ' (' + s.ids.join(' ') + ')', null, '≤ 5', s.applied && s.n <= 5 ? 'PASS' : 'FAIL', '칩: ' + s.chips.join(' '));
+        row(G, k + ' 출발 버튼 스크롤 없이·엄지 영역', (s.inView ? '화면 안' : '가려짐') + ' · 중심 ' + s.cy + '% · 카드 넘침 ' + s.scroll + 'px', null, '화면 안 · 중심 ≥ 33%', s.inView && s.cy >= 33 ? 'PASS' : 'FAIL');
+        row(G, k + ' 버튼 글자 잘림', s.clip.length ? s.clip.join(' ') : 0, null, '0', s.clip.length ? 'FAIL' : 'PASS');
+        const c = r.cyc;
+        row(G, k + ' 시트 열고 닫기 20회·옵저버 자극 — 버튼 수', c.states.length === 1 ? '불변 [' + c.c0 + ']' : '변함 ' + c.states.join(' / '), null, '불변·중복 id 0', c.states.length === 1 && /,0$/.test(c.c0) ? 'PASS' : 'FAIL', '[함께·설정·칩·카드 전체·.sz-opts·.szf-opts·szxMp·szxDuo·중복id]');
+        const tg = c.tog || [];
+        const needTog = ['szxRaceBtn', 'szxCoopBtn', 'ovCreateBtn', 'ovJoinBtn'].filter(x => !tg.includes(x));
+        row(G, k + ' 함께 날기 시트 내용', tg.join(' '), null, '대결·협동·방 만들기·참여', needTog.length ? 'FAIL' : 'PASS', needTog.length ? '없음: ' + needTog.join(' ') : '');
+        const st = c.set || {};
+        row(G, k + ' 설정 시트 내용', '조향 ' + !!st.hand + ' · 소리칩 ' + !!st.opts + ' · 조작칩 ' + !!st.szf + ' · 버튼 ' + st.n, null, '조향·소리칩 있음', st.hand && st.opts ? 'PASS' : 'FAIL');
+        row(G, k + ' 시트 카드 화면 안(함께 / 설정)', JSON.stringify(r.togScr) + ' / ' + JSON.stringify(r.setScr), null, '위 ≥0 · 아래 ≤ 화면', (r.togScr[0] >= 0 && r.togScr[1] <= r.togScr[2] && r.setScr[0] >= 0 && r.setScr[1] <= r.setScr[2]) ? 'PASS' : 'FAIL', r.setScr[3] > 0 ? '설정 카드 안 스크롤 ' + r.setScr[3] + 'px' : '');
+    }
+    const bs = BASE && BASE.startshot;
+    for(const [k, r] of Object.entries(cur.off)){
+        const b = bs && bs[k];
+        if(!b){ row(G, '?mp1=0 ' + k + ' DOM 서명', '#' + r.dom, null, 'startshot 기준선', 'WARN', '기준선 없음'); continue; }
+        let diff = '';
+        if(r.dom !== b.dom && b.sig){ const bset = new Set(b.sig.map(x => JSON.stringify(x))); diff = '새: ' + r.sig.filter(x => !bset.has(JSON.stringify(x))).slice(0, 2).map(x => x.join(',')).join(' | '); }
+        row(G, '?mp1=0 ' + k + ' DOM 서명 = MP0 시작 화면', r.dom === b.dom ? '같음 (' + r.nDom + '개)' : '다름', '#' + b.dom, '같음', r.dom === b.dom ? 'PASS' : 'FAIL', diff.slice(0, 160));
+    }
+    const S = cur.stages;
+    const ok = (c) => c ? 'PASS' : 'FAIL';
+    row(G, 'det 시작 경로(G.begin) 상태', JSON.stringify(S.det), null, '단계 3 · 잠금 없음(단계 개방이 det 를 바꾸지 않음)', ok(S.det && S.det.stage === 3 && !S.det.lock.some(Boolean)), '첫 판 판정(szFirstRunCalc) ' + (S.det && S.det.first) + ' — MP1 이전부터 det 기준선에 들어 있던 상태');
+    row(G, '새 기기 판 수', S.runs0, null, '0', ok(S.runs0 === 0));
+    const s1 = S.s1 || {};
+    row(G, '1판 단계·숨김', 'stage ' + s1.stage + ' · BEAM ' + s1.grav + ' · 아이템 칸 ' + s1.slots + ' · 잠금 ' + JSON.stringify(s1.lock), null, '1 · hidden · hidden · 전부 잠김', ok(s1.stage === 1 && s1.grav === 'hidden' && s1.slots === 'hidden' && s1.lock && s1.lock.beam && s1.lock.fuel && s1.lock.cut));
+    const s1b = S.s1b || {};
+    row(G, '1판 16초 — 보급·연료', '캡슐 ' + JSON.stringify(s1b.dep) + ' · 연료 ' + JSON.stringify(s1b.fuel) + ' · 보급 투하 ' + S.s1drop + ' · 존0 미션 ' + JSON.stringify(s1b.mis), null, '캡슐 0 · 연료 1/1 · null · 대기(무기한)', ok(s1b.dep && s1b.dep.length === 0 && s1b.fuel && s1b.fuel[0] === 1 && s1b.fuel[1] === 1 && S.s1drop === 'null' && s1b.mis && s1b.mis[0] === 'pending' && s1b.mis[1] === 0 && s1b.mis[2]));
+    const s1z1 = S.s1z1 || {};
+    row(G, '1판 존 1 진입 — 존 0 대기 미션 정리·달 미션 대기', JSON.stringify(s1z1.mis) + ' · 달 창 ' + JSON.stringify(S.win1), null, "['pending',1,false] · on ≥ 25000", ok(s1z1.mis && s1z1.mis[0] === 'pending' && s1z1.mis[1] === 1 && !s1z1.mis[2] && S.win1 && S.win1.on >= 25000));
+    const act = (S.s1c || {}).act;
+    row(G, '1판 첫 활성 위성 미션 시각', JSON.stringify(act), null, '존 1 · ≥ 25000ms', ok(act && act[0] === 1 && act[1] >= 25000));
+    row(G, '1판 끝 → 판 수', S.runsAfter1, null, '1', ok(S.runsAfter1 === 1));
+    const s2 = S.s2 || {}, s2b = S.s2b || {}, s2c = S.s2c || {};
+    row(G, '2판 단계·BEAM', 'stage ' + s2.stage + ' · BEAM ' + s2.grav + ' · 아이템 칸 ' + s2.slots + ' · 잠금 ' + JSON.stringify(s2.lock), null, '2 · visible · visible · 연료·차단만 잠김', ok(s2.stage === 2 && s2.grav === 'visible' && s2.slots === 'visible' && s2.lock && !s2.lock.beam && s2.lock.fuel && s2.lock.cut));
+    row(G, '2판 보급 캡슐·힌트·연료', '캡슐 ' + JSON.stringify(s2b.dep) + ' · 힌트 ' + s2b.hint + ' · 연료(12초) ' + JSON.stringify(s2c.fuel), null, '캡슐 ≥1 · 힌트 true · 연료 1/1', ok(s2b.dep && s2b.dep.length >= 1 && s2b.hint === true && s2c.fuel && s2c.fuel[0] === 1));
+    row(G, '2판 끝 → 판 수', S.runsAfter2, null, '2', ok(S.runsAfter2 === 2));
+    const s3 = S.s3 || {};
+    row(G, '3판 전부 열림·연료 소모', 'stage ' + s3.stage + ' · 잠금 ' + JSON.stringify(s3.lock) + ' · 연료 ' + JSON.stringify(s3.fuel), null, '3 · 잠금 없음 · 연료 < 1', ok(s3.stage === 3 && s3.lock && !s3.lock.beam && !s3.lock.fuel && !s3.lock.cut && s3.fuel && s3.fuel[0] < 1));
+    const dl = S.daily || {};
+    row(G, '오늘의 코스(시드 판, 판 수 0)', 'kind ' + dl.kind + ' · stage ' + dl.stage + ' · 칩 자리 ' + S.dailyChip, null, 'daily · 3', ok(dl.kind === 'daily' && dl.stage === 3));
+    row(G, '기존 사용자 이전(szx_runs 없음, szx_log.runs ' + S.logRuns + ')', S.migrated, null, '3', ok(S.migrated === 3));
+    for(const k of ['ch', 'race']){
+        const a = cur.links[k + '_1'], b = cur.links[k + '_0'];
+        row(G, '링크 진입 ?' + k + '= 흐름 (mp1 켬 / 끔)', JSON.stringify(a) + ' / ' + JSON.stringify(b), null, '같음', JSON.stringify(a) === JSON.stringify(b) ? 'PASS' : 'FAIL');
+    }
+}
+EXT_CMDS.mp1 = { all: false, server: true, run: (base) => runMp1(base), judge: (cur) => judgeMp1(cur) };
 /*</gate:mp1>*/
 /*<gate:mp2>*/
 /* MP2 — restart2: 2초 재시작·정산 카운트업 (실제 시간, 가짜 시계 없음 · CDP 터치/키 입력).
