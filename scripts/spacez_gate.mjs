@@ -8,9 +8,10 @@
      node scripts/spacez_gate.mjs [명령...] --root <체크아웃 경로> --port <n> [옵션]
 
    명령 (생략 시 기본 = all):
-     all     det perf layout tm i18n fx0 beamdrain  (기본 게이트 묶음)
+     all     det perf layout tm i18n fx0 beamdrain hitpath noshake  (기본 게이트 묶음 — MP0 에서 hitpath·noshake 추가)
      full    all + sweep + bot + soak + assets
-     det     합성 시계 결정성 — 16.67/21/33.33ms × 솔로/레이스 × 미션 성공/실패 × 폭탄
+     merge   all + restart audioctx latency boot flags0 startshot  (웨이브 병합 묶음 — ibot 1000 은 따로)
+     det     합성 시계 결정성 — 16.67/21/33.33/8.33ms × 솔로/레이스 × 미션 성공/실패 × 폭탄. 구성마다 rand·randH·randD 호출 수(nR·nH·nD) 기준선 비교
      perf    프레임 JS 시간 p50/p95/p99 — CPU 1x·4x, 고정 존 구간(구간마다 Edge 새로 띄움)
      sweep   perf 와 같지만 전 존(1~30) 순회
      layout  320x568 360x640 375x667 375x812 412x915 740x360 768x1024 1280x800
@@ -24,6 +25,19 @@
      assets  첫 로드·존 순회 전송량
      beamdrain  BEAM 게이지 소진 회귀(탭·꾹·PC F 키 — 4초 방치 뒤 시계가 계속 가는가) + SAT R 키 설치
                 (존 1 궤도에서 R 꾹 → 설치, BEAM 게이지·상태 불변, 설치 중 보급 획득이 진행률을 깎지 않음)
+     ── MP0 (2026-10-08, 명작화 기반) ──
+     hitpath    무적을 끈 충돌 경로 — 자연 운석(기체 고정)·주입 운석(고정 궤적, 직격·스침 교대) × 16.67/33.33ms.
+                {피격·목숨·콤보·게임오버 논리 시각·순서} 해시를 기준선과 비교 + Math.random 시드를 바꿔도 같은지(논리 독립)
+     noshake    ① #canvasWrap·조상 CSS transform 항등 ② 캔버스 전체 fillRect 시점 변환 항등(평행이동·회전 0)
+                ③ 프레임 간 평균 휘도 증가 ≤ 0.12×255 (폭탄·플라즈마 폭풍·피버·피격을 일부러 건다)
+     restart    사망 → 결과 카드 '다시하기' 탭 가능 → 다음 판 조종 가능까지 실제 시간 ms (가짜 시계 없음). p50·p90
+     audioctx   페이지 전체(공용 lpAudio.js 포함) AudioContext 생성 수 — 생성 위치(스택) 포함
+     latency    입력 지연 — 마우스(PC)·터치(폰 플로팅) 이벤트 → 기체가 새 위치로 그려진 프레임까지 ms·프레임 수
+     boot       첫 로드 — CPU 4x 스로틀, 탐색 시작 → #ovBtn 탭 가능까지 ms + 그 전 롱태스크 합
+     flags0     ?mp1=0…&mp8=0 (킬스위치 전부 끔) 으로 det(16.67ms 구성)·hitpath 해시가 기준선과 같은지
+     startshot  시작 화면 ko·en × 320x568·390x844 — 스크린샷(보통 + 애니메이션 정지·캔버스 숨김) 해시·DOM 배치 서명 기준선 비교
+     gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
+     ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -48,6 +62,11 @@
      --mis-p-warn <p>      ibot 경고(위성 1번 놓침)가 뜬 뒤의 미션 성공 확률 — 경고를 본 사람이 다음 미션에 집중하는 모델 (기본 = --mis-p)
      --no-cut              ibot 에서 보급 영구 차단 규칙만 끈다 (규칙의 영향 비교용)
      --no-tank             ibot 이 궤도 급유 탱커를 하나도 안 먹는다(나오자마자 치움) — 추진제 고갈까지 걸리는 시간 확인용 (2026-10-08)
+     --ibot-sets <n>       ibot 시드 묶음 수 (기본 1). 2 면 서로 다른 시드·코스 묶음 2개를 돌려 실행 간 중앙값 차이(runDiff)를 기록 —
+                           병합 판정 허용폭 N = max(8초, runDiff×2) 의 근거 (MP0)
+     --seed-set <k>        ibot/bot 시드 묶음 번호 (기본 0). k 번 묶음 = 봇 시드 1000+k×판수…, 코스 번호도 k×판수 만큼 민다
+     --boot-runs <n>       boot 반복 수 (기본 3, 중앙값)
+     --restart-runs <n>    restart 반복 수 (기본 6)
      --edge <exe>          msedge.exe 경로
      --json <file>         결과 전체를 JSON 으로 저장
      --verbose             진행 로그
@@ -97,11 +116,46 @@ const EDGE = A.edge || ['C:/Program Files (x86)/Microsoft/Edge/Application/msedg
 const BRAND_RE = /SPACEX|SpaceX|Space X|STARSHIP|Starship|STAR FOX|Star Fox|StarFox|TETRIS|Tetris|Tetrimino|TETRIMINO|BREAKOUT|Breakout|Arkanoid|Mechazilla|Falcon 9|\bUFC\b/;
 const HANGUL_RE = /[\uAC00-\uD7A3]/;
 
+/* ---------------- 패키지 확장 등록부 (MP0, 2026-10-08) ----------------
+   명작화 패키지(mp1~mp8)는 아래 자기 펜스 gate:mpN (열고 닫는 주석 표식) 안에서만 게이트를 늘린다.
+     EXT_CMDS.<명령> = { run: async (base) => 결과, judge: (cur, base) => { row(...) }, all: true|false, server: true|false }
+       → 결과는 CUR[<명령>] 에 저장되고 --write-baseline 이면 기준선 같은 이름 구역에 기록된다. all:true 면 'all' 묶음에 들어간다
+     PAGE_EXT.push(function(){ const G = window.__G; G.내도구 = function(P){ ... }; })   → 페이지 쪽 도구(__G) 추가
+     IBOT_HOOKS.push((P) => P)   → ibot 페이로드 P 를 고친다(예: --assist 면 P.ext.assist = 1). 페이지 쪽은 G.ibotPre(P, bi)/G.ibotPost(P, bi, rec)
+     HIT_SCEN.push({ key, mode, step, ... })   → hitpath 시나리오 추가(예: MP3 데스봄 유예 누름·안 누름)
+   명령 표(파일 머리)에는 1줄만 추가한다. 펜스 밖의 기존 코드는 고치지 않는다 */
+const EXT_CMDS = {};
+const PAGE_EXT = [];
+const IBOT_HOOKS = [];
+const HIT_SCEN = [];
+/*<gate:mp1>*/
+/*</gate:mp1>*/
+/*<gate:mp2>*/
+/*</gate:mp2>*/
+/*<gate:mp3>*/
+/*</gate:mp3>*/
+/*<gate:mp4>*/
+/*</gate:mp4>*/
+/*<gate:mp5>*/
+/*</gate:mp5>*/
+/*<gate:mp6>*/
+/*</gate:mp6>*/
+/*<gate:mp7>*/
+/*</gate:mp7>*/
+/*<gate:mp8>*/
+/*</gate:mp8>*/
+
+const ALL_CMDS = ['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'hitpath', 'noshake'].concat(Object.keys(EXT_CMDS).filter(k => EXT_CMDS[k].all));
 let CMDS = A._.length ? A._ : ['all'];
-if(CMDS.includes('all')) CMDS = [...new Set(CMDS.filter(c => c !== 'all').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain']))];
-if(CMDS.includes('full')) CMDS = [...new Set(CMDS.filter(c => c !== 'full').concat(['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'sweep', 'bot', 'soak', 'assets']))];
-const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain'];
+if(CMDS.includes('merge')) CMDS = [...new Set(CMDS.filter(c => c !== 'merge').concat(['all', 'restart', 'audioctx', 'latency', 'boot', 'flags0', 'startshot']))];
+if(CMDS.includes('all')) CMDS = [...new Set(CMDS.filter(c => c !== 'all').concat(ALL_CMDS))];
+if(CMDS.includes('full')) CMDS = [...new Set(CMDS.filter(c => c !== 'full').concat(ALL_CMDS, ['sweep', 'bot', 'soak', 'assets']))];
+const KNOWN = ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain',
+    'hitpath', 'noshake', 'restart', 'audioctx', 'latency', 'boot', 'flags0', 'startshot', 'gl0'].concat(Object.keys(EXT_CMDS));
 for(const c of CMDS) if(!KNOWN.includes(c)){ console.error('알 수 없는 명령: ' + c); process.exit(2); }
+/* MP0 — 명작화 킬스위치 전부 끔 쿼리 (flags0) */
+const MP_OFF_Q = Array.from({ length: 8 }, (_, i) => 'mp' + (i + 1) + '=0').join('&');
+const SEED_SET = Math.max(0, +(A['seed-set'] || 0));
 
 const log = (...a) => { if(VERBOSE) console.log('[gate]', ...a); };
 const say = (...a) => console.log('[gate]', ...a);
@@ -528,6 +582,7 @@ function pageLib(){
             dead = false; deadKind = null;
             G.begin(P.courseSeeds ? P.courseSeeds[bi] : P.seed, false);
             invincibleUntil = 0;
+            if(G.ibotPre) try{ G.ibotPre(P, bi); }catch(_){}   /* MP0 — 패키지 고리(예: 편한 비행·연습 비행 시작 막) */
             let nextDecide = 0, dir = DIRS[0], frames = 0; const lifeLost = [];
             let fuelMin = 1, moved = 0, mpx = player.x, mpy = player.y;
             let lv = lives; const picks = {}, uses = {}; let misKey = '', misOk = false, misAt = 0, nMis = 0, nMisOk = 0, cutAt = null;
@@ -607,8 +662,10 @@ function pageLib(){
             try{ if(gravityFieldActive) szBeamOff(); }catch(_){}
             let why = null; try{ why = dead ? deadKind || (SZM && SZM.hitKind) || null : null; }catch(_){}
             let hdrN = 0; try{ hdrN = SZP.hdrN; }catch(_){}
-            res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, why, frames, lost: lifeLost, picks, uses, nMis, nMisOk, cutAt,
-                fuelMin: Math.round(fuelMin * 100) / 100, hdrN, pxs: elapsedMs > 0 ? Math.round(moved / (elapsedMs / 1000)) : 0 });
+            const rec = { bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, why, frames, lost: lifeLost, picks, uses, nMis, nMisOk, cutAt,
+                fuelMin: Math.round(fuelMin * 100) / 100, hdrN, pxs: elapsedMs > 0 ? Math.round(moved / (elapsedMs / 1000)) : 0 };
+            if(G.ibotPost) try{ G.ibotPost(P, bi, rec); }catch(_){}
+            res.push(rec);
             running = false;
         }
         G.unsynth();
@@ -635,17 +692,120 @@ function pageLib(){
         running = false; G.unsynth(); window.__szFuelInf = 0;
         return { frames, errs, heap, E: (window.__E || []).slice(0, 8), endSec: Math.round(elapsedMs / 1000) };
     };
+    /* ── MP0 hitpath — 무적을 끈 충돌 경로. det 는 매 스텝 무적(1e15)이라 피격 처리를 아예 안 탄다.
+       P = {seed, step, secs, mode:'natural'|'inject', mr(Math.random 시드), lives, setup(선택: 시작 직후 평가할 식 — 패키지 시나리오용)}
+       기록(해시 대상)은 감싼 함수·상태 관찰만으로 만든다 — SZE 같은 새 API 에 기대면 MP0 전후 기준선이 갈린다 */
+    G.hitpath = function(P){
+        const out = { errs: [] };
+        const mbr = (s) => { let a = s | 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+        const mr0 = Math.random;
+        if(P.mr) Math.random = mbr(P.mr);
+        G.synth();
+        G.begin(0, false, true);
+        _setSeed(P.seed);
+        window.__szFuelInf = 1;
+        startedAt = G.VT; lastFrame = G.VT; lastSpawn = 0;
+        invincibleUntil = 0;
+        if(P.lives) lives = P.lives;
+        const PX = 180, PY = 390;
+        player.x = PX; player.y = PY;
+        const EV = []; let over = null, nHit = 0;
+        const oHit = window.szOnHit, oOver = window.triggerGameOver;
+        window.szOnHit = function(now, x, y){ nHit++; EV.push(['h', Math.round(elapsedMs), lives, comboCount, R1(x), R1(y)]); return oHit.apply(this, arguments); };
+        window.triggerGameOver = function(k){ if(over == null){ over = Math.round(elapsedMs); EV.push(['o', over, lives, String(k || '')]); } return oOver.apply(this, arguments); };
+        if(P.setup) try{ (0, eval)(P.setup); }catch(e){ out.errs.push('setup ' + e.message); }
+        let pc = comboCount, pl = lives, frames = 0, k = 0, nextInj = 3000;
+        try{
+            while(G.VT - startedAt < P.secs * 1000 && running){
+                G.VT += P.step; frames++;
+                player.x = PX; player.y = PY;
+                if(P.mode === 'inject'){
+                    lastSpawn = G.VT;   /* 자연 운석 스폰을 막는다(스폰 루프 조건이 바로 거짓) — 위험물 스케줄러는 그대로 */
+                    if(elapsedMs >= nextInj){
+                        nextInj += 1300;
+                        /* 고정 궤적 — 황금각으로 방향을 돌리며 170px 밖에서 200px/s. 짝수 = 직격, 홀수 = 20px 비껴 스침 */
+                        const a = k * 2.39996, cx = Math.cos(a), cy = Math.sin(a), off = (k % 2) ? 20 : 0;
+                        bullets.push({ x: PX + cx * 170 - cy * off, y: PY + cy * 170 + cx * off, vx: -cx * 200, vy: -cy * 200, aimed: true, trail: [] });
+                        k++;
+                    }
+                }
+                gameLoop(G.VT);
+                if(comboCount !== pc){ EV.push(['c', Math.round(elapsedMs), comboCount]); pc = comboCount; }
+                if(lives !== pl){ EV.push(['l', Math.round(elapsedMs), lives]); pl = lives; }
+            }
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        window.szOnHit = oHit; window.triggerGameOver = oOver;
+        running = false; G.unsynth(); window.__szFuelInf = 0; Math.random = mr0;
+        Object.assign(out, { frames, nHit, over, livesEnd: lives, comboMax: comboMaxThisRun | 0, endZone: currentZoneIdx, endSec: Math.round(elapsedMs / 100) / 10,
+            nEv: EV.length, ev: EV, E: (window.__E || []).slice(0, 8) });
+        return out;
+    };
+    /* ── MP0 noshake — 합성 시계로 판을 돌리며 ② 캔버스 전체를 덮는 fillRect 시점의 변환 ③ 프레임 간 평균 휘도 증가를 잰다.
+       폭탄(4s)·플라즈마 폭풍(9s)·피버(14s)·자연 피격(기체 고정, 목숨 99)을 일부러 건다. ① CSS transform 은 실시간 단계에서 따로 */
+    G.noshake = function(P){
+        const out = { errs: [] };
+        const CP = CanvasRenderingContext2D.prototype, oFR = CP.fillRect;
+        const bad = []; let nFull = 0;
+        CP.fillRect = function(x, y, w, h){
+            try{
+                if(this === ctx && x <= 0.5 && y <= 0.5 && x + w >= CW - 0.5 && y + h >= CH - 0.5){
+                    nFull++;
+                    const t = this.getTransform();
+                    if(Math.abs(t.b) > 1e-6 || Math.abs(t.c) > 1e-6 || Math.abs(t.e) > 0.01 || Math.abs(t.f) > 0.01){
+                        if(bad.length < 20) bad.push([Math.round(elapsedMs), R2(t.a), R2(t.b), R2(t.c), R2(t.d), R2(t.e), R2(t.f), String((new Error().stack || '').split('\n')[2] || '').trim().slice(0, 90)]);
+                    }
+                }
+            }catch(_){}
+            return oFR.apply(this, arguments);
+        };
+        const sc = document.createElement('canvas'); sc.width = 24; sc.height = 40;
+        const sx = sc.getContext('2d', { willReadFrequently: true });
+        const lum = () => { sx.drawImage(canvas, 0, 0, 24, 40); const d = sx.getImageData(0, 0, 24, 40).data; let s = 0; for(let i = 0; i < d.length; i += 4) s += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; return s / (d.length / 4); };
+        G.synth();
+        G.begin(P.seed || 424242, false, true);
+        window.__szFuelInf = 1;
+        startedAt = G.VT; lastFrame = G.VT; lastSpawn = 0; invincibleUntil = 0; lives = 99;
+        const marks = [], fired = {};
+        let prev = null, maxInc = 0, maxAt = null, frames = 0, feverSeen = false;
+        const inc = [];
+        try{
+            while(G.VT - startedAt < (P.secs || 30) * 1000 && running){
+                G.VT += P.step || 16.667; frames++;
+                player.x = 180; player.y = 390; if(lives < 50) lives = 99;
+                const e = elapsedMs;
+                if(e >= 4000 && !fired.w){ fired.w = 1; marks.push(['wipe', Math.round(e)]); try{ triggerWipe(); }catch(err){ out.errs.push('wipe ' + err.message); } }
+                if(e >= 9000 && !fired.s){ fired.s = 1; marks.push(['storm', Math.round(e)]); try{ _activatePlasmaStorm(G.VT); }catch(err){ out.errs.push('storm ' + err.message); } }
+                if(e >= 14000 && !fired.f){ fired.f = 1; marks.push(['fever', Math.round(e)]); try{ szFeverAdd(100); }catch(err){ out.errs.push('fever ' + err.message); } }
+                gameLoop(G.VT);
+                if(typeof szFeverOn !== 'undefined' && szFeverOn) feverSeen = true;
+                const L = lum();
+                if(prev != null){ const d = L - prev; inc.push([d, Math.round(elapsedMs)]); if(d > maxInc){ maxInc = d; maxAt = Math.round(elapsedMs); } }
+                prev = L;
+            }
+        }catch(err){ out.errs.push(String(err && err.stack || err).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        CP.fillRect = oFR;
+        running = false; G.unsynth(); window.__szFuelInf = 0;
+        const near = (t) => { let b = 'hit/기타'; for(const m of marks) if(t != null && t >= m[1] && t - m[1] < 1500) b = m[0]; return b; };
+        const top = inc.slice().sort((a, b) => b[0] - a[0]).slice(0, 6).map(([d, t]) => [R1(d), t, near(t)]);
+        Object.assign(out, { frames, nFull, bad, maxInc: R1(maxInc), maxIncFrac: R2(maxInc / 255), maxAt, maxNear: near(maxAt), top, marks, feverSeen, E: (window.__E || []).slice(0, 8) });
+        return out;
+    };
+    /* ── MP0 ibot 확장 고리 — 패키지가 PAGE_EXT 로 채운다(없으면 아무것도 안 함) */
+    G.ibotPre = G.ibotPre || null;
+    G.ibotPost = G.ibotPost || null;
     return 1;
 }
-const PAGE_LIB = '(' + pageLib.toString() + ')()';
+const PAGE_LIB = '(' + pageLib.toString() + ')();' + PAGE_EXT.map(f => '(' + f.toString() + ')();').join('');
 const gameUrl = (base, lang, extra = '') => base + '/games/dodge/?lang=' + lang + (extra ? '&' + extra : '');
 
 /* ================= det ================= */
 function detConfigs(){
     const S = [1000 / 60, 21, 1000 / 30];
+    /* MP0 — 120Hz 기기(8.33ms) 를 기본 구성 둘에 더한다 */
+    const S8 = S.concat([1000 / 120]);
     return [
-        { mode: 'solo', mission: 'fail', bomb: false, steps: S },
-        { mode: 'race', mission: 'fail', bomb: false, steps: S },
+        { mode: 'solo', mission: 'fail', bomb: false, steps: S8 },
+        { mode: 'race', mission: 'fail', bomb: false, steps: S8 },
         { mode: 'solo', mission: 'success', bomb: false, steps: S.slice(0, 2) },
         { mode: 'solo', mission: 'fail', bomb: true, steps: S.slice(0, 2) },
         { mode: 'race', mission: 'success', bomb: true, steps: S.slice(0, 2) },
@@ -655,32 +815,37 @@ function detConfigs(){
     ];
 }
 const cfgKey = (c, st) => c.mode + '/' + c.mission + '/' + (c.bomb ? 'bomb' : 'nobomb') + (c.fx ? '/fx' : '') + '@' + st.toFixed(2);
-async function runDet(base){
+/* det 한 판 → 비교 서명 (flags0 도 같은 식을 쓴다) */
+function detSig(o, r){
+    return {
+        frames: o.frames, nR: o.nR, nH: o.nH, nD: o.nD, endZone: o.endZone, endSec: o.endSec, endReason: o.endReason, errs: o.errs.length,
+        hH: sha(o.H.map(x => [x[1], x[2]])), hHaz: sha(o.haz.map(x => [x[0], x[1], x[2], x[3]])), hMet: sha(o.met), hMetGeo: sha(o.met.map(m => [r1(m[1]), r1(m[2]), r1(m[3]), r1(m[4])])),
+        hDep: sha(Object.keys(o.dep).sort().map(k => [k, o.dep[k][0], o.dep[k][1]])), hBh: sha(o.bh), nHaz: o.haz.length, nMet: o.met.length, nDep: Object.keys(o.dep).length, nBh: o.bh.length,
+        /* P2 — 프레임과 무관한 기록: 운석 스폰 목록(스폰 순간 좌표·논리시각)·위험물 사건(존·논리 ms·수열 소비 수) */
+        hMetS: sha(o.metS || []), nMetS: (o.metS || []).length, nS: o.nS, hHz2: sha(o.hz2 || []), nHz2: (o.hz2 || []).length,
+        flare0: o.flare0, flare0Seen: o.flare0Seen, step: r.step, mode: r.mode, nStop: o.nStop, nWarp: o.nWarp,
+    };
+}
+const DET_CMP = ['nR', 'nH', 'nD', 'hH', 'hHaz', 'hMet', 'hDep', 'hBh'];
+async function runDet(base, opt = {}){
     const runs = [];
-    for(const c of detConfigs()) for(const st of c.steps) runs.push({ ...c, step: st, key: cfgKey(c, st) });
-    say('det: ' + runs.length + '회 × ' + DET_SECS + 's 합성 시간, 병렬 ' + JOBS);
+    for(const c of detConfigs()) for(const st of (opt.firstOnly ? c.steps.slice(0, 1) : c.steps)) runs.push({ ...c, step: st, key: cfgKey(c, st) });
+    say((opt.tag || 'det') + ': ' + runs.length + '회 × ' + DET_SECS + 's 합성 시간, 병렬 ' + JOBS + (opt.extra ? ' · ?' + opt.extra : ''));
     const results = await pool(runs, JOBS, async (r) => withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
-        await e.open(gameUrl(base, 'ko'), 1500);
+        await e.open(gameUrl(base, 'ko', opt.extra || ''), 1500);
         const t0 = Date.now();
         const out = await e.ev('__G.det(' + JSON.stringify({ seed: 424242, racing: r.mode === 'race', pvp: r.mode === 'pvp', fx: !!r.fx, step: r.step, secs: DET_SECS, mission: r.mission, bomb: r.bomb, nMet: 400, nMetS: 1500, noDraw: !!A['det-nodraw'] }) + ')', 900000);
         const pe = await e.ev('(window.__E||[]).slice(0,8)');
-        collectErrs('det ' + r.key, e, pe.concat(out.errs));
+        collectErrs((opt.tag || 'det') + ' ' + r.key, e, pe.concat(out.errs));
         log('det', r.key, 'frames', out.frames, 'wall', Date.now() - t0, 'rand', out.nR, 'randH', out.nH, 'randD', out.nD, 'end', out.endZone, out.endSec, out.endReason);
         return { ...r, out };
     }));
     const M = {};
     for(const r of results){
-        const o = r.out;
-        M[r.key] = {
-            frames: o.frames, nR: o.nR, nH: o.nH, nD: o.nD, endZone: o.endZone, endSec: o.endSec, endReason: o.endReason, errs: o.errs.length,
-            hH: sha(o.H.map(x => [x[1], x[2]])), hHaz: sha(o.haz.map(x => [x[0], x[1], x[2], x[3]])), hMet: sha(o.met), hMetGeo: sha(o.met.map(m => [r1(m[1]), r1(m[2]), r1(m[3]), r1(m[4])])),
-            hDep: sha(Object.keys(o.dep).sort().map(k => [k, o.dep[k][0], o.dep[k][1]])), hBh: sha(o.bh), nHaz: o.haz.length, nMet: o.met.length, nDep: Object.keys(o.dep).length, nBh: o.bh.length,
-            /* P2 — 프레임과 무관한 기록: 운석 스폰 목록(스폰 순간 좌표·논리시각)·위험물 사건(존·논리 ms·수열 소비 수) */
-            hMetS: sha(o.metS || []), nMetS: (o.metS || []).length, nS: o.nS, hHz2: sha(o.hz2 || []), nHz2: (o.hz2 || []).length,
-            flare0: o.flare0, flare0Seen: o.flare0Seen, step: r.step, mode: r.mode, nStop: o.nStop, nWarp: o.nWarp,
-        };
-        M[r.key]._raw = o;
+        M[r.key] = detSig(r.out, r);
+        M[r.key]._raw = r.out;
     }
+    if(opt.firstOnly){ for(const k of Object.keys(M)) delete M[k]._raw; return { secs: DET_SECS, runs: M }; }
     /* 스폰 목록 비교 — 같은 인덱스끼리 논리시각·좌표·속도가 모두 같아야 한다(허용 0.01) */
     const metSDiff = (a, b, fromMs) => {
         const A2 = (a.metS || []).filter(m => m[0] >= (fromMs || 0)), B2 = (b.metS || []).filter(m => m[0] >= (fromMs || 0));
@@ -758,7 +923,10 @@ function judgeDet(cur, base){
         if(m.errs) row('G1 det', k + ' 에러', m.errs, 0, '0', 'FAIL');
         if(!B || !B.runs[k]){ row('G1 det', k + ' 해시', m.hH + '/' + m.hHaz + '/' + m.hMet, null, '기준선 없음', 'INFO'); continue; }
         const b = B.runs[k];
-        const parts = ['nR', 'nH', 'nD', 'hH', 'hHaz', 'hMet', 'hDep', 'hBh'].filter(p => m[p] !== b[p]);
+        const parts = DET_CMP.filter(p => m[p] !== b[p]);
+        /* MP0 — 호출 수는 따로 한 줄 (패키지 수용 기준: nR·nH·nD 동일) */
+        const cnt = ['nR', 'nH', 'nD'].filter(p => m[p] !== b[p]);
+        row('G1 det', k + ' 호출 수 nR/nH/nD', m.nR + '/' + m.nH + '/' + m.nD, b.nR + '/' + b.nH + '/' + b.nD, '기준선과 같음', cnt.length ? (A['allow-det-change'] ? 'WARN' : 'FAIL') : 'PASS');
         const st = parts.length === 0 ? 'PASS' : (A['allow-det-change'] ? 'WARN' : 'FAIL');
         row('G1 det', k + ' 기준선 일치', parts.length ? '다름: ' + parts.join(',') : '동일', '', '완전 일치', st, parts.length ? parts.map(p => p + ' ' + m[p] + '≠' + b[p]).join(' ').slice(0, 160) : '');
     }
@@ -1176,11 +1344,12 @@ async function runFx0(base){
         res[tag] = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko', extra), 2000);
             const flags = await e.ev('(function(){ try{ return typeof SZ_FLAGS === "undefined" ? null : JSON.parse(JSON.stringify(SZ_FLAGS)); }catch(e){ return "err"; } })()');
+            const sentinel = tag === 'fx1' ? await e.ev(SENTINEL_EXPR) : null;   /* MP0 — 스텁 센티널·API (투어 전에) */
             const t = await e.ev('__G.tour({step:16.667, frames:40})', 300000);
             const pe = await e.ev('(window.__E||[]).slice(0,8)');
             const x = e.errors();
             collectErrs(tag, e, pe.concat(t.errs));
-            return { flags, errs: t.errs.length + pe.length + x.exc.length, sample: t.errs.concat(pe, x.exc).slice(0, 3), frames: t.frames, zones: t.zones };
+            return { flags, sentinel, errs: t.errs.length + pe.length + x.exc.length, sample: t.errs.concat(pe, x.exc).slice(0, 3), frames: t.frames, zones: t.zones };
         });
     }
     return res;
@@ -1228,18 +1397,38 @@ function judgeBot(cur, base){
 
 /* ================= ibot (아이템 봇) ================= */
 async function runIBot(base){
+    /* MP0 — --ibot-sets 2: 서로 다른 시드·코스 묶음 2개 → 실행 간 중앙값 차이(runDiff). 기준선 본값은 0번 묶음 */
+    const NS = Math.max(1, +(A['ibot-sets'] || 1));
+    const sets = [];
+    for(let k = 0; k < NS; k++) sets.push(await runIBotSet(base, SEED_SET + k));
+    const out = sets[0];
+    out.seedSet = SEED_SET;
+    if(NS > 1){
+        out.sets = sets.map((x, i) => { const o = {}; for(const f of ['30fps', '60fps']) o[f] = { medianT: x[f].medianT, ci: x[f].ci, meanT: x[f].meanT, meanCI: x[f].meanCI, reach: x[f].reach, runs: x[f].runs, seedSet: SEED_SET + i }; return o; });
+        out.runDiff = {}; out.N = {};
+        for(const f of ['30fps', '60fps']){ const ms = sets.map(x => x[f].medianT); out.runDiff[f] = r1(Math.max(...ms) - Math.min(...ms)); out.N[f] = Math.max(8, r1(out.runDiff[f] * 2));
+            const mm = sets.map(x => x[f].meanT); (out.runDiffMean = out.runDiffMean || {})[f] = r1(Math.max(...mm) - Math.min(...mm)); }
+        say('ibot 실행 간 중앙값 차이: ' + JSON.stringify(out.runDiff) + ' → 허용폭 N ' + JSON.stringify(out.N));
+    }
+    return out;
+}
+async function runIBotSet(base, setK){
     const out = {};
     const MISP = A['mis-p'] != null ? +A['mis-p'] : 0.8, SECS = +(A['ibot-secs'] || 560);
     const MARKS = [60, 120, 184, 240, 300, 343, 385, 420, 475, 540];
     for(const fps of [30, 60]){
-        const seeds = Array.from({ length: BOT_RUNS }, (_, i) => 1000 + i);
+        /* 묶음 k = 봇 시드 1000+k×판수…, 코스 번호도 k×판수 만큼 민다 (k=0 은 MP0 이전과 같은 시드·코스) */
+        const off = setK * BOT_RUNS;
+        const seeds = Array.from({ length: BOT_RUNS }, (_, i) => 1000 + off + i);
         const chunks = []; const per = Math.ceil(seeds.length / JOBS);
         for(let i = 0; i < seeds.length; i += per) chunks.push(seeds.slice(i, i + per));
         const t0 = Date.now();
         const parts = await pool(chunks, JOBS, async (ch) => withEdge({ w: 412, h: 915, dsf: 1, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko'), 1200);
-            const cs = COURSE_SEEDS > 1 ? ch.map(b => 424242 + ((b - 1000) % COURSE_SEEDS) * 7919) : undefined;
-            const r = await e.ev('__G.ibot(' + JSON.stringify({ seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: SECS, misP: MISP, misPW: A['mis-p-warn'] != null ? +A['mis-p-warn'] : null, noCut: !!A['no-cut'], noTank: !!A['no-tank'] }) + ')', 3600000);
+            const cs = COURSE_SEEDS > 1 ? ch.map(b => 424242 + (off + ((b - 1000 - off) % COURSE_SEEDS)) * 7919) : undefined;
+            let P = { seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: SECS, misP: MISP, misPW: A['mis-p-warn'] != null ? +A['mis-p-warn'] : null, noCut: !!A['no-cut'], noTank: !!A['no-tank'], ext: {} };
+            for(const h of IBOT_HOOKS) P = h(P) || P;
+            const r = await e.ev('__G.ibot(' + JSON.stringify(P) + ')', 3600000);
             const pe = await e.ev('(window.__E||[]).slice(0,8)');
             collectErrs('ibot ' + fps, e, pe.concat(r.filter(x => x.err).map(x => x.err)));
             return r;
@@ -1265,23 +1454,379 @@ async function runIBot(base){
             hdrPct: r1(100 * runs.filter(x => x.hdrN > 0).length / runs.length),
             fuelMinMed: q(runs.map(x => x.fuelMin == null ? 1 : x.fuelMin).sort((a, b) => a - b), 0.5),
             pxs: q(runs.map(x => x.pxs || 0).sort((a, b) => a - b), 0.5),
-            cutPct: r1(100 * cut.length / runs.length), cutMed: cut.length ? q(cut.map(x => x.cutAt).sort((a, b) => a - b), 0.5) : null, zoneDeaths, medianT: q(ts, 0.5), wallS: Math.round((Date.now() - t0) / 1000) };
-        say('ibot ' + fps + 'fps: ' + runs.length + '판 · ' + MARKS.map(s => s + 's ' + reach[s] + '%').join(' · ') + ' (중앙 ' + out[fps + 'fps'].medianT + 's, 차단 ' + out[fps + 'fps'].cutPct + '%, 연료사 ' + out[fps + 'fps'].fuelDeathPct + '% 중앙 ' + out[fps + 'fps'].fuelDeathMed + 's ' + JSON.stringify(out[fps + 'fps'].fuelDeathRange) + ', 헤더 ' + out[fps + 'fps'].hdrPct + '%, 탱커 ' + (out[fps + 'fps'].picks.fuel || 0) + '/판, 최저연료 중앙 ' + out[fps + 'fps'].fuelMinMed + ', 이동 ' + out[fps + 'fps'].pxs + 'px/s, ' + out[fps + 'fps'].wallS + 's)');
+            cutPct: r1(100 * cut.length / runs.length), cutMed: cut.length ? q(cut.map(x => x.cutAt).sort((a, b) => a - b), 0.5) : null, zoneDeaths, medianT: q(ts, 0.5), ci: bootCI(ts), meanT: r1(ts.reduce((a, b) => a + b, 0) / Math.max(1, ts.length)), meanCI: bootCI(ts, 1000, true), wallS: Math.round((Date.now() - t0) / 1000) };
+        if(setK) delete out[fps + 'fps'].raw;   /* 원자료는 0번 묶음만 보관 (기준선 파일 크기) */
+        say('ibot ' + fps + 'fps: ' + runs.length + '판 · ' + MARKS.map(s => s + 's ' + reach[s] + '%').join(' · ') + ' (중앙 ' + out[fps + 'fps'].medianT + 's, 차단 ' + out[fps + 'fps'].cutPct + '%, 연료사 ' + out[fps + 'fps'].fuelDeathPct + '% 중앙 ' + out[fps + 'fps'].fuelDeathMed + 's ' + JSON.stringify(out[fps + 'fps'].fuelDeathRange) + ', 헤더 ' + out[fps + 'fps'].hdrPct + '%, 탱커 ' + (out[fps + 'fps'].picks.fuel || 0) + '/판, 최저연료 중앙 ' + out[fps + 'fps'].fuelMinMed + ', 이동 ' + out[fps + 'fps'].pxs + 'px/s, CI ' + JSON.stringify(out[fps + 'fps'].ci) + ', 묶음 ' + setK + ', ' + out[fps + 'fps'].wallS + 's)');
     }
     return out;
 }
 function judgeIBot(cur, base){
     const G = 'G9 ibot';
+    /* MP0 (6장) — 병합 판정: 중앙값 생존시간 ±N초 그리고 부트스트랩 95% CI 겹침. N = max(8, 실행 간 차이×2).
+       도달률(꼬리 지표)은 표본 잡음이 커서 참고(INFO)만 한다 */
+    const sameCond = base && (base.seedSet || 0) === (cur.seedSet || 0) && base['30fps'] && base['30fps'].runs === cur['30fps'].runs;
+    if(base && !sameCond) row(G, '기준선 조건', '묶음 ' + (cur.seedSet || 0) + ' · ' + cur['30fps'].runs + '판', '묶음 ' + (base.seedSet || 0) + ' · ' + (base['30fps'] && base['30fps'].runs) + '판', '같은 시드 묶음·판 수', 'WARN', '판 수·묶음이 달라도 분포 판정은 하지만 해석 주의');
     for(const k of ['30fps', '60fps']){
         const c = cur[k], b = base && base[k];
-        for(const s of [60, 184, 343, 475]){
-            const ok = !b || Math.abs(c.reach[s] - b.reach[s]) <= 5;
-            row(G, k + ' ' + s + 's 도달률', c.reach[s] + '%', b ? b.reach[s] + '%' : null, '기준 ±5%p', b ? (ok ? 'PASS' : 'FAIL') : 'INFO');
+        if(b && b.medianT != null){
+            const N = ibotN(base, k);
+            const d = r1(c.medianT - b.medianT);
+            const ov = c.ci && b.ci && c.ci[0] != null && b.ci && b.ci[0] != null ? (c.ci[0] <= b.ci[1] && b.ci[0] <= c.ci[1]) : null;
+            row(G, k + ' 중앙값 생존시간', c.medianT + 's (CI ' + (c.ci || []).join('–') + ')', b.medianT + 's (CI ' + (b.ci || []).join('–') + ')', '±' + N + 's · CI 겹침', Math.abs(d) <= N && ov !== false ? 'PASS' : 'FAIL', 'Δ ' + d + 's' + (ov === null ? ' · 기준선 CI 없음' : ov ? '' : ' · CI 안 겹침'));
+        } else row(G, k + ' 중앙값 생존시간', c.medianT + 's (CI ' + (c.ci || []).join('–') + ')', null, '기준선 없음', 'INFO');
+        /* MP0 발견(2026-10-08) — ibot 생존시간은 존 19 블랙홀(475.8~475.9s)에 12~15% 가 한꺼번에 몰려 중앙값이 그 점에 붙는다.
+           중앙값 판정이 둔해지므로 평균(부트스트랩 CI)을 보조 지표로 함께 본다 — 허용폭 = max(8, 평균 실행 간 차이×2), 벗어나면 WARN(판정은 6장 규칙 유지) */
+        if(c.meanT != null){
+            const bm = b && b.meanT != null ? b : null;
+            const Nm = Math.max(8, r1(2 * ((base && base.runDiffMean && base.runDiffMean[k]) || 0)));
+            const dm = bm ? r1(c.meanT - bm.meanT) : null;
+            row(G, k + ' 평균 생존시간 (보조)', c.meanT + 's (CI ' + (c.meanCI || []).join('–') + ')', bm ? bm.meanT + 's (CI ' + (bm.meanCI || []).join('–') + ')' : null, bm ? '±' + Nm + 's' : '기록', bm ? (Math.abs(dm) <= Nm ? 'PASS' : 'WARN') : 'INFO', bm ? 'Δ ' + dm + 's' : '');
         }
+        for(const s2 of [60, 184, 343, 475]) row(G, k + ' ' + s2 + 's 도달률 (참고)', c.reach[s2] + '%', b && b.reach ? b.reach[s2] + '%' : null, '참고', 'INFO');
         row(G, k + ' 보급 영구 차단 판', c.cutPct + '%', b ? b.cutPct + '%' : null, '-', 'INFO');
         if(c.fuelDeathPct != null) row(G, k + ' 추진제 고갈(우주 미아) 판', c.fuelDeathPct + '%', b && b.fuelDeathPct != null ? b.fuelDeathPct + '%' : null, '-', 'INFO');
     }
+    if(cur.runDiff) row(G, '실행 간 중앙값 차이 (묶음 ' + (cur.sets || []).length + '개)', JSON.stringify(cur.runDiff), base && base.runDiff ? JSON.stringify(base.runDiff) : null, '허용폭 N = max(8, ×2) → ' + JSON.stringify(cur.N), 'INFO');
 }
+
+/* ================= MP0 (2026-10-08) — hitpath · noshake · restart · audioctx · latency · boot · flags0 · startshot · gl0 ================= */
+function hitScenarios(){
+    const base = [
+        { key: 'natural@16.67', mode: 'natural', step: 1000 / 60 },
+        { key: 'natural@33.33', mode: 'natural', step: 1000 / 30 },
+        { key: 'inject@16.67', mode: 'inject', step: 1000 / 60 },
+        { key: 'inject@33.33', mode: 'inject', step: 1000 / 30 },
+    ];
+    return base.concat(HIT_SCEN);
+}
+const hitSig = (o) => ({ h: sha(o.ev), nEv: o.nEv, nHit: o.nHit, over: o.over, livesEnd: o.livesEnd, comboMax: o.comboMax, endSec: o.endSec, endZone: o.endZone, frames: o.frames, errs: o.errs.length });
+async function runHitpath(base, extra = '', tag = 'hitpath'){
+    const jobs = [];
+    for(const s of hitScenarios()){
+        jobs.push({ ...s, mr: 1, id: s.key });
+        /* Math.random 시드만 바꾼 짝 — 판정·수명·콤보가 Math.random 에 기대지 않는지(표시 전용 Math.random 은 자유) */
+        if(!extra && !s.noPair && s.step < 20) jobs.push({ ...s, mr: 7, id: s.key + '#mr7' });
+    }
+    say(tag + ': ' + jobs.length + '판 (자연·주입 × 프레임' + (extra ? ' · ?' + extra : '') + ')');
+    const res = await pool(jobs, JOBS, async (j) => withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', extra), 1500);
+        const o = await e.ev('__G.hitpath(' + JSON.stringify({ seed: j.seed || 424242, step: j.step, secs: j.secs || 240, mode: j.mode, mr: j.mr, lives: j.lives || 5, setup: j.setup || null }) + ')', 600000);
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs(tag + ' ' + j.id, e, pe.concat(o.errs));
+        return { id: j.id, sig: hitSig(o), head: o.ev.slice(0, 14) };
+    }));
+    const out = { runs: {}, head: {} };
+    for(const r of res){ out.runs[r.id] = r.sig; out.head[r.id] = r.head; }
+    return out;
+}
+function judgeHitpath(cur, base, G = 'G13 hitpath'){
+    for(const [k, m] of Object.entries(cur.runs)){
+        if(k.includes('#mr')) continue;
+        if(m.errs) row(G, k + ' 에러', m.errs, 0, '0', 'FAIL');
+        if(!(m.nHit > 0)) row(G, k + ' 피격 경로를 탔는가', m.nHit + '회', null, '≥1', 'FAIL', '하네스가 충돌 경로를 못 탔다');
+        const b = base && base.runs && base.runs[k];
+        const desc = '피격 ' + m.nHit + ' · 끝 ' + (m.over != null ? (m.over / 1000).toFixed(1) + 's' : '생존') + ' · 콤보 ' + m.comboMax + ' · #' + m.h;
+        if(!b){ row(G, k + ' 해시', desc, null, '기준선 없음', 'INFO'); }
+        else row(G, k + ' 기준선 일치', desc, '#' + b.h + ' (피격 ' + b.nHit + ')', '해시 동일', m.h === b.h ? 'PASS' : 'FAIL');
+        const p = cur.runs[k + '#mr7'];
+        if(p) row(G, k + ' Math.random 시드 무관', p.h === m.h ? '같음' : '다름 #' + p.h, null, '같음 (판정은 수열·시계만)', p.h === m.h ? 'PASS' : 'FAIL', p.h === m.h ? '' : '피격·콤보 경로가 Math.random 에 기대고 있다');
+    }
+}
+
+async function runNoshake(base){
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        const syn = await e.ev('__G.noshake({seed:424242, step:16.667, secs:24})', 600000);
+        /* ① 실시간 — 진짜 rAF 로 날며 피격·폭탄을 건 동안 #canvasWrap 과 조상의 CSS transform/translate/rotate/scale 을 50ms 마다 본다 */
+        await e.ev(`(function(){ __G.begin(424242, false, true); requestAnimationFrame(gameLoop); lives = 99; invincibleUntil = 0;
+            window.__css = { n: 0, bad: [] };
+            const chk = function(){ let el = document.getElementById('canvasWrap'); const cv = document.getElementById('dodge-canvas'); const L = [cv]; for(; el; el = el.parentElement) L.push(el);
+                for(const x of L){ const c = getComputedStyle(x); const tf = c.transform, tr = c.translate, ro = c.rotate, sc = c.scale;
+                    const okT = tf === 'none' || tf === 'matrix(1, 0, 0, 1, 0, 0)'; const ok2 = (!tr || tr === 'none') && (!ro || ro === 'none') && (!sc || sc === 'none');
+                    if(!okT || !ok2){ if(__css.bad.length < 12) __css.bad.push((x.id || x.className || x.tagName) + ' ' + tf + ' ' + tr + ' ' + ro + ' ' + sc); } }
+                __css.n++; };
+            window.__cssT = setInterval(function(){ chk(); player.x = 180; player.y = 390; if(lives < 50) lives = 99; }, 50);
+            setTimeout(function(){ try{ triggerWipe(); }catch(_){} }, 600);
+            setTimeout(function(){ try{ _activatePlasmaStorm(performance.now()); }catch(_){} }, 1600);
+            return 1; })()`);
+        await sleep(3600);
+        const css = await e.ev('(function(){ clearInterval(window.__cssT); running = false; return window.__css; })()');
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('noshake', e, pe.concat(syn.errs));
+        return { ...syn, css };
+    });
+}
+function judgeNoshake(cur, base){
+    const G = 'G14 noshake';
+    const b = base || null;
+    row(G, '① CSS transform 항등 (#canvasWrap·조상·캔버스)', cur.css.bad.length ? cur.css.bad.slice(0, 2).join(' | ') : '항등 (' + cur.css.n + '회 확인)', b ? (b.css.bad.length ? b.css.bad.length + '건' : '항등') : null, '0건', cur.css.bad.length ? 'FAIL' : (cur.css.n > 10 ? 'PASS' : 'WARN'));
+    row(G, '② 전체 fillRect 변환 항등', cur.bad.length ? cur.bad.length + '건 ' + JSON.stringify(cur.bad[0]).slice(0, 90) : '항등 (' + cur.nFull + '회)', b ? (b.bad.length + '건') : null, '평행이동·회전 0', cur.bad.length ? 'FAIL' : 'PASS');
+    const lim = Math.round(0.12 * 255 * 10) / 10;
+    row(G, '③ 프레임 간 평균 휘도 증가 최대', cur.maxInc + ' (' + cur.maxIncFrac + '×255) @' + cur.maxAt + 'ms ' + cur.maxNear, b ? b.maxInc + ' ' + b.maxNear : null, '≤' + lim + ' (0.12×255)', cur.maxInc <= lim ? 'PASS' : 'FAIL', '상위 ' + cur.top.map(x => x[0] + '@' + x[2]).join(' '));
+    row(G, '자극 장면 실제로 걸림', cur.marks.map(m => m[0]).join('·') + (cur.feverSeen ? '·피버켜짐' : '·피버안켜짐'), null, '폭탄·폭풍·피버', cur.marks.length >= 3 ? 'PASS' : 'WARN');
+}
+
+async function runRestart(base){
+    const N = Math.max(2, +(A['restart-runs'] || 6));
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1800);
+        /* 첫 판은 긴 인트로(이야기 3·2·1) — 재시작 측정은 두 번째 판부터. 실제 시간, 가짜 시계 없음 */
+        await e.ev('(function(){ startGame(); window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); return 1; })()');
+        await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if(running || performance.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+        const out = [];
+        for(let i = 0; i < N; i++){
+            await sleep(1500);
+            const r = await e.ev(`new Promise(function(res){
+                clearInterval(window.__inv); invincibleUntil = 0;
+                var t0 = performance.now(), tCard = null, tTap = null;
+                try{ triggerGameOver(); }catch(err){ return res({ err: 'gameover ' + err.message }); }
+                (function w(){
+                    var now = performance.now();
+                    if(now - t0 > 20000) return res({ err: 'timeout', tCard: tCard, tTap: tTap });
+                    var ov = document.getElementById('overlay'), b = document.getElementById('ovBtn');
+                    if(tTap == null){
+                        var ok = ov && b && !ov.classList.contains('hidden') && !ov.classList.contains('go-lock') && b.getClientRects().length && getComputedStyle(ov).pointerEvents !== 'none' && +getComputedStyle(ov).opacity > 0.5;
+                        if(ok){ tCard = now - t0; tTap = now; b.click(); }
+                    } else if(running && !(typeof _introRunning !== 'undefined' && _introRunning)){
+                        window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100);
+                        return res({ total: Math.round(now - t0), card: Math.round(tCard), intro: Math.round(now - tTap) });
+                    }
+                    setTimeout(w, 10);
+                })();
+            })`, 40000);
+            out.push(r);
+        }
+        await e.ev('(function(){ clearInterval(window.__inv); running = false; return 1; })()');
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('restart', e, pe);
+        const ok = out.filter(x => x.total != null).map(x => x.total).sort((a, b) => a - b);
+        return { path: 'tap', runs: out, n: ok.length, p50: q(ok, 0.5), p90: q(ok, 0.9), cardP50: q(out.filter(x => x.card != null).map(x => x.card).sort((a, b) => a - b), 0.5), introP50: q(out.filter(x => x.intro != null).map(x => x.intro).sort((a, b) => a - b), 0.5) };
+    });
+}
+function judgeRestart(cur, base){
+    const G = 'G15 restart';
+    const errs = cur.runs.filter(x => x.err);
+    row(G, '탭 경로 측정 오류', errs.length, null, '0', errs.length ? 'FAIL' : 'PASS', errs.map(x => x.err).join(' ').slice(0, 80));
+    row(G, '탭 경로 사망→조종 p50 / p90', cur.p50 + ' / ' + cur.p90 + 'ms (카드 ' + cur.cardP50 + ' + 인트로 ' + cur.introP50 + ')', base ? base.p50 + ' / ' + base.p90 + 'ms' : null, base ? 'p50 ≤ 기준선+250ms (MP2 목표: 탭 p90 ≤3500)' : '기록', base ? (cur.p50 <= base.p50 + 250 ? 'PASS' : 'FAIL') : 'INFO');
+}
+
+/* AudioContext 생성 수 — 페이지 스크립트보다 먼저 생성자를 감싼다 */
+const AC_HOOK = `(function(){ window.__AC = 0; window.__ACs = []; var seen = [];
+  ['AudioContext','webkitAudioContext'].forEach(function(k){ var O = window[k]; if(!O || seen.indexOf(O) >= 0) return; seen.push(O);
+    var W = function(a, b){ window.__AC++; try{ window.__ACs.push(String(new Error().stack || '').split('\\n').slice(2, 4).map(function(s){ return s.trim().replace(location.origin, ''); }).join(' < ')); }catch(_){}
+      return new O(a, b); };
+    W.prototype = O.prototype; try{ Object.setPrototypeOf(W, O); }catch(_){}
+    window.AudioContext = W; if(window.webkitAudioContext) window.webkitAudioContext = W; }); })();`;
+async function runAudioCtx(base){
+    return withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.send('Page.addScriptToEvaluateOnNewDocument', { source: AC_HOOK });
+        await e.open(gameUrl(base, 'ko'), 2200);
+        const a0 = await e.ev('window.__AC');
+        /* 실제 사용자 제스처(탭) — 잠금 해제 경로를 다 깨운다 */
+        const pt = await e.ev('(function(){ var r = document.getElementById("dodge-canvas").getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + 40)]; })()');
+        await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1] }] });
+        await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+        await e.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Shift', code: 'ShiftLeft' });
+        await e.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Shift', code: 'ShiftLeft' });
+        await sleep(400);
+        await e.ev('(function(){ startGame(); window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); return 1; })()');
+        await sleep(6500);
+        await e.ev('(function(){ clearInterval(window.__inv); invincibleUntil = 0; try{ triggerGameOver(); }catch(_){} return 1; })()');
+        await sleep(1200);
+        const r = await e.ev('({ n: window.__AC, src: window.__ACs })');
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('audioctx', e, pe);
+        return { atLoad: a0, n: r.n, src: r.src };
+    });
+}
+function judgeAudioCtx(cur, base){
+    const G = 'G16 audioctx';
+    row(G, '페이지 전체 AudioContext 생성 수', cur.n + ' (로드 직후 ' + cur.atLoad + ')', base ? base.n : null, base ? '≤ 기준선 (MP4a 목표 ≤2)' : '기록 (MP4a 목표 ≤2)', base ? (cur.n <= base.n ? 'PASS' : 'FAIL') : 'INFO', cur.src.map(s => s.split(' < ')[0].replace(/^at /, '')).join(' | ').slice(0, 150));
+}
+
+/* 입력 지연 — 입력 이벤트(캡처 단계) 시각 → 기체 좌표가 바뀐 채 drawFrame 이 끝난 시각. 프레임 수 = 그 사이 gameLoop 호출 수 */
+const LAT_PAGE = `(function(){
+  if(window.__LAT) return 1;
+  var L = window.__LAT = { on: null, res: [], loops: 0 };
+  var mark = function(){ if(L.on || !running) return; L.on = { t: performance.now(), x: player.x, y: player.y, loops: L.loops }; };
+  addEventListener('mousemove', mark, true); addEventListener('touchmove', mark, true);
+  var od = window.drawFrame;
+  window.drawFrame = function(now, dt){ var r = od.apply(this, arguments);
+    if(L.on && (Math.abs(player.x - L.on.x) > 0.5 || Math.abs(player.y - L.on.y) > 0.5)){ L.res.push([Math.round((performance.now() - L.on.t) * 10) / 10, L.loops - L.on.loops]); L.on = null; }
+    return r; };
+  var og = window.gameLoop;
+  window.gameLoop = function(t){ L.loops++; return og.apply(this, arguments); };
+  return 1; })()`;
+async function runLatency(base){
+    const out = {};
+    const N = 24;
+    for(const mode of ['mouse', 'touch']){
+        const vp = mode === 'mouse' ? { w: 1280, h: 800, dsf: 1, mobile: false } : { w: 412, h: 915, dsf: 2.625, mobile: true };
+        out[mode] = await withEdge(vp, async (e) => {
+            await e.open(gameUrl(base, 'ko'), 1800);
+            await e.ev(LAT_PAGE);
+            /* 실제 시작 경로(startGame) — 플로팅 조작 층은 판 시작(.on) 때 놓인다 */
+            await e.ev('(function(){ window.__inv = setInterval(function(){ invincibleUntil = 1e15; lives = 5; }, 50); startGame(); return 1; })()');
+            await e.ev(`new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(1); setTimeout(w, 50); })(); })`, 30000);
+            await sleep(900);
+            const geo = await e.ev('(function(){ var r = document.getElementById("dodge-canvas").getBoundingClientRect(); var cx = r.left + r.width * 0.5, cy = r.top + r.height * 0.55; var el = document.elementFromPoint(cx, cy);'
+                + ' return { l: r.left, t: r.top, w: r.width, h: r.height, float: document.body.classList.contains("sz-float"), at: el ? (el.id || el.className || el.tagName) : null }; })()');
+            const cx = geo.l + geo.w * 0.5, cy = geo.t + geo.h * 0.55;
+            if(mode === 'touch') await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: cy, id: 1 }] });
+            for(let i = 0; i < N; i++){
+                const dx = ((i % 2) ? 1 : -1) * (14 + (i % 5) * 3), x = cx + dx, y = cy + ((i % 3) - 1) * 6;
+                await e.ev('(window.__LAT.on = null, 1)');
+                if(mode === 'mouse') await e.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+                else await e.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y, id: 1 }] });
+                await sleep(90 + (i % 4) * 13);   /* 프레임 위상을 고르게 섞는다 */
+            }
+            if(mode === 'touch') await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            const dbg = await e.ev('({ tp: (typeof pendingTp !== "undefined") ? JSON.stringify(pendingTp).slice(0, 160) : null, id: (typeof tpTouchId !== "undefined") ? tpTouchId : null, run: running, px: player.x })');
+            const r = await e.ev('(function(){ clearInterval(window.__inv); running = false; return window.__LAT.res; })()');
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            collectErrs('latency ' + mode, e, pe);
+            const ms = r.map(x => x[0]).sort((a, b) => a - b), fr = r.map(x => x[1]).sort((a, b) => a - b);
+            return { n: r.length, sent: N, float: geo.float, at: geo.at, dbg: r.length ? undefined : dbg, p50: q(ms, 0.5), p90: q(ms, 0.9), max: ms[ms.length - 1], fr50: q(fr, 0.5), frMax: fr[fr.length - 1] };
+        });
+        say('latency ' + mode + ': ' + JSON.stringify(out[mode]));
+    }
+    return out;
+}
+function judgeLatency(cur, base){
+    const G = 'G17 latency';
+    for(const [m, c] of Object.entries(cur)){
+        const b = base && base[m];
+        row(G, m + ' 측정 수', c.n + '/' + c.sent + (m === 'touch' ? (c.float ? ' (플로팅)' : ' (클래식)') : ''), null, '≥ 절반', c.n >= c.sent / 2 ? 'PASS' : 'FAIL');
+        row(G, m + ' 입력→그려짐 프레임 수 중앙/최대', c.fr50 + ' / ' + c.frMax, b ? b.fr50 + ' / ' + b.frMax : null, b ? '중앙값 증가 0프레임' : '기록', b ? (c.fr50 <= b.fr50 ? 'PASS' : 'FAIL') : 'INFO');
+        row(G, m + ' 입력→그려짐 ms p50/p90/최대', c.p50 + ' / ' + c.p90 + ' / ' + c.max, b ? b.p50 + ' / ' + b.p90 : null, '참고 (rAF 위상 포함)', 'INFO');
+    }
+}
+
+/* 첫 로드 — CPU 4x, 캐시 끔. 탐색 시작(timeOrigin) → #ovBtn 이 보이고 startGame 이 정의되고 문서 파싱이 끝난 시각 */
+const BOOT_HOOK = `(function(){ var t = setInterval(function(){ try{ var b = document.getElementById('ovBtn');
+  if(b && typeof startGame === 'function' && document.readyState !== 'loading' && b.getClientRects().length){ window.__BOOT = performance.now(); clearInterval(t); } }catch(e){} }, 4); })();`;
+async function runBoot(base){
+    const N = Math.max(1, +(A['boot-runs'] || 3));
+    const runs = [];
+    for(let i = 0; i < N; i++){
+        runs.push(await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            await e.send('Page.addScriptToEvaluateOnNewDocument', { source: BOOT_HOOK });
+            await e.send('Network.setCacheDisabled', { cacheDisabled: true });
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+            await e.send('Page.navigate', { url: gameUrl(base, 'ko') });
+            let r = null;
+            for(let k = 0; k < 200 && !r; k++){ await sleep(150); try{ r = await e.ev('window.__BOOT ? { boot: Math.round(window.__BOOT), lt: (window.__LT || []).filter(function(x){ return x[0] < window.__BOOT; }), dcl: Math.round(performance.getEntriesByType("navigation")[0].domContentLoadedEventEnd || 0) } : null', 5000); }catch(_){} }
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+            const pe = await e.ev('(window.__E||[]).slice(0,8)').catch(() => []);
+            collectErrs('boot', e, pe);
+            if(!r) return { err: 'timeout' };
+            return { boot: r.boot, dcl: r.dcl, ltSum: r.lt.reduce((s, x) => s + x[1], 0), ltN: r.lt.length, ltMax: r.lt.reduce((m, x) => Math.max(m, x[1]), 0) };
+        }));
+    }
+    const ok = runs.filter(x => !x.err), med = (f) => q(ok.map(x => x[f]).sort((a, b) => a - b), 0.5);
+    return { runs, n: ok.length, boot: med('boot'), dcl: med('dcl'), ltSum: med('ltSum'), ltN: med('ltN'), ltMax: med('ltMax') };
+}
+function judgeBoot(cur, base){
+    const G = 'G18 boot';
+    row(G, '측정', cur.n + '/' + cur.runs.length, null, '전부', cur.n === cur.runs.length ? 'PASS' : 'WARN');
+    const lim = base ? Math.round(base.boot * 1.15 + 150) : null;
+    row(G, '4x 탐색→#ovBtn 탭 가능 (중앙값)', cur.boot + 'ms (DCL ' + cur.dcl + ')', base ? base.boot + 'ms' : null, base ? '≤' + lim + 'ms (기준×1.15+150)' : '기록', base ? (cur.boot <= lim ? 'PASS' : 'WARN') : 'INFO', 'headless 흔들림이 커서 WARN 까지만');
+    row(G, '그 전 롱태스크 합 / 수 / 최대', cur.ltSum + 'ms / ' + cur.ltN + ' / ' + cur.ltMax + 'ms', base ? base.ltSum + 'ms / ' + base.ltN : null, '기록', 'INFO');
+}
+
+/* flags0 — 킬스위치 전부 끈 URL 로 det(구성마다 첫 스텝)·hitpath 가 기준선과 같아야 한다 */
+async function runFlags0(base){
+    const det = await runDet(base, { extra: MP_OFF_Q, firstOnly: true, tag: 'flags0 det' });
+    const hit = await runHitpath(base, MP_OFF_Q, 'flags0 hitpath');
+    let flags = null;
+    try{ flags = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => { await e.open(gameUrl(base, 'ko', MP_OFF_Q), 1200); return e.ev('(function(){ try{ var o = {}; for(var i = 1; i <= 8; i++) o["mp" + i] = window.SZ_FLAGS ? SZ_FLAGS["mp" + i] : null; return o; }catch(e){ return null; } })()'); }); }catch(_){}
+    return { det, hit, flags };
+}
+function judgeFlags0(cur, BASE){
+    const G = 'G19 flags0';
+    const off = cur.flags && Object.values(cur.flags).every(v => v === false);
+    row(G, '?mp1..8=0 → SZ_FLAGS.mpN 전부 false', JSON.stringify(cur.flags), null, '전부 false', off ? 'PASS' : 'FAIL');
+    const bd = BASE && BASE.det && BASE.det.secs === cur.det.secs ? BASE.det : null;
+    for(const [k, m] of Object.entries(cur.det.runs)){
+        const b = bd && bd.runs[k];
+        if(!b){ row(G, 'det ' + k, '기준선 없음', null, '-', 'WARN'); continue; }
+        const parts = DET_CMP.filter(p => m[p] !== b[p]);
+        row(G, 'det ' + k + ' (킬스위치 끔)', parts.length ? '다름: ' + parts.join(',') : '동일', '', '기준선과 완전 일치', parts.length ? 'FAIL' : 'PASS');
+    }
+    const bh = BASE && BASE.hitpath;
+    for(const [k, m] of Object.entries(cur.hit.runs)){
+        const b = bh && bh.runs[k];
+        if(!b){ row(G, 'hitpath ' + k, '기준선 없음', null, '-', 'WARN'); continue; }
+        row(G, 'hitpath ' + k + ' (킬스위치 끔)', '#' + m.h, '#' + b.h, '같음', m.h === b.h ? 'PASS' : 'FAIL');
+    }
+}
+
+/* 시작 화면 — 보통 스크린샷(사람 확인용) + 정지 스크린샷(애니메이션 끔·캔버스 숨김, 해시 비교) + DOM 배치 서명(id 제외) */
+const STARTSHOT_SIZES = [[320, 568, 2], [390, 844, 3]];
+async function runStartshot(base){
+    const jobs = [];
+    for(const L of ['ko', 'en']) for(const s of STARTSHOT_SIZES) jobs.push({ L, w: s[0], h: s[1], dsf: s[2] });
+    const res = await pool(jobs, JOBS, async (j) => withEdge({ w: j.w, h: j.h, dsf: j.dsf, mobile: true }, async (e) => {
+        const key = j.L + '_' + j.w + 'x' + j.h;
+        /* 고정 pid — 첫 방문 pid 생성(Math.random) 위치가 달라도 화면이 같게 */
+        await e.send('Page.addScriptToEvaluateOnNewDocument', { source: 'try{ if(!localStorage.getItem("szx_pid")) localStorage.setItem("szx_pid", "gatepid0001"); }catch(e){}' });
+        await e.open(gameUrl(base, j.L), 2600);
+        await e.shot(path.join(OUT, 'startshot', key + '.png'));
+        /* 애니메이션(조종사 숨쉬기 등)을 멈춘 뒤 잰다 — 움직이는 요소의 좌표가 측정 시각마다 달라지지 않게 */
+        await e.ev(`(function(){ var s = document.createElement('style'); s.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important} #dodge-canvas{visibility:hidden!important}'; document.head.appendChild(s); return 1; })()`);
+        await sleep(400);
+        const sig = await e.ev(`(function(){ var ov = document.getElementById('overlay'); var o = [];
+            ov.querySelectorAll('*').forEach(function(x){ if(!x.getClientRects().length) return; var r = x.getBoundingClientRect(); var c = getComputedStyle(x); if(c.display === 'none' || c.visibility === 'hidden') return;
+                var t = ''; for(var n = x.firstChild; n; n = n.nextSibling) if(n.nodeType === 3) t += n.nodeValue.trim();
+                o.push([x.tagName, String(x.className || ''), t.slice(0, 30), Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)]); });
+            return o; })()`);
+        const r = await e.send('Page.captureScreenshot', { format: 'png' }, 30000);
+        fs.writeFileSync(path.join(OUT, 'startshot', key + '_frozen.png'), Buffer.from(r.data, 'base64'));
+        const pe = await e.ev('(window.__E||[]).slice(0,8)');
+        collectErrs('startshot ' + key, e, pe);
+        return { key, frozen: sha(r.data), dom: sha(sig), nDom: sig.length, sig };
+    }));
+    const out = {};
+    for(const r of res) out[r.key] = r;
+    return out;
+}
+function judgeStartshot(cur, base){
+    const G = 'G20 start';
+    for(const [k, c] of Object.entries(cur)){
+        const b = base && base[k];
+        if(!b){ row(G, k + ' 시작 화면', 'DOM ' + c.nDom + '개 #' + c.dom + ' · 정지샷 #' + c.frozen, null, '기준선 없음', 'INFO'); continue; }
+        let diff = '';
+        if(c.dom !== b.dom && b.sig){ const bs = new Set(b.sig.map(x => JSON.stringify(x))); const cs = new Set(c.sig.map(x => JSON.stringify(x)));
+            diff = '새: ' + c.sig.filter(x => !bs.has(JSON.stringify(x))).slice(0, 2).map(x => x.join(',')).join(' | ') + ' · 빠짐: ' + b.sig.filter(x => !cs.has(JSON.stringify(x))).slice(0, 2).map(x => x.join(',')).join(' | '); }
+        row(G, k + ' DOM 배치 서명(id 제외)', c.dom === b.dom ? '같음 (' + c.nDom + '개)' : '다름', '#' + b.dom, '같음', c.dom === b.dom ? 'PASS' : 'FAIL', diff.slice(0, 160));
+        row(G, k + ' 정지 스크린샷 해시', c.frozen === b.frozen ? '같음' : '다름 #' + c.frozen, '#' + b.frozen, '같음 (다르면 PNG 를 눈으로 비교)', c.frozen === b.frozen ? 'PASS' : 'WARN');
+    }
+}
+
+/* 스텁·API 센티널 (MP0) — 블록마다 IIFE, 끝에서 SZMPn.ok = true. 한 블록이 렉시컬 충돌로 죽으면 그 블록 센티널만 빠진다 */
+const MP0_API = ['SZE', 'SZSTART', 'szRunKind', 'szWarpTo', 'szRAF', 'SZGL', 'szShipSkinHook', 'SZAU', 'szTel', 'szRecOk'];
+const SENTINEL_EXPR = `(function(){ var s = {}; for(var i = 1; i <= 8; i++){ var o = window['SZMP' + i]; s['mp' + i] = !!(o && o.ok === true); }
+    var api = {}; ${JSON.stringify(MP0_API)}.forEach(function(n){ api[n] = typeof window[n]; }); return { s: s, api: api }; })()`;
+function judgeSentinel(x){
+    const miss = Object.entries(x.s).filter(([k, v]) => !v).map(([k]) => k);
+    row('G10 site', '스텁 센티널 SZMP1~8.ok', miss.length ? '없음: ' + miss.join(' ') : '8개 전부', null, '8개', miss.length ? 'FAIL' : 'PASS');
+    const am = Object.entries(x.api).filter(([k, v]) => v === 'undefined').map(([k]) => k);
+    row('G10 site', 'MP0 API (' + MP0_API.length + '개)', am.length ? '없음: ' + am.join(' ') : '전부 있음', null, '전부', am.length ? 'FAIL' : 'PASS');
+}
+
+/* ibot 중앙값 부트스트랩 95% CI (결정적 난수) */
+function bootCI(ts, B = 1000, mean = false){
+    if(!ts.length) return [null, null];
+    let a = 0x9e3779b9; const rnd = () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const n = ts.length, meds = new Float64Array(B), buf = new Float64Array(n);
+    for(let b = 0; b < B; b++){
+        if(mean){ let sum = 0; for(let i = 0; i < n; i++) sum += ts[(rnd() * n) | 0]; meds[b] = sum / n; continue; }
+        for(let i = 0; i < n; i++) buf[i] = ts[(rnd() * n) | 0]; buf.sort(); meds[b] = buf[Math.floor(n * 0.5)];   /* q(ts, 0.5) 와 같은 정의 */
+    }
+    meds.sort();
+    return [r1(meds[Math.floor(B * 0.025)]), r1(meds[Math.floor(B * 0.975)])];
+}
+const ibotN = (base, k) => Math.max(8, r1(2 * ((base && base.runDiff && base.runDiff[k]) || 0)));
 
 /* ================= soak / assets ================= */
 async function runSoak(base){
@@ -1375,13 +1920,26 @@ try{
             const o = html.split('/*<sz:mod:' + f + '>*/').length - 1, c = html.split('/*</sz:mod:' + f + '>*/').length - 1;
             if(o !== 1 || c !== 1 || html.indexOf('/*<sz:mod:' + f + '>*/') > html.indexOf('/*</sz:mod:' + f + '>*/')) miss.push('펜스 ' + f + '(' + o + '/' + c + ')');
         }
+        /* MP0 — 명작화 스텁 펜스: JS 8 + 하위(mp4:song·mp8a·mp8b) · CSS 8 · HTML(mp6·mp8) · 게이트 자기 펜스 8 */
+        const once = (src, o, c) => { const a = src.split(o).length - 1, b = src.split(c).length - 1; return a === 1 && b === 1 && src.indexOf(o) < src.indexOf(c); };
+        const mpF = [];
+        for(let n = 1; n <= 8; n++){
+            mpF.push(['/*<sz:mod:mp' + n + '>*/', '/*</sz:mod:mp' + n + '>*/'], ['/*<sz:css:mp' + n + '>*/', '/*</sz:css:mp' + n + '>*/']);
+        }
+        mpF.push(['/*<sz:mod:mp4:song>*/', '/*</sz:mod:mp4:song>*/'], ['/*<sz:mod:mp8a>*/', '/*</sz:mod:mp8a>*/'], ['/*<sz:mod:mp8b>*/', '/*</sz:mod:mp8b>*/'],
+            ['<!--<sz:html:mp6>-->', '<!--</sz:html:mp6>-->'], ['<!--<sz:html:mp8>-->', '<!--</sz:html:mp8>-->']);
+        for(const [o, c] of mpF) if(!once(html, o, c)) miss.push('펜스 ' + o.replace(/[/*<>!-]/g, ''));
+        const gsrc = fs.readFileSync(new URL(import.meta.url), 'utf8');
+        for(let n = 1; n <= 8; n++){ const o = '/*<gate:mp' + n + '>*/', c = '/*</gate:mp' + n + '>*/'; if(!once(gsrc, o, c)) miss.push('게이트 펜스 gate:mp' + n); }
+        if(!fs.existsSync(path.join(ROOT, 'public', 'games', 'dodge', 'flags.json'))) miss.push('flags.json');
         const bad = ['G-W91WWVNLD6', 'notmeplz', '말머리 성운까지'].filter(s => html.includes(s));
         CUR.invariants = { missing: miss, forbidden: bad };
         row('G10 site', '불변 키·RPC·DOM id·펜스', miss.length ? '없음: ' + miss.join(' ') : '전부 있음', null, '전부 있음', miss.length ? 'FAIL' : 'PASS');
         row('G10 site', '금지 문자열', bad.length ? bad.join(' ') : 0, null, '0', bad.length ? (bad.every(s => s === '말머리 성운까지') ? 'WARN' : 'FAIL') : 'PASS', bad.includes('말머리 성운까지') ? '말머리 문구는 P3 과제' : '');
     }
 
-    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain'].includes(c));
+    const needServer = CMDS.some(c => ['det', 'perf', 'sweep', 'layout', 'tm', 'i18n', 'fx0', 'bot', 'ibot', 'soak', 'assets', 'beamdrain',
+        'hitpath', 'noshake', 'restart', 'audioctx', 'latency', 'boot', 'flags0', 'startshot', 'gl0'].includes(c) || (EXT_CMDS[c] && EXT_CMDS[c].server !== false));
     if(needServer){
         const base = await startServer();
         say('서버 ' + base + ' (cwd ' + ROOT + ')');
@@ -1408,7 +1966,19 @@ try{
             const f = CUR.fx0.fx0;
             row('G8 fx0', '?fx=0 31존 순회 에러', f.errs, null, '0', f.errs ? 'FAIL' : 'PASS', f.sample.join(' | ').slice(0, 120));
             row('G8 fx0', 'SZ_FLAGS (fx0 / 기본)', JSON.stringify(f.flags) + ' / ' + JSON.stringify(CUR.fx0.fx1.flags), null, 'fx:false / fx:true', (f.flags && f.flags.fx === false && CUR.fx0.fx1.flags && CUR.fx0.fx1.flags.fx === true) ? 'PASS' : 'FAIL');
+            if(CUR.fx0.fx1.sentinel) judgeSentinel(CUR.fx0.fx1.sentinel);
         }
+        /* ── MP0 명령 ── */
+        if(CMDS.includes('hitpath')){ CUR.hitpath = await runHitpath(base); judgeHitpath(CUR.hitpath, BASE && BASE.hitpath); }
+        if(CMDS.includes('noshake')){ CUR.noshake = await runNoshake(base); judgeNoshake(CUR.noshake, BASE && BASE.noshake); }
+        if(CMDS.includes('restart')){ CUR.restart = await runRestart(base); judgeRestart(CUR.restart, BASE && BASE.restart); }
+        if(CMDS.includes('audioctx')){ CUR.audioctx = await runAudioCtx(base); judgeAudioCtx(CUR.audioctx, BASE && BASE.audioctx); }
+        if(CMDS.includes('latency')){ CUR.latency = await runLatency(base); judgeLatency(CUR.latency, BASE && BASE.latency); }
+        if(CMDS.includes('boot')){ CUR.boot = await runBoot(base); judgeBoot(CUR.boot, BASE && BASE.boot); }
+        if(CMDS.includes('flags0')){ CUR.flags0 = await runFlags0(base); judgeFlags0(CUR.flags0, BASE); }
+        if(CMDS.includes('startshot')){ CUR.startshot = await runStartshot(base); judgeStartshot(CUR.startshot, BASE && BASE.startshot); }
+        if(CMDS.includes('gl0')) row('G21 gl0', 'GL 끔 순회 (자리)', 'MP8b 가 채운다', null, '-', 'INFO');
+        for(const c of CMDS) if(EXT_CMDS[c]){ CUR[c] = await EXT_CMDS[c].run(base); if(EXT_CMDS[c].judge) EXT_CMDS[c].judge(CUR[c], BASE && BASE[c]); }
         if(CMDS.includes('beamdrain')){ CUR.beamdrain = await runBeamDrain(base); judgeBeamDrain(CUR.beamdrain); }
         if(CMDS.includes('bot')){ CUR.bot = await runBot(base); judgeBot(CUR.bot, BASE && BASE.bot); }
         if(CMDS.includes('ibot')){ CUR.ibot = await runIBot(base); judgeIBot(CUR.ibot, BASE && BASE.ibot); }
@@ -1461,6 +2031,8 @@ if(A.json){ try{ fs.writeFileSync(path.resolve(A.json), JSON.stringify(CUR, null
 if(A['write-baseline']){
     let B = {}; try{ B = JSON.parse(fs.readFileSync(BASE_FILE, 'utf8')); }catch(_){}
     const keep = { ...CUR }; delete keep.rows;
+    /* MP0 — ibot 실행 간 차이(runDiff·N)는 --ibot-sets 2 로 잰 값을 다음 기록에도 넘긴다 */
+    if(keep.ibot && !keep.ibot.runDiff && B.ibot && B.ibot.runDiff){ keep.ibot.runDiff = B.ibot.runDiff; keep.ibot.N = B.ibot.N; keep.ibot.sets = B.ibot.sets; keep.ibot.runDiffMean = B.ibot.runDiffMean; }
     for(const k of Object.keys(keep)) if(k !== 'meta') B[k] = keep[k];
     B.meta = { ...(B.meta || {}), ...CUR.meta, updated: new Date().toISOString(), sections: [...new Set([...(B.meta && B.meta.sections || []), ...Object.keys(keep).filter(k => k !== 'meta')])] };
     fs.writeFileSync(BASE_FILE, JSON.stringify(B, null, 1));
