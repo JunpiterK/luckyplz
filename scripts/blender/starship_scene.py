@@ -17,6 +17,8 @@
   Blender : C:/tools/blender-4.2.5-windows-x64/blender.exe -b -P scripts/blender/starship_scene.py -- ship stack
   굽기    : python scripts/blender/starship_scene.py post     → public/assets/spacez/ship_steel.webp · launch_stack.webp
   금 도장 : python scripts/blender/starship_scene.py gold     → public/assets/spacez/ship_gold.webp (2인 모드 참가자 기체)
+  MP6 도색: python scripts/blender/starship_scene.py livery   → public/assets/spacez/ship_livery.webp (4줄×5뱅크, 외형 해금)
+            (Blender 만: -- shiplivery / 굽기만: post livery). SS_THREADS=n 으로 CPU 스레드 제한
             (Blender 만: -- shipgold / 굽기만: post gold). 같은 모델·카메라·5 뱅크, 스틸 재질만 광택 금으로 바꾼다.
             검은 내열타일·엔진은 그대로. 은색 = 방장, 금색 = 참가자(2026-09-29 운영자 결정).
 중간 PNG: scripts/og-assets/spacez_ship/ (git 미추적)
@@ -179,7 +181,14 @@ LIVERY = {
     # 광택 금 — 금 F0(1.0, 0.77, 0.34). 거칠기는 스틸과 같은 급(넓은 하이라이트 = 같은 밝기),
     # 위에 얇은 클리어코트를 올려 흰 스페큘러 줄이 또렷하다(광택). 푸른 월드를 반사해 올리브로 죽는 건 굽기에서 살짝 올린다
     'gold': dict(base=(1.0, 0.77, 0.34), rr=(0.19, 0.29), coat=0.55),
+    # MP6 (2026-10-09) 외형 해금 도색 4종 — 엽서 8·16·24·31장. 형상·타일·엔진은 공통, 판재 금속색만(능력치 변화 0).
+    # 금(멀티 참가자 보상)·위험물 빨강(#FF3B5C)과 헷갈리지 않는 색만 쓴다. 클리어코트로 은색과 같은 급의 흰 스페큘러 줄
+    'ember': dict(base=(0.93, 0.50, 0.30), rr=(0.19, 0.29), coat=0.5),    # 노을 — 구리빛 주황(레서판다 털색)
+    'aurora': dict(base=(0.30, 0.80, 0.74), rr=(0.19, 0.29), coat=0.5),   # 오로라 — 청록 양극산화
+    'cobalt': dict(base=(0.40, 0.54, 0.98), rr=(0.19, 0.29), coat=0.5),   # 코발트 — 푸른 양극산화 티타늄
+    'violet': dict(base=(0.70, 0.46, 0.96), rr=(0.19, 0.29), coat=0.5),   # 성운 — 보라 양극산화
 }
+LIVERY_MP6 = ['ember', 'aurora', 'cobalt', 'violet']   # 아틀라스 줄 순서 = 게임 SZMP6 LIV 표 순서
 
 
 def materials(livery='steel'):
@@ -493,6 +502,11 @@ def main_blender(args):
     if 'shipgold' in args:
         do_ship(livery='gold')
         return
+    if 'shiplivery' in args:
+        for lv in LIVERY_MP6:
+            if lv in args or not any(x in args for x in LIVERY_MP6):
+                do_ship(livery=lv)
+        return
     if not args or 'ship' in args:
         do_ship()
     elif 'ship0' in args:
@@ -548,6 +562,25 @@ def post_gold():
     print(dict(ship_gold=dict(w=A.shape[1], h=A.shape[0], q=q, kb=round(sz / 1024, 1))))
 
 
+def post_livery():
+    """MP6 도색 아틀라스 — 줄 = LIVERY_MP6 순서, 칸 = 뱅크 5 (은색 ship_steel 과 같은 칸 크기·앵커). → ship_livery.webp"""
+    import numpy as np
+    sp = _sp()
+    fw, fh = FR_PX[0] // 4, FR_PX[1] // 4
+    rows = []
+    for lv in LIVERY_MP6:
+        cells = []
+        for bi in BANKS:
+            a = sp.load_rgba(os.path.join(REN, "ship_%s_b%+d.png" % (lv, bi)))
+            x0, y0, x1, y1 = bbox(a)
+            assert x0 > 2 and y0 > 2 and x1 < a.shape[1] - 3 and y1 < a.shape[0] - 3, ("잘림", lv, bi, (x0, y0, x1, y1))
+            cells.append(sharpen(sp.resize_premul(a, fw, fh), 0.35))
+        rows.append(np.concatenate(cells, axis=1))
+    A = sp.clean_alpha(np.concatenate(rows, axis=0))
+    q, sz = sp.save_webp(A, os.path.join(PUB, "ship_livery.webp"), 60, q0=86, qmin=55, qmax=95, aq=90)
+    print(dict(ship_livery=dict(w=A.shape[1], h=A.shape[0], rows=LIVERY_MP6, q=q, kb=round(sz / 1024, 1))))
+
+
 def post():
     import numpy as np
     sp = _sp()
@@ -589,6 +622,17 @@ if IN_BLENDER:
 elif __name__ == "__main__":
     if sys.argv[1:3] == ["post", "gold"]:
         post_gold()
+    elif sys.argv[1:3] == ["post", "livery"]:
+        post_livery()
+    elif sys.argv[1:2] == ["livery"]:
+        # MP6 도색 4종 — Blender 만: -- shiplivery [ember ...] / 굽기만: post livery
+        import subprocess
+        os.makedirs(REN, exist_ok=True)
+        if not os.path.exists(os.path.join(REN, "hex_tiles.png")):
+            hex_texture(os.path.join(REN, "hex_tiles.png"))
+        exe = "C:/tools/blender-4.2.5-windows-x64/blender.exe"
+        subprocess.check_call([exe, "-b", "-t", os.environ.get("SS_THREADS", "0"), "-P", os.path.abspath(__file__), "--", "shiplivery"] + sys.argv[2:])
+        post_livery()
     elif sys.argv[1:2] == ["post"]:
         post()
     elif sys.argv[1:2] == ["gold"]:

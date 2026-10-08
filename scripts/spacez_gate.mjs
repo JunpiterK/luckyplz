@@ -44,6 +44,7 @@
      mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
      mp5 · mp5shots  (MP5) 별빛 편대 계획 결정성·발동률·rand 무소비·?mp5=0·완벽 비행 PERFECT·비용 4x / 장면(ko·en×390·320)·색각 시트  (ibot 옵션 --mp5-p <p>)
      mp4b       MP4b 작곡 — 곡 데이터 ≤12KB·막 5곡 조성/템포·반복 0·보스 lead 5종·보스 곡 교대(실시간)·청취 녹음 m4a 11개 (--rec-audio <dir>, --mp4b-norec)
+     mp6 · mp6ibot · mp6shots  (MP6) v1 기록 손실 0·코드 왕복·워프 첫 1초 스폰·첫 3초 프레임·금테·대사·해금·HUD·연습 흐름 / ibot --start-act 3·5 / 장면 (ibot 옵션 --start-act N)
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -1555,6 +1556,481 @@ EXT_CMDS.mp5shots = { run: runMp5Shots, all: false, judge: (cur) => {
 } };
 /*</gate:mp5>*/
 /*<gate:mp6>*/
+/* MP6 (2026-10-09) — 통신망 진행선·HUD 위계·연습 비행·메타.
+   ibot 옵션 --start-act N (2~5): 판마다 연습 비행(SZRUN.want='practice' + szWarpTo(막 첫 존))으로 시작. 첫 1초 스폰 수·2~11초 평균을 uses 에 싣는다.
+   명령: mp6 — ① v1 szx_log 샘플 3종 로드·판 끝 저장·기록 코드 왕복(손실 0) ② 워프 2~5막: 첫 1초 스폰 ≤ 정상 1초 ×1.2 (같은 존을 정상 비행으로 지난 판과 비교),
+           첫 3초 프레임 최대 ≤25ms (그리기 켬·CPU 4x) ③ 금테·관제 대사·해금·도색·상대 도색 값 ④ HUD(진행선·BEST 숨김·콤보 5↑·LV 숨김·?mp6=0) ⑤ 실제 화면 연습 흐름
+         mp6ibot — ibot --start-act 3·5 (오류 0·첫 1초 스폰 ≤ 같은 판 2~11초 평균 ×1.2+1). --bot-runs 로 판 수
+         mp6shots — 장면 ko·en × 320x568·390x844 (존 1·9·19 평시·진행선·연료·도색·상대 도색·시작 연습 칩·결과 칩·도감 금테·설정·기록 코드) → OUT/mp6 */
+const MP6_ACT = [0, 9, 15, 20, 26];
+IBOT_HOOKS.push((P) => { if(A['start-act'] != null){ P.ext = P.ext || {}; P.ext.startAct = +A['start-act']; } return P; });
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const ACTZ = [0, 9, 15, 20, 26];
+    const pre0 = G.ibotPre, post0 = G.ibotPost;
+    /* 스폰 세기 — 운석(spawnBullet) + 위험물 스케줄러 발사(_szHzFire). 감싼 함수는 판정·수열 무변경 */
+    G.mp6spy = function(){
+        if(G._m6spy) return G._m6spy;
+        const S = G._m6spy = { n: 0 };
+        const oB = window.spawnBullet, oH = window._szHzFire;
+        window.spawnBullet = function(){ S.n++; return oB.apply(this, arguments); };
+        window._szHzFire = function(){ S.n++; return oH.apply(this, arguments); };
+        return S;
+    };
+    G.ibotPre = function(P, bi){
+        if(pre0) try{ pre0(P, bi); }catch(_){}
+        const X = P.ext || {};
+        G._m6 = null;
+        if(!(X.startAct >= 2) || !window.SZMP6) return;
+        const z = ACTZ[X.startAct - 1];
+        /* 판 길이(--ibot-secs)는 논리 시각 기준이라 5막(920s)은 그대로면 한 프레임도 안 난다 → 워프 뒤 min(secs, 180)초를 날게 늘린다 */
+        if(P._s0 == null) P._s0 = P.secs;
+        P.secs = ZONES[z].s + Math.min(P._s0, 180);
+        SZRUN.kind = null; SZRUN.want = 'practice'; szRunBegin();
+        const S = G.mp6spy();
+        szWarpTo(z, G.VT);
+        S.n = 0;
+        const t0 = elapsedMs, per = [];
+        G._m6 = { z, per, ok: currentZoneIdx === z, kind: szRunKind(), lives, shield: false };
+        if(!G._m6gl){
+            const gl = window.gameLoop; G._m6gl = gl;
+            window.gameLoop = function(now){
+                const r = gl.apply(this, arguments);
+                const m = G._m6;
+                if(m && running){
+                    const s = Math.floor((elapsedMs - m.t0) / 1000);
+                    if(s >= 0 && s < 12){ while(m.per.length <= s) m.per.push(0); m.per[s] += S.n; }
+                    S.n = 0;
+                }
+                return r;
+            };
+        }
+        G._m6.t0 = t0;
+    };
+    G.ibotPost = function(P, bi, rec){
+        if(post0) try{ post0(P, bi, rec); }catch(_){}
+        const m = G._m6; if(!m) return;
+        rec.uses = rec.uses || {};
+        const per = m.per; while(per.length < 12) per.push(0);
+        const steady = per.slice(2, 12).reduce((a, b) => a + b, 0) / 10;
+        rec.uses.mp6_s1 = per[0];
+        rec.uses.mp6_steady = Math.round(steady * 100) / 100;
+        rec.uses.mp6_over = per[0] > steady * 1.2 + 1 ? 1 : 0;
+        rec.uses.mp6_warpOk = m.ok && m.kind === 'practice' ? 1 : 0;
+        G._m6 = null;
+        SZRUN.want = null; SZRUN.kind = null;
+    };
+    /* 워프 대 정상 비행 — 같은 존 시작 시점부터 secs 초. 정상(warp:false)은 그리기 끄고 그 존까지 날아간다 */
+    G.mp6warp = function(P){
+        const out = { errs: [] };
+        const z = ACTZ[P.act - 1];
+        const oDraw = window.drawFrame;
+        const S = G.mp6spy();
+        G.synth(); G.begin(P.seed || 424242, false); window.__szFuelInf = 1;
+        const fix = () => { invincibleUntil = 1e15; lives = 5; player.x = 180; player.y = 430; };
+        try{
+            SZRUN.kind = null; SZRUN.want = P.warp ? 'practice' : null; szRunBegin();
+            if(P.warp){ szWarpTo(z, G.VT); }
+            else {
+                /* 그리기는 존 진입 1초 전부터(진입 프레임의 굽기 비용을 워프와 같은 조건으로 잰다) */
+                window.drawFrame = function(){};
+                while(running && elapsedMs < ZONES[z].s * 1000 - 1000){ G.VT += 16.667; fix(); gameLoop(G.VT); }
+                if(P.draw) window.drawFrame = oDraw;
+                while(running && elapsedMs < ZONES[z].s * 1000 - 17){ G.VT += 16.667; fix(); gameLoop(G.VT); }
+                window.drawFrame = oDraw;
+            }
+            out.kind = szRunKind(); out.zone0 = currentZoneIdx; out.t0 = Math.round(elapsedMs);
+            /* --prof: drawFrame·gameLoop 안에서 부르는 전역 함수를 감싸 가장 느린 프레임의 함수별 시간(포함 시간)을 잰다 */
+            let PF = null, unwrap = [];
+            if(P.prof){
+                PF = { cur: {}, worst: null, worstMs: 0 };
+                const names = new Set();
+                for(const f of [window.drawFrame === oDraw ? oDraw : window.drawFrame, window.gameLoop]) String(f).replace(/([A-Za-z_$][\w$]*)\s*\(/g, (m, n) => { names.add(n); return m; });
+                for(const n of names){
+                    const fn = window[n];
+                    if(typeof fn !== 'function' || /^(gameLoop|drawFrame|szRAF|requestAnimationFrame|Math|String|Number|Array|Object|parseInt|isFinite|szDomQueue)$/.test(n) || fn.__m6w) continue;
+                    const w = function(){ const a = G.realPN(); try{ return fn.apply(this, arguments); } finally { PF.cur[n] = (PF.cur[n] || 0) + G.realPN() - a; } };
+                    w.__m6w = 1; window[n] = w; unwrap.push([n, fn]);
+                }
+            }
+            out.inv = inventory.slice(); out.lives = lives;
+            const t0 = elapsedMs; S.n = 0;
+            const per = []; let fmax = 0, fsum = 0, fn = 0, bul1 = null;
+            if(!P.draw) window.drawFrame = function(){};
+            while(running && elapsedMs - t0 < (P.secs || 10) * 1000){
+                G.VT += 16.667; fix();
+                if(PF) PF.cur = {};
+                const a = G.realPN(); gameLoop(G.VT); const d = G.realPN() - a;
+                if(PF && d > PF.worstMs){ PF.worstMs = d; PF.worstAt = Math.round(elapsedMs - t0); PF.worst = Object.entries(PF.cur).sort((x, y) => y[1] - x[1]).slice(0, 12).map(([k, v]) => k + ' ' + (Math.round(v * 10) / 10)); }
+                const s = Math.floor((elapsedMs - t0) / 1000);
+                while(per.length <= s) per.push(0);
+                per[s] += S.n; S.n = 0;
+                if(elapsedMs - t0 <= 3000){ if(d > fmax) fmax = d; fsum += d; fn++; }
+                if(bul1 == null && elapsedMs - t0 >= 1000) bul1 = bullets.length;
+            }
+            for(const [n, fn] of (typeof unwrap !== 'undefined' ? unwrap : [])) window[n] = fn;
+            if(PF) out.prof = { ms: Math.round(PF.worstMs * 10) / 10, at: PF.worstAt, top: PF.worst };
+            out.per = per; out.s1 = per[0] || 0; out.avg = Math.round(100 * per.reduce((a, b) => a + b, 0) / Math.max(1, per.length)) / 100;
+            out.fmax = Math.round(fmax * 10) / 10; out.favg = Math.round(100 * fsum / Math.max(1, fn)) / 100; out.bul1 = bul1; out.zone1 = currentZoneIdx;
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        window.drawFrame = oDraw;
+        running = false; G.unsynth(); window.__szFuelInf = 0; SZRUN.want = null; SZRUN.kind = null;
+        out.E = (window.__E || []).slice(0, 5);
+        return out;
+    };
+    /* v1 szx_log 샘플 3종 — 로드 손실 0 · 판 끝 저장 뒤에도 원래 값 보존 · 기록 코드 왕복 */
+    G.mp6log = function(){
+        const out = { errs: [], samples: [] };
+        const S = [
+            { v: 1, far: 3, seen: 15, sat: 3, ch: 1, runs: 4, end: 0, bestAct: [42000, 0, 0, 0, 0], skin: 0 },
+            { v: 1, far: 12, seen: 8191, sat: 63, ch: 3, runs: 30 },
+            { v: 1, far: 30, seen: 0x7fffffff, sat: 0xfff, ch: 31, runs: 200, end: 1, bestAct: [180000, 170000, 120000, 150000, 90000], skin: 0, extra: 'keep' }
+        ];
+        const keep = localStorage.getItem('szx_log'), keepB = localStorage.getItem('szx_best_ms');
+        const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        try{
+            for(let i = 0; i < S.length; i++){
+                const s = S[i], r = { i, loss: [], saveLoss: [], code: null };
+                localStorage.setItem('szx_log', JSON.stringify(s)); __szMeta.log = null;
+                const L = szLog();
+                for(const k in s) if(!eq(L[k], s[k])) r.loss.push(k + ':' + JSON.stringify(L[k]));
+                /* 판 끝 저장(일반 판, 존 0 · 1초) — 원래 값이 줄면 손실 */
+                SZRUN.kind = 'ranked'; szMetaRunStart(); currentZoneIdx = 0; elapsedMs = 1000;
+                szMetaRunEnd(1000, null);
+                const W = JSON.parse(localStorage.getItem('szx_log'));
+                for(const k in s){
+                    const a = s[k], b = W[k];
+                    if(k === 'runs'){ if(b !== a + 1) r.saveLoss.push('runs'); }
+                    else if(Array.isArray(a)){ if(!Array.isArray(b) || a.some((v, j) => !(b[j] >= v))) r.saveLoss.push(k); }
+                    else if(typeof a === 'number' && ['seen', 'sat', 'ch'].includes(k)){ if(((b >>> 0) & (a >>> 0)) >>> 0 !== (a >>> 0)) r.saveLoss.push(k); }
+                    else if(typeof a === 'number'){ if(!(b >= a)) r.saveLoss.push(k); }
+                    else if(!eq(a, b)) r.saveLoss.push(k);
+                }
+                r.newFields = ['gb', 'lines', 'gz', 'rcs'].every(k => typeof W[k] === 'number');
+                /* 기록 코드 왕복 — 빈 기기에 붙여 넣으면 같은 기록 */
+                const code = SZMP6.exportCode();
+                localStorage.removeItem('szx_log'); __szMeta.log = null; szLog();
+                const ok = SZMP6.importCode(code);
+                const I = JSON.parse(localStorage.getItem('szx_log'));
+                const diff = []; for(const k in W) if(!eq(I[k], W[k])) diff.push(k);
+                r.code = { ok, len: code.length, diff };
+                out.samples.push(r);
+            }
+            /* 합치기 — 서로 다른 두 기록을 합치면 양쪽 비트·최댓값이 다 남는다 */
+            localStorage.setItem('szx_log', JSON.stringify({ v: 1, far: 5, seen: 63, sat: 1, ch: 1, runs: 9, end: 0, bestAct: [10, 0, 0, 0, 0], skin: 0 })); __szMeta.log = null; szLog();
+            const cA = SZMP6.exportCode();
+            localStorage.setItem('szx_log', JSON.stringify({ v: 1, far: 2, seen: 7 << 8, sat: 2, ch: 2, runs: 3, end: 0, bestAct: [5, 20, 0, 0, 0], skin: 0, gb: 2 })); __szMeta.log = null; szLog();
+            const okM = SZMP6.importCode(cA);
+            const M = JSON.parse(localStorage.getItem('szx_log'));
+            out.merge = { ok: okM, far: M.far, seen: M.seen, sat: M.sat, ch: M.ch, runs: M.runs, bestAct: M.bestAct, gb: M.gb,
+                pass: okM && M.far === 5 && M.seen === (63 | (7 << 8)) && M.sat === 3 && M.ch === 3 && M.runs === 9 && M.bestAct[0] === 10 && M.bestAct[1] === 20 && M.gb === 2 };
+            out.bad = [SZMP6.importCode('SZ1.abc.zz'), SZMP6.importCode('hello'), SZMP6.importCode(cA.slice(0, -2) + 'xx')];
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        if(keep == null) localStorage.removeItem('szx_log'); else localStorage.setItem('szx_log', keep);
+        if(keepB == null) localStorage.removeItem('szx_best_ms'); else localStorage.setItem('szx_best_ms', keepB);
+        __szMeta.log = null; SZRUN.kind = null;
+        return out;
+    };
+    /* 금테·관제 대사·해금·도색 값 */
+    G.mp6meta = function(){
+        const out = { errs: [] };
+        const keep = localStorage.getItem('szx_log');
+        try{
+            /* 엽서 7장·누적 스침 995 → 이번 판(존 8 까지 = 9장, 스침 +12) 에 도색 1·불꽃 1 해금 */
+            localStorage.setItem('szx_log', JSON.stringify({ v: 1, far: 6, seen: 127, sat: 0, ch: 1, runs: 5, end: 0, bestAct: [90000, 0, 0, 0, 0], skin: 0, gz: 995 }));
+            __szMeta.log = null;
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1;
+            SZRUN.kind = null; SZRUN.want = null; szRunBegin(); szMetaRunStart();
+            SZE.emit('boss', 'canyon', 'start'); SZE.emit('boss', 'canyon', 'end');                         /* 노히트 → 금테 */
+            SZE.emit('boss', 'shock', 'start'); SZE.emit('hit', 100, 100, 'rock'); SZE.emit('boss', 'shock', 'end');   /* 맞음 → 없음 */
+            for(let i = 0; i < 12; i++) SZE.emit('graze', i + 1);
+            currentZoneIdx = 8; elapsedMs = 150000; running = false;
+            const sum = szMetaRunEnd(150000, null);
+            const L = JSON.parse(localStorage.getItem('szx_log'));
+            const st = SZMP6.st();
+            out.gb = L.gb; out.gz = L.gz; out.unlock = st.RS.unlock; out.gbShow = st.RS.gbShow; out.line = sum && sum.line;
+            /* 관제 대사 — 같은 막 6번: 처음 6번은 모두 ★ 이고 서로 다르다, 7번째는 ★ 없음 */
+            __szMeta.log = null; const L2 = szLog(); L2.lines = 0;
+            const lines = [];
+            for(let i = 0; i < 7; i++){ L2.runs = i; lines.push(SZMP6.ctlLine(L2, 16, false)); }
+            out.lines = lines; out.linesBits = L2.lines >>> 0;
+            out.linesOk = lines.slice(0, 6).every(s => /^★ /.test(s)) && new Set(lines.slice(0, 6)).size === 6 && !/^★ /.test(lines[6]) && L2.lines === (63 << 12);
+            /* 도색 — 해금된 1번(ember) 고르기 → szMyLivery, mp6 끔 → 은색, 해금 안 된 3번 → 은색 */
+            L2.skin = 1; out.myLv1 = szMyLivery();
+            SZ_FLAGS.mp6 = false; out.myLvOff = szMyLivery(); SZ_FLAGS.mp6 = true;
+            L2.skin = 3; out.myLvLocked = szMyLivery(); L2.skin = 0;
+            out.peer = [SZMP6.peerLv('ember'), SZMP6.peerLv('xyz'), SZMP6.peerLv(undefined), SZMP6.peerLv('gold')];
+            /* 금테 도감 — 보스 존 3(협곡) 카드 */
+            out.gbZone3 = SZMP6.gbZone(3, L); out.gbZone9 = SZMP6.gbZone(9, L);
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        running = false; G.unsynth(); window.__szFuelInf = 0; SZRUN.kind = null;
+        if(keep == null) localStorage.removeItem('szx_log'); else localStorage.setItem('szx_log', keep);
+        __szMeta.log = null;
+        return out;
+    };
+    /* HUD — 그리기 켠 합성 판 6초(존 9): 진행선 그림·BEST 숨김·콤보 칸·LV 배지·작은 글자 */
+    G.mp6hud = function(P){
+        const out = { errs: [] };
+        G.hookText(); G.texts.clear();
+        try{
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1;
+            SZRUN.kind = null; SZRUN.want = null; szRunBegin();
+            szWarpTo(9, G.VT);
+            const n0 = SZMP6.st().RS.nLine;
+            for(let i = 0; i < 360 && running; i++){ G.VT += 16.667; invincibleUntil = 1e15; lives = 5; player.x = 180; player.y = 430; comboCount = i < 200 ? 2 : 9; gameLoop(G.VT); szDomFlush(); }
+            out.nLine = SZMP6.st().RS.nLine - n0;
+            out.body = document.body.classList.contains('szm6');
+            const best = document.getElementById('bestScore').closest('.ss');
+            out.bestHidden = getComputedStyle(best).display === 'none';
+            const cc = document.getElementById('comboNow').closest('.ss');
+            out.comboHiddenLo = null;
+            out.comboShownHi = !cc.classList.contains('szm6-lo');
+            out.lv = [...G.texts.keys()].filter(s => /^LV \d/.test(s));
+            out.small = [...G.texts.entries()].filter(([s, px]) => px != null && px < 9).map(([s, px]) => s.slice(0, 20) + '@' + px);
+            /* 진행선 픽셀 — 맨 위 줄 가운데가 배경보다 밝다 */
+            const d = ctx.getImageData(Math.round(canvas.width * 0.5), 1, 1, 1).data;
+            out.px = [d[0], d[1], d[2]];
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        running = false; G.unsynth(); window.__szFuelInf = 0; SZRUN.kind = null;
+        return out;
+    };
+    /* 장면 — 합성 시계로 만들고 멈춘 화면을 찍는다 */
+    G.mp6scene = function(name){
+        const out = { errs: [] };
+        const fix = () => { player.x = 180; player.y = 440; invincibleUntil = 1e15; lives = 4; };
+        const step = (ms, f) => { const t1 = G.VT + ms; while(G.VT < t1 && running){ G.VT += 16.667; fix(); if(f) f(); gameLoop(G.VT); } szDomFlush(); };
+        try{
+            G.synth(); G.begin(424242, false, true); window.__szFuelInf = 1;
+            SZRUN.kind = null; SZRUN.want = null; szRunBegin();
+            const L = szLog(); L.skin = 0; L.rcs = 0;
+            const z = { z1: 1, z9: 9, z19: 19, line: 12, fuel: 5, livery: 5, peer: 6 }[name] || 1;
+            if(name === 'line'){ __szMeta.run.bestMs = 330000; }
+            szWarpTo(z, G.VT);
+            if(name === 'line'){ for(const mz of [0, 1, 2, 4, 5, 11]) __szMeta.run.sat |= szSatBit(mz); }
+            if(name === 'livery'){ L.seen = 0x7fffffff; L.gz = 6000; L.skin = 1; L.rcs = 1; }
+            step(name === 'z1' ? 2600 : 3200, () => {
+                if(name === 'line') comboCount = 14;
+                if(name === 'fuel'){ SZP.ch4 = 0.32; SZP.lox = 0.3; }
+                if(name === 'livery'){ const t = G.VT % 1400; player.x = t < 700 ? 150 : 210; }
+            });
+            if(name === 'livery'){
+                /* 움직임 시작 프레임(RCS 김) 직후를 찍는다 */
+                player.x = 150; for(let i = 0; i < 6; i++){ G.VT += 16.667; invincibleUntil = 1e15; gameLoop(G.VT); }
+                for(let i = 0; i < 3; i++){ G.VT += 16.667; invincibleUntil = 1e15; player.x += 9; gameLoop(G.VT); }
+            }
+            if(name === 'peer'){
+                /* 동시 대결 상대 기체 — 메타 lv: 'ember'(아는 값) · 'xyz'(모르는 값 → 은색) · 참가자 금색 */
+                G.VT += 16.667; gameLoop(G.VT);
+                const st = { bank: 0 };
+                szDrawPeerShip(110, 330, st, (SZMP6.peerLv('ember') || 'steel'), 0.9, G.VT, 'ember', '#DDE6F0', 1);
+                szDrawPeerShip(180, 330, st, (SZMP6.peerLv('xyz') || 'steel'), 0.9, G.VT, 'xyz', '#DDE6F0', 1);
+                szDrawPeerShip(250, 330, st, 'gold', 0.9, G.VT, 'gold', '#FFD166', 1);
+            }
+            out.zone = currentZoneIdx; out.myLv = szMyLivery();
+        }catch(e){ out.errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 240)); }
+        /* 합성 시계를 그대로 둔다(rAF 끊김 → 멈춘 화면). 찍은 뒤 mp6sceneEnd 로 푼다 — 먼저 풀면 대기 화면 루프가 덮어 그린다 */
+        return out;
+    };
+    G.mp6sceneEnd = function(){ running = false; G.unsynth(); window.__szFuelInf = 0; return 1; };
+});
+/* 실제 화면 — 연습 비행 흐름(실제 시간). 막 칩 → 출발 → 존·종류·하트·방어막 → 결과 칩 → 다시하기도 연습 → 칩 끄면 보통 판 */
+const MP6_LOG_FIXTURE = JSON.stringify({ v: 1, far: 16, seen: (1 << 17) - 1, sat: 7, ch: 3, runs: 12, end: 0, bestAct: [180000, 90000, 30000, 0, 0], skin: 0, gz: 0 });
+const mp6WaitRun = `new Promise(function(res){ var t0 = Date.now(); (function w(){ if((running && !_introRunning) || Date.now() - t0 > 15000) return res(running); setTimeout(w, 50); })(); })`;
+async function mp6Flow(base){
+    return withEdge({ w: 390, h: 844, dsf: 3, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        await e.ev(`(localStorage.setItem('szx_log', ${JSON.stringify(MP6_LOG_FIXTURE)}), localStorage.setItem('szx_runs', '9'), localStorage.removeItem('szx_best_ms'), 1)`);
+        await e.open(gameUrl(base, 'ko'), 2000);
+        const out = {};
+        out.chip = await e.ev(`(function(){ var c = document.getElementById('szm6Prac'); if(!c) return null; c.click(); return 1; })()`);
+        await sleep(200);
+        out.acts = await e.ev(`[].map.call(document.querySelectorAll('#szStartExtra [data-szm6=act]'), function(b){ return b.dataset.z + ':' + b.textContent; })`);
+        out.mainBtns = await e.ev(`(function(){ var ov = document.getElementById('overlay'); return [].filter.call(ov.querySelectorAll('button'), function(b){ var r = b.getBoundingClientRect(); return r.width > 1 && !b.closest('#szm1Chips') && !b.closest('#szStartExtra') && getComputedStyle(b).visibility !== 'hidden' && !b.closest('[hidden]'); }).length; })()`);
+        await e.ev(`(window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 40), document.querySelector('#szStartExtra [data-z="15"]').click(), 1)`);
+        await e.ev(mp6WaitRun, 30000);
+        await sleep(1000);
+        out.run1 = await e.ev(`({ kind: szRunKind(), zone: currentZoneIdx, t: Math.round(elapsedMs / 1000), lives: lives, inv: inventory.slice(), bullets: bullets.length, best: localStorage.getItem('szx_best_ms') })`);
+        await e.ev(`(clearInterval(window.__inv), triggerGameOver(), 1)`);
+        await sleep(1800);
+        out.card = await e.ev(`(function(){ var c = document.querySelector('#szGoExtra .szm6-prac'); return { prac: !!c, pressed: c && c.getAttribute('aria-pressed'), best: localStorage.getItem('szx_best_ms') }; })()`);
+        await e.ev(`(window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 40), document.getElementById('ovBtn').click(), 1)`);
+        await e.ev(mp6WaitRun, 30000);
+        await sleep(600);
+        out.run2 = await e.ev(`({ kind: szRunKind(), zone: currentZoneIdx })`);
+        await e.ev(`(clearInterval(window.__inv), triggerGameOver(), 1)`);
+        await sleep(1800);
+        await e.ev(`(document.querySelector('#szGoExtra .szm6-prac').click(), 1)`);
+        await e.ev(`(window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 40), document.getElementById('ovBtn').click(), 1)`);
+        await e.ev(mp6WaitRun, 30000);
+        await sleep(600);
+        out.run3 = await e.ev(`({ kind: szRunKind(), zone: currentZoneIdx, want: SZRUN.want })`);
+        await e.ev(`(clearInterval(window.__inv), running = false, 1)`);
+        collectErrs('mp6 flow', e, await e.ev('(window.__E||[]).slice(0,8)'));
+        return out;
+    });
+}
+async function runMp6(base){
+    const out = {};
+    await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 1500);
+        out.log = await e.ev('__G.mp6log()', 60000);
+        out.meta = await e.ev('__G.mp6meta()', 60000);
+        out.hud = await e.ev('__G.mp6hud()', 120000);
+        out.warp = {};
+        for(const act of [2, 3, 4, 5]){
+            /* 정상 — 같은 존을 정상 비행으로 들어간 판(진입 1초 전부터 그리기·CPU 4x). 새 페이지라 굽기 캐시가 비어 있다 */
+            await e.open(gameUrl(base, 'ko'), 1200);
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+            const nrm = await e.ev('__G.mp6warp(' + JSON.stringify({ act, warp: false, draw: true, secs: 10 }) + ')', 900000);
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+            /* 워프 — 실제 흐름처럼 연습 시작(runStart)이 카운트다운 동안 그 존을 미리 굽는다. 카운트다운 1.2초 흉내 */
+            await e.open(gameUrl(base, 'ko'), 1200);
+            await e.ev('(SZMP6.prewarm(' + MP6_ACT[act - 1] + '), 1)'); await sleep(1200);
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+            const wp = await e.ev('__G.mp6warp(' + JSON.stringify({ act, warp: true, draw: true, secs: 10 }) + ')', 600000);
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+            out.warp[act] = { nrm, wp };
+        }
+        collectErrs('mp6', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    /* ?mp6=0 — 진행선·body 표식·LV 숨김이 없다(MP0 경로) */
+    await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', 'mp6=0'), 1500);
+        out.off = await e.ev('__G.mp6hud()', 120000);
+        collectErrs('mp6 off', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    out.flow = await mp6Flow(base);
+    say('mp6: ' + JSON.stringify({ log: out.log.samples.map(s => [s.loss.length, s.saveLoss.length, s.code && s.code.ok]), merge: out.log.merge && out.log.merge.pass, meta: [out.meta.gb, out.meta.gz, out.meta.linesOk], hud: out.hud, off: out.off, flow: out.flow }).slice(0, 1600));
+    for(const [k, v] of Object.entries(out.warp)) say('mp6 warp act ' + k + ': 정상 ' + JSON.stringify({ s1: v.nrm.s1, avg: v.nrm.avg, per: v.nrm.per }) + ' · 워프 ' + JSON.stringify({ s1: v.wp.s1, avg: v.wp.avg, fmax: v.wp.fmax, favg: v.wp.favg, z: v.wp.zone0, kind: v.wp.kind, inv: v.wp.inv, err: v.wp.errs }));
+    return out;
+}
+function judgeMp6(cur, _b){
+    const G = 'MP6';
+    const L = cur.log || {};
+    (L.samples || []).forEach((s) => {
+        row(G, 'v1 szx_log 샘플 ' + (s.i + 1) + ' — 로드·판 끝 저장·코드 왕복 손실', s.loss.length + '·' + s.saveLoss.length + '·' + (s.code ? s.code.diff.length : '-'), null, '0·0·0 + 새 필드',
+            !s.loss.length && !s.saveLoss.length && s.code && s.code.ok && !s.code.diff.length && s.newFields ? 'PASS' : 'FAIL', (s.loss.concat(s.saveLoss, s.code ? s.code.diff : [])).join(' ').slice(0, 100) + ' · 코드 ' + (s.code && s.code.len) + '자');
+    });
+    row(G, '기록 코드 합치기(비트 OR·최댓값) · 나쁜 코드 거부', (L.merge && L.merge.pass) + ' · ' + JSON.stringify(L.bad), null, 'true · [false,false,false]', L.merge && L.merge.pass && L.bad && L.bad.every(x => x === false) ? 'PASS' : 'FAIL');
+    const M = cur.meta || {};
+    row(G, '보스 노히트 금테(협곡만) · 누적 스침', 'gb ' + M.gb + ' · gz ' + M.gz + ' · 도감 3/9 ' + M.gbZone3 + '/' + M.gbZone9, null, 'gb 1 · gz 1007 · true/false', M.gb === 1 && M.gz === 1007 && M.gbZone3 === true && M.gbZone9 === false ? 'PASS' : 'FAIL');
+    row(G, '해금(엽서 7→9장 · 스침 995→1007)', JSON.stringify(M.unlock), null, '{liv:1, fl:2}', M.unlock && M.unlock.liv === 1 && M.unlock.fl === 2 ? 'PASS' : 'FAIL');
+    row(G, '관제 대사 — 막당 6줄 다 다르고 처음엔 ★', M.linesOk, null, 'true', M.linesOk ? 'PASS' : 'FAIL', (M.lines || []).slice(0, 2).join(' / ').slice(0, 90));
+    row(G, '도색 — 고름/mp6 끔/잠김 · 상대 값', [M.myLv1, M.myLvOff, M.myLvLocked].join('/') + ' · ' + JSON.stringify(M.peer), null, 'ember/steel/steel · ["ember",null,null,null]',
+        M.myLv1 === 'ember' && M.myLvOff === 'steel' && M.myLvLocked === 'steel' && JSON.stringify(M.peer) === '["ember",null,null,null]' ? 'PASS' : 'FAIL');
+    const H = cur.hud || {}, O = cur.off || {};
+    row(G, 'HUD — 진행선 그림·BEST 숨김·콤보 5↑ 보임·LV 배지 0', [H.nLine > 0, H.bestHidden, H.comboShownHi, (H.lv || []).length].join('·'), null, 'true·true·true·0', H.nLine > 0 && H.bestHidden && H.comboShownHi && !(H.lv || []).length && !(H.errs || []).length ? 'PASS' : 'FAIL', 'small ' + JSON.stringify(H.small || []).slice(0, 80));
+    row(G, '?mp6=0 — 진행선 0·body 표식 없음·BEST 보임·LV 배지 있음', [O.nLine, O.body, O.bestHidden, (O.lv || []).length > 0].join('·'), null, '0·false·false·true', O.nLine === 0 && O.body === false && O.bestHidden === false && (O.lv || []).length > 0 ? 'PASS' : 'FAIL');
+    for(const [act, v] of Object.entries(cur.warp || {})){
+        const n = v.nrm, w = v.wp;
+        const lim = Math.max(n.s1, n.avg) * 1.2;
+        row(G, act + '막 워프 — 첫 1초 스폰 (정상 같은 시점 1초·10초 평균)', w.s1, n.s1 + ' · ' + n.avg, '≤ ' + r1(lim), w.s1 <= lim + 0.001 || w.s1 <= n.avg + 1 ? 'PASS' : 'FAIL', '워프 ' + JSON.stringify(w.per) + ' / 정상 ' + JSON.stringify(n.per));
+        /* 25ms 를 넘으면 원인이 워프(스폰 폭주)인지 기존 존 진입 비용인지 가른다 — 기존 perf 4x 존 전환 최대(기준선)보다 크면 FAIL, 그 안이면 WARN(MP8a 존 미리 굽기 몫) */
+        const zmax = BASE && BASE.perf && BASE.perf['4x'] ? BASE.perf['4x'].zoneMax : null;
+        const nz = Math.max(n.fmax || 0, zmax || 0);
+        row(G, act + '막 워프 — 첫 3초 프레임 최대 (CPU 4x·그리기 켬·미리 굽기)', w.fmax + 'ms', '정상 진입 ' + n.fmax + 'ms' + (zmax != null ? ' · perf 존 전환 ' + zmax + 'ms' : ''), '≤ 25ms (넘으면 ≤ 정상 진입)', w.fmax <= 25 ? 'PASS' : (w.fmax <= nz ? 'WARN' : 'FAIL'),
+            '평균 ' + w.favg + 'ms · 존 ' + w.zone0 + '→' + w.zone1 + ' · ' + w.kind + ' · 방어막 ' + (w.inv || []).includes('shield') + (w.prof ? ' · 최악 프레임 @' + w.prof.at + 'ms: ' + (w.prof.top || []).slice(0, 4).join(', ') : ''));
+        row(G, act + '막 워프 — 오류·종류·존', (w.errs.length + n.errs.length) + ' · ' + w.kind + ' · ' + w.zone0, null, '0 · practice · ' + MP6_ACT[act - 1], !w.errs.length && !n.errs.length && w.kind === 'practice' && w.zone0 === MP6_ACT[act - 1] ? 'PASS' : 'FAIL');
+    }
+    const F = cur.flow || {};
+    const r1_ = F.run1 || {}, c_ = F.card || {};
+    row(G, '실제 화면 연습 — 막 칩·출발(3막)', JSON.stringify(F.acts) + ' → ' + r1_.kind + ' 존 ' + r1_.zone + ' 하트 ' + r1_.lives + ' 방어막 ' + (r1_.inv || []).includes('shield'), null, '["9:2막","15:3막"] → practice 존 15 하트 3 방어막',
+        JSON.stringify(F.acts) === '["9:2막","15:3막"]' && r1_.kind === 'practice' && r1_.zone === 15 && r1_.lives === 3 && (r1_.inv || []).includes('shield') ? 'PASS' : 'FAIL', '처음 보이는 버튼 ' + F.mainBtns + ' · 1초 뒤 운석 ' + r1_.bullets);
+    row(G, '실제 화면 연습 — 결과 칩·best 미기록·다시하기도 연습·칩 끄면 보통 판', [c_.prac, c_.best, F.run2 && F.run2.kind + '/' + F.run2.zone, F.run3 && F.run3.kind + '/' + F.run3.zone].join(' · '), null, 'true · null · practice/15 · ranked/0',
+        c_.prac && c_.best == null && F.run2 && F.run2.kind === 'practice' && F.run2.zone === 15 && F.run3 && F.run3.kind === 'ranked' && F.run3.zone === 0 ? 'PASS' : 'FAIL');
+}
+EXT_CMDS.mp6 = { run: runMp6, judge: judgeMp6, all: false };
+/* 워프 첫 프레임 진단 — 4x·그리기 켬, 미리 굽기 없음/있음(카운트다운 1초 흉내) × 3~5막, 가장 느린 프레임의 함수별 시간 */
+EXT_CMDS.mp6prof = { all: false, run: async (base) => {
+    const out = {};
+    await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        for(const act of [3, 4, 5]) for(const pw of [0, 1]){
+            await e.open(gameUrl(base, 'ko'), 1500);
+            if(pw){ await e.ev('(SZMP6.prewarm(' + MP6_ACT[act - 1] + '), 1)'); await sleep(1200); }
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+            out[act + (pw ? 'p' : '')] = await e.ev('__G.mp6warp(' + JSON.stringify({ act, warp: true, draw: true, secs: 3, prof: true }) + ')', 600000);
+            await e.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+        }
+        collectErrs('mp6prof', e, await e.ev('(window.__E||[]).slice(0,8)'));
+    });
+    for(const [k, v] of Object.entries(out)) say('mp6prof ' + k + ': fmax ' + v.fmax + ' favg ' + v.favg + ' ' + JSON.stringify(v.prof) + ' ' + JSON.stringify(v.errs));
+    return out;
+}};
+/* ibot 연습 비행 — 3·5막 시작. 오류 0 · 판마다 첫 1초 스폰 ≤ 같은 판 2~11초 평균 ×1.2 + 1 */
+EXT_CMDS.mp6ibot = {
+    run: async (base) => {
+        const res = {};
+        const a0 = A['start-act'];
+        try{ for(const act of [3, 5]){ A['start-act'] = act; res[act] = await runIBotSet(base, SEED_SET); } } finally { A['start-act'] = a0; }
+        return res;
+    },
+    judge: (cur) => {
+        for(const [act, r] of Object.entries(cur)){
+            for(const k of ['30fps', '60fps']){
+                const c = r[k], u = c.uses || {};
+                row('MP6', 'ibot --start-act ' + act + ' ' + k + ' — 오류·워프·첫 1초 스폰', (c.runs) + '판 · 워프 ' + u.mp6_warpOk + ' · s1 ' + u.mp6_s1 + ' / 정상 ' + u.mp6_steady + ' · 넘침 ' + (u.mp6_over || 0), null, '오류 0 · 워프 1 · 넘침 0',
+                    u.mp6_warpOk === 1 && !(u.mp6_over > 0) && c.runs > 0 ? 'PASS' : 'FAIL', '중앙 ' + c.medianT + 's · 존 사망 ' + JSON.stringify(c.zoneDeaths).slice(0, 80));
+            }
+        }
+    }, all: false
+};
+/* 장면 — 사람 검수용 (ko·en × 320x568·390x844) */
+async function runMp6Shots(base){
+    const dir = path.join(OUT, 'mp6');
+    fs.mkdirSync(dir, { recursive: true });
+    const out = { dir, scenes: {} };
+    for(const L of ['ko', 'en']) for(const [w, h, dsf] of [[320, 568, 2], [390, 844, 3]]){
+        const key = L + '_' + w + 'x' + h;
+        await withEdge({ w, h, dsf, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, L), 1500);
+            await e.ev(`(localStorage.setItem('szx_log', ${JSON.stringify(MP6_LOG_FIXTURE)}), localStorage.setItem('szx_runs', '9'), 1)`);
+            await e.open(gameUrl(base, L), 2000);
+            /* 시작 화면 — 연습 칩 펼침 */
+            await e.ev(`(function(){ var c = document.getElementById('szm6Prac'); if(c) c.click(); return 1; })()`); await sleep(300);
+            await e.shot(path.join(dir, key + '_start_practice.png'));
+            await e.ev(`(function(){ var c = document.getElementById('szm6Prac'); if(c) c.click(); return 1; })()`);
+            await e.ev('(SZMP6.livPreload(), 1)'); await sleep(600);   /* 도색 아틀라스(지연 로드) — 합성 시계 장면은 비동기 로드를 기다리지 못한다 */
+            for(const s of ['z1', 'z9', 'z19', 'line', 'fuel', 'livery', 'peer']){
+                out.scenes[key + '_' + s] = await e.ev('__G.mp6scene(' + JSON.stringify(s) + ')', 120000);
+                await sleep(150);
+                await e.shot(path.join(dir, key + '_' + s + '.png'));
+                await e.ev('__G.mp6sceneEnd()');
+            }
+            /* 결과 카드 — 연습(2막) + 노히트 금테 + 새 도색·불꽃 칩 */
+            await e.ev(`(function(){ var l = JSON.parse(${JSON.stringify(MP6_LOG_FIXTURE)}); l.seen = 127; l.gz = 995; l.gb = 0; localStorage.setItem('szx_log', JSON.stringify(l)); __szMeta.log = null; return 1; })()`);
+            await e.ev(`(window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 40), SZMP6.practice(9), 1)`);
+            await e.ev(mp6WaitRun, 30000);
+            await sleep(400);
+            await e.ev(`(function(){ SZE.emit('boss', 'shock', 'start'); SZE.emit('boss', 'shock', 'end'); for(var i = 0; i < 14; i++) SZE.emit('graze', i); clearInterval(window.__inv); triggerGameOver(); return 1; })()`);
+            await sleep(2400);
+            await e.shot(path.join(dir, key + '_result.png'));
+            out.scenes[key + '_result'] = await e.ev(`[].map.call(document.querySelectorAll('#szGoExtra .szm6-chip'), function(b){ return b.className + '|' + b.textContent; })`);
+            /* 도감 금테 */
+            await e.ev(`(function(){ var l = szLog(); l.gb = 31; l.seen = 0x7fffffff; szOpenPostcards(); return 1; })()`); await sleep(500);
+            await e.shot(path.join(dir, key + '_postcards.png'));
+            await e.ev(`(function(){ var g = document.querySelector('.sz-pc-c.szm6-gb'); if(g) g.scrollIntoView({block: 'center'}); return !!g; })()`); await sleep(300);
+            await e.shot(path.join(dir, key + '_postcards_gold.png'));
+            await e.ev(`(szClosePostcards(), 1)`);
+            /* 설정 시트(도색·불꽃·기록 코드) · 기록 코드 창 — 시작 화면에서 */
+            await e.ev(`(function(){ var l = szLog(); l.gz = 6000; localStorage.setItem('szx_log', JSON.stringify(l)); return 1; })()`);
+            await e.open(gameUrl(base, L), 2000);
+            await e.ev(`(window.SZMP1 && SZMP1.open('set'), 1)`); await sleep(500);
+            await e.ev(`(function(){ var s = document.querySelector('[data-szset=mp6code]'); if(s) s.scrollIntoView({block: 'center'}); return 1; })()`); await sleep(200);
+            await e.shot(path.join(dir, key + '_settings.png'));
+            out.scenes[key + '_settings'] = await e.ev(`[].map.call(document.querySelectorAll('[data-szset^=mp6]'), function(b){ return b.textContent.trim(); })`);
+            await e.ev(`(window.SZMP1 && SZMP1.close(), SZMP6.openCode(), 1)`); await sleep(400);
+            await e.shot(path.join(dir, key + '_code.png'));
+            collectErrs('mp6shots ' + key, e, await e.ev('(window.__E||[]).slice(0,8)'));
+        });
+    }
+    say('mp6shots: ' + dir + ' ' + JSON.stringify(out.scenes).slice(0, 1500));
+    return out;
+}
+EXT_CMDS.mp6shots = { run: runMp6Shots, judge: (cur) => {
+    const bad = Object.entries(cur.scenes).filter(([k, v]) => v && v.errs && v.errs.length).map(([k]) => k);
+    row('MP6', '장면 오류', bad.length, null, '0', bad.length ? 'FAIL' : 'PASS', bad.join(' ').slice(0, 100));
+    row('MP6', '장면 폴더 (사람 검수)', cur.dir, null, '-', 'INFO');
+}, all: false };
 /*</gate:mp6>*/
 /*<gate:mp7>*/
 /*</gate:mp7>*/
