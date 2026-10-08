@@ -8455,6 +8455,17 @@ function flushTpInput(){
    2. 게임 종료/리셋 등 force-close 경로 — e 없이 바로 호출
    1번 경우엔 우리 추적 touch 가 끝났을 때만 처리 (다른 손가락 떼는
    걸로 트랙패드가 같이 종료되면 안 됨). */
+/* 2026-10-08 운영자: '다른 앱·바탕화면에 갔다 돌아오면 조종패드가 전혀 안 된다'.
+   손가락을 댄 채 앱을 벗어나면 touchend/touchcancel 이 오지 않아(특히 안드로이드 홈 제스처·iOS 앱 전환)
+   추적 중인 손가락 번호(tpTouchId·BEAM·SAT)가 그대로 남고, '이미 추적 중' 검사에 막혀 새 터치를 전부 버렸다.
+   ① 숨김·포커스 잃음·pagehide·복귀 때 모든 추적을 푼다(_szTouchResets) ② touchstart 때 추적 중인 번호가
+   e.touches 에 없으면 끊긴 추적으로 보고 풀어 준다(복귀 이벤트를 못 받는 웹뷰 대비) */
+const _szTouchResets = [];
+function _szTouchGone(e, id){
+    if(id === null || id === undefined || !e || !e.touches) return false;
+    for(let i = 0; i < e.touches.length; i++) if(e.touches[i].identifier === id) return false;
+    return true;
+}
 function tpEnd(e){
     if(e && e.changedTouches){
         const ours = _findTouchById(e.changedTouches, tpTouchId);
@@ -8476,6 +8487,7 @@ tpZone.addEventListener('touchstart',(e)=>{
     if(!running||paused) return;
     /* 이미 다른 손가락이 트랙패드 추적 중이면 새 손가락은 무시.
        e.changedTouches[0] = 방금 새로 들어온 손가락. */
+    if(tpTouchId !== null && _szTouchGone(e, tpTouchId)) tpEnd();
     if(tpTouchId !== null) return;
     const t = e.changedTouches[0] || e.touches[0];
     if(!t) return;
@@ -8556,9 +8568,14 @@ function _szReleaseHeldInputs(){
     if(_szSatKeyOn){ _szSatKeyOn = false; satHeld = false; }
     for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D']) keys[k] = false;
     try{ if(gravityFieldActive && !_szBeamLatched) szBeamOff(); }catch(_){}
+    try{ tpEnd(); }catch(_){}
+    for(const f of _szTouchResets){ try{ f(); }catch(_){} }
 }
 window.addEventListener('blur', _szReleaseHeldInputs);
-document.addEventListener('visibilitychange', () => { if(document.hidden) _szReleaseHeldInputs(); });
+window.addEventListener('pagehide', _szReleaseHeldInputs);
+window.addEventListener('pageshow', _szReleaseHeldInputs);
+/* 숨길 때와 돌아올 때 둘 다 — 숨김 이벤트가 손가락 해제보다 먼저 와서 놓치는 기기가 있다 */
+document.addEventListener('visibilitychange', _szReleaseHeldInputs);
 function _szTyping(e){ const t = e && e.target; return !!(t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)); }
 var _szSatKeyOn = false;   /* R 키가 SAT 를 쥐고 있는가 — 손을 뗄 때 터치 쪽 satHeld 를 건드리지 않게 */
 
@@ -8581,7 +8598,8 @@ function _wireItemBar(){
         if(!running || paused) return;
         const touch = !!(e.changedTouches && e.changedTouches.length);
         if(touch){
-            /* 이미 추적 중이면 두 번째 손가락은 무시 */
+            /* 이미 추적 중이면 두 번째 손가락은 무시 — 단, 그 손가락이 화면에 없으면(앱 전환으로 끊김) 풀고 받는다 */
+            if(gravTouchId !== null && _szTouchGone(e, gravTouchId)) gravTouchId = null;
             if(gravTouchId !== null) return;
             gravTouchId = e.changedTouches[0].identifier;
         }
@@ -8609,6 +8627,7 @@ function _wireItemBar(){
     gb.addEventListener('mouseleave', release);
     gb.addEventListener('touchend', release);
     gb.addEventListener('touchcancel', release);
+    _szTouchResets.push(() => { gravTouchId = null; });   /* 앱 전환 등으로 끊긴 추적 풀기 */
     /* contextmenu 방지 (모바일 long-press 시 메뉴 뜨면 hold 끊김) */
     gb.addEventListener('contextmenu', (e) => e.preventDefault());
 }
@@ -13897,6 +13916,7 @@ function _wireSatBtn(){
         if(!running || paused) return;
         if(missionState !== 'active') return;
         if(e.changedTouches && e.changedTouches.length){
+            if(satTouchId !== null && _szTouchGone(e, satTouchId)) satTouchId = null;   /* 끊긴 추적 */
             if(satTouchId !== null) return;
             satTouchId = e.changedTouches[0].identifier;
         }
@@ -13918,6 +13938,7 @@ function _wireSatBtn(){
     sb.addEventListener('mouseleave', release);
     sb.addEventListener('touchend', release);
     sb.addEventListener('touchcancel', release);
+    _szTouchResets.push(() => { if(satTouchId !== null){ satTouchId = null; satHeld = false; sb.classList.remove('firing'); } });
     sb.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 if(document.readyState !== 'loading') _wireSatBtn();
@@ -25354,6 +25375,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         if(e.target.closest && e.target.closest('.szf-tools')) return;
         e.preventDefault();
         if(!running || paused || (typeof szSpectating !== 'undefined' && szSpectating)) return;
+        if(tpTouchId !== null && _szTouchGone(e, tpTouchId)){ tpEnd(); ringOff(); }   /* 앱 전환으로 끊긴 추적 */
         if(tpTouchId !== null) return;
         const t = e.changedTouches[0]; if(!t) return;
         const r = col.getBoundingClientRect(); geo.L = r.left; geo.T = r.top;
