@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
 """Space-Z 발사 사운드 — 카운트다운 음성(관제 무선 톤) + 발사 추진음(점화→최대추력→이탈).
-출력: public/assets/sfx/spacez/*.mp3  (재생성 가능 — 이 스크립트가 원본)"""
-import numpy as np, subprocess, os
+출력: public/assets/sfx/spacez/*.mp3  (재생성 가능 — 이 스크립트가 원본)
+
+MP4a (2026-10-08) — 음성 콜아웃:  python scripts/audio/spacez_launch_audio.py --vo
+  출력 public/assets/spacez/vo/*.m4a (AAC-LC 16kHz 모노 20kbps — 무선 대역 320~3500Hz 라 16kHz 로 충분). 예산: ≤10개·각 ≤15KB·합 ≤150KB.
+  new_zone · warning · boss · fever · link_up · last_heart · new_record · act(“Act two|three|four|five” 를 1.25s 칸에 담은 스프라이트 1개)
+  원본 음성은 SAPI Zira(PowerShell System.Speech)로 임시 폴더에 그때그때 만든다(저장소에 wav 를 늘리지 않는다).
+  --vo 는 카운트다운·추진음(mp3)을 다시 만들지 않는다. 게임 쪽 재생: dodge index.html 의 sz:mod:mp4(SZAU.vo)"""
+import numpy as np, subprocess, os, sys, tempfile
 from scipy.io import wavfile
-from scipy.signal import butter, sosfilt, fftconvolve
+from scipy.signal import butter, sosfilt, fftconvolve, resample_poly
 
 SR = 44100
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spacez_voice')  # SAPI Zira 원본 (PowerShell System.Speech 로 생성)
-OUT = 'C:/code/python/luckyplz/public/assets/sfx/spacez'
-os.makedirs(OUT, exist_ok=True)
+REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+OUT = os.path.join(REPO, 'public', 'assets', 'sfx', 'spacez')   # MP4a — 체크아웃 기준(워크트리에서도 자기 public 에 쓴다)
+FFMPEG = 'C:/ffmpeg/bin/ffmpeg'
 rng = np.random.default_rng(20260924)
 
 def bp(x, lo, hi, order=4):
@@ -56,6 +63,63 @@ def enc(name, y, br='96k'):
                     '-ac', '1', '-ar', '44100', '-b:a', br, os.path.join(OUT, name + '.mp3')], check=True)
     os.remove(tmp)
     print(name, round(len(y) / SR, 2), 's', os.path.getsize(os.path.join(OUT, name + '.mp3')), 'bytes')
+
+# ── MP4a 음성 콜아웃 ──
+VO_LINES = [('new_zone', 'New zone.'), ('warning', 'Warning.'), ('boss', 'Boss incoming.'), ('fever', 'Fever!'),
+            ('link_up', 'Link up.'), ('last_heart', 'Last heart.'), ('new_record', 'New record!')]
+VO_ACTS = ['Act two.', 'Act three.', 'Act four.', 'Act five.']
+VO_SLOT = 1.25
+
+def sapi(text, path, rate=1):
+    ps = ("Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+          "$s.SelectVoice('Microsoft Zira Desktop'); $s.Rate = %d; "
+          "$f = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo(44100, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, [System.Speech.AudioFormat.AudioChannel]::Mono); "
+          "$s.SetOutputToWaveFile('%s', $f); $s.Speak('%s'); $s.Dispose()") % (rate, path.replace("'", "''"), text.replace("'", "''"))
+    subprocess.run(['powershell', '-NoProfile', '-Command', ps], check=True)
+
+def enc_vo(name, y, outdir):
+    y = np.clip(y, -1, 1)
+    y16 = resample_poly(y, 160, 441)          # 44.1k → 16k
+    tmp = os.path.join(tempfile.gettempdir(), 'szvo_' + name + '.wav')
+    wavfile.write(tmp, 16000, (np.clip(y16, -1, 1) * 32767).astype(np.int16))
+    dst = os.path.join(outdir, name + '.m4a')
+    subprocess.run([FFMPEG, '-y', '-loglevel', 'error', '-i', tmp, '-ac', '1', '-ar', '16000', '-c:a', 'aac', '-b:a', '20k',
+                    '-movflags', '+faststart', '-map_metadata', '-1', dst], check=True)
+    os.remove(tmp)
+    sz = os.path.getsize(dst)
+    print('vo', name, round(len(y) / SR, 2), 's', sz, 'bytes')
+    return sz
+
+def make_vo():
+    outdir = os.path.join(REPO, 'public', 'assets', 'spacez', 'vo')
+    os.makedirs(outdir, exist_ok=True)
+    tmpd = tempfile.mkdtemp(prefix='szvo_')
+    def line(text):
+        p = os.path.join(tmpd, 'v.wav'); sapi(text, p)
+        x = load(p); os.remove(p)
+        return radio(x)
+    total = 0
+    for name, text in VO_LINES:
+        y = np.concatenate([quindar(2525, 0.09), np.zeros(int(0.025 * SR)), line(text) * 0.95])
+        total += enc_vo(name, y, outdir)
+    # act 스프라이트 — 칸마다 0.05s 여유를 두고 시작(AAC 프라이밍 지연 흡수), 칸 길이를 넘으면 잘라 짧은 꼬리 페이드
+    n = int(VO_SLOT * SR)
+    spr = np.zeros(n * len(VO_ACTS))
+    for i, text in enumerate(VO_ACTS):
+        y = np.concatenate([quindar(2525, 0.07), np.zeros(int(0.02 * SR)), line(text) * 0.95])
+        y = y[:n - int(0.12 * SR)]
+        f = int(0.02 * SR); y[-f:] *= np.linspace(1, 0, f)
+        a = i * n + int(0.05 * SR)
+        spr[a:a + len(y)] = y
+    total += enc_vo('act', spr, outdir)
+    print('vo total', total, 'bytes')
+    try: os.rmdir(tmpd)
+    except OSError: pass
+
+if '--vo' in sys.argv:
+    make_vo()
+    sys.exit(0)
+os.makedirs(OUT, exist_ok=True)
 
 # ── 음성 ──
 gap = np.zeros(int(0.03 * SR))
