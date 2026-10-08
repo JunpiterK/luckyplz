@@ -259,7 +259,7 @@ async function mp1Stages(base){
         await e.ev(mp1Jump(22.6)); await sleep(700);
         out.s1z1 = await e.ev(MP1_STATE);
         out.win1 = await e.ev('szMissionWin(1)');
-        await e.ev(mp1Jump(26.0)); await sleep(1500);
+        await sleep(6200);   /* 대기 미션 활성 시각은 벽시계 — 논리 시각을 건너뛰지 말고 실제로 기다린다(달 창 27.5초) */
         out.s1c = await e.ev(MP1_STATE);
         await e.ev('triggerGameOver(); 1'); await sleep(1800);
         out.runsAfter1 = await e.ev('SZMP1.runs()');
