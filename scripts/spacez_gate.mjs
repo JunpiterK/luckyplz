@@ -1085,7 +1085,7 @@ EXT_CMDS.mp4 = {
         const G = 'G-mp4';
         const bgm = (p) => (p || []).some(s => /\/assets\/bgm\/dodge\/track\d\.mp3$/.test(s));
         const d = cur.def, o = cur.on, f = cur.fx0;
-        row(G, '기본: SZ_FLAGS.mp4 / 음악', String(d.start.mp4) + ' / ' + (d.start.seq ? '시퀀서' : 'mp3') + (bgm(d.play) ? ' (재생됨)' : ' (재생 안 됨)'), null, 'false / mp3', !d.start.mp4 && !d.start.seq && bgm(d.play) ? 'PASS' : 'FAIL');
+        row(G, '기본: SZ_FLAGS.mp4 / 음악', String(d.start.mp4) + ' / ' + (d.start.seq ? '시퀀서' : 'mp3') + (bgm(d.play) ? ' (재생됨)' : ' (재생 안 됨)'), null, '* / mp3 (2026-10-09 운영자: 기본은 운영자 곡, 반응형 음악은 설정 칩)', !d.start.seq && bgm(d.play) ? 'PASS' : 'FAIL');
         row(G, '기본: 시퀀서 상태', d.end.s ? d.end.s.st + ' run=' + d.end.s.run : 'SZAU 없음', null, 'off', d.end.s && d.end.s.st === 'off' && !d.end.s.run ? 'PASS' : 'FAIL');
         row(G, '기본: AudioContext 수', d.ac.n, null, '≤2', d.ac.n <= 2 ? 'PASS' : 'FAIL', (d.ac.src || []).map(s => s.split(' < ')[0].replace(/^at /, '')).join(' | ').slice(0, 120));
         row(G, '?mp4=1: 센티널·음악', 'SZMP4.ok=' + o.start.ok + ' / ' + (o.start.seq ? '시퀀서' : 'mp3') + ' / mp3 재생 ' + bgm(o.play), null, 'true / 시퀀서 / false', o.start.ok && o.start.seq && !bgm(o.play) ? 'PASS' : 'FAIL');
@@ -3530,7 +3530,7 @@ function sameGeo(R, B){
     return true;
 }
 /* 선체에 칠한 장식 글자 — 읽는 글이 아니라 무늬라 크기 검사에서 뺀다 (기존 'SPACEX' 6px 자리) */
-const DECOR_TEXT = new Set(['LUCKY-1']);
+const DECOR_TEXT = new Set(['LUCKY-1', '★']);   /* ★ = 조종사 창 옆 감정 표시(SZ3.mood) 장식 — 읽는 글자가 아니다 (2026-10-09) */
 let SMALL_BASE = new Set();
 function judgeLayout(cur, base){
     SMALL_BASE = new Set();
