@@ -45,6 +45,7 @@
      mp5 · mp5shots  (MP5) 별빛 편대 계획 결정성·발동률·rand 무소비·?mp5=0·완벽 비행 PERFECT·비용 4x / 장면(ko·en×390·320)·색각 시트  (ibot 옵션 --mp5-p <p>)
      mp4b       MP4b 작곡 — 곡 데이터 ≤12KB·막 5곡 조성/템포·반복 0·보스 lead 5종·보스 곡 교대(실시간)·청취 녹음 m4a 11개 (--rec-audio <dir>, --mp4b-norec)
      mp6 · mp6ibot · mp6shots  (MP6) v1 기록 손실 0·코드 왕복·워프 첫 1초 스폰·첫 3초 프레임·금테·대사·해금·HUD·연습 흐름 / ibot --start-act 3·5 / 장면 (ibot 옵션 --start-act N)
+     mp8a · mp8ab · mp8prof · mp8trace · mp8shots  (MP8a) 수용(?mp8=0·120Hz 솎아내기·tier→maxLayers·다음 존 미리 굽기·미룬 굽기 처리) / A·B 번갈아 perf(점프·자연 전환·미션·p95) / CPU 샘플·트레이스로 긴 프레임 원인
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -2035,6 +2036,309 @@ EXT_CMDS.mp6shots = { run: runMp6Shots, judge: (cur) => {
 /*<gate:mp7>*/
 /*</gate:mp7>*/
 /*<gate:mp8>*/
+/*<gate:mp8a>*/
+/* MP8a (2026-10-09) — 성능: 존 전환·미션 시작 프로파일(mp8prof) · 미리 굽기·tier·120Hz 확인(mp8a)
+   mp8prof: CDP 샘플링 프로파일(100µs)로 존 점프 → 존 전환 → 미션 시작 구간을 잡고, gameLoop 가 든 연속 샘플 = 한 프레임으로 묶어
+            가장 긴 프레임 6개의 함수별 포함 시간을 낸다(근거 수치). 옵션 --zones · --mp8-rate(기본 4) · --mp8-q '<추가 쿼리>' */
+function mp8Frames(prof){
+    const nodes = new Map(); for(const n of prof.nodes) nodes.set(n.id, n);
+    const parent = new Map(); for(const n of prof.nodes) for(const c of (n.children || [])) parent.set(c, n.id);
+    const stackOf = (id) => { const s = []; for(let k = id; k != null; k = parent.get(k)){ const n = nodes.get(k); const cf = n.callFrame; s.push((cf.functionName || '(anon)') + ':' + (cf.lineNumber + 1)); } return s; };
+    const cache = new Map(); const st = (id) => { let s = cache.get(id); if(!s){ s = stackOf(id); cache.set(id, s); } return s; };
+    let t = prof.startTime; const S = [];
+    for(let i = 0; i < prof.samples.length; i++){ t += prof.timeDeltas[i]; S.push([t, prof.samples[i]]); }
+    const inLoop = (id) => st(id).some(f => f.startsWith('gameLoop:'));
+    const glue = (id) => { const f = st(id)[0]; return f.startsWith('(garbage collector)') || f.startsWith('(program)'); };
+    const frames = []; let cur = null, pend = [];
+    for(let i = 0; i < S.length; i++){
+        const [tt, id] = S[i];
+        if(inLoop(id)){ if(!cur) cur = { t0: tt, t1: tt, ids: [] }; for(const p of pend) cur.ids.push(p[1]); pend = []; cur.ids.push(id); cur.t1 = tt; }
+        else if(cur && glue(id) && pend.length < 60){ pend.push(S[i]); }
+        else { if(cur){ frames.push(cur); cur = null; } pend = []; }
+    }
+    if(cur) frames.push(cur);
+    const dtS = prof.samples.length ? (S[S.length - 1][0] - S[0][0]) / prof.samples.length / 1000 : 0.1;
+    return frames.map(f => {
+        const inc = new Map(), self = new Map();
+        for(const id of f.ids){ const s = st(id); self.set(s[0], (self.get(s[0]) || 0) + 1); for(const fn of new Set(s)) inc.set(fn, (inc.get(fn) || 0) + 1); }
+        const top = (m, n) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => [k, r2(v * dtS)]);
+        return { ms: r2((f.t1 - f.t0) / 1000 + dtS), n: f.ids.length, t0: f.t0, inc: top(inc, 28), self: top(self, 14) };
+    });
+}
+async function runMp8Prof(base){
+    const zones = A.zones ? String(A.zones).split(',').map(Number) : [2, 9, 13, 27];
+    const rate = +(A['mp8-rate'] || 4), extra = A['mp8-q'] ? String(A['mp8-q']) : '';
+    const out = {};
+    for(const z of zones){
+        out[z] = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko', extra), 2200);
+            await e.send('Emulation.setCPUThrottlingRate', { rate });
+            await e.ev('__G.perfStart({seed:424242, tier:0})');
+            await sleep(600);
+            /* --mp8-skipjump: 점프 프레임(0→z-1, 하네스 인공 전환)을 빼고 자연 전환(z-1→z)·미션 시작만 잡는다 */
+            const skipJ = !!A['mp8-skipjump'];
+            if(skipJ){ await e.ev('__G.perfJump(' + z + ')'); await sleep(350); }
+            await e.send('Profiler.enable'); await e.send('Profiler.setSamplingInterval', { interval: +(A['mp8-iv'] || 100) }); await e.send('Profiler.start');
+            if(!skipJ) await e.ev('__G.perfJump(' + z + ')');
+            await sleep(skipJ ? 1950 : 2300);
+            await e.ev('__G.forceMission()');
+            await sleep(1500);
+            const { profile } = await e.send('Profiler.stop', {}, 120000);
+            const c = await e.ev('__G.perfCollect()');
+            collectErrs('mp8prof z' + z, e, c.E);
+            const fr = mp8Frames(profile).sort((a, b) => b.ms - a.ms);
+            const all = fr.map(f => f.ms).sort((a, b) => a - b);
+            return { zoneJs: c.zoneJs.map(r1), actJs: c.actJs.map(r1), frames: fr.length, p50: r2(q(all, 0.5)), p95: r2(q(all, 0.95)), top: fr.slice(0, 6) };
+        });
+        say('mp8prof z' + z + ' zoneJs ' + out[z].zoneJs + ' actJs ' + out[z].actJs + ' 프레임 ' + out[z].frames + ' p50 ' + out[z].p50 + ' p95 ' + out[z].p95);
+        for(const f of out[z].top.slice(0, 4)){
+            say('  ' + f.ms + 'ms  inc: ' + f.inc.slice(0, 22).map(x => x[0] + '=' + x[1]).join(' '));
+            say('       self: ' + f.self.slice(0, 10).map(x => x[0] + '=' + x[1]).join(' '));
+        }
+    }
+    return out;
+}
+EXT_CMDS.mp8prof = { all: false, server: true, run: runMp8Prof, judge: () => {} };
+/* mp8trace: CDP Tracing(devtools.timeline·v8·gc·blink) — gameLoop 가 든 rAF(FireAnimationFrame) 중 긴 것 6개의 이벤트별 자기 시간.
+   (program) 로 뭉뚱그려지는 컴파일·GC·디코드·캔버스 래스터를 이름으로 가른다 */
+async function mp8Trace(e, fn){
+    const evs = [];
+    const onm = e.ws.onmessage;
+    e.ws.onmessage = (m) => { const d = JSON.parse(m.data); if(d.method === 'Tracing.dataCollected'){ for(const x of d.params.value) evs.push(x); return; } onm(m); };
+    let done; const fin = new Promise(r => { done = r; });
+    const onm2 = e.ws.onmessage;
+    e.ws.onmessage = (m) => { const d = JSON.parse(m.data); if(d.method === 'Tracing.tracingComplete'){ done(); return; } onm2(m); };
+    await e.send('Tracing.start', { categories: 'devtools.timeline,disabled-by-default-devtools.timeline,v8,disabled-by-default-v8.compile,disabled-by-default-v8.gc,blink,blink.canvas,cc,gpu,skia,toplevel', transferMode: 'ReportEvents' });
+    await fn();
+    await e.send('Tracing.end');
+    await Promise.race([fin, sleep(30000)]);
+    e.ws.onmessage = onm;
+    return evs;
+}
+function mp8TraceFrames(evs){
+    const tn = new Map(); for(const x of evs) if(x.ph === 'M' && x.name === 'thread_name') tn.set(x.pid + ':' + x.tid, x.args.name);
+    let main = null; for(const [k, v] of tn) if(v === 'CrRendererMain'){ const n = evs.filter(x => (x.pid + ':' + x.tid) === k).length; if(!main || n > main[1]) main = [k, n]; }
+    if(!main) return [];
+    const M = evs.filter(x => (x.pid + ':' + x.tid) === main[0] && (x.ph === 'X' || x.ph === 'B' || x.ph === 'E')).sort((a, b) => a.ts - b.ts || (b.dur || 0) - (a.dur || 0));
+    /* B/E → X */
+    const X = []; const st = [];
+    for(const x of M){ if(x.ph === 'X') X.push(x); else if(x.ph === 'B') st.push(x); else if(x.ph === 'E'){ const b = st.pop(); if(b) X.push({ name: b.name, ts: b.ts, dur: x.ts - b.ts, args: b.args, ph: 'X' }); } }
+    X.sort((a, b) => a.ts - b.ts || (b.dur || 0) - (a.dur || 0));
+    const raf = X.filter(x => x.name === 'FireAnimationFrame').sort((a, b) => b.dur - a.dur);
+    return raf.slice(0, 6).map(f => {
+        const inn = X.filter(x => x !== f && x.ts >= f.ts && x.ts + (x.dur || 0) <= f.ts + f.dur + 1);
+        /* 자기 시간 = dur − 직계 자식 합 */
+        const self = new Map(); const stack = [];
+        const all = [f].concat(inn);
+        const selfOf = new Map(all.map(x => [x, x.dur || 0]));
+        for(const x of all){
+            while(stack.length && stack[stack.length - 1].ts + (stack[stack.length - 1].dur || 0) < x.ts + (x.dur || 0) - 0.5) stack.pop();
+            if(stack.length){ const p = stack[stack.length - 1]; selfOf.set(p, selfOf.get(p) - (x.dur || 0)); }
+            stack.push(x);
+        }
+        for(const [x, v] of selfOf){ const nm = x.name + (x.name === 'FunctionCall' && x.args && x.args.data ? '(' + (x.args.data.functionName || '') + ')' : ''); self.set(nm, (self.get(nm) || 0) + v); }
+        return { ms: r2(f.dur / 1000), self: [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => [k, r2(v / 1000)]) };
+    });
+}
+async function runMp8Trace(base){
+    const zones = A.zones ? String(A.zones).split(',').map(Number) : [2, 9, 13, 27];
+    const rate = +(A['mp8-rate'] || 4), extra = A['mp8-q'] ? String(A['mp8-q']) : '';
+    const out = {};
+    for(const z of zones){
+        out[z] = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko', extra), 2200);
+            await e.send('Emulation.setCPUThrottlingRate', { rate });
+            await e.ev('__G.perfStart({seed:424242, tier:0})');
+            await sleep(600);
+            const skipJ = !!A['mp8-skipjump'];
+            if(skipJ){ await e.ev('__G.perfJump(' + z + ')'); await sleep(350); }
+            const evs = await mp8Trace(e, async () => {
+                if(!skipJ) await e.ev('__G.perfJump(' + z + ')');
+                await sleep(skipJ ? 1950 : 2300);
+                await e.ev('__G.forceMission()');
+                await sleep(1500);
+            });
+            const c = await e.ev('__G.perfCollect()');
+            collectErrs('mp8trace z' + z, e, c.E);
+            return { zoneJs: c.zoneJs.map(r1), actJs: c.actJs.map(r1), top: mp8TraceFrames(evs) };
+        });
+        say('mp8trace z' + z + ' zoneJs ' + out[z].zoneJs + ' actJs ' + out[z].actJs);
+        for(const f of out[z].top.slice(0, 4)) say('  ' + f.ms + 'ms  ' + f.self.map(x => x[0] + '=' + x[1]).join(' '));
+    }
+    return out;
+}
+EXT_CMDS.mp8trace = { all: false, server: true, run: runMp8Trace, judge: () => {} };
+/* mp8ab: perf 와 같은 절차(점프 → 자연 전환 → 미션 시작)를 변형 A·B 로 존마다 번갈아(같은 Edge 조건) — 점프 프레임·자연 전환·미션 시작·평시 p95·롱태스크를 따로.
+   --mp8-a '<쿼리>' (기본 'mp8=0') · --mp8-b '<쿼리>' (기본 '') · --mp8-rate 4 · --zones · --mp8-reps 1 · --mp8-dsf 2.625 */
+async function mp8Seg(base, q, z, rate, dsf){
+    return withEdge({ w: 412, h: 915, dsf, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', q), 2200);
+        await e.send('Emulation.setCPUThrottlingRate', { rate });
+        await e.ev('__G.perfStart({seed:424242, tier:0})');
+        await sleep(z === 0 ? 300 : 600);
+        await e.ev('__G.perfJump(' + z + ')');
+        await sleep(z === 0 ? 2500 : 2300);
+        await e.ev('__G.forceMission()');
+        await sleep(1800);
+        const c = await e.ev('__G.perfCollect()');
+        const st = await e.ev('(window.SZMP8 && SZMP8.stat) ? SZMP8.stat() : null');
+        const lt = await e.ev('(window.__LT||[]).filter(function(x){return x[1]>50}).length');
+        collectErrs('mp8ab z' + z, e, c.E);
+        const s = c.steady.slice().sort((a, b) => a - b);
+        return { jump: c.zoneJs.length > 1 ? r1(c.zoneJs[0]) : null, nat: r1(c.zoneJs[c.zoneJs.length - 1] || 0), act: c.actJs.map(r1), p95: r2(q2(s, 0.95)), p99: r2(q2(s, 0.99)), max: r2(s[s.length - 1] || 0), n: s.length, steady: s, lt, st };
+    });
+}
+const q2 = (arr, p) => arr.length ? arr[Math.min(arr.length - 1, Math.floor(arr.length * p))] : 0;
+async function runMp8Ab(base){
+    /* --mp8-vars 'mp8=0;;mp8pre=0' — ';' 로 나눈 변형(빈 칸 = 기본). --mp8-zones 존 목록(다른 명령의 --zones 와 따로) */
+    const zones = A['mp8-zones'] ? String(A['mp8-zones']).split(',').map(Number) : [0, 1, 2, 4, 6, 9, 13, 17, 22, 27];
+    const rate = +(A['mp8-rate'] || 4), dsf = +(A['mp8-dsf'] || 2.625), reps = +(A['mp8-reps'] || 1);
+    const V = A['mp8-vars'] != null && A['mp8-vars'] !== true ? String(A['mp8-vars']).split(';') : ['mp8=0', ''];
+    const out = { vars: V, rate, dsf, seg: [] };
+    for(let r = 0; r < reps; r++) for(const z of zones){
+        const row2 = { z, r, v: [] };
+        const order = V.map((_, i) => i); for(let k = 0; k < (r + z) % V.length; k++) order.push(order.shift());
+        for(const i of order){ try{ row2.v[i] = await mp8Seg(base, V[i], z, rate, dsf); }catch(err){ row2.v[i] = { err: String(err.message).slice(0, 80) }; } }
+        const f = (x) => x && !x.err ? 'jump ' + x.jump + ' nat ' + x.nat + ' act ' + x.act.join('/') + ' p95 ' + x.p95 + ' p99 ' + x.p99 + ' max ' + x.max + ' lt ' + x.lt + (x.st ? ' defer ' + x.st.deferN + ' pre ' + x.st.preN + '/' + x.st.preMs + 'ms' : '') : (x && x.err);
+        V.forEach((v, i) => say('mp8ab r' + r + ' z' + z + ' [' + (v || '기본') + '] ' + f(row2.v[i])));
+        out.seg.push(row2);
+    }
+    const agg = (i) => {
+        const S = out.seg.map(s => s.v[i]).filter(x => x && !x.err);
+        const all = S.flatMap(x => x.steady).sort((a, b) => a - b);
+        const jumps = S.map(x => x.jump).filter(x => x != null).sort((a, b) => a - b), nats = S.map(x => x.nat).filter(x => x).sort((a, b) => a - b), acts = S.flatMap(x => x.act).sort((a, b) => a - b);
+        const tr = jumps.concat(nats).sort((a, b) => a - b);
+        return { p50: r2(q2(all, 0.5)), p95: r2(q2(all, 0.95)), p99: r2(q2(all, 0.99)), max: r2(all[all.length - 1] || 0), frames: all.length,
+            jumpMax: jumps[jumps.length - 1] || 0, jumpMed: q2(jumps, 0.5), natMax: nats[nats.length - 1] || 0, natMed: q2(nats, 0.5), nat90: q2(nats, 0.9), zoneMed: q2(tr, 0.5), zoneMax: tr[tr.length - 1] || 0,
+            actMax: acts[acts.length - 1] || 0, actMed: q2(acts, 0.5), act90: q2(acts, 0.9), lt: S.reduce((n, x) => n + x.lt, 0) };
+    };
+    out.agg = V.map((_, i) => agg(i));
+    for(const s of out.seg) for(const x of s.v) if(x) delete x.steady;
+    return out;
+}
+EXT_CMDS.mp8ab = { all: false, server: true, run: runMp8Ab, judge: (cur) => {
+    const G = 'G-mp8ab';
+    for(const k of ['p50', 'p95', 'p99', 'max', 'zoneMed', 'zoneMax', 'jumpMed', 'jumpMax', 'natMed', 'nat90', 'natMax', 'actMed', 'act90', 'actMax', 'lt'])
+        row(G, cur.rate + 'x ' + k + ' [' + cur.vars.map(v => v || '기본').join(' | ') + ']', cur.agg.map(a => a[k]).join(' | '), null, '-', 'INFO');
+} };
+/* mp8a: 수용 검사 — 센티널 · ?mp8=0 = MP0 경로 · 120Hz 솎아내기(강제 p50 8.3ms·tier 1 → 콜백 2개에 루프 1번, p50 16.7 → 솎지 않음, tier 0 → 솎지 않음)
+         · tier 변경 → SZAU.maxLayers · 다음 존 미리 굽기(전환 전 그 존 굽기 키 존재) · 미룬 굽기가 모두 처리됨(큐 0) */
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    G.mp8Count = async function(ms){
+        let cb = 0, on = true; const f = () => { cb++; if(on) G.rafReal(f); }; G.rafReal(f);
+        const n0 = __M.fr.length; await wait(ms); on = false;
+        return { cb, loop: __M.fr.length - n0 };
+    };
+    G.mp8Hz = async function(){
+        const M = window.SZMP8, F = M.fr, out = {};
+        M.opt.hz = true;
+        SZ3.setTier(1);
+        F.p50 = 8.3; F.ivN = 48; F.p50At = performance.now() + 1e9; F.hz = true;
+        out.forced = await G.mp8Count(1200);
+        F.p50At = 0;   /* 다음 콜백에서 실측(헤드리스 60Hz) → p50≈16.7 → 끔 */
+        await wait(1300);
+        out.measured = await G.mp8Count(1000); out.p50 = F.p50; out.hzAfter = F.hz;
+        SZ3.setTier(0); F.p50 = 8.3; F.ivN = 48; F.p50At = performance.now() + 1e9; F.hz = false;
+        /* tier 0 이면 hzWanted 가 거짓 — 다음 재계산에서 켜지지 않는지 */
+        F.p50At = 0; await wait(1300);
+        out.tier0 = await G.mp8Count(800); out.hzTier0 = F.hz;
+        M.opt.hz = false; F.hz = false;
+        return out;
+    };
+    G.mp8Tier = function(){
+        const got = []; const o = SZAU.maxLayers;
+        SZAU.maxLayers = function(n){ got.push(n); return o.apply(this, arguments); };
+        try{
+            SZ3.setTier(2); SZMP8.tierSync(); SZ3.setTier(0); SZMP8.tierSync(); SZ3.setTier(0); SZMP8.tierSync();
+        } finally { SZAU.maxLayers = o; }
+        return { got, cfg0: SZ3.tierCfg && SZ3.tierCfg() };
+    };
+    G.mp8Keys = function(z){
+        const ks = [];
+        for(const [k, e] of SZ_BAKE) if(e.z === z || k.indexOf('arr' + z + '|') >= 0 || (k.indexOf('t|buoy|') === 0 && k.indexOf('rgb(' + szBuoyRGB(z) + ')') > 0)) ks.push(k.split('|').slice(0, 2).join('|'));
+        return { ks, zone: currentZoneIdx, st: SZMP8.stat() };
+    };
+});
+async function runMp8a(base){
+    const out = {};
+    out.on = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko'), 2200);
+        const r = {};
+        r.sent = await e.ev('({ok: !!(window.SZMP8 && SZMP8.ok && SZMP8.okA), raf: typeof (window.SZMP8 && SZMP8.raf), mp8: SZ_FLAGS.mp8, cfg: !!(SZ3.tierCfg && SZ3.tierCfg())})');
+        await e.ev('__G.perfStart({seed:424242, tier:0})');
+        await sleep(600);
+        r.tier = await e.ev('__G.mp8Tier()');
+        /* 존 9(막 경계·도착 칩·P7 판) 직전 0.8s 로 점프 → 0.6s 뒤(전환 전) 그 존 굽기 키 */
+        await e.ev('__G.perfJump(9)');
+        await sleep(600);
+        r.pre9 = await e.ev('__G.mp8Keys(9)');
+        await sleep(2200);
+        r.post9 = await e.ev('__G.mp8Keys(9)');
+        r.hz = await e.ev('__G.mp8Hz()', 30000);
+        r.E = await e.ev('(window.__E||[]).slice(0,5)');
+        collectErrs('mp8a on', e, r.E);
+        return r;
+    });
+    out.off = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+        await e.open(gameUrl(base, 'ko', 'mp8=0'), 2200);
+        await e.ev('__G.perfStart({seed:424242, tier:0})');
+        await sleep(600);
+        await e.ev('__G.perfJump(9)');
+        await sleep(1500);
+        const r = await e.ev('({mp8: SZ_FLAGS.mp8, st: SZMP8.stat(), fr: SZMP8.fr.n, dpr: SZ3.dprCap()})');
+        r.E = await e.ev('(window.__E||[]).slice(0,5)');
+        collectErrs('mp8a off', e, r.E);
+        return r;
+    });
+    return out;
+}
+EXT_CMDS.mp8a = { all: false, server: true, run: runMp8a, judge: (cur) => {
+    const G = 'G-mp8a', o = cur.on, f = cur.off;
+    row(G, '센티널·szRAF 본문·tierCfg', JSON.stringify(o.sent), null, 'ok·function·mp8·cfg', o.sent.ok && o.sent.raf === 'function' && o.sent.mp8 && o.sent.cfg ? 'PASS' : 'FAIL');
+    row(G, '?mp8=0 → MP0 경로(래퍼·굽기 조절·계획 0)', 'mp8=' + f.mp8 + ' 프레임 ' + f.fr + ' 미룸 ' + f.st.deferN + ' 미리 ' + f.st.preN, null, 'false · 0 · 0 · 0', !f.mp8 && f.fr === 0 && f.st.deferN === 0 && f.st.preN === 0 ? 'PASS' : 'FAIL');
+    row(G, 'tier 변경 → SZAU.maxLayers', JSON.stringify(o.tier.got), null, '[3,6] (같은 등급 재호출 없음)', JSON.stringify(o.tier.got) === '[3,6]' ? 'PASS' : 'FAIL');
+    const h = o.hz, r1x = (c) => c.cb ? Math.round(c.loop / c.cb * 100) / 100 : 0;
+    row(G, '120Hz 솎아내기 강제(p50 8.3·tier 1) 루프/콜백', r1x(h.forced) + ' (' + h.forced.loop + '/' + h.forced.cb + ')', null, '0.4~0.6', r1x(h.forced) >= 0.4 && r1x(h.forced) <= 0.6 ? 'PASS' : 'FAIL');
+    row(G, '실측 p50 ' + Math.round(h.p50 * 10) / 10 + 'ms(60Hz) → 솎지 않음', r1x(h.measured) + ' hz=' + h.hzAfter, null, '≥0.9 · false', r1x(h.measured) >= 0.9 && !h.hzAfter ? 'PASS' : 'FAIL');
+    row(G, 'tier 0 → 솎지 않음(p50 8.3 이어도)', r1x(h.tier0) + ' hz=' + h.hzTier0, null, '≥0.9 · false', r1x(h.tier0) >= 0.9 && !h.hzTier0 ? 'PASS' : 'FAIL');
+    const need = ['fd|9', 'bd|9', 'szchip|arr9'];
+    const miss = need.filter(k => !o.pre9.ks.some(x => x.indexOf(k) === 0));
+    row(G, '존 9 전환 전 미리 구운 키(존 ' + o.pre9.zone + ')', o.pre9.ks.join(' '), null, need.join(' ') + ' + t|buoy', o.pre9.zone === 8 && !miss.length && o.pre9.ks.some(x => x.indexOf('t|buoy') === 0) ? 'PASS' : 'FAIL', miss.length ? '없음: ' + miss.join(' ') : '');
+    const st = o.post9.st;
+    row(G, '미룬 굽기 처리(전환 2.2s 뒤 큐)', '큐 ' + st.q + ' · 미룸 ' + st.deferN + ' · 미리 ' + st.preN + '건 ' + st.preMs + 'ms', null, '큐 0', st.q === 0 ? 'PASS' : 'FAIL');
+} };
+/* mp8shots: 장면 검수 — ko·en × 320x568·390x844, 존 9 자연 전환 0.5s 뒤(도착 칩·막 도장·항로 패널 — 미룬 굽기가 빠짐없이 그려지는지)·
+   존 15 미션 시작 0.6s 뒤(배너·부표). --mp8-q 로 쿼리 추가 */
+async function runMp8Shots(base){
+    const out = [];
+    const dir = path.join(OUT, 'mp8shots');
+    for(const L of ['ko', 'en']) for(const [w, h] of [[320, 568], [390, 844]]){
+        const r = await withEdge({ w, h, dsf: 2, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, L, A['mp8-q'] ? String(A['mp8-q']) : ''), 2200);
+            await e.ev('__G.perfStart({seed:424242, tier:0})');
+            await sleep(600);
+            await e.ev('__G.perfJump(9)');
+            await sleep(1300);
+            const f1 = path.join(dir, L + '_' + w + 'x' + h + '_z9.png'); await e.shot(f1);
+            await e.ev('__G.perfJump(15)');
+            await sleep(1500);
+            await e.ev('__G.forceMission()');
+            await sleep(600);
+            const f2 = path.join(dir, L + '_' + w + 'x' + h + '_z15m.png'); await e.shot(f2);
+            const st = await e.ev('SZMP8.stat()');
+            collectErrs('mp8shots ' + L, e, await e.ev('(window.__E||[]).slice(0,5)'));
+            return { L, w, h, f1, f2, st };
+        });
+        out.push(r);
+    }
+    return out;
+}
+EXT_CMDS.mp8shots = { all: false, server: true, run: runMp8Shots, judge: (cur) => {
+    for(const r of cur) row('G-mp8shots', r.L + ' ' + r.w + 'x' + r.h, path.basename(r.f1) + ' · ' + path.basename(r.f2), null, '사람 검수', 'INFO', '미룸 ' + r.st.deferN + ' 큐 ' + r.st.q);
+} };
+/*</gate:mp8a>*/
 /*</gate:mp8>*/
 
 const ALL_CMDS = ['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'hitpath', 'noshake'].concat(Object.keys(EXT_CMDS).filter(k => EXT_CMDS[k].all));
