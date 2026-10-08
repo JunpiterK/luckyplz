@@ -1307,6 +1307,49 @@ body.sz-ov-res .lp-dock,body.sz-ov-res .lp-fs-btn,body.sz-ov-res .lp-help-fab{vi
     .dodge-kbd-ref table{font-size:.64em}
     .dodge-kbd-ref td:first-child{white-space:normal}
 }
+/* ═══ MP0 (2026-10-08 명작화) — 패키지 CSS 스텁. 각 패키지는 자기 펜스 안에만 쓴다 ═══ */
+#szStartExtra:empty{display:none}
+
+
+
+/*<sz:css:mp1>*/
+/*</sz:css:mp1>*/
+
+
+
+/*<sz:css:mp2>*/
+/*</sz:css:mp2>*/
+
+
+
+/*<sz:css:mp3>*/
+/*</sz:css:mp3>*/
+
+
+
+/*<sz:css:mp4>*/
+/*</sz:css:mp4>*/
+
+
+
+/*<sz:css:mp5>*/
+/*</sz:css:mp5>*/
+
+
+
+/*<sz:css:mp6>*/
+/*</sz:css:mp6>*/
+
+
+
+/*<sz:css:mp7>*/
+/*</sz:css:mp7>*/
+
+
+
+/*<sz:css:mp8>*/
+/*</sz:css:mp8>*/
+
     </style>
     <script src="/vendor/supabase.min.js"></script>
     <script type="application/ld+json">
@@ -1348,6 +1391,8 @@ body.sz-ov-res .lp-dock,body.sz-ov-res .lp-fs-btn,body.sz-ov-res .lp-help-fab{vi
                 <div class="ss"><div class="l">COMBO</div><div class="v combo" id="comboNow">0</div></div>
             </div>
             <canvas id="dodge-canvas"></canvas>
+            <!--<sz:html:mp8>-->
+            <!--</sz:html:mp8>-->
             <!-- 위성 미션 배너 — Phase B. 미션 활성화 시 캔버스 상단에
                  띠 형태로 슬라이드인. 한·영 두 줄. timer 카운트다운. -->
             <div class="mission-banner" id="missionBanner" hidden>
@@ -1390,6 +1435,7 @@ body.sz-ov-res .lp-dock,body.sz-ov-res .lp-fs-btn,body.sz-ov-res .lp-help-fab{vi
                     <button class="hand-btn" data-steer="left" type="button" aria-pressed="false" data-i18n="steerLeft">⬅ 조향 왼쪽</button>
                     <button class="hand-btn active" data-steer="right" type="button" aria-pressed="true" data-i18n="steerRight">조향 오른쪽 ➡</button>
                 </div>
+                <!--<sz:html:mp6>--><div id="szStartExtra"></div><!--</sz:html:mp6>-->
                 <div class="kbd-hint" data-i18n="kbdHint">↑↓←→ / AD: 이동 · 1-5 / QWE: 아이템 · S / F / Shift: BEAM · R: SAT · Space: 일시정지</div>
             </div>
             <!-- 일시정지 이동 버튼 — 🎮 게임 홈 · 🏠 전체 홈 (syncPauseUI 가 켜고 끈다) -->
@@ -3417,6 +3463,250 @@ window.SZ_FLAGS = SZ_FLAGS;
    2026-09-29 기본값을 꾹으로 되돌렸다 — 옆 SAT 도 꾹이라 두 버튼 규칙이 같아야 헷갈리지 않는다.
    이미 'tap' 을 저장한 사용자는 그대로 둔다. PC 키(F·S·Shift)·마우스는 늘 누르고 있기 */
 try{ SZ_FLAGS.beamHold = localStorage.getItem('szx_beam') !== 'tap'; }catch(_){ SZ_FLAGS.beamHold = true; }
+
+/* ═══════════ MP0 (2026-10-08 명작화 기반) — 이벤트 버스·킬스위치·판 종류·시작 화면 슬롯·워프·rAF·텔레메트리·API 스텁 ═══════════
+   설계: docs/SPACEZ_MASTERPIECE_PLAN.md 3장·4장 MP0. 게임 동작은 바꾸지 않는다(연결점만). 패키지(mp1~mp8)는 이 API 로만 붙는다.
+   여기 있는 함수는 게임 전역(running·startedAt …)을 '부를 때' 읽는다 — 이 구역이 그것들보다 먼저 정의돼도 된다 */
+
+/* ── 1. 이벤트 버스 SZE — on(ev, fn) · off(ev, fn) · has(ev) · emit(ev, a, b, c)
+   리스너마다 try/catch(한 패키지 오류가 게임 루프를 멈추지 않게). emit 은 할당 없음(인자 3개 고정) — 리스너가 없으면 배열 조회 1번.
+   이벤트: runStart(kind) · tick(dt, now) · zone(idx, prev) · rhythm('calm'|'surge'|'breath'|'boss', i, seg) · boss(id, 'start'|'end')
+           fever('on'|'off') · graze(comboCount) · mission('start'|'ok'|'fail', z, kind) · hit(x, y, kind) · death(kind)
+           goCard(overlayEl, {ms, zone, kind, sum}) · drawBg/drawWorld/drawShip/drawHud/drawTop(now)
+   논리 이벤트 리스너는 rand·randH·randD 를 부르면 안 된다(결정성 — 3장 규약) */
+const SZE = window.SZE = (function(){
+    const L = Object.create(null);
+    const E = {
+        errs: 0,
+        on(ev, fn){ if(typeof fn === 'function') (L[ev] || (L[ev] = [])).push(fn); return fn; },
+        off(ev, fn){ const a = L[ev]; if(!a) return; const i = a.indexOf(fn); if(i >= 0) a.splice(i, 1); },
+        has(ev){ const a = L[ev]; return !!(a && a.length); },
+        emit(ev, a, b, c){
+            const arr = L[ev];
+            if(!arr || !arr.length) return;
+            for(let i = 0; i < arr.length; i++){
+                try{ arr[i](a, b, c); }catch(err){ E.errs++; if(E.errs <= 20) try{ console.warn('[SZE] ' + ev, err); }catch(_){} }
+            }
+        }
+    };
+    return E;
+})();
+
+/* ── 2. 킬스위치 SZ_FLAGS.mp1~mp8 — 패키지 기능은 SZ_FLAGS.mpN 이 참일 때만 돈다.
+   우선순위: 내장 기본값 < public/games/dodge/flags.json(부팅 때 비차단 fetch, 800ms) < localStorage lp_sz_flags(JSON {"mp3":0}) < ?mpN=0|1.
+   판 시작(szRunBegin) 때 한 번 정하고 판 중간에는 바꾸지 않는다. 시드 판(daily·ch·race·coop·pvp)은 비율 배포(roll)를 무시하고 기본값만 —
+   대결 참가자끼리 같은 규칙. 비율 배포 = flags.json "roll":{"mp2":50} → szx_pid 해시 버킷(0~99) < 50 인 사람만 켬. 버킷은 GA4 bkt */
+const SZ_MP_KEYS = ['mp1', 'mp2', 'mp3', 'mp4', 'mp5', 'mp6', 'mp7', 'mp8'];
+const SZ_MP_DEF = {mp1: true, mp2: true, mp3: true, mp4: false, mp5: true, mp6: true, mp7: true, mp8: true};   /* mp4 = 시퀀서 음악 — 운영자 청취 검수 전까지 끔(MP4b) */
+const SZ_BKT = (function(){
+    let p = '';
+    try{ p = localStorage.getItem('szx_pid') || ''; }catch(_){}
+    /* SZX(대결 엔진)와 같은 방식·같은 키 — 먼저 만들어 두면 SZX 는 그대로 읽어 쓴다 */
+    if(!p){ p = Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); try{ localStorage.setItem('szx_pid', p); }catch(_){} }
+    let h = 2166136261;
+    for(let i = 0; i < p.length; i++){ h ^= p.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return (h >>> 0) % 100;
+})();
+let _szFlagsRemote = null;
+function szFlagsResolve(kind){
+    const seeded = /^(daily|ch|race|coop|pvp)$/.test(kind || '');
+    const R = _szFlagsRemote || {};
+    let loc = null;
+    try{ loc = JSON.parse(localStorage.getItem('lp_sz_flags') || 'null'); }catch(_){ loc = null; }
+    let q = '';
+    try{ q = location.search; }catch(_){}
+    for(const k of SZ_MP_KEYS){
+        let v = SZ_MP_DEF[k];
+        if(typeof R[k] === 'boolean') v = R[k];
+        if(!seeded && R.roll && typeof R.roll[k] === 'number') v = SZ_BKT < R.roll[k];
+        if(loc && loc[k] != null) v = !!(+loc[k]);
+        const m = new RegExp('[?&]' + k + '=([01])(?:&|$)').exec(q);
+        if(m) v = m[1] === '1';
+        SZ_FLAGS[k] = v;
+    }
+    SZ_FLAGS.bkt = SZ_BKT;
+    return SZ_FLAGS;
+}
+szFlagsResolve('ranked');
+(function(){
+    try{
+        const ac = window.AbortController ? new AbortController() : null;
+        const t = setTimeout(() => { try{ ac && ac.abort(); }catch(_){} }, 800);
+        fetch('/games/dodge/flags.json', {cache: 'no-store', signal: ac ? ac.signal : undefined})
+            .then(r => r.ok ? r.json() : null)
+            .then(j => { clearTimeout(t); if(j && typeof j === 'object'){ _szFlagsRemote = j; if(!running) szFlagsResolve('ranked'); } })
+            .catch(() => { clearTimeout(t); });
+    }catch(_){}
+})();
+
+/* ── 3. 판 종류 szRunKind() — 'ranked'(일반 싱글) · 'daily' · 'ch'(도전장) · 'race' · 'coop' · 'pvp' · 'spectate' · 'assist'(MP3) · 'practice'(MP6).
+   판 시작(szRunBegin) 때 정해 두고 그 판이 끝날 때까지 같은 값(결과 처리 도중 SZX 가 racing 을 끄거나 데일리 무장이 풀려도 흔들리지 않게).
+   시드 판은 assist·practice 가 될 수 없다. MP3·MP6 은 SZRUN.want = 'assist' | 'practice' 를 판 시작 전에 놓는다(자기 플래그가 켜졌을 때만) */
+const SZRUN = window.SZRUN = {kind: null, want: null, n: 0, warpZ: 0, warped: 0};
+function szRunKindLive(){
+    try{ if(typeof szSpectating !== 'undefined' && szSpectating) return 'spectate'; }catch(_){}
+    try{ if(typeof pvpState !== 'undefined' && pvpState && pvpState.gameMode === 'pvp') return 'pvp'; }catch(_){}
+    try{
+        const X = window.SZX;
+        if(X){
+            if(X.racing && X.racing()) return (X._R && X._R.coop) ? 'coop' : 'race';
+            const m = X.mode ? X.mode() : '';
+            if(m === 'daily') return 'daily';
+            if(m === 'challenge') return 'ch';
+        }
+    }catch(_){}
+    if(SZRUN.want === 'assist' || SZRUN.want === 'practice') return SZRUN.want;
+    return 'ranked';
+}
+function szRunKind(){
+    try{ if(typeof szSpectating !== 'undefined' && szSpectating) return 'spectate'; }catch(_){}
+    return SZRUN.kind || szRunKindLive();
+}
+function szRunSeeded(k){ return /^(daily|ch|race|coop|pvp)$/.test(k == null ? szRunKind() : k); }
+/* 기록 4곳의 거름망 — rpc(record_dodge_attempt) · best(szx_best_ms) · daily(szx_daily) · meta(szx_log 엽서·도감).
+   MP0 은 지금 조건을 그대로 옮긴 것: 지금 존재하는 판 종류는 전부 통과하고, 새 종류(assist·practice)만 막는다.
+   연습 비행(practice)은 엽서·막 도장은 그대로 얻는다(MP6) → meta 는 막지 않는다 */
+const SZ_REC_DENY = {
+    rpc:   {assist: 1, practice: 1, spectate: 1},
+    best:  {assist: 1, practice: 1, spectate: 1},
+    daily: {assist: 1, practice: 1, spectate: 1},
+    meta:  {spectate: 1}
+};
+function szRecOk(where){ const d = SZ_REC_DENY[where]; return !(d && d[szRunKind()]); }
+/* startGame 의 resetGame() 직후 한 줄 — 판 종류·킬스위치를 정하고 runStart 를 낸다 */
+function szRunBegin(){
+    SZRUN.kind = null;
+    SZRUN.kind = szRunKindLive();
+    SZRUN.n++; SZRUN.warped = 0;
+    szFlagsResolve(SZRUN.kind);
+    SZE.emit('runStart', SZRUN.kind);
+}
+
+/* ── 4. 워프 szWarpTo(z) — 연습 비행(MP6)이 부른다. 논리 시각을 존 z 시작으로 옮긴다.
+   startedAt = now − T 로 옮기고 lastSpawn = now(따라잡기 루프가 수백 초치 운석을 한 프레임에 뿌리지 않게),
+   위험물 스케줄러는 _szHzEnter(z) 로 그 존에서 시작(400회 상한 경로로 존을 하나씩 넘기지 않게). 리듬·fun·zonescript 는
+   startedAt 이 바뀌면 스스로 새 판 상태를 만든다(szFS·szZS). 연료는 가득·탱커 시간표는 오프셋 기준(지난 탱커는 STALE 로 건너뜀).
+   판이 아직 안 돌면 예약했다가 startGame 이 카운트다운 뒤에 적용(szWarpTake). 시드 판은 항상 0존부터 — 예약을 버린다.
+   연습은 비순위라 수열 재현은 요구하지 않는다 */
+function szWarpTo(z, now){
+    z = z | 0;
+    if(!(z > 0) || typeof ZONES === 'undefined' || !ZONES[z]) return false;
+    if(!running){ SZRUN.warpZ = z; return true; }
+    if(szRunSeeded()) return false;
+    now = (now == null) ? performance.now() : now;
+    const T = ZONES[z].s * 1000;
+    const prev = currentZoneIdx;
+    startedAt = now - T - totalPausedMs;
+    lastSpawn = now;
+    elapsedMs = T;
+    prevZoneIdx = z; currentZoneIdx = z; zoneTransitionT = 1;
+    zoneLabel = {idx: z, timer: 0};
+    try{ resetParticles(z); }catch(_){}
+    SZ_HZ = {z: -1, ev: [], firing: false, fz: -1, ft: 0};
+    _szHzEnter(z);
+    try{ szFuelReset(); }catch(_){}
+    if(missionState !== 'idle'){
+        missionState = 'idle'; missionZoneIdx = -1; missionOrbit = null;
+        try{ _szLooseBannerHideAt = 0; _hideMissionBanner(); _setSatBtnState('disabled'); }catch(_){}
+    }
+    try{ startMissionForZone(z, now); }catch(_){}
+    zoneEnteredAt = now;
+    SZRUN.warped = z;
+    SZE.emit('zone', z, prev);
+    return true;
+}
+function szWarpTake(now){
+    const z = SZRUN.warpZ; SZRUN.warpZ = 0;
+    if(z > 0 && !szRunSeeded()) szWarpTo(z, now);
+}
+
+/* ── 5. rAF 래퍼 — gameLoop 재무장은 전부 여기로(MP8a 가 본문만 고친다: 120Hz 솎아내기 등).
+   requestAnimationFrame 을 부를 때마다 전역에서 찾는다(게이트 합성 시계가 바꿔 끼운 것도 그대로 따른다) */
+function szRAF(fn){ return requestAnimationFrame(fn); }
+
+/* ── 6. 시작 화면 슬롯 SZSTART — slot(name) 은 그 자리 요소(없으면 null), put(name, id, make, where, key) 는 멱등 쓰기.
+   이름: primary(출발·게임방법) · together(방·대결·협동·1:1) · chips(오늘의 코스·엽서) · settings(조작 칩 — 소리·진동 칩 줄 바로 뒤) · extra(#szStartExtra, MP6)
+   MP0 의 슬롯은 지금과 같은 DOM 자리를 돌려준다(화면 변화 0). MP1 이 define(name, fn) 으로 실제 자리를 바꾼다.
+   put: 같은 id 가 이미 있으면 아무것도 안 한다(key 를 주면 key 가 같을 때만 — 다르면 그 자리에서 바꿔 끼운다).
+   overlay 의 MutationObserver 들이 변경마다 다시 부르므로 멱등이 아니면 중복 주입·무한 반복이 난다.
+   where: 'end'(기본) · 'start' · 'after'(슬롯 요소 바로 뒤 형제) · 숫자 n(n 번째 자식 앞, 없으면 끝) */
+const SZSTART = window.SZSTART = (function(){
+    const ov = () => document.getElementById('overlay');
+    const isStart = (o) => !!(o && o.querySelector('#ovTitle'));
+    const BASE = {
+        primary(){ const o = ov(); return isStart(o) ? o.querySelector('.sz-start-pair') : null; },
+        /* 지금 addStartButton 과 같은 자리 — #overlay 의 버튼 줄(1:1 PvP 결과 카드의 버튼 줄도 포함, 지금 동작 그대로) */
+        together(){ return document.querySelector('#overlay .ov-btn-row'); },
+        chips(){ const o = ov(); return isStart(o) ? o.querySelector('.sz-opts') : null; },
+        /* 조작 칩(ctl) — 결과 카드(.sz-go-head)가 아닌 화면의 소리·진동 칩 줄 */
+        settings(){ const o = ov(); const s = o ? o.querySelector('.sz-opts') : null; return (s && !(s.parentElement && s.parentElement.querySelector('.sz-go-head'))) ? s : null; },
+        extra(){ return document.getElementById('szStartExtra'); }
+    };
+    const OVR = Object.create(null);
+    function slot(name){ const f = OVR[name] || BASE[name]; try{ return f ? f() : null; }catch(_){ return null; } }
+    function define(name, fn){ if(typeof fn === 'function') OVR[name] = fn; }
+    function put(name, id, make, where, key){
+        const ex = id ? document.getElementById(id) : null;
+        if(ex && (key == null || ex.dataset.szk === String(key))) return ex;
+        const s = slot(name);
+        if(!s) return null;
+        let el = (typeof make === 'function') ? make(s) : make;
+        if(typeof el === 'string'){ const t = document.createElement('template'); t.innerHTML = el.trim(); el = t.content.firstElementChild; }
+        if(!el) return null;
+        if(id && !el.id) el.id = id;
+        if(key != null) el.dataset.szk = String(key);
+        if(ex){ ex.replaceWith(el); return el; }
+        if(where === 'start') s.insertBefore(el, s.firstChild);
+        else if(where === 'after') s.insertAdjacentElement('afterend', el);
+        else if(typeof where === 'number') s.insertBefore(el, s.children[where] || null);
+        else s.appendChild(el);
+        return el;
+    }
+    return {slot, define, put};
+})();
+
+/* ── 7. 텔레메트리 szTel — GA4 이벤트 4종. 판 시작·끝에 1회씩만(루프 안에서 부르지 않는다). 개인정보 없음. ?tel=0 이면 끈다.
+   sz_run_start{kind,tier,run_n,first,bkt,gl} · sz_run_end{sec,zone,act,kind,combo_max,sats} · sz_restart{ms}(MP2) · sz_share{type}(MP7).
+   GA4 맞춤 측정기준(kind·act·first·bkt·gl)은 운영자가 1회 등록 */
+const szTel = window.szTel = (function(){
+    let off = false;
+    try{ off = /[?&]tel=0(?:&|$)/.test(location.search); }catch(_){}
+    const send = (name, p) => { if(off) return; try{ if(typeof gtag === 'function') gtag('event', name, p); }catch(_){} };
+    let live = false;
+    const T = {
+        get off(){ return off; },
+        send,
+        runStart(kind){
+            live = true;
+            let tier = 0, first = 0;
+            try{ tier = (window.SZ3 && SZ3.tier) ? SZ3.tier() : 0; }catch(_){}
+            try{ first = (typeof szLog === 'function' && szLog().runs === 0) ? 1 : 0; }catch(_){}
+            send('sz_run_start', {kind: kind, tier: tier, run_n: SZRUN.n, first: first, bkt: SZ_BKT, gl: (window.SZGL && SZGL.on) ? 1 : 0});
+        },
+        runEnd(){
+            if(!live) return; live = false;
+            let z = 0, sec = 0, combo = 0, sats = 0;
+            try{ z = currentZoneIdx | 0; sec = Math.round(elapsedMs / 1000); combo = comboMaxThisRun | 0; }catch(_){}
+            try{ if(window.__szMeta && __szMeta.run && typeof szPopcount === 'function') sats = szPopcount(__szMeta.run.sat); }catch(_){}
+            const ACT = [0, 9, 15, 20, 26];
+            let act = 0; for(let i = 0; i < ACT.length; i++) if(z >= ACT[i]) act = i + 1;
+            send('sz_run_end', {sec: sec, zone: z, act: act, kind: szRunKind(), combo_max: combo, sats: sats});
+        },
+        restart(ms){ send('sz_restart', {ms: Math.round(ms)}); },
+        share(type){ send('sz_share', {type: String(type || '')}); }
+    };
+    return T;
+})();
+SZE.on('runStart', (k) => szTel.runStart(k));
+SZE.on('death', () => szTel.runEnd());
+
+/* ── 8. API 스텁(아무것도 안 함) — 실제 구현은 각 패키지 스텁 블록이 window 의 같은 이름을 바꿔 끼운다.
+   SZGL.snapshot(ctx2d): MP7 결과 PNG 가 GL 배경을 받는 자리(MP8b 구현, GL 이 없으면 아무것도 안 함)
+   szShipSkinHook(livery): szDrawShip 이 기체 스프라이트를 그린 직후(기체 좌표계·뱅크·찌그러짐·알파 적용 상태) 부른다 — MP6 도색
+   SZAU.*: MP4a 소리 엔진 공개 API — 없어도 안전한 no-op */
+window.SZGL = window.SZGL || {on: false, snapshot(ctx2d){ return false; }};
+window.szShipSkinHook = window.szShipSkinHook || function(livery){};
+window.SZAU = window.SZAU || {ctx: null, note(i){}, warn(){}, vo(id){}, duck(ms){}, layer(name, on){}, maxLayers(n){}, song(def){}};
 /*</sz:mod:flags>*/
 
 /* ======================================================
@@ -10120,6 +10410,7 @@ function szBossTick(now, e){
     if(!B) return;
     if(!F.sfx[B.id] && e < B.warn + SZB_WARN_MS){
         F.sfx[B.id] = true; F.warnT = now;
+        SZE.emit('boss', B.id, 'start');   /* MP0 */
         /* 끝난 미션 결과 배너는 바로 접고, 진행 중인 미션 배너가 있으면 그 아래에 WARNING (보스당 한 번만 잰다) */
         if(missionState === 'success' || missionState === 'failed') missionBannerHideAt = Math.min(missionBannerHideAt, now);
         if(_szLooseBannerHideAt) _szLooseBannerHideAt = Math.min(_szLooseBannerHideAt, now);
@@ -10136,6 +10427,7 @@ function szBossTick(now, e){
     }
     if(!F.surv[B.id] && e >= B.end){
         F.surv[B.id] = true;
+        SZE.emit('boss', B.id, 'end');     /* MP0 */
         /* 보스 보급 1개 — 해시 좌표(P2 szDropDepot, key z-'b'). 논리시각 고정이라 대결 전원이 같은 순간·같은 자리 */
         try{ szDropDepot(B.z, 'b', ITEM.HEART, now); }catch(_){}
         if(running && lives > 0){
@@ -11080,6 +11372,7 @@ function szFunSegEnter(F, i){
     const prev = F.segI >= 0 ? SZR_SEGS[F.segI] : null;
     F.segI = i;
     const s = SZR_SEGS[i];
+    SZE.emit('rhythm', s.ph === SZR_SURGE ? 'surge' : s.ph === SZR_BREATH ? 'breath' : s.ph === SZR_BOSS ? 'boss' : 'calm', i, s);   /* MP0 */
     F.q.length = 0; F.qi = 0;
     const _win = (s.o0 === -1);   /* C — 위성·부표 설치 창 숨 고르기: 별가루 리본·무피격 보너스 없음(설치가 그 창의 보상) */
     if(s.ph === SZR_BREATH && !_win){
@@ -11161,7 +11454,7 @@ function szFunUpdate(dt, now){
     }
     /* 피버 */
     if(szFeverOn){
-        if(e >= F.fever || !canGet){ szFeverOn = false; F.fever = 0; F.g = 0; F.tn = 0; if(canGet) szFunSfx('feverEnd'); }
+        if(e >= F.fever || !canGet){ szFeverOn = false; F.fever = 0; F.g = 0; F.tn = 0; if(canGet) szFunSfx('feverEnd'); SZE.emit('fever', 'off'); }
         else {
             F.g = 100 * (F.fever - e) / SZF_FEVER_MS;
             if(e >= F.beatT){ F.beatT = e + 312; szFunTone(SZF_BEAT[F.beatN++ % SZF_BEAT.length], 0.08, 'triangle', 0.025); }
@@ -11184,6 +11477,7 @@ function szFunPick(F, m, now){
 }
 function szFunFeverStart(F, now, e){
     szFeverOn = true; F.fever = e + SZF_FEVER_MS; F.feverN++; F.beatT = e + 260; F.beatN = 0; F.tn = 0;
+    SZE.emit('fever', 'on');   /* MP0 */
     try{ szFlash('255,170,235', 0.1, 200); }catch(_){}
     for(let k = 0; k < 3; k++) szRings.push({x: player.x, y: player.y, t: -k * 0.09, dur: 0.6, r0: 12, r1: 96 + k * 34, rgb: SZF_RAIN[k * 2], w: 3.2 - k * 0.7});
     szBurst(player.x, player.y, {sparks: szLo() ? 8 : 18, power: 260});
@@ -11223,6 +11517,7 @@ function szFunPop(F, b, n, now){
 }
 /* 스침 — 별가루 게이지를 조금(콤보가 길수록 더). 황금 운석을 스치면 잭팟 */
 function szFunGraze(b, now){
+    SZE.emit('graze', comboCount);   /* MP0 — 스침 확정(콤보 증가 뒤) */
     const F = SZFUN; if(!F || !F.on) return;
     if(!szFeverOn) F.g = Math.min(100, F.g + 1 + Math.min(40, comboCount) / 40);
     if(b && b._g === 1) szFunJackpot(F, b, now);
@@ -12078,6 +12373,7 @@ const SZ_SUPPLY_CUT_N = 2;
 let szSatMiss = 0;               /* 주 미션 연속 실패 수 */
 let szSupplyCut = false;         /* 이번 판 보급 영구 차단 */
 function szSatMissed(){
+    SZE.emit('mission', 'fail', missionZoneIdx, 'main');   /* MP0 — 주 미션 실패(존 끝·시간 초과) */
     if(szSupplyCut) return;
     try{ if(szFirstRunNow()) return; }catch(_){}
     szSatMiss++;
@@ -12478,6 +12774,7 @@ function startMissionForZone(zIdx, now){
         /* B — 시각표(논리 ms)의 활성 시각까지 남은 만큼. 일시정지는 _lpMarkPause 가 이 값을 함께 민다 */
         const W = szMissionWin(zIdx);
         missionPendingUntil = now + Math.max(0, (W ? W.on : el + 4000) - el);
+        SZE.emit('mission', 'start', zIdx, 'main');   /* MP0 */
         return;
     }
     if(!SZ_BUOY_ZONES.has(zIdx) || !szBuoyOn()) return;
@@ -12489,6 +12786,7 @@ function startMissionForZone(zIdx, now){
         missionKind = 'buoy'; missionBuoyK = b.k; missionZoneIdx = zIdx; missionOrbit = null;
         missionState = 'pending';
         missionPendingUntil = now + Math.max(0, b.on - el);
+        SZE.emit('mission', 'start', zIdx, 'buoy');   /* MP0 */
         return;
     }
 }
@@ -12567,6 +12865,7 @@ function completeMission(now){
     if(missionKind === 'buoy'){
         /* 부표 — ×N +1 · FEVER +20. 통신 두절이면 복구 + 'r' 하트(솔로 — 두절은 솔로에서만 걸린다) */
         missionState = 'success';
+        SZE.emit('mission', 'ok', z, 'buoy');   /* MP0 */
         szMbHideAt = 0;
         szBuoyDone.add(z + '-' + missionBuoyK);
         szLinkBump();
@@ -12589,6 +12888,7 @@ function completeMission(now){
     const isPvp = !!(pvpState && pvpState.gameMode === 'pvp');
     const opponentWonThisZone = isPvp && pvpState.missionWonByOpp && pvpState.missionWonByOpp[z];
     missionState = 'success';
+    SZE.emit('mission', 'ok', z, 'main');   /* MP0 */
     missionsCompletedZones.add(z);
     missionBannerHideAt = now + 2600;
     szMbHideAt = 0;
@@ -13780,7 +14080,9 @@ function drawPlasmaStormFlash(now){
     const k = Math.min(1, remain / 1100);
     /* 첫 200ms 는 0.85 alpha 강한 흰색 → 점차 fade */
     const burst = remain > 900 ? 1 : (remain - 100) / 800;
-    const alpha = Math.max(0, burst) * ((window.SZ3 && SZ3.RM) ? 0.12 : 0.32);   /* P8a — 0.85 흰 화면이 1초 가까이 운석을 가렸다 */
+    /* P8a — 0.85 흰 화면이 1초 가까이 운석을 가렸다. MP0 — 0.32 → 0.10: 아래 자홍 가장자리·광선과 합친 첫 프레임 밝기 증가가
+       0.12×255(번쩍임 상한, 게이트 noshake ③)를 넘지 않게. 흰 막만 0.12 로 두면 합계 0.13×255 였다 */
+    const alpha = Math.max(0, burst) * 0.10;
     ctx.save();
     ctx.fillStyle = `rgba(255, 240, 245, ${alpha})`;
     ctx.fillRect(0, 0, CW, CH);
@@ -14969,7 +15271,8 @@ function drawWipeFlash(){
     const remain = (wipeFlashUntil - now) / 500;
     ctx.save();
     /* 0.7 흰 화면은 눈이 아팠다 — 충격파 고리(SZ3)가 대신 크기를 보여 준다 */
-    const _wpk = (window.SZ3 && SZ3.RM) ? 0.12 : 0.3;
+    /* MP0 (2026-10-08) — 운영자 규칙 '번쩍임 ≤0.12' 에 맞춰 0.3 → 0.12 (모션 줄이기와 같은 값) */
+    const _wpk = 0.12;
     ctx.fillStyle = `rgba(255,255,255,${remain * _wpk})`;
     ctx.fillRect(0, 0, CW, CH);
     ctx.restore();
@@ -17126,6 +17429,7 @@ async function startGame(){
         else if(el.webkitRequestFullscreen) el.webkitRequestFullscreen();
     }catch(_){}
     resetGame();
+    szRunBegin();   /* MP0 — 판 종류(szRunKind)·킬스위치(SZ_FLAGS.mpN)를 이 판 동안 고정하고 SZE 'runStart' */
     /* 조향 위치 적용 — startGame 시점 직전에 한 번 sync.
        overlay 의 토글로 사용자가 변경한 값이 즉시 콕핏 panel 에 반영되도록. */
     applySteerToControlRow();
@@ -17161,8 +17465,9 @@ async function startGame(){
         const _missionPvp = pvpState && pvpState.gameMode === 'pvp';
         if(!_missionPvp) startMissionForZone(0, startedAt);
     }
+    szWarpTake(startedAt);   /* MP0 — 연습 비행(MP6)이 예약한 워프. 예약이 없으면 아무것도 안 함 */
     syncPauseUI();
-    requestAnimationFrame(gameLoop);
+    szRAF(gameLoop);
 }
 
 /* 결과 카드가 넘칠 때는 아래(다시하기·이동 버튼)가 보이게 — 위(제목·기록)는 스크롤로 */
@@ -17239,7 +17544,9 @@ function szMetaRunEnd(ms, kind){
     if(!R) return null;
     if(R.saved) return R.sum;
     R.saved = true;
-    const L = szLog();
+    /* MP0 — 기록 거름(szRecOk('meta')): 막힌 판 종류면 복사본에만 합쳐 결과 한 줄만 만들고 저장하지 않는다 */
+    const _keep = szRecOk('meta');
+    const L = _keep ? szLog() : JSON.parse(JSON.stringify(szLog()));
     const cur = Math.max(0, Math.min(ZONES.length - 1, currentZoneIdx | 0));
     for(let i = 0; i <= cur; i++) R.seen |= (1 << i);
     const prevFar = L.far, prevSeen = L.seen, firstRun = !L.runs;
@@ -17257,7 +17564,7 @@ function szMetaRunEnd(ms, kind){
         const inAct = Math.max(0, Math.min(sec, s1) - s0) * 1000;
         if(inAct > L.bestAct[a]) L.bestAct[a] = Math.round(inAct);
     }
-    try{ localStorage.setItem('szx_log', JSON.stringify(L)); SZM.saves++; }catch(_){}
+    if(_keep) try{ localStorage.setItem('szx_log', JSON.stringify(L)); SZM.saves++; }catch(_){}
     /* 결과 한 줄 — 피날레 > 신기록 > '{n}초만 더 가면 {존}' > 통신 두절 > 사인 > 첫 판 > 기본 */
     const T = (k, v) => (typeof SZ_T === 'function' ? SZ_T(k, v) : '');
     const nextS = ZONES[cur + 1] ? ZONES[cur + 1].s : Infinity;
@@ -17342,10 +17649,8 @@ function szPcChipHtml(){
 function szPcChipMount(ov){
     try{
         if(!ov || !ov.querySelector('#ovTitle')) return;      /* 시작 화면에서만 */
-        const opts = ov.querySelector('.sz-opts');
-        if(!opts || opts.querySelector('.sz-pc-chip')) return;
-        const h = szPcChipHtml();
-        if(h) opts.insertAdjacentHTML('beforeend', h);
+        /* MP0 — 시작 화면 슬롯 'chips'(지금과 같은 .sz-opts 끝), id 로 멱등. 도감이 비었으면(첫 판 전) 안 붙는다 */
+        SZSTART.put('chips', 'szPcChip', () => szPcChipHtml(), 'end');
     }catch(_){}
 }
 function szPcThumbUrl(i){ return '/assets/spacez/z/pc_' + (i === 'gold' ? 'gold' : (i < 10 ? '0' : '') + i) + '.webp' + (typeof SZ_BV === 'string' ? SZ_BV : ''); }   /* P6 — ?v=빌드 (자산 1주 캐시) */
@@ -17433,6 +17738,7 @@ function triggerGameOver(kind){
     try{ if(window.SZX && SZX.coopPod && SZX.coopPod(kind)) return; }catch(_){}
     if(szSpectating){ szExitSpectate(); return; }   /* P5 — 관전은 판이 아니다 */
     running=false;
+    SZE.emit('death', kind || null);   /* MP0 */
     /* P5 — 미션 배너가 결과(싱글·대결·1:1) 위에 남지 않게 모든 경로에서 먼저 내린다 */
     try{ _szLooseBannerHideAt = 0; _hideMissionBanner(); }catch(_){}
     /* P3 — 판 기록(szx_log) 판당 1회 저장 + 결과 카드 한 줄 재료. kind = 충돌 원인(사인). 표시·저장 전용 */
@@ -17527,6 +17833,7 @@ function triggerGameOver(kind){
         }
     }
     $('overlay').classList.remove('hidden');
+    SZE.emit('goCard', $('overlay'), {ms: duration, zone: currentZoneIdx, kind: szRunKind(), sum: _szRun});   /* MP0 — 결과 카드(싱글) */
     try{ window.SZX && SZX.decorateResult(duration); }catch(_){}   /* 도전장 승패 + 보내기 */
     $('ovBtn').addEventListener('click', (e)=>{ e.stopPropagation(); startGame(); });
     $('ovRankBtn').addEventListener('click', (e)=>{ e.stopPropagation(); openDodgeRankSheet(); });
@@ -17584,7 +17891,11 @@ function triggerGameOver(kind){
         let liveUser = null;
         let liveNick = '';
         let pbMsg='', recordOk=false, recordErrKind=null;
-        if(!me){
+        if(!szRecOk('rpc')){
+            /* MP0 — 기록 거름(szRunKind): 편한 비행·연습 비행(MP3·MP6)은 리더보드에 넣지 않는다. 지금 존재하는 판 종류는 전부 통과.
+               표시는 아래 'unranked' 칸(비워 둠 — 깃털·연습 칩은 MP3·MP6 이 goCard 에서 단다) */
+            recordErrKind='unranked';
+        }else if(!me){
             /* Anon player: skip the record RPC entirely (it would just
                return not_authenticated). Mark a synthetic 'no_login'
                bucket so the dispatch below shows a friendly upsell
@@ -17709,6 +18020,9 @@ function triggerGameOver(kind){
         }else if(!recordOk && recordErrKind==='no_auth'){
             $('ovRankNum').textContent=tT('loginNeededShort');
             $('ovRankPct').textContent=tT('loginAndRetry');
+        }else if(recordErrKind==='unranked'){
+            $('ovRankNum').textContent='';
+            $('ovRankPct').textContent='';
         }else if(!recordOk && recordErrKind==='no_login'){
             $('ovRankNum').textContent=tT('loginNeeded');
             $('ovRankPct').textContent=tT('rankLoginOnly');
@@ -18037,6 +18351,7 @@ function szOnHit(now, x, y){
     szHeartBreak.push({idx: Math.max(0, lives), t0: now});
     if(szHeartBreak.length > 4) szHeartBreak.shift();
     if(window.SZ3) try{ SZ3.hit(x, y); }catch(_){}
+    if(SZE.has('hit')) SZE.emit('hit', x, y, szHitKind(null) || 'rock');   /* MP0 — 피격 확정(목숨 −1 이 적용된 프레임) */
 }
 
 /* 스침(니어미스) — 작은 링 + 틱 소리 + 10콤보마다 팝업 */
@@ -18200,7 +18515,7 @@ function szEnterSpectate(){
     running = true; paused = false;
     lastFrame = performance.now();
     try{ document.body.classList.add('sz-spectating'); syncPauseUI(); }catch(_){}
-    requestAnimationFrame(gameLoop);
+    szRAF(gameLoop);
     return true;
 }
 function szExitSpectate(){
@@ -18552,6 +18867,7 @@ function szDrawShip(px, py, now, alpha, livery){
     } else {
         szDrawShipFallback();
     }
+    szShipSkinHook(livery);   /* MP0 — 도색 고리(MP6 구현, 기본 no-op). 기체 좌표계·뱅크·찌그러짐·알파가 걸린 상태 */
     ctx.restore();
     ctx.globalAlpha = 1;
 
@@ -18877,7 +19193,7 @@ function gameLoop(now){
         drawFrame(now, 0);
         szDomFlush();
         if(window.SZ3 && SZ3.applyFit) try{ SZ3.applyFit(); }catch(_){}   /* P1 — 미뤄 둔 해상도 변경은 멈춘 동안 */
-        requestAnimationFrame(gameLoop);
+        szRAF(gameLoop);
         return;
     }
     /* 피격 순간 짧은 정지(hitstop) — 화면 흔들림 대신 쓰는 타격감. 싱글만.
@@ -18886,7 +19202,7 @@ function gameLoop(now){
         if(!szSpectating) szMovePlayer(rawDt);
         drawFrame(now, 0);
         szDomFlush();
-        requestAnimationFrame(gameLoop);
+        szRAF(gameLoop);
         return;
     }
 
@@ -18902,6 +19218,7 @@ function gameLoop(now){
     if(newIdx!==currentZoneIdx){
         prevZoneIdx=currentZoneIdx;
         currentZoneIdx=newIdx;
+        SZE.emit('zone', newIdx, prevZoneIdx);   /* MP0 */
         zoneTransitionT=0;
         zoneLabel={idx:newIdx, timer:0};
         /* Sprint H — 새 zone 이 boundary 인 경우 별도 큰 사이즈 배너도
@@ -19180,6 +19497,7 @@ function gameLoop(now){
     /* ---- Items / Depots / Gravity field / Mini-ship / Wipe ---- */
     szFuelUpdate(dt, now);              /* sz:mod:fuel — 추진제 소모(증발·기동)·탱커 투하·헤더 탱크. 바닥나면 우주 미아(게임 종료) */
     if(!running) return;
+    SZE.emit('tick', dt, now);          /* MP0 — 패키지 프레임 갱신(논리 리스너는 rand 금지) */
     maybeSpawnDepot(currentZoneIdx, now);
     updateDepots(dt, now);
     updateGravFieldCharge(dt);
@@ -19278,7 +19596,7 @@ function gameLoop(now){
     drawFrame(now, dt);
     szDomFlush();   /* P1 — 이 프레임의 DOM 쓰기를 그리기 뒤에 한 번에 */
     if(window.SZ3) SZ3.frame(_szT0, now);
-    requestAnimationFrame(gameLoop);
+    szRAF(gameLoop);
 }
 
 function drawFrame(now, dt){
@@ -19306,6 +19624,7 @@ function drawFrame(now, dt){
     /* 2026-09-29 — 블룸을 배경층 바로 위로(위험물·기체 아래). 블룸 원본은 직전 프레임(szBloomCapture)이라 맨 위에 얹으면
        움직이는 운석·혜성 위에 1프레임 늦은 번진 잔상이 덮여 흐려 보였다(등급 0 = 고사양 기기일수록 심함) */
     applyBloom();
+    SZE.emit('drawBg', now);           /* MP0 — 배경층 위·위험물 아래 */
 
     /* ---- Bullets — comet-style trail ----
        PERF v3: trail 8-sample ring buffer + 단일 패스로 통합 (이전 2-layer
@@ -19343,6 +19662,7 @@ function drawFrame(now, dt){
     szFuelDrawWorld(now);              /* sz:mod:fuel — 첫 탱커 안내 */
     szDrawGhosts(now);                 /* C — 두절로 못 받은 보급 실루엣 */
     szFunDraw(now);                    /* P8b — 별가루·황금 운석 */
+    SZE.emit('drawWorld', now);        /* MP0 — 보급·별가루 위, 기체 아래 */
 
     /* ---- Wipe fragments (사용 후 잔재) ---- */
     drawWipeFragments();
@@ -19384,6 +19704,7 @@ function drawFrame(now, dt){
     }
     szDrawP5Marks(now);        /* P5 — 부딪힌 운석(들어온 길·외곽선)·첫 판 히트박스 — 기체 위 */
     szFunDrawShip(now);        /* P8b — 피버 무지개·별가루 게이지 고리 */
+    SZE.emit('drawShip', now); /* MP0 — 기체 바로 위(판정 링 등) */
 
     /* ---- Shield bubble (player 둘러싸는 청록 방어막) ----
        player 본체 위에 그려져야 우주선이 막 안에 든 듯이 보임. */
@@ -19416,6 +19737,7 @@ function drawFrame(now, dt){
     szFuelDrawHud(now);                /* sz:mod:fuel — 하트 줄 아래 CH₄·LOX 이중 게이지 · 헤더 탱크 경보 */
     szDrawCommHud(now);                /* 통신망 📡 — 하트 줄 오른쪽 */
     szItemsDrawHud(now);               /* sz:mod:items2 — 하트 줄 아래 아이템 칩(남은 시간 고리) */
+    SZE.emit('drawHud', now);          /* MP0 — HUD 층 */
 
     /* ---- HUD: level badge ---- 2026-05-11 v5: y=10→y=40, font 13→11 ---- */
     const s=running?elapsedMs/1000:0;
@@ -19452,6 +19774,7 @@ function drawFrame(now, dt){
     drawPlasmaStormFlash(now);
     /* Reward toast — 절대적으로 가장 위 (모든 효과 + UI 위) */
     drawRewardToast(now);
+    SZE.emit('drawTop', now);          /* MP0 — 맨 위 */
 }
 
 /* ---- RAF kick-off for idle star animation ---- */
@@ -23589,7 +23912,7 @@ function decorateStart(){
 /* 싱글 결과 카드에 도전장 결과·보내기 버튼 */
 function decorateResult(ms){
     const best=+LS.get('szx_best_ms','0')||0;
-    if(ms>best){LS.set('szx_best_ms',String(Math.round(ms)))}
+    if(ms>best&&szRecOk('best')){LS.set('szx_best_ms',String(Math.round(ms)))}   /* MP0 — 기록 거름(szRunKind) */
     const ov=$('overlay'),big=ov&&ov.querySelector('.score-big');if(!big)return;
     const box=document.createElement('div');box.style.cssText='display:flex;flex-direction:column;align-items:center;width:100%';
     let html='';
@@ -24018,7 +24341,7 @@ function onGameOver(ms){
     const rr=R.results[R.round]||(R.results[R.round]={});
     rr[pid]={p:pid,n:R.nick,s:'done',t:Math.round(ms),z,c,gz,sa:C.sats,rs:C.rescues,at:Date.now()};
     metaOut({s:'done',t:Math.round(ms),z,c,pd:0,gz,sa:C.sats,rs:C.rescues,rv:C.revived});track(true);
-    if(ms>(+LS.get('szx_best_ms','0')||0))LS.set('szx_best_ms',String(Math.round(ms)));
+    if(ms>(+LS.get('szx_best_ms','0')||0)&&szRecOk('best'))LS.set('szx_best_ms',String(Math.round(ms)));   /* MP0 — 기록 거름 */
     live.classList.remove('on');
     /* P5 — 아직 나는 사람이 있으면 결과 패널 대신 가벼운 관전(SZ_FLAGS.spectate) */
     setTimeout(()=>{if(!szSpecStart()){openPanel();setView('result')}},1100);
@@ -24184,23 +24507,28 @@ function onPanelClick(e){
 function openRace(md){ensureDom();if(md&&!R.code)R.entryMd=md;R.preCode=R.preCode||'';setView(R.code?(R.view==='result'?'result':'lobby'):'entry');openPanel()}
 /* 시작 화면에 버튼 + 링크 진입(?race=) + 새로고침 복귀 */
 function addStartButton(){
-    const row=document.querySelector('#overlay .ov-btn-row');
-    if(!row||$('szxRaceBtn'))return;
+    /* MP0 — 시작 화면 슬롯 'together'(SZSTART). MP0 의 슬롯은 지금과 같은 자리(#overlay .ov-btn-row) — 쓰기는 id 로 멱등 */
+    if(!SZSTART.slot('together')||$('szxRaceBtn'))return;
     /* 2026-09-29 — 친구와 같이: 동시 대결(최대 8) · 2인 협동 을 반폭 두 버튼으로 (높이 그대로). 1:1 대결은 아래 줄 */
-    const w=document.createElement('div');w.className='szx-mp';w.id='szxMp';
-    const b=document.createElement('button');b.className='btn btn-race';b.id='szxRaceBtn';b.type='button';b.textContent=ct('raceS');
-    b.addEventListener('click',e=>{e.stopPropagation();openRace('race')});
-    const b2=document.createElement('button');b2.className='btn btn-coop';b2.id='szxCoopBtn';b2.type='button';b2.textContent=ct('coop');
-    b2.addEventListener('click',e=>{e.stopPropagation();openRace('coop')});
-    w.appendChild(b);w.appendChild(b2);
-    row.insertBefore(w,row.children[1]||null);
+    SZSTART.put('together','szxMp',()=>{
+        const w=document.createElement('div');w.className='szx-mp';w.id='szxMp';
+        const b=document.createElement('button');b.className='btn btn-race';b.id='szxRaceBtn';b.type='button';b.textContent=ct('raceS');
+        b.addEventListener('click',e=>{e.stopPropagation();openRace('race')});
+        const b2=document.createElement('button');b2.className='btn btn-coop';b2.id='szxCoopBtn';b2.type='button';b2.textContent=ct('coop');
+        b2.addEventListener('click',e=>{e.stopPropagation();openRace('coop')});
+        w.appendChild(b);w.appendChild(b2);
+        return w;
+    },1);
     setTimeout(szDailyMount,0);   /* P5 — 오늘의 코스 칩 (race 펜스) */
     /* 기존 1:1 실시간 PvP(로그인) 두 버튼은 작은 한 줄로 — 새 동시 대결과 헷갈리지 않게 */
     const c=$('ovCreateBtn'),j=$('ovJoinBtn');
     if(c&&j&&!$('szxDuo')){
-        const d=document.createElement('div');d.id='szxDuo';d.className='szx-duo';
-        d.innerHTML='<div class="cap">'+esc(t('duo'))+'</div><div class="bt"></div>';
-        row.appendChild(d);d.querySelector('.bt').appendChild(c);d.querySelector('.bt').appendChild(j);
+        SZSTART.put('together','szxDuo',()=>{
+            const d=document.createElement('div');d.id='szxDuo';d.className='szx-duo';
+            d.innerHTML='<div class="cap">'+esc(t('duo'))+'</div><div class="bt"></div>';
+            d.querySelector('.bt').appendChild(c);d.querySelector('.bt').appendChild(j);
+            return d;
+        },'end');
     }
 }
 function boot(){
@@ -24407,16 +24735,18 @@ function szDailyGet(){try{const o=JSON.parse(LS.get('szx_daily','null'));if(o&&o
 function szDailyArm(){const date=szDailyDate();dailyPending={date,seed:szDailySeed(date)};return dailyPending}
 function szDailyMount(){
     const ov=$('overlay');if(!ov||running||!ov.querySelector('#ovTitle'))return;
-    const opts=ov.querySelector('.sz-opts');if(!opts||opts.querySelector('.sz-opt-daily'))return;
-    const b=document.createElement('button');b.type='button';b.className='sz-opt sz-opt-daily';
-    const best=szDailyGet().best;
-    b.textContent=szP5T('daily')+(best?' · '+fmt(best).slice(0,-3):'');
-    b.addEventListener('click',e=>{e.stopPropagation();if(running||(typeof _introRunning!=='undefined'&&_introRunning))return;szDailyArm();try{startGame()}catch(_){}});
-    opts.insertBefore(b,opts.firstChild);
+    /* MP0 — 시작 화면 슬롯 'chips'(지금과 같은 .sz-opts 맨 앞), id 로 멱등 */
+    SZSTART.put('chips','szDailyChip',()=>{
+        const b=document.createElement('button');b.type='button';b.className='sz-opt sz-opt-daily';
+        const best=szDailyGet().best;
+        b.textContent=szP5T('daily')+(best?' · '+fmt(best).slice(0,-3):'');
+        b.addEventListener('click',e=>{e.stopPropagation();if(running||(typeof _introRunning!=='undefined'&&_introRunning))return;szDailyArm();try{startGame()}catch(_){}});
+        return b;
+    },'start');
 }
 function szDailyResult(d,ms){
     const o=szDailyGet();let nw=false;
-    if(ms>(o.best||0)){o.best=Math.round(ms);nw=true;LS.set('szx_daily',JSON.stringify({date:d.date,best:o.best}))}
+    if(ms>(o.best||0)&&szRecOk('daily')){o.best=Math.round(ms);nw=true;LS.set('szx_daily',JSON.stringify({date:d.date,best:o.best}))}   /* MP0 — 기록 거름 */
     dailyPending={date:d.date,seed:d.seed};   /* 다시하기 = 오늘의 코스 한 번 더 */
     return '<div class="szx-vs win szx-daily">'+esc(nw?szP5T('dailyNew'):szP5T('dailyBest').replace('{t}',fmt(o.best)))+'</div>';
 }
@@ -25535,19 +25865,14 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
     }
     function syncChips(){
         const ok = eligible();
-        document.querySelectorAll('.sz-opts').forEach((o) => {
-            let c = o.nextElementSibling;
-            if(c && !c.classList.contains('szf-opts')) c = null;
-            /* 시작 화면에만 — 결과 카드는 이미 길다(게임 홈으로 돌아가면 보인다) */
-            const res = !!(o.parentElement && o.parentElement.querySelector('.sz-go-head'));
-            if(!ok || res){ if(c) c.remove(); return; }
-            const html = chipsHtml();
-            /* 같은 내용이면 건드리지 않는다(아래 MutationObserver 가 다시 부르므로 무한 반복 방지) */
-            if(c && c.dataset.k === html) return;
-            if(c) c.remove();
-            o.insertAdjacentHTML('afterend', html);
-            const n = o.nextElementSibling; if(n) n.dataset.k = html;
-        });
+        /* MP0 — 시작 화면 슬롯 'settings'(지금과 같은 자리: 결과 카드가 아닌 화면의 소리·진동 칩 줄 바로 뒤).
+           시작 화면에만 — 결과 카드는 이미 길다(게임 홈으로 돌아가면 보인다) */
+        const o = SZSTART.slot('settings');
+        const c = document.getElementById('szfOpts');
+        if(!ok || !o){ if(c) c.remove(); return; }
+        const html = chipsHtml();
+        /* 같은 내용이면 건드리지 않는다(아래 MutationObserver 가 다시 부르므로 무한 반복 방지) — put 의 key 비교 */
+        SZSTART.put('settings', 'szfOpts', html, 'after', html);
     }
     document.addEventListener('click', (e) => {
         const b = e.target.closest && e.target.closest('[data-szf]');
@@ -25566,6 +25891,143 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
 /*</sz:mod:ctl>*/
 </script>
 <!--</sz:mod:ctl>-->
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp1 (MP0, 2026-10-08)
+     MP1 — 첫 30초와 시작 화면 (SZSTART.define 으로 슬롯 배치, SZSET 설정 등록부, 첫 판 각본)
+     블록마다 IIFE · 센티널 SZMP1.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp1>*/
+(function(){
+'use strict';
+const SZMP1 = window.SZMP1 = {ok: false};
+/* MP1 코드는 이 IIFE 안에만. 밖으로는 window.SZMP1 하나만 노출한다.
+   기능은 SZ_FLAGS.mp1 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP1.ok = true;
+})();
+/*</sz:mod:mp1>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp2 (MP0, 2026-10-08)
+     MP2 — 2초 재시작과 결과 정산 (SZE goCard 구독, #szGoExtra, szTel.restart)
+     블록마다 IIFE · 센티널 SZMP2.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp2>*/
+(function(){
+'use strict';
+const SZMP2 = window.SZMP2 = {ok: false};
+/* MP2 코드는 이 IIFE 안에만. 밖으로는 window.SZMP2 하나만 노출한다.
+   기능은 SZ_FLAGS.mp2 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP2.ok = true;
+})();
+/*</sz:mod:mp2>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp3 (MP0, 2026-10-08)
+     MP3 — 공정성과 '편한 비행' (SZRUN.want='assist', szRecOk 표, 예고 문법 szWarn, 데스봄 유예 pendingHit)
+     블록마다 IIFE · 센티널 SZMP3.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp3>*/
+(function(){
+'use strict';
+const SZMP3 = window.SZMP3 = {ok: false};
+/* MP3 코드는 이 IIFE 안에만. 밖으로는 window.SZMP3 하나만 노출한다.
+   기능은 SZ_FLAGS.mp3 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP3.ok = true;
+})();
+/*</sz:mod:mp3>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp4 (MP0, 2026-10-08)
+     MP4a — 소리 엔진 (window.SZAU 를 실제 구현으로 바꿔 끼운다) · 하위 펜스 mp4:song = MP4b 곡 데이터
+     블록마다 IIFE · 센티널 SZMP4.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp4>*/
+(function(){
+'use strict';
+const SZMP4 = window.SZMP4 = {ok: false};
+/* MP4 코드는 이 IIFE 안에만. 밖으로는 window.SZMP4 하나만 노출한다.
+   기능은 SZ_FLAGS.mp4 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+/*<sz:mod:mp4:song>*/
+/* MP4b 곡 데이터(패턴 표) — SZAU.song(def) 로 넘긴다 */
+/*</sz:mod:mp4:song>*/
+SZMP4.ok = true;
+})();
+/*</sz:mod:mp4>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp5 (MP0, 2026-10-08)
+     MP5 — 숨 고르기 보상 무대 (SZE rhythm/graze 구독, 새 무작위는 szZoneRng(seed,'mp5',z))
+     블록마다 IIFE · 센티널 SZMP5.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp5>*/
+(function(){
+'use strict';
+const SZMP5 = window.SZMP5 = {ok: false};
+/* MP5 코드는 이 IIFE 안에만. 밖으로는 window.SZMP5 하나만 노출한다.
+   기능은 SZ_FLAGS.mp5 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP5.ok = true;
+})();
+/*</sz:mod:mp5>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp6 (MP0, 2026-10-08)
+     MP6 — 통신망 진행선·HUD·연습 비행·메타 (szWarpTo, SZRUN.want='practice', window.szShipSkinHook 구현, #szStartExtra)
+     블록마다 IIFE · 센티널 SZMP6.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp6>*/
+(function(){
+'use strict';
+const SZMP6 = window.SZMP6 = {ok: false};
+/* MP6 코드는 이 IIFE 안에만. 밖으로는 window.SZMP6 하나만 노출한다.
+   기능은 SZ_FLAGS.mp6 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP6.ok = true;
+})();
+/*</sz:mod:mp6>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp7 (MP0, 2026-10-08)
+     MP7 — 데일리·도전장 스플릿·공유 카드 (SZE zone/goCard 구독, SZGL.snapshot, szTel.share)
+     블록마다 IIFE · 센티널 SZMP7.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp7>*/
+(function(){
+'use strict';
+const SZMP7 = window.SZMP7 = {ok: false};
+/* MP7 코드는 이 IIFE 안에만. 밖으로는 window.SZMP7 하나만 노출한다.
+   기능은 SZ_FLAGS.mp7 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+SZMP7.ok = true;
+})();
+/*</sz:mod:mp7>*/
+</script>
+<!-- ─────────────────────────────────────────────────────────────
+     명작화 패키지 스텁 mp8 (MP0, 2026-10-08)
+     MP8 — 성능(mp8a: szRAF 본문·tier)·그림(mp8b: WebGL2 층, window.SZGL 구현)
+     블록마다 IIFE · 센티널 SZMP8.ok — 게이트(G10)가 8개를 확인한다
+     ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:mp8>*/
+(function(){
+'use strict';
+const SZMP8 = window.SZMP8 = {ok: false};
+/* MP8 코드는 이 IIFE 안에만. 밖으로는 window.SZMP8 하나만 노출한다.
+   기능은 SZ_FLAGS.mp8 가 참일 때만 돈다(판 시작 때 정해짐 — szRunBegin). */
+/*<sz:mod:mp8a>*/
+/* MP8a — 존 전환 미리 굽기·tier 표·120Hz 솎아내기(szRAF 본문은 sz:mod:flags 안 함수 — MP8a 소유) */
+/*</sz:mod:mp8a>*/
+/*<sz:mod:mp8b>*/
+/* MP8b — GL 층(#szGl, 2D 아래), window.SZGL = {on, snapshot(ctx2d)} 구현 */
+/*</sz:mod:mp8b>*/
+SZMP8.ok = true;
+})();
+/*</sz:mod:mp8>*/
+</script>
 <script src="/js/siteFooter.js?v=1791433156"></script>
 <!--lp-game-about:start-->
 <style>
