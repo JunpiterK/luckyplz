@@ -47,6 +47,7 @@
      --ibot-secs <n>       ibot 한 판 최대 합성 시간 (기본 560)
      --mis-p-warn <p>      ibot 경고(위성 1번 놓침)가 뜬 뒤의 미션 성공 확률 — 경고를 본 사람이 다음 미션에 집중하는 모델 (기본 = --mis-p)
      --no-cut              ibot 에서 보급 영구 차단 규칙만 끈다 (규칙의 영향 비교용)
+     --no-tank             ibot 이 궤도 급유 탱커를 하나도 안 먹는다(나오자마자 치움) — 추진제 고갈까지 걸리는 시간 확인용 (2026-10-08)
      --edge <exe>          msedge.exe 경로
      --json <file>         결과 전체를 JSON 으로 저장
      --verbose             진행 로그
@@ -353,7 +354,7 @@ function pageLib(){
         window.__M = { fr: [], mark: 0, markT: 0 };
         G.begin(P.seed, false);
         const T = performance.now(); startedAt = T; lastSpawn = T; lastFrame = T; lives = 5; invincibleUntil = 1e15;
-        window.__szLockTier = 1; try{ if(window.SZ3 && SZ3.setTier) SZ3.setTier(P.tier); }catch(_){}
+        window.__szLockTier = 1; window.__szFuelInf = 1; try{ if(window.SZ3 && SZ3.setTier) SZ3.setTier(P.tier); }catch(_){}
         const og = gameLoop; let last = 0;
         window.gameLoop = function(t){
             const rec = { iv: last ? t - last : 0, z0: currentZoneIdx, m0: missionState }; last = t;
@@ -382,7 +383,7 @@ function pageLib(){
     /* 존 순회 — 합성 시계로 존마다 몇 프레임씩 그린다 (글자 수집·킬스위치·에러 확인) */
     G.tour = function(P){
         const errs = [];
-        G.synth(); G.begin(P.seed || 424242, false);
+        G.synth(); G.begin(P.seed || 424242, false); window.__szFuelInf = 1;   /* 무적 순회 — 추진제도 무한(sz:mod:fuel) */
         startedAt = G.VT; lastFrame = G.VT;
         const zones = P.zones || ZONES.map((_, i) => i);
         let frames = 0;
@@ -395,7 +396,7 @@ function pageLib(){
             run(P.frames || 60);
             if(P.textAt && P.textAt.includes(z)) (G.midDom = G.midDom || []).push(...G.visibleText());
         }
-        G.unsynth();
+        G.unsynth(); window.__szFuelInf = 0;
         return { frames, errs, E: (window.__E || []).slice(0, 8), zones: zones.length };
     };
     /* 레이아웃 검사 */
@@ -444,6 +445,8 @@ function pageLib(){
         const pure = [['checkSolarFlareCollision', 0], ['checkSupernovaRingCollision', 0], ['checkPulsarBeamCollision', 1], ['checkCometCollision', 0], ['checkSplitterCollision', 0], ['checkBlackHoleJetCollision', 0]]
             .filter(([n]) => typeof window[n] === 'function');
         G.synth();
+        /* bot 은 보급을 안 줍는다 — 위험물 난이도만 재도록 추진제는 무한(2026-10-08 sz:mod:fuel). 연료는 ibot 이 잰다 */
+        window.__szFuelInf = 1;
         for(let bi = 0; bi < P.botSeeds.length; bi++){
             const bs = P.botSeeds[bi];
             const br = mb(bs);
@@ -486,7 +489,7 @@ function pageLib(){
             res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, frames, lost: lifeLost.slice(0, 12) });
             running = false;
         }
-        G.unsynth();
+        G.unsynth(); window.__szFuelInf = 0;
         window.drawFrame = oDraw; window.triggerGameOver = oOver;
         return res;
     };
@@ -497,9 +500,10 @@ function pageLib(){
         const res = [];
         const oDraw = window.drawFrame, oOver = window.triggerGameOver;
         window.drawFrame = function(){};
-        let dead = false;
-        window.triggerGameOver = function(){ running = false; dead = true; };
+        let dead = false, deadKind = null;
+        window.triggerGameOver = function(k){ running = false; dead = true; deadKind = k || null; };
         try{ window.szFirstRunCalc = function(){ return false; }; }catch(_){}
+        window.__szFuelInf = 0;
         /* --no-cut — 보급 영구 차단 규칙만 끈 비교용 */
         if(P.noCut) try{ window.szSatMissed = function(){}; }catch(_){}
         const mb = (s) => { let a = s | 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -513,15 +517,19 @@ function pageLib(){
         if(typeof checkZoneBossCollision === 'function') pure.push(['checkZoneBossCollision', 1]);
         const NOW_USE = { mini: 1, whipple: 1, lidar: 1, laser: 1, aerogel: 1 };
         const DEF_ORDER = ['shield', 'antigrav', 'ion', 'rail', 'wipe'];
-        const pickable = (d) => !d.collected && !d.collectedByPeer && (d.item === 'heart' ? lives < MAXL : inventoryHasSpace());
+        /* 추진제 (2026-10-08 sz:mod:fuel) — 탱커(item 'fuel')는 슬롯과 무관하게 줍는다. --no-tank 면 일부러 안 줍는다.
+           연료 70% 넘으면 노리지 않고(원뿔에 들면 줍기만), 그 아래면 거리에 (0.25 + 연료) 를 곱한다 — 사람처럼 연료가 낮을수록 탱커를 먼저 */
+        const fuelLv = () => { try{ return SZP.mode >= 1 ? 0 : Math.min(SZP.ch4, SZP.lox); }catch(_){ return 1; } };
+        const pickable = (d) => !d.collected && !d.collectedByPeer && (d.item === 'fuel' ? !P.noTank : d.item === 'heart' ? lives < MAXL : inventoryHasSpace());
         G.synth();
         for(let bi = 0; bi < P.botSeeds.length; bi++){
             const bs = P.botSeeds[bi];
             const br = mb(bs), bm = mb(bs ^ 0x5bd1e995);
-            dead = false;
+            dead = false; deadKind = null;
             G.begin(P.courseSeeds ? P.courseSeeds[bi] : P.seed, false);
             invincibleUntil = 0;
             let nextDecide = 0, dir = DIRS[0], frames = 0; const lifeLost = [];
+            let fuelMin = 1, moved = 0, mpx = player.x, mpy = player.y;
             let lv = lives; const picks = {}, uses = {}; let misKey = '', misOk = false, misAt = 0, nMis = 0, nMisOk = 0, cutAt = null;
             const nPick0 = {};
             const oPick = window.onDepotCollected;
@@ -551,7 +559,8 @@ function pageLib(){
                     nextDecide = elapsedMs + 90 + br() * 80;
                     /* 노릴 보급 — 화면 안, 주울 수 있는 것 중 가장 가까운 것 (기체가 그 아래 90px 에 서면 원뿔에 든다) */
                     let tgt = null, bd = 1e9;
-                    for(const d of depots){ if(!pickable(d) || d.y < -10 || d.y > CH - 40) continue; const q = Math.hypot(d.x - player.x, d.y + 90 - player.y); if(q < bd){ bd = q; tgt = [d.x, Math.min(CH - 30, d.y + 90)]; } }
+                    const fl = fuelLv();
+                    for(const d of depots){ if(!pickable(d) || d.y < -10 || d.y > CH - 40) continue; let q = Math.hypot(d.x - player.x, d.y + 90 - player.y); if(d.item === 'fuel'){ if(fl > 0.7) continue; q *= 0.25 + fl; } if(q < bd){ bd = q; tgt = [d.x, Math.min(CH - 30, d.y + 90)]; } }
                     let best = Infinity;
                     if(br() > 0.04){ for(const d of DIRS){ const s = score(d, tgt) + br() * 0.002; if(s < best){ best = s; dir = d; } } }
                     for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys[k] = false;
@@ -587,14 +596,19 @@ function pageLib(){
                     if(misOk && elapsedMs >= misAt) try{ completeMission(G.VT); }catch(_){}
                 }
                 try{ gameLoop(G.VT); }catch(e){ res.push({ err: String(e.message).slice(0, 160) }); running = false; break; }
+                /* --no-tank — 탱커를 끝까지 안 먹는다(우연히 원뿔·드론에 걸려도): 떨어지자마자 화면 밖으로 치운다 */
+                if(P.noTank) for(const d of depots) if(d.item === 'fuel' && !d.collected) d.y = CH + 100;
                 if(lives < lv) lifeLost.push(Math.round(elapsedMs / 100) / 10); lv = lives;
+                { const f = fuelLv(); if(f < fuelMin) fuelMin = f; moved += Math.hypot(player.x - mpx, player.y - mpy); mpx = player.x; mpy = player.y; }
                 if(cutAt == null && typeof szSupplyCut !== 'undefined' && szSupplyCut) cutAt = Math.round(elapsedMs / 1000);
             }
             window.onDepotCollected = oPick;
             for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown']) keys[k] = false;
             try{ if(gravityFieldActive) szBeamOff(); }catch(_){}
-            let why = null; try{ why = dead ? (SZM && SZM.hitKind) || null : null; }catch(_){}
-            res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, why, frames, lost: lifeLost, picks, uses, nMis, nMisOk, cutAt });
+            let why = null; try{ why = dead ? deadKind || (SZM && SZM.hitKind) || null : null; }catch(_){}
+            let hdrN = 0; try{ hdrN = SZP.hdrN; }catch(_){}
+            res.push({ bs, t: Math.round(elapsedMs / 100) / 10, z: currentZoneIdx, dead, why, frames, lost: lifeLost, picks, uses, nMis, nMisOk, cutAt,
+                fuelMin: Math.round(fuelMin * 100) / 100, hdrN, pxs: elapsedMs > 0 ? Math.round(moved / (elapsedMs / 1000)) : 0 });
             running = false;
         }
         G.unsynth();
@@ -604,7 +618,7 @@ function pageLib(){
     /* 소크 — 합성 시계, 무작위 입력(키·아이템·일시정지 없음), 무적 */
     G.soak = function(P){
         const errs = []; const heap = [];
-        G.synth(); G.begin(P.seed || 777, false);
+        G.synth(); G.begin(P.seed || 777, false); window.__szFuelInf = 1;   /* 무적 소크 — 추진제도 무한 */
         startedAt = G.VT; lastFrame = G.VT;
         let nextIn = 0, nextHeap = 0, frames = 0; let s = 12345;
         const rnd = () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
@@ -618,7 +632,7 @@ function pageLib(){
             if(elapsedMs >= nextHeap){ nextHeap = elapsedMs + 30000; heap.push([Math.round(elapsedMs / 1000), performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : -1]); }
         }
         for(const k of K) keys[k] = false;
-        running = false; G.unsynth();
+        running = false; G.unsynth(); window.__szFuelInf = 0;
         return { frames, errs, heap, E: (window.__E || []).slice(0, 8), endSec: Math.round(elapsedMs / 1000) };
     };
     return 1;
@@ -1225,7 +1239,7 @@ async function runIBot(base){
         const parts = await pool(chunks, JOBS, async (ch) => withEdge({ w: 412, h: 915, dsf: 1, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko'), 1200);
             const cs = COURSE_SEEDS > 1 ? ch.map(b => 424242 + ((b - 1000) % COURSE_SEEDS) * 7919) : undefined;
-            const r = await e.ev('__G.ibot(' + JSON.stringify({ seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: SECS, misP: MISP, misPW: A['mis-p-warn'] != null ? +A['mis-p-warn'] : null, noCut: !!A['no-cut'] }) + ')', 3600000);
+            const r = await e.ev('__G.ibot(' + JSON.stringify({ seed: 424242, courseSeeds: cs, botSeeds: ch, step: 1000 / fps, secs: SECS, misP: MISP, misPW: A['mis-p-warn'] != null ? +A['mis-p-warn'] : null, noCut: !!A['no-cut'], noTank: !!A['no-tank'] }) + ')', 3600000);
             const pe = await e.ev('(window.__E||[]).slice(0,8)');
             collectErrs('ibot ' + fps, e, pe.concat(r.filter(x => x.err).map(x => x.err)));
             return r;
@@ -1245,8 +1259,14 @@ async function runIBot(base){
         const ts = runs.map(x => x.t).sort((a, b) => a - b);
         out[fps + 'fps'] = { runs: runs.length, misP: MISP, reach, hit10, picks: sum('picks'), uses: sum('uses'), mis: r2(runs.reduce((a, x) => a + x.nMis, 0) / runs.length),
             raw: runs.map(x => [x.t, x.dead ? 1 : 0, x.cutAt, x.lost.length, x.z, x.why]),
+            fuelDeathPct: r1(100 * runs.filter(x => x.dead && x.why === 'fuel').length / runs.length),
+            fuelDeathMed: (() => { const f = runs.filter(x => x.dead && x.why === 'fuel').map(x => x.t).sort((a, b) => a - b); return f.length ? q(f, 0.5) : null; })(),
+            fuelDeathRange: (() => { const f = runs.filter(x => x.dead && x.why === 'fuel').map(x => x.t).sort((a, b) => a - b); return f.length ? [f[0], f[f.length - 1]] : null; })(),
+            hdrPct: r1(100 * runs.filter(x => x.hdrN > 0).length / runs.length),
+            fuelMinMed: q(runs.map(x => x.fuelMin == null ? 1 : x.fuelMin).sort((a, b) => a - b), 0.5),
+            pxs: q(runs.map(x => x.pxs || 0).sort((a, b) => a - b), 0.5),
             cutPct: r1(100 * cut.length / runs.length), cutMed: cut.length ? q(cut.map(x => x.cutAt).sort((a, b) => a - b), 0.5) : null, zoneDeaths, medianT: q(ts, 0.5), wallS: Math.round((Date.now() - t0) / 1000) };
-        say('ibot ' + fps + 'fps: ' + runs.length + '판 · ' + MARKS.map(s => s + 's ' + reach[s] + '%').join(' · ') + ' (중앙 ' + out[fps + 'fps'].medianT + 's, 차단 ' + out[fps + 'fps'].cutPct + '%, ' + out[fps + 'fps'].wallS + 's)');
+        say('ibot ' + fps + 'fps: ' + runs.length + '판 · ' + MARKS.map(s => s + 's ' + reach[s] + '%').join(' · ') + ' (중앙 ' + out[fps + 'fps'].medianT + 's, 차단 ' + out[fps + 'fps'].cutPct + '%, 연료사 ' + out[fps + 'fps'].fuelDeathPct + '% 중앙 ' + out[fps + 'fps'].fuelDeathMed + 's ' + JSON.stringify(out[fps + 'fps'].fuelDeathRange) + ', 헤더 ' + out[fps + 'fps'].hdrPct + '%, 탱커 ' + (out[fps + 'fps'].picks.fuel || 0) + '/판, 최저연료 중앙 ' + out[fps + 'fps'].fuelMinMed + ', 이동 ' + out[fps + 'fps'].pxs + 'px/s, ' + out[fps + 'fps'].wallS + 's)');
     }
     return out;
 }
@@ -1259,6 +1279,7 @@ function judgeIBot(cur, base){
             row(G, k + ' ' + s + 's 도달률', c.reach[s] + '%', b ? b.reach[s] + '%' : null, '기준 ±5%p', b ? (ok ? 'PASS' : 'FAIL') : 'INFO');
         }
         row(G, k + ' 보급 영구 차단 판', c.cutPct + '%', b ? b.cutPct + '%' : null, '-', 'INFO');
+        if(c.fuelDeathPct != null) row(G, k + ' 추진제 고갈(우주 미아) 판', c.fuelDeathPct + '%', b && b.fuelDeathPct != null ? b.fuelDeathPct + '%' : null, '-', 'INFO');
     }
 }
 
