@@ -649,6 +649,7 @@ body::after{
 .overlay.hidden::after{animation:none}
 /* 2026-09-24 — 게임오버 카드: 캔버스 폭발 연출(0.85s) 뒤에 떠오른다 */
 .overlay.go-enter{animation:goEnter .5s cubic-bezier(.2,.9,.25,1.15) .85s both}
+.overlay.go-enter.sz-go-drift{animation-delay:2.6s}
 .overlay.go-enter.go-lock{pointer-events:none}
 /* 정지·종료 공통 버튼(lpGameNav) — 버튼 자체가 pointer-events:auto 라, 카드가 opacity 로만 숨겨진
    동안(게임 중)·폭발 연출 잠금 동안에는 눌리지 않게 막는다 */
@@ -13985,7 +13986,7 @@ function szDrawItemIcon(k, x, y, s){
     ctx.restore();
     return true;
 }
-function szItemHeld(item){ return item !== ITEM.HEART; }   /* 하트만 즉시 회복 — 나머지는 전부 슬롯 */
+function szItemHeld(item){ return item !== ITEM.HEART && item !== 'fuel'; }   /* 하트만 즉시 회복 — 나머지는 전부 슬롯 (sz:mod:fuel — 탱커도 즉시 급유) */
 function szItemTech(item){ return !!SZI_ICON[item]; }
 /*</sz:mod:items>*/
 /* MINI 아이콘 — sz:mod:drones (2026-10-08): 옛 F-117 손그림 SVG 대신 렌더 아틀라스(drones.webp)의 윙맨 정면 프레임을
@@ -14191,6 +14192,7 @@ function updateDepots(dt, now){
 function drawDepot(d, now){
     /* 2026-09-27 — 납작한 사각형 → 광택 보급 캡슐(금속 동체 + 아이템색 띠 + 유리창 아이콘 + 비콘).
        중력장으로 끌 때는 기체 쪽으로 떨며 끌려오고, 충전 고리가 아이템색으로 차오른다 */
+    if(d.item === 'fuel'){ szDrawTanker(d, now); return; }   /* sz:mod:fuel — 궤도 급유 탱커 */
     const v = ITEM_VISUAL[d.item];
     const t = (now - d.spawnedAt) / 1000;
     const isHeld = szItemHeld(d.item);
@@ -14688,6 +14690,12 @@ function onDepotCollected(d, fromPeer){
         /* 상대가 먹은 거 — 시각적 fade 만 (collected=true 라 drawDepot 의 fade 발동).
            buff 도 sfx 도 안 줌. depot 옆에 작은 텍스트로 "상대 획득" 마크할 수도 있지만,
            일단은 사라지는 visual cue 로 충분. */
+        return;
+    }
+    /* sz:mod:fuel — 탱커는 기체마다(로컬): 급유만 하고 대결 쟁탈·1:1 방송에 넣지 않는다 */
+    if(d.item === 'fuel'){
+        szFuelRefill(d);
+        if(window.SZ3){ try{ SZ3.pickup(d); }catch(_){} } else { sfxStart(); }
         return;
     }
     /* 본인 픽업 — buff 적용 */
@@ -15934,7 +15942,7 @@ function szItemsDrawHud(now){
     if(e < SZI.agUntil) L.push(['antigrav', (SZI.agUntil - e) / SZI_T.AG_MS, SZI.agUntil - e]);
     if(e < SZI.ionUntil) L.push(['ion', (SZI.ionUntil - e) / SZI_T.ION_MS, SZI.ionUntil - e]);
     if(!L.length) return;
-    const x0 = 22 + szHudDX, y0 = 66, gap = 23;
+    const x0 = 22 + szHudDX, y0 = 76, gap = 23;   /* sz:mod:fuel — 하트 줄 아래 연료 게이지(55~62) 밑으로 66→76 */
     ctx.save();
     for(let i = 0; i < L.length; i++){
         const k = L[i][0], ff = Math.max(0, Math.min(1, L[i][1])), warn = L[i][2] < SZI_T.WARN;
@@ -15951,6 +15959,364 @@ function szItemsDrawHud(now){
     ctx.restore();
 }
 /*</sz:mod:items2>*/
+/*<sz:mod:fuel>*/
+/* 소유: 로켓 추진제 (2026-10-08, 운영자: "로켓의 연료개념을 도입하자 — 실제 쓰이는 연료 개념으로 먹어야 하고, 아니면 우주에서 멈춰 우주 미아 → 게임 종료").
+   · 추진제 = 액체메탄(CH₄) + 액체산소(LOX), '메탈록스'. 엔진 혼합비 O/F ≈ 3.6(질량). 탱크가 그 비율로 짜여 있어 엔진이 태우는 양은 두 탱크에서 같은 '비율'로 준다.
+   · 소모 ① 극저온 증발(boil-off) — 가만히 있어도 준다. LOX(끓는점 90 K)가 CH₄(112 K)보다 조금 빨리(×BOIL_LOX) → 보통 LOX 가 먼저 바닥.
+          ② 기동 — 기체가 실제로 움직인 거리(px)에 비례. 이 기체는 입력 즉시 최고속·즉시 정지(관성 없음)라 움직인 거리를 가감속 Δv 의 대용으로 쓴다.
+            숫자만 깎는다 — 기체에 힘·지연을 걸지 않는다(조작 지연 0). 한 프레임 이동은 MAXSTEP 까지만 센다(부활·순간이동이 연료를 먹지 않게)
+   · 둘 중 하나라도 0 → 헤더 탱크(착륙용 소형 예비) HDR_MS(8초) + 반투명 경보·게이지 붉게 깜빡. 이 동안 탱커를 먹으면 메인·헤더 모두 회복.
+     헤더도 0 → 엔진 정지·조향 불가 → 우주 미아 triggerGameOver('fuel') (szStartDeathFx 'drift' — 폭발 없이 조용히 회전하며 멀어짐, 별빛만)
+   · 보급 = 궤도 급유 탱커 (depots 의 item 'fuel', key 'T-k'). 출현 = 논리시간 시간표 FIRST + k·EVERY ± 해시 지터(보스 경고~끝은 피해 끝+3s 로),
+     x = 해시 _szU('T', k, 0) — 수열 소비 0, 결정성 무변경(det 는 보급 목록에 'T-k' 가 늘 뿐). STALE 초보다 늦게 알아챈 회차(존 점프·정지)는 건너뛴다.
+     기체마다 따로(로컬): 1:1 PvP 방송·depot_take·동시 대결 쟁탈(SZX.onTake)에서 뺀다 — 같은 시드면 모두 같은 자리에 자기 탱커를 본다.
+     보급 영구 차단·통신 두절에도 온다(차단 = 확정 사망이 되지 않게). 막히는 건 아이템 보급뿐. 관전·구조 캡슐 중엔 소모·투하 없음.
+   · 첫 판(szFirstRunNow): 소모 ×FIRST_K. 첫 탱커가 화면에 들어오면 기기당 한 번 반투명 안내(SZP_I18N.tip).
+   · 2인 협동 구조(onRv → szFuelRevive): 메인 35% + 헤더 가득으로 부활(구조선이 옮겨 준 추진제).
+   · 게이트 하네스: window.__szFuelInf = 1 이면 소모 없음 — 무적으로 도는 검사(tour·soak·perf·bot)용. ibot 은 실제 연료로 돈다.
+   · 프레임마다 새 객체 없음: 상태는 SZP 한 벌을 고쳐 쓰고, 탱커 몸체는 처음 한 번 구운 스프라이트(_szfSpr) */
+const SZP_T = {OF: 3.6, BOIL: 0.0017, BOIL_LOX: 1.12, MOVE: 1.6e-5, TANK: 0.35, FIRST: 45, EVERY: 45, JIT: 6, HDR_MS: 8000,
+               FIRST_K: 0.5, LOW: 0.25, STALE: 12, MAXSTEP: 40, SPEED: 24, REVIVE: 0.35};
+const SZP = {ch4: 1, lox: 1, hdr: 8000, mode: 0, lx: NaN, ly: NaN, k: 0, nextAt: -1, hdrN: 0, picks: 0, tipD: null, tipT0: 0, popT: 0, alarmT: 0, lastAdd: 0};
+let szFuelFlameK = 1;   /* 엔진 화염 배율 — 헤더 탱크로 버티는 동안 툭툭 끊긴다(szDrawShip) */
+ITEM.FUEL = 'fuel';
+ITEM_VISUAL.fuel = {emoji: '', color: '#BFEAFF', borderColor: '#E8F8FF', tank: true};
+const SZP_I18N = {
+    ko: {tip: '연료 보급 — BEAM 으로 끌어요', hdr: '추진제 바닥 · 헤더 탱크', hdrSub: '탱커를 BEAM 으로 끌어와요'},
+    en: {tip: 'Refuel — pull the tanker with BEAM', hdr: 'Propellant out · header tank', hdrSub: 'Pull a tanker in with BEAM'},
+    ja: {tip: '燃料補給 — BEAMで引き寄せよう', hdr: '推進剤切れ · ヘッダータンク', hdrSub: 'タンカーをBEAMで引き寄せて'},
+    zh: {tip: '燃料补给 — 用 BEAM 拉过来', hdr: '推进剂耗尽 · 集管箱', hdrSub: '用 BEAM 拉来加注船'},
+    es: {tip: 'Repostaje — atrae el tanque con BEAM', hdr: 'Sin propelente · tanque de cabecera', hdrSub: 'Atrae un tanque con BEAM'},
+    pt: {tip: 'Reabastecer — puxe o tanque com BEAM', hdr: 'Sem propelente · tanque de cabeçote', hdrSub: 'Puxe um tanque com BEAM'}
+};
+function _szfT(k){ let l = 'en'; try{ l = szStoryLang(); }catch(_){} const t = SZP_I18N[l] || SZP_I18N.en; return t[k] || SZP_I18N.en[k] || ''; }
+function szFuelLevel(){ return SZP.ch4 < SZP.lox ? SZP.ch4 : SZP.lox; }
+/* k 번째 탱커의 논리 시각(초) — 해시 지터 + 보스(경고 6s 전 ~ 끝) 회피 */
+function szFuelDue(k){
+    let u = 0.5; try{ u = _szU('T', k, 1); }catch(_){}
+    let t = SZP_T.FIRST + k * SZP_T.EVERY + (u - 0.5) * 2 * SZP_T.JIT;
+    try{
+        for(let i = 0; i < SZB_BOSS.length; i++){
+            const B = SZB_BOSS[i];
+            if(t * 1000 >= B.warn - 6000 && t * 1000 < B.end) t = B.end / 1000 + 3;
+        }
+    }catch(_){}
+    return t;
+}
+function szFuelReset(){
+    SZP.ch4 = 1; SZP.lox = 1; SZP.hdr = SZP_T.HDR_MS; SZP.mode = 0; SZP.lx = NaN; SZP.ly = NaN;
+    SZP.k = 0; SZP.nextAt = -1;   /* 시드는 resetGame 뒤에 정해진다 — 첫 프레임에 계산 */
+    SZP.hdrN = 0; SZP.picks = 0; SZP.tipD = null; SZP.tipT0 = 0; SZP.popT = 0; SZP.alarmT = 0; SZP.lastAdd = 0;
+    szFuelFlameK = 1;
+}
+function szFuelDrop(k, now){
+    const key = 'T-' + k;
+    if(depotsSpawnedZones.has(key)) return;
+    depotsSpawnedZones.add(key);
+    let u = 0.5; try{ u = _szU('T', k, 0); }catch(_){}
+    const d = {x: 50 + u * (CW - 100), y: -50, speed: SZP_T.SPEED, item: ITEM.FUEL, zoneIdx: currentZoneIdx, slot: 'T' + k, key,
+               chargeTime: 0, collected: false, collectedByPeer: false, spawnedAt: now, radius: 19};
+    depots.push(d);
+    if(!SZP.tipD){
+        let seen = false; try{ seen = !!localStorage.getItem('szx_fuel_tip'); }catch(_){}
+        if(!seen) SZP.tipD = d;   /* 화면에 들어온 뒤(szFuelDrawWorld) 3.2초 */
+    }
+}
+/* 매 프레임 — gameLoop(기체 이동 뒤·충돌 뒤). dt = 기체 시간(시간 왜곡·피격 정지와 무관) */
+function szFuelUpdate(dt, now){
+    if(!running || szSpectating || SZP.mode === 2) return;
+    const es = elapsedMs / 1000;
+    if(SZP.nextAt < 0) SZP.nextAt = szFuelDue(SZP.k);
+    while(es >= SZP.nextAt){
+        const k = SZP.k++;
+        if(es - SZP.nextAt < SZP_T.STALE) szFuelDrop(k, now);
+        SZP.nextAt = szFuelDue(SZP.k);
+    }
+    let mv = 0;
+    const px = player.x, py = player.y;
+    if(SZP.lx === SZP.lx){ const dx = px - SZP.lx, dy = py - SZP.ly; mv = Math.sqrt(dx * dx + dy * dy); if(mv > SZP_T.MAXSTEP) mv = SZP_T.MAXSTEP; }
+    SZP.lx = px; SZP.ly = py;
+    if(window.__szFuelInf){ szFuelFlameK = 1; return; }
+    if(SZP.mode === 0){
+        const K = szFirstRunNow() ? SZP_T.FIRST_K : 1;
+        const burn = SZP_T.MOVE * mv;
+        SZP.ch4 -= K * (SZP_T.BOIL * dt + burn);
+        SZP.lox -= K * (SZP_T.BOIL * SZP_T.BOIL_LOX * dt + burn);
+        if(SZP.ch4 <= 0 || SZP.lox <= 0){
+            if(SZP.ch4 < 0) SZP.ch4 = 0;
+            if(SZP.lox < 0) SZP.lox = 0;
+            SZP.mode = 1; SZP.hdr = SZP_T.HDR_MS; SZP.hdrN++; SZP.alarmT = now;
+            try{ window.SZ3 && SZ3.mood && SZ3.mood('worry', 2200, 3, '!', '255,90,110'); }catch(_){}
+            try{ szVibrate([30, 60, 30]); }catch(_){}
+        }
+        szFuelFlameK = 1;
+    } else {
+        SZP.hdr -= dt * 1000;
+        /* 헤더 탱크 — 화염이 툭툭 끊긴다(표시 전용 Math.random) */
+        szFuelFlameK = Math.random() < 0.22 ? 0.18 : 0.7 + Math.random() * 0.25;
+        if(SZP.hdr <= 0){ SZP.hdr = 0; szFuelStrand(); }
+    }
+}
+/* 헤더까지 0 — 엔진 정지·조향 불가 → 우주 미아 */
+function szFuelStrand(){
+    if(SZP.mode === 2) return;
+    SZP.mode = 2; szFuelFlameK = 0;
+    try{ szBeamOff(); }catch(_){}
+    try{ for(const k in keys) keys[k] = false; }catch(_){}
+    triggerGameOver('fuel');
+}
+/* 탱커 획득 — 메인 두 탱크를 3.6:1(질량) 그대로 채우고 헤더도 가득 */
+function szFuelRefill(d){
+    const a0 = szFuelLevel();
+    SZP.ch4 = Math.min(1, SZP.ch4 + SZP_T.TANK);
+    SZP.lox = Math.min(1, SZP.lox + SZP_T.TANK);
+    SZP.hdr = SZP_T.HDR_MS; SZP.picks++; SZP.popT = performance.now();
+    if(SZP.mode === 1) SZP.mode = 0;
+    szFuelFlameK = 1;
+    SZP.lastAdd = Math.max(1, Math.round((szFuelLevel() - a0) * 100));
+}
+function szFuelLabel(){ return 'CH₄·LOX +' + (SZP.lastAdd || Math.round(SZP_T.TANK * 100)) + '%'; }
+/* 2인 협동 구조 — 구조선이 추진제를 나눠 준다 */
+function szFuelRevive(){
+    SZP.mode = 0; SZP.hdr = SZP_T.HDR_MS;
+    SZP.ch4 = Math.max(SZP.ch4, SZP_T.REVIVE); SZP.lox = Math.max(SZP.lox, SZP_T.REVIVE);
+    SZP.lx = NaN; SZP.ly = NaN; szFuelFlameK = 1;
+}
+
+/* ── 탱커 그림 — 극저온 서리 낀 흰 원통(왼쪽 CH₄ 파랑 띠 43% · 오른쪽 LOX 흰 띠 57% — 3.6:1 질량을 밀도로 나눈 부피비) + 증기 김 ── */
+let _szfSpr = null;
+function szFuelSprite(){
+    if(_szfSpr) return _szfSpr;
+    const S = 3, W = 52, H = 26;
+    const c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
+    const x = c.getContext('2d');
+    x.scale(S, S); x.translate(W / 2, H / 2);
+    const L = 22, R = 8.5;
+    const rr = (x0, y0, w, h, r) => { x.beginPath(); x.moveTo(x0 + r, y0); x.arcTo(x0 + w, y0, x0 + w, y0 + h, r); x.arcTo(x0 + w, y0 + h, x0, y0 + h, r); x.arcTo(x0, y0 + h, x0, y0, r); x.arcTo(x0, y0, x0 + w, y0, r); x.closePath(); };
+    /* 도킹 포트(오른쪽 끝)·안테나 */
+    x.fillStyle = '#5d6b7c'; x.fillRect(L - 1, -3.6, 4.2, 7.2);
+    x.strokeStyle = 'rgba(220,240,255,.75)'; x.lineWidth = 0.9; x.beginPath(); x.moveTo(-6, -R); x.lineTo(-8.5, -R - 3.5); x.stroke();
+    /* 몸통 — 서리 낀 스테인리스 */
+    const g = x.createLinearGradient(0, -R, 0, R);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.35, '#dfe9f3'); g.addColorStop(0.7, '#9fb0c2'); g.addColorStop(1, '#4a5868');
+    x.fillStyle = g; rr(-L, -R, L * 2, R * 2, R); x.fill();
+    x.save(); rr(-L, -R, L * 2, R * 2, R); x.clip();
+    const split = -L + L * 2 * 0.43;
+    x.fillStyle = 'rgba(52,150,255,0.92)'; x.fillRect(-L, -2.6, split + L - 0.8, 5.2);                 /* CH₄ 띠 */
+    x.fillStyle = 'rgba(238,248,255,0.95)'; x.fillRect(split + 0.8, -2.6, L - split - 0.8, 5.2);      /* LOX 띠 */
+    x.strokeStyle = 'rgba(150,205,255,0.9)'; x.lineWidth = 0.7; x.strokeRect(split + 0.8, -2.6, L - split - 0.8, 5.2);
+    x.fillStyle = 'rgba(20,30,46,0.85)'; x.fillRect(split - 0.6, -R, 1.2, R * 2);                       /* 공통 격벽 */
+    /* 서리 — 위쪽 반에 흰 반점(고정 수열) */
+    let s = 7;
+    const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
+    for(let i = 0; i < 26; i++){
+        const fx = -L + 3 + rnd() * (L * 2 - 6), fy = -R + 1 + rnd() * R * 0.9, fr = 0.5 + rnd() * 1.3;
+        x.fillStyle = 'rgba(255,255,255,' + (0.45 + rnd() * 0.5).toFixed(2) + ')';
+        x.beginPath(); x.arc(fx, fy, fr, 0, Math.PI * 2); x.fill();
+    }
+    x.fillStyle = 'rgba(255,255,255,.65)'; x.fillRect(-L + 5, -R + 1.6, L * 2 - 10, 1.3);
+    x.restore();
+    x.lineWidth = 2.2; x.strokeStyle = 'rgba(8,12,24,.85)'; rr(-L, -R, L * 2, R * 2, R); x.stroke();
+    x.lineWidth = 1.1; x.strokeStyle = '#CFF3FF'; x.stroke();
+    /* 띠 글씨(장식 — 실제 판독은 아래 라벨) */
+    x.font = '800 4.6px sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillStyle = '#ffffff'; x.fillText('CH4', (-L + split) / 2, 0.3);
+    x.fillStyle = '#2a6fb8'; x.fillText('LOX', (split + L) / 2, 0.3);
+    _szfSpr = {c, W, H};
+    return _szfSpr;
+}
+function szDrawTanker(d, now){
+    const t = (now - d.spawnedAt) / 1000;
+    const pct = (d.chargeTime > 0 && !d.collected) ? Math.min(1, d.chargeTime / GRAV_PICKUP_TIME) : 0;
+    let cx = d.x, cy = d.y;
+    if(pct > 0){
+        const dx = player.x - cx, dy = player.y - cy, dl = Math.sqrt(dx * dx + dy * dy) || 1;
+        cx += dx / dl * pct * 4 + (Math.random() - 0.5) * pct * 2;
+        cy += dy / dl * pct * 4 + (Math.random() - 0.5) * pct * 2;
+    }
+    ctx.save();
+    if(d.collected){
+        ctx.globalAlpha = Math.max(0, 1 - (now - (d.collectedAt || now)) / 800);
+        if(ctx.globalAlpha <= 0.01){ ctx.restore(); return; }
+    }
+    const a0 = ctx.globalAlpha;
+    /* 서리빛 후광 + 증기 김(통기구에서 흰 김이 흩어진다 — 극저온 증발) */
+    ctx.globalCompositeOperation = 'lighter';
+    szGlow(SZ_GLOW.cold, cx, cy, 40, a0 * (0.42 + 0.12 * Math.sin(t * 3) + pct * 0.4));
+    ctx.globalCompositeOperation = 'source-over';
+    for(let i = 0; i < 5; i++){
+        const ph = (t * 0.7 + i / 5) % 1;
+        const vx = cx - 6 + ph * 10 + Math.sin(t * 2 + i) * 2.5, vy = cy - 11 - ph * 18;
+        szGlow(SZ_GLOW.white, vx, vy, 3 + ph * 7, a0 * (1 - ph) * 0.42);
+    }
+    ctx.globalAlpha = a0;
+    /* 점선 표적 고리 — 얼음색 */
+    ctx.strokeStyle = 'rgba(200,238,255,' + (0.45 + Math.sin(t * 4) * 0.2).toFixed(3) + ')';
+    ctx.lineWidth = 1.4; ctx.setLineDash([4, 5]); ctx.lineDashOffset = -t * 14;
+    ctx.beginPath(); ctx.arc(cx, cy, d.radius + 9, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineDashOffset = 0;
+    const sp = szFuelSprite();
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(Math.sin(t * 1.3) * 0.08);
+    ctx.drawImage(sp.c, -sp.W / 2, -sp.H / 2, sp.W, sp.H);
+    ctx.restore();
+    /* 라벨 — 무엇인지 한눈에(언어 무관 화학식) */
+    ctx.globalAlpha = a0 * 0.72;
+    ctx.font = '700 10.5px Orbitron, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';   /* 320px 폰(캔버스 ×0.86)에서도 9px 이상 */
+    ctx.lineWidth = 2.6; ctx.strokeStyle = 'rgba(0,6,20,0.75)'; ctx.strokeText('CH₄ · LOX', cx, cy + 16);
+    ctx.fillStyle = '#CFEFFF'; ctx.fillText('CH₄ · LOX', cx, cy + 16);
+    ctx.globalAlpha = a0;
+    /* 충전 고리 */
+    if(pct > 0){
+        const A0 = -Math.PI / 2, A1 = A0 + Math.PI * 2 * pct, R = d.radius + 13;
+        ctx.strokeStyle = 'rgba(0,0,0,.45)'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = '#BFEAFF'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.arc(cx, cy, R, A0, A1); ctx.stroke();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(SZ_GLOW.white, cx + Math.cos(A1) * R - 7, cy + Math.sin(A1) * R - 7, 14, 14);
+        ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+/* 첫 탱커 안내 — 탱커 아래 반투명 알약 3.2초, 기기당 한 번 */
+function szFuelDrawWorld(now){
+    const d = SZP.tipD;
+    if(!d) return;
+    if(!SZP.tipT0){
+        if(d.collected || d.y < 30 || d.y > CH - 60) return;
+        SZP.tipT0 = now;
+        try{ localStorage.setItem('szx_fuel_tip', '1'); }catch(_){}
+    }
+    const e = (now - SZP.tipT0) / 3200;
+    if(e >= 1 || d.collected){ SZP.tipD = null; return; }
+    const a = (e < 0.12 ? e / 0.12 : e > 0.8 ? (1 - e) / 0.2 : 1) * 0.86;
+    const s = _szfT('tip');
+    ctx.save();
+    ctx.font = '700 11px ' + szStoryFont();
+    const w = ctx.measureText(s).width + 18, y = Math.min(CH - 40, d.y + 44), x = Math.max(w / 2 + 6, Math.min(CW - w / 2 - 6, d.x));
+    ctx.globalAlpha = a * 0.8;
+    ctx.fillStyle = 'rgba(6,14,30,0.82)';
+    szRR(ctx, x - w / 2, y - 10, w, 20, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(191,234,255,0.7)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#DFF4FF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(s, x, y + 0.5);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+/* HUD — 하트 줄 바로 아래 이중 게이지(CH₄ 파랑 / LOX 하양), 작게·반투명. 헤더 탱크면 붉게 깜빡 + 화면 위쪽 반투명 경보 */
+function szFuelDrawHud(now){
+    if(!running || szSpectating) return;
+    const x0 = 10 + szHudDX, y0 = 55, bx = x0 + 9, bw = 62;
+    const lvl = szFuelLevel(), hdr = SZP.mode >= 1;
+    const blink = 0.5 + 0.5 * Math.sin(now * 0.014);
+    const pop = Math.max(0, 1 - (now - SZP.popT) / 500);
+    ctx.save();
+    /* 탱크 아이콘 — 작은 원통 */
+    ctx.globalAlpha = hdr ? 0.5 + 0.5 * blink : 0.62;
+    ctx.strokeStyle = hdr ? '#FF5A6E' : (lvl < SZP_T.LOW ? '#FFB347' : '#BFEAFF');
+    ctx.lineWidth = 1.3;
+    szRR(ctx, x0 + 0.5, y0 - 1, 5, 10, 2.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0 + 3, y0 - 1); ctx.lineTo(x0 + 3, y0 - 2.6); ctx.stroke();
+    /* 바탕 */
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
+    ctx.fillRect(bx, y0, bw, 2.8); ctx.fillRect(bx, y0 + 4.4, bw, 2.8);
+    if(!hdr){
+        const low = lvl < SZP_T.LOW;
+        ctx.globalAlpha = (low ? 0.55 + 0.4 * blink : 0.78) + pop * 0.2;
+        ctx.fillStyle = low ? '#FFB347' : '#4DAEFF';
+        ctx.fillRect(bx, y0, bw * Math.max(0, SZP.ch4), 2.8);
+        ctx.fillStyle = low ? '#FFD39A' : '#EAF6FF';
+        ctx.fillRect(bx, y0 + 4.4, bw * Math.max(0, SZP.lox), 2.8);
+        if(pop > 0){
+            ctx.globalCompositeOperation = 'lighter';
+            szGlow(SZ_GLOW.cold, bx + bw * 0.5, y0 + 3.6, 34, pop * 0.6);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+    } else {
+        /* 헤더 탱크 남은 시간 — 붉은 한 줄이 줄어든다 */
+        ctx.globalAlpha = 0.45 + 0.5 * blink;
+        ctx.fillStyle = '#FF5A6E';
+        ctx.fillRect(bx, y0, bw * Math.max(0, SZP.hdr / SZP_T.HDR_MS), 7.2);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    if(SZP.mode === 1) szFuelDrawAlarm(now, blink);
+}
+function szFuelDrawAlarm(now, blink){
+    const sec = Math.max(0, SZP.hdr / 1000);
+    const k = Math.min(1, (now - SZP.alarmT) / 250);
+    ctx.save();
+    /* 가장자리 붉은 빛(흔들림 없음) */
+    ctx.globalCompositeOperation = 'lighter';
+    const ea = (0.10 + 0.10 * blink) * k;
+    szGlow(SZ_GLOW.hot, 0, CH * 0.5, CH * 0.42, ea);
+    szGlow(SZ_GLOW.hot, CW, CH * 0.5, CH * 0.42, ea);
+    ctx.globalCompositeOperation = 'source-over';
+    const y = CH * 0.27, fnt = szStoryFont();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = (0.55 + 0.25 * blink) * k;
+    ctx.font = '800 12px ' + fnt;
+    const s1 = _szfT('hdr');
+    const w1 = ctx.measureText(s1).width;
+    /* 경고 삼각형(그림 — 컬러 이모지 fillText 를 피한다) */
+    const tx = CW / 2 - w1 / 2 - 11;
+    ctx.fillStyle = '#FF5A6E';
+    ctx.beginPath(); ctx.moveTo(tx, y - 6.5); ctx.lineTo(tx + 7, y + 5.5); ctx.lineTo(tx - 7, y + 5.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#1a0008'; ctx.fillRect(tx - 0.8, y - 2.5, 1.6, 4.4); ctx.fillRect(tx - 0.8, y + 2.9, 1.6, 1.4);
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(20,0,8,0.7)'; ctx.strokeText(s1, CW / 2 + 4, y);
+    ctx.fillStyle = '#FFB3BD'; ctx.fillText(s1, CW / 2 + 4, y);
+    ctx.font = '900 24px Orbitron, sans-serif';
+    const s2 = sec.toFixed(1);
+    ctx.lineWidth = 4; ctx.strokeText(s2, CW / 2, y + 24);
+    ctx.fillStyle = '#FF6F80'; ctx.fillText(s2, CW / 2, y + 24);
+    ctx.font = '700 10.5px ' + fnt;
+    const s3 = _szfT('hdrSub');
+    ctx.lineWidth = 3; ctx.strokeText(s3, CW / 2, y + 46);
+    ctx.fillStyle = '#FFD7DD'; ctx.fillText(s3, CW / 2, y + 46);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+}
+/* 우주 미아 — 폭발 없음. 세상은 어두워지고 별빛만 남은 채 기체가 관성으로 천천히 돌며 멀어진다(화면 흔들림 없음) */
+function szFuelDrawDrift(d, now, dt){
+    const t = (now - d.t0) / 1000;
+    for(const b of bullets){ b.x += b.vx * dt * 0.3; b.y += b.vy * dt * 0.3; }
+    updateStars(dt * 0.35);
+    drawFrame(now, 0);
+    const k = Math.min(1, t / 1.1);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(2,3,12,' + (0.84 * k).toFixed(3) + ')';
+    ctx.fillRect(0, 0, CW, CH);
+    ctx.restore();
+    if(k > 0.04) drawStars();
+    if(d.y < CH + 40){
+        const q = Math.min(1, t / 5);
+        const x = d.x + d.vx * t, y = d.y + d.vy * t, sc = 1 - 0.5 * q, rot = d.a0 + d.w * t;
+        ctx.save();
+        ctx.translate(x, y); ctx.rotate(rot); ctx.scale(sc, sc);
+        ctx.globalAlpha = 1 - 0.3 * q;
+        const art = szShipArt(szMyLivery());
+        if(art){ const fw = art.width / 5; ctx.drawImage(art, 2 * fw, 0, fw, art.height, -SZ_SHIP.fw / 2, SZ_SHIP.y0, SZ_SHIP.fw, SZ_SHIP.fh); }
+        else szDrawShipFallback();
+        ctx.restore();
+        /* 남은 추진제가 통기구로 새어 나오는 흰 김(처음 2초) */
+        if(t < 2.2){
+            ctx.save();
+            for(let i = 0; i < 4; i++){
+                const ph = (t * 1.1 + i / 4) % 1;
+                szGlow(SZ_GLOW.white, x + Math.cos(rot) * (6 + ph * 12), y + Math.sin(rot) * (6 + ph * 12) - ph * 4, (2 + ph * 6) * sc, (1 - ph) * 0.35 * (1 - t / 2.2));
+            }
+            ctx.restore();
+            ctx.globalAlpha = 1;
+        }
+    }
+    if(t > 7) szDeathFx = null;
+}
+/*</sz:mod:fuel>*/
 
 /* PvP bullet broadcast dedup —
    P2P (DC) + supabase 양쪽으로 같은 spawn 을 broadcast 하니까 guest 가 같은
@@ -16479,6 +16845,7 @@ function resetGame(){
     inventory = new Array(INVENTORY_SLOTS).fill(null);
     syncInventoryUI();
     szItemsReset();                    /* sz:mod:items — 장비 효과 상태 */
+    szFuelReset();                     /* sz:mod:fuel — 추진제 가득·탱커 시간표 처음부터 */
     gravityFieldActive = false;
     gravGauge = GRAV_GAUGE_MAX;
     gravLastTick = 0;
@@ -16516,7 +16883,7 @@ async function startGame(){
        overlay 의 토글로 사용자가 변경한 값이 즉시 콕핏 panel 에 반영되도록. */
     applySteerToControlRow();
     $('overlay').classList.add('hidden');
-    $('overlay').classList.remove('go-enter', 'go-lock');
+    $('overlay').classList.remove('go-enter', 'go-lock', 'sz-go-drift');
     /* 두 번째 판부터는 idleLoop 가 멈춰 있어 카운트다운 동안 발사 장면이
        그려지지 않고 직전 판 마지막 프레임이 얼어 있었다 — 다시 깨운다. */
     szDeathFx = null;
@@ -16653,6 +17020,7 @@ function szMetaRunEnd(ms, kind){
     const hk = szHitKind(kind);
     let line = '', face = 'salute';
     if(R.finale){ line = T('resEnd'); face = 'salute'; }
+    else if(hk === 'fuel' && T('sign.fuel')){ line = T('sign.fuel'); face = 'cry'; }   /* sz:mod:fuel — 사인이 곧 배울 점 (신기록 줄보다 먼저) */
     else if(R.bestMs > 5000 && ms > R.bestMs){ line = T('resRec'); face = 'cheer'; }
     else if(left > 0 && left < 10){ line = T('resNear', {z: szZoneShortSafe(cur + 1, true), n: szDec1(left)}); face = 'cry'; }
     else if(lost){ line = T('resLost'); face = 'worry'; }
@@ -16832,7 +17200,7 @@ function triggerGameOver(kind){
        결과 카드가 떠오른다 (szStartDeathFx). */
     if(navigator.vibrate)try{szVibrate([40,20,80])}catch(_){}
     const _isPvpDeath = !!(pvpState && pvpState.gameMode === 'pvp');
-    if(!_isPvpDeath){ try{ szStartDeathFx(performance.now()); }catch(_){} }
+    if(!_isPvpDeath){ try{ szStartDeathFx(performance.now(), kind); }catch(_){} }
     /* 동시 대결 판이면 결과는 대결 순위표가 맡는다 (싱글 카드·기록 저장 생략) */
     {
         let _szxHandled = false;
@@ -16902,11 +17270,13 @@ function triggerGameOver(kind){
         /* 폭발 연출이 보이도록 결과 카드는 짧게 늦게 떠오른다(싱글만).
            CSS 애니메이션 지연 동안에는 클릭을 막아 폭발 중 오터치로 재시작되지 않게. */
         const ovEl = $('overlay');
-        ovEl.classList.remove('go-enter', 'go-lock');
+        ovEl.classList.remove('go-enter', 'go-lock', 'sz-go-drift');
         if(!_isPvpDeath){
             void ovEl.offsetWidth;
+            /* sz:mod:fuel — 우주 미아는 표류 연출을 더 오래 보여 준다(카드 2.6초 뒤) */
             ovEl.classList.add('go-enter', 'go-lock');
-            setTimeout(()=>{ try{ ovEl.classList.remove('go-lock'); }catch(_){} }, 900);
+            if(kind === 'fuel') ovEl.classList.add('sz-go-drift');
+            setTimeout(()=>{ try{ ovEl.classList.remove('go-lock'); }catch(_){} }, kind === 'fuel' ? 3100 : 900);
         }
     }
     $('overlay').classList.remove('hidden');
@@ -17508,7 +17878,17 @@ function szDrawP5Marks(now){
 }
 /* 사망 — 슬로모션 속에서 기체가 터지고, 0.85초 뒤 결과 카드.
    P5 — 터지기 전 80ms 정지: 기체와 부딪힌 운석(빨간 외곽선)을 그대로 보여 '무엇에 맞았는지' 먼저 읽히게 한다(흔들림 없음) */
-function szStartDeathFx(now){
+function szStartDeathFx(now, kind){
+    if(kind === 'fuel'){
+        /* sz:mod:fuel — 우주 미아: 폭발·정지 없이 관성 표류(움직이던 속도 ×0.12 + 화면 가운데 쪽 위로 느리게, 작아지며 멀어짐) */
+        const sx = player.x < CW / 2 ? 1 : -1;
+        szDeathFx = {t0: now, x: player.x, y: player.y, hold: false, drift: true,
+                     vx: szPlayerVel.x * 0.12 + sx * 6, vy: szPlayerVel.y * 0.12 - 16, a0: szBank * 0.5, w: -sx * 0.45};
+        szHitStopUntil = 0; szShipHidden = true; szKillMark = null;
+        try{ gravityFieldActive = false; }catch(_){}
+        szKickIdle();
+        return;
+    }
     szDeathFx = {t0: now, x: player.x, y: player.y, hold: true};
     szHitStopUntil = 0;
     try{ gravityFieldActive = false; }catch(_){}
@@ -17527,6 +17907,7 @@ function _szDeathBoom(now){
 }
 function szDrawDeathFx(now, dt){
     const d = szDeathFx;
+    if(d.drift){ szFuelDrawDrift(d, now, dt); return; }   /* sz:mod:fuel — 우주 미아 */
     if(d.hold){
         if(now - d.t0 < SZ_DEATH_HOLD_MS){ drawFrame(now, 0); return; }
         _szDeathBoom(now);
@@ -17851,7 +18232,7 @@ function szDrawShip(px, py, now, alpha, livery){
     const up = Math.max(-1, Math.min(1, -szPlayerVel.y / 300));
     const thrust = 0.85 + up * 0.45;
     const flick = Math.sin(flamePulse) * 0.5 + 0.5;
-    const L = (14 + flick * 6 + Math.random() * 2.5) * thrust;
+    const L = (14 + flick * 6 + Math.random() * 2.5) * thrust * szFuelFlameK;   /* sz:mod:fuel — 헤더 탱크면 툭툭 끊긴다 */
     const NZ = 14.5;
 
     ctx.save();
@@ -18550,6 +18931,8 @@ function gameLoop(now){
     flamePulse=(flamePulse+dt*12)%(Math.PI*2);
 
     /* ---- Items / Depots / Gravity field / Mini-ship / Wipe ---- */
+    szFuelUpdate(dt, now);              /* sz:mod:fuel — 추진제 소모(증발·기동)·탱커 투하·헤더 탱크. 바닥나면 우주 미아(게임 종료) */
+    if(!running) return;
     maybeSpawnDepot(currentZoneIdx, now);
     updateDepots(dt, now);
     updateGravFieldCharge(dt);
@@ -18710,6 +19093,7 @@ function drawFrame(now, dt){
 
     /* ---- Depots (보급 거점) — bullets 위, player 아래 ---- */
     for(const d of depots) drawDepot(d, now);
+    szFuelDrawWorld(now);              /* sz:mod:fuel — 첫 탱커 안내 */
     szDrawGhosts(now);                 /* C — 두절로 못 받은 보급 실루엣 */
     szFunDraw(now);                    /* P8b — 별가루·황금 운석 */
 
@@ -18782,6 +19166,7 @@ function drawFrame(now, dt){
        2026-05-11 v5 — score-strip HTML overlay (y=5-30) 와 안 겹치게 y=10→y=40.
        하트 크기도 16→13 으로 축소 (overlay 와 위계 분리). */
     szDrawLives(now);
+    szFuelDrawHud(now);                /* sz:mod:fuel — 하트 줄 아래 CH₄·LOX 이중 게이지 · 헤더 탱크 경보 */
     szDrawCommHud(now);                /* 통신망 📡 — 하트 줄 오른쪽 */
     szItemsDrawHud(now);               /* sz:mod:items2 — 하트 줄 아래 아이템 칩(남은 시간 고리) */
 
@@ -20541,7 +20926,7 @@ ko:{
     resDef:'다음엔 더 멀리!', resEnd:'시간의 끝을 봤어! 우주 끝 우편배달부', resFirst:'첫 비행 끝! 위성을 이으면 보급이 와',
     sign:{comet:'혜성에 맞았어 — 꼬리는 늘 태양 반대편!', split:'분열암! 돌무더기 소행성은 쪼개져', wave:'유성 떼! 같은 궤도를 도는 돌 무리야',
           flare:'태양 플레어! 무전까지 흔드는 폭발이야', mine:'자기장 폭풍 구역에 걸렸어', nova:'초신성 충격파! 별의 마지막 폭발이야',
-          beam:'쌍성 빔! 시리우스 B는 백색왜성이야', bh:'블랙홀… 빛도 못 빠져나와'},
+          beam:'쌍성 빔! 시리우스 B는 백색왜성이야', bh:'블랙홀… 빛도 못 빠져나와', fuel:'추진제 고갈 — 우주 미아… 탱커는 BEAM으로!'},
     pc:['표면 71%가 바다인 푸른 행성','매년 3.8cm씩 지구에서 멀어지는 중','최고봉 올림푸스산, 높이 22km','다 모아도 달 질량의 3%뿐',
         '대적점엔 지구가 쏙 들어가','밀도가 물보다 낮은 유일한 행성','98° 기울어 옆으로 누워 공전','태양계 최강 바람, 시속 2,000km',
         '하트 모양 평원은 질소 얼음','보이저 1호가 2012년 처음 넘은 곳','얼음 천체 약 1조 개가 둘러싼 껍질','가장 가까운 별, 행성 b는 생명가능지대',
@@ -20583,7 +20968,7 @@ en:{
     resDef:'Farther next time!', resEnd:'Saw the end of time—cosmic mail carrier!', resFirst:'First flight done! Link satellites for supplies',
     sign:{comet:'A comet! Tails always point away from the Sun', split:'Splitter! Rubble-pile rocks break apart', wave:'Meteor swarm—rocks sharing one orbit',
           flare:'Solar flare—it even scrambles radio', mine:'Caught in a magnetic storm zone', nova:"Supernova shock—a star's last blast",
-          beam:'Binary beam! Sirius B is a white dwarf', bh:'Black hole… not even light escapes'},
+          beam:'Binary beam! Sirius B is a white dwarf', bh:'Black hole… not even light escapes', fuel:'Out of propellant — lost in space… BEAM those tankers!'},
     pc:['A blue world, 71% ocean','Drifts 3.8 cm from Earth each year','Olympus Mons towers 22 km high','All of it adds up to 3% of the Moon',
         'Earth could fit inside the Great Red Spot','The only planet less dense than water','Tilted 98°, it rolls around the Sun','Fastest winds in the Solar System',
         'Its heart is a plain of nitrogen ice','Voyager 1 crossed it first, in 2012','A shell of up to a trillion icy bodies','Nearest star; planet b is in the habitable zone',
@@ -20625,7 +21010,7 @@ ja:{
     resDef:'次はもっと遠くへ！', resEnd:'時間の果てを見た！宇宙の果ての郵便屋さん', resFirst:'初飛行おつかれ！衛星をつなぐと補給が来るよ',
     sign:{comet:'彗星に当たった — 尾はいつも太陽の反対側！', split:'分裂岩！がれきの小惑星は割れるんだ', wave:'流星群！同じ軌道を回る岩の群れだよ',
           flare:'太陽フレア！無線まで乱す大爆発だよ', mine:'磁気嵐ゾーンにつかまった', nova:'超新星の衝撃波！星の最後の大爆発だ',
-          beam:'連星ビーム！シリウスBは白色矮星だよ', bh:'ブラックホール…光さえ抜け出せない'},
+          beam:'連星ビーム！シリウスBは白色矮星だよ', bh:'ブラックホール…光さえ抜け出せない', fuel:'推進剤切れ — 宇宙の迷子…タンカーはBEAMで！'},
     pc:['表面の71%が海の青い惑星','毎年3.8cmずつ地球から遠ざかる','最高峰オリンポス山は高さ22km','全部集めても月の質量の3%',
         '大赤斑には地球がすっぽり入る','水より密度が低い唯一の惑星','98°傾き、横倒しで公転','太陽系最速の風、時速2,000km',
         'ハート形の平原は窒素の氷','ボイジャー1号が2012年に初めて越えた','約1兆個の氷の天体が包む殻','一番近い恒星、惑星bはハビタブルゾーン',
@@ -20667,7 +21052,7 @@ zh:{
     resDef:'下次飞更远！', resEnd:'见到了时间尽头！宇宙尽头的邮差', resFirst:'首飞完成！连上卫星就有补给',
     sign:{comet:'被彗星撞了 — 彗尾总是背向太阳！', split:'分裂岩！碎石堆小行星会裂开', wave:'流星群！同一轨道上的一群石头',
           flare:'太阳耀斑！连无线电都会被干扰', mine:'被磁暴区困住了', nova:'超新星冲击波！恒星最后的爆发',
-          beam:'双星光束！天狼星B是白矮星', bh:'黑洞…连光都逃不出去'},
+          beam:'双星光束！天狼星B是白矮星', bh:'黑洞…连光都逃不出去', fuel:'推进剂耗尽 — 迷失太空…加注船要用 BEAM 拉！'},
     pc:['71%表面是海洋的蓝色星球','每年远离地球3.8厘米','最高峰奥林匹斯山高22公里','全部加起来只有月球质量的3%',
         '大红斑能装下整个地球','唯一密度比水低的行星','倾斜98°，躺着绕太阳转','太阳系最强风，时速2000公里',
         '心形平原是氮冰','旅行者1号在2012年首次越过','约一万亿个冰质天体组成的外壳','最近的恒星，行星b位于宜居带',
@@ -20709,7 +21094,7 @@ es:{
     resDef:'¡La próxima, más lejos!', resEnd:'¡Vi el fin del tiempo! Cartero del cosmos', resFirst:'¡Primer vuelo! Conecta satélites y llegan suministros',
     sign:{comet:'Un cometa: ¡la cola siempre apunta lejos del Sol!', split:'¡Roca divisible! Los asteroides de escombros se parten', wave:'¡Enjambre de meteoros! Rocas que comparten órbita',
           flare:'¡Llamarada solar! Hasta altera la radio', mine:'Atrapado en una zona de tormenta magnética', nova:'¡Onda de supernova! La última explosión de una estrella',
-          beam:'¡Haz binario! Sirio B es una enana blanca', bh:'Agujero negro… ni la luz escapa'},
+          beam:'¡Haz binario! Sirio B es una enana blanca', bh:'Agujero negro… ni la luz escapa', fuel:'Sin propelente — perdido en el espacio… ¡tanques con BEAM!'},
     pc:['Un mundo azul, 71% océano','Se aleja 3,8 cm de la Tierra al año','El monte Olimpo mide 22 km','Todo junto suma el 3% de la Luna',
         'La Tierra cabe en la Gran Mancha Roja','El único planeta menos denso que el agua','Inclinado 98°, rueda alrededor del Sol','Los vientos más rápidos del sistema solar',
         'Su corazón es hielo de nitrógeno','La Voyager 1 lo cruzó en 2012','Una capa de hasta un billón de cuerpos helados','La más cercana; su planeta b está en la zona habitable',
@@ -20751,7 +21136,7 @@ pt:{
     resDef:'Na próxima, mais longe!', resEnd:'Vi o fim do tempo! Carteiro do cosmos', resFirst:'Primeiro voo! Conecte satélites para ter suprimentos',
     sign:{comet:'Um cometa: a cauda sempre aponta para longe do Sol!', split:'Rocha que se parte! Asteroides de entulho se dividem', wave:'Enxame de meteoros! Rochas na mesma órbita',
           flare:'Erupção solar! Até embaralha o rádio', mine:'Preso numa zona de tempestade magnética', nova:'Onda de supernova! A última explosão de uma estrela',
-          beam:'Feixe binário! Sirius B é uma anã branca', bh:'Buraco negro… nem a luz escapa'},
+          beam:'Feixe binário! Sirius B é uma anã branca', bh:'Buraco negro… nem a luz escapa', fuel:'Sem propelente — perdido no espaço… tanques com BEAM!'},
     pc:['Um mundo azul, 71% oceano','Afasta-se 3,8 cm da Terra por ano','O Monte Olimpo tem 22 km','Tudo junto soma 3% da Lua',
         'A Terra cabe na Grande Mancha Vermelha','O único planeta menos denso que a água','Inclinado 98°, rola em volta do Sol','Os ventos mais rápidos do Sistema Solar',
         'O coração é gelo de nitrogênio','A Voyager 1 cruzou em 2012','Uma casca de até um trilhão de corpos gelados','A mais próxima; o planeta b fica na zona habitável',
@@ -21869,7 +22254,7 @@ function pickup(d){
     for(let i = 0; i < 10; i++){ emit(K_MOTE, d.x + (Math.random() - 0.5) * 16, d.y + (Math.random() - 0.5) * 16, (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200, 0.7, 2.4, c); }
     szRings.push({x:d.x, y:d.y, t:0, dur:0.45, r0:8, r1:46, rgb: c === 2 ? '255,110,150' : '124,231,255', w:2.4});
     const v = ITEM_VISUAL[d.item] || {};
-    const label = d.item === ITEM.MINI ? '✈ +1' : v.tech ? szItemName(d.item) : ((v.emoji && !v.isSvg ? v.emoji : '+') + ' +1');
+    const label = d.item === 'fuel' ? szFuelLabel() : d.item === ITEM.MINI ? '✈ +1' : v.tech ? szItemName(d.item) : ((v.emoji && !v.isSvg ? v.emoji : '+') + ' +1');
     szPopup(label, d.x, d.y - 18, v.color || '#FFE66D', 15, 0.9);
     P.popT = n;
 }
@@ -23883,6 +24268,7 @@ function onRv(o){
     player.x=P.x;player.y=P.y;
     try{pointer.x=P.x;pointer.y=P.y;pointer.active=false;pendingTp.active=false}catch(_){}
     try{szPrevPos=null}catch(_){}
+    try{ szFuelRevive(); }catch(_){}   /* sz:mod:fuel — 구조선이 추진제를 나눠 준다 */
     C.revived++;
     metaOut({pd:0,rv:C.revived});track(true);
     coopStamp(ct('revived').replace('{n}',String(o.n||'').slice(0,8)),'#7CFFB2');
@@ -24209,7 +24595,7 @@ const SZH_I18N = {
         tabs: ['위성', 'BEAM', '피버', '아이템'],
         ttl: ['📡 위성 설치', '🧲 BEAM으로 보급 끌기', '🌈 피버 모드', '🎁 아이템'],
         lines: [['빈 곳 어디든 끌어서 조종 — 엄지가 기체를 가리지 않음', '미션이 뜨면 노란 슬롯 아래로 → SAT 꾹 1.2초 · 안 놓치면 PERFECT LINK(피버 +40 · 추가 보급)', '시작 화면 ✋ 배치 편집 = 버튼 옮기기·크기 · 🎮 클래식 = 예전 조종판', '위성 미션을 2번 연속 놓치면 그 판은 보급이 영구 차단'],
-                ['보급 캡슐을 노란 원뿔에 1.5초 담으면 획득 → 슬롯(5칸)에 보관 (하트는 즉시 +1)', '게이지 3초분 · 떼면 다시 참 · 아슬아슬 스치면 빨리 참'],
+                ['보급 캡슐을 노란 원뿔에 1.5초 담으면 획득 → 슬롯(5칸)에 보관 (하트는 즉시 +1)', '게이지 3초분 · 떼면 다시 참 · 아슬아슬 스치면 빨리 참', '연료 — 하트 아래 메탄(파랑)·산소(하양) 게이지는 가만히 있어도 증발하고 움직이면 더 줄어요. 서리 낀 탱커를 BEAM으로 끌어 급유 · 바닥나면 헤더 탱크 8초, 그것도 비면 우주 미아'],
                 ['별가루·스침·황금 운석·PERFECT LINK → 기체 둘레 고리 100%', '5초간 닿는 운석 파괴(보스 장벽 제외) · 별가루 자석 약 3배 · 위성 설치 ×1.5'],
                 ['BEAM으로 캡슐 획득 → 슬롯(5칸)을 눌러 사용', '반중력파·이온 충격파는 일부 구간 두 번째 보급에서 드물게 나온다 (미션 구간은 위성을 이어야 옴)']],
         pc: ['PC: R 꾹', 'PC: F · S · Shift 꾹', '', 'PC: 1~5 (Q W E = 1~3)'],
@@ -24223,7 +24609,7 @@ const SZH_I18N = {
         tabs: ['Satellite', 'BEAM', 'FEVER', 'Items'],
         ttl: ['📡 Place a satellite', '🧲 Pull supplies with BEAM', '🌈 FEVER mode', '🎁 Items'],
         lines: [['Drag anywhere on empty space to steer — your thumb never covers the ship', 'Mission → get under the yellow slot, hold SAT 1.2 s · never slip off = PERFECT LINK (FEVER +40 · extra supplies)', 'Start screen: ✋ Edit layout moves/resizes buttons · 🎮 Classic = the old control panel', 'Miss 2 satellite missions in a row and supplies are cut for the rest of the run'],
-                ['Keep a capsule in the yellow cone for 1.5 s → it goes into a slot (5) · hearts heal at once', 'Gauge lasts 3 s · refills when released · close grazes refill it faster'],
+                ['Keep a capsule in the yellow cone for 1.5 s → it goes into a slot (5) · hearts heal at once', 'Gauge lasts 3 s · refills when released · close grazes refill it faster', 'Fuel — the methane (blue) and oxygen (white) bars under your hearts boil off even at rest and drain faster as you move. Pull the frosty tanker in with BEAM · when empty, the header tank buys 8 s, then you are lost in space'],
                 ['Stardust, grazes, golden meteors, PERFECT LINK → fill the ring around your ship', '5 s: meteors you touch shatter (not boss walls) · stardust magnet ~3× · satellite install ×1.5'],
                 ['Grab capsules with BEAM → tap a slot (5) to use', 'Anti-Gravity Wave and Ion Shockwave rarely ride in the 2nd supply of some zones (mission zones: link the satellite first)']],
         pc: ['PC: hold R', 'PC: hold F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
@@ -24237,7 +24623,7 @@ const SZH_I18N = {
         tabs: ['衛星', 'BEAM', 'フィーバー', 'アイテム'],
         ttl: ['📡 衛星を設置', '🧲 BEAMで補給を引き寄せ', '🌈 フィーバーモード', '🎁 アイテム'],
         lines: [['空いた所ならどこでもドラッグで操縦 — 親指が機体を隠さない', 'ミッションが出たら黄色いスロットの下へ → SAT長押し1.2秒 · 外さなければPERFECT LINK（フィーバー+40・追加補給）', 'スタート画面 ✋ 配置編集でボタンの移動・サイズ · 🎮 クラシック = 従来の操縦パネル', '衛星ミッションを2回続けて逃すと、その回は補給が永久に止まる'],
-                ['補給カプセルを黄色い円すいに1.5秒入れると獲得 → スロット（5つ）に保管（ハートは即+1）', 'ゲージは3秒分 · 離すと回復 · ぎりぎりのかすりで早く回復'],
+                ['補給カプセルを黄色い円すいに1.5秒入れると獲得 → スロット（5つ）に保管（ハートは即+1）', 'ゲージは3秒分 · 離すと回復 · ぎりぎりのかすりで早く回復', '燃料 — ハートの下のメタン（青）・酸素（白）ゲージは止まっていても蒸発し、動くほど減る。霜のついたタンカーをBEAMで引き寄せて補給 · 空になるとヘッダータンクで8秒、それも尽きると宇宙の迷子'],
                 ['星くず・かすり・金色の隕石・PERFECT LINK → 機体のまわりのリングを満タンに', '5秒間：触れた隕石が砕ける（ボスの壁は除く）· 星くず吸引 約3倍 · 衛星設置 ×1.5'],
                 ['BEAMでカプセル獲得 → スロット（5つ）をタップで使用', '反重力波・イオン衝撃波は一部の区間の2つ目の補給からまれに出る（ミッション区間は衛星をつなぐと届く）']],
         pc: ['PC：R長押し', 'PC：F · S · Shift長押し', '', 'PC：1〜5（Q W E = 1〜3）'],
@@ -24251,7 +24637,7 @@ const SZH_I18N = {
         tabs: ['卫星', 'BEAM', '狂热', '道具'],
         ttl: ['📡 安装卫星', '🧲 用 BEAM 拉补给', '🌈 狂热模式', '🎁 道具'],
         lines: [['在空白处任意拖动即可操控 — 拇指不会挡住飞船', '任务出现后移到黄色槽位下方 → 按住 SAT 1.2 秒 · 全程不脱离 = PERFECT LINK（狂热 +40 · 额外补给）', '开始画面 ✋ 编辑布局：移动按钮、调大小 · 🎮 经典 = 原来的操控面板', '连续 2 次错过卫星任务，本局补给将永久中断'],
-                ['让补给舱在黄色锥形里停 1.5 秒即可获得 → 存入槽位（5 格）（爱心立即 +1）', '能量可用 3 秒 · 松开自动回充 · 惊险擦边回充更快'],
+                ['让补给舱在黄色锥形里停 1.5 秒即可获得 → 存入槽位（5 格）（爱心立即 +1）', '能量可用 3 秒 · 松开自动回充 · 惊险擦边回充更快', '燃料 — 爱心下方的甲烷（蓝）·氧（白）计量条静止时也会蒸发，移动越多减得越快。用 BEAM 拉来结霜的加注船补给 · 耗尽后集管箱撑 8 秒，再耗尽就会迷失在太空'],
                 ['星尘、擦边、金色陨石、PERFECT LINK → 填满飞船周围的光环', '5 秒内：碰到的陨石粉碎（Boss 墙除外）· 星尘吸力约 3 倍 · 卫星安装 ×1.5'],
                 ['用 BEAM 获得补给舱 → 点按槽位（5 格）使用', '反重力波、离子冲击波偶尔出现在部分区段的第 2 个补给中（任务区段需先接通卫星）']],
         pc: ['电脑：按住 R', '电脑：按住 F · S · Shift', '', '电脑：1–5（Q W E = 1–3）'],
@@ -24265,7 +24651,7 @@ const SZH_I18N = {
         tabs: ['Satélite', 'BEAM', 'FIEBRE', 'Objetos'],
         ttl: ['📡 Instala un satélite', '🧲 Atrae suministros con BEAM', '🌈 Modo FIEBRE', '🎁 Objetos'],
         lines: [['Arrastra en cualquier zona libre para pilotar — el pulgar no tapa la nave', 'Misión → ponte bajo la ranura amarilla y mantén SAT 1,2 s · sin salirte = PERFECT LINK (FIEBRE +40 · más suministros)', 'Pantalla de inicio: ✋ Editar mueve y redimensiona botones · 🎮 Clásico = el panel de antes', 'Si fallas 2 misiones de satélite seguidas, los suministros se cortan el resto de la partida'],
-                ['Mantén la cápsula 1,5 s en el cono amarillo → va a una ranura (5) · el corazón cura al instante', 'Carga de 3 s · se recarga al soltar · los roces la recargan más rápido'],
+                ['Mantén la cápsula 1,5 s en el cono amarillo → va a una ranura (5) · el corazón cura al instante', 'Carga de 3 s · se recarga al soltar · los roces la recargan más rápido', 'Combustible — las barras de metano (azul) y oxígeno (blanco) bajo los corazones se evaporan aunque no te muevas y bajan más al moverte. Atrae el tanque escarchado con BEAM · vacías, el tanque de cabecera da 8 s y luego quedas perdido en el espacio'],
                 ['Polvo estelar, roces, meteoritos dorados y PERFECT LINK → llena el anillo de tu nave', '5 s: los meteoritos que tocas se rompen (no los muros de jefe) · imán de polvo ~3× · satélite ×1,5'],
                 ['Atrapa cápsulas con BEAM → toca una ranura (5) para usarla', 'La Onda antigravedad y la Onda de choque iónica salen rara vez en el 2.º suministro de algunas zonas (en zonas de misión, enlaza el satélite)']],
         pc: ['PC: mantén R', 'PC: mantén F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
@@ -24279,7 +24665,7 @@ const SZH_I18N = {
         tabs: ['Satélite', 'BEAM', 'FEBRE', 'Itens'],
         ttl: ['📡 Instale um satélite', '🧲 Puxe suprimentos com BEAM', '🌈 Modo FEBRE', '🎁 Itens'],
         lines: [['Arraste em qualquer área livre para pilotar — o polegar não cobre a nave', 'Missão → fique sob o encaixe amarelo e segure SAT 1,2 s · sem escapar = PERFECT LINK (FEBRE +40 · mais suprimentos)', 'Tela inicial: ✋ Editar move e redimensiona botões · 🎮 Clássico = o painel antigo', 'Perca 2 missões de satélite seguidas e os suprimentos são cortados até o fim da partida'],
-                ['Mantenha a cápsula 1,5 s no cone amarelo → vai para um encaixe (5) · o coração cura na hora', 'Carga de 3 s · recarrega ao soltar · raspões recarregam mais rápido'],
+                ['Mantenha a cápsula 1,5 s no cone amarelo → vai para um encaixe (5) · o coração cura na hora', 'Carga de 3 s · recarrega ao soltar · raspões recarregam mais rápido', 'Combustível — as barras de metano (azul) e oxigênio (branco) sob os corações evaporam mesmo parado e caem mais ao se mover. Puxe o tanque congelado com BEAM · vazias, o tanque de cabeçote dá 8 s e depois você fica perdido no espaço'],
                 ['Poeira estelar, raspões, meteoros dourados e PERFECT LINK → encha o anel da nave', '5 s: meteoros que você toca se quebram (exceto muros de chefe) · ímã de poeira ~3× · satélite ×1,5'],
                 ['Pegue cápsulas com BEAM → toque num encaixe (5) para usar', 'A Onda antigravidade e a Onda de choque iônica aparecem raramente no 2º suprimento de algumas zonas (em zonas de missão, ligue o satélite)']],
         pc: ['PC: segure R', 'PC: segure F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
@@ -25033,6 +25419,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
 <li><strong>SAT</strong> — 위성 미션 때만 켜지는 버튼입니다. 천체를 도는 궤도 링 위에 <strong>노란 슬롯</strong>이 움직이는데, 원뿔로 그 슬롯을 1.2초 비추면 위성이 펼쳐지며 설치됩니다. 한 번도 놓치지 않으면 <strong>PERFECT LINK</strong>로 피버 게이지와 점수가 더 붙습니다. 위성을 이어야 보급이 끊기지 않습니다. 큰 위성 미션을 <strong>두 번 연속</strong> 놓치면 그 판은 보급 캡슐이 영구히 끊기니(한 번 놓치면 경고가 뜹니다), 다음 미션은 꼭 이어 두세요.</li>
 <li><strong>보조 부표</strong> — 큰 위성 미션(12개) 사이와 은하 밖 구간에는 작은 중계 부표가 20~40초마다 내려옵니다. 원뿔로 0.8초 덮으면 설치되고, 끊긴 통신도 되살아납니다.</li>
 <li><strong>스침</strong> — 운석을 아슬아슬하게 비껴가면 BEAM 게이지가 차고 콤보가 쌓입니다. 과감할수록 보상이 큽니다.</li>
+<li><strong>추진제(연료)</strong> — 하트 아래 두 줄 게이지는 액체메탄(파랑)과 액체산소(하양)입니다. 메탄 엔진은 산소를 메탄 질량의 약 3.6배 태우는데, 액체산소가 메탄보다 2.7배쯤 무거워서 두 탱크의 부피는 약 4:3 — 그래서 탱커 그림의 띠도 산소 쪽이 조금 깁니다. 둘 다 영하 160~183℃의 극저온 액체라 단열을 해도 계속 끓어 날아가고(증발, boil-off), 그래서 가만히 있어도 게이지가 줄고 움직이면 더 빨리 줍니다. 실제 화성행 대형 우주선도 같은 문제 때문에 궤도에서 탱커 여러 대가 차례로 추진제를 옮겨 담는 <strong>궤도 급유</strong>를 계획하는데, 이 게임에서는 서리 낀 탱커를 BEAM 으로 끌어오면 급유됩니다. 메인 탱크가 바닥나면 착륙용 예비 <strong>헤더 탱크</strong>로 8초를 버티고, 그 안에 탱커를 못 잡으면 엔진이 꺼져 우주 미아가 됩니다. 탱커는 위성 보급이 끊겨도 계속 옵니다.</li>
 </ul>
       </div>
     </details>
