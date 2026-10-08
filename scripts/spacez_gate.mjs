@@ -365,7 +365,12 @@ function pageLib(){
         return ZONES.length;
     };
     G.perfJump = function(z){ const now = performance.now(); if(z > 0) startedAt = now - (ZONES[z].s * 1000 - 800) - totalPausedMs; __M.mark = __M.fr.length; __M.markT = now; return 1; };
-    G.forceMission = function(){ if(missionState === 'pending'){ missionPendingUntil = performance.now() + 30; return 1; } return 0; };
+    /* 예고 전(idle)이면 바로 발동 — 캡처 타이밍에 따라 idle 이 걸려 'SAT·BEAM 버튼 (idle)' FAIL 이 해상도를 옮겨 다녔다(2026-10-08) */
+    G.forceMission = function(){
+        if(missionState === 'pending'){ missionPendingUntil = performance.now() + 30; return 1; }
+        if(missionState !== 'active' && typeof _activateMission === 'function'){ try{ _activateMission(performance.now()); return 2; }catch(_){} }
+        return 0;
+    };
     G.perfCollect = function(){
         const a = __M.fr.slice(__M.mark);
         const tr = a.filter(x => x.z0 !== x.z1), ac = a.filter(x => x.m0 === 'pending' && x.m1 === 'active');
