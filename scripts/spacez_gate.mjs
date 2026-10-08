@@ -3951,9 +3951,13 @@ function judgeFlags0(cur, BASE){
     }
     const bh = BASE && BASE.hitpath;
     for(const [k, m] of Object.entries(cur.hit.runs)){
-        const b = bh && bh.runs[k];
+        /* 패키지 시나리오(mp3db-press@16.67 등)는 기준선에 '패키지 켬' 해시가 들어 있다. 킬스위치를 끄면 그 기능이 없는
+           경로가 되므로 같은 dt 의 inject 시나리오와 같아야 맞다 (2026-10-09 — 웨이브 2 보고 4건이 이 오탐) */
+        const pm = /^mp\d+[a-z]*-[a-z]+@(.+)$/.exec(k);
+        const bk = pm ? 'inject@' + pm[1] : k;
+        const b = bh && bh.runs[bk];
         if(!b){ row(G, 'hitpath ' + k, '기준선 없음', null, '-', 'WARN'); continue; }
-        row(G, 'hitpath ' + k + ' (킬스위치 끔)', '#' + m.h, '#' + b.h, '같음', m.h === b.h ? 'PASS' : 'FAIL');
+        row(G, 'hitpath ' + k + ' (킬스위치 끔' + (pm ? ' = ' + bk : '') + ')', '#' + m.h, '#' + b.h, '같음', m.h === b.h ? 'PASS' : 'FAIL');
     }
 }
 
