@@ -38,6 +38,7 @@
      startshot  시작 화면 ko·en × 320x568·390x844 — 스크린샷(보통 + 애니메이션 정지·캔버스 숨김) 해시·DOM 배치 서명 기준선 비교
      gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
+     restart2   (MP2) 길게 누르기 p50≤2s·탭 p90≤3.5s·스크롤/대던 손가락/사망 직후/대결·협동 오작동 0·Space·정산 값·320x568 다시하기·?mp2=0  [--mp2-shots]
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -131,6 +132,207 @@ const HIT_SCEN = [];
 /*<gate:mp1>*/
 /*</gate:mp1>*/
 /*<gate:mp2>*/
+/* MP2 — restart2: 2초 재시작·정산 카운트업 (실제 시간, 가짜 시계 없음 · CDP 터치/키 입력).
+   경로 ① 길게 누르기(사망 0.35초 뒤 손가락 → 0.42초 누름) p50 ≤2000ms ② 탭(카드가 눌릴 수 있게 되자마자 '다시하기' 터치) p90 ≤3500ms
+   오작동 ③ 결과 카드 위아래 스크롤(412x915·320x568) ④ 비행 중 대고 있던 손가락 ⑤ 사망 직후(0.1초) 누름 ⑥ 대결·협동 판 → 전부 재시작 0
+   ⑦ Space 재시작 ⑧ 카운트업 중간값·최종값 ⑨ 320x568 결과 카드에서 다시하기가 스크롤 없이 보이는가 ⑩ ?mp2=0 이면 길게 누르기 무시
+   --mp2-shots: 결과 카드(ko·en × 320x568·390x844, 정산 중간·끝)·우주 미아 카드 스크린샷 → <out>/mp2/ */
+const MP2_PAGE = {
+    fly: `(function(){ if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); try{ startGame(); }catch(_){} return 1; })()`,
+    waitRun: `new Promise(function(res){ var t0 = performance.now(); (function w(){ if((running && !_introRunning) || performance.now() - t0 > 15000) return res(running ? 1 : 0); setTimeout(w, 30); })(); })`,
+    die: (kind) => `(function(){ clearInterval(window.__inv); window.__inv = 0; invincibleUntil = 0; window.__exp = formatDuration(Math.round(elapsedMs)); window.__h0 = (window.SZMP2 && SZMP2.stats) ? SZMP2.stats.holds : -1;
+        window.__t0 = performance.now(); try{ triggerGameOver(${kind ? JSON.stringify(kind) : ''}); }catch(err){ (window.__E = window.__E || []).push('gameover ' + err.message); } return 1; })()`,
+    /* 사망(__t0) → 조종 가능까지. 오는 판이 없으면 null */
+    waitPlay: (ms) => `new Promise(function(res){ var t1 = performance.now(); (function w(){ var n = performance.now();
+        if(running && !_introRunning){ var tot = Math.round(n - window.__t0); return setTimeout(function(){ res({ total: tot, last: window.SZMP2 && SZMP2.stats.last, holds: window.SZMP2 ? SZMP2.stats.holds - window.__h0 : null }); }, 80); }
+        if(n - t1 > ${ms}) return res({ total: null, running: running, intro: !!_introRunning, holds: window.SZMP2 ? SZMP2.stats.holds - window.__h0 : null });
+        setTimeout(w, 10); })(); })`,
+    canvasPt: `(function(){ var r = document.getElementById('dodge-canvas').getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height * 0.55)]; })()`,
+    elPt: (sel) => `(function(){ var el = document.querySelector(${JSON.stringify(sel)}); if(!el) return null; var r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; })()`,
+    tappable: `new Promise(function(res){ var t1 = performance.now(); (function w(){ var ov = document.getElementById('overlay'), b = document.getElementById('ovBtn');
+        var ok = ov && b && !ov.classList.contains('hidden') && !ov.classList.contains('go-lock') && b.getClientRects().length && getComputedStyle(ov).pointerEvents !== 'none' && +getComputedStyle(ov).opacity > 0.5;
+        if(ok){ var r = b.getBoundingClientRect(); return res({ t: Math.round(performance.now() - window.__t0), pt: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] }); }
+        if(performance.now() - t1 > 8000) return res(null); setTimeout(w, 10); })(); })`,
+};
+async function mp2Touch(e, pt, holdMs, moves){
+    await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1], id: 7 }] });
+    if(moves) for(const m of moves){ await sleep(m[2] || 30); await e.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: pt[0] + m[0], y: pt[1] + m[1], id: 7 }] }); }
+    await sleep(holdMs);
+    await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+async function mp2Fly(e){ await e.ev(MP2_PAGE.fly); const ok = await e.ev(MP2_PAGE.waitRun, 30000); await sleep(1200); return ok; }
+EXT_CMDS.restart2 = {
+    all: false,
+    run: async (base) => {
+        const N = Math.max(3, +(A['restart-runs'] || 6));
+        const out = { hold: [], tap: [], miss: {}, space: null, cu: null, retryVis: null, off: null, shots: [] };
+        await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko'), 1800);
+            await mp2Fly(e);   /* 첫 판(긴 인트로) — 재시작 측정은 둘째 판부터 */
+            for(let i = 0; i < N; i++){
+                /* ① 길게 누르기 — 사람이 폭발을 보고 손을 대는 시점(0.35초)에 누른다 */
+                await e.ev(MP2_PAGE.die());
+                await sleep(350);
+                await mp2Touch(e, await e.ev(MP2_PAGE.canvasPt), 420);
+                const r = await e.ev(MP2_PAGE.waitPlay(6000), 20000);
+                out.hold.push(r);
+                if(r.total == null) await mp2Fly(e); else { await e.ev(MP2_PAGE.fly); await sleep(1200); }
+                /* ② 탭 — 카드가 눌릴 수 있게 되자마자 '다시하기' 를 터치 */
+                await e.ev(MP2_PAGE.die());
+                const tp = await e.ev(MP2_PAGE.tappable, 20000);
+                if(tp){ await mp2Touch(e, tp.pt, 40); }
+                const r2 = await e.ev(MP2_PAGE.waitPlay(6000), 20000);
+                out.tap.push({ ...r2, card: tp && tp.t });
+                if(r2.total == null) await mp2Fly(e); else { await e.ev(MP2_PAGE.fly); await sleep(1200); }
+            }
+            /* ⑦ Space */
+            await e.ev(MP2_PAGE.die()); await sleep(600);
+            await e.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+            await e.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+            out.space = await e.ev(MP2_PAGE.waitPlay(4000), 20000);
+            if(out.space.total == null) await mp2Fly(e); else { await e.ev(MP2_PAGE.fly); await sleep(1200); }
+            /* ③ 스크롤(412x915) — 카드 위 큰 시간 글자에서 아래로 끌기 */
+            const scrollCase = async (key) => {
+                await e.ev(MP2_PAGE.die()); await sleep(1300);
+                const pt = await e.ev(MP2_PAGE.elPt('#overlay .score-big'));
+                const st0 = await e.ev('document.getElementById("overlay").scrollTop');
+                await mp2Touch(e, pt, 500, [[0, 8], [0, 18], [0, 30], [0, 44], [0, 60], [0, 80]]);
+                await mp2Touch(e, pt, 500, [[0, -8], [0, -18], [0, -30], [0, -44], [0, -60], [0, -80]]);
+                const r = await e.ev(MP2_PAGE.waitPlay(1500), 20000);
+                r.scrollTop = [st0, await e.ev('document.getElementById("overlay").scrollTop')];
+                out.miss[key] = r;
+                if(r.total != null){ await e.ev(MP2_PAGE.fly); await sleep(1200); } else await mp2Fly(e);
+            };
+            await scrollCase('scroll412');
+            /* ④ 비행 중 대고 있던 손가락 — 그대로 1.5초 누르고 있어도 재시작하지 않는다 */
+            {
+                const pt = await e.ev(MP2_PAGE.canvasPt);
+                await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1], id: 7 }] });
+                await sleep(300);
+                await e.ev(MP2_PAGE.die());
+                await sleep(1500);
+                await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                out.miss.heldFinger = await e.ev(MP2_PAGE.waitPlay(800), 20000);
+                if(out.miss.heldFinger.total != null){ await e.ev(MP2_PAGE.fly); await sleep(1200); } else await mp2Fly(e);
+            }
+            /* ⑤ 사망 0.1초 만에 누름(당황한 손) — 0.6초 누르고 있어도 재시작 0 */
+            await e.ev(MP2_PAGE.die()); await sleep(100);
+            await mp2Touch(e, await e.ev(MP2_PAGE.canvasPt), 600);
+            out.miss.early = await e.ev(MP2_PAGE.waitPlay(800), 20000);
+            if(out.miss.early.total != null){ await e.ev(MP2_PAGE.fly); await sleep(1200); } else await mp2Fly(e);
+            /* ⑥ 대결·협동 판(판 종류만 바꿔 흉내) — 길게 누르기 무시 */
+            for(const k of ['race', 'coop', 'ch']){
+                await e.ev('(SZRUN.kind = ' + JSON.stringify(k) + ', 1)');
+                await e.ev(MP2_PAGE.die()); await sleep(400);
+                await mp2Touch(e, await e.ev(MP2_PAGE.canvasPt), 500);
+                out.miss['kind_' + k] = await e.ev(MP2_PAGE.waitPlay(900), 20000);
+                await mp2Fly(e);
+            }
+            /* ⑧ 카운트업 — 워프로 존 9·콤보 37 판을 만들고 중간(0.75초)·끝(2초)을 읽는다 */
+            await e.ev('(function(){ szWarpTo(9); comboMaxThisRun = 37; return 1; })()');
+            await sleep(400);
+            await e.ev(MP2_PAGE.die());
+            const read = '(function(){ var o = document.getElementById("overlay"); var c = o.querySelectorAll(".go-stats .sz-cu"); return { big: (o.querySelector(".score-big") || {}).textContent, combo: c[0] && c[0].textContent, zone: c[1] && c[1].textContent, bar: o.querySelectorAll(".sz-prog i.on").length, exp: window.__exp }; })()';
+            await sleep(750); const mid = await e.ev(read);
+            await sleep(1300); const end = await e.ev(read);
+            out.cu = { mid, end };
+            await e.ev(MP2_PAGE.fly); await e.ev(MP2_PAGE.waitRun, 30000); await sleep(800);
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            collectErrs('restart2', e, pe);
+        });
+        /* ③·⑨ 320x568 — 스크롤 오작동 + 다시하기 가시성 */
+        await withEdge({ w: 320, h: 568, dsf: 2, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko'), 1800);
+            await mp2Fly(e);
+            await e.ev('(function(){ szWarpTo(9); comboMaxThisRun = 12; return 1; })()'); await sleep(300);
+            await e.ev(MP2_PAGE.die()); await sleep(1700);
+            out.retryVis = await e.ev('(function(){ var o = document.getElementById("overlay"), b = document.getElementById("ovBtn"); var ro = o.getBoundingClientRect(), rb = b.getBoundingClientRect(); return { btnBottom: Math.round(rb.bottom), ovBottom: Math.round(ro.bottom), btnTop: Math.round(rb.top), ovTop: Math.round(ro.top), overflow: o.scrollHeight > o.clientHeight + 2, scrollTop: o.scrollTop, ok: rb.top >= ro.top - 1 && rb.bottom <= ro.bottom + 1 }; })()');
+            const pt = await e.ev(MP2_PAGE.elPt('#overlay .score-big'));
+            const st0 = await e.ev('document.getElementById("overlay").scrollTop');
+            await mp2Touch(e, pt, 500, [[0, -8], [0, -20], [0, -36], [0, -54], [0, -76], [0, -100]]);
+            await mp2Touch(e, pt, 500, [[0, 8], [0, 20], [0, 36], [0, 54], [0, 76], [0, 100]]);
+            const r = await e.ev(MP2_PAGE.waitPlay(1500), 20000);
+            r.scrollTop = [st0, await e.ev('document.getElementById("overlay").scrollTop')];
+            out.miss.scroll320 = r;
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            collectErrs('restart2 320', e, pe);
+        });
+        /* ⑩ ?mp2=0 — 길게 누르기 무시(킬스위치) */
+        await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko', 'mp2=0'), 1800);
+            await mp2Fly(e);
+            await e.ev(MP2_PAGE.die()); await sleep(400);
+            await mp2Touch(e, await e.ev(MP2_PAGE.canvasPt), 500);
+            out.off = await e.ev(MP2_PAGE.waitPlay(900), 20000);
+            out.off.flag = await e.ev('SZ_FLAGS.mp2');
+            const pe = await e.ev('(window.__E||[]).slice(0,8)');
+            collectErrs('restart2 mp2=0', e, pe);
+        });
+        /* 스크린샷 — 결과 카드(정산 중간·끝) ko·en × 320x568·390x844 + 우주 미아(표류 중·카드) */
+        if(A['mp2-shots']){
+            const dir = path.join(OUT, 'mp2');
+            for(const L of ['ko', 'en']) for(const vp of [[320, 568, 2], [390, 844, 3]]){
+                await withEdge({ w: vp[0], h: vp[1], dsf: vp[2], mobile: true }, async (e) => {
+                    const k = L + '_' + vp[0] + 'x' + vp[1];
+                    await e.open(gameUrl(base, L), 1800);
+                    await mp2Fly(e);
+                    await e.ev('(function(){ szWarpTo(9); comboMaxThisRun = 37; return 1; })()'); await sleep(500);
+                    await e.ev(MP2_PAGE.die());
+                    await sleep(640); await e.shot(path.join(dir, k + '_1count_a.png'));
+                    await sleep(160); await e.shot(path.join(dir, k + '_1count_b.png'));
+                    await sleep(200); await e.shot(path.join(dir, k + '_1count_c.png'));
+                    await sleep(1200); await e.shot(path.join(dir, k + '_2final.png'));
+                    /* 길게 누르기 중(고리·테두리) */
+                    const bp = await e.ev(MP2_PAGE.elPt('#ovBtn'));
+                    await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: bp[0], y: bp[1], id: 7 }] });
+                    await sleep(200); await e.shot(path.join(dir, k + '_3hold.png'));
+                    await sleep(250);
+                    await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                    await sleep(150); await e.shot(path.join(dir, k + '_4intro.png'));
+                    await e.ev(MP2_PAGE.waitRun, 30000); await sleep(1500);
+                    if(L === 'ko' && vp[0] === 390){
+                        await e.ev(MP2_PAGE.die('fuel'));
+                        await sleep(500);
+                        await mp2Touch(e, await e.ev(MP2_PAGE.canvasPt), 0);   /* 표류 중 짧은 탭 — 재시작 안 함 */
+                        await sleep(900); await e.shot(path.join(dir, k + '_5drift.png'));
+                        await sleep(2900); await e.shot(path.join(dir, k + '_6driftcard.png'));
+                    }
+                    out.shots.push(k);
+                    const pe = await e.ev('(window.__E||[]).slice(0,8)');
+                    collectErrs('restart2 shots ' + k, e, pe);
+                });
+            }
+            say('restart2 스크린샷 → ' + dir);
+        }
+        const ok = (a) => a.filter(x => x.total != null).map(x => x.total).sort((x, y) => x - y);
+        const h = ok(out.hold), t = ok(out.tap);
+        out.holdP50 = q(h, 0.5); out.holdP90 = q(h, 0.9); out.tapP50 = q(t, 0.5); out.tapP90 = q(t, 0.9);
+        out.holdPaths = out.hold.map(x => x.last && x.last.path).join(',');
+        say('restart2: ' + JSON.stringify({ hold: [out.holdP50, out.holdP90], tap: [out.tapP50, out.tapP90] }));
+        return out;
+    },
+    judge: (cur, base) => {
+        const G = 'G-mp2 restart2';
+        const nH = cur.hold.filter(x => x.total != null).length, nT = cur.tap.filter(x => x.total != null).length;
+        const viaHold = cur.hold.filter(x => x.total != null && x.holds === 1 && x.last && x.last.path === 'hold').length;
+        row(G, '길게 누르기 경로 성공(실제로 hold 로 재시작)', viaHold + '/' + cur.hold.length + ' (' + cur.holdPaths + ')', null, '전부', nH === cur.hold.length && viaHold === nH ? 'PASS' : 'FAIL');
+        row(G, '길게 누르기 사망→조종 p50 / p90', cur.holdP50 + ' / ' + cur.holdP90 + 'ms', base ? base.holdP50 + ' / ' + base.holdP90 + 'ms' : null, 'p50 ≤2000', cur.holdP50 != null && cur.holdP50 <= 2000 ? 'PASS' : 'FAIL');
+        row(G, '탭 경로 사망→조종 p50 / p90', cur.tapP50 + ' / ' + cur.tapP90 + 'ms (카드 ' + q(cur.tap.map(x => x.card).filter(x => x != null).sort((a, b) => a - b), 0.5) + ')', base ? base.tapP50 + ' / ' + base.tapP90 + 'ms' : null, 'p90 ≤3500', nT === cur.tap.length && cur.tapP90 != null && cur.tapP90 <= 3500 ? 'PASS' : 'FAIL');
+        for(const [k, v] of Object.entries(cur.miss)){
+            row(G, '오작동 없음: ' + k, v.total == null ? '재시작 안 함' + (v.scrollTop ? ' (scrollTop ' + v.scrollTop.join('→') + ')' : '') : '재시작됨 ' + v.total + 'ms', null, '재시작 0', v.total == null ? 'PASS' : 'FAIL');
+        }
+        row(G, 'Space 재시작', cur.space && cur.space.total != null ? cur.space.total + 'ms (' + (cur.space.last && cur.space.last.path) + ')' : '안 됨', null, '재시작(key 경로)', cur.space && cur.space.total != null && cur.space.last && cur.space.last.path === 'key' ? 'PASS' : 'FAIL');
+        const tapLbl = cur.tap.filter(x => x.last && x.last.path === 'tap').length;
+        row(G, 'szTel 경로 표시(탭)', tapLbl + '/' + cur.tap.length, null, '전부 tap', tapLbl === cur.tap.length ? 'PASS' : 'WARN');
+        if(cur.cu){
+            const m = cur.cu.mid, e = cur.cu.end;
+            row(G, '정산 끝 값 = 실제 값', e.big + ' ×' + e.combo + ' Z' + e.zone + ' 막대' + e.bar, e.exp + ' ×37 Z10 막대10', '같음', e.big === e.exp && e.combo === '37' && e.zone === '10' && e.bar === 10 ? 'PASS' : 'FAIL');
+            row(G, '정산 중간 값(0.75초)', m.big + ' ×' + m.combo + ' Z' + m.zone + ' 막대' + m.bar, null, '끝 값보다 작음', (m.big !== e.big || m.combo !== e.combo || m.zone !== e.zone) ? 'PASS' : 'WARN');
+        }
+        if(cur.retryVis) row(G, '320x568 다시하기 스크롤 없이 보임', JSON.stringify(cur.retryVis).slice(0, 90), null, '버튼이 카드 안', cur.retryVis.ok ? 'PASS' : 'FAIL');
+        if(cur.off) row(G, '?mp2=0 길게 누르기 무시', (cur.off.total == null ? '무시' : '재시작됨') + ' (SZ_FLAGS.mp2=' + cur.off.flag + ')', null, '무시', cur.off.total == null && cur.off.flag === false ? 'PASS' : 'FAIL');
+    }
+};
 /*</gate:mp2>*/
 /*<gate:mp3>*/
 /*</gate:mp3>*/
