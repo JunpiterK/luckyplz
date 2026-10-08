@@ -24189,7 +24189,8 @@ Object.assign(window.SZX,{joinSilent:szxJoinSilent,goSilent:szxGoSilent,onFinish
 /*<sz:mod:howto>*/
 /* 소유: 게임방법 팝업 (2026-10-02, 운영자 요청). 실제 게임을 녹화한 클립 4개(public/assets/dodge/howto/*.mp4)
    ① 위성 설치(SAT, 플로팅 상대 드래그 조향) ② BEAM 보급 끌기(슬롯 5칸) ③ 피버 ④ 아이템. 2026-10-07 플로팅 조작 기본값으로 재녹화.
-   ※ 2026-10-08 장비 6종 폐기 → ④ 영상은 아직 옛 장비(라이다·레일건·휘플)를 보여 준다 — 재녹화 때 자막 순서(반중력파·이온 충격파·방어막·폭탄)에 맞출 것. 사실은 코드 기준:
+   2026-10-08 재녹화(scripts/spacez_howto_rec.mjs — 다음 재녹화도 이것으로): ① SAT 가 미션 중에만 BEAM 오른쪽에 나타남 + 끝에 보급 영구 차단 경고 배너,
+   ② 캡슐 = 윙맨(새 드론 그림)·이온 충격파, ④ 반중력파 → 이온 충격파 → 방어막 → 폭탄. ③ 피버는 10-07 영상 그대로(UI 동일). 자막 시각(cues)은 녹화 로그 기준. 사실은 코드 기준:
    SAT_INSTALL_MS 1200 · GRAV_PICKUP_TIME 1.5 · GRAV_GAUGE_MAX 3000(재사용 40%) · SZF_FEVER_MS 5000 · 피버 자석 42→120 · 설치 ×1.5 ·
    PERFECT LINK +40 · SHIELD_BUBBLE_MS 20000(막을 때 −2000) · MAX_LIVES 5 · WIPE_SPAWN_BLOCK_MS 5000 · MINI_DUR 30000(MINI_MAX 2).
    반중력파·이온 충격파(2026-10-08, SZI_T): AG_MS 15000 · R 138(기체 지름 46 × 3) · 1/r² · ION_MS 30000 · 120° 부채꼴 R 138 · SZI_RARE 0.25. 슬롯 ITEM_SLOT_MAX 5.
@@ -24197,12 +24198,12 @@ Object.assign(window.SZX,{joinSilent:szxJoinSilent,goSilent:szxGoSilent,onFinish
    열려 있는 동안 키·탭을 삼켜 아래에서 게임이 시작되지 않게 한다(window 캡처 단계). 레이어는 body 직속이라 캔버스 터치 함정과 무관 */
 (function(){
 const SZH_CLIPS = [
-    {id: 'sat',   ic: '📡', dur: 5.5, cues: [[0.1, 1.1], [1.1, 1.8], [1.8, 3.03], [3.03, 9]]},
-    {id: 'beam',  ic: '🧲', dur: 6.0, cues: [[0.1, 0.55], [0.55, 0.95], [0.95, 2.47], [2.47, 3.9], [3.98, 5.5], [5.5, 9]]},
+    {id: 'sat',   ic: '📡', dur: 7.9, cues: [[0.1, 1.0], [1.0, 1.73], [1.73, 2.93], [2.93, 4.5], [4.75, 9]]},
+    {id: 'beam',  ic: '🧲', dur: 6.1, cues: [[0.1, 0.6], [0.6, 1.05], [1.05, 2.55], [2.55, 3.4], [3.43, 4.9], [4.93, 9]]},
     {id: 'fever', ic: '🌈', dur: 7.2, cues: [[0, 1.33], [1.33, 6.35], [6.35, 9]]},
-    {id: 'items', ic: '🎁', dur: 8.0, cues: [[0.3, 2.2], [2.25, 4.25], [4.3, 6.45], [6.5, 9]]}
+    {id: 'items', ic: '🎁', dur: 10.6, cues: [[0.3, 2.8], [3.0, 5.62], [5.85, 8.1], [8.35, 11]]}
 ];
-const SZH_ITEM_KEYS = ['antigrav', 'ion', 'shield', 'wipe', 'heart', 'mini'];   /* 앞 4개 = 영상 자막 순서(반중력파·이온 충격파·방어막·폭탄 — 재녹화 예정), 나머지 = 전체 목록 (2026-10-08) */
+const SZH_ITEM_KEYS = ['antigrav', 'ion', 'shield', 'wipe', 'heart', 'mini'];   /* 앞 4개 = 영상 자막 순서(반중력파·이온 충격파·방어막·폭탄 — 2026-10-08 재녹화), 나머지 = 전체 목록 */
 const SZH_I18N = {
     ko: {title: '📖 게임방법', close: '닫기', prev: '이전', next: '다음', play: '재생',
         tabs: ['위성', 'BEAM', '피버', '아이템'],
@@ -24212,7 +24213,7 @@ const SZH_I18N = {
                 ['별가루·스침·황금 운석·PERFECT LINK → 기체 둘레 고리 100%', '5초간 닿는 운석 파괴(보스 장벽 제외) · 별가루 자석 약 3배 · 위성 설치 ×1.5'],
                 ['BEAM으로 캡슐 획득 → 슬롯(5칸)을 눌러 사용', '반중력파·이온 충격파는 일부 구간 두 번째 보급에서 드물게 나온다 (미션 구간은 위성을 이어야 옴)']],
         pc: ['PC: R 꾹', 'PC: F · S · Shift 꾹', '', 'PC: 1~5 (Q W E = 1~3)'],
-        chips: [['👆 빈 곳 어디든 끌어서 조종', '📡 미션! 노란 슬롯 아래로', 'SAT 꾹 — 1.2초', '✨ PERFECT LINK!'],
+        chips: [['👆 빈 곳 어디든 끌어서 조종', '📡 미션! 노란 슬롯 아래로', 'SAT 꾹 — 1.2초', '✨ PERFECT LINK!', '⚠ 2번 연속 놓치면 — 보급 영구 차단'],
                 ['📦 보급 캡슐 등장', '캡슐 아래로', 'BEAM 꾹 — 1.5초', '슬롯에 쏙!', 'BEAM 꾹 — 1.5초', '슬롯 5칸까지 보관'],
                 ['✦ 별가루로 고리 채우기', '🌈 피버 5초 — 몸통 박치기!', '피버 끝'],
                 ['🌀 반중력파 — 다가오는 운석을 밀어냄', '⚡ 이온 충격파 — 앞쪽 운석 분해', '🛡 방어막', '✦ 폭탄 — 싹쓸이']],
@@ -24226,7 +24227,7 @@ const SZH_I18N = {
                 ['Stardust, grazes, golden meteors, PERFECT LINK → fill the ring around your ship', '5 s: meteors you touch shatter (not boss walls) · stardust magnet ~3× · satellite install ×1.5'],
                 ['Grab capsules with BEAM → tap a slot (5) to use', 'Anti-Gravity Wave and Ion Shockwave rarely ride in the 2nd supply of some zones (mission zones: link the satellite first)']],
         pc: ['PC: hold R', 'PC: hold F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
-        chips: [['👆 Drag anywhere to steer', '📡 Mission! Get under the yellow slot', 'Hold SAT — 1.2 s', '✨ PERFECT LINK!'],
+        chips: [['👆 Drag anywhere to steer', '📡 Mission! Get under the yellow slot', 'Hold SAT — 1.2 s', '✨ PERFECT LINK!', '⚠ Miss 2 in a row — supplies cut for good'],
                 ['📦 Supply capsule', 'Get under it', 'Hold BEAM — 1.5 s', 'Into the slot!', 'Hold BEAM — 1.5 s', 'Up to 5 slots'],
                 ['✦ Stardust fills the ring', '🌈 5 s FEVER — ram them!', 'FEVER over'],
                 ['🌀 Anti-Gravity Wave — pushes meteors away', '⚡ Ion Shockwave — disintegrates meteors ahead', '🛡 Shield', '✦ Bomb — wipe out']],
@@ -24240,7 +24241,7 @@ const SZH_I18N = {
                 ['星くず・かすり・金色の隕石・PERFECT LINK → 機体のまわりのリングを満タンに', '5秒間：触れた隕石が砕ける（ボスの壁は除く）· 星くず吸引 約3倍 · 衛星設置 ×1.5'],
                 ['BEAMでカプセル獲得 → スロット（5つ）をタップで使用', '反重力波・イオン衝撃波は一部の区間の2つ目の補給からまれに出る（ミッション区間は衛星をつなぐと届く）']],
         pc: ['PC：R長押し', 'PC：F · S · Shift長押し', '', 'PC：1〜5（Q W E = 1〜3）'],
-        chips: [['👆 どこでもドラッグで操縦', '📡 ミッション！黄色いスロットの下へ', 'SAT長押し — 1.2秒', '✨ PERFECT LINK!'],
+        chips: [['👆 どこでもドラッグで操縦', '📡 ミッション！黄色いスロットの下へ', 'SAT長押し — 1.2秒', '✨ PERFECT LINK!', '⚠ 2回続けて逃すと — 補給が永久停止'],
                 ['📦 補給カプセル', 'カプセルの下へ', 'BEAM長押し — 1.5秒', 'スロットにイン！', 'BEAM長押し — 1.5秒', 'スロットは5つまで'],
                 ['✦ 星くずでリング充電', '🌈 フィーバー5秒 — 体当たり！', 'フィーバー終了'],
                 ['🌀 反重力波 — 迫る隕石を押し返す', '⚡ イオン衝撃波 — 前方の隕石を分解', '🛡 シールド', '✦ ボム — 一掃']],
@@ -24254,7 +24255,7 @@ const SZH_I18N = {
                 ['星尘、擦边、金色陨石、PERFECT LINK → 填满飞船周围的光环', '5 秒内：碰到的陨石粉碎（Boss 墙除外）· 星尘吸力约 3 倍 · 卫星安装 ×1.5'],
                 ['用 BEAM 获得补给舱 → 点按槽位（5 格）使用', '反重力波、离子冲击波偶尔出现在部分区段的第 2 个补给中（任务区段需先接通卫星）']],
         pc: ['电脑：按住 R', '电脑：按住 F · S · Shift', '', '电脑：1–5（Q W E = 1–3）'],
-        chips: [['👆 空白处任意拖动操控', '📡 任务！移到黄色槽位下方', '按住 SAT — 1.2 秒', '✨ PERFECT LINK!'],
+        chips: [['👆 空白处任意拖动操控', '📡 任务！移到黄色槽位下方', '按住 SAT — 1.2 秒', '✨ PERFECT LINK!', '⚠ 连续错过 2 次 — 补给永久中断'],
                 ['📦 补给舱出现', '移到它下方', '按住 BEAM — 1.5 秒', '进槽位！', '按住 BEAM — 1.5 秒', '最多存 5 格'],
                 ['✦ 星尘充能光环', '🌈 狂热 5 秒 — 撞碎它们！', '狂热结束'],
                 ['🌀 反重力波 — 推开逼近的陨石', '⚡ 离子冲击波 — 分解前方陨石', '🛡 护盾', '✦ 炸弹 — 一扫而空']],
@@ -24268,7 +24269,7 @@ const SZH_I18N = {
                 ['Polvo estelar, roces, meteoritos dorados y PERFECT LINK → llena el anillo de tu nave', '5 s: los meteoritos que tocas se rompen (no los muros de jefe) · imán de polvo ~3× · satélite ×1,5'],
                 ['Atrapa cápsulas con BEAM → toca una ranura (5) para usarla', 'La Onda antigravedad y la Onda de choque iónica salen rara vez en el 2.º suministro de algunas zonas (en zonas de misión, enlaza el satélite)']],
         pc: ['PC: mantén R', 'PC: mantén F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
-        chips: [['👆 Arrastra donde quieras para pilotar', '📡 ¡Misión! Bajo la ranura amarilla', 'Mantén SAT — 1,2 s', '✨ PERFECT LINK!'],
+        chips: [['👆 Arrastra donde quieras para pilotar', '📡 ¡Misión! Bajo la ranura amarilla', 'Mantén SAT — 1,2 s', '✨ PERFECT LINK!', '⚠ 2 fallos seguidos — sin suministros para siempre'],
                 ['📦 Cápsula de suministros', 'Ponte debajo', 'Mantén BEAM — 1,5 s', '¡A la ranura!', 'Mantén BEAM — 1,5 s', 'Hasta 5 ranuras'],
                 ['✦ El polvo llena el anillo', '🌈 FIEBRE 5 s — ¡embiste!', 'Fin de la FIEBRE'],
                 ['🌀 Onda antigravedad — aparta meteoritos', '⚡ Onda de choque iónica — desintegra lo de delante', '🛡 Escudo', '✦ Bomba — limpieza total']],
@@ -24282,7 +24283,7 @@ const SZH_I18N = {
                 ['Poeira estelar, raspões, meteoros dourados e PERFECT LINK → encha o anel da nave', '5 s: meteoros que você toca se quebram (exceto muros de chefe) · ímã de poeira ~3× · satélite ×1,5'],
                 ['Pegue cápsulas com BEAM → toque num encaixe (5) para usar', 'A Onda antigravidade e a Onda de choque iônica aparecem raramente no 2º suprimento de algumas zonas (em zonas de missão, ligue o satélite)']],
         pc: ['PC: segure R', 'PC: segure F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
-        chips: [['👆 Arraste onde quiser para pilotar', '📡 Missão! Sob o encaixe amarelo', 'Segure SAT — 1,2 s', '✨ PERFECT LINK!'],
+        chips: [['👆 Arraste onde quiser para pilotar', '📡 Missão! Sob o encaixe amarelo', 'Segure SAT — 1,2 s', '✨ PERFECT LINK!', '⚠ 2 falhas seguidas — suprimentos cortados de vez'],
                 ['📦 Cápsula de suprimentos', 'Fique embaixo', 'Segure BEAM — 1,5 s', 'No encaixe!', 'Segure BEAM — 1,5 s', 'Até 5 encaixes'],
                 ['✦ Poeira enche o anel', '🌈 FEBRE 5 s — passe por cima!', 'Fim da FEBRE'],
                 ['🌀 Onda antigravidade — afasta meteoros', '⚡ Onda de choque iônica — desintegra o que vem à frente', '🛡 Escudo', '✦ Bomba — limpa tudo']],
