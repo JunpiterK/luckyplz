@@ -2699,7 +2699,7 @@ PAGE_EXT.push(function(){
         const kx = R.width / CW, ky = R.height / CH;
         /* 위험물(논리 좌표 → CSS px) */
         const hz = [];
-        const add = (k, x, y, r) => { if(isFinite(x) && isFinite(y) && x > -20 && x < CW + 20 && y > -20 && y < CH + 20) hz.push([k, R.left + x * kx, R.top + y * ky, Math.max(3, (r || 6) * kx)]); };
+        const add = (k, x, y, r) => { if(isFinite(x) && isFinite(y) && x >= 0 && x <= CW && y >= 0 && y <= CH) hz.push([k, R.left + x * kx, R.top + y * ky, Math.max(3, (r || 6) * kx)]); };
         try{ for(const b of bullets) add('운석', b.x, b.y, b.r || 6); }catch(_){}
         try{ for(const c of asteroidClusters) for(const r of c.rocks) add('바위', r.x, r.y, r.r); }catch(_){}
         try{ for(const m of magneticMines) add('기뢰', m.x, m.y, typeof MINE_R !== 'undefined' ? MINE_R : 10); }catch(_){}
