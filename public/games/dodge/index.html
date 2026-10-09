@@ -4239,6 +4239,11 @@ function drawStars(layerFrom, layerTo){
     const smul=(typeof szStreakMul==='number' && szStreakMul>0) ? szStreakMul : 1;
     const skz=szP7StarK();   /* P7 — 은하간 공간 ×0.35 · 부츠 초공동 ×0.1 */
     const hd=(lt>=2 && typeof _szHeroDisk!=='undefined') ? _szHeroDisk : null;   /* D — 가까운 층은 행성 원반 위에 찍지 않는다(원근) */
+    /* 2026-10-09 운영자 — 블랙홀(존 19) 둘레 배경 별빛이 휜다: 점질량 렌즈 방정식 θ± = (β ± √(β²+4θE²))/2.
+       먼 두 층(0·1)만 — 가까운 층(스트릭)은 앞쪽 먼지라 렌즈를 거치지 않는다. 밝기 = 증폭률 μ± = (u²+2)/(2u√(u²+4)) ± ½ (u = β/θE).
+       주상은 바깥으로 밀려 아인슈타인 고리 쪽에 모이고 접선 방향으로 늘어나며, 부상은 반대편 고리 안쪽에 흐리게 */
+    let LZ=null; try{ if(zIdx===19 && blackHole.r>4) LZ=blackHole; }catch(_){}   /* blackHole 은 아래에서 선언(시작 화면 그리기 때는 아직 없다) */
+    const thE=LZ ? LZ.r*3.2 : 0, thE2=thE*thE*4;
     ctx.save();
     ctx.lineCap='round';
     for(let i=0;i<stars.length;i++){
@@ -4265,6 +4270,23 @@ function drawStars(layerFrom, layerTo){
         }
         let x=s.x-pxOff*L.par;
         if(x<-4) x+=CW+8; else if(x>CW+4) x-=CW+8;
+        if(LZ && s.layer<2){
+            const bx=x-LZ.cx, by=s.y-LZ.cy, b=Math.sqrt(bx*bx+by*by)||0.01;
+            if(b<thE*4){
+                const q=Math.sqrt(b*b+thE2), u=b/thE, mu=(u*u+2)/(2*u*Math.sqrt(u*u+4));
+                const rp=(b+q)/2, rm=(q-b)/2, ux=bx/b, uy=by/b;
+                const ap=Math.min(1, a*Math.min(3, mu+0.5)), am=a*Math.max(0, mu-0.5);
+                ctx.fillStyle='rgba(235,240,255,1)';
+                /* 주상 — 접선으로 늘인 짧은 호(늘어남 ∝ μ) */
+                const half=Math.min(0.5, (0.03+0.05*Math.min(4, mu))*s.r), ang=Math.atan2(uy, ux);
+                ctx.globalAlpha=ap; ctx.strokeStyle='rgba(235,240,255,1)'; ctx.lineWidth=Math.max(0.8, s.r*1.3);
+                ctx.beginPath(); ctx.arc(LZ.cx, LZ.cy, rp, ang-half, ang+half); ctx.stroke();
+                /* 부상 — 반대편, 지평선 밖일 때만 */
+                if(rm>LZ.r*1.15 && am>0.03){ ctx.globalAlpha=Math.min(1, am); ctx.beginPath(); ctx.arc(LZ.cx, LZ.cy, rm, ang+Math.PI-half, ang+Math.PI+half); ctx.stroke(); }
+                ctx.globalAlpha=1;
+                continue;
+            }
+        }
         if(s.layer===2){
             if(hd){ const dx=x-hd.x, dy=(s.y-hd.y)/hd.asp; if(dx*dx+dy*dy<hd.r*hd.r) continue; }
             /* 가까운 층 — 테이퍼 스트릭 스프라이트 (오르트 구름은 별마다 색이 달라 스프라이트도 별마다) */
@@ -11625,16 +11647,18 @@ function szRhyDiff(d, eMs){
 
 /* ─────────── 별가루 · 피버 · 황금 운석 ─────────── */
 const SZF_FEVER_MS = 5000;
-const SZF_RAIN = ['255,80,130', '255,160,60', '255,232,90', '90,255,150', '80,200,255', '185,120,255'];
+/* 2026-10-09 운영자(물리학 박사): '별·코인은 몰입을 깬다' → 별가루 = 갇힌 반양성자(p̄), 피버 = 반양성자 소멸장.
+   무지개 대신 소멸 섬광 팔레트(보라·자홍·흰 감마) — 이 배열을 쓰는 꼬리·고리·가장자리 빛·글자가 함께 바뀐다 */
+const SZF_RAIN = ['190,140,255', '235,180,255', '255,255,255', '160,120,255', '255,150,235', '215,200,255'];
 const SZF_SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];            /* 연달아 먹으면 올라가는 5음 음계 */
 const SZF_BEAT = [523, 659, 784, 1047, 784, 659, 880, 1047];          /* 피버 중 은은한 박 */
 const SZF_I18N = {
-    ko: {fever: '피버!', jack: '잭팟!', feverL: '피버'},
-    en: {fever: 'FEVER!', jack: 'JACKPOT!', feverL: 'FEVER'},
-    ja: {fever: 'フィーバー!', jack: 'ジャックポット!', feverL: 'フィーバー'},
-    zh: {fever: '狂热!', jack: '大奖!', feverL: '狂热'},
-    es: {fever: '¡FIEBRE!', jack: '¡PREMIO!', feverL: 'FIEBRE'},
-    pt: {fever: 'FEBRE!', jack: 'PRÊMIO!', feverL: 'FEBRE'}
+    ko: {fever: '소멸장!', jack: '대량 포획!', feverL: '소멸장'},
+    en: {fever: 'ANNIHILATION!', jack: 'BIG CATCH!', feverL: 'Annihilation field'},
+    ja: {fever: '対消滅！', jack: '大量捕獲！', feverL: '対消滅フィールド'},
+    zh: {fever: '湮灭！', jack: '大量捕获！', feverL: '湮灭场'},
+    es: {fever: '¡ANIQUILACIÓN!', jack: '¡GRAN CAPTURA!', feverL: 'Campo de aniquilación'},
+    pt: {fever: 'ANIQUILAÇÃO!', jack: 'GRANDE CAPTURA!', feverL: 'Campo de aniquilação'}
 };
 function szFunT(k){ let l = 'en'; try{ l = _szLang() || 'en'; }catch(_){} const t = SZF_I18N[l] || SZF_I18N.en; return t[k] || SZF_I18N.en[k] || ''; }
 let SZFUN = null;
@@ -11791,18 +11815,18 @@ function szFunPick(F, m, now){
     F.chain = (now - F.pickT < 650) ? F.chain + 1 : 0; F.pickT = now;
     const step = SZF_SCALE[Math.min(F.chain, SZF_SCALE.length - 1)];
     szFunTone(988 * Math.pow(2, step / 12), 0.09, 'triangle', 0.04);
-    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.26, r0: 8, r1: 22 + Math.min(F.chain, 8) * 2, rgb: '255,226,140', w: 1.6});
-    for(let k = 0; k < 3; k++) _pushFxSpark(grazeSparks, m.x, m.y, k ? '#FFE9A8' : '#FFFFFF', 80, 0.3);
+    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.26, r0: 8, r1: 22 + Math.min(F.chain, 8) * 2, rgb: '200,160,255', w: 1.6});   /* 트랩에 들어감 */
+    for(let k = 0; k < 3; k++) _pushFxSpark(grazeSparks, m.x, m.y, k ? '#E3CCFF' : '#FFFFFF', 80, 0.3);
 }
 function szFunFeverStart(F, now, e){
     szFeverOn = true; F.fever = e + SZF_FEVER_MS; F.feverN++; F.beatT = e + 260; F.beatN = 0; F.tn = 0;
     SZE.emit('fever', 'on');   /* MP0 */
-    try{ szFlash('255,170,235', 0.1, 200); }catch(_){}
+    try{ szFlash('215,190,255', 0.1, 200); }catch(_){}
     for(let k = 0; k < 3; k++) szRings.push({x: player.x, y: player.y, t: -k * 0.09, dur: 0.6, r0: 12, r1: 96 + k * 34, rgb: SZF_RAIN[k * 2], w: 3.2 - k * 0.7});
     szBurst(player.x, player.y, {sparks: szLo() ? 8 : 18, power: 260});
     szPopup(szFunT('fever'), player.x, player.y - 46, 'rain', 22, 1.2);   /* QA — 무지개 글자(흐르는 그라데이션), 18 → 22 */
     szFunSfx('fever');
-    try{ if(window.SZ3){ SZ3.mood && SZ3.mood('cheer', 1600, 2, '★', '255,120,220'); SZ3.haptic && SZ3.haptic('rec'); } }catch(_){}
+    try{ if(window.SZ3){ SZ3.mood && SZ3.mood('cheer', 1600, 2, '⚛', '190,140,255'); SZ3.haptic && SZ3.haptic('rec'); } }catch(_){}
 }
 /* 피버 — 기체에 닿는 운석(보스 벽 제외)은 부서진다. 충돌 검사 직전에 부른다 */
 function szFunShatter(now){
@@ -11871,7 +11895,7 @@ function szFunSpawned(n0, eMs){
 /* 결과 카드 — MAX COMBO 칸 옆에 피버 횟수(있을 때만) */
 function szFunGoHtml(){
     const F = SZFUN; if(!F || !F.on || !F.feverN) return '';
-    return '<small title="' + szFunT('feverL') + '"> · 🌈' + F.feverN + '</small>';
+    return '<small title="' + szFunT('feverL') + '"> · ⚛' + F.feverN + '</small>';
 }
 
 /* ─────────── 그리기 ─────────── */
@@ -11910,7 +11934,22 @@ function szRhyDrawEdge(now){
     ctx.restore();
     ctx.globalAlpha = 1;
 }
-/* 별가루·황금 운석 (운석 위, 기체 아래) */
+/* 반양성자(p̄) — 자기력선(세로 짧은 선)에 묶여 도는 하전 입자: 기울어진 작은 자이로 궤도 + 그 위를 도는 흰 점(밝은 보라 빛).
+   R = 자이로 반지름, a = 알파. 별·코인 모양을 쓰지 않는다(2026-10-09 운영자) */
+function szPbar(x, y, ph, now, R, a, lo){
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgb(185,140,255)';
+    ctx.globalAlpha = a * 0.32;
+    ctx.beginPath(); ctx.moveTo(x, y - R * 2.8); ctx.lineTo(x, y + R * 2.8); ctx.stroke();
+    ctx.globalAlpha = a * 0.6;
+    ctx.beginPath(); ctx.ellipse(x, y, R, R * 0.36, 0, 0, 6.2832); ctx.stroke();
+    const g = now * 0.013 + ph, px = x + Math.cos(g) * R, py = y + Math.sin(g) * R * 0.36;
+    if(!lo){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.pbar, px, py, R * 1.9, 0.75 * a); szGlow(SZ_GLOW.pbar, x, y, R * 1.6, 0.28 * a); ctx.globalCompositeOperation = 'source-over'; }
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath(); ctx.arc(px, py, 1.9, 0, 6.2832); ctx.fill();
+}
+/* 반양성자·금속 소행성 (운석 위, 기체 아래) */
 function szFunDraw(now){
     const F = SZFUN; if(!F || !F.on) return;
     if(!F.dust.length && !F.golds.length) return;
@@ -11940,23 +11979,20 @@ function szFunDraw(now){
         /* 고리 위를 도는 반짝이 2개 */
         ctx.fillStyle = '#FFFBE6'; ctx.globalAlpha = 0.95;
         for(let k = 0; k < 2; k++){
-            const a = now * 0.004 + k * 3.1416, sx = b.x + Math.cos(a) * (COMBO_NEAR_OUTER - 2), sy = b.y + Math.sin(a) * (COMBO_NEAR_OUTER - 2), R = 3.4 + 1.2 * p;
-            ctx.beginPath(); ctx.moveTo(sx, sy - R); ctx.lineTo(sx + R * 0.3, sy - R * 0.3); ctx.lineTo(sx + R, sy); ctx.lineTo(sx + R * 0.3, sy + R * 0.3);
-            ctx.lineTo(sx, sy + R); ctx.lineTo(sx - R * 0.3, sy + R * 0.3); ctx.lineTo(sx - R, sy); ctx.lineTo(sx - R * 0.3, sy - R * 0.3); ctx.closePath(); ctx.fill();
+            const a = now * 0.004 + k * 3.1416, sx = b.x + Math.cos(a) * (COMBO_NEAR_OUTER - 2), sy = b.y + Math.sin(a) * (COMBO_NEAR_OUTER - 2);
+            ctx.beginPath(); ctx.arc(sx, sy, 2 + 0.8 * p, 0, 6.2832); ctx.fill();   /* 2026-10-09 — 별 모양 대신 점 */
         }
     }
     for(let i = 0; i < F.dust.length; i++){
         const m = F.dust[i];
-        const tw = 0.7 + 0.3 * Math.sin(now * 0.011 + m.ph * 3);
-        ctx.globalCompositeOperation = 'lighter';
-        szGlow(SZ_GLOW.gold, m.x, m.y, m.st ? 13 : 17, (m.st ? 0.75 : 0.6) * tw);
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 0.95;
-        ctx.fillStyle = m.st ? '#FFFFFF' : '#FFF1B8';
-        const R = (lo ? 4.6 : 6.4) * (0.85 + 0.25 * tw), r = R * 0.34, a0 = now * 0.003 + m.ph;
-        ctx.beginPath();
-        for(let k = 0; k < 8; k++){ const a = a0 + k * 0.7854, rr = (k & 1) ? r : R; if(k) ctx.lineTo(m.x + Math.cos(a) * rr, m.y + Math.sin(a) * rr); else ctx.moveTo(m.x + Math.cos(a) * rr, m.y + Math.sin(a) * rr); }
-        ctx.closePath(); ctx.fill();
+        if(m.st){
+            /* 스쿠프에 잡혀 끌려오는 중 — 기체 쪽으로 늘어진 보라 궤적 + 흰 점 */
+            const dx = player.x - m.x, dy = player.y - m.y, dl = Math.sqrt(dx * dx + dy * dy) || 1, L = Math.min(14, dl);
+            ctx.globalAlpha = 0.7; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(200,160,255)';
+            ctx.beginPath(); ctx.moveTo(m.x - dx / dl * L, m.y - dy / dl * L); ctx.lineTo(m.x, m.y); ctx.stroke();
+            if(!lo){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.pbar, m.x, m.y, 10, 0.7); ctx.globalCompositeOperation = 'source-over'; }
+            ctx.globalAlpha = 1; ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(m.x, m.y, 1.8, 0, 6.2832); ctx.fill();
+        } else szPbar(m.x, m.y, m.ph, now, lo ? 4.6 : 5.6, 0.95, lo);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -11985,8 +12021,8 @@ function szFunDrawShip(now){
         }
         ctx.globalCompositeOperation = 'lighter';
         const pul = 0.5 + 0.5 * Math.sin(now * 0.018);
-        szGlow(SZ_GLOW.pink, px, py, 58 + 8 * pul, (0.3 + 0.15 * pul) * blink);
-        szGlow(SZ_GLOW.gold, px, py, 30, 0.35 * blink);
+        szGlow(SZ_GLOW.pbar, px, py, 58 + 8 * pul, (0.32 + 0.15 * pul) * blink);
+        szGlow(SZ_GLOW.white, px, py, 26, 0.3 * blink);
         ctx.globalCompositeOperation = 'source-over';
         const rot = now * 0.006, seg = 6.2832 / SZF_RAIN.length;
         ctx.lineWidth = 3.4; ctx.globalAlpha = 0.9 * blink;
@@ -11995,12 +12031,12 @@ function szFunDrawShip(now){
             ctx.beginPath(); ctx.arc(px, py, 22, rot + k * seg, rot + (k + 0.8) * seg); ctx.stroke();
         }
         /* 바깥으로 도는 별 3개 — 반대 방향 */
+        /* 바깥을 도는 감마 광자 3개(점) — 반대 방향 */
         ctx.fillStyle = '#FFFFFF';
         for(let k = 0; k < 3; k++){
-            const a = -now * 0.005 + k * 2.0944, sx = px + Math.cos(a) * 33, sy = py + Math.sin(a) * 33, R = 4 + 1.5 * pul;
+            const a = -now * 0.005 + k * 2.0944, sx = px + Math.cos(a) * 33, sy = py + Math.sin(a) * 33;
             ctx.globalAlpha = 0.95 * blink;
-            ctx.beginPath(); ctx.moveTo(sx, sy - R); ctx.lineTo(sx + R * 0.3, sy - R * 0.3); ctx.lineTo(sx + R, sy); ctx.lineTo(sx + R * 0.3, sy + R * 0.3);
-            ctx.lineTo(sx, sy + R); ctx.lineTo(sx - R * 0.3, sy + R * 0.3); ctx.lineTo(sx - R, sy); ctx.lineTo(sx - R * 0.3, sy - R * 0.3); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.arc(sx, sy, 2.2 + 0.8 * pul, 0, 6.2832); ctx.fill();
         }
         /* 남은 시간 — 바깥 가는 호 */
         ctx.globalAlpha = 0.55 * blink; ctx.lineWidth = 1.4; ctx.strokeStyle = '#FFFFFF';
@@ -12009,7 +12045,7 @@ function szFunDrawShip(now){
         const fl = Math.max(0, 1 - (now - F.flashT) / 420);
         const hi = F.g >= 75;
         ctx.globalAlpha = 0.22 + 0.45 * fl + (hi ? 0.12 * (0.5 + 0.5 * Math.sin(now * 0.012)) : 0);
-        ctx.strokeStyle = hi ? '#FFB3EC' : '#FFD75A';
+        ctx.strokeStyle = hi ? '#F0DDFF' : '#B98CFF';   /* 페닝 트랩 저장량 */
         ctx.lineWidth = 2 + fl;
         ctx.lineCap = 'round';
         ctx.beginPath(); ctx.arc(px, py, 23, -1.5708, -1.5708 + 6.2832 * Math.min(1, F.g / 100)); ctx.stroke();
@@ -15132,6 +15168,12 @@ function updateBlackHolePull(dt){
        예전 값(1400/d²)은 체감 0.1~1px/s 로 효과도 없었다 */
     /* bullets pull (strong) — 메테오가 휘어 들어가는 시각. event horizon 닿으면 제거. 마지막 10s ×1.4 (P4 보스④) */
     const _bhK = szBhPullMul();
+    /* 2026-10-09 운영자 재요청 — '블랙홀 근처에 가면 자꾸 빨려 들어가야'. 가속(힘)은 입력 지연처럼 느껴져 뺐었으니
+       '흐름(속도 장)'으로 — 손가락 조작은 그대로 먹고, 그 위에 지평선 쪽으로 미끄러진다. 200px 26px/s · 100px 52 · 60px 87 · 상한 140 */
+    if(phd > 1 && phd < BH_PULL_RADIUS && lives > 0 && !szShipHidden && !szSpectating){
+        const v = Math.min(140, 5200 / phd) * _bhK;
+        player.x -= phx / phd * v * dt; player.y -= phy / phd * v * dt;
+    }
     let w = 0;
     const len = bullets.length;
     for(let i = 0; i < len; i++){
@@ -18530,7 +18572,8 @@ const SZ_GLOW = {
     white:  szMakeGlow(255, 245, 225),
     cyan:   szMakeGlow(0, 217, 255),
     gold:   szMakeGlow(255, 214, 90),
-    pink:   szMakeGlow(255, 70, 120)
+    pink:   szMakeGlow(255, 70, 120),
+    pbar:   szMakeGlow(185, 135, 255)   /* 2026-10-09 반양성자·소멸장 */
 };
 function szGlow(img, x, y, radius, alpha){
     if(alpha <= 0.01) return;
@@ -25659,92 +25702,92 @@ Object.assign(window.SZX,{joinSilent:szxJoinSilent,goSilent:szxGoSilent,onFinish
 const SZH_CLIPS = [
     {id: 'sat',   ic: '📡', dur: 7.9, cues: [[0.1, 1.0], [1.0, 1.73], [1.73, 2.93], [2.93, 4.5], [4.75, 9]]},
     {id: 'beam',  ic: '🧲', dur: 6.3, cues: [[0.1, 1.03], [1.03, 2.53], [2.53, 3.4], [3.43, 4.97], [4.97, 9]]},
-    {id: 'fever', ic: '🌈', dur: 7.3, cues: [[0, 1.37], [1.37, 6.37], [6.37, 9]]},
+    {id: 'fever', ic: '⚛', dur: 7.3, cues: [[0, 1.37], [1.37, 6.37], [6.37, 9]]},
     {id: 'items', ic: '🎁', dur: 10.6, cues: [[0.3, 2.8], [3.0, 5.62], [5.85, 8.1], [8.35, 11]]}
 ];
 const SZH_ITEM_KEYS = ['antigrav', 'ion', 'shield', 'wipe', 'heart', 'mini'];   /* 앞 4개 = 영상 자막 순서(반중력파·이온 충격파·방어막·폭탄 — 2026-10-08 재녹화), 나머지 = 전체 목록 */
 const SZH_I18N = {
     ko: {title: '📖 게임방법', close: '닫기', prev: '이전', next: '다음', play: '재생',
-        tabs: ['위성', 'BEAM', '피버', '아이템'],
-        ttl: ['📡 위성 설치', '🧲 BEAM으로 보급 끌기', '🌈 피버 모드', '🎁 아이템'],
+        tabs: ['위성', 'BEAM', '소멸장', '아이템'],
+        ttl: ['📡 위성 설치', '🧲 BEAM으로 보급 끌기', '⚛ 반양성자 소멸장', '🎁 아이템'],
         lines: [['빈 곳 어디든 끌어서 조종 — 엄지가 기체를 가리지 않음', '미션이 뜨면 노란 슬롯 아래로 → SAT 꾹 1.2초 · 안 놓치면 PERFECT LINK(피버 +40 · 추가 보급)', '시작 화면 ✋ 배치 편집 = 버튼 옮기기·크기 · 🎮 클래식 = 예전 조종판', '위성 미션을 2번 연속 놓치면 그 판은 보급이 영구 차단'],
-                ['보급 캡슐을 노란 원뿔에 1.5초 담으면 획득 → 슬롯(5칸)에 보관 (하트는 즉시 +1)', '게이지 3초분 · 떼면 다시 참 · 아슬아슬 스치면 빨리 참', '연료 — 하트 아래 메탄(파랑)·산소(하양) 게이지는 가만히 있어도 증발하고 움직이면 더 줄어요. 서리 낀 탱커를 BEAM으로 끌어 급유 · 바닥나면 헤더 탱크 8초, 그것도 비면 우주 미아'],
-                ['별가루·스침·황금 운석·PERFECT LINK → 기체 둘레 고리 100%', '5초간 닿는 운석 파괴(보스 장벽 제외) · 별가루 자석 약 3배 · 위성 설치 ×1.5'],
-                ['BEAM으로 캡슐 획득 → 슬롯(5칸)을 눌러 사용', '반중력파·이온 충격파는 일부 구간 두 번째 보급에서 드물게 나온다 (미션 구간은 위성을 이어야 옴)']],
-        pc: ['PC: R 꾹', 'PC: F · S · Shift 꾹', '', 'PC: 1~5 (Q W E = 1~3)'],
+                ['보급 캡슐을 노란 원뿔에 1.5초 담으면 획득 → 슬롯(6칸)에 보관 (하트는 즉시 +1)', '게이지 3초분 · 떼면 다시 참 · 아슬아슬 스치면 빨리 참', '연료 — 하트 아래 메탄(파랑)·산소(하양) 게이지는 가만히 있어도 증발하고 움직이면 더 줄어요. 서리 낀 탱커를 BEAM으로 끌어 급유 · 바닥나면 헤더 탱크 8초, 그것도 비면 우주 미아'],
+                ['자기 스쿠프로 갇힌 반양성자(p̄) 포획·스침·금속 소행성·PERFECT LINK → 페닝 트랩(기체 둘레 고리) 100%', '5초간 소멸장 — 닿는 운석이 쌍소멸로 증발(보스 장벽 제외) · 스쿠프 범위 약 3배 · 위성 설치 ×1.5'],
+                ['BEAM으로 캡슐 획득 → 슬롯(6칸)을 눌러 사용', '반중력파·이온 충격파는 일부 구간 두 번째 보급에서 드물게 나온다 (미션 구간은 위성을 이어야 옴)']],
+        pc: ['PC: R 꾹', 'PC: F · S · Shift 꾹', '', 'PC: 1~6 (Q W E = 1~3)'],
         chips: [['👆 빈 곳 어디든 끌어서 조종', '📡 미션! 노란 슬롯 아래로', 'SAT 꾹 — 1.2초', '✨ PERFECT LINK!', '⚠ 2번 연속 놓치면 — 보급 영구 차단'],
-                ['⛽ 연료 바닥 직전 — 탱커!', 'BEAM 꾹 — 1.5초', '급유 완료 · 게이지 +35%', '📦 윙맨 캡슐 — BEAM 꾹 1.5초', '슬롯에 쏙! (5칸까지 보관)'],
-                ['✦ 별가루로 고리 채우기', '🌈 피버 5초 — 몸통 박치기!', '피버 끝'],
+                ['⛽ 연료 바닥 직전 — 탱커!', 'BEAM 꾹 — 1.5초', '급유 완료 · 게이지 +35%', '📦 윙맨 캡슐 — BEAM 꾹 1.5초', '슬롯에 쏙! (6칸까지 보관)'],
+                ['⚛ 반양성자로 트랩 채우기', '⚛ 소멸장 5초 — 들이받아 증발!', '소멸장 끝'],
                 ['🌀 반중력파 — 다가오는 운석을 밀어냄', '⚡ 이온 충격파 — 앞쪽 운석 분해', '🛡 방어막', '✦ 폭탄 — 싹쓸이']],
         items: [['반중력파', '15초 · 기체 둘레 장이 다가오는 운석을 밀어냄 (빠를수록 깊이 파고듦)'], ['이온 충격파', '30초 · 앞쪽 120° 부채꼴에 든 운석 분해 (보스 벽 제외)'], ['방어막', '20초 · 닿는 운석 파괴 (막을 때마다 −2초)'], ['폭탄', '화면 운석 싹쓸이 + 5초간 새 운석 없음'],
                 ['하트', '먹는 즉시 목숨 +1 (최대 5)'], ['윙맨', '30초 자동 사격 (최대 2기)']]},
     en: {title: '📖 How to play', close: 'Close', prev: 'Previous', next: 'Next', play: 'Play',
-        tabs: ['Satellite', 'BEAM', 'FEVER', 'Items'],
-        ttl: ['📡 Place a satellite', '🧲 Pull supplies with BEAM', '🌈 FEVER mode', '🎁 Items'],
+        tabs: ['Satellite', 'BEAM', 'Annihilate', 'Items'],
+        ttl: ['📡 Place a satellite', '🧲 Pull supplies with BEAM', '⚛ Antiproton annihilation field', '🎁 Items'],
         lines: [['Drag anywhere on empty space to steer — your thumb never covers the ship', 'Mission → get under the yellow slot, hold SAT 1.2 s · never slip off = PERFECT LINK (FEVER +40 · extra supplies)', 'Start screen: ✋ Edit layout moves/resizes buttons · 🎮 Classic = the old control panel', 'Miss 2 satellite missions in a row and supplies are cut for the rest of the run'],
-                ['Keep a capsule in the yellow cone for 1.5 s → it goes into a slot (5) · hearts heal at once', 'Gauge lasts 3 s · refills when released · close grazes refill it faster', 'Fuel — the methane (blue) and oxygen (white) bars under your hearts boil off even at rest and drain faster as you move. Pull the frosty tanker in with BEAM · when empty, the header tank buys 8 s, then you are lost in space'],
-                ['Stardust, grazes, golden meteors, PERFECT LINK → fill the ring around your ship', '5 s: meteors you touch shatter (not boss walls) · stardust magnet ~3× · satellite install ×1.5'],
-                ['Grab capsules with BEAM → tap a slot (5) to use', 'Anti-Gravity Wave and Ion Shockwave rarely ride in the 2nd supply of some zones (mission zones: link the satellite first)']],
-        pc: ['PC: hold R', 'PC: hold F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
+                ['Keep a capsule in the yellow cone for 1.5 s → it goes into a slot (6) · hearts heal at once', 'Gauge lasts 3 s · refills when released · close grazes refill it faster', 'Fuel — the methane (blue) and oxygen (white) bars under your hearts boil off even at rest and drain faster as you move. Pull the frosty tanker in with BEAM · when empty, the header tank buys 8 s, then you are lost in space'],
+                ['Trapped antiprotons (p̄) caught by your magnetic scoop, grazes, metal asteroids, PERFECT LINK → fill the Penning trap (ring around your ship)', '5 s annihilation field: meteors you touch vaporize (not boss walls) · scoop reach ~3× · satellite install ×1.5'],
+                ['Grab capsules with BEAM → tap a slot (6) to use', 'Anti-Gravity Wave and Ion Shockwave rarely ride in the 2nd supply of some zones (mission zones: link the satellite first)']],
+        pc: ['PC: hold R', 'PC: hold F · S · Shift', '', 'PC: 1–6 (Q W E = 1–3)'],
         chips: [['👆 Drag anywhere to steer', '📡 Mission! Get under the yellow slot', 'Hold SAT — 1.2 s', '✨ PERFECT LINK!', '⚠ Miss 2 in a row — supplies cut for good'],
-                ['⛽ Fuel low — tanker!', 'Hold BEAM — 1.5 s', 'Refueled · gauge +35%', '📦 Wingman — hold BEAM 1.5 s', 'Into the slot! (up to 5)'],
-                ['✦ Stardust fills the ring', '🌈 5 s FEVER — ram them!', 'FEVER over'],
+                ['⛽ Fuel low — tanker!', 'Hold BEAM — 1.5 s', 'Refueled · gauge +35%', '📦 Wingman — hold BEAM 1.5 s', 'Into the slot! (up to 6)'],
+                ['⚛ Antiprotons fill the trap', '⚛ 5 s annihilation — ram them!', 'Field down'],
                 ['🌀 Anti-Gravity Wave — pushes meteors away', '⚡ Ion Shockwave — disintegrates meteors ahead', '🛡 Shield', '✦ Bomb — wipe out']],
         items: [['Anti-Gravity Wave', '15 s · a field around the ship pushes incoming meteors away (faster ones dig in deeper)'], ['Ion Shockwave', '30 s · disintegrates meteors in the 120° fan ahead (not boss walls)'], ['Shield', '20 s · smashes meteors (−2 s per block)'], ['Bomb', 'Clears on-screen meteors + no new ones for 5 s'],
                 ['Heart', 'Instant +1 life (max 5)'], ['Wingman', '30 s auto-fire escort (max 2)']]},
     ja: {title: '📖 遊び方', close: '閉じる', prev: '前へ', next: '次へ', play: '再生',
-        tabs: ['衛星', 'BEAM', 'フィーバー', 'アイテム'],
-        ttl: ['📡 衛星を設置', '🧲 BEAMで補給を引き寄せ', '🌈 フィーバーモード', '🎁 アイテム'],
+        tabs: ['衛星', 'BEAM', '対消滅', 'アイテム'],
+        ttl: ['📡 衛星を設置', '🧲 BEAMで補給を引き寄せ', '⚛ 反陽子の対消滅フィールド', '🎁 アイテム'],
         lines: [['空いた所ならどこでもドラッグで操縦 — 親指が機体を隠さない', 'ミッションが出たら黄色いスロットの下へ → SAT長押し1.2秒 · 外さなければPERFECT LINK（フィーバー+40・追加補給）', 'スタート画面 ✋ 配置編集でボタンの移動・サイズ · 🎮 クラシック = 従来の操縦パネル', '衛星ミッションを2回続けて逃すと、その回は補給が永久に止まる'],
-                ['補給カプセルを黄色い円すいに1.5秒入れると獲得 → スロット（5つ）に保管（ハートは即+1）', 'ゲージは3秒分 · 離すと回復 · ぎりぎりのかすりで早く回復', '燃料 — ハートの下のメタン（青）・酸素（白）ゲージは止まっていても蒸発し、動くほど減る。霜のついたタンカーをBEAMで引き寄せて補給 · 空になるとヘッダータンクで8秒、それも尽きると宇宙の迷子'],
-                ['星くず・かすり・金色の隕石・PERFECT LINK → 機体のまわりのリングを満タンに', '5秒間：触れた隕石が砕ける（ボスの壁は除く）· 星くず吸引 約3倍 · 衛星設置 ×1.5'],
-                ['BEAMでカプセル獲得 → スロット（5つ）をタップで使用', '反重力波・イオン衝撃波は一部の区間の2つ目の補給からまれに出る（ミッション区間は衛星をつなぐと届く）']],
-        pc: ['PC：R長押し', 'PC：F · S · Shift長押し', '', 'PC：1〜5（Q W E = 1〜3）'],
+                ['補給カプセルを黄色い円すいに1.5秒入れると獲得 → スロット（6つ）に保管（ハートは即+1）', 'ゲージは3秒分 · 離すと回復 · ぎりぎりのかすりで早く回復', '燃料 — ハートの下のメタン（青）・酸素（白）ゲージは止まっていても蒸発し、動くほど減る。霜のついたタンカーをBEAMで引き寄せて補給 · 空になるとヘッダータンクで8秒、それも尽きると宇宙の迷子'],
+                ['磁気スクープで捕らえた反陽子（p̄）・かすり・金属小惑星・PERFECT LINK → ペニングトラップ（機体まわりのリング）を満タンに', '5秒間 対消滅フィールド：触れた隕石が蒸発（ボスの壁は除く）· スクープ範囲 約3倍 · 衛星設置 ×1.5'],
+                ['BEAMでカプセル獲得 → スロット（6つ）をタップで使用', '反重力波・イオン衝撃波は一部の区間の2つ目の補給からまれに出る（ミッション区間は衛星をつなぐと届く）']],
+        pc: ['PC：R長押し', 'PC：F · S · Shift長押し', '', 'PC：1〜6（Q W E = 1〜3）'],
         chips: [['👆 どこでもドラッグで操縦', '📡 ミッション！黄色いスロットの下へ', 'SAT長押し — 1.2秒', '✨ PERFECT LINK!', '⚠ 2回続けて逃すと — 補給が永久停止'],
-                ['⛽ 燃料ピンチ — タンカー！', 'BEAM長押し — 1.5秒', '補給完了 · ゲージ+35%', '📦 僚機 — BEAM長押し1.5秒', 'スロットにイン！（5つまで）'],
-                ['✦ 星くずでリング充電', '🌈 フィーバー5秒 — 体当たり！', 'フィーバー終了'],
+                ['⛽ 燃料ピンチ — タンカー！', 'BEAM長押し — 1.5秒', '補給完了 · ゲージ+35%', '📦 僚機 — BEAM長押し1.5秒', 'スロットにイン！（6つまで）'],
+                ['⚛ 反陽子でトラップ充填', '⚛ 対消滅5秒 — 体当たり！', 'フィールド終了'],
                 ['🌀 反重力波 — 迫る隕石を押し返す', '⚡ イオン衝撃波 — 前方の隕石を分解', '🛡 シールド', '✦ ボム — 一掃']],
         items: [['反重力波', '15秒 · 機体まわりの場が迫る隕石を押し返す（速いほど深く入り込む）'], ['イオン衝撃波', '30秒 · 前方120°の扇形に入った隕石を分解（ボスの壁は除く）'], ['シールド', '20秒 · 触れた隕石を破壊（防ぐたび−2秒）'], ['ボム', '画面の隕石を一掃 + 5秒間 新しい隕石なし'],
                 ['ハート', 'すぐにライフ+1（最大5）'], ['僚機', '30秒 自動射撃（最大2機）']]},
     zh: {title: '📖 玩法', close: '关闭', prev: '上一个', next: '下一个', play: '播放',
-        tabs: ['卫星', 'BEAM', '狂热', '道具'],
-        ttl: ['📡 安装卫星', '🧲 用 BEAM 拉补给', '🌈 狂热模式', '🎁 道具'],
+        tabs: ['卫星', 'BEAM', '湮灭场', '道具'],
+        ttl: ['📡 安装卫星', '🧲 用 BEAM 拉补给', '⚛ 反质子湮灭场', '🎁 道具'],
         lines: [['在空白处任意拖动即可操控 — 拇指不会挡住飞船', '任务出现后移到黄色槽位下方 → 按住 SAT 1.2 秒 · 全程不脱离 = PERFECT LINK（狂热 +40 · 额外补给）', '开始画面 ✋ 编辑布局：移动按钮、调大小 · 🎮 经典 = 原来的操控面板', '连续 2 次错过卫星任务，本局补给将永久中断'],
-                ['让补给舱在黄色锥形里停 1.5 秒即可获得 → 存入槽位（5 格）（爱心立即 +1）', '能量可用 3 秒 · 松开自动回充 · 惊险擦边回充更快', '燃料 — 爱心下方的甲烷（蓝）·氧（白）计量条静止时也会蒸发，移动越多减得越快。用 BEAM 拉来结霜的加注船补给 · 耗尽后集管箱撑 8 秒，再耗尽就会迷失在太空'],
-                ['星尘、擦边、金色陨石、PERFECT LINK → 填满飞船周围的光环', '5 秒内：碰到的陨石粉碎（Boss 墙除外）· 星尘吸力约 3 倍 · 卫星安装 ×1.5'],
-                ['用 BEAM 获得补给舱 → 点按槽位（5 格）使用', '反重力波、离子冲击波偶尔出现在部分区段的第 2 个补给中（任务区段需先接通卫星）']],
-        pc: ['电脑：按住 R', '电脑：按住 F · S · Shift', '', '电脑：1–5（Q W E = 1–3）'],
+                ['让补给舱在黄色锥形里停 1.5 秒即可获得 → 存入槽位（6 格）（爱心立即 +1）', '能量可用 3 秒 · 松开自动回充 · 惊险擦边回充更快', '燃料 — 爱心下方的甲烷（蓝）·氧（白）计量条静止时也会蒸发，移动越多减得越快。用 BEAM 拉来结霜的加注船补给 · 耗尽后集管箱撑 8 秒，再耗尽就会迷失在太空'],
+                ['用磁勺捕获的反质子（p̄）、擦边、金属小行星、PERFECT LINK → 充满彭宁阱（飞船周围的光环）', '5 秒湮灭场：碰到的陨石湮灭汽化（Boss 墙除外）· 磁勺范围约 3 倍 · 卫星安装 ×1.5'],
+                ['用 BEAM 获得补给舱 → 点按槽位（6 格）使用', '反重力波、离子冲击波偶尔出现在部分区段的第 2 个补给中（任务区段需先接通卫星）']],
+        pc: ['电脑：按住 R', '电脑：按住 F · S · Shift', '', '电脑：1–6（Q W E = 1–3）'],
         chips: [['👆 空白处任意拖动操控', '📡 任务！移到黄色槽位下方', '按住 SAT — 1.2 秒', '✨ PERFECT LINK!', '⚠ 连续错过 2 次 — 补给永久中断'],
-                ['⛽ 燃料告急 — 加注船！', '按住 BEAM — 1.5 秒', '加注完成 · 量表 +35%', '📦 僚机 — 按住 BEAM 1.5 秒', '进槽位！（最多 5 格）'],
-                ['✦ 星尘充能光环', '🌈 狂热 5 秒 — 撞碎它们！', '狂热结束'],
+                ['⛽ 燃料告急 — 加注船！', '按住 BEAM — 1.5 秒', '加注完成 · 量表 +35%', '📦 僚机 — 按住 BEAM 1.5 秒', '进槽位！（最多 6 格）'],
+                ['⚛ 反质子充入陷阱', '⚛ 湮灭场 5 秒 — 撞上去！', '湮灭场结束'],
                 ['🌀 反重力波 — 推开逼近的陨石', '⚡ 离子冲击波 — 分解前方陨石', '🛡 护盾', '✦ 炸弹 — 一扫而空']],
         items: [['反重力波', '15 秒 · 飞船周围的力场推开逼近的陨石（越快钻得越深）'], ['离子冲击波', '30 秒 · 分解前方 120° 扇形内的陨石（Boss 墙除外）'], ['护盾', '20 秒 · 碰到的陨石被摧毁（每挡一次 −2 秒）'], ['炸弹', '清空屏幕陨石 + 5 秒内不出新陨石'],
                 ['爱心', '立即生命 +1（最多 5）'], ['僚机', '30 秒自动射击（最多 2 架）']]},
     es: {title: '📖 Cómo jugar', close: 'Cerrar', prev: 'Anterior', next: 'Siguiente', play: 'Reproducir',
-        tabs: ['Satélite', 'BEAM', 'FIEBRE', 'Objetos'],
-        ttl: ['📡 Instala un satélite', '🧲 Atrae suministros con BEAM', '🌈 Modo FIEBRE', '🎁 Objetos'],
+        tabs: ['Satélite', 'BEAM', 'Aniquilación', 'Objetos'],
+        ttl: ['📡 Instala un satélite', '🧲 Atrae suministros con BEAM', '⚛ Campo de aniquilación de antiprotones', '🎁 Objetos'],
         lines: [['Arrastra en cualquier zona libre para pilotar — el pulgar no tapa la nave', 'Misión → ponte bajo la ranura amarilla y mantén SAT 1,2 s · sin salirte = PERFECT LINK (FIEBRE +40 · más suministros)', 'Pantalla de inicio: ✋ Editar mueve y redimensiona botones · 🎮 Clásico = el panel de antes', 'Si fallas 2 misiones de satélite seguidas, los suministros se cortan el resto de la partida'],
-                ['Mantén la cápsula 1,5 s en el cono amarillo → va a una ranura (5) · el corazón cura al instante', 'Carga de 3 s · se recarga al soltar · los roces la recargan más rápido', 'Combustible — las barras de metano (azul) y oxígeno (blanco) bajo los corazones se evaporan aunque no te muevas y bajan más al moverte. Atrae el tanque escarchado con BEAM · vacías, el tanque de cabecera da 8 s y luego quedas perdido en el espacio'],
-                ['Polvo estelar, roces, meteoritos dorados y PERFECT LINK → llena el anillo de tu nave', '5 s: los meteoritos que tocas se rompen (no los muros de jefe) · imán de polvo ~3× · satélite ×1,5'],
-                ['Atrapa cápsulas con BEAM → toca una ranura (5) para usarla', 'La Onda antigravedad y la Onda de choque iónica salen rara vez en el 2.º suministro de algunas zonas (en zonas de misión, enlaza el satélite)']],
-        pc: ['PC: mantén R', 'PC: mantén F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
+                ['Mantén la cápsula 1,5 s en el cono amarillo → va a una ranura (6) · el corazón cura al instante', 'Carga de 3 s · se recarga al soltar · los roces la recargan más rápido', 'Combustible — las barras de metano (azul) y oxígeno (blanco) bajo los corazones se evaporan aunque no te muevas y bajan más al moverte. Atrae el tanque escarchado con BEAM · vacías, el tanque de cabecera da 8 s y luego quedas perdido en el espacio'],
+                ['Antiprotones (p̄) atrapados por tu colector magnético, roces, asteroides metálicos y PERFECT LINK → llena la trampa de Penning (anillo de tu nave)', '5 s de campo de aniquilación: los meteoritos que tocas se vaporizan (no los muros de jefe) · alcance del colector ~3× · satélite ×1,5'],
+                ['Atrapa cápsulas con BEAM → toca una ranura (6) para usarla', 'La Onda antigravedad y la Onda de choque iónica salen rara vez en el 2.º suministro de algunas zonas (en zonas de misión, enlaza el satélite)']],
+        pc: ['PC: mantén R', 'PC: mantén F · S · Shift', '', 'PC: 1–6 (Q W E = 1–3)'],
         chips: [['👆 Arrastra donde quieras para pilotar', '📡 ¡Misión! Bajo la ranura amarilla', 'Mantén SAT — 1,2 s', '✨ PERFECT LINK!', '⚠ 2 fallos seguidos — sin suministros para siempre'],
-                ['⛽ Poco combustible — ¡tanque!', 'Mantén BEAM — 1,5 s', 'Repostado · indicador +35%', '📦 Escolta — mantén BEAM 1,5 s', '¡A la ranura! (hasta 5)'],
-                ['✦ El polvo llena el anillo', '🌈 FIEBRE 5 s — ¡embiste!', 'Fin de la FIEBRE'],
+                ['⛽ Poco combustible — ¡tanque!', 'Mantén BEAM — 1,5 s', 'Repostado · indicador +35%', '📦 Escolta — mantén BEAM 1,5 s', '¡A la ranura! (hasta 6)'],
+                ['⚛ Los antiprotones llenan la trampa', '⚛ 5 s de aniquilación — ¡embiste!', 'Campo apagado'],
                 ['🌀 Onda antigravedad — aparta meteoritos', '⚡ Onda de choque iónica — desintegra lo de delante', '🛡 Escudo', '✦ Bomba — limpieza total']],
         items: [['Onda antigravedad', '15 s · un campo alrededor de la nave aparta los meteoritos (los rápidos se adentran más)'], ['Onda de choque iónica', '30 s · desintegra los meteoritos del abanico de 120° delante (no los muros de jefe)'], ['Escudo', '20 s · rompe meteoritos (−2 s por bloqueo)'], ['Bomba', 'Limpia los meteoritos en pantalla + 5 s sin nuevos'],
                 ['Corazón', '+1 vida al instante (máx. 5)'], ['Escolta', '30 s de disparo automático (máx. 2)']]},
     pt: {title: '📖 Como jogar', close: 'Fechar', prev: 'Anterior', next: 'Próximo', play: 'Reproduzir',
-        tabs: ['Satélite', 'BEAM', 'FEBRE', 'Itens'],
-        ttl: ['📡 Instale um satélite', '🧲 Puxe suprimentos com BEAM', '🌈 Modo FEBRE', '🎁 Itens'],
+        tabs: ['Satélite', 'BEAM', 'Aniquilação', 'Itens'],
+        ttl: ['📡 Instale um satélite', '🧲 Puxe suprimentos com BEAM', '⚛ Campo de aniquilação de antiprótons', '🎁 Itens'],
         lines: [['Arraste em qualquer área livre para pilotar — o polegar não cobre a nave', 'Missão → fique sob o encaixe amarelo e segure SAT 1,2 s · sem escapar = PERFECT LINK (FEBRE +40 · mais suprimentos)', 'Tela inicial: ✋ Editar move e redimensiona botões · 🎮 Clássico = o painel antigo', 'Perca 2 missões de satélite seguidas e os suprimentos são cortados até o fim da partida'],
-                ['Mantenha a cápsula 1,5 s no cone amarelo → vai para um encaixe (5) · o coração cura na hora', 'Carga de 3 s · recarrega ao soltar · raspões recarregam mais rápido', 'Combustível — as barras de metano (azul) e oxigênio (branco) sob os corações evaporam mesmo parado e caem mais ao se mover. Puxe o tanque congelado com BEAM · vazias, o tanque de cabeçote dá 8 s e depois você fica perdido no espaço'],
-                ['Poeira estelar, raspões, meteoros dourados e PERFECT LINK → encha o anel da nave', '5 s: meteoros que você toca se quebram (exceto muros de chefe) · ímã de poeira ~3× · satélite ×1,5'],
-                ['Pegue cápsulas com BEAM → toque num encaixe (5) para usar', 'A Onda antigravidade e a Onda de choque iônica aparecem raramente no 2º suprimento de algumas zonas (em zonas de missão, ligue o satélite)']],
-        pc: ['PC: segure R', 'PC: segure F · S · Shift', '', 'PC: 1–5 (Q W E = 1–3)'],
+                ['Mantenha a cápsula 1,5 s no cone amarelo → vai para um encaixe (6) · o coração cura na hora', 'Carga de 3 s · recarrega ao soltar · raspões recarregam mais rápido', 'Combustível — as barras de metano (azul) e oxigênio (branco) sob os corações evaporam mesmo parado e caem mais ao se mover. Puxe o tanque congelado com BEAM · vazias, o tanque de cabeçote dá 8 s e depois você fica perdido no espaço'],
+                ['Antiprótons (p̄) presos pelo seu coletor magnético, raspões, asteroides metálicos e PERFECT LINK → encha a armadilha de Penning (anel da nave)', '5 s de campo de aniquilação: os meteoros que você toca se vaporizam (exceto muros de chefe) · alcance do coletor ~3× · satélite ×1,5'],
+                ['Pegue cápsulas com BEAM → toque num encaixe (6) para usar', 'A Onda antigravidade e a Onda de choque iônica aparecem raramente no 2º suprimento de algumas zonas (em zonas de missão, ligue o satélite)']],
+        pc: ['PC: segure R', 'PC: segure F · S · Shift', '', 'PC: 1–6 (Q W E = 1–3)'],
         chips: [['👆 Arraste onde quiser para pilotar', '📡 Missão! Sob o encaixe amarelo', 'Segure SAT — 1,2 s', '✨ PERFECT LINK!', '⚠ 2 falhas seguidas — suprimentos cortados de vez'],
-                ['⛽ Pouco combustível — tanque!', 'Segure BEAM — 1,5 s', 'Reabastecido · medidor +35%', '📦 Ala — segure BEAM 1,5 s', 'No encaixe! (até 5)'],
-                ['✦ Poeira enche o anel', '🌈 FEBRE 5 s — passe por cima!', 'Fim da FEBRE'],
+                ['⛽ Pouco combustível — tanque!', 'Segure BEAM — 1,5 s', 'Reabastecido · medidor +35%', '📦 Ala — segure BEAM 1,5 s', 'No encaixe! (até 6)'],
+                ['⚛ Os antiprótons enchem a armadilha', '⚛ 5 s de aniquilação — avance!', 'Campo desligado'],
                 ['🌀 Onda antigravidade — afasta meteoros', '⚡ Onda de choque iônica — desintegra o que vem à frente', '🛡 Escudo', '✦ Bomba — limpa tudo']],
         items: [['Onda antigravidade', '15 s · um campo ao redor da nave afasta os meteoros (os rápidos entram mais fundo)'], ['Onda de choque iônica', '30 s · desintegra meteoros no leque de 120° à frente (exceto muros de chefe)'], ['Escudo', '20 s · quebra meteoros (−2 s por bloqueio)'], ['Bomba', 'Limpa os meteoros da tela + 5 s sem novos'],
                 ['Coração', '+1 vida na hora (máx. 5)'], ['Ala', '30 s de tiro automático (máx. 2)']]}
@@ -29006,7 +29049,7 @@ const CTRL = {
 };
 const TIER = [10, 25, 50, 100];
 const TIER_RGB = ['90,230,255', '120,255,180', '255,214,90', '190,150,255'];
-const COIN_RGB = '124,247,255';
+const COIN_RGB = '190,145,255';   /* 2026-10-09 — 반양성자 띠(코인 폐지) */
 
 const st = SZMP5.st = {launch: 0, perfect: 0, got: 0, coins: 0, rung: 0};
 SZMP5.P = P_LAUNCH;
@@ -29129,7 +29172,7 @@ SZE.on('tick', function(dt, now){
 /* 코인 스침 — 0프레임 반응(S등급): 둥근 고리 + 불티 5 + 별가루 한 알(빨려 와서 szFunPick 의 오르는 음계·게이지) */
 function pick(x, y){
     szRings.push({x, y, t: 0, dur: 0.28, r0: 6, r1: 26, rgb: COIN_RGB, w: 1.8});
-    if(!szLo()) for(let k = 0; k < 5; k++) _pushFxSpark(grazeSparks, x, y, k ? '#BFFBFF' : '#FFFFFF', 90, 0.32);
+    if(!szLo()) for(let k = 0; k < 5; k++) _pushFxSpark(grazeSparks, x, y, k ? '#E3CCFF' : '#FFFFFF', 90, 0.32);
     const F = SZFUN;
     if(F && F.on){
         const a = Math.atan2(y - player.y, x - player.x);
@@ -29140,7 +29183,7 @@ function perfect(f, now){
     st.perfect++;
     const F = SZFUN;
     if(F && F.on && !szFeverOn){ F.g = Math.min(100, F.g + 40); F.flashT = now; }
-    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.55, r0: 12, r1: 74, rgb: '255,224,130', w: 2.6});
+    szRings.push({x: player.x, y: player.y, t: 0, dur: 0.55, r0: 12, r1: 74, rgb: '235,220,255', w: 2.6});
     szRings.push({x: player.x, y: player.y, t: -0.1, dur: 0.55, r0: 12, r1: 52, rgb: COIN_RGB, w: 1.6});
     let shown = false;
     try{ if(window.SZ3 && SZ3.stamp && !(SZ3.stampOn && SZ3.stampOn())){ SZ3.stamp('PERFECT', '#FFE66D'); shown = true; } }catch(_){}
@@ -29164,19 +29207,7 @@ SZE.on('graze', function(n){
 
 /* ── 그리기 ── */
 function coinDraw(x, y, a, now, lo, k){
-    const tw = 0.82 + 0.18 * Math.sin(now * 0.012 + k * 1.3);
-    if(!lo){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.cyan, x, y, 17, 0.32 * a * tw); szGlow(SZ_GLOW.gold, x, y, 10, 0.45 * a); ctx.globalCompositeOperation = 'source-over'; }
-    ctx.globalAlpha = a;
-    ctx.fillStyle = '#FFD75A';
-    ctx.beginPath(); ctx.arc(x, y, 6.6, 0, 6.2832); ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
-    ctx.beginPath(); ctx.arc(x, y, 8.4, 0, 6.2832); ctx.stroke();
-    /* 가운데 네 갈래 별(흰) — 색이 아니라 무늬로도 '보상' */
-    const R = 4.6 * tw, r = 1.3, a0 = now * 0.004 + k;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    for(let j = 0; j < 8; j++){ const aa = a0 + j * 0.7854, rr = (j & 1) ? r : R; const px = x + Math.cos(aa) * rr, py = y + Math.sin(aa) * rr; if(j) ctx.lineTo(px, py); else ctx.moveTo(px, py); }
-    ctx.closePath(); ctx.fill();
+    szPbar(x, y, k * 1.7, now, lo ? 5 : 6.4, a, lo);   /* 2026-10-09 — 코인 대신 반양성자 */
 }
 SZE.on('drawWorld', function(now){
     const f = fm;
@@ -29189,9 +29220,11 @@ SZE.on('drawWorld', function(now){
         const left = (f.n - f.nGot - f.miss) / f.n;
         const ga = 0.2 * pre * left;
         if(ga > 0.01){
-            ctx.globalAlpha = ga; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
-            ctx.setLineDash([0.1, 11]); ctx.lineDashOffset = -e * 0.02;
-            ctx.translate(f.ox, f.oy); ctx.stroke(f.path); ctx.translate(-f.ox, -f.oy);
+            /* 2026-10-09 — 둥근 점선 대신 자기력선: 가는 실선 + 그 위를 흐르는 옅은 빛 */
+            ctx.globalAlpha = ga * 1.1; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
+            ctx.translate(f.ox, f.oy); ctx.stroke(f.path);
+            ctx.globalAlpha = ga * 1.6; ctx.lineWidth = 2.2; ctx.setLineDash([18, 70]); ctx.lineDashOffset = -e * 0.09; ctx.stroke(f.path);
+            ctx.translate(-f.ox, -f.oy);
             ctx.setLineDash([]);
         }
     }
