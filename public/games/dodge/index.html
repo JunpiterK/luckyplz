@@ -1014,7 +1014,7 @@ body.sz-ov-res .lp-dock,body.sz-ov-res .lp-fs-btn,body.sz-ov-res .lp-help-fab{vi
        미션이 켜지는 프레임에 배치·폰트 계산이 몰려 캔버스 font 세터가 그걸 동기로 떠안던 스파이크 제거.
        contain 으로 글자 교체가 바깥 배치를 흔들지 않게 한다 */
     visibility:hidden;
-    transition:opacity .25s, transform .3s cubic-bezier(.2,.8,.3,1), visibility 0s linear .3s;
+    transition:opacity .25s, transform .3s cubic-bezier(.2,.8,.3,1), top .35s ease, visibility 0s linear .3s;
     contain:layout paint;
     will-change:opacity,transform;
     pointer-events:none;
@@ -7169,6 +7169,32 @@ function szOvA(a0, x0, y0, x1, y1, slot, lo0, noShip){
 /* 미션 배너(DOM) — 위험물이 가까우면 .sz-ovnear (쓰기는 szDomQueue).
    자리는 레이아웃을 읽지 않고 계산한다: 크기는 ResizeObserver(비동기, 강제 배치 없음), 위치는 CSS 규칙(가운데·top 60px) */
 let _szOvBrOn = false, _szOvBW = 0, _szOvBH = 0, _szOvCW = 0, _szOvCH = 0, _szOvRO = null, _szOvBEl = null;
+/* 2026-10-09 — 도착 천체(달~명왕성 히어로)가 위쪽 가운데로 들어올 때 미션 배너·ARRIVAL 카드가 천체와 미션 궤도를 덮었다.
+   천체(+고리·미션 궤도)의 화면 범위를 재서 글자를 천체 위(들어가면) 또는 아래(상한 cap)로 비킨다.
+   표시 전용 — 천체 자리·궤도·RNG 는 그대로(szBodyAt 은 순수 함수) */
+let _szMbTop = 60;   /* 미션 배너 top(CSS px) — 기본 60 */
+function szHeroSpan(){
+    try{
+        if(!running) return null;
+        const z = szZoneAtMs(elapsedMs);
+        if(!SZ_HERO[z]) return null;
+        const zt = _szZoneTRaw(z);
+        if(zt < 0 || zt > 0.8) return null;
+        const asp = _szAsp(), B = szBodyAt(z, zt, asp);
+        let vy = B.rd * asp, hx = B.rd;
+        if(B.ring){ vy = Math.max(vy, B.ring.ry); hx = Math.max(hx, B.ring.rx); }
+        if(MISSION_ZONES.has(z)){ const m = Math.max(26, Math.min(60, B.rd * 0.35)); vy += m * asp; hx += m; }
+        return { x0: B.x - hx, x1: B.x + hx, y0: B.y - vy, y1: B.y + vy };
+    }catch(_){ return null; }
+}
+/* 글자 상자(논리 좌표 top·높이 h·가로 x0~x1)를 천체와 안 겹치게 — 겹치지 않거나 위에 들어가면 그대로, 아니면 천체 아래(넘치면 그대로) */
+function szDodgeHero(top, h, x0, x1, cap){
+    const S = szHeroSpan();
+    if(!S || S.x1 < x0 || S.x0 > x1) return top;
+    if(top + h <= S.y0 - 4 || top >= S.y1 + 4) return top;
+    const below = S.y1 + 6;
+    return below + h <= cap ? below : top;
+}
 function _szOvBanner(){
     if(!running) return;
     const b = _szOvBEl || (_szOvBEl = document.getElementById('missionBanner'));
@@ -7181,10 +7207,17 @@ function _szOvBanner(){
             _szOvRO.observe(b); _szOvRO.observe(canvas);
         }catch(_){ _szOvRO = 1; }
     }
-    if(!b.classList.contains('show')){ if(_szOvBrOn){ _szOvBrOn = false; szDomQueue(() => b.classList.remove('sz-ovnear')); } return; }
+    if(!b.classList.contains('show')){
+        if(_szOvBrOn){ _szOvBrOn = false; szDomQueue(() => b.classList.remove('sz-ovnear')); }
+        if(_szMbTop !== 60){ _szMbTop = 60; szDomQueue(() => { b.style.top = ''; }); }
+        return;
+    }
     if(!(_szOvCW > 0 && _szOvCH > 0 && _szOvBW > 0)) return;
     const sx = CW / _szOvCW, sy = CH / _szOvCH, hw = _szOvBW / 2 * sx;
-    const near = szOvNear(CW / 2 - hw, 60 * sy, CW / 2 + hw, (60 + _szOvBH) * sy) > 0.2;
+    /* 천체 비키기 — 2px 이상 바뀔 때만 쓴다(top 전환 .35s 로 부드럽게) */
+    const _mt = Math.round(szDodgeHero(60 * sy, _szOvBH * sy, CW / 2 - hw, CW / 2 + hw, CH * 0.42) / sy);
+    if(Math.abs(_mt - _szMbTop) >= 2){ _szMbTop = _mt; szDomQueue(() => { b.style.top = _mt === 60 ? '' : _mt + 'px'; }); }
+    const near = szOvNear(CW / 2 - hw, _szMbTop * sy, CW / 2 + hw, (_szMbTop + _szOvBH) * sy) > 0.2;
     if(near !== _szOvBrOn){ _szOvBrOn = near; szDomQueue(() => b.classList.toggle('sz-ovnear', near)); }
 }
 /* 구운 글자에 어두운 외곽선 — 판 대신 가독성. shadowBlur(소프트웨어 캔버스에서 굽기 한 장 수 ms)는 쓰지 않는다.
@@ -7346,7 +7379,7 @@ function szQRun(id){ return id === SZQ.own && SZQ.n >= SZQ.gate; }
 function szQBannerBottom(){
     try{
         const b = _szOvBEl || document.getElementById('missionBanner');
-        if(b && b.classList.contains('show') && _szOvCH > 0 && _szOvBH > 0) return (60 + _szOvBH) * CH / _szOvCH;
+        if(b && b.classList.contains('show') && _szOvCH > 0 && _szOvBH > 0) return (_szMbTop + _szOvBH) * CH / _szOvCH;
     }catch(_){}
     return 0;
 }
@@ -7420,7 +7453,8 @@ function drawZoneLabel(dt){
     })();
 
     /* 상자 위 끝 — HUD 줄(하트·LV) 아래. 미션 배너가 떠 있으면 그 아래 */
-    const _top = Math.max(CH * 0.18 - 8, szQBannerBottom() + 6);
+    /* 2026-10-09 — 도착 천체·미션 궤도 위에 겹치면 그 아래로(상자 위 끝 = _top-10, 높이 ≤ 56). 미션 배너는 그 뒤에 피한다(배너도 천체를 비켜 내려와 있다) */
+    const _top = Math.max(szDodgeHero(CH * 0.18 - 18, _chip ? 30 : 56, CW / 2 - 120, CW / 2 + 120, CH * 0.5) + 10, szQBannerBottom() + 16);
     const _rgb = (typeof zoneWarpRGB === 'string') ? zoneWarpRGB : '160,200,255';
     if(_chip){
         const nm = showLocal ? _zoneName(zoneLabel.idx) : szZoneLabelEn(zoneLabel.idx);
