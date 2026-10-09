@@ -36,7 +36,8 @@
      boot       첫 로드 — CPU 4x 스로틀, 탐색 시작 → #ovBtn 탭 가능까지 ms + 그 전 롱태스크 합
      flags0     ?mp1=0…&mp8=0 (킬스위치 전부 끔) 으로 det(16.67ms 구성)·hitpath 해시가 기준선과 같은지
      startshot  시작 화면 ko·en × 320x568·390x844 — 스크린샷(보통 + 애니메이션 정지·캔버스 숨김) 해시·DOM 배치 서명 기준선 비교
-     gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
+     gl0        (MP8b) ?gl=0·?mp8=0 = 2D 경로 · SwiftShader 로 GL 실행 여부 출력 · GL 켬 31존 순회 · tier 2·컨텍스트 손실 → 2D 복귀 · ≤32MB · GL 휘도 ≤0.12
+     mp8b · mp8bshots  (MP8b) GL 켬 latency·noshake·perf(참고) / GL 켬·끔 장면 ko×390·320×존 1·6·12·19·24·25·30
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
      restart2   (MP2) 길게 누르기 p50≤2s·탭 p90≤3.5s·스크롤/대던 손가락/사망 직후/대결·협동 오작동 0·Space·정산 값·320x568 다시하기·?mp2=0  [--mp2-shots]
      resume     앱 전환 → 이어하기(실제 터치 탭 + 호환 mousemove) 뒤 드래그로 기체가 실제로 움직이는지 (2026-10-09)
@@ -2667,6 +2668,198 @@ EXT_CMDS.mp8shots = { all: false, server: true, run: runMp8Shots, judge: (cur) =
     for(const r of cur) row('G-mp8shots', r.L + ' ' + r.w + 'x' + r.h, path.basename(r.f1) + ' · ' + path.basename(r.f2), null, '사람 검수', 'INFO', '미룸 ' + r.st.deferN + ' 큐 ' + r.st.q);
 } };
 /*</gate:mp8a>*/
+/*<gate:mp8b>*/
+/* MP8b (2026-10-09) — GL 층 게이트
+   gl0      (all) ① ?gl=0 31존 순회 에러 0·GL 꺼짐·2D alpha:false(= 지금 2D 경로) ② 기본 실행에서 GL 이 켜졌는지(헤드리스 기본은 대개 꺼짐 — 표시)
+            ③ SwiftShader(--use-angle=swiftshader --enable-unsafe-swiftshader) + ?gl=1 로 GL 을 실제로 켜서 31존 순회 에러 0 · GL 실행 여부 출력 ·
+               텍스처·버퍼 ≤32MB · tier 2 → 2D 복귀 → tier 0 → GL 재개 · 컨텍스트 손실 → 숨김·2D 불투명 배경·에러 0 ·
+               GL 버퍼 평균 휘도 프레임 간 증가 ≤0.12×255(폭탄·피격·피버·미션 입자를 일부러 건다) · ?mp8=0 = GL 없음
+   mp8b     GL 켬(SwiftShader) 상태의 latency(기준선 대비 증가 0프레임)·noshake·perf 4x(참고 — JS 시간만, GPU 비용은 실기기)
+   mp8bshots GL 켬/끔 장면 — ko × 390x844·320x568 × 존 1·6·12·19·24·25·30 (--mp8b-zones) */
+const GL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
+let _glQ = '';
+function glMode(on){
+    globalThis.__EDGE_XARGS = on ? GL_ARGS : [];
+    _glQ = on ? 'gl=1' : '';
+    if(!Edge.prototype.__mp8bOpen){
+        const o = Edge.prototype.open;
+        Edge.prototype.__mp8bOpen = o;
+        Edge.prototype.open = function(url, settle){ if(_glQ && url.indexOf('/games/dodge/') >= 0 && url.indexOf('gl=') < 0) url += (url.indexOf('?') >= 0 ? '&' : '?') + _glQ; return o.call(this, url, settle); };
+    }
+}
+PAGE_EXT.push(function(){
+    const G = window.__G;
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+    G.glInfo = function(){
+        const c = document.getElementById('dodge-canvas'), g = document.getElementById('szGl');
+        let alpha = null; try{ alpha = c.getContext('2d').getContextAttributes().alpha; }catch(_){}
+        return { boot: typeof SZ_GLB !== 'undefined' && !!SZ_GLB, alpha, hidden: g ? g.hidden : null, st: (window.SZGL && SZGL.stat) ? SZGL.stat() : null, okB: !!(window.SZMP8 && SZMP8.okB), mp8: window.SZ_FLAGS ? SZ_FLAGS.mp8 : 'none', game: typeof gameLoop, E: (window.__E || []).slice(0, 4) };
+    };
+    /* 2D 캔버스에서 알파 <100 인 칸의 비율(%) — GL 이 배경을 맡으면 대부분 비고(어두운 덮개 α0.2 정도), 2D 가 맡으면 0 */
+    G.glA2d = function(){ try{ const c = document.getElementById('dodge-canvas'), x = c.getContext('2d'); let n = 0, k = 0;
+        for(let j = 1; j < 12; j++) for(let i = 1; i < 8; i++){ k++; if(x.getImageData((c.width * i / 8) | 0, (c.height * j / 12) | 0, 1, 1).data[3] < 100) n++; } return Math.round(n / k * 100); }catch(_){ return -1; } };
+    G.glStress = async function(){
+        const L = []; let last = SZGL.lum(); const t0 = performance.now(); let max = 0, at = '';
+        const acts = [[150, 'wipe', () => triggerWipe()], [700, 'hit', () => SZE.emit('hit', player.x, player.y, 'test')], [1100, 'fever', () => SZE.emit('fever', 'on')],
+            [1500, 'mission', () => SZE.emit('mission', 'ok', currentZoneIdx)], [1800, 'boss', () => SZE.emit('boss', 1, 'end')], [2100, 'zone', () => SZE.emit('zone', currentZoneIdx, currentZoneIdx - 1)]];
+        let ai = 0, cur = '';
+        while(performance.now() - t0 < 2800){
+            const t = performance.now() - t0;
+            while(ai < acts.length && t >= acts[ai][0]){ try{ acts[ai][2](); }catch(e){ L.push('act ' + acts[ai][1] + ' ' + e.message); } cur = acts[ai][1]; ai++; }
+            await new Promise(r => requestAnimationFrame(() => r()));
+            const v = SZGL.lum();
+            if(v != null && last != null && v - last > max){ max = v - last; at = cur + '@' + Math.round(t); }
+            if(v != null) last = v;
+        }
+        return { max: Math.round(max * 10) / 10, at, errs: L, parts: SZGL.stat().parts };
+    };
+    G.glTier = async function(){
+        const r = {};
+        SZ3.setTier(2); await wait(400); r.t2 = { bg: SZGL.bg, hidden: document.getElementById('szGl').hidden, a: G.glA2d() };
+        SZ3.setTier(0); await wait(400); r.t0 = { bg: SZGL.bg, hidden: document.getElementById('szGl').hidden, a: G.glA2d() };
+        return r;
+    };
+    /* noshake ③ 은 2D 캔버스만 24×40 으로 줄여 휘도를 잰다. GL 층이 켜지면 2D 는 투명 배경이라 그것만으로는 화면이 아니다 —
+       noshake 동안 그 축소 그리기를 'GL 스냅샷(불투명) → 2D' 합성으로 바꿔 실제 화면 휘도를 잰다(GL 꺼짐이면 그대로) */
+    if(G.noshake && !G.noshake.__gl){
+        const o = G.noshake;
+        G.noshake = function(P){
+            const CP = CanvasRenderingContext2D.prototype, od = CP.drawImage, game = document.getElementById('dodge-canvas');
+            let inS = false;
+            CP.drawImage = function(src){
+                if(src === game && !inS && this.canvas && this.canvas.width === 24 && this.canvas.height === 40 && window.SZGL && SZGL.bg){
+                    inS = true;
+                    try{ this.save(); this.globalCompositeOperation = 'copy'; SZGL.snapshot(this); this.restore(); }catch(_){}
+                    inS = false;
+                }
+                return od.apply(this, arguments);
+            };
+            try{ const r = o.call(this, P); if(r) r.glComposite = !!(window.SZGL && SZGL.ok && SZGL.stat().frames); return r; } finally { CP.drawImage = od; }
+        };
+        G.noshake.__gl = 1;
+    }
+    G.glLose = async function(){
+        const ok = SZGL.lose(); await wait(700);
+        return { ok, lost: SZGL.lost, bg: SZGL.bg, on: SZGL.on, hidden: document.getElementById('szGl').hidden, a: G.glA2d(), frames: __M.fr.length, running };
+    };
+});
+async function glSession(base, q, withGl, deep){
+    glMode(withGl);
+    const tag = (withGl ? 'GL ' : '') + (q || '기본');
+    say('gl0 세션 시작: ' + tag);
+    try{
+        /* GL 세션은 dsf 1 — SwiftShader 는 GPU 일을 CPU 로 하므로 순회가 길다(해상도는 검사 내용과 무관) */
+        return await withEdge({ w: 412, h: 915, dsf: withGl ? 1 : 2.625, mobile: true }, async (e) => {
+            await e.open(gameUrl(base, 'ko', q), 2000);
+            const r = { info0: await e.ev('__G.glInfo()') };
+            say('gl0 ' + tag + ' 부팅: ' + JSON.stringify(r.info0).slice(0, 300));
+            if(r.info0.game !== 'function'){ r.errs = 1; r.tour = { errs: 1, sample: ['게임 스크립트 미실행 ' + JSON.stringify(r.info0.E)] }; r.info1 = r.info0; return r; }
+            const t = await e.ev('__G.tour({step:16.667, frames:40})', 900000);
+            r.tour = { errs: t.errs.length, sample: t.errs.slice(0, 3), frames: t.frames, zones: t.zones };
+            r.info1 = await e.ev('__G.glInfo()');
+            say('gl0 ' + tag + ' 순회 끝: 에러 ' + t.errs.length + ' ' + JSON.stringify(r.info1.st).slice(0, 200));
+            if(deep && r.info1.st && r.info1.st.ok){
+                await e.ev('__G.perfStart({seed:424242, tier:0})'); await sleep(900);
+                r.a2dOn = await e.ev('__G.glA2d()');
+                r.stress = await e.ev('__G.glStress()', 120000);
+                r.tier = await e.ev('__G.glTier()', 30000);
+                await e.ev('__G.perfJump(19)'); await sleep(1500);
+                r.bh = await e.ev('({bg: SZGL.bg, z: currentZoneIdx, st: SZGL.stat()})');
+                r.lose = await e.ev('__G.glLose()', 30000);
+                await sleep(500);
+                r.after = await e.ev('({fr: __M.fr.length, a: __G.glA2d(), bg: SZGL.bg})');
+            }
+            r.E = await e.ev('(window.__E||[]).slice(0,8)');
+            const x = e.errors();
+            collectErrs('gl0 ' + (withGl ? 'gl ' : '') + (q || 'default'), e, r.E.concat(t.errs));
+            r.errs = t.errs.length + r.E.length + x.exc.length;
+            return r;
+        });
+    } finally { glMode(false); }
+}
+async function runGl0(base){
+    const out = {};
+    out.off = await glSession(base, 'gl=0', false, false);
+    out.def = await glSession(base, '', false, false);
+    out.mp8off = await glSession(base, 'mp8=0', true, false);
+    out.gl = await glSession(base, '', true, true);
+    say('gl0 GL 실행: ' + JSON.stringify(out.gl.info1.st));
+    return out;
+}
+EXT_CMDS.gl0 = { all: true, server: true, run: runGl0, judge: (c) => {
+    const G = 'G21 gl0', o = c.off, d = c.def, g = c.gl, m = c.mp8off;
+    row(G, '?gl=0 31존 순회 에러', o.errs, null, '0', o.errs ? 'FAIL' : 'PASS', (o.tour.sample || []).join(' | ').slice(0, 110));
+    row(G, '?gl=0 → GL 없음·2D alpha:false·#szGl 숨김', 'boot ' + o.info1.boot + ' alpha ' + o.info1.alpha + ' hidden ' + o.info1.hidden, null, 'false · false · true', !o.info1.boot && o.info1.alpha === false && o.info1.hidden === true ? 'PASS' : 'FAIL');
+    row(G, '?mp8=0(SwiftShader 켬이어도) → GL 없음', 'boot ' + m.info1.boot + ' alpha ' + m.info1.alpha + ' 에러 ' + m.errs, null, 'false · false · 0', !m.info1.boot && m.info1.alpha === false && !m.errs ? 'PASS' : 'FAIL');
+    row(G, '기본 실행(헤드리스 기본 플래그) GL', d.info1.boot ? ('켜짐 ' + JSON.stringify(d.info1.st).slice(0, 60)) : 'GL 미실행(2D 경로)', null, '표시', 'INFO', '에러 ' + d.errs);
+    if(d.errs) row(G, '기본 실행 31존 순회 에러', d.errs, null, '0', 'FAIL', (d.tour.sample || []).join(' | ').slice(0, 110));
+    const st = g.info1.st;
+    const ran = !!(g.info1.boot && st && st.ok && st.frames > 0);
+    row(G, 'SwiftShader + ?gl=1 — GL 실제 실행', ran ? ('실행 ' + st.w + 'x' + st.h + ' 프레임 ' + st.frames + ' · ' + String(st.renderer).slice(0, 40)) : ('GL 미실행 — ' + (st ? st.why : 'boot ' + g.info1.boot)), null, '실행', ran ? 'PASS' : 'WARN', ran ? '' : 'GL 경로는 실기기에서 확인');
+    row(G, 'GL 켬 31존 순회 에러', g.errs, null, '0', g.errs ? 'FAIL' : 'PASS', (g.tour.sample || []).join(' | ').slice(0, 110));
+    if(!ran) return;
+    row(G, 'GL 텍스처·버퍼 메모리', st.mb + 'MB', null, '≤32MB', st.mb <= 32 ? 'PASS' : 'FAIL');
+    row(G, 'GL 켬 → 2D 배경 투명(77칸 중 α<100 비율)', g.a2dOn + '%', null, '≥50% (2D 는 비우고 GL 이 그림)', g.a2dOn >= 50 ? 'PASS' : 'FAIL');
+    const t = g.tier;
+    row(G, 'tier 2 → GL 끔·2D 불투명 / tier 0 → GL 재개', 't2 bg ' + t.t2.bg + ' 빈칸 ' + t.t2.a + '% · t0 bg ' + t.t0.bg + ' 빈칸 ' + t.t0.a + '%', null, 'false·0% · true·≥50%', !t.t2.bg && t.t2.hidden && t.t2.a === 0 && t.t0.bg && !t.t0.hidden && t.t0.a >= 50 ? 'PASS' : 'FAIL');
+    row(G, '블랙홀 존 19 GL 렌즈 프레임', 'z ' + g.bh.z + ' bg ' + g.bh.bg, null, 'z 19 · true', g.bh.z === 19 && g.bh.bg ? 'PASS' : 'FAIL');
+    const L = g.lose;
+    row(G, '컨텍스트 손실 → 숨김·2D 복귀·계속 그림', 'lost ' + L.lost + ' bg ' + L.bg + ' hidden ' + L.hidden + ' 빈칸 ' + L.a + '% 프레임 ' + L.frames + '→' + g.after.fr, null, 'true·false·true·0%·증가', L.ok && L.lost && !L.bg && L.hidden && L.a === 0 && g.after.fr > L.frames && g.after.a === 0 ? 'PASS' : 'FAIL');
+    const lim = Math.round(0.12 * 255 * 10) / 10, s = g.stress;
+    row(G, 'GL 버퍼 휘도 프레임 간 증가 최대(폭탄·피격·피버·미션·보스·존)', s.max + ' @' + s.at + ' (입자 ' + s.parts + ')', null, '≤' + lim, s.max <= lim && !s.errs.length ? 'PASS' : 'FAIL', s.errs.join(' | ').slice(0, 100));
+} };
+async function runMp8b(base){
+    const out = {};
+    glMode(true);
+    try{
+        out.gl = await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => { await e.open(gameUrl(base, 'ko'), 1500); return e.ev('__G.glInfo()'); });
+        out.latency = await runLatency(base);
+        out.noshake = await runNoshake(base);
+        if(!A['mp8b-noperf']) out.perf = await runPerf(base, A.zones ? String(A.zones).split(',').map(Number) : [1, 9, 19, 25], 'perf');
+    } finally { glMode(false); }
+    return out;
+}
+EXT_CMDS.mp8b = { all: false, server: true, run: runMp8b, judge: (c) => {
+    const G = 'G-mp8b', BL = BASE && BASE.latency;
+    row(G, 'GL 켬 여부(이 측정)', c.gl.boot ? 'GL ' + (c.gl.st && c.gl.st.ok ? '실행 ' + c.gl.st.w + 'x' + c.gl.st.h : '부팅만') : 'GL 미실행', null, '실행', c.gl.boot && c.gl.st && c.gl.st.ok ? 'PASS' : 'WARN');
+    for(const [m, x] of Object.entries(c.latency)){
+        const bb = BL && BL[m];
+        row(G, 'GL 켬 latency ' + m + ' 프레임 중앙/최대', x.fr50 + ' / ' + x.frMax + ' (n ' + x.n + ')', bb ? bb.fr50 + ' / ' + bb.frMax : null, '중앙값 증가 0프레임', bb ? (x.fr50 <= bb.fr50 && x.n >= x.sent / 2 ? 'PASS' : 'FAIL') : 'INFO', 'ms p50 ' + x.p50);
+    }
+    const n = c.noshake, lim = Math.round(0.12 * 255 * 10) / 10;
+    row(G, 'GL 켬 noshake ① CSS·② fillRect·③ 휘도', (n.css.bad.length ? 'CSS ' + n.css.bad.length : 'CSS 항등') + ' · fillRect ' + n.bad.length + ' · ' + n.maxInc, null, '항등·0·≤' + lim, !n.css.bad.length && !n.bad.length && n.maxInc <= lim ? 'PASS' : 'FAIL');
+    if(c.perf) row(G, 'GL 켬 perf (JS 시간만 — SwiftShader 는 GPU 비용을 CPU 로 치르므로 참고)', JSON.stringify(c.perf).slice(0, 120), null, '참고', 'INFO');
+} };
+async function runMp8bShots(base){
+    const zones = A['mp8b-zones'] ? String(A['mp8b-zones']).split(',').map(Number) : [1, 6, 12, 19, 24, 25, 30];
+    const sizes = A['mp8b-sizes'] ? String(A['mp8b-sizes']).split(',').map(s => s.split('x').map(Number)) : [[390, 844], [320, 568]];
+    const dir = path.join(OUT, 'mp8bshots'), out = [];
+    for(const [w, h] of sizes) for(const gon of [true, false]){
+        glMode(gon);
+        try{
+            const r = await withEdge({ w, h, dsf: 2, mobile: true }, async (e) => {
+                await e.open(gameUrl(base, 'ko', gon ? '' : 'gl=0'), 2200);
+                await e.ev('__G.perfStart({seed:424242, tier:0})');
+                await sleep(500);
+                const fs_ = [];
+                for(const z of zones){
+                    await e.ev('__G.perfJump(' + z + ')');
+                    await sleep(z === 19 ? 4200 : 3000);
+                    const f = path.join(dir, 'ko_' + w + 'x' + h + '_z' + z + '_' + (gon ? 'gl1' : 'gl0') + '.png'); await e.shot(f); fs_.push(f);
+                }
+                const st = await e.ev('__G.glInfo()');
+                collectErrs('mp8bshots', e, await e.ev('(window.__E||[]).slice(0,5)'));
+                return { w, h, gl: gon, files: fs_, st };
+            });
+            out.push(r);
+        } finally { glMode(false); }
+    }
+    return out;
+}
+EXT_CMDS.mp8bshots = { all: false, server: true, run: runMp8bShots, judge: (cur) => {
+    for(const r of cur) row('G-mp8bshots', r.w + 'x' + r.h + ' ' + (r.gl ? 'GL 켬' : 'GL 끔'), r.files.length + '장 · GL ' + (r.st.st && r.st.st.on ? '실행' : '꺼짐'), null, '사람 검수', 'INFO', path.dirname(r.files[0] || ''));
+} };
+/*</gate:mp8b>*/
 /*<gate:mp8c>*/
 /* MP8c (2026-10-09) — 장면 검수 시트 scenes (사람 검수용 — 자동 표시는 '눈여겨볼 곳' 힌트일 뿐 판정이 아니다).
    31존 × 3시점(진입 +2초 · 중간 · 끝 −2초)을 합성 시계로 결정적으로 찍어 존별 한 줄 시트 HTML 을 만든다.
@@ -3055,7 +3248,7 @@ class Edge {
         this.proc = spawn(EDGE, ['--headless=old', '--edge-skip-compat-layer-relaunch', '--remote-debugging-port=' + this.dport, '--remote-allow-origins=*', '--user-data-dir=' + this.prof,
             '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync', '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
             '--disable-backgrounding-occluded-windows', '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling', '--mute-audio', '--autoplay-policy=no-user-gesture-required',
-            '--window-size=' + w + ',' + h, 'about:blank'], { stdio: 'ignore', windowsHide: true });
+            '--window-size=' + w + ',' + h, ...(globalThis.__EDGE_XARGS || []) /* MP8b — GL 게이트가 SwiftShader 플래그를 넣는다 */, 'about:blank'], { stdio: 'ignore', windowsHide: true });
         LIVE.add(this);
         let tabs = null;
         for(let i = 0; i < 120 && !tabs; i++){ await sleep(200); try{ const t = await (await fetch('http://127.0.0.1:' + this.dport + '/json')).json(); if(t.find(x => x.type === 'page')) tabs = t; }catch(_){} }
@@ -4813,7 +5006,7 @@ try{
         if(CMDS.includes('boot')){ CUR.boot = await runBoot(base); judgeBoot(CUR.boot, BASE && BASE.boot); }
         if(CMDS.includes('flags0')){ CUR.flags0 = await runFlags0(base); judgeFlags0(CUR.flags0, BASE); }
         if(CMDS.includes('startshot')){ CUR.startshot = await runStartshot(base); judgeStartshot(CUR.startshot, BASE && BASE.startshot); }
-        if(CMDS.includes('gl0')) row('G21 gl0', 'GL 끔 순회 (자리)', 'MP8b 가 채운다', null, '-', 'INFO');
+        if(CMDS.includes('gl0') && !EXT_CMDS.gl0) row('G21 gl0', 'GL 끔 순회 (자리)', 'MP8b 가 채운다', null, '-', 'INFO');
         for(const c of CMDS) if(EXT_CMDS[c]){ CUR[c] = await EXT_CMDS[c].run(base); if(EXT_CMDS[c].judge) EXT_CMDS[c].judge(CUR[c], BASE && BASE[c]); }
         if(CMDS.includes('beamdrain')){ CUR.beamdrain = await runBeamDrain(base); judgeBeamDrain(CUR.beamdrain); }
         if(CMDS.includes('bot')){ CUR.bot = await runBot(base); judgeBot(CUR.bot, BASE && BASE.bot); }
