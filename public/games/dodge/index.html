@@ -27631,21 +27631,36 @@ function szWarn(shape, x, y, t, p, a5, a6){
             chevron(cx, cy, ux * s, uy * s, 6); stroke2(1.6);
         }
     } else if(shape === 'peek'){
-        /* 스케줄 예고 — 각진 마름모 + 가운데 모양(종류) + 좁혀 오는 괄호(남은 시간) */
+        /* 스케줄 예고 (2026-10-09 운영자: '사탕 모양은 안 어울린다 — 전 세계 누구나 아는 경고로') —
+           노란 삼각형 + 검은 테두리 + 느낌표(ISO 7010 W001 일반 경고 표지 꼴). 아래 작은 모양 = 종류(선·고리·삼각·파편),
+           그 밑 막대 = 남은 시간(차오르면 곧 온다). 다가올수록 커지고 깜빡임이 빨라진다 */
         const k = p, gl = a5;
-        ctx.globalAlpha = 0.45 + 0.55 * k;
-        poly(x, y, 9, 4, 0);
-        ctx.fillStyle = 'rgba(40,6,14,0.72)'; ctx.fill();
-        stroke2(1.6);
-        ctx.lineWidth = 1.6; ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF';
-        if(gl === 'line'){ ctx.beginPath(); ctx.moveTo(x - 4, y + 3); ctx.lineTo(x + 4, y - 3); ctx.stroke(); }
-        else if(gl === 'ring'){ poly(x, y, 3.6, 6, 0); ctx.stroke(); }
-        else if(gl === 'tri'){ ctx.beginPath(); ctx.moveTo(x - 3.6, y - 2.4); ctx.lineTo(x + 3.6, y - 2.4); ctx.lineTo(x, y + 3.4); ctx.closePath(); ctx.fill(); }
-        else { for(let i = 0; i < 4; i++){ const a = i * 1.5708 + 0.785; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * 4, y + Math.sin(a) * 4); ctx.stroke(); } }
-        const gap = 11 + 13 * (1 - k);
-        ctx.globalAlpha = 0.5 + 0.5 * blink;
-        chevron(x - gap, y, 1, 0, 5); stroke2(1.3);
-        chevron(x + gap, y, -1, 0, 5); stroke2(1.3);
+        const pulse = 0.5 + 0.5 * Math.sin((t || 0) * (0.008 + 0.012 * k));
+        const S = 10.5 + 2.5 * k + 0.8 * pulse;            /* 삼각형 외접 반지름 */
+        ctx.globalAlpha = 0.55 + 0.45 * k;
+        ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(x, y - S); ctx.lineTo(x + S * 0.95, y + S * 0.62); ctx.lineTo(x - S * 0.95, y + S * 0.62); ctx.closePath();
+        ctx.lineWidth = 4.2; ctx.strokeStyle = 'rgba(255,59,92,' + (0.35 + 0.4 * pulse * k).toFixed(2) + ')'; ctx.stroke();   /* 바깥 붉은 빛(급할수록) */
+        ctx.fillStyle = '#FFC928'; ctx.fill();
+        ctx.lineWidth = 1.8; ctx.strokeStyle = '#14100A'; ctx.stroke();
+        /* 느낌표 */
+        ctx.fillStyle = '#14100A';
+        ctx.fillRect(x - 1.25, y - S * 0.42, 2.5, S * 0.58);
+        ctx.beginPath(); ctx.arc(x, y + S * 0.34, 1.45, 0, 6.2832); ctx.fill();
+        /* 종류 — 삼각형 아래 작은 흰 모양 */
+        const gy = y + S * 0.62 + 7;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 1.5; ctx.strokeStyle = '#FFFFFF'; ctx.fillStyle = '#FFFFFF';
+        if(gl === 'line'){ ctx.beginPath(); ctx.moveTo(x - 4, gy + 2.5); ctx.lineTo(x + 4, gy - 2.5); ctx.stroke(); }
+        else if(gl === 'ring'){ ctx.beginPath(); ctx.arc(x, gy, 3.2, 0, 6.2832); ctx.stroke(); }
+        else if(gl === 'tri'){ ctx.beginPath(); ctx.moveTo(x - 3.4, gy - 2.2); ctx.lineTo(x + 3.4, gy - 2.2); ctx.lineTo(x, gy + 3); ctx.closePath(); ctx.fill(); }
+        else { for(let i = 0; i < 4; i++){ const a = i * 1.5708 + 0.785; ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + Math.cos(a) * 3.6, gy + Math.sin(a) * 3.6); ctx.stroke(); } }
+        /* 남은 시간 막대 */
+        const bw = 18, by = gy + 6.5;
+        ctx.globalAlpha = 0.5;
+        ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(x - bw / 2, by, bw, 2);
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = k > 0.7 ? '#FF3B5C' : '#FFC928'; ctx.fillRect(x - bw / 2, by, bw * k, 2);
     }
     ctx.restore();
 }
@@ -27691,7 +27706,7 @@ function drawPeek(now){
     }
     if(!n) return;
     let k = 0;
-    const y = NHT + 28, step = 30, x0 = CW / 2 - (n - 1) * step / 2;
+    const y = NHT + 26, step = 34, x0 = CW / 2 - (n - 1) * step / 2;
     for(const g of _pkOrder){
         if(_pk[g] < 0) continue;
         szWarn('peek', x0 + k * step, y, now, _pk[g], g);
@@ -28981,7 +28996,8 @@ const SZMP5 = window.SZMP5 = {ok: false};
 const P_LAUNCH = 0.5;
 const GAP = 160, LEAD = 700, TAIL = 600, V0 = 280, VMAX = 380, NS = 64;
 const RG = (typeof COMBO_NEAR_OUTER === 'number') ? COMBO_NEAR_OUTER : 32;
-const KINDS = ['loop', 'wave', 'zig', 'spiral'];
+/* 2026-10-09 운영자: 동그라미가 회오리처럼 훑고 지나가는 게 안 어울린다 → 회오리(spiral)·고리(loop) 안무는 뺀다(코드는 남김). 물결·지그재그만 */
+const KINDS = ['wave', 'zig'];
 /* 안무 — 정규화 좌표(가로 CW·세로 CH 비율) 제어점. 파도(wave) 위험물의 V자·나선·옆 쓸기 곡선 문법을 보상 쪽으로 옮겼다 */
 const CTRL = {
     loop: [[-0.14, 0.10], [0.16, 0.30], [0.38, 0.62], [0.60, 0.78], [0.80, 0.68], [0.78, 0.50], [0.60, 0.46], [0.48, 0.60], [0.60, 0.78], [0.86, 0.66], [1.14, 0.34]],
