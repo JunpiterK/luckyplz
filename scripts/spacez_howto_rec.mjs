@@ -474,7 +474,10 @@ async function clipSat(rec){
         }
         /* SAT 꾹 — 원뿔이 슬롯에 닿은 뒤(엔게이지) */
         if(!satDown && actAt >= 0 && st.eng && t - actAt > 0.7){
-            const b = await btn(rec, '#satBtn');
+            /* 2026-10-10 — 가운데 버튼 따닥 누른 채로 = SAT (짧게 한 번 → 0.1초 쉬고 다시 꾹) */
+            const b = await btn(rec, '#gravBtn');
+            await rec.down('sat', b.x, b.y); await rec.frame(); await rec.frame(); await rec.up('sat');
+            await rec.frame(); await rec.frame(); await rec.frame();
             await rec.down('sat', b.x, b.y); satDown = true; cue.sat = t;
         }
         if(satDown && okAt < 0 && st.ms === 'success'){ okAt = t; cue.ok = t; }
