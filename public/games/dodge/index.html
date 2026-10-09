@@ -9306,130 +9306,126 @@ function _szFdText(key, ko, en){
     if(v && v !== key) return String(v);
     return _szLang() === 'ko' ? ko : en;
 }
+/* 항로 패널 자리 (2026-10-09 운영자: 하단 → 캔버스 오른쪽 위, 작고 반투명).
+   CSS px 로 정한다 — 화면 위 DOM(COMBO 줄 아래 top 31 · 미션 배너 top 60 위)과 같은 단위라야 폰 크기와 무관하게 사이에 끼고,
+   글자도 CSS 9px 이상이 유지된다. kx·ky = 논리 px / CSS px (캔버스 비율이 3:5 가 아니어도 글자가 찌그러지지 않게 굽기 안에서 되돌린다).
+   레이아웃을 읽지 않는다(canvas.width/height·dpr 은 fitCanvas 가 정한 값) */
+const SZ_FD_CSS = { w: 136, wMin: 112, h: 26, top: 31, right: 6 };
+/* 폭 — 같은 줄 왼쪽의 하트·통신 칩(📡 ×N '보급 차단', szDrawCommHud)이 가장 길 때 끝나는 자리까지 비켜 준다(좁은 폰에서만 줄어든다).
+   글자 폭은 언어·szHudDX 가 바뀔 때만 잰다 */
+let _szFdCommK = '', _szFdCommW = 0;
+function _szFdGeo(){
+    const cw = canvas.width / (dpr || 1), ch = canvas.height / (dpr || 1);
+    const kx = cw > 0 ? Math.max(0.5, Math.min(2, CW / cw)) : 1, ky = ch > 0 ? Math.max(0.5, Math.min(2, CH / ch)) : 1;
+    const ck = _szLang() + '|' + szHudDX;
+    if(ck !== _szFdCommK){
+        _szFdCommK = ck;
+        let tw = 50;
+        try{ ctx.save(); ctx.font = 'bold 9px "Noto Sans KR",sans-serif'; tw = Math.max(ctx.measureText(_szCommT('hudCut')).width, ctx.measureText(_szCommT('hud')).width); ctx.restore(); }catch(_){}
+        _szFdCommW = 16 + szHudDX + MAX_LIVES * 15 - 2 + 18 + 24 + tw;   /* 논리 px — 통신 칩 오른쪽 끝(×NN 포함) */
+    }
+    const avail = (cw > 0 ? cw : 360) - SZ_FD_CSS.right - _szFdCommW / kx - 6;
+    const wc = Math.round(Math.max(SZ_FD_CSS.wMin, Math.min(SZ_FD_CSS.w, avail)));
+    const w = wc * kx, h = SZ_FD_CSS.h * ky;
+    return { x: CW - SZ_FD_CSS.right * kx - w, y: SZ_FD_CSS.top * ky, w, h, kx, ky, wc };
+}
 function _szFdBake(zIdx, lazy){
-    const x = 12, y = CH - 52, w = CW - 24, h = 38;
-    const pathT = _szFdText('fdPath', '항로', 'FLIGHT PATH');
-    const nextT = _szFdText('fdNext', '다음', 'NEXT').trim();   /* P3 표 값은 뒤 공백 포함 */
+    const G = _szFdGeo(), w = G.w, h = G.h, kx = G.kx, ky = G.ky;
     const curName = _zoneName(zIdx) || '';
     const nextName = ZONES[zIdx + 1] ? _zoneName(zIdx + 1) : _szFdText('fdUnknown', '미지의 영역', 'UNKNOWN');
     const nextOrdinal = Math.min(zIdx + 2, ZONES.length);
-    /* MP6 — 7·8px 글자(항로·다음 n/31·다음 이름)를 아이콘 + 9px 로. 꺼지면 예전 그대로 */
+    /* MP6 키(fd6|존|…) 그대로 — mp8a 미리 굽기 검사가 'fd6|9' 접두를 본다. 꺼지면 fd| */
     const m6 = !!(SZ_FLAGS.mp6 && window.SZMP6 && SZMP6.fd && SZMP6.fd());
-    const nameFont = '800 10px Noto Sans KR, sans-serif', nextFont = m6 ? '700 9px Noto Sans KR, sans-serif' : '700 8px Noto Sans KR, sans-serif';
-    const P = 2;   /* 테두리 선이 잘리지 않게 여백 */
-    if(m6) return szBake('fd6|' + zIdx + '|' + curName + '|' + nextName, w + P * 2, h + P * 2, (c) => {
-        c.translate(P - x, P - y);
-        szRR(c, x, y, w, h, 11);
-        const bg = c.createLinearGradient(x, y, x + w, y + h);
-        bg.addColorStop(0, 'rgba(4,12,28,0.26)');
-        bg.addColorStop(0.55, 'rgba(0,42,78,0.16)');
-        bg.addColorStop(1, 'rgba(20,8,34,0.22)');
+    const nameFont = '800 10px Noto Sans KR, sans-serif', nextFont = '700 9px Noto Sans KR, sans-serif', ordFont = '700 9px Orbitron, sans-serif';
+    const P = 2;
+    const W = G.wc, H = SZ_FD_CSS.h;   /* 굽기 안은 CSS px 좌표 */
+    /* 1줄: [항로 아이콘] 지금 존 ······ n/31   2줄: 진행 막대 ····· ▸ 다음 존(노랑) */
+    return szBake((m6 ? 'fd6|' : 'fd|') + zIdx + '|' + curName + '|' + nextName + '|' + W + '|' + kx.toFixed(3) + ',' + ky.toFixed(3), w + P * 2, h + P * 2, (c) => {
+        c.translate(P, P);
+        c.scale(kx, ky);
+        szRR(c, 0, 0, W, H, 9);
+        const bg = c.createLinearGradient(0, 0, W, H);
+        bg.addColorStop(0, 'rgba(4,12,28,0.30)');
+        bg.addColorStop(1, 'rgba(20,8,34,0.24)');
         c.fillStyle = bg;
         c.fill();
-        c.strokeStyle = 'rgba(116,226,255,0.2)';
+        c.strokeStyle = 'rgba(116,226,255,0.22)';
         c.lineWidth = 1;
         c.stroke();
         /* 항로 아이콘 — 점 세 개를 잇는 선(지금 존 = 큰 점) */
-        c.strokeStyle = 'rgba(156,223,255,.7)'; c.lineWidth = 1.2;
-        c.beginPath(); c.moveTo(x + 11, y + 22); c.lineTo(x + 18, y + 15); c.lineTo(x + 25, y + 19); c.stroke();
+        c.strokeStyle = 'rgba(156,223,255,.7)'; c.lineWidth = 1.1;
+        c.beginPath(); c.moveTo(6, 12); c.lineTo(10.5, 6.5); c.lineTo(15, 9.5); c.stroke();
         c.fillStyle = 'rgba(156,223,255,.9)';
-        c.beginPath(); c.arc(x + 11, y + 22, 1.6, 0, Math.PI * 2); c.arc(x + 25, y + 19, 1.6, 0, Math.PI * 2); c.fill();
-        c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(x + 18, y + 15, 2.3, 0, Math.PI * 2); c.fill();
-        szOutlineText(c, 2.4);
+        c.beginPath(); c.arc(6, 12, 1.4, 0, Math.PI * 2); c.arc(15, 9.5, 1.4, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#FFFFFF'; c.beginPath(); c.arc(10.5, 6.5, 2, 0, Math.PI * 2); c.fill();
+        szOutlineText(c, 2.2);
         c.textBaseline = 'middle';
-        c.textAlign = 'left';
-        c.fillStyle = 'rgba(255,255,255,.92)';
-        c.font = nameFont;
-        c.fillText(_szEllipsize(c, curName, w * 0.5), x + 31, y + 17);
-        /* 다음 — ▸ 화살표(그림) + 9px 숫자, 그 아래 9px 이름 */
         c.textAlign = 'right';
-        c.fillStyle = 'rgba(255,255,255,.62)';
-        c.font = '700 9px Orbitron, sans-serif';
+        c.font = ordFont;
+        c.fillStyle = 'rgba(255,255,255,.55)';
         const ord = nextOrdinal + '/' + ZONES.length;
-        c.fillText(ord, x + w - 11, y + 10);
+        c.fillText(ord, W - 6, 9.5);
         const ow = c.measureText(ord).width;
-        c.beginPath(); c.moveTo(x + w - 15 - ow, y + 7); c.lineTo(x + w - 15 - ow, y + 13); c.lineTo(x + w - 11 - ow, y + 10); c.closePath(); c.fill();
-        c.fillStyle = 'rgba(255,230,109,.86)';
-        c.font = nextFont;
-        c.fillText(_szEllipsize(c, nextName, w * 0.4), x + w - 11, y + 22);
-        c.fillStyle = 'rgba(255,255,255,.12)';
-        c.fillRect(x + 11, y + h - 7, w - 22, 3);
-    }, zIdx, [[nameFont, curName], [nextFont, nextName], ['700 9px Orbitron, sans-serif', '0123456789/']], lazy);
-    return szBake('fd|' + zIdx + '|' + pathT + '|' + nextT + '|' + curName + '|' + nextName, w + P * 2, h + P * 2, (c) => {
-        c.translate(P - x, P - y);
-        szRR(c, x, y, w, h, 11);
-        const bg = c.createLinearGradient(x, y, x + w, y + h);
-        /* P8a — 늘 떠 있는 패널이라 가장 옅게(≤.26). 글자는 어두운 번짐으로 */
-        bg.addColorStop(0, 'rgba(4,12,28,0.26)');
-        bg.addColorStop(0.55, 'rgba(0,42,78,0.16)');
-        bg.addColorStop(1, 'rgba(20,8,34,0.22)');
-        c.fillStyle = bg;
-        c.fill();
-        c.strokeStyle = 'rgba(116,226,255,0.2)';
-        c.lineWidth = 1;
-        c.stroke();
-        szOutlineText(c, 2.4);
-        c.textBaseline = 'top';
         c.textAlign = 'left';
-        c.fillStyle = 'rgba(156,223,255,.82)';
-        c.font = '800 7px Orbitron, sans-serif';
-        c.fillText(pathT, x + 11, y + 7);
-        c.fillStyle = 'rgba(255,255,255,.92)';
         c.font = nameFont;
-        c.fillText(_szEllipsize(c, curName, w * 0.56), x + 11, y + 18);
+        c.fillStyle = 'rgba(255,255,255,.94)';
+        c.fillText(_szEllipsize(c, curName, W - 20 - 6 - ow - 5), 20, 9.5);
+        /* 2줄 오른쪽 — ▸ 다음 존 */
         c.textAlign = 'right';
-        c.fillStyle = 'rgba(255,255,255,.52)';
-        c.font = '700 7px Orbitron, sans-serif';
-        c.fillText(nextT + ' ' + nextOrdinal + '/' + ZONES.length, x + w - 11, y + 7);
-        c.fillStyle = 'rgba(255,230,109,.82)';
         c.font = nextFont;
-        c.fillText(_szEllipsize(c, nextName, w * 0.34), x + w - 11, y + 20);
-        c.fillStyle = 'rgba(255,255,255,.12)';
-        c.fillRect(x + 11, y + h - 7, w - 22, 3);
-    }, zIdx, [[nameFont, curName], [nextFont, nextName], ['800 7px Orbitron, sans-serif', pathT]], lazy);
+        c.fillStyle = 'rgba(255,230,109,.88)';
+        const nx = _szEllipsize(c, nextName, SZ_FD_NEXT_W - 10);
+        c.fillText(nx, W - 6, 19.5);
+        const ax = W - 6 - c.measureText(nx).width - 3;
+        c.fillStyle = 'rgba(255,255,255,.55)';
+        c.beginPath(); c.moveTo(ax - 4, 16.5); c.lineTo(ax - 4, 22.5); c.lineTo(ax, 19.5); c.closePath(); c.fill();
+        c.fillStyle = 'rgba(255,255,255,.13)';
+        c.fillRect(6, 18.5, W - 12 - SZ_FD_NEXT_W, 3);
+    }, zIdx, [[nameFont, curName], [nextFont, nextName], [ordFont, '0123456789/']], lazy);
 }
-let _szFdGrad = null;
+const SZ_FD_NEXT_W = 54;   /* 2줄 오른쪽 '▸ 다음 존' 자리(CSS px) — 막대 길이 = 폭 − 12 − 이 값 */
+let _szFdGrad = null, _szFdGradK = '';
 function drawFlightDirector(now){
     if(!running) return;
     const z = ZONES[currentZoneIdx];
     if(!z) return;
     const zoneT = getZoneT(currentZoneIdx);
     const pct = Math.max(0, Math.min(1, zoneT));
-    const x = 12, y = CH - 52, w = CW - 24, h = 38;
-    /* P8a — 기체만이 아니라 운석·위험물·보급이 패널 70px 안이면 0.15 까지 비켜 준다 */
+    const G = _szFdGeo(), x = G.x, y = G.y, w = G.w, h = G.h;
+    /* 평소 0.55 — 운석·위험물·보급·기체가 패널 70px 안이면 0.12 까지 비켜 준다(szOvA 칸 5) */
     ctx.save();
-    /* 기체는 늘 아래쪽을 날아 패널에 붙어 있으므로 기체는 예전처럼 높이로만(→0.3), 나머지는 근접 비킴(→0.15) */
-    const playerOverlap = Math.max(0, Math.min(1, (player.y - (y - 32)) / 72));
-    ctx.globalAlpha = ((typeof szOvA === 'function') ? szOvA(0.62, x, y, x + w, y + h, 5, null, 1) : 0.62) * (1 - playerOverlap * 0.62);   /* QA — 0.8 → 0.62 */
-    /* 존·언어가 그대로면 지난 프레임 비트맵 (문구 조회·키 조립도 건너뛴다) */
-    const L = _szLang(), fm = drawFlightDirector._m, m6 = !!SZ_FLAGS.mp6;
-    let e = (fm && fm.z === currentZoneIdx && fm.l === L && fm.S === szBakeScale() && fm.m6 === m6 && !fm.e.tmp && fm.e.c.width) ? fm.e : null;
+    ctx.globalAlpha = (typeof szOvA === 'function') ? szOvA(0.55, x, y, x + w, y + h, 5) : 0.55;
+    /* 존·언어·자리가 그대로면 지난 프레임 비트맵 (문구 조회·키 조립도 건너뛴다) */
+    const L = _szLang(), fm = drawFlightDirector._m, m6 = !!SZ_FLAGS.mp6, gk = G.kx.toFixed(3) + ',' + G.ky.toFixed(3) + ',' + G.wc;
+    let e = (fm && fm.z === currentZoneIdx && fm.l === L && fm.S === szBakeScale() && fm.m6 === m6 && fm.g === gk && !fm.e.tmp && fm.e.c.width) ? fm.e : null;
     if(!e){
         /* 새 존인데 아직 못 구웠으면 한두 프레임은 직전 패널을 그대로 보여 주고 한가할 때 굽는다 */
-        const prev = (fm && fm.e && fm.e.c.width && fm.S === szBakeScale()) ? fm.e : null;
+        const prev = (fm && fm.e && fm.e.c.width && fm.S === szBakeScale() && fm.g === gk) ? fm.e : null;
         e = _szFdBake(currentZoneIdx, !!prev);
-        if(e) drawFlightDirector._m = { z: currentZoneIdx, l: L, S: szBakeScale(), m6, e }; else e = prev;
+        if(e) drawFlightDirector._m = { z: currentZoneIdx, l: L, S: szBakeScale(), m6, g: gk, e }; else e = prev;
     }
     szDrawBaked(e, x + w / 2, y + h / 2);
 
-    const bx = x + 11, by = y + h - 7, bw = w - 22;
-    if(!_szFdGrad){
+    const bx = x + 6 * G.kx, by = y + 18.5 * G.ky, bw = (G.wc - 12 - SZ_FD_NEXT_W) * G.kx, bh = 3 * G.ky;
+    const gkey = bx.toFixed(1) + ',' + bw.toFixed(1);
+    if(!_szFdGrad || _szFdGradK !== gkey){
+        _szFdGradK = gkey;
         _szFdGrad = ctx.createLinearGradient(bx, by, bx + bw, by);
         _szFdGrad.addColorStop(0, '#00D9FF');
         _szFdGrad.addColorStop(0.65, '#FFE66D');
         _szFdGrad.addColorStop(1, '#FF3366');
     }
     ctx.fillStyle = _szFdGrad;
-    ctx.fillRect(bx, by, Math.max(4, bw * pct), 3);
+    ctx.fillRect(bx, by, Math.max(3, bw * pct), bh);
     /* BEST 깃발 (P3 szBestMarker) */
     let bm = null;
     try{ if(typeof szBestMarker === 'function') bm = szBestMarker(); }catch(_){}
     if(bm != null && typeof bm === 'object') bm = (bm.f != null) ? bm.f : bm.t;   /* P3 는 {f, ms} */
     if(typeof bm === 'number' && bm >= 0 && bm <= 1){
-        const fx = bx + bw * bm;
+        const fx = bx + bw * bm, k = G.ky;
         ctx.fillStyle = '#FFD24A';
-        ctx.fillRect(fx - 0.75, by - 5, 1.5, 8);
-        ctx.beginPath(); ctx.moveTo(fx + 0.75, by - 5); ctx.lineTo(fx + 5, by - 3.5); ctx.lineTo(fx + 0.75, by - 2); ctx.closePath(); ctx.fill();
+        ctx.fillRect(fx - 0.75, by - 4 * k, 1.5, 7 * k);
+        ctx.beginPath(); ctx.moveTo(fx + 0.75, by - 4 * k); ctx.lineTo(fx + 4.5, by - 2.6 * k); ctx.lineTo(fx + 0.75, by - 1.2 * k); ctx.closePath(); ctx.fill();
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -25869,6 +25865,58 @@ body.sz-float #rewardRow .reward-slot.empty{opacity:.3;pointer-events:none}
     font:800 13px 'Noto Sans KR',sans-serif;color:rgba(200,240,255,.92);text-shadow:0 1px 3px rgba(0,0,0,.9);padding:6px 12px;border-radius:999px;
     background:rgba(2,8,24,.55);border:1px solid rgba(0,217,255,.3);opacity:0;transition:opacity .4s}
 .szf-tip.on{opacity:1}
+/* ---- 원호 배치 (2026-10-09 운영자: '왼손 엄지가 BEAM·SAT 위에 늘 얹혀 있어 그 아래 아이템이 가려진다') ----
+   폰(캔버스 옆 여백 <92px)은 모바일 MOBA 식 — BEAM(큰 원) 둘레 위쪽~안쪽 수평 사분원에 SAT 휜 캡슐, 그 바깥 호에 아이템 5칸 부채꼴,
+   그 바깥 호(아이템 사이 틈)에 보상 3칸. 엄지가 오는 아래·바깥 반원에는 아무것도 두지 않는다. 자리 계산은 SZCTL.layout(arcLayout).
+   태블릿(옆 여백 ≥92px)은 위 세로 열 배치 그대로 */
+body.szf-arc #gravBtn{width:var(--d,72px);height:var(--d,72px)}
+body.szf-arc #gravBtn .grav-icon{font-size:calc(var(--d,72px) * .36)}
+body.szf-arc #gravBtn .grav-label{font-size:max(9px,calc(var(--d,72px) * .14))}
+/* SAT — 버튼 상자는 캡슐의 외접 사각형. 상자 자체는 손가락을 받지 않고(빈 모서리 = 조향 면) 안의 캡슐 모양(.szf-arc-hit)만 받는다 */
+#satBtn .szf-arc{display:none}
+body.szf-arc #satBtn{width:var(--w);height:var(--h);padding:0;border-radius:0;background:none !important;box-shadow:none !important;overflow:visible;pointer-events:none;
+    color:#CFF3FF;text-shadow:none}
+body.szf-arc #satBtn::before,body.szf-arc #satBtn::after{display:none !important}
+body.szf-arc #satBtn > .sat-top,body.szf-arc #satBtn > .sat-chip{display:none !important}
+body.szf-arc #satBtn .szf-arc{display:block;position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible}
+body.szf-arc #satBtn .szf-arc *{pointer-events:none}
+body.szf-arc #satBtn .szf-arc .szf-arc-hit{pointer-events:auto;cursor:pointer}
+body.szf-arc #satBtn.disabled .szf-arc .szf-arc-hit{pointer-events:none}
+.szf-arc-hit{fill:rgba(4,18,34,.52);stroke:rgba(93,193,255,.78);stroke-width:2;transition:fill .12s,stroke .12s}
+#satBtn.armed .szf-arc-hit{fill:rgba(16,44,70,.6);animation:szfArcPulse 1.2s ease-in-out infinite}
+@keyframes szfArcPulse{0%,100%{stroke:rgba(93,193,255,.7)}50%{stroke:rgba(190,236,255,1)}}
+#satBtn.engaged .szf-arc-hit{fill:rgba(28,72,104,.66);stroke:#DDE8FF;stroke-width:2.5}
+#satBtn.firing .szf-arc-hit,#satBtn.installing .szf-arc-hit{fill:rgba(52,144,200,.72);stroke:#9CDFFF;stroke-width:2.5}
+#satBtn.done .szf-arc-hit{fill:rgba(34,184,106,.78);stroke:#5CF0A0;animation:none}
+#satBtn.sz-hurry .szf-arc-hit{animation:szfArcHurry .42s steps(2,jump-none) infinite}
+@keyframes szfArcHurry{0%,100%{stroke:rgba(255,90,90,.95)}50%{stroke:rgba(255,210,90,.35)}}
+.szf-arc-prog{fill:none;stroke:rgba(255,230,109,.85);stroke-linecap:round;opacity:0}
+#satBtn.installing .szf-arc-prog{opacity:.85}
+.szf-arc-trk,.szf-arc-left{fill:none;stroke-width:2.5;stroke-linecap:round;opacity:0;transition:opacity .2s}
+.szf-arc-trk{stroke:rgba(255,230,109,.16)}
+.szf-arc-left{stroke:#FFE66D}
+#satBtn.armed .szf-arc-trk,#satBtn.engaged .szf-arc-trk,#satBtn.installing .szf-arc-trk,#satBtn.firing .szf-arc-trk,
+#satBtn.armed .szf-arc-left,#satBtn.engaged .szf-arc-left,#satBtn.installing .szf-arc-left,#satBtn.firing .szf-arc-left{opacity:1}
+.szf-arc-txt{font:900 11px 'Orbitron','Noto Sans KR',sans-serif;fill:#CFF3FF;stroke:rgba(0,8,20,.75);stroke-width:2.6px;paint-order:stroke;letter-spacing:.04em}
+.szf-arc-txt.c{font:800 10px 'Noto Sans KR',sans-serif;letter-spacing:0}
+#satBtn.firing .szf-arc-txt,#satBtn.installing .szf-arc-txt,#satBtn.done .szf-arc-txt{fill:#031018;stroke:rgba(220,245,255,.6)}
+/* 아이템·보상 — 묶음 상자는 자리만(손가락 통과), 칸마다 따로 놓이고 따로 흐려진다 */
+body.sz-float.szf-arc .szf-fan{display:block !important;width:var(--w);height:var(--h);pointer-events:none}
+body.sz-float.szf-arc.lp-playing .szf-fan.szf-g{opacity:1}
+body.sz-float.szf-arc .szf-fan > button{position:absolute !important;left:var(--ix);top:var(--iy);margin:0;width:var(--d);height:var(--d);border-radius:50%;
+    pointer-events:auto;opacity:var(--szf-a,.62);transition:opacity .14s linear;grid-column:auto}
+body.sz-float.szf-arc .slot-row.szf-fan > .item-slot{font-size:calc(var(--d) * .46)}
+body.sz-float.szf-arc #rewardRow.szf-fan > .reward-slot{font-size:calc(var(--d) * .54)}
+body.sz-float.szf-arc .szf-fan > button.empty{opacity:calc(var(--szf-a,.62) * .42);pointer-events:none}
+body.sz-float.szf-arc .szf-fan > button:not(.empty):active{opacity:.96}
+body.sz-editing.szf-arc .szf-fan > button.empty{opacity:.6}
+/* 보상 칸 기본 규칙(#rewardRow …)이 id 라 더 세다 — 같은 id 로 덮는다 */
+body.sz-float.szf-arc #rewardRow.szf-fan > .reward-slot{width:var(--d);height:var(--d);border-radius:50%}
+body.sz-float.szf-arc #rewardRow.szf-fan > .reward-slot.empty{opacity:calc(var(--szf-a,.62) * .42);pointer-events:none}
+body.sz-editing.szf-arc #rewardRow.szf-fan > .reward-slot.empty{opacity:.6}
+/* 편집 중 — 묶음 하나로 움직이므로 칸마다 점선 대신 BEAM 둘레 고리 하나만 */
+body.sz-editing.szf-arc .left-controls .szf-g{outline:none}
+body.sz-editing.szf-arc #gravBtn{outline:2px solid #FFE66D;outline-offset:3px}
 /* ---- 배치 편집 ---- */
 .szf-dim,.szf-tools,.szf-ehint{display:none}
 body.sz-editing .szf-dim{display:block;position:absolute;inset:0;background:rgba(2,6,20,.3);pointer-events:none}
@@ -25924,12 +25972,12 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
     const GAP = 6;
     const KEYS = ['beam', 'sat', 'items', 'rewards'];
     const SZF_I18N = {
-        ko:{ float:'🎮 플로팅', classic:'🎮 클래식', sens:'감도', edit:'✋ 배치 편집', size:'크기', arr:'배열', reset:'↺ 초기화', done:'✓ 완료', ehint:'끌어서 옮기기 · 눌러서 고르기', tip:'빈 곳 어디든 끌어서 조종', items:'아이템', rewards:'보상' },
-        en:{ float:'🎮 Float', classic:'🎮 Classic', sens:'Sens', edit:'✋ Edit layout', size:'Size', arr:'Layout', reset:'↺ Reset', done:'✓ Done', ehint:'Drag to move · tap to select', tip:'Drag anywhere to steer', items:'Items', rewards:'Rewards' },
-        ja:{ float:'🎮 フロート', classic:'🎮 クラシック', sens:'感度', edit:'✋ 配置編集', size:'サイズ', arr:'並び', reset:'↺ リセット', done:'✓ 完了', ehint:'ドラッグで移動 · タップで選択', tip:'空いた所ならどこでもドラッグで操縦', items:'アイテム', rewards:'報酬' },
-        zh:{ float:'🎮 悬浮', classic:'🎮 经典', sens:'灵敏度', edit:'✋ 编辑布局', size:'大小', arr:'排列', reset:'↺ 重置', done:'✓ 完成', ehint:'拖动移动 · 点按选择', tip:'在空白处任意拖动即可操控', items:'道具', rewards:'奖励' },
-        es:{ float:'🎮 Flotante', classic:'🎮 Clásico', sens:'Sens', edit:'✋ Editar', size:'Tamaño', arr:'Forma', reset:'↺ Reiniciar', done:'✓ Listo', ehint:'Arrastra para mover · toca para elegir', tip:'Arrastra en cualquier lugar para pilotar', items:'Ítems', rewards:'Premios' },
-        pt:{ float:'🎮 Flutuante', classic:'🎮 Clássico', sens:'Sens', edit:'✋ Editar', size:'Tamanho', arr:'Forma', reset:'↺ Redefinir', done:'✓ Pronto', ehint:'Arraste para mover · toque para escolher', tip:'Arraste em qualquer lugar para pilotar', items:'Itens', rewards:'Prêmios' }
+        ko:{ float:'🎮 플로팅', classic:'🎮 클래식', sens:'감도', edit:'✋ 배치 편집', size:'크기', arr:'배열', reset:'↺ 초기화', done:'✓ 완료', ehint:'끌어서 옮기기 · 눌러서 고르기', tip:'빈 곳 어디든 끌어서 조종', items:'아이템', rewards:'보상', arc:'조작 묶음' },
+        en:{ float:'🎮 Float', classic:'🎮 Classic', sens:'Sens', edit:'✋ Edit layout', size:'Size', arr:'Layout', reset:'↺ Reset', done:'✓ Done', ehint:'Drag to move · tap to select', tip:'Drag anywhere to steer', items:'Items', rewards:'Rewards', arc:'Controls' },
+        ja:{ float:'🎮 フロート', classic:'🎮 クラシック', sens:'感度', edit:'✋ 配置編集', size:'サイズ', arr:'並び', reset:'↺ リセット', done:'✓ 完了', ehint:'ドラッグで移動 · タップで選択', tip:'空いた所ならどこでもドラッグで操縦', items:'アイテム', rewards:'報酬', arc:'操作セット' },
+        zh:{ float:'🎮 悬浮', classic:'🎮 经典', sens:'灵敏度', edit:'✋ 编辑布局', size:'大小', arr:'排列', reset:'↺ 重置', done:'✓ 完成', ehint:'拖动移动 · 点按选择', tip:'在空白处任意拖动即可操控', items:'道具', rewards:'奖励', arc:'操作组' },
+        es:{ float:'🎮 Flotante', classic:'🎮 Clásico', sens:'Sens', edit:'✋ Editar', size:'Tamaño', arr:'Forma', reset:'↺ Reiniciar', done:'✓ Listo', ehint:'Arrastra para mover · toca para elegir', tip:'Arrastra en cualquier lugar para pilotar', items:'Ítems', rewards:'Premios', arc:'Controles' },
+        pt:{ float:'🎮 Flutuante', classic:'🎮 Clássico', sens:'Sens', edit:'✋ Editar', size:'Tamanho', arr:'Forma', reset:'↺ Redefinir', done:'✓ Pronto', ehint:'Arraste para mover · toque para escolher', tip:'Arraste em qualquer lugar para pilotar', items:'Itens', rewards:'Prêmios', arc:'Controles' }
     };
     const L = () => { let l = 'en'; try{ l = (window.LpI18n && LpI18n.getLang && LpI18n.getLang()) || 'en'; }catch(_){} return SZF_I18N[l] ? l : 'en'; };
     const T = (k) => SZF_I18N[L()][k] || SZF_I18N.en[k] || k;
@@ -25969,9 +26017,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         return gridWH(nRew(), 48 * s, g.o);
     }
     /* 기본 배치 — 버튼 쪽 가장자리에서 잰 중심(px).
-       오래 쥐는 입력(조향·BEAM·SAT)은 화면 가운데~아래 사이(층 높이 64%)에 — 폰 가운데를 쥔 채 엄지가 닿는다.
-       가끔 한 번 누르는 아이템·보상은 캔버스 아래 남는 띠(3:5 캔버스와 화면 비율 차이)에 — 플레이필드를 가리지 않는다.
-       띠가 없을 만큼 납작한 화면이면 BEAM 위 가장자리 세로 줄로 */
+       오래 쥐는 입력(조향·BEAM·SAT)은 화면 가운데~아래 사이(층 높이 64%, 폰은 조종사 창 높이)에 — 폰 가운데를 쥔 채 엄지가 닿는다 */
     function defaults(W, H){
         let by = Math.max(150, Math.min(H * 0.64, H - 150));
         /* 2026-10-08 운영자: BEAM·SAT 를 오른쪽 아래 레서판다 조종사 창과 같은 높이로 — 창 중심(portraitPos: CH−60−PR·asp−8)을 층 좌표로 */
@@ -25980,47 +26026,25 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
             const py = geo.cy0 + (CH - 60 - 26 * asp - 8) * geo.ch / CH;
             by = Math.max(150, Math.min(py, H - 44));
         }
-        const n = nItems(), nr = nRew(), rowW = n * 52 + (n - 1) * GAP;
-        const sy0 = Math.min(H, geo.cy0 + geo.ch), strip = H - sy0;
-        /* SAT = BEAM 바로 안쪽 옆(같은 높이) — 운영자 2026-10-08 '아이템 먹는 버튼(BEAM)의 오른쪽'. 조향 쪽이 바뀌면 거울로 뒤집힌다 */
-        const D = { beam:{x:66, y:by, s:1}, sat:{x:66 + 36 + 12 + 40, y:by, s:1}, items:{s:1, o:'h'}, rewards:{s:1, o:'h'} };
-        const put = (k) => { const z = size(k, D[k]); D[k].x = 8 + z[0] / 2; return z; };
-        const mg = geo.cx0;   /* 캔버스 옆 여백(태블릿) */
-        if(mg >= 92){
-            /* 태블릿 — 캔버스 옆 여백에 세로로 전부(플레이필드를 하나도 가리지 않는다): 아이템 / BEAM / SAT / 보상 */
-            const cx = mg / 2;
-            D.beam.x = cx; D.sat.x = cx; D.sat.y = by + 36 + 12 + 32;
-            D.items.o = (n * 52 + (n - 1) * GAP) <= by - 60 ? 'v' : 'g';
-            const iz = size('items', D.items); D.items.x = cx; D.items.y = by - 36 - 14 - iz[1] / 2;
-            D.rewards.o = 'v'; const rz = size('rewards', D.rewards); D.rewards.x = cx; D.rewards.y = Math.min(D.sat.y + 32 + 14 + rz[1] / 2, H - 8 - rz[1] / 2);
-        } else if(strip >= 64 && rowW <= W - 16){
-            const iz = put('items');
-            if(strip >= 124){
-                D.items.y = sy0 + 8 + iz[1] / 2;
-                const rz = put('rewards'); D.rewards.y = sy0 + 8 + iz[1] + GAP + rz[1] / 2;
-            } else {
-                D.items.y = sy0 + strip / 2;
-                D.rewards.o = 'v'; const rz = put('rewards'); D.rewards.y = by - 36 - 14 - rz[1] / 2;
-            }
-        } else if(rowW <= W - 16){
-            /* 띠가 없는 납작한 폰(320×568·375×667) — 아이템은 캔버스 맨 아래 한 줄(항로 패널 자리, 기체가 덜 가는 곳), 보상은 BEAM 위 세로줄 */
-            const iz = put('items'); D.items.y = H - 6 - iz[1] / 2;
-            D.beam.y = Math.min(D.beam.y, H - 6 - iz[1] - 12 - 36);
-            D.sat.y = Math.min(D.beam.y, H - 6 - iz[1] - 12 - 32);
-            D.rewards.o = 'v'; const rz = put('rewards'); D.rewards.y = D.beam.y - 36 - 14 - rz[1] / 2;
-        } else {
-            const colH = n * 52 + (n - 1) * GAP;
-            D.items.o = colH <= H * 0.36 ? 'v' : 'g';
-            const iz = put('items'); D.items.y = by - 36 - 14 - iz[1] / 2;
-            const rz = put('rewards'); D.rewards.y = Math.min(by + 62 + 32 + 14 + rz[1] / 2, H - 8 - rz[1] / 2);
-            void nr;
-        }
+        const n = nItems();
+        /* 태블릿 — 캔버스 옆 여백에 세로로 전부(플레이필드를 하나도 가리지 않는다): 아이템 / BEAM / SAT / 보상.
+           폰(옆 여백 <92px)은 아래 D.arc 하나로 원호 배치(arcLayout) — 2026-10-09 전엔 아이템·보상을 캔버스 아래 띠·항로 패널 자리에 두었다 */
+        const mg = geo.cx0, cx = mg / 2;
+        const D = { beam:{x:cx, y:by, s:1}, sat:{x:cx, y:by + 36 + 12 + 32, s:1}, items:{s:1, o:'v'}, rewards:{s:1, o:'v'} };
+        D.items.o = (n * 52 + (n - 1) * GAP) <= by - 60 ? 'v' : 'g';
+        const iz = size('items', D.items); D.items.x = cx; D.items.y = by - 36 - 14 - iz[1] / 2;
+        const rz = size('rewards', D.rewards); D.rewards.x = cx; D.rewards.y = Math.min(D.sat.y + 32 + 14 + rz[1] / 2, H - 8 - rz[1] / 2);
         for(const k of KEYS){ D[k].x /= W; D[k].y /= H; }
+        /* 원호 배치(폰) 기준점 = BEAM 중심 — 가장자리에서 66px(폭 비례), 높이는 위 by(조종사 창 높이) 그대로 */
+        const gk = Math.max(0.8, Math.min(1, W / 412));
+        D.arc = { x: Math.max(38, Math.round(66 * gk)) / W, y: by / H, s: 1 };
         return D;
     }
     let LAY = null;
-    try{ const j = JSON.parse(LSG('szx_ctl_lay') || 'null'); if(j && j.beam){ LAY = j; if(!LAY.sv3){ delete LAY.sat; delete LAY.beam; LAY.sv2 = LAY.sv3 = 1; } } }catch(_){}   /* sv2·sv3: SAT 자리(2026-10-08)·BEAM 높이(같은 날, 조종사 창 높이)가 바뀌어 예전 저장본의 BEAM·SAT 만 새 기본으로 */
-    let geo = { W:0, H:0, cx0:0, cy0:0, cw:1, ch:1 }, PX = {}, LR = {}, _a = {}, _aw = {};
+    /* sv2·sv3: SAT 자리(2026-10-08)·BEAM 높이(같은 날, 조종사 창 높이)가 바뀌어 예전 저장본의 BEAM·SAT 만 새 기본으로.
+       sv4(2026-10-09 원호 배치): BEAM·SAT·아이템 자리를 새 기본으로(보상 등 나머지는 그대로) */
+    try{ const j = JSON.parse(LSG('szx_ctl_lay') || 'null'); if(j && typeof j === 'object'){ LAY = j; if(!LAY.sv4){ delete LAY.sat; delete LAY.beam; delete LAY.items; LAY.sv2 = LAY.sv3 = LAY.sv4 = 1; } } }catch(_){}
+    let geo = { W:0, H:0, cx0:0, cy0:0, cw:1, ch:1 }, PX = {}, UNITS = [];
 
     /* 층 크기·캔버스 자리를 재고 네 묶음을 놓는다 (크기 바뀔 때·판 시작·조향 쪽 바뀔 때만 — 매 프레임 레이아웃을 읽지 않는다) */
     function layout(){
@@ -26030,7 +26054,11 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         if(geo.W < 50 || geo.H < 50) return;
         SZF.scale = CW / geo.cw;
         const D = defaults(geo.W, geo.H), G = grp();
-        const lay = {};
+        /* 폰(캔버스 옆 여백 <92px) = 원호 배치, 태블릿 = 옆 여백 세로 열 */
+        if(geo.cx0 < 92){ arcLayout(D, G); return; }
+        if(SZF.arc) clearArc();
+        const lay = Object.assign({}, LAY || {});
+        UNITS = []; PX = {};
         for(const k of KEYS){
             const g = Object.assign({}, D[k], (LAY && LAY[k]) || {});
             if(!SCALES.includes(g.s)) g.s = 1;
@@ -26046,13 +26074,154 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
             if(g.o) el.dataset.o = g.o; else delete el.dataset.o;
             el.style.setProperty('--x', left.toFixed(1) + 'px'); el.style.setProperty('--y', (cy - h / 2).toFixed(1) + 'px'); el.style.setProperty('--s', g.s);
             PX[k] = { cx, cy, w, h };
-            /* 근접 비킴용 — 캔버스 논리 좌표 사각형. 캔버스 밖(태블릿 옆 여백·아래 띠)이면 비킬 일이 없다 */
-            const x0 = (left - geo.cx0) * CW / geo.cw, y0 = (cy - h / 2 - geo.cy0) * CH / geo.ch, x1 = x0 + w * CW / geo.cw, y1 = y0 + h * CH / geo.ch;
-            LR[k] = (x1 < 0 || x0 > CW || y1 < 0 || y0 > CH) ? null : [x0, y0, x1, y1];
+            UNITS.push({ k, el, r: canvasRect(left, cy - h / 2, w, h) });
         }
         SZF.lay = lay;
     }
+    /* 층 좌표 사각형 → 캔버스 논리 좌표 사각형(근접 비킴용). 캔버스 밖(태블릿 옆 여백·아래 띠)이면 null — 비킬 일이 없다 */
+    function canvasRect(left, top, w, h){
+        const x0 = (left - geo.cx0) * CW / geo.cw, y0 = (top - geo.cy0) * CH / geo.ch, x1 = x0 + w * CW / geo.cw, y1 = y0 + h * CH / geo.ch;
+        return (x1 < 0 || x0 > CW || y1 < 0 || y0 > CH) ? null : [x0, y0, x1, y1];
+    }
+
+    /* ---- 원호 배치 (2026-10-09, 폰) ----
+       엄지 가림 모델: 왼손(조향 오른쪽일 때) 엄지는 BEAM 위에 늘 얹혀 있고 화면 아래·바깥 모서리 쪽에서 뻗어 온다 →
+       BEAM 중심 기준 아래·바깥 반원은 엄지·손바닥이 가린다. 순간 버튼은 위쪽(-90°)~안쪽 수평(0°) 원호 위에만 둔다.
+         · SAT  = BEAM 링 바로 바깥, 중심선 -100°~-8° 를 따라 휜 캡슐(두께 ≥48px, 끝 둥글게) — 엄지를 살짝 굴리면 닿는다
+         · 아이템 = 그 바깥 호(반경 ≈ 캡슐 바깥 + 6 + 칸/2, 412폭 기준 121px) 위 부채꼴, 가운데 -45° · 칸 사이 7px
+         · 보상  = 그 바깥 호, 아이템 칸 사이 틈 각도(엇갈려 놓아 반경을 최소로)
+       크기는 폰 폭 비례(412px = 1, 하한 0.8)·사용자 배율(배치 편집 크기). 터치 칸 하한 48px. 조향 쪽이 바뀌면 전부 거울 */
+    const ARC_A0 = -100 * Math.PI / 180, ARC_A1 = -8 * Math.PI / 180, ARC_C = -45 * Math.PI / 180;
+    function arcGeom(W, H, a){
+        const gk = Math.max(0.8, Math.min(1, W / 412)), s = a.s;
+        const db = Math.max(60, Math.round(72 * gk * s)), rB = db / 2;
+        const T = Math.max(48, Math.round(50 * gk * s));
+        /* 캡슐 안쪽 반경 ≥46px — BEAM 에 얹힌 엄지(반지름 ≈45px)가 캡슐을 덮지 않는다(굴리면 바로 닿는 거리) */
+        const ri = Math.max(rB + Math.round(5 * gk), 46), ro = ri + T, rm = ri + T / 2;
+        const d = Math.max(48, Math.round(52 * gk * s)), dr = Math.max(48, Math.round(48 * gk * s));
+        const R2 = ro + 6 + d / 2;
+        const dl = 2 * Math.asin(Math.min(1, (d + 7) / (2 * R2)));
+        const n = nItems(), nr = nRew();
+        const be = dl / 2, m = (d + dr) / 2 + 6;
+        const R3 = R2 * Math.cos(be) + Math.sqrt(Math.max(0, m * m - Math.pow(R2 * Math.sin(be), 2)));
+        let ub = a.x * W, vb = a.y * H;
+        ub = Math.max(rB + 8, Math.min(W - R2 - d / 2 - 8, ub));
+        vb = Math.max(Math.min(R3 + dr / 2 + 8, H * 0.5), Math.min(H - rB - 6, vb));
+        /* 부채꼴 시작각 — 가운데 -45°, 맨 위 칸이 화면 가장자리 밖으로 나가면 안쪽으로 돌린다 */
+        let t0 = ARC_C - (n - 1) * dl / 2;
+        const c = (4 + d / 2 - ub) / R2;
+        if(c > -1) t0 = Math.max(t0, -Math.acos(Math.min(1, c)));
+        /* 마지막 칸이 화면 아래로 나가면 묶음을 올린다 */
+        const yl = vb + R2 * Math.sin(t0 + (n - 1) * dl) + d / 2;
+        if(yl > H - 4) vb -= yl - (H - 4);
+        return { gk, s, db, rB, T, ri, ro, rm, d, dr, R2, dl, R3, ub, vb, t0, n, nr };
+    }
+    let arcSvg = null;
+    function arcSvgEl(sb){
+        if(arcSvg && arcSvg.parentNode === sb) return arcSvg;
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'szf-arc'); svg.setAttribute('aria-hidden', 'true');
+        /* 글자는 캡슐 가운데에 바로 세워 둔다(호를 따라 기울이면 남은 초를 한눈에 못 읽는다) */
+        svg.innerHTML = '<path class="szf-arc-hit"/><path class="szf-arc-prog" pathLength="100"/><path class="szf-arc-trk"/><path class="szf-arc-left" pathLength="100"/>'
+            + '<text class="szf-arc-txt" text-anchor="middle">\u{1F4E1} SAT</text><text class="szf-arc-txt c" text-anchor="middle"></text>';
+        sb.appendChild(svg); arcSvg = svg;
+        /* 게임이 쓰는 값(#satChip 글자·--sat-left·--sat-progress)을 캡슐에 옮긴다 — 바뀔 때만(관찰자) */
+        const chip = $('satChip'), tp2 = svg.querySelectorAll('text')[1];
+        const syncChip = () => { const t = chip ? chip.textContent : ''; if(tp2.textContent !== t) tp2.textContent = t; };
+        const left = svg.querySelector('.szf-arc-left'), prog = svg.querySelector('.szf-arc-prog');
+        let _l = -1, _p = -1;
+        const syncVars = () => {
+            const l = Math.max(0, Math.min(1, parseFloat(sb.style.getPropertyValue('--sat-left')) || 0));
+            const p = Math.max(0, Math.min(1, parseFloat(sb.style.getPropertyValue('--sat-progress')) || 0));
+            if(l !== _l){ _l = l; left.setAttribute('stroke-dasharray', (l * 100).toFixed(1) + ' 101'); left.style.visibility = l > 0.005 ? '' : 'hidden'; }
+            if(p !== _p){ _p = p; prog.setAttribute('stroke-dasharray', (p * 100).toFixed(1) + ' 101'); prog.style.visibility = p > 0.01 ? '' : 'hidden'; }
+        };
+        try{ if(chip) new MutationObserver(syncChip).observe(chip, { childList:true, characterData:true, subtree:true }); }catch(_){}
+        try{ new MutationObserver(syncVars).observe(sb, { attributes:true, attributeFilter:['style'] }); }catch(_){}
+        syncChip(); syncVars();
+        return svg;
+    }
+    function arcLayout(D, G){
+        const W = geo.W, H = geo.H, sg = SZF.side === 'left' ? 1 : -1;
+        const a = Object.assign({}, D.arc, (LAY && LAY.arc) || {});
+        if(!SCALES.includes(a.s)) a.s = 1;
+        const A = arcGeom(W, H, a);
+        SZF.lay = Object.assign({}, LAY || {}, { arc: { x: A.ub / W, y: A.vb / H, s: a.s } });
+        if(!SZF.arc){ SZF.arc = true; body.classList.add('szf-arc'); }
+        const X = (u) => sg > 0 ? u : W - u;
+        const P = (r, t) => [X(A.ub + r * Math.cos(t)), A.vb + r * Math.sin(t)];
+        UNITS = [];
+        PX = { arc: { cx: A.ub, cy: A.vb, w: A.db, h: A.db } };
+        const put = (el, k, left, top, w, h) => {
+            el.classList.add('szf-g'); el.dataset.szg = k; delete el.dataset.o;
+            el.style.setProperty('--x', left.toFixed(1) + 'px'); el.style.setProperty('--y', top.toFixed(1) + 'px');
+            el.style.setProperty('--w', w.toFixed(1) + 'px'); el.style.setProperty('--h', h.toFixed(1) + 'px');
+        };
+        /* BEAM */
+        if(G.beam){
+            const l = X(A.ub) - A.db / 2, t = A.vb - A.db / 2;
+            put(G.beam, 'beam', l, t, A.db, A.db);
+            G.beam.style.setProperty('--d', A.db + 'px'); G.beam.style.setProperty('--s', (A.db / 72).toFixed(3));
+            UNITS.push({ k: 'beam', el: G.beam, r: canvasRect(l, t, A.db, A.db) });
+        }
+        /* SAT 휜 캡슐 — 외접 사각형(표본 점)을 버튼 상자로 */
+        if(G.sat){
+            const h2 = A.T / 2, pts = [];
+            for(let i = 0; i <= 14; i++){ const t = ARC_A0 + (ARC_A1 - ARC_A0) * i / 14; pts.push(P(A.ro, t), P(A.ri, t)); }
+            for(const t of [ARC_A0, ARC_A1]){ const q = P(A.rm, t); pts.push([q[0] - h2, q[1] - h2], [q[0] + h2, q[1] + h2]); }
+            let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+            for(const q of pts){ x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }
+            x0 = Math.floor(x0 - 2); y0 = Math.floor(y0 - 2); x1 = Math.ceil(x1 + 2); y1 = Math.ceil(y1 + 2);
+            put(G.sat, 'sat', x0, y0, x1 - x0, y1 - y0);
+            G.sat.style.removeProperty('--s');
+            const svg = arcSvgEl(G.sat);
+            svg.setAttribute('viewBox', '0 0 ' + (x1 - x0) + ' ' + (y1 - y0));
+            const L = (r, t) => { const q = P(r, t); return (q[0] - x0).toFixed(1) + ',' + (q[1] - y0).toFixed(1); };
+            const sw = sg > 0 ? 1 : 0;
+            svg.querySelector('.szf-arc-hit').setAttribute('d', 'M' + L(A.ro, ARC_A0) + 'A' + A.ro + ',' + A.ro + ' 0 0 ' + sw + ' ' + L(A.ro, ARC_A1)
+                + 'A' + h2 + ',' + h2 + ' 0 0 ' + sw + ' ' + L(A.ri, ARC_A1) + 'A' + A.ri + ',' + A.ri + ' 0 0 ' + (1 - sw) + ' ' + L(A.ri, ARC_A0)
+                + 'A' + h2 + ',' + h2 + ' 0 0 ' + sw + ' ' + L(A.ro, ARC_A0) + 'Z');
+            /* 화면에서 늘 시계 방향(왼쪽 끝 → 오른쪽 끝)인 호 — 글자가 바로 서고 진행 막대가 왼→오로 찬다 */
+            const cwArc = (r, ext) => { const ta = ARC_A0 - ext, tb = ARC_A1 + ext; const s0 = sg > 0 ? ta : tb, s1 = sg > 0 ? tb : ta;
+                return 'M' + L(r, s0) + 'A' + r.toFixed(1) + ',' + r.toFixed(1) + ' 0 0 1 ' + L(r, s1); };
+            const mid = P(A.rm, (ARC_A0 + ARC_A1) / 2), tx = svg.querySelectorAll('text'), mx = (mid[0] - x0).toFixed(1), my = mid[1] - y0;
+            tx[0].setAttribute('x', mx); tx[0].setAttribute('y', (my - 1.5).toFixed(1));
+            tx[1].setAttribute('x', mx); tx[1].setAttribute('y', (my + 10.5).toFixed(1));
+            const prog = svg.querySelector('.szf-arc-prog'); prog.setAttribute('d', cwArc(A.rm, 0)); prog.setAttribute('stroke-width', String(A.T - 16));
+            svg.querySelector('.szf-arc-trk').setAttribute('d', cwArc(A.ro - 4, 0));
+            svg.querySelector('.szf-arc-left').setAttribute('d', cwArc(A.ro - 4, 0));
+            UNITS.push({ k: 'sat', el: G.sat, r: canvasRect(x0, y0, x1 - x0, y1 - y0) });
+        }
+        /* 아이템·보상 부채꼴 — 묶음 상자 = 칸들의 외접 사각형, 칸은 그 안 절대 위치 */
+        const fan = (el, k, d, list) => {
+            if(!el) return;
+            let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+            for(const q of list){ x0 = Math.min(x0, q[0] - d / 2); y0 = Math.min(y0, q[1] - d / 2); x1 = Math.max(x1, q[0] + d / 2); y1 = Math.max(y1, q[1] + d / 2); }
+            put(el, k, x0, y0, x1 - x0, y1 - y0);
+            el.classList.add('szf-fan'); el.style.removeProperty('--s');
+            el.querySelectorAll(':scope > button').forEach((b, i) => {
+                const q = list[i]; if(!q) return;
+                const l = q[0] - d / 2 - x0, t = q[1] - d / 2 - y0;
+                b.style.setProperty('--ix', l.toFixed(1) + 'px'); b.style.setProperty('--iy', t.toFixed(1) + 'px'); b.style.setProperty('--d', d + 'px');
+                UNITS.push({ k: k + i, el: b, r: canvasRect(x0 + l, y0 + t, d, d) });
+            });
+        };
+        const it = [], rw = [];
+        for(let i = 0; i < A.n; i++) it.push(P(A.R2, A.t0 + i * A.dl));
+        for(let i = 0; i < A.nr; i++) rw.push(P(A.R3, A.t0 + A.dl / 2 + i * A.dl));
+        fan(G.items, 'items', A.d, it);
+        fan(G.rewards, 'rewards', A.dr, rw);
+        SZF.arcGeo = A;
+    }
+    function clearArc(){
+        SZF.arc = false; body.classList.remove('szf-arc');
+        const G = grp();
+        for(const k of KEYS){ const el = G[k]; if(!el) continue; el.classList.remove('szf-fan'); for(const v of ['--w', '--h', '--d']) el.style.removeProperty(v);
+            el.querySelectorAll(':scope > button').forEach(b => { for(const v of ['--ix', '--iy', '--d', '--szf-a']) b.style.removeProperty(v); }); }
+    }
     function clearGroups(){
+        if(SZF.arc) clearArc();
+        UNITS = [];
         const G = grp();
         for(const k of KEYS){ const el = G[k]; if(!el) continue; el.classList.remove('szf-g', 'szf-sel'); delete el.dataset.szg; delete el.dataset.o; el.style.removeProperty('--x'); el.style.removeProperty('--y'); el.style.removeProperty('--s'); el.style.removeProperty('--szf-a'); }
     }
@@ -26140,22 +26309,22 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
 
     /* ---- 위험물·기체가 밑을 지나면 더 흐려진다 (szOvFrame 에서 매 프레임) ---- */
     const A0 = 0.62, ALO = 0.28, AOUT = 0.85;   /* 위험물 밑으로 지나가도 버튼 자리는 찾을 수 있게 하한 0.28 */
+    /* 단위 = 태블릿은 네 묶음, 원호 배치(폰)는 BEAM·SAT·아이템 칸·보상 칸 하나하나(부채꼴이 넓어 묶음째 흐려지면 먼 칸까지 흐려진다) */
     function tick(){
         if(!running || SZF.editing || typeof szOvNear !== 'function') return;
-        const G = grp();
-        for(const k of KEYS){
-            const el = G[k]; if(!el) continue;
+        for(let i = 0; i < UNITS.length; i++){
+            const u = UNITS[i], el = u.el;
             let a;
-            const r = LR[k];
+            const r = u.r;
             if(!r) a = AOUT;
             else {
                 let n = szOvNear(r[0], r[1], r[2], r[3]);
-                const v = _a[k] || 0;
+                const v = u.v || 0;
                 n = n > v ? Math.min(n, v + 0.34) : Math.max(n, v - 0.07);
-                _a[k] = n;
+                u.v = n;
                 a = A0 + (ALO - A0) * n;
             }
-            if(Math.abs(a - (_aw[k] || 0)) > 0.03){ _aw[k] = a; const s = a.toFixed(2); szDomQueue(() => el.style.setProperty('--szf-a', s)); }
+            if(Math.abs(a - (u.aw || 0)) > 0.03){ u.aw = a; const s = a.toFixed(2); szDomQueue(() => el.style.setProperty('--szf-a', s)); }
         }
         if(!tipShownRun && cr.classList.contains('on')){
             tipShownRun = true;
@@ -26168,8 +26337,11 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
 
     /* ---- 배치 편집 ---- */
     let sel = 'beam', drag = null;
-    function save(){ LAY = SZF.lay; LSS('szx_ctl_lay', JSON.stringify(LAY)); }
+    function save(){ LAY = SZF.lay; if(LAY){ LAY.sv2 = LAY.sv3 = LAY.sv4 = 1; } LSS('szx_ctl_lay', JSON.stringify(LAY)); }
+    /* 원호 배치에서는 묶음 하나('arc' = BEAM 중심)만 옮기고 키운다 */
+    const selKey = (k) => SZF.arc ? 'arc' : k;
     function renderTools(){
+        sel = selKey(sel); if(sel === 'arc' && !SZF.arc) sel = 'beam';
         const g = SZF.lay && SZF.lay[sel];
         const name = sel === 'beam' ? 'BEAM' : sel === 'sat' ? 'SAT' : T(sel);
         const si = g ? SCALES.indexOf(g.s) : 1;
@@ -26180,7 +26352,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
             + '<button type="button" data-szft="reset">' + T('reset') + '</button>'
             + '<button type="button" data-szft="done">' + T('done') + '</button>';
         ehint.textContent = T('ehint');
-        const G = grp(); for(const k of KEYS) if(G[k]) G[k].classList.toggle('szf-sel', k === sel);
+        const G = grp(); for(const k of KEYS) if(G[k]) G[k].classList.toggle('szf-sel', selKey(k) === sel);
     }
     function editStart(){
         if(!SZF.on) return;
@@ -26198,7 +26370,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         e.preventDefault(); e.stopPropagation();
         const a = b.dataset.szft, g = SZF.lay && SZF.lay[sel];
         if(a === 'done'){ editEnd(true); return; }
-        if(a === 'reset'){ LAY = null; LSS('szx_ctl_lay', null); layout(); renderTools(); return; }
+        if(a === 'reset'){ LAY = { sv2: 1, sv3: 1, sv4: 1 }; LSS('szx_ctl_lay', null); layout(); renderTools(); return; }
         if(!g) return;
         if(a === 'minus' || a === 'plus'){ const i = SCALES.indexOf(g.s) + (a === 'plus' ? 1 : -1); if(i >= 0 && i < SCALES.length) g.s = SCALES[i]; }
         if(a === 'orient'){ g.o = g.o === 'v' ? 'h' : g.o === 'h' ? 'g' : 'v'; }
@@ -26212,7 +26384,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         e.preventDefault(); e.stopPropagation();
         const g = e.target.closest && e.target.closest('.szf-g');
         if(!g || drag) return;
-        sel = g.dataset.szg; renderTools();
+        sel = selKey(g.dataset.szg); renderTools();
         const p = pt(e), P = PX[sel]; if(!P) return;
         drag = { k: sel, id: p.identifier, x: p.clientX, y: p.clientY, cx: P.cx, cy: P.cy };
     }
