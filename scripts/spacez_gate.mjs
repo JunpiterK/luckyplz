@@ -47,6 +47,7 @@
      mp6 · mp6ibot · mp6shots  (MP6) v1 기록 손실 0·코드 왕복·워프 첫 1초 스폰·첫 3초 프레임·금테·대사·해금·HUD·연습 흐름 / ibot --start-act 3·5 / 장면 (ibot 옵션 --start-act N)
      mp8a · mp8ab · mp8prof · mp8trace · mp8shots  (MP8a) 수용(?mp8=0·120Hz 솎아내기·tier→maxLayers·다음 존 미리 굽기·미룬 굽기 처리) / A·B 번갈아 perf(점프·자연 전환·미션·p95) / CPU 샘플·트레이스로 긴 프레임 원인
      mp7        (MP7) 오늘 한 줄·스트릭(구 szx_daily 하위호환)·도전장 URL 회귀·&sp= 구간 비교·URL ≤300·결과 카드 줄 수·PNG(ko·en·ja·de·가짜 GL)·공유 폴백·?mp7=0  [--mp7-shots]
+     scenes     (MP8c) 31존×3시점(진입+2s·중간·끝-2s) 장면 검수 시트 — GL 끔·켬 두 벌, 자동 힌트(HUD↓위험물·글자 겹침·빈 화면). 실행은 scripts/spacez_scenes.mjs  [--sc-size --sc-lang --sc-gl --sc-zones --sc-warp]
 
    옵션:
      --root <path>         체크아웃 루트 (기본: 이 스크립트의 상위 폴더)
@@ -2597,6 +2598,314 @@ EXT_CMDS.mp8shots = { all: false, server: true, run: runMp8Shots, judge: (cur) =
     for(const r of cur) row('G-mp8shots', r.L + ' ' + r.w + 'x' + r.h, path.basename(r.f1) + ' · ' + path.basename(r.f2), null, '사람 검수', 'INFO', '미룸 ' + r.st.deferN + ' 큐 ' + r.st.q);
 } };
 /*</gate:mp8a>*/
+/*<gate:mp8c>*/
+/* MP8c (2026-10-09) — 장면 검수 시트 scenes (사람 검수용 — 자동 표시는 '눈여겨볼 곳' 힌트일 뿐 판정이 아니다).
+   31존 × 3시점(진입 +2초 · 중간 · 끝 −2초)을 합성 시계로 결정적으로 찍어 존별 한 줄 시트 HTML 을 만든다.
+   - 비행: 기본은 0존부터 끊김 없이 자연 비행(G.begin + szRunBegin, 시드 424242) — 존 전환·천체 교대가 실제와 같다.
+           --sc-warp 면 존마다 새 판 + szWarpTo(z) (연습 비행과 같은 진입)
+   - 위험물 회피 보정: 시뮬 중엔 무적(invincibleUntil)·기체 고정(화면 아래 가운데)·추진제 무한으로 판이 끝나지 않게 하고,
+     찍는 순간에는 무적을 풀고 drawFrame(now, 0) 으로 한 번 다시 그린다 → 무적 실드 링·반투명 기체가 장면에 남지 않는다.
+     Math.random(표시 전용)도 시드 고정 → 같은 커밋이면 같은 그림
+   - 빨리 감기 구간은 그리기를 끄고, 찍기 3초 전부터만 그린다(미룬 굽기·전환 연출이 실제처럼 돈다)
+   - 자동 힌트: HUD(DOM) 아래 위험물 · 캔버스 글자끼리/DOM 글자와 겹침(미리 구운 글자 캔버스의 drawImage 포함) · 거의 빈 화면(휘도 편차)
+   옵션: --sc-size 412x915 (기본) · --sc-dsf 2 · --sc-lang ko · --sc-gl both|0|1 · --sc-zones 0,5,19 · --sc-warp · --sc-seed n · --sc-q '<추가 쿼리>'
+         --sc-norows (검토용 존별 PNG 생략)
+   GL: 두 벌 모두 Edge 를 SwiftShader 플래그로 띄우고 GL 끔 벌은 ?gl=0 을 붙인다. 페이지가 GL 을 실제로 켰는지(SZGL.on)를 시트에 적는다.
+   출력: --out/<lang>_<w>x<h>[_warp]/gl0|gl1/zNN_{a,b,c}.jpg + sheet_gl0.html·sheet_gl1.html + rows_glN/zNN.png(존 한 줄) + scenes.json
+   실행은 scripts/spacez_scenes.mjs (gate_locked 순번 잠금으로 이 명령을 부른다) */
+const SC_ZN = 31;
+const SC_LAB = { a: '진입 +2s', b: '중간', c: '끝 −2s' };
+PAGE_EXT.push(function(){
+    const G = window.__G; if(!G || G.scStart) return;
+    const mb = (s) => { let a = s | 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), a | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+    /* 글자 상자 기록 — DOM 캔버스는 찍는 프레임에서만, 다른 캔버스(미리 굽기)는 늘 기록해 두었다가 drawImage 때 옮긴다 */
+    const TX = { on: false, list: [] };
+    G.scTX = TX;
+    const fpx = (font) => { const m = /(\d+(?:\.\d+)?)px/.exec(font || ''); return m ? +m[1] : 10; };
+    const boxOf = (ctx, s, x, y) => {
+        const fs = fpx(ctx.font); let w = 0; try{ w = ctx.measureText(s).width; }catch(_){ w = s.length * fs * 0.6; }
+        const al = ctx.textAlign, bl = ctx.textBaseline;
+        const x0 = (al === 'center') ? x - w / 2 : (al === 'right' || al === 'end') ? x - w : x;
+        const y0 = (bl === 'top' || bl === 'hanging') ? y : (bl === 'middle') ? y - fs / 2 : (bl === 'bottom' || bl === 'ideographic') ? y - fs : y - fs * 0.8;
+        const tr = ctx.getTransform();
+        const P = [[x0, y0], [x0 + w, y0], [x0, y0 + fs], [x0 + w, y0 + fs]].map(([u, v]) => [tr.a * u + tr.c * v + tr.e, tr.b * u + tr.d * v + tr.f]);
+        const xs = P.map(p => p[0]), ys = P.map(p => p[1]);
+        return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    };
+    const hook = (Proto) => {
+        if(!Proto || Proto.__scH) return; Proto.__scH = 1;
+        const oF = Proto.fillText, oC = Proto.clearRect, oD = Proto.drawImage;
+        Proto.fillText = function(s, x, y){
+            try{
+                const str = String(s).trim(); const cv = this.canvas;
+                if(str && cv){
+                    const a = this.globalAlpha;
+                    if(cv.isConnected){ if(TX.on && a >= 0.3) TX.list.push({ s: str, b: boxOf(this, str, x, y), a, cv }); }
+                    else { const L = cv.__scT || (cv.__scT = []); L.push({ s: str, b: boxOf(this, str, x, y), a }); if(L.length > 40) L.shift(); }
+                }
+            }catch(_){}
+            return oF.apply(this, arguments);
+        };
+        Proto.clearRect = function(x, y, w, h){ try{ const cv = this.canvas; if(cv && cv.__scT && x <= 0 && y <= 0 && w >= cv.width && h >= cv.height) cv.__scT = []; }catch(_){} return oC.apply(this, arguments); };
+        Proto.drawImage = function(src){
+            try{
+                const cv = this.canvas;
+                if(TX.on && cv && cv.isConnected && src && src.__scT && src.__scT.length && this.globalAlpha >= 0.3){
+                    const n = arguments.length, A2 = arguments;
+                    let sx = 0, sy = 0, sw = src.width, sh = src.height, dx, dy, dw, dh;
+                    if(n >= 9){ sx = A2[1]; sy = A2[2]; sw = A2[3]; sh = A2[4]; dx = A2[5]; dy = A2[6]; dw = A2[7]; dh = A2[8]; }
+                    else { dx = A2[1]; dy = A2[2]; dw = n >= 5 ? A2[3] : src.width; dh = n >= 5 ? A2[4] : src.height; }
+                    const kx = dw / (sw || 1), ky = dh / (sh || 1), tr = this.getTransform();
+                    for(const t of src.__scT){
+                        if(t.b[2] < sx - 1 || t.b[3] < sy - 1 || t.b[0] > sx + sw + 1 || t.b[1] > sy + sh + 1) continue;   /* 아틀라스의 다른 칸 */
+                        const u0 = (t.b[0] - sx) * kx + dx, v0 = (t.b[1] - sy) * ky + dy, u1 = (t.b[2] - sx) * kx + dx, v1 = (t.b[3] - sy) * ky + dy;
+                        const P = [[u0, v0], [u1, v0], [u0, v1], [u1, v1]].map(([u, v]) => [tr.a * u + tr.c * v + tr.e, tr.b * u + tr.d * v + tr.f]);
+                        const xs = P.map(p => p[0]), ys = P.map(p => p[1]);
+                        TX.list.push({ s: t.s, b: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)], a: this.globalAlpha * t.a, cv, baked: 1 });
+                    }
+                }
+            }catch(_){}
+            return oD.apply(this, arguments);
+        };
+    };
+    hook(CanvasRenderingContext2D.prototype);
+    if(typeof OffscreenCanvasRenderingContext2D !== 'undefined') hook(OffscreenCanvasRenderingContext2D.prototype);
+    G.scStart = function(P){
+        G.scMR = G.scMR || Math.random; Math.random = mb((P.seed ^ 0x5CE7E) + (P.salt | 0));
+        G.synth(); G.begin(P.seed, false);
+        try{ SZRUN.want = null; szRunBegin(); }catch(_){}
+        window.__szFuelInf = 1;
+        G.scDraw = G.scDraw || window.drawFrame;
+        return { kind: (typeof szRunKind === 'function') ? szRunKind() : null, zones: ZONES.length };
+    };
+    G.scWarp = function(z){ return szWarpTo(z, G.VT) ? currentZoneIdx : -1; };
+    G.scRun = function(P){
+        const errs = []; let n = 0; const noop = function(){};
+        while(running && elapsedMs < P.to && n < 400000){
+            window.drawFrame = elapsedMs >= P.drawFrom ? G.scDraw : noop;
+            G.VT += 16.667; n++;
+            invincibleUntil = 1e15; lives = Math.max(lives, 3); player.x = CW * 0.5; player.y = CH * 0.8; if(paused) paused = false;
+            try{ gameLoop(G.VT); }catch(e){ errs.push(String(e && e.stack || e).split('\n').slice(0, 2).join(' | ').slice(0, 200)); if(errs.length > 10) break; }
+        }
+        window.drawFrame = G.scDraw;
+        return { n, errs, z: currentZoneIdx, t: Math.round(elapsedMs), running };
+    };
+    G.scSnap = function(){
+        const inv = invincibleUntil; invincibleUntil = 0; flashVisible = true;
+        TX.list = []; TX.on = true; let err = null;
+        try{ G.scDraw(G.VT, 0); }catch(e){ err = String(e && e.message || e).slice(0, 160); }
+        TX.on = false; invincibleUntil = inv;
+        const cv = document.getElementById('dodge-canvas'); const R = cv.getBoundingClientRect();
+        const kx = R.width / CW, ky = R.height / CH;
+        /* 위험물(논리 좌표 → CSS px) */
+        const hz = [];
+        const add = (k, x, y, r) => { if(isFinite(x) && isFinite(y) && x > -20 && x < CW + 20 && y > -20 && y < CH + 20) hz.push([k, R.left + x * kx, R.top + y * ky, Math.max(3, (r || 6) * kx)]); };
+        try{ for(const b of bullets) add('운석', b.x, b.y, b.r || 6); }catch(_){}
+        try{ for(const c of asteroidClusters) for(const r of c.rocks) add('바위', r.x, r.y, r.r); }catch(_){}
+        try{ for(const m of magneticMines) add('기뢰', m.x, m.y, typeof MINE_R !== 'undefined' ? MINE_R : 10); }catch(_){}
+        try{ for(const c of comets) if(c.phase !== 'warn') add('혜성', c.x, c.y, 8); }catch(_){}
+        try{ for(const s of splitters) add('분열체', s.x, s.y, typeof SPLIT_R !== 'undefined' ? SPLIT_R : 10); }catch(_){}
+        /* HUD(DOM) — 보이는 것만, 누적 불투명도 0.5 이상(플로팅 버튼은 위험물 근처에서 스스로 흐려진다) */
+        const HUD = ['.topbar', '.score-strip', '.szx-live', '.sz-pilot', '#missionBanner', '#rewardRow', '#gravBtn', '#satBtn', '#itemSlot0', '#itemSlot1', '#itemSlot2', '#itemSlot3', '#itemSlot4', '#pauseBtn', '#tpRing', '#handToggle', '.dodge-kbd-ref'];
+        const op = (el) => { let o = 1; for(let p = el; p && p !== document.documentElement; p = p.parentElement){ const c = getComputedStyle(p); if(c.display === 'none' || c.visibility === 'hidden') return 0; o *= +c.opacity; } return o; };
+        const hud = [];
+        for(const s of HUD) for(const el of document.querySelectorAll(s)){ if(!el.getClientRects().length || el.closest('.hidden')) continue; const o = op(el); if(o < 0.5) continue; const r = el.getBoundingClientRect(); if(r.width < 2 || r.height < 2) continue; hud.push([s, r.left, r.top, r.right, r.bottom, el]); }
+        const hudHaz = [];
+        for(const h of hz) for(const u of hud){ if(h[1] + h[3] > u[1] && h[1] - h[3] < u[3] && h[2] + h[3] > u[2] && h[2] - h[3] < u[4]) hudHaz.push(u[0] + '←' + h[0]); }
+        /* 글자 겹침 — 캔버스 글자 상자(장치 px → CSS px) */
+        const boxes = TX.list.map(t => { const r = t.cv.getBoundingClientRect(), sx = r.width / t.cv.width, sy = r.height / t.cv.height; return { s: t.s, b: [r.left + t.b[0] * sx, r.top + t.b[1] * sy, r.left + t.b[2] * sx, r.top + t.b[3] * sy] }; })
+            .filter(t => (t.b[2] - t.b[0]) * (t.b[3] - t.b[1]) > 12 && !/^[★·•|\s]+$/.test(t.s));
+        const inter = (a, b) => Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+        const area = (a) => (a[2] - a[0]) * (a[3] - a[1]);
+        const txtOv = new Set();
+        for(let i = 0; i < boxes.length; i++) for(let j = i + 1; j < boxes.length; j++){
+            const A1 = boxes[i], B1 = boxes[j]; if(A1.s === B1.s) continue;
+            if(A1.s.indexOf(B1.s) >= 0 || B1.s.indexOf(A1.s) >= 0) continue;   /* 같은 글의 그림자·조각 */
+            if(inter(A1.b, B1.b) > 0.25 * Math.min(area(A1.b), area(B1.b))) txtOv.add(A1.s.slice(0, 18) + ' × ' + B1.s.slice(0, 18));
+        }
+        /* DOM 글자 × 캔버스 글자 */
+        const domTx = [];
+        for(const u of hud){ const w = document.createTreeWalker(u[5], NodeFilter.SHOW_TEXT); let nd;
+            while((nd = w.nextNode())){ const s = nd.nodeValue.trim(); if(!s || !nd.parentElement || op(nd.parentElement) < 0.5) continue; const rg = document.createRange(); rg.selectNodeContents(nd); for(const r of rg.getClientRects()) if(r.width > 1) domTx.push({ s, b: [r.left, r.top, r.right, r.bottom] }); } }
+        for(const d of domTx) for(const c of boxes){ if(inter(d.b, c.b) > 0.25 * Math.min(area(d.b), area(c.b))) txtOv.add('[DOM]' + d.s.slice(0, 14) + ' × ' + c.s.slice(0, 18)); }
+        /* 휘도 — 캔버스 30×50 축소 */
+        let lum = null;
+        try{ const o = document.createElement('canvas'); o.width = 30; o.height = 50; const c2 = o.getContext('2d'); c2.drawImage(cv, 0, 0, 30, 50);
+            const d = c2.getImageData(0, 0, 30, 50).data; let s = 0, s2 = 0, n = 0;
+            for(let i = 0; i < d.length; i += 4){ const y = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; s += y; s2 += y * y; n++; }
+            const m = s / n; lum = { m: Math.round(m * 10) / 10, sd: Math.round(Math.sqrt(Math.max(0, s2 / n - m * m)) * 10) / 10 }; }catch(_){}
+        const gl = { on: !!(window.SZGL && SZGL.on), can: (function(){ try{ return !!document.createElement('canvas').getContext('webgl2'); }catch(_){ return false; } })() };
+        return { z: currentZoneIdx, t: Math.round(elapsedMs), mission: (typeof missionState !== 'undefined') ? missionState : null, nHaz: hz.length,
+            hudHaz: [...new Set(hudHaz)].slice(0, 12), nHudHaz: hudHaz.length, txtOv: [...txtOv].slice(0, 12), nTxt: boxes.length, lum, gl, err, E: (window.__E || []).slice(0, 5) };
+    };
+});
+/* GL 시도 플래그로 Edge 띄우기 — Edge._launch 와 같고 인자만 더한다(헤드리스 Edge 는 SwiftShader WebGL 이 기본으로 꺼져 있다) */
+const SC_GL_ARGS = ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
+async function scEdge(opts){
+    const e = new Edge();
+    e._launch = async function({ w = 412, h = 915, dsf = 2, mobile = true } = {}){
+        if(!EDGE) throw new Error('msedge.exe 를 찾지 못함 (--edge 로 지정)');
+        this.dport = await freePort();
+        this.prof = path.join(PROF_DIR, PROF_PREFIX + '_' + process.pid + '_' + this.dport);
+        PROFILES.add(this.prof);
+        this.proc = spawn(EDGE, ['--headless=old', '--edge-skip-compat-layer-relaunch', '--remote-debugging-port=' + this.dport, '--remote-allow-origins=*', '--user-data-dir=' + this.prof,
+            '--no-first-run', '--no-default-browser-check', '--disable-extensions', '--disable-sync', '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
+            '--disable-backgrounding-occluded-windows', '--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling', '--mute-audio', '--autoplay-policy=no-user-gesture-required',
+            ...SC_GL_ARGS, '--window-size=' + w + ',' + h, 'about:blank'], { stdio: 'ignore', windowsHide: true });
+        LIVE.add(this);
+        let tabs = null;
+        for(let i = 0; i < 120 && !tabs; i++){ await sleep(200); try{ const t = await (await fetch('http://127.0.0.1:' + this.dport + '/json')).json(); if(t.find(x => x.type === 'page')) tabs = t; }catch(_){} }
+        if(!tabs) throw new Error('Edge 디버깅 포트 응답 없음');
+        this.ws = new WebSocket(tabs.find(t => t.type === 'page').webSocketDebuggerUrl);
+        await new Promise((res, rej) => { this.ws.onopen = res; this.ws.onerror = rej; });
+        this.ws.onmessage = (m) => {
+            const d = JSON.parse(m.data);
+            if(d.id && this.pend.has(d.id)){ const p = this.pend.get(d.id); this.pend.delete(d.id); clearTimeout(p.t); d.error ? p.rej(new Error(JSON.stringify(d.error))) : p.res(d.result); return; }
+            if(d.method === 'Runtime.exceptionThrown'){ const ed = d.params.exceptionDetails; this.exc.push(((ed.exception && ed.exception.description) || ed.text || '').split('\n')[0].slice(0, 200) + ' @' + ed.lineNumber); }
+            else if(d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error'){ this.cerr.push(d.params.args.map(a => a.value != null ? String(a.value) : (a.description || '')).join(' ').slice(0, 200)); }
+        };
+        await this.send('Page.enable'); await this.send('Runtime.enable'); await this.send('Network.enable');
+        await this.send('Network.setBlockedURLs', { urls: ['https://*', 'wss://*', 'http://*.supabase.co*'] });
+        await this.metrics({ w, h, dsf, mobile });
+        try{ await this.send('Emulation.setFocusEmulationEnabled', { enabled: true }); }catch(_){}
+        await this.send('Page.addScriptToEvaluateOnNewDocument', { source: 'window.__E=[];addEventListener("error",function(e){__E.push(String(e.message).slice(0,200)+" @"+e.lineno)});addEventListener("unhandledrejection",function(e){__E.push("rejection: "+String(e.reason&&e.reason.message||e.reason).slice(0,200))});' });
+        return this;
+    };
+    await e.launch(opts);
+    return e;
+}
+const scEsc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const scClock = (ms) => { const s = ms / 1000; return Math.floor(s / 60) + ':' + (s % 60).toFixed(1).padStart(4, '0'); };
+/* 존 z 의 세 시점(논리 ms). 마지막 존(dur 9999)은 60초로 본다 */
+function scTimes(Z, z){
+    const s = Z[z].s * 1000, d = Z[z].dur >= 600 ? 60000 : Z[z].dur * 1000;
+    return { a: s + 2000, b: s + Math.round(d / 2), c: s + d - 2000 };
+}
+const scZoneAt = (Z, ms) => { let z = 0; for(let i = 0; i < Z.length; i++) if(Z[i].s * 1000 <= ms) z = i; return z; };
+async function scVariant(base, gl, dir, info){
+    const [w, h] = info.size;
+    const q = [gl ? '' : 'gl=0', A['sc-q'] ? String(A['sc-q']) : ''].filter(Boolean).join('&');
+    const shots = [];
+    const sess = async (fn) => { const e = await scEdge({ w, h, dsf: info.dsf, mobile: true }); try{ return await fn(e); } finally { collectErrs('scenes gl' + gl, e, []); await e.close(); } };
+    const zonesOf = async (e) => { const Z = await e.ev('ZONES.map(function(o){ return {s: o.s, dur: o.dur, en: o.nameEn, ko: o.nameKo}; })'); info.Z = info.Z || Z; return Z; };
+    const one = async (e, z, Z) => {
+        const T = scTimes(Z, z);
+        for(const k of ['a', 'b', 'c']){
+            const r = await e.ev('__G.scRun(' + JSON.stringify({ to: T[k], drawFrom: T[k] - 3000 }) + ')', 600000);
+            const s = await e.ev('__G.scSnap()');
+            await sleep(150);
+            const file = path.join(dir, 'z' + String(z).padStart(2, '0') + '_' + k + '.jpg');
+            const cap = await e.send('Page.captureScreenshot', { format: 'jpeg', quality: 88 }, 30000);
+            fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file, Buffer.from(cap.data, 'base64'));
+            shots.push({ z, k, want: T[k], file: path.basename(file), run: { n: r.n, errs: r.errs, running: r.running }, ...s });
+            if(!r.running) break;
+        }
+    };
+    if(A['sc-warp']){
+        for(const z of info.zones) await sess(async (e) => {
+            await e.open(gameUrl(base, info.lang, q), 2200);
+            const Z = await zonesOf(e);
+            await e.ev('__G.scStart(' + JSON.stringify({ seed: info.seed, salt: z }) + ')');
+            if(z > 0) await e.ev('__G.scWarp(' + z + ')');
+            say('scenes gl' + gl + ' 존 ' + z + ' (워프)');
+            await one(e, z, Z);
+        });
+    } else {
+        await sess(async (e) => {
+            await e.open(gameUrl(base, info.lang, q), 2200);
+            const Z = await zonesOf(e);
+            info.start = await e.ev('__G.scStart(' + JSON.stringify({ seed: info.seed }) + ')');
+            for(const z of info.zones){ say('scenes gl' + gl + ' 존 ' + z); await one(e, z, Z); }
+        });
+    }
+    return shots;
+}
+function scSheet(info, gl, shots, file){
+    const Z = info.Z || [];
+    const by = {}; for(const s of shots){ const zw = scZoneAt(Z, s.want); (by[zw] = by[zw] || {})[s.k] = s; }
+    const glOn = shots.some(s => s.gl && s.gl.on), glCan = shots.some(s => s.gl && s.gl.can);
+    const imgDir = path.relative(path.dirname(file), info.dirs[gl]).replace(/\\/g, '/');
+    let rows = '';
+    for(const z of info.zones){
+        const zo = Z[z] || {}; const T = Z[z] ? scTimes(Z, z) : {};
+        let cells = '';
+        for(const k of ['a', 'b', 'c']){
+            const s = by[z] && by[z][k];
+            if(!s){ cells += '<figure class="miss"><div>없음</div></figure>'; continue; }
+            const fl = [];
+            if(s.z !== z) fl.push('<b class="bad">찍힌 존 ' + s.z + '</b>');
+            if(s.nHudHaz) fl.push('<b class="w">HUD↓위험물 ' + s.nHudHaz + '</b> ' + scEsc(s.hudHaz.slice(0, 3).join(', ')));
+            if(s.txtOv.length) fl.push('<b class="w">글자 겹침 ' + s.txtOv.length + '</b> ' + scEsc(s.txtOv.slice(0, 3).join(' / ')));
+            if(s.lum && s.lum.sd < 6) fl.push('<b class="w">거의 빈 화면</b> 휘도 ' + s.lum.m + '±' + s.lum.sd);
+            const er = [s.err].concat(s.run.errs, s.E || []).filter(Boolean);
+            if(er.length) fl.push('<b class="bad">오류</b> ' + scEsc(er[0]));
+            const src = imgDir + '/' + s.file;
+            cells += '<figure><a href="' + scEsc(src) + '"><img loading="lazy" src="' + scEsc(src) + '"></a>'
+                + '<figcaption><span class="k">' + SC_LAB[k] + '</span> ' + scClock(s.t) + ' · 위험물 ' + s.nHaz + ' · ' + scEsc(s.mission || '') + (fl.length ? '<div class="fl">' + fl.join('<br>') + '</div>' : '') + '</figcaption></figure>';
+        }
+        rows += '<section class="z" id="z' + z + '"><h2><span class="n">' + String(z).padStart(2, '0') + '</span> ' + scEsc(zo.ko) + ' <small>' + scEsc(zo.en) + (zo.s != null ? ' · ' + scClock(zo.s * 1000) + '–' + scClock(T.c + 2000) : '') + '</small></h2><div class="r">' + cells + '</div></section>\n';
+    }
+    const html = '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Space-Z 장면 검수 ' + (gl ? 'GL 켬' : 'GL 끔') + '</title><style>'
+        + 'body{margin:0;background:#0b0d14;color:#dde;font:13px/1.45 system-ui,"Noto Sans KR",sans-serif}header{padding:12px 16px;border-bottom:1px solid #223}h1{font-size:17px;margin:0 0 4px}'
+        + '.z{padding:10px 16px;border-bottom:1px solid #1c2030}.z h2{font-size:15px;margin:0 0 6px}.z h2 .n{display:inline-block;min-width:26px;color:#7cf}.z small{color:#889;font-weight:400}'
+        + '.r{display:grid;grid-template-columns:repeat(3,minmax(0,412px));gap:10px}figure{margin:0}img{width:100%;display:block;border:1px solid #2a3044;border-radius:4px}'
+        + 'figcaption{font-size:12px;color:#aab;margin-top:3px}.k{color:#fff;font-weight:700}.fl{margin-top:2px;color:#ccd}.w{color:#ffb13b}.bad{color:#ff5d73}.miss div{height:200px;display:grid;place-items:center;color:#556;border:1px dashed #334}'
+        + '</style></head><body><header><h1>Space-Z 장면 검수 — ' + (gl ? 'GL 켬' : 'GL 끔(?gl=0)') + '</h1><div>' + scEsc(info.lang) + ' · ' + info.size.join('×') + ' DPR' + info.dsf + ' · ' + (A['sc-warp'] ? '존마다 워프' : '0존부터 자연 비행') + ' · 시드 ' + info.seed
+        + ' · 커밋 ' + scEsc(info.commit) + ' · GL 실제 켜짐 ' + (glOn ? '예' : '아니오') + ' (webgl2 ' + (glCan ? '가능' : '불가') + ') · ' + new Date().toISOString().slice(0, 16) + '</div>'
+        + '<div style="color:#889">노랑 = 눈여겨볼 곳(자동 힌트, 판정 아님). 시뮬은 무적·기체 고정(화면 아래 가운데)·추진제 무한, 찍는 프레임만 무적 표시 없이 다시 그림. 그림을 누르면 원본(DPR' + info.dsf + ').</div></header>' + rows + '</body></html>';
+    fs.writeFileSync(file, html);
+}
+/* 검토용 — 존 한 줄을 PNG 로(시트를 Edge 로 열어 그 줄만 찍는다) */
+async function scRows(sheet, outDir, zones){
+    fs.mkdirSync(outDir, { recursive: true });
+    const e = new Edge();
+    try{
+        await e.launch({ w: 1320, h: 1100, dsf: 1, mobile: false });
+        await e.send('Page.navigate', { url: 'file:///' + sheet.replace(/\\/g, '/') });
+        await sleep(1500);
+        await e.ev('Promise.all([...document.images].map(function(i){ i.loading = "eager"; return i.complete && i.naturalWidth ? 1 : new Promise(function(r){ i.onload = i.onerror = r; }); }))', 120000);
+        await sleep(500);
+        for(const z of zones){
+            const r = await e.ev('(function(){ var s = document.getElementById("z' + z + '"); if(!s) return null; var b = s.getBoundingClientRect(); return [b.left + scrollX, b.top + scrollY, b.width, b.height]; })()');
+            if(!r) continue;
+            const cap = await e.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: r[0], y: r[1], width: r[2], height: r[3], scale: 1 } }, 60000);
+            fs.writeFileSync(path.join(outDir, 'z' + String(z).padStart(2, '0') + '.png'), Buffer.from(cap.data, 'base64'));
+        }
+    } finally { await e.close(); }
+}
+async function runScenes(base){
+    const size = String(A['sc-size'] || '412x915').split('x').map(Number);
+    const info = { size, dsf: +(A['sc-dsf'] || 2), lang: String(A['sc-lang'] || 'ko'), seed: +(A['sc-seed'] || 424242),
+        zones: A['sc-zones'] ? String(A['sc-zones']).split(',').map(Number) : Array.from({ length: SC_ZN }, (_, i) => i), dirs: {} };
+    try{ info.commit = execFileSync('git', ['-C', ROOT, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); }catch(_){ info.commit = '?'; }
+    const gls = String(A['sc-gl'] || 'both') === 'both' ? [0, 1] : [+A['sc-gl'] ? 1 : 0];
+    const root = path.join(OUT, info.lang + '_' + size.join('x') + (A['sc-warp'] ? '_warp' : ''));
+    const out = { root, info, v: {} };
+    for(const gl of gls){
+        const dir = info.dirs[gl] = path.join(root, 'gl' + gl);
+        const t0 = Date.now();
+        const shots = await scVariant(base, gl, dir, info);
+        const sheet = path.join(root, 'sheet_gl' + gl + '.html');
+        scSheet(info, gl, shots, sheet);
+        if(!A['sc-norows']) await scRows(sheet, path.join(root, 'rows_gl' + gl), info.zones);
+        out.v[gl] = { sheet, n: shots.length, secs: Math.round((Date.now() - t0) / 1000), shots };
+        say('scenes gl' + gl + ' → ' + sheet + ' (' + shots.length + '컷, ' + out.v[gl].secs + 's)');
+    }
+    fs.writeFileSync(path.join(root, 'scenes.json'), JSON.stringify(out, null, 1));
+    return out;
+}
+EXT_CMDS.scenes = { all: false, server: true, run: runScenes, judge: (cur) => {
+    for(const [gl, v] of Object.entries(cur.v)){
+        const S = v.shots, Z = cur.info.Z || [];
+        const errs = S.filter(s => s.err || s.run.errs.length || (s.E && s.E.length));
+        const zoneMiss = S.filter(s => s.z !== scZoneAt(Z, s.want));
+        row('G22 scenes', 'gl' + gl + ' 컷 수 (' + cur.info.zones.length + '존×3)', S.length, null, cur.info.zones.length * 3, S.length === cur.info.zones.length * 3 ? 'PASS' : 'FAIL', path.basename(v.sheet));
+        row('G22 scenes', 'gl' + gl + ' 찍힌 존 = 의도한 존', zoneMiss.length ? zoneMiss.map(s => s.z + s.k).join(' ') : '전부', null, '전부', zoneMiss.length ? 'FAIL' : 'PASS');
+        row('G22 scenes', 'gl' + gl + ' 오류', errs.length, null, '0', errs.length ? 'FAIL' : 'PASS', errs.slice(0, 2).map(s => s.z + s.k + ' ' + (s.err || s.run.errs[0] || s.E[0])).join(' | ').slice(0, 120));
+        row('G22 scenes', 'gl' + gl + ' 힌트 컷 수(HUD↓위험물·글자 겹침·빈 화면)', S.filter(s => s.nHudHaz).length + '·' + S.filter(s => s.txtOv.length).length + '·' + S.filter(s => s.lum && s.lum.sd < 6).length, null, '사람 검수', 'INFO', 'GL 켜짐 ' + S.some(s => s.gl && s.gl.on));
+    }
+} };
+/*</gate:mp8c>*/
 /*</gate:mp8>*/
 
 const ALL_CMDS = ['det', 'perf', 'layout', 'tm', 'i18n', 'fx0', 'beamdrain', 'hitpath', 'noshake'].concat(Object.keys(EXT_CMDS).filter(k => EXT_CMDS[k].all));
