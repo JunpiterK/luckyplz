@@ -39,6 +39,7 @@
      gl0        (자리) MP8b 가 채운다 — GL 끔 31존 순회·컨텍스트 손실
      ── 패키지 확장 명령 (각 gate:mpN 펜스가 등록, 여기 표에 1줄씩) ──
      restart2   (MP2) 길게 누르기 p50≤2s·탭 p90≤3.5s·스크롤/대던 손가락/사망 직후/대결·협동 오작동 0·Space·정산 값·320x568 다시하기·?mp2=0  [--mp2-shots]
+     resume     앱 전환 → 이어하기(실제 터치 탭 + 호환 mousemove) 뒤 드래그로 기체가 실제로 움직이는지 (2026-10-09)
      mp1        MP1 시작 화면(ko·en·ja×320·390: 버튼 ≤5·출발 엄지 영역·시트 20회 멱등·?mp1=0=MP0 서명)·단계 개방 1~3판·시드 판·링크 진입 (--mp1-nopin: 하네스 3판 고정 끔)
      mp3 · mp3assist · mp3shots  (MP3) A1 데스봄 유예·A2 블랙홀 버블·편한 비행·RPC·지연 검사 / ibot 편한 비행 ≥ 기본×1.5 / 장면·색각 시트  (ibot 옵션 --assist --mp3-db <p> --mp3-nobh --mp3-nodb)
      mp4        MP4a 소리 엔진 — 기본(mp3)·?mp4=1(시퀀서: 컨텍스트 ≤2·예약 층 전환 ≤1박·스침 양자화 ≤63ms·숨김/복귀·음성)·fx=0 폴백·데모 WAV(--rec-dir)
@@ -412,6 +413,74 @@ async function mp2Touch(e, pt, holdMs, moves){
     await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 async function mp2Fly(e){ await e.ev(MP2_PAGE.fly); const ok = await e.ev(MP2_PAGE.waitRun, 30000); await sleep(1200); return ok; }
+/*<gate:resume>*/
+/* resume (2026-10-09) — 운영자 재보고 '다른 앱 갔다 와서 계속하기 → 조종 링은 반응하는데 우주선이 멈춤'.
+   폰 흐름 그대로: 판 시작 → 손가락 드래그(기준) → 앱 전환(hidden) → 복귀 → '계속하기'를 실제 터치로 탭
+   (+ 탭 뒤 브라우저가 쏘는 호환 mousemove 를 같은 자리에 재현) → 다시 드래그 → 기체가 실제로 움직였는지(player.x) */
+EXT_CMDS.resume = {
+    all: false,
+    run: async (base) => {
+        const out = { cases: [] };
+        const drag = async (e, x0, y0, dx) => {
+            const before = await e.ev('player.x');
+            await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0, id: 3 }] });
+            for(let i = 1; i <= 8; i++){ await sleep(40); await e.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + dx * i / 8, y: y0, id: 3 }] }); }
+            await sleep(120);
+            const mid = await e.ev('player.x');
+            await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await sleep(150);
+            return { before, mid, moved: Math.round(mid - before) };
+        };
+        for(const sc of [{ name: 'float', q: '' }, { name: 'stuckFinger', q: '', stuck: true }]){
+            await withEdge({ w: 412, h: 915, dsf: 2.625, mobile: true }, async (e) => {
+                await e.open(gameUrl(base, 'ko'), 1800);
+                await e.ev('(function(){ window.triggerGameOver = function(){}; window.szOnHit = function(){}; setInterval(function(){ try{ invincibleUntil = performance.now() + 1e7; }catch(_){} }, 200); startGame(); return 1; })()');
+                await sleep(5000);   /* GO·인트로가 끝나고 조종이 열릴 때까지 */
+                const r = { name: sc.name };
+                r.pre = await drag(e, 300, 520, -90);
+                if(sc.stuck) await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 250, y: 600, id: 9 }] });   /* 손가락을 댄 채 앱 전환 */
+                await e.ev('(function(){ Object.defineProperty(document, "hidden", {configurable: true, get: function(){ return true; }}); Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){ return "hidden"; }}); document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("blur")); return 1; })()');
+                await sleep(700);
+                r.pausedHidden = await e.ev('paused');
+                await e.ev('(function(){ Object.defineProperty(document, "hidden", {configurable: true, get: function(){ return false; }}); Object.defineProperty(document, "visibilityState", {configurable: true, get: function(){ return "visible"; }}); document.dispatchEvent(new Event("visibilitychange")); window.dispatchEvent(new Event("focus")); return 1; })()');
+                await sleep(700);
+                const btn = await e.ev('(function(){ var b = document.querySelector(".lp-ap-go"); var ov = b && b.closest(".on"); if(!b || !ov) return null; var q = b.getBoundingClientRect(); return [q.left + q.width / 2, q.top + q.height / 2]; })()');
+                r.dialog = !!btn;
+                if(btn){
+                    await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: btn[0], y: btn[1], id: 5 }] });
+                    await sleep(60);
+                    await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+                    await sleep(30);
+                    /* 탭 뒤 호환 마우스(창은 이미 닫힘 → 게임 화면에 떨어진다) */
+                    await e.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: btn[0], y: btn[1] });
+                    await e.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: btn[0], y: btn[1], button: 'left', clickCount: 1 });
+                    await e.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: btn[0], y: btn[1], button: 'left', clickCount: 1 });
+                } else {
+                    await e.ev('(function(){ try{ paused = false; syncPauseUI(); }catch(_){} return 1; })()');
+                }
+                await sleep(500);
+                r.pausedAfter = await e.ev('paused');
+                r.pointerActive = await e.ev('pointer.active');
+                r.post = await drag(e, 300, 520, 90);
+                r.post2 = await drag(e, 200, 600, -70);
+                r.err = e.errors().exc.slice(0, 3);
+                out.cases.push(r);
+            });
+        }
+        return out;
+    },
+    judge: (cur) => {
+        const G = 'G-resume';
+        for(const c of cur.cases){
+            row(G, c.name + ' 기준 드래그 기체 이동', c.pre.moved + 'px', null, '|Δx| ≥ 20', Math.abs(c.pre.moved) >= 20 ? 'PASS' : 'FAIL');
+            row(G, c.name + ' 앱 전환 → 일시정지 · 이어하기 창', 'paused=' + c.pausedHidden + ' · 창=' + c.dialog, null, 'true · true', c.pausedHidden && c.dialog ? 'PASS' : 'WARN');
+            row(G, c.name + ' 계속하기 뒤 재개 · 마우스 조종 꺼짐', 'paused=' + c.pausedAfter + ' · pointer.active=' + c.pointerActive, null, 'false · false', !c.pausedAfter && !c.pointerActive ? 'PASS' : 'FAIL');
+            row(G, c.name + ' 재개 후 드래그 기체 이동(1·2회)', c.post.moved + ' / ' + c.post2.moved + 'px', null, '둘 다 |Δx| ≥ 20', Math.abs(c.post.moved) >= 20 && Math.abs(c.post2.moved) >= 20 ? 'PASS' : 'FAIL');
+            if(c.err && c.err.length) row(G, c.name + ' JS 예외', c.err.join(' | ').slice(0, 120), null, '0', 'FAIL');
+        }
+    },
+};
+/*</gate:resume>*/
 EXT_CMDS.restart2 = {
     all: false,
     run: async (base) => {

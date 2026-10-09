@@ -8758,9 +8758,22 @@ let lastFlashToggle=0;
 /* ---- Pointer tracking ---- */
 let pointer={x:player.x, y:player.y, active:false};
 
+/* 2026-10-09 운영자: '다른 앱 갔다 와서 계속하기 누르면 조종 링은 움직이는데 우주선이 멈춰 있다'.
+   원인: 폰 브라우저는 탭 뒤에 호환 마우스 이벤트(mousemove)를 한 번 더 쏜다. 이어하기 창이 이미 닫혀 그 mousemove 가
+   게임 화면에 떨어지면 pointer.active=true(마우스 조종)가 되고, szMovePlayer 가 매 프레임 기체를 그 탭 자리에 붙여
+   손가락 드래그(pendingTp)가 덮어쓰인다. 터치에서 온 호환 마우스는 무시하고, 터치가 시작·이동하면 마우스 조종을 끈다 */
+let _szLastTouchAt = -1e9;
+function _szCompatMouse(e){
+    try{ if(e && e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return true; }catch(_){}
+    return performance.now() - _szLastTouchAt < 1500;
+}
+for(const _t of ['touchstart', 'touchmove', 'touchend']){
+    document.addEventListener(_t, () => { _szLastTouchAt = performance.now(); if(_t !== 'touchend' && pointer.active) pointer.active = false; }, {capture: true, passive: true});
+}
 const canvasWrap=$('canvasWrap');
 canvasWrap.addEventListener('mousemove',(e)=>{
     if(!running||paused)return;
+    if(_szCompatMouse(e)) return;   /* 터치 뒤 호환 마우스 — 기체를 탭 자리에 묶지 않는다 */
     const r=canvas.getBoundingClientRect();
     pointer.x=(e.clientX-r.left)/r.width*CW;
     pointer.y=(e.clientY-r.top)/r.height*CH;
@@ -9000,6 +9013,7 @@ function _szReleaseHeldInputs(){
     for(const k of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D']) keys[k] = false;
     try{ if(gravityFieldActive && !_szBeamLatched) szBeamOff(); }catch(_){}
     try{ tpEnd(); }catch(_){}
+    try{ pointer.active = false; }catch(_){}
     for(const f of _szTouchResets){ try{ f(); }catch(_){} }
 }
 window.addEventListener('blur', _szReleaseHeldInputs);
@@ -26112,6 +26126,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
     /* 마우스(터치 노트북·좁은 창) — 예전처럼 커서에 붙는다 */
     cr.addEventListener('mousemove', (e) => {
         if(!SZF.on || SZF.editing || !running || paused) return;
+        if(typeof _szCompatMouse === 'function' && _szCompatMouse(e)) return;   /* 터치 뒤 호환 마우스는 무시(2026-10-09 이어하기 뒤 기체 멈춤) */
         const r = canvas.getBoundingClientRect();
         pointer.x = (e.clientX - r.left) / r.width * CW; pointer.y = (e.clientY - r.top) / r.height * CH; pointer.active = true;
     });
