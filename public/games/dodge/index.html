@@ -1485,6 +1485,9 @@ body.szm6 .score-strip.szm6-near{opacity:.28}                   /* 위험물이 
 
 
 /*<sz:css:mp8>*/
+/* MP8b — GL 층은 2D 캔버스 바로 아래(.canvas-wrap 이 isolation:isolate 라 z-index:-1 이 틀 배경 위·2D 아래) */
+#szGl{position:absolute;left:0;top:0;width:100%;height:100%;z-index:-1;display:block;pointer-events:none}
+#szGl[hidden]{display:none}
 /*</sz:css:mp8>*/
 
     </style>
@@ -1529,6 +1532,8 @@ body.szm6 .score-strip.szm6-near{opacity:.28}                   /* 위험물이 
             </div>
             <canvas id="dodge-canvas"></canvas>
             <!--<sz:html:mp8>-->
+            <!-- MP8b — WebGL2 배경·입자 층(2D 캔버스 아래 한 장). GL 이 안 켜지면 hidden 그대로 = 지금 2D 경로 -->
+            <canvas id="szGl" aria-hidden="true" hidden></canvas>
             <!--</sz:html:mp8>-->
             <!-- 위성 미션 배너 — Phase B. 미션 활성화 시 캔버스 상단에
                  띠 형태로 슬라이드인. 한·영 두 줄. timer 카운트다운. -->
@@ -3490,9 +3495,35 @@ async function loadMyStats(){
    ====================================================== */
 const CW=360, CH=600;
 const canvas=$('dodge-canvas');
+/* MP8b (2026-10-09) — WebGL2 배경층 시도는 2D getContext '전에' 한다(2D 의 alpha 를 여기서 정해야 하므로).
+   켜지면 2D 는 alpha:true(배경을 비우고 아래 #szGl 이 비친다), 아니면 지금처럼 alpha:false — 2D 경로 그대로.
+   안 켜는 경우: ?gl=0 · ?mp8=0 · ?fx=0 · localStorage szx_gl='0'·szx_fx='0' · lp_sz_flags {mp8:0} · 기억된 성능 등급 2 · WebGL2 없음 · 소프트웨어 GL
+   (failIfMajorPerformanceCaveat — 실기기에서 CPU 래스터 GL 은 2D 보다 느리다. ?gl=1 은 검수용 강제: SwiftShader 헤드리스 게이트).
+   본체(셰이더·그리기)는 sz:mod:mp8b — 여기서는 컨텍스트만 만든다 */
+const SZ_GLB = (function(){
+    try{
+        const q = location.search || '';
+        if(/[?&](?:gl|mp8|fx)=0(?:&|$)/.test(q)) return null;
+        try{
+            if(localStorage.getItem('szx_gl') === '0' || localStorage.getItem('szx_tier') === '2' || localStorage.getItem('szx_fx') === '0') return null;
+            const o = JSON.parse(localStorage.getItem('lp_sz_flags') || 'null');
+            if(o && o.mp8 != null && !+o.mp8) return null;
+        }catch(_){}
+        const cv = document.getElementById('szGl');
+        if(!cv || !window.WebGL2RenderingContext) return null;
+        const force = /[?&]gl=1(?:&|$)/.test(q);
+        /* 2026-10-09 통합 담당 — 실기기(저가 안드로이드·iPhone SE급) 8분 측정 전까지 GL 층은 기본 꺼짐(옵트인).
+           게이트 perf 4x 악화·헤드리스에서 GL 켬 쪽 20초 정지 2회(원인 미확정). 켜기: ?gl=1 또는 localStorage szx_gl='1' */
+        let optIn = force; try{ optIn = optIn || localStorage.getItem('szx_gl') === '1'; }catch(_){}
+        if(!optIn) return null;
+        const gl = cv.getContext('webgl2', {alpha: false, depth: false, stencil: false, antialias: false, premultipliedAlpha: true,
+            preserveDrawingBuffer: false, powerPreference: 'default', failIfMajorPerformanceCaveat: !force});
+        return gl ? {cv: cv, gl: gl, force: force} : null;
+    }catch(_){ return null; }
+})();
 /* P1 — alpha:false: 배경이 매 프레임 화면 전체를 채우므로 불투명 캔버스로 합성 비용을 줄인다.
-   desynchronized 는 티어링 위험이 있어 기본 off */
-const ctx=canvas.getContext('2d', {alpha:false});
+   desynchronized 는 티어링 위험이 있어 기본 off. MP8b — GL 층이 있으면 alpha:true(GL 이 꺼진 프레임은 배경이 불투명하게 다 덮는다) */
+const ctx=canvas.getContext('2d', {alpha: !!SZ_GLB});
 
 let dpr=1;
 function fitCanvas(){
@@ -3503,6 +3534,7 @@ function fitCanvas(){
     canvas.height=Math.round(rect.height*dpr);
     ctx.setTransform(dpr*rect.width/CW, 0, 0, dpr*rect.height/CH, 0, 0);
     szHudFit(rect);
+    if(SZ_GLB && window.SZGL && SZGL.fit) SZGL.fit();   /* MP8b — GL 층 해상도(2D 백버퍼 기준, 레이아웃 읽기 없음) */
 }
 /* QA (2026-09-29) — 작은 폰(320x568·360x640)에서 공용 코너 독의 접힌 손잡이(⋮, lpChrome)가 하트 줄 첫 두 칸을 덮었다.
    손잡이 사각형과 하트 줄이 겹칠 때만 하트·📡 줄을 오른쪽으로 민다. 표시 전용(판정·시드 무관), 크기 바뀔 때·판 시작 때만 잰다 */
@@ -3539,6 +3571,7 @@ window.addEventListener('resize', fitCanvas);
 let _bloomReady = false;
 function szBloomCapture(){
     if(window.SZ3 && !SZ3.bloom()){ _bloomReady = false; return; }
+    if(SZ_GLB && SZGL.bg){ _bloomReady = false; return; }   /* MP8b — GL 층이 배경을 그리는 동안 2D 블룸은 쉰다(블룸은 GL 입자에만) */
     const B = _bloomCtx, M = _bloomSmCtx;
     B.globalCompositeOperation = 'copy';
     B.drawImage(canvas, 0, 0, 180, 300);
@@ -4310,7 +4343,21 @@ function drawParticles(){
 function lerp(a,b,t){ return a+(b-a)*t; }
 
 /* ---- drawBackground: zone gradient + blend ---- */
+/* MP8b (2026-10-09 장면 검수) — 배경이 밝거나 위험물 색과 가까운 존은 천체·성운 층을 더 가라앉힌다(위험물은 이 위에 그려져 그대로).
+   기본 0.2(지금 값). 8 명왕성(베이지 원반 위 회색 바위) · 16 오리온(마젠타 위 빨간 꼬리) · 18 창조의 기둥(갈색 기둥 위 회색 운석) ·
+   23 우주 필라멘트(밝은 실) · 27 관측 끝(적자색 위 분홍 운석). 존 전환 동안 섞는다. 표시 전용 — 2D·GL 두 경로 공통 */
+const SZ_BG_DIM = {8: 0.34, 16: 0.32, 18: 0.34, 23: 0.36, 27: 0.4};
+const _szBgDimS = [];
+function szBgDimStyle(){
+    const f = (z) => SZ_BG_DIM[z] || 0.2;
+    let a = f(currentZoneIdx);
+    if(zoneTransitionT < 1) a = f(prevZoneIdx) + (a - f(prevZoneIdx)) * Math.min(1, Math.max(0, zoneTransitionT));
+    const k = Math.round(a * 100);
+    return _szBgDimS[k] || (_szBgDimS[k] = 'rgba(3,5,18,' + (k / 100) + ')');
+}
 function drawBackground(){
+    /* MP8b — GL 층이 이 프레임 배경(그라디언트·fbm·별·렌즈)을 맡으면 2D 는 비우기만. 아니면(꺼짐·손실·등급 2) 아래 2D 그대로 */
+    if(SZ_GLB && SZGL.frame && SZGL.frame()){ ctx.clearRect(0,0,CW,CH); return; }
     const zi=currentZoneIdx;
     const pi=prevZoneIdx;
     const t=Math.min(zoneTransitionT,1);
@@ -18468,7 +18515,7 @@ function szDrawNebula(dt){
     szNebulaY = (szNebulaY + (dt || 0) * 7) % H;
     const zi = currentZoneIdx || 0;
     /* 태양계 안(0~5)은 옅게, 외곽·성간·은하 구간은 짙게 */
-    const a = zi >= 10 ? 0.95 : zi >= 6 ? 0.6 : 0.4;
+    const a = zi === 16 ? 0.65 : zi >= 10 ? 0.95 : zi >= 6 ? 0.6 : 0.4;   /* MP8b — 16 오리온: 마젠타 성운이 빨간 위험물 꼬리를 먹어서 낮춤 */
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
     if(SZ_FLAGS.fx){
@@ -19087,6 +19134,8 @@ function szDrawShip(px, py, now, alpha, livery){
     const flick = Math.sin(flamePulse) * 0.5 + 0.5;
     const L = (14 + flick * 6 + Math.random() * 2.5) * thrust * szFuelFlameK;   /* sz:mod:fuel — 헤더 탱크면 툭툭 끊긴다 */
     const NZ = 14.5;
+    /* MP8b — 고속 잔상 3프레임(표시 전용, 내 기체만) */
+    if(SZ_FLAGS.mp8 && px === player.x && py === player.y && window.SZMP8 && SZMP8.ghost) SZMP8.ghost(px, py, alpha, livery);
 
     ctx.save();
     ctx.translate(px, py);
@@ -19924,7 +19973,7 @@ function drawFrame(now, dt){
 
     /* ---- Zone planet/object ---- */
     drawZonePlanet(currentZoneIdx, dt);
-    if(running){ ctx.fillStyle = 'rgba(3,5,18,0.2)'; ctx.fillRect(0, 0, CW, CH); }
+    if(running){ ctx.fillStyle = szBgDimStyle(); ctx.fillRect(0, 0, CW, CH); }   /* MP8b — 존별 배경 가라앉힘(위험물 대비) */
 
     /* ---- Stars 가까운 층(2) — 행성 앞, 속도선 스트릭 ---- */
     drawStars(2, 2);
@@ -23032,7 +23081,7 @@ function frame(t0, n){
 })();
 
 /* ─────────── 한 판 흐름 ─────────── */
-let bestMs = 0, recDone = false, lastMin = 0, lastRcs = 0, prevVx = 0, charging = false;
+let bestMs = 0, recDone = false, lastMin = 0, lastRcs = 0, prevVx = 0, charging = false, rcsVx = 0;   /* rcsVx — MP8b 가속 기반 RCS */
 function reset(){
     for(let i = 0; i < NP; i++) POOL[i].on = false;
     P.ev = null; P.evUntil = 0; P.crackUntil = 0; P.fogUntil = 0; P.emoteUntil = 0; P.ledUntil = 0;
@@ -23049,7 +23098,17 @@ function tick(n, dt){
     if(!running || szSpectating) return;   /* P5 — 관전 중엔 기록·분 도장·심장 박동 없음 */
     /* 좌우 자세 분사 — 빠르게 옆으로 틀 때 반대편 노즐에서 푸슉 */
     const vx = szPlayerVel.x;
-    if(!szShipHidden && Math.abs(vx) > 140 && n - lastRcs > (tier ? 70 : 38)){
+    if(SZ_FLAGS.mp8){
+        /* MP8b — 진공 비행감: 자세 분사는 속도가 아니라 '가속'할 때만(등속 순항엔 분사 없음). 가스는 가속 반대편 노즐로,
+           세기(속도·크기)는 가속에 비례. 같은 K_PUFF 입자·같은 간격 상한(표시 전용 — Math.random) */
+        const ax = dt > 0 ? (vx - rcsVx) / dt : 0;
+        rcsVx = vx;
+        if(!szShipHidden && Math.abs(ax) > 900 && n - lastRcs > (tier ? 60 : 30)){
+            lastRcs = n;
+            const s = ax > 0 ? -1 : 1, k = Math.min(1, Math.abs(ax) / 3200);
+            emit(K_PUFF, player.x + s * 8, player.y + 3, s * (60 + 90 * k + Math.random() * 30) + vx * 0.4, 6 + Math.random() * 14, 0.2 + 0.12 * k, 2.4 + 1.6 * k, 0);
+        }
+    } else if(!szShipHidden && Math.abs(vx) > 140 && n - lastRcs > (tier ? 70 : 38)){
         lastRcs = n;
         const s = vx > 0 ? -1 : 1;
         emit(K_PUFF, player.x + s * 8, player.y + 3, s * (70 + Math.random() * 50), 10 + Math.random() * 20, 0.28, 3, 0);
@@ -29540,7 +29599,8 @@ function skinHook(livery){
     if(f > 0){
         const NZ = 14.5;
         ctx.save();
-        ctx.globalCompositeOperation = 'hue';
+        /* MP8b — GL 배경 프레임은 2D 가 투명 바탕이라 'hue' 가 빈 곳에 색 실루엣을 찍는다 → 화염 픽셀 위에만(source-atop) 옅게 물들인다 */
+        if(window.SZGL && SZGL.bg){ ctx.globalCompositeOperation = 'source-atop'; ctx.globalAlpha *= 0.55; } else ctx.globalCompositeOperation = 'hue';
         ctx.fillStyle = FL_COL[f];
         ctx.beginPath(); ctx.moveTo(-8, NZ - 0.5); ctx.quadraticCurveTo(-10, NZ + 22, 0, NZ + 44); ctx.quadraticCurveTo(10, NZ + 22, 8, NZ - 0.5); ctx.closePath(); ctx.fill();
         ctx.restore();
@@ -30390,7 +30450,434 @@ M.okA = true;
 })();
 /*</sz:mod:mp8a>*/
 /*<sz:mod:mp8b>*/
-/* MP8b — GL 층(#szGl, 2D 아래), window.SZGL = {on, snapshot(ctx2d)} 구현 */
+/* MP8b (2026-10-09) — GL 층(#szGl, 2D 아래 한 장), window.SZGL = {on, bg, frame, fit, snapshot(ctx2d), stat, lose} 구현
+   층: #szGl(그라디언트 배경 · fbm 성운(깊이감) · 두 겹 별 · 블랙홀 중력렌즈 · 항성 코로나 · 운석 그늘 · 반응 격자 · 우주 먼지 · 입자) → 2D(구운 성운·천체·운석·기체·HUD).
+   2D 구운 성운(szDrawNebula, 운영자 확정 색)은 GL 이 켜져도 그대로 그린다 — GL fbm 은 그 아래 0.35배 깊이감만.
+   ① 컨텍스트는 2D 보다 먼저 엔진 셋업(SZ_GLB)이 만든다. 여기서는 셰이더·버퍼만. 실패·?gl=0·WebGL2 없음·tier≥2·손실·mp8 끔이면
+      SZGL.frame() 이 거짓 → drawBackground·블룸이 지금 2D 그대로 그린다(#szGl 숨김)
+   ② 그리기는 프레임 끝(drawTop) 한 번 — 2D 와 같은 프레임에 합성된다. 2D 블룸 대신 GL 입자만 스스로 빛난다(점 스프라이트 halo)
+   ③ 입자는 무상태: 방출 시각·초기값만 링버퍼(1만)에 쓰고 위치·알파는 셰이더가 시각 함수로 계산한다. 먼지는 정점 번호 해시
+   ④ 격자 20×36 스프링: BEAM 원뿔(끌림)·반중력파(밀림)·블랙홀(우물)·폭탄·피격(충격파). 전역 상태를 읽기만 한다
+   ⑤ 운석 몸통 뒤 darken 그늘은 투명 2D 위에서는 밝은 고리가 되므로, GL 이 켜진 프레임에만 GL 의 MIN 합성으로 옮긴다(같은 모양·같은 목표색)
+   결정성: rand·randH·randD 를 부르지 않는다(Math.random 만). 판정·수열·위험물·HUD 그리기는 건드리지 않는다. 번쩍임 ≤0.12, 화면 흔들림 없음 */
+(function(){
+'use strict';
+const M = SZMP8, G = window.SZGL || (window.SZGL = {});
+const B = (typeof SZ_GLB !== 'undefined') ? SZ_GLB : null;
+Object.assign(G, {on: false, bg: false, ok: false, lost: false, why: B ? '' : 'off', frame: () => false, fit(){}, snapshot: () => false});
+M.okB = true;
+if(!B) return;
+const gl = B.gl, cv = B.cv;
+const LW = 360, LH = 600, MAXP = 10000, NGX = 20, NGY = 36;
+/* ── 셰이더 ── */
+const HDR = '#version 300 es\nprecision highp float;\n';
+const VQ = HDR + 'void main(){vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(p*2.-1.,0.,1.);}';
+const FBG = HDR + `uniform vec2 uR;uniform float uT,uS,uNA,uSK,uSeed,uDen;uniform vec3 uC0,uC1,uC2,uN0,uN1,uN2,uCC;uniform vec4 uL,uCo;out vec4 o;
+uint hh(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return x;}
+float h2(vec2 p){ivec2 i=ivec2(floor(p));return float(hh(uint(i.x)*0x8da6b343u^uint(i.y)*0xd8163841u)>>8)/16777215.;}
+float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+1.),f.x),f.y);}
+float fb(vec2 p,int o){float a=.5,s=0.;for(int k=0;k<4;k++){if(k>=o)break;s+=a*vn(p);p=p*2.03+vec2(17.1,9.3);a*=.5;}return s;}
+vec3 st(vec2 p,float c,float d,float b){vec2 g=floor(p/c),f=p-g*c;uint h=hh(uint(int(g.x)+4096)*7919u^hh(uint(int(g.y)+65536)));
+ float r1=float(h&1023u)/1023.,r2=float((h>>10)&1023u)/1023.,r3=float((h>>20)&1023u)/1023.;if(r1>d)return vec3(0);
+ vec2 q=(vec2(r2,r3)*.8+.1)*c;float e=length(f-q),w=.32+.5*r2*r2;float tw=.72+.28*sin(uT*(1.3+r3*3.)+r2*40.);
+ return mix(vec3(.75,.85,1.),vec3(1.,.9,.75),r3)*b*(.25+.75*r3*r3)*tw*exp(-e*e/(w*w));}
+void main(){vec2 p=vec2(gl_FragCoord.x/uR.x*360.,(1.-gl_FragCoord.y/uR.y)*600.);float fy=p.y/600.;
+ vec3 c=fy<.5?mix(uC0,uC1,fy*2.):mix(uC1,uC2,fy*2.-1.);vec2 s=p;float mu=1.,lk=uL.w;
+ if(lk>0.){vec2 d=p-uL.xy;float r2=dot(d,d)+1.,e2=uL.z*uL.z*lk;s=p-d*(e2/r2);float u=e2/r2;mu=min(3.5,1./max(.28,abs(1.-u*u)));
+  float r=sqrt(r2);c*=smoothstep(uL.z*.42,uL.z*.62,r);c+=vec3(.2,.16,.12)*uDen*exp(-length(s-uL.xy)/170.)*.55;}
+ vec2 q=s*.0042+vec2(uSeed,uSeed*.7);q.y-=uS*.0042;float w=fb(q*.6+3.1,3);float n=fb(q+vec2(w*1.7,w*1.1),4);float n2=vn(q*2.3-w);
+ float m=smoothstep(.42,.86,n)*uNA;vec3 nc=mix(mix(uN0,uN1,n2),uN2,smoothstep(.55,.9,w));nc=mix(vec3(dot(nc,vec3(.3,.5,.2))),nc,.62);
+ c+=nc*m*(.2+.18*smoothstep(.7,.95,n))*mu;
+ vec2 sp=s+vec2(0.,uS*.3);vec3 sk=st(sp,7.,.16+.3*uDen,.55)+st(s+vec2(31.,uS*.6),12.,.22+.25*uDen,.9);
+ c+=sk*uSK*mu;
+ if(uCo.w>0.){vec2 dc=p-uCo.xy;float rr=length(dc),a=atan(dc.y,dc.x),x=max(0.,rr-uCo.z*.85)/(uCo.z*3.2);
+  float f=fb(vec2(a*2.6,rr*.018-uT*.12),3)*.8+fb(vec2(a*6.,rr*.05-uT*.3),2)*.35;c+=uCC*uCo.w*pow(max(0.,1.-x),2.2)*(.35+.9*f)*step(uCo.z*.7,rr)*.42;}
+ o=vec4(c/(1.+c*.35),1.);}`;
+/* 운석 그늘 — 2D szRkShade 와 같은 반지름 단계(α .9→.9@.7→.55@.8→.2@.9→0)·같은 목표색. MIN 합성 = 밝은 채널만 끌어내림(어두운 우주에선 그대로) */
+const VSH = HDR + 'layout(location=0) in vec3 aP;uniform vec2 uR;out vec2 v;void main(){vec2 c=vec2(float(gl_VertexID&1),float(gl_VertexID>>1))*2.-1.;v=c;vec2 p=aP.xy+c*aP.z;gl_Position=vec4(p.x/180.-1.,1.-p.y/300.,0.,1.);}';
+const FSH = HDR + 'in vec2 v;out vec4 o;void main(){float d=length(v);float a=d<.7?.9:d<.8?mix(.9,.55,(d-.7)*10.):d<.9?mix(.55,.2,(d-.8)*10.):d<1.?mix(.2,0.,(d-.9)*10.):0.;o=vec4(mix(vec3(1),vec3(34,38,58)/255.,a),1);}';
+const VGR = HDR + 'layout(location=0) in vec3 aP;out float v;void main(){v=aP.z;gl_Position=vec4(aP.x/180.-1.,1.-aP.y/300.,0.,1.);}';
+const FGR = HDR + 'in float v;uniform vec3 uG;uniform float uA;out vec4 o;void main(){o=vec4(uG*(uA+min(.3,v*.02)),1);}';
+/* 입자: a0 = x0,y0,vx,vy(논리 px, px/s) · a1 = t0,수명,크기,감쇠 · a2 = r,g,b,중력. 위치 = x0 + v·(1−e^(−kt))/k + ½g t² */
+const VPA = HDR + `layout(location=0) in vec4 a0;layout(location=1) in vec4 a1;layout(location=2) in vec4 a2;uniform float uT,uPx;out vec4 vc;
+void main(){float t=uT-a1.x;if(t<0.||t>a1.y){gl_Position=vec4(2,2,0,1);gl_PointSize=0.;vc=vec4(0);return;}
+ float k=max(a1.w,.001),u=t/a1.y;vec2 p=a0.xy+a0.zw*(1.-exp(-k*t))/k+vec2(0.,.5*a2.w*t*t);
+ gl_Position=vec4(p.x/180.-1.,1.-p.y/300.,0.,1.);gl_PointSize=clamp(a1.z*uPx*(1.+.6*u),1.,96.);vc=vec4(a2.rgb,pow(1.-u,1.5)*min(1.,t*30.));}`;
+const FPA = HDR + 'in vec4 vc;out vec4 o;void main(){vec2 d=gl_PointCoord*2.-1.;float r=dot(d,d);float a=(exp(-r*9.)+.32*exp(-r*2.5))*vc.a;o=vec4(vc.rgb*a,1);}';
+/* 먼지 — 정점 번호 해시로 위치·깊이를 정하고 시각으로 흘려보낸다(버퍼 없음) */
+const VDU = HDR + `uniform float uT,uF,uPx,uA;out vec4 vc;
+float hf(uint x){x^=x>>16;x*=0x7feb352du;x^=x>>15;x*=0x846ca68bu;x^=x>>16;return float(x&65535u)/65535.;}
+void main(){uint i=uint(gl_VertexID);float z=hf(i*3u+1u),x=hf(i*3u+2u)*380.-10.;float y=mod(hf(i*3u+3u)*640.+uT*uF*(.35+z*1.1),640.)-20.;
+ gl_Position=vec4(x/180.-1.,1.-y/300.,0.,1.);gl_PointSize=max(1.,(.5+z*1.1)*uPx);vc=vec4(mix(vec3(.62,.7,.9),vec3(.9,.88,.8),hf(i)),uA*(.25+.75*z*z));}`;
+function sh(t, s){ const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if(!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error('sh ' + gl.getShaderInfoLog(o)); return o; }
+function prog(v, f, names){
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, v)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, f)); gl.linkProgram(p);
+    if(!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link ' + gl.getProgramInfoLog(p));
+    const u = {p}; for(const n of names) u[n] = gl.getUniformLocation(p, n); return u;
+}
+let PB, PS, PG, PP, PD, vaoS, vaoG, vaoP, bufS, bufG, bufP, ibG, nIdx = 0;
+const SHQ = new Float32Array(3 * 256); let nSh = 0;
+const PA = new Float32Array(MAXP * 12); let pHead = 0, pUsed = 0, dLo = MAXP, dHi = -1;
+const GX = new Float32Array(NGX * NGY * 2), GV = new Float32Array(NGX * NGY * 2), GR = new Float32Array(NGX * NGY * 2), GD = new Float32Array(NGX * NGY * 3);
+function build(){
+    PB = prog(VQ, FBG, ['uR', 'uT', 'uS', 'uNA', 'uSK', 'uSeed', 'uDen', 'uC0', 'uC1', 'uC2', 'uN0', 'uN1', 'uN2', 'uCC', 'uL', 'uCo']);
+    PS = prog(VSH, FSH, ['uR']); PG = prog(VGR, FGR, ['uG', 'uA']); PP = prog(VPA, FPA, ['uT', 'uPx']); PD = prog(VDU, FPA, ['uT', 'uF', 'uPx', 'uA']);
+    vaoS = gl.createVertexArray(); gl.bindVertexArray(vaoS); bufS = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufS); gl.bufferData(gl.ARRAY_BUFFER, SHQ.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0); gl.vertexAttribDivisor(0, 1);
+    vaoG = gl.createVertexArray(); gl.bindVertexArray(vaoG); bufG = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufG); gl.bufferData(gl.ARRAY_BUFFER, GD.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+    const I = [];
+    for(let y = 0; y < NGY; y++) for(let x = 0; x < NGX; x++){ const i = y * NGX + x; if(x + 1 < NGX) I.push(i, i + 1); if(y + 1 < NGY) I.push(i, i + NGX); }
+    nIdx = I.length; ibG = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibG); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(I), gl.STATIC_DRAW);
+    vaoP = gl.createVertexArray(); gl.bindVertexArray(vaoP); bufP = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bufP); gl.bufferData(gl.ARRAY_BUFFER, PA.byteLength, gl.DYNAMIC_DRAW);
+    for(let k = 0; k < 3; k++){ gl.enableVertexAttribArray(k); gl.vertexAttribPointer(k, 4, gl.FLOAT, false, 48, k * 16); }
+    gl.bindVertexArray(null);
+    for(let y = 0; y < NGY; y++) for(let x = 0; x < NGX; x++){ const j = y * NGX + x, i = j * 2; GR[i] = GX[i] = GD[j * 3] = -20 + x * 400 / (NGX - 1); GR[i + 1] = GX[i + 1] = GD[j * 3 + 1] = -20 + y * 640 / (NGY - 1); }
+}
+try{ build(); G.ok = true; }catch(e){ G.why = String(e && e.message || e).slice(0, 120); M.glErr = G.why; return; }
+const RND = (function(){ try{ const d = gl.getExtension('WEBGL_debug_renderer_info'); return String(gl.getParameter(d ? d.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || ''); }catch(_){ return ''; } })();
+cv.addEventListener('webglcontextlost', () => { G.lost = true; G.bg = false; G.on = false; G.why = 'lost'; try{ cv.hidden = true; }catch(_){} }, false);
+
+/* ── 상태 읽기 (전역은 읽기만) ── */
+const ok = (f, d) => { try{ return f(); }catch(_){ return d; } };
+const _rgb = {};
+function rgb(h){ let v = _rgb[h]; if(!v){ v = _rgb[h] = [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255]; } return v; }
+const C3 = [new Float32Array(3), new Float32Array(3), new Float32Array(3)];
+function mixInto(o, a, b, t){ o[0] = a[0] + (b[0] - a[0]) * t; o[1] = a[1] + (b[1] - a[1]) * t; o[2] = a[2] + (b[2] - a[2]) * t; return o; }
+/* 성운 색 — 존 계열(szNebFam) 5색 중 3색(2D 성운과 같은 계열). 0 = 태양계(청·보라 옅게) */
+const NF0 = [[60, 120, 255], [120, 100, 255], [40, 190, 220]];
+const NEB = [new Float32Array(3), new Float32Array(3), new Float32Array(3)];
+function famCols(z){ const f = ok(() => szNebFam(z), 0); const H = (f && typeof SZ_NEB_HUES !== 'undefined' && SZ_NEB_HUES[f]) || NF0; return [H[0], H[1], H[2] || H[0]]; }
+function nebA(z){ if(z === 26) return 0; const f = ok(() => szNebFam(z), 0); const a = z >= 10 ? 0.95 : z >= 6 ? 0.6 : 0.4; return a * ((typeof SZ_NEB_A !== 'undefined' && SZ_NEB_A[f]) || 1); }
+/* 항성 코로나 — P7 판과 같은 위치식(표시 전용 복제). [색, 반지름, 세기] */
+const COR = {11: [[1, 0.66, 0.38], 26, 0.85], 12: [[0.72, 0.84, 1], 34, 0.9], 28: [[1, 0.62, 0.34], 34, 0.7]};
+function corPos(z, zt){
+    const px = ok(() => _p7Px, 0);
+    if(z === 11) return [LW * 0.30, LH * (zt * 2 - 0.4)];
+    if(z === 12) return [LW * 0.32, LH * (zt * 2 - 0.4)];
+    if(z === 28) return [LW * 0.62 - px * 0.03, LH * (0.2 + 0.14 * zt)];
+    return null;
+}
+/* 렌즈 — 19 궁수자리 A*(판정 기하 blackHole 를 읽기만) · 25 TON 618(P7 판 위치식). [cx, cy, 아인슈타인 반지름] */
+const LZ = [0, 0, 0];
+function lens(z){
+    if(z === 19 && typeof blackHole !== 'undefined' && blackHole.r){ LZ[0] = blackHole.cx; LZ[1] = blackHole.cy; LZ[2] = blackHole.r * 4.4; return LZ; }   /* 아인슈타인 고리가 2D 판(반지름 ≈4.6r) 가장자리에 걸치게 */
+    if(z === 25){ let zt = 0.5, px = 0; try{ zt = getZoneT(25); px = _p7Px; }catch(_){} LZ[0] = LW / 2 - px * 0.02; LZ[1] = LH * (0.14 + 0.16 * zt); LZ[2] = 64; return LZ; }
+    return null;
+}
+
+/* ── 해상도 — 2D 백버퍼를 기준으로(레이아웃 읽기 없음). 등급 0: 최대 2×CSS px·130만 px, 등급 1: 1.5×·70만 px ── */
+let W = 0, H = 0, fitKey = '';
+function tierNo(){ return ok(() => SZ3.tier(), 0) | 0; }
+function cfg(){ return ok(() => SZ3.tierCfg(), null) || {gl: true, grid: true, part: 1}; }
+G.fit = function(){
+    const d = (typeof dpr !== 'undefined' && dpr) || 1, cw = canvas.width / d, ch = canvas.height / d;
+    if(!(cw > 0 && ch > 0)) return;
+    const t = tierNo(), cap = t ? 7e5 : 1.3e6;
+    let k = Math.min(window.devicePixelRatio || 1, t ? 1.5 : 2);
+    if(cw * ch * k * k > cap) k = Math.sqrt(cap / (cw * ch));
+    const w = Math.max(2, Math.round(cw * k)), h = Math.max(2, Math.round(ch * k));
+    fitKey = canvas.width + 'x' + canvas.height + '|' + t;
+    if(w !== W || h !== H){ W = cv.width = w; H = cv.height = h; }
+};
+
+/* ── 프레임 판단 — drawBackground 가 프레임마다 한 번 부른다 ── */
+let shown = false, nFrames = 0;
+function want(){
+    if(!G.ok || G.lost || !SZ_FLAGS.mp8 || SZ_FLAGS.fx === false) return false;
+    const c = cfg(); return !!(c && c.gl);
+}
+G.frame = function(){
+    const w = want();
+    if(w && fitKey !== canvas.width + 'x' + canvas.height + '|' + tierNo()) G.fit();
+    if(w !== shown){ shown = w; try{ cv.hidden = !w; }catch(_){} }
+    G.bg = G.on = w;
+    return w;
+};
+
+/* ── 입자 방출 (Math.random 만 — 표시 전용) ── */
+const PALS = {gold: [1, 0.84, 0.43], cyan: [0.43, 0.9, 1], white: [0.9, 0.94, 1], violet: [0.7, 0.6, 1], teal: [0.35, 1, 0.82], amber: [1, 0.72, 0.36], green: [0.6, 1, 0.6], blue: [0.55, 0.75, 1]};
+let T = 0, lastNow = 0, partK = 1;
+function emit(x, y, vx, vy, life, size, drag, col, grav){
+    const i = pHead, o = i * 12;
+    PA[o] = x; PA[o + 1] = y; PA[o + 2] = vx; PA[o + 3] = vy;
+    PA[o + 4] = T; PA[o + 5] = life; PA[o + 6] = size; PA[o + 7] = drag;
+    PA[o + 8] = col[0]; PA[o + 9] = col[1]; PA[o + 10] = col[2]; PA[o + 11] = grav || 0;
+    if(i < dLo) dLo = i; if(i > dHi) dHi = i;
+    pHead = (pHead + 1) % MAXP; if(pUsed < MAXP) pUsed++;
+}
+function burst(x, y, n, sp, life, size, cols, drag, grav){
+    if(!G.bg) return;
+    n = Math.max(1, Math.round(n * partK));
+    for(let i = 0; i < n; i++){
+        const a = Math.random() * 6.2832, v = sp * (0.35 + 0.65 * Math.random());
+        emit(x, y, Math.cos(a) * v, Math.sin(a) * v, life * (0.6 + 0.4 * Math.random()), size * (0.6 + 0.6 * Math.random()), drag, cols[i % cols.length], grav);
+    }
+}
+/* 충격파(격자) — {x, y, t0, sp, amp} */
+const WAVES = [];
+function wave(x, y, sp, amp){ if(WAVES.length < 8) WAVES.push({x, y, t0: T, sp, amp}); }
+const pl = () => ok(() => [player.x, player.y], [180, 390]);
+try{
+    SZE.on('graze', () => { const p = pl(); burst(p[0], p[1] - 4, 6, 140, 0.35, 2.2, [PALS.gold, PALS.cyan], 5); });
+    SZE.on('hit', (x, y) => { burst(x, y, 26, 230, 0.7, 2.6, [PALS.white, PALS.amber, PALS.cyan], 3.5); wave(x, y, 260, 7); });
+    SZE.on('mission', (k) => { if(k === 'ok'){ const p = pl(); burst(p[0], p[1], 44, 170, 1.2, 2.4, [PALS.teal, PALS.cyan, PALS.white], 2.2, -40); wave(p[0], p[1], 200, 5); } });
+    SZE.on('fever', (k) => { if(k === 'on'){ const p = pl(); burst(p[0], p[1], 90, 260, 1.3, 2.6, [PALS.gold, PALS.cyan, PALS.violet, PALS.green, PALS.teal], 1.8); } });
+    SZE.on('boss', (id, k) => { if(k === 'end'){ burst(LW / 2, LH * 0.3, 120, 280, 1.5, 2.8, [PALS.gold, PALS.white, PALS.amber], 1.6, 30); wave(LW / 2, LH * 0.3, 300, 9); } });
+    SZE.on('zone', () => { if(!G.bg) return; const n = Math.round(40 * partK); for(let i = 0; i < n; i++) emit(Math.random() * LW, -10 - Math.random() * 60, 0, 520 + Math.random() * 380, 0.9, 1.4, 0.2, PALS.blue, 0); });
+    /* 실제 시계로 3ms 안에 또 오는 프레임(합성 시계 하네스·고속 따라잡기)은 GL 을 다시 그리지 않는다 — 화면에는 다음 vsync 에 한 장만 나간다 */
+    let lastReal = 0;
+    SZE.on('drawTop', (now) => { if(!G.bg) return; const r = Date.now(); if(r - lastReal < 3){ nSh = 0; return; } lastReal = r; render(now, false); });
+    SZE.on('runStart', () => { WAVES.length = 0; agSeen = 0; wipeSeen = 0; });
+}catch(_){}
+/* 2D 그늘 → GL (그 프레임이 GL 배경일 때만. 아니면 원래 2D 경로) */
+(function(){
+    const q0 = window.szRkShadeQ, s0 = window.szRkShade;
+    const push = (x, y, R) => { if(nSh < 256){ const i = nSh * 3; SHQ[i] = x; SHQ[i + 1] = y; SHQ[i + 2] = R * 1.35; nSh++; } };
+    if(typeof q0 === 'function') window.szRkShadeQ = function(x, y, R){ return G.bg ? push(x, y, R) : q0(x, y, R); };
+    if(typeof s0 === 'function') window.szRkShade = function(x, y, R){ return G.bg ? push(x, y, R) : s0(x, y, R); };
+})();
+
+/* 2D 'lighter' 그림의 검은 바탕 — 불투명 2D 위에선 더해도 0 이라 안 보였지만, 투명 2D 에선 알파가 쌓여 GL 을 가리는 검은 상자가 된다
+   (블랙홀 제트·쉬머, 은하 판, 퀘이사 판 등 — 2026-10-09 실측 7장). GL 배경 프레임에서만, 바탕이 불투명·검정인 그림을
+   '밝기 = 알파' 판(색 = rgb/α, α = max(rgb))으로 바꿔 그린다 — 가산 합성 결과는 같고(GL 위에서 rgb 를 더함) 검은 곳은 투명. 한 장당 1회, 한가할 때 */
+const LUM = new WeakMap();
+const _di = CanvasRenderingContext2D.prototype.drawImage;
+let _lx = null;
+function lumOf(im){
+    const v = LUM.get(im);
+    if(v !== undefined) return v;
+    /* 프레임 안에서는 픽셀을 읽지 않는다(GPU 비트맵 읽기 = 동기 대기). 검사·변환은 한가할 때 한 장씩 — 그동안은 원본 그대로 */
+    let w = 0, h = 0;
+    try{ w = im.naturalWidth || im.width; h = im.naturalHeight || im.height; }catch(_){}
+    if(w * h < 16384 || im.complete === false){ LUM.set(im, false); return false; }
+    LUM.set(im, 0);
+    M.want('lum|' + w + 'x' + h + '|' + (++lumN), () => { try{ if(lumCheck(im, w, h)) lumMake(im, w, h); else LUM.set(im, false); }catch(_){ LUM.set(im, false); } });
+    return 0;
+}
+let lumN = 0;
+function lumCheck(im, w, h){
+    if(!_lx){ const c = document.createElement('canvas'); c.width = c.height = 1; _lx = c.getContext('2d', {willReadFrequently: true}); }
+    let n = 0;
+    for(const [u, q] of [[0, 0], [w - 1, 0], [0, h - 1], [w - 1, h - 1], [w >> 1, 0], [0, h >> 1]]){
+        _lx.clearRect(0, 0, 1, 1); _di.call(_lx, im, u, q, 1, 1, 0, 0, 1, 1);
+        const d = _lx.getImageData(0, 0, 1, 1).data; if(d[3] >= 250 && d[0] < 40 && d[1] < 40 && d[2] < 40) n++;
+    }
+    return n === 6;
+}
+/* 변환은 48줄씩 한가할 때 조각으로(큰 판 1080×600 도 한 조각 수 ms) — 끝 조각이 LUM 에 넣는다 */
+function lumMake(im, w, h){
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d', {willReadFrequently: true}); _di.call(x, im, 0, 0);
+    const id = ++lumN;
+    for(let y0 = 0; y0 < h; y0 += 48){
+        const rows = Math.min(48, h - y0), last = y0 + rows >= h;
+        M.want('lum|' + id + '|' + y0, () => {
+            try{
+                const D = x.getImageData(0, y0, w, rows), p = D.data;
+                for(let i = 0; i < p.length; i += 4){
+                    const a = p[i + 3] / 255, r = p[i] * a, g = p[i + 1] * a, b = p[i + 2] * a, m = r > g ? (r > b ? r : b) : (g > b ? g : b);
+                    if(m < 0.5){ p[i + 3] = 0; continue; }
+                    const k = 255 / m; p[i] = r * k; p[i + 1] = g * k; p[i + 2] = b * k; p[i + 3] = m;
+                }
+                x.putImageData(D, 0, y0);
+                /* 끝 — GPU 에 올라간 비트맵으로 바꿔 둔다(소프트웨어 캔버스를 매번 원본으로 쓰면 첫 그리기마다 업로드) */
+                if(last){ if(window.createImageBitmap) createImageBitmap(c).then(bm => LUM.set(im, bm), () => LUM.set(im, c)); else LUM.set(im, c); }
+            }catch(_){ LUM.set(im, false); }
+        });
+    }
+}
+try{
+    ctx.drawImage = function(im){
+        if(G.bg && this.globalCompositeOperation === 'lighter' && im && typeof im === 'object'){
+            const v = lumOf(im);
+            if(v){ arguments[0] = v; }
+        }
+        return _di.apply(this, arguments);
+    };
+}catch(_){}
+/* 다음 존 그림을 미리 — 존 진입 때 그 존·다음 존 아트를 한 번씩 검사(불투명 검정이면 변환 예약) */
+function lumPrep(z){ try{ for(const k of (SZ_ZONE_ART[z] || [])){ const im = szArt(k); if(im) lumOf(im); } }catch(_){} }
+try{ SZE.on('zone', (z) => { if(G.bg){ lumPrep(z); lumPrep(z + 1); } }); SZE.on('runStart', () => { if(G.ok) lumPrep(ok(() => currentZoneIdx, 0) + 1); }); }catch(_){}
+
+/* ── 격자 스프링 — 외력은 전역 상태에서 읽는다 ── */
+let agSeen = 0, wipeSeen = 0;
+/* 프레임마다 한 번 전역을 읽어 둔다(할당 없음 — 읽기만). 없는 전역은 기본값 */
+const ST = {z: 0, pz: 0, t: 1, run: false, pau: false, hid: true, px: 180, py: 390, vx: 0, beam: false, gl: 150, gh: 0.5, e: 0, ag: false, agR: 135, agT0: 0, wf: 0, sk: 1};
+function readState(){
+    try{ ST.z = currentZoneIdx | 0; ST.pz = prevZoneIdx | 0; ST.t = Math.min(1, zoneTransitionT); }catch(_){}
+    try{ ST.run = !!running; ST.pau = !!paused; ST.e = elapsedMs; }catch(_){}
+    try{ ST.hid = !!szShipHidden; ST.px = player.x; ST.py = player.y; ST.vx = szPlayerVel.x; }catch(_){}
+    try{ ST.beam = !!gravityFieldActive; ST.gl = GRAV_FIELD_LEN; ST.gh = GRAV_FIELD_HALF; ST.wf = wipeFlashUntil; }catch(_){}
+    try{ ST.ag = !!(SZI && ST.e < SZI.agUntil); ST.agT0 = SZI ? SZI.agT0 : 0; ST.agR = SZI_T.AG_R * 1.5; }catch(_){ ST.ag = false; }
+    try{ ST.sk = szP7StarK(); }catch(_){ ST.sk = 1; }
+}
+let gridLive = true;
+function gridStep(dt, c){
+    const px = ST.px, py = ST.py;
+    /* 폭탄·반중력 시작을 한 번만 충격파로 */
+    if(ST.wf && ST.wf !== wipeSeen){ wipeSeen = ST.wf; wave(px, py, 420, 16); burst(px, py, 160, 340, 1.1, 2.6, [PALS.white, PALS.violet, PALS.cyan], 2.4); }
+    if(ST.ag && ST.agT0 && ST.agT0 !== agSeen){ agSeen = ST.agT0; wave(px, py, 300, -10); burst(px, py, 50, 200, 0.8, 2.2, [PALS.violet, PALS.white], 2.6); }
+    for(let i = WAVES.length - 1; i >= 0; i--) if((T - WAVES[i].t0) * WAVES[i].sp > 700) WAVES.splice(i, 1);
+    if(!c.grid) return false;
+    const L = lens(ST.z), beam = ST.beam, ag = ST.ag, nw = WAVES.length;
+    /* 쉬는 격자(외력 없음·다 멈춤)는 건너뛴다 — 업로드도 안 함 */
+    if(!beam && !ag && !L && !nw && !gridLive) return false;
+    const K = 38, D = 5.2, CP = 26, GL_ = ST.gl, GH = ST.gh + 0.15, agR = ST.agR;
+    let live = false;
+    for(let j = 0, n = NGX * NGY; j < n; j++){
+        const i = j * 2, dx0 = GX[i] - GR[i], dy0 = GX[i + 1] - GR[i + 1];
+        let fx = -K * dx0 - D * GV[i], fy = -K * dy0 - D * GV[i + 1];
+        const gx = j % NGX, gy = (j / NGX) | 0;
+        let sx = 0, sy = 0, sn = 0;
+        if(gx > 0){ sx += GX[i - 2] - GR[i - 2]; sy += GX[i - 1] - GR[i - 1]; sn++; }
+        if(gx < NGX - 1){ sx += GX[i + 2] - GR[i + 2]; sy += GX[i + 3] - GR[i + 3]; sn++; }
+        if(gy > 0){ const u = i - NGX * 2; sx += GX[u] - GR[u]; sy += GX[u + 1] - GR[u + 1]; sn++; }
+        if(gy < NGY - 1){ const u = i + NGX * 2; sx += GX[u] - GR[u]; sy += GX[u + 1] - GR[u + 1]; sn++; }
+        fx += CP * (sx / sn - dx0); fy += CP * (sy / sn - dy0);
+        const rx = GR[i], ry = GR[i + 1];
+        if(beam){
+            const ddx = rx - px, ddy = ry - (py - 4), d = Math.sqrt(ddx * ddx + ddy * ddy);
+            if(d < GL_ && d > 6 && Math.abs(Math.atan2(ddx, -ddy)) < GH){ const f = 520 * (1 - d / GL_); fx -= ddx / d * f; fy -= ddy / d * f; }
+        }
+        if(ag){ const ddx = rx - px, ddy = ry - py, d = Math.sqrt(ddx * ddx + ddy * ddy); if(d < agR && d > 1){ const f = 700 * (1 - d / agR); fx += ddx / d * f; fy += ddy / d * f; } }
+        if(L){ const ddx = rx - L[0], ddy = ry - L[1], d = Math.sqrt(ddx * ddx + ddy * ddy) + 1, r = L[2] * 3.2; if(d < r){ const f = Math.min(900, 24000 / d) * (1 - d / r); fx -= ddx / d * f; fy -= ddy / d * f; } }
+        for(let w = 0; w < nw; w++){
+            const W_ = WAVES[w], ddx = rx - W_.x, ddy = ry - W_.y, d = Math.sqrt(ddx * ddx + ddy * ddy) + 1, fr = (T - W_.t0) * W_.sp, q = 1 - Math.abs(d - fr) / 26;
+            if(q > 0){ const f = W_.amp * 60 * q * Math.max(0, 1 - fr / 700); fx += ddx / d * f; fy += ddy / d * f; }
+        }
+        GV[i] += fx * dt; GV[i + 1] += fy * dt;
+    }
+    for(let j = 0, n = NGX * NGY; j < n; j++){
+        const i = j * 2;
+        GX[i] += GV[i] * dt; GX[i + 1] += GV[i + 1] * dt;
+        const dx = GX[i] - GR[i], dy = GX[i + 1] - GR[i + 1], k = j * 3;
+        GD[k] = GX[i]; GD[k + 1] = GX[i + 1]; GD[k + 2] = Math.sqrt(dx * dx + dy * dy);
+        if(!live && (GD[k + 2] > 0.05 || Math.abs(GV[i]) + Math.abs(GV[i + 1]) > 0.05)) live = true;
+    }
+    if(!live){ for(let j = 0, n = NGX * NGY; j < n; j++){ const i = j * 2, k = j * 3; GX[i] = GD[k] = GR[i]; GX[i + 1] = GD[k + 1] = GR[i + 1]; GD[k + 2] = 0; GV[i] = GV[i + 1] = 0; } }
+    gridLive = live;
+    return true;
+}
+
+/* ── 그리기 ── */
+let scroll = 0, exAcc = 0, gridUp = true;
+const TT = [0, 0, 0], NA = new Float32Array(3), NB = new Float32Array(3);
+function famInto(o, z, k){ const f = famCols(z)[k]; o[0] = f[0] / 255; o[1] = f[1] / 255; o[2] = f[2] / 255; return o; }
+function bgUniforms(){
+    const z = ST.z, pz = ST.pz, t = ST.t;
+    const Z = (typeof ZONE_BG !== 'undefined') ? ZONE_BG : null;
+    if(Z && Z[z]){
+        /* drawBackground 와 같은 엇갈린 전환(위 50%·가운데 80%·아래 35% 뒤) */
+        const P = Z[pz] || Z[z]; TT[0] = Math.min(t / 0.5, 1); TT[1] = Math.min(t / 0.8, 1); TT[2] = Math.max((t - 0.35) / 0.65, 0);
+        for(let k = 0; k < 3; k++) mixInto(C3[k], rgb(P[k]), rgb(Z[z][k]), t >= 1 ? 1 : TT[k]);
+    }
+    /* 2D 성운(구운 판, 운영자 확정 색)은 그대로 위에 그려지므로 GL fbm 은 깊이감만 — 0.35배 (판 존에서 판 가장자리 이음매가 안 보이게) */
+    const na = (nebA(z) + (nebA(pz) - nebA(z)) * (1 - t)) * 0.35;
+    for(let k = 0; k < 3; k++) mixInto(NEB[k], famInto(NA, pz, k), famInto(NB, z, k), t);
+    gl.useProgram(PB.p);
+    gl.uniform2f(PB.uR, W, H); gl.uniform1f(PB.uT, T); gl.uniform1f(PB.uS, scroll);
+    gl.uniform1f(PB.uNA, na); gl.uniform1f(PB.uSK, ST.sk); gl.uniform1f(PB.uSeed, (z % 7) * 3.71 + 1.3);
+    gl.uniform3fv(PB.uC0, C3[0]); gl.uniform3fv(PB.uC1, C3[1]); gl.uniform3fv(PB.uC2, C3[2]);
+    gl.uniform3fv(PB.uN0, NEB[0]); gl.uniform3fv(PB.uN1, NEB[1]); gl.uniform3fv(PB.uN2, NEB[2]);
+    const L = lens(z);
+    /* 렌즈 세기 — 19 는 판정과 함께 바로(위험물 존), 25 는 존 진입 전환에 맞춰 */
+    const lk = L ? (z === 19 ? 1 : t) : 0;
+    gl.uniform1f(PB.uDen, z === 19 ? 1 : z === 25 ? 0.5 : 0);
+    gl.uniform4f(PB.uL, L ? L[0] : 0, L ? L[1] : 0, L ? L[2] : 1, lk);
+    const C = COR[z], cp = C && corPos(z, ok(() => getZoneT(z), 0));
+    if(cp){ gl.uniform4f(PB.uCo, cp[0], cp[1], C[1], C[2] * t); gl.uniform3fv(PB.uCC, C[0]); } else gl.uniform4f(PB.uCo, 0, 0, 1, 0);
+}
+function render(now, snap){
+    if(!G.bg || gl.isContextLost()) return false;
+    const c = cfg(), dt = lastNow ? Math.max(0, Math.min(0.05, (now - lastNow) / 1000)) : 0.016;
+    lastNow = now;
+    readState();
+    if(!snap && !ST.pau){
+        T += dt; scroll += dt * (ST.run ? 7 : 3);
+        partK = c.part || 1;
+        /* 엔진 플라스마 꼬리 — 노즐 아래로 흘러 2D 화염 밑에서 빛난다(진공: 배기 = 기체 속도 + 분사 속도) */
+        if(ST.run && !ST.hid){
+            exAcc += dt * 34 * partK;
+            while(exAcc >= 1){ exAcc--; emit(ST.px + (Math.random() - 0.5) * 3, ST.py + 17, ST.vx * 0.15 + (Math.random() - 0.5) * 16, 170 + Math.random() * 60, 0.42, 1.9, 0.6, Math.random() < 0.5 ? PALS.blue : PALS.white, 0); }
+        }
+        if(gridStep(Math.min(dt, 1 / 30), c)) gridUp = true;
+        if(nFrames % 60 === 0) lumPrep(ST.z + 1);
+    }
+    nFrames++;
+    gl.viewport(0, 0, W, H);
+    gl.disable(gl.BLEND);
+    bgUniforms();
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.enable(gl.BLEND);
+    if(nSh){
+        gl.blendEquation(gl.MIN); gl.useProgram(PS.p); gl.bindVertexArray(vaoS); gl.bindBuffer(gl.ARRAY_BUFFER, bufS);
+        gl.bufferSubData(gl.ARRAY_BUFFER, 0, SHQ, 0, nSh * 3); gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, nSh);
+        if(!snap) nSh = 0;
+    }
+    gl.blendEquation(gl.FUNC_ADD); gl.blendFunc(gl.ONE, gl.ONE);
+    if(c.grid){
+        gl.useProgram(PG.p); gl.bindVertexArray(vaoG); gl.bindBuffer(gl.ARRAY_BUFFER, bufG);
+        if(gridUp){ gl.bufferSubData(gl.ARRAY_BUFFER, 0, GD); gridUp = false; }
+        gl.uniform3f(PG.uG, 0.42, 0.5, 0.85); gl.uniform1f(PG.uA, 0.03);   /* 평소엔 거의 안 보이고 휠 때 밝아진다 */
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibG); gl.drawElements(gl.LINES, nIdx, gl.UNSIGNED_SHORT, 0);
+    }
+    const pxl = W / LW;
+    gl.bindVertexArray(null);
+    gl.useProgram(PD.p); gl.uniform1f(PD.uT, T); gl.uniform1f(PD.uF, ST.run ? 90 : 30); gl.uniform1f(PD.uPx, pxl); gl.uniform1f(PD.uA, 0.32);
+    gl.drawArrays(gl.POINTS, 0, Math.round(260 * partK));
+    if(pUsed){
+        gl.useProgram(PP.p); gl.bindVertexArray(vaoP); gl.bindBuffer(gl.ARRAY_BUFFER, bufP);
+        if(dHi >= dLo){ gl.bufferSubData(gl.ARRAY_BUFFER, dLo * 48, PA, dLo * 12, (dHi - dLo + 1) * 12); dLo = MAXP; dHi = -1; }
+        gl.uniform1f(PP.uT, T); gl.uniform1f(PP.uPx, pxl); gl.drawArrays(gl.POINTS, 0, pUsed);
+    }
+    gl.bindVertexArray(null);
+    return true;
+}
+G.snapshot = function(x2){
+    if(!G.bg || !x2) return false;
+    try{ if(!render(lastNow || performance.now(), true)) return false; x2.drawImage(cv, 0, 0, x2.canvas.width, x2.canvas.height); return true; }catch(_){ return false; }
+};
+G.lose = function(){ try{ const e = gl.getExtension('WEBGL_lose_context'); if(e){ e.loseContext(); return true; } }catch(_){} return false; };
+G.mem = () => Math.round((W * H * 4 * 3 + PA.byteLength + GD.byteLength + SHQ.byteLength + nIdx * 2) / 1048576 * 10) / 10;
+G.stat = () => ({ok: G.ok, on: G.on, bg: G.bg, lost: G.lost, why: G.why, force: !!B.force, w: W, h: H, mb: G.mem(), parts: pUsed, frames: nFrames, renderer: RND, tier: tierNo(), grid: !!cfg().grid});
+/* 시험용 — 이 프레임 GL 버퍼 평균 휘도(0..255). render 직후 같은 작업 안에서 읽는다 */
+G.lum = function(){
+    if(!G.bg) return null;
+    render(lastNow || performance.now(), true);
+    const px = new Uint8Array(W * H * 4);
+    gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let s = 0, n = 0;
+    for(let i = 0; i < px.length; i += 4 * 7){ s += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; n++; }
+    return s / n;
+};
+G.fit();
+
+/* ── 비행감 — 고속 잔상 3프레임(표시 전용, 내 기체만). szDrawShip 이 기체를 그리기 직전에 부른다 ── */
+const GH_ = new Float32Array(9); let ghN = 0, ghI = 0;
+M.ghost = function(px, py, alpha, livery){
+    const v = ok(() => szPlayerVel, null);
+    const sp = v ? Math.hypot(v.x, v.y) : 0;
+    if(sp > 380 && ghN){
+        const art = ok(() => szShipArt(livery), null);
+        if(art && art.width){
+            const fw = art.width / 5, k = Math.min(1, (sp - 380) / 420);
+            for(let j = 1; j <= ghN; j++){
+                const o = ((ghI - j + 3) % 3) * 3, gx = GH_[o], gy = GH_[o + 1], bk = GH_[o + 2];
+                const fi = Math.max(0, Math.min(4, Math.round((bk / 0.34 + 1) * 2)));
+                ctx.save(); ctx.translate(gx, gy); ctx.rotate(bk * 0.5); ctx.scale(1 - Math.abs(bk) * 0.26, 1);
+                ctx.globalAlpha = alpha * k * (j === 1 ? 0.22 : j === 2 ? 0.12 : 0.06);
+                const Wd = SZ_SHIP.fw * (1 - Math.abs(bk) * 0.05) / (1 - Math.abs(bk) * 0.26);
+                ctx.drawImage(art, fi * fw, 0, fw, art.height, -Wd / 2, SZ_SHIP.y0, Wd, SZ_SHIP.fh);
+                ctx.restore();
+            }
+            ctx.globalAlpha = 1;
+        }
+    }
+    const o = ghI * 3; GH_[o] = px; GH_[o + 1] = py; GH_[o + 2] = ok(() => szBank, 0); ghI = (ghI + 1) % 3; if(ghN < 3) ghN++;
+};
+M.okB = true;
+})();
 /*</sz:mod:mp8b>*/
 SZMP8.ok = true;
 })();
