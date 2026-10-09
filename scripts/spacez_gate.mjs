@@ -490,7 +490,7 @@ EXT_CMDS.hepshots = {
     all: false,
     run: async (base) => {
         const dir = path.join(os.tmpdir(), 'spacez_hep'); fs.mkdirSync(dir, { recursive: true });
-        const PTS = [[0, 0.45], [19, 0.3], [20, 0.3], [20, 0.556], [20, 0.6], [21, 0.45], [21, 0.47], [22, 0.38], [22, 0.40], [23, 0.43], [27, 0.505], [27, 0.55], [29, 0.6], [29, 0.885]];
+        const PTS = [[0, 0.45], [19, 0.3], [20, 0.3], [20, 0.53], [20, 0.556], [21, 0.45], [21, 0.47], [22, 0.38], [22, 0.40], [23, 0.43], [27, 0.505], [27, 0.55], [29, 0.6], [29, 0.885]];
         const out = { shots: [] };
         await withEdge({ w: 412, h: 915, dsf: 2, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko'), 1800);
@@ -503,7 +503,7 @@ EXT_CMDS.hepshots = {
                 await e.shot(fn);
                 out.shots.push({ z, f, fn, gw: await e.ev('window.SZHEP ? SZHEP.gw.h : -1') });
             }
-            out.seen = await e.ev('window.SZHEP ? SZHEP.seen() : []');
+            out.seen = await e.ev('window.SZHEP ? SZHEP.seen() : []'); out.emp = await e.ev('window.SZHEP ? SZHEP.empUntil : null');
             out.err = e.errors().exc.slice(0, 5);
         });
         return out;

@@ -15101,7 +15101,9 @@ function _szBeamBtn(on){
     szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(gb) gb.classList.toggle('active', on); });
 }
 function szBeamOn(latch){
-    if(window.SZMP1 && SZMP1.lock('beam')) return false;   /* MP1 A6 — BEAM 은 2판부터(1판엔 버튼·보급이 없다) */
+    if(window.SZMP1 && SZMP1.lock('beam')) return false;
+    /* 2026-10-09 — 마그네타 감마선에 맞으면 4초 전자장비 교란(sz:mod:hep): BEAM 이 안 켜진다 */
+    if(window.SZHEP && SZHEP.empUntil > elapsedMs){ szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(!gb) return; gb.classList.remove('sz-nope'); void gb.offsetWidth; gb.classList.add('sz-nope'); }); return false; }   /* MP1 A6 — BEAM 은 2판부터(1판엔 버튼·보급이 없다) */
     if(!_gravTryActivate()){
         /* 게이지 부족 — 버튼이 짧게 '아직' 흔들림 대신 테두리 깜빡 (화면은 흔들지 않는다) */
         szDomQueue(() => { const gb = document.getElementById('gravBtn'); if(!gb) return; gb.classList.remove('sz-nope'); void gb.offsetWidth; gb.classList.add('sz-nope'); });
@@ -15335,6 +15337,7 @@ function inventoryUseSlot(idx){
     if(!item) return;
     /* MINI 는 동시 2 기까지 · 반중력파·이온 충격파는 이미 켜져 있으면 — 사용 거부 (슬롯 그대로, 칸만 깜빡) */
     if(!szItemCanUse(item)){ szSlotNope(idx); return; }
+    if(window.SZHEP && SZHEP.empUntil > elapsedMs){ szSlotNope(idx); return; }   /* 2026-10-09 — 감마선 전자장비 교란 중 */
     if(item === ITEM.WIPE) triggerWipe();
     else if(item === ITEM.MINI) triggerMiniShip();
     else if(item === ITEM.SHIELD) triggerShieldBubble();
@@ -29419,8 +29422,99 @@ SZE.on('goCard', function(ov){
     d.innerHTML = '<summary>' + esc(UI[L][0]) + ' ' + S.size + '/' + ORDER.length + (runNew.length ? ' · +' + runNew.length : '') + '</summary><ul>' + li + '</ul>';
     host.parentNode.insertBefore(d, host);
 });
+/* ── 2단계: 마그네타 감마선 섬광 = 실제 위험(치명 아님) ──
+   존 20 zt 0.55 에 오른쪽 위 화면 밖(소스)에서 감마선 전면이 지나간다. 그 순간 기체가 '그림자' 밖이면 4초 전자장비 교란
+   (BEAM·아이템 먹통 — 실제 우주선의 단일 사건 오류 SEU 를 게임으로). 그림자 = 소스와 기체 사이를 가리는 물체:
+   ① 3.5초 전에 나타나 천천히 떠내려오는 방열판 잔해(충돌 없음, 길이 84px — 그림자 띠를 미리 보여 준다) ② 운석(반지름 13).
+   방어막·무적 중엔 막힌다. 자리 = 시드 해시(_szU 'H'), 시각 = 논리 시간 — 수열 소비 0. 목숨은 줄지 않는다 */
+HEP.empUntil = -1;
+const MG = {z: 20, zt: 0.55, sx: CW + 30, sy: CH * 0.22, warn: 3.5, len: 84};
+const MG_T = {ko: 'γ선 섬광! 판 뒤 그림자로', en: 'γ-ray flare! Hide in the panel’s shadow', ja: 'γ線フレア！板の陰へ', zh: 'γ射线耀斑！躲进板的阴影', es: '¡Destello γ! A la sombra del panel', pt: 'Clarão γ! Para a sombra do painel'};
+const MG_E = {ko: '전자장비 교란', en: 'ELECTRONICS UPSET', ja: '電子機器エラー', zh: '电子设备受扰', es: 'FALLO ELECTRÓNICO', pt: 'FALHA ELETRÔNICA'};
+let mgRun = -1, mgHitRun = -1;
+/* 판 중심·방향 — 소스에서 오는 빛에 거의 수직으로 선다(그림자 띠가 넓다) */
+function mgPanel(s){
+    let u = 0.5; try{ u = _szU('H', 20, 1); }catch(_){}
+    const x = CW * (0.3 + 0.32 * u) - 10 * s, y = CH * 0.3 + 24 * s;
+    const lx = x - MG.sx, ly = y - MG.sy, ll = Math.sqrt(lx * lx + ly * ly) || 1;
+    return {x, y, nx: -ly / ll, ny: lx / ll, dx: lx / ll, dy: ly / ll};
+}
+/* 점 (px,py) 가 소스에서 볼 때 판·운석 뒤에 숨었는가 */
+function mgShadowed(px, py, s){
+    const SX = MG.sx, SY = MG.sy, vx = px - SX, vy = py - SY, L2 = vx * vx + vy * vy;
+    const occ = (ox, oy, r) => { const t = ((ox - SX) * vx + (oy - SY) * vy) / L2; if(t <= 0.02 || t >= 0.985) return false;
+        const qx = SX + vx * t - ox, qy = SY + vy * t - oy; return qx * qx + qy * qy < r * r; };
+    const P = mgPanel(s);
+    for(let k = -3; k <= 3; k++) if(occ(P.x + P.nx * k * MG.len / 7, P.y + P.ny * k * MG.len / 7, 9)) return true;
+    try{ for(let i = 0; i < bullets.length; i++){ const b = bullets[i]; if(occ(b.x, b.y, 13)) return true; } }catch(_){}
+    return false;
+}
+SZE.on('tick', function(dt, now){
+    let sa = 0; try{ sa = startedAt; }catch(_){}
+    let z = -1; try{ z = currentZoneIdx; }catch(_){}
+    if(z !== MG.z || !running) return;
+    const s = since(MG.z, MG.zt);
+    if(s >= 0 && s < 0.4 && mgHitRun !== sa){
+        mgHitRun = sa;
+        let safe = false;
+        try{ safe = szShipHidden || szSpectating || lives <= 0 || performance.now() < invincibleUntil || shieldBubbleActive(performance.now()) || mgShadowed(player.x, player.y, s); }catch(_){}
+        if(!safe){
+            HEP.empUntil = elapsedMs + 4000;
+            try{ if(gravityFieldActive) szBeamOff(); }catch(_){}
+            try{ for(let k = 0; k < 10; k++) _pushFxSpark(grazeSparks, player.x, player.y, k & 1 ? '#BFD8FF' : '#FFFFFF', 140, 0.4); }catch(_){}
+            try{ szPopup(MG_E[lang()] || MG_E.en, player.x, player.y - 34, '#BFD8FF', 13, 1.4); }catch(_){}
+            try{ window.SZ3 && SZ3.haptic && SZ3.haptic('hit'); }catch(_){}
+        } else {
+            try{ szRings.push({x: player.x, y: player.y, t: 0, dur: 0.4, r0: 10, r1: 40, rgb: '160,220,255', w: 2}); }catch(_){}
+        }
+    }
+});
+/* 판·그림자·경고 (배경 위·위험물 아래) */
+SZE.on('drawBg', function(now){
+    let z = -1; try{ z = currentZoneIdx; }catch(_){}
+    if(z !== MG.z || !running) return;
+    const s = since(MG.z, MG.zt);
+    if(s < -MG.warn || s > 2.5) return;
+    const P = mgPanel(s), a = Math.min(1, (s + MG.warn) / 0.6) * Math.min(1, (2.5 - s) / 0.6), L = MG.len / 2;
+    const ex = P.nx * L, ey = P.ny * L;
+    ctx.save();
+    /* 그림자 띠 — 소스 반대쪽으로 길게(섬광 전엔 옅은 예고, 섬광 순간엔 진하게) */
+    const sh = s < 0 ? 0.16 + 0.1 * (0.5 + 0.5 * Math.sin(now * 0.012)) : Math.max(0, 0.42 - s * 0.2);
+    ctx.globalAlpha = sh * a; ctx.fillStyle = 'rgb(0,4,14)';
+    ctx.beginPath(); ctx.moveTo(P.x + ex, P.y + ey); ctx.lineTo(P.x - ex, P.y - ey);
+    ctx.lineTo(P.x - ex + P.dx * 520, P.y - ey + P.dy * 520); ctx.lineTo(P.x + ex + P.dx * 520, P.y + ey + P.dy * 520); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 0.5 * a; ctx.strokeStyle = 'rgba(150,200,255,0.5)'; ctx.lineWidth = 1; ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.moveTo(P.x + ex, P.y + ey); ctx.lineTo(P.x + ex + P.dx * 520, P.y + ey + P.dy * 520);
+    ctx.moveTo(P.x - ex, P.y - ey); ctx.lineTo(P.x - ex + P.dx * 520, P.y - ey + P.dy * 520); ctx.stroke(); ctx.setLineDash([]);
+    /* 판 — 방열판 잔해(어두운 판 + 핀 줄 + 소스 쪽 모서리 빛) */
+    ctx.globalAlpha = a; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#2b3442'; ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(P.x + ex, P.y + ey); ctx.lineTo(P.x - ex, P.y - ey); ctx.stroke();
+    ctx.strokeStyle = '#5c6a80'; ctx.lineWidth = 1;
+    for(let k = -5; k <= 5; k++){ const cx = P.x + P.nx * k * L / 6, cy = P.y + P.ny * k * L / 6; ctx.beginPath(); ctx.moveTo(cx - P.dx * 4, cy - P.dy * 4); ctx.lineTo(cx + P.dx * 4, cy + P.dy * 4); ctx.stroke(); }
+    ctx.strokeStyle = s >= 0 && s < 0.6 ? '#FFFFFF' : 'rgba(170,210,255,0.8)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(P.x + ex - P.dx * 4.5, P.y + ey - P.dy * 4.5); ctx.lineTo(P.x - ex - P.dx * 4.5, P.y - ey - P.dy * 4.5); ctx.stroke();
+    /* 경고 — 소스 쪽 화면 가장자리 노란 삼각 + 짧은 글 (섬광 전만) */
+    if(s < 0){
+        const bl = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.012)), wx = CW - 18, wy = MG.sy;
+        try{ if(window.szWarn) szWarn('peek', wx, wy, now, Math.min(1, (s + MG.warn) / MG.warn), 'burst'); }catch(_){}
+        ctx.globalAlpha = 0.9 * bl * a; ctx.fillStyle = '#FFE08A'; ctx.font = '800 10px "Noto Sans KR",sans-serif'; ctx.textAlign = 'right';
+        ctx.fillText(MG_T[lang()] || MG_T.en, CW - 38, wy + 4);
+    }
+    ctx.restore(); ctx.globalAlpha = 1;
+});
+/* 교란 중 표시 — 기체 둘레 깜빡이는 푸른 지직임 + 남은 초 */
+SZE.on('drawShip', function(now){
+    if(!(HEP.empUntil > elapsedMs) || !running) return;
+    const left = (HEP.empUntil - elapsedMs) / 1000;
+    ctx.save();
+    ctx.globalAlpha = 0.5 + 0.4 * (Math.sin(now * 0.05) > 0 ? 1 : 0); ctx.strokeStyle = '#9FC8FF'; ctx.lineWidth = 1.2;
+    for(let k = 0; k < 3; k++){ const a0 = now * 0.01 + k * 2.1; ctx.beginPath(); ctx.arc(player.x, player.y, 18 + k * 3, a0, a0 + 0.9); ctx.stroke(); }
+    ctx.globalAlpha = 0.85; ctx.fillStyle = '#CFE2FF'; ctx.font = '700 8px Orbitron,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('EMP ' + left.toFixed(1), player.x, player.y + 32);
+    ctx.restore(); ctx.globalAlpha = 1;
+});
 /* 판 시작 — 이번 판 새 관측 목록 비우기 */
-SZE.on('runStart', function(){ runNew.length = 0; toast = null; HEP.gw.h = 0; });
+SZE.on('runStart', function(){ runNew.length = 0; toast = null; HEP.gw.h = 0; HEP.empUntil = -1; });
 })();
 /*</sz:mod:hep>*/
 </script>
