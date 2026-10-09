@@ -41,6 +41,7 @@ if(O.seed) args.push('--sc-seed', String(O.seed));
 if(O.json) args.push('--json', String(O.json));
 if(O.verbose) args.push('--verbose');
 console.log('[scenes] gate_locked.mjs ' + args.join(' '));
-const child = spawn(process.execPath, [path.join(here, 'gate_locked.mjs'), ...args], { stdio: 'inherit' });
+/* 장면 캡처는 수십 분 CPU 를 쓴다 — 기본은 게이트 잠금 슬롯 1개만(다른 게이트가 돌면 끝날 때까지 기다린다). GATE_SLOTS 로 덮어쓰기 */
+const child = spawn(process.execPath, [path.join(here, 'gate_locked.mjs'), ...args], { stdio: 'inherit', env: { ...process.env, GATE_SLOTS: process.env.GATE_SLOTS || '1' } });
 for(const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { try{ child.kill(sig); }catch(_){} });
 child.on('exit', (code) => process.exit(code == null ? 1 : code));
