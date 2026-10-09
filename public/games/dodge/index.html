@@ -692,7 +692,7 @@ body::after{
     background-image:radial-gradient(ellipse at 50% 30%,rgba(0,217,255,.08) 0%,transparent 60%);
 }
 .intro-overlay.on{display:flex}
-/* MECHAZILLA 발사 시퀀스 — 캔버스에 발사 장면 그릴 동안 배경 투명도 낮춤
+/* 발사탑 시퀀스 — 캔버스에 발사 장면 그릴 동안 배경 투명도 낮춤
    (위/아래 dim 만 살짝 깔아서 카운트다운 숫자 가독성 유지). */
 .intro-overlay.launch-mode{
     background:linear-gradient(180deg,
@@ -2990,8 +2990,8 @@ function pickIntroStory(){
 /* runIntroCountdown — 3·2·1·GO 카운트다운 + 랜덤 스토리. Promise resolve
    시 카운트다운 끝 → caller 가 실제 게임플레이 시작.
    각 숫자 0.9초, GO 0.6초 = 총 ~3.3초.
-   2026-05-09: MECHAZILLA 발사 시퀀스 추가 — 3·2·1·GO 동안 캔버스에
-   텍사스 보카치카 발사대에서 Starship 점화 → 상승 장면 렌더. */
+   2026-05-09: 발사탑 시퀀스 추가 — 3·2·1·GO 동안 캔버스에
+   해안 발사대에서 2단 우주선 점화 → 상승 장면 렌더. */
 let _introRunning = false;
 let introLaunchActive = false;
 let introLaunchStartedAt = 0;
@@ -3104,13 +3104,13 @@ function _szIntroCut(ov){
     }catch(_){}
 }
 
-/* MECHAZILLA 발사 장면 — idle loop 에서 호출. t = launch start 부터 경과 초.
+/* 발사탑 장면(szDrawLaunchTower) — idle loop 에서 호출. t = launch start 부터 경과 초.
    Phases (runIntroCountdown 타이밍과 동기):
      0.0 ~ 0.9s "3"  : 발사대에 거치, 빨간 깜빡 등, 차분
      0.9 ~ 1.8s "2"  : LOX vapor 분출 + 엔진 pre-glow
      1.8 ~ 2.7s "1"  : 점화 화염 키우기 + 흰 연기 측면 폭발 + 카메라 진동
      2.7 ~ 3.3s "GO!": 풀파워 + 로켓 빠르게 상승, 하늘 청→검정 전환 */
-function drawMechazillaLaunch(now){
+function szDrawLaunchTower(now){
     if(!introLaunchActive) return false;
     const t = (now - introLaunchStartedAt) / 1000;
 
@@ -3163,7 +3163,7 @@ function drawMechazillaLaunch(now){
     ctx.save();
     ctx.translate(sx, sy);
 
-    /* === 3. HORIZON / GROUND === (Boca Chica 해변 — 오션 + 모래) */
+    /* === 3. HORIZON / GROUND === (해안 발사장 — 오션 + 모래) */
     const groundY = CH * (0.78 + liftT * 1.6);     /* 상승 중 ground 화면 아래로 */
     if(groundY < CH){
         /* Ocean band */
@@ -3181,7 +3181,7 @@ function drawMechazillaLaunch(now){
         ctx.fillRect(0, groundY, CW, CH - groundY + 30);
     }
 
-    /* === 4. MECHAZILLA TOWER === */
+    /* === 4. LAUNCH TOWER === */
     const towerBaseX = CW * 0.42;          /* 화면 좌측 살짝 */
     const towerBaseY = groundY;
     const towerHeight = Math.min(CW, CH) * 0.55;
@@ -3224,7 +3224,7 @@ function drawMechazillaLaunch(now){
             ctx.moveTo(tx - towerHalfW, hsy); ctx.lineTo(tx + towerHalfW, hsy);
             ctx.stroke();
         }
-        /* CHOPSTICKS arms — 발사대 우측에서 우측으로 뻗어 로켓 catch */
+        /* 포획 팔(arms) — 발사대 우측에서 우측으로 뻗어 로켓 catch */
         const armY1 = tTop + towerHeight * 0.22;
         const armY2 = tTop + towerHeight * 0.40;
         ctx.strokeStyle = '#3a4250';
@@ -3253,8 +3253,8 @@ function drawMechazillaLaunch(now){
         ctx.restore();
     }
 
-    /* === 5. STARSHIP ROCKET === */
-    /* chopsticks 사이 거치 → liftT 상승. 우측으로 50px 오프셋. */
+    /* === 5. ROCKET === */
+    /* 포획 팔 사이 거치 → liftT 상승. 우측으로 50px 오프셋. */
     const rocketX = towerBaseX + towerHalfW + 30;
     const rocketBodyHeight = Math.min(CW, CH) * 0.34;
     const rocketWidth = 24;
@@ -3851,7 +3851,7 @@ window.SZAU = window.SZAU || {ctx: null, note(i){}, warn(){}, vo(id){}, duck(ms)
 /*</sz:mod:flags>*/
 
 /* ======================================================
-   ZONE SYSTEM — SpaceX terraforming journey
+   ZONE SYSTEM — 태양계 → 우주 끝 항해
    ====================================================== */
 /* Zone 시퀀스 v3 — 태양계 외곽 이후 우리 은하 끝까지 천문학적 순서로 확장.
    기존 11 zones (0~10) 중 9~10 번이 너무 러프 (Interstellar/Horsehead만)
@@ -20085,8 +20085,8 @@ function idleLoop(now){
     lastFrame=now;
     const idt = Math.min(0.05, Math.max(0, (now-(idleLoop._last||now))/1000));
     if(introLaunchActive){
-        /* MECHAZILLA 발사 시퀀스 — 카운트다운 동안 캔버스 점령 */
-        drawMechazillaLaunch(now);
+        /* 발사탑 시퀀스 — 카운트다운 동안 캔버스 점령 */
+        szDrawLaunchTower(now);
     } else if(szDeathFx){
         /* 게임오버 폭발 연출 — 마지막 판 화면 위에 파편·충격파를 그린다 */
         szDrawDeathFx(now, idt);
@@ -24558,7 +24558,7 @@ function drawGhosts(c){
             g.lt = undefined;   /* 부활하면 뱅크 추정을 새로 */
             continue;
         }
-        /* 같은 스타십 스프라이트 — 뱅크는 보간 좌표의 옆 속도, 반투명 + 이름표. 내 기체는 이 위에 불투명 */
+        /* 같은 기체 스프라이트 — 뱅크는 보간 좌표의 옆 속도, 반투명 + 이름표. 내 기체는 이 위에 불투명 */
         szPeerTrack(g, x, y, pn);
         szDrawPeerShip(x, y, g, livOf(p), 0.74, pn, m.n, col, big);
     }
