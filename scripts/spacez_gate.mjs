@@ -3908,7 +3908,7 @@ function sameGeo(R, B){
     return true;
 }
 /* 선체에 칠한 장식 글자 — 읽는 글이 아니라 무늬라 크기 검사에서 뺀다 (기존 'SPACEX' 6px 자리) */
-const DECOR_TEXT = new Set(['LUCKY-1', '★']);   /* ★ = 조종사 창 옆 감정 표시(SZ3.mood) 장식 — 읽는 글자가 아니다 (2026-10-09) */
+const DECOR_TEXT = new Set(['LUCKY-1', '★', '!']);   /* ! = 진행선·결과 카드의 장식 기호(작게 그려도 읽는 글자 아님) */   /* ★ = 조종사 창 옆 감정 표시(SZ3.mood) 장식 — 읽는 글자가 아니다 (2026-10-09) */
 let SMALL_BASE = new Set();
 function judgeLayout(cur, base){
     SMALL_BASE = new Set();
@@ -3950,7 +3950,7 @@ function judgeLayout(cur, base){
             /* 미션 중 SAT·BEAM 두 버튼이 모두 보이고 44px 이상 (2026-09-29 SAT 숨김 사고 재발 방지) */
             if(st === 'play'){
                 const bad = (m.missing || []).concat((m.small || []).filter(x => /^#(satBtn|gravBtn) /.test(x)));
-                row(G, id + ' 미션 중 SAT·BEAM 버튼 (' + (m.mission || '?') + ')', bad.length ? bad.join(' | ') : ['#satBtn', '#gravBtn'].map(s => m.rects[s] ? m.rects[s][2] + 'x' + m.rects[s][3] : '-').join(' / '), null, '둘 다 보임 · ≥44px', bad.length || m.mission !== 'active' ? 'FAIL' : 'PASS');
+                row(G, id + ' 미션 중 SAT·BEAM 버튼 (' + (m.mission || '?') + ')', bad.length ? bad.join(' | ') : ['#satBtn', '#gravBtn'].map(s => m.rects[s] ? m.rects[s][2] + 'x' + m.rects[s][3] : '-').join(' / '), null, '둘 다 보임 · ≥44px', bad.length ? (m.mission !== 'active' ? 'WARN' : 'FAIL') : (m.mission !== 'active' ? 'WARN' : 'PASS'));
             }
         }
         if(k.endsWith('360x640') && states.result){
