@@ -10980,37 +10980,14 @@ function szDrawCanyon(now){
         _szCwGrad = [ctx.createLinearGradient(0, 0, CW * 0.5, 0), ctx.createLinearGradient(CW, 0, CW * 0.5, 0)];
         for(const g of _szCwGrad){ g.addColorStop(0, '#0d0a0a'); g.addColorStop(0.55, '#2a1f19'); g.addColorStop(1, '#4a3526'); }
     }
-    for(let s = 0; s < 2; s++){
-        const side = s ? 1 : -1, xe = side < 0 ? -12 : CW + 12;
-        let first = null, lastY = 0, n = 0;
-        ctx.beginPath();
-        for(let i = 0; i < rows.length; i++){
-            const b = side < 0 ? rows[i].L : rows[i].R;
-            if(!alive(b) || b.y < -60 || b.y > CH + 60) continue;
-            const x = b.x + side * -9;      /* 돌 반지름만큼 통로 쪽으로 */
-            if(!first){ first = b; ctx.moveTo(xe, b.y + 12); ctx.lineTo(x, b.y + 12); }
-            ctx.lineTo(x, b.y); lastY = b.y; n++;
-        }
-        if(!first) continue;
-        ctx.lineTo(xe, lastY - 12);
-        ctx.closePath();
-        ctx.fillStyle = _szCwGrad[s];
-        ctx.globalAlpha = 0.6;   /* 2026-10-09 — 0.96 → 0.6: 벽 안 소행성들이 비쳐 보이게(판은 그림자 노릇만) */
-        ctx.fill();
-        /* 달아오른 테두리 — 넓고 옅게 + 좁고 밝게 (shadowBlur 대신). 저사양은 좁은 선만 */
-        ctx.globalCompositeOperation = 'lighter';
-        if(!lo){ ctx.strokeStyle = 'rgba(255,120,50,0.22)'; ctx.lineWidth = 9; ctx.stroke(); }
-        ctx.strokeStyle = 'rgba(255,170,90,0.55)'; ctx.lineWidth = 2.2; ctx.stroke();
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 1;
-    }
+    /* 2026-10-10 운영자: '소행성을 감싼 이상한 선 때문에 몰입이 깨진다 — 소행성만 몰려 있게'. 벽 판(어두운 다각형)·달아오른 테두리 선을 없애고 돌만 그린다 */
     /* 가장자리 바위 — 운석 스프라이트를 돌려 붙인다(밀린 돌은 금빛). 2026-09-29 실사 아틀라스 우선 */
     const spr = szReady('meteor_a'), rk = !!szArt('rocks_m');
     for(let i = 0; i < bullets.length; i++){
         const b = bullets[i];
         if(b.zk !== 'cw' || b.y < -30 || b.y > CH + 30) continue;
         if(b.push > 0){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.gold, b.x, b.y, 22, Math.min(1, b.push * 2)); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
-        if(!b.edge && !b.outer && !(b.push > 0) && lo) continue;   /* 저사양 — 예전처럼 가장자리·밀린 돌만 */
+        if(lo && !b.edge && !b.outer && !(b.push > 0) && ((b._mv | 0) & 1)) continue;   /* 저사양 — 안쪽 채움 돌은 절반만(판이 없으니 너무 비지 않게) */
         if(rk){
             szRk('m', (b._mv | 0) % 6, b._mr + now * 0.0004 * (b.side), b.x, b.y, (HIT_RADIUS + 6) * (b._sc || 1));
         } else if(spr && !lo){
