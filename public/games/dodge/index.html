@@ -10389,6 +10389,18 @@ function szCanyonRow(e, z, tAbs){
     /* 채움 돌 — 이웃 줄 가장자리(또는 화면 끝)까지 18px 간격. 6px 이하 차이는 이미 막혀 있다 */
     if(xl - tl > 6){ let x = xl; while(x - 18 > tl){ x -= 18; szCwRock(x, y, -1, false, k); } szCwRock(tl, y, -1, false, k); }
     if(tr - xr > 6){ let x = xr; while(x + 18 < tr){ x += 18; szCwRock(x, y, 1, false, k); } szCwRock(tr, y, 1, false, k); }
+    /* 2026-10-09 운영자: '지나가는 길 빼고는 전부 소행성이 빽빽이(지금보다 조금 성기게)'. 채움 돌 너머 화면 끝까지 평균 27px 간격 바깥 돌.
+       자리·크기는 시드 해시(_szU 'W' 흐름 — 공용 수열 rand 를 쓰지 않는다)로 흔들고, 통로 쪽 10px 안으로는 들어오지 않는다 */
+    let jn = 0;
+    const outer = (x0, x1, side) => {
+        for(let x = x0 + side * 24; side < 0 ? x > x1 : x < x1; x += side * 27){
+            const u = _szU('W', k, jn++), v = _szU('W', k, jn++);
+            const b = szCwRock(Math.max(-6, Math.min(CW + 6, x + (u - 0.5) * 12)), y + (v - 0.5) * 8, side, false, k);
+            b.outer = true; b._sc = 0.62 + 0.55 * _szU('W', k, jn++);
+        }
+    };
+    outer(Math.min(xl, tl), -14, -1);
+    outer(Math.max(xr, tr), CW + 14, 1);
     W.rows.push(row);
 }
 
@@ -10545,6 +10557,9 @@ function szZoneForce(b, dt){
             if(gravityFieldActive && _inGravCone(b.x, b.y)){
                 b.vx += b.side * CLUSTER_GRAV_ACCEL * dt;
                 if(b.vx * b.side > 420) b.vx = 420 * b.side;
+                /* 2026-10-09 운영자 — 끌어당긴 돌은 화면 아래로 가속이 붙어 떨어진다(원래 속도의 4배까지) */
+                b.vy += CLUSTER_GRAV_ACCEL * 0.75 * dt;
+                if(b.vy > SZ_CW.v * 4) b.vy = SZ_CW.v * 4;
                 b.push = 0.45;
             } else if(b.push > 0) b.push -= dt;
         }
@@ -10597,7 +10612,8 @@ function szZoneUpdate(wDt, dt, now){
         SZ_VX.x = B.grs.x; SZ_VX.y = B.grs.y;
         const off = B.y - B.r > CH || B.x + B.r < 0 || B.x - B.r > CW;
         SZ_VX.k = off ? 0 : (zt < 0.8 ? 1 : Math.max(0, 1 - (zt - 0.8) / 0.15));
-        if(SZ_VX.k > 0) F.fz = 4;
+        /* 2026-10-09 운영자 — 대적점 소용돌이(나선 그림 + 운석 접선가속)는 없앤다. 대적점 좌표만 계속 갱신(다른 곳이 읽을 수 있게) */
+        SZ_VX.k = 0;
     }
     else if(z === 7){ F.fz = 7; F.windPrev = F.wind; F.wind = szWindAt(e); }
     else if(z === 13){ const t = e - ZONES[13].s * 1000; if(t >= SZ_BR.t0 && t < SZ_BR.t1) F.fz = 13; }
@@ -10912,8 +10928,8 @@ function szZoneDraw(now){
     const e = elapsedMs;
     const z = currentZoneIdx;
     ctx.save();
-    if(z === 4 && e >= 85500) szDrawVortex(now);
-    else if(z === 7) szDrawWind(now, e);
+    /* 2026-10-09 — 목성 소용돌이 그림(szDrawVortex) 없앰(운영자) */
+    if(z === 7) szDrawWind(now, e);
     else if(z === 13) szDrawBridge(now, e);
     else if(z === 16) szDrawRadial(now);
     else if(z === 15) szDrawBetel(now, e);
@@ -10953,7 +10969,7 @@ function szDrawCanyon(now){
         ctx.lineTo(xe, lastY - 12);
         ctx.closePath();
         ctx.fillStyle = _szCwGrad[s];
-        ctx.globalAlpha = 0.96;
+        ctx.globalAlpha = 0.6;   /* 2026-10-09 — 0.96 → 0.6: 벽 안 소행성들이 비쳐 보이게(판은 그림자 노릇만) */
         ctx.fill();
         /* 달아오른 테두리 — 넓고 옅게 + 좁고 밝게 (shadowBlur 대신). 저사양은 좁은 선만 */
         ctx.globalCompositeOperation = 'lighter';
@@ -10968,9 +10984,9 @@ function szDrawCanyon(now){
         const b = bullets[i];
         if(b.zk !== 'cw' || b.y < -30 || b.y > CH + 30) continue;
         if(b.push > 0){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.gold, b.x, b.y, 22, Math.min(1, b.push * 2)); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
-        if(!b.edge && !(b.push > 0)) continue;
+        if(!b.edge && !b.outer && !(b.push > 0) && lo) continue;   /* 저사양 — 예전처럼 가장자리·밀린 돌만 */
         if(rk){
-            szRk('m', (b._mv | 0) % 6, b._mr + now * 0.0004 * (b.side), b.x, b.y, HIT_RADIUS + 6);
+            szRk('m', (b._mv | 0) % 6, b._mr + now * 0.0004 * (b.side), b.x, b.y, (HIT_RADIUS + 6) * (b._sc || 1));
         } else if(spr && !lo){
             const im = SZ_SPRITES[SZ_METEOR_KEYS[b._mv | 0]];
             ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b._mr + now * 0.0004 * (b.side));
