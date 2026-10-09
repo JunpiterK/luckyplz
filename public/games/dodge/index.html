@@ -10349,7 +10349,9 @@ function szShiftKind(ev, kind, minT){
 }
 /* 운석 스폰 난이도 조정 — 논리시간만. 보스 ×1.35 · 숨 고르기 ×1.4 · 대감광 ×1.25 · 바람 조준 −0.08 · 달 속도 ×0.9 · 적색편이 ×0.95 */
 /* 난이도 맞춤 값 — 봇 하네스 A/B 로 도달률 분포(184·343·475s)를 개편 전 ±5%p 안에 둔다 */
-const SZ_TUNE = {saturn: 0.8, windAim: 0, wind: 0.88, iceV: 140, outer: 0.77, bh: 1.35};
+const SZ_TUNE = {saturn: 0.8, windAim: 0, wind: 0.88, iceV: 140, outer: 0.77, bh: 1.35, ease: 1.22, hellA: 405, hellB: 475};
+/* 2026-10-10 운영자: '전체는 조금 무난하게, 7분대(말머리·창조의 기둥 405~475s)는 극악 그대로 — 대신 헤쳐 나갈 방법을'.
+   ease = 그 구간 밖 운석 간격 ×1.22(약 18% 덜, ibot 420s 74.7→목표 80%대). 7분대 대비: 존 16~18 보급을 방어 꾸러미로 확정(szDepotItem 표), 6:50 경고 */
 function szDiffMod(d, eMs){
     if(!szZS().on) return d;
     const s = eMs / 1000;
@@ -10373,6 +10375,7 @@ function szDiffMod(d, eMs){
     else if(s >= 565 && s < 620) d.spawnInterval = Math.round(d.spawnInterval * 1.4);      /* 21 은하간 — 숨 고르기 */
     else if(s >= 920 && s < 985) d.spawnInterval = Math.round(d.spawnInterval * 1.4);      /* 26 부츠 초공동 — 정적 */
     else if(s >= 985 && s < 1055) d.bulletSpeed = Math.round(d.bulletSpeed * 0.95);         /* 27 적색편이 — 위쪽 +25% 대신 전체 −5% */
+    if(s < SZ_TUNE.hellA || s >= SZ_TUNE.hellB) d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.ease);   /* 2026-10-10 — 7분대 밖은 조금 무난하게 */
     return szRhyDiff(d, eMs);   /* P8b — 몰아치기·숨 고르기 리듬 (fun 펜스) */
 }
 /* 스폰 가장자리 구간표 — 기본 위 40·오른쪽 22·왼쪽 22·아래 16. 천왕성(98° 기울기)은 좌37·우37·위16·아래10.
@@ -14714,9 +14717,9 @@ const ZONE_DEPOT_MAP = [
     {zoneIdx:13, items:[I_.SHIELD, I_.HEART]},                  // ✨ 견우직녀 — 2026-10-08 MINI→HEART (보급 영구 차단 규칙 보정)
     {zoneIdx:14, items:[I_.MINI,   [I_.HEART,  I_.ANTIGRAV]]},  // ✨ 좀생이별 — 2026-10-08 SHIELD→HEART (보급 영구 차단 규칙 보정)
     {zoneIdx:15, items:[I_.HEART,  I_.WIPE ]},                  // 🟥 베텔게우스
-    {zoneIdx:16, items:[I_.SHIELD, [I_.HEART,  I_.ION]]},       // 🌸 오리온 성운
-    {zoneIdx:17, items:[I_.SHIELD, [I_.WIPE,   I_.ANTIGRAV]]},  // 🌠 말머리 성운
-    {zoneIdx:18, items:[I_.MINI,   [I_.SHIELD, I_.ION]]},       // 🌫 창조의 기둥
+    {zoneIdx:16, items:[I_.SHIELD, I_.WIPE ]},                  // 🌸 오리온 성운 — 2026-10-10 7분대 대비 꾸러미(방어막·폭탄 확정)
+    {zoneIdx:17, items:[I_.SHIELD, I_.HEART]},                  // 🌠 말머리 성운 — 2026-10-10 7분대: 방어막·하트 확정
+    {zoneIdx:18, items:[I_.SHIELD, I_.ION ]},                   // 🌫 창조의 기둥 — 2026-10-10 7분대: 방어막·이온 충격파 확정
     {zoneIdx:19, items:[I_.HEART,  I_.SHIELD]},                 // ⚫ 궁수자리 A*
     /* 20~27 후반부라 HEART + SHIELD 풍족하게. WIPE 는 큰 폭격 시점. 28~30 은 2026-08-21 보급 누락 보정분 */
     {zoneIdx:20, items:[I_.HEART,  [I_.SHIELD, I_.ANTIGRAV]]},
@@ -15172,9 +15175,9 @@ function updateBlackHolePull(dt){
     /* bullets pull (strong) — 메테오가 휘어 들어가는 시각. event horizon 닿으면 제거. 마지막 10s ×1.4 (P4 보스④) */
     const _bhK = szBhPullMul();
     /* 2026-10-09 운영자 재요청 — '블랙홀 근처에 가면 자꾸 빨려 들어가야'. 가속(힘)은 입력 지연처럼 느껴져 뺐었으니
-       '흐름(속도 장)'으로 — 손가락 조작은 그대로 먹고, 그 위에 지평선 쪽으로 미끄러진다. 200px 26px/s · 100px 52 · 60px 87 · 상한 140 */
+       '흐름(속도 장)'으로 — 손가락 조작은 그대로 먹고, 그 위에 지평선 쪽으로 미끄러진다. 200px 13px/s · 100px 26 · 60px 43 · 상한 70 */
     if(phd > 1 && phd < BH_PULL_RADIUS && lives > 0 && !szShipHidden && !szSpectating){
-        const v = Math.min(140, 5200 / phd) * _bhK;
+        const v = Math.min(70, 2600 / phd) * _bhK;   /* 2026-10-10 — 절반으로(5200/d·상한 140 → 2600/d·70): ibot 사인 1위가 지평선(45%)이라 체감은 남기고 위험은 줄인다 */
         player.x -= phx / phd * v * dt; player.y -= phy / phd * v * dt;
     }
     let w = 0;
@@ -29416,6 +29419,20 @@ SZE.on('drawHud', function(now){
     ctx.restore();
 });
 
+/* ── 7분대 예고 (2026-10-10) — 6:48~6:56 위쪽 가운데 한 줄: 극한 구간이 온다, 방어 꾸러미를 지금 쓸 준비 ── */
+const HELL_T = {ko: '⚠ 7분대 극한 구간 — 방어막·폭탄은 지금을 위해!', en: '⚠ The 7-minute gauntlet — save shields and bombs for this!', ja: '⚠ 7分台の極限区間 — シールドとボムはここで！',
+    zh: '⚠ 7 分钟极限区段——护盾和炸弹留到现在！', es: '⚠ El tramo infernal del minuto 7: ¡escudos y bombas para ahora!', pt: '⚠ O trecho infernal do minuto 7: escudos e bombas para agora!'};
+SZE.on('drawHud', function(now){
+    let e = 0; try{ e = elapsedMs; }catch(_){ return; }
+    if(e < 408000 || e > 416000 || !running) return;
+    const a = Math.min(1, (e - 408000) / 400) * Math.min(1, (416000 - e) / 600), bl = 0.75 + 0.25 * Math.sin(now * 0.01);
+    ctx.save();
+    ctx.globalAlpha = 0.5 * a; ctx.fillStyle = 'rgba(40,6,10,1)';
+    if(typeof drawRR === 'function'){ drawRR(14, 96, CW - 28, 24, 8); ctx.fill(); }
+    ctx.globalAlpha = a * bl; ctx.fillStyle = '#FFD36E'; ctx.textAlign = 'center'; ctx.font = '800 ' + fz(11) + 'px "Noto Sans KR",sans-serif';
+    ctx.fillText(HELL_T[lang()] || HELL_T.en, CW / 2, 112, CW - 40);
+    ctx.restore();
+});
 /* ── 결과 카드 — 접는 목록(이번 판에 새로 본 것은 NEW) ── */
 SZE.on('goCard', function(ov){
     if(!ov) return;
