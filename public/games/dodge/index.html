@@ -4245,6 +4245,8 @@ function drawStars(layerFrom, layerTo){
     let LZ=null; try{ if(zIdx===19 && blackHole.r>4) LZ=blackHole; }catch(_){}   /* blackHole 은 아래에서 선언(시작 화면 그리기 때는 아직 없다) */
     const thE=LZ ? LZ.r*3.2 : 0, thE2=thE*thE*4;
     ctx.save();
+    /* 2026-10-09 — 중력파(sz:mod:hep, 존 22): 하늘 전체가 + 편광 사중극으로 늘었다 줄었다 — x 는 (1+h·cosφ), y 는 (1−h·cosφ) */
+    { const G=window.SZHEP && SZHEP.gw; if(G && G.h>0.0005){ const c=G.h*Math.cos(G.ph); ctx.translate(CW/2,CH/2); ctx.scale(1+c,1-c); ctx.translate(-CW/2,-CH/2); } }
     ctx.lineCap='round';
     for(let i=0;i<stars.length;i++){
         const s=stars[i];
@@ -29016,6 +29018,423 @@ SZMP4.ok = true;
      MP5 — 숨 고르기 보상 무대 (SZE rhythm/graze 구독, 새 무작위는 szZoneRng(seed,'mp5',z))
      블록마다 IIFE · 센티널 SZMP5.ok — 게이트(G10)가 8개를 확인한다
      ───────────────────────────────────────────────────────────── -->
+<script>
+/*<sz:mod:hep>*/
+/* 고에너지 천체 현상 + 관측 기록(우주 도감) — 2026-10-09 운영자(물리학 박사):
+   '알려진 매우 큰 에너지를 방출하는 현상을 적극 배치 · 사진 대신 직접 그럴듯하고 신비하게 · 물리 호기심을 불러일으키게'.
+   전부 그림·소리·기록만 — 판정·스폰·시드 수열(rand/randH/randD)을 건드리지 않는다. 시각은 논리 시간(존 진행 zt)의 함수.
+     0 지구      캐링턴급 지자기 폭풍 오로라(산소 557.7 nm 초록 · 630 nm 빨강)
+     19 궁수 A*  사건의 지평선 곁을 도는 플레어 열점(GRAVITY 2018 · 상대론적 빔으로 다가오는 쪽이 밝다) · 렌즈 · S2
+     20 은하 끝  페르미 거품(감마선) + 마그네타 거대 섬광(SGR 1806-20)
+     21 은하간   빠른 전파 폭발 FRB — 분산 지연 Δt ∝ ν⁻² 의 '폭포' 곡선
+     22 안드로메다 중력파 GW150914 — 배경 별이 + 편광 사중극으로 늘었다 줄었다(처프 → 합체 → 링다운). 빛은 나오지 않는다
+     23 필라멘트 킬로노바 GW170817 — 파랑에서 빨강으로 식으며 무거운 원소(r-과정)
+     27 관측 끝  GRB 221009A(BOAT) — 점광원 섬광 + 먼지 산란 X선 고리 메아리
+     29 블랙홀 시대 호킹 증발 — 가벼워질수록 뜨거워지다 마지막 섬광
+   기록은 localStorage szx_codex(처음 본 현상 id 목록), 결과 카드에 접는 목록 */
+(function(){
+'use strict';
+const HEP = window.SZHEP = {gw: {h: 0, ph: 0}};
+const LSG = (k) => { try{ return localStorage.getItem(k); }catch(_){ return null; } };
+const LSS = (k, v) => { try{ localStorage.setItem(k, v); }catch(_){} };
+const lang = () => { let l = 'en'; try{ l = _szLang() || 'en'; }catch(_){} return ['ko', 'en', 'ja', 'zh', 'es', 'pt'].indexOf(l) >= 0 ? l : 'en'; };
+
+/* ── 관측 기록 — [제목, 사실 한 줄] × 6개 언어. 숫자는 출처가 있는 값만 ── */
+const CX = {
+  carrington: {z: 0, ko: ['캐링턴급 지자기 폭풍', '1859년 태양 폭발 뒤 전신선에 불꽃이 튀고 카리브해에서도 오로라가 보였다. 초록(557.7 nm)·빨강(630 nm)은 산소 원자의 금지선.'],
+    en: ['Carrington-class storm', 'After the 1859 solar outburst telegraph lines sparked and aurorae reached the Caribbean. Green 557.7 nm and red 630 nm are forbidden lines of atomic oxygen.'],
+    ja: ['キャリントン級磁気嵐', '1859年の太陽爆発で電信線から火花が散り、カリブ海でもオーロラが見えた。緑(557.7 nm)と赤(630 nm)は酸素原子の禁制線。'],
+    zh: ['卡林顿级磁暴', '1859 年太阳爆发后电报线冒出火花，加勒比海也能看到极光。绿 557.7 nm、红 630 nm 是氧原子的禁戒谱线。'],
+    es: ['Tormenta tipo Carrington', 'Tras el estallido solar de 1859 saltaron chispas en el telégrafo y hubo auroras en el Caribe. El verde 557,7 nm y el rojo 630 nm son líneas prohibidas del oxígeno.'],
+    pt: ['Tempestade tipo Carrington', 'Após a explosão solar de 1859 o telégrafo soltou faíscas e houve auroras no Caribe. O verde 557,7 nm e o vermelho 630 nm são linhas proibidas do oxigênio.']},
+  shock: {z: 9, ko: ['종단 충격파', '보이저 1호는 2004년 94 AU에서 태양풍이 음속 아래로 떨어지는 경계를, 2012년 121 AU에서 태양권계면을 넘었다.'],
+    en: ['Termination shock', 'Voyager 1 crossed the point where the solar wind drops below sound speed at 94 AU (2004) and left the heliopause at 121 AU (2012).'],
+    ja: ['末端衝撃波', 'ボイジャー1号は2004年に94 AUで太陽風が音速を下回る境界を、2012年に121 AUでヘリオポーズを越えた。'],
+    zh: ['终端激波', '旅行者 1 号 2004 年在 94 AU 穿过太阳风降到声速以下的边界，2012 年在 121 AU 越过日球层顶。'],
+    es: ['Choque de terminación', 'La Voyager 1 cruzó en 2004, a 94 UA, el punto donde el viento solar cae bajo la velocidad del sonido, y en 2012, a 121 UA, la heliopausa.'],
+    pt: ['Choque de terminação', 'A Voyager 1 cruzou em 2004, a 94 UA, o ponto onde o vento solar cai abaixo da velocidade do som, e em 2012, a 121 UA, a heliopausa.']},
+  betel: {z: 15, ko: ['베텔게우스 대감광', '2019~20년 밝기가 약 1/3로 떨어졌다. 원인은 표면에서 뿜어낸 먼지 구름. 초신성이 되면 낮에도 보일 만큼 밝아진다.'],
+    en: ['Great Dimming of Betelgeuse', 'In 2019–20 it faded to about a third of its brightness—a dust cloud it had puffed out. As a supernova it will be visible in daylight.'],
+    ja: ['ベテルギウスの大減光', '2019〜20年に明るさが約3分の1に。原因は表面から吹き出したちりの雲。超新星になれば昼間でも見える。'],
+    zh: ['参宿四大变暗', '2019–20 年亮度降到约三分之一，原因是它喷出的尘埃云。成为超新星时白天也能看见。'],
+    es: ['Gran oscurecimiento de Betelgeuse', 'En 2019–20 bajó a un tercio de su brillo por una nube de polvo que expulsó. Como supernova se verá de día.'],
+    pt: ['Grande escurecimento de Betelgeuse', 'Em 2019–20 caiu para um terço do brilho por uma nuvem de poeira que expeliu. Como supernova será vista de dia.']},
+  hotspot: {z: 19, ko: ['궁수자리 A*의 플레어 열점', 'GRAVITY 관측(2018): 사건의 지평선 근처를 빛의 약 30% 속도로 45분마다 도는 뜨거운 점. 다가오는 쪽이 더 밝은 건 상대론적 빔 효과.'],
+    en: ['Sgr A* flare hot spot', 'GRAVITY (2018) caught a hot spot circling near the horizon at ~30% of light speed every 45 min. The approaching side looks brighter: relativistic beaming.'],
+    ja: ['いて座A*のフレア・ホットスポット', 'GRAVITY(2018)：事象の地平線の近くを光速の約30%で45分ごとに回る高温の点。近づく側が明るいのは相対論的ビーミング。'],
+    zh: ['人马座 A* 耀斑热点', 'GRAVITY（2018）：以约 30% 光速、每 45 分钟绕视界附近一圈的热点。靠近我们的一侧更亮——相对论性集束。'],
+    es: ['Punto caliente de Sgr A*', 'GRAVITY (2018) vio un punto caliente girando junto al horizonte al ~30 % de la luz cada 45 min. El lado que se acerca brilla más: haz relativista.'],
+    pt: ['Ponto quente de Sgr A*', 'GRAVITY (2018) viu um ponto quente girando junto ao horizonte a ~30 % da luz a cada 45 min. O lado que se aproxima brilha mais: feixe relativístico.']},
+  lens: {z: 19, ko: ['중력 렌즈', '질량이 시공간을 휘어 뒤쪽 별빛이 고리처럼 휜다. 점질량 렌즈는 상을 둘 만든다: θ± = (β ± √(β²+4θE²))/2.'],
+    en: ['Gravitational lensing', 'Mass bends spacetime, so starlight behind it curls into arcs. A point lens makes two images: θ± = (β ± √(β²+4θE²))/2.'],
+    ja: ['重力レンズ', '質量が時空をゆがめ、背後の星の光が弧を描く。点質量レンズは像を2つ作る：θ± = (β ± √(β²+4θE²))/2。'],
+    zh: ['引力透镜', '质量弯曲时空，背后的星光弯成弧。点质量透镜成两个像：θ± = (β ± √(β²+4θE²))/2。'],
+    es: ['Lente gravitacional', 'La masa curva el espacio-tiempo y la luz de detrás se vuelve arco. Una lente puntual da dos imágenes: θ± = (β ± √(β²+4θE²))/2.'],
+    pt: ['Lente gravitacional', 'A massa curva o espaço-tempo e a luz de trás vira arco. Uma lente pontual dá duas imagens: θ± = (β ± √(β²+4θE²))/2.']},
+  s2: {z: 19, ko: ['S2 별', '블랙홀 곁을 초속 7,650 km(광속의 2.5%)로 스치며 중력 적색편이를 보여 줬다(2018) — 일반상대론 검증.'],
+    en: ['Star S2', 'It swings past the black hole at 7,650 km/s (2.5% of light speed); in 2018 its gravitational redshift confirmed general relativity.'],
+    ja: ['S2星', 'ブラックホールの近くを秒速7,650 km(光速の2.5%)で通過し、2018年に重力赤方偏移を示した——一般相対論の検証。'],
+    zh: ['S2 恒星', '以每秒 7,650 公里（光速 2.5%）掠过黑洞，2018 年测到引力红移——验证广义相对论。'],
+    es: ['Estrella S2', 'Pasa junto al agujero negro a 7.650 km/s (2,5 % de la luz); en 2018 su corrimiento al rojo gravitacional confirmó la relatividad general.'],
+    pt: ['Estrela S2', 'Passa pelo buraco negro a 7.650 km/s (2,5 % da luz); em 2018 seu desvio gravitacional para o vermelho confirmou a relatividade geral.']},
+  fermi: {z: 20, ko: ['페르미 거품', '은하 중심 위아래로 각각 2만 5천 광년 뻗은 감마선 거품(2010 발견). 수백만 년 전 중심 블랙홀의 분출 흔적으로 본다.'],
+    en: ['Fermi bubbles', 'Gamma-ray lobes reaching 25,000 light-years above and below the galactic centre (found 2010)—likely a relic of an outburst from the central black hole.'],
+    ja: ['フェルミバブル', '銀河中心の上下にそれぞれ2万5千光年のびるガンマ線の泡(2010年発見)。数百万年前の中心ブラックホールの噴出の跡とみられる。'],
+    zh: ['费米气泡', '银河中心上下各延伸 2.5 万光年的伽马射线气泡（2010 年发现），可能是中心黑洞数百万年前喷发的遗迹。'],
+    es: ['Burbujas de Fermi', 'Lóbulos de rayos gamma de 25.000 años luz sobre y bajo el centro galáctico (2010), quizá restos de un estallido del agujero negro central.'],
+    pt: ['Bolhas de Fermi', 'Lóbulos de raios gama de 25.000 anos-luz acima e abaixo do centro galáctico (2010), talvez restos de uma erupção do buraco negro central.']},
+  magnetar: {z: 20, ko: ['마그네타 거대 섬광 SGR 1806-20', '2004년 0.2초 동안 약 10³⁹ J — 태양이 15만 년 동안 내는 에너지. 5만 광년 밖 지구 전리층이 흔들렸고, 꼬리에서 92.5 Hz 별 지진 진동이 보였다.'],
+    en: ['Magnetar giant flare SGR 1806-20', '2004: ~10³⁹ J in 0.2 s—what the Sun emits in 150,000 years. It jolted Earth’s ionosphere from 50,000 ly, and its tail rang at 92.5 Hz: a starquake.'],
+    ja: ['マグネター巨大フレア SGR 1806-20', '2004年、0.2秒で約10³⁹ J——太陽の15万年分。5万光年先から地球の電離層を揺らし、尾には92.5 Hzの星震振動。'],
+    zh: ['磁星巨耀斑 SGR 1806-20', '2004 年 0.2 秒内约 10³⁹ J，相当太阳 15 万年的输出。5 万光年外扰动地球电离层，尾部出现 92.5 Hz 星震振荡。'],
+    es: ['Llamarada gigante del magnetar SGR 1806-20', '2004: ~10³⁹ J en 0,2 s, lo que el Sol emite en 150.000 años. Sacudió la ionosfera desde 50.000 años luz y su cola vibró a 92,5 Hz: un sismo estelar.'],
+    pt: ['Erupção gigante do magnetar SGR 1806-20', '2004: ~10³⁹ J em 0,2 s, o que o Sol emite em 150.000 anos. Abalou a ionosfera a 50.000 anos-luz e a cauda vibrou a 92,5 Hz: um sismo estelar.']},
+  frb: {z: 21, ko: ['빠른 전파 폭발(FRB)', '1천분의 1초에 태양이 며칠 동안 낼 에너지. 낮은 주파수일수록 늦게 온다(Δt ∝ ν⁻²) — 그 지연으로 가는 길의 전자 수를 센다.'],
+    en: ['Fast radio burst', 'A millisecond carrying days of the Sun’s output. Lower frequencies arrive later (Δt ∝ ν⁻²), and that delay counts the electrons along the way.'],
+    ja: ['高速電波バースト(FRB)', '1000分の1秒に太陽の数日分のエネルギー。低い周波数ほど遅れて届き(Δt ∝ ν⁻²)、その遅れで途中の電子の数がわかる。'],
+    zh: ['快速射电暴', '千分之一秒释放太阳数天的能量。频率越低到得越晚（Δt ∝ ν⁻²），由此可数出沿途的电子。'],
+    es: ['Ráfaga rápida de radio', 'Un milisegundo con días de la energía del Sol. Las frecuencias bajas llegan después (Δt ∝ ν⁻²) y ese retraso cuenta los electrones del camino.'],
+    pt: ['Rajada rápida de rádio', 'Um milissegundo com dias da energia do Sol. As frequências baixas chegam depois (Δt ∝ ν⁻²) e esse atraso conta os elétrons do caminho.']},
+  gw: {z: 22, ko: ['중력파 GW150914', '13억 년 전 블랙홀 둘(태양 36·29배)이 합쳐지며 0.2초에 태양 3개 질량이 중력파로 — 최대 3.6×10⁴⁹ W. 빛은 나오지 않았고, LIGO의 4 km 팔이 양성자 지름의 1/1000만큼 떨렸다.'],
+    en: ['Gravitational waves GW150914', '1.3 billion years ago two black holes (36 and 29 M☉) merged, turning 3 Suns of mass into ripples in 0.2 s—peak 3.6×10⁴⁹ W. No light at all; LIGO’s 4 km arms shook by 1/1000 of a proton.'],
+    ja: ['重力波 GW150914', '13億年前、ブラックホール2つ(太陽の36・29倍)が合体し0.2秒で太陽3個分の質量が重力波に——最大3.6×10⁴⁹ W。光は出ず、LIGOの4 kmの腕が陽子の1/1000だけ揺れた。'],
+    zh: ['引力波 GW150914', '13 亿年前两个黑洞（36、29 倍太阳质量）合并，0.2 秒内 3 个太阳质量化为引力波——峰值 3.6×10⁴⁹ W。没有光；LIGO 4 公里的臂只抖动了质子的千分之一。'],
+    es: ['Ondas gravitacionales GW150914', 'Hace 1.300 millones de años dos agujeros negros (36 y 29 M☉) se fundieron y 3 soles de masa se volvieron ondas en 0,2 s: 3,6×10⁴⁹ W. Sin luz; los brazos de 4 km de LIGO vibraron 1/1000 de un protón.'],
+    pt: ['Ondas gravitacionais GW150914', 'Há 1,3 bilhão de anos dois buracos negros (36 e 29 M☉) se fundiram e 3 sóis de massa viraram ondas em 0,2 s: 3,6×10⁴⁹ W. Sem luz; os braços de 4 km do LIGO vibraram 1/1000 de um próton.']},
+  kilonova: {z: 23, ko: ['킬로노바 GW170817', '중성자별 둘의 충돌. 중력파 1.7초 뒤 감마선이 왔고, 파랑에서 빨강으로 식는 빛 속에서 금·백금 같은 무거운 원소가 지구 몇 배 질량만큼 만들어졌다.'],
+    en: ['Kilonova GW170817', 'Two neutron stars collided; gamma rays arrived 1.7 s after the gravitational waves, and as the glow cooled from blue to red it forged several Earth masses of heavy elements like gold.'],
+    ja: ['キロノバ GW170817', '中性子星どうしの衝突。重力波の1.7秒後にガンマ線が届き、青から赤へ冷える光の中で金・白金など重い元素が地球数個分つくられた。'],
+    zh: ['千新星 GW170817', '两颗中子星相撞。引力波之后 1.7 秒伽马射线到达，在由蓝变红的余辉中造出数个地球质量的金、铂等重元素。'],
+    es: ['Kilonova GW170817', 'Chocaron dos estrellas de neutrones; los rayos gamma llegaron 1,7 s después de las ondas y, al enfriarse de azul a rojo, forjó varias masas terrestres de oro y otros elementos pesados.'],
+    pt: ['Kilonova GW170817', 'Duas estrelas de nêutrons colidiram; os raios gama chegaram 1,7 s após as ondas e, ao esfriar de azul a vermelho, forjou várias massas terrestres de ouro e outros elementos pesados.']},
+  ton618: {z: 25, ko: ['TON 618', '태양 질량 약 660억 배. 사건의 지평선 지름이 해왕성 궤도의 약 40배 — 빛으로도 가로지르는 데 2주가 걸린다.'],
+    en: ['TON 618', 'About 66 billion solar masses. Its event horizon is ~40× the size of Neptune’s orbit—light needs two weeks to cross it.'],
+    ja: ['TON 618', '太陽質量の約660億倍。事象の地平線は海王星軌道の約40倍——光でも横切るのに2週間。'],
+    zh: ['TON 618', '约 660 亿倍太阳质量。事件视界约为海王星轨道的 40 倍——光也要两周才能穿过。'],
+    es: ['TON 618', 'Unos 66.000 millones de masas solares. Su horizonte mide ~40 veces la órbita de Neptuno: la luz tarda dos semanas en cruzarlo.'],
+    pt: ['TON 618', 'Cerca de 66 bilhões de massas solares. Seu horizonte tem ~40 vezes a órbita de Netuno: a luz leva duas semanas para cruzá-lo.']},
+  grb: {z: 27, ko: ['감마선 폭발 GRB 221009A', '2022년 "역대 가장 밝은(BOAT)" 폭발. 약 20억 광년 밖에서 지구 전리층을 흔들었고 10 TeV가 넘는 광자가 잡혔다. 먼지에 산란된 X선이 고리 메아리로 번졌다.'],
+    en: ['GRB 221009A — the BOAT', '2022’s “brightest of all time” burst. From ~2 billion ly it disturbed Earth’s ionosphere, sent photons above 10 TeV, and its X-rays echoed off dust as expanding rings.'],
+    ja: ['ガンマ線バースト GRB 221009A', '2022年の「史上最も明るい(BOAT)」バースト。約20億光年先から地球の電離層を揺らし、10 TeVを超える光子が届いた。ちりに散乱したX線がリング状のこだまに。'],
+    zh: ['伽马射线暴 GRB 221009A', '2022 年“史上最亮（BOAT）”的爆发。约 20 亿光年外扰动地球电离层，探测到 10 TeV 以上光子，X 射线被尘埃散射成扩张的光环回声。'],
+    es: ['GRB 221009A, el BOAT', 'La ráfaga “más brillante de la historia” (2022). Desde ~2.000 millones de años luz alteró la ionosfera, envió fotones de más de 10 TeV y sus rayos X resonaron en el polvo como anillos.'],
+    pt: ['GRB 221009A, o BOAT', 'A explosão “mais brilhante de todos os tempos” (2022). De ~2 bilhões de anos-luz perturbou a ionosfera, enviou fótons acima de 10 TeV e seus raios X ecoaram na poeira em anéis.']},
+  hawking: {z: 29, ko: ['호킹 복사', '블랙홀은 온도 T = ħc³/(8πGMk_B)로 빛나며 증발한다. 가벼울수록 뜨겁고, 마지막 1초에 약 2×10²² J를 한꺼번에 내놓는다.'],
+    en: ['Hawking radiation', 'A black hole glows at T = ħc³/(8πGMk_B) and evaporates. The lighter it gets the hotter it burns, releasing ~2×10²² J in its final second.'],
+    ja: ['ホーキング放射', 'ブラックホールは温度 T = ħc³/(8πGMk_B) で光り蒸発する。軽くなるほど熱くなり、最後の1秒で約2×10²² Jを放つ。'],
+    zh: ['霍金辐射', '黑洞以温度 T = ħc³/(8πGMk_B) 发光并蒸发。越轻越热，最后一秒释放约 2×10²² J。'],
+    es: ['Radiación de Hawking', 'Un agujero negro brilla a T = ħc³/(8πGMk_B) y se evapora. Cuanto más ligero, más caliente; en su último segundo libera ~2×10²² J.'],
+    pt: ['Radiação Hawking', 'Um buraco negro brilha a T = ħc³/(8πGMk_B) e evapora. Quanto mais leve, mais quente; no último segundo libera ~2×10²² J.']}
+};
+const ORDER = ['carrington', 'shock', 'betel', 'hotspot', 'lens', 's2', 'fermi', 'magnetar', 'frb', 'gw', 'kilonova', 'ton618', 'grb', 'hawking'];
+const UI = {ko: ['🔭 관측 기록', '새 관측'], en: ['🔭 Observation log', 'New'], ja: ['🔭 観測記録', '新規'], zh: ['🔭 观测记录', '新'], es: ['🔭 Registro de observación', 'Nuevo'], pt: ['🔭 Registro de observação', 'Novo']};
+let seen = null; const runNew = [];
+function seenSet(){ if(!seen){ seen = new Set(); try{ (JSON.parse(LSG('szx_codex') || '[]') || []).forEach(k => seen.add(k)); }catch(_){} } return seen; }
+let toast = null;   /* {id, t0} */
+function discover(id, now){
+    const S = seenSet();
+    if(runNew.indexOf(id) >= 0) return;
+    if(S.has(id)){ return; }
+    S.add(id); runNew.push(id);
+    LSS('szx_codex', JSON.stringify([...S]));
+    toast = {id, t0: now};
+}
+HEP.discover = discover; HEP.seen = () => [...seenSet()]; HEP.CX = CX;
+
+/* ── 시각 도우미 ── */
+const zt = (z) => { try{ return _szZoneTRaw(z); }catch(_){ return -1; } };
+const dur = (z) => { try{ return ZONES[z].dur === 9999 ? 75 : ZONES[z].dur; }catch(_){ return 30; } };
+/* 존 z 의 zt0 지점부터 지난 초(아직이면 음수) */
+const since = (z, zt0) => { const t = zt(z); return t < 0 ? -1 : (t - zt0) * dur(z); };
+function glow(img, x, y, r, a){ if(a > 0.01) szGlow(img, x, y, r, a); }
+let auroraSpr = null;
+function auroraSprite(){
+    if(auroraSpr) return auroraSpr;
+    const c = document.createElement('canvas'); c.width = 8; c.height = 96;
+    const x = c.getContext('2d'), g = x.createLinearGradient(0, 96, 0, 0);
+    g.addColorStop(0, 'rgba(120,255,170,0)'); g.addColorStop(0.08, 'rgba(110,255,170,0.95)'); g.addColorStop(0.42, 'rgba(90,240,160,0.55)');
+    g.addColorStop(0.7, 'rgba(255,90,120,0.32)'); g.addColorStop(1, 'rgba(255,60,110,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 8, 96);
+    return (auroraSpr = c);
+}
+/* 페르미 거품 — 은하 판(P7Z[20])과 같은 자리·기울기: 중심 (CW/2 − px·0.02, CH(0.4+0.1zt)), −0.18 rad, 폭 w.
+   원반에 수직으로 위아래 물방울 꼴 두 엽(각 반지름의 약 절반 = 2만 5천 광년). 가장자리만 옅게 밝은 껍질(감마선 지도 가색) */
+let _fbG = null;
+function drawFermi(t, env){
+    let px = 0; try{ px = _p7Px; }catch(_){}
+    const e = (typeof _p7E === 'function') ? _p7E(t) : t;
+    const w = CW * 1.3 * (1 - 0.4 * e), cx = CW / 2 - px * 0.02, cy = CH * (0.4 + 0.1 * t);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(-0.18);
+    ctx.globalCompositeOperation = 'lighter';
+    /* 모래시계 꼴 — 중심에서 좁게 나와 위로 부풀었다 둥글게 닫힌다(물방울 두 개를 꼭짓점끼리 붙인 모양) */
+    const L = w * 0.26, R = w * 0.1;
+    for(const sgn of [-1, 1]){
+        ctx.save(); ctx.scale(1, sgn);
+        const g = ctx.createLinearGradient(0, 0, 0, -L);
+        g.addColorStop(0, 'rgba(200,140,255,0.02)'); g.addColorStop(0.55, 'rgba(180,120,255,0.07)'); g.addColorStop(0.92, 'rgba(230,175,255,0.13)'); g.addColorStop(1, 'rgba(230,175,255,0.04)');
+        ctx.beginPath(); ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(R * 0.55, -L * 0.18, R * 1.2, -L * 0.45, R * 1.05, -L * 0.72);
+        ctx.bezierCurveTo(R * 0.9, -L * 1.0, -R * 0.9, -L * 1.0, -R * 1.05, -L * 0.72);
+        ctx.bezierCurveTo(-R * 1.2, -L * 0.45, -R * 0.55, -L * 0.18, 0, 0);
+        ctx.globalAlpha = env; ctx.fillStyle = g; ctx.fill();
+        ctx.globalAlpha = 0.5 * env; ctx.strokeStyle = 'rgba(235,185,255,0.35)'; ctx.lineWidth = 1.2; ctx.stroke();
+        ctx.restore();
+    }
+    ctx.restore();
+}
+/* 지구 림(원) — szHeroEarth 와 같은 식(자산이 없으면 예전 호) */
+function earthLimb(t){
+    const asp = (typeof _szAsp === 'function') ? _szAsp() : 1;
+    if(typeof szArt === 'function' && szArt('z00_earth_limb')){
+        const e = Math.max(0, t), k = 1.12 - 0.22 * Math.min(1, e), W = CW * k;
+        const need = CH - W * (560 - 150) / 1080 * asp;
+        const apex = Math.max(need, CH * (0.75 + 0.18 * e * e)), top = apex - W * 150 / 1080 * asp, sc = W / 1080;
+        return {cx: CW / 2, cy: top + 1500 * sc * asp, R: 1350 * sc, asp};
+    }
+    const R = 1800 + (400 - 1800) * t;
+    return {cx: CW / 2, cy: CH + R * 0.82, R, asp: 1};
+}
+const gwBuf = new Float32Array(90); let gwN = 0, gwLast = 0;
+
+/* ── 그리기 (배경층 위·위험물 아래) ── */
+SZE.on('drawBg', function(now){
+    if(!running && !(typeof szDeathFx !== 'undefined' && szDeathFx)) return;
+    let z = -1; try{ z = currentZoneIdx; }catch(_){ return; }
+    const lo = (typeof szLo === 'function') && szLo();
+    HEP.gw.h = 0;
+    ctx.save();
+    if(z === 0){
+        /* 오로라 — 지구 밤쪽 림 위 커튼. 빛줄기 52개가 천천히 접히며 흐른다 */
+        const t = zt(0);
+        if(t > 0.1 && t < 1.05){
+            const env = Math.min(1, (t - 0.1) / 0.12) * Math.min(1, (1.05 - t) / 0.1);
+            const L = earthLimb(t), spr = auroraSprite(), s = now * 0.001;
+            ctx.globalCompositeOperation = 'lighter';
+            const N = lo ? 26 : 52;
+            for(let i = 0; i < N; i++){
+                const u = i / (N - 1), x = CW * (0.04 + 0.6 * u);
+                const dx = x - L.cx; if(Math.abs(dx) >= L.R) continue;
+                const ly = L.cy - L.asp * Math.sqrt(L.R * L.R - dx * dx);
+                if(ly > CH + 10 || ly < -40) continue;
+                const fold = 0.5 + 0.5 * Math.sin(u * 13 + s * 0.9) * Math.sin(u * 5.3 - s * 0.55);
+                const h = 30 + 46 * fold, a = env * (0.16 + 0.44 * fold) * (0.8 + 0.2 * Math.sin(s * 3 + u * 40));
+                ctx.globalAlpha = Math.min(1, a);
+                ctx.drawImage(spr, x - 2.6, ly - h - 3, 5.2, h);
+            }
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            if(t > 0.2) discover('carrington', now);
+        }
+    } else if(z === 9){ if(zt(9) > 0.15) discover('shock', now); }
+    else if(z === 15){ if(zt(15) > 0.15) discover('betel', now); }
+    else if(z === 19){
+        /* 플레어 열점 — 광자 고리 바로 바깥 기울어진 궤도. 다가오는 쪽(앞쪽 반원)이 도플러 빔으로 밝다. 9초마다 1.2초 플레어 */
+        let B = null; try{ B = blackHole; }catch(_){}
+        if(B && B.r > 4){
+            const t = Math.max(0, since(19, 0)), a = B.r * 1.62, b = a * 0.3, th = t * 6.2832 / 5.5;
+            const x = B.cx + Math.cos(th) * a, y = B.cy + Math.sin(th) * b;
+            const dop = 1 + 0.85 * Math.sin(th), fl = (t % 9) < 1.2 ? 1 + 1.6 * Math.sin(Math.PI * (t % 9) / 1.2) : 1;
+            ctx.globalCompositeOperation = 'lighter';
+            if(!lo){ glow(SZ_GLOW.hot, x, y, 14 * fl, 0.35 * dop * fl); }
+            glow(SZ_GLOW.white, x, y, 7 * fl, 0.5 * dop * Math.min(1.6, fl));
+            ctx.globalCompositeOperation = 'source-over';
+            if(t > 3) discover('hotspot', now);
+            if(t > 6) discover('lens', now);
+            if(t > 14) discover('s2', now);
+        }
+    } else if(z === 20){
+        const t = zt(20);
+        if(t > 0.02 && t < 1.02){
+            const env = Math.min(1, (t - 0.02) / 0.15) * Math.min(1, (1.02 - t) / 0.1);
+            drawFermi(t, env);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            if(t > 0.12) discover('fermi', now);
+        }
+        /* 마그네타 거대 섬광 — 오른쪽 위 화면 밖 별에서. 0.2초 섬광(화면 흔들림 없음, 알파 ≤0.22) → 7.56초 자전으로 맥동하는 꼬리 */
+        const s = since(20, 0.55);
+        if(s >= 0 && s < 6){
+            const sx = CW + 30, sy = CH * 0.22;
+            ctx.globalCompositeOperation = 'lighter';
+            const spike = s < 0.25 ? 1 - s / 0.25 : 0;
+            if(spike > 0){ ctx.globalAlpha = 0.22 * spike; ctx.fillStyle = 'rgb(200,225,255)'; ctx.fillRect(0, 0, CW, CH); }
+            const tail = Math.exp(-s / 2.2) * (0.62 + 0.38 * Math.cos(6.2832 * s / 1.26)) * Math.min(1, s / 0.1 + 0.3);
+            glow(SZ_GLOW.cold, sx, sy, 150, 0.55 * tail);
+            glow(SZ_GLOW.white, sx, sy, 60, 0.6 * tail);
+            if(!lo){
+                ctx.lineWidth = 1.2;
+                for(let k = 0; k < 14; k++){
+                    const ang = Math.PI * (0.62 + 0.6 * k / 13), len = 140 + 220 * ((k * 37) % 11) / 11;
+                    ctx.globalAlpha = 0.18 * (tail + spike); ctx.strokeStyle = 'rgb(190,215,255)';
+                    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + Math.cos(ang) * len, sy + Math.sin(ang) * len); ctx.stroke();
+                }
+            }
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            if(s > 0.3) discover('magnetar', now);
+        }
+    } else if(z === 21){
+        /* FRB 폭포 — 세로 = 주파수(위 1.6 GHz → 아래 1.1 GHz), 가로 = 도착 시각. Δt ∝ ν⁻² 곡선이 2.4초에 걸쳐 그려진다 */
+        const s = since(21, 0.42);
+        if(s >= 0 && s < 4.5){
+            const T = 2.4, nu0 = 1.6, nu1 = 1.1, d0 = 1 / (nu0 * nu0), d1 = 1 / (nu1 * nu1);
+            const x0 = CW * 0.12, x1 = CW * 0.9, yT = CH * 0.18, yB = CH * 0.62;
+            const fade = s < T ? 1 : Math.max(0, 1 - (s - T) / 2.1);
+            const head = Math.min(1, s / T);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.lineCap = 'round';
+            const N = 40; let px = 0, py = 0;
+            for(let i = 0; i <= N; i++){
+                const nu = nu0 - (nu0 - nu1) * i / N, f = (1 / (nu * nu) - d0) / (d1 - d0);
+                if(f > head) break;
+                const x = x0 + (x1 - x0) * f, y = yT + (yB - yT) * i / N;
+                if(i){ ctx.globalAlpha = 0.55 * fade; ctx.strokeStyle = 'rgb(255,190,120)'; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke(); }
+                px = x; py = y;
+            }
+            if(head < 1 && s < T) glow(SZ_GLOW.gold, px, py, 18, 0.8);
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.globalAlpha = 0.5 * fade; ctx.fillStyle = 'rgb(255,220,190)'; ctx.font = '600 8px Orbitron,sans-serif'; ctx.textAlign = 'left';
+            ctx.fillText('1.6 GHz', x0 - 34, yT + 3); ctx.fillText('1.1 GHz', x0 - 34, yB + 3);
+            ctx.fillText('FRB · DM ≈ 560 pc cm⁻³', x0, yB + 16);
+            ctx.globalAlpha = 1;
+            if(s < 0.05 && !HEP._frbS){ HEP._frbS = 1; try{ if(typeof LPAudio !== 'undefined' && !(typeof sfxOn !== 'undefined' && !sfxOn)) LPAudio.beep({freq: 2600, dur: 2.2, vol: 0.022, type: 'sine', slide: 420, decay: 0.95}); }catch(_){} }
+            if(s > 0.6) discover('frb', now);
+        } else HEP._frbS = 0;
+    } else if(z === 22){
+        /* 중력파 — 처프(주파수·진폭이 (t_c−t)^(−3/8)·^(−1/4) 로 오른다) → 합체 → 링다운. 배경 별이 + 편광으로 늘었다 줄었다(drawStars 가 읽는다).
+           실제 변형률 10⁻²¹ 을 화면에서 보이게 키웠다. 빛은 그리지 않는다 — 블랙홀 쌍성 합체는 어둡다 */
+        const s = since(22, 0.36), TC = 3.2;
+        if(s >= 0 && s < TC + 1.2){
+            let h, f;
+            if(s < TC){ const r = Math.max(0.012, 1 - s / TC); f = Math.min(9, 0.55 * Math.pow(r, -0.375)); h = Math.min(0.055, 0.009 * Math.pow(r, -0.25)); }
+            else { const r = s - TC; f = 9; h = 0.055 * Math.exp(-r / 0.13); }
+            const dt = Math.max(0, Math.min(0.05, s - gwLast)); gwLast = s;
+            HEP.gw.ph += 6.2832 * f * dt; HEP.gw.h = h;
+            /* 변형률 그래프 — 왼쪽 가장자리 작은 창(LIGO 그림처럼) */
+            gwBuf.copyWithin(0, 1); gwBuf[gwBuf.length - 1] = h * Math.cos(HEP.gw.ph) / 0.055; if(gwN < gwBuf.length) gwN++;
+            const gx = 10, gy = CH * 0.3, gw = 92, gh = 26;
+            ctx.globalAlpha = 0.5; ctx.fillStyle = 'rgba(4,10,24,0.55)'; ctx.fillRect(gx, gy - gh / 2 - 4, gw, gh + 16);
+            ctx.globalAlpha = 0.9; ctx.strokeStyle = 'rgb(140,230,255)'; ctx.lineWidth = 1.2; ctx.beginPath();
+            for(let i = 0; i < gwBuf.length; i++){ const x = gx + gw * i / (gwBuf.length - 1), y = gy - gwBuf[i] * gh / 2; if(i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
+            ctx.stroke();
+            ctx.globalAlpha = 0.7; ctx.fillStyle = 'rgb(180,235,255)'; ctx.font = '600 7.5px Orbitron,sans-serif'; ctx.textAlign = 'left';
+            ctx.fillText('GW150914  h(t)', gx + 3, gy + gh / 2 + 9);
+            ctx.globalAlpha = 1;
+            if(s > 1) discover('gw', now);
+        } else { HEP.gw.ph = 0; gwLast = 0; gwBuf.fill(0); }
+    } else if(z === 23){
+        /* 킬로노바 — 점이 밝아지고(0.5s) 파랑 → 빨강으로 식으며 껍질이 퍼진다(5s) */
+        const s = since(23, 0.4);
+        if(s >= 0 && s < 6){
+            const x = CW * 0.74, y = CH * 0.27, u = Math.min(1, s / 4.5);
+            const br = Math.min(1, s / 0.5) * (s < 4.5 ? 1 : Math.max(0, 1 - (s - 4.5) / 1.5));
+            const r = Math.round(150 + 105 * u), g = Math.round(190 - 80 * u), b = Math.round(255 - 185 * u);
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.globalAlpha = 0.35 * br; ctx.strokeStyle = 'rgb(' + r + ',' + g + ',' + b + ')'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, 5 + 30 * Math.sqrt(u), 0, 6.2832); ctx.stroke();
+            glow(SZ_GLOW.white, x, y, 10 + 8 * br, 0.7 * br);
+            glow(u < 0.45 ? SZ_GLOW.cold : SZ_GLOW.hot, x, y, 26 + 26 * u, 0.5 * br);
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            if(s > 1.5) discover('kilonova', now);
+        }
+    } else if(z === 25){ if(zt(25) > 0.15) discover('ton618', now); }
+    else if(z === 27){
+        /* GRB 221009A — 점광원 섬광(회절 스파이크 4) + 잔광 t^−1.2 + 먼지 산란 X선 고리 메아리(천천히 퍼지는 동심원) */
+        const s = since(27, 0.5);
+        if(s >= 0 && s < 9){
+            const x = CW * 0.36, y = CH * 0.34, ag = Math.min(1, Math.pow(Math.max(0.05, s), -1.2) * 0.35) * (s < 0.15 ? s / 0.15 : 1);
+            ctx.globalCompositeOperation = 'lighter';
+            glow(SZ_GLOW.cold, x, y, 30 + 60 * ag, 0.6 * ag);
+            glow(SZ_GLOW.white, x, y, 12 + 30 * ag, ag);
+            ctx.globalAlpha = 0.6 * ag; ctx.strokeStyle = 'rgb(220,235,255)'; ctx.lineWidth = 1;
+            const L = 18 + 60 * ag;
+            ctx.beginPath(); ctx.moveTo(x - L, y); ctx.lineTo(x + L, y); ctx.moveTo(x, y - L); ctx.lineTo(x, y + L); ctx.stroke();
+            for(let k = 0; k < 3; k++){
+                const rr = 14 + (s - k * 0.8) * (16 + k * 6);
+                if(rr <= 6) continue;
+                ctx.globalAlpha = Math.max(0, 0.22 - s * 0.022); ctx.strokeStyle = 'rgb(150,190,255)'; ctx.lineWidth = 1.4;
+                ctx.beginPath(); ctx.arc(x, y, rr, 0, 6.2832); ctx.stroke();
+            }
+            ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+            if(s > 0.5) discover('grb', now);
+        }
+    } else if(z === 29){
+        /* 호킹 증발 — 작은 블랙홀이 가벼워질수록 뜨거워진다(빨강→하양→파랑), zt 0.88 에 마지막 섬광 */
+        const t = zt(29);
+        if(t > 0.2 && t < 0.95){
+            const x = CW * 0.62, y = CH * 0.36, u = Math.min(1, (t - 0.2) / 0.68);
+            if(t < 0.88){
+                const rr = 7 * (1 - 0.85 * u);
+                const hot = u < 0.5 ? SZ_GLOW.hot : (u < 0.8 ? SZ_GLOW.white : SZ_GLOW.cold);
+                ctx.globalCompositeOperation = 'lighter';
+                glow(hot, x, y, rr * (3.2 + 3 * u), 0.35 + 0.55 * u);
+                glow(SZ_GLOW.white, x, y, rr * 1.4, 0.3 + 0.5 * u);
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(x, y, Math.max(0.6, rr * 0.5), 0, 6.2832); ctx.fill();
+            } else {
+                const f = 1 - (t - 0.88) / 0.07;
+                ctx.globalCompositeOperation = 'lighter';
+                glow(SZ_GLOW.cold, x, y, 60 * (1.2 - f), 0.8 * f);
+                glow(SZ_GLOW.white, x, y, 20, f);
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            ctx.globalAlpha = 1;
+            if(t > 0.4) discover('hawking', now);
+        }
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+});
+
+/* ── 새 관측 알림 — 항로 표시(오른쪽 위) 바로 아래 작은 두 줄, 2.6초. 위험물이 가까우면 더 흐려진다 ── */
+SZE.on('drawHud', function(now){
+    if(!toast) return;
+    const age = now - toast.t0;
+    if(age > 2600){ toast = null; return; }
+    const L = lang(), C = CX[toast.id]; if(!C) return;
+    const a = Math.min(1, age / 220) * Math.min(1, (2600 - age) / 400);
+    const x1 = CW - 8, y = 64, w = 168, h = 26;
+    let k = 1; try{ if(typeof szOvA === 'function') k = szOvA(1, x1 - w, y, x1, y + h, 23); }catch(_){}
+    ctx.save();
+    ctx.globalAlpha = 0.55 * a * k; ctx.fillStyle = 'rgba(6,10,26,1)';
+    if(typeof drawRR === 'function'){ drawRR(x1 - w, y, w, h, 7); ctx.fill(); }
+    ctx.globalAlpha = 0.95 * a * k; ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgb(160,220,255)'; ctx.font = '700 8px Orbitron,"Noto Sans KR",sans-serif';
+    ctx.fillText(UI[L][0] + ' · ' + UI[L][1], x1 - 7, y + 10);
+    ctx.fillStyle = '#FFFFFF'; ctx.font = '800 10px "Noto Sans KR",sans-serif';
+    ctx.fillText((C[L] || C.en)[0], x1 - 7, y + 22, w - 12);
+    ctx.restore();
+});
+
+/* ── 결과 카드 — 접는 목록(이번 판에 새로 본 것은 NEW) ── */
+SZE.on('goCard', function(ov){
+    if(!ov) return;
+    const S = seenSet(); if(!S.size) return;
+    const host = ov.querySelector('.ov-btn-row') || ov.querySelector('#ovBtn');
+    if(!host || ov.querySelector('.sz-codex')) return;
+    const L = lang(), esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
+    let li = '';
+    for(const id of ORDER){ if(!S.has(id)) continue; const C = CX[id], T = C[L] || C.en;
+        li += '<li><b>' + esc(T[0]) + (runNew.indexOf(id) >= 0 ? ' <i>' + esc(UI[L][1]) + '</i>' : '') + '</b><span>' + esc(T[1]) + '</span></li>'; }
+    const d = document.createElement('details');
+    d.className = 'sz-codex';
+    d.innerHTML = '<summary>' + esc(UI[L][0]) + ' ' + S.size + '/' + ORDER.length + (runNew.length ? ' · +' + runNew.length : '') + '</summary><ul>' + li + '</ul>';
+    host.parentNode.insertBefore(d, host);
+});
+/* 판 시작 — 이번 판 새 관측 목록 비우기 */
+SZE.on('runStart', function(){ runNew.length = 0; toast = null; HEP.gw.h = 0; });
+})();
+/*</sz:mod:hep>*/
+</script>
+<style>
+#overlay .sz-codex{margin:8px auto 4px;max-width:340px;text-align:left;font:500 12px/1.45 'Noto Sans KR',sans-serif;color:#cfe3ff;
+    background:rgba(8,16,34,.5);border:1px solid rgba(140,190,255,.25);border-radius:10px;padding:6px 10px}
+#overlay .sz-codex summary{cursor:pointer;font-weight:800;color:#a8dcff;list-style:none}
+#overlay .sz-codex summary::-webkit-details-marker{display:none}
+#overlay .sz-codex ul{margin:6px 0 2px;padding:0;list-style:none;max-height:40vh;overflow:auto}
+#overlay .sz-codex li{margin:0 0 7px}
+#overlay .sz-codex li b{display:block;color:#fff;font-weight:800}
+#overlay .sz-codex li i{font-style:normal;font-size:.8em;color:#1a0c2e;background:#d6b4ff;border-radius:6px;padding:0 5px;margin-left:4px}
+#overlay .sz-codex li span{display:block;color:#b8c8e6;font-size:.92em}
+</style>
 <script>
 /*<sz:mod:mp5>*/
 (function(){
