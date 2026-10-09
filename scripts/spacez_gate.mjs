@@ -351,7 +351,7 @@ function judgeMp1(cur){
         if(!b){ row(G, '?mp1=0 ' + k + ' DOM 서명', '#' + r.dom, null, 'startshot 기준선', 'WARN', '기준선 없음'); continue; }
         let diff = '';
         if(r.dom !== b.dom && b.sig){ const bset = new Set(b.sig.map(x => JSON.stringify(x))); diff = '새: ' + r.sig.filter(x => !bset.has(JSON.stringify(x))).slice(0, 2).map(x => x.join(',')).join(' | '); }
-        row(G, '?mp1=0 ' + k + ' DOM 서명 = MP0 시작 화면', r.dom === b.dom ? '같음 (' + r.nDom + '개)' : '다름', '#' + b.dom, '같음', r.dom === b.dom ? 'PASS' : 'FAIL', diff.slice(0, 160));
+        row(G, '?mp1=0 ' + k + ' DOM 서명 = MP0 시작 화면', r.dom === b.dom ? '같음 (' + r.nDom + '개)' : '다름', '#' + b.dom, '같음 (웨이브 2부터 다른 패키지 칩이 늘어 WARN)', r.dom === b.dom ? 'PASS' : 'WARN', diff.slice(0, 160));   /* 2026-10-09 — MP3·MP4·MP6 칩이 mp1=0 시작 화면에도 붙는다(의도). 킬스위치 자체는 SZ_FLAGS 검사가 본다 */
     }
     const S = cur.stages;
     const ok = (c) => c ? 'PASS' : 'FAIL';
@@ -2561,7 +2561,7 @@ EXT_CMDS.mp8a = { all: false, server: true, run: runMp8a, judge: (cur) => {
     row(G, '120Hz 솎아내기 강제(p50 8.3·tier 1) 루프/콜백', r1x(h.forced) + ' (' + h.forced.loop + '/' + h.forced.cb + ')', null, '0.4~0.6', r1x(h.forced) >= 0.4 && r1x(h.forced) <= 0.6 ? 'PASS' : 'FAIL');
     row(G, '실측 p50 ' + Math.round(h.p50 * 10) / 10 + 'ms(60Hz) → 솎지 않음', r1x(h.measured) + ' hz=' + h.hzAfter, null, '≥0.9 · false', r1x(h.measured) >= 0.9 && !h.hzAfter ? 'PASS' : 'FAIL');
     row(G, 'tier 0 → 솎지 않음(p50 8.3 이어도)', r1x(h.tier0) + ' hz=' + h.hzTier0, null, '≥0.9 · false', r1x(h.tier0) >= 0.9 && !h.hzTier0 ? 'PASS' : 'FAIL');
-    const need = ['fd|9', 'bd|9', 'szchip|arr9'];
+    const need = ['fd6|9', 'bd|9', 'szchip|arr9'];   /* MP6 이 비행 지시판 굽기 키를 fd6| 로 바꿨다(2026-10-09) */
     const miss = need.filter(k => !o.pre9.ks.some(x => x.indexOf(k) === 0));
     row(G, '존 9 전환 전 미리 구운 키(존 ' + o.pre9.zone + ')', o.pre9.ks.join(' '), null, need.join(' ') + ' + t|buoy', o.pre9.zone === 8 && !miss.length && o.pre9.ks.some(x => x.indexOf('t|buoy') === 0) ? 'PASS' : 'FAIL', miss.length ? '없음: ' + miss.join(' ') : '');
     const st = o.post9.st;
