@@ -3499,7 +3499,10 @@ function pageLib(){
         const hScroll = Math.max(se.scrollWidth, document.body.scrollWidth) - vw;
         let smallText = [];
         if(G.texts) smallText = [...G.texts.entries()].filter(([s, px]) => px != null && px < 9).map(([s, px]) => s.slice(0, 24) + '@' + px);
-        const missing = ['#satBtn', '#gravBtn'].filter(s => !rects[s]);
+        /* 2026-10-09 육각 꽃(폰) — 가운데 버튼 하나가 BEAM ⇄ SAT(두 번 톡). BEAM 일 때 SAT 가 숨는 게 정상이고,
+           미션이 열리면 가운데 칸이 청록으로 숨 쉰다(szf-satcue) — 그게 보이면 SAT 는 닿을 수 있는 상태로 센다 */
+        const hex = !!(window.SZCTL && SZCTL.arc), cue = document.body.classList.contains('szf-satcue') || document.body.classList.contains('szf-mode-sat');
+        const missing = ['#satBtn', '#gravBtn'].filter(s => !rects[s] && !(hex && s === '#satBtn' && rects['#gravBtn'] && (cue || (typeof missionState !== 'undefined' && missionState !== 'active'))));
         /* E (2026-09-29) — 조종판·키 가이드가 캔버스(플레이필드)를 덮는 넓이(px). 0 이어야 한다 (PC 에서 56px 덮던 문제) */
         const cov = {};
         for(const s of ['.control-row', '.dodge-kbd-ref']){ const a = rects[s], b = rects['#dodge-canvas']; if(!a || !b) continue;
@@ -3508,7 +3511,7 @@ function pageLib(){
            캔버스를 덮는 게 설계라 cov 검사 대신 버튼 ≥48px 를 본다 */
         const float = document.body.classList.contains('sz-float');
         const fbtn = float ? ['#gravBtn', '#satBtn', '#itemSlot0'].filter(s => rects[s]).map(s => s + ' ' + rects[s][2] + 'x' + rects[s][3]) : [];
-        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, float, fbtn, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
+        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, float, fbtn, hex, cue, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
     };
     /* 자동 조종봇 — 같은 시드, 봇 난수만 다르게. 그리기는 끈다(시뮬만) */
     G.bot = function(P){
