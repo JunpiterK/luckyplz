@@ -10349,7 +10349,7 @@ function szShiftKind(ev, kind, minT){
 }
 /* 운석 스폰 난이도 조정 — 논리시간만. 보스 ×1.35 · 숨 고르기 ×1.4 · 대감광 ×1.25 · 바람 조준 −0.08 · 달 속도 ×0.9 · 적색편이 ×0.95 */
 /* 난이도 맞춤 값 — 봇 하네스 A/B 로 도달률 분포(184·343·475s)를 개편 전 ±5%p 안에 둔다 */
-const SZ_TUNE = {saturn: 0.8, windAim: 0, wind: 0.88, iceV: 140, outer: 0.77, bh: 1.35, ease: 1.22, hellA: 405, hellB: 475};
+const SZ_TUNE = {saturn: 0.8, windAim: 0, wind: 0.88, iceV: 140, outer: 0.77, bh: 1.35, ease: 1.22, hell: 1.12, hellA: 405, hellB: 475};
 /* 2026-10-10 운영자: '전체는 조금 무난하게, 7분대(말머리·창조의 기둥 405~475s)는 극악 그대로 — 대신 헤쳐 나갈 방법을'.
    ease = 그 구간 밖 운석 간격 ×1.22(약 18% 덜, ibot 420s 74.7→목표 80%대). 7분대 대비: 존 16~18 보급을 방어 꾸러미로 확정(szDepotItem 표), 6:50 경고 */
 function szDiffMod(d, eMs){
@@ -10376,6 +10376,7 @@ function szDiffMod(d, eMs){
     else if(s >= 920 && s < 985) d.spawnInterval = Math.round(d.spawnInterval * 1.4);      /* 26 부츠 초공동 — 정적 */
     else if(s >= 985 && s < 1055) d.bulletSpeed = Math.round(d.bulletSpeed * 0.95);         /* 27 적색편이 — 위쪽 +25% 대신 전체 −5% */
     if(s < SZ_TUNE.hellA || s >= SZ_TUNE.hellB) d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.ease);   /* 2026-10-10 — 7분대 밖은 조금 무난하게 */
+    else d.spawnInterval = Math.round(d.spawnInterval * SZ_TUNE.hell);   /* 2026-10-10 실기기: '7분대에서 항상 죽는다' — 극악은 남기되 ×1.12 */
     return szRhyDiff(d, eMs);   /* P8b — 몰아치기·숨 고르기 리듬 (fun 펜스) */
 }
 /* 스폰 가장자리 구간표 — 기본 위 40·오른쪽 22·왼쪽 22·아래 16. 천왕성(98° 기울기)은 좌37·우37·위16·아래10.
@@ -10986,10 +10987,18 @@ function szDrawCanyon(now){
     for(let i = 0; i < bullets.length; i++){
         const b = bullets[i];
         if(b.zk !== 'cw' || b.y < -30 || b.y > CH + 30) continue;
+        ctx.globalAlpha = 1;
         if(b.push > 0){ ctx.globalCompositeOperation = 'lighter'; szGlow(SZ_GLOW.gold, b.x, b.y, 22, Math.min(1, b.push * 2)); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; }
         if(lo && !b.edge && !b.outer && !(b.push > 0) && ((b._mv | 0) & 1)) continue;   /* 저사양 — 안쪽 채움 돌은 절반만(판이 없으니 너무 비지 않게) */
+        /* 2026-10-10 실기기(C4 협곡 어색): 줄 맞춰 똑같은 돌이 행진하던 것 → 돌마다 크기·자리·흔들림을 해시로 다르게.
+           그림만 비킨다(판정 자리는 그대로) — 통로 가장자리 돌은 ±2.5px, 그 너머는 ±6px. 먼 돌(outer)은 조금 어둡게 */
+        const hh = (b._mr * 7.31) % 1, hv = (b._mr * 3.17 + (b._mv | 0) * 0.37) % 1, jr = b.edge ? 2.5 : 6;
+        const dx = (hh - 0.5) * 2 * jr + Math.sin(now * 0.0007 + b._mr) * (b.edge ? 0.6 : 1.4), dy = (hv - 0.5) * 2 * jr * 0.7;
+        const sc = b._sc || (0.78 + 0.5 * hv);
+        if(b.outer) ctx.globalAlpha = 0.82;
         if(rk){
-            szRk('m', (b._mv | 0) % 6, b._mr + now * 0.0004 * (b.side), b.x, b.y, (HIT_RADIUS + 6) * (b._sc || 1));
+            szRk('m', (b._mv | 0) % 6, b._mr + now * 0.0004 * (b.side), b.x + dx, b.y + dy, (HIT_RADIUS + 6) * sc);
+            ctx.globalAlpha = 1;
         } else if(spr && !lo){
             const im = SZ_SPRITES[SZ_METEOR_KEYS[b._mv | 0]];
             ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b._mr + now * 0.0004 * (b.side));
@@ -11029,11 +11038,11 @@ function szDrawShock(now, e){
         const wy = W && W.nodes.length ? W.nodes[0].y : -40;
         const gx = szShockGap(k), a = Math.min(1, (e - (tE - S.lead)) / 400), blink = 0.55 + 0.45 * Math.sin(now * 0.014);
         const top = Math.max(0, wy);
-        const g = ctx.createLinearGradient(0, top, 0, CH);
-        g.addColorStop(0, 'rgba(90,255,160,' + (0.22 * a).toFixed(3) + ')'); g.addColorStop(1, 'rgba(90,255,160,0.05)');
+        /* 2026-10-10 장면 검수 — 단단한 초록 기둥·점선 테두리가 인공적이었다 → 가장자리가 녹아드는 옅은 빛 기둥 */
+        const g = ctx.createLinearGradient(gx - S.gap / 2, 0, gx + S.gap / 2, 0);
+        const ca = (0.13 * a * (0.8 + 0.2 * blink)).toFixed(3);
+        g.addColorStop(0, 'rgba(120,255,190,0)'); g.addColorStop(0.5, 'rgba(120,255,190,' + ca + ')'); g.addColorStop(1, 'rgba(120,255,190,0)');
         ctx.fillStyle = g; ctx.fillRect(gx - S.gap / 2, top, S.gap, CH - top);
-        ctx.strokeStyle = 'rgba(120,255,190,' + (0.6 * a * blink).toFixed(3) + ')'; ctx.lineWidth = 1.5; ctx.setLineDash([6, 6]);
-        ctx.beginPath(); ctx.moveTo(gx - S.gap / 2, top); ctx.lineTo(gx - S.gap / 2, CH); ctx.moveTo(gx + S.gap / 2, top); ctx.lineTo(gx + S.gap / 2, CH); ctx.stroke(); ctx.setLineDash([]);
         if(!W){
             /* 아직 안 온 벽 — 위 가장자리 붉은 선 + 틈 위 초록 화살표 */
             ctx.fillStyle = 'rgba(255,80,80,' + (0.5 * a * blink).toFixed(3) + ')';
@@ -11461,6 +11470,7 @@ function szZStyle(){
 
 /* ─────────── Sgr A* 판정 기하 — 그리기와 분리 (P4). 식·수치는 예전 drawSagittariusA 와 한 글자도 다르지 않다 ───────────
    update 단계(updateBlackHolePull)와 그리기가 같은 zoneT 로 부르므로 값이 같다. 그리기를 꺼도(봇·게이트) 판정이 산다 */
+const SZ_BH_JET_DELAY = 2.0;   /* 초 — 존 19 진입 뒤 제트 예고 시간 */
 function szUpdateBlackHoleGeom(zoneT){
     const cx = CW * 0.5;
     const cy = CH * (0.22 + (zoneT||0.4) * 0.40);
@@ -11471,7 +11481,10 @@ function szUpdateBlackHoleGeom(zoneT){
     blackHole.zoneT = zoneT||0.4;
     /* 2026-10-07 — 존 19 진입 순간 화면 중앙 세로줄 전체가 바로 제트(판정)라 가운데 있던 기체는 예고 없이 맞았다(봇 기준 판당 0.94회).
        제트가 블랙홀에서 2.5s 동안 뻗어 나온다 — 그리기·판정이 같은 jetReach 라 보이는 만큼만 아프다 */
-    const _jg = Math.min(1, Math.max(0.05, (zoneT || 0) * ZONES[BLACK_HOLE_ZONE_IDX].dur / ((window.SZMP3 && SZMP3.as) ? SZMP3.JET_GROW_S : 2.5)));   /* MP3 편한 비행 — 제트가 1초 더 천천히 뻗는다(예고 +1s) */
+    /* 2026-10-10 실기기·ibot: 7:50~8:00 피격 최고(10초당 1.02) — 존 19 진입 순간 가운데 기체가 뻗어 나오는 제트에 맞았다.
+       제트는 진입 2초 뒤부터 뻗는다(그 2초는 sz:mod:hep 가 제트 길을 붉은 점선 원뿔로 예고). 그리기·판정은 같은 jetReach */
+    const _jt = (zoneT || 0) * ZONES[BLACK_HOLE_ZONE_IDX].dur - SZ_BH_JET_DELAY;
+    const _jg = _jt <= 0 ? 0 : Math.min(1, Math.max(0.05, _jt / ((window.SZMP3 && SZMP3.as) ? SZMP3.JET_GROW_S : 2.5)));   /* MP3 편한 비행 — 제트가 1초 더 천천히 뻗는다(예고 +1s) */
     blackHole.jetReach = Math.max(CW, CH) * 1.1 * _jg;
     blackHole.jetHalfAngle = 0.14;
 }
@@ -26408,7 +26421,9 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
        · 따닥(짧게 한 번 + 0.3초 안에 다시) 누른 채로 = SAT — 두 번째 누름부터 손을 뗄 때까지 SAT 를 쥔다(모드 전환 없음)
        · SAT 는 위성 미션 중에만. 미션이 아닐 때 따닥은 그냥 BEAM(지연 없이). 미션이 열리면 가운데 칸 테두리가 청록으로 숨 쉰다
        · 버튼 본래 처리기(즉시 BEAM)는 층(cr) 캡처 단계에서 가로채 이 상태기계만 쓴다. 판정·시드와 무관(입력 시각만) */
-    const DLY = 170, DTW = 300, SHORT = 200;
+    /* 2026-10-10 실기기 점검(A1 지연 어색·A3 따닥 사이 BEAM 샘): 미션이 아닐 땐 따닥이 뜻이 없으니 BEAM 즉시,
+       미션 중(SAT 가능)에만 첫 누름을 DLY 만큼 기다린다 — 엄지 따닥의 첫 톡(보통 80~200ms)보다 길게 240ms */
+    const DLY = 240, DTW = 320, SHORT = 240;
     let satAvail = false, dtTipRun = false;
     const H = { id: null, t0: 0, kind: '', timer: 0, lastUp: -1e9, lastShort: false, pendTap: 0 };
     function showSat(on){ body.classList.toggle('szf-mode-sat', !!on); }
@@ -26437,7 +26452,7 @@ body.sz-editing .szf-ehint{display:block;position:absolute;left:50%;transform:tr
         /* 첫 판(BEAM 이 아직 없다) — 미션 중이면 한 번 누름이 곧 SAT */
         if(body.classList.contains('szm1-s1')){ if(satAvail){ H.kind = 'sat'; satDown(); } else H.kind = ''; return; }
         if(second && satAvail){ H.kind = 'sat'; satDown(); try{ szVibrate(12); }catch(_){} return; }
-        if(second){ H.kind = 'beam'; beamOn(); return; }
+        if(!satAvail){ H.kind = 'beam'; beamOn(); return; }   /* 미션이 아니면 지연 없이 */
         H.kind = 'wait';
         H.timer = setTimeout(() => { if(H.kind === 'wait' && H.id !== null){ H.kind = 'beam'; beamOn(); } }, DLY);
     }, { capture: true, passive: false });
@@ -29142,11 +29157,16 @@ function glow(img, x, y, r, a){ if(a > 0.01) szGlow(img, x, y, r, a); }
 let auroraSpr = null;
 function auroraSprite(){
     if(auroraSpr) return auroraSpr;
-    const c = document.createElement('canvas'); c.width = 8; c.height = 96;
+    /* 2026-10-10 장면 검수 — 좁은 막대가 줄지어 '음량 막대'처럼 보였다 → 가로로 녹아드는 넓은 빛줄기(겹쳐서 커튼) */
+    const c = document.createElement('canvas'); c.width = 24; c.height = 96;
     const x = c.getContext('2d'), g = x.createLinearGradient(0, 96, 0, 0);
-    g.addColorStop(0, 'rgba(120,255,170,0)'); g.addColorStop(0.08, 'rgba(110,255,170,0.95)'); g.addColorStop(0.42, 'rgba(90,240,160,0.55)');
-    g.addColorStop(0.7, 'rgba(255,90,120,0.32)'); g.addColorStop(1, 'rgba(255,60,110,0)');
-    x.fillStyle = g; x.fillRect(0, 0, 8, 96);
+    g.addColorStop(0, 'rgba(130,255,150,0)'); g.addColorStop(0.07, 'rgba(120,255,150,0.9)'); g.addColorStop(0.45, 'rgba(100,240,150,0.45)');
+    g.addColorStop(0.75, 'rgba(255,100,130,0.22)'); g.addColorStop(1, 'rgba(255,80,120,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 24, 96);
+    x.globalCompositeOperation = 'destination-in';
+    const h = x.createLinearGradient(0, 0, 24, 0);
+    h.addColorStop(0, 'rgba(0,0,0,0)'); h.addColorStop(0.5, 'rgba(0,0,0,1)'); h.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = h; x.fillRect(0, 0, 24, 96);
     return (auroraSpr = c);
 }
 /* 페르미 거품 — 은하 판(P7Z[20])과 같은 자리·기울기: 중심 (CW/2 − px·0.02, CH(0.4+0.1zt)), −0.18 rad, 폭 w.
@@ -29203,22 +29223,40 @@ SZE.on('drawBg', function(now){
             const env = Math.min(1, (t - 0.1) / 0.12) * Math.min(1, (1.05 - t) / 0.1);
             const L = earthLimb(t), spr = auroraSprite(), s = now * 0.001;
             ctx.globalCompositeOperation = 'lighter';
-            const N = lo ? 26 : 52;
+            const N = lo ? 22 : 40;
             for(let i = 0; i < N; i++){
                 const u = i / (N - 1), x = CW * (0.04 + 0.6 * u);
                 const dx = x - L.cx; if(Math.abs(dx) >= L.R) continue;
                 const ly = L.cy - L.asp * Math.sqrt(L.R * L.R - dx * dx);
                 if(ly > CH + 10 || ly < -40) continue;
                 const fold = 0.5 + 0.5 * Math.sin(u * 13 + s * 0.9) * Math.sin(u * 5.3 - s * 0.55);
-                const h = 30 + 46 * fold, a = env * (0.16 + 0.44 * fold) * (0.8 + 0.2 * Math.sin(s * 3 + u * 40));
+                const h = 30 + 46 * fold, a = env * (0.08 + 0.22 * fold) * (0.85 + 0.15 * Math.sin(s * 1.6 + u * 23));
                 ctx.globalAlpha = Math.min(1, a);
-                ctx.drawImage(spr, x - 2.6, ly - h - 3, 5.2, h);
+                ctx.drawImage(spr, x - 9, ly - h - 3, 18, h);
             }
             ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
             if(t > 0.2) discover('carrington', now);
         }
     } else if(z === 9){ if(zt(9) > 0.15) discover('shock', now); }
     else if(z === 15){ if(zt(15) > 0.15) discover('betel', now); }
+    else if(z === 19 && (function(){
+        /* 2026-10-10 — 제트 예고: 진입 뒤 SZ_BH_JET_DELAY 동안 위아래 제트 길(반각 0.14 rad 원뿔)을 붉은 점선과 옅은 띠로 */
+        let B = null, dly = 2; try{ B = blackHole; dly = SZ_BH_JET_DELAY; }catch(_){}
+        const t = since(19, 0);
+        if(!B || !(B.r > 4) || t < 0 || t > dly + 0.3) return false;
+        const a = Math.min(1, t / 0.3) * Math.min(1, (dly + 0.3 - t) / 0.4), bl = 0.55 + 0.45 * Math.abs(Math.sin(now * 0.012)), tn = Math.tan(0.14), L = Math.max(CW, CH) * 1.1;
+        ctx.save();
+        for(const sg of [-1, 1]){
+            const y1 = B.cy + sg * L, w = tn * L;
+            ctx.globalAlpha = 0.12 * a; ctx.fillStyle = 'rgb(255,70,90)';
+            ctx.beginPath(); ctx.moveTo(B.cx, B.cy); ctx.lineTo(B.cx - w, y1); ctx.lineTo(B.cx + w, y1); ctx.closePath(); ctx.fill();
+            ctx.globalAlpha = 0.75 * a * bl; ctx.strokeStyle = 'rgb(255,80,100)'; ctx.lineWidth = 1.5; ctx.setLineDash([8, 7]);
+            ctx.beginPath(); ctx.moveTo(B.cx, B.cy); ctx.lineTo(B.cx - w, y1); ctx.moveTo(B.cx, B.cy); ctx.lineTo(B.cx + w, y1); ctx.stroke(); ctx.setLineDash([]);
+        }
+        try{ if(window.szWarn) szWarn('peek', B.cx, Math.min(CH - 40, B.cy + B.r + 70), now, Math.min(1, t / dly), 'line'); }catch(_){}
+        ctx.restore(); ctx.globalAlpha = 1;
+        return false;
+    })()){ }
     else if(z === 19){
         /* 플레어 열점 — 광자 고리 바로 바깥 기울어진 궤도. 다가오는 쪽(앞쪽 반원)이 도플러 빔으로 밝다. 9초마다 1.2초 플레어 */
         let B = null; try{ B = blackHole; }catch(_){}
@@ -29737,12 +29775,8 @@ SZE.on('drawWorld', function(now){
         const left = (f.n - f.nGot - f.miss) / f.n;
         const ga = 0.2 * pre * left;
         if(ga > 0.01){
-            /* 2026-10-09 — 둥근 점선 대신 자기력선: 가는 실선 + 그 위를 흐르는 옅은 빛 */
-            ctx.globalAlpha = ga * 1.1; ctx.lineWidth = 1.2; ctx.lineCap = 'round'; ctx.strokeStyle = 'rgb(' + COIN_RGB + ')';
-            ctx.translate(f.ox, f.oy); ctx.stroke(f.path);
-            ctx.globalAlpha = ga * 1.6; ctx.lineWidth = 2.2; ctx.setLineDash([18, 70]); ctx.lineDashOffset = -e * 0.09; ctx.stroke(f.path);
-            ctx.translate(-f.ox, -f.oy);
-            ctx.setLineDash([]);
+            /* 2026-10-10 장면 검수 — 화면을 가로지르는 긴 길 곡선이 '이상한 선'으로 보였다. 입자마다 짧은 자기력선만 남긴다 */
+            void ga;
         }
     }
     for(let k = 0; k < f.n; k++){
