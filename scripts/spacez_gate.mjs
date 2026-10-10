@@ -490,7 +490,7 @@ EXT_CMDS.hepshots = {
     all: false,
     run: async (base) => {
         const dir = path.join(os.tmpdir(), 'spacez_hep'); fs.mkdirSync(dir, { recursive: true });
-        const PTS = [[0, 0.45], [3, 0.0], [19, 0.3], [20, 0.3], [20, 0.53], [20, 0.556], [21, 0.45], [21, 0.47], [22, 0.38], [22, 0.40], [23, 0.43], [27, 0.505], [27, 0.55], [29, 0.6], [29, 0.885]];
+        const PTS = [[0, 0.45], [3, 0.0], [9, 0.06], [19, 0.02], [19, 0.3], [20, 0.3], [20, 0.53], [20, 0.556], [21, 0.45], [21, 0.47], [22, 0.38], [22, 0.40], [23, 0.43], [27, 0.505], [27, 0.55], [29, 0.6], [29, 0.885]];
         const out = { shots: [] };
         await withEdge({ w: 412, h: 915, dsf: 2, mobile: true }, async (e) => {
             await e.open(gameUrl(base, 'ko'), 1800);
@@ -509,7 +509,7 @@ EXT_CMDS.hepshots = {
         return out;
     },
     judge: (cur) => {
-        row('G-hep', '장면 수', cur.shots.length, null, '15', cur.shots.length === 15 ? 'PASS' : 'FAIL', path.dirname(cur.shots[0] ? cur.shots[0].fn : ''));
+        row('G-hep', '장면 수', cur.shots.length, null, '17', cur.shots.length === 17 ? 'PASS' : 'FAIL', path.dirname(cur.shots[0] ? cur.shots[0].fn : ''));
         row('G-hep', '관측 기록', cur.seen.join(','), null, '사람 검수', 'INFO');
         row('G-hep', 'JS 예외', cur.err.length ? cur.err.join(' | ').slice(0, 120) : 0, null, '0', cur.err.length ? 'FAIL' : 'PASS');
     },
