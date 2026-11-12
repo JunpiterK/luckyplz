@@ -241,6 +241,20 @@ grant execute on function public.lp_stat_ingest(jsonb) to anon, authenticated;
 
 
 -- ---------------------------------------------------------------------
+-- 4-9. 읽기 허용 판정 — 관리자 로그인, 또는 lp_ops_read 가 읽기 키를 확인한
+--      같은 트랜잭션(트랜잭션 한정 설정값이라 다른 요청에서 흉내 낼 수 없다)
+-- ---------------------------------------------------------------------
+create or replace function public._lp_ops_allowed()
+returns boolean
+language sql stable security definer
+set search_path = public
+as $$
+    select public.is_admin() or coalesce(current_setting('lp.ops_ok', true), '') = '1';
+$$;
+revoke all on function public._lp_ops_allowed() from public, anon, authenticated;
+
+
+-- ---------------------------------------------------------------------
 -- 5. 상황판 읽기 — 내부 도우미(필터 적용된 페이지뷰 · KPI)
 --    p_f: {country, path, dev, src, vid, inc_me, inc_dc}
 -- ---------------------------------------------------------------------
@@ -314,7 +328,7 @@ declare
     -- 비교 기간 = 날짜 단위로 통째로 민 같은 구간('오늘 0시~지금' ↔ '어제 0시~어제 이 시각')
     v_shift interval := ceil(extract(epoch from p_to - p_from) / 86400) * interval '1 day';
 begin
-    if not public.is_admin() then
+    if not public._lp_ops_allowed() then
         raise exception 'forbidden' using errcode = '42501';
     end if;
     if p_from is null or p_to is null or p_to <= p_from or v_span > interval '400 days' then
@@ -494,7 +508,7 @@ language plpgsql stable security definer
 set search_path = public
 as $$
 begin
-    if not public.is_admin() then
+    if not public._lp_ops_allowed() then
         raise exception 'forbidden' using errcode = '42501';
     end if;
     if p_from is null or p_to is null or p_to <= p_from or p_to - p_from > interval '400 days' then
@@ -560,7 +574,7 @@ as $$
 declare
     v_me boolean := coalesce(p_f->>'inc_me', '') = 'true';
 begin
-    if not public.is_admin() then
+    if not public._lp_ops_allowed() then
         raise exception 'forbidden' using errcode = '42501';
     end if;
 
@@ -609,7 +623,7 @@ language plpgsql security definer
 set search_path = public
 as $$
 begin
-    if not public.is_admin() then
+    if not public._lp_ops_allowed() then
         raise exception 'forbidden' using errcode = '42501';
     end if;
     perform public.lp_stat_housekeep();
@@ -624,7 +638,51 @@ revoke all on function public.lp_ops_days(int) from public, anon;
 grant execute on function public.lp_ops_days(int) to authenticated;
 
 
--- 확인: 아래가 5행이면 적용 완료
+-- ---------------------------------------------------------------------
+-- 10. 읽기 전용 키 — 로그인 없이 상황판 숫자만 읽는 통로(분석 스크립트용)
+--     키 원문은 DB 에 없다. sha256 해시만 저장하고, 원문은 운영자 PC 의
+--     .keys/ops-read.key(깃 제외)에만 있다. 키를 없애려면 행을 지운다.
+--     이 키로는 lp_ops_board/sessions/live/days 결과만 읽을 수 있고
+--     어떤 테이블에도 쓰거나 직접 SELECT 할 수 없다.
+-- ---------------------------------------------------------------------
+create table if not exists public.lp_ops_keys (
+    hash       text        primary key check (hash ~ '^[0-9a-f]{64}$'),
+    label      text        not null default '',
+    created_at timestamptz not null default now(),
+    last_used  timestamptz
+);
+alter table public.lp_ops_keys enable row level security;
+revoke all on public.lp_ops_keys from anon, authenticated;
+
+create or replace function public.lp_ops_read(p_key text, p_fn text, p_args jsonb default '{}'::jsonb)
+returns jsonb
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+    v_hash text := encode(sha256(convert_to(coalesce(p_key, ''), 'UTF8')), 'hex');
+    a      jsonb := coalesce(p_args, '{}'::jsonb);
+begin
+    if p_key is null or length(p_key) < 32
+       or not exists (select 1 from public.lp_ops_keys where hash = v_hash) then
+        raise exception 'forbidden' using errcode = '42501';
+    end if;
+    update public.lp_ops_keys set last_used = now() where hash = v_hash;
+    perform set_config('lp.ops_ok', '1', true);   -- 이 트랜잭션 안에서만
+    return case p_fn
+        when 'board'    then public.lp_ops_board((a->>'from')::timestamptz, (a->>'to')::timestamptz, coalesce(a->'f', '{}'::jsonb))
+        when 'sessions' then public.lp_ops_sessions((a->>'from')::timestamptz, (a->>'to')::timestamptz, coalesce(a->'f', '{}'::jsonb),
+                                                    coalesce((a->>'limit')::int, 50), coalesce((a->>'offset')::int, 0))
+        when 'live'     then public.lp_ops_live(coalesce(a->'f', '{}'::jsonb))
+        when 'days'     then public.lp_ops_days(coalesce((a->>'days')::int, 400))
+    end;
+end;
+$$;
+revoke all on function public.lp_ops_read(text, text, jsonb) from public;
+grant execute on function public.lp_ops_read(text, text, jsonb) to anon, authenticated;
+
+
+-- 확인: 아래가 7행이면 적용 완료
 select proname from pg_proc
- where proname in ('lp_stat_ingest', 'lp_ops_board', 'lp_ops_sessions', 'lp_ops_live', 'lp_ops_days')
+ where proname in ('lp_stat_ingest', 'lp_ops_board', 'lp_ops_sessions', 'lp_ops_live', 'lp_ops_days', 'lp_ops_read', '_lp_ops_allowed')
  order by proname;
