@@ -235,6 +235,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **OG 이미지.** 링크로 공유되는 모든 페이지는 내용에 맞는 OG 이미지를 갖춰야 한다. 생성기는 `scripts/gen-og-games.py`(게임별), `scripts/gen-og-main.py`(사이트 대표). 폰트는 `scripts/og-fonts/`.
 
+**운영 상황판 `/ops/` (2026-11-12).** GA4 는 운영자가 보기 어려워 1st-party 방문 통계를 따로 쌓는다. 흐름: `public/js/lpTrack.js` 의 `LpStat`(모든 페이지) → `POST /api/p` = **Cloudflare Pages Function `functions/api/p.js`**(국가·도시·통신사·기기·유입·검색어를 붙이고 봇 UA 는 버림) → Supabase RPC `lp_stat_ingest` → `lp_hits`/`lp_events`. 화면은 관리자(`is_admin()`)만 RPC `lp_ops_board`·`lp_ops_sessions`·`lp_ops_live`·`lp_ops_days` 로 읽는다. SQL 원본 `supabase/migrations/2026-11-12-ops-stats.sql`.
+- IP·쿠키 저장 없음. 방문자·세션 id 는 localStorage 무작위 uuid. 운영자 기기는 `/ops/` 를 연 순간 `lp_stat_me=1` 로 표시돼 기본 집계에서 빠진다
+- 머문 시간 = 화면에 보이는 동안 + 마지막 조작 후 30분 이내만. 한 페이지뷰는 시작 1번 + 15초·1분·이후 4분마다 + 숨김 때 갱신(같은 내용 upsert 라 유실돼도 됨) — **Workers 무료 한도(하루 10만 요청)** 를 쓰니 주기를 줄이지 말 것
+- 랜딩 iframe 속 게임은 페이지뷰를 만들지 않고 이벤트만 부모 페이지뷰에 붙인다. 로컬은 `?lp_stat=1` 로 켜고 `server.py` 가 `/api/p` 내용을 찍기만 한다
+- 원본 400일 + 200만 행 상한, 일별 요약 `lp_stat_days` 는 영구. 청소는 수집 호출 0.4% 확률(pg_cron 불필요)
+- **상관 서브쿼리 금지** — 페이지별 플레이 수를 상관 서브쿼리로 썼다가 30일 조회가 23초 걸렸다(조인으로 0.13초)
+
 **Analytics.** GA4 measurement ID 는 `G-NZDPE3H3DQ` (property: LuckyPlz). 이전 `notmeplz.com` ID `G-W91WWVNLD6` 는 어디에도 남아 있으면 안 된다 — 커밋 전 grep 할 것.
 
 **Monetization.** AdSense Publisher ID `ca-pub-5370817769801923`. **현재 미승인**("low value content" 3회+ 거절). 광고 슬롯 ID 3개는 `public/js/adSlots.js` 에 실값으로 있으나, 게임 17종 전부 `<meta name="lp-ad-policy" content="off">` 라서 `adSlots.js` 가 로드조차 되지 않는다 — 즉 **광고 배선 준비도는 0%** 이며 승인이 나도 2~3주 배선 작업이 남는다. 상세는 [docs/MONETIZATION_AUDIT_2026-08.md](docs/MONETIZATION_AUDIT_2026-08.md).

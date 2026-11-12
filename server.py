@@ -30,6 +30,14 @@ def room_invite(code):
     """Rooms v2 초대 링크 /r/<CODE>#k=... → /lobby/index.html (public/_redirects 의 200 rewrite 를 흉내)."""
     return send_file(os.path.join(PUBLIC, 'lobby', 'index.html'))
 
+@app.route('/api/p', methods=['POST', 'GET'])
+def stat_beacon():
+    """방문 통계 비컨 — 운영에서는 functions/api/p.js (Pages Function) 가 받는다.
+    로컬은 받은 내용만 찍고 204 (DB 로 보내지 않는다). ?lp_stat=1 로 켠다."""
+    from flask import request
+    print('[lp_stat]', request.get_data(as_text=True)[:600], flush=True)
+    return '', 204
+
 @app.route('/<path:path>')
 def static_files(path):
     full = os.path.join(PUBLIC, path)

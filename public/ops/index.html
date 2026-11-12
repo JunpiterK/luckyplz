@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--lp-build-check:start-->
+<meta name="lp-build" content="1794469611">
+<script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
+<script>(function(){var B="1794469611";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<!--lp-build-check:end-->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="robots" content="noindex, nofollow">
+<title>상황판 · Lucky Please</title>
+<style>
+/* 운영 상황판 — 관리자 전용. 데이터는 supabase/migrations/2026-11-12-ops-stats.sql 의 lp_ops_* RPC.
+   색: 차트 색은 dataviz 기준 팔레트(어두운 화면용)만 쓴다. 글자는 글자색, 색은 막대·칸·점에만. */
+:root{
+  color-scheme:dark;
+  --bg:#0b0b10;--card:#15151b;--card2:#1c1c23;--line:rgba(255,255,255,.08);--grid:#2a2a31;--axis:#3a3a42;
+  --ink:#f0efec;--ink2:#c3c2b7;--muted:#898781;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;
+  --good:#0ca30c;--bad:#e66767;--nodata:#24242c;--brand:#FFE66D;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;min-height:100dvh}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+a{color:inherit}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px 64px}
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+
+/* 머리 */
+.top{display:flex;align-items:center;gap:10px;padding:16px 0 10px;flex-wrap:wrap}
+.brand{font-weight:900;letter-spacing:.06em;color:var(--brand)}
+.chip-title{font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--ink2)}
+.live-pill{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-weight:700}
+.live-pill i{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 rgba(12,163,12,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 7px rgba(12,163,12,0)}100%{box-shadow:0 0 0 0 rgba(12,163,12,0)}}
+.top nav{margin-left:auto;display:flex;gap:6px}
+.top nav a{font-size:13px;color:var(--ink2);text-decoration:none;padding:6px 10px;border-radius:8px}
+.top nav a:hover{background:var(--card)}
+
+/* 필터 줄 */
+.bar{position:sticky;top:0;z-index:20;background:rgba(11,11,16,.92);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:8px 0;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:flex;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:2px}
+.seg button{padding:6px 11px;border-radius:8px;color:var(--ink2);font-weight:700;font-size:13px}
+.seg button.on{background:var(--card2);color:var(--ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.fchips{display:flex;gap:6px;flex-wrap:wrap}
+.fchip{display:flex;align-items:center;gap:6px;padding:5px 6px 5px 10px;border-radius:999px;background:rgba(57,135,229,.16);border:1px solid rgba(57,135,229,.45);font-size:13px;font-weight:700}
+.fchip b{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);font-weight:400}
+.bar .sp{flex:1}
+.tog{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink2);cursor:pointer;user-select:none}
+.tog input{accent-color:var(--s1)}
+.refresh{padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-size:13px;color:var(--ink2)}
+.refresh:hover{color:var(--ink)}
+#updated{font-size:12px;color:var(--muted)}
+
+/* 카드 */
+.grid{display:grid;gap:12px;margin-top:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.g2s{grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 14px 12px;min-width:0}
+.card h2{font-size:14px;font-weight:800;display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.card h2 small{font-weight:500;color:var(--muted);font-size:12px}
+.card h2 .seg{margin-left:auto}
+.card h2 .seg button{padding:3px 8px;font-size:12px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.empty{color:var(--muted);font-size:13px;padding:18px 0;text-align:center}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.kpi .k{font-size:12.5px;color:var(--ink2);font-weight:700}
+.kpi .v{font-size:28px;font-weight:800;margin:2px 0 1px;letter-spacing:-.01em}
+.kpi .d{font-size:12px;font-weight:700}
+.kpi .d.up{color:var(--good)}.kpi .d.down{color:var(--bad)}.kpi .d.flat{color:var(--muted)}
+.kpi .s{font-size:12px;color:var(--muted)}
+
+/* 차트 */
+svg{display:block;overflow:visible}
+.ax{fill:var(--muted);font-size:11px}
+.gl{stroke:var(--grid);stroke-width:1}
+.base{stroke:var(--axis);stroke-width:1}
+.bar-m{fill:var(--s1)}
+.hit{fill:transparent}
+.hit.on+.bar-m,.bar-m.on{fill:#6da7ec}
+.chart{width:100%;min-height:60px}
+
+/* 가로 막대 목록 */
+.hb{display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;gap:8px;align-items:center;width:100%;text-align:left;padding:5px 4px;border-radius:7px}
+.hb:hover{background:var(--card2)}
+.hb[disabled]{cursor:default}.hb[disabled]:hover{background:none}
+.hb-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.hb-l small{color:var(--muted);margin-left:5px}
+.hb-t{height:8px;border-radius:4px;background:var(--card2);overflow:hidden}
+.hb-f{display:block;height:100%;background:var(--s1);border-radius:0 4px 4px 0}
+.hb-v{font-variant-numeric:tabular-nums;font-size:13px;font-weight:700;min-width:34px;text-align:right}
+.hb-v small{font-weight:500;color:var(--muted);margin-left:6px}
+
+/* 표 */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{font-size:11.5px;color:var(--muted);font-weight:700;text-align:right;padding:6px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.tbl td{padding:7px 6px;border-bottom:1px solid rgba(255,255,255,.04);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl tr.click{cursor:pointer}
+.tbl tr.click:hover td{background:var(--card2)}
+.tbl td .nm{display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+.tbl td .nm small{color:var(--muted)}
+.tbl-wrap{overflow-x:auto;margin:0 -4px;padding:0 4px}
+.cc{display:inline-block;min-width:24px;padding:1px 4px;border-radius:4px;background:var(--card2);border:1px solid var(--line);font-size:10.5px;font-weight:800;text-align:center;color:var(--ink2);letter-spacing:.03em}
+.inbar{height:3px;border-radius:2px;background:var(--s1);margin-top:3px}
+.more{margin-top:8px;font-size:12.5px;color:var(--ink2);padding:6px 10px;border-radius:8px;border:1px solid var(--line)}
+.more:hover{color:var(--ink)}
+
+/* 지도 */
+#map{width:100%;position:relative}
+#map path.cty{stroke:#0b0b10;stroke-width:.5}
+#map path.cty.has{cursor:pointer}
+#map path.cty.has:hover{stroke:#f0efec;stroke-width:1}
+#map svg{overflow:hidden}
+.legend-ramp{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);margin-top:6px}
+.legend-ramp i{flex:0 0 140px;height:8px;border-radius:4px;background:linear-gradient(90deg,#104281,#2a78d6,#6da7ec,#b7d3f6)}
+
+/* 시간대 */
+.heat{display:grid;grid-template-columns:22px repeat(24,1fr);gap:2px;font-size:10.5px;color:var(--muted)}
+.heat i{aspect-ratio:1/1;border-radius:3px;background:var(--nodata);min-width:0}
+.heat span{text-align:center;line-height:1.6}
+.heat .rl{text-align:left}
+
+/* 유입 채널 띠 */
+.stack{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px;margin:2px 0 8px}
+.stack i{display:block;height:100%}
+.leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--ink2);margin-bottom:8px}
+.leg span{display:flex;align-items:center;gap:5px}
+.leg i{width:10px;height:10px;border-radius:3px}
+.ch{display:inline-block;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--ink2)}
+.ch i{display:inline-block;width:7px;height:7px;border-radius:2px;margin-right:4px;vertical-align:0}
+
+/* 지금 */
+.live-row{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;padding:8px 2px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+.live-row:last-child{border-bottom:0}
+.live-row .w{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-row .r{text-align:right;font-variant-numeric:tabular-nums}
+.live-row .r small{display:block;color:var(--muted);font-size:11.5px}
+
+/* 방문 기록 */
+.ses{border-bottom:1px solid rgba(255,255,255,.05)}
+.ses summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:96px 1fr auto;gap:2px 12px;padding:9px 4px;align-items:start}
+.ses summary::-webkit-details-marker{display:none}
+.ses summary:hover{background:var(--card2)}
+.ses[open] summary{background:var(--card2)}
+.ses .t{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:12.5px}
+.ses .t small{display:block;color:var(--muted);font-size:11px}
+.ses .who{font-size:13px;min-width:0}
+.ses .who .l1{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ses .who .l2{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ses .dur{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.ses .dur small{display:block;font-weight:500;color:var(--muted);font-size:11.5px}
+.tag{font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--ink2)}
+.tag.new{border-color:rgba(57,135,229,.5);color:#9ec5f4}
+.tag.play{border-color:rgba(25,158,112,.5);color:#7fd4b2}
+.ses-body{padding:6px 6px 14px 112px;font-size:12.5px}
+.tl{border-left:2px solid var(--grid);margin:6px 0 10px;padding-left:12px}
+.tl div{padding:3px 0;display:flex;gap:10px}
+.tl .tt{color:var(--muted);font-variant-numeric:tabular-nums;width:62px;flex:0 0 auto}
+.tl .ev{color:#7fd4b2}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;color:var(--ink2)}
+.kv b{color:var(--muted);font-weight:600}
+.lnk{color:#9ec5f4;text-decoration:underline;cursor:pointer;margin-top:8px;display:inline-block}
+
+/* 툴팁 · 게이트 */
+#tip{position:fixed;z-index:100;pointer-events:none;background:#23232b;border:1px solid rgba(255,255,255,.14);border-radius:9px;padding:8px 10px;font-size:12.5px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:280px}
+#tip b{font-weight:800}
+#tip .row{display:flex;justify-content:space-between;gap:14px}
+#tip .row span:last-child{font-variant-numeric:tabular-nums;font-weight:700}
+.gate{max-width:520px;margin:18vh auto 0;text-align:center;padding:0 16px;color:var(--ink2)}
+.gate h1{font-size:18px;margin-bottom:10px;color:var(--ink)}
+.gate code{background:var(--card2);padding:2px 6px;border-radius:5px;font-size:12.5px}
+.banner{margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(201,133,0,.45);background:rgba(201,133,0,.08);font-size:13px;color:var(--ink2)}
+.foot{margin-top:16px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 16px}
+.foot button{color:#9ec5f4;text-decoration:underline}
+
+@media (max-width:640px){
+  .wrap{padding:0 10px 56px}
+  .kpi .v{font-size:23px}
+  .ses summary{grid-template-columns:70px 1fr auto;gap:2px 8px}
+  .ses-body{padding:6px 4px 12px}
+  .hb{grid-template-columns:minmax(70px,40%) 1fr auto}
+  .bar .sp{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate"><h1>상황판</h1><p>로그인 확인 중…</p></div>
+
+<div class="wrap" id="app" hidden>
+  <div class="top">
+    <span class="brand">LUCKY PLEASE</span><span class="chip-title">상황판</span>
+    <button class="live-pill" id="livePill" title="최근 5분 안에 신호가 온 방문"><i></i><span id="liveN">지금 –명</span></button>
+    <nav><a href="/admin/">회원 관리</a><a href="/" target="_blank" rel="noopener">사이트 ↗</a></nav>
+  </div>
+
+  <div class="bar">
+    <div class="seg" id="rangeSeg">
+      <button data-r="today">오늘</button><button data-r="yesterday">어제</button><button data-r="7d">7일</button><button data-r="30d">30일</button><button data-r="90d">90일</button>
+    </div>
+    <div class="fchips" id="fchips"></div>
+    <span class="sp"></span>
+    <label class="tog" title="체크하면 운영자 본인 기기의 방문도 셉니다"><input type="checkbox" id="incMe">내 방문 포함</label>
+    <label class="tog" title="체크하면 데이터센터(서버) IP 에서 온 방문도 셉니다 — 대개 봇"><input type="checkbox" id="incDc">서버 IP 포함</label>
+    <button class="refresh" id="refresh">↻ 새로 고침</button><span id="updated"></span>
+  </div>
+
+  <div id="banner"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid g2">
+    <section class="card" style="grid-column:1/-1">
+      <h2>흐름 <small id="trendSub"></small>
+        <span class="seg" id="metricSeg"><button data-m="v">방문자</button><button data-m="pv">페이지뷰</button><button data-m="avg">평균 체류</button><button data-m="g">게임 플레이</button></span>
+      </h2>
+      <div class="chart" id="trend"></div>
+    </section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card">
+      <h2>어느 나라에서 <small>지도를 누르면 그 나라만 봅니다</small></h2>
+      <div id="map"></div>
+      <div class="legend-ramp"><span>적음</span><i></i><span id="mapMax">많음</span><span>· 방문자 수</span></div>
+      <div class="tbl-wrap" style="margin-top:10px"><table class="tbl" id="countryTbl"></table></div>
+      <div id="countryMore"></div>
+    </section>
+    <section class="card">
+      <h2>지금 접속 중 <small id="liveSub">최근 5분</small></h2>
+      <div class="chart" id="live30" style="margin-bottom:6px"></div>
+      <div id="liveList"></div>
+      <h2 style="margin-top:16px">도시 <small>Cloudflare 추정 위치</small></h2>
+      <div id="cities"></div>
+    </section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card">
+      <h2>언제 오는가 <small id="heatSub">한국 시간</small>
+        <span class="seg" id="heatSeg"><button data-h="kst">한국</button><button data-h="local">방문자 현지</button></span>
+      </h2>
+      <div class="heat" id="heat"></div>
+      <p class="note">칸 하나 = 요일 × 시각에 시작한 방문 수. 진할수록 많음.</p>
+    </section>
+    <section class="card">
+      <h2>얼마나 머무나 <small>방문 1회 기준 · 화면에 보이는 동안만</small></h2>
+      <div class="chart" id="dwell"></div>
+      <div class="grid g2s" style="margin-top:4px;gap:16px">
+        <div><h2 style="margin-bottom:4px">몇 페이지 보나</h2><div class="chart" id="depth"></div></div>
+        <div><h2 style="margin-bottom:4px">몇 번째 방문인가</h2><div class="chart" id="visitno"></div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card">
+      <h2>어디서 들어오나 <small>방문 첫 페이지 기준</small></h2>
+      <div class="stack" id="chStack"></div>
+      <div class="leg" id="chLeg"></div>
+      <div class="tbl-wrap"><table class="tbl" id="srcTbl"></table></div>
+      <div id="kwBox"></div>
+    </section>
+    <section class="card">
+      <h2>무엇을 보나 <small>페이지 · 게임</small></h2>
+      <div class="tbl-wrap"><table class="tbl" id="pageTbl"></table></div>
+      <div id="pageMore"></div>
+    </section>
+  </div>
+
+  <div class="grid g3" id="dims"></div>
+
+  <div class="grid g2">
+    <section class="card">
+      <h2>게임 플레이 <small>결과 화면까지 간 판 수</small></h2>
+      <div id="plays"></div>
+    </section>
+    <section class="card">
+      <h2>게임 페이지 열림 <small>기존 카운터 · 5분에 1번 · 나라 정보 없음</small></h2>
+      <div id="opens"></div>
+      <p class="note" id="opensNote"></p>
+    </section>
+  </div>
+
+  <div class="grid">
+    <section class="card">
+      <h2>방문 기록 <small id="sesSub"></small></h2>
+      <div id="sessions"></div>
+      <div id="sesMore"></div>
+    </section>
+  </div>
+
+  <div class="grid" id="longWrap" hidden>
+    <section class="card">
+      <h2>장기 추이 <small>하루 방문자 · 일별 요약(원본이 지워져도 남음)</small></h2>
+      <div class="chart" id="longterm"></div>
+    </section>
+  </div>
+
+  <div class="foot" id="foot"></div>
+</div>
+
+<div id="tip" hidden></div>
+
+<script src="/vendor/supabase.min.js"></script>
+<script src="/js/supabase-config.js?v=1794469611"></script>
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const MOCK=window.OPS_MOCK||null;               /* 로컬 시험용 대체 데이터원(운영에서는 없음) */
+const DAY=864e5, KOFF=9*36e5;
+
+/* ---------- 이름표 ---------- */
+const GN={'car-racing':'카레이싱','glory-racing':'브롤 런',roulette:'룰렛',ladder:'사다리',dice:'주사위',lotto:'로또 추첨',team:'팀 뽑기',bingo:'빙고',balloon:'풍선 룰렛',snake:'스네이크',pacman:'닷 러너',tetris:'테트로미노 쌓기','starship-lander':'스타십 착륙',brick:'벽돌깨기',burger:'버거 셰프',dodge:'스페이스-Z','lucky-merge':'행성 키우기',quiz:'라이브 퀴즈',orbit:'델타-브이',yut:'윷놀이',yacht:'요트 다이스',omok:'오목',lots:'긁는 제비뽑기',janggi:'장기',ludo:'루도',reversi:'리버시','prism-hex':'프리즘 헥스','mahjong-tw':'대만 마작','mahjong-solitaire':'마작 솔리테어',bubble:'버블 버스트',gummy:'구미 체인'};
+const LAND={'/wheel-spinner/':'룰렛','/team-generator/':'팀','/dice-roller/':'주사위','/bingo-caller/':'빙고','/race-picker/':'레이스','/ladder-draw/':'사다리',
+  '/es/ruleta/':'룰렛','/es/sorteo-equipos/':'팀','/es/tirar-dados/':'주사위','/es/bingo/':'빙고','/es/carrera-aleatoria/':'레이스','/es/escalera/':'사다리',
+  '/pt/roleta/':'룰렛','/pt/sorteio-times/':'팀','/pt/rolar-dados/':'주사위','/pt/bingo/':'빙고','/pt/corrida-aleatoria/':'레이스','/pt/escada/':'사다리',
+  '/ja/roulette/':'룰렛','/ja/team-generator/':'팀','/ja/saikoro/':'주사위','/ja/bingo/':'빙고','/ja/random-race/':'레이스','/ja/amidakuji/':'사다리'};
+const PAGES={'/':'홈 (영어)','/ko/':'홈 (한국어)','/es/':'홈 (스페인어)','/pt/':'홈 (포르투갈어)','/ja/':'홈 (일본어)','/arcade/':'아케이드','/games/':'게임 목록','/lobby/':'방 로비','/r/*':'초대 링크','/u/*':'프로필','/auth/':'로그인','/me/':'내 정보','/about/':'소개','/privacy/':'개인정보','/terms/':'약관','/contact/':'문의','/messages/':'메시지'};
+function plabel(p){
+  if(PAGES[p])return PAGES[p];
+  if(LAND[p]){const l=p.split('/')[1];return LAND[p]+' 랜딩 · '+(/^(es|pt|ja)$/.test(l)?l:'en')}
+  const m=p.match(/^\/games\/([^\/]+)\/?$/);if(m)return GN[m[1]]||m[1];
+  return p;
+}
+const SRC_NAME={direct:'직접 입력·즐겨찾기',unknown:'미상',google:'구글',naver:'네이버',daum:'다음',kakao:'카카오',kakaotalk:'카카오톡',bing:'빙',yahoo:'야후',duckduckgo:'DuckDuckGo',baidu:'바이두',yandex:'얀덱스',ecosia:'에코시아',chatgpt:'ChatGPT',perplexity:'Perplexity',gemini:'Gemini',claude:'Claude',copilot:'Copilot',facebook:'페이스북',instagram:'인스타그램',x:'X(트위터)',youtube:'유튜브',reddit:'레딧',threads:'스레드',tiktok:'틱톡',line:'라인',band:'밴드',everytime:'에브리타임',discord:'디스코드',telegram:'텔레그램',naver_app:'네이버 앱',daum_app:'다음 앱'};
+const CH=[ /* 채널 = 색 슬롯 고정(순서 = 검증된 인접 순서) */
+  {k:'search',n:'검색',c:'var(--s1)',m:['google','naver','daum','bing','yahoo','duckduckgo','baidu','yandex','ecosia']},
+  {k:'direct',n:'직접',c:'var(--s2)',m:['direct']},
+  {k:'msg',n:'메신저',c:'var(--s3)',m:['kakaotalk','kakao','line','telegram','discord','whatsapp']},
+  {k:'social',n:'소셜',c:'var(--s4)',m:['facebook','instagram','x','youtube','reddit','threads','tiktok','band','everytime']},
+  {k:'ai',n:'AI',c:'var(--s5)',m:['chatgpt','perplexity','gemini','claude','copilot']},
+  {k:'ref',n:'다른 사이트',c:'var(--s6)',m:[]},
+  {k:'unk',n:'미상',c:'#55555e',m:['unknown']}];
+function chOf(src){for(const c of CH)if(c.m.indexOf(src)>=0)return c;return CH[5]}
+function sname(s){return SRC_NAME[s]||s}
+const DEVN={mobile:'폰',desktop:'PC',tablet:'태블릿','?':'미상'};
+const INAPP={kakaotalk:'카카오톡 앱',naver:'네이버 앱',daum:'다음 앱',instagram:'인스타그램 앱',facebook:'페이스북 앱',line:'라인 앱',everytime:'에브리타임 앱',tiktok:'틱톡 앱',x:'X 앱',webview:'기타 앱'};
+let RN=null,LN=null;
+try{RN=new Intl.DisplayNames(['ko'],{type:'region'})}catch(e){}
+try{LN=new Intl.DisplayNames(['ko'],{type:'language'})}catch(e){}
+function cname(c){if(!c||c==='??')return '알 수 없음';if(c==='T1')return 'Tor';if(c==='XX')return '미상';try{return RN?RN.of(c):c}catch(e){return c}}
+function lname(c){if(!c||c==='-'||c==='?')return '미상';try{return LN?LN.of(c):c}catch(e){return c}}
+const ISO={};'AF4,AL8,DZ12,AS16,AD20,AO24,AI660,AQ10,AG28,AR32,AM51,AW533,AU36,AT40,AZ31,BS44,BH48,BD50,BB52,BY112,BE56,BZ84,BJ204,BM60,BT64,BO68,BA70,BW72,BV74,BR76,IO86,BN96,BG100,BF854,BI108,KH116,CM120,CA124,CV132,KY136,CF140,TD148,CL152,CN156,CX162,CC166,CO170,KM174,CG178,CD180,CK184,CR188,CI384,HR191,CU192,CY196,CZ203,DK208,DJ262,DM212,DO214,EC218,EG818,SV222,GQ226,ER232,EE233,ET231,FK238,FO234,FJ242,FI246,FR250,GF254,PF258,TF260,GA266,GM270,GE268,DE276,GH288,GI292,GR300,GL304,GD308,GP312,GU316,GT320,GN324,GW624,GY328,HT332,HM334,VA336,HN340,HK344,HU348,IS352,IN356,ID360,IR364,IQ368,IE372,IL376,IT380,JM388,JP392,JO400,KZ398,KE404,KI296,KP408,KR410,KW414,KG417,LA418,LV428,LB422,LS426,LR430,LY434,LI438,LT440,LU442,MO446,MG450,MW454,MY458,MV462,ML466,MT470,MH584,MQ474,MR478,MU480,YT175,MX484,FM583,MD498,MC492,MN496,MS500,MA504,MZ508,MM104,NA516,NR520,NP524,NL528,NC540,NZ554,NI558,NE562,NG566,NU570,NF574,MP580,MK807,NO578,OM512,PK586,PW585,PS275,PA591,PG598,PY600,PE604,PH608,PN612,PL616,PT620,PR630,QA634,RE638,RO642,RU643,RW646,SH654,KN659,LC662,PM666,VC670,WS882,SM674,ST678,SA682,SN686,SC690,SL694,SG702,SK703,SI705,SB90,SO706,ZA710,GS239,ES724,LK144,SD729,SR740,SJ744,SZ748,SE752,CH756,SY760,TW158,TJ762,TZ834,TH764,TL626,TG768,TK772,TO776,TT780,TN788,TR792,TM795,TC796,TV798,UG800,UA804,AE784,GB826,US840,UM581,UY858,UZ860,VU548,VE862,VN704,VG92,VI850,WF876,EH732,YE887,ZM894,ZW716,AX248,BQ535,CW531,GG831,IM833,JE832,ME499,BL652,MF663,RS688,SX534,SS728,XK983'.split(',').forEach(s=>{ISO[s.slice(0,2)]=+s.slice(2)});
+const ISO_R={};Object.keys(ISO).forEach(k=>{ISO_R[ISO[k]]=k});
+
+/* ---------- 숫자 · 시각 ---------- */
+const nf=n=>Number(n||0).toLocaleString('ko-KR');
+function dfmt(ms){
+  let s=Math.round((ms||0)/1000);if(s<60)return s+'초';
+  const m=Math.floor(s/60);s%=60;if(m<60)return m+'분'+(s&&m<10?' '+s+'초':'');
+  return Math.floor(m/60)+'시간 '+(m%60)+'분';
+}
+function pct(a,b){return b?Math.round(a/b*100):0}
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fK=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});
+const fKt=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+const fKd=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',weekday:'short'});
+const fKhm=new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false});
+function localT(ts,tz){try{return new Intl.DateTimeFormat('ko-KR',{timeZone:tz,month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date(ts))}catch(e){return ''}}
+function ago(ts){const s=Math.max(0,(Date.now()-new Date(ts))/1000);if(s<60)return Math.round(s)+'초 전';if(s<3600)return Math.round(s/60)+'분 전';return Math.round(s/3600)+'시간 전'}
+const WD=['월','화','수','목','금','토','일'];
+function bucketLabel(t,unit,long){ /* 'YYYY-MM-DDTHH:MI'(KST) */
+  const y=+t.slice(0,4),mo=+t.slice(5,7),d=+t.slice(8,10),h=+t.slice(11,13);
+  const wd=WD[(new Date(Date.UTC(y,mo-1,d)).getUTCDay()+6)%7];
+  if(unit==='hour')return long?`${mo}월 ${d}일 (${wd}) ${h}시`:`${h}시`;
+  return long?`${mo}월 ${d}일 (${wd})`:`${mo}/${d}`;
+}
+
+/* ---------- 상태 ---------- */
+const st={r:'today',m:'v',heat:'kst',f:{},incMe:false,incDc:false,board:null,ses:[],sesTotal:0,live:null,days:null,showAllC:false,showAllP:false};
+try{const s=JSON.parse(localStorage.getItem('lp_ops_ui')||'{}');if(s.r)st.r=s.r;if(s.m)st.m=s.m;if(s.heat)st.heat=s.heat}catch(e){}
+function saveUi(){try{localStorage.setItem('lp_ops_ui',JSON.stringify({r:st.r,m:st.m,heat:st.heat}))}catch(e){}}
+function kstMid(t){return Math.floor((t+KOFF)/DAY)*DAY-KOFF}
+function range(){
+  const now=Date.now(),m0=kstMid(now),end=now+60e3;
+  const R={today:[m0,end],yesterday:[m0-DAY,m0],'7d':[m0-6*DAY,end],'30d':[m0-29*DAY,end],'90d':[m0-89*DAY,end]}[st.r]||[m0,end];
+  return {from:new Date(R[0]).toISOString(),to:new Date(R[1]).toISOString()};
+}
+function filt(){const f=Object.assign({},st.f);if(st.incMe)f.inc_me=true;if(st.incDc)f.inc_dc=true;return f}
+async function rpc(fn,args){
+  const r=MOCK?await MOCK.rpc(fn,args):await getSupabase().rpc(fn,args);
+  if(r.error)throw r.error;return r.data;
+}
+
+/* ---------- 툴팁 ---------- */
+const tip=$('tip');
+function tipShow(html,e){tip.innerHTML=html;tip.hidden=false;tipMove(e)}
+function tipMove(e){
+  if(tip.hidden||!e)return;const r=tip.getBoundingClientRect();
+  let L=e.clientX+14,T=e.clientY+14;
+  if(L+r.width>innerWidth-8)L=e.clientX-r.width-14;if(T+r.height>innerHeight-8)T=e.clientY-r.height-14;
+  tip.style.left=Math.max(8,L)+'px';tip.style.top=Math.max(8,T)+'px';
+}
+function tipHide(){tip.hidden=true}
+function rows(pairs){return pairs.map(p=>`<div class="row"><span>${p[0]}</span><span>${p[1]}</span></div>`).join('')}
+function hover(root,sel,html){
+  root.querySelectorAll(sel).forEach(el=>{
+    el.addEventListener('pointerenter',e=>{const h=html(el);if(h)tipShow(h,e);el.classList.add('on')});
+    el.addEventListener('pointermove',tipMove);
+    el.addEventListener('pointerleave',()=>{tipHide();el.classList.remove('on')});
+  });
+}
+
+/* ---------- 세로 막대 차트(축 하나 · 막대 끝 4px 둥글게 · 막대 사이 2px 이상) ---------- */
+/* 눈금 간격을 1·2·5 ×10ⁿ 으로 잡고 최대값 = 간격 × 눈금 수(13.333 같은 눈금이 안 나오게) */
+function niceStep(v,minStep){if(v<=0)return minStep||1;const p=Math.pow(10,Math.floor(Math.log10(v)));for(const m of [1,2,5,10])if(m*p>=v)return Math.max(m*p,minStep||0);return 10*p}
+function columns(el,data,o){
+  const W=Math.max(240,el.clientWidth||600),H=o.h||200,ml=o.ml||40,mr=6,mt=8,mb=o.xl===false?6:22;
+  const tk=o.ticks||4,vals=data.map(o.val),max=niceStep((Math.max(...vals,0)||1)/tk,o.minStep==null?1:o.minStep)*tk;
+  const iw=W-ml-mr,ih=H-mt-mb,n=data.length,band=iw/Math.max(1,n),bw=Math.max(1,Math.min(o.bwMax||30,band-2>4?band*.72:band-1));
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  for(let i=0;i<=tk;i++){
+    const y=mt+ih-ih*i/tk;
+    if(i)s+=`<line class="gl" x1="${ml}" x2="${W-mr}" y1="${y}" y2="${y}"/>`;
+    s+=`<text class="ax" x="${ml-6}" y="${y+4}" text-anchor="end">${o.axFmt?o.axFmt(max*i/tk):nf(max*i/tk)}</text>`;
+  }
+  s+=`<line class="base" x1="${ml}" x2="${W-mr}" y1="${mt+ih}" y2="${mt+ih}"/>`;
+  const stride=Math.ceil(n/Math.max(1,Math.floor(iw/(o.xw||46))));
+  data.forEach((d,i)=>{
+    const v=vals[i],x=ml+i*band+(band-bw)/2,bh=ih*v/max,y0=mt+ih;
+    s+=`<rect class="hit" data-i="${i}" x="${ml+i*band}" y="${mt}" width="${band}" height="${ih}"/>`;
+    if(bh>0.5){const r=Math.min(4,bw/2,bh);s+=`<path class="bar-m" d="M${x},${y0}V${y0-bh+r}Q${x},${y0-bh} ${x+r},${y0-bh}H${x+bw-r}Q${x+bw},${y0-bh} ${x+bw},${y0-bh+r}V${y0}Z"/>`}
+    else s+=`<path class="bar-m" d=""/>`;
+    if(o.xl!==false&&i%stride===0)s+=`<text class="ax" x="${ml+i*band+band/2}" y="${H-6}" text-anchor="middle">${esc(o.xl(d,i))}</text>`;
+  });
+  el.innerHTML=s+'</svg>';
+  hover(el,'.hit',h=>o.tip(data[+h.dataset.i]));
+}
+
+/* ---------- 가로 막대 목록 ---------- */
+function hbars(el,list,o){
+  if(!list.length){el.innerHTML='<div class="empty">아직 데이터 없음</div>';return}
+  const mx=Math.max(1,...list.map(o.val));
+  el.innerHTML=list.map((r,i)=>`<button class="hb" data-i="${i}"${o.click?'':' disabled'}><span class="hb-l">${o.label(r)}</span><span class="hb-t"><span class="hb-f" style="width:${(o.val(r)/mx*100).toFixed(1)}%"></span></span><span class="hb-v">${nf(o.val(r))}${o.sub?'<small>'+o.sub(r)+'</small>':''}</span></button>`).join('');
+  if(o.click)el.querySelectorAll('.hb').forEach(b=>b.addEventListener('click',()=>o.click(list[+b.dataset.i])));
+}
+
+/* ---------- 필터 ---------- */
+function setF(k,v){if(v==null||v==='')delete st.f[k];else st.f[k]=v;st.showAllC=st.showAllP=false;loadAll();scrollTo({top:0,behavior:'smooth'})}
+function drawChips(){
+  const L={country:v=>'나라: '+cname(v),path:v=>'페이지: '+plabel(v),src:v=>'유입: '+sname(v),dev:v=>'기기: '+(DEVN[v]||v),vid:v=>'방문자 '+v.slice(0,8)};
+  $('fchips').innerHTML=Object.keys(st.f).map(k=>`<span class="fchip">${esc(L[k]?L[k](st.f[k]):k)}<b data-k="${k}" title="필터 해제">×</b></span>`).join('');
+  $('fchips').querySelectorAll('b').forEach(b=>b.addEventListener('click',()=>setF(b.dataset.k,null)));
+}
+
+/* ---------- 그리기 ---------- */
+function delta(cur,prev,suffix,pp){
+  if(pp){const d=cur-prev;return d?`<span class="d ${d>0?'up':'down'}">${d>0?'▲':'▼'} ${Math.abs(d)}%p</span>`:'<span class="d flat">= 같음</span>'}
+  if(!prev&&!cur)return '<span class="d flat">—</span>';
+  if(!prev)return '<span class="d up">▲ 새로 생김</span>';
+  const p=Math.round((cur-prev)/prev*100);
+  if(p===0)return '<span class="d flat">= 같음 '+suffix+'</span>';
+  return `<span class="d ${p>0?'up':'down'}">${p>0?'▲':'▼'} ${Math.abs(p)}% ${suffix}</span>`;
+}
+function drawKpis(b){
+  const k=b.kpi,p=b.prev,cmp={today:'어제 같은 시각 대비',yesterday:'그제 대비','7d':'이전 7일 대비','30d':'이전 30일 대비','90d':'이전 90일 대비'}[st.r];
+  const T=[
+    ['방문자',nf(k.visitors),delta(k.visitors,p.visitors,''),'신규 '+nf(k.new_visitors)+'명'],
+    ['방문',nf(k.sessions),delta(k.sessions,p.sessions,''),'1인당 '+(k.visitors?(k.sessions/k.visitors).toFixed(1):0)+'회'],
+    ['페이지뷰',nf(k.pageviews),delta(k.pageviews,p.pageviews,''),'방문당 '+(k.sessions?(k.pageviews/k.sessions).toFixed(1):0)+'쪽'],
+    ['평균 체류',dfmt(k.avg_ms),delta(k.avg_ms,p.avg_ms,''),'총 '+dfmt(k.engaged_ms)],
+    ['참여율',pct(k.engaged_sessions,k.sessions)+'%',p.sessions?delta(pct(k.engaged_sessions,k.sessions),pct(p.engaged_sessions,p.sessions),'',true):delta(0,0,''),'10초+ · 2쪽+ · 게임'],
+    ['게임 플레이',nf(k.plays)+'판',delta(k.plays,p.plays,''),'플레이한 방문 '+nf(k.play_sessions)]];
+  $('kpis').innerHTML=T.map(t=>`<div class="kpi" title="${esc(cmp)}"><div class="k">${t[0]}</div><div class="v">${t[1]}</div>${t[2]}<div class="s">${t[3]}</div></div>`).join('');
+}
+function drawTrend(b){
+  const M={v:['방문자',d=>d.v,nf],pv:['페이지뷰',d=>d.pv,nf],avg:['평균 체류',d=>d.s?d.ms/d.s:0,v=>dfmt(v)],g:['게임 플레이',d=>d.g,nf]}[st.m];
+  $('trendSub').textContent=(b.unit==='hour'?'시간별':'일별')+' · '+M[0]+' · 한국 시간';
+  document.querySelectorAll('#metricSeg button').forEach(x=>x.classList.toggle('on',x.dataset.m===st.m));
+  columns($('trend'),b.series,{h:220,val:M[1],minStep:st.m==='avg'?60000:1,axFmt:st.m==='avg'?v=>v?Math.round(v/60000)+'분':'0':null,
+    xl:d=>bucketLabel(d.t,b.unit),xw:b.unit==='hour'?34:44,
+    tip:d=>`<b>${bucketLabel(d.t,b.unit,true)}</b>`+rows([['방문자',nf(d.v)],['방문',nf(d.s)],['페이지뷰',nf(d.pv)],['평균 체류',d.s?dfmt(d.ms/d.s):'—'],['게임 플레이',nf(d.g)]])});
+}
+function drawCountries(b){
+  const L=b.countries,tot=L.reduce((a,r)=>a+r.v,0)||1,mx=Math.max(1,...L.map(r=>r.v));
+  const show=st.showAllC?L:L.slice(0,12);
+  $('countryTbl').innerHTML='<tr><th>나라</th><th>방문자</th><th>방문</th><th>평균 체류</th><th>참여율</th><th>신규</th></tr>'+
+    (show.length?show.map(r=>`<tr class="click" data-c="${esc(r.c)}"><td><div class="nm"><span class="cc">${esc(r.c)}</span>${esc(cname(r.c))}</div><div class="inbar" style="width:${(r.v/mx*100).toFixed(1)}%"></div></td><td>${nf(r.v)} <span class="muted">${pct(r.v,tot)}%</span></td><td>${nf(r.s)}</td><td>${dfmt(r.ms)}</td><td>${pct(r.eng,r.s)}%</td><td>${pct(r.nw,r.s)}%</td></tr>`).join(''):'<tr><td colspan="6" class="empty">아직 데이터 없음</td></tr>');
+  $('countryTbl').querySelectorAll('tr.click').forEach(tr=>tr.addEventListener('click',()=>setF('country',tr.dataset.c)));
+  $('countryMore').innerHTML=L.length>12?`<button class="more">${st.showAllC?'접기':'나라 '+L.length+'개 모두 보기'}</button>`:'';
+  const mb=$('countryMore').querySelector('button');if(mb)mb.addEventListener('click',()=>{st.showAllC=!st.showAllC;drawCountries(b)});
+  drawMap(L);
+}
+/* 지도: d3 + world-atlas 는 이 페이지에서만, 처음 그릴 때 한 번 받는다 */
+let mapLib=null;
+function loadScript(src){return new Promise((ok,no)=>{const s=document.createElement('script');s.src=src;s.onload=ok;s.onerror=no;document.head.appendChild(s)})}
+function loadMap(){
+  if(!mapLib)mapLib=Promise.all([loadScript('https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js'),loadScript('https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js')])
+    .then(()=>fetch('https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json')).then(r=>r.json())
+    .then(t=>{const fc=topojson.feature(t,t.objects.countries);fc.features=fc.features.filter(f=>f.id!=='010');return fc});
+  return mapLib;
+}
+const RAMP=['#104281','#184f95','#1c5cab','#256abf','#2a78d6','#3987e5','#5598e7','#6da7ec','#86b6ef','#9ec5f4','#b7d3f6'];
+function seq(t){return RAMP[Math.min(RAMP.length-1,Math.max(0,Math.round(t*(RAMP.length-1))))]}
+async function drawMap(L){
+  const el=$('map');let fc;
+  try{fc=await loadMap()}catch(e){el.innerHTML='<div class="empty">지도를 불러오지 못했어요(표는 아래에 그대로 있어요)</div>';mapLib=null;return}
+  const by={};L.forEach(r=>{if(ISO[r.c]!=null)by[ISO[r.c]]=r});
+  const mx=Math.max(1,...L.map(r=>r.v));$('mapMax').textContent='많음 ('+nf(mx)+'명)';
+  const W=Math.max(260,el.clientWidth),H=Math.round(W*.5);
+  const proj=d3.geoNaturalEarth1().fitExtent([[2,2],[W-2,H-2]],fc),path=d3.geoPath(proj);
+  let s=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`;
+  fc.features.forEach(f=>{const r=by[+f.id];s+=`<path class="cty${r?' has':''}" data-id="${+f.id}" fill="${r?seq(Math.sqrt(r.v/mx)):'var(--nodata)'}" d="${path(f)}"/>`});
+  el.innerHTML=s+'</svg>';
+  hover(el,'path.cty',p=>{const c=ISO_R[+p.dataset.id],r=by[+p.dataset.id];
+    return `<b>${esc(c?cname(c):'')}</b>`+(r?rows([['방문자',nf(r.v)+'명'],['방문',nf(r.s)],['평균 체류',dfmt(r.ms)],['참여율',pct(r.eng,r.s)+'%']]):'<div class="muted">방문 없음</div>')});
+  el.querySelectorAll('path.cty.has').forEach(p=>p.addEventListener('click',()=>{tipHide();setF('country',ISO_R[+p.dataset.id])}));
+}
+function drawCities(b){
+  hbars($('cities'),b.cities.slice(0,12),{val:r=>r.s,label:r=>`<span class="cc">${esc(r.c)}</span> ${esc(r.city)}${r.region&&r.region!==r.city?'<small>'+esc(r.region)+'</small>':''}`,sub:r=>dfmt(r.ms),click:r=>setF('country',r.c)});
+}
+function drawHeat(b){
+  const cells=st.heat==='local'?b.heat_local:b.heat;
+  document.querySelectorAll('#heatSeg button').forEach(x=>x.classList.toggle('on',x.dataset.h===st.heat));
+  $('heatSub').textContent=st.heat==='local'?'방문자가 있던 곳의 시각':'한국 시간(KST)';
+  const g=WD.map(()=>Array(24).fill(0));let mx=0;
+  cells.forEach(c=>{g[c[0]-1][c[1]]=c[2];mx=Math.max(mx,c[2])});
+  let h='<span></span>';for(let i=0;i<24;i++)h+=`<span>${i%3===0?i:''}</span>`;
+  g.forEach((row,d)=>{h+=`<span class="rl">${WD[d]}</span>`;row.forEach((n,hr)=>{h+=`<i data-t="${WD[d]}요일 ${hr}시" data-n="${n}" style="${n?'background:'+seq(Math.sqrt(n/mx)):''}"></i>`})});
+  $('heat').innerHTML=h;
+  hover($('heat'),'i',i=>`<b>${i.dataset.t}</b>`+rows([['시작한 방문',nf(i.dataset.n)]]));
+}
+function smallCols(el,vals,labels,unit){
+  columns(el,vals.map((v,i)=>({v,l:labels[i]})),{h:150,ml:34,val:d=>d.v,xl:d=>d.l,xw:20,bwMax:46,
+    tip:d=>{const tot=vals.reduce((a,b)=>a+b,0)||1;return `<b>${d.l}</b>`+rows([[unit,nf(d.v)],['비율',pct(d.v,tot)+'%']])}});
+}
+function drawDist(b){
+  smallCols($('dwell'),b.dwell,['10초↓','10–30초','30초–1분','1–3분','3–10분','10–30분','30분+'],'방문');
+  smallCols($('depth'),b.depth,['1쪽','2쪽','3쪽','4–5쪽','6쪽+'],'방문');
+  smallCols($('visitno'),b.visitno,['처음','2번째','3–5','6–10','11+'],'방문');
+}
+function drawSources(b){
+  const S=b.sources,tot=S.reduce((a,r)=>a+r.s,0)||1,agg={};
+  S.forEach(r=>{const c=chOf(r.src);agg[c.k]=(agg[c.k]||0)+r.s});
+  const used=CH.filter(c=>agg[c.k]);
+  $('chStack').innerHTML=used.map(c=>`<i style="flex:${agg[c.k]};background:${c.c}" data-n="${esc(c.n)}" data-v="${agg[c.k]}"></i>`).join('')||'<i style="flex:1;background:var(--nodata)"></i>';
+  hover($('chStack'),'i[data-n]',i=>`<b>${i.dataset.n}</b>`+rows([['방문',nf(i.dataset.v)],['비율',pct(+i.dataset.v,tot)+'%']]));
+  $('chLeg').innerHTML=used.map(c=>`<span><i style="background:${c.c}"></i>${c.n} ${pct(agg[c.k],tot)}%</span>`).join('');
+  $('srcTbl').innerHTML='<tr><th>유입</th><th>방문</th><th>방문자</th><th>평균 체류</th><th>참여율</th></tr>'+
+    (S.length?S.slice(0,15).map(r=>{const c=chOf(r.src);return `<tr class="click" data-s="${esc(r.src)}"><td><div class="nm"><span class="ch"><i style="background:${c.c}"></i>${c.n}</span>${esc(sname(r.src))}</div></td><td>${nf(r.s)}</td><td>${nf(r.v)}</td><td>${dfmt(r.ms)}</td><td>${pct(r.eng,r.s)}%</td></tr>`}).join(''):'<tr><td colspan="5" class="empty">아직 데이터 없음</td></tr>');
+  $('srcTbl').querySelectorAll('tr.click').forEach(tr=>tr.addEventListener('click',()=>setF('src',tr.dataset.s)));
+  $('kwBox').innerHTML=b.keywords.length?'<h2 style="margin:14px 0 6px">검색어 <small>검색 사이트가 넘겨준 것만</small></h2><div id="kwList"></div>':'';
+  if(b.keywords.length)hbars($('kwList'),b.keywords.slice(0,12),{val:r=>r.n,label:r=>`“${esc(r.k)}”<small>${esc(sname(r.src))}</small>`});
+}
+function drawPages(b){
+  const L=b.pages,mx=Math.max(1,...L.map(r=>r.pv)),show=st.showAllP?L:L.slice(0,15);
+  $('pageTbl').innerHTML='<tr><th>페이지</th><th>조회</th><th>방문자</th><th>평균 체류</th><th>첫 페이지</th><th>플레이</th></tr>'+
+    (show.length?show.map(r=>`<tr class="click" data-p="${esc(r.p)}"><td><div class="nm">${esc(plabel(r.p))}${plabel(r.p)!==r.p?'<small>'+esc(r.p)+'</small>':''}</div><div class="inbar" style="width:${(r.pv/mx*100).toFixed(1)}%"></div></td><td>${nf(r.pv)}</td><td>${nf(r.v)}</td><td>${dfmt(r.ms)}</td><td>${nf(r.ent)}</td><td>${r.plays?nf(r.plays):'<span class="muted">–</span>'}</td></tr>`).join(''):'<tr><td colspan="6" class="empty">아직 데이터 없음</td></tr>');
+  $('pageTbl').querySelectorAll('tr.click').forEach(tr=>tr.addEventListener('click',()=>setF('path',tr.dataset.p)));
+  $('pageMore').innerHTML=L.length>15?`<button class="more">${st.showAllP?'접기':'페이지 '+L.length+'개 모두 보기'}</button>`:'';
+  const mb=$('pageMore').querySelector('button');if(mb)mb.addEventListener('click',()=>{st.showAllP=!st.showAllP;drawPages(b)});
+}
+function drawDims(b){
+  const D=b.dims,obj=o=>Object.keys(o).map(k=>({k,n:o[k]})).sort((a,b)=>b.n-a.n);
+  const cards=[['기기',obj(D.dev),r=>DEVN[r.k]||r.k,r=>r.k==='?'?null:()=>setF('dev',r.k)],
+    ['운영체제',obj(D.os),r=>r.k],['브라우저',obj(D.br),r=>r.k],
+    ['앱 안에서 열림',obj(D.inapp),r=>INAPP[r.k]||r.k,null,'카카오톡 등 앱 내장 브라우저'],
+    ['사이트 언어',obj(D.lang),r=>r.k==='-'?'고른 적 없음':lname(r.k),null,'사이트에서 고른 언어'],
+    ['브라우저 언어',obj(D.blang),r=>lname(r.k),null,'기기 설정 언어'],
+    ['통신사·회선',obj(D.isp),r=>esc(r.k)]];
+  $('dims').innerHTML=cards.map((c,i)=>`<section class="card"><h2>${c[0]}${c[4]?' <small>'+c[4]+'</small>':''}</h2><div id="dim${i}"></div></section>`).join('');
+  const tot=b.kpi.sessions||1;   /* 비율은 전체 방문 대비(앱·통신사는 일부만 해당) */
+  cards.forEach((c,i)=>{
+    hbars($('dim'+i),c[1].slice(0,8),{val:r=>r.n,label:c[2],sub:r=>pct(r.n,tot)+'%',click:c[3]?r=>{const fn=c[3](r);if(fn)fn()}:null})});
+}
+function drawGames(b){
+  const by={};b.events.forEach(e=>{if(e.g==='-')return;const o=by[e.g]||(by[e.g]={g:e.g,end:0,start:0,share:0});if(e.n0==='game_end')o.end+=e.n;else if(e.n0==='game_start')o.start+=e.n;else if(e.n0==='share_click')o.share+=e.n});
+  const L=Object.values(by).filter(r=>r.end||r.start).sort((a,b)=>b.end-a.end||b.start-a.start);
+  hbars($('plays'),L.slice(0,14),{val:r=>r.end,label:r=>esc(GN[r.g]||r.g),sub:r=>(r.share?'공유 '+r.share:''),click:r=>setF('path','/games/'+r.g+'/')});
+  const O=Object.keys(b.plays_hist.by_game).map(g=>({g,n:b.plays_hist.by_game[g]})).sort((a,b)=>b.n-a.n);
+  hbars($('opens'),O.slice(0,14),{val:r=>r.n,label:r=>esc(GN[r.g]||r.g)});
+  $('opensNote').textContent='이 카운터의 전체 누적: '+nf(b.plays_hist.total_all)+'회 (2026-04 부터). 위 방문 통계보다 오래된 이력이에요.';
+}
+function sesHtml(r){
+  const place=[r.city,r.region&&r.region!==r.city?r.region:''].filter(Boolean).join(', ');
+  const dev=[DEVN[r.dev]||r.dev,r.os,r.br].filter(Boolean).join(' · ')+(r.inapp?' · '+(INAPP[r.inapp]||r.inapp):'');
+  const plays=r.ev.filter(e=>e.n==='game_end').length;
+  const path=r.pv.map(p=>plabel(p.p));const pathTxt=path.slice(0,4).join(' → ')+(path.length>4?' …':'');
+  let lt=r.tz?localT(r.t0,r.tz):'';if(lt&&lt===localT(r.t0,'Asia/Seoul'))lt='';   /* 한국과 시각이 같으면 생략 */
+  const items=r.pv.map(p=>({t:p.t,h:`<span>${esc(plabel(p.p))}</span><span class="muted">${dfmt(p.d)}</span>`}))
+    .concat(r.ev.map(e=>({t:e.t,h:`<span class="ev">${{game_start:'▶ 게임 시작',game_end:'🏁 결과까지 플레이',share_click:'↗ 공유 누름',preset_apply:'프리셋 적용',recent_click:'최근 결과 누름'}[e.n]||e.n}${e.g&&e.g!=='-'?' · '+esc(GN[e.g]||e.g):''}</span>`})))
+    .sort((a,b)=>new Date(a.t)-new Date(b.t));
+  return `<details class="ses"><summary>
+    <div class="t">${esc(fK.format(new Date(r.t0)))}${lt?'<small>현지 '+esc(lt)+'</small>':''}</div>
+    <div class="who"><div class="l1"><span class="cc">${esc(r.country||'??')}</span><b>${esc(cname(r.country))}</b>${place?'<span class="muted">'+esc(place)+'</span>':''}
+      ${r.nw?'<span class="tag new">첫 방문</span>':'<span class="tag">'+(r.vn||'?')+'번째 방문</span>'}${plays?'<span class="tag play">🎮 '+plays+'판</span>':''}</div>
+      <div class="l2">${esc(sname(r.src||'unknown'))}${r.kw?' “'+esc(r.kw)+'”':''} · ${esc(dev)}</div>
+      <div class="l2">${esc(pathTxt)}</div></div>
+    <div class="dur">${dfmt(r.dur)}<small>${r.pages}쪽</small></div></summary>
+    <div class="ses-body"><div class="tl">${items.map(x=>`<div><span class="tt">${esc(fKt.format(new Date(x.t)))}</span>${x.h}</div>`).join('')}</div>
+    <div class="kv"><b>머문 시간</b><span>${dfmt(r.dur)} (보이는 동안) · 머문 구간 ${esc(fKhm.format(new Date(r.t0)))}–${esc(fKhm.format(new Date(r.t1)))}</span>
+      <b>위치</b><span>${esc(cname(r.country))}${place?' · '+esc(place):''}${r.tz?' · '+esc(r.tz):''}</span>
+      ${r.asorg?'<b>회선</b><span>'+esc(r.asorg)+'</span>':''}
+      <b>유입</b><span>${esc(sname(r.src||'unknown'))}${r.ref?' ('+esc(r.ref)+')':''}${r.kw?' · 검색어 “'+esc(r.kw)+'”':''}</span>
+      <b>언어</b><span>사이트 ${esc(r.lang?lname(r.lang):'미선택')} · 기기 ${esc(r.blang||'?')}</span>
+      <b>기기</b><span>${esc(dev)}</span></div>
+    <span class="lnk" data-vid="${esc(r.vid)}">이 방문자의 모든 방문 보기</span></div></details>`;
+}
+function drawSessions(append,rowsIn){
+  const el=$('sessions');
+  if(!append)el.innerHTML=st.ses.length?'':'<div class="empty">이 기간·조건의 방문이 없어요</div>';
+  el.insertAdjacentHTML('beforeend',(rowsIn||st.ses).map(sesHtml).join(''));
+  el.querySelectorAll('.lnk:not([data-w])').forEach(a=>{a.dataset.w=1;a.addEventListener('click',()=>setF('vid',a.dataset.vid))});
+  $('sesSub').textContent='최신순 · '+nf(st.ses.length)+' / '+nf(st.sesTotal)+'건 · 줄을 누르면 경로가 펼쳐져요';
+  $('sesMore').innerHTML=st.ses.length<st.sesTotal?'<button class="more">50건 더 보기</button>':'';
+  const mb=$('sesMore').querySelector('button');if(mb)mb.addEventListener('click',moreSessions);
+}
+function drawLive(L){
+  st.live=L;$('liveN').textContent='지금 '+nf(L.n)+'명';
+  const last=Array(30).fill(0);L.last30.forEach(x=>{if(x[0]>=0&&x[0]<30)last[29-x[0]]=x[1]});
+  columns($('live30'),last.map((v,i)=>({v,m:29-i})),{h:70,ml:26,ticks:2,val:d=>d.v,xl:false,bwMax:12,
+    tip:d=>`<b>${d.m?d.m+'분 전':'방금'}</b>`+rows([['신호 보낸 방문',nf(d.v)]])});
+  $('liveList').innerHTML=L.rows.length?L.rows.slice(0,12).map(r=>`<div class="live-row"><span class="cc">${esc(r.c||'??')}</span>
+    <div class="w"><b>${esc(plabel(r.p))}</b> <span class="muted">· ${esc([r.city,cname(r.c)].filter(Boolean).join(', '))} · ${esc(DEVN[r.dev]||r.dev||'')}${r.inapp?' · '+esc(INAPP[r.inapp]||r.inapp):''} · ${esc(sname(r.src||'unknown'))}</span></div>
+    <div class="r">${dfmt(r.dur)}<small>${r.pages}쪽 · ${ago(r.seen)}</small></div></div>`).join(''):'<div class="empty">지금은 아무도 없어요</div>';
+}
+function drawLong(D){
+  st.days=D;$('longWrap').hidden=!(D&&D.length>=2);if($('longWrap').hidden)return;
+  columns($('longterm'),D,{h:170,val:d=>d.visitors,xl:d=>{const p=d.day.split('-');return +p[1]+'/'+(+p[2])},xw:44,
+    tip:d=>`<b>${d.day}</b>`+rows([['방문자',nf(d.visitors)],['신규',nf(d.new_visitors)],['방문',nf(d.sessions)],['페이지뷰',nf(d.pageviews)],['평균 체류',d.sessions?dfmt(d.engaged_ms/d.sessions):'—']])});
+}
+function drawFoot(b){
+  const h=b.health,mb=(h.bytes/1048576).toFixed(1);
+  $('foot').innerHTML=`<span>수집 시작 ${h.first?esc(fKd.format(new Date(h.first))):'—'}</span><span>마지막 신호 ${h.last?esc(ago(h.last)):'—'}</span>
+    <span>저장 ${nf(Math.max(0,h.rows))}행 · ${mb}MB</span><span>이 기간 제외: 내 방문 ${nf(h.excluded_me)} · 서버 IP ${nf(h.excluded_dc)}</span>
+    <span>이 브라우저: ${isMe()?'내 기기로 표시됨(통계에서 빠짐) <button id="meOff">해제</button>':'일반 방문으로 집계 중 <button id="meOn">내 기기로 표시</button>'}</span>`;
+  const on=$('meOn'),off=$('meOff');
+  if(on)on.addEventListener('click',()=>{setMe(true);drawFoot(b)});if(off)off.addEventListener('click',()=>{setMe(false);drawFoot(b)});
+}
+function isMe(){try{return localStorage.getItem('lp_stat_me')==='1'}catch(e){return false}}
+function setMe(v){try{v?localStorage.setItem('lp_stat_me','1'):localStorage.removeItem('lp_stat_me')}catch(e){}}
+
+/* ---------- 불러오기 ---------- */
+let busy=0;
+function setupMsg(e){
+  const m=String(e&&(e.message||e.code)||e);
+  if(/lp_ops_|PGRST202|function .* does not exist|schema cache/i.test(m))
+    return '<b>DB 준비가 아직 안 됐어요.</b> Supabase SQL Editor 에 <code>supabase/migrations/2026-11-12-ops-stats.sql</code> 전체를 붙여 넣고 Run 하면 바로 켜집니다.';
+  if(/forbidden|42501/.test(m))return '이 계정은 관리자 권한이 없어요.';
+  return '불러오기 실패: '+esc(m);
+}
+async function loadAll(){
+  const my=++busy;saveUi();drawChips();
+  document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.r===st.r));
+  $('updated').textContent='불러오는 중…';
+  const R=range(),f=filt();
+  try{
+    const [b,s]=await Promise.all([rpc('lp_ops_board',{p_from:R.from,p_to:R.to,p_f:f}),rpc('lp_ops_sessions',{p_from:R.from,p_to:R.to,p_f:f,p_limit:50,p_offset:0})]);
+    if(my!==busy)return;
+    st.board=b;st.ses=s.rows;st.sesTotal=s.total;
+    $('banner').innerHTML=!b.health.first?'<div class="banner">아직 모인 방문이 없어요. 사이트에 방문이 들어오면 몇 초 안에 여기 나타납니다. (이 브라우저는 내 기기로 표시돼 빠지니, 시험하려면 다른 기기·시크릿 창으로 사이트를 열어 보세요)</div>':'';
+    drawKpis(b);drawTrend(b);drawCountries(b);drawCities(b);drawHeat(b);drawDist(b);drawSources(b);drawPages(b);drawDims(b);drawGames(b);drawSessions(false);drawFoot(b);
+    $('updated').textContent=fKhm.format(new Date())+' 갱신';
+  }catch(e){
+    if(my!==busy)return;
+    $('banner').innerHTML='<div class="banner">'+setupMsg(e)+'</div>';$('updated').textContent='';
+  }
+}
+async function moreSessions(){
+  const R=range();
+  try{const s=await rpc('lp_ops_sessions',{p_from:R.from,p_to:R.to,p_f:filt(),p_limit:50,p_offset:st.ses.length});
+    st.ses=st.ses.concat(s.rows);st.sesTotal=s.total;drawSessions(true,s.rows)}catch(e){}
+}
+async function loadLive(){try{drawLive(await rpc('lp_ops_live',{p_f:filt()}))}catch(e){}}
+async function loadDays(){try{drawLong(await rpc('lp_ops_days',{p_days:400}))}catch(e){}}
+
+function wire(){
+  document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',()=>{st.r=b.dataset.r;loadAll()}));
+  document.querySelectorAll('#metricSeg button').forEach(b=>b.addEventListener('click',()=>{st.m=b.dataset.m;saveUi();if(st.board)drawTrend(st.board)}));
+  document.querySelectorAll('#heatSeg button').forEach(b=>b.addEventListener('click',()=>{st.heat=b.dataset.h;saveUi();if(st.board)drawHeat(st.board)}));
+  $('incMe').addEventListener('change',e=>{st.incMe=e.target.checked;loadAll();loadLive()});
+  $('incDc').addEventListener('change',e=>{st.incDc=e.target.checked;loadAll()});
+  $('refresh').addEventListener('click',()=>{loadAll();loadLive();loadDays()});
+  $('livePill').addEventListener('click',()=>$('liveList').scrollIntoView({behavior:'smooth',block:'center'}));
+  let rt=0;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{const b=st.board;if(!b)return;drawTrend(b);drawMap(b.countries);drawDist(b);if(st.live)drawLive(st.live);if(st.days)drawLong(st.days)},200)});
+  /* 지금 접속은 30초, 전체는 5분마다(화면이 보일 때만) */
+  setInterval(()=>{if(document.visibilityState==='visible')loadLive()},30000);
+  setInterval(()=>{if(document.visibilityState==='visible'&&st.r!=='yesterday')loadAll()},300000);
+}
+
+async function init(){
+  if(!MOCK){
+    let user=null;try{user=await getUser()}catch(e){}
+    if(!user){location.replace('/auth/?return='+encodeURIComponent('/ops/'));return}
+    let ok=false;try{const r=await getSupabase().rpc('is_admin');ok=r.data===true}catch(e){}
+    if(!ok){$('gate').innerHTML='<h1>접근 권한 없음</h1><p>이 화면은 관리자 계정만 볼 수 있어요.</p>';return}
+    if(!isMe())setMe(true);   /* 운영자 기기는 기본으로 통계에서 뺀다(하단에서 해제 가능) */
+  }
+  $('gate').hidden=true;$('app').hidden=false;
+  wire();loadAll();loadLive();loadDays();
+}
+init();
+})();
+</script>
+</body>
+</html>
