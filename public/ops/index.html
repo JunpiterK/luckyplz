@@ -53,6 +53,7 @@ a{color:inherit}
 .tog input{accent-color:var(--s1)}
 .refresh{padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);font-size:13px;color:var(--ink2)}
 .refresh:hover{color:var(--ink)}
+a.refresh{text-decoration:none;display:inline-block}
 #updated{font-size:12px;color:var(--muted)}
 
 /* 카드 */
@@ -687,12 +688,38 @@ function wire(){
   setInterval(()=>{if(document.visibilityState==='visible'&&st.r!=='yesterday')loadAll()},300000);
 }
 
+/* 권한 없음 — 막다른 화면이 되지 않게 어떤 계정인지 보여 주고, 계정 전환과
+   관리자 지정 SQL(이 계정 id 로 정확히)을 바로 쓸 수 있게 한다 */
+async function showDenied(user){
+  let role='확인 못 함';
+  try{const r=await getSupabase().from('profiles').select('role').eq('id',user.id).maybeSingle();role=r.data?(r.data.role||'user'):'프로필 없음(가입 설정 미완료)'}catch(e){}
+  const sql="update public.profiles set role = 'super_admin' where id = '"+user.id+"' returning nickname, role;";
+  const prov=(user.app_metadata&&user.app_metadata.provider)||'';
+  $('gate').innerHTML=`<h1>접근 권한 없음</h1><p>상황판은 관리자 계정만 볼 수 있어요.</p>
+    <div class="kv" style="margin:16px auto;text-align:left;max-width:380px"><b>로그인한 계정</b><span>${esc(user.email||'(메일 없음)')}</span>
+      <b>로그인 방법</b><span>${esc({google:'Google',kakao:'카카오'}[prov]||prov||'-')}</span><b>현재 권한</b><span>${esc(role)}</span></div>
+    <p style="font-size:13px">운영자 본인 계정이 맞다면: SQL 복사 → SQL Editor 에 붙여 넣고 Run → 이 화면 새로 고침.<br>다른 계정으로 들어와 있다면 계정을 바꾸세요.</p>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px">
+      <button class="refresh" id="dCopy">관리자 지정 SQL 복사</button>
+      <a class="refresh" href="https://supabase.com/dashboard/project/jkrpxijybuljdxkrbsan/sql/new" target="_blank" rel="noopener">SQL Editor 열기 ↗</a>
+      <button class="refresh" id="dSwitch">다른 계정으로 로그인</button>
+      <button class="refresh" id="dReload">새로 고침</button></div>
+    <textarea id="dSql" readonly hidden style="width:100%;margin-top:12px;height:64px;background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:12px monospace">${esc(sql)}</textarea>`;
+  $('dCopy').addEventListener('click',()=>{
+    const done=()=>{$('dCopy').textContent='복사됨 ✓'};
+    const manual=()=>{const t=$('dSql');t.hidden=false;t.select();$('dCopy').textContent='아래 글을 직접 복사하세요'};
+    try{navigator.clipboard.writeText(sql).then(done,manual)}catch(e){manual()}
+  });
+  $('dSwitch').addEventListener('click',async()=>{try{await signOut()}catch(e){}location.replace('/auth/?return='+encodeURIComponent('/ops/'))});
+  $('dReload').addEventListener('click',()=>location.reload());
+}
+
 async function init(){
   if(!MOCK){
     let user=null;try{user=await getUser()}catch(e){}
     if(!user){location.replace('/auth/?return='+encodeURIComponent('/ops/'));return}
     let ok=false;try{const r=await getSupabase().rpc('is_admin');ok=r.data===true}catch(e){}
-    if(!ok){$('gate').innerHTML='<h1>접근 권한 없음</h1><p>이 화면은 관리자 계정만 볼 수 있어요.</p>';return}
+    if(!ok){showDenied(user);return}
     if(!isMe())setMe(true);   /* 운영자 기기는 기본으로 통계에서 뺀다(하단에서 해제 가능) */
   }
   $('gate').hidden=true;$('app').hidden=false;
