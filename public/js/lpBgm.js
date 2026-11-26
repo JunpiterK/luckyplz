@@ -59,6 +59,7 @@
 
   /* Skip games whose pages already wire their own audio engine. */
   var SKIP_GAMES={
+    'quiz':true,   /* 진행자만 켤 수 있는 BGM. 퀴즈 화면에서 단계별로 음량을 조절한다. */
     'yut':true,'ludo':true,'yacht':true,'omok':true,'lots':true,'janggi':true,'brick':true,   /* brick: 자체 WebAudio 루프(2026-09-27) */   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
     'car-racing':true,
     'dodge':true,
