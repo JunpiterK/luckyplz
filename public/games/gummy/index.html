@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795699733">
+<meta name="lp-build" content="1795701948">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795699733";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795701948";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -23,7 +23,7 @@
 <meta property="og:title" content="구미 체인 · Gummy Chain">
 <meta property="og:description" content="같은 색 젤리 넷이면 쫀득하게 펑! 연쇄를 이어 상대 판에 설탕 블록을 퍼붓는 1:1 연쇄 퍼즐.">
 <meta property="og:url" content="https://luckyplz.com/games/gummy/">
-<meta property="og:image" content="https://luckyplz.com/og/games/gummy.png">
+<meta property="og:image" content="https://luckyplz.com/og/games/gummy.png?v=felt1">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#140A24">
@@ -938,6 +938,10 @@ function shoot(x0,y0,x1,y1,col,onHit,big){
 /* ════════════ 레이아웃 · 스프라이트 ════════════ */
 const cv=$('cv'), ctx=cv.getContext('2d');
 let DPR=1, LW=0, LH=0, LAY=null, STATIC=null, SPR={};
+const feltCandyAtlas=new Image();
+feltCandyAtlas.decoding='async';
+feltCandyAtlas.onload=()=>{ SPR={}; STATIC=null; };
+feltCandyAtlas.src='/assets/gummy/gummy.webp?v=felt1';
 function layout(){
     const st=$('stage'), r=st.getBoundingClientRect();
     LW=Math.max(220,Math.floor(r.width)); LH=Math.max(220,Math.floor(r.height));
@@ -997,13 +1001,22 @@ function mkCanvas(w,h){ const c=document.createElement('canvas'); c.width=Math.m
 function spriteSet(c){
     const key=c+'@'+DPR; if(SPR[key]) return SPR[key];
     const S=c*1.3, px=S*DPR, ow=Math.max(1.4,c*.075);
-    const set={c,S,body:[],sil:[],nh:[],nv:[],nhs:[],nvs:[],white:null};
+    const set={c,S,body:[],sil:[],flashes:[],nh:[],nv:[],nhs:[],nvs:[],white:null};
     for(let k=1;k<=6;k++){
         const P=PAL[k];
         /* 외곽선(합쳐진 덩어리 전체를 한 번에 두른다) */
         let cvs=mkCanvas(px,px), g=cvs.getContext('2d'); g.scale(DPR,DPR); g.translate(S/2,S/2);
         const s=c*.93, rr=k===GARB?s*.2:s*.36;
-        rrect(g,-s/2-ow,-s/2-ow,s+ow*2,s+ow*2,rr+ow); g.fillStyle=P.ink; g.fill();
+        if(feltCandyAtlas.naturalWidth){
+            const tile=feltCandyAtlas.naturalWidth/6;
+            g.drawImage(feltCandyAtlas,0,(k-1)*tile,tile,tile,-S/2-ow/2,-S/2-ow/2,S+ow,S+ow);
+            g.globalCompositeOperation='source-in'; g.fillStyle=P.ink; g.fillRect(-S/2,-S/2,S,S);
+            const flash=mkCanvas(px,px), fg=flash.getContext('2d');
+            fg.drawImage(cvs,0,0); fg.globalCompositeOperation='source-in'; fg.fillStyle='#fff'; fg.fillRect(0,0,px,px);
+            set.flashes[k]=flash;
+        }else{
+            rrect(g,-s/2-ow,-s/2-ow,s+ow*2,s+ow*2,rr+ow); g.fillStyle=P.ink; g.fill();
+        }
         set.sil[k]=cvs;
         /* 몸통 */
         cvs=mkCanvas(px,px); g=cvs.getContext('2d'); g.scale(DPR,DPR); g.translate(S/2,S/2);
@@ -1140,9 +1153,26 @@ function buildStatic(){
 
 /* ════════════ 그리기 ════════════ */
 function cellXY(B,x,y){ return [B.x+(x+.5)*B.c,B.y+(11-y+.5)*B.c]; }
-function drawBlob(set,k,cx,cy,sx,sy,layer,alpha){
-    const S=set.S, img=layer==='sil'?set.sil[k]:layer==='white'?set.white:set.body[k];
+/* 표정 고르기 — 반응이 셀 단위로 읽히게: 부풀기 = 비명, 세게 눌림·빠른 낙하 = 놀람, 판이 높음 = 걱정,
+   연쇄 진행·같은 색 셋 = 기쁨, 그 밖엔 가끔 깜빡 */
+function candyExpression(p,i,sq,vel,T,groupSize){
+    if(p.pf[i]||p.fx.ko>0) return 'p';
+    if(sq>.13||vel>9) return 's';
+    if(p.fx.danger>.5&&(((i*37+(T*1.3|0))%9)!==0)) return 'w';
+    if(p.chain>0&&(p.phase==='fall'||p.phase==='pop')) return 'h';
+    if(groupSize>=3) return 'h';
+    const ph=(T+((i*7919)%97)*.137)%4.3; if(ph<.13) return 'b';
+    return 'n';
+}
+function drawBlob(set,k,cx,cy,sx,sy,layer,alpha,expression='n'){
+    const S=set.S, img=layer==='sil'?set.sil[k]:layer==='white'?(set.flashes[k]||set.white):set.body[k];
     const w=S*sx, h=S*sy, bot=cy+set.c*.47;
+    if(layer==='body'&&feltCandyAtlas.naturalWidth){
+        const tile=feltCandyAtlas.naturalWidth/6;
+        const col=k===GARB?0:'nbhswp'.indexOf(expression);
+        ctx.drawImage(feltCandyAtlas,col*tile,(k-1)*tile,tile,tile,cx-w/2,bot-set.c*.47*sy-h/2,w,h);
+        return;
+    }
     if(alpha!==undefined&&alpha<1){ ctx.globalAlpha=alpha; ctx.drawImage(img,cx-w/2,bot-set.c*.47*sy-h/2,w,h); ctx.globalAlpha=1; }
     else ctx.drawImage(img,cx-w/2,bot-set.c*.47*sy-h/2,w,h);
 }
@@ -1179,7 +1209,11 @@ function drawBoard(p,B,T){
     for(let i=0;i<78;i++){ if(_geo[i*4]<0) continue; drawBlob(set,b[i],_geo[i*4],_geo[i*4+1],_geo[i*4+2],_geo[i*4+3],'sil'); }
     neck(true);
     neck(false);
-    for(let i=0;i<78;i++){ if(_geo[i*4]<0) continue; drawBlob(set,b[i],_geo[i*4],_geo[i*4+1],_geo[i*4+2],_geo[i*4+3],'body'); }
+    for(let i=0;i<78;i++){
+        if(_geo[i*4]<0) continue;
+        const face=candyExpression(p,i,p.sq[i],p.vel[i],T,0);
+        drawBlob(set,b[i],_geo[i*4],_geo[i*4+1],_geo[i*4+2],_geo[i*4+3],'body',1,face);
+    }
     /* 터지기 직전 하얗게 부풀기 */
     if(p.popList&&!p.snapped){
         const a=Math.min(.75,p.popU*POP_T/SNAP*.8);
@@ -1414,7 +1448,7 @@ function render(dt){
      Unity·Godot 웹 빌드는 수십 MB 에 인앱 웹뷰에서 불안정해 제외
    - 규칙·점수·방해·CPU·온라인·자동 일시정지 코드는 한 줄도 바꾸지 않는다. 이 모듈은 G·LAY·Player 상태를
      읽어서 그리기만 한다(Canvas2D render() 와 같은 입력)
-   - 젤리 = Blender Cycles 렌더(scripts/blender/gummy_blobs.py → /assets/gummy/gummy.webp). 같은 색 이웃은
+   - 젤리 = 5색 펠트 인형 × 6표정(/assets/gummy/gummy.webp). 같은 색 이웃은
      메타볼 셰이더(GOO)가 하나의 쫀득한 덩어리로 잇고 덩어리 전체에 잉크 외곽선 하나를 두른다
    - WebGL 이 없거나 로드·초기화가 실패하면(또는 컨텍스트를 잃으면) 기존 Canvas2D 렌더러가 그대로 돈다.
      ?gl=0 으로 강제 폴백
@@ -1462,7 +1496,7 @@ const GL=(()=>{
         if(S.on||S.dead||S.loading||!wanted()) { if(!wanted()){ S.dead=true; S.reason='?gl=0'; } return; }
         S.loading=true;
         try{
-            const imgs=Promise.all([loadImg('/assets/gummy/gummy.webp?v=1'),loadImg('/assets/gummy/panda.webp?v=1')]);
+            const imgs=Promise.all([loadImg('/assets/gummy/gummy.webp?v=felt1'),loadImg('/assets/gummy/panda.webp?v=felt1')]);
             if(!window.PIXI) await loadScript('/vendor/pixi/8.21.0/pixi.min.js');
             const [a,p]=await imgs;
             await gap();
@@ -1683,17 +1717,6 @@ void main(){
             s.visible=true; return s;
         }
     }
-    /* 표정 고르기 — 반응이 셀 단위로 읽히게: 부풀기 = 비명, 세게 눌림·빠른 낙하 = 놀람, 판이 높음 = 걱정,
-       연쇄 진행·같은 색 셋 = 기쁨, 그 밖엔 가끔 깜빡 */
-    function face(p,i,k,sq,vel,T){
-        if(p.pf[i]||p.fx.ko>0) return 'p';
-        if(sq>.13||vel>9) return 's';
-        if(p.fx.danger>.5&&(((i*37+(T*1.3|0))%9)!==0)) return 'w';
-        if(p.chain>0&&(p.phase==='fall'||p.phase==='pop')) return 'h';
-        if(views._gs&&views._gs[i]>=3) return 'h';
-        const ph=(T+((i*7919)%97)*.137)%4.3; if(ph<.13) return 'b';
-        return 'n';
-    }
     const _gSeen=new Uint8Array(NCELL), _gSt=new Int16Array(NCELL), _gCells=new Int16Array(NCELL);
     function groups(b,out){
         out.fill(0); const seen=_gSeen, st=_gSt, cells=_gCells; seen.fill(0);
@@ -1733,7 +1756,7 @@ void main(){
             if(cy-c*.6>B.y+B.h||cy+c*.6<B.y){ s.visible=false; continue; }
             const bot=cy+c*.47;
             s.visible=true;
-            s.texture=k===GARB?FR.g:FR[k+face(p,i,k,q,v,T)];
+            s.texture=k===GARB?FR.g:FR[k+candyExpression(p,i,q,v,T,views._gs?views._gs[i]:0)];
             s.position.set(cx,bot); s.scale.set(FS*sx,FS*sy); s.skew.x=sk;
             if(k!==GARB){ const inf=p.pf[i]||ko>0; V.goo.add(cx,bot-BH*c*(inf?sy:gsy),inf?sx:gsx,inf?sy:gsy,k); }
             if(popping&&p.pf[i]){ const w=V.whiteSpr(wn++); w.texture=s.texture; w.position.copyFrom(s.position); w.scale.copyFrom(s.scale); w.skew.x=sk; w.alpha=wa*(.55+.45*Math.sin(T*40)); }
@@ -2647,12 +2670,12 @@ function V2on(){ return !!(K&&K.room); }
 function P2on(){ return !!(window.LpRoomsUI&&LpRoomsUI.mountLobby&&!String(LpRoomsUI.version||'').includes('stub')); }
 /* 공통 UI(lpRoomsUI)가 부팅할 때 커널을 먼저 세운다(UI 👥 로 방을 만들어도 이 게임이 그린다) — v1 페이지에선 아무도 안 부른다 */
 (window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
-function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795699733'],['LpRooms','/js/lpRoomsCore.js?v=1795699733'],['LpFair','/js/lpFair.js?v=1795699733'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795699733']];
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795701948'],['LpRooms','/js/lpRoomsCore.js?v=1795701948'],['LpFair','/js/lpFair.js?v=1795701948'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795701948']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
 function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
   if(window.LpGames)return cb(LpGames.v(GAME_ID)==='v2');
-  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795699733';s.onload=()=>cb(!!(window.LpGames&&LpGames.v(GAME_ID)==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795701948';s.onload=()=>cb(!!(window.LpGames&&LpGames.v(GAME_ID)==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
 function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
   if(!K){K=LpRoomsTurn.mount(gmSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 50px)');ds.setProperty('--lpt-hud-right','8px');ds.setProperty('--lpt-hud-left','auto')}res(K)})))}
 function askLocal(q){return new Promise(res=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9080;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px';
@@ -2814,11 +2837,11 @@ layout();
 })();
 </script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795699733"></script>
+<script src="/js/supabase-config.js?v=1795701948"></script>
 <script>
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1795699733" defer></script>
+<script src="/js/siteFooter.js?v=1795701948" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

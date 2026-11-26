@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Blender 장난감 렌더(scripts/og-assets/tiles3d/*.png) → 홈 타일 webp(public/assets/tiles/toy-<id>.webp).
+"""펠트 미니어처 원화(scripts/og-assets/tiles3d/*.png) → 홈 타일 webp(public/assets/tiles/toy-<id>.webp).
 
 - 그림자 캐처가 프레임 가장자리 바닥까지 옅은 알파(10~30)를 남긴다. 그대로 자르면 타일 위에
   네모난 얼룩이 생기므로, 장난감 불투명 영역 밖의 알파는 거리 기반으로 부드럽게 지운다

@@ -50,7 +50,7 @@
     'use strict';
     if (G.LpGames && G.LpGames.version) return;
 
-    var T = function (id) { return '/assets/tiles/toy-' + id + '.webp'; };
+    var T = function (id) { return '/assets/tiles/toy-' + id + '.webp?v=felt1'; };
     /* 이름 표 — 홈(public/index.html) I18N 에서 추출(2026-09-30). 빠진 언어는 en 폴백 */
     var N = {
         'roulette': {ko:'룰렛',en:'Roulette',ja:'ルーレット',es:'Ruleta',pt:'Roleta',zh:'轮盘',de:'Roulette',fr:'Roulette',ru:'Рулетка',ar:'روليت',hi:'रूलेट',th:'รูเล็ต',id:'Roulette',vi:'Vòng quay',tr:'Rulet'},

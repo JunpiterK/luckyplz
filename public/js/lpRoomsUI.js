@@ -853,7 +853,7 @@
         var cr = E('div', 'lpr-cats'), grid = E('div', 'lpr-grid');
         cats.forEach(function (c) {
             var b = E('button', 'lpr-cat' + (c === sel ? ' sel' : '')); b.type = 'button';
-            var im = E('img'); im.src = '/assets/tiles/' + CAT_ICON[c] + '.webp'; im.alt = ''; b.appendChild(im); b.appendChild(E('span', null, tl(CAT_NAME[c])));
+            var im = E('img'); im.src = '/assets/tiles/' + CAT_ICON[c] + '.webp?v=felt1'; im.alt = ''; b.appendChild(im); b.appendChild(E('span', null, tl(CAT_NAME[c])));
             b.addEventListener('click', function (e) { e.preventDefault(); sel = c; [].forEach.call(cr.children, function (x) { x.classList.toggle('sel', x === b); }); paint(); });
             cr.appendChild(b);
         });
