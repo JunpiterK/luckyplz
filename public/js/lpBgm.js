@@ -67,7 +67,6 @@
     'reversi':true,   /* 보드게임 — BGM 없음(돌 소리가 주인공). 없는 트랙 HEAD 404 방지 */
     'gummy':true,     /* 구미 체인 — 연쇄 음이 올라가는 자체 WebAudio 효과음. 없는 트랙 HEAD 404 방지 */
     'mahjong-tw':true,         /* 대만 마작 — 패 소리·효과음 자체 합성(WebAudio), BGM 없음(404 방지) */
-    'mahjong-solitaire':true,  /* 마작 솔리테어 — 패 딸깍 소리 자체 합성, BGM 없음(404 방지) */
     /* 2026-10-01 QA M-7: assets/bgm/<id>/ 가 없거나 README 만 있는 게임 — 진입마다 track1 HEAD 404,
        시작 후 track1~4 를 차례로 시도해 404 가 4~5건 더 났다. 트랙을 넣으면 여기서 빼면 된다 */
     'bubble':true,'dice':true,'glory-racing':true,'lucky-merge':true,'orbit':true,'starship-lander':true
@@ -82,7 +81,9 @@
   /* 10dB below typical 1.0 SFX peak. Games with quieter SFX can call
      LpBgm.setVolume to scale further down at runtime. */
   var DEFAULT_VOLUME=0.3;
-  var MAX_TRACKS=4;
+  /* 트랙 수: 기본 4곡. 더 많은 게임만 여기에 적는다(전체를 올리면 4곡짜리 게임이 없는 track5 를 찔러 404 가 난다) */
+  var TRACK_COUNT={'mahjong-solitaire':5};   /* 2026-11-26 운영자 제작 5곡 */
+  var MAX_TRACKS=TRACK_COUNT[gameId]||4;
   var TRACK_BASE='/assets/bgm/'+gameId+'/track';
   var MUTE_KEY='lp_bgm_muted';
 

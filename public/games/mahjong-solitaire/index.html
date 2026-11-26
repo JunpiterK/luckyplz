@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795505705">
+<meta name="lp-build" content="1795696631">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795505705";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795696631";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -48,59 +48,81 @@ body{
   height:100dvh;max-height:100dvh;overflow:hidden;display:flex;flex-direction:column;
   user-select:none;-webkit-user-select:none;touch-action:manipulation;
 }
-.app{flex:1;min-height:0;width:100%;max-width:1400px;margin:0 auto;display:grid;
-  grid-template-columns:1fr;grid-template-rows:auto auto 1fr auto;grid-template-areas:"top" "hud" "field" "tools"}
-header.top{grid-area:top;display:flex;align-items:center;gap:8px;height:44px;padding:0 10px;min-width:0}
-header.top .home{font-size:12px;font-weight:700;color:var(--mute);text-decoration:none;padding:6px 10px;
-  border:1px solid var(--line);border-radius:8px;white-space:nowrap;transition:.2s}
+/* ---- 배치: 판(#cv)이 화면 전체를 덮고, 꼭 필요한 것만 판 위에 작은 칩으로 띄운다(여백·틀·막대 없음) ----
+   html.mj-side = 가로로 넓은 화면 → 도구가 오른쪽 가장자리 세로 줄
+   html.mj-low  = 낮은 가로(폰) → 위 띠도 없이 왼쪽(홈·기록)·오른쪽(일시정지·도구) 가장자리만 쓴다
+   html.mj-wide = 넓은 화면(900px~) → 홈 옆에 제목
+   패가 들어가지 않는 가장자리 폭은 스크립트 insets() 와 같은 값이어야 한다 */
+.app{flex:1;min-height:0;width:100%;position:relative;overflow:hidden;
+  --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);--st:env(safe-area-inset-top,0px)}
+html.mj-vland .app{--sl:0px;--sr:0px;--st:0px}
+.field{position:absolute;inset:0;overflow:hidden}
+canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:pointer}
+#saProbe{position:absolute;visibility:hidden;pointer-events:none;width:0;height:0;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+header.top{position:absolute;z-index:4;left:var(--sl);right:var(--sr);top:var(--st);height:44px;padding:0 6px;display:flex;align-items:center;gap:6px;pointer-events:none}
+header.top>*{pointer-events:auto}
+header.top .home,.ib,.st{background:rgba(6,12,9,.56);border:1px solid rgba(255,236,190,.22);box-shadow:0 2px 6px rgba(0,0,0,.35)}
+header.top .home{display:flex;align-items:center;justify-content:center;width:34px;height:34px;flex-shrink:0;border-radius:50%;
+  font-size:0;font-weight:700;color:var(--ivory);text-decoration:none;white-space:nowrap;transition:.2s}
+header.top .home::before{content:'←';font-size:16px;line-height:1}
 header.top .home:hover{color:var(--gold);border-color:var(--gold)}
-header.top h1{flex:1;min-width:0;text-align:center;font-size:15px;font-weight:900;letter-spacing:.06em;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;color:var(--gold2);text-shadow:0 1px 0 #000,0 0 14px rgba(233,196,106,.25)}
+/* 제목: 좁은 화면에서는 눈에만 안 보이게(문서에는 그대로 있다), 넓은 화면에서는 홈 옆에 작게 */
+header.top h1{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;
+  font-size:13px;font-weight:900;letter-spacing:.05em;color:var(--gold2);text-shadow:0 1px 2px #000,0 0 10px rgba(0,0,0,.6)}
 header.top h1 small{font-size:11px;font-weight:700;color:var(--mute);letter-spacing:.02em;margin-left:6px}
-.ib{width:34px;height:34px;flex-shrink:0;border-radius:10px;border:1px solid var(--line);background:rgba(255,230,190,.05);
-  color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
-.ib:hover{border-color:rgba(233,196,106,.55)}
-.hud,.tools{width:100%;max-width:820px;justify-self:center}
-.hud{grid-area:hud;display:grid;grid-template-columns:1fr 1.15fr 1fr 1fr;gap:5px;padding:2px 10px 4px}
-.st{padding:3px 4px 4px;text-align:center;border-radius:9px;background:rgba(255,220,170,.04);border:1px solid var(--line);min-width:0}
-.st .l{font-size:9.5px;font-weight:700;letter-spacing:.06em;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.st .v{font-size:16px;font-weight:900;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--ivory)}
+html.mj-wide header.top .home{width:auto;padding:0 12px;border-radius:17px;font-size:12px}
+html.mj-wide header.top .home::before{content:none}
+html.mj-wide header.top h1{position:static;width:auto;height:auto;overflow:hidden;clip:auto;text-overflow:ellipsis;max-width:240px;margin-left:4px}
+#btnMute{margin-left:auto}
+.ib{width:34px;height:34px;flex-shrink:0;border-radius:50%;color:#fff;font-size:15px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation}
+.ib:hover{border-color:rgba(233,196,106,.6)}
+.hud{position:absolute;z-index:4;top:calc(5px + var(--st));left:50%;transform:translateX(-50%);display:grid;grid-template-columns:repeat(4,minmax(46px,auto));gap:4px;
+  width:max-content;max-width:calc(100% - 132px - var(--sl) - var(--sr));pointer-events:none}
+.st{padding:2px 7px 3px;text-align:center;border-radius:10px;min-width:0}
+.st .l{font-size:8.5px;font-weight:700;letter-spacing:.04em;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st .v{font-size:14px;font-weight:900;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--ivory)}
 .st.sc .v{color:var(--gold2)}
 .st.mv.warn .v{color:#ff8a7a}
 .st.mv.zero .v{color:#ff5a5a}
-@media(max-width:900px){.hud{padding-left:52px}}
-.field{grid-area:field;position:relative;min-height:0;overflow:hidden}
-canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:pointer}
-.combo{position:absolute;left:50%;top:10px;transform:translateX(-50%) scale(.9);opacity:0;pointer-events:none;z-index:3;
+html.mj-wide .st{padding:2px 12px 3px}
+html.mj-wide .st .v{font-size:15px}
+.combo{position:absolute;left:50%;top:calc(var(--it,54px) + 6px);transform:translateX(-50%) scale(.9);opacity:0;pointer-events:none;z-index:3;
   padding:4px 12px;border-radius:999px;font-size:13px;font-weight:900;letter-spacing:.04em;white-space:nowrap;
   color:#2a1300;background:linear-gradient(135deg,#ffe9a8,#e9b949 55%,#c98a1e);box-shadow:0 0 18px rgba(255,200,90,.45),0 2px 0 rgba(0,0,0,.35);
   transition:opacity .2s,transform .2s}
 .combo.on{opacity:1;transform:translateX(-50%) scale(1)}
-.tools{grid-area:tools;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:6px 10px calc(8px + var(--sb))}
-.tb{height:50px;border-radius:13px;border:1px solid rgba(233,196,106,.28);cursor:pointer;touch-action:manipulation;
-  background:linear-gradient(180deg,#4a2014,#2e130b);color:var(--ivory);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
-  box-shadow:inset 0 1px 0 rgba(255,220,160,.14),0 3px 0 #150704;font-family:inherit}
-.tb:active{transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,220,160,.14),0 1px 0 #150704}
+.combo i{font-style:normal;margin-left:8px;opacity:.75}
+/* 콤보 알림도 패를 가리지 않게: 넓은 가로는 위 칩 줄 오른쪽, 폰 가로는 왼쪽 기록 칸 아래 */
+html.mj-side .combo{left:auto;right:calc(92px + var(--sr));top:calc(9px + var(--st));transform:scale(.9);transform-origin:100% 50%}
+html.mj-side .combo.on{transform:scale(1)}
+html.mj-low .combo{left:calc(5px + var(--sl));right:auto;top:auto;bottom:8px;width:46px;padding:4px 2px;border-radius:9px;font-size:10.5px;line-height:1.25;letter-spacing:0;text-align:center;white-space:normal;transform-origin:50% 100%}
+html.mj-low .combo b,html.mj-low .combo i{display:block;margin:0}
+/* 도구: 세로 화면은 아래 가운데 한 줄 */
+.tools{position:absolute;z-index:4;left:0;right:0;bottom:calc(7px + var(--sb));display:flex;justify-content:center;gap:7px;pointer-events:none}
+.tb{pointer-events:auto;height:42px;min-width:44px;padding:0 13px;border-radius:21px;border:1.5px solid rgba(233,196,106,.28);cursor:pointer;touch-action:manipulation;
+  color:var(--ivory);display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;font-family:inherit}
 .tb .i{font-size:18px;line-height:1}
-.tb .t{font-size:11px;font-weight:700;color:var(--dim);white-space:nowrap}
-.tb .c{font-size:9px;color:var(--mute);font-weight:700}
-.tb:disabled{opacity:.38;cursor:default}
-/* 가로로 누운 폰 — 위 바·도구를 오른쪽 기둥으로 옮겨 판 높이를 최대로 */
-@media (orientation:landscape) and (max-height:540px){
-  .app{grid-template-columns:1fr 168px;grid-template-rows:auto auto 1fr;grid-template-areas:"field top" "field hud" "field tools"}
-  header.top{height:40px;padding:0 6px}
-  header.top h1{font-size:12px}
-  header.top h1{visibility:hidden}
-  .hud{grid-template-columns:1fr 1fr;padding:2px 6px}
-  .tools{grid-template-columns:1fr 1fr;align-content:end;padding:4px 6px calc(6px + var(--sb))}
-  .tb{height:44px}
-  @media(max-width:900px){.hud{padding-left:6px}}
-}
-@media (max-height:600px) and (orientation:portrait){
-  header.top{height:38px}
-  .st .v{font-size:14px}
-  .tb{height:42px}.tb .t{display:none}
-}
+.tb .t{font-size:12px;font-weight:700;white-space:nowrap}
+.tb:disabled{cursor:default}
+@media (max-width:359px){.tb{padding:0 9px}.tb .t{font-size:11px}}
+/* 가로로 넓은 화면: 도구는 오른쪽 가장자리 세로 줄, 진행 막대는 왼쪽 가장자리 세로 */
+html.mj-side .tools{left:auto;right:calc(7px + var(--sr));bottom:8px;flex-direction:column;align-items:center}
+html.mj-side .tb{width:50px;height:50px;min-width:0;padding:0;border-radius:15px;flex-direction:column;gap:1px}
+html.mj-side .tb .t{font-size:9.5px}
+/* 낮은 가로(폰): 왼쪽 = 홈 · (사이트 독 손잡이) · 기록 네 칸 / 오른쪽 = 일시정지 · 소리 · 도구(아이콘만) */
+html.mj-low header.top{height:0;padding:0}
+html.mj-low header.top .home{position:absolute;left:8px;top:6px}
+html.mj-low #btnPause{position:absolute;right:12px;top:6px}
+html.mj-low #btnMute{position:absolute;right:12px;top:46px;margin:0}
+html.mj-low .hud{left:calc(5px + var(--sl));top:96px;transform:none;grid-template-columns:1fr;width:46px;max-width:none;gap:3px}
+html.mj-low .st{padding:2px 2px 3px;border-radius:9px}
+html.mj-low .st .l{font-size:8px;letter-spacing:0}
+html.mj-low .st .v{font-size:12.5px}
+html.mj-low .tools{right:calc(7px + var(--sr));bottom:6px;gap:6px}
+html.mj-low .tb{width:44px;height:44px;border-radius:50%}
+html.mj-low .tb .t{display:none}
+@media (max-height:330px){html.mj-low .hud{top:92px;gap:2px}html.mj-low .st .l{display:none}html.mj-low .tb{width:40px;height:40px}html.mj-low .tools{gap:4px}}
 /* ---- 오버레이 ---- */
 .ov{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:14px;overflow-y:auto;
   background:rgba(18,6,3,.74);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
@@ -169,7 +191,93 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
   padding:9px 16px;border-radius:14px;background:rgba(40,16,9,.94);border:1px solid rgba(233,196,106,.3);font-size:13px;font-weight:700;
   transition:.25s;pointer-events:none;color:var(--ivory)}
 .toast.on{opacity:1;transform:translateX(-50%)}
+/* ---- 보석색 도구 버튼 + 별 진행 막대 ---- */
+.tb .t{color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.45)}
+.tb .i{filter:drop-shadow(0 1px 0 rgba(0,0,0,.35))}
+#bUndo{background:linear-gradient(180deg,#5aa6f6,#2a62c4);border-color:#a9d2ff;box-shadow:inset 0 2px 0 rgba(255,255,255,.38),inset 0 -3px 0 rgba(0,0,0,.2),0 3px 0 #173a80,0 5px 10px rgba(0,0,0,.35)}
+#bHint{background:linear-gradient(180deg,#62d274,#2c8f45);border-color:#b4f3bb;box-shadow:inset 0 2px 0 rgba(255,255,255,.38),inset 0 -3px 0 rgba(0,0,0,.2),0 3px 0 #17592a,0 5px 10px rgba(0,0,0,.35)}
+#bShuffle{background:linear-gradient(180deg,#bb78f6,#7a3cc4);border-color:#e2c0ff;box-shadow:inset 0 2px 0 rgba(255,255,255,.38),inset 0 -3px 0 rgba(0,0,0,.2),0 3px 0 #48207e,0 5px 10px rgba(0,0,0,.35)}
+#bZoom{background:linear-gradient(180deg,#f7bd4a,#cf7f18);border-color:#ffe6ac;box-shadow:inset 0 2px 0 rgba(255,255,255,.38),inset 0 -3px 0 rgba(0,0,0,.2),0 3px 0 #7a4208,0 5px 10px rgba(0,0,0,.35)}
+.tools .tb:active{transform:translateY(2px);box-shadow:inset 0 2px 0 rgba(255,255,255,.3),inset 0 -2px 0 rgba(0,0,0,.2),0 1px 0 rgba(0,0,0,.5)}
+.tools .tb:disabled{opacity:.55;filter:saturate(.3)}
+/* 진행 막대: --p(0~100)만 스크립트가 바꾼다. 세로 화면은 위 칩 바로 아래 가로 줄, 가로 화면은 왼쪽 가장자리 세로 줄. 별은 채워진 끝에 */
+.prog{position:absolute;z-index:3;left:12px;right:12px;top:calc(45px + var(--st));height:4px;border-radius:9px;background:rgba(0,0,0,.42);
+  box-shadow:0 0 0 1px rgba(255,236,190,.16);pointer-events:none}
+.prog i{position:absolute;left:0;top:0;bottom:0;width:calc(var(--p,0)*1%);border-radius:9px;background:linear-gradient(180deg,#fff3b4,#ffc83c 55%,#e99a1c);
+  box-shadow:0 0 8px rgba(255,200,80,.7);transition:width .4s cubic-bezier(.2,1,.3,1),height .4s cubic-bezier(.2,1,.3,1)}
+.prog b{position:absolute;left:calc(var(--p,0)*1%);top:50%;margin:-10px 0 0 -10px;width:20px;height:20px;line-height:20px;text-align:center;font-size:17px;color:#ffd84f;
+  -webkit-text-stroke:1px #9a5200;text-shadow:0 1px 0 #7a3c00,0 0 8px rgba(255,205,90,.85);transition:left .4s cubic-bezier(.2,1,.3,1),bottom .4s cubic-bezier(.2,1,.3,1)}
+.prog b.bump{animation:mjStar .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes mjStar{0%{transform:scale(1) rotate(0)}40%{transform:scale(1.6) rotate(-18deg)}100%{transform:scale(1) rotate(0)}}
+html.mj-side .prog{left:calc(46px + var(--sl));right:auto;top:calc(100px + var(--st));bottom:14px;width:4px;height:auto}
+html.mj-side .prog i{top:auto;right:0;width:auto;height:calc(var(--p,0)*1%)}
+html.mj-side .prog b{left:50%;top:auto;bottom:calc(var(--p,0)*1%);margin:0 0 -10px -10px}
+html.mj-low .prog{left:calc(55px + var(--sl));top:8px;bottom:8px}
+/* 판 색 고르기 */
+.swl{display:flex;align-items:center;gap:6px;padding:0 4px;font:700 11.5px/1 'Noto Sans KR',sans-serif;color:var(--mute)}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.28);padding:0;cursor:pointer;box-shadow:inset 0 2px 4px rgba(255,255,255,.25),inset 0 -3px 5px rgba(0,0,0,.35)}
+.sw.on{border-color:var(--gold);box-shadow:0 0 0 2px rgba(233,196,106,.5),inset 0 2px 4px rgba(255,255,255,.25),inset 0 -3px 5px rgba(0,0,0,.35)}
+/* 판 밖으로 비치는 바탕(노치 자리 등)도 판 색을 따라간다 */
+html[data-tbl=green] body{background:#0a3a22}
+html[data-tbl=red] body{background:#38060a}
+html[data-tbl=blue] body{background:#0a2240}
+/* ---- 폰은 가로 화면: 세로로 든 폰에서는 화면 전체를 90° 돌려 그린다(가상 가로 — 회전 잠금이 켜져 있어도 된다).
+        html.mj-vland 는 <head> 의 작은 스크립트와 게임 스크립트(syncLand)가 붙였다 뗀다 ---- */
+html.mj-vland{overflow:hidden}
+html.mj-vland body{position:fixed;left:0;top:0;width:100vh;width:100dvh;height:100vw;min-height:0!important;max-height:100vw;transform-origin:0 0;transform:translateX(100vw) rotate(90deg);
+  padding-left:env(safe-area-inset-top,0px);padding-right:env(safe-area-inset-bottom,0px);--sb:0px}
+/* 낮은 가로 화면(진짜 가로·가상 가로)에서는 카드를 좌우 두 단으로 펴서 스크롤 없이 한 화면에 */
+html.mj-low .ov{padding:8px}
+html.mj-low .card.wide{max-width:720px;padding:10px 14px;display:grid;grid-template-columns:1fr 1fr;column-gap:14px;align-items:center}
+html.mj-low .card.wide .c1{grid-column:1;min-width:0}
+html.mj-low .card.wide .c2{grid-column:2;min-width:0}
+html.mj-low .card .feats,html.mj-low .card .hintline{display:none}
+html.mj-low .card .logo{height:38px;margin-bottom:0}
+html.mj-low .card .logo canvas{width:88px;height:38px}
+html.mj-low .card h2{font-size:19px;margin-bottom:2px}
+html.mj-low .card .sub{font-size:11.5px;line-height:1.4;margin-bottom:6px}
+html.mj-low .card .lays{margin-bottom:0}
+html.mj-low .card .lay canvas{aspect-ratio:2/1}
+html.mj-low .card .lay .b{display:none}
+html.mj-low .card .btn{padding:9px 8px}
+html.mj-low .card .tgl{margin-top:7px}
+html.mj-low .card .mpanda{width:52px;height:52px;margin-top:0}
+html.mj-low .card .grid2{margin:6px 0 8px}
+html.mj-low .card .grid2 .it{padding:5px 6px}
+html.mj-low .card .grid2 .v{font-size:16px}
+html.mj-low .card .brk{margin:-2px 0 6px}
+html.mj-low #clearOv .card h2{font-size:22px}
+/* ---- 연출: 짝 맞춤 HUD 튕김 · 콤보 열기 · 완성 축하 ---- */
+.st .v.bump,.grid2 .v.bump{animation:mjBump .34s cubic-bezier(.2,1.5,.4,1)}
+@keyframes mjBump{0%{transform:scale(1)}35%{transform:scale(1.32);color:#fff;text-shadow:0 0 14px rgba(255,214,110,.95)}100%{transform:scale(1)}}
+.field::after{content:'';position:absolute;inset:0;pointer-events:none;z-index:2;opacity:0;transition:opacity .4s;
+  box-shadow:inset 0 0 34px 6px rgba(255,196,80,.55),inset 0 0 96px 22px rgba(255,110,40,.26)}
+.field.fever::after{opacity:1;animation:mjFever .9s ease-in-out infinite alternate}
+@keyframes mjFever{from{opacity:.5}to{opacity:1}}
+canvas#fx{position:fixed;left:0;top:0;width:100%;height:100%;z-index:150;pointer-events:none;display:none}
+canvas#fx.on{display:block}
+#clearOv .rays{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0}
+#clearOv .rays i{position:absolute;left:50%;top:50%;width:min(150vmin,900px);height:min(150vmin,900px);margin:calc(min(150vmin,900px)/-2) 0 0 calc(min(150vmin,900px)/-2);border-radius:50%;
+  background:repeating-conic-gradient(from 0deg,rgba(255,214,120,.2) 0 7deg,rgba(255,214,120,0) 7deg 20deg);
+  -webkit-mask:radial-gradient(closest-side,#000 0,rgba(0,0,0,.55) 38%,transparent 96%);mask:radial-gradient(closest-side,#000 0,rgba(0,0,0,.55) 38%,transparent 96%);
+  animation:mjRays 26s linear infinite}
+@keyframes mjRays{to{transform:rotate(360deg)}}
+#clearOv .card{position:relative;z-index:1}
+#clearOv.show .card{animation:mjCardIn .55s cubic-bezier(.2,1.5,.35,1),mjCardGlow 1.6s ease-in-out .55s infinite alternate}
+@keyframes mjCardIn{0%{transform:scale(.55) translateY(30px);opacity:0}100%{transform:none;opacity:1}}
+@keyframes mjCardGlow{from{box-shadow:0 0 0 4px rgba(20,6,3,.6),0 0 40px rgba(233,196,106,.16),0 20px 60px rgba(0,0,0,.6)}
+  to{box-shadow:0 0 0 4px rgba(20,6,3,.6),0 0 70px rgba(255,210,110,.5),0 20px 60px rgba(0,0,0,.6)}}
+#clearOv .card h2{font-size:30px;background:linear-gradient(100deg,#e9b949 0%,#fff6c8 28%,#e9b949 50%,#fff6c8 72%,#e9b949 100%);background-size:220% 100%;
+  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;text-shadow:none;
+  filter:drop-shadow(0 2px 0 rgba(0,0,0,.75)) drop-shadow(0 0 12px rgba(255,200,90,.45));animation:mjShine 2.4s linear infinite}
+@keyframes mjShine{to{background-position:-220% 0}}
+@media (max-height:640px){#clearOv .card h2{font-size:23px}}
+@media (prefers-reduced-motion:reduce){#clearOv .rays i,.field.fever::after,#clearOv .card h2{animation:none}}
 </style>
+<script>/* 폰 세로 = 가상 가로(첫 화면이 세로로 번쩍하지 않게 그리기 전에 붙인다 — 게임 스크립트의 syncLand 와 같은 조건) */
+try{(function(){var s={};try{s=JSON.parse(localStorage.getItem('lp_mjs_set')||'{}')||{}}catch(e){}var w=innerWidth,h=innerHeight,c=document.documentElement.classList,q=/[?&]vland=1/.test(location.search);
+if(s.land!==false&&(q||matchMedia('(pointer:coarse)').matches)&&w<=540&&h>w*1.2){c.add('mj-vland');var t=w;w=h;h=t}
+if(w>h)c.add('mj-side');if(w>h&&h<=540)c.add('mj-low');if(w>=900)c.add('mj-wide')})()}catch(e){}</script>
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"홈","item":"https://luckyplz.com/"},{"@type":"ListItem","position":2,"name":"게임","item":"https://luckyplz.com/games/"},{"@type":"ListItem","position":3,"name":"마작 솔리테어","item":"https://luckyplz.com/games/mahjong-solitaire/"}]}
     </script>
@@ -192,6 +300,8 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
     <div class="st"><div class="l" data-t="left">남은 패</div><div class="v" id="vLeft">144</div></div>
     <div class="st mv" id="stMoves"><div class="l" data-t="moves">가능한 짝</div><div class="v" id="vMoves">0</div></div>
   </div>
+  <div class="prog" id="prog" aria-hidden="true"><i id="progFill"></i><b id="progStar">★</b></div>
+  <i id="saProbe" aria-hidden="true"></i>
   <main class="field" id="field">
     <canvas id="cv" aria-label="Mahjong Solitaire board"></canvas>
     <div class="combo" id="combo">COMBO ×2</div>
@@ -205,7 +315,8 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
 </div>
 
 <div class="ov show" id="introOv">
-  <div class="card">
+  <div class="card wide">
+    <div class="c1">
     <div class="logo" aria-hidden="true"><canvas id="logoCv" width="300" height="132"></canvas></div>
     <h2 data-t="title">마작 솔리테어</h2>
     <p class="sub" data-t="tagline">위와 옆이 트인 같은 패 두 장을 짝지어 모두 치우세요.</p>
@@ -215,6 +326,8 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
       <li data-th="f3">꽃은 꽃끼리, 계절은 계절끼리 <b>아무거나</b> 짝</li>
     </ul>
     <div class="lays" id="lays"></div>
+    </div>
+    <div class="c2">
     <div class="btn-col">
       <button class="btn pri" id="btnStart" type="button" data-t="start">시작</button>
       <div class="btn-row">
@@ -224,6 +337,7 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
     </div>
     <div class="tgl" id="tglIntro"></div>
     <p class="hintline" id="introHint"></p>
+    </div>
   </div>
 </div>
 
@@ -259,7 +373,9 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
 </div>
 
 <div class="ov" id="clearOv">
-  <div class="card">
+  <div class="rays" aria-hidden="true"><i></i></div>
+  <div class="card wide">
+    <div class="c1">
     <div class="mpanda win" aria-hidden="true"></div>
     <h2 data-t="cleared">완성!</h2>
     <div class="nb" id="newBest" data-t="newBest">최고 기록!</div>
@@ -270,15 +386,19 @@ canvas#cv{position:absolute;left:0;top:0;display:block;touch-action:none;cursor:
       <div class="it"><div class="l" id="oLayL">배치</div><div class="v" id="oLay" style="font-size:15px">-</div></div>
     </div>
     <p class="brk" id="oBrk"></p>
+    </div>
+    <div class="c2">
     <div class="btn-row">
       <button class="btn pri" id="btnAgain" type="button" data-t="again">한 판 더</button>
       <button class="btn" id="btnShare" type="button" data-t="share">공유</button>
     </div>
     <div class="btn-col" style="margin-top:8px"><button class="btn" id="btnOther" type="button" data-t="other">다른 배치</button></div>
     <div class="navslot" id="clearNav"></div>
+    </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
 
 <script>
 /*MJS-CORE:start*/
@@ -939,13 +1059,13 @@ const $=id=>document.getElementById(id);
 
 /* ════════════ i18n — luckyplz_lang 을 따른다 (gb→en, zh + 대만·홍콩 브라우저 → 번체, 없는 언어는 en) ════════════ */
 const TXT={
-ko:{title:'마작 솔리테어',tagline:'위와 옆이 트인 같은 패 두 장을 짝지어 모두 치우세요.',f1:'<b>반드시 풀리는 판</b> — 정답이 있는 배치만 나와요',f2:'<b>빠르게 연속</b>으로 맞히면 콤보 배수',f3:'꽃은 꽃끼리, 계절은 계절끼리 <b>아무거나</b> 짝',start:'시작',cont:'이어하기',daily:'오늘의 판',dailyDone:'오늘 기록',best:'최고',time:'시간',score:'점수',left:'남은 패',moves:'가능한 짝',undo:'되돌리기',hint:'힌트',shuffle:'섞기',fit:'맞춤',zoom:'확대',paused:'일시정지',resume:'계속하기',restart:'같은 판 다시',newGame:'새 판',menu:'배치 고르기',layout:'배치',diff1:'쉬움',diff2:'보통',diff3:'어려움',tiles:'장',wide:'가로 추천',sound:'소리',vib:'진동',hl:'자유 패 강조',cleared:'완성!',newBest:'최고 기록!',bestTime:'최고 시간',share:'공유',copied:'링크를 복사했어요',stuck:'더 뗄 짝이 없어요',stuckSub:'남은 패를 풀리는 배치로 섞거나, 한 수 되돌려 보세요.',again:'한 판 더',other:'다른 배치',deadEnd:'이대로는 끝까지 못 풀어요 — 되돌리기나 섞기를 써 보세요',noHint:'지금은 뗄 짝이 없어요',shuffled:'풀리는 배치로 섞었어요',cantShuffle:'남은 자리는 어떻게 섞어도 풀 수 없어요 — 되돌리기를 써 보세요',pinch:'두 손가락으로 확대·이동할 수 있어요',combo:'콤보',blocked:'위나 양옆이 막힌 패예요',pts:'점',timeBonus:'시간 보너스',clearBonus:'완성 보너스',penalty:'힌트·섞기 감점',garden:'정원',butterfly:'나비',fortress:'요새',pagoda:'탑',pyramid:'피라미드',turtle:'거북',hintKeys:'H 힌트 · Z 되돌리기 · S 섞기 · F 확대/맞춤 · P 일시정지',hintTouch:'패를 눌러 고르고, 같은 패를 눌러 짝 · 두 손가락으로 확대',dailyTag:'오늘의 판',shareMsg:'{lay} {n}장을 {t}에 완성!',noUndo:'되돌릴 수가 없어요',savedAt:'{lay} · 남은 {n}장'},
-en:{title:'Mahjong Solitaire',tagline:'Pair up matching tiles that are open on top and on one side until the table is clear.',f1:'<b>Always solvable</b> — every deal has a solution',f2:'Match <b>fast in a row</b> for a combo multiplier',f3:'Any flower pairs with any flower, any season with any season',start:'Start',cont:'Continue',daily:'Daily Deal',dailyDone:'Today',best:'Best',time:'Time',score:'Score',left:'Tiles',moves:'Moves',undo:'Undo',hint:'Hint',shuffle:'Shuffle',fit:'Fit',zoom:'Zoom',paused:'Paused',resume:'Resume',restart:'Replay deal',newGame:'New deal',menu:'Choose layout',layout:'Layout',diff1:'Easy',diff2:'Medium',diff3:'Hard',tiles:'tiles',wide:'Landscape',sound:'Sound',vib:'Haptics',hl:'Highlight free',cleared:'Cleared!',newBest:'New best!',bestTime:'Best time',share:'Share',copied:'Link copied',stuck:'No moves left',stuckSub:'Shuffle the remaining tiles into a solvable layout, or undo a move.',again:'Play again',other:'Other layout',deadEnd:'This position can’t be finished as is — try Undo or Shuffle',noHint:'No matching pair is open right now',shuffled:'Shuffled into a solvable layout',cantShuffle:'These spots can’t be solved in any order — try Undo',pinch:'Pinch with two fingers to zoom and pan',combo:'Combo',blocked:'That tile is covered or boxed in',pts:'pts',timeBonus:'Time bonus',clearBonus:'Clear bonus',penalty:'Hint/shuffle penalty',garden:'Garden',butterfly:'Butterfly',fortress:'Fortress',pagoda:'Pagoda',pyramid:'Pyramid',turtle:'Turtle',hintKeys:'H hint · Z undo · S shuffle · F zoom/fit · P pause',hintTouch:'Tap a tile, then tap its twin · pinch to zoom',dailyTag:'Daily',shareMsg:'Cleared {lay} ({n} tiles) in {t}!',noUndo:'Nothing to undo',savedAt:'{lay} · {n} left'},
-ja:{title:'麻雀ソリティア',tagline:'上と左右どちらかが空いている同じ牌を2枚ずつ取り、全部なくしましょう。',f1:'<b>必ず解ける配牌</b> — 正解のある配置だけ',f2:'<b>素早く連続</b>で取るとコンボ倍率',f3:'花は花どうし、季節は季節どうし<b>どれでも</b>ペア',start:'スタート',cont:'続きから',daily:'今日の一局',dailyDone:'今日の記録',best:'ベスト',time:'タイム',score:'スコア',left:'残り',moves:'取れる組',undo:'戻す',hint:'ヒント',shuffle:'シャッフル',fit:'全体',zoom:'拡大',paused:'一時停止',resume:'再開',restart:'同じ配牌で',newGame:'新しい配牌',menu:'配置を選ぶ',layout:'配置',diff1:'やさしい',diff2:'ふつう',diff3:'むずかしい',tiles:'枚',wide:'横向き推奨',sound:'サウンド',vib:'振動',hl:'取れる牌を強調',cleared:'クリア！',newBest:'自己ベスト！',bestTime:'ベストタイム',share:'シェア',copied:'リンクをコピーしました',stuck:'取れる組がありません',stuckSub:'残りの牌を解ける並びにシャッフルするか、一手戻しましょう。',again:'もう一局',other:'別の配置',deadEnd:'このままでは最後まで解けません — 戻すかシャッフルを',noHint:'今は取れる組がありません',shuffled:'解ける並びにシャッフルしました',cantShuffle:'残りの位置はどう並べても解けません — 戻すを使ってください',pinch:'2本指で拡大・移動できます',combo:'コンボ',blocked:'上か左右がふさがっています',pts:'点',timeBonus:'タイムボーナス',clearBonus:'クリアボーナス',penalty:'ヒント・シャッフル減点',garden:'庭園',butterfly:'蝶',fortress:'城塞',pagoda:'塔',pyramid:'ピラミッド',turtle:'亀',hintKeys:'H ヒント · Z 戻す · S シャッフル · F 拡大/全体 · P 一時停止',hintTouch:'牌をタップして、同じ牌をタップ · 2本指で拡大',dailyTag:'今日の一局',shareMsg:'{lay}（{n}枚）を{t}でクリア！',noUndo:'戻せる手がありません',savedAt:'{lay} · 残り{n}枚'},
-zhTW:{title:'麻將接龍',tagline:'把上方與左右任一側沒被擋住的相同牌兩兩配對，清空整個牌桌。',f1:'<b>保證有解</b> — 每一局都有正解',f2:'<b>快速連續</b>配對可獲得連擊倍率',f3:'花牌任兩張、季節牌任兩張<b>都能</b>配對',start:'開始',cont:'繼續',daily:'每日一局',dailyDone:'今日紀錄',best:'最佳',time:'時間',score:'分數',left:'剩餘',moves:'可配對',undo:'復原',hint:'提示',shuffle:'洗牌',fit:'全覽',zoom:'放大',paused:'暫停',resume:'繼續',restart:'同局重來',newGame:'新的一局',menu:'選擇牌陣',layout:'牌陣',diff1:'簡單',diff2:'普通',diff3:'困難',tiles:'張',wide:'建議橫向',sound:'音效',vib:'震動',hl:'標示可取牌',cleared:'完成！',newBest:'新紀錄！',bestTime:'最佳時間',share:'分享',copied:'已複製連結',stuck:'沒有可配對的牌了',stuckSub:'把剩下的牌洗成有解的排列，或復原一步。',again:'再來一局',other:'換個牌陣',deadEnd:'照這樣下去無法完成 — 試試復原或洗牌',noHint:'目前沒有可配對的牌',shuffled:'已洗成有解的排列',cantShuffle:'剩下的位置怎麼排都無解 — 請用復原',pinch:'可用兩指放大與移動',combo:'連擊',blocked:'這張牌被壓住或兩側被擋',pts:'分',timeBonus:'時間獎勵',clearBonus:'完成獎勵',penalty:'提示・洗牌扣分',garden:'庭園',butterfly:'蝴蝶',fortress:'城堡',pagoda:'寶塔',pyramid:'金字塔',turtle:'烏龜',hintKeys:'H 提示 · Z 復原 · S 洗牌 · F 放大/全覽 · P 暫停',hintTouch:'點一張牌，再點相同的牌 · 兩指放大',dailyTag:'每日一局',shareMsg:'{t} 完成 {lay}（{n} 張）！',noUndo:'沒有可復原的步驟',savedAt:'{lay} · 剩 {n} 張'},
-zh:{title:'麻将接龙',tagline:'把上方与左右任一侧没被挡住的相同牌两两配对，清空整个牌桌。',f1:'<b>保证有解</b> — 每一局都有正解',f2:'<b>快速连续</b>配对可获得连击倍率',f3:'花牌任两张、季节牌任两张<b>都能</b>配对',start:'开始',cont:'继续',daily:'每日一局',dailyDone:'今日记录',best:'最佳',time:'时间',score:'分数',left:'剩余',moves:'可配对',undo:'撤销',hint:'提示',shuffle:'洗牌',fit:'全览',zoom:'放大',paused:'暂停',resume:'继续',restart:'同局重来',newGame:'新的一局',menu:'选择牌阵',layout:'牌阵',diff1:'简单',diff2:'普通',diff3:'困难',tiles:'张',wide:'建议横屏',sound:'音效',vib:'振动',hl:'标示可取牌',cleared:'完成！',newBest:'新纪录！',bestTime:'最佳时间',share:'分享',copied:'链接已复制',stuck:'没有可配对的牌了',stuckSub:'把剩下的牌洗成有解的排列，或撤销一步。',again:'再来一局',other:'换个牌阵',deadEnd:'照这样下去无法完成 — 试试撤销或洗牌',noHint:'目前没有可配对的牌',shuffled:'已洗成有解的排列',cantShuffle:'剩下的位置怎么排都无解 — 请用撤销',pinch:'可用两指放大和移动',combo:'连击',blocked:'这张牌被压住或两侧被挡',pts:'分',timeBonus:'时间奖励',clearBonus:'完成奖励',penalty:'提示・洗牌扣分',garden:'庭园',butterfly:'蝴蝶',fortress:'城堡',pagoda:'宝塔',pyramid:'金字塔',turtle:'乌龟',hintKeys:'H 提示 · Z 撤销 · S 洗牌 · F 放大/全览 · P 暂停',hintTouch:'点一张牌，再点相同的牌 · 两指放大',dailyTag:'每日一局',shareMsg:'{t} 完成 {lay}（{n} 张）！',noUndo:'没有可撤销的步骤',savedAt:'{lay} · 剩 {n} 张'},
-es:{title:'Mahjong Solitario',tagline:'Empareja fichas iguales libres por arriba y por un lado hasta vaciar la mesa.',f1:'<b>Siempre tiene solución</b> — cada reparto se puede resolver',f2:'Empareja <b>rápido y seguido</b> para multiplicar con combo',f3:'Cualquier flor con cualquier flor, cualquier estación con otra',start:'Jugar',cont:'Continuar',daily:'Reto del día',dailyDone:'Hoy',best:'Récord',time:'Tiempo',score:'Puntos',left:'Fichas',moves:'Parejas',undo:'Deshacer',hint:'Pista',shuffle:'Mezclar',fit:'Ajustar',zoom:'Zoom',paused:'Pausa',resume:'Continuar',restart:'Repetir reparto',newGame:'Nuevo reparto',menu:'Elegir tablero',layout:'Tablero',diff1:'Fácil',diff2:'Normal',diff3:'Difícil',tiles:'fichas',wide:'Horizontal',sound:'Sonido',vib:'Vibración',hl:'Resaltar libres',cleared:'¡Completado!',newBest:'¡Nuevo récord!',bestTime:'Mejor tiempo',share:'Compartir',copied:'Enlace copiado',stuck:'No quedan parejas',stuckSub:'Mezcla las fichas restantes en un orden resoluble o deshaz una jugada.',again:'Otra vez',other:'Otro tablero',deadEnd:'Así ya no se puede terminar — prueba Deshacer o Mezclar',noHint:'Ahora no hay ninguna pareja libre',shuffled:'Mezclado en un orden resoluble',cantShuffle:'Estos huecos no se pueden resolver de ninguna forma — usa Deshacer',pinch:'Pellizca con dos dedos para acercar y mover',combo:'Combo',blocked:'Esa ficha está tapada o encerrada',pts:'pts',timeBonus:'Bonus de tiempo',clearBonus:'Bonus final',penalty:'Pistas/mezclas',garden:'Jardín',butterfly:'Mariposa',fortress:'Fortaleza',pagoda:'Pagoda',pyramid:'Pirámide',turtle:'Tortuga',hintKeys:'H pista · Z deshacer · S mezclar · F zoom/ajustar · P pausa',hintTouch:'Toca una ficha y luego su pareja · pellizca para acercar',dailyTag:'Reto del día',shareMsg:'¡Completé {lay} ({n} fichas) en {t}!',noUndo:'No hay nada que deshacer',savedAt:'{lay} · quedan {n}'},
-pt:{title:'Paciência Mahjong',tagline:'Junte pares de peças iguais livres em cima e de um lado até limpar a mesa.',f1:'<b>Sempre tem solução</b> — toda mesa pode ser resolvida',f2:'Combine <b>rápido e em sequência</b> para multiplicar o combo',f3:'Qualquer flor com qualquer flor, qualquer estação com outra',start:'Jogar',cont:'Continuar',daily:'Desafio do dia',dailyDone:'Hoje',best:'Recorde',time:'Tempo',score:'Pontos',left:'Peças',moves:'Pares',undo:'Desfazer',hint:'Dica',shuffle:'Embaralhar',fit:'Ajustar',zoom:'Zoom',paused:'Pausado',resume:'Continuar',restart:'Repetir mesa',newGame:'Nova mesa',menu:'Escolher formato',layout:'Formato',diff1:'Fácil',diff2:'Médio',diff3:'Difícil',tiles:'peças',wide:'Horizontal',sound:'Som',vib:'Vibração',hl:'Destacar livres',cleared:'Concluído!',newBest:'Novo recorde!',bestTime:'Melhor tempo',share:'Compartilhar',copied:'Link copiado',stuck:'Sem pares livres',stuckSub:'Embaralhe as peças restantes numa ordem resolvível ou desfaça uma jogada.',again:'Jogar de novo',other:'Outro formato',deadEnd:'Assim não dá mais para terminar — use Desfazer ou Embaralhar',noHint:'Não há par livre agora',shuffled:'Embaralhado numa ordem resolvível',cantShuffle:'Estas posições não têm solução em nenhuma ordem — use Desfazer',pinch:'Use dois dedos para ampliar e mover',combo:'Combo',blocked:'Essa peça está coberta ou presa',pts:'pts',timeBonus:'Bônus de tempo',clearBonus:'Bônus final',penalty:'Dicas/embaralhar',garden:'Jardim',butterfly:'Borboleta',fortress:'Fortaleza',pagoda:'Pagode',pyramid:'Pirâmide',turtle:'Tartaruga',hintKeys:'H dica · Z desfazer · S embaralhar · F zoom/ajustar · P pausa',hintTouch:'Toque numa peça e depois no par · dois dedos para ampliar',dailyTag:'Desafio do dia',shareMsg:'Concluí {lay} ({n} peças) em {t}!',noUndo:'Nada para desfazer',savedAt:'{lay} · faltam {n}'}
+ko:{title:'마작 솔리테어',tagline:'위와 옆이 트인 같은 패 두 장을 짝지어 모두 치우세요.',f1:'<b>반드시 풀리는 판</b> — 정답이 있는 배치만 나와요',f2:'<b>빠르게 연속</b>으로 맞히면 콤보 배수',f3:'꽃은 꽃끼리, 계절은 계절끼리 <b>아무거나</b> 짝',start:'시작',cont:'이어하기',daily:'오늘의 판',dailyDone:'오늘 기록',best:'최고',time:'시간',score:'점수',left:'남은 패',moves:'가능한 짝',undo:'되돌리기',hint:'힌트',shuffle:'섞기',fit:'맞춤',zoom:'확대',paused:'일시정지',resume:'계속하기',restart:'같은 판 다시',newGame:'새 판',menu:'배치 고르기',layout:'배치',diff1:'쉬움',diff2:'보통',diff3:'어려움',tiles:'장',wide:'가로 추천',sound:'소리',vib:'진동',hl:'자유 패 강조',cleared:'완성!',newBest:'최고 기록!',bestTime:'최고 시간',share:'공유',copied:'링크를 복사했어요',stuck:'더 뗄 짝이 없어요',stuckSub:'남은 패를 풀리는 배치로 섞거나, 한 수 되돌려 보세요.',again:'한 판 더',other:'다른 배치',deadEnd:'이대로는 끝까지 못 풀어요 — 되돌리기나 섞기를 써 보세요',noHint:'지금은 뗄 짝이 없어요',shuffled:'풀리는 배치로 섞었어요',cantShuffle:'남은 자리는 어떻게 섞어도 풀 수 없어요 — 되돌리기를 써 보세요',table:'판 색',land:'가로 화면',pinch:'두 손가락으로 확대·이동할 수 있어요',combo:'콤보',blocked:'위나 양옆이 막힌 패예요',pts:'점',timeBonus:'시간 보너스',clearBonus:'완성 보너스',penalty:'힌트·섞기 감점',garden:'정원',butterfly:'나비',fortress:'요새',pagoda:'탑',pyramid:'피라미드',turtle:'거북',hintKeys:'H 힌트 · Z 되돌리기 · S 섞기 · F 확대/맞춤 · P 일시정지',hintTouch:'패를 눌러 고르고, 같은 패를 눌러 짝 · 두 손가락으로 확대',dailyTag:'오늘의 판',shareMsg:'{lay} {n}장을 {t}에 완성!',noUndo:'되돌릴 수가 없어요',savedAt:'{lay} · 남은 {n}장'},
+en:{title:'Mahjong Solitaire',tagline:'Pair up matching tiles that are open on top and on one side until the table is clear.',f1:'<b>Always solvable</b> — every deal has a solution',f2:'Match <b>fast in a row</b> for a combo multiplier',f3:'Any flower pairs with any flower, any season with any season',start:'Start',cont:'Continue',daily:'Daily Deal',dailyDone:'Today',best:'Best',time:'Time',score:'Score',left:'Tiles',moves:'Moves',undo:'Undo',hint:'Hint',shuffle:'Shuffle',fit:'Fit',zoom:'Zoom',paused:'Paused',resume:'Resume',restart:'Replay deal',newGame:'New deal',menu:'Choose layout',layout:'Layout',diff1:'Easy',diff2:'Medium',diff3:'Hard',tiles:'tiles',wide:'Landscape',sound:'Sound',vib:'Haptics',hl:'Highlight free',cleared:'Cleared!',newBest:'New best!',bestTime:'Best time',share:'Share',copied:'Link copied',stuck:'No moves left',stuckSub:'Shuffle the remaining tiles into a solvable layout, or undo a move.',again:'Play again',other:'Other layout',deadEnd:'This position can’t be finished as is — try Undo or Shuffle',noHint:'No matching pair is open right now',shuffled:'Shuffled into a solvable layout',cantShuffle:'These spots can’t be solved in any order — try Undo',table:'Table',land:'Landscape',pinch:'Pinch with two fingers to zoom and pan',combo:'Combo',blocked:'That tile is covered or boxed in',pts:'pts',timeBonus:'Time bonus',clearBonus:'Clear bonus',penalty:'Hint/shuffle penalty',garden:'Garden',butterfly:'Butterfly',fortress:'Fortress',pagoda:'Pagoda',pyramid:'Pyramid',turtle:'Turtle',hintKeys:'H hint · Z undo · S shuffle · F zoom/fit · P pause',hintTouch:'Tap a tile, then tap its twin · pinch to zoom',dailyTag:'Daily',shareMsg:'Cleared {lay} ({n} tiles) in {t}!',noUndo:'Nothing to undo',savedAt:'{lay} · {n} left'},
+ja:{title:'麻雀ソリティア',tagline:'上と左右どちらかが空いている同じ牌を2枚ずつ取り、全部なくしましょう。',f1:'<b>必ず解ける配牌</b> — 正解のある配置だけ',f2:'<b>素早く連続</b>で取るとコンボ倍率',f3:'花は花どうし、季節は季節どうし<b>どれでも</b>ペア',start:'スタート',cont:'続きから',daily:'今日の一局',dailyDone:'今日の記録',best:'ベスト',time:'タイム',score:'スコア',left:'残り',moves:'取れる組',undo:'戻す',hint:'ヒント',shuffle:'シャッフル',fit:'全体',zoom:'拡大',paused:'一時停止',resume:'再開',restart:'同じ配牌で',newGame:'新しい配牌',menu:'配置を選ぶ',layout:'配置',diff1:'やさしい',diff2:'ふつう',diff3:'むずかしい',tiles:'枚',wide:'横向き推奨',sound:'サウンド',vib:'振動',hl:'取れる牌を強調',cleared:'クリア！',newBest:'自己ベスト！',bestTime:'ベストタイム',share:'シェア',copied:'リンクをコピーしました',stuck:'取れる組がありません',stuckSub:'残りの牌を解ける並びにシャッフルするか、一手戻しましょう。',again:'もう一局',other:'別の配置',deadEnd:'このままでは最後まで解けません — 戻すかシャッフルを',noHint:'今は取れる組がありません',shuffled:'解ける並びにシャッフルしました',cantShuffle:'残りの位置はどう並べても解けません — 戻すを使ってください',table:'テーブル',land:'横画面',pinch:'2本指で拡大・移動できます',combo:'コンボ',blocked:'上か左右がふさがっています',pts:'点',timeBonus:'タイムボーナス',clearBonus:'クリアボーナス',penalty:'ヒント・シャッフル減点',garden:'庭園',butterfly:'蝶',fortress:'城塞',pagoda:'塔',pyramid:'ピラミッド',turtle:'亀',hintKeys:'H ヒント · Z 戻す · S シャッフル · F 拡大/全体 · P 一時停止',hintTouch:'牌をタップして、同じ牌をタップ · 2本指で拡大',dailyTag:'今日の一局',shareMsg:'{lay}（{n}枚）を{t}でクリア！',noUndo:'戻せる手がありません',savedAt:'{lay} · 残り{n}枚'},
+zhTW:{title:'麻將接龍',tagline:'把上方與左右任一側沒被擋住的相同牌兩兩配對，清空整個牌桌。',f1:'<b>保證有解</b> — 每一局都有正解',f2:'<b>快速連續</b>配對可獲得連擊倍率',f3:'花牌任兩張、季節牌任兩張<b>都能</b>配對',start:'開始',cont:'繼續',daily:'每日一局',dailyDone:'今日紀錄',best:'最佳',time:'時間',score:'分數',left:'剩餘',moves:'可配對',undo:'復原',hint:'提示',shuffle:'洗牌',fit:'全覽',zoom:'放大',paused:'暫停',resume:'繼續',restart:'同局重來',newGame:'新的一局',menu:'選擇牌陣',layout:'牌陣',diff1:'簡單',diff2:'普通',diff3:'困難',tiles:'張',wide:'建議橫向',sound:'音效',vib:'震動',hl:'標示可取牌',cleared:'完成！',newBest:'新紀錄！',bestTime:'最佳時間',share:'分享',copied:'已複製連結',stuck:'沒有可配對的牌了',stuckSub:'把剩下的牌洗成有解的排列，或復原一步。',again:'再來一局',other:'換個牌陣',deadEnd:'照這樣下去無法完成 — 試試復原或洗牌',noHint:'目前沒有可配對的牌',shuffled:'已洗成有解的排列',cantShuffle:'剩下的位置怎麼排都無解 — 請用復原',table:'牌桌',land:'橫向畫面',pinch:'可用兩指放大與移動',combo:'連擊',blocked:'這張牌被壓住或兩側被擋',pts:'分',timeBonus:'時間獎勵',clearBonus:'完成獎勵',penalty:'提示・洗牌扣分',garden:'庭園',butterfly:'蝴蝶',fortress:'城堡',pagoda:'寶塔',pyramid:'金字塔',turtle:'烏龜',hintKeys:'H 提示 · Z 復原 · S 洗牌 · F 放大/全覽 · P 暫停',hintTouch:'點一張牌，再點相同的牌 · 兩指放大',dailyTag:'每日一局',shareMsg:'{t} 完成 {lay}（{n} 張）！',noUndo:'沒有可復原的步驟',savedAt:'{lay} · 剩 {n} 張'},
+zh:{title:'麻将接龙',tagline:'把上方与左右任一侧没被挡住的相同牌两两配对，清空整个牌桌。',f1:'<b>保证有解</b> — 每一局都有正解',f2:'<b>快速连续</b>配对可获得连击倍率',f3:'花牌任两张、季节牌任两张<b>都能</b>配对',start:'开始',cont:'继续',daily:'每日一局',dailyDone:'今日记录',best:'最佳',time:'时间',score:'分数',left:'剩余',moves:'可配对',undo:'撤销',hint:'提示',shuffle:'洗牌',fit:'全览',zoom:'放大',paused:'暂停',resume:'继续',restart:'同局重来',newGame:'新的一局',menu:'选择牌阵',layout:'牌阵',diff1:'简单',diff2:'普通',diff3:'困难',tiles:'张',wide:'建议横屏',sound:'音效',vib:'振动',hl:'标示可取牌',cleared:'完成！',newBest:'新纪录！',bestTime:'最佳时间',share:'分享',copied:'链接已复制',stuck:'没有可配对的牌了',stuckSub:'把剩下的牌洗成有解的排列，或撤销一步。',again:'再来一局',other:'换个牌阵',deadEnd:'照这样下去无法完成 — 试试撤销或洗牌',noHint:'目前没有可配对的牌',shuffled:'已洗成有解的排列',cantShuffle:'剩下的位置怎么排都无解 — 请用撤销',table:'牌桌',land:'横屏',pinch:'可用两指放大和移动',combo:'连击',blocked:'这张牌被压住或两侧被挡',pts:'分',timeBonus:'时间奖励',clearBonus:'完成奖励',penalty:'提示・洗牌扣分',garden:'庭园',butterfly:'蝴蝶',fortress:'城堡',pagoda:'宝塔',pyramid:'金字塔',turtle:'乌龟',hintKeys:'H 提示 · Z 撤销 · S 洗牌 · F 放大/全览 · P 暂停',hintTouch:'点一张牌，再点相同的牌 · 两指放大',dailyTag:'每日一局',shareMsg:'{t} 完成 {lay}（{n} 张）！',noUndo:'没有可撤销的步骤',savedAt:'{lay} · 剩 {n} 张'},
+es:{title:'Mahjong Solitario',tagline:'Empareja fichas iguales libres por arriba y por un lado hasta vaciar la mesa.',f1:'<b>Siempre tiene solución</b> — cada reparto se puede resolver',f2:'Empareja <b>rápido y seguido</b> para multiplicar con combo',f3:'Cualquier flor con cualquier flor, cualquier estación con otra',start:'Jugar',cont:'Continuar',daily:'Reto del día',dailyDone:'Hoy',best:'Récord',time:'Tiempo',score:'Puntos',left:'Fichas',moves:'Parejas',undo:'Deshacer',hint:'Pista',shuffle:'Mezclar',fit:'Ajustar',zoom:'Zoom',paused:'Pausa',resume:'Continuar',restart:'Repetir reparto',newGame:'Nuevo reparto',menu:'Elegir tablero',layout:'Tablero',diff1:'Fácil',diff2:'Normal',diff3:'Difícil',tiles:'fichas',wide:'Horizontal',sound:'Sonido',vib:'Vibración',hl:'Resaltar libres',cleared:'¡Completado!',newBest:'¡Nuevo récord!',bestTime:'Mejor tiempo',share:'Compartir',copied:'Enlace copiado',stuck:'No quedan parejas',stuckSub:'Mezcla las fichas restantes en un orden resoluble o deshaz una jugada.',again:'Otra vez',other:'Otro tablero',deadEnd:'Así ya no se puede terminar — prueba Deshacer o Mezclar',noHint:'Ahora no hay ninguna pareja libre',shuffled:'Mezclado en un orden resoluble',cantShuffle:'Estos huecos no se pueden resolver de ninguna forma — usa Deshacer',table:'Mesa',land:'Horizontal',pinch:'Pellizca con dos dedos para acercar y mover',combo:'Combo',blocked:'Esa ficha está tapada o encerrada',pts:'pts',timeBonus:'Bonus de tiempo',clearBonus:'Bonus final',penalty:'Pistas/mezclas',garden:'Jardín',butterfly:'Mariposa',fortress:'Fortaleza',pagoda:'Pagoda',pyramid:'Pirámide',turtle:'Tortuga',hintKeys:'H pista · Z deshacer · S mezclar · F zoom/ajustar · P pausa',hintTouch:'Toca una ficha y luego su pareja · pellizca para acercar',dailyTag:'Reto del día',shareMsg:'¡Completé {lay} ({n} fichas) en {t}!',noUndo:'No hay nada que deshacer',savedAt:'{lay} · quedan {n}'},
+pt:{title:'Paciência Mahjong',tagline:'Junte pares de peças iguais livres em cima e de um lado até limpar a mesa.',f1:'<b>Sempre tem solução</b> — toda mesa pode ser resolvida',f2:'Combine <b>rápido e em sequência</b> para multiplicar o combo',f3:'Qualquer flor com qualquer flor, qualquer estação com outra',start:'Jogar',cont:'Continuar',daily:'Desafio do dia',dailyDone:'Hoje',best:'Recorde',time:'Tempo',score:'Pontos',left:'Peças',moves:'Pares',undo:'Desfazer',hint:'Dica',shuffle:'Embaralhar',fit:'Ajustar',zoom:'Zoom',paused:'Pausado',resume:'Continuar',restart:'Repetir mesa',newGame:'Nova mesa',menu:'Escolher formato',layout:'Formato',diff1:'Fácil',diff2:'Médio',diff3:'Difícil',tiles:'peças',wide:'Horizontal',sound:'Som',vib:'Vibração',hl:'Destacar livres',cleared:'Concluído!',newBest:'Novo recorde!',bestTime:'Melhor tempo',share:'Compartilhar',copied:'Link copiado',stuck:'Sem pares livres',stuckSub:'Embaralhe as peças restantes numa ordem resolvível ou desfaça uma jogada.',again:'Jogar de novo',other:'Outro formato',deadEnd:'Assim não dá mais para terminar — use Desfazer ou Embaralhar',noHint:'Não há par livre agora',shuffled:'Embaralhado numa ordem resolvível',cantShuffle:'Estas posições não têm solução em nenhuma ordem — use Desfazer',table:'Mesa',land:'Paisagem',pinch:'Use dois dedos para ampliar e mover',combo:'Combo',blocked:'Essa peça está coberta ou presa',pts:'pts',timeBonus:'Bônus de tempo',clearBonus:'Bônus final',penalty:'Dicas/embaralhar',garden:'Jardim',butterfly:'Borboleta',fortress:'Fortaleza',pagoda:'Pagode',pyramid:'Pirâmide',turtle:'Tartaruga',hintKeys:'H dica · Z desfazer · S embaralhar · F zoom/ajustar · P pausa',hintTouch:'Toque numa peça e depois no par · dois dedos para ampliar',dailyTag:'Desafio do dia',shareMsg:'Concluí {lay} ({n} peças) em {t}!',noUndo:'Nada para desfazer',savedAt:'{lay} · faltam {n}'}
 };
 function curLang(){
     let l='en';
@@ -976,7 +1096,33 @@ window.addEventListener('storage',e=>{ if(e&&e.key==='luckyplz_lang') applyLang(
 const LS_SET='lp_mjs_set', LS_BEST='lp_mjs_best', LS_DAILY='lp_mjs_daily', LS_SAVE='lp_mjs_save', LS_LAY='lp_mjs_lay', LS_TIP='lp_mjs_tip';
 const load=(k,d)=>{ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(_){ return d; } };
 const store=(k,v)=>{ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(_){} };
-const SET=Object.assign({snd:true,vib:true,hl:true},load(LS_SET,{}));
+const SET=Object.assign({snd:true,vib:true,hl:true,land:true,tbl:'green'},load(LS_SET,{}));   /* tbl: 판 색(green·red·blue) */
+document.documentElement.setAttribute('data-tbl',SET.tbl);
+/* ════════════ 폰은 가로 화면(가상 가로) ════════════
+   세로로 든 폰(터치 · 폭 540px 이하 · 세로가 더 긴 화면)에서는 <html class="mj-vland"> — CSS 가 body 를 90° 돌려 그린다.
+   회전 잠금이 켜진 폰도 그냥 눕혀 들면 되고, 자동 회전으로 진짜 가로가 되면 조건이 풀려 평소 가로 배치가 된다.
+   글자를 칠 때(방 닉네임·채팅)는 자판이 세로라 잠깐 푼다. 설정의 '가로 화면'을 끄면 예전처럼 세로로 한다 */
+const VL_FORCE=/[?&]vland=1/.test(location.search);
+let VL=false, typing=false;
+const phoneP=()=>(isTouch||VL_FORCE)&&innerWidth<=540&&innerHeight>innerWidth*1.2;
+function syncLand(){
+    const want=SET.land!==false&&!typing&&phoneP(), cl=document.documentElement.classList;
+    /* 보이는 가로×세로(가상 가로면 뒤바뀐다)로 칩 배치를 고른다 — 가로로 넓으면 도구가 옆으로, 낮은 가로면 위 띠도 없앤다 */
+    const vw=want?innerHeight:innerWidth, vh=want?innerWidth:innerHeight;
+    const side=vw>vh, low=side&&vh<=540, wide=vw>=900;
+    const same=want===VL&&cl.contains('mj-vland')===want&&cl.contains('mj-side')===side&&cl.contains('mj-low')===low&&cl.contains('mj-wide')===wide;
+    cl.toggle('mj-side',side); cl.toggle('mj-low',low); cl.toggle('mj-wide',wide);
+    if(same) return;
+    VL=want; cl.toggle('mj-vland',VL);
+    /* 바로 다시 맞춘다(시작 직후 한 번은 캔버스가 아직 없어 건너뛴다 — 아래 '시작'에서 fit) */
+    try{ fit(); }catch(_){}
+    requestAnimationFrame(()=>{ try{ fit(); }catch(_){} });
+}
+window.addEventListener('resize',syncLand);
+window.addEventListener('orientationchange',()=>setTimeout(syncLand,250));
+document.addEventListener('focusin',e=>{ const g=e.target; if(g&&g.matches&&g.matches('input,textarea,[contenteditable="true"]')){ typing=true; syncLand(); } });
+document.addEventListener('focusout',()=>{ if(typing){ typing=false; setTimeout(syncLand,200); } });
+syncLand();
 let BEST=load(LS_BEST,{});
 function saveSet(){ store(LS_SET,SET); }
 const fmt=s=>{ s=Math.max(0,Math.floor(s)); const h=Math.floor(s/3600), m=Math.floor(s/60)%60, ss=s%60; return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(ss).padStart(2,'0'); };
@@ -1017,7 +1163,7 @@ const SND=(()=>{
         o=o||{}; if(!SET.snd) return; const a=A(); if(!a) return;
         if(!nbuf){ nbuf=a.createBuffer(1,a.sampleRate*.5,a.sampleRate); const ch=nbuf.getChannelData(0); for(let i=0;i<ch.length;i++) ch[i]=Math.random()*2-1; }
         const t0=a.currentTime+(o.at||0);
-        const s=a.createBufferSource(); s.buffer=nbuf; s.playbackRate.value=o.rate||1;
+        const s=a.createBufferSource(); s.buffer=nbuf; s.loop=true; s.playbackRate.value=o.rate||1;
         const f=a.createBiquadFilter(); f.type=o.type||'bandpass'; f.frequency.value=o.f||2000; f.Q.value=o.q||1;
         const g=a.createGain(); g.gain.setValueAtTime(.0001,t0); g.gain.exponentialRampToValueAtTime(o.v||.1,t0+.0015); g.gain.exponentialRampToValueAtTime(.0001,t0+d);
         s.connect(f); f.connect(g); g.connect(out); s.start(t0,Math.random()*.3); s.stop(t0+d+.02);
@@ -1032,18 +1178,89 @@ const SND=(()=>{
         tone(4870*p,.035,{v:.05*v,at});
         tone(520*p,.045,{v:.12*v,at,to:430*p});
     }
+    /* 종: 기음 + 비조화 배음(2.76배·5.4배) — 맑게 울리고 길게 남는다 */
+    function bell(f,at,v,d){
+        at=at||0; v=v||.12; d=d||.5;
+        tone(f,d,{v,at,atk:.004});
+        tone(f*2,d*.8,{type:'triangle',v:v*.25,at});
+        tone(f*2.76,d*.55,{v:v*.32,at});
+        tone(f*5.4,d*.28,{v:v*.14,at});
+    }
+    /* 금관: 톱니파 둘(살짝 어긋나게) + 사각파를 저역 필터로 열었다 닫는다 — 팡파르용 */
+    function brass(f,at,d,v){
+        if(!SET.snd) return; const a=A(); if(!a) return;
+        const t0=a.currentTime+(at||0), g=a.createGain(), lp=a.createBiquadFilter();
+        lp.type='lowpass'; lp.Q.value=1.1;
+        lp.frequency.setValueAtTime(f*1.3,t0);
+        lp.frequency.exponentialRampToValueAtTime(Math.min(9000,f*6),t0+.05);
+        lp.frequency.exponentialRampToValueAtTime(Math.max(500,f*2.4),t0+d);
+        g.gain.setValueAtTime(.0001,t0);
+        g.gain.exponentialRampToValueAtTime(v,t0+.025);
+        g.gain.setValueAtTime(v,t0+Math.max(.03,d-.07));
+        g.gain.exponentialRampToValueAtTime(.0001,t0+d+.07);
+        [[-7,'sawtooth',.5],[7,'sawtooth',.5],[0,'square',.3]].forEach(([det,type,lv])=>{
+            const o=a.createOscillator(), og=a.createGain(); o.type=type; o.frequency.value=f; o.detune.value=det; og.gain.value=lv;
+            o.connect(og); og.connect(lp); o.start(t0); o.stop(t0+d+.12);
+        });
+        lp.connect(g); g.connect(out);
+    }
+    /* 5음 음계(궁상각치우) — 어떤 순서로 울려도 어울린다 */
+    const PENTA=[0,2,4,7,9];
+    const pn=i=>Math.pow(2,(12*Math.floor(i/5)+PENTA[i%5])/12);
+    const C5=523.25;
     return {
+        /* 짝 맞춤: 딸깍 + 종 한 음(콤보가 이어지면 음계를 타고 올라간다) + 반짝이는 높은 배음. 꽃·계절은 하프 훑기 */
+        match(combo,bonus){
+            const p=Math.pow(2,Math.min(Math.max(combo-1,0),12)/12); clack(p,0,1);
+            const i=combo<=1?2+Math.floor(Math.random()*4):Math.min(combo+3,13);
+            const f=C5*pn(i);
+            bell(f,.015,.12+Math.min(combo,6)*.008,.6);
+            [7,12,19].forEach((s,k)=>tone(f*Math.pow(2,s/12),.1,{v:.032,at:.06+k*.038}));
+            noise(.16,{v:.035,f:7200,q:.7,at:.01,type:'highpass'});
+            if(bonus) for(let k=0;k<6;k++) tone(C5*pn(5+k),.32,{type:'triangle',v:.055,at:.05+k*.042});
+        },
+        /* 콤보 고비(5·8·10…): 훑어 올리는 바람 + 밝은 화음 */
+        milestone(n){
+            noise(.34,{v:.09,f:1400,q:.9,type:'bandpass',rate:1.6});
+            const b=C5*pn(Math.min(5+Math.floor(n/3),9));
+            [0,4,7,12].forEach((s,k)=>{ brass(b*Math.pow(2,s/12)/2,.04+k*.05,.34,.05); bell(b*Math.pow(2,s/12),.04+k*.05,.07,.7); });
+        },
+        /* 징(鑼): 낮은 비조화 배음이 살짝 휘어 내려가며 길게 운다 */
+        gong(at,v){
+            at=at||0; v=v||1; const b=98;
+            [[1,.2,3.2],[1.5,.14,2.6],[2.02,.17,2.9],[2.76,.13,2.3],[3.4,.1,1.9],[4.3,.08,1.5],[5.63,.055,1.1],[7.1,.04,.8]].forEach(([r,g,d])=>tone(b*r*1.035,d,{v:g*v,at,atk:.012,to:b*r}));
+            noise(1.7,{v:.15*v,f:2600,q:.5,at});
+            noise(.5,{v:.24*v,f:520,q:.6,at,type:'lowpass'});
+        },
+        /* 완성 팡파르: 쟁(箏) 훑기 → 4도 병행 금관 선율 → 긴 으뜸화음 + 심벌 + 종 */
+        fanfare(at){
+            at=at||0;
+            [392,440,523.25,587.33,659.25,783.99,880,1046.5].forEach((f,i)=>{ tone(f,.42,{type:'triangle',v:.085,at:at+i*.045}); tone(f*2,.2,{v:.03,at:at+i*.045}); });
+            const m=at+.44;
+            [[0,1046.5,783.99,.26],[.3,880,659.25,.13],[.45,1046.5,783.99,.13],[.6,1174.66,880,.27],[.9,1318.51,1046.5,1.15]].forEach(([dt,f,h,d])=>{ brass(f,m+dt,d,.13); brass(h,m+dt,d,.08); });
+            brass(783.99,m+.9,1.15,.06);
+            [[0,130.81,.55],[.6,196,.28],[.9,130.81,1.2]].forEach(([dt,f,d])=>{ tone(f,d,{type:'triangle',v:.2,at:m+dt,atk:.01}); tone(f*2,d,{type:'triangle',v:.1,at:m+dt,atk:.01}); });
+            noise(1.5,{v:.13,f:6500,q:.4,at:m+.9,type:'highpass'});
+            noise(.3,{v:.2,f:300,q:.6,at:m+.9,type:'lowpass'}); tone(110,.4,{v:.2,to:70,at:m+.9});
+            [1318.51,1567.98,2093,2637].forEach((f,i)=>bell(f,m+.98+i*.075,.075,1.3));
+            [1046.5,1174.66,1318.51,1567.98,1760,2093,2349.32,2637,3135.96].forEach((f,i)=>tone(f,.16,{v:.035,at:m+1.5+i*.05}));
+        },
+        whistle(at,d){ tone(650,d,{v:.03,at:at||0,to:2100,atk:.06}); noise(d,{v:.018,f:3000,q:2,at:at||0}); },
+        pop(at){ noise(.09,{v:.26,f:900,q:.6,at:at||0,type:'lowpass'}); noise(.05,{v:.14,f:3000,q:.9,at:at||0}); tone(210,.12,{v:.16,to:90,at:at||0}); },
+        crackle(at,n,v){ at=at||0; v=v||1; for(let i=0;i<n;i++) noise(.012+Math.random()*.02,{v:(.05+Math.random()*.08)*v,f:3600+Math.random()*4200,q:2,at:at+.1+Math.random()*.7,type:'highpass'}); },
+        tick(p){ tone(1700*(p||1),.03,{v:.035}); },
         tock(p){ p=p||1; noise(.02,{v:.2,f:2300*p,q:1.6}); tone(1180*p,.05,{v:.1,to:980*p}); tone(640*p,.035,{v:.09}); },
         untock(){ noise(.018,{v:.12,f:1700,q:1.4}); tone(760,.04,{v:.07,to:620}); },
         dull(){ noise(.06,{v:.2,f:420,type:'lowpass',q:.7}); tone(170,.07,{v:.14,to:120}); },
-        clack(combo){ const p=Math.pow(2,Math.min(Math.max(combo-1,0),12)/12); clack(p,0,1); if(combo>=3) tone(1568*p,.18,{type:'triangle',v:.05,at:.03}); },
-        comboUp(n){ const b=784*Math.pow(2,Math.min(n,10)/12); [0,4,7].forEach((s,i)=>tone(b*Math.pow(2,s/12),.12,{type:'triangle',v:.06,at:.05+i*.045})); },
+        comboUp(n){ const b=784*Math.pow(2,Math.min(n,10)/12); [0,4,7].forEach((s,i)=>tone(b*Math.pow(2,s/12),.12,{type:'triangle',v:.05,at:.09+i*.045})); },
         hint(){ tone(1319,.22,{type:'triangle',v:.07}); tone(1976,.26,{type:'triangle',v:.05,at:.08}); },
         wash(){ for(let i=0;i<16;i++){ const p=.8+Math.random()*.5; clack(p,i*.045+Math.random()*.03,.35+Math.random()*.35); } },
         undo(){ tone(900,.06,{v:.07,to:600}); noise(.02,{v:.1,f:2000,q:1.3}); },
         stuck(){ [392,311].forEach((f,i)=>tone(f,.3,{type:'triangle',v:.1,at:i*.16})); },
-        win(){ [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,.26,{type:'triangle',v:.1,at:i*.08})); for(let i=0;i<10;i++) clack(1+Math.random()*.4,.5+i*.07,.4); },
-        boom(at){ noise(.35,{v:.12,f:900,type:'lowpass',q:.6,at:at||0}); tone(140,.3,{v:.06,to:60,at:at||0}); }
+        /* 완성: 징 → 팡파르 → 패가 쏟아지는 딸깍 소리 */
+        win(){ this.gong(0,1); this.fanfare(.22); for(let i=0;i<14;i++) clack(1+Math.random()*.4,.5+i*.075,.3); },
+        /* 불꽃 터지는 소리 — 폰 스피커에서도 들리게 낮은 쿵 + 중역 '팡' */
+        boom(at,v){ at=at||0; v=v||1; noise(.5,{v:.3*v,f:700,type:'lowpass',q:.5,at}); noise(.12,{v:.2*v,f:1800,q:.7,at}); tone(160,.4,{v:.2*v,to:45,at}); }
     };
 })();
 function vib(p){ if(!SET.vib) return; try{ if(navigator.vibrate) navigator.vibrate(p); }catch(_){} }
@@ -1053,7 +1270,7 @@ function vib(p){ if(!SET.vib) return; try{ if(navigator.vibrate) navigator.vibra
    패 번호도 MJArt 와 같다: 34~37 春夏秋冬 · 38~41 梅蘭菊竹 — 규칙 코어는 34~37 / 38~41 을 각각 한 무리로 본다. */
 function rr(g,x,y,w,h,r){ g.beginPath(); g.moveTo(x+r,y); g.arcTo(x+w,y,x+w,y+h,r); g.arcTo(x+w,y+h,x,y+h,r); g.arcTo(x,y+h,x,y,r); g.arcTo(x,y,x+w,y,r); g.closePath(); }
 /* 패 비율: 얼굴 가로 1 : 세로 1.3, 두께 띠 = 세로의 20%(MJArt 'flat' 과 같다). 위층은 두께만큼 위로(+조금 왼쪽) 올린다 */
-const RATIO=1.3, GAP=.03, DEP=RATIO*.2, LZ=RATIO*.2, LX=.06;
+const RATIO=1.3, GAP=.03, DEPR=.23, DEP=RATIO*DEPR, LZ=RATIO*DEPR, LX=.06;   /* DEPR: 두께 = 세로의 23%(도톰하게) */
 
 /* ════════════ 상태 ════════════ */
 let state='title', paused=false;
@@ -1072,6 +1289,60 @@ let flights=[], parts=[], pops=[], wig={}, wigRed={}, casc=[], fireT=0;
 let movesN=0, leftN=0;
 let won=false;
 const COMBO_WIN=4.2;
+/* 연출 — 화면 흔들림·입자 상한. 움직임 줄이기 설정이면 흔들림·번쩍임만 끈다(입자는 그대로) */
+const RM=(()=>{ try{ return matchMedia('(prefers-reduced-motion:reduce)').matches; }catch(_){ return false; } })();
+const FX_MAX=520;
+let shakeT=0, shakeA=0, shakeD=.2;
+function shake(a,d){ if(RM) return; if(shakeT<=0||a>=shakeA*(shakeT/shakeD)){ shakeA=a; shakeD=d; shakeT=d; } }
+/* 패 종류별 빛깔(r,g,b): 만=붉은빛 · 통=푸른빛 · 삭=비취빛 · 풍=보랏빛 · 中發白 · 꽃=분홍 · 계절=호박빛 */
+const FX_GOLD='255,214,110', FX_WHITE='255,248,232';
+function fxTheme(k){
+    if(k<9) return ['255,96,80','255,190,130'];
+    if(k<18) return ['90,180,255','175,230,255'];
+    if(k<27) return ['90,225,160','200,255,190'];
+    if(k<31) return ['176,140,255','226,206,255'];
+    if(k===31) return ['255,80,90','255,180,150'];
+    if(k===32) return ['80,220,140','190,255,200'];
+    if(k===33) return ['150,215,255','240,250,255'];
+    if(k<38) return ['255,130,195','255,205,230'];
+    return ['255,170,70','255,225,150'];
+}
+/* 빛 스프라이트(한 번 구워 재사용): glow=둥근 빛 · star=네 갈래 반짝임 · burst=방사 빛줄기 */
+const FXS={};
+function fxSpr(kind,col){
+    const key=kind+col; let c=FXS[key]; if(c) return c;
+    const S=kind==='burst'?192:(kind==='glow'?128:72), h=S/2;
+    c=document.createElement('canvas'); c.width=c.height=S; const g=c.getContext('2d');
+    if(kind==='glow'){
+        const gr=g.createRadialGradient(h,h,0,h,h,h);
+        gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.18,'rgba('+col+',.85)'); gr.addColorStop(.5,'rgba('+col+',.28)'); gr.addColorStop(1,'rgba('+col+',0)');
+        g.fillStyle=gr; g.fillRect(0,0,S,S);
+    }else if(kind==='dim'){
+        /* 순간 어둠: 빛 효과가 밝은 상아색 패 위에서도 보이게 주변을 잠깐 가라앉힌다 */
+        const gr=g.createRadialGradient(h,h,0,h,h,h);
+        gr.addColorStop(0,'rgba(20,4,2,.92)'); gr.addColorStop(.55,'rgba(20,4,2,.6)'); gr.addColorStop(1,'rgba(20,4,2,0)');
+        g.fillStyle=gr; g.fillRect(0,0,S,S);
+    }else if(kind==='star'){
+        /* 색을 채운 별 + 흰 속심 + 어두운 테두리 — 밝은 패 위·붉은 천 위 어디서나 읽힌다 */
+        const gr=g.createRadialGradient(h,h,0,h,h,h*.72);
+        gr.addColorStop(0,'rgba('+col+',.6)'); gr.addColorStop(1,'rgba('+col+',0)');
+        g.fillStyle=gr; g.fillRect(0,0,S,S);
+        const path=L=>{ const q=L*.14; g.beginPath(); g.moveTo(h,h-L); g.quadraticCurveTo(h+q,h-q,h+L,h); g.quadraticCurveTo(h+q,h+q,h,h+L); g.quadraticCurveTo(h-q,h+q,h-L,h); g.quadraticCurveTo(h-q,h-q,h,h-L); g.closePath(); };
+        g.lineJoin='round';
+        path(h*.9); g.strokeStyle='rgba(74,22,2,.62)'; g.lineWidth=S*.045; g.stroke(); g.fillStyle='rgb('+col+')'; g.fill();
+        path(h*.5); g.fillStyle='rgba(255,255,255,.95)'; g.fill();
+    }else{
+        g.translate(h,h);
+        for(let i=0;i<14;i++){
+            const a=i/14*6.2832, L=h*(i%2?.6:.98), w=i%2?.04:.065;
+            const gr=g.createLinearGradient(0,0,Math.cos(a)*L,Math.sin(a)*L);
+            gr.addColorStop(0,'rgba(255,255,255,.95)'); gr.addColorStop(.3,'rgba('+col+',.6)'); gr.addColorStop(1,'rgba('+col+',0)');
+            g.fillStyle=gr; g.beginPath(); g.moveTo(0,0); g.lineTo(Math.cos(a-w)*L,Math.sin(a-w)*L); g.lineTo(Math.cos(a+w)*L,Math.sin(a+w)*L); g.closePath(); g.fill();
+        }
+    }
+    return FXS[key]=c;
+}
+function bump(id){ const el=$(id); if(!el) return; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); }
 
 /* ════════════ 캔버스·기하 ════════════ */
 const cv=$('cv'), field=$('field'), mainCtx=cv.getContext('2d');
@@ -1089,10 +1360,21 @@ function extents(tw,TT){
 }
 function computeFit(){
     if(!T) return;
-    const e=extents(100), pd=Math.max(6,Math.min(CW,CH)*.02);
-    TWf=Math.max(10,Math.min(80,Math.min((inner.w-2*pd)/e.w,(inner.h-2*pd)/e.h)*100));
+    /* 판에 꽉 차게: 가장자리 여유는 몇 px 만, 패 크기 상한도 넉넉히(큰 화면에서 작게 남지 않게) */
+    const e=extents(100), pd=Math.max(3,Math.min(CW,CH)*.008);
+    TWf=Math.max(10,Math.min(120,Math.min((inner.w-2*pd)/e.w,(inner.h-2*pd)/e.h)*100));
 }
 function zmax(){ return Math.max(1.6,78/TWf); }
+/* 판이 비워 둘 가장자리(위·오른쪽·아래·왼쪽) — CSS 의 칩 배치와 같은 값. 노치 여백은 #saProbe 로 읽는다(가상 가로는 body 가 이미 비켜 있다) */
+function insets(){
+    const cl=document.documentElement.classList; let sa=[0,0,0,0];
+    if(!VL){ try{ const c=getComputedStyle($('saProbe')); sa=[c.paddingTop,c.paddingRight,c.paddingBottom,c.paddingLeft].map(v=>parseFloat(v)||0); }catch(_){} }
+    let t,r,b,l;
+    if(cl.contains('mj-low')){ t=4; r=60; b=4; l=64; }            /* 폰 가로: 좌우 가장자리만 */
+    else if(cl.contains('mj-side')){ t=46; r=64; b=6; l=58; }     /* 넓은 가로: 위 칩 줄 + 오른쪽 도구 */
+    else { t=56; r=4; b=56; l=4; }                                 /* 세로: 위 칩 줄·진행 막대 + 아래 도구 줄 */
+    return {t:t+sa[0],r:r+sa[1],b:b+sa[2],l:l+sa[3]};
+}
 function computeGeo(){
     if(!T) return;
     const tw=TWf*zoom, th=tw*RATIO, pw=tw*(1+GAP), ph=th+tw*GAP, dep=tw*DEP, lz=tw*LZ, lx=tw*LX;
@@ -1110,12 +1392,64 @@ function buildSprites(){
     const tw=geo.tw, th=tw*RATIO, s=DPR;
     const mk=(w,h)=>{ const c=document.createElement('canvas'); c.width=Math.max(1,Math.ceil(w)); c.height=Math.max(1,Math.ceil(h)); return c; };
     const tiles=[]; let sp=null;
-    for(let k=0;k<42;k++){ sp=MJArt.makeTileSprite(k,tw,th,s,{view:'flat',shadow:false}); tiles.push(sp.canvas); }
-    const pad=sp.ox*s, fw=tw*s, fh=th*s, dep=th*.2*s, rad=Math.min(fw,fh)*.13;
+    for(let k=0;k<42;k++){ sp=MJArt.makeTileSprite(k,tw,th,s,{view:'flat',shadow:false,depth:DEPR}); tiles.push(sp.canvas); }
+    const pad=sp.ox*s, fw=tw*s, fh=th*s, dep=th*DEPR*s, rad=Math.min(fw,fh)*.13;
     const W=tiles[0].width, H=tiles[0].height;
-    /* 그림자: 얼굴+두께 띠 모양을 흐리게 */
-    const sm=Math.ceil(dep*1.6+4*s), shadow=mk(fw+sm*2,fh+dep+sm*2);
-    { const g=shadow.getContext('2d'); g.shadowColor='rgba(0,0,0,.6)'; g.shadowBlur=dep*.9+2*s; g.shadowOffsetX=5000; g.fillStyle='#000'; rr(g,sm-5000,sm,fw,fh+dep,rad); g.fill(); }
+    /* 패 다듬기 — MJArt 가 그린 패(대만 마작과 같은 그림) 위에 이 게임만의 윤기·입체감을 얹는다. MJArt 블록은 건드리지 않는다.
+       ① 글자 음각(오른쪽 아래 흰 받침 + 왼쪽 위 그늘) ② 볼록한 면(오른쪽 아래로 갈수록 크림빛) ③ 유광(비스듬한 넓은 빛 + 가는 빛띠 + 모서리 반짝)
+       ④ 두께 띠: 앞판 아래 그늘 · 빛줄 · 바닥으로 갈수록 어둡게 */
+    {
+        const tmp=mk(W,H), q=tmp.getContext('2d'), e=Math.max(.6*s,fw*.017), x=pad, y=pad;
+        const face=(c,k)=>{ c.save(); c.scale(s,s); MJArt.drawFace(c,k,sp.ox+tw*.06,sp.oy+th*.05,tw*.88,th*.9); c.restore(); };
+        for(let k=0;k<42;k++){
+            const g=tiles[k].getContext('2d'); let gr;
+            g.setTransform(1,0,0,1,0,0);   /* MJArt 가 걸어 둔 배율(dpr)을 풀고 기기 픽셀로 그린다 */
+            g.save(); rr(g,x,y,fw,fh,rad); g.clip();
+            /* ② 볼록한 면 — 곱하기 합성이라 글자 색은 그대로 두고 상아색만 가라앉는다 */
+            g.globalCompositeOperation='multiply';
+            gr=g.createLinearGradient(x,y,x+fw,y+fh); gr.addColorStop(0,'#ffffff'); gr.addColorStop(.45,'#fdf8ec'); gr.addColorStop(1,'#e8d9b6');
+            g.fillStyle=gr; g.fillRect(x,y,fw,fh);
+            gr=g.createLinearGradient(0,y+fh*.84,0,y+fh); gr.addColorStop(0,'#ffffff'); gr.addColorStop(1,'#d9c49a');
+            g.fillStyle=gr; g.fillRect(x,y+fh*.84,fw,fh*.16);
+            gr=g.createLinearGradient(x+fw*.88,0,x+fw,0); gr.addColorStop(0,'#ffffff'); gr.addColorStop(1,'#e0cda6');
+            g.fillStyle=gr; g.fillRect(x+fw*.88,y,fw*.12,fh);
+            g.globalCompositeOperation='source-over';
+            /* ① 음각 — 글자 실루엣을 흰색·짙은색으로 살짝 어긋나게 깔고 글자를 다시 올린다 */
+            q.setTransform(1,0,0,1,0,0); q.globalCompositeOperation='source-over'; q.clearRect(0,0,W,H); face(q,k);
+            q.globalCompositeOperation='source-in'; q.fillStyle='#fff'; q.fillRect(0,0,W,H);
+            g.globalAlpha=.85; g.drawImage(tmp,e,e);
+            q.fillStyle='#2e1c06'; q.fillRect(0,0,W,H);
+            g.globalAlpha=.32; g.drawImage(tmp,-e*.6,-e*.6);
+            g.globalAlpha=1; face(g,k);
+            /* ③ 유광 — 위 가장자리에 맺히는 넓은 빛(위쪽 조명이 비친 자리) */
+            gr=g.createLinearGradient(0,y,0,y+fh*.3); gr.addColorStop(0,'rgba(255,255,255,.78)'); gr.addColorStop(.55,'rgba(255,255,255,.22)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+            g.fillStyle=gr; g.beginPath(); g.ellipse(x+fw*.5,y-fh*.02,fw*.62,fh*.3,0,0,6.2832); g.fill();
+            /* 왼쪽 위에서 비스듬히 떨어지는 빛 */
+            gr=g.createLinearGradient(x,y,x+fw*.5,y+fh*.5); gr.addColorStop(0,'rgba(255,255,255,.6)'); gr.addColorStop(1,'rgba(255,255,255,.08)');
+            g.fillStyle=gr; g.beginPath(); g.moveTo(x,y); g.lineTo(x+fw,y); g.lineTo(x+fw,y+fh*.13); g.quadraticCurveTo(x+fw*.42,y+fh*.2,x,y+fh*.46); g.closePath(); g.fill();
+            g.fillStyle='rgba(255,255,255,.34)'; g.beginPath(); g.moveTo(x,y+fh*.52); g.quadraticCurveTo(x+fw*.45,y+fh*.25,x+fw,y+fh*.19); g.lineTo(x+fw,y+fh*.235); g.quadraticCurveTo(x+fw*.45,y+fh*.3,x,y+fh*.58); g.closePath(); g.fill();
+            gr=g.createRadialGradient(x+fw*.2,y+fh*.1,0,x+fw*.2,y+fh*.1,fw*.25); gr.addColorStop(0,'rgba(255,255,255,.95)'); gr.addColorStop(.35,'rgba(255,255,255,.4)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+            g.fillStyle=gr; g.fillRect(x,y,fw*.5,fh*.3);
+            /* 위·왼쪽 테두리의 가는 빛 */
+            g.lineWidth=Math.max(1,fw*.035); g.strokeStyle='rgba(255,255,255,.9)'; g.lineCap='round';
+            g.beginPath(); g.moveTo(x+g.lineWidth*.6,y+fh-rad*1.4); g.lineTo(x+g.lineWidth*.6,y+rad); g.quadraticCurveTo(x+g.lineWidth*.6,y+g.lineWidth*.6,x+rad,y+g.lineWidth*.6); g.lineTo(x+fw-rad*1.4,y+g.lineWidth*.6); g.stroke();
+            g.restore();
+            /* ④ 두께 띠 */
+            g.save(); rr(g,x,y,fw,fh+dep,rad); g.clip();
+            /* 앞판 자리는 빼고 띠만(rr 은 경로를 새로 시작하므로 둥근 사각형을 손으로 잇는다) */
+            g.beginPath(); g.rect(x,y+fh-rad,fw,dep+rad);
+            g.moveTo(x+rad,y); g.arcTo(x+fw,y,x+fw,y+fh,rad); g.arcTo(x+fw,y+fh,x,y+fh,rad); g.arcTo(x,y+fh,x,y,rad); g.arcTo(x,y,x+fw,y,rad); g.closePath();
+            g.clip('evenodd');
+            gr=g.createLinearGradient(0,y+fh-rad*.4,0,y+fh+dep); gr.addColorStop(0,'rgba(40,22,4,.3)'); gr.addColorStop(.22,'rgba(40,22,4,0)'); gr.addColorStop(.7,'rgba(0,0,0,.06)'); gr.addColorStop(1,'rgba(0,0,0,.36)');
+            g.fillStyle=gr; g.fillRect(x,y+fh-rad,fw,dep+rad);
+            gr=g.createLinearGradient(x,0,x+fw,0); gr.addColorStop(0,'rgba(255,255,255,0)'); gr.addColorStop(.2,'rgba(255,255,255,.55)'); gr.addColorStop(.55,'rgba(255,255,255,.12)'); gr.addColorStop(1,'rgba(255,255,255,0)');
+            g.fillStyle=gr; g.fillRect(x,y+fh+dep*.2,fw,Math.max(1,dep*.11));
+            g.restore();
+        }
+    }
+    /* 그림자: 얼굴+두께 띠 모양을 흐리게 — 판에서 도톰하게 떠 보이도록 짙고 넓게 */
+    const sm=Math.ceil(dep*2+5*s), shadow=mk(fw+sm*2,fh+dep+sm*2);
+    { const g=shadow.getContext('2d'); g.shadowColor='rgba(0,0,0,.72)'; g.shadowBlur=dep*1.15+3*s; g.shadowOffsetX=5000; g.fillStyle='#000'; rr(g,sm-5000,sm,fw,fh+dep,rad); g.fill(); }
     const faceMask=col=>{ const c=mk(W,H), g=c.getContext('2d'); g.fillStyle=col; rr(g,pad,pad,fw,fh,rad); g.fill(); return c; };
     const shade=faceMask('rgb(38,16,6)'), tint=faceMask('rgb(255,214,120)');
     const gm=Math.ceil(10*s);
@@ -1124,7 +1458,10 @@ function buildSprites(){
     SPR={tw,fw,fh,dep,pad,W,H,tiles,shadow,sm,shade,tint,gm,glow:glowOf('rgba(255,205,90,1)',10),glowH:glowOf('rgba(120,255,200,1)',10),glowR:glowOf('rgba(255,90,70,1)',8)};
 }
 
-/* ── 테이블: 짙은 행운의 붉은 천 + 옅은 금색 구름무늬(雲紋)·회문(回紋) 테두리 + 자단목 틀 + 위에서 내리는 따뜻한 빛 ── */
+/* ── 테이블: 화면 전체를 덮는 펠트(틀·테두리 없음 — 패가 판을 꽉 채운다). 색은 설정에서 고른다(기본 녹색) ──
+   가운데가 밝고 가장자리로 깊어지는 바탕 + 고르지 않은 얼룩 + 잔 알갱이 + 여러 방향의 보풀 + 위에서 내리는 빛 */
+const TABLES={green:['#37a56b','#1f7c4b','#0a3a22'],red:['#b22b34','#7c141c','#38060a'],blue:['#3a7fc4','#1d5088','#0a2240']};
+const TABLE_IDS=['green','red','blue'];
 function cloudMotif(g,x,y,s){
     g.beginPath();
     g.moveTo(x-s*1.1,y+s*.35);
@@ -1139,62 +1476,59 @@ function cloudMotif(g,x,y,s){
 function buildBg(){
     bgC=document.createElement('canvas'); bgC.width=Math.round(CW*DPR); bgC.height=Math.round(CH*DPR);
     const g=bgC.getContext('2d'); g.scale(DPR,DPR);
-    const F=Math.round(Math.max(7,Math.min(14,Math.min(CW,CH)*.024)));
-    /* 자단목 틀 */
-    const wg=g.createLinearGradient(0,0,CW,CH); wg.addColorStop(0,'#4a2016'); wg.addColorStop(.5,'#2e120a'); wg.addColorStop(1,'#3d1a10');
-    g.fillStyle=wg; g.fillRect(0,0,CW,CH);
-    const wr=MJ.rng(77);
-    g.lineWidth=1;
-    for(let i=0;i<Math.min(260,(CW+CH)*.4);i++){
-        const y=wr()*CH; g.strokeStyle='rgba('+(wr()<.5?'90,40,22':'20,6,2')+','+(.18+wr()*.25)+')';
-        g.beginPath(); g.moveTo(0,y); g.bezierCurveTo(CW*.3,y+(wr()-.5)*6,CW*.7,y+(wr()-.5)*6,CW,y+(wr()-.5)*4); g.stroke();
+    const P=TABLES[SET.tbl]||TABLES.green, M=Math.max(CW,CH), r=MJ.rng(31);
+    const bg=g.createRadialGradient(CW*.5,CH*.42,M*.04,CW*.5,CH*.5,M*.74);
+    bg.addColorStop(0,P[0]); bg.addColorStop(.5,P[1]); bg.addColorStop(1,P[2]);
+    g.fillStyle=bg; g.fillRect(0,0,CW,CH);
+    /* 얼룩 — 펠트는 빛을 고르게 받지 않는다 */
+    for(let i=0;i<18;i++){
+        const x=r()*CW, y=r()*CH, R=M*(.07+r()*.17), mg=g.createRadialGradient(x,y,0,x,y,R);
+        mg.addColorStop(0,r()<.5?'rgba(255,255,255,.05)':'rgba(0,0,0,.08)'); mg.addColorStop(1,'rgba(0,0,0,0)');
+        g.fillStyle=mg; g.fillRect(x-R,y-R,R*2,R*2);
     }
-    /* 틀 안쪽 모서리 빛 */
-    g.strokeStyle='rgba(255,200,150,.18)'; g.lineWidth=1.5; rr(g,F-1.5,F-1.5,CW-2*F+3,CH-2*F+3,10); g.stroke();
-    g.strokeStyle='rgba(0,0,0,.6)'; g.lineWidth=2; rr(g,F,F,CW-2*F,CH-2*F,9); g.stroke();
-    /* 천 */
-    g.save(); rr(g,F,F,CW-2*F,CH-2*F,9); g.clip();
-    const cg=g.createRadialGradient(CW*.5,CH*.36,Math.min(CW,CH)*.05,CW*.5,CH*.45,Math.max(CW,CH)*.78);
-    cg.addColorStop(0,'#a3232b'); cg.addColorStop(.45,'#7c141c'); cg.addColorStop(1,'#3e070c');
-    g.fillStyle=cg; g.fillRect(0,0,CW,CH);
-    /* 천 결: 아주 옅은 점 */
-    const nr=MJ.rng(9);
-    for(let i=0;i<CW*CH/60;i++){ g.fillStyle=nr()<.5?'rgba(255,200,180,.035)':'rgba(0,0,0,.05)'; g.fillRect(nr()*CW,nr()*CH,1,1); }
-    /* 구름무늬 — 낮은 대비라 패가 먼저 읽힌다 */
-    g.strokeStyle='rgba(233,180,90,.075)'; g.lineWidth=1.3; g.lineCap='round';
-    const cs=Math.max(40,Math.min(CW,CH)*.13);
-    for(let row=0,y=F+cs*.6;y<CH;row++,y+=cs*1.25){ for(let x=F+(row%2?cs*1.1:cs*.2);x<CW+cs;x+=cs*2.2) cloudMotif(g,x,y,cs*.42); }
-    /* 회문 테두리 */
-    const B=F+6, bw=9;
-    g.strokeStyle='rgba(233,190,100,.16)'; g.lineWidth=1.2;
-    g.strokeRect(B,B,CW-2*B,CH-2*B); g.strokeRect(B+bw,B+bw,CW-2*(B+bw),CH-2*(B+bw));
-    const step=bw*1.1;
-    g.beginPath();
-    for(let x=B+bw;x<CW-B-bw-step;x+=step){ /* 위·아래 띠 */
-        [[B,1],[CH-B-bw,-1]].forEach(([y0])=>{ const u=bw/4; g.moveTo(x+u,y0+bw-u); g.lineTo(x+u,y0+u); g.lineTo(x+3*u,y0+u); g.lineTo(x+3*u,y0+2.6*u); g.lineTo(x+2*u,y0+2.6*u); });
+    /* 잔 알갱이 — 작은 무늬 한 장을 구워 기기 픽셀 그대로 깐다(확대해도 뭉개지지 않는다) */
+    const nt=document.createElement('canvas'); nt.width=nt.height=192;
+    { const q=nt.getContext('2d'), im=q.createImageData(192,192), d=im.data;
+      for(let i=0;i<d.length;i+=4){ const v=r(), lt=v>.5; d[i]=d[i+1]=d[i+2]=lt?255:0; d[i+3]=Math.floor(Math.pow(Math.abs(v-.5)*2,2)*(lt?54:84)); }
+      q.putImageData(im,0,0); }
+    g.save(); g.setTransform(1,0,0,1,0,0); g.fillStyle=g.createPattern(nt,'repeat'); g.fillRect(0,0,bgC.width,bgC.height); g.restore();
+    /* 보풀 — 짧고 휜 실오라기 */
+    const nf=Math.min(11000,CW*CH/95); g.lineCap='round';
+    for(let i=0;i<nf;i++){
+        const x=r()*CW, y=r()*CH, a=r()*6.2832, L=2+r()*6, cx=Math.cos(a)*L, cy=Math.sin(a)*L;
+        g.strokeStyle=r()<.55?'rgba(255,255,255,'+(.035+r()*.06)+')':'rgba(0,0,0,'+(.06+r()*.09)+')';
+        g.lineWidth=.55+r()*.6;
+        g.beginPath(); g.moveTo(x,y); g.quadraticCurveTo(x+cx*.5+(r()-.5)*3,y+cy*.5+(r()-.5)*3,x+cx,y+cy); g.stroke();
     }
-    for(let y=B+bw;y<CH-B-bw-step;y+=step){
-        [B,CW-B-bw].forEach(x0=>{ const u=bw/4; g.moveTo(x0+u,y+u); g.lineTo(x0+bw-u,y+u); g.lineTo(x0+bw-u,y+3*u); g.lineTo(x0+1.4*u,y+3*u); g.lineTo(x0+1.4*u,y+2*u); });
+    /* 붉은 판은 예전의 옅은 금색 구름무늬(雲紋)를 그대로 */
+    if((SET.tbl||'green')==='red'){
+        g.strokeStyle='rgba(233,180,90,.07)'; g.lineWidth=1.3;
+        const cs=Math.max(40,Math.min(CW,CH)*.13);
+        for(let row=0,y=cs*.6;y<CH+cs;row++,y+=cs*1.25){ for(let x=(row%2?cs*1.1:cs*.2);x<CW+cs;x+=cs*2.2) cloudMotif(g,x,y,cs*.42); }
     }
-    g.stroke();
     /* 위에서 내리는 따뜻한 빛 + 가장자리 어둡게 */
-    const lg=g.createRadialGradient(CW*.5,CH*.3,0,CW*.5,CH*.3,Math.max(CW,CH)*.62);
-    lg.addColorStop(0,'rgba(255,190,120,.13)'); lg.addColorStop(1,'rgba(255,190,120,0)');
+    const lg=g.createRadialGradient(CW*.5,CH*.28,0,CW*.5,CH*.28,M*.6);
+    lg.addColorStop(0,'rgba(255,244,214,.15)'); lg.addColorStop(1,'rgba(255,244,214,0)');
     g.fillStyle=lg; g.fillRect(0,0,CW,CH);
-    const vg=g.createRadialGradient(CW*.5,CH*.5,Math.min(CW,CH)*.35,CW*.5,CH*.5,Math.max(CW,CH)*.75);
-    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.42)');
+    const vg=g.createRadialGradient(CW*.5,CH*.5,Math.min(CW,CH)*.42,CW*.5,CH*.5,M*.78);
+    vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,.46)');
     g.fillStyle=vg; g.fillRect(0,0,CW,CH);
-    /* 틀이 천에 드리우는 안쪽 그림자 */
-    g.shadowColor='rgba(0,0,0,.7)'; g.shadowBlur=10; g.strokeStyle='rgba(0,0,0,.8)'; g.lineWidth=6; rr(g,F-3,F-3,CW-2*F+6,CH-2*F+6,11); g.stroke();
-    g.restore();
-    inner={x:F+10,y:F+8,w:CW-2*F-20,h:CH-2*F-16};
+}
+function setTable(id){
+    SET.tbl=TABLES[id]?id:'green'; saveSet();
+    document.documentElement.setAttribute('data-tbl',SET.tbl);
+    if(bgC){ buildBg(); boardKey=''; dirty(); }
 }
 function fit(){
-    const r=field.getBoundingClientRect();
-    CW=Math.max(100,Math.floor(r.width)); CH=Math.max(100,Math.floor(r.height));
+    /* clientWidth/Height = 돌리기 전 배치 크기(가상 가로에서 getBoundingClientRect 는 가로·세로가 뒤바뀐다) */
+    CW=Math.max(100,field.clientWidth|0); CH=Math.max(100,field.clientHeight|0);
     DPR=Math.min(3,window.devicePixelRatio||1);
     cv.style.width=CW+'px'; cv.style.height=CH+'px';
     cv.width=Math.round(CW*DPR); cv.height=Math.round(CH*DPR);
+    /* 패가 놓일 자리 = 화면 전체에서 칩이 앉은 가장자리만 뺀 곳 */
+    const ins=insets();
+    inner={x:ins.l,y:ins.t,w:Math.max(60,CW-ins.l-ins.r),h:Math.max(60,CH-ins.t-ins.b)};
+    field.style.setProperty('--it',ins.t+'px');
     buildBg();
     if(T){ computeFit(); computeGeo(); buildSprites(); }
     syncZoomBtn();
@@ -1212,7 +1546,7 @@ function fit(){
 let raf=0, lastFrame=0, needDraw=true;
 function dirty(){ needDraw=true; kick(); }
 function kick(){ if(!raf) raf=requestAnimationFrame(loop); }
-function animating(){ return selT<1||flights.length||parts.length||pops.length||casc.length||fireT>0||Object.keys(wig).length||(hintPair&&hintT>0); }
+function animating(){ return selT<1||flights.length||parts.length||pops.length||casc.length||fireT>0||shakeT>0||Object.keys(wig).length||(hintPair&&hintT>0); }
 function loop(now){
     raf=0;
     const dt=Math.min(.05,Math.max(0,(now-(lastFrame||now))/1000)); lastFrame=now;
@@ -1229,9 +1563,22 @@ function update(dt){
         const f=flights[i]; f.t+=dt;
         if(!f.hit&&f.t>=f.dur){ f.hit=true; impact(f); }
         if(f.t>=f.dur+.26){ flights.splice(i,1); if(!flights.length) afterFlights(); }
-        else if(f.trail&&!f.hit&&f.ax!=null){ f.trail.push([f.ax,f.ay,f.bx,f.by]); if(f.trail.length>10) f.trail.shift(); }
+        else if(f.trail&&!f.hit&&f.ax!=null){
+            f.trail.push([f.ax,f.ay,f.bx,f.by]); if(f.trail.length>10) f.trail.shift();
+            /* 날아가는 두 패가 흘리는 별가루 */
+            if(parts.length<FX_MAX) for(let s=0;s<2;s++){ if(Math.random()>dt*55) continue; const tw=geo.tw, px=s?f.bx:f.ax, py=s?f.by:f.ay; parts.push({k:'star',x:px+(Math.random()-.5)*tw*.7,y:py+(Math.random()-.5)*tw*.9,vx:(Math.random()-.5)*tw,vy:tw*(.2+Math.random()*.8),life:.3+Math.random()*.3,max:.6,col:Math.random()<.5?FX_GOLD:f.tc,s:tw*(.09+Math.random()*.1),g:tw*2,ph:Math.random()*6.28}); }
+        }
     }
-    for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.life-=dt; if(p.life<=0){ parts.splice(i,1); continue; } p.vy+=p.g*dt; p.vx*=1-1.8*dt; p.vy*=1-1.2*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; }
+    for(let i=parts.length-1;i>=0;i--){
+        const p=parts[i];
+        if(p.d>0){ p.d-=dt; continue; }
+        p.life-=dt; if(p.life<=0){ parts.splice(i,1); continue; }
+        if(p.vr) p.rot+=p.vr*dt;
+        if(p.vx===undefined) continue;   /* 고리·섬광은 제자리 */
+        const dr=p.dr||1;
+        p.vy+=p.g*dt; p.vx*=1-1.8*dr*dt; p.vy*=1-1.2*dr*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+    }
+    if(shakeT>0) shakeT=Math.max(0,shakeT-dt);
     for(let i=pops.length-1;i>=0;i--){ const p=pops[i]; p.t+=dt; if(p.t>=p.life) pops.splice(i,1); }
     for(let i=casc.length-1;i>=0;i--){ const c=casc[i]; c.d-=dt; if(c.d>0) continue; c.vy+=900*dt; c.x+=c.vx*dt; c.y+=c.vy*dt; c.r+=c.vr*dt; if(c.y>CH+120) casc.splice(i,1); }
     if(fireT>0){ fireT-=dt; if(Math.random()<dt*5.5) firework(); }
@@ -1245,7 +1592,7 @@ function drawSpr(img,x,y,scale,alpha){
     if(alpha!=null) ctx.globalAlpha=1;
 }
 function drawShadow(x,y,lift,scale,alpha){
-    const r=geo.tw/SPR.tw*(scale||1), off=geo.dep*(.28+lift*.9);
+    const r=geo.tw/SPR.tw*(scale||1), off=geo.dep*(.36+lift*.9);
     ctx.globalAlpha=(alpha==null?1:alpha)*(lift?.7:1);
     ctx.drawImage(SPR.shadow,(x+off*.8)*DPR-SPR.sm*r,(y+off)*DPR-SPR.sm*r,SPR.shadow.width*r,SPR.shadow.height*r);
     ctx.globalAlpha=1;
@@ -1264,7 +1611,7 @@ function drawTileAt(k,cx,cy,sc,alpha,lift){
     return [x,y];
 }
 function drawBoard(){
-    if(bgC) ctx.drawImage(bgC,0,0); else { ctx.fillStyle='#5a0d12'; ctx.fillRect(0,0,cv.width,cv.height); }
+    if(bgC) ctx.drawImage(bgC,0,0); else { ctx.fillStyle=(TABLES[SET.tbl]||TABLES.green)[1]; ctx.fillRect(0,0,cv.width,cv.height); }
     if(!T||!geo||!SPR) return;
     const n=T.length, hl=SET.hl;
     for(let i=0;i<n;i++){
@@ -1281,6 +1628,12 @@ function render(ts){
     const key=geo&&SPR?[boardVer,sprVer,geo.ox.toFixed(2),geo.oy.toFixed(2),geo.tw.toFixed(3),sel,SET.hl?1:0,wk,cv.width,cv.height].join('|'):'x';
     if(!boardC||boardC.width!==cv.width||boardC.height!==cv.height){ boardC=document.createElement('canvas'); boardC.width=cv.width; boardC.height=cv.height; boardKey=''; }
     if(key!==boardKey){ const bc=boardC.getContext('2d'); bc.setTransform(1,0,0,1,0,0); bc.clearRect(0,0,boardC.width,boardC.height); ctx=bc; drawBoard(); ctx=mainCtx; boardKey=key; }
+    /* 화면 흔들림: 판 전체를 몇 px 밀어 그린다(드러나는 가장자리는 나무 틀 색) */
+    if(shakeT>0){
+        const m=shakeA*(shakeT/shakeD);
+        ctx.fillStyle=(TABLES[SET.tbl]||TABLES.green)[2]; ctx.fillRect(0,0,cv.width,cv.height);
+        ctx.setTransform(1,0,0,1,Math.round((Math.random()*2-1)*m*DPR),Math.round((Math.random()*2-1)*m*DPR));
+    }
     ctx.drawImage(boardC,0,0);
     if(!T||!geo||!SPR) return;
     const hl=SET.hl;
@@ -1312,16 +1665,70 @@ function render(ts){
         if(f.hit){ const v=Math.min(1,(f.t-f.dur)/.26); const sq=v<.25?1+v*.35:1.09-(v-.25)*1.1; sc=1.08*Math.max(.25,sq); al=1-v*v; ay-=v*geo.tw*.25; by-=v*geo.tw*.25; const pull=v*geo.tw*.18; ax+=pull; bx-=pull; }
         f.ax=ax; f.ay=ay; f.bx=bx; f.by=by;
         /* 콤보 중이면 두 패 뒤로 금빛 꼬리 */
-        if(f.trail&&f.trail.length&&!f.hit){ ctx.globalCompositeOperation='lighter'; for(let q=0;q<f.trail.length;q++){ const tr=f.trail[q], a=(q+1)/f.trail.length; ctx.fillStyle='rgba(255,196,80,'+(.34*a)+')'; ctx.beginPath(); ctx.arc(tr[0]*DPR,tr[1]*DPR,geo.tw*.2*a*DPR,0,6.2832); ctx.fill(); ctx.beginPath(); ctx.arc(tr[2]*DPR,tr[3]*DPR,geo.tw*.2*a*DPR,0,6.2832); ctx.fill(); } ctx.globalCompositeOperation='source-over'; }
+        if(f.trail&&f.trail.length&&!f.hit){ ctx.globalCompositeOperation='lighter'; const ta=f.combo>=2?.42:.3, tr0=geo.tw*(f.combo>=2?.26:.2); for(let q=0;q<f.trail.length;q++){ const tr=f.trail[q], a=(q+1)/f.trail.length; ctx.fillStyle='rgba('+(f.combo>=2?'255,196,80':f.tc)+','+(ta*a)+')'; ctx.beginPath(); ctx.arc(tr[0]*DPR,tr[1]*DPR,tr0*a*DPR,0,6.2832); ctx.fill(); ctx.beginPath(); ctx.arc(tr[2]*DPR,tr[3]*DPR,tr0*a*DPR,0,6.2832); ctx.fill(); } ctx.globalCompositeOperation='source-over'; }
         drawTileAt(f.fa,ax,ay,sc,al,1); drawTileAt(f.fb,bx,by,sc,al,1);
-        if(f.hit){ const v=Math.min(1,(f.t-f.dur)/.26); const w=geo.tw*sc, h=geo.th*sc; drawGlow(SPR.glow,ax-w/2,ay-h/2,(1-v)*.9,sc); drawGlow(SPR.glow,bx-w/2,by-h/2,(1-v)*.9,sc); }
+        if(f.hit){ const v=Math.min(1,(f.t-f.dur)/.26); const w=geo.tw*sc, h=geo.th*sc; drawSpr(SPR.tint,ax-w/2,ay-h/2,sc,(1-v)*.6*al); drawSpr(SPR.tint,bx-w/2,by-h/2,sc,(1-v)*.6*al); drawGlow(SPR.glow,ax-w/2,ay-h/2,(1-v)*.9,sc); drawGlow(SPR.glow,bx-w/2,by-h/2,(1-v)*.9,sc); }
     }
-    /* 불꽃·먼지 */
+    /* 입자 0 — 순간 어둠(빛이 도드라지게) → 1 — 빛(더하기 합성): 섬광 · 방사 빛줄기 */
     for(const p of parts){
+        if(p.k!=='dim'||p.d>0) continue;
+        const a=Math.max(0,p.life/p.max), r=p.s*DPR;
+        ctx.globalAlpha=Math.min(1,(1-a)*6)*a*.85; ctx.drawImage(fxSpr('dim',''),p.x*DPR-r,p.y*DPR-r,r*2,r*2);
+    }
+    ctx.globalCompositeOperation='lighter';
+    for(const p of parts){
+        const k=p.k; if(p.d>0||(k!=='glow'&&k!=='burst')) continue;
         const a=Math.max(0,p.life/p.max);
-        if(p.ring){ ctx.strokeStyle='rgba(255,226,150,'+(a*.8)+')'; ctx.lineWidth=2*DPR*a+.5; ctx.beginPath(); ctx.arc(p.x*DPR,p.y*DPR,(1-a)*p.s*DPR,0,6.2832); ctx.stroke(); continue; }
-        ctx.globalAlpha=a; ctx.fillStyle=p.col;
-        ctx.beginPath(); ctx.arc(p.x*DPR,p.y*DPR,Math.max(.6,p.s*(.5+a*.5))*DPR,0,6.2832); ctx.fill();
+        if(k==='glow'){
+            const r=p.s*(.5+.5*(1-a))*DPR;
+            ctx.globalAlpha=a*a; ctx.drawImage(fxSpr('glow',p.col),p.x*DPR-r,p.y*DPR-r,r*2,r*2);
+        }else{
+            const r=p.s*(.45+.7*(1-a))*DPR;
+            ctx.save(); ctx.translate(p.x*DPR,p.y*DPR); ctx.rotate(p.rot); ctx.globalAlpha=a; ctx.drawImage(fxSpr('burst',p.col),-r,-r,r*2,r*2); ctx.restore();
+        }
+    }
+    ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; ctx.lineCap='round';
+    /* 입자 2 — 색(밝은 패 위에서도 보이게 짙은 색 + 어두운 테): 충격파 고리 · 색 조각 · 불똥 · 별 */
+    for(const p of parts){
+        const k=p.k; if(p.d>0||k==='dim'||k==='glow'||k==='burst') continue;
+        const a=Math.max(0,p.life/p.max);
+        if(k==='spark'){
+            const x0=(p.x-p.vx*.04)*DPR, y0=(p.y-p.vy*.04)*DPR, w=p.s*DPR*(.45+.55*a);
+            ctx.globalAlpha=Math.min(1,a*1.6);
+            ctx.strokeStyle='rgba(70,18,2,.4)'; ctx.lineWidth=w+2*DPR; ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(p.x*DPR,p.y*DPR); ctx.stroke();
+            ctx.strokeStyle='rgb('+p.col+')'; ctx.lineWidth=w; ctx.stroke();
+        }else if(k==='star'){
+            const r=p.s*(.5+.5*a)*(.6+.4*Math.sin(ts*18+p.ph))*DPR;
+            ctx.globalAlpha=Math.min(1,a*2); ctx.drawImage(fxSpr('star',p.col),p.x*DPR-r,p.y*DPR-r,r*2,r*2);
+        }else if(k==='ring'){
+            const rr2=(1-a*a)*p.s*DPR, w=(p.w||2)*DPR*(.35+a);
+            ctx.globalAlpha=Math.min(1,a*1.5);
+            ctx.strokeStyle='rgba(70,18,2,.3)'; ctx.lineWidth=w+3*DPR; ctx.beginPath(); ctx.arc(p.x*DPR,p.y*DPR,rr2,0,6.2832); ctx.stroke();
+            ctx.strokeStyle='rgb('+p.col+')'; ctx.lineWidth=w; ctx.stroke();
+        }else if(k==='ribbon'){
+            /* 두 패를 잇는 금빛 리본 — A 에서 B 로 뻗어 나가 물결치다 사라진다 */
+            const dx=p.bx-p.ax, dy=p.by-p.ay, L=Math.hypot(dx,dy)||1, nx=-dy/L, ny=dx/L, amp=Math.min(geo.tw*.5,L*.2), N=20, grow=Math.min(1,(1-a)*4.5);
+            ctx.beginPath();
+            for(let i=0;i<=N;i++){ const u=i/N*grow, w=Math.sin(u*Math.PI)*amp*Math.sin(u*8-ts*13+p.ph), x=(p.ax+dx*u+nx*w)*DPR, y=(p.ay+dy*u+ny*w)*DPR; if(i) ctx.lineTo(x,y); else ctx.moveTo(x,y); }
+            ctx.lineJoin='round';
+            ctx.globalAlpha=a*.3; ctx.strokeStyle='rgb(255,190,60)'; ctx.lineWidth=geo.tw*.5*DPR; ctx.stroke();
+            ctx.globalAlpha=a*.55; ctx.strokeStyle='rgb(110,44,0)'; ctx.lineWidth=geo.tw*.27*DPR; ctx.stroke();
+            ctx.globalAlpha=Math.min(1,a*1.6); ctx.strokeStyle='rgb(255,198,64)'; ctx.lineWidth=geo.tw*.19*DPR; ctx.stroke();
+            ctx.strokeStyle='rgb(255,251,228)'; ctx.lineWidth=geo.tw*.07*DPR; ctx.stroke();
+        }else if(k==='note'){
+            /* 떠오르는 음표 */
+            const x=(p.x+Math.sin(ts*5+p.ph)*geo.tw*.12)*DPR, y=p.y*DPR;
+            ctx.globalAlpha=Math.min(1,a*2.4); ctx.font='900 '+(p.s*DPR)+'px "Noto Sans KR","Segoe UI Symbol","Apple Symbols",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+            ctx.lineWidth=3.2*DPR; ctx.strokeStyle='rgba(74,22,2,.8)'; ctx.strokeText(p.ch,x,y); ctx.fillStyle=p.col; ctx.fillText(p.ch,x,y);
+        }else if(k==='shard'){
+            ctx.save(); ctx.translate(p.x*DPR,p.y*DPR); ctx.rotate(p.rot); ctx.scale(1,Math.cos(p.rot*1.7)*.8+.2);
+            ctx.globalAlpha=Math.min(1,a*2.4); ctx.fillStyle=p.col; ctx.fillRect(-p.w*DPR/2,-p.h*DPR/2,p.w*DPR,p.h*DPR);
+            ctx.lineWidth=DPR; ctx.strokeStyle='rgba(60,16,2,.45)'; ctx.strokeRect(-p.w*DPR/2,-p.h*DPR/2,p.w*DPR,p.h*DPR);
+            ctx.restore();
+        }else{
+            ctx.globalAlpha=a; ctx.fillStyle=p.col;
+            ctx.beginPath(); ctx.arc(p.x*DPR,p.y*DPR,Math.max(.6,p.s*(.5+a*.5))*DPR,0,6.2832); ctx.fill();
+        }
     }
     ctx.globalAlpha=1;
     /* 떨어지는 패(완성 축하) */
@@ -1388,11 +1795,17 @@ function newDeal(id,sd,isDaily,rot){
 function resetRun(){
     playT=0; score=0; combo=0; lastMatchT=-99; hints=0; shuffles=0; matches=0; penalty=0;
     sel=-1; hintPair=null; undoSt=[]; known=null; flights=[]; parts=[]; pops=[]; wig={}; wigRed={}; casc=[]; fireT=0; won=false;
+    shakeT=0; lastHit=null; clearTimeout(cardTimer); CEL.stop(); field.classList.remove('fever'); $('combo').classList.remove('on');
     zoom=1; panX=0; panY=0;
     refresh();
 }
+/* 배경음악 — 공용 lpBgm 이 /assets/bgm/mahjong-solitaire/track1~5.mp3 를 섞어 튼다(끄기는 왼쪽 위 독의 🔊).
+   효과음(종·팡파르)이 주인공이라 조금 낮게 깔고, 완성 팡파르 동안은 더 줄였다가 되돌린다 */
+const BGM_VOL=.24; let bgmDuckT=0;
+function bgmStart(){ try{ clearTimeout(bgmDuckT); if(window.LpBgm){ LpBgm.setVolume(BGM_VOL); LpBgm.start(); } else window.__lpBgmWanted=true; }catch(_){} }
+function bgmDuck(ms){ try{ if(!window.LpBgm) return; LpBgm.setVolume(BGM_VOL*.25); clearTimeout(bgmDuckT); bgmDuckT=setTimeout(()=>{ try{ LpBgm.setVolume(BGM_VOL); }catch(_){} },ms); }catch(_){} }
 function beginPlay(){
-    state='play'; paused=false;
+    state='play'; paused=false; bgmStart();
     ['introOv','pauseOv','clearOv','stuckOv'].forEach(id=>show(id,false));
     fit();
     hud(); save();
@@ -1437,8 +1850,14 @@ function match(a,b){
     const half=geo.tw*1.08*.5+geo.tw*.02;
     const tA=[mx+(left===0?-half:half),my], tB=[mx+(left===0?half:-half),my];
     const dist=Math.hypot(ca[0]-cb[0],ca[1]-cb[1]);
-    const fl={fa:faces[a],fb:faces[b],a0:ca,b0:cb,a1:tA,b1:tB,t:0,dur:Math.min(.3,.13+dist/2600),hit:false,mx,my,pts,combo,trail:combo>=2?[]:null,cx:mx,cy:my};
+    const fl={fa:faces[a],fb:faces[b],a0:ca,b0:cb,a1:tA,b1:tB,t:0,dur:Math.min(.3,.13+dist/2600),hit:false,mx,my,pts,combo,trail:[],tc:fxTheme(faces[a])[0],cx:mx,cy:my};
     flights.push(fl);
+    /* 짝이 맞는 순간 두 패를 금빛 리본이 잇고, 리본을 따라 금가루가 반짝인다 */
+    if(parts.length<FX_MAX){
+        parts.push({k:'ribbon',ax:ca[0],ay:ca[1],bx:cb[0],by:cb[1],life:.6,max:.6,ph:Math.random()*6.28});
+        const nb=Math.min(12,4+Math.round(dist/geo.tw));
+        for(let i=0;i<nb;i++){ const u=(i+.5)/nb; parts.push({k:'star',x:ca[0]+(cb[0]-ca[0])*u+(Math.random()-.5)*geo.tw*.5,y:ca[1]+(cb[1]-ca[1])*u+(Math.random()-.5)*geo.tw*.5,vx:0,vy:-geo.tw*.5,life:.45+Math.random()*.3,max:.75,col:i%2?FX_GOLD:FX_WHITE,s:geo.tw*(.12+Math.random()*.12),g:0,ph:Math.random()*6.28,d:u*.14}); }
+    }
     /* 안전장치: rAF 가 멈춘 환경(백그라운드 탭·일부 웹뷰)에서도 판정(완성·막힘)이 밀리지 않게 */
     setTimeout(()=>{ const k=flights.indexOf(fl); if(k<0) return; if(!fl.hit){ fl.hit=true; impact(fl); } flights.splice(k,1); if(!flights.length) afterFlights(); dirty(); },(fl.dur+.26)*1000+450);
     alive[a]=0; alive[b]=0; sel=-1; hintPair=null;
@@ -1446,15 +1865,49 @@ function match(a,b){
     refresh(); hud(); save();
     dirty();
 }
+let lastHit=null;
 function impact(f){
-    SND.clack(f.combo); vib(f.combo>=3?[14,20,10]:16);
-    const n=10+Math.min(f.combo,6)*3;
-    for(let i=0;i<n;i++){ const a=Math.random()*6.2832, v=60+Math.random()*(160+f.combo*25); parts.push({x:f.mx,y:f.my,vx:Math.cos(a)*v,vy:Math.sin(a)*v-40,life:.35+Math.random()*.3,max:.65,col:i%3?'#ffe3a0':(i%2?'#fff8e8':'#f0b840'),s:1.2+Math.random()*2.2,g:260}); }
-    parts.push({x:f.mx,y:f.my,ring:true,life:.3,max:.3,s:geo.tw*1.3});
+    const c=Math.min(f.combo,8), tw=geo.tw, x=f.mx, y=f.my;
+    SND.match(f.combo,f.fa>=34); vib(f.combo>=3?[14,20,10]:16);
+    lastHit={x,y};
+    const th=fxTheme(f.fa), c1=th[0], c2=th[1];
+    const q=parts.length>FX_MAX?0:(parts.length>FX_MAX*.6?.45:1);   /* 입자가 많이 쌓였으면 덜 뿌리고, 상한을 넘으면 빛·고리만 */
+    /* 주변이 잠깐 어두워지고 → 섬광 + 방사 빛줄기 + 충격파 세 겹 */
+    parts.push({k:'dim',x,y,life:.5,max:.5,s:tw*(5+c*.4)});
+    parts.push({k:'glow',x,y,life:.36,max:.36,s:tw*(3+c*.25),col:FX_WHITE});
+    parts.push({k:'glow',x,y,life:.6,max:.6,s:tw*(4.2+c*.35),col:c1});
+    parts.push({k:'burst',x,y,life:.45,max:.45,s:tw*(3+c*.3),rot:Math.random()*6.28,vr:Math.random()<.5?-1.8:1.8,col:c2});
+    parts.push({k:'ring',x,y,life:.4,max:.4,s:tw*2.4,col:FX_GOLD,w:4.5});
+    parts.push({k:'ring',x,y,life:.55,max:.55,s:tw*(3.4+c*.22),col:c1,w:3,d:.06});
+    parts.push({k:'ring',x,y,life:.6,max:.6,s:tw*(4.3+c*.25),col:FX_WHITE,w:1.6,d:.12});
+    /* 사방으로 튀는 불똥 — 패 빛깔 + 금빛 */
+    const n=Math.round((22+c*5)*q);
+    for(let i=0;i<n;i++){ const a=Math.random()*6.2832, v=tw*(4+Math.random()*(9+c)); parts.push({k:'spark',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-tw*.8,life:.35+Math.random()*.4,max:.75,col:i%3===0?FX_GOLD:(i%3===1?c1:c2),s:2.2+Math.random()*2,g:tw*7}); }
+    /* 반짝이며 떠오르는 별 */
+    const ns=Math.round((10+c*1.5)*q);
+    for(let i=0;i<ns;i++) parts.push({k:'star',x:x+(Math.random()-.5)*tw*2.6,y:y+(Math.random()-.5)*tw*1.8,vx:(Math.random()-.5)*tw*3.4,vy:-tw*(.6+Math.random()*2.6),life:.6+Math.random()*.6,max:1.2,col:i%3===0?c1:(i%3===1?FX_GOLD:FX_WHITE),s:tw*(.2+Math.random()*.26),g:tw*1.2,ph:Math.random()*6.28,d:Math.random()*.12});
+    /* 터져 흩날리는 색 조각 — 패 빛깔·금빛·비취 */
+    const nh=Math.round(16*q), sc=['rgb('+c1+')','rgb('+FX_GOLD+')','#2fb383','rgb('+c2+')'];
+    for(let i=0;i<nh;i++){ const sd=i%2?1:-1; parts.push({k:'shard',x:x+sd*tw*(.25+Math.random()*.5),y:y+(Math.random()-.5)*tw*.9,vx:sd*tw*(1+Math.random()*5.5),vy:-tw*(2.5+Math.random()*5.5),life:.7+Math.random()*.45,max:1.15,w:tw*(.13+Math.random()*.13),h:tw*(.16+Math.random()*.17),rot:Math.random()*6.28,vr:(Math.random()-.5)*24,col:sc[i%4],g:tw*22,dr:.5}); }
+    /* 종소리와 함께 떠오르는 음표 */
+    const nn=Math.round((3+Math.min(c,4))*q);
+    for(let i=0;i<nn;i++) parts.push({k:'note',x:x+(Math.random()-.5)*tw*2,y:y-tw*.2,vx:(Math.random()-.5)*tw*2.2,vy:-tw*(1.6+Math.random()*1.8),g:-tw*.6,life:.9+Math.random()*.4,max:1.3,s:Math.max(15,tw*(.46+Math.random()*.2)),ch:i%2?'♪':'♫',col:i%3===0?'#fff6df':'#ffe27a',ph:Math.random()*6.28,d:.05+i*.07});
+    /* 콤보 3 이상: 둥글게 퍼지는 별 고리 */
+    if(f.combo>=3&&q>0){ const m=10+Math.min(c,6)*2; for(let i=0;i<m;i++){ const a=i/m*6.2832; parts.push({k:'star',x,y,vx:Math.cos(a)*tw*8,vy:Math.sin(a)*tw*8,life:.7,max:.7,col:i%2?FX_GOLD:c1,s:tw*.3,g:0,ph:i,dr:1.5}); } }
+    shake(2+Math.min(f.combo,6)*.9,.22);
     const col=f.combo>=3?'#ffd766':'#fff6df';
-    pops.push({x:f.mx,y:f.my-geo.tw*.2,text:'+'+f.pts,col,size:Math.max(15,geo.tw*.42)+Math.min(f.combo,6)*1.5,t:0,life:.9});
-    if(f.combo>=2){ pops.push({x:f.mx,y:f.my+geo.tw*.35,text:t('combo')+' ×'+f.combo,col:'#ffc24a',size:Math.max(11,geo.tw*.3),t:0,life:.95}); SND.comboUp(f.combo); }
+    pops.push({x,y:y-tw*.2,text:'+'+f.pts,col,size:Math.max(20,tw*.62)+Math.min(f.combo,6)*2,t:0,life:1});
+    if(f.combo>=2){ pops.push({x,y:y+tw*.4,text:t('combo')+' ×'+f.combo,col:'#ffc24a',size:Math.max(12,tw*.33),t:0,life:.95}); SND.comboUp(f.combo); }
+    if(f.combo===5||f.combo===8||(f.combo>=10&&f.combo%5===0)) comboBlast(f.combo);
+    bump('vScore'); bump('vLeft'); bump('progStar');
     showCombo();
+}
+/* 콤보 고비: 판 위에 작은 불꽃 몇 발 + 큰 글씨 */
+function comboBlast(n){
+    SND.milestone(n); vib([20,30,20,30,40]);
+    pops.push({x:inner.x+inner.w/2,y:inner.y+inner.h*.3,text:t('combo')+' ×'+n+'!',col:'#ffe27a',size:Math.max(28,Math.min(64,inner.w*.09)),t:0,life:1.3});
+    fireT=Math.max(fireT,.5+Math.min(n,15)*.04); firework(); firework();
+    shake(5,.3);
 }
 function afterFlights(){
     if(state!=='play') return;
@@ -1464,9 +1917,10 @@ function afterFlights(){
 let comboTimer=0;
 function showCombo(){
     const el=$('combo');
-    if(combo>=2){ el.textContent=t('combo')+' ×'+combo+'  ·  ×'+(Math.min(5,1+(combo-1)*.5)).toFixed(1); el.classList.add('on'); }
+    if(combo>=2){ el.innerHTML='<b></b><i></i>'; el.firstChild.textContent=t('combo')+' ×'+combo; el.lastChild.textContent='×'+(Math.min(5,1+(combo-1)*.5)).toFixed(1); el.classList.add('on'); }
+    field.classList.toggle('fever',combo>=3);   /* 콤보 3부터 판 가장자리가 금빛으로 달아오른다 */
     clearTimeout(comboTimer);
-    comboTimer=setTimeout(()=>el.classList.remove('on'),Math.max(300,(COMBO_WIN-(playT-lastMatchT))*1000));
+    comboTimer=setTimeout(()=>{ el.classList.remove('on'); field.classList.remove('fever'); },Math.max(300,(COMBO_WIN-(playT-lastMatchT))*1000));
 }
 function undo(){
     if(state!=='play'||paused) return;
@@ -1477,7 +1931,7 @@ function undo(){
     else if(u.k==='s'){ faces=u.faces; }
     known=u.known||null;
     combo=0; lastMatchT=-99; sel=-1; hintPair=null;
-    $('combo').classList.remove('on');
+    $('combo').classList.remove('on'); field.classList.remove('fever');
     SND.undo(); vib(6);
     refresh(); hud(); save(); dirty();
     show('stuckOv',false);
@@ -1563,22 +2017,245 @@ function win(){
     $('newBest').classList.toggle('on',nb&&rec.n>1);
     $('oBrk').innerHTML=t('clearBonus')+' <b>+'+cb+'</b> · '+t('timeBonus')+' <b>+'+tb+'</b>'+(penalty?' · '+t('penalty')+' <b>−'+penalty+'</b>':'');
     hud();
-    SND.win(); vib([30,60,30,60,80]);
-    /* 축하: 패가 위에서 우수수 + 불꽃 */
-    for(let i=0;i<46;i++){ casc.push({k:Math.floor(Math.random()*42),x:Math.random()*CW,y:-60-Math.random()*80,vx:(Math.random()-.5)*120,vy:Math.random()*120,r:Math.random()*6,vr:(Math.random()-.5)*7,s:.75+Math.random()*.4,d:i*.035}); }
-    fireT=2.6; firework(); firework();
+    field.classList.remove('fever'); $('combo').classList.remove('on');
+    SND.win(); bgmDuck(4200); vib([40,60,40,60,40,60,140]);
+    /* 축하: 판에서는 패가 우수수 쏟아지며 크게 한 번 흔들리고, 화면 전체(#fx)에서 불꽃놀이·색종이·현수막 */
+    for(let i=0;i<60;i++){ casc.push({k:Math.floor(Math.random()*42),x:Math.random()*CW,y:-60-Math.random()*80,vx:(Math.random()-.5)*120,vy:Math.random()*120,r:Math.random()*6,vr:(Math.random()-.5)*7,s:.75+Math.random()*.4,d:i*.035}); }
+    shake(10,.6);
+    const fo=fieldPos(), o=lastHit||{x:CW/2,y:CH/2};
+    CEL.start({x:fo[0]+o.x,y:fo[1]+o.y,text:t('cleared'),sub:nb&&rec.n>1?t('newBest'):''});
     kick();
     try{ gtag('event','mjs_clear',{layout:layId,time:Math.round(playT),score,daily:daily?1:0}); }catch(_){}
-    setTimeout(()=>{ if(state==='won'){ show('clearOv',true); navMount($('clearNav')); } },1500);
+    /* 결과 카드는 축하를 잠깐 본 뒤에 — 기다리기 싫으면 화면을 한 번 누르면 바로 뜬다 */
+    winAt=performance.now(); clearTimeout(cardTimer); cardTimer=setTimeout(showClear,2500);
 }
+let cardTimer=0, winAt=0, cuRaf=0;
+function showClear(){
+    clearTimeout(cardTimer);
+    if(state!=='won'||$('clearOv').classList.contains('show')) return;
+    show('clearOv',true); navMount($('clearNav')); CEL.card();
+    /* 점수가 또르르 올라간다 */
+    const el=$('oScore'), to=score, t0=performance.now(), D=1100; let lastTick=0;
+    cancelAnimationFrame(cuRaf);
+    const done=()=>{ el.textContent=to.toLocaleString(); };
+    const step=now=>{
+        if(state!=='won'||score!==to) return;
+        const u=Math.min(1,(now-t0)/D);
+        if(u>=1){ done(); bump('oScore'); SND.hint(); return; }
+        el.textContent=Math.round(to*(1-Math.pow(1-u,3))).toLocaleString();
+        if(now-lastTick>60){ lastTick=now; SND.tick(1+u*.6); }
+        cuRaf=requestAnimationFrame(step);
+    };
+    el.textContent='0'; cuRaf=requestAnimationFrame(step);
+    setTimeout(()=>{ if(state==='won'&&score===to) done(); },D+500);   /* rAF 가 멈춘 환경 대비 */
+}
+document.addEventListener('pointerdown',()=>{ if(state==='won'&&performance.now()-winAt>600) showClear(); },true);
+/* 판 위의 작은 불꽃 — 콤보 고비에서 터진다 */
 function firework(){
-    const x=inner.x+inner.w*(.15+Math.random()*.7), y=inner.y+inner.h*(.12+Math.random()*.4);
-    const cols=['#ffd766','#ff6a5a','#6fe3b0','#fff3d6','#ff9ec0'];
-    const c=cols[Math.floor(Math.random()*cols.length)];
-    for(let i=0;i<34;i++){ const a=i/34*6.2832, v=110+Math.random()*80; parts.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.9+Math.random()*.4,max:1.3,col:c,s:1.6+Math.random()*1.4,g:120}); }
-    parts.push({x,y,ring:true,life:.4,max:.4,s:60});
-    SND.boom(0);
+    if(parts.length>FX_MAX||!geo) return;
+    const x=inner.x+inner.w*(.12+Math.random()*.76), y=inner.y+inner.h*(.1+Math.random()*.45);
+    const cols=[FX_GOLD,'255,106,90','111,227,176','255,243,214','255,158,192','120,190,255'];
+    const c=cols[Math.floor(Math.random()*cols.length)], V=Math.max(150,Math.min(330,Math.min(inner.w,inner.h)*.5));
+    parts.push({k:'glow',x,y,life:.4,max:.4,s:V*.7,col:c});
+    parts.push({k:'ring',x,y,life:.42,max:.42,s:V*.45,col:c,w:2});
+    for(let i=0;i<30;i++){ const a=i/30*6.2832+Math.random()*.1, v=V*(.6+Math.random()*.4); parts.push({k:'spark',x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life:.7+Math.random()*.4,max:1.1,col:i%4?c:FX_WHITE,s:1.6+Math.random()*1.4,g:V*.5}); }
+    for(let i=0;i<7;i++) parts.push({k:'star',x:x+(Math.random()-.5)*V*.5,y:y+(Math.random()-.5)*V*.5,vx:(Math.random()-.5)*V*.3,vy:V*.1,life:.6+Math.random()*.5,max:1.1,col:i%2?c:FX_WHITE,s:6+Math.random()*7,g:V*.3,ph:Math.random()*6.28,d:.1+Math.random()*.25});
+    SND.boom(0,.4);
 }
+
+/* ════════════ 완성 축하 — 화면 전체를 덮는 별도 캔버스(#fx). 결과 카드 위에서도 계속 터진다 ════════════
+   순서: 번쩍 + 충격파 → '완성!' 현수막이 쾅 → 양쪽 아래 색종이 대포 → 불꽃 로켓(모란·고리·겹·버들·딱총)
+         → 5초쯤 9발 연발 + 버들 세 발 → 이후 15초까지 드문드문. 다 끝나면 스스로 멈춰 배터리를 쓰지 않는다 */
+const CEL=(()=>{
+    const c=$('fx'), g=c.getContext('2d');
+    const PAL=['255,214,110','255,96,88','90,225,160','120,190,255','255,140,200','255,170,70','190,150,255','255,248,232'];
+    const CONF=['#ff4d5a','#ffd766','#36c98f','#fff3d6','#ff8ec6','#5ab8ff','#ff9a3c','#b48cff'];
+    const TYPES=['peony','peony','ring','double','crackle','willow'];
+    const END=15.5, CAP=900;
+    let W=0,H=0,S=1,on=false,raf=0,last=0,tm=0,Q=1,dens=1,ema=.016;
+    let rockets=[],sparks=[],conf=[],glit=[],rings=[],glows=[],sched=[],flash=0,ox=0,oy=0,banner=null,cardT=-1,nextAmb=0;
+    const rnd=Math.random, pick=a=>a[Math.floor(rnd()*a.length)];
+    function size(){
+        /* 캔버스의 배치 크기 — 가상 가로(body 90° 회전)에서도 '보이는 가로×세로' 그대로 나온다 */
+        W=c.clientWidth||window.innerWidth||360; H=c.clientHeight||window.innerHeight||640;
+        S=Math.min(2,window.devicePixelRatio||1); if(W*H*S*S>3.6e6) S=Math.sqrt(3.6e6/(W*H));
+        c.width=Math.round(W*S); c.height=Math.round(H*S);
+        dens=Math.max(.7,Math.min(1.3,Math.sqrt(W*H)/900));
+    }
+    window.addEventListener('resize',()=>{ if(on) size(); });
+    function spark(x,y,a,v,col,life,o){
+        o=o||{};
+        sparks.push({x,y,tx:x,ty:y,vx:Math.cos(a)*v,vy:Math.sin(a)*v,life,max:life,css:'rgb('+col+')',s:o.s||2.4,g:o.g==null?90:o.g,dr:o.dr||2.4,tl:o.tl||14,fl:o.fl!==false,crk:!!o.crk});
+    }
+    function explode(x,y,type,col,vol){
+        const V=Math.max(300,Math.min(640,Math.sqrt(W*H)*.78)), room=1-sparks.length/(CAP*Q);
+        SND.boom(0,vol); if(type==='crackle'&&vol>.5) SND.crackle(.2,14,vol);
+        glows.push({x,y,r:V,life:.5,max:.5,col});
+        if(room<=0) return;
+        const N=Math.round(100*dens*Q*Math.max(.4,room)), col2=pick(PAL), TAU=6.2832;
+        if(type==='ring'){
+            const n=Math.round(N*.6); for(let i=0;i<n;i++) spark(x,y,i/n*TAU,V*.88,col,1.1+rnd()*.3,{g:V*.16});
+            const m=Math.round(N*.4); for(let i=0;i<m;i++) spark(x,y,rnd()*TAU,V*(.1+rnd()*.38),col2,.8+rnd()*.4,{g:V*.16,s:1.7});
+        }else if(type==='double'){
+            const n=Math.round(N*.6); for(let i=0;i<n;i++) spark(x,y,rnd()*TAU,V*(.7+rnd()*.3),col,1.1+rnd()*.4,{g:V*.18});
+            const m=Math.round(N*.5); for(let i=0;i<m;i++) spark(x,y,rnd()*TAU,V*(.25+rnd()*.3),col2,.9+rnd()*.4,{g:V*.18});
+        }else if(type==='willow'){
+            for(let i=0;i<N;i++) spark(x,y,rnd()*TAU,V*(.25+rnd()*.65),'255,200,110',1.9+rnd()*.8,{g:V*.4,dr:1.6,tl:6,s:1.8,fl:false});
+        }else{
+            const ck=type==='crackle';
+            for(let i=0;i<N;i++) spark(x,y,rnd()*TAU,V*(.2+Math.sqrt(rnd())*.8),i%7?col:'255,248,232',1+rnd()*.5,{g:V*.2,crk:ck&&i%2===0});
+        }
+    }
+    function launch(xf,yf,type,vol,whistle){
+        const x0=W*(xf+(rnd()-.5)*.08);
+        rockets.push({x0,x1:W*xf+(rnd()-.5)*W*.06,y0:H+12,y1:H*yf,t:0,dur:.5+rnd()*.25,type:type||pick(TYPES),col:pick(PAL),vol,x:x0,y:H+12});
+        if(whistle) SND.whistle(0,.45);
+    }
+    /* 색종이: 대포(아래 구석에서 위·안쪽으로) · 비(위에서 팔랑팔랑) */
+    function piece(x,y,vx,vy){
+        const sh=rnd(); let w=5+rnd()*6, h=7+rnd()*8; if(sh>.8){ w=3+rnd()*2; h=14+rnd()*10; }
+        conf.push({x,y,vx,vy,w,h,rot:rnd()*6.28,vr:(rnd()-.5)*10,ph:rnd()*6.28,vph:3+rnd()*5,sw:20+rnd()*50,col:pick(CONF),life:11});
+    }
+    function cannon(side){
+        const n=Math.round(Math.max(36,Math.min(110,W*H/9000))*Q), x=side<0?-8:W+8;
+        for(let i=0;i<n;i++) piece(x,H*(.9+rnd()*.1),-side*1.6*W*(.08+rnd()*.6),-H*(.7+rnd()*1.3));
+    }
+    function rain(n){ n=Math.round(n*dens*Q); for(let i=0;i<n;i++) piece(rnd()*W,-20-rnd()*H*.35,(rnd()-.5)*60,rnd()*80); }
+    function mkBanner(text,sub){
+        /* 큰 글씨는 그림자 번짐이 비싸서 한 번만 구워 두고 매 프레임 크기만 바꿔 그린다 */
+        let fs=Math.min(W*.19,H*.15,150);
+        const F=s=>'900 '+s+'px "Noto Sans KR","Noto Sans",system-ui,sans-serif';
+        const b=document.createElement('canvas'), q=b.getContext('2d');
+        q.font=F(fs); const tw0=q.measureText(text).width; if(tw0>W*.84) fs*=W*.84/tw0;
+        q.font=F(fs); const tw=q.measureText(text).width, pad=fs*.5, sfs=fs*.34, bh=fs*1.25+(sub?sfs*1.5:0);
+        b.width=Math.ceil((tw+pad*2)*S); b.height=Math.ceil((bh+pad*2)*S);
+        q.scale(S,S); q.textAlign='center'; q.textBaseline='middle'; q.lineJoin='round';
+        const cx=tw/2+pad, cy=pad+fs*.62;
+        q.font=F(fs);
+        q.shadowColor='rgba(255,170,50,.95)'; q.shadowBlur=fs*.3; q.lineWidth=fs*.15; q.strokeStyle='rgba(58,10,4,.96)'; q.strokeText(text,cx,cy);
+        q.shadowBlur=0;
+        const gr=q.createLinearGradient(0,cy-fs*.5,0,cy+fs*.5); gr.addColorStop(0,'#fffbe0'); gr.addColorStop(.42,'#ffd766'); gr.addColorStop(.58,'#f6b93a'); gr.addColorStop(1,'#d9791a');
+        q.fillStyle=gr; q.fillText(text,cx,cy);
+        q.lineWidth=Math.max(1,fs*.014); q.strokeStyle='rgba(255,255,255,.6)'; q.strokeText(text,cx,cy);
+        if(sub){ q.font=F(sfs); q.lineWidth=sfs*.22; q.strokeStyle='rgba(58,10,4,.96)'; q.strokeText('★ '+sub+' ★',cx,cy+fs*.62+sfs*.6); q.fillStyle='#fff3c4'; q.fillText('★ '+sub+' ★',cx,cy+fs*.62+sfs*.6); }
+        return {img:b,w:b.width/S,h:b.height/S,t0:tm,y:H*.36,slam:false};
+    }
+    function start(o){
+        stop(); on=true; c.classList.add('on'); size();
+        tm=0; last=0; Q=1; ema=.016; cardT=-1; ox=o.x; oy=o.y; flash=RM?0:1;
+        rings=[0,.12,.26].map(t=>({t,x:ox,y:oy}));
+        glows.push({x:ox,y:oy,r:Math.min(W,H)*.6,life:.6,max:.6,col:'255,214,110'});
+        for(let i=0;i<70;i++) spark(ox,oy,rnd()*6.2832,Math.min(W,H)*(.3+rnd()*1.1),i%3?'255,214,110':'255,248,232',.7+rnd()*.5,{g:60,dr:2.8});
+        const at=(t,f)=>sched.push({t,f});
+        at(.12,()=>{ banner=mkBanner(o.text,o.sub); });
+        at(.2,()=>{ cannon(-1); cannon(1); SND.pop(0); });
+        [.35,.6,.85,1.1,1.35].forEach((t,i)=>at(t,()=>launch([.2,.8,.5,.32,.68][i],.14+rnd()*.2,['peony','ring','double','crackle','peony'][i],.55,i<3)));
+        at(1.15,()=>{ cannon(-1); cannon(1); SND.pop(0); });
+        for(let t=1.7;t<4.7;t+=.3+rnd()*.22) at(t,()=>launch(.1+rnd()*.8,.08+rnd()*.24,null,.7,rnd()<.4));
+        at(2.7,()=>rain(40)); at(4,()=>rain(40));
+        for(let i=0;i<9;i++) at(4.9+i*.12,()=>launch(.08+i*.105,.08+rnd()*.2,i%3===1?'ring':(i%3?'peony':'crackle'),.8,i%3===0));
+        at(6.05,()=>{ launch(.5,.16,'willow',.9,true); launch(.24,.24,'willow',.6); launch(.76,.24,'willow',.6); rain(60); });
+        sched.sort((a,b)=>a.t-b.t);
+        nextAmb=7.6;
+        raf=requestAnimationFrame(frame);
+    }
+    function stop(){
+        if(raf) cancelAnimationFrame(raf); raf=0;
+        const was=on; on=false;
+        rockets=[]; sparks=[]; conf=[]; glit=[]; rings=[]; glows=[]; sched=[]; banner=null; flash=0;
+        if(was){ g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); c.classList.remove('on'); }
+    }
+    function update(dt){
+        for(let i=rockets.length-1;i>=0;i--){
+            const r=rockets[i]; r.t+=dt; const u=Math.min(1,r.t/r.dur);
+            r.x=r.x0+(r.x1-r.x0)*u+Math.sin(u*9)*3; r.y=r.y0+(r.y1-r.y0)*(1-(1-u)*(1-u));
+            for(let k=0;k<2;k++) spark(r.x,r.y,1.57+(rnd()-.5)*.7,40+rnd()*80,'255,200,120',.22+rnd()*.2,{g:140,dr:1,s:1.5,fl:false});
+            if(u>=1){ rockets.splice(i,1); explode(r.x,r.y,r.type,r.col,r.vol); }
+        }
+        for(let i=sparks.length-1;i>=0;i--){
+            const p=sparks[i]; p.life-=dt;
+            if(p.life<=0){
+                if(p.crk&&sparks.length<CAP) for(let k=0;k<3;k++) spark(p.x,p.y,rnd()*6.2832,30+rnd()*70,'255,248,232',.12+rnd()*.16,{g:40,dr:3,s:1.4,fl:false});
+                sparks[i]=sparks[sparks.length-1]; sparks.pop(); continue;
+            }
+            const k=Math.max(0,1-p.dr*dt); p.vx*=k; p.vy=p.vy*k+p.g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt;
+            const tl=Math.min(1,dt*p.tl); p.tx+=(p.x-p.tx)*tl; p.ty+=(p.y-p.ty)*tl;
+        }
+        const GC=H*.5;
+        for(let i=conf.length-1;i>=0;i--){
+            const p=conf[i]; p.life-=dt;
+            p.vx*=Math.max(0,1-1.6*dt); p.vy=p.vy*Math.max(0,1-(p.vy<0?1.6:3)*dt)+GC*dt;
+            p.ph+=p.vph*dt; p.rot+=p.vr*dt; p.x+=(p.vx+Math.sin(p.ph)*p.sw)*dt; p.y+=p.vy*dt;
+            if(p.life<=0||(p.vy>0&&p.y>H+30)){ conf[i]=conf[conf.length-1]; conf.pop(); }
+        }
+        /* 허공에서 반짝이는 금가루 */
+        if(tm<8&&glit.length<70*dens&&rnd()<dt*26*dens*Q) glit.push({x:rnd()*W,y:rnd()*H*.85,vy:20+rnd()*50,ph:rnd()*6.28,s:5+rnd()*9,life:.7+rnd()*.9,max:1.6,col:rnd()<.6?'255,214,110':'255,248,232'});
+        for(let i=glit.length-1;i>=0;i--){ const p=glit[i]; p.life-=dt; p.y+=p.vy*dt; if(p.life<=0){ glit[i]=glit[glit.length-1]; glit.pop(); } }
+        for(let i=glows.length-1;i>=0;i--){ glows[i].life-=dt; if(glows[i].life<=0) glows.splice(i,1); }
+        if(flash>0) flash=Math.max(0,flash-dt/.5);
+    }
+    function draw(){
+        g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,c.width,c.height); g.setTransform(S,0,0,S,0,0);
+        /* 현수막 뒤 빛줄기 */
+        const bu=banner?tm-banner.t0:-1; let bal=0;
+        if(banner&&bu>=0){ bal=Math.min(1,bu/.3); if(cardT>=0) bal*=Math.max(0,1-(tm-cardT)/.35); }
+        g.globalCompositeOperation='lighter';
+        if(bal>0){
+            const R=Math.min(W,H)*.78, im=fxSpr('burst','255,214,110');
+            g.save(); g.translate(W/2,banner.y); g.rotate(RM?0:tm*.45); g.globalAlpha=bal*.5; g.drawImage(im,-R,-R,R*2,R*2);
+            g.rotate(RM?.2:-tm*.8); g.globalAlpha=bal*.28; g.drawImage(im,-R*.7,-R*.7,R*1.4,R*1.4); g.restore();
+        }
+        if(flash>0){
+            const R=Math.hypot(W,H), gr=g.createRadialGradient(ox,oy,0,ox,oy,R);
+            gr.addColorStop(0,'rgba(255,255,255,1)'); gr.addColorStop(.3,'rgba(255,226,150,.75)'); gr.addColorStop(1,'rgba(255,170,60,.12)');
+            g.globalAlpha=flash*flash*.62; g.fillStyle=gr; g.fillRect(0,0,W,H);
+        }
+        g.globalAlpha=1;
+        for(const r of rings){ const u=(tm-r.t)/.9; if(u<=0||u>=1) continue; g.strokeStyle='rgba(255,220,140,'+((1-u)*.8)+')'; g.lineWidth=12*(1-u)+2; g.beginPath(); g.arc(r.x,r.y,(1-(1-u)*(1-u))*Math.hypot(W,H)*.75,0,6.2832); g.stroke(); }
+        for(const p of glows){ const a=p.life/p.max, r=p.r*(.4+.6*(1-a)); g.globalAlpha=a*a; g.drawImage(fxSpr('glow',p.col),p.x-r,p.y-r,r*2,r*2); }
+        g.lineCap='round';
+        for(const p of sparks){
+            let a=Math.min(1,p.life/p.max*1.7); if(p.fl&&p.life<p.max*.4&&rnd()<.5) a*=.25;
+            g.globalAlpha=a; g.strokeStyle=p.css; g.lineWidth=p.s; g.beginPath(); g.moveTo(p.tx,p.ty); g.lineTo(p.x,p.y); g.stroke();
+        }
+        for(const p of glit){ const a=Math.min(1,p.life/p.max*2.2), r=p.s*(.45+.55*Math.abs(Math.sin(tm*9+p.ph))); g.globalAlpha=a; g.drawImage(fxSpr('star',p.col),p.x-r,p.y-r,r*2,r*2); }
+        g.globalAlpha=1; g.globalCompositeOperation='source-over';
+        /* 색종이 — 팔랑이며 뒤집힌다 */
+        for(const p of conf){
+            const cs=Math.cos(p.rot)*S, sn=Math.sin(p.rot)*S, fy=Math.cos(p.ph*1.3);
+            g.setTransform(cs,sn,-sn*fy,cs*fy,p.x*S,p.y*S);
+            g.globalAlpha=(fy<0?.72:1)*Math.min(1,p.life*1.5); g.fillStyle=p.col; g.fillRect(-p.w/2,-p.h/2,p.w,p.h);
+        }
+        g.setTransform(S,0,0,S,0,0); g.globalAlpha=1;
+        /* '완성!' 현수막: 크게 나타나 쾅 내려앉고, 결과 카드가 뜨면 위로 사라진다 */
+        if(banner&&bu>=0){
+            const b=banner; let sc, al=1, dy=0;
+            if(bu<.3){ const e=bu/.3, s=e*e*(3-2*e); sc=3-2*s; al=e; }
+            else{
+                if(!b.slam){ b.slam=true; ox=W/2; oy=b.y; if(!RM) flash=Math.max(flash,.45); rings.push({t:tm,x:ox,y:oy}); for(let i=0;i<40;i++) spark(W/2+(rnd()-.5)*b.w*.8,b.y+(rnd()-.5)*b.h*.4,rnd()*6.2832,120+rnd()*380,i%2?'255,214,110':'255,248,232',.5+rnd()*.5,{g:120,dr:2.6}); }
+                sc=1+.13*Math.exp(-(bu-.3)*7)*Math.cos((bu-.3)*22)+.018*Math.sin(tm*4.2);
+            }
+            if(cardT>=0){ const v=Math.min(1,(tm-cardT)/.35); al*=1-v; dy=-v*H*.1; sc*=1-.25*v; if(v>=1) banner=null; }
+            if(banner&&al>0){ g.globalAlpha=al; g.drawImage(b.img,W/2-b.w*sc/2,b.y+dy-b.h*sc/2,b.w*sc,b.h*sc); g.globalAlpha=1; }
+        }
+    }
+    function tick(dt){
+        tm+=dt;
+        while(sched.length&&sched[0].t<=tm) sched.shift().f();
+        if(tm>=nextAmb&&tm<END-2.5){ launch(.12+rnd()*.76,.07+rnd()*.2,null,.3); nextAmb=tm+1+rnd()*.8; }
+        update(dt); draw();
+        if(tm>END&&!sparks.length&&!rockets.length&&!conf.length&&!glit.length){ stop(); return false; }
+        return true;
+    }
+    function frame(now){
+        raf=0; if(!on) return;
+        const dt=Math.min(.05,Math.max(0,(now-(last||now))/1000)); last=now;
+        /* 느린 기기: 프레임이 계속 밀리면 입자를 줄인다 */
+        ema+=(dt-ema)*.06; if(tm>1.2&&ema>.03&&Q>.6) Q=.55;
+        if(tick(dt)) raf=requestAnimationFrame(frame);
+    }
+    return {start,stop,card(){ if(on&&cardT<0) cardT=tm; },get on(){ return on; },step(dt){ if(on) tick(dt); }};
+})();
 
 /* ════════════ 저장(이어하기) ════════════ */
 function save(){
@@ -1618,6 +2295,7 @@ function hud(){
     $('vMoves').textContent=T?movesN:0;
     const st=$('stMoves'); st.classList.toggle('warn',!!T&&movesN>0&&movesN<=2); st.classList.toggle('zero',!!T&&movesN===0&&leftN>0);
     $('bUndo').disabled=!undoSt.length;
+    $('prog').style.setProperty('--p',T&&T.length?Math.round((1-leftN/T.length)*1000)/10:0);   /* 별 진행 막대 */
 }
 function show(id,on){ $(id).classList.toggle('show',!!on); }
 function anyOv(){ return ['introOv','pauseOv','clearOv','stuckOv'].some(id=>$(id).classList.contains('show')); }
@@ -1638,7 +2316,7 @@ function goTitle(){
     if(state==='play') save();
     state='title'; paused=false; titleAt=performance.now();
     ['pauseOv','clearOv','stuckOv'].forEach(id=>show(id,false));
-    casc=[]; fireT=0; parts=[];
+    casc=[]; fireT=0; parts=[]; shakeT=0; clearTimeout(cardTimer); CEL.stop(); field.classList.remove('fever');
     refreshIntro(); show('introOv',true);
     dirty();
 }
@@ -1686,12 +2364,22 @@ function refreshIntro(){
 function renderToggles(){
     [['tglIntro'],['tglPause']].forEach(([id])=>{
         const box=$(id); if(!box) return; box.innerHTML='';
-        [['snd','🔊 '+t('sound')],['vib','📳 '+t('vib')],['hl','✨ '+t('hl')]].forEach(([k,label])=>{
+        [['snd','🔊 '+t('sound')],['vib','📳 '+t('vib')],['hl','✨ '+t('hl')],['land','📱 '+t('land')]].forEach(([k,label])=>{
             if(k==='vib'&&!('vibrate' in navigator)) return;
+            if(k==='land'&&!((isTouch||VL_FORCE)&&Math.min(innerWidth,innerHeight)<=540)) return;   /* 폰에서만 보인다 */
             const b=document.createElement('button'); b.type='button'; b.className='tg'+(SET[k]?' on':''); b.textContent=label;
-            b.addEventListener('click',()=>{ SET[k]=!SET[k]; saveSet(); renderToggles(); syncMute(); if(k==='hl') dirty(); if(k==='snd'&&SET.snd) SND.tock(); if(k==='vib'&&SET.vib) vib(12); });
+            b.addEventListener('click',()=>{ SET[k]=!SET[k]; saveSet(); renderToggles(); syncMute(); if(k==='hl') dirty(); if(k==='land') syncLand(); if(k==='snd'&&SET.snd) SND.tock(); if(k==='vib'&&SET.vib) vib(12); });
             box.appendChild(b);
         });
+        /* 판 색 고르기 — 색 동그라미 세 개 */
+        const sw=document.createElement('span'); sw.className='swl'; sw.textContent=t('table');
+        TABLE_IDS.forEach(id=>{
+            const b=document.createElement('button'); b.type='button'; b.className='sw'+((SET.tbl||'green')===id?' on':''); b.setAttribute('aria-label',t('table')+' '+id);
+            b.style.background='radial-gradient(circle at 35% 30%,'+TABLES[id][0]+','+TABLES[id][1]+' 60%,'+TABLES[id][2]+')';
+            b.addEventListener('click',()=>{ setTable(id); renderToggles(); SND.tock(); });
+            sw.appendChild(b);
+        });
+        box.appendChild(sw);
     });
 }
 function syncMute(){ const b=$('btnMute'); b.textContent=SET.snd?'🔊':'🔇'; b.setAttribute('aria-pressed',SET.snd?'false':'true'); }
@@ -1712,7 +2400,13 @@ function logo(){
 
 /* ════════════ 입력: 탭·핀치 확대·끌어서 이동·휠 ════════════ */
 const ptrs=new Map(); let pinch=null, drag=null, downAt=null;
-function lp(e){ const r=cv.getBoundingClientRect(); return [e.clientX-r.left,e.clientY-r.top]; }
+/* 판(field)의 왼쪽 위 — #fx 캔버스·포인터와 같은 좌표계로. 가상 가로에서는 돌리기 전(body 기준) 좌표 */
+function fieldPos(){
+    if(!VL){ const r=cv.getBoundingClientRect(); return [r.left,r.top]; }
+    let x=0,y=0,el=field; while(el&&el!==document.body){ x+=el.offsetLeft; y+=el.offsetTop; el=el.offsetParent; } return [x,y];
+}
+/* 가상 가로: body 가 translateX(100vw) rotate(90deg) 라 화면의 (cx,cy) 는 body 안의 (cy, 폭-cx) */
+function lp(e){ const o=fieldPos(); return VL?[e.clientY-o[0],innerWidth-e.clientX-o[1]]:[e.clientX-o[0],e.clientY-o[1]]; }
 function hit(x,y){
     if(!T||!geo) return -1;
     for(let i=T.length-1;i>=0;i--){
@@ -1848,10 +2542,14 @@ window.addEventListener('pagehide',()=>save());
 window.__mjs={MJ,get state(){return state;},get T(){return T;},get faces(){return faces;},get alive(){return alive;},get free(){return freeA;},
     get score(){return score;},get time(){return playT;},get sel(){return sel;},get hintPair(){return hintPair;},get moves(){return movesN;},get left(){return leftN;},
     get order(){return order;},get known(){return known;},get undoLen(){return undoSt.length;},get zoom(){return zoom;},get rot(){return curRot;},get geo(){return geo;},get TWf(){return TWf;},get combo(){return combo;},get flights(){return flights.length;},
-    screenPos(i){ const [x,y]=tilePos(i); const r=cv.getBoundingClientRect(); return [r.left+x+geo.tw/2,r.top+y+geo.th/2]; },
+    screenPos(i){ const [x,y]=tilePos(i), o=fieldPos(), lx=o[0]+x+geo.tw/2, ly=o[1]+y+geo.th/2; return VL?[innerWidth-ly,lx]:[lx,ly]; },
+    get vland(){return VL;},
     tap,hint,undo,shuffle,startGame,restartSame,setPaused,goTitle,setZoom,
     solveNow(b){ return MJ.solveR(T,faces,alive,b||200000,4); },
-    clearFx(){ pops=[]; parts=[]; casc=[]; fireT=0; wig={}; wigRed={}; hintPair=null; },
+    clearFx(){ pops=[]; parts=[]; casc=[]; fireT=0; shakeT=0; wig={}; wigRed={}; hintPair=null; CEL.stop(); },
+    get parts(){return parts.length;},get cel(){return CEL.on;},showClear,
+    /* 프레임을 손으로 한 장씩 — rAF 가 멈춘 창(숨은 탭·헤드리스)에서 연출을 검증할 때 */
+    step(dt,ts){ update(dt); render(ts==null?performance.now()/1000:ts); CEL.step(dt); },
     bench(n){ n=n||60; const t0=performance.now(); for(let i=0;i<n;i++) render(i/60); return (performance.now()-t0)/n; },
     rebuildMs(){ const t0=performance.now(); buildSprites(); return performance.now()-t0; },
     skipAnims(){ flights.forEach(f=>{ if(!f.hit) impact(f); }); flights=[]; afterFlights(); }};
@@ -1902,7 +2600,7 @@ try{ MJArt.loadFont().then(()=>{ MJArt.clear(); if(geo) buildSprites(); logo(); 
         LpRooms.adapter({gameId:RACE.gameId,kind:'race',seats:[2,8],max:12,lateJoin:'nextRound',migratable:true,options:RACE.options,race:RACE});
         UI.config({onStart:function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; }});
         if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
-        const sc=document.createElement('script'); sc.src='/js/lpRoomsRace.js?v=1795505705';
+        const sc=document.createElement('script'); sc.src='/js/lpRoomsRace.js?v=1795696631';
         sc.onload=function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
         document.body.appendChild(sc);
     });
@@ -1913,7 +2611,7 @@ try{ MJArt.loadFont().then(()=>{ MJArt.clear(); if(geo) buildSprites(); logo(); 
 <script>
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1795505705" defer></script>
+<script src="/js/siteFooter.js?v=1795696631" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
