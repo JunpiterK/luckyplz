@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795706135">
+<meta name="lp-build" content="1795708220">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795706135";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795708220";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="robots" content="noindex, nofollow">
@@ -178,6 +178,13 @@ svg{display:block;overflow:visible}
 .gate{max-width:520px;margin:18vh auto 0;text-align:center;padding:0 16px;color:var(--ink2)}
 .gate h1{font-size:18px;margin-bottom:10px;color:var(--ink)}
 .gate code{background:var(--card2);padding:2px 6px;border-radius:5px;font-size:12.5px}
+.orders{margin:12px 0}
+.orders>summary{cursor:pointer;font-size:15px;font-weight:750}
+.orders>summary span{font-size:12px;color:var(--ink2);margin-left:6px}
+.order{border-top:1px solid var(--line);padding:12px 0;overflow-wrap:anywhere}
+.order p{margin:5px 0;color:var(--ink2)}
+.order-note{white-space:pre-wrap}
+.order select{color:var(--ink);background:var(--card2);border:1px solid var(--axis);border-radius:6px;padding:5px}
 .banner{margin-top:12px;padding:12px 14px;border-radius:12px;border:1px solid rgba(201,133,0,.45);background:rgba(201,133,0,.08);font-size:13px;color:var(--ink2)}
 .foot{margin-top:16px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 16px}
 .foot button{color:#9ec5f4;text-decoration:underline}
@@ -215,6 +222,14 @@ svg{display:block;overflow:visible}
   </div>
 
   <div id="banner"></div>
+  <details class="card orders" id="packageInbox">
+    <summary>기업 퀴즈 패키지 신청 <span id="packageCount"></span></summary>
+    <p class="note">신청 담당자에게 이메일로 행사 일정과 준비 범위를 확인한 뒤 처리 상태를 기록하세요.</p>
+    <p class="note" id="packageMessage" role="status"></p>
+    <div id="packageRows"></div>
+    <button type="button" class="refresh" id="packageReload">신청 목록 새로 고침</button>
+    <button type="button" class="refresh" id="packageMore" hidden>이전 신청 더 보기</button>
+  </details>
   <div class="kpis" id="kpis"></div>
 
   <div class="grid g2">
@@ -311,7 +326,7 @@ svg{display:block;overflow:visible}
 <div id="tip" hidden></div>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795706135"></script>
+<script src="/js/supabase-config.js?v=1795708220"></script>
 <script>
 (function(){
 'use strict';
@@ -674,18 +689,77 @@ async function moreSessions(){
 async function loadLive(){try{drawLive(await rpc('lp_ops_live',{p_f:filt()}))}catch(e){}}
 async function loadDays(){try{drawLong(await rpc('lp_ops_days',{p_days:400}))}catch(e){}}
 
+const orderStatuses={new:'신규 접수',contacted:'연락 완료',confirmed:'예약 확정',closed:'종료'};
+const orderSources={home:'메인',quiz:'퀴즈 진행자',direct:'직접 방문'};
+let orderListVersion=0,orderOffset=0;
+function makeOrder(row){
+  const el=document.createElement('article');
+  el.className='order';
+  const date=new Date(row.created_at).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul'});
+  el.innerHTML=`<strong>${esc(row.company)}</strong> · ${esc(row.contact_name)}
+    <p>${esc(row.receipt)} · ${esc(date)} 접수 · ${esc(orderSources[row.source]||row.source)}</p>
+    <p>${esc(row.event_date||'일정 미정')} · ${esc(row.attendees==null?'인원 미정':row.attendees+'명')} · ${esc(row.email)}</p>
+    <p class="order-note">${esc(row.note)}</p>
+    <label>처리 상태 <select>${Object.entries(orderStatuses).map(([v,label])=>`<option value="${v}">${label}</option>`).join('')}</select></label>
+    <button type="button" class="refresh" disabled>상태 저장</button> <span role="status"></span>`;
+  const select=el.querySelector('select'),save=el.querySelector('button'),message=el.querySelector('[role=status]');
+  select.value=row.status;
+  select.onchange=()=>{save.disabled=select.value===row.status;message.textContent=''};
+  save.onclick=async()=>{
+    select.disabled=save.disabled=true;
+    try{
+      const result=await rpc('lp_quiz_package_status',{p_id:row.id,p_expected_status:row.status,p_status:select.value});
+      if(!result.ok){
+        if(result.error==='stale_status'||result.error==='not_found'){
+          if(await loadOrders())$('packageMessage').textContent=result.error==='not_found'?'목록이 변경되어 다시 불러왔습니다.':'다른 운영자가 상태를 변경했습니다. 최신 상태를 확인해 주세요.';
+        }else{message.textContent='상태 값을 확인하고 다시 저장해 주세요.'}
+        return;
+      }
+      row.status=result.status;select.value=row.status;message.textContent='저장했습니다.';
+    }catch(e){message.textContent='저장하지 못했습니다. 다시 시도해 주세요.'}
+    finally{select.disabled=false;save.disabled=select.value===row.status}
+  };
+  return el;
+}
+async function loadOrders(append=false){
+  const version=++orderListVersion,offset=append?orderOffset:0;
+  const more=$('packageMore');
+  more.disabled=true;$('packageMessage').textContent='신청 목록을 불러오는 중…';
+  try{
+    const result=await rpc('lp_quiz_package_list',{p_limit:20,p_offset:offset});
+    if(version!==orderListVersion)return false;
+    const list=$('packageRows');
+    if(!append)list.replaceChildren();
+    result.rows.forEach(row=>list.append(makeOrder(row)));
+    orderOffset=offset+result.rows.length;
+    $('packageCount').textContent='전체 '+result.total+'건';
+    $('packageMessage').textContent=result.total?'':'아직 접수된 신청이 없습니다.';
+    more.hidden=orderOffset>=result.total;
+    return true;
+  }catch(e){if(version===orderListVersion)$('packageMessage').textContent='신청 목록을 불러오지 못했습니다. 다시 시도해 주세요.';return false}
+  finally{if(version===orderListVersion)more.disabled=false}
+}
+
 function wire(){
+  $('packageInbox').addEventListener('toggle',()=>{if($('packageInbox').open)loadOrders()});
+  $('packageReload').addEventListener('click',()=>loadOrders());
+  $('packageMore').addEventListener('click',()=>loadOrders(true));
   document.querySelectorAll('#rangeSeg button').forEach(b=>b.addEventListener('click',()=>{st.r=b.dataset.r;loadAll()}));
   document.querySelectorAll('#metricSeg button').forEach(b=>b.addEventListener('click',()=>{st.m=b.dataset.m;saveUi();if(st.board)drawTrend(st.board)}));
   document.querySelectorAll('#heatSeg button').forEach(b=>b.addEventListener('click',()=>{st.heat=b.dataset.h;saveUi();if(st.board)drawHeat(st.board)}));
   $('incMe').addEventListener('change',e=>{st.incMe=e.target.checked;loadAll();loadLive()});
   $('incDc').addEventListener('change',e=>{st.incDc=e.target.checked;loadAll()});
-  $('refresh').addEventListener('click',()=>{loadAll();loadLive();loadDays()});
+  $('refresh').addEventListener('click',()=>{loadAll();loadLive();loadDays();if($('packageInbox').open)loadOrders()});
   $('livePill').addEventListener('click',()=>$('liveList').scrollIntoView({behavior:'smooth',block:'center'}));
   let rt=0;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{const b=st.board;if(!b)return;drawTrend(b);drawMap(b.countries);drawDist(b);if(st.live)drawLive(st.live);if(st.days)drawLong(st.days)},200)});
   /* 지금 접속은 30초, 전체는 5분마다(화면이 보일 때만) */
   setInterval(()=>{if(document.visibilityState==='visible')loadLive()},30000);
   setInterval(()=>{if(document.visibilityState==='visible'&&st.r!=='yesterday')loadAll()},300000);
+}
+
+function opsLoginUrl(){
+  const target=location.hash==='#packageInbox'?'/ops/#packageInbox':'/ops/';
+  return '/auth/?return='+encodeURIComponent(target);
 }
 
 /* 권한 없음 — 막다른 화면이 되지 않게 어떤 계정인지 보여 주고, 계정 전환과
@@ -710,20 +784,21 @@ async function showDenied(user){
     const manual=()=>{const t=$('dSql');t.hidden=false;t.select();$('dCopy').textContent='아래 글을 직접 복사하세요'};
     try{navigator.clipboard.writeText(sql).then(done,manual)}catch(e){manual()}
   });
-  $('dSwitch').addEventListener('click',async()=>{try{await signOut()}catch(e){}location.replace('/auth/?return='+encodeURIComponent('/ops/'))});
+  $('dSwitch').addEventListener('click',async()=>{try{await signOut()}catch(e){}location.replace(opsLoginUrl())});
   $('dReload').addEventListener('click',()=>location.reload());
 }
 
 async function init(){
   if(!MOCK){
     let user=null;try{user=await getUser()}catch(e){}
-    if(!user){location.replace('/auth/?return='+encodeURIComponent('/ops/'));return}
+    if(!user){location.replace(opsLoginUrl());return}
     let ok=false;try{const r=await getSupabase().rpc('is_admin');ok=r.data===true}catch(e){}
     if(!ok){showDenied(user);return}
     if(!isMe())setMe(true);   /* 운영자 기기는 기본으로 통계에서 뺀다(하단에서 해제 가능) */
   }
   $('gate').hidden=true;$('app').hidden=false;
   wire();loadAll();loadLive();loadDays();
+  if(location.hash==='#packageInbox')$('packageInbox').open=true;
 }
 init();
 })();
