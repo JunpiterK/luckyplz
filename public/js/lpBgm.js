@@ -59,7 +59,7 @@
 
   /* Skip games whose pages already wire their own audio engine. */
   var SKIP_GAMES={
-    'yut':true,'ludo':true,'prism-hex':true,'yacht':true,'omok':true,'lots':true,'janggi':true,'brick':true,   /* brick: 자체 WebAudio 루프(2026-09-27) */   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
+    'yut':true,'ludo':true,'yacht':true,'omok':true,'lots':true,'janggi':true,'brick':true,   /* brick: 자체 WebAudio 루프(2026-09-27) */   /* 2026-09-25 보드게임 — 전용 BGM 파일 없음(404 방지) */
     'car-racing':true,
     'dodge':true,
     'tetris':true,    /* 3-tier dynamic BGM tied to stack height */
@@ -82,7 +82,7 @@
      LpBgm.setVolume to scale further down at runtime. */
   var DEFAULT_VOLUME=0.3;
   /* 트랙 수: 기본 4곡. 더 많은 게임만 여기에 적는다(전체를 올리면 4곡짜리 게임이 없는 track5 를 찔러 404 가 난다) */
-  var TRACK_COUNT={'mahjong-solitaire':5};   /* 2026-11-26 운영자 제작 5곡 */
+  var TRACK_COUNT={'mahjong-solitaire':5,'prism-hex':5};   /* 2026-11-26 운영자 제작 5곡씩 */
   var MAX_TRACKS=TRACK_COUNT[gameId]||4;
   var TRACK_BASE='/assets/bgm/'+gameId+'/track';
   var MUTE_KEY='lp_bgm_muted';
