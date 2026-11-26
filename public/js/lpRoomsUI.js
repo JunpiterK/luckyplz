@@ -1670,6 +1670,14 @@
             var room = null, act = jparse(ssGet('lpr_active'), null);
             /* 허브에서는 '먼저 모이기' 방만 이어받는다 — 다른 게임 방은 HUD·최근 방으로 돌아간다 */
             var skipResume = pg === 'lobby' && act && act.gameId && act.gameId !== 'lobby' && !/[?&]r=/.test(location.search);
+            /* 게임 페이지에서는 '그 게임의 방'만 이어받는다(2026-11-26 버그: 루도 방을 열어 둔 탭에서 윷놀이로 가면 윷놀이 화면에
+               루도 대기실이 떠서, 설정하고 시작을 누르면 루도로 넘어갔다). 방장이 게임을 바꾼 이동은 lpr_active.gameId 가 먼저 새 게임으로
+               바뀌고 주소에 ?r=코드 가 붙어 오므로 여기 걸리지 않는다. 턴제 커널(lpRoomsTurn.boot)과 같은 규칙 — 방 기록은 지우지 않아
+               원래 게임으로 돌아가면 그대로 이어진다 */
+            if (!skipResume && pg && pg !== 'lobby' && act && act.gameId && act.gameId !== pg && act.gameId !== 'lobby') {
+                var rq = null; try { rq = G.LpRooms.util.normCode(new URLSearchParams(location.search).get('r') || ''); } catch (_) {}
+                if (!rq || rq !== act.code) skipResume = true;
+            }
             if (!skipResume) { try { room = await G.LpRooms.resume(); } catch (_) {} }
             if (room) { bind(room); return room; }
             var q = null; try { q = new URLSearchParams(location.search); } catch (_) {}

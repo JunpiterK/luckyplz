@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795701948">
+<meta name="lp-build" content="1795705120">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795701948";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795705120";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -31,7 +31,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@500;700;900&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet">
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
 <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
-<script src="/js/lpI18n.js?v=1795701948"></script>
+<script src="/js/lpI18n.js?v=1795705120"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 :root{
@@ -889,73 +889,79 @@ function sfxStage(){
   [392, 523, 659].forEach((n,i)=>tone({freq:n, type:'triangle', dur:0.09, vol:0.14, at:i*0.07}));
 }
 
-// ======== MUSIC (procedural loop, 2026-09-27) ========
-/* 벽돌깨기에는 BGM 파일이 없다(/assets/bgm/brick/ 이 비어 공용 lpBgm 이 404 만 내던 상태).
-   대신 WebAudio 로 짜는 짧은 루프: 기본은 베이스 + 하이햇 + 약한 킥만 잔잔히.
-   콤보 ×2 부터 스네어·박수, ×3 부터 아르페지오, ×4 부터 리드가 얹혀 연쇄가 '음악으로' 고조된다.
-   헤더 🔊(S.muted) 와 사이트 BGM 음소거(LpBgm.isMuted) 둘 다 따른다. 일시정지·결과 화면에서는 멈춘다.
-   스케줄러는 30ms 간격 setInterval + 120ms 앞 예약 — 프레임 루프를 쓰지 않는다 */
+// ======== MUSIC (운영자 제작 7곡, 2026-11-26 — 상황별 선곡) ========
+/* /assets/bgm/brick/track1~7.mp3. 빠르기를 재서(스펙트럼 변화량 자기상관) 느린 순으로 번호를 붙였다:
+     잔잔 calm  1 Plucky Adventure ≈125 · 2 Plucky Arcade Fun ≈128 · 3 Bouncy Block Jump ≈129
+     보통 mid   4 Brick Breaker Groove ≈131 · 5 Brick Breaker Bounce ≈133
+     긴박 fast  6 Pixel Dash ≈144 · 7 Brick Breaker Burst ≈144
+   상황 → 묶음:  스테이지 1~6 = 잔잔 · 7~12 = 보통 · 13~18 = 긴박
+                 목숨이 하나 남으면 스테이지와 상관없이 긴박(1UP 으로 벗어나면 원래 묶음으로)
+                 벽돌이 15% 이하로 남은 막바지는 한 단계 위 묶음(잔잔→보통, 보통→긴박)
+   묶음이 바뀌면 0.6초 겹쳐 넘기고, 같은 묶음 안에서는 곡이 끝날 때 다른 곡으로. 스테이지마다 직전 곡은 피한다.
+   콤보가 이어지면 음량이 조금 올라간다(예전 합성 루프의 '연쇄가 음악으로 고조'를 대신한다).
+   헤더 🔊(S.muted) 와 사이트 BGM 음소거(LpBgm.isMuted) 둘 다 따른다. 일시정지는 멈췄다가 그 자리에서 잇고, 결과 화면에서는 줄이며 끝낸다.
+   API 는 예전과 같다: start · stop · level(콤보) — 추가로 mood()(목숨·남은 벽돌이 바뀌었을 때 다시 고른다) · next()(새 스테이지) */
 const Music = (()=>{
-  const BPM = 122, STEP = 60 / BPM / 4;
-  const PROG = [[57,60,64],[53,57,60],[48,52,55],[55,59,62]];   // Am F C G
-  let on = false, timer = 0, nextT = 0, step = 0, bus = null, lvl = 1;
-  const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+  const BASE = '/assets/bgm/brick/track', POOLS = {calm:[1,2,3], mid:[4,5], fast:[6,7]}, UP = {calm:'mid', mid:'fast', fast:'fast'};
+  const VOL = 0.3;
+  let on = false, cur = null, curIdx = 0, curPool = '', lastIdx = 0, combo = 1, fades = [], fresh = false;
   function silenced(){
     try{ if(window.LpBgm && LpBgm.isMuted && LpBgm.isMuted()) return true; }catch(_){}
     return S.muted;
   }
-  function note(t, m, dur, type, vol){
-    const a = S.audio;
-    const o = a.actx.createOscillator(), g = a.actx.createGain();
-    o.type = type; o.frequency.setValueAtTime(mtof(m), t);
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(bus); o.start(t); o.stop(t + dur + 0.02);
+  function wantPool(){
+    let p = S.level <= 6 ? 'calm' : (S.level <= 12 ? 'mid' : 'fast');
+    if(S.bricksTotal > 0 && S.bricksLeft > 0 && S.bricksLeft <= S.bricksTotal * 0.15) p = UP[p];
+    if(S.lives <= 1) p = 'fast';
+    return p;
   }
-  function perc(t, f, dur, vol, type){
-    const a = S.audio;
-    const src = a.actx.createBufferSource(); src.buffer = a.nbuf;
-    const fl = a.actx.createBiquadFilter(); fl.type = type; fl.frequency.value = f;
-    const g = a.actx.createGain();
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(fl); fl.connect(g); g.connect(bus); src.start(t, Math.random() * 0.8); src.stop(t + dur + 0.02);
+  const vol = ()=> Math.min(0.42, VOL * (1 + Math.min(Math.max(combo - 1, 0), 4) * 0.08));
+  function fade(a, to, ms, done){
+    const from = a.volume, t0 = performance.now();
+    const id = setInterval(()=>{
+      const u = Math.min(1, (performance.now() - t0) / ms);
+      try{ a.volume = Math.max(0, Math.min(1, from + (to - from) * u)); }catch(_){}
+      if(u >= 1){ clearInterval(id); fades = fades.filter(x => x !== id); if(done) done(); }
+    }, 40);
+    fades.push(id);
   }
-  function kick(t, vol){
-    const a = S.audio;
-    const o = a.actx.createOscillator(), g = a.actx.createGain();
-    o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.18);
-  }
-  function tick(){
-    if(!on) return;
-    if(silenced() || !S.audio){ stop(); return; }
-    const ct = S.audio.actx.currentTime;
-    if(nextT < ct) nextT = ct + 0.04;
-    try{
-      while(nextT < ct + 0.12){
-        const bar = Math.floor(step / 16) % 4, s16 = step % 16, ch = PROG[bar];
-        if(s16 === 0 || s16 === 8) kick(nextT, 0.16);
-        if(lvl >= 2 && (s16 === 4 || s16 === 12)){ kick(nextT, 0.1); perc(nextT, 1800, 0.12, 0.09, 'bandpass'); }
-        if(s16 % 2 === 1) perc(nextT, 8000, 0.03, lvl >= 3 ? 0.05 : 0.03, 'highpass');
-        if(s16 === 0 || s16 === 3 || s16 === 6 || s16 === 10 || s16 === 14) note(nextT, ch[0] - 24, STEP * 1.8, 'triangle', 0.1);
-        if(lvl >= 3) note(nextT, ch[s16 % 3] + 12 + (s16 >= 8 ? 12 : 0), STEP * 0.9, 'square', 0.022);
-        if(lvl >= 4 && s16 % 4 === 0) note(nextT, ch[(s16 / 4) % 3] + 24, STEP * 3.5, 'sawtooth', 0.02);
-        nextT += STEP; step++;
-      }
-    }catch(_){}
+  function kill(a){ try{ a.pause(); a.src = ''; a.load(); }catch(_){} }
+  function play(pool, xfade){
+    let list = POOLS[pool].filter(i => i !== curIdx && i !== lastIdx);
+    if(!list.length) list = POOLS[pool].filter(i => i !== curIdx);
+    if(!list.length) list = POOLS[pool];
+    const pick = list[Math.floor(Math.random() * list.length)];
+    const old = cur;
+    if(old){ old.onended = null; if(xfade) fade(old, 0, 600, ()=>kill(old)); else kill(old); }
+    const a = new Audio(BASE + pick + '.mp3');
+    a.preload = 'auto'; a.volume = xfade ? 0 : vol();
+    a.onended = ()=>{ if(on && cur === a) play(wantPool(), false); };
+    a.onerror = ()=>{ if(cur === a){ cur = null; } };
+    lastIdx = curIdx; cur = a; curIdx = pick; curPool = pool; fresh = false;
+    const p = a.play(); if(p && p.catch) p.catch(()=>{});
+    if(xfade) fade(a, vol(), 600);
   }
   function start(){
-    if(on || silenced()) return;
-    const a = ensureAudio(); if(!a) return;
-    if(!bus){ bus = a.actx.createGain(); bus.gain.value = 0.55; bus.connect(a.master); }
-    on = true; nextT = 0; step = 0;
-    timer = setInterval(tick, 30);
-    tick();
+    if(silenced()){ stop(); return; }
+    const pool = wantPool();
+    if(on && cur && curPool === pool && !fresh) return;
+    on = true;
+    fades.forEach(clearInterval); fades = [];   /* 줄이던 중이었으면 그만둔다 */
+    if(cur && curPool === pool && !fresh){
+      try{ cur.volume = vol(); const p = cur.play(); if(p && p.catch) p.catch(()=>{}); }catch(_){}
+    } else play(pool, !!(cur && !cur.paused));
   }
-  function stop(){ on = false; clearInterval(timer); timer = 0; }
-  return { start, stop, level(l){ lvl = l; }, get on(){ return on; } };
+  /* 일시정지·음소거·결과: 멈춘다(곡과 자리는 그대로 두어 다시 시작하면 이어진다) */
+  function stop(){
+    on = false;
+    if(cur && !cur.paused){ const a = cur; fade(a, 0, 250, ()=>{ if(!on || cur !== a){ try{ a.pause(); }catch(_){} } }); }
+  }
+  /* 목숨·남은 벽돌이 바뀌었을 때: 묶음이 달라졌으면 겹쳐 넘긴다 */
+  function mood(){ if(on && cur && wantPool() !== curPool) play(wantPool(), true); }
+  return { start, stop, mood,
+    next(){ fresh = true; },
+    level(l){ combo = l || 1; if(on && cur && !fades.length){ try{ cur.volume = vol(); }catch(_){} } },
+    get on(){ return on; }, get track(){ return curIdx; }, get pool(){ return curPool; } };
 })();
 
 // ======== BRICK TYPES ========
@@ -1259,7 +1265,7 @@ function applyPowerUp(t){
     setEffect('sticky', 18000);
     S.paddleSticky = true;
   } else if(t==='life'){
-    S.lives = Math.min(S.lives+1, C.MAX_LIVES);
+    S.lives = Math.min(S.lives+1, C.MAX_LIVES); Music.mood();
   } else if(t==='bomb'){
     S.bombCharges = 3;
   } else if(t==='pierce'){
@@ -1795,7 +1801,7 @@ function hitBrick(br, hx, hy, opt){
   S.score += pts;
   S.stageBlockScore += pts;
   if(br.hp <= 0){
-    S.bricksLeft = Math.max(0, S.bricksLeft - 1);
+    S.bricksLeft = Math.max(0, S.bricksLeft - 1); Music.mood();
     spawnShards(br, t, hx, hy, br.maxHp >= 3 || t.gold ? 1.35 : 1);
     /* 단단한 벽돌·금 벽돌을 부순 순간 — 짧은 정지(그림만) + 진동 */
     if(!RM && !aoe && (t.gold || br.maxHp >= 3)){ S.hitstop = Math.max(S.hitstop, t.gold ? 55 : 34); buzz(t.gold ? 22 : 12); }
@@ -1855,6 +1861,7 @@ function loseLife(){
     Music.stop();
     return;
   }
+  Music.mood();   /* 목숨이 하나 남으면 긴박한 곡으로 */
   S.phase = 'respawn'; S.phaseT = 0;
 }
 function startClearSeq(){
@@ -3265,6 +3272,9 @@ function loop(t){
 /* 프레임 비용(물리+그리기) 측정 → 품질 단계 자동 조절. window.__brickPerf 로 최근 600 프레임을 볼 수 있다 */
 const PERF = { buf: new Float32Array(600), i: 0, n: 0 };
 window.__brickPerf = { get: ()=>({ q: Q.lvl, ema: Q.ema, costs: Array.from(PERF.buf.subarray(0, Math.min(PERF.n, 600))) }), reset: ()=>{ PERF.i = 0; PERF.n = 0; } };
+/* 검증용 — 상황별 선곡을 콘솔에서 확인한다(게임 동작에는 쓰이지 않는다): __brickMusic.state() · .sim({level,lives,left}) */
+window.__brickMusic = { state: ()=>({ on: Music.on, track: Music.track, pool: Music.pool, level: S.level, lives: S.lives, left: S.bricksLeft, total: S.bricksTotal }),
+  sim(o){ const k = {level:S.level, lives:S.lives, left:S.bricksLeft}; if(o.level != null) S.level = o.level; if(o.lives != null) S.lives = o.lives; if(o.left != null) S.bricksLeft = o.left; if(o.next){ Music.next(); Music.start(); } else Music.mood(); const r = {track: Music.track, pool: Music.pool}; S.level = k.level; S.lives = k.lives; S.bricksLeft = k.left; return r; } };
 function perfSample(cost){
   PERF.buf[PERF.i] = cost; PERF.i = (PERF.i + 1) % 600; PERF.n++;
   Q.ema += (cost - Q.ema) * 0.08;
@@ -3309,14 +3319,14 @@ function startGame(fromIntro){
   syncPauseNav();
   S.uiDirty = true;
   fitCanvas();
-  Music.start();
+  Music.next(); Music.start();
 }
 function nextLevel(){
   levelOv.classList.remove('show');
   S.level++;
   resetStageState();
   S.running = true; S.paused = false;
-  Music.start();
+  Music.next(); Music.start();
   document.getElementById('btnPause').textContent = 'PAUSE';
   syncPauseNav();
   S.uiDirty = true;
@@ -3396,7 +3406,7 @@ if(window.__LP_BRICK_SIM__){
     LpRooms.adapter({ gameId: RACE.gameId, kind: 'race', seats: [2, 8], max: 12, lateJoin: 'nextRound', migratable: true, options: [], race: RACE });
     UI.config({ onStart: function(room){ if(window.LpRoomsRace) window.LpRoomsRace.hostStart(room); return false; } });
     if(window.LpRoomsRace){ window.LpRoomsRace.register(RACE); return; }
-    const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1795701948';
+    const sc = document.createElement('script'); sc.src = '/js/lpRoomsRace.js?v=1795705120';
     sc.onload = function(){ if(window.LpRoomsRace) window.LpRoomsRace.register(RACE); };
     document.body.appendChild(sc);
   });
@@ -3408,7 +3418,7 @@ if(window.__LP_BRICK_SIM__){
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1795701948" defer></script>
+<script src="/js/siteFooter.js?v=1795705120" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
