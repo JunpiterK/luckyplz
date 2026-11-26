@@ -141,7 +141,8 @@ begin
           and not exists (select 1 from public.qlive_answers a where a.code = p_code and a.q = p_q and a.pid = p.pid)
     ) then
         update public.qlive_rooms set ends_at = now() + interval '600 milliseconds', rev = rev + 1
-         where code = p_code and phase = 'question' and q_index = p_q;
+         where code = p_code and phase = 'question' and q_index = p_q and phase_at = r.phase_at
+           and paused_left_ms is null and ends_at = r.ends_at;
     end if;
     return jsonb_build_object('ok', true, 'dup', false, 'choice', p_choice);
 end $$;
@@ -151,6 +152,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare r public.qlive_rooms%rowtype; is_host boolean := false; me public.qlive_players%rowtype;
         qq jsonb; res jsonb; show_c boolean; counts jsonb; nans int; nact int; nplay int;
         my_ans public.qlive_answers%rowtype; my_rank int; top jsonb; lobby jsonb; opts int;
+        shortened_at timestamptz; shortened_rev bigint;
 begin
     perform public._qlive_advance(p_code);
     select * into r from public.qlive_rooms where code = p_code;
@@ -169,6 +171,24 @@ begin
 
     select count(*), count(*) filter (where seen_at > now() - interval '20 seconds') into nplay, nact
     from public.qlive_players where code = p_code and not kicked;
+
+    if r.q_index >= 0 and r.q_index < r.total then
+        select count(*) into nans from public.qlive_answers where code = p_code and q = r.q_index;
+    end if;
+    -- The last simultaneous submissions can each see the other as uncommitted.
+    -- Reconcile after commit on the host poll. Each currently active seat needs its own answer.
+    if is_host and r.phase = 'question' and r.paused_left_ms is null
+       and r.ends_at > now() + interval '1 second' and nact > 0 and nans >= nact then
+        update public.qlive_rooms set ends_at = now() + interval '600 milliseconds', rev = rev + 1
+         where code = p_code and phase = 'question' and q_index = r.q_index and phase_at = r.phase_at
+           and paused_left_ms is null and ends_at = r.ends_at
+           and (select bool_and(a.pid is not null)
+                  from public.qlive_players p
+                  left join public.qlive_answers a on a.code = p.code and a.q = r.q_index and a.pid = p.pid
+                 where p.code = p_code and not p.kicked and p.seen_at > now() - interval '20 seconds')
+         returning ends_at, rev into shortened_at, shortened_rev;
+        if found then r.ends_at := shortened_at; r.rev := shortened_rev; end if;
+    end if;
 
     res := jsonb_build_object(
         'ok', true, 'now', (extract(epoch from now())*1000)::bigint, 'rev', r.rev,
@@ -189,7 +209,6 @@ begin
             'c', case when show_c or is_host then (qq->>'c')::int end,
             'h', case when show_c then qq->>'h' end,
             'img', qq->>'img'));
-        select count(*) into nans from public.qlive_answers where code = p_code and q = r.q_index;
         res := res || jsonb_build_object('answered', nans);
         if show_c or is_host then
             select coalesce(jsonb_agg(coalesce(c.cnt,0) order by g.i), '[]'::jsonb) into counts
