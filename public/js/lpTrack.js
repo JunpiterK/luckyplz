@@ -78,7 +78,12 @@
         touchSes();S.n=(S.n||0)+1;put('lp_ses',JSON.stringify(S));
         pv=uuid();sp=S.n;acc=0;lastAct=Date.now();since=vis()?lastAct:null;hbN=0;lastFinal=-1;
         var q=new URLSearchParams(location.search),ref='';
-        try{if(document.referrer&&new URL(document.referrer).host!==location.host)ref=document.referrer.slice(0,400)}catch(e){}
+        try{
+            if(document.referrer){
+                var from=new URL(document.referrer);
+                if(from.host!==location.host)ref=/^\/auth(?:\/|$)/.test(location.pathname)?from.origin:document.referrer.slice(0,400);
+            }
+        }catch(e){}
         ctx={id:pv,sid:S.id,vid:vid,path:path(),sp:sp,new:!!S.nw,vn:S.vn,
             ref:sp===1?ref:'',utm:sp===1?(q.get('utm_source')||''):'',cmp:sp===1?(q.get('utm_campaign')||''):'',
             lang:get('luckyplz_lang')||'',blang:navigator.language||'',

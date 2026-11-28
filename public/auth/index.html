@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795838734">
+<meta name="lp-build" content="1795840418">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795838734";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795840418";try{if (/[?#&](?:code|state|access_token|refresh_token|error|error_code|error_description)=/.test(location.search+location.hash))return;fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -21,10 +22,17 @@
     <meta name="theme-color" content="#0A0A1A">
     <link rel="apple-touch-icon" href="/assets/icon-192.png?v=1781415816">
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ"></script>
-    <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}if(/(^|\.)luckyplz\.com$/.test(location.hostname)){gtag('js',new Date());gtag('config','G-NZDPE3H3DQ');}</script>
+    <script>
+    // Capture the callback shape before the Supabase SDK consumes its URL.
+    const authLanding=(()=>{
+        const q=new URLSearchParams(location.search),h=new URLSearchParams(location.hash.slice(1));
+        return {code:q.get('code'),state:q.get('state'),error:q.get('error')||h.get('error'),
+            errorCode:q.get('error_code')||h.get('error_code'),implicit:h.has('access_token')||h.has('refresh_token')};
+    })();
+    </script>
     <style>
 *{margin:0;padding:0;box-sizing:border-box}
+[hidden]{display:none!important}
 :root{--primary:#FF6B35;--secondary:#00D9FF;--accent:#FFE66D;--accent-warm:#FF9A3C;--danger:#FF3366;--success:#00FF88;--dark:#0A0A1A;--muted:rgba(255,255,255,.55);--muted-2:rgba(255,255,255,.35);--muted-3:rgba(255,255,255,.18)}
 /* flex-direction:column because siteFooter.js injects a .lp-site-footer
    element at the end of <body>; with the default flex-direction:row that
@@ -142,25 +150,10 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
         <div class="logo" onclick="location.href='/'">Lucky Please!</div>
         <div class="subtitle" id="subtitle">Join the fun! Sign in to play with friends.</div>
 
-        <!-- OAUTH-ONLY AUTH (email/password 가입 제거됨)
-             ─────────────────────────────────────────────
-             이메일 인증 메일 배달 문제 (Supabase 기본 SMTP 시간당
-             3통 한도 + 한국 ISP 스팸 필터 차단) 가 반복적으로
-             가입을 막아서 OAuth 전용으로 단순화. Google · Kakao
-             모두 자체적으로 이메일 검증을 끝낸 상태로 Supabase 에
-             세션을 만들어주므로 verification 메일 발송이 필요
-             없음 → 100% 가입 성공.
-
-             동의 절차는 KISA 정통망법 50조에 따라 반드시 OAuth
-             redirect 전에 이루어져야 함 (사용자가 명시적으로 동의
-             한 후에 외부 서비스로 정보 전송). 따라서 동의 블록을
-             OAuth 버튼 위에 두고, [필수] 두 항목 다 체크되기
-             전까지 버튼 disabled. 체크 상태는 sessionStorage 에
-             저장되어 OAuth redirect → callback 후에도 유지됨.
-             callback 후 set_consent RPC 가 호출되어 timestamp
-             기록. -->
+        <!-- Required consent is collected before handing off to the provider and saved after the profile exists. -->
         <div id="authSection">
-            <div id="msgBox" class="msg"></div>
+            <div id="msgBox" class="msg" role="status" aria-live="polite"></div>
+            <button type="button" id="retryAuth" class="oauth-btn" hidden></button>
 
             <!-- 동의 블록 (가입 게이트) — 텍스트는 applyLanguage 가 i18n 으로 채움 -->
             <div class="consent-block" style="margin:0 0 14px;padding:10px 14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;text-align:left">
@@ -202,6 +195,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
 
             <!-- 동의 미체크 시 안내 메시지 -->
             <div id="consentHint" style="margin-top:10px;font-size:.74em;color:rgba(255,230,109,.7);text-align:center;line-height:1.5"></div>
+            <a id="browserLink" class="home-link" hidden></a>
         </div>
 
         <!-- PROFILE (logged in) -->
@@ -214,7 +208,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
                 <div id="profileMsg" class="msg"></div>
                 <div class="profile-actions">
                     <button class="profile-btn home return" id="returnBtn" style="display:none" onclick="goReturn()">↩ Continue</button>
-                    <button class="profile-btn home" onclick="location.href='/'">🎮 Play Games</button>
+                    <button class="profile-btn home" id="profileGames" onclick="location.href='/'">🎮 Play Games</button>
                     <button class="profile-btn resend" id="resendBtn" style="display:none" onclick="resendVerification()">📧 Resend Verification Email</button>
                     <button class="profile-btn logout" onclick="handleLogout()">Logout</button>
                 </div>
@@ -225,7 +219,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--dark);min-height:100
     </div>
 
     <script src="/vendor/supabase.min.js"></script>
-    <script src="/js/supabase-config.js?v=1795838734"></script>
+    <script src="/js/supabase-config.js?v=1795840418"></script>
     <script>
 /* ===== I18N (16 languages) ===== */
 const I18N={
@@ -309,13 +303,17 @@ function clearMsg(){
     el.textContent='';el.className='msg';
 }
 
-function getReturnUrl(){
-    const p=new URLSearchParams(location.search);
-    const r=p.get('return');
-    if(!r)return null;
-    // Only allow relative paths — reject absolute URLs to avoid open redirect
-    if(r.startsWith('/')&&!r.startsWith('//'))return r;
-    return null;
+const entryParams=new URLSearchParams(location.search);
+let switchAccount=entryParams.get('switch')==='1';
+let returnTarget=typeof safeAuthReturn==='function'
+    ?safeAuthReturn(entryParams.get('return'))||safeAuthReturn(entryParams.get('next')):null;
+function getReturnUrl(){return returnTarget;}
+function referringPage(){
+    try{
+        const previous=new URL(document.referrer);
+        if(previous.origin!==location.origin||/^\/auth(?:\/|$)/.test(previous.pathname))return null;
+        return safeAuthReturn(previous.pathname+previous.search+previous.hash);
+    }catch(_){return null;}
 }
 
 function goReturn(){
@@ -333,17 +331,15 @@ function showProfile(user){
     document.getElementById('profileName').textContent=name;
     document.getElementById('profileEmail').textContent=user.email;
 
-    /* OAuth-only 전환으로 모든 신규 사용자는 provider 가 이메일을
-       이미 검증한 상태로 들어옴 → email_confirmed_at 항상 set.
-       Verified 배지만 표시하고 unverified 케이스의 resend 버튼은
-       legacy 사용자 (이메일/비번으로 가입 후 미인증) 가 남아있을
-       경우 대비해 그대로 둠. */
-    const verified=user.email_confirmed_at!=null;
+    // Kakao can grant a profile without sharing an email address.
+    const verified=!!(user.email&&user.email_confirmed_at);
+    const hasEmailIdentity=user.identities?.some(identity=>identity.provider==='email')||user.app_metadata?.provider==='email';
     const badge=document.getElementById('profileBadge');
+    badge.hidden=!user.email;
     badge.textContent=verified?'✅ '+T('verified'):'⚠️ '+T('unverified');
     badge.className='profile-badge '+(verified?'verified':'unverified');
 
-    document.getElementById('resendBtn').style.display=verified?'none':'block';
+    document.getElementById('resendBtn').style.display=user.email&&!verified&&hasEmailIdentity?'block':'none';
 
     const retBtn=document.getElementById('returnBtn');
     if(getReturnUrl()){
@@ -360,7 +356,7 @@ function showAuth(){
 }
 
 function applyLanguage(){
-    document.getElementById('subtitle').textContent=T('subtitle');
+    document.getElementById('subtitle').textContent=switchAccount?(SWITCH_TITLE[lang]||SWITCH_TITLE.en):T('subtitle');
     document.getElementById('homeLink').textContent='🏠 '+T('backToGames');
     document.getElementById('googleBtnText').textContent=T('google');
     const kk=document.getElementById('kakaoBtnText');
@@ -369,6 +365,11 @@ function applyLanguage(){
        and SEO crawlers see the right locale. en-GB → "en-GB", others
        → 2-letter code. */
     document.documentElement.lang = (lang==='gb'?'en-GB':lang);
+    document.getElementById('profileGames').textContent='🎮 '+T('playGames');
+    document.querySelector('.profile-btn.logout').textContent=T('logout');
+    document.getElementById('resendBtn').textContent=T('resend');
+    document.getElementById('retryAuth').textContent=flowText('retry');
+    document.getElementById('browserLink').textContent=flowText('browser');
     /* 동의 미체크 안내 메시지 — i18n 'mustAgreeRequired' 재활용
        (회원가입 시 검증 메시지와 동일 의미). */
     const hint = document.getElementById('consentHint');
@@ -386,8 +387,8 @@ function applyLanguage(){
     }
     const REQ='<span style="color:#FF9A3C;font-weight:700">['+_escHtml(T('tagRequired'))+']</span>';
     const OPT='<span style="color:rgba(255,255,255,.5);font-weight:700">['+_escHtml(T('tagOptional'))+']</span>';
-    const LINK_T='<a href="/privacy/" target="_blank" style="color:#00D9FF;text-decoration:underline">'+_escHtml(T('linkTerms'))+'</a>';
-    const LINK_P='<a href="/privacy/" target="_blank" style="color:#00D9FF;text-decoration:underline">'+_escHtml(T('linkPrivacy'))+'</a>';
+    const LINK_T='<a href="/terms/" target="_blank" rel="noopener" style="color:#00D9FF;text-decoration:underline">'+_escHtml(T('linkTerms'))+'</a>';
+    const LINK_P='<a href="/privacy/" target="_blank" rel="noopener" style="color:#00D9FF;text-decoration:underline">'+_escHtml(T('linkPrivacy'))+'</a>';
     const aT=document.getElementById('caTermsText');
     if(aT) aT.innerHTML = REQ+' '+ String(T('agreeTermsTpl')).replace('{link}', LINK_T);
     const aP=document.getElementById('caPrivacyText');
@@ -410,14 +411,15 @@ function _captchaActive(){ return false; }
      KISA 정통망법 위반 (외부 서비스로 정보 전송 전 명시적 동의 필요).
      marketing 은 [선택] 이라 게이트에 안 들어감. */
 const CONSENT_STORAGE_KEY = 'lp_pending_consent';
+let authBusy=true;
 function _refreshOauthGate(){
     const t = document.getElementById('signupTerms');
     const p = document.getElementById('signupPrivacy');
     const ok = !!(t && p && t.checked && p.checked);
     const gBtn = document.getElementById('googleBtn');
     const kBtn = document.getElementById('kakaoBtn');
-    if (gBtn) gBtn.disabled = !ok;
-    if (kBtn) kBtn.disabled = !ok;
+    if (gBtn) gBtn.disabled = !ok||authBusy;
+    if (kBtn) kBtn.disabled = !ok||authBusy;
     const hint = document.getElementById('consentHint');
     if (hint) hint.style.display = ok ? 'none' : 'block';
 }
@@ -442,187 +444,180 @@ function _refreshOauthGate(){
     _refreshOauthGate();   /* 초기 상태 반영 */
 })();
 
-/* OAuth redirect 직전에 호출 — 사용자의 동의 상태를 sessionStorage 에
-   저장해서 callback 후 set_consent RPC 호출에 사용. localStorage 가
-   아니라 sessionStorage 인 이유: 다른 탭/세션에 새는 걸 방지 + OAuth
-   왕복은 같은 탭에서 끝남. */
-function _stashPendingConsent(){
-    const data = {
-        terms: !!document.getElementById('signupTerms').checked,
-        privacy: !!document.getElementById('signupPrivacy').checked,
-        marketing: !!document.getElementById('signupMarketing').checked,
-        ts: Date.now()
-    };
-    try { sessionStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(data)); }
-    catch(_) {}
+const SWITCH_TITLE={en:'Sign in with a different account',ko:'다른 계정으로 로그인',ja:'別のアカウントでログイン',zh:'使用其他账户登录',
+    es:'Accede con otra cuenta',pt:'Entre com outra conta',de:'Mit einem anderen Konto anmelden',fr:'Se connecter avec un autre compte',
+    ru:'Войти с другим аккаунтом',ar:'تسجيل الدخول بحساب آخر',hi:'दूसरे खाते से साइन इन करें',th:'เข้าสู่ระบบด้วยบัญชีอื่น',
+    id:'Masuk dengan akun lain',vi:'Đăng nhập bằng tài khoản khác',tr:'Başka bir hesapla giriş yap'};
+const FLOW_TEXT={
+    en:['Signing in…','Sign-in was cancelled. You can try again.','Sign-in could not be completed. Please try again.','This sign-in has expired. Start again in this tab.','Try again','Open in your browser for Google sign-in'],
+    ko:['로그인 중…','로그인이 취소됐습니다. 다시 시도할 수 있습니다.','로그인을 완료하지 못했습니다. 다시 시도해 주세요.','로그인 요청이 만료됐습니다. 이 탭에서 다시 시작해 주세요.','다시 시도','외부 브라우저에서 Google 로그인'],
+    ja:['ログイン中…','ログインをキャンセルしました。もう一度お試しください。','ログインできませんでした。もう一度お試しください。','ログインの有効期限が切れました。このタブからやり直してください。','再試行','ブラウザでGoogleにログイン'],
+    zh:['正在登录…','已取消登录，可以重试。','未能完成登录，请重试。','此次登录已过期，请在此标签页重新开始。','重试','在浏览器中使用 Google 登录'],
+    es:['Iniciando sesión…','Has cancelado el inicio de sesión. Puedes volver a intentarlo.','No se pudo iniciar sesión. Vuelve a intentarlo.','La solicitud ha caducado. Empieza de nuevo en esta pestaña.','Reintentar','Abrir en el navegador para acceder con Google'],
+    pt:['Entrando…','Você cancelou a entrada. Pode tentar de novo.','Não foi possível entrar. Tente novamente.','A solicitação expirou. Comece de novo nesta aba.','Tentar novamente','Abrir no navegador para entrar com o Google'],
+    de:['Anmeldung läuft…','Anmeldung abgebrochen. Du kannst es erneut versuchen.','Anmeldung fehlgeschlagen. Bitte versuche es erneut.','Die Anmeldung ist abgelaufen. Starte in diesem Tab erneut.','Erneut versuchen','Für Google-Anmeldung im Browser öffnen'],
+    fr:['Connexion…','Connexion annulée. Vous pouvez réessayer.','La connexion a échoué. Veuillez réessayer.','La demande a expiré. Recommencez dans cet onglet.','Réessayer','Ouvrir dans le navigateur pour se connecter avec Google'],
+    ru:['Вход…','Вход отменён. Можно попробовать ещё раз.','Не удалось войти. Попробуйте ещё раз.','Запрос истёк. Начните заново в этой вкладке.','Повторить','Открыть в браузере для входа через Google'],
+    ar:['جارٍ تسجيل الدخول…','أُلغي تسجيل الدخول. يمكنك المحاولة مجددًا.','تعذّر تسجيل الدخول. حاول مجددًا.','انتهت صلاحية الطلب. ابدأ من جديد في علامة التبويب هذه.','إعادة المحاولة','افتح في المتصفح لتسجيل الدخول باستخدام Google'],
+    hi:['साइन इन हो रहा है…','साइन इन रद्द हुआ। फिर से कोशिश कर सकते हैं।','साइन इन नहीं हो सका। फिर से कोशिश करें।','अनुरोध की समय सीमा समाप्त हो गई। इसी टैब में फिर से शुरू करें।','फिर कोशिश करें','Google से साइन इन करने के लिए ब्राउज़र में खोलें'],
+    th:['กำลังเข้าสู่ระบบ…','ยกเลิกการเข้าสู่ระบบแล้ว ลองอีกครั้งได้','เข้าสู่ระบบไม่สำเร็จ โปรดลองอีกครั้ง','คำขอหมดอายุแล้ว โปรดเริ่มใหม่ในแท็บนี้','ลองอีกครั้ง','เปิดในเบราว์เซอร์เพื่อเข้าสู่ระบบด้วย Google'],
+    id:['Sedang masuk…','Login dibatalkan. Anda dapat mencoba lagi.','Tidak dapat masuk. Silakan coba lagi.','Permintaan login kedaluwarsa. Mulai lagi di tab ini.','Coba lagi','Buka di browser untuk masuk dengan Google'],
+    vi:['Đang đăng nhập…','Đã hủy đăng nhập. Bạn có thể thử lại.','Không thể đăng nhập. Vui lòng thử lại.','Yêu cầu đăng nhập đã hết hạn. Hãy bắt đầu lại trong thẻ này.','Thử lại','Mở trong trình duyệt để đăng nhập bằng Google'],
+    tr:['Giriş yapılıyor…','Giriş iptal edildi. Tekrar deneyebilirsiniz.','Giriş yapılamadı. Lütfen tekrar deneyin.','Giriş isteğinin süresi doldu. Bu sekmede yeniden başlayın.','Tekrar dene','Google ile giriş için tarayıcıda aç']
+};
+function flowText(key){
+    return (FLOW_TEXT[lang]||FLOW_TEXT.en)[['busy','cancel','failed','expired','retry','browser'].indexOf(key)];
 }
+const hasCallback=!!(authLanding.code||authLanding.error||authLanding.errorCode||authLanding.implicit);
+const directKakao=!!(authLanding.state&&(authLanding.code||authLanding.error||authLanding.errorCode));
+const kakaoInApp=/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent);
+const KAKAO_CLIENT_ID='847abad1c7bd5a9242197654386bdc0d';
+const CALLBACK_URL=location.origin+'/auth/';
 
-/* OAuth callback 후 호출 — sessionStorage 에 stash 된 동의 timestamp
-   을 set_consent RPC 로 서버에 영속화. RPC 누락 (마이그레이션 미배포)
-   시 silent fall-through. */
-async function _commitPendingConsent(){
-    let raw = null;
-    try { raw = sessionStorage.getItem(CONSENT_STORAGE_KEY); } catch(_){}
-    if (!raw) return;
-    try { sessionStorage.removeItem(CONSENT_STORAGE_KEY); } catch(_){}
-    let parsed;
-    try { parsed = JSON.parse(raw); } catch(_) { return; }
-    if (!parsed || typeof parsed !== 'object') return;
-    /* 5분 넘은 stash 는 무시 (중간에 OAuth 가 막혔거나 사용자가
-       다른 곳을 거쳐 왔을 수 있음). 안전을 위해 폐기. */
-    if (Date.now() - (parsed.ts||0) > 5*60*1000) return;
-    try {
-        const { error } = await getSupabase().rpc('set_consent', {
-            p_terms: !!parsed.terms,
-            p_privacy: !!parsed.privacy,
-            p_marketing: !!parsed.marketing
-        });
-        if (error) console.warn('[auth.oauth] set_consent failed:', error.message);
-    } catch(e) {
-        console.warn('[auth.oauth] set_consent threw:', e);
+function authUrl(){
+    const u=new URL(CALLBACK_URL);
+    if(returnTarget)u.searchParams.set('return',returnTarget);
+    if(switchAccount)u.searchParams.set('switch','1');
+    u.searchParams.set('lang',lang);
+    return u;
+}
+function openBrowserForGoogle(){
+    const u=authUrl();
+    const previous=!hasCallback&&!returnTarget&&referringPage();
+    if(previous)u.searchParams.set('return',previous);
+    return 'kakaotalk://web/openExternal?url='+encodeURIComponent(u.href);
+}
+function setBusy(value){
+    authBusy=value;
+    _refreshOauthGate();
+}
+function readAttempt(){
+    let a;
+    try{a=JSON.parse(sessionStorage.getItem(CONSENT_STORAGE_KEY));}catch(_){}
+    return a&&a.terms===true&&a.privacy===true&&Number.isFinite(a.ts)&&a.ts<=Date.now()&&Date.now()-a.ts<3600000?a:null;
+}
+function discardAttempt(){
+    try{
+        for(const key of [CONSENT_STORAGE_KEY,'kakao_oauth_state','kakao_oauth_return','kakao_oauth_nonce'])sessionStorage.removeItem(key);
+    }catch(_){}
+}
+function restoreChecks(attempt){
+    if(!attempt)return;
+    document.getElementById('signupTerms').checked=attempt.terms;
+    document.getElementById('signupPrivacy').checked=attempt.privacy;
+    document.getElementById('signupMarketing').checked=!!attempt.marketing;
+    document.getElementById('signupAgreeAll').checked=!!attempt.marketing&&attempt.terms&&attempt.privacy;
+}
+function saveAttempt(provider,state){
+    const attempt={provider,state,returnTo:returnTarget,switchAccount,lang,ts:Date.now(),
+        terms:document.getElementById('signupTerms').checked,
+        privacy:document.getElementById('signupPrivacy').checked,
+        marketing:document.getElementById('signupMarketing').checked};
+    discardAttempt();
+    sessionStorage.setItem(CONSENT_STORAGE_KEY,JSON.stringify(attempt));
+}
+function callbackAttempt(){
+    const attempt=readAttempt();
+    if(!attempt||attempt.userId)return null;
+    // An account chooser opened before this update stored Kakao state separately.
+    if(!attempt.provider&&directKakao){
+        attempt.state=sessionStorage.getItem('kakao_oauth_state');
+        attempt.returnTo=sessionStorage.getItem('kakao_oauth_return');
+    }
+    // Some providers omit state when the user cancels. Only restore this tab's form.
+    if(!authLanding.state&&(authLanding.error||authLanding.errorCode))return attempt;
+    if(directKakao){
+        return (!attempt.provider||attempt.provider==='kakao')&&attempt.state===authLanding.state?attempt:null;
+    }
+    return !attempt.provider||attempt.provider==='google'?attempt:null;
+}
+async function beginLogin(provider){
+    if(authBusy)return;
+    if(!document.getElementById('signupTerms').checked||!document.getElementById('signupPrivacy').checked){
+        showMsg(T('mustAgreeRequired'));return;
+    }
+    if(!hasCallback&&!returnTarget)returnTarget=referringPage();
+    if(provider==='google'&&kakaoInApp){location.href=openBrowserForGoogle();return;}
+    clearMsg();
+    document.getElementById('retryAuth').hidden=true;
+    setBusy(true);
+    showMsg(flowText('busy'),'info');
+    try{
+        if(provider==='google'){
+            saveAttempt(provider,null);
+            const options={redirectTo:CALLBACK_URL};
+            if(switchAccount)options.queryParams={prompt:'select_account'};
+            const {error}=await getSupabase().auth.signInWithOAuth({provider,options});
+            if(error)throw error;
+        }else{
+            const state=Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join('');
+            saveAttempt(provider,state);
+            const params=new URLSearchParams({client_id:KAKAO_CLIENT_ID,redirect_uri:CALLBACK_URL,
+                response_type:'code',scope:'openid,profile_nickname,profile_image',state});
+            if(switchAccount)params.set('prompt','select_account');
+            location.assign('https://kauth.kakao.com/oauth/authorize?'+params);
+        }
+    }catch(_){
+        discardAttempt();setBusy(false);showMsg(flowText('failed'));
     }
 }
+function handleGoogleLogin(){return beginLogin('google');}
+function handleKakaoLogin(){return beginLogin('kakao');}
 
-async function handleLogout(){
-    await signOut();
+async function exchangeKakao(code){
+    const r=await fetch(SUPABASE_URL+'/functions/v1/kakao-token',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({code,redirect_uri:CALLBACK_URL})
+    });
+    if(!r.ok)throw new Error('kakao_exchange_failed');
+    const data=await r.json();
+    if(!data.id_token)throw new Error('kakao_token_missing');
+    const {data:result,error}=await getSupabase().auth.signInWithIdToken({provider:'kakao',token:data.id_token});
+    if(error||!result.user||!result.session)throw new Error('kakao_session_failed');
+    return result.user;
+}
+function startAnalytics(){
+    if(!/(^|\.)luckyplz\.com$/.test(location.hostname))return;
+    window.dataLayer=window.dataLayer||[];
+    window.gtag=function(){dataLayer.push(arguments);};
+    gtag('js',new Date());
+    gtag('config','G-NZDPE3H3DQ',{page_location:CALLBACK_URL});
+    const s=document.createElement('script');s.async=true;s.src='https://www.googletagmanager.com/gtag/js?id=G-NZDPE3H3DQ';document.head.appendChild(s);
+}
+function showRetry(){
     showAuth();
-    showMsg(T('logoutSuccess'),'info');
+    showMsg(flowText('failed'));
+    document.getElementById('retryAuth').hidden=false;
+    setBusy(true);
 }
-
-async function handleGoogleLogin(){
-    clearMsg();
-    /* 게이트 확인 — disabled 속성 우회 가능성에 대비한 백업. */
-    const t = document.getElementById('signupTerms');
-    const p = document.getElementById('signupPrivacy');
-    if (!(t && p && t.checked && p.checked)){
-        showMsg(T('mustAgreeRequired'),'error');
-        return;
-    }
-    const btn=document.getElementById('googleBtn');
-    btn.disabled=true;
-    /* 동의 상태를 sessionStorage 에 저장 — Google 리다이렉트 후
-       돌아왔을 때 set_consent RPC 호출에 사용. */
-    _stashPendingConsent();
-    const ret=getReturnUrl();
-    const redirectTo=window.location.origin+'/auth/'+(ret?('?return='+encodeURIComponent(ret)):'');
-    const{error}=await getSupabase().auth.signInWithOAuth({
-        provider:'google',
-        options:{redirectTo}
-    });
-    if(error){btn.disabled=false;showMsg(error.message,'error')}
-    // On success, browser redirects to Google — no further action here
-}
-
-/* Kakao login — direct OIDC flow that bypasses Supabase's OAuth
-   handler. Reason: Supabase GoTrue hardcodes `account_email` in the
-   Kakao scope list (https://github.com/supabase/supabase/issues/36878),
-   which breaks every non-biz-verified Kakao app with KOE205. We
-   instead:
-     1. Redirect the user straight to kauth.kakao.com/oauth/authorize
-        with ONLY the scopes a personal-dev app can grant
-        (openid + profile_nickname + profile_image).
-     2. Kakao bounces back to /auth/?code=... with an authorization
-        code after consent.
-     3. Our Edge Function (supabase/functions/kakao-token) exchanges
-        the code for an id_token using the client_secret — kept
-        server-side so it never reaches the browser.
-     4. Client calls supabase.auth.signInWithIdToken with that
-        id_token, and Supabase verifies + creates a session exactly
-        as it would for any other OIDC provider. No biz-app needed. */
-const KAKAO_CLIENT_ID='847abad1c7bd5a9242197654386bdc0d';   /* REST API key — public */
-const KAKAO_REDIRECT_URI=window.location.origin+'/auth/';
-const KAKAO_TOKEN_ENDPOINT='https://owvaarmnlednfkgmgerf.supabase.co/functions/v1/kakao-token';
-
-async function handleKakaoLogin(){
-    clearMsg();
-    /* 게이트 확인 — disabled 속성 우회 가능성에 대비한 백업. */
-    const t = document.getElementById('signupTerms');
-    const p = document.getElementById('signupPrivacy');
-    if (!(t && p && t.checked && p.checked)){
-        showMsg(T('mustAgreeRequired'),'error');
-        return;
-    }
-    const btn=document.getElementById('kakaoBtn');
-    btn.disabled=true;
-    /* 동의 상태 stash (Google 과 동일 패턴). */
-    _stashPendingConsent();
-    /* CSRF protection via state (echoed back by Kakao, verified on
-       return). We intentionally do NOT send a nonce — Kakao's id_token
-       nonce-claim format doesn't match Supabase's raw-nonce
-       verification path and causes "Nonces mismatch" failures.
-       Replay protection is still covered by the authorization code
-       being single-use server-side. */
-    const state=(crypto.randomUUID&&crypto.randomUUID())||(Date.now().toString(36)+Math.random().toString(36).slice(2,12));
+let displayedId=null,settling=false;
+async function finishSession(){
+    if(settling)return;
+    settling=true;
     try{
-        sessionStorage.setItem('kakao_oauth_state',state);
-        const ret=getReturnUrl();
-        if(ret)sessionStorage.setItem('kakao_oauth_return',ret);
-    }catch(_){}
-    const params=new URLSearchParams({
-        client_id:KAKAO_CLIENT_ID,
-        redirect_uri:KAKAO_REDIRECT_URI,
-        response_type:'code',
-        scope:'openid profile_nickname profile_image',
-        state:state
-    });
-    window.location.href='https://kauth.kakao.com/oauth/authorize?'+params.toString();
-}
-
-/* Handle return from Kakao authorize. Runs once on every /auth/
-   page load and early-returns unless ?code= is present. */
-(async function handleKakaoReturn(){
-    const p=new URLSearchParams(location.search);
-    const code=p.get('code');
-    if(!code)return;
-    const state=p.get('state');
-    let savedState=null,returnUrl=null;
-    try{
-        savedState=sessionStorage.getItem('kakao_oauth_state');
-        returnUrl=sessionStorage.getItem('kakao_oauth_return');
-        sessionStorage.removeItem('kakao_oauth_state');
-        sessionStorage.removeItem('kakao_oauth_return');
-        /* legacy nonce key cleanup (from previous deploys) */
-        sessionStorage.removeItem('kakao_oauth_nonce');
-    }catch(_){}
-    /* state mismatch = someone forged the callback; refuse. */
-    if(!savedState||savedState!==state){
-        showMsg('Kakao login: invalid state','error');
-        history.replaceState({},'','/auth/');
-        return;
-    }
-    /* Clean query string right away so a refresh doesn't retry the
-       same (already-spent) code. */
-    history.replaceState({},'','/auth/');
-    try{
-        const r=await fetch(KAKAO_TOKEN_ENDPOINT,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({code:code,redirect_uri:KAKAO_REDIRECT_URI})
-        });
-        const data=await r.json();
-        if(!r.ok||!data.id_token){
-            showMsg('Kakao token exchange failed: '+(data.error||r.status),'error');
-            return;
+        const s=await ensureProfile({force:true,throwOnError:true});
+        if(!s.signedIn){showAuth();if(hasCallback)showMsg(flowText('failed'));return;}
+        if(s.needsSetup){
+            const setup=new URL('/auth/setup/',location.origin);
+            if(returnTarget&&!/^\/auth\/setup(?:\/|[?#]|$)/.test(returnTarget))setup.searchParams.set('next',returnTarget);
+            else if(returnTarget) {location.replace(returnTarget);return;}
+            location.replace(setup.href);return;
         }
-        const{error}=await getSupabase().auth.signInWithIdToken({
-            provider:'kakao',
-            token:data.id_token
-        });
-        if(error){
-            showMsg('Kakao session failed: '+error.message,'error');
-            return;
-        }
-        /* 신규 가입자라면 stash 된 동의 timestamp 를 서버에 영속화. */
-        await _commitPendingConsent();
-        /* Success — route to setup if profile incomplete, otherwise
-           the ?return= the user came from (or home). Mirrors the
-           Google flow. */
-        const next=returnUrl||'/';
-        location.replace(/^\/[^\/]/.test(next)?next:'/');
-    }catch(e){
-        showMsg('Kakao login failed: '+String(e),'error');
+        await commitAuthConsent(s.authUser.id,s.profile);
+        if(returnTarget)location.replace(returnTarget);
+        else{displayedId=s.authUser.id;showProfile(s.authUser);}
+    }catch(_){showRetry();}
+    finally{settling=false;}
+}
+async function handleLogout(){
+    try{
+        const {error}=await signOut();
+        if(error)throw error;
+        displayedId=null;showAuth();showMsg(T('logoutSuccess'),'info');
+    }catch(_){
+        const el=document.getElementById('profileMsg');el.textContent=flowText('failed');el.className='msg error';
     }
-})();
+}
 
 async function resendVerification(){
     const user=await getUser();
@@ -635,48 +630,89 @@ async function resendVerification(){
 
 /* ===== Init ===== */
 async function init(){
-    // Language - sync with main page selection
-    const saved=localStorage.getItem('luckyplz_lang');
-    if(saved&&I18N[saved])lang=saved;
-    else{const m={'ko':'ko','en':'en','es':'es','de':'de','fr':'fr','ja':'ja','zh':'zh','pt':'pt','ru':'ru','ar':'ar','hi':'hi','th':'th','id':'id','vi':'vi','tr':'tr'};
-    const langs=navigator.languages||[navigator.language||'en'];
-    for(const l of langs){if(l.toLowerCase()==='en-gb'){lang='gb';break}const p=l.split('-')[0].toLowerCase();if(m[p]){lang=m[p];break}}}
-
-    createStars();
-    applyLanguage();
-
-    // Check URL params
-    const params=new URLSearchParams(location.search);
-    if(params.get('verified')==='1'){
-        showMsg(T('emailVerifiedBanner'),'success');
-    }
-
-    // Check existing session
-    const user=await getUser();
-    if(user){
-        /* OAuth redirect 후 첫 진입이라면 stash 된 동의 RPC 처리.
-           이미 set 돼 있으면 set_consent 가 no-op (sticky). */
-        await _commitPendingConsent();
-        // If arrived via OAuth redirect with a return URL, auto-continue to origin
-        const ret=getReturnUrl();
-        if(ret){setTimeout(()=>{location.href=ret},400);return}
-        showProfile(user);
-    }
-
-    // Listen for auth changes
-    onAuthChange(async (event,session)=>{
-        if(event==='SIGNED_IN'&&session?.user){
-            /* SIGNED_IN 도 OAuth 콜백 케이스 처리 (init 의 getUser
-               로는 못 잡는 race 가 있을 수 있음). _commitPendingConsent
-               는 stash 가 없으면 no-op 이라 idempotent. */
-            await _commitPendingConsent();
-            showProfile(session.user);
-        }else if(event==='SIGNED_OUT'){
-            showAuth();
+    let preferred=entryParams.get('lang');
+    try{preferred=preferred||localStorage.getItem('luckyplz_lang');}catch(_){}
+    if(preferred&&I18N[preferred])lang=preferred;
+    else{
+        for(const choice of navigator.languages||[navigator.language||'en']){
+            const tag=choice.toLowerCase(),base=tag.split('-')[0];
+            if(tag==='en-gb'){lang='gb';break;}
+            if(I18N[base]){lang=base;break;}
         }
-    });
+    }
+    createStars();applyLanguage();
+    document.getElementById('retryAuth').onclick=()=>location.reload();
+    let acceptSessionEvents=false,confirmed=false;
+    const browserLink=document.getElementById('browserLink');
+    const refreshBrowserLink=()=>{browserLink.hidden=!kakaoInApp;browserLink.href=openBrowserForGoogle();};
+    try{
+        if(hasCallback)showMsg(flowText('busy'),'info');
+        const attempt=hasCallback?callbackAttempt():null;
+        if(attempt){
+            returnTarget=returnTarget||safeAuthReturn(attempt.returnTo);
+            switchAccount=switchAccount||attempt.switchAccount===true;
+            if(attempt.lang&&I18N[attempt.lang]){lang=attempt.lang;applyLanguage();}
+        }
+        if(directKakao)history.replaceState(null,'',authUrl().href);
+        const client=getSupabase();
+        const initialized=await client.auth.initialize();
+        if(authLanding.error||authLanding.errorCode){
+            const cancelled=[authLanding.error,authLanding.errorCode].includes('access_denied');
+            restoreChecks(attempt);discardAttempt();
+            showMsg(flowText(cancelled?'cancel':'failed'),cancelled?'info':'error');
+            return;
+        }
+        if(initialized.error)throw initialized.error;
+        if(hasCallback){
+            const unclaimedCode=!directKakao&&authLanding.code&&new URLSearchParams(location.search).has('code');
+            const remainingHash=new URLSearchParams(location.hash.slice(1));
+            const unclaimedHash=authLanding.implicit&&(remainingHash.has('access_token')||remainingHash.has('refresh_token'));
+            if(!attempt||unclaimedCode||unclaimedHash){
+                restoreChecks(attempt);discardAttempt();showMsg(flowText('expired'));return;
+            }
+            const user=directKakao?await exchangeKakao(authLanding.code):(await getSession())?.user;
+            if(!user)throw new Error('missing_session');
+            const expected=directKakao?'kakao':'google';
+            if(!user.identities?.some(i=>i.provider===expected)&&user.app_metadata?.provider!==expected){
+                throw new Error('unexpected_provider');
+            }
+            confirmed=true;
+            sessionStorage.setItem(CONSENT_STORAGE_KEY,JSON.stringify({...attempt,provider:expected,
+                state:null,userId:user.id,boundAt:Date.now(),returnTo:returnTarget}));
+            switchAccount=false;
+            history.replaceState(null,'',authUrl().href);
+        }else if(entryParams.get('verified')==='1')showMsg(T('emailVerifiedBanner'),'success');
+        if(!switchAccount)await finishSession();
+        else showAuth();
+        acceptSessionEvents=true;
+        onAuthChange((event,session)=>{
+            if(event==='SIGNED_OUT'){
+                displayedId=null;clearMsg();showAuth();
+            }else if(event==='SIGNED_IN'&&session?.user&&!switchAccount&&displayedId!==session.user.id&&!authBusy){
+                // Leave the Supabase auth lock before requesting the profile or recording consent.
+                setTimeout(()=>{if(acceptSessionEvents&&!settling&&!authBusy)finishSession();},0);
+            }
+        });
+    }catch(_){
+        if(hasCallback&&!confirmed){
+            restoreChecks(readAttempt());discardAttempt();showAuth();showMsg(flowText('failed'));
+        }else showRetry();
+    }finally{
+        if(hasCallback){
+            history.replaceState(null,'',authUrl().href);
+            authLanding.code=null;
+        }
+        refreshBrowserLink();setBusy(!document.getElementById('retryAuth').hidden);startAnalytics();
+    }
 }
 
+window.addEventListener('pageshow',event=>{
+    if(!event.persisted)return;
+    const pending=readAttempt();
+    if(authBusy&&!hasCallback&&!pending?.userId&&document.getElementById('retryAuth').hidden){
+        restoreChecks(pending);discardAttempt();setBusy(false);showMsg(flowText('cancel'),'info');
+    }
+});
 init();
     </script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
@@ -684,6 +720,6 @@ init();
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1795838734" defer></script>
+<script src="/js/siteFooter.js?v=1795840418" defer></script>
 </body>
 </html>

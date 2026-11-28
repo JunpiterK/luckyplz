@@ -32,7 +32,7 @@ START = '<!--lp-build-check:start-->'
 END = '<!--lp-build-check:end-->'
 
 
-def snippet(version: str) -> str:
+def snippet(version: str, *, auth_page: bool = False) -> str:
     """Inline build-check HTML block. Fences are stable comment markers
     so the bumper can rewrite the contents on every run.
 
@@ -73,18 +73,25 @@ def snippet(version: str) -> str:
         'location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);'
         '}catch(e){}})();</script>'
     )
+    # A version change must not reload the page while an authorization code
+    # is being exchanged. The following normal navigation checks the build.
+    callback_guard = (
+        'if (/[?#&](?:code|state|access_token|refresh_token|error|error_code|error_description)=/'
+        '.test(location.search+location.hash))return;'
+        if auth_page else ''
+    )
     return (
         f'{START}\n'
         f'<meta name="lp-build" content="{version}">\n'
         f'{kakao}\n'
-        f'<script>(function(){{var B="{version}";try{{fetch("/build.json?_="+Date.now(),{{cache:"no-store"}}).then(function(r){{return r.ok?r.json():null}}).then(function(d){{if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}}catch(e){{}}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}}).catch(function(){{}});}}catch(e){{}}}})();</script>\n'
+        f'<script>(function(){{var B="{version}";try{{{callback_guard}fetch("/build.json?_="+Date.now(),{{cache:"no-store"}}).then(function(r){{return r.ok?r.json():null}}).then(function(d){{if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}}catch(e){{}}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}}).catch(function(){{}});}}catch(e){{}}}})();</script>\n'
         f'{END}'
     )
 
 
-def update_or_inject(html: str, version: str) -> str:
+def update_or_inject(html: str, version: str, *, auth_page: bool = False) -> str:
     block_re = re.compile(re.escape(START) + r'.*?' + re.escape(END), re.DOTALL)
-    new_block = snippet(version)
+    new_block = snippet(version, auth_page=auth_page)
     if block_re.search(html):
         return block_re.sub(new_block, html, count=1)
 
@@ -152,7 +159,7 @@ def main(version: str) -> None:
     count = 0
     for p in ROOT.rglob('*.html'):
         s = p.read_text(encoding='utf-8')
-        s2 = update_or_inject(s, version)
+        s2 = update_or_inject(s, version, auth_page=(p == ROOT / 'auth' / 'index.html'))
         if s != s2:
             # Preserve LF line endings — git is configured for LF on this
             # repo and CRLF would re-trigger the warning loop on every

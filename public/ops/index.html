@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795838734">
+<meta name="lp-build" content="1795840418">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795838734";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795840418";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="robots" content="noindex, nofollow">
@@ -341,7 +341,7 @@ svg{display:block;overflow:visible}
 <div id="tip" hidden></div>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795838734"></script>
+<script src="/js/supabase-config.js?v=1795840418"></script>
 <script>
 (function(){
 'use strict';
@@ -884,22 +884,36 @@ async function showDenied(user){
       <a class="refresh" href="https://supabase.com/dashboard/project/jkrpxijybuljdxkrbsan/sql/new" target="_blank" rel="noopener">SQL Editor 열기 ↗</a>
       <button class="refresh" id="dSwitch">다른 계정으로 로그인</button>
       <button class="refresh" id="dReload">새로 고침</button></div>
+    <p id="dSwitchError" role="alert" hidden>현재 계정에서 로그아웃하지 못했습니다. 연결을 확인한 뒤 다시 시도해 주세요.</p>
     <textarea id="dSql" readonly hidden style="width:100%;margin-top:12px;height:64px;background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;font:12px monospace">${esc(sql)}</textarea>`;
   $('dCopy').addEventListener('click',()=>{
     const done=()=>{$('dCopy').textContent='복사됨 ✓'};
     const manual=()=>{const t=$('dSql');t.hidden=false;t.select();$('dCopy').textContent='아래 글을 직접 복사하세요'};
     try{navigator.clipboard.writeText(sql).then(done,manual)}catch(e){manual()}
   });
-  $('dSwitch').addEventListener('click',async()=>{try{await signOut()}catch(e){}location.replace(opsLoginUrl())});
+  $('dSwitch').addEventListener('click',async()=>{
+    $('dSwitch').disabled=true;$('dSwitchError').hidden=true;
+    try{
+      const {error}=await signOut();
+      if(error)throw error;
+      location.replace(opsLoginUrl()+'&switch=1');
+    }catch(_){$('dSwitch').disabled=false;$('dSwitchError').hidden=false}
+  });
   $('dReload').addEventListener('click',()=>location.reload());
 }
 
 async function init(){
   if(!MOCK){
-    let user=null;try{user=await getUser()}catch(e){}
-    if(!user){location.replace(opsLoginUrl());return}
-    let ok=false;try{const r=await getSupabase().rpc('is_admin');ok=r.data===true}catch(e){}
-    if(!ok){showDenied(user);return}
+    try{
+      const user=await getUser({throwOnError:true});
+      if(!user){location.replace(opsLoginUrl());return}
+      const {data,error}=await getSupabase().rpc('is_admin');
+      if(error||typeof data!=='boolean')throw new Error('role unavailable');
+      if(!data){await showDenied(user);return}
+    }catch(_){
+      $('gate').innerHTML='<h1>상황판</h1><p>로그인 상태와 권한을 확인하지 못했습니다.</p><button class="refresh" id="retryGate">다시 시도</button>';
+      $('retryGate').onclick=()=>location.reload();return
+    }
     if(!isMe())setMe(true);   /* 운영자 기기는 기본으로 통계에서 뺀다(하단에서 해제 가능) */
   }
   $('gate').hidden=true;$('app').hidden=false;

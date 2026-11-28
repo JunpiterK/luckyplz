@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795838734">
+<meta name="lp-build" content="1795840418">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795838734";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795840418";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Edit profile · Lucky Please</title>
@@ -322,6 +322,7 @@ h1.headline{
         <div class="signout-group">
             <button type="button" class="signout" id="signOutBtn">Sign out</button>
             <button type="button" class="signout-all" id="signOutAllBtn">Sign out from all devices</button>
+            <div class="field-msg err" id="signOutError" role="alert" hidden></div>
         </div>
         <a class="view-profile" id="viewProfileLink" target="_blank" rel="noopener">View public page →</a>
     </div>
@@ -393,7 +394,7 @@ h1.headline{
     </div>
 </div>
 
-<script src="/js/supabase-config.js?v=1795838734"></script>
+<script src="/js/supabase-config.js?v=1795840418"></script>
 <script>
 /* ================================================================
    /me/ — own profile editor.
@@ -440,6 +441,8 @@ const T = {
         signOutAll:'Sign out from all devices',
         signOutAllConfirm:'Sign out from every device that has your account? You\'ll be signed out here too.',
         signOutAllDone:'Signed out everywhere. Redirecting…',
+        signOutFailed:'Sign-out could not be confirmed. Check your connection and try again.',
+        loadFailed:'Could not load your account.',reload:'Try again',
         reauthRequired:'For security, account deletion is only allowed within 30 minutes of signing in. Sign in again now?'
     },
     ko:{
@@ -470,6 +473,8 @@ const T = {
         signOutAll:'다른 기기에서도 로그아웃',
         signOutAllConfirm:'이 계정으로 로그인된 모든 기기에서 로그아웃할까요? 이 기기에서도 로그아웃 돼요.',
         signOutAllDone:'모든 기기에서 로그아웃 됐어요. 잠시 후 이동해요…',
+        signOutFailed:'로그아웃을 확인하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.',
+        loadFailed:'계정 정보를 불러오지 못했습니다.',reload:'다시 시도',
         reauthRequired:'보안을 위해 계정 탈퇴는 최근 30분 이내에 로그인한 경우에만 가능해요. 지금 다시 로그인하시겠어요?',
         ok_saved:'✓ 저장됐어요', msg_checking:'중복 확인 중…', msg_available:'✓ 사용 가능해요',
         msg_invalid:'영문·숫자·한글·_·- 만 가능 (2–20자)',
@@ -507,6 +512,8 @@ const T = {
         signOutAll:'すべてのデバイスからログアウト',
         signOutAllConfirm:'このアカウントでログイン中のすべてのデバイスからログアウトしますか？このデバイスもログアウトされます。',
         signOutAllDone:'すべてのデバイスからログアウトしました。リダイレクト中…',
+        signOutFailed:'ログアウトを確認できませんでした。接続を確認して再試行してください。',
+        loadFailed:'アカウント情報を読み込めませんでした。',reload:'再試行',
         reauthRequired:'セキュリティのため、アカウント削除は最終ログインから30分以内のみ可能です。今すぐ再ログインしますか？'
     },
     zh:{
@@ -540,6 +547,8 @@ const T = {
         signOutAll:'从所有设备退出',
         signOutAllConfirm:'要从此账号登录的所有设备退出吗？此设备也会退出。',
         signOutAllDone:'已从所有设备退出。即将跳转…',
+        signOutFailed:'未能确认退出登录。请检查网络连接后重试。',
+        loadFailed:'无法加载账号信息。',reload:'重试',
         reauthRequired:'为了安全，注销账号只能在最近30分钟内登录的情况下进行。是否现在重新登录？'
     }
 };
@@ -596,7 +605,7 @@ let currentUser=null, currentProfile=null, originalNickname='';
 
 (async function init(){
     try {
-        const state=await ensureProfile({force:true});
+        const state=await ensureProfile({force:true,throwOnError:true});
         if(!state.signedIn){
             $('loadingOverlay').classList.remove('on');
             $('signedOutRoot').style.display='block';
@@ -621,8 +630,10 @@ let currentUser=null, currentProfile=null, originalNickname='';
         /* Last sign-in display — depends on currentUser. Safe to call
            synchronously here since currentUser is just set above. */
         try { _refreshLastSignin(); } catch(_){}
-    } catch(e){
-        console.error('[me init]',e);
+    } catch(_){
+        $('soH2').textContent=t.loadFailed;$('soBody').hidden=true;
+        $('soBtn').href=location.href;$('soBtn').textContent=t.reload;
+        $('signedOutRoot').style.display='block';
     } finally {
         $('loadingOverlay').classList.remove('on');
     }
@@ -849,12 +860,22 @@ $('cancelBtn').addEventListener('click',()=>{
     updateViewLink();updateBioCounter();refreshSaveButton();
 });
 
-$('signOutBtn').addEventListener('click',async()=>{
+async function leaveAccount(scope, destination){
+    const message=$('signOutError');
+    message.hidden=true;
     $('loadingOverlay').classList.add('on');
-    try { await signOut(); } catch(_){}
-    try { clearProfileCache(); } catch(_){}
-    location.replace('/');
-});
+    try {
+        const result=scope==='global'?await getSupabase().auth.signOut({scope:'global'}):await signOut();
+        if(result.error)throw result.error;
+        clearProfileCache();
+        location.replace(destination);
+    } catch(_) {
+        $('loadingOverlay').classList.remove('on');
+        message.textContent=t.signOutFailed;
+        message.hidden=false;
+    }
+}
+$('signOutBtn').addEventListener('click',()=>leaveAccount('local','/'));
 
 /* ---- "Sign out from all devices" ----
    Calls Supabase's signOut with scope:'global' which revokes every
@@ -866,18 +887,7 @@ $('signOutBtn').addEventListener('click',async()=>{
 if ($('signOutAllBtn')){
     $('signOutAllBtn').addEventListener('click', async () => {
         if (!confirm(t.signOutAllConfirm || '모든 기기에서 로그아웃할까요?')) return;
-        $('loadingOverlay').classList.add('on');
-        try {
-            const sb = getSupabase();
-            await sb.auth.signOut({ scope: 'global' });
-        } catch(e) {
-            console.warn('[me.signOutAll]', e);
-            /* Fall back to local sign-out if global failed (e.g.
-               network blip — local still goes through). */
-            try { await signOut(); } catch(_){}
-        }
-        try { clearProfileCache(); } catch(_){}
-        location.replace('/');
+        await leaveAccount('global','/');
     });
 }
 
@@ -1021,11 +1031,7 @@ if ($('dataExportBtn')){
                    param brings them back to /me/ post-login. The
                    reauth flag is informational; /auth/ ignores it
                    today but it's there for future banner UX. */
-                (async () => {
-                    try { await signOut(); } catch(_){}
-                    try { clearProfileCache(); } catch(_){}
-                    location.replace('/auth/?return=' + encodeURIComponent('/me/') + '&reauth=1');
-                })();
+                leaveAccount('local','/auth/?return=' + encodeURIComponent('/me/') + '&reauth=1');
             }
             return;
         }
