@@ -408,11 +408,11 @@ const MP2_PAGE = {
         if(ok){ var r = b.getBoundingClientRect(); return res({ t: Math.round(performance.now() - window.__t0), pt: [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)] }); }
         if(performance.now() - t1 > 8000) return res(null); setTimeout(w, 10); })(); })`,
 };
-async function mp2Touch(e, pt, holdMs, moves){
-    await e.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: pt[0], y: pt[1], id: 7 }] });
+async function mp2Touch(e, pt, holdMs, moves, timestamp){
+    await e.send('Input.dispatchTouchEvent', { type: 'touchStart', timestamp, touchPoints: [{ x: pt[0], y: pt[1], id: 7 }] });
     if(moves) for(const m of moves){ await sleep(m[2] || 30); await e.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: pt[0] + m[0], y: pt[1] + m[1], id: 7 }] }); }
     await sleep(holdMs);
-    await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await e.send('Input.dispatchTouchEvent', { type: 'touchEnd', timestamp:timestamp === undefined ? undefined : timestamp + holdMs/1000, touchPoints: [] });
 }
 async function mp2Fly(e){ await e.ev(MP2_PAGE.fly); const ok = await e.ev(MP2_PAGE.waitRun, 30000); await sleep(1200); return ok; }
 /*<gate:resume>*/
@@ -3531,10 +3531,21 @@ function pageLib(){
         const hScroll = Math.max(se.scrollWidth, document.body.scrollWidth) - vw;
         let smallText = [];
         if(G.texts) smallText = [...G.texts.entries()].filter(([s, px]) => px != null && px < 9).map(([s, px]) => s.slice(0, 24) + '@' + px);
-        /* 2026-10-09 육각 꽃(폰) — 가운데 버튼 하나가 BEAM ⇄ SAT(두 번 톡). BEAM 일 때 SAT 가 숨는 게 정상이고,
-           미션이 열리면 가운데 칸이 청록으로 숨 쉰다(szf-satcue) — 그게 보이면 SAT 는 닿을 수 있는 상태로 센다 */
-        const hex = !!(window.SZCTL && SZCTL.arc), cue = document.body.classList.contains('szf-satcue') || document.body.classList.contains('szf-mode-sat');
-        const missing = ['#satBtn', '#gravBtn'].filter(s => !rects[s] && !(hex && s === '#satBtn' && rects['#gravBtn'] && (cue || (typeof missionState !== 'undefined' && missionState !== 'active'))));
+        /* 첫 비행은 SAT 전용. 이후 휴대폰은 중앙 한 칸을 교대하고, 분리형 조종판은 두 버튼을 제공한다. */
+        const classes = document.body.classList;
+        const stage = SZMP1.stage();
+        const required = stage === 1 ? ['#satBtn']
+            : classes.contains('szf-arc') ? [classes.contains('szf-mode-sat') ? '#satBtn' : '#gravBtn'] : ['#satBtn', '#gravBtn'];
+        const centers = required.map(selector => {
+            const button = document.querySelector(selector);
+            if(!rects[selector]) return {selector, ok:false, detail:'숨김'};
+            const r = button.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            const enabled = !button.matches(':disabled, .disabled, [aria-disabled="true"]');
+            const reachable = button.contains(hit);
+            return {selector, ok:enabled && reachable && Math.min(r.width, r.height) >= 44,
+                detail:rects[selector].slice(2).join('×') + (!enabled ? ' 비활성' : !reachable ? ' 중앙 가림' : '')};
+        });
         /* E (2026-09-29) — 조종판·키 가이드가 캔버스(플레이필드)를 덮는 넓이(px). 0 이어야 한다 (PC 에서 56px 덮던 문제) */
         const cov = {};
         for(const s of ['.control-row', '.dodge-kbd-ref']){ const a = rects[s], b = rects['#dodge-canvas']; if(!a || !b) continue;
@@ -3543,7 +3554,7 @@ function pageLib(){
            캔버스를 덮는 게 설계라 cov 검사 대신 버튼 ≥48px 를 본다 */
         const float = document.body.classList.contains('sz-float');
         const fbtn = float ? ['#gravBtn', '#satBtn', '#itemSlot0'].filter(s => rects[s]).map(s => s + ' ' + rects[s][2] + 'x' + rects[s][3]) : [];
-        return { vw, vh, hScroll, rects, small, clip, overlap, missing, cov, float, fbtn, hex, cue, mission: (typeof missionState !== 'undefined') ? missionState : null, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
+        return { vw, vh, hScroll, rects, small, clip, overlap, centers, stage, cov, float, fbtn, running, mission: missionState, missionZone: missionZoneIdx, smallText: smallText.slice(0, 80), nSmallText: smallText.length };
     };
     /* 자동 조종봇 — 같은 시드, 봇 난수만 다르게. 그리기는 끈다(시뮬만) */
     G.bot = function(P){
@@ -4085,6 +4096,15 @@ function judgePerf(cur, base, tag){
 /* ================= layout ================= */
 const SIZES_FULL = [[320, 568, 2], [360, 640, 3], [375, 667, 2], [375, 812, 3], [412, 915, 2.625], [740, 360, 3], [768, 1024, 2], [1280, 800, 1], [1366, 768, 1]];
 const SIZES_QUICK = [[320, 568, 2], [375, 667, 2], [740, 360, 3], [1280, 800, 1]];
+async function layoutMoonMission(e, key){
+    if(!await e.ev(MP2_PAGE.waitRun, 30000)) throw new Error(key + ' 비행 시작 대기 시간 초과');
+    await e.ev('startedAt = performance.now() - (szMissionWin(1).on + 100) - totalPausedMs');
+    for(let i = 0; i < 50; i++){
+        if(await e.ev("running && missionZoneIdx === 1 && missionState === 'active'")) return;
+        await sleep(100);
+    }
+    throw new Error(key + ' 달 미션 활성 대기 시간 초과');
+}
 async function runLayout(base){
     const langs = String(A['layout-langs'] || 'ko,en').split(',');
     const sizes = QUICK ? SIZES_QUICK : SIZES_FULL;
@@ -4096,7 +4116,8 @@ async function runLayout(base){
         await e.open(gameUrl(base, j.L), 2200);
         /* --layout-ctl classic|float — 조작 방식 고정 (기본: 페이지 기본값 = 세로 터치는 플로팅) */
         if(A['layout-ctl']){ await e.ev(`localStorage.setItem('szx_ctl', ${JSON.stringify(String(A['layout-ctl']))}); 1`); await e.open(gameUrl(base, j.L), 2200); }
-        await e.ev('__G.hookText()');
+        /* 이 검사는 새 플레이어의 실제 첫 비행이다. 다른 게이트용 3단계 고정을 해제한다. */
+        await e.ev('SZMP1.pin(null); __G.hookText()');
         const o = {};
         o.start = await e.ev('__G.layout()'); await e.shot(fn('start'));
         /* 실제 시작 경로(인트로 포함) */
@@ -4104,23 +4125,41 @@ async function runLayout(base){
         const startExpr = `(function(){ const mr = Math.random; let v = 0.999;
             try{ const L = (window.LpI18n && LpI18n.getLang && LpI18n.getLang()) || 'en'; const S = INTRO_STORIES[L] || INTRO_STORIES.en;
                  let bi = 0, bl = -1; S.forEach(function(x, i){ const l = [].concat(x).join('').length; if(l > bl){ bl = l; bi = i; } }); v = (bi + 0.5) / S.length; }catch(_){}
+            let skippedGuide = false;
             Math.random = function(){ return v; };
-            try{ startGame(); } finally { Math.random = mr; }
-            if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); return 1; })()`;
-        await e.ev(startExpr);
-        /* 드물게 첫 호출이 먹지 않는다(부팅 직후 경합) — 인트로가 시작됐는지 확인하고 한 번 더 */
-        for(let i = 0; i < 24; i++){ if(await e.ev('!!((typeof _introRunning !== "undefined" && _introRunning) || running)')) break; await sleep(150); if(i === 12) await e.ev(startExpr); }
+            try{
+                document.getElementById('ovBtn').click();
+                const guide = document.querySelector('#szHow:not([hidden])');
+                if(guide){
+                    const skip = guide.querySelector('[data-szh="launch"]');
+                    if(!skip || skip.disabled || !skip.getClientRects().length) throw new Error('첫 비행 건너뛰기 버튼을 찾지 못했습니다');
+                    skip.click();
+                    skippedGuide = true;
+                }
+            } finally { Math.random = mr; }
+            if(!window.__inv) window.__inv = setInterval(function(){ invincibleUntil = 1e15; }, 100); return skippedGuide; })()`;
+        const skippedGuide = await e.ev(startExpr);
         await sleep(1200);
         o.intro = await e.ev('__G.layout()'); await e.shot(fn('intro'));
-        await sleep(3200);
-        await e.ev('(function(){ var z = 1; startedAt = performance.now() - (ZONES[z].s * 1000 + 400) - totalPausedMs; return 1; })()');
-        await sleep(700);
-        await e.ev('__G.forceMission()');
-        await sleep(900);
+        o.intro.skippedGuide = skippedGuide;
+        /* 달의 편성 시각으로 이동하고 실제 게임 루프가 미션·버튼을 여는 것을 기다린다. */
+        await layoutMoonMission(e, key);
+        await sleep(350);   /* 조종판 표시 전환 */
         o.play = await e.ev('__G.layout()'); await e.shot(fn('play'));
         await e.ev('(function(){ clearInterval(window.__inv); invincibleUntil = 0; try{ triggerGameOver(); }catch(e){ (window.__E=window.__E||[]).push("gameover "+e.message); } return 1; })()');
         await sleep(1800);
         o.result = await e.ev('__G.layout()'); await e.shot(fn('result'));
+        if(j.w < 900 && j.w > j.h){
+            /* 두 번째 비행에서 열리는 달 보급 캡슐도 실제로 그려진 CSS px로 검사한다. */
+            await e.ev('__G.texts.clear(); document.getElementById("ovBtn").click()');
+            await layoutMoonMission(e, key);
+            let px = null;
+            for(let i = 0; i < 50 && px == null; i++){
+                await sleep(100);
+                px = await e.ev('__G.texts.get(ITEM_VISUAL[ITEM.SHIELD].emoji) ?? null');
+            }
+            o.result.nextFlightShieldPx = px;
+        }
         const pe = await e.ev('(window.__E||[]).slice(0,8)');
         collectErrs('layout ' + key, e, pe);
         return { key, o };
@@ -4175,11 +4214,11 @@ function judgeLayout(cur, base){
             }
             /* E — 결과 카드가 떠 있으면 HUD 줄(.score-strip)은 숨긴다 (카드 글자를 가렸다) */
             if(st === 'result') row(G, id + ' 결과 카드 위 HUD 줄', m.rects['.score-strip'] ? '보임' : '숨김', b ? (b.rects['.score-strip'] ? '보임' : '숨김') : null, '숨김', m.rects['.score-strip'] ? 'FAIL' : 'PASS');
-            /* 미션 중 SAT·BEAM 두 버튼이 모두 보이고 44px 이상 (2026-09-29 SAT 숨김 사고 재발 방지) */
             if(st === 'play'){
-                const bad = (m.missing || []).concat((m.small || []).filter(x => /^#(satBtn|gravBtn) /.test(x)));
-                row(G, id + ' 미션 중 SAT·BEAM 버튼 (' + (m.mission || '?') + ')', bad.length ? bad.join(' | ') : ['#satBtn', '#gravBtn'].map(s => m.rects[s] ? m.rects[s][2] + 'x' + m.rects[s][3] : '-').join(' / '), null, '둘 다 보임 · ≥44px', bad.length ? (m.mission !== 'active' ? 'WARN' : 'FAIL') : (m.mission !== 'active' ? 'WARN' : 'PASS'));
+                const ok = m.running && m.stage === 1 && m.missionZone === 1 && m.mission === 'active' && m.centers.length > 0 && m.centers.every(c => c.ok);
+                row(G, id + ' 비행 중 미션 조작 (' + m.mission + ')', m.centers.map(c => c.selector + ' ' + c.detail).join(' / '), null, '현재 단계 버튼 중앙 입력 가능 · ≥44px', ok ? 'PASS' : 'FAIL');
             }
+            if('nextFlightShieldPx' in m) row(G, k + ' 둘째 비행 보급 방패', m.nextFlightShieldPx == null ? '미출현' : m.nextFlightShieldPx + 'px', null, '≥9 CSS px', m.nextFlightShieldPx >= 9 ? 'PASS' : 'FAIL');
         }
         if(k.endsWith('360x640') && states.result){
             const ov = states.result.rects['#ovBtn'];
@@ -4370,14 +4409,70 @@ async function runBeamDrain(base){
                 await e.ev('(document.dispatchEvent(new KeyboardEvent("keyup", { key: "r", bubbles: true })), clearInterval(window.__pin), 1)');
                 sat = sat && sat.err ? sat : { ...sat, mid, mid2, gA, end };
             }
+            const taps = mode === 'key' ? await e.ev('(' + checkSatelliteTaps.toString() + ')()') : null;
+            const touchSat = mode === 'tap' ? await checkSatelliteTouch(e) : null;
             await e.ev('(function(){ clearInterval(window.__inv); running = false; return 1; })()');
             const pe = await e.ev('(window.__E||[]).slice(0,8)');
             const x = e.errors();
             collectErrs('beamdrain ' + mode, e, pe);
-            return { on, a, b, sat, exc: x.exc.length + pe.length, sample: x.exc.concat(pe).slice(0, 3) };
+            return { on, a, b, sat, taps, touchSat, exc: x.exc.length + pe.length, sample: x.exc.concat(pe).slice(0, 3) };
         });
     }
     return out;
+}
+// The center button changes from BEAM to SAT after arming. Replay a real
+// fingertip at the same viewport coordinate, independent of the replacement DOM.
+async function checkSatelliteTouch(e){
+    await e.ev(`(() => {
+        const now = performance.now(); elapsedMs = szMissionWin(1).on + 120;
+        startedAt = now - elapsedMs - totalPausedMs;
+        currentZoneIdx = missionZoneIdx = 1; missionKind = 'main'; missionBuoyK = -1;
+        syncPauseUI(); _activateMission(now); return true;
+    })()`);
+    await sleep(150);
+    const before = await e.ev(`(()=>{const r = document.getElementById('gravBtn').getBoundingClientRect();
+        const x = r.left + r.width/2, y = r.top + r.height/2;
+        return {pt:[x,y], hit:document.elementFromPoint(x,y)?.closest('button')?.id, links:szLinkN,
+            inventory:Object.values(rewardCounts).reduce((a,b)=>a+b,0)};})()`);
+    await mp2Touch(e, before.pt, 16, null, Date.now()/1000);
+    await e.ev(`new Promise(resolve=>{const started=performance.now();(function wait(){
+        if(document.body.classList.contains('szf-mode-sat') || performance.now()-started>900)resolve(true);
+        else setTimeout(wait,16);
+    })()})`);
+    const first = await e.ev(`({armed:szSatArmed,state:missionState,hit:document.elementFromPoint(${before.pt[0]},${before.pt[1]})?.closest('button')?.id})`);
+    await mp2Touch(e, before.pt, 16, null, Date.now()/1000);
+    const end = await e.ev(`({state:missionState,links:szLinkN,inventory:Object.values(rewardCounts).reduce((a,b)=>a+b,0)})`);
+    return {before,first,end,ok:before.hit==='gravBtn' && first.hit==='satBtn' && first.armed && first.state==='active'
+        && end.state==='success' && end.links===before.links+1 && end.inventory===before.inventory+1};
+}
+
+// Runs inside the game page. Send both releases between game frames, then verify
+// the actual inventory deltas (an undefined reward is silently rejected).
+function checkSatelliteTaps(){
+    const key = (type, repeat = false) => document.dispatchEvent(new KeyboardEvent(type, {key:'r', code:'KeyR', repeat, bubbles:true}));
+    const tap = () => { key('keydown'); key('keyup'); };
+    const inventory = () => Object.values(rewardCounts).reduce((a, b) => a + b, 0);
+    const results = [];
+    for(const [zone, rewards] of [[0,1], [2,1], [5,1], [13,1], [15,2], [19,3], [8,0]]){
+        const buoy = zone === 8, now = performance.now();
+        missionKind = buoy ? 'buoy' : 'main'; missionBuoyK = buoy ? 0 : -1;
+        currentZoneIdx = missionZoneIdx = zone;
+        elapsedMs = (buoy ? szBuoyWins(zone)[0].on : szMissionWin(zone).on) + 120;
+        startedAt = now - elapsedMs - totalPausedMs;
+        _activateMission(now);
+        const count = inventory(), links = szLinkN;
+        key('keydown'); key('keydown', true);
+        const repeatIgnored = !szSatArmed && szLinkN === links;
+        key('keyup');
+        const singleArmed = szSatArmed && missionState === 'active';
+        tap(); tap();
+        results.push({zone, repeatIgnored, singleArmed, links:szLinkN - links, inventory:inventory() - count,
+            ok:repeatIgnored && singleArmed && missionState === 'success' && !szSatArmed
+                && szLinkN === links + 1 && inventory() === count + rewards});
+    }
+    const indices = [];
+    for(let z=0; z<512; z++) indices.push(_szRewardPick(z,3));
+    return {results, validIndices:indices.every(i => Number.isInteger(i) && i >= 0 && i < 3)};
 }
 function judgeBeamDrain(cur){
     const G = 'G12 beam';
@@ -4386,6 +4481,16 @@ function judgeBeamDrain(cur){
         row(G, mode + ' BEAM 켜고 방치 → 시계 계속', r.on.el + '→' + r.a.el + '→' + r.b.el + 'ms (게이지 ' + r.a.g + '→' + r.b.g + ')', null, '4s 뒤 +3000 이상 · 이후 계속 증가', moving && r.on.on ? 'PASS' : 'FAIL');
         row(G, mode + ' 소진 뒤 BEAM 해제·재충전', 'on=' + r.a.on + ' g ' + r.a.g + '→' + r.b.g, null, 'on=false · 게이지 증가', !r.a.on && r.b.g > r.a.g ? 'PASS' : 'FAIL');
         row(G, mode + ' 예외', r.exc, null, '0', r.exc ? 'FAIL' : 'PASS', r.sample.join(' | ').slice(0, 120));
+        if(r.touchSat){
+            const t = r.touchSat;
+            row(G, '같은 좌표 터치 2회 · BEAM→SAT', t.before.hit + '→' + t.first.hit + ' · ' + t.end.state,
+                null, '첫 탭 대기·둘째 연결 및 보상 1개', t.ok ? 'PASS' : 'FAIL', t.ok ? '' : JSON.stringify(t));
+        }
+        if(r.taps){
+            for(const t of r.taps.results) row(G, 'R 두 번 · 존 ' + t.zone,
+                '연결 ' + t.links + ' · 지급 ' + t.inventory, null, '첫 탭 대기·반복 무시·해당 보상 1회', t.ok ? 'PASS' : 'FAIL');
+            row(G, '시드 보상 인덱스 512개', r.taps.validIndices, null, '모두 0~2', r.taps.validIndices ? 'PASS' : 'FAIL');
+        }
         if(r.sat){
             const s = r.sat;
             if(s.err){ row(G, 'SAT R 키 설치', s.err, null, 'success', 'FAIL'); continue; }
