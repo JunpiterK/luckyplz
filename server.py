@@ -1,10 +1,48 @@
 import os
+import json
+import re
 import socket
-from flask import Flask, send_from_directory, send_file
+from html import escape
+from pathlib import Path
+from flask import Flask, Response, request, send_from_directory, send_file
 
 app = Flask(__name__)
 
 PUBLIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public')
+with (Path(__file__).parent / 'scripts/og-assets/home-share-locales.json').open(encoding='utf8') as f:
+    SHARE_LOCALES = json.load(f)
+COUNTRY_LANGUAGES = {country: code for code, data in SHARE_LOCALES.items() for country in data['countries']}
+
+
+def share_language_code(value):
+    tag = (value or '').strip().lower().replace('_', '-')
+    if not re.fullmatch(r'[a-z]{2,3}(?:-[a-z0-9]{1,8})*', tag):
+        return None
+    if re.match(r'^en-(gb|uk)(-|$)', tag):
+        return 'gb'
+    primary = tag.split('-')[0]
+    return primary if primary in SHARE_LOCALES else None
+
+
+def home_share_language():
+    """Local equivalent of the root Pages Function. CF-IPCountry simulates request.cf.country."""
+    explicit = share_language_code(request.args.get('lang'))
+    if explicit:
+        return explicit
+    excluded = set()
+    for tag, quality in request.accept_languages:
+        code = share_language_code(tag)
+        if code and quality > 0:
+            return code
+        if code and quality == 0:
+            excluded.add(code)
+    agent = request.headers.get('User-Agent', '')
+    if re.search(r'kakaotalk|kakaostory|kakaoscrap|kakaobot', agent, re.I):
+        return 'en' if 'ko' in excluded else 'ko'
+    if re.search(r'bot\b|crawler|spider|facebookexternalhit|meta-external|whatsapp|\bline(?:[-/ ]|$)|preview|unfurl', agent, re.I):
+        return 'en'
+    country_language = COUNTRY_LANGUAGES.get(request.headers.get('CF-IPCountry', ''))
+    return country_language if country_language and country_language not in excluded else 'en'
 
 @app.after_request
 def no_cache(resp):
@@ -16,7 +54,24 @@ def no_cache(resp):
 
 @app.route('/')
 def index():
-    return send_file(os.path.join(PUBLIC, 'index.html'))
+    code = home_share_language()
+    data = SHARE_LOCALES[code]
+    html = (Path(PUBLIC) / 'index.html').read_text(encoding='utf8')
+    head, separator, body = html.partition('</head>')
+    head = head.replace('<html ', '<html data-share-locale="' + code + '" ', 1)
+    values = {
+        'og:title': data['title'], 'twitter:title': data['title'],
+        'og:image:alt': data['alt'], 'twitter:image:alt': data['alt'],
+        'og:locale': data['locale'],
+        'og:url': 'https://luckyplz.com' + data.get('path', '/?lang=' + code),
+    }
+    def replace_meta(match):
+        opening, name, value = match.groups()
+        return opening + (escape(values[name], quote=True) if name in values else value) + '"'
+    head = re.sub(r'(<meta (?:property|name)="([^"]+)" content=")([^"]*)"', replace_meta, head)
+    response = Response(head + separator + body, mimetype='text/html')
+    response.vary.update(('Accept-Language', 'User-Agent', 'CF-IPCountry'))
+    return response
 
 @app.route('/u/<path:nickname>')
 def user_profile(nickname):

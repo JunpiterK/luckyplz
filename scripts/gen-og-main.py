@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Export the site sharing card and the PNG used by previously shared links."""
+"""Export the site sharing card, including images referenced by older previews."""
 from pathlib import Path
+from shutil import copyfile
 
 from PIL import Image, ImageOps
 
@@ -14,13 +15,15 @@ def main():
     with Image.open(ARTWORK) as source:
         card = ImageOps.fit(source.convert("RGB"), CARD_SIZE, method=Image.Resampling.LANCZOS)
 
-    jpeg = ASSETS / "lucky-please-game-night.jpg"
+    jpeg = ASSETS / "lucky-please-game-night-v2.jpg"
     card.save(jpeg, quality=89, optimize=True)
-    # Old messages can still request the original URL with its cached query string.
+    # A messenger can retain an old image URL after the page metadata changes.
+    previous_jpeg = ASSETS / "lucky-please-game-night.jpg"
+    copyfile(jpeg, previous_jpeg)
     legacy = ASSETS / "og-image.png"
     card.quantize(colors=256).save(legacy, optimize=True)
 
-    for path in (jpeg, legacy):
+    for path in (jpeg, previous_jpeg, legacy):
         print(f"{path.relative_to(ROOT)} ({path.stat().st_size:,} bytes)")
 
 
