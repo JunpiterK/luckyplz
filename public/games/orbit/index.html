@@ -4,9 +4,9 @@
 <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -195,6 +195,9 @@ html,body{margin:0;background:var(--dv-bg);color:var(--dv-ink);font-family:'IBM 
 @keyframes coachBob{0%,100%{transform:translateY(0)}50%{transform:translateY(7px)}}
 #scTitle .row a.btn{text-decoration:none;display:inline-flex;align-items:center}
 @media (prefers-reduced-motion:reduce){.bigStars i.on,.cb.act.hot,.stamp,#coach.on .bob,.rMeta .nb{animation:none}}
+.ms{font:inherit;color:inherit}
+.ms:focus-visible{outline:2px solid var(--dv-acc);outline-offset:3px}
+@media(hover:hover) and (pointer:fine){#bStart::after,#bGo::after,#rRetry::after{content:"↵";font:600 .75em monospace;opacity:.75;margin-inline-start:.6em}}
 </style>
 </head>
 <body>
@@ -776,7 +779,7 @@ const rgb=(c,a=1)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
 const IN={left:0,right:0,up:0,down:0,thrust:0,act:0,_act:0};
 const KEYMAP={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',Space:'act',Enter:'act',ShiftLeft:'thrust',ShiftRight:'thrust'};
 /* lpAutoPause 창의 Enter/Space 가 창을 닫은 뒤 act(분리·전개)로 흘러오지 않게 — 창이 먼저 preventDefault 한다 */
-addEventListener('keydown',e=>{const k=KEYMAP[e.code];if(!k||!GAME.run)return;if(k==='act'&&e.defaultPrevented)return;e.preventDefault();if(k==='act'){if(!IN.act)IN._act=1;IN.act=1}else IN[k]=1;Snd.ctx()});
+addEventListener('keydown',e=>{const k=KEYMAP[e.code];if(!k||!GAME.run||GAME.paused||e.ctrlKey||e.altKey||e.metaKey||e.target.closest?.('input,textarea,select,[contenteditable=true]'))return;if(k==='act'&&(e.defaultPrevented || e.target.closest?.('button,a[href],summary')))return;e.preventDefault();if(k==='act'){if(!IN.act)IN._act=1;IN.act=1}else IN[k]=1;Snd.ctx()});
 addEventListener('keyup',e=>{const k=KEYMAP[e.code];if(!k)return;IN[k]=0});
 document.querySelectorAll('#ctl .cb').forEach(b=>{
   const k=b.dataset.k;
@@ -793,13 +796,46 @@ const thrustKey=()=>IN.thrust||IN.up;
 /* ─── 사운드 (WebAudio 합성) ─── */
 const Snd=(()=>{let ac=null,mst=null,eng=null,muted=false,nb=null;
   try{muted=localStorage.getItem('lp_dv_mute')==='1'}catch(e){}
-  function ctx(){if(!ac){try{ac=new(window.AudioContext||window.webkitAudioContext)();mst=ac.createGain();mst.gain.value=muted?0:0.55;mst.connect(ac.destination)}catch(e){return null}}if(ac.state==='suspended')ac.resume();return ac}
-  function noise(){if(nb)return nb;const n=ac.sampleRate*2;nb=ac.createBuffer(1,n,ac.sampleRate);const d=nb.getChannelData(0);let l=0;for(let i=0;i<n;i++){const w=Math.random()*2-1;l=(l+0.02*w)/1.02;d[i]=l*3.5}return nb}
+  function ctx(){if(!ac){try{ac=new(window.AudioContext||window.webkitAudioContext)();mst=ac.createGain();mst.gain.value=muted?0:0.55;mst.connect(ac.destination)}catch(e){return null}}if(ac.state==='suspended')ac.resume();warmNoise();return ac}
+  let shortNoise=null, warming=false;
+  function fillNoise(data,from,to,level){
+    for(let i=from;i<to;i++){
+      level=(level+0.02*(Math.random()*2-1))/1.02;
+      data[i]=level*3.5;
+    }
+    return level;
+  }
+  function warmNoise(){
+    if(warming||nb||!ac||muted)return;
+    warming=true;
+    const later=window.requestIdleCallback ? f=>requestIdleCallback(f,{timeout:200}) : f=>setTimeout(f,12);
+    let buf, data, offset=0, level=0;
+    function chunk(){
+      if(muted){ warming=false;return }
+      try{
+        if(!buf){buf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);data=buf.getChannelData(0)}
+        const end=Math.min(data.length,offset+4096);
+        level=fillNoise(data,offset,end,level);offset=end;
+        if(offset<data.length){later(chunk);return}
+        nb=buf;
+      } catch(_) { /* The short sample keeps immediate input audible. */ }
+      warming=false;
+    }
+    later(chunk);
+  }
+  function noise(){
+    if(nb)return nb;
+    if(!shortNoise){
+      shortNoise=ac.createBuffer(1,2048,ac.sampleRate);
+      fillNoise(shortNoise.getChannelData(0),0,shortNoise.length,0);
+    }
+    return shortNoise;
+  }
   function engOn(){if(!ctx()||eng)return;const s=ac.createBufferSource();s.buffer=noise();s.loop=true;const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.value=200;const gg=ac.createGain();gg.gain.value=0;s.connect(f);f.connect(gg);gg.connect(mst);s.start();eng={s,f,g:gg}}
-  function engSet(level,tone){if(!eng){if(level<=0.01)return;engOn();if(!eng)return}const t=ac.currentTime;eng.g.gain.setTargetAtTime(level*0.9,t,0.06);eng.f.frequency.setTargetAtTime(90+tone*700,t,0.08)}
+  function engSet(level,tone){if(muted)return;if(!eng){if(level<=0.01)return;engOn();if(!eng)return}const t=ac.currentTime;eng.g.gain.setTargetAtTime(level*0.9,t,0.06);eng.f.frequency.setTargetAtTime(90+tone*700,t,0.08)}
   function engOff(){if(!eng)return;try{eng.g.gain.setTargetAtTime(0,ac.currentTime,0.1);const e=eng;setTimeout(()=>{try{e.s.stop()}catch(_){}},600)}catch(_){}eng=null}
-  function burst(dur,vol,freq,type='lowpass',q=0.7){if(!ctx())return;const s=ac.createBufferSource();s.buffer=noise();const f=ac.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const gg=ac.createGain();const t=ac.currentTime;gg.gain.setValueAtTime(vol,t);gg.gain.exponentialRampToValueAtTime(0.0008,t+dur);s.connect(f);f.connect(gg);gg.connect(mst);s.start(t,Math.random());s.stop(t+dur+0.05)}
-  function tone(fr,dur,type='sine',vol=0.15,delay=0,slide=0){if(!ctx())return;const o=ac.createOscillator(),gg=ac.createGain(),t=ac.currentTime+delay;o.type=type;o.frequency.setValueAtTime(fr,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,fr*slide),t+dur);gg.gain.setValueAtTime(0.0001,t);gg.gain.linearRampToValueAtTime(vol,t+0.01);gg.gain.exponentialRampToValueAtTime(0.0008,t+dur);o.connect(gg);gg.connect(mst);o.start(t);o.stop(t+dur+0.05)}
+  function burst(dur,vol,freq,type='lowpass',q=0.7){if(muted||!ctx())return;const s=ac.createBufferSource();s.buffer=noise();s.loop=s.buffer===shortNoise;const f=ac.createBiquadFilter();f.type=type;f.frequency.value=freq;f.Q.value=q;const gg=ac.createGain();const t=ac.currentTime;gg.gain.setValueAtTime(vol,t);gg.gain.exponentialRampToValueAtTime(0.0008,t+dur);s.connect(f);f.connect(gg);gg.connect(mst);s.start(t,Math.random()*Math.min(1,s.buffer.duration));s.stop(t+dur+0.05)}
+  function tone(fr,dur,type='sine',vol=0.15,delay=0,slide=0){if(muted||!ctx())return;const o=ac.createOscillator(),gg=ac.createGain(),t=ac.currentTime+delay;o.type=type;o.frequency.setValueAtTime(fr,t);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,fr*slide),t+dur);gg.gain.setValueAtTime(0.0001,t);gg.gain.linearRampToValueAtTime(vol,t+0.01);gg.gain.exponentialRampToValueAtTime(0.0008,t+dur);o.connect(gg);gg.connect(mst);o.start(t);o.stop(t+dur+0.05)}
   return{ctx,engSet,engOff,
     boom(){burst(2.2,1.2,420);burst(0.5,0.9,1600,'lowpass');tone(55,1.2,'sine',0.5,0,0.4)},
     puff(){burst(0.12,0.12,3200,'highpass')},
@@ -813,21 +849,43 @@ const Snd=(()=>{let ac=null,mst=null,eng=null,muted=false,nb=null;
     /* 결과 화면 — 별 하나마다 한 음씩 올라가는 '띵', 도장은 낮은 '쿵' */
     star(k,delay=0){const f=[988,1319,1760][k]||1760;tone(f,0.28,'triangle',0.13,delay);tone(f*2,0.16,'sine',0.05,delay+0.02)},
     stamp(win,delay=0){if(!ctx())return;tone(win?150:90,0.22,'triangle',0.32,delay,0.5);setTimeout(()=>burst(0.16,0.45,win?900:500),delay*1000)},
-    toggle(){muted=!muted;try{localStorage.setItem('lp_dv_mute',muted?'1':'0')}catch(e){}if(mst)mst.gain.value=muted?0:0.55;return muted},
+    toggle(){muted=!muted;try{localStorage.setItem('lp_dv_mute',muted?'1':'0')}catch(e){}if(mst)mst.gain.value=muted?0:0.55;if(muted)engOff();else warmNoise();return muted},
     get muted(){return muted}};
 })();
 
 /* ─── 파티클 ─── 세계 좌표(m). add=가산 합성(불꽃), 아니면 연기 */
 const PS=[];
-function emit(p){if(PS.length>1600)PS.splice(0,PS.length-1600);p.t=0;PS.push(p)}
-function stepPS(dt,wind=0){for(let i=PS.length-1;i>=0;i--){const p=PS[i];p.t+=dt;if(p.t>=p.life){PS.splice(i,1);continue}
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+const coarsePointer=matchMedia('(pointer: coarse)');
+let slowFrames=0, smoothFrames=0, strained=false, particleLimit=1600, particleScale=1;
+function budgetParticles(dt){
+  if(dt>0.028){ slowFrames=Math.min(16,slowFrames+1); smoothFrames=0; }
+  else if(dt>0 && dt<0.022){ slowFrames=Math.max(0,slowFrames-1); smoothFrames++; }
+  if(slowFrames===16) strained=true;
+  else if(smoothFrames>=120) strained=false;
+  if(reducedMotion.matches){particleLimit=24;particleScale=0.12}
+  else if(strained){particleLimit=96;particleScale=0.3}
+  else if(coarsePointer.matches){particleLimit=224;particleScale=0.55}
+  else{particleLimit=1600;particleScale=1}
+  if(PS.length>particleLimit) PS.length=particleLimit;
+}
+// Continuous exhaust leaves room for a touchdown or ignition burst.
+function particleCount(n,burst=false){
+  const room=particleLimit-PS.length-(burst?0:Math.min(32,particleLimit>>2));
+  return Math.max(0,Math.min(room,Math.ceil(n*particleScale)));
+}
+function emit(p){if(PS.length>=particleLimit)return;p.t=0;PS.push(p)}
+function stepPS(dt,wind=0){let live=0;for(let i=0;i<PS.length;i++){const p=PS[i];p.t+=dt;if(p.t>=p.life)continue;
+  PS[live++]=p;
   const dr=Math.exp(-(p.drag||0)*dt);p.vx=(p.vx+(p.ax||wind)*dt)*dr;p.vy=(p.vy+(p.g||0)*dt)*dr;p.x+=p.vx*dt;p.y+=p.vy*dt;
-  if(p.floor!=null&&p.y<p.floor){p.y=p.floor;p.vy=Math.abs(p.vy)*0.1;p.vx+=sgn(p.vx||rnd(-1,1))*Math.abs(p.vy)*0.3}}}
+  if(p.floor!=null&&p.y<p.floor){p.y=p.floor;p.vy=Math.abs(p.vy)*0.1;p.vx+=sgn(p.vx||rnd(-1,1))*Math.abs(p.vy)*0.3}}
+  PS.length=live;
+}
 function drawPS(cam,add){g.save();if(add)g.globalCompositeOperation='lighter';
   for(const p of PS){if(!!p.add!==add)continue;const k=p.t/p.life,r=Math.max(0.6,lerp(p.r0,p.r1,k)*cam.s),a=(p.a0||1)*(p.fadeIn?Math.min(1,k/p.fadeIn):1)*(1-k)*(p.fadeOut?Math.min(1,(1-k)/p.fadeOut):1);
     if(a<=0.01)continue;const sx=W/2+(p.x-cam.x)*cam.s,sy=H/2-(p.y-cam.y)*cam.s;if(sx<-r||sx>W+r||sy<-r||sy>H+r)continue;
     const c=p.c1?mix(p.c,p.c1,k):p.c;
-    if(add&&r>2.5){const gr=g.createRadialGradient(sx,sy,0,sx,sy,r);gr.addColorStop(0,rgb(c,a));gr.addColorStop(1,rgb(c,0));g.fillStyle=gr}else g.fillStyle=rgb(c,a);
+    if(add && r>2.5 && particleScale>=0.55){const gr=g.createRadialGradient(sx,sy,0,sx,sy,r);gr.addColorStop(0,rgb(c,a));gr.addColorStop(1,rgb(c,0));g.fillStyle=gr}else g.fillStyle=rgb(c,a);
     g.beginPath();g.arc(sx,sy,r,0,TAU);g.fill()}
   g.restore()}
 
@@ -927,7 +985,7 @@ function timeline(evs,t,tMax,names){const w=Math.min(520,W*0.62),x0=W/2-w/2,y=H-
     below=(x-px<70)?!below:false;px=x;
     g.fillStyle=done?'#dffcf5':'rgba(220,230,250,0.6)';fitFont(names[i],10,600,90);g.textAlign='center';g.textBaseline='middle';g.fillText(names[i],x,below?y+15:y-12)});
   g.restore()}
-const isTouch=()=>window.matchMedia('(pointer:coarse)').matches;
+const isTouch=()=>coarsePointer.matches;
 /* 콜아웃 (중앙 큰 글씨) */
 let callT=null;
 function callout(big,small='',ms=1600){const b=$('#callB');b.textContent=big;b.style.fontSize='';$('#callS').textContent=small;const c=$('#call');c.classList.add('on');
@@ -935,15 +993,15 @@ function callout(big,small='',ms=1600){const b=$('#callB');b.textContent=big;b.s
   if(big&&b.scrollWidth>c.clientWidth){const fs=parseFloat(getComputedStyle(b).fontSize)||26;b.style.fontSize=Math.max(14,fs*c.clientWidth/b.scrollWidth*0.97)+'px'}
   clearTimeout(callT);callT=setTimeout(()=>c.classList.remove('on'),ms)}
 /* 폭발 — 화구 + 파편 + 연기 (화면 흔들림 없음) */
-function explode(x,y,size=1){Snd.boom();for(let i=0;i<90*size;i++){const a=rnd(0,TAU),v=rnd(10,70)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+10,life:rnd(0.6,1.6),r0:rnd(2,6)*size,r1:rnd(8,18)*size,c:[255,rnd(150,230),rnd(60,120)],c1:[180,40,10],add:1,drag:1.6})}
-  for(let i=0;i<60*size;i++){const a=rnd(0,TAU),v=rnd(5,40)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+8,life:rnd(2,5),r0:rnd(4,8)*size,r1:rnd(20,40)*size,c:[70,64,60],c1:[40,38,40],a0:0.7,drag:0.8,g:3})}
-  for(let i=0;i<24*size;i++){const a=rnd(0,TAU),v=rnd(20,90)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+20,life:rnd(1.2,2.6),r0:0.8*size,r1:0.5*size,c:[40,40,44],g:-25,drag:0.3})}
+function explode(x,y,size=1){Snd.boom();for(let i=0,n=particleCount(90*size,true);i<n;i++){const a=rnd(0,TAU),v=rnd(10,70)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+10,life:rnd(0.6,1.6),r0:rnd(2,6)*size,r1:rnd(8,18)*size,c:[255,rnd(150,230),rnd(60,120)],c1:[180,40,10],add:1,drag:1.6})}
+  for(let i=0,n=particleCount(60*size,true);i<n;i++){const a=rnd(0,TAU),v=rnd(5,40)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+8,life:rnd(2,5),r0:rnd(4,8)*size,r1:rnd(20,40)*size,c:[70,64,60],c1:[40,38,40],a0:0.7,drag:0.8,g:3})}
+  for(let i=0,n=particleCount(24*size,true);i<n;i++){const a=rnd(0,TAU),v=rnd(20,90)*size;emit({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v+20,life:rnd(1.2,2.6),r0:0.8*size,r1:0.5*size,c:[40,40,44],g:-25,drag:0.3})}
   FLASH.v=1}
 /* 성공 축포 — 금빛·청록 불꽃이 위로 터져 내린다(한 번만 뿌리는 파티클, 프레임당 추가 비용 없음) */
-function celebrate(x,y,size=1){for(let i=0;i<70;i++){const a=rnd(-Math.PI*0.95,-Math.PI*0.05),v=rnd(18,60)*size,gold=Math.random()<0.6;
+function celebrate(x,y,size=1){for(let i=0,n=particleCount(70,true);i<n;i++){const a=rnd(-Math.PI*0.95,-Math.PI*0.05),v=rnd(18,60)*size,gold=Math.random()<0.6;
     emit({x:x+rnd(-2,2)*size,y,vx:Math.cos(a)*v,vy:-Math.sin(a)*v,life:rnd(0.9,1.8),r0:rnd(0.5,1.1)*size,r1:0.2*size,c:gold?[255,220,110]:[90,255,210],c1:gold?[255,140,40]:[40,160,255],add:1,drag:1.2,g:-22*size})}}
 const FLASH={v:0};
-function drawFlash(dt){if(FLASH.v>0){g.fillStyle=`rgba(255,240,210,${FLASH.v*0.55})`;g.fillRect(0,0,W,H);FLASH.v=Math.max(0,FLASH.v-dt*2.2)}}
+function drawFlash(dt){if(reducedMotion.matches){FLASH.v=0;return}if(FLASH.v>0){g.fillStyle=`rgba(255,240,210,${FLASH.v*0.55})`;g.fillRect(0,0,W,H);FLASH.v=Math.max(0,FLASH.v-dt*2.2)}}
 
 /* ═══ 게임 틀 — 저장·화면·루프·공용 비행 물리 ═══ */
 const SAVE_KEY='lp_dv4';
@@ -986,7 +1044,12 @@ function autoLand(st,P,targetX,groundY,bottomOff,margin=1.18){const v=st.v,m=v.d
   return{u,thr}}
 
 /* ─── 화면 전환 ─── */
-function show(id){document.querySelectorAll('.sc').forEach(e=>e.classList.toggle('on',e.id===id))}
+function show(id){
+  document.querySelectorAll('.sc').forEach(e=>e.classList.toggle('on',e.id===id));
+  if(!matchMedia('(hover:hover) and (pointer:fine)').matches) return;
+  const targets={scTitle:'#bStart',scHub:'.ms:not(:disabled)',scBrief:'#bGo',scPause:'#pGo',scResult:'#rRetry'};
+  if(targets[id]) document.getElementById(id).querySelector(targets[id])?.focus({preventScroll:true});
+}
 function hudOn(on,m){$('#topBar').classList.toggle('on',on);$('#ctl').classList.toggle('on',on);
   const ki=$('#keyHint');ki.classList.toggle('on',on&&!isTouch());if(!on)coachSet(null);if(on&&m){ki.innerHTML=m.keyHint||'';$('#tTtl').textContent=m.yr+' · '+m.title.toUpperCase();
     $('#gL').style.display=m.ctl==='dpad'?'none':'flex';$('#gD').style.display=m.ctl==='dpad'?'flex':'none';
@@ -1006,7 +1069,7 @@ function keyRows(id){const lab=L(id+'_keys');return KBD[id].map((k,i)=>[kbdName(
 function openHub(){GAME.run=false;GAME.m=null;GAME.paused=false;Snd.engOff();hudOn(false);clearIn();PS.length=0;
   $('#hFunds').textContent='$'+fmt(SV.funds)+'M';$('#hFlights').textContent=fmt(SV.flights);$('#hStars').textContent=totalStars()+' / '+MISSIONS.length*3;
   const tr=$('#track');tr.innerHTML='';
-  MISSIONS.forEach((m,i)=>{const d=document.createElement('div');const lk=!unlocked(i);d.className='ms'+(lk?' lock':'');
+  MISSIONS.forEach((m,i)=>{const d=document.createElement('button');const lk=!unlocked(i);d.type='button';d.disabled=lk;d.className='ms'+(lk?' lock':'');
     const st=SV.stars[m.id]||0;d.innerHTML='<canvas width="240" height="240"></canvas><div class="yr">'+m.yr+'</div><div class="nm">'+m.title+'</div><div class="stars">'+[0,1,2].map(k=>'<i class="'+(k<st?'on':'')+'">★</i>').join('')+'</div>'+(lk?'<span class="lk">'+L('locked')+'</span>':'');
     drawPatch(d.querySelector('canvas'),m,lk);
     d.addEventListener('click',()=>{if(lk){Snd.beep();return}Snd.click();openBrief(i)});tr.appendChild(d)});
@@ -1091,6 +1154,7 @@ function applyLang(){setLangNow();TW.clear();$('#dv').setAttribute('lang',LANG==
   if(on('#scPause')&&GAME.m)$('#pTitle').textContent=GAME.m.yr+' · '+GAME.m.title;
   if(GAME.run&&GAME.m){hudOn(true,GAME.m);if(ACT)setAct(ACT.k,$('#cAct').classList.contains('hot'),ACT.i);COACH.cur=null;COACH.t=0}}
 
+if(document.activeElement === document.body) show('scTitle');
 $('#bStart').addEventListener('click',()=>{Snd.ctx();Snd.click();
   /* 처음이면 1번 미션 브리핑으로 곧장 */
   if(!SV.flights)openBrief(0);else openHub()});
@@ -1112,6 +1176,7 @@ let lastTs=0;
 function frame(ts){requestAnimationFrame(frame);const dt=Math.min(0.05,(ts-(lastTs||ts))/1000);lastTs=ts;tick(dt)}
 function tick(dt){g.setTransform(DPR,0,0,DPR,0,0);
   if(GAME.paused&&GAME.run&&GAME.m)return;
+  budgetParticles(dt);
   if(GAME.run&&GAME.m){const m=GAME.m,st=GAME.st;
     if(!st.over||m.stepAfterOver){const n=Math.max(1,Math.round(dt*120));const warp=st.warp||1;for(let i=0;i<n;i++){m.step(st,(1/120)*warp);if(st.over&&!m.stepAfterOver)break}}
     st.t+=dt;m.fx&&m.fx(st,dt);stepPS(dt,st.wind||0);m.draw(st,dt);drawFlash(dt);coachTick(dt)}
@@ -1137,7 +1202,7 @@ MISSIONS.push({id:'m1',yr:2003,get title(){return L('m1_t')},reward:12,ctl:'burn
       if(takeAct()){Snd.click();const s=st.step;
         if(s===1&&st.purge<1){callout(L('c_purging'),L('c_purgingS'),900);st.mist++;return}
         if(s===2&&st.chill>-140){callout(L('c_chill'),L('c_chillS'),1300);st.mist++;st.A+=6}
-        st.step++;if(st.step===3)st.fuelT=0;
+        st.step++;if(st.step===2 || st.step===3)st.valveAt=st.T;if(st.step===3)st.fuelT=0;
         if(st.step===4){st.phase='burn';st.ign=1;st.P=20;st.sp=60;Snd.ign();callout(L('c_ign'),L('c_ignS'),900);st.fuelLead=st.fuelT;if(st.fuelT<0.12)st.mist++}
         if(st.step<4)setAct('m1_steps',true,st.step);else setAct(null)}
       return}
@@ -1158,11 +1223,11 @@ MISSIONS.push({id:'m1',yr:2003,get title(){return L('m1_t')},reward:12,ctl:'burn
         finish(true,'r_m1ok',[KV('k_inBand',Math.round(pct*100),0,'%'),KV('k_mist',st.mist,0,'@times'),KV('k_ignDelay',st.fuelLead||0,2,' s')],'l_m1ok',stars)}}},
   fx(st,dt){const burn=st.phase==='burn'||(st.phase==='done'&&st.T<0);const thr=st.phase==='burn'?clamp((st.Pd||st.P)/100,0,1.3):0;
     Snd.engSet(thr*0.9,thr);
-    if(st.phase==='prep'&&st.step>=1&&st.purge<1&&Math.random()<0.5)emit({x:2.3,y:rnd(-0.3,0.3),vx:rnd(3,6),vy:rnd(-0.5,0.8),life:rnd(0.6,1.2),r0:0.2,r1:0.9,c:[230,235,245],a0:0.4,drag:1.5});
-    if(st.phase==='prep'&&st.step>=2&&Math.random()<0.8)emit({x:rnd(2.1,2.4),y:rnd(-0.5,0.5),vx:rnd(1,3),vy:rnd(-1.5,-0.3),life:rnd(1,2),r0:0.3,r1:1.4,c:[240,246,255],a0:0.5,drag:1,g:-0.6});
-    if(st.phase==='prep'&&st.step>=3&&Math.random()<0.7)emit({x:2.3,y:rnd(-0.2,0.2),vx:rnd(8,14),vy:rnd(-1,1),life:0.4,r0:0.08,r1:0.2,c:[200,190,160],a0:0.5,drag:2});
-    if(thr>0){for(let i=0;i<3;i++)emit({x:rnd(3,6),y:rnd(-0.4,0.4),vx:rnd(40,70)*thr,vy:rnd(-3,3),life:rnd(0.25,0.45),r0:0.5,r1:1.6,c:[255,200,120],c1:[255,90,30],add:1,drag:1.5});
-      for(let i=0;i<2;i++)emit({x:rnd(14,22),y:rnd(-1,1),vx:rnd(12,26)*thr,vy:rnd(1,5),life:rnd(2.5,4.5),r0:1.5,r1:rnd(6,11),c:[235,225,210],c1:[120,110,100],a0:0.55,drag:0.5,g:1.2,fadeIn:0.15})}},
+    if(st.phase==='prep'&&st.step>=1&&st.purge<1&&particleCount(1)&&Math.random()<0.5*particleScale)emit({x:2.3,y:rnd(-0.3,0.3),vx:rnd(3,6),vy:rnd(-0.5,0.8),life:rnd(0.6,1.2),r0:0.2,r1:0.9,c:[230,235,245],a0:0.4,drag:1.5});
+    if(st.phase==='prep'&&st.step>=2&&particleCount(1)&&Math.random()<0.8*particleScale)emit({x:rnd(2.1,2.4),y:rnd(-0.5,0.5),vx:rnd(1,3),vy:rnd(-1.5,-0.3),life:rnd(1,2),r0:0.3,r1:1.4,c:[240,246,255],a0:0.5,drag:1,g:-0.6});
+    if(st.phase==='prep'&&st.step>=3&&particleCount(1)&&Math.random()<0.7*particleScale)emit({x:2.3,y:rnd(-0.2,0.2),vx:rnd(8,14),vy:rnd(-1,1),life:0.4,r0:0.08,r1:0.2,c:[200,190,160],a0:0.5,drag:2});
+    if(thr>0){for(let i=0,n=particleCount(3);i<n;i++)emit({x:rnd(3,6),y:rnd(-0.4,0.4),vx:rnd(40,70)*thr,vy:rnd(-3,3),life:rnd(0.25,0.45),r0:0.5,r1:1.6,c:[255,200,120],c1:[255,90,30],add:1,drag:1.5});
+      for(let i=0,n=particleCount(2);i<n;i++)emit({x:rnd(14,22),y:rnd(-1,1),vx:rnd(12,26)*thr,vy:rnd(1,5),life:rnd(2.5,4.5),r0:1.5,r1:rnd(6,11),c:[235,225,210],c1:[120,110,100],a0:0.55,drag:0.5,g:1.2,fadeIn:0.15})}},
   draw(st,dt){const T=performance.now()*0.001;cam.s=Math.min(W/40,H/18);cam.x=W<H?11:13;cam.y=W<H?-1:1.2;
     drawSky(0,[[40,40,80],[255,160,90],0.55]);
     /* 먼 언덕 */
@@ -1181,6 +1246,21 @@ MISSIONS.push({id:'m1',yr:2003,get title(){return L('m1_t')},reward:12,ctl:'burn
     const[p0x,p0y]=S(-11,-1.2),[p1x,p1y]=S(-1.2,0.35);g.lineCap='round';
     g.strokeStyle=`rgb(${lerp(90,235,frost)|0},${lerp(110,242,frost)|0},${lerp(150,250,frost)|0})`;g.lineWidth=0.34*cam.s;g.beginPath();g.moveTo(p0x,p0y);g.bezierCurveTo(p0x+2*cam.s,p0y-3*cam.s,p1x-3*cam.s,p1y,p1x,p1y);g.stroke();
     const[q0x,q0y]=S(-9.2,-2),[q1x,q1y]=S(-1.2,-0.35);g.strokeStyle='#8c2a22';g.lineWidth=0.3*cam.s;g.beginPath();g.moveTo(q0x,q0y);g.bezierCurveTo(q0x+2*cam.s,q0y+cam.s,q1x-3*cam.s,q1y,q1x,q1y);g.stroke();
+    /* Mark the line the operator just opened, in the same coordinates as its pipe. */
+    if(st.phase==='prep' && st.valveAt!=null && st.T-st.valveAt<0.6){
+      const fuel=st.step===3, age=st.T-st.valveAt;
+      const x0=fuel?q0x:p0x, y0=fuel?q0y:p0y, x1=fuel?q1x:p1x, y1=fuel?q1y:p1y;
+      const size=clamp(cam.s*0.23,2.5,6);
+      g.fillStyle=fuel?'#ffb665':'#96edff';
+      if(particleScale>0.3){
+        const u=Math.min(1,age/0.4), v=1-u;
+        const x=v*v*v*x0 + 3*v*v*u*(x0+2*cam.s) + 3*v*u*u*(x1-3*cam.s) + u*u*u*x1;
+        const y=v*v*v*y0 + 3*v*v*u*(y0+(fuel?1:-3)*cam.s) + (3*v*u*u+u*u*u)*y1;
+        g.fillRect(x-size,y-size,size*2,size*2);
+      }
+      g.strokeStyle=g.fillStyle;g.lineWidth=2;
+      g.strokeRect(x1-size*1.5,y1-size*1.5,size*3,size*3);
+    }
     /* 시험대 트러스 */
     g.strokeStyle='#59616e';g.lineWidth=Math.max(1.5,0.16*cam.s);const tr=(a,b,c,d)=>{const[x1,y1]=S(a,b),[x2,y2]=S(c,d);g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke()};
     tr(-6,-3.2,-2.2,1.6);tr(-6,-3.2,-2.2,-1.6);tr(-2.2,1.6,-2.2,-1.6);tr(-6,-3.2,-6,3);tr(-6,3,-2.2,1.6);tr(-4,-3.2,-2.2,-1.6);tr(-7,-3.2,-5,-3.2);
@@ -1280,12 +1360,12 @@ MISSIONS.push({id:'m2',yr:2008,get title(){return L('m2_t')},reward:40,S2T:80000
   fx(st,dt){const v=st.v;Snd.engSet(v.stage===1?v.thr*0.95*clamp(1.2-v.y/60000,0.25,1):v.thr*0.35,v.stage===1?v.thr:0.4);
     const ax=Math.sin(v.a),ay=Math.cos(v.a),bx=v.x-ax*(v.stage===1?11:1.5),by=v.y-ay*(v.stage===1?11:1.5);
     if(v.thr>0.05){const vac=clamp(v.y/60000,0,1);
-      for(let i=0;i<(v.stage===1?3:1);i++)emit({x:bx+rnd(-0.3,0.3),y:by,vx:v.vx-ax*rnd(60,110),vy:v.vy-ay*rnd(60,110),life:rnd(0.15,0.3),r0:0.8,r1:2+vac*6,c:[255,210,140],c1:[255,90,30],add:1,drag:2});
-      if(v.y<30000&&v.stage===1)for(let i=0;i<2;i++)emit({x:bx+rnd(-1,1),y:by-rnd(0,4),vx:v.vx*0.2+rnd(-4,4),vy:v.vy*0.2-rnd(5,15),life:rnd(3,6),r0:2,r1:rnd(9,16),c:[240,236,230],c1:[150,150,160],a0:0.5*(1-v.y/30000),drag:0.4,fadeIn:0.1})}
+      for(let i=0,n=particleCount((v.stage===1?3:1));i<n;i++)emit({x:bx+rnd(-0.3,0.3),y:by,vx:v.vx-ax*rnd(60,110),vy:v.vy-ay*rnd(60,110),life:rnd(0.15,0.3),r0:0.8,r1:2+vac*6,c:[255,210,140],c1:[255,90,30],add:1,drag:2});
+      if(v.y<30000&&v.stage===1)for(let i=0,n=particleCount(2);i<n;i++)emit({x:bx+rnd(-1,1),y:by-rnd(0,4),vx:v.vx*0.2+rnd(-4,4),vy:v.vy*0.2-rnd(5,15),life:rnd(3,6),r0:2,r1:rnd(9,16),c:[240,236,230],c1:[150,150,160],a0:0.5*(1-v.y/30000),drag:0.4,fadeIn:0.1})}
     /* 발사대 증기 */
-    if(st.phase!=='fly'&&v.thr>0.2||(st.phase==='fly'&&v.y<120&&v.thr>0.2))for(let i=0;i<5;i++)emit({x:rnd(-4,4),y:rnd(0,3),vx:rnd(-40,40),vy:rnd(2,14),life:rnd(1.5,3.5),r0:2,r1:rnd(8,15),c:[245,245,245],a0:0.7,drag:0.9,g:1,floor:0});
+    if(st.phase!=='fly'&&v.thr>0.2||(st.phase==='fly'&&v.y<120&&v.thr>0.2))for(let i=0,n=particleCount(5);i<n;i++)emit({x:rnd(-4,4),y:rnd(0,3),vx:rnd(-40,40),vy:rnd(2,14),life:rnd(1.5,3.5),r0:2,r1:rnd(8,15),c:[245,245,245],a0:0.7,drag:0.9,g:1,floor:0});
     /* 음속 돌파 — 증기 원뿔 */
-    const spd=Math.hypot(v.vx,v.vy);if(spd>300&&spd<380&&v.y<15000)for(let i=0;i<3;i++){const s=rnd(-1,1);emit({x:v.x+ax*rnd(0,6)+ay*s*1.2,y:v.y+ay*rnd(0,6)-ax*s*1.2,vx:v.vx*0.97,vy:v.vy*0.97,life:0.25,r0:0.7,r1:1.8,c:[255,255,255],a0:0.55,drag:0.3})}},
+    const spd=Math.hypot(v.vx,v.vy);if(spd>300&&spd<380&&v.y<15000)for(let i=0,n=particleCount(3);i<n;i++){const s=rnd(-1,1);emit({x:v.x+ax*rnd(0,6)+ay*s*1.2,y:v.y+ay*rnd(0,6)-ax*s*1.2,vx:v.vx*0.97,vy:v.vy*0.97,life:0.25,r0:0.7,r1:1.8,c:[255,255,255],a0:0.55,drag:0.3})}},
   draw(st,dt){const v=st.v,h=v.y;
     cam.s=lerp(cam.s,Math.min(W,H)/(h<300?80:100),Math.min(1,dt*1.5));cam.x=v.x;cam.y=v.y+4+(h<60?Math.max(0,22-h*0.3):0);
     drawSky(h);drawEarthLimb(h);
@@ -1356,7 +1436,7 @@ MISSIONS.push({id:'m3',yr:2012,get title(){return L('m3_t')},reward:60,ctl:'dpad
     if(st.rcs<=0&&!st.noRcs){st.noRcs=1;callout(L('c_rcsOut'),'',1200)}
     if(st.T>240||c.x<-80||Math.abs(c.y)>30){st.phase='crash';finish(false,'r_late',[KV('k_time',Math.round(st.T),0,' s')],'l_late',0)}},
   fx(st,dt){const c=st.c;if(st.phase!=='fly')return;st.puffT-=dt;
-    const pf=(x,y,vx,vy)=>{for(let i=0;i<3;i++)emit({x:c.x+x,y:c.y+y,vx:vx*rnd(2,4)+c.vx,vy:vy*rnd(2,4)+c.vy+rnd(-0.3,0.3),life:rnd(0.3,0.6),r0:0.05,r1:0.45,c:[235,240,255],a0:0.8,drag:2})};
+    const pf=(x,y,vx,vy)=>{for(let i=0,n=particleCount(3);i<n;i++)emit({x:c.x+x,y:c.y+y,vx:vx*rnd(2,4)+c.vx,vy:vy*rnd(2,4)+c.vy+rnd(-0.3,0.3),life:rnd(0.3,0.6),r0:0.05,r1:0.45,c:[235,240,255],a0:0.8,drag:2})};
     if(st.ux>0)pf(-2.2,rnd(-0.8,0.8),-1,0);if(st.ux<0)pf(1.6,rnd(-1,1),1,0);if(st.uy>0)pf(rnd(-1.5,0.5),-1.5,0,-1);if(st.uy<0)pf(rnd(-1.5,0.5),1.5,0,1);
     if((st.ux||st.uy)&&st.puffT<=0){st.puffT=0.18;Snd.puff()}},
   draw(st,dt){const c=st.c,d=Math.max(0,-c.x-2.25);
@@ -1431,13 +1511,13 @@ MISSIONS.push({id:'m4',yr:2015,get title(){return L('m4_t')},reward:90,ctl:'flig
       const kv=[KV('k_vs',Math.abs(v.vy),1,' m/s'),KV('k_hs',Math.abs(v.vx),1,' m/s'),KV('k_tilt',Math.abs(v.a)*57.3,1,'°'),KV('k_center',Math.abs(v.x),1,' m'),KV('k_fuelLeft',Math.round(v.fuel/st.fuel0*100),0,'%')];
       if(ok){st.phase='landed';v.vx=0;v.vy=0;v.w=0;v.thr=0;Snd.clunk();callout('TOUCHDOWN','THE BOOSTER HAS LANDED',2000);
         const stars=(v.vy>-3.5&&Math.abs(v.x)<6&&Math.abs(v.a)<0.07)?3:(Math.abs(v.x)<14)?2:1;finish(true,'r_m4ok',kv,'l_m4ok',stars)}
-      else{st.phase='dead';if(!onDeck){for(let i=0;i<60;i++)emit({x:v.x+rnd(-4,4),y:-5,vx:rnd(-12,12),vy:rnd(10,40),life:rnd(1,2),r0:1,r1:4,c:[230,240,255],a0:0.8,g:-20,drag:0.5})}
+      else{st.phase='dead';if(!onDeck){for(let i=0,n=particleCount(60,true);i<n;i++)emit({x:v.x+rnd(-4,4),y:-5,vx:rnd(-12,12),vy:rnd(10,40),life:rnd(1,2),r0:1,r1:4,c:[230,240,255],a0:0.8,g:-20,drag:0.5})}
         explode(v.x,v.y-this.L/2+3,1);finish(false,!onDeck?'r_sea':v.legs<0.95?'r_noLegs':'r_hardLand',kv,!onDeck?'l_sea':v.legs<0.95?'l_noLegs':'l_m4fast',0)}}},
   fx(st,dt){const v=st.v;Snd.engSet(v.thr*0.9,v.thr);const ax=Math.sin(v.a),ay=Math.cos(v.a),bx=v.x-ax*(this.L/2+2),by=v.y-ay*(this.L/2+2);
-    if(v.thr>0.05){for(let i=0;i<4;i++)emit({x:bx+rnd(-0.4,0.4),y:by,vx:v.vx-ax*rnd(80,130),vy:v.vy-ay*rnd(80,130),life:rnd(0.12,0.25),r0:1,r1:3,c:[255,215,150],c1:[255,90,30],add:1,drag:2});
-      const dk=this.deck(st.T),hh=by-dk.y;if(hh<40)for(let i=0;i<4;i++)emit({x:bx+rnd(-2,2),y:dk.y+0.5,vx:rnd(-50,50),vy:rnd(0,6),life:rnd(1,2.2),r0:1.5,r1:rnd(5,10),c:[240,240,240],a0:0.6*(1-hh/40),drag:1.2,g:1})}
+    if(v.thr>0.05){for(let i=0,n=particleCount(4);i<n;i++)emit({x:bx+rnd(-0.4,0.4),y:by,vx:v.vx-ax*rnd(80,130),vy:v.vy-ay*rnd(80,130),life:rnd(0.12,0.25),r0:1,r1:3,c:[255,215,150],c1:[255,90,30],add:1,drag:2});
+      const dk=this.deck(st.T),hh=by-dk.y;if(hh<40)for(let i=0,n=particleCount(4);i<n;i++)emit({x:bx+rnd(-2,2),y:dk.y+0.5,vx:rnd(-50,50),vy:rnd(0,6),life:rnd(1,2.2),r0:1.5,r1:rnd(5,10),c:[240,240,240],a0:0.6*(1-hh/40),drag:1.2,g:1})}
     /* 재진입 열기 — 빠를 때 기체 하단이 달아오른다 */
-    if(Math.hypot(v.vx,v.vy)>180&&v.y>1500&&Math.random()<0.5)emit({x:bx,y:by,vx:v.vx*0.9,vy:v.vy*0.9+rnd(10,30),life:0.4,r0:0.8,r1:2.4,c:[255,160,90],add:1,a0:0.35,drag:1})},
+    if(Math.hypot(v.vx,v.vy)>180&&v.y>1500&&particleCount(1)&&Math.random()<0.5*particleScale)emit({x:bx,y:by,vx:v.vx*0.9,vy:v.vy*0.9+rnd(10,30),life:0.4,r0:0.8,r1:2.4,c:[255,160,90],add:1,a0:0.35,drag:1})},
   draw(st,dt){const v=st.v,dk=this.deck(st.T);const hAbove=v.y-this.L/2-dk.y;
     const tgt=clamp(Math.min(W,H)*0.55/(Math.max(0,hAbove)+this.L*1.6),Math.min(W,H)/320,Math.min(W,H)/70);cam.s=lerp(cam.s,tgt,Math.min(1,dt*2));
     const showDeck=hAbove<(H*0.42)/cam.s;cam.x=lerp(cam.x,showDeck?(v.x*0.6):v.x,Math.min(1,dt*3));cam.y=showDeck?lerp(cam.y,Math.max(v.y*0.5,this.L*0.7),Math.min(1,dt*3)):v.y;
@@ -1507,10 +1587,10 @@ MISSIONS.push({id:'m5',yr:2021,get title(){return L('m5_t')},reward:150,ctl:'fli
       else{st.phase='dead';explode(v.x,Math.max(4,v.y-10),1.4);finish(false,!st.flipped?'r_belly':!onPad?'r_offPad':'r_hardLand',kv,!st.flipped?'l_belly':st.flipAt&&st.flipAt<300?'l_lateFlip':'l_m5fast',0)}}},
   fx(st,dt){const v=st.v;Snd.engSet(v.thr,v.thr);const fuelK=v.fuel/st.fuel0;
     const ax=Math.sin(v.a),ay=Math.cos(v.a),bx=v.x-ax*(this.L/2+1),by=v.y-ay*(this.L/2+1);
-    if(v.thr>0.05){const green=fuelK<0.12?1:0;for(let i=0;i<4;i++)emit({x:bx+rnd(-1.5,1.5),y:by,vx:v.vx-ax*rnd(70,110),vy:v.vy-ay*rnd(70,110),life:rnd(0.12,0.25),r0:1.5,r1:4,c:green?[170,255,160]:[255,190,120],c1:[255,90,30],add:1,drag:2});
-      if(by<60)for(let i=0;i<5;i++)emit({x:bx+rnd(-4,4),y:1,vx:rnd(-60,60),vy:rnd(0,8),life:rnd(1,2.4),r0:2,r1:rnd(8,14),c:[210,190,160],a0:0.55*(1-by/60),drag:1.1,g:1})}
+    if(v.thr>0.05){const green=fuelK<0.12?1:0;for(let i=0,n=particleCount(4);i<n;i++)emit({x:bx+rnd(-1.5,1.5),y:by,vx:v.vx-ax*rnd(70,110),vy:v.vy-ay*rnd(70,110),life:rnd(0.12,0.25),r0:1.5,r1:4,c:green?[170,255,160]:[255,190,120],c1:[255,90,30],add:1,drag:2});
+      if(by<60)for(let i=0,n=particleCount(5);i<n;i++)emit({x:bx+rnd(-4,4),y:1,vx:rnd(-60,60),vy:rnd(0,8),life:rnd(1,2.4),r0:2,r1:rnd(8,14),c:[210,190,160],a0:0.55*(1-by/60),drag:1.1,g:1})}
     /* 벨리 하강 중 공기 흐름 줄무늬 */
-    if(!st.flipped&&Math.random()<0.6)emit({x:v.x+rnd(-20,20),y:v.y-rnd(4,6),vx:v.vx,vy:v.vy+rnd(20,40),life:0.35,r0:0.3,r1:0.2,c:[255,255,255],a0:0.25})},
+    if(!st.flipped&&particleCount(1)&&Math.random()<0.6*particleScale)emit({x:v.x+rnd(-20,20),y:v.y-rnd(4,6),vx:v.vx,vy:v.vy+rnd(20,40),life:0.35,r0:0.3,r1:0.2,c:[255,255,255],a0:0.25})},
   draw(st,dt){const v=st.v;const h=Math.max(0,v.y-this.L/2);
     const tgt=clamp(Math.min(W,H)*0.55/(h+this.L*1.6),Math.min(W,H)/300,Math.min(W,H)/85);cam.s=lerp(cam.s,tgt,Math.min(1,dt*2));
     const showG=h<(H*0.42)/cam.s;cam.x=lerp(cam.x,showG?v.x*0.6:v.x,Math.min(1,dt*3));cam.y=showG?lerp(cam.y,Math.max(v.y*0.5,this.L*0.8),Math.min(1,dt*3)):v.y;
@@ -1588,8 +1668,8 @@ MISSIONS.push({id:'m6',yr:2024,get title(){return L('m6_t')},reward:300,ctl:'fli
     const hitG=pts.some(p=>p[1]<=0);
     if(hitT||hitG){st.phase='dead';explode(v.x,Math.max(8,v.y-20),1.8);finish(false,hitT?'r_towerHit':'r_ground',[KV('k_vs',Math.abs(v.vy),1,' m/s'),KV('k_hErr',Math.abs(z.dx),1,' m'),KV('k_fuelLeft',Math.round(v.fuel/st.fuel0*100),0,'%')],hitT?'l_towerHit':'l_ground',0)}},
   fx(st,dt){const v=st.v;Snd.engSet(v.thr,v.thr*0.8);const ax=Math.sin(v.a),ay=Math.cos(v.a),bx=v.x-ax*(this.L/2+1),by=v.y-ay*(this.L/2+1);
-    if(v.thr>0.05){for(let i=0;i<6;i++)emit({x:bx+rnd(-2.5,2.5),y:by,vx:v.vx-ax*rnd(80,120),vy:v.vy-ay*rnd(80,120),life:rnd(0.12,0.28),r0:2,r1:5,c:[255,200,140],c1:[255,90,30],add:1,drag:2});
-      if(by<90)for(let i=0;i<6;i++)emit({x:bx+rnd(-5,5),y:2,vx:rnd(-80,80),vy:rnd(0,12),life:rnd(1.2,2.6),r0:3,r1:rnd(10,18),c:[235,225,215],a0:0.6*(1-by/90),drag:1,g:1.2})}},
+    if(v.thr>0.05){for(let i=0,n=particleCount(6);i<n;i++)emit({x:bx+rnd(-2.5,2.5),y:by,vx:v.vx-ax*rnd(80,120),vy:v.vy-ay*rnd(80,120),life:rnd(0.12,0.28),r0:2,r1:5,c:[255,200,140],c1:[255,90,30],add:1,drag:2});
+      if(by<90)for(let i=0,n=particleCount(6);i<n;i++)emit({x:bx+rnd(-5,5),y:2,vx:rnd(-80,80),vy:rnd(0,12),life:rnd(1.2,2.6),r0:3,r1:rnd(10,18),c:[235,225,215],a0:0.6*(1-by/90),drag:1,g:1.2})}},
   draw(st,dt){const v=st.v;const h=Math.max(0,v.y-this.L/2);
     const tgt=clamp(Math.min(W,H)*0.5/(Math.max(0,v.y-TOWER.armY)+this.L*1.8),Math.min(W,H)/360,Math.min(W,H)/150);cam.s=lerp(cam.s,tgt,Math.min(1,dt*2));
     const near=v.y<(H*0.5)/cam.s+TOWER.h;cam.x=lerp(cam.x,near?(v.x+TOWER.x)/2:v.x,Math.min(1,dt*3));cam.y=near?lerp(cam.y,Math.max((v.y+TOWER.armY)/2,70),Math.min(1,dt*3)):v.y;
@@ -1672,7 +1752,7 @@ function drawTitleScene(dt){TS.t+=dt;const t=TS.t;cam.s=W>H?H/102:H/150;cam.x=W>
     tube(1.85,1,38,'white');g.fillStyle='#0d0e10';g.fillRect(-1.86,38,3.72,3);tube(1.85,41,50,'white');
     g.fillStyle=cylGrad(1.9,PAINT.white);g.beginPath();g.moveTo(-1.9,50);g.lineTo(-1.9,55);g.quadraticCurveTo(-1.7,60,0,62);g.quadraticCurveTo(1.7,60,1.9,55);g.lineTo(1.9,50);g.fill();
     g.fillStyle='rgba(255,255,255,0.08)';g.fillRect(-0.4,1,0.8,49)});
-  if(Math.random()<0.6)emit({x:rnd(-1.5,1.5),y:rnd(10,36),vx:rnd(-1.5,1.5),vy:rnd(-2,-0.5),life:rnd(2,4),r0:0.5,r1:rnd(2.5,4),c:[225,232,245],a0:0.35,drag:0.6,g:-0.4});
+  if(particleCount(1)&&Math.random()<0.6*particleScale)emit({x:rnd(-1.5,1.5),y:rnd(10,36),vx:rnd(-1.5,1.5),vy:rnd(-2,-0.5),life:rnd(2,4),r0:0.5,r1:rnd(2.5,4),c:[225,232,245],a0:0.35,drag:0.6,g:-0.4});
   stepPS(dt);drawPS(cam,false);
   const lg=g.createRadialGradient(W/2,gy,10,W/2,gy,W*0.6);lg.addColorStop(0,'rgba(255,190,120,0.18)');lg.addColorStop(1,'rgba(255,190,120,0)');g.fillStyle=lg;g.fillRect(0,0,W,H)}
 
@@ -1705,7 +1785,7 @@ if(navigator.serviceWorker){
   }).catch(function(){});
 }
 </script>
-<script src="/js/siteFooter.js?v=1795734944"></script>
+<script src="/js/siteFooter.js?v=1795824714"></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

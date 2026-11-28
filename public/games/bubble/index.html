@@ -5,9 +5,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
@@ -163,6 +163,17 @@ canvas#cv{
   padding:9px 16px;border-radius:999px;background:rgba(20,20,40,.92);border:1px solid var(--line);font-size:13px;font-weight:700;
   transition:.25s;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%)}
+@media(min-width:1024px) and (orientation:landscape){
+  .app{display:grid;grid-template-columns:minmax(0,calc((100dvh - 65px) * 9 / 16)) clamp(225px,19vw,310px);
+    grid-template-rows:46px auto auto minmax(0,1fr);justify-content:center;column-gap:clamp(16px,2vw,34px);max-width:none}
+  .app > header{grid-column:1 / -1}
+  .field{grid-row:2 / -1;grid-column:1}
+  .hud{grid-row:2;grid-column:2;padding:12px 0 0}
+  .hud2{grid-row:3;grid-column:2;margin:8px 0 0}
+  .pc-bubble-keys{grid-row:4;grid-column:2;align-self:start;font-size:12px;line-height:1.6;color:var(--mute)}
+}
+@media(max-width:1023px),(orientation:portrait),(hover:none){.pc-bubble-keys{display:none}}
+
 </style>
     <script type="application/ld+json">
     {"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"홈","item":"https://luckyplz.com/"},{"@type":"ListItem","position":2,"name":"게임","item":"https://luckyplz.com/games/"},{"@type":"ListItem","position":3,"name":"버블 버스트","item":"https://luckyplz.com/games/bubble/"}]}
@@ -192,6 +203,7 @@ canvas#cv{
     <span class="cmb" id="cmb">COMBO</span>
   </div>
 
+  <p class="pc-bubble-keys" data-t="hintKeys"></p>
   <main class="field" id="field">
     <canvas id="cv" width="360" height="640" aria-label="Bubble Burst"></canvas>
   </main>
@@ -317,10 +329,47 @@ window.addEventListener('storage',e=>{ if(e&&e.key==='luckyplz_lang') applyLang(
 /* ════════════ 사운드 — WebAudio 절차 합성 (파일 없음) ════════════
    음소거 = 헤더 🔊(lp_bubble_mute) 또는 사이트 소리 끔(LpBgm.isMuted — 다른 게임 독의 🔊). 헤더 버튼으로 켜면 둘 다 푼다 */
 const SND=(()=>{
-    let ac=null,out=null,nbuf=null,muted=false,lastCoin=0,resuming=false,unlockAt=-1e9;
+    let ac=null,out=null,muted=false,lastCoin=0,resuming=false,unlockAt=-1e9;
     try{ muted=localStorage.getItem('lp_bubble_mute')==='1'; }catch(_){}
     const siteMuted=()=>{ try{ return !!(window.LpBgm&&window.LpBgm.isMuted&&window.LpBgm.isMuted()); }catch(_){ return false; } };
     const off=()=>muted||siteMuted();
+    // Build the mono noise a little at a time without opening an audio device.
+    const getNoiseBank = (() => {
+      const length = 24000, sampleRate = 48000;
+      let full, fallback, context, written = 0, needsContext = false;
+      let seed = (Math.random() * 0x100000000) >>> 0;
+      function fill(data, start, end) {
+        for (let i = start; i < end; i++) {
+          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+          data[i] = seed / 2147483648 - 1;
+        }
+      }
+      function schedule() {
+        if (window.requestIdleCallback) window.requestIdleCallback(primeNoise, {timeout: 150});
+        else setTimeout(primeNoise, 16);
+      }
+      function primeNoise() {
+        if (!full) {
+          try { full = context ? context.createBuffer(1, length, sampleRate) : new AudioBuffer({length, sampleRate, numberOfChannels: 1}); }
+          catch (_) { needsContext = true; return; }
+        }
+        const end = Math.min(written + 4096, length);
+        fill(full.getChannelData(0), written, end);
+        written = end;
+        if (written < length) schedule();
+        else fallback = null;
+      }
+      schedule();
+      return ac => {
+        if (!context) { context = ac; if (needsContext) schedule(); }
+        if (written === length) return full;
+        if (!fallback) {
+          fallback = ac.createBuffer(1, 2048, sampleRate);
+          fill(fallback.getChannelData(0), 0, 2048);
+        }
+        return fallback;
+      };
+    })();
     function A(){
         if(!ac){
             const C=window.AudioContext||window.webkitAudioContext;
@@ -357,9 +406,9 @@ const SND=(()=>{
     }
     function noise(d,o){
         o=o||{}; if(off()) return; const a=A(); if(!a) return;
-        if(!nbuf){ nbuf=a.createBuffer(1,a.sampleRate*.5,a.sampleRate); const ch=nbuf.getChannelData(0); for(let i=0;i<ch.length;i++) ch[i]=Math.random()*2-1; }
         const t0=a.currentTime+(o.at||0);
-        const s=a.createBufferSource(); s.buffer=nbuf;
+        const s=a.createBufferSource(); s.buffer=getNoiseBank(a);
+        s.loop=s.buffer.length===2048;
         const f=a.createBiquadFilter(); f.type=o.type||'bandpass'; f.frequency.setValueAtTime(o.f||2000,t0); f.Q.value=o.q||1;
         if(o.f2) f.frequency.exponentialRampToValueAtTime(o.f2,t0+d);
         const g=a.createGain(); g.gain.setValueAtTime(o.v||.1,t0); g.gain.exponentialRampToValueAtTime(.0001,t0+d);
@@ -1086,14 +1135,21 @@ function inkRing(g){ g.beginPath(); g.arc(0,0,R-.8,0,6.283); g.strokeStyle='rgba
 /* 기본 버블, 아기 판다를 품은 6색 버블, 특수 오브, 얼음, 구출된 아기 순서. */
 /*BA:start*/const BA_ORDER=['c0','c1','c2','c3','c4','c5','k0','k1','k2','k3','k4','k5','rb','bm','ln','gy','ice','ice2'], BA_COLS=5;/*BA:end*/
 const baImg=new Image(); let baOk=false;
-baImg.onload=()=>{ baOk=true; buildSprites(); if(!raf) render(); };
+baImg.decoding='async';
+baImg.onload=()=>{
+    const ready=()=>{ baOk=true; buildSprites(true); };
+    if(baImg.decode) baImg.decode().then(ready, ready); else ready();
+};
 baImg.src='/assets/bubble/orbs.webp?v=felt1';
 const BA_KEY={c0:0,c1:1,c2:2,c3:3,c4:4,c5:5,rb:RAINBOW,bm:BOMB,ln:LINE,gy:GRAY};
-function buildSprites(){
-    spr={};
+function buildSprites(upgrade){
+    // Keep the existing playable board during a progressively decoded atlas upgrade.
+    if(!upgrade) spr={};
+    const current=spr;
     const px=Math.ceil(2*SP*K), sc=px/(2*SP);
     const cell=baOk?baImg.naturalWidth/BA_COLS:0;
-    BA_ORDER.forEach((n,i)=>{
+    function bake(i){
+        const n=BA_ORDER[i];
         const isIce=n==='ice'||n==='ice2', cpx=isIce?Math.ceil(2.2*SP*K):px;
         const c=mkCanvas(cpx,cpx), g=c.getContext('2d');
         g.imageSmoothingQuality='high';
@@ -1116,9 +1172,24 @@ function buildSprites(){
             g.scale(sc,sc); g.translate(SP*1.1,SP*1.1);
             g.beginPath(); g.arc(0,0,R+1.5,0,6.283); g.fillStyle='rgba(200,235,255,.35)'; g.fill(); g.lineWidth=2; g.strokeStyle='rgba(230,248,255,.9)'; g.stroke();
         }
-        spr[key]=c;
-    });
-    buildFx();
+        current[key]=c;
+    }
+    if(!upgrade){
+        for(let i=0;i<BA_ORDER.length;i++) bake(i);
+        buildFx();
+        return;
+    }
+    let i=0;
+    function schedule(){
+        if(window.requestIdleCallback) window.requestIdleCallback(nextOrbs,{timeout:200});
+        else setTimeout(nextOrbs,24);
+    }
+    function nextOrbs(){
+        if(current!==spr) return;
+        bake(i++); if(i<BA_ORDER.length) bake(i++);
+        if(i<BA_ORDER.length) schedule(); else if(!raf) render();
+    }
+    schedule();
 }
 /* 효과 스프라이트 — 빛 점(색별)·파편(색별)·별·얼음 조각·조준점. 매 프레임 그라디언트를 만들지 않는다 */
 function buildFx(){
@@ -1630,7 +1701,25 @@ dance2:{i:24,h:[0.5089,0.3716]}};
 const PD_S=124, PD_X=286, PD_Y=624;          /* 셀 한 변(논리 px) · 발이 서는 곳 */
 const RM=(()=>{ try{ return matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ return false; } })();
 const pdImg=new Image(); let pdOk=false, pdCache={}, pdCell=0;
-pdImg.onload=()=>{ pdOk=true; pdCell=pdImg.naturalWidth/PD_COLS; pdCache={}; if(!raf) render(); };
+pdImg.decoding='async';
+function warmPanda(){
+    const current=pdCache;
+    const poses=['aim2','push2','reload','happy'];
+    let i=0;
+    function schedule(){
+        if(window.requestIdleCallback) window.requestIdleCallback(nextPose,{timeout:250});
+        else setTimeout(nextPose,32);
+    }
+    function nextPose(){
+        if(current!==pdCache) return;
+        pdSprite(poses[i++]); if(i<poses.length) schedule();
+    }
+    if(pdOk) schedule();
+}
+pdImg.onload=()=>{
+    const ready=()=>{ pdOk=true; pdCell=pdImg.naturalWidth/PD_COLS; pdCache={}; warmPanda(); if(!raf) render(); };
+    if(pdImg.decode) pdImg.decode().then(ready, ready); else ready();
+};
 pdImg.src='/assets/mascot/panda-bubble.webp?v=felt1';
 /* 프레임별로 현재 배율에 맞춘 캔버스를 한 번만 만든다(매 프레임 축소 샘플링 방지) — fit() 이 비운다 */
 function pdSprite(f){
@@ -1888,9 +1977,10 @@ function fit(){
     cv.style.width=cw+'px'; cv.style.height=ch+'px';
     dpr=Math.min(3,window.devicePixelRatio||1);
     const bw=Math.round(cw*dpr), bh=Math.round(ch*dpr);
-    if(cv.width!==bw||cv.height!==bh){ cv.width=bw; cv.height=bh; }
+    if(cv.width===bw && cv.height===bh && bgC) return;
+    cv.width=bw; cv.height=bh;
     K=cv.width/W;
-    pdCache={}; cubC=null; handC=null; TC.clear();
+    pdCache={}; warmPanda(); cubC=null; handC=null; TC.clear();
     buildSprites(); buildBg(); render();
 }
 (function(){
@@ -1939,7 +2029,13 @@ cv.addEventListener('contextmenu',e=>e.preventDefault());
 document.addEventListener('keydown',e=>{
     if(window.LpAutoPause&&window.LpAutoPause.isShowing&&window.LpAutoPause.isShowing()) return;
     if(document.body.classList.contains('lp-help-open')) return;
-    const tg=e.target; if(tg&&tg.closest&&tg.closest('input,textarea,select')) return;
+    if(e.ctrlKey || e.metaKey || e.altKey || e.isComposing || e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if((e.code === 'Space' || e.code === 'Enter') && e.target.closest?.('button, a[href], summary')) return;
+    if(e.defaultPrevented) return;
+    if(e.repeat){
+        if(e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+        return;
+    }
     const c=e.code;
     if(state==='title'){ if(c==='Enter'||c==='Space'){ e.preventDefault(); startGame(); } return; }
     if(state==='over'){ if(c==='Enter'||c==='Space'){ e.preventDefault(); startGame(); } return; }
@@ -2025,7 +2121,7 @@ hud(true);
 <script>
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 </script>
-<script src="/js/siteFooter.js?v=1795734944" defer></script>
+<script src="/js/siteFooter.js?v=1795824714" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

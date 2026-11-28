@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <!-- no-cache: force fresh on every visit -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -400,6 +400,26 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 .lp-v2-badge[hidden],.lp-v2-note[hidden]{display:none}
 .lp-v2-note{margin:6px auto;text-align:center;font-size:.85em;color:rgba(255,255,255,.65)}
 .setup-card.lp-v2-ro .variant-chip,.setup-card.lp-v2-ro .mode-chip,.setup-card.lp-v2-ro .step-btn,.setup-card.lp-v2-ro [data-hostplay],.setup-card.lp-v2-ro input{pointer-events:none;opacity:.7}
+@media(min-width:901px){
+  body #gameScreen{grid-template-columns:minmax(0,1fr) clamp(340px,32vw,700px)}
+  body #gameScreen.caller-only{grid-template-columns:minmax(0,1fr) clamp(260px,25vw,530px)}
+  #gameScreen .bingo-card{max-width:min(100%,50vh)}
+  #gameScreen .side-panel{overflow-y:auto}
+  #gameScreen .drum-canvas-wrap{max-width:min(100%,calc(100svh - 100px))}
+}
+
+.board-key-guide{display:none}
+@media (min-width:900px) and (hover:hover){
+  .board-key-guide{display:block;color:inherit;opacity:.8;font:600 12px/1.3 system-ui;text-align:center;pointer-events:none}
+}
+canvas:focus-visible,button:focus-visible,[role=button]:focus-visible{outline:3px solid #48dffc;outline-offset:-3px}
+
+.bingo-card .cell.last-hit{outline:3px solid #ba4a16;outline-offset:-4px}
+@media(prefers-reduced-motion:reduce){
+  .bingo-card .cell.marked::before,.bingo-card svg.strike line,.bingo-card.won,.bb-word span,.bb-word i{animation:none}
+  .bingo-card svg.strike line{stroke-dashoffset:0}
+  #bingoBlast.show .bb-word span,#bingoBlast.show .bb-word i{opacity:1;transform:none}
+}
 </style>
 </head>
 <body>
@@ -553,7 +573,7 @@ canvas#confettiCanvas{position:fixed;inset:0;pointer-events:none;z-index:25}
 <canvas id="confettiCanvas"></canvas>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795734944"></script>
+<script src="/js/supabase-config.js?v=1795824714"></script>
 <script>
 /* ===== I18N ===== */
 const I18N={
@@ -781,12 +801,43 @@ const SFX=(()=>{
     let c;
     let lastClack=0;
     const CLACK_COOLDOWN=45;
+    let noiseBed=null,shortNoise=null;
+    function prepareNoise(x){
+        // A short loop is ready immediately for an early draw. Prepare the longer bed between frames.
+        shortNoise=x.createBuffer(1,512,x.sampleRate);
+        const short=shortNoise.getChannelData(0);
+        for(let i=0;i<short.length;i++)short[i]=Math.random()*2-1;
+        let bed,data,written=0;
+        function chunk(){
+            if(!bed){bed=x.createBuffer(1,Math.ceil(x.sampleRate*.85),x.sampleRate);data=bed.getChannelData(0)}
+            const stop=Math.min(data.length,written+2048);
+            for(;written<stop;written++)data[written]=Math.random()*2-1;
+            if(written===data.length)noiseBed=bed;else schedule();
+        }
+        function schedule(){if(window.requestIdleCallback)requestIdleCallback(chunk,{timeout:200});else setTimeout(chunk,16)}
+        schedule();
+    }
+    let quiet=false;
+    try{quiet=localStorage.getItem('lpAudio.muted')==='1'}catch(_){}
+    window.addEventListener('storage',e=>{if(e.key==='lpAudio.muted')quiet=e.newValue==='1'});
+    function muted(){return window.LPAudio?LPAudio.isMuted():quiet}
+    function prepare(){
+        if(!c){c=new(window.AudioContext||window.webkitAudioContext)();prepareNoise(c)}
+    }
+    function warm(){
+        if(!document.hidden&&!muted()){try{prepare()}catch(_){}}
+    }
+    const queueWarm=()=>setTimeout(()=>{
+        if(window.requestIdleCallback)requestIdleCallback(warm,{timeout:1000});else warm();
+    },750);
+    if(document.readyState==='loading')addEventListener('DOMContentLoaded',queueWarm,{once:true});else queueWarm();
     function g(){
-        if(!c)c=new(window.AudioContext||window.webkitAudioContext)();
-        if(c.state==='suspended')c.resume();
+        prepare();
+        if(c.state==='suspended')c.resume().catch(()=>{});
         return c;
     }
     function tone(f,d,type,vol,rampTo){
+        if(muted())return;
         try{
             const x=g(),t=x.currentTime;
             const o=x.createOscillator(),ga=x.createGain();
@@ -800,13 +851,11 @@ const SFX=(()=>{
         }catch(e){}
     }
     function burst(d,vol,filterFreq){
+        if(muted())return;
         try{
             const x=g(),t=x.currentTime;
-            const buf=x.createBuffer(1,Math.max(1,(x.sampleRate*d)|0),x.sampleRate);
-            const data=buf.getChannelData(0);
-            for(let i=0;i<data.length;i++)data[i]=Math.random()*2-1;
             const src=x.createBufferSource(),ga=x.createGain();
-            src.buffer=buf;
+            src.buffer=noiseBed||shortNoise;src.loop=true;
             let node=src;
             if(filterFreq){
                 const f=x.createBiquadFilter();
@@ -816,7 +865,7 @@ const SFX=(()=>{
             ga.gain.setValueAtTime(vol,t);
             ga.gain.exponentialRampToValueAtTime(.0001,t+d);
             node.connect(ga);ga.connect(x.destination);
-            src.start(t);
+            src.start(t);src.stop(t+d);
         }catch(e){}
     }
     return{
@@ -825,6 +874,7 @@ const SFX=(()=>{
            home button) — without this the next SFX.* call plays
            silently on iOS until the user taps again. */
         resume(){
+            if(muted())return;
             try{const ctx=g();if(ctx&&ctx.state==='suspended')ctx.resume()}catch(_){}
         },
         start(){
@@ -853,6 +903,7 @@ const SFX=(()=>{
             tone(170+s*12,.055,'sine',vol,90);
         },
         suction(){
+            if(muted())return;
             try{
                 const x=g(),t=x.currentTime,dur=.85;
                 const o=x.createOscillator(),ga=x.createGain();
@@ -1492,6 +1543,8 @@ function markCard(n){
     if(!myCard)return;
     const size=variant.size;
     let hit=false;
+    const card=document.getElementById('bingoCard');
+    card.querySelector('.last-hit')?.classList.remove('last-hit');
     for(let r=0;r<size;r++){
         for(let c=0;c<size;c++){
             if(myCard.grid[r][c]===n){
@@ -1499,7 +1552,7 @@ function markCard(n){
                 const cell=document.querySelector('.bingo-card .cell[data-r="'+r+'"][data-c="'+c+'"]');
                 if(cell){
                     applyPenMark(cell);
-                    cell.classList.add('marked');
+                    cell.classList.add('marked','last-hit');
                     hit=true;
                 }
             }
@@ -2089,6 +2142,30 @@ document.getElementById('startBtn').addEventListener('click',()=>{
     }
     startGame(false);
 });
+const keyGuide = document.createElement('small');
+keyGuide.className = 'board-key-guide';
+keyGuide.id = 'boardKeyGuide';
+const keyGuideText = {"ko": "Space/Enter 다음 번호", "en": "Space/Enter Draw a number", "ja": "Space/Enter 次の番号", "zh": "Space/Enter 抽取下一个号码"};
+let keyLocale = 'en';
+try{ keyLocale = (new URLSearchParams(location.search).get('lang')||localStorage.getItem('luckyplz_lang')||navigator.language||'en').toLowerCase().split('-')[0]; }catch(_){}
+keyGuide.textContent = keyGuideText[keyLocale] || keyGuideText.en;
+document.querySelector('#gameScreen .drum-panel').appendChild(keyGuide);
+document.getElementById('drawLever').setAttribute('aria-describedby', keyGuide.id);
+document.addEventListener('click',e=>{
+    if(e.detail!==0||!e.target.closest('#startBtn'))return;
+    requestAnimationFrame(()=>{
+        const target=document.getElementById('drawLever'),r=target.getBoundingClientRect();
+        if(r.width&&r.height&&target.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))target.focus({preventScroll:true});
+    });
+});
+document.addEventListener('keydown',e=>{
+    if(![' ','Enter'].includes(e.key)||e.repeat||e.ctrlKey||e.metaKey||e.altKey||e.defaultPrevented||
+       e.target.closest('button,a,input,select,textarea,[contenteditable=true],[role=button]'))return;
+    const draw=document.getElementById('drawLever');
+    if(!draw.getClientRects().length||draw.disabled||document.getElementById('resultScreen').classList.contains('active'))return;
+    if(!draw.contains(document.elementFromPoint(draw.getBoundingClientRect().x+draw.offsetWidth/2,draw.getBoundingClientRect().y+draw.offsetHeight/2)))return;
+    e.preventDefault();draw.click();
+});
 document.getElementById('drawLever').addEventListener('click',()=>{
     if(_isG())return;
     performDraw();
@@ -2659,7 +2736,7 @@ window.__bv2=(function(){
         const m=/#cert=([^&]+)/.exec(location.hash||'');if(!m)return;
         const go=()=>LpFair.cert.decode(m[1]).then(certShow).catch(()=>{V.certView='bad';document.getElementById('setupWrap').style.display='none';showResult();const el=badgeEl();el.hidden=false;el.className='lp-v2-badge bad';el.textContent=tx('bad');});
         if(window.LpFair)go();
-        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1795734944';s.onload=go;document.head.appendChild(s);}
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1795824714';s.onload=go;document.head.appendChild(s);}
     }
     setTimeout(certMode,200);
     return V;
@@ -2761,8 +2838,8 @@ window.addEventListener('pageshow',_onVisibilityRestore);
 <script>/* Nuke any legacy service worker + caches. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/topNav.js?v=1795734944"></script>
-<script src="/js/siteFooter.js?v=1795734944" defer></script>
+<script src="/js/topNav.js?v=1795824714"></script>
+<script src="/js/siteFooter.js?v=1795824714" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

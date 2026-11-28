@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -233,6 +233,19 @@ body.lp-v2-room #btnPump:disabled{opacity:.42;filter:saturate(.55);cursor:not-al
   #gameScreen.on #btnPass{padding:10px}
   #gameScreen.on .pump-count{grid-area:pc}
 }
+
+@media(min-width:900px) and (min-height:501px){
+    #shell:has(#gameScreen.on){height:100dvh;min-height:0}
+    #stage:has(#gameScreen.on){width:min(94vw,1460px);max-width:none}
+    #gameScreen.on{display:grid;grid-template-columns:minmax(0,1fr) clamp(245px,24vw,355px);grid-template-rows:1fr auto auto auto auto 1fr;gap:12px 28px;align-items:center}
+    #balloonZone{grid-area:1/1/-1/2;align-self:stretch;min-height:0;margin:0}
+    .turn-banner{grid-area:2/2}.danger-row{grid-area:3/2}.pump-row{grid-area:4/2;flex-direction:column}.pump-count{grid-area:5/2}
+    #btnPump::after,#btnPass::after{font:600 .65em monospace;opacity:.75;margin-left:.6em}
+    #btnPump::after{content:"Space"}#btnPass::after{content:"→"}
+}
+@media(hover:hover) and (min-width:900px){
+    [aria-keyshortcuts="Control+Enter"]::after{content:"Ctrl ↵";display:inline-block;margin-inline-start:.45em;font:600 10px/1.2 monospace;letter-spacing:0;opacity:.78}
+}
 </style>
 </head>
 <body>
@@ -257,7 +270,7 @@ body.lp-v2-room #btnPump:disabled{opacity:.42;filter:saturate(.55);cursor:not-al
         </div>
         <div class="players" id="playerList"></div>
 
-        <button class="btn primary" id="btnStart" type="button">START 🎈</button>
+        <button class="btn primary" id="btnStart" aria-keyshortcuts="Control+Enter" type="button">START 🎈</button>
         <p class="hint-mini" id="hintMini">2~12명 · 이름은 비워도 OK · 폰을 돌려가며 플레이</p>
     </div>
 
@@ -405,7 +418,7 @@ $('playerList').addEventListener('click',e=>{
     b.closest('.player-row').remove();renumber();
 });
 $('playerList').addEventListener('keydown',e=>{
-    if(e.key!=='Enter')return;
+    if(e.key!=='Enter'||e.ctrlKey||e.altKey||e.metaKey||e.isComposing||!e.target.matches('input'))return;
     e.preventDefault();
     const rows=[...document.querySelectorAll('#playerList .player-row input')];
     const i=rows.indexOf(e.target);
@@ -433,16 +446,41 @@ saved.slice(0,MAXP).forEach(v=>addRow(v,false));
    3레이어), 파열 = 크랙 임펄스 + 뱅 몸통 + 저역 펀치 + 방 잔향의
    4레이어 + tanh 소프트클리퍼. 위험 구간에는 고무 삐걱 + 심장 박동을
    얹어 긴장을 청각으로도 쌓는다. */
-let AC=null,NOISE=null;
-function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}
-    if(AC&&AC.state==='suspended')AC.resume().catch(()=>{});return AC}
-function noiseBuf(c){
-    if(!NOISE){
-        NOISE=c.createBuffer(1,c.sampleRate,c.sampleRate);
-        const d=NOISE.getChannelData(0);
-        for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+const noiseMaterial=(()=>{
+    let ready=null,quick=null,pending=false;
+    const idle=fn=>window.requestIdleCallback?requestIdleCallback(fn,{timeout:100}):setTimeout(fn,0);
+    function fill(samples,from,to){
+        for(let i=from;i<to;i++){samples[i]=Math.random()*2-1}
     }
-    return NOISE;
+    function prepare(c){
+        if(!c || ready || pending)return;
+        pending=true;
+        let buffer=null,at=0;
+        function make(){
+            try{
+                if(!buffer)buffer=c.createBuffer(1,Math.floor(c.sampleRate*1),c.sampleRate);
+                const a=buffer.getChannelData(0),end=Math.min(at+4096,a.length);
+                fill(a,at,end);at=end;
+                if(at<a.length){idle(make);return}
+                ready=buffer;
+            }catch(_){}
+            pending=false;
+        }
+        idle(make);
+    }
+    function get(c){
+        if(ready)return ready;
+        prepare(c);
+        if(!quick){quick=c.createBuffer(1,512,c.sampleRate);fill(quick.getChannelData(0),0,512)}
+        return quick;
+    }
+    return {prepare,get,get ready(){return ready}};
+})();
+let AC=null;
+function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(_){}}
+    if(AC&&AC.state==='suspended')AC.resume().catch(()=>{});noiseMaterial.prepare(AC);return AC}
+function noiseSource(c){
+    const source=c.createBufferSource();source.buffer=noiseMaterial.get(c);source.loop=!noiseMaterial.ready;return source;
 }
 function sPump(k){
     const c=ac();if(!c)return;
@@ -450,7 +488,7 @@ function sPump(k){
     /* L1 바람 몸통 — "후우" : 밴드패스 노이즈, 필터가 올라갔다 내려오며
        숨을 불어넣는 궤적을 그린다. 풍선이 클수록(k↑) 등압이 높아
        중심 주파수가 살짝 올라간다. */
-    const s1=c.createBufferSource();s1.buffer=noiseBuf(c);
+    const s1=noiseSource(c);
     s1.playbackRate.value=.92+Math.random()*.16;
     const bp=c.createBiquadFilter();bp.type='bandpass';bp.Q.value=.8;
     bp.frequency.setValueAtTime(240,t);
@@ -464,7 +502,7 @@ function sPump(k){
     s1.connect(bp).connect(g1).connect(c.destination);
     s1.start(t);s1.stop(t+.34);
     /* L2 입술 히스 — 고역 숨소리가 있어야 "사람이 분다"로 들린다 */
-    const s2=c.createBufferSource();s2.buffer=noiseBuf(c);
+    const s2=noiseSource(c);
     const hp=c.createBiquadFilter();hp.type='highpass';hp.frequency.value=2200;
     const g2=c.createGain();
     g2.gain.setValueAtTime(.0001,t);
@@ -497,7 +535,7 @@ function sPump(k){
         o2.start(t+.05);o2.stop(t+.22);
     }
     /* 펌프 손잡이가 바닥을 치는 딸깍 */
-    const s4=c.createBufferSource();s4.buffer=noiseBuf(c);
+    const s4=noiseSource(c);
     const hp4=c.createBiquadFilter();hp4.type='highpass';hp4.frequency.value=2600;
     const g6=c.createGain();
     g6.gain.setValueAtTime(.0001,t+.085);
@@ -514,7 +552,7 @@ function sHeart(d){
         os.type='sine';os.frequency.setValueAtTime(i?92:78,t+o);os.frequency.exponentialRampToValueAtTime(44,t+o+.13);
         gg.gain.setValueAtTime(.0001,t+o);gg.gain.exponentialRampToValueAtTime(v*(i?.65:1),t+o+.018);gg.gain.exponentialRampToValueAtTime(.0001,t+o+.17);
         os.connect(gg).connect(c.destination);os.start(t+o);os.stop(t+o+.19);
-        const n=c.createBufferSource();n.buffer=noiseBuf(c);
+        const n=noiseSource(c);
         const lp=c.createBiquadFilter();lp.type='lowpass';lp.frequency.value=260;
         const ng=c.createGain();ng.gain.setValueAtTime(v*.9*(i?.6:1),t+o);ng.gain.exponentialRampToValueAtTime(.0001,t+o+.07);
         n.connect(lp).connect(ng).connect(c.destination);n.start(t+o);n.stop(t+o+.08);
@@ -532,6 +570,7 @@ function sCreak(d){
     gg.gain.setValueAtTime(.0001,t);gg.gain.exponentialRampToValueAtTime(.035+.06*d,t+.05);gg.gain.exponentialRampToValueAtTime(.0001,t+.34);
     o.connect(bq).connect(gg).connect(c.destination);o.start(t);o.stop(t+.36);
 }
+const popCurve=Float32Array.from({length:256},(_,i)=>Math.tanh(2.4*(i/255*2-1)));
 function sPop(){
     const c=ac();if(!c)return;
     const t=c.currentTime;
@@ -539,19 +578,17 @@ function sPop(){
        때리는 펀치가 된다 */
     const master=c.createGain();master.gain.value=1;
     const shaper=c.createWaveShaper();
-    const N=256,curve=new Float32Array(N);
-    for(let i=0;i<N;i++){const x=i/(N-1)*2-1;curve[i]=Math.tanh(2.4*x);}
-    shaper.curve=curve;
+    shaper.curve=popCurve;
     master.connect(shaper).connect(c.destination);
     /* L1 크랙 — 파열의 정체는 첫 3ms 의 광대역 임펄스다 */
-    const s1=c.createBufferSource();s1.buffer=noiseBuf(c);
+    const s1=noiseSource(c);
     const hp=c.createBiquadFilter();hp.type='highpass';hp.frequency.value=1400;
     const g1=c.createGain();
     g1.gain.setValueAtTime(1.0,t);
     g1.gain.exponentialRampToValueAtTime(.001,t+.03);
     s1.connect(hp).connect(g1).connect(master);s1.start(t);s1.stop(t+.05);
     /* L2 뱅 몸통 — 광대역에서 저역으로 빠르게 무너지는 노이즈 */
-    const s2=c.createBufferSource();s2.buffer=noiseBuf(c);
+    const s2=noiseSource(c);
     const lp=c.createBiquadFilter();lp.type='lowpass';
     lp.frequency.setValueAtTime(2600,t);
     lp.frequency.exponentialRampToValueAtTime(150,t+.16);
@@ -568,7 +605,7 @@ function sPop(){
     g3.gain.exponentialRampToValueAtTime(.001,t+.16);
     o.connect(g3).connect(master);o.start(t);o.stop(t+.17);
     /* L4 방 잔향 꼬리 — 이게 있어야 "방 안에서 터졌다"가 된다 */
-    const s3=c.createBufferSource();s3.buffer=noiseBuf(c);
+    const s3=noiseSource(c);
     const lp2=c.createBiquadFilter();lp2.type='lowpass';lp2.frequency.value=900;
     const g4=c.createGain();
     g4.gain.setValueAtTime(.0001,t+.02);
@@ -1094,7 +1131,8 @@ $('btnPass').addEventListener('click',pass);
 document.addEventListener('keydown',e=>{
     if(!onGame()||$('resultOv').classList.contains('on'))return;
     const tg=e.target&&e.target.tagName;
-    if(tg==='INPUT'||tg==='TEXTAREA'||tg==='BUTTON'||e.repeat)return;
+    if(e.defaultPrevented||e.isComposing||e.ctrlKey||e.altKey||e.metaKey||e.repeat||e.target.isContentEditable||/^(INPUT|TEXTAREA|SELECT|A)$/.test(tg))return;
+    if(tg==='BUTTON' && (e.key==='Enter'||e.code==='Space'))return;
     if(e.code==='Space'){e.preventDefault();pump();}
     else if(e.key==='Enter'||e.key==='ArrowRight'){if(!$('btnPass').disabled){e.preventDefault();pass();}}
 });
@@ -1436,7 +1474,7 @@ const V2=(()=>{
             if(log.length)setTimeout(step,500);
         })).catch(()=>show(false));
         if(window.LpFair)go();
-        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1795734944';s.onload=go;s.onerror=()=>show(false);document.head.appendChild(s);}
+        else{const s=document.createElement('script');s.src='/js/lpFair.js?v=1795824714';s.onload=go;s.onerror=()=>show(false);document.head.appendChild(s);}
     }
     setTimeout(certMode,0);
     V2.dbg=()=>({vr:Object.assign({},vr,{q:vr.q?vr.q.length:0}),g:cur(),popped,pumps,turn,players:players.slice()});
@@ -1448,13 +1486,13 @@ applyI18n();
 })();
 </script>
 
-<script src="/js/nextGames.js?v=1795734944"></script>
+<script src="/js/nextGames.js?v=1795824714"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1795734944" defer></script>
+<script src="/js/siteFooter.js?v=1795824714" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
@@ -1686,5 +1724,18 @@ if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).cat
 })();
 </script>
 <!--lp-game-about:end-->
+
+<script>
+document.addEventListener('keydown', e=>{
+    if(e.key!=='Enter' || !e.ctrlKey || e.altKey || e.metaKey || e.isComposing || e.defaultPrevented || e.repeat) return;
+    const form=e.target.closest('#setupScreen');
+    if(!form && e.target!==document.body) return;
+    if([...document.querySelectorAll('#resultOv.on,dialog[open],[aria-modal="true"]')].some(el=>el.getClientRects().length && getComputedStyle(el).visibility==='visible')) return;
+    const button=[...(form||document).querySelectorAll('#btnStart')].find(b=>b.getClientRects().length && getComputedStyle(b).visibility==='visible');
+    if(!button || button.disabled) return;
+    e.preventDefault();
+    button.click();
+});
+</script>
 </body>
 </html>

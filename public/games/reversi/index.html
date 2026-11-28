@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -317,6 +317,17 @@ body.lp-mp-active .topbar .title{visibility:hidden}
 }
 @media (orientation:landscape) and (max-height:500px) and (max-width:899px){.stage{display:none}}
 @media (prefers-reduced-motion:reduce){.pal.bob,.ratio::after{animation:none}}
+@media (min-width:900px) and (min-aspect-ratio:5/4){
+  #shell:has(#game:not(.off)){max-width:max(1180px,calc(100svh + clamp(300px,23vw,450px)))}
+  #game .ctrls .board-key-guide{flex-basis:100%}
+}
+
+.board-key-guide{display:none}
+@media (min-width:900px) and (hover:hover){
+  .board-key-guide{display:block;color:inherit;opacity:.8;font:600 12px/1.3 system-ui;text-align:center;pointer-events:none}
+}
+canvas:focus-visible,button:focus-visible,[role=button]:focus-visible{outline:3px solid #48dffc;outline-offset:-3px}
+
 </style>
 </head>
 <body>
@@ -369,7 +380,7 @@ body.lp-mp-active .topbar .title{visibility:hidden}
     <div class="ratio" id="ratio"><i id="ratioB"></i></div>
     <div class="stage" id="stage" hidden><div class="pal-wrap" id="palWrap"><i class="pal" id="pal"></i></div><div class="bub" id="bub"></div></div>
     <div class="net" id="netRow"></div>
-    <div id="boardWrap"><div class="board-box" id="boardBox"><canvas id="cv" aria-label="Reversi board"></canvas></div><div class="toast" id="toast"></div></div>
+    <div id="boardWrap"><div class="board-box" id="boardBox"><canvas tabindex="0" id="cv" aria-label="Reversi board"></canvas></div><div class="toast" id="toast"></div></div>
     <div class="status" id="status"></div>
     <div class="ctrls">
       <button class="cb" id="bInvite" type="button" hidden><span class="i">🔗</span><span data-i="invite">초대</span></button>
@@ -1115,6 +1126,16 @@ function makeView(cv,opt){
         for(const a of V.anims){
             const p=(now-a.t0)/a.dur;
             if(p<1)active=true;
+            if(a.type==='captureRays'&&p>=0&&p<1){
+                const [x,y]=cellXY(a.i),extent=opt.lowFx?1:Math.min(1,p*3);
+                ctx.save();ctx.lineCap='round';ctx.lineWidth=cell*.12;
+                ctx.strokeStyle='rgba(255,210,104,'+(opt.lowFx?.66:.7*(1-p*p))+')';ctx.beginPath();
+                for(const ray of a.ends){
+                    const [ex,ey]=cellXY(ray.end);
+                    ctx.moveTo(x,y);ctx.lineTo(x+(ex-x)*extent,y+(ey-y)*extent);
+                }
+                ctx.stroke();ctx.restore();
+            }
             if(a.type==='ripple')continue;
             if(a.type==='drop'||a.type==='flip')cellA[a.i]=a;
         }
@@ -1180,6 +1201,11 @@ function makeView(cv,opt){
             circle(x,yy,mr,'#ff6a3d');ctx.shadowBlur=0;
             circle(x-mr*.25,yy-mr*.3,mr*.4,'rgba(255,220,200,.8)');
         }
+        if(V.keyCell >= 0 && cv.matches(':focus-visible')){
+            const [cx,cy]=cellXY(V.keyCell), radius=cell*.42;
+            ctx.save();ctx.strokeStyle='#10202c';ctx.lineWidth=5;ctx.strokeRect(cx-radius,cy-radius,2*radius,2*radius);
+            ctx.strokeStyle='#73edff';ctx.lineWidth=2.5;ctx.strokeRect(cx-radius,cy-radius,2*radius,2*radius);ctx.restore();
+        }
         /* 파문 */
         for(const a of V.anims){
             if(a.type!=='ripple')continue;
@@ -1232,6 +1258,15 @@ function makeView(cv,opt){
         V.anims.push({i:i,type:'ripple',t0:now+D-70,dur:520});
         if(corner)V.anims.push({i:i,type:'corner',t0:now+D-70,dur:opt.lowFx?600:950});
         const r0=i>>3,c0=i&7;let last=now+D;
+        if(n>=2){
+            const rays=new Map();
+            for(const f of flips){
+                const dx=Math.sign((f.i&7)-c0),dy=Math.sign((f.i>>3)-r0);
+                const end=f.i+dx+8*dy,dir=dx+8*dy;
+                if(!rays.has(dir)||f.dist>rays.get(dir).dist)rays.set(dir,{end,dist:f.dist});
+            }
+            if(rays.size>1)V.anims.push({type:'captureRays',i,ends:Array.from(rays.values()),t0:now+D-70,dur:400});
+        }
         (flips||[]).forEach(f=>{
             const dx=(f.i&7)-c0,dy=(f.i>>3)-r0,l=Math.hypot(dx,dy)||1,t0=now+D-90+(f.dist-1)*85;
             V.anims.push({i:f.i,type:'flip',t0:t0,dur:460,from:-p,to:p,dx:dx/l,dy:dy/l,k:f.dist,snd:false});
@@ -1996,12 +2031,12 @@ let K=null,v2P=null,v2Self=false;
 function V2on(){return !!(K&&K.room)}
 /* 공통 UI(lpRoomsUI)가 부팅할 때 커널을 먼저 세운다(UI 👥 로 방을 만들어도 이 게임이 그린다) — v1 페이지에선 아무도 안 부른다 */
 (window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
-function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795734944'],['LpRooms','/js/lpRoomsCore.js?v=1795734944'],['LpFair','/js/lpFair.js?v=1795734944'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795734944']];
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795824714'],['LpRooms','/js/lpRoomsCore.js?v=1795824714'],['LpFair','/js/lpFair.js?v=1795824714'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795824714']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
 function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
   if(window.LpGames)return cb(LpGames.v('reversi')==='v2');
-  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795734944';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('reversi')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795824714';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('reversi')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
 function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
   if(!K){K=LpRoomsTurn.mount(rvSpec());/* 방 알약(폴백 HUD) 자리 — 이 게임의 위쪽 버튼을 가리지 않게. P2 HUD 가 오면 그쪽이 대신한다 */const ds=document.documentElement.style;ds.setProperty('--lpt-hud-top','calc(env(safe-area-inset-top) + 150px)');ds.setProperty('--lpt-hud-right','auto');ds.setProperty('--lpt-hud-left','8px')}res(K)})))}
 function askLocal(q){return new Promise(res=>{const ov=document.createElement('div');ov.style.cssText='position:fixed;inset:0;z-index:9080;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:18px';
@@ -2124,6 +2159,26 @@ $('sndBtn').textContent=SND.on?'🔊':'🔇';$('sndBtn').classList.toggle('off',
 
 /* 판 입력 — pointerdown 하나로(탭 지연 없음). 마우스는 미리보기 고스트 */
 const cvEl=$('cv');
+function firstKeyCell(){return Array.from({length:64},(_,i)=>i).find(i=>E.canMove(G.board,i,G.turn)) ?? 27}
+cvEl.addEventListener('focus',()=>{if(canHumanAct()){view.V.keyCell=firstKeyCell();view.kick()}});
+cvEl.addEventListener('blur',()=>{view.V.keyCell=-1;view.kick()});
+document.addEventListener('keydown',e=>{
+    if(e.target!==cvEl&&e.target!==document.body)return;
+    if($('game').classList.contains('off')||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Enter',' '].includes(e.key))return;
+    if(e.ctrlKey||e.metaKey||e.altKey||document.querySelector('.ov.on')||!canHumanAct())return;
+    if(e.target===document.body)cvEl.focus({preventScroll:true});
+    if(!(view.V.keyCell>=0))view.V.keyCell=firstKeyCell();
+    const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+    if(delta){
+        const cols=8,rows=8,sign=1;
+        const i=view.V.keyCell;
+        const x=Math.max(0,Math.min(cols-1,i%cols+sign*delta[0]));
+        const y=Math.max(0,Math.min(rows-1,Math.floor(i/cols)+sign*delta[1]));
+        view.V.keyCell=y*cols+x;e.preventDefault();view.kick();
+    }else if(e.key==='Enter'||e.key===' '){
+        e.preventDefault();if(!e.repeat){actx();onTap(view.V.keyCell);}
+    }
+});
 function evCell(e){const r=cvEl.getBoundingClientRect();return view.hitCell(e.clientX-r.left,e.clientY-r.top)}
 cvEl.addEventListener('pointerdown',e=>{if(!e.isPrimary)return;actx();if(view.V.wipe){if(!view.V.wipe.done)view.wipeSkip();return}onTap(evCell(e))});
 cvEl.addEventListener('pointermove',e=>{
@@ -2136,6 +2191,22 @@ cvEl.addEventListener('pointermove',e=>{
 cvEl.addEventListener('pointerleave',()=>{if(view.V.hover!==-1){view.V.hover=-1;view.V.hoverFlips=null;view.kick()}});
 
 /* ══ 크기 맞춤 ══ */
+const keyGuide = document.createElement('small');
+keyGuide.className = 'board-key-guide';
+keyGuide.id = 'boardKeyGuide';
+const keyGuideText = {"ko": "↑↓←→ 이동 · Enter/Space 선택", "en": "↑↓←→ Move · Enter/Space Select", "ja": "↑↓←→ 移動 · Enter/Space 選択", "zh": "↑↓←→ 移动 · Enter/Space 选择"};
+let keyLocale = 'en';
+try{ keyLocale = (new URLSearchParams(location.search).get('lang')||localStorage.getItem('luckyplz_lang')||navigator.language||'en').toLowerCase().split('-')[0]; }catch(_){}
+keyGuide.textContent = keyGuideText[keyLocale] || keyGuideText.en;
+document.querySelector('#game .ctrls').appendChild(keyGuide);
+cvEl.setAttribute('aria-describedby', keyGuide.id);
+document.addEventListener('click',e=>{
+    if(e.detail!==0||!e.target.closest('#startBtn,#resumeBtn,#bAgain'))return;
+    requestAnimationFrame(()=>{
+        const target=cvEl,r=target.getBoundingClientRect();
+        if(r.width&&r.height&&target.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))target.focus({preventScroll:true});
+    });
+});
 function fitBoard(){
     const w=$('boardWrap'),st=$('stage');
     /* 세로 쌓기일 때 — 판이 먼저 제 크기를 갖고, 남는 높이를 캐릭터 무대가 쓴다(46~132px) */
@@ -2148,7 +2219,7 @@ function fitBoard(){
         }else if(st.style.height)st.style.height='';
     }
     const r=w.getBoundingClientRect();
-    const s=Math.min(r.width,r.height,760);
+    const s=Math.min(r.width,r.height);
     if(s>60)view.resize(s);
 }
 const hero=makeView($('heroCv'),{frame:.05,noLabels:true});
@@ -2223,13 +2294,13 @@ refreshHints();
 })();
 </script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795734944"></script>
+<script src="/js/supabase-config.js?v=1795824714"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1795734944" defer></script>
+<script src="/js/siteFooter.js?v=1795824714" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

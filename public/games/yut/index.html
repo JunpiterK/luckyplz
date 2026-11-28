@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795734944">
+<meta name="lp-build" content="1795824714">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795734944";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795824714";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -246,7 +246,7 @@ html body{padding:0}
 @keyframes breathe{50%{transform:translateY(-2px) scale(1.04)}}
 
 /* ── 가로로 누운 폰 (높이가 낮다) — 세로로 쌓으면 판이 200px 로 쪼그라든다 ── */
-@media (orientation:landscape) and (max-height:560px){
+@media (orientation:landscape) and (max-height:560px), (min-width:900px) and (min-aspect-ratio:5/4){
   .topbar{max-width:none;padding-top:calc(env(safe-area-inset-top,0px) + 4px);padding-bottom:2px}
   .scr.game{max-width:none;display:grid;grid-template-columns:minmax(0,1fr) clamp(230px,38vw,320px);
     grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"board strip" "board gap" "board ctrls";column-gap:12px;padding-top:2px}
@@ -403,6 +403,17 @@ body.lpr2 #roomPill{display:none!important}   /* 공통 HUD 알약이 그 자리
 #lprSlot{display:flex;flex:0 1 auto;min-width:0;justify-content:center}
 #tbDock .lp-rooms-btn{position:relative!important;left:auto!important;top:auto!important}
 body.lpr2 #tbDock .lp-rooms-btn.in{display:none!important}   /* 방 안에선 머리줄 HUD 알약이 같은 방 시트를 연다 */
+@media(min-width:900px) and (min-aspect-ratio:5/4){
+  #scrGame{width:min(100%,calc(100dvh + 390px));margin-inline:auto;padding-inline:14px}
+  #scrGame .strip,#scrGame .ctrls{align-self:center}
+}
+
+.board-key-guide{display:none}
+@media (min-width:900px) and (hover:hover){
+  .board-key-guide{display:block;color:inherit;opacity:.8;font:600 12px/1.3 system-ui;text-align:center;pointer-events:none}
+}
+canvas:focus-visible,button:focus-visible,[role=button]:focus-visible{outline:3px solid #48dffc;outline-offset:-3px}
+
 </style>
 </head>
 <body>
@@ -526,7 +537,7 @@ body.lpr2 #tbDock .lp-rooms-btn.in{display:none!important}   /* 방 안에선 �
   <section class="scr game hide" id="scrGame">
     <div class="strip" id="strip"></div>
     <div class="boardwrap" id="bwrap">
-      <canvas id="board"></canvas>
+      <canvas tabindex="0" id="board"></canvas>
       <div class="toast" id="toast"></div>
     </div>
     <div class="ctrls">
@@ -780,25 +791,63 @@ try{sndOn=localStorage.getItem('yut_snd')!=='0';bgmOn=localStorage.getItem(BGM_K
 let AC=null,OUT=null,SFXB=null,BGMB=null,DUCK=null,NOISE=null;
 const BGM_VOL=0.5,SFX_VOL=0.62;   /* 실측(분석기): 배경음 RMS ≈ -32dBFS, 큰 효과음 피크 ≈ 0dBFS — 컴프레서 앞에서 넘치지 않게 */
 function ac(){
+  if(!AC&&!sndOn&&!bgmOn)return null;
   if(!AC){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
     try{AC=new C({latencyHint:'interactive'})}catch(_){try{AC=new C()}catch(__){return null}}
     try{buildGraph()}catch(e){console.warn('[yut] audio',e);AC=null;return null}}
   if(AC.state==='suspended'&&!document.hidden)AC.resume().catch(()=>{});
   return AC}
+const audioJobs=[];
+function queueAudioJob(job){
+  audioJobs.push(job);
+  if(audioJobs.length===1)scheduleAudioWork();
+}
+function scheduleAudioWork(){
+  const run=()=>{
+    const until=performance.now()+2;
+    do{
+      const job=audioJobs.shift();
+      if(!job.next().done)audioJobs.push(job);
+    }while(audioJobs.length&&performance.now()<until);
+    if(audioJobs.length)scheduleAudioWork();
+  };
+  if(window.requestIdleCallback)requestIdleCallback(run,{timeout:140});else setTimeout(run,16);
+}
 function buildGraph(){
   const a=AC,comp=a.createDynamicsCompressor();
   comp.threshold.value=-14;comp.knee.value=10;comp.ratio.value=4;comp.attack.value=0.004;comp.release.value=0.22;
   OUT=a.createGain();OUT.gain.value=0.9;OUT.connect(comp);comp.connect(a.destination);
   /* 잔향(짧은 대청마루 울림) — 생성한 1.2초 IR 하나를 두 버스가 나눠 쓴다 */
-  const rev=a.createConvolver(),len=Math.floor(a.sampleRate*1.2),ir=a.createBuffer(2,len,a.sampleRate);
-  for(let c=0;c<2;c++){const d=ir.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.4)}
-  rev.buffer=ir;const rvo=a.createGain();rvo.gain.value=0.5;rev.connect(rvo);rvo.connect(OUT);
+  const rev=a.createConvolver(),rvo=a.createGain();rvo.gain.value=0.5;rev.connect(rvo);rvo.connect(OUT);
   SFXB=a.createGain();SFXB.gain.value=sndOn?SFX_VOL:0;SFXB.connect(OUT);
   const s1=a.createGain();s1.gain.value=0.12;SFXB.connect(s1);s1.connect(rev);
   BGMB=a.createGain();BGMB.gain.value=0;DUCK=a.createGain();DUCK.gain.value=1;
   BGMB.connect(DUCK);DUCK.connect(OUT);
   const s2=a.createGain();s2.gain.value=0.32;DUCK.connect(s2);s2.connect(rev);
-  NOISE=a.createBuffer(1,a.sampleRate,a.sampleRate);const nd=NOISE.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  NOISE=a.createBuffer(1,512,a.sampleRate);
+  const short=NOISE.getChannelData(0);
+  for(let i=0;i<short.length;i++)short[i]=Math.random()*2-1;
+  // Feed dry sound immediately. Attach the room response after both channels are populated.
+  queueAudioJob((function*(){
+    const len=Math.ceil(a.sampleRate*1.2),ir=a.createBuffer(2,len,a.sampleRate);
+    for(let ch=0;ch<2;ch++){
+      const data=ir.getChannelData(ch);
+      for(let start=0;start<len;start+=1024){
+        const stop=Math.min(len,start+1024);
+        for(let i=start;i<stop;i++)data[i]=(Math.random()*2-1)*Math.pow(1-i/len,3.4);
+        yield;
+      }
+    }
+    rev.buffer=ir;
+    const full=a.createBuffer(1,a.sampleRate,a.sampleRate),data=full.getChannelData(0);
+    for(let start=0;start<data.length;start+=2048){
+      const stop=Math.min(data.length,start+2048);
+      for(let i=start;i<stop;i++)data[i]=Math.random()*2-1;
+      yield;
+    }
+    NOISE=full;
+  })());
+  if(sndOn||bgmOn)[4,5,10].forEach(d=>requestString(deg(d)));
 }
 /* iOS·크롬 자동재생 정책 — 첫 탭 안에서 컨텍스트를 만들고 무음 한 샘플을 틀어 풀어 둔다 */
 let unlocked=false;
@@ -813,17 +862,15 @@ document.addEventListener('visibilitychange',()=>{
   if(document.hidden){AC.suspend().catch(()=>{})}
   else{AC.resume().then(()=>{Bgm.next=AC.currentTime+0.12}).catch(()=>{})}
 });
-const live=()=>AC&&AC.state==='running';
-/* 2026-10-01 첫 탭 지연 — AudioContext 생성(+잔향 IR·잡음 버퍼 계산)이 첫 pointerdown 안에서 돌아 CPU 4배 스로틀에서
-   첫 탭이 110~230ms 늦게 반응했다. 로드 3초 뒤 한가할 때 미리 만들어 둔다(정지 상태로 생성 — 소리는 안 난다.
-   첫 화면이 그려지고 조용해진 뒤라 메뉴 반응을 막지 않는다). 그 전에 탭하면 예전처럼 탭 안에서 만든다.
-   첫 탭의 unlockAudio 는 그대로 resume + 무음 한 샘플로 푼다. dodge 의 발사음도 같은 방식(로드 때 생성) */
+const live=()=>AC&&AC.state==='running'&&(sndOn||bgmOn);
+/* Prepare this game's audio bus while the setup screen is idle. The first gesture unlocks audio
+   immediately. Room response, noise and string samples finish in small idle slices. */
 (function(){
-  const pre=()=>{if(AC||document.hidden)return;const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
+  const pre=()=>{if(AC||document.hidden||(!sndOn&&!bgmOn))return;const C=window.AudioContext||window.webkitAudioContext;if(!C)return;
     try{AC=new C({latencyHint:'interactive'})}catch(_){try{AC=new C()}catch(__){return}}
     try{buildGraph()}catch(e){try{AC.close()}catch(_){}AC=null}};
-  const go=()=>setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(pre,{timeout:2000});else pre()},3000);
-  if(document.readyState==='complete')go();else addEventListener('load',go,{once:true});
+  const go=()=>setTimeout(()=>{if(window.requestIdleCallback)requestIdleCallback(pre,{timeout:2000});else pre()},750);
+  if(document.readyState==='loading')addEventListener('DOMContentLoaded',go,{once:true});else go();
 })();
 
 /* ── 음 높이: 평조 솔(D4)을 0도로. 도수 i → 주파수 (5음 음계, 옥타브 넘나듦) ── */
@@ -831,9 +878,13 @@ const SC=[0,2,5,7,9],BASE=293.66;
 function deg(i){const o=Math.floor(i/5),k=((i%5)+5)%5;return BASE*Math.pow(2,(o*12+SC[k])/12)}
 
 /* ── 가야금: Karplus-Strong. 음마다 한 번 계산해 캐시(≈1ms) ── */
-const KS={};
-function ksBuf(f){
-  const key=Math.round(f*2);if(KS[key])return KS[key];
+const KS=new Map(),pendingStrings=new Set();
+function requestString(f){
+  const key=Math.round(f*2);
+  if(KS.has(key)||pendingStrings.has(key))return;
+  pendingStrings.add(key);queueAudioJob(makeString(f,key));
+}
+function* makeString(f,key){
   const a=AC,sr=a.sampleRate,n=Math.floor(sr*1.7),b=a.createBuffer(1,n,sr),d=b.getChannelData(0);
   const N=Math.max(2,Math.round(sr/f)),ring=new Float32Array(N);
   /* 명주실 — 딱딱한 금속 현보다 부드럽게: 저역 통과한 잡음으로 튕기고, 튕긴 자리(1/5) 빗살로 콧소리 */
@@ -842,18 +893,33 @@ function ksBuf(f){
   const pp=Math.max(1,Math.round(N*0.2));for(let i=0;i<N;i++)ring[i]=ex[i]-0.6*ex[(i+pp)%N];
   const T60=f<250?1.5:f<500?1.15:0.8,loss=Math.pow(0.001,1/(f*T60));
   let idx=0,dc=0,prev=0;
-  for(let i=0;i<n;i++){const nx=(idx+1)%N,y=ring[idx];ring[idx]=loss*0.5*(y+ring[nx]);idx=nx;
-    dc=y-prev+0.995*dc;prev=y;d[i]=dc*(i<48?i/48:1)}
+  for(let start=0;start<n;start+=2048){
+    const stop=Math.min(n,start+2048);
+    for(let i=start;i<stop;i++){
+      const nx=(idx+1)%N,y=ring[idx];ring[idx]=loss*.5*(y+ring[nx]);idx=nx;
+      dc=y-prev+.995*dc;prev=y;d[i]=dc*(i<48?i/48:1);
+    }
+    yield;
+  }
   let pk=0;for(let i=0;i<Math.min(n,4000);i++)pk=Math.max(pk,Math.abs(d[i]));
-  if(pk>0)for(let i=0;i<n;i++)d[i]/=pk;
-  return (KS[key]={b,r:f/(sr/(N+0.5))});   /* KS 는 반 샘플 늦다 — 재생 속도로 음정을 바로잡는다 */
+  if(pk>0)for(let start=0;start<n;start+=2048){
+    const stop=Math.min(n,start+2048);for(let i=start;i<stop;i++)d[i]/=pk;yield;
+  }
+  KS.set(key,{b,f,r:f/(sr/(N+.5))});pendingStrings.delete(key);   /* KS 는 반 샘플 늦다 — 재생 속도로 음정을 바로잡는다 */
 }
 function vibCurve(r0,depth,dur){const n=48,c=new Float32Array(n);
   for(let i=0;i<n;i++){const u=i/(n-1),tt=u*dur;c[i]=r0*(1+depth*Math.min(1,u*2.2)*Math.sin(tt*2*Math.PI*5.3))}return c}
 /* o: {bus, dur, vib(깊이), bend(반음, +추성 / -퇴성), bendAt, pan} */
 function pluck(f,t,vol,o){
-  if(!live())return;o=o||{};const a=AC,k=ksBuf(f),s=a.createBufferSource();s.buffer=k.b;
-  const r0=k.r,dur=o.dur||1.5;s.playbackRate.setValueAtTime(r0,t);
+  if(!live())return;o=o||{};
+  let k=KS.get(Math.round(f*2));
+  if(!k){
+    requestString(f);
+    for(const sample of KS.values())if(!k||Math.abs(f-sample.f)<Math.abs(f-k.f))k=sample;
+    if(!k){osc(t,'triangle',f,f,Math.min(.24,o.dur||.24),vol*.28,o.bus||SFXB);return}
+  }
+  const a=AC,s=a.createBufferSource();s.buffer=k.b;
+  const r0=k.r*f/k.f,dur=o.dur||1.5;s.playbackRate.setValueAtTime(r0,t);
   if(o.bend){const bt=t+(o.bendAt||0.1);s.playbackRate.setValueAtTime(r0,bt);s.playbackRate.linearRampToValueAtTime(r0*Math.pow(2,o.bend/12),bt+(o.bendDur||0.11))}
   else if(o.vib&&dur>0.3){s.playbackRate.setValueCurveAtTime(vibCurve(r0,o.vib,dur-0.16),t+0.14,dur-0.16)}
   const g=a.createGain();g.gain.setValueAtTime(vol,t);g.gain.setValueAtTime(vol,t+dur*0.75);g.gain.linearRampToValueAtTime(0.0001,t+dur);
@@ -865,7 +931,7 @@ function noiseHit(t,dur,type,freq,q,vol,bus,f2){
   if(!live())return;const a=AC,s=a.createBufferSource();s.buffer=NOISE;
   const f=a.createBiquadFilter();f.type=type;f.frequency.setValueAtTime(freq,t);if(f2)f.frequency.exponentialRampToValueAtTime(f2,t+dur);f.Q.value=q;
   const g=a.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+Math.min(0.01,dur*0.2));g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
-  s.connect(f);f.connect(g);g.connect(bus||SFXB);const off=Math.random()*0.5;s.start(t,off,dur+0.05);
+  s.connect(f);f.connect(g);g.connect(bus||SFXB);s.loop=true;s.start(t,Math.random()*s.buffer.duration);s.stop(t+dur+.05);
 }
 function osc(t,type,f0,f1,dur,vol,bus,att){
   if(!live())return;const a=AC,o=a.createOscillator(),g=a.createGain();o.type=type;
@@ -1587,9 +1653,42 @@ function endCharge(fire){if(!charge)return;const pow=charge.pow;charge=null;canc
   /* 키보드(스페이스·엔터)·보조기기 click — 포인터로 방금 던졌으면 무시 */
   tb.addEventListener('click',()=>{if(Date.now()-chargeEndAt<700)return;throwIntent(0.6)});
 }
+const keyGuide = document.createElement('small');
+keyGuide.className = 'board-key-guide';
+keyGuide.id = 'boardKeyGuide';
+const keyGuideText = {"ko": "Space 던지기 · ←→ 말/도착지 · Enter 선택", "en": "Space Throw · ←→ Piece/destination · Enter Select", "ja": "Space 投げる · ←→ 駒/行き先 · Enter 選択", "zh": "Space 投掷 · ←→ 棋子/目的地 · Enter 选择"};
+let keyLocale = 'en';
+try{ keyLocale = (new URLSearchParams(location.search).get('lang')||localStorage.getItem('luckyplz_lang')||navigator.language||'en').toLowerCase().split('-')[0]; }catch(_){}
+keyGuide.textContent = keyGuideText[keyLocale] || keyGuideText.en;
+document.querySelector('#scrGame .ctrls').appendChild(keyGuide);
+$('board').setAttribute('aria-describedby', keyGuide.id);
+document.addEventListener('click',e=>{
+    if(e.detail!==0||!e.target.closest('#btnStart,#btnAgain,#btnResumeGame'))return;
+    requestAnimationFrame(()=>{
+        const target=$('board'),r=target.getBoundingClientRect();
+        if(r.width&&r.height&&target.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)))target.focus({preventScroll:true});
+    });
+});
 $('btnNew').addEventListener('click',()=>{if(!canInput())return;sel={from:-1};Sfx.pick();renderHUD()});
-document.addEventListener('keydown',e=>{if($('scrGame').classList.contains('hide'))return;
-  if((e.key===' '||e.key==='Enter')&&!$('btnThrow').disabled&&document.activeElement.tagName!=='INPUT'){e.preventDefault();$('btnThrow').click()}});
+let keyChoice=0;
+function moveChoices(os){
+  return sel?destList(os,sel.from):[...new Set(os.map(o=>o.from))].map(from=>({from}));
+}
+document.addEventListener('keydown',e=>{
+  if(e.defaultPrevented||e.ctrlKey||e.altKey||e.metaKey||e.target.closest('a,input,textarea,select,[contenteditable=true]')||
+     (e.target.closest('button,[role=button]')&&!(e.key.startsWith('Arrow')&&$('scrGame').contains(e.target)))||
+     $('scrGame').classList.contains('hide')||document.querySelector('.ov.on')||!canInput())return;
+  const choose=e.key==='Enter'||e.key===' ';
+  if(V.throws>0){if(choose){e.preventDefault();if(!e.repeat)$('btnThrow').click()}return}
+  const dir={ArrowLeft:-1,ArrowUp:-1,ArrowRight:1,ArrowDown:1}[e.key];
+  if(e.key==='Escape'){sel=null;keyChoice=0;renderHUD();return}
+  if(!dir&&!choose)return;
+  const choices=moveChoices(options(V,V.turn));if(!choices.length)return;
+  e.preventDefault();cv.focus({preventScroll:true});
+  if(dir){keyChoice=(keyChoice+choices.length+dir)%choices.length;return}
+  if(e.repeat)return;const choice=choices[keyChoice%choices.length];keyChoice=0;
+  if(sel)chooseMove(choice.o);else{sel={from:choice.from};Sfx.pick();renderHUD()}
+});
 function chooseMove(o){
   sel=null;
   if(V2on()){intentAt=Date.now();K.act({k:'move',from:o.from,v:o.v}).then(r=>{if(r&&!r.ok){intentAt=0;renderHUD()}});renderHUD();return}
@@ -1617,7 +1716,7 @@ function stPos(st){
 const BIG=new Set([0,5,10,15,22]);
 function resize(){
   const w=$('bwrap').clientWidth,h=$('bwrap').clientHeight;
-  const s=Math.max(200,Math.floor(Math.min(w,h,720)));
+  const s=Math.max(200,Math.floor(Math.min(w,h)));
   DPR=Math.min(window.devicePixelRatio||1,2.5);
   SZ=s;cv.style.width=s+'px';cv.style.height=s+'px';cv.width=Math.round(s*DPR);cv.height=Math.round(s*DPR);
   boardCache=null;
@@ -1864,6 +1963,13 @@ function frame(now){
     });
     if(sel.from===-1){const p=stPos('F');ctx.strokeStyle='rgba('+rgb+',.9)';ctx.lineWidth=SZ*0.006;ctx.beginPath();ctx.arc(p.x,p.y,SZ*0.035,0,7);ctx.stroke()}
   }
+  if(myMove&&cv.matches(':focus-visible')){
+    const choices=moveChoices(os),choice=choices[keyChoice%choices.length];
+    if(choice){
+      const p=stPos(sel?choice.to:choice.from===-1?'F':choice.from);
+      ctx.save();ctx.strokeStyle='#70f5ff';ctx.lineWidth=SZ*.008;ctx.strokeRect(p.x-SZ*.052,p.y-SZ*.052,SZ*.104,SZ*.104);ctx.restore();
+    }
+  }
   frame.dests=dests;
   /* 말 — 말밭별로 쌓아 그린다(업힌 말 = 탑). 탑은 늘 살랑이고, 막 업혔으면 젤리처럼 출렁인다 */
   const hide=anim?anim.hide:null;
@@ -2036,6 +2142,7 @@ function moveAnim(prev,st,ev){
     const hide=new Set(keys);
     const pts=[ev.from===-1?stPos('F'):stPos(ev.from)].concat(ev.path.map(s=>stPos(s)));
     const N=pts.length-1,lift=PS*STACK;
+    const branch=ev.from===5&&ev.path[0]===20||ev.from===10&&ev.path[0]===25||ev.from===22&&ev.path[0]===27;
     /* 도착 칸에 이미 서 있던 우리 말 수 — 마지막 도약은 그 탑 꼭대기로(업기) */
     const toSt=ev.fin?null:ev.path[ev.path.length-1];
     let under=0;if(toSt!=null)prev.pieces[t].forEach((p,i)=>{if(p.s===1&&!ev.movers.includes(i)&&stOf(p)===toSt)under++});
@@ -2062,7 +2169,15 @@ function moveAnim(prev,st,ev){
         if(back){o.rot=Math.sin(now/55)*0.3*(RM?0.3:1);if(Math.random()<0.08)sweat(x+PS*0.22,y-PS*0.8)}
         else if(!RM&&keys.length>1)o.dx=Math.sin(q*Math.PI*2)*PS*0.03}
       const ex=back?'o':(ev.cap.length&&last)?'x':'h';
-      anim.y=y;anim.draw=()=>tower(x,y,o,ex);
+      anim.y=y;anim.draw=()=>{
+        if(branch||back){
+          ctx.save();ctx.lineWidth=SZ*.008;ctx.lineCap='round';ctx.strokeStyle=back?'#9ed4ff':'#ffd76a';
+          ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+          for(let j=1;j<=k;j++)ctx.lineTo(pts[j].x,pts[j].y);
+          ctx.lineTo(x,y);ctx.stroke();ctx.restore();
+        }
+        tower(x,y,o,ex);
+      };
       requestAnimationFrame(run);
     };
     const finishLand=()=>{
@@ -2947,13 +3062,13 @@ function V2on(){return !!(K&&K.room)}
 function P2on(){return !!(window.LpRoomsUI&&LpRoomsUI.mountLobby&&!String(LpRoomsUI.version||'').includes('stub'))}
 function lbScr(){return V2on()&&P2on()?'scrMode':'scrLobby'}
 (window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>{document.body.classList.add('lpr2');setTimeout(dockShared,120);setTimeout(dockShared,900);return v2Ready().catch(()=>{})});
-function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795734944'],['LpRooms','/js/lpRoomsCore.js?v=1795734944'],['LpFair','/js/lpFair.js?v=1795734944'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795734944']];
+function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v=1795824714'],['LpRooms','/js/lpRoomsCore.js?v=1795824714'],['LpFair','/js/lpFair.js?v=1795824714'],['LpRoomsTurn','/js/lpRoomsTurn.js?v=1795824714']];
   let i=0;(function nx(){while(i<L.length&&window[L[i][0]]&&!String(window[L[i][0]].version||'').includes('stub'))i++;if(i>=L.length)return cb();
     const s=document.createElement('script');s.src=L[i][1];s.onload=()=>{i++;nx()};s.onerror=()=>{i=L.length;cb()};document.head.appendChild(s)})()}
 /* 방 만들기 버튼 — 레지스트리 플래그는 누를 때 확인한다(v1 이 기본) */
 function lpV2Want(cb){if(LPV2)return cb(true);try{if(localStorage.getItem('lpRoomsV')==='1'||new URLSearchParams(location.search).get('rooms')==='v1')return cb(false)}catch(_){}
   if(window.LpGames)return cb(LpGames.v('yut')==='v2');
-  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795734944';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('yut')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
+  const s=document.createElement('script');s.src='/js/lpGames.js?v=1795824714';s.onload=()=>cb(!!(window.LpGames&&LpGames.v('yut')==='v2'));s.onerror=()=>cb(false);document.head.appendChild(s)}
 function v2Ready(){return v2P||(v2P=new Promise((res,rej)=>lpV2Load(()=>{if(!window.LpRooms||!window.LpRoomsTurn){v2P=null;rej(new Error('load'));return}
   if(!K)K=LpRoomsTurn.mount(yutSpec());res(K)})))}
 function yutSpec(){return {gameId:'yut',name:()=>T('title'),seats:[2,4],max:8,lateJoin:'takeBot',needGuest:true,migratable:true,noHud:true,noBanner:true,
@@ -3134,14 +3249,14 @@ window.__yut={get S(){return S},get V(){return V},get role(){return ROLE},get my
 </script>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795734944"></script>
-<script src="/js/nextGames.js?v=1795734944"></script>
+<script src="/js/supabase-config.js?v=1795824714"></script>
+<script src="/js/nextGames.js?v=1795824714"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1795734944" defer></script>
+<script src="/js/siteFooter.js?v=1795824714" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===
