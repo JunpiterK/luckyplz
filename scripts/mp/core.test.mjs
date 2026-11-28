@@ -76,5 +76,24 @@ function stats(N, lat, trials, seed) {
     ok('RP1', JSON.stringify(a) === '[true,false,true,true,false,false]' && !seen0 && !seen1 && take && seen2 && JSON.stringify(b) === '[true,false,true,true,false]',
         'replay window: new/dup/late-in-window/out-of-window; replaySeen is read-only; restored floor rejects everything ≤ saved lastC', { a, peek: [seen0, seen1, take, seen2], floor: b });
 }
+/* Both turn start paths publish a round number to peers through JSON. */
+vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'public', 'js', 'lpRoomsTurn.js'), 'utf8'), { filename: 'lpRoomsTurn.js' });
+for (const method of ['start', 'startGame']) {
+    const state = { phase: 'lobby', roster: [{ p: 'host', r: 'host', seat: 0 }] };
+    const kernel = Object.create(globalThis.LpRoomsTurn._Kernel.prototype);
+    kernel.spec = { host: { init: () => ({}) } };
+    kernel.room = {
+        isHost: true, state: () => state, canStart: () => true,
+        setState: mutate => mutate(state), start: () => {}
+    };
+    kernel._norm = kernel._advance = () => {};
+    const observed = [];
+    for (let i = 0; i < 2; i++) {
+        await kernel[method]({});
+        observed.push([state.tk.g, JSON.parse(JSON.stringify(state.tk)).g]);
+    }
+    ok('ROUND-' + method, JSON.stringify(observed) === '[[1,1],[2,2]]',
+        'host and guest see round 1 in a new room and round 2 on rematch', observed);
+}
 console.log(`\ncore.test: ${pass} pass / ${fail} fail`);
 process.exit(fail ? 1 : 0);

@@ -4,9 +4,9 @@
     <meta name="lp-ad-policy" content="off"><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!--lp-build-check:start-->
-<meta name="lp-build" content="1795827565">
+<meta name="lp-build" content="1795837752">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795827565";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795837752";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -1183,8 +1183,13 @@ const I18N={
      tipBlock:'O ponto que brilha precisa de bloqueio',tipWin:'Você tem uma jogada vencedora!',tipThree:'Três aberto: o rival precisa bloquear',tipFour:'Quatro: a próxima é cinco!',tipForb:'✕ marca pontos proibidos às pretas',tipOpen:'Comece pelo centro e mantenha as pedras juntas',
      coach:'Dicas',tapMode:'Toque',tap2:'Dois toques',tap1:'Um toque',recTitle:'Registro',fromLink:'Partida compartilhada',rpHint:'Passo a passo com ◀ ▶'}
 };
-function curLang(){let l='en';try{l=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase()}catch(_){}if(l==='gb')l='en';return I18N[l]?l:'en'}
-let LANG=curLang();
+function curLang(atEntry){
+  const query=atEntry&&(new URLSearchParams(location.search).get('lang')||'').toLowerCase().split('-')[0];
+  if(query&&Object.prototype.hasOwnProperty.call(I18N,query))return query;
+  let l='en';try{l=(localStorage.getItem('luckyplz_lang')||'en').toLowerCase()}catch(_){}
+  return Object.prototype.hasOwnProperty.call(I18N,l)?l:'en';
+}
+let LANG=curLang(true);
 function T(k,vars){
     let s=(I18N[LANG]&&I18N[LANG][k]!=null)?I18N[LANG][k]:(I18N.en[k]!=null?I18N.en[k]:k);
     if(vars&&typeof s==='string')for(const v in vars)s=s.split('{'+v+'}').join(vars[v]);
@@ -1201,6 +1206,7 @@ if(['free','std','renju'].indexOf(PREF.rule)<0)PREF.rule='free';
 if(PREF.size!==19)PREF.size=15;
 const LOWFX=(function(){try{return matchMedia('(prefers-reduced-motion: reduce)').matches||((navigator.deviceMemory||8)<=2)}catch(_){return false}})();
 const STATS=load('lp_om_stats',{});
+let setupMode=PREF.mode;
 const COLS='ABCDEFGHJKLMNOPQRST';
 /* 좌표 표기 — 렌주 관례(가로 a~o · 세로 아래에서 1~15). 19줄은 바둑식으로 I 를 건너뛴다 */
 function coord(i,N){const x=i%N,y=(i-x)/N;return (N===19?COLS[x]:'ABCDEFGHIJKLMNO'[x])+(N-y)}
@@ -1894,6 +1900,7 @@ function resumeSolo(){
     G.aiTok++;G.thinking=false;
     G.mode=s.mode==='local'?'local':'ai';G.level=CH[s.level]?s.level:'normal';G.human=s.human===-1?-1:1;
     showGame();resetBoard(s.N,s.rule);setMoves(s.mv);G.t0=s.t0||Date.now();
+    reportOmRound(false);
     hideEnd();stageSetup(false);refreshOverlay();updateHUD();sfx('start');fitBoard();
     if(G.mode==='ai'&&G.turn!==G.human)aiThink(300);
 }
@@ -1902,6 +1909,7 @@ function resumeSolo(){
 function finishSoon(){
     if(G.shownOver)return;
     G.shownOver=true;clearSolo();
+    if(G.mode!=='online')reportOmRound(true);
     const w=G.win||{draw:true};
     if(w.line){view.setWin(w.line,w.p);if(w.line.length)view.follow(w.line[2],true)}
     const mine=G.mode==='ai'?G.human:G.mode==='online'?mySeatColor():0;
@@ -1936,10 +1944,11 @@ function showEnd(pex,lost){
     if(G.mode!=='online'&&secs>3)chips.push('<span>⏱ '+esc(T('stTime',{m:Math.floor(secs/60),s:secs%60}))+'</span>');
     if(G.mode==='ai'){const s=STATS[G.level];if(s)chips.push('<span>'+esc(T('record',{w:s.w,l:s.l,d:s.d}))+'</span>')}
     $('endStats').innerHTML=chips.join('');
+    if(G.mode==='online'&&O&&O.series)$('endStats').appendChild(duelChip());
     $('endPal').style.backgroundPosition=palPos(PAL.row,pex);
     const on=G.mode==='online';
-    $('bAgain').textContent=on?T('rematch'):T('again');
-    $('bAgain').hidden=on&&!(K&&K.isHost);
+    if(on)refreshRematch();
+    else{$('bAgain').textContent=T('again');$('bAgain').hidden=false;$('bAgain').disabled=false}
     $('endOv').classList.add('on');mountNav();
 }
 function hideEnd(){finishSoon.tok++;$('endOv').classList.remove('on')}
@@ -2053,6 +2062,7 @@ function showSetup(){
 function newLocalGame(){
     G.aiTok++;G.thinking=false;$('pal').classList.remove('bob');
     resetBoard(G.N,G.rule);hideEnd();clearPending();
+    reportOmRound(false);
     stageSetup(true);refreshOverlay();updateHUD();sfx('start');clearSolo();fitBoard();
     if(G.mode==='ai'&&G.human===-1)aiThink(500);
 }
@@ -2080,7 +2090,45 @@ async function toMenu(fromNav){
    방장이 수를 검증(빈칸·차례·렌주 금수)해 판 상태(수 목록)를 올리고 모두가 같은 판을 그린다.
    자리 보호: 폰을 내려놓아도 자리는 그 사람 것 — 끊기면 8초 뒤 봇이 대신, 돌아오면 이어서. 관전자는 늦게 와도 판 전체를 받는다.
    한 판 더 = 방장이 대기실로 → 두 사람 색을 서로 바꿔 둔다(바꾸기 싫으면 대기실에서 다시 고른다). */
-const GID='omok',LPV='1795827565';
+const GID='omok',LPV='1795837752';
+let omReports=load('lp_om_round_events',[]);
+if(!Array.isArray(omReports))omReports=[];
+function deliverOmEvents(events,mode,result,attempt=0){
+  if(window.LpTrack&&events.length){
+    events.forEach(name=>window.LpTrack(name,{game:GID,mode}));
+    events=[];
+  }
+  if(result&&window.LpRecent&&window.LpRecent.add){
+    window.LpRecent.add({game:GID,result});
+    result='';
+  }
+  if((events.length||result)&&attempt<20)setTimeout(()=>deliverOmEvents(events,mode,result,attempt+1),500);
+}
+function reportOmRound(ended,S){
+  const mode=G.mode,net=mode==='online';
+  if(net&&(!S||!S.tk||!mySeatColor()))return;
+  const key=net?(S.game.matchId||K.room.code+'-'+S.tk.g):String(G.t0);
+  const id=mode+'-'+key;
+  let record=omReports.find(r=>r.id===id);
+  if(ended?(!record||record.end):record)return;
+  const events=[ended?'game_end':'game_start'];
+  let result='';
+  if(ended){
+    record.end=true;
+    const win=net?S.game.win:G.win;
+    result=win.draw?T('draw'):T('winsName',{name:nameOf(win.p)});
+  }else{
+    record={id};omReports.push(record);
+    if(omReports.length>48)omReports.shift();
+    if(net&&O.series){
+      events.push('duel_start');
+      const start=S.game.duel;
+      if(start&&(start.wins[0]||start.wins[1]||start.draws))events.push('duel_rematch');
+    }
+  }
+  save('lp_om_round_events',omReports);
+  deliverOmEvents(events,mode,result);
+}
 function V2on(){return !!(K&&K.room)}
 (window.LpRoomsQ=window.LpRoomsQ||[]).push(()=>v2Ready().catch(()=>{}));
 function lpV2Load(cb){const L=[['LpGames','/js/lpGames.js?v='+LPV],['LpRooms','/js/lpRoomsCore.js?v='+LPV],['LpFair','/js/lpFair.js?v='+LPV],['LpRoomsTurn','/js/lpRoomsTurn.js?v='+LPV]];
@@ -2092,6 +2140,53 @@ function boardFrom(N,mv){const b=new Int8Array(N*N);mv.forEach((i,k)=>{b[i]=k%2?
 function stoneChip(v){return '<span style="display:inline-block;width:16px;height:16px;border-radius:50%;vertical-align:-3px;box-shadow:0 1px 2px rgba(0,0,0,.5);background:'+(v==='b'?'radial-gradient(circle at 34% 30%,#8a8f98,#111214 70%)':'radial-gradient(circle at 34% 30%,#fff,#cfc8b6)')+'"></span> '+esc(T(v==='b'?'black':'white'))}
 function sideOf(v){return v==='b'?'⚫ '+esc(T('black')):v==='w'?'⚪ '+esc(T('white')):'🎲 '+esc(T('rnd'))}
 function hostPid(S){const h=S&&S.roster&&S.roster.find(m=>m.r==='host');return h?h.p:null}
+/* Wins follow the two people across colour swaps and host migrations. Each
+   board holds its opening score. Its outcome is derived from the final board,
+   so repeated snapshots never award another win. */
+function scoreForPair(seats,prior){
+  if(!seats||seats.length!==2||seats.some(s=>!s||!s.p||s.bot))return null;
+  const players=seats.map(s=>s.p);
+  const same=prior&&players.every(p=>prior.players.includes(p));
+  return {players,wins:same?players.map(p=>prior.wins[prior.players.indexOf(p)]):[0,0],draws:same?prior.draws:0};
+}
+function currentScore(S){
+  if(!S||!S.game||!S.tk)return null;
+  const g=S.game,score=scoreForPair(S.tk.seats,g.duel);
+  if(!score||!g.over||!g.win)return score;
+  if(g.win.draw)score.draws++;
+  else score.wins[g.sides.indexOf(g.win.p===1?'b':'w')]++;
+  return score;
+}
+const DUEL_COPY={
+  ko:['{n}국','{n}무','재대결 신청','신청 완료 · 방장 대기','재대결 수락 · 색 교대'],
+  en:['Game {n}','{n} drawn','Request rematch','Requested · waiting for host','Accept rematch · swap colours'],
+  ja:['第{n}局','引き分け{n}','再戦を申し込む','申請済み・ホスト待ち','再戦を受ける・色交代'],
+  zh:['第{n}局','{n}平','邀请再战','已邀请 · 等待房主','接受再战 · 交换颜色'],
+  es:['Partida {n}','{n} tablas','Pedir revancha','Enviada · esperando al anfitrión','Aceptar y cambiar de color'],
+  pt:['Partida {n}','{n} empates','Pedir revanche','Enviado · aguardando anfitrião','Aceitar e trocar de cor']
+};
+function duelText(i,n){return (DUEL_COPY[LANG]||DUEL_COPY.en)[i].replace('{n}',n)}
+function duelChip(){
+  const s=O.series,b=O.seats.b,w=O.seats.w,el=document.createElement('span');
+  el.className='chip';const black=s.wins[s.players.indexOf(b.cid)],white=s.wins[s.players.indexOf(w.cid)];
+  const round=black+white+s.draws+(O.phase==='over'?0:1);
+  el.textContent=duelText(0,round)+' · '+b.name+' '+black+' : '+white+' '+w.name+(s.draws?' · '+duelText(1,s.draws):'');
+  return el;
+}
+function refreshRematch(){
+  const button=$('bAgain'),S=K&&K.S(),game=S&&S.game;
+  const host=K&&K.isHost,requested=game&&S.tk&&S.tk.seats&&S.tk.seats.some(s=>s.p===game.rematchBy);
+  button.hidden=!game||!game.over||(!host&&!mySeatColor());
+  button.disabled=!!(!host&&requested&&game.rematchBy===myCid());
+  button.textContent=host?(requested?duelText(4):T('rematch')):duelText(button.disabled?3:2);
+}
+function omIntent(from,action,data,seat){
+  if(action!=='om_rematch')return {reject:'unknown'};
+  const S=K.S();
+  if(seat==null||!S.tk||!S.tk.seats||!S.tk.seats[seat]||S.tk.seats[seat].p!==from.p)return {reject:'seat'};
+  if(!S.game||!S.game.over||!data||data.round!==(S.game.matchId||(S.tk.g|0))||S.phase!=='result')return {reject:'phase'};
+  if(S.game.rematchBy!==from.p)K.room.setState(s=>{s.game.rematchBy=from.p});
+}
 function omSpec(){return {gameId:GID,name:()=>T('name'),seats:[2,2],max:12,lateJoin:'spectate',needGuest:true,migratable:true,bots:false,
   options:[{key:'side',values:['b','w','r'],def:'b',title:()=>T('hostSide'),label:v=>sideOf(v)},
            {key:'rule',values:['free','std','renju'],def:'free',title:()=>T('rule'),label:v=>esc(T('r_'+v))},
@@ -2100,7 +2195,7 @@ function omSpec(){return {gameId:GID,name:()=>T('name'),seats:[2,2],max:12,lateJ
   botName:()=>'🤖 '+T('ai'),
   hudInto:()=>$('lprSlot'),
   lobbyNote:()=>{let o={};try{o=K.opts()}catch(_){}return T('rn_'+(o.rule||'free'))},
-  host:{init:v2Init,apply:v2Apply,next:g=>g.over?null:g.sides.indexOf(g.t===1?'b':'w'),
+  host:{init:v2Init,apply:v2Apply,intent:omIntent,next:g=>g.over?null:g.sides.indexOf(g.t===1?'b':'w'),
         result:g=>({win:g.win&&g.win.p||0,n:g.mv.length}),
         bot:(g,seat)=>v2Bot(g,seat),timeout:(g,seat)=>v2Bot(g,seat)},
   client:{render:v2Render,onLeave:v2OnLeave}}}
@@ -2110,7 +2205,9 @@ function v2Init(seats,opts){
   const hp=hostPid(K&&K.S());let hi=seats.findIndex(s=>s.p===hp);if(hi<0)hi=0;
   const sides=seats.map((s,i)=>i===hi?hs:(hs==='b'?'w':'b'));
   const N=+opts.size===19?19:15,rule=['free','std','renju'].indexOf(opts.rule)>=0?opts.rule:'free';
-  return {N:N,rule:rule,mv:[],t:1,over:false,win:null,sides:sides,ev:{type:'start'}}}
+  const S=K&&K.S();
+  const prior=S&&S.game?currentScore(S):S&&S.omDuel&&S.tk&&S.omDuel.round===(S.tk.g|0)?S.omDuel.score:null;
+  return {N:N,rule:rule,mv:[],t:1,over:false,win:null,sides:sides,matchId:K.room.code+'-'+Date.now(),duel:scoreForPair(seats,prior),ev:{type:'start'}}}
 function v2Apply(g,seat,a){
   const col=g.sides[seat]==='b'?1:-1;
   if(g.over||!a)return {reject:'over'};if(g.t!==col)return {reject:'turn'};if(a.n!==g.mv.length)return {reject:'stale'};
@@ -2137,6 +2234,9 @@ function v2Render(Sk){
   const g=Sk.game,seats={b:null,w:null};
   ['b','w'].forEach(k=>{const i=g.sides.indexOf(k),si=i>=0?K.seatInfo(i,Sk):null;if(si)seats[k]={cid:si.p,name:si.bot?T('ai'):si.n,on:!si.off,bot:si.bot||si.afk}});
   O.seats=seats;O.phase=g.over?'over':'play';
+  O.series=currentScore(Sk);
+  if(g.over||Sk.phase==='playing')reportOmRound(g.over,Sk);
+  if(g.over)refreshRematch();
   const gid=(Sk.tk&&Sk.tk.g)|0,same=G.N===g.N&&G.rule===g.rule&&O.gid===gid&&g.mv.length>=G.mv.length&&G.mv.every((x,k)=>g.mv[k]===x);
   if(O.pendingMove&&g.mv.length!==G.mv.length){O.pendingMove=false;view.V.ghost=-1}
   if(!same){
@@ -2183,13 +2283,19 @@ async function v2Create(){try{await v2Ready();G.mode='online';const r=await K.cr
 function v2Boot(){window.__lprBoot=window.__lprBoot||'turn';
   G.mode='online';showGame();updateHUD();v2Ready().then(k=>k.boot()).then(r=>{if(!r&&!V2on()){O=null;G.mode=PREF.mode==='online'?'online':PREF.mode;showSetup()}}).catch(()=>{toast(T('noNet'),2600);showSetup()})}
 function v2Rematch(){
-  if(!K||!K.isHost)return;
-  /* 한 판 더 = 색 바꾸기 — 방금 판에서 방장이 둔 색의 반대로(랜덤이면 그대로 랜덤) */
-  let o={};try{o=K.opts()}catch(_){}
-  const S=K.S(),g=S&&S.game,hp=hostPid(S);
-  let mine=null;if(g&&g.sides){const i=K.seatOf(hp,S);if(i!=null)mine=g.sides[i]}
+  const S=K&&K.S();
+  if(!S||S.phase!=='result'||!S.game||!S.game.over)return;
+  if(!K.isHost){
+    if(!mySeatColor())return;
+    return K.room.intent('om_rematch',{round:S.game.matchId||(S.tk.g|0)}).then(r=>{if(r&&!r.ok)toast(T('noNet'))}).catch(()=>toast(T('noNet')));
+  }
+  const i=K.seatOf(hostPid(S),S);
+  const score=currentScore(S);
+  K.room.setState(s=>{
+    s.omDuel={round:s.tk.g|0,score};
+    if(i!=null)s.opts.side=s.game.sides[i]==='b'?'w':'b';
+  });
   K.rematch();
-  if(o.side!=='r'&&mine)K.setOpt('side',mine==='b'?'w':'b');
 }
 function renderNet(){
   const row=$('netRow');
@@ -2197,15 +2303,16 @@ function renderNet(){
   let h='';
   if(V2on()&&O.phase!=='lobby'&&!mySeatColor())h='<span class="chip">👀 '+esc(T('spectating'))+'</span>';
   if(O.phase!=='lobby')h+='<span class="chip">'+esc(T('r_'+G.rule))+' · '+G.N+'×'+G.N+'</span>';
-  row.innerHTML=h;row.classList.toggle('on',!!h);
+  row.innerHTML=h;if(O.phase!=='lobby'&&O.series)row.appendChild(duelChip());
+  row.classList.toggle('on',!!row.childElementCount);
 }
 
 /* ══ 설정 화면 ══ */
 const TOUCH=(function(){try{return matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0}catch(_){return false}})();
 function renderSetup(){
-    document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('on',b.dataset.mode===PREF.mode));
-    const on=PREF.mode==='online';
-    $('optAi').hidden=PREF.mode!=='ai';$('optFoe').hidden=PREF.mode!=='ai';$('optLocal').hidden=PREF.mode!=='local';$('optOnline').hidden=!on;$('optRule').hidden=on;
+    document.querySelectorAll('.mode').forEach(b=>b.classList.toggle('on',b.dataset.mode===setupMode));
+    const on=setupMode==='online';
+    $('optAi').hidden=setupMode!=='ai';$('optFoe').hidden=setupMode!=='ai';$('optLocal').hidden=setupMode!=='local';$('optOnline').hidden=!on;$('optRule').hidden=on;
     document.querySelectorAll('#segLevel button').forEach(b=>b.classList.toggle('on',b.dataset.v===PREF.level));
     document.querySelectorAll('#segColor button').forEach(b=>b.classList.toggle('on',b.dataset.v===PREF.color));
     document.querySelectorAll('#segRule button').forEach(b=>b.classList.toggle('on',b.dataset.v===PREF.rule));
@@ -2221,7 +2328,7 @@ function renderSetup(){
     $('startBtn').textContent=on?T('createRoom'):T('start');
 }
 function savePref(){save('lp_om_prefs',PREF)}
-document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{PREF.mode=b.dataset.mode;savePref();sfx('tap');renderSetup();fitHero()}));
+document.querySelectorAll('.mode').forEach(b=>b.addEventListener('click',()=>{PREF.mode=setupMode=b.dataset.mode;savePref();sfx('tap');renderSetup();fitHero()}));
 function seg(id,key,num){$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;PREF[key]=num?+b.dataset.v:b.dataset.v;savePref();sfx('tap');renderSetup();if(key==='size'||key==='rule')demo.reset()})}
 seg('segLevel','level');seg('segTap','tap1',true);seg('segColor','color');seg('segRule','rule');seg('segSize','size',true);
 $('resumeBtn').addEventListener('click',()=>{actx();resumeSolo()});
@@ -2233,8 +2340,8 @@ $('nameW').addEventListener('input',()=>{PREF.nw=$('nameW').value;savePref()});
 $('nickIn').addEventListener('change',()=>{const v=$('nickIn').value.trim();if(!v)return;try{localStorage.setItem('luckyplz_nick',v);const p=JSON.parse(localStorage.getItem('lp_profile')||'{}');p.nick=v;p.v=1;localStorage.setItem('lp_profile',JSON.stringify(p))}catch(_){}});
 $('startBtn').addEventListener('click',()=>{
     actx();
-    if(PREF.mode==='online'){$('nickIn').dispatchEvent(new Event('change'));v2Create();return}
-    G.mode=PREF.mode;G.level=PREF.level;G.N=PREF.size;G.rule=PREF.rule;
+    if(setupMode==='online'){$('nickIn').dispatchEvent(new Event('change'));v2Create();return}
+    G.mode=setupMode;G.level=PREF.level;G.N=PREF.size;G.rule=PREF.rule;
     G.human=PREF.color==='w'?-1:PREF.color==='r'?(Math.random()<.5?1:-1):1;
     showGame();newLocalGame();
 });
@@ -2251,8 +2358,8 @@ $('bNew').addEventListener('click',async()=>{
 $('bInvite').addEventListener('click',()=>{if(K)K.invite()});
 $('bMenu').addEventListener('click',()=>toMenu(false));
 $('bAgain').addEventListener('click',()=>{
-    hideEnd();
     if(G.mode==='online'){v2Rematch();return}
+    hideEnd();
     if(G.mode==='ai'&&PREF.color==='r')G.human=Math.random()<.5?1:-1;
     newLocalGame();
 });
@@ -2402,8 +2509,8 @@ const demo=(function(){
 })();
 
 /* ══ 언어 ══ */
-function applyI18n(){
-    LANG=curLang();
+function applyI18n(atEntry){
+    LANG=curLang(atEntry===true);
     document.querySelectorAll('[data-i]').forEach(el=>{el.textContent=T(el.dataset.i)});
     $('ttl').textContent=(LANG==='ko'||LANG==='ja'||LANG==='zh')?T('name'):'GOMOKU';
     renderSetup();updateHUD();
@@ -2427,7 +2534,7 @@ window.__omok={E:E,selfTest:o=>E.selfTest(o),get G(){return G},get O(){return O}
 window.addEventListener('hashchange',()=>{const m=/[#&]rec=([0-9a-z.]+)/i.exec(location.hash||'');if(!m)return;const rec=decRec(m[1].toLowerCase());if(!rec||V2on())return;
     if(RP)exitReplay();hideEnd();G.aiTok++;G.thinking=false;enterReplay(rec,true)});
 /* ══ 시작 ══ */
-applyI18n();
+applyI18n(true);
 (function boot(){
     /* 공유된 기보(#rec=) — 바로 복기 화면 */
     const hm=/[#&]rec=([0-9a-z.]+)/i.exec(location.hash||'');
@@ -2436,18 +2543,19 @@ applyI18n();
     let arr=false;try{const q=new URLSearchParams(location.search);arr=/^[2-9A-HJKMNP-TV-Z]{6}$/i.test(q.get('r')||'');
         const a=JSON.parse(sessionStorage.getItem('lpr_active')||'null');if(a&&a.gameId===GID&&Date.now()-(a.t||0)<864e5)arr=true}catch(_){}
     if(arr){v2Boot();return}
+    if(new URLSearchParams(location.search).get('play')==='friends')setupMode='online';
     showSetup();
 })();
 })();
 </script>
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795827565"></script>
+<script src="/js/supabase-config.js?v=1795837752"></script>
 <script>/* Nuke any legacy service worker + its caches on every page load.
    See public/sw.js comments. Safe to remove once server logs show
    no one hits /sw.js anymore. */
 if('serviceWorker' in navigator){navigator.serviceWorker.getRegistrations().then(r=>r.forEach(s=>s.unregister())).catch(()=>{})}
 if('caches' in window){caches.keys().then(k=>k.forEach(n=>caches.delete(n))).catch(()=>{})}</script>
-<script src="/js/siteFooter.js?v=1795827565" defer></script>
+<script src="/js/siteFooter.js?v=1795837752" defer></script>
 <!--lp-game-about:start-->
 <style>
 /* === lp-game-about — 게임 하단 가시 콘텐츠 (ladder 패턴 이식) ===

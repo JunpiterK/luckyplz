@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!--lp-build-check:start-->
-<meta name="lp-build" content="1795827565">
+<meta name="lp-build" content="1795837752">
 <script>(function(){try{if(!/(iPhone|iPad|iPod|Android).*KAKAOTALK/i.test(navigator.userAgent||""))return;if(window.top!==window.self)return;var l=location,q=l.search;if(/^\/auth(\/|$)/.test(l.pathname)||/[?&]lp_iab=off/.test(q)||(/[?&]code=/.test(q)&&/[?&]state=/.test(q)))return;var K="lp_kko_out";try{if(sessionStorage.getItem(K))return;sessionStorage.setItem(K,"1");}catch(e){}location.href="kakaotalk://web/openExternal?url="+encodeURIComponent(location.href);}catch(e){}})();</script>
-<script>(function(){var B="1795827565";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
+<script>(function(){var B="1795837752";try{fetch("/build.json?_="+Date.now(),{cache:"no-store"}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d||!d.v||d.v===B)return;var k="lp_build_"+B;try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,"1");}catch(e){}var u=new URL(location.href);u.searchParams.set("_b",d.v);location.replace(u.toString());}).catch(function(){});}catch(e){}})();</script>
 <!--lp-build-check:end-->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="robots" content="noindex, nofollow">
@@ -295,6 +295,21 @@ svg{display:block;overflow:visible}
 
   <div class="grid g2">
     <section class="card">
+      <h2>친구와 온라인 대결 <small>선택한 기간</small></h2>
+      <div class="tbl-wrap" id="duels" aria-live="polite"></div>
+      <p class="note">참가 기기가 남긴 시작 횟수입니다. 두 기기에서 한 판을 시작하면 2회로 집계합니다. 재대결도 전체 시작에 포함됩니다.</p>
+    </section>
+    <section class="card">
+      <h2>게임별 주간 재방문</h2>
+      <p class="note">어제까지 7일과 그 앞 7일을 비교합니다. 재방문율은 앞 주에 해당 게임을 연 브라우저 중 다음 주에도 같은 게임을 연 비율입니다.</p>
+      <button type="button" class="more" id="weeklyLoad">최근 두 주 비교하기</button>
+      <p class="note" id="weeklyStatus" role="status"></p>
+      <div class="tbl-wrap" id="weeklyGames"></div>
+    </section>
+  </div>
+
+  <div class="grid g2">
+    <section class="card">
       <h2>게임 플레이 <small>결과 화면까지 간 판 수</small></h2>
       <div id="plays"></div>
     </section>
@@ -326,7 +341,7 @@ svg{display:block;overflow:visible}
 <div id="tip" hidden></div>
 
 <script src="/vendor/supabase.min.js"></script>
-<script src="/js/supabase-config.js?v=1795827565"></script>
+<script src="/js/supabase-config.js?v=1795837752"></script>
 <script>
 (function(){
 'use strict';
@@ -589,12 +604,94 @@ function drawDims(b){
     hbars($('dim'+i),c[1].slice(0,8),{val:r=>r.n,label:c[2],sub:r=>pct(r.n,tot)+'%',click:c[3]?r=>{const fn=c[3](r);if(fn)fn()}:null})});
 }
 function drawGames(b){
+  drawDuels(b.events);
   const by={};b.events.forEach(e=>{if(e.g==='-')return;const o=by[e.g]||(by[e.g]={g:e.g,end:0,start:0,share:0});if(e.n0==='game_end')o.end+=e.n;else if(e.n0==='game_start')o.start+=e.n;else if(e.n0==='share_click')o.share+=e.n});
   const L=Object.values(by).filter(r=>r.end||r.start).sort((a,b)=>b.end-a.end||b.start-a.start);
   hbars($('plays'),L.slice(0,14),{val:r=>r.end,label:r=>esc(GN[r.g]||r.g),sub:r=>(r.share?'공유 '+r.share:''),click:r=>setF('path','/games/'+r.g+'/')});
   const O=Object.keys(b.plays_hist.by_game).map(g=>({g,n:b.plays_hist.by_game[g]})).sort((a,b)=>b.n-a.n);
   hbars($('opens'),O.slice(0,14),{val:r=>r.n,label:r=>esc(GN[r.g]||r.g)});
   $('opensNote').textContent='이 카운터의 전체 누적: '+nf(b.plays_hist.total_all)+'회 (2026-04 부터). 위 방문 통계보다 오래된 이력이에요.';
+}
+function drawDuels(events){
+  const recorded=new Map();
+  for(const e of events){
+    if(e.g==='-' || (e.n0!=='duel_start' && e.n0!=='duel_rematch'))continue;
+    if(!recorded.has(e.g))recorded.set(e.g,{});
+    recorded.get(e.g)[e.n0]=e.n;
+  }
+  const limited=events.length>=60; // lp_ops_board returns at most 60 event/game pairs.
+  const box=$('duels');
+  if(!recorded.size){
+    box.textContent=limited?'상위 60개 이벤트에서 친구 대결 기록을 찾지 못했습니다.':'이 기간에 수집된 친구 대결 기록이 없습니다. 기록 도입 전 대결은 집계되지 않습니다.';
+    return;
+  }
+  const count=value=>value==null && limited?'—':nf(value);
+  const body=[...recorded].sort((a,b)=>(b[1].duel_start||0)-(a[1].duel_start||0)).map(([g,r])=>
+    `<tr><td>${esc(GN[g]||g)}</td><td>${count(r.duel_start)}</td><td>${count(r.duel_rematch)}</td></tr>`).join('');
+  box.innerHTML='<table class="tbl"><thead><tr><th>게임</th><th>전체 대결 시작</th><th>그중 재대결</th></tr></thead><tbody>'+body+'</tbody></table>'+
+    (limited?'<p class="note">— 해당 이벤트가 상위 60개에 포함되지 않았습니다.</p>':'');
+}
+
+let weeklyVersion=0,weeklyKey='';
+function weeklyContext(){
+  const end=kstMid(Date.now()),filters=filt();
+  return {end,filters,key:JSON.stringify([end,filters])};
+}
+function resetWeeklyIfChanged(){
+  const key=weeklyContext().key;
+  if(key===weeklyKey)return;
+  weeklyKey=key;
+  weeklyVersion++;
+  $('weeklyLoad').disabled=false;
+  $('weeklyLoad').textContent='최근 두 주 비교하기';
+  $('weeklyStatus').textContent='';
+  $('weeklyGames').replaceChildren();
+}
+function weeklyVisitors(pages,path){
+  const row=pages.find(page=>page.p===path);
+  if(row)return row.v;
+  return pages.length<60?0:null; // A missing page can fall outside the top 60.
+}
+async function loadWeekly(){
+  resetWeeklyIfChanged();
+  const {end,filters,key}=weeklyContext(),request=++weeklyVersion;
+  const button=$('weeklyLoad'),status=$('weeklyStatus'),box=$('weeklyGames');
+  const selected=filters.path;
+  const paths=selected?[selected]:['/games/yut/','/games/omok/','/games/reversi/'];
+  if(selected && !/^\/games\/[^/]+\/$/.test(selected)){
+    status.textContent='게임 페이지를 선택하거나 페이지 필터를 해제해 주세요.';
+    return;
+  }
+  button.disabled=true;
+  status.textContent='두 주의 방문자를 비교하는 중…';
+  box.replaceChildren();
+  try{
+    const iso=time=>new Date(time).toISOString();
+    const prior=end-14*DAY,recent=end-7*DAY;
+    const boards=await Promise.all([[prior,recent],[recent,end],[prior,end]].map(([a,b])=>
+      rpc('lp_ops_board',{p_from:iso(a),p_to:iso(b),p_f:filters})));
+    if(request!==weeklyVersion)return;
+    if(key!==weeklyContext().key){resetWeeklyIfChanged();return}
+    let missing=false;
+    const cell=n=>n==null?'—':nf(n);
+    const body=paths.map(path=>{
+      const [p,r,u]=boards.map(board=>weeklyVisitors(board.pages,path));
+      const both=p==null||r==null||u==null?null:p+r-u;
+      // The three requests may straddle late-arriving data. Never publish impossible overlap.
+      const valid=both!=null && both>=0 && both<=Math.min(p,r);
+      if(!valid)missing=true;
+      return `<tr><td>${esc(plabel(path))}</td><td>${cell(p)}</td><td>${cell(r)}</td><td>${valid?nf(both):'—'}</td><td>${valid&&p?pct(both,p)+'%':'—'}</td></tr>`;
+    }).join('');
+    const date=t=>new Date(t+KOFF).toISOString().slice(5,10).replace('-','/');
+    status.textContent=`앞 주 ${date(prior)}~${date(recent-DAY)} · 다음 주 ${date(recent)}~${date(end-DAY)} (한국 시간)`+
+      (missing?' · 일부 집계가 목록에서 빠졌거나 집계 간 수치가 일치하지 않습니다.':'');
+    box.innerHTML='<table class="tbl"><thead><tr><th>게임</th><th>앞 주</th><th>다음 주</th><th>양쪽 방문</th><th>재방문율</th></tr></thead><tbody>'+body+'</tbody></table>';
+    button.textContent='다시 비교하기';
+  }catch(e){
+    if(request===weeklyVersion){status.textContent='주간 비교를 불러오지 못했습니다.';button.textContent='다시 시도'}
+  }finally{
+    if(request===weeklyVersion)button.disabled=false;
+  }
 }
 function sesHtml(r){
   const place=[r.city,r.region&&r.region!==r.city?r.region:''].filter(Boolean).join(', ');
@@ -666,6 +763,8 @@ function setupMsg(e){
 }
 async function loadAll(){
   const my=++busy;saveUi();drawChips();
+  resetWeeklyIfChanged();
+  $('duels').textContent='기록을 불러오는 중…';
   document.querySelectorAll('#rangeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.r===st.r));
   $('updated').textContent='불러오는 중…';
   const R=range(),f=filt();
@@ -679,6 +778,7 @@ async function loadAll(){
   }catch(e){
     if(my!==busy)return;
     $('banner').innerHTML='<div class="banner">'+setupMsg(e)+'</div>';$('updated').textContent='';
+    $('duels').textContent='대결 기록을 불러오지 못했습니다.';
   }
 }
 async function moreSessions(){
@@ -746,6 +846,7 @@ async function loadOrders(append=false){
 }
 
 function wire(){
+  $('weeklyLoad').addEventListener('click',loadWeekly);
   $('packageInbox').addEventListener('toggle',()=>{if($('packageInbox').open)loadOrders()});
   $('packageReload').addEventListener('click',()=>loadOrders());
   $('packageMore').addEventListener('click',()=>loadOrders(true));

@@ -574,7 +574,7 @@
             seated.forEach(function (m, i) { var mm = member(S, m.p); if (mm) mm.seat = i; });
             S.opts = Object.assign({}, S.opts || {}, opts);
             S.game = game;
-            S.tk = { seats: seats.map(function (s) { return { p: s.p, bot: s.bot || undefined, n: s.n, pick: s.pick }; }), to: {}, c0: self._pendC0 || null, ci: 0, fe: null, ev: null, evn: 0, res: null, g: (S.tk && S.tk.g | 0) + 1 };
+            S.tk = { seats: seats.map(function (s) { return { p: s.p, bot: s.bot || undefined, n: s.n, pick: s.pick }; }), to: {}, c0: self._pendC0 || null, ci: 0, fe: null, ev: null, evn: 0, res: null, g: ((S.tk && S.tk.g) | 0) + 1 };
             self._pendC0 = null;
             S.turn = null;
             self._advance(S, { anim: 900 });
@@ -610,7 +610,7 @@
         r.setState(function (S) {
             seated.forEach(function (m, i) { var mm = member(S, m.p); if (mm) mm.seat = i; });
             S.game = game; S.turn = (o && o.turn) || null;
-            S.tk = { seats: seated.map(function (m) { return { p: m.p, bot: m.r === 'bot' || undefined, n: m.r === 'bot' ? '' : m.n, pick: clone(m.pick || {}) }; }), to: {}, c0: null, ci: 0, fe: null, ev: null, evn: 0, res: null, g: (S.tk && S.tk.g | 0) + 1 };
+            S.tk = { seats: seated.map(function (m) { return { p: m.p, bot: m.r === 'bot' || undefined, n: m.r === 'bot' ? '' : m.n, pick: clone(m.pick || {}) }; }), to: {}, c0: null, ci: 0, fe: null, ev: null, evn: 0, res: null, g: ((S.tk && S.tk.g) | 0) + 1 };
         }, { full: true });
         r.start({ countdownMs: 0 });
         return true;

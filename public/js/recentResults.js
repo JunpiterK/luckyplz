@@ -24,6 +24,7 @@
         lotto:      {emoji:'🎱', ko:'로또',   en:'Lotto',      ja:'ロト',       zh:'乐透', es:'Lotería',  pt:'Loteria'},
         bingo:      {emoji:'🎰', ko:'빙고',   en:'Bingo',      ja:'ビンゴ',     zh:'宾果', es:'Bingo',    pt:'Bingo'},
         yut:        {emoji:'🪵', ko:'윷놀이', en:'Yut Nori',   ja:'ユンノリ',   zh:'掷柶', es:'Yut Nori', pt:'Yut Nori'},
+        omok:       {emoji:'⚫', ko:'오목', en:'Gomoku', ja:'五目並べ', zh:'五子棋', es:'Gomoku', pt:'Gomoku'},
         'prism-hex':{emoji:'💎', ko:'프리즘 헥스',en:'Prism Hex',ja:'プリズムヘックス',zh:'棱镜六角',es:'Prism Hex',pt:'Prism Hex'},
         lots:       {emoji:'🎟️', ko:'제비뽑기',en:'Scratch Lots',ja:'スクラッチくじ',zh:'刮刮签',es:'Sorteo',  pt:'Sorteio'}
     };
