@@ -22,6 +22,7 @@
 import importlib.util
 import re
 import sys
+from html import escape
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -48,8 +49,9 @@ LANGS["ko"] = dict(
     title="무료 룰렛 돌리기 · 팀 나누기 · 주사위 | Lucky Please",
     description="가입 없이 바로 쓰는 랜덤 뽑기 6종 — 룰렛, 팀 나누기, 주사위, 빙고, 랜덤 레이스, 사다리타기. 결과는 1탭으로 공유. 모바일·PC 모두 지원.",
     keywords="룰렛 돌리기, 랜덤 뽑기, 팀 나누기, 사다리타기, 주사위 굴리기, 빙고 번호 추첨, 랜덤 이름 뽑기, 순서 정하기, 벌칙 정하기, 무료 결정 도구",
-    og_title="Lucky Please — 무료 룰렛·팀 나누기·주사위",
-    og_desc="가입 없이 바로 쓰는 랜덤 뽑기 6종. 결과는 1탭 공유.",
+    og_title="한 번만 돌려볼까? | Lucky Please!",
+    og_desc="오늘 커피는 누가 살까? 룰렛에 맡기고, 폰을 돌려가며 벽돌깨기 최고 기록에 도전해 보세요.",
+    og_alt="‘LUCKY PLEASE!’ 간판 아래 펠트 레서판다가 나무 룰렛 뚜껑을 들어 올린다. 사막여우와 랙돌 고양이, 수달이 들여다보는 틈 안쪽에 작은 나선 계단과 오락기가 호박빛으로 드러난다.",
     prose="""            <p class="lp-lead">여럿이 정해야 하는데 아무도 나서기 싫을 때 쓰는 랜덤 뽑기 6종. 돌리고, 나누고, 굴리고, 뽑고, 달리고, 사다리 타고 &mdash; 같은 화면을 다 같이 보면 끝. 가입 없음.</p>
 
             <details class="lp-fold">
@@ -85,8 +87,9 @@ LANGS["ja"] = dict(
     title="無料ルーレット・チーム分け・サイコロ | Lucky Please",
     description="登録なしですぐ使えるランダム抽選ツール6種 — ルーレット、チーム分け、サイコロ、ビンゴ、ランダムレース、あみだくじ。結果はワンタップで共有。スマホ・PC対応。",
     keywords="ルーレット 無料, ランダム 抽選, チーム分け ツール, あみだくじ, サイコロ 振る, ビンゴ 番号 抽選, 名前 ランダム, 順番 決め, 罰ゲーム 決め, 無料 決定ツール",
-    og_title="Lucky Please — 無料ルーレット・チーム分け・サイコロ",
-    og_desc="登録なしで使えるランダム抽選6種。結果はワンタップ共有。",
+    og_title="ちょっと回してみる？ | Lucky Please!",
+    og_desc="今日のコーヒーは誰のおごり？ ルーレットで決めたら、次はブロック崩し。スマホを回して友だちの記録に挑もう。",
+    og_alt="「LUCKY PLEASE!」の看板の下、フェルトのレッサーパンダが木製ルーレットのふたを持ち上げる。フェネック、ラグドール、カワウソがのぞく隙間には、琥珀色に照らされた小さならせん階段とゲーム筐体が見える。",
     prose="""            <p class="lp-lead">みんなで決めたいけれど誰も決めたくないときのランダム抽選6種。回す・分ける・振る・引く・走らせる・たどる &mdash; 同じ画面を全員で見れば終わり。登録不要。</p>
 
             <details class="lp-fold">
@@ -122,8 +125,9 @@ LANGS["es"] = dict(
     title="Ruleta, Sorteo de Equipos y Dados Gratis | Lucky Please",
     description="Seis sorteos aleatorios gratis: ruleta de nombres, generador de equipos, dados, bingo, carrera aleatoria y escalera. Sin registro, funciona en cualquier celular y se comparte con un toque.",
     keywords="ruleta de nombres, ruleta aleatoria, sorteo de equipos, generador de equipos, tirar dados online, bingo online, sorteo aleatorio gratis, elegir al azar, quien paga, decidir al azar",
-    og_title="Lucky Please — Ruleta, Equipos y Dados Gratis",
-    og_desc="Seis sorteos aleatorios gratis. Sin registro, se comparte con un toque.",
+    og_title="¿Giramos la ruleta? | Lucky Please!",
+    og_desc="¿Quién invita hoy al café? Que lo decida la ruleta. Después, pasa el móvil y reta a tus amigos a superar tu récord en el rompeladrillos.",
+    og_alt="Bajo el letrero «LUCKY PLEASE!», un panda rojo de fieltro levanta la tapa de una ruleta de madera. Un fénec, un gato ragdoll y una nutria se asoman. La luz ámbar revela una escalera de caracol y una máquina arcade en miniatura.",
     prose="""            <p class="lp-lead">Seis sorteos aleatorios para grupos. Gira, divide, tira, canta, corre o sortea &mdash; y ense&ntilde;a a todos la misma pantalla. Sin registro.</p>
 
             <details class="lp-fold">
@@ -159,8 +163,9 @@ LANGS["pt"] = dict(
     title="Roleta, Sorteio de Times e Dados Grátis | Lucky Please",
     description="Seis sorteios aleatórios grátis: roleta de nomes, sorteio de times, dados, bingo, corrida aleatória e escada. Sem cadastro, funciona em qualquer celular e compartilha com um toque.",
     keywords="roleta de nomes, sorteio aleatorio, sortear nomes, sorteio de times, rolar dados online, bingo online gratis, sorteador de nomes, escolher aleatoriamente, quem paga a conta, decidir no sorteio",
-    og_title="Lucky Please — Roleta, Times e Dados Grátis",
-    og_desc="Seis sorteios aleatórios grátis. Sem cadastro, compartilha com um toque.",
+    og_title="Vamos girar a roleta? | Lucky Please!",
+    og_desc="Quem paga o café de hoje? Deixe a roleta decidir. Depois, passe o celular e desafie a turma a bater seu recorde no quebra-blocos.",
+    og_alt="Sob o letreiro “LUCKY PLEASE!”, um panda-vermelho de feltro levanta a tampa de uma roleta de madeira. Um feneco, um gato ragdoll e uma lontra espiam pela fresta. A luz âmbar revela uma escada em espiral e um fliperama em miniatura.",
     prose="""            <p class="lp-lead">Seis sorteios aleat&oacute;rios para grupos. Gire, divida, role, cante, corra ou sorteie &mdash; e mostre a mesma tela para todos. Sem cadastro.</p>
 
             <details class="lp-fold">
@@ -266,13 +271,13 @@ def build(code, cfg, src):
     hl_end = s.index('hreflang="x-default" href="https://luckyplz.com/">') + len('hreflang="x-default" href="https://luckyplz.com/">')
     s = s[:hl_start] + HREFLANG + s[hl_end:]
 
-    # og:title / og:description / og:locale
-    s = re.sub(r'<meta property="og:title" content="[^"]*">',
-               '<meta property="og:title" content="%s">' % cfg["og_title"], s, count=1)
-    s = re.sub(r'<meta property="og:description" content="[^"]*">',
-               '<meta property="og:description" content="%s">' % cfg["og_desc"], s, count=1)
-    s = s.replace('<meta property="og:type" content="website">',
-                  '<meta property="og:type" content="website">\n    <meta property="og:locale" content="%s">' % cfg["og_locale"], 1)
+    # Each sharing platform gets the same copy for this language.
+    for field, text in (("title", cfg["og_title"]), ("description", cfg["og_desc"]), ("image:alt", cfg["og_alt"])):
+        for attr, platform in (("property", "og"), ("name", "twitter")):
+            tag = f'<meta {attr}="{platform}:{field}" content="'
+            s = re.sub(re.escape(tag) + r'[^"]*">', lambda _: tag + escape(text) + '">', s, count=1)
+    s = s.replace('<meta property="og:locale" content="en_US">',
+                  '<meta property="og:locale" content="%s">' % cfg["og_locale"], 1)
 
     # FAQPage 스키마는 여기서 쓰지 않는다. 이 스크립트는 **화면**만 만들고,
     # 스키마는 scripts/sync-faq-schema.py 가 그 화면을 읽어 생성한다.
