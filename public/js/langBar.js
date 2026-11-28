@@ -8,12 +8,10 @@
 */
 
 (function(){
-    // 2026-08-19: 표시 5개를 SEO 투자 대상 5개 언어와 일치시킨다.
-    // en / es / pt / ja / ko — 각각 실제 경로 페이지(/es/ 등)와 hreflang 을
-    // 갖는 언어들이다. zh 는 본토에서 구글이 차단돼 구글 SEO 로 도달이
-    // 안 되므로 More 드롭다운으로 내렸다(UI 지원은 그대로 유지).
-    // enhance() 가 바를 이 순서로 재정렬하므로 모든 페이지가 동일 순서.
-    const PRIMARY = ['en','es','pt','ja','ko'];
+    const PRIMARY = ['en', 'ko', 'ja', 'es', 'pt'];
+    const MORE = ['de', 'fr', 'vi', 'id', 'zh', 'hi', 'ar', 'th', 'tr', 'ru', 'gb'];
+    const moreRank = new Map(MORE.map((code, index) => [code, index]));
+    const morePosition = button => moreRank.get(button.dataset.lang) ?? MORE.length;
 
     function injectStyles(){
         if (document.getElementById('lp-langbar-enhance-styles')) return;
@@ -50,8 +48,11 @@
         if (!buttons.length) return;
 
         const primary = PRIMARY.map(c => buttons.find(b => b.dataset.lang === c)).filter(Boolean);
-        const secondary = buttons.filter(b => !PRIMARY.includes(b.dataset.lang));
-        if (!secondary.length) return; // nothing to hide
+        const secondary = buttons
+            .filter(b => !PRIMARY.includes(b.dataset.lang))
+            .sort((a, b) => morePosition(a) - morePosition(b));
+        primary.forEach(b => bar.appendChild(b));
+        if (!secondary.length) return;
 
         // Build More toggle
         const more = document.createElement('button');
@@ -65,8 +66,7 @@
         menu.className = 'lang-more-menu';
         menu.hidden = true;
 
-        secondary.forEach(b => menu.appendChild(b)); // detach from bar, attach to menu
-        primary.forEach(b => bar.appendChild(b)); // re-append primaries in canonical order
+        secondary.forEach(b => menu.appendChild(b));
 
         bar.appendChild(more);
         bar.appendChild(menu);
@@ -77,18 +77,20 @@
                element is 0. */
             const wasHidden = menu.hidden;
             if (wasHidden) { menu.style.visibility='hidden'; menu.hidden=false; }
-            const mw = menu.offsetWidth;
-            const mh = menu.offsetHeight;
+            // A game panel with backdrop-filter can establish its own fixed-position origin.
+            menu.style.left = '0px';
+            menu.style.top = '0px';
+            const bounds = menu.getBoundingClientRect();
             if (wasHidden) { menu.hidden=true; menu.style.visibility=''; }
             const vw = window.innerWidth;
             const vh = window.innerHeight;
-            let left = r.left + r.width/2 - mw/2;
-            left = Math.max(8, Math.min(vw - mw - 8, left));
+            let left = r.left + r.width/2 - bounds.width/2;
+            left = Math.max(8, Math.min(vw - bounds.width - 8, left));
             /* If there's no room below, flip above. */
             let top = r.bottom + 8;
-            if (top + mh > vh - 8) top = Math.max(8, r.top - mh - 8);
-            menu.style.left = left + 'px';
-            menu.style.top = top + 'px';
+            if (top + bounds.height > vh - 8) top = Math.max(8, r.top - bounds.height - 8);
+            menu.style.left = (left - bounds.left) + 'px';
+            menu.style.top = (top - bounds.top) + 'px';
         }
 
         more.addEventListener('click', (e) => {
